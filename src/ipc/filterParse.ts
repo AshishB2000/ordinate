@@ -57,7 +57,7 @@ async function buildCatalog(projectId: string, dashboardId: string): Promise<Fil
   const parts: FilterCatalog[] = [];
   for (const id of ids) {
     const src = await datasets.residentSource(projectId, id).catch(() => null);
-    const fast = src ? catalogResident(src, id) : null;
+    const fast = src ? await catalogResident(src, id) : null;
     if (fast) { parts.push(fast); continue; }
     const ds = await datasets.getDataset(projectId, id);
     if (ds) parts.push(catalogJs(ds.columns, ds.rows, id));

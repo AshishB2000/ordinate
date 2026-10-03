@@ -286,7 +286,7 @@ async function topDimension(projectId: string, datasetId: string): Promise<strin
   let ds: Awaited<ReturnType<typeof datasets.getDataset>> | undefined;
   for (const c of texts) {
     let values: string[] | null = null;
-    if (src) { const r = readDistinctPage(src, c.name, { limit: 51 }); values = r ? r.values : null; }
+    if (src) { const r = await readDistinctPage(src, c.name, { limit: 51 }); values = r ? r.values : null; }
     if (values === null) {
       if (ds === undefined) ds = await datasets.getDataset(projectId, datasetId);
       values = ds ? distinctValuesPageJs(ds.columns, ds.rows, c.name, { limit: 51, search: '' }).values : [];

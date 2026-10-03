@@ -275,7 +275,7 @@ async function main(): Promise<void> {
       return p.test;
     };
     const req = { offset: 0, limit: 100, rowFilter: { sql: sql ? sql.sql : null, params: sql ? sql.params : [], keepFor } };
-    const fast = page.readPage({ parquetPath: mainFile, columns: mainCols }, req);
+    const fast = await page.readPage({ parquetPath: mainFile, columns: mainCols }, req);
     const slow = page.pageRowsJs(mainCols, mainBack.rows, req);
     ok(`${rules.ruleSignature(r)}: failing-row page total === failing count (both paths)`,
       !!fast && fast.total === js[i].failing && slow.total === js[i].failing && sameCells(fast.rows, slow.rows),

@@ -323,9 +323,9 @@ async function main(): Promise<void> {
     const cleanSrc = await datasets.residentSource(dates.projectId, dates.id);
     ok('fixtures are resident', Boolean(looseSrc && cleanSrc));
     ok('resolveCatKey refuses a non-canonical date column',
-      residentQuery.resolveCatKey(looseSrc!, 'd', [{ column: 'v', aggregation: 'sum' }], [], 'month') === null);
+      await residentQuery.resolveCatKey(looseSrc!, 'd', [{ column: 'v', aggregation: 'sum' }], [], 'month') === null);
     ok('…and accepts the same column without that one cell',
-      residentQuery.resolveCatKey(cleanSrc!, 'd', [{ column: 'v', aggregation: 'sum' }], [], 'month') !== null);
+      await residentQuery.resolveCatKey(cleanSrc!, 'd', [{ column: 'v', aggregation: 'sum' }], [], 'month') !== null);
     const js = reference(loose, enc);
     ok('and the JS path still buckets it (Date.parse)',
       js.data.labels.includes('2023-01') && js.category?.grain === 'month');

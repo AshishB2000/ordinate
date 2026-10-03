@@ -122,7 +122,7 @@ async function main(): Promise<void> {
     );
 
     // ── 3. A page reads every column back correctly ──────────────────────────
-    const page = datasetPage.readPage(src, { offset: 100, limit: 50 });
+    const page = await datasetPage.readPage(src, { offset: 100, limit: 50 });
     ok('page over a wide table', page !== null && page.rows.length === 50 && page.total === N);
     ok(
       'page cells identical to the source slice',
@@ -137,7 +137,7 @@ async function main(): Promise<void> {
     // A metric on the LAST column — an off-by-one in the positional mapping
     // would silently read a neighbour and return a plausible wrong number.
     const lastNumeric = columns.map((c, i) => ({ c, i })).filter((x) => x.c.type === 'number').pop()!;
-    const resMetric = residentQuery.computeMetricResident(src, {
+    const resMetric = await residentQuery.computeMetricResident(src, {
       column: lastNumeric.c.name,
       aggregation: 'sum',
     });
@@ -202,7 +202,7 @@ async function main(): Promise<void> {
       const s = statsResident.computeColumnSummariesResident(src);
       const statsMs = Date.now() - t;
       t = Date.now();
-      const p = datasetPage.readPage(src, { offset: 0, limit: 500 });
+      const p = await datasetPage.readPage(src, { offset: 0, limit: 500 });
       const pageMs = Date.now() - t;
       ok(`${C} columns: stats complete`, s !== null && s.length === C, `${statsMs} ms`);
       ok(`${C} columns: page complete`, p !== null && p.rows.length === 500, `${pageMs} ms`);

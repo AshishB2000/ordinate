@@ -370,7 +370,7 @@ export async function applyToBundle(projectId: string, bytes: Buffer): Promise<B
       } else {
         await fs.promises.mkdir(scratch, { recursive: true });
         const file = path.join(scratch, id + '.parquet');
-        parquetStore.writeTable(file, shaped.columns, rows);
+        await parquetStore.writeTableAsync(file, shaped.columns, rows);
         const table = entries.find((x) => x.name === `datasets/${id}.parquet`);
         if (table) table.data = await fs.promises.readFile(file);
       }

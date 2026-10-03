@@ -24,7 +24,8 @@
 import type { ParsedColumn } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';
 import type { VizEncoding } from './visuals';
-import * as residentQuery from '../engine/residentQuery';
+import type * as residentQuery from '../engine/residentQuery';
+import { aggregateResidentSync } from '../engine/residentSync';
 
 export type InsightKind =
   | 'mover'
@@ -185,7 +186,7 @@ export function foldPeriods(
 export function residentAgg(src: residentQuery.ResidentSource): Agg {
   return (category, measure, filters) => {
     if (!isNumberColumn(src.columns, measure)) return null;
-    const out = residentQuery.aggregateResident(
+    const out = aggregateResidentSync(
       src,
       category,
       [{ column: measure, aggregation: 'sum' }],

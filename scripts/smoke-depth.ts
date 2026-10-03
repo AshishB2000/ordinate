@@ -423,7 +423,7 @@ async function main(): Promise<void> {
     const p = (await projects.listProjects())[0];
     const ds = (await datasets.listDatasets(p.id)).find((d: any) => d.name === 'Retail orders');
     const src = await datasets.residentSource(p.id, ds.id);
-    const out = rq.aggregateResident(src, 'region', [{ column: 'revenue', aggregation: 'sum' }]);
+    const out = await rq.aggregateResident(src, 'region', [{ column: 'revenue', aggregation: 'sum' }]);
     const pairs = out.labels.map((l: any, i: number) => [String(l), out.series[0].values[i]]);
     pairs.sort((a: any, b: any) => b[1] - a[1]);
     return { top: pairs[0], id: ds.id };

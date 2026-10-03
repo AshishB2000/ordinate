@@ -189,7 +189,7 @@ interface ControlSpec {
 async function distinct(projectId: string, datasetId: string, column: string): Promise<string[]> {
   const req = { limit: MAX_OPTIONS_PER_CONTROL, search: '' };
   const src = await datasets.residentSource(projectId, datasetId);
-  const fast = src ? readDistinctPage(src, column, req) : null;
+  const fast = src ? await readDistinctPage(src, column, req) : null;
   if (fast) return fast.values.map((v) => String(v));
   const ds = await datasets.getDataset(projectId, datasetId);
   return ds ? distinctValuesPageJs(ds.columns, ds.rows, column, req).values.map((v) => String(v)) : [];

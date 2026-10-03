@@ -221,7 +221,7 @@ async function main(): Promise<void> {
   const run = await sq.runSql(pid, 'select region, sum(revenue) as revenue from retail_orders group by region');
   ok('run: GROUP BY + sum over a dataset runs', run.ok === true, run.ok ? '' : run.error);
   const src = await datasets.residentSource(pid, orders!.id);
-  const ref = rq.aggregateResident(src!, 'region', [{ column: 'revenue', aggregation: 'sum' }]);
+  const ref = await rq.aggregateResident(src!, 'region', [{ column: 'revenue', aggregation: 'sum' }]);
   ok('differential: aggregateResident answered', ref !== null);
   if (run.ok && ref) {
     // NULL and '' are two groups in both; compare as a sorted multiset.

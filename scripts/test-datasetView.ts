@@ -28,6 +28,8 @@ import type { Cell } from '../src/data/transforms';
 
 import { ok, failureCount } from './selfcheck';
 
+async function main(): Promise<void> {
+
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-dsview-'));
 let seq = 0;
 function tmpFile(): string {
@@ -117,7 +119,7 @@ if (!duck.isAvailable()) {
   );
   ok('viewSql: reads the parquet file through parquetStore.relationSql', sql.includes(`FROM read_parquet('${file}');`));
 
-  ok('ensureView: creates the view', dv.ensureView({ name, parquetPath: file, columns: cols }) === true);
+  ok('ensureView: creates the view', await dv.ensureView({ name, parquetPath: file, columns: cols }) === true);
 
   // DESCRIBE — what a charting layer sees.
   const d = describe(name);
@@ -146,7 +148,7 @@ if (!duck.isAvailable()) {
   // become NULL, exactly as the JS fold and residentQuery produce.
   const weird = write([{ name: 'n', type: 'number' }], [['inf'], ['nan'], ['3'], [null], ['']]);
   const wname = viewName();
-  ok('ensureView: number column with junk cells', dv.ensureView({ name: wname, parquetPath: weird, columns: [{ name: 'n', type: 'number' }] }));
+  ok('ensureView: number column with junk cells', await dv.ensureView({ name: wname, parquetPath: weird, columns: [{ name: 'n', type: 'number' }] }));
   const wvals = q(`SELECT "n" FROM ${quoted(wname)};`).map((r) => r.n);
   ok("number column: 'inf'/'nan'/''/null → NULL, only 3 survives", JSON.stringify(wvals) === JSON.stringify([null, null, 3, null, null]));
 }
@@ -160,7 +162,7 @@ if (!duck.isAvailable()) {
   ok('unknown ColumnType → text (never a cast)', vc[0].type === 'text');
   const file = write([{ name: 'a', type: 'text' }], [['007']]);
   const name = viewName();
-  ok('unknown ColumnType: view still creates', dv.ensureView({ name, parquetPath: file, columns: bogus }));
+  ok('unknown ColumnType: view still creates', await dv.ensureView({ name, parquetPath: file, columns: bogus }));
   ok("unknown ColumnType: '007' preserved", q(`SELECT "a" FROM ${quoted(name)};`)[0].a === '007');
 }
 
@@ -184,7 +186,7 @@ if (!duck.isAvailable()) {
 
   const file = write(cols, [['p', 'q', 'r', 's', 't']]);
   const name = viewName();
-  ok('dedupe: view creates', dv.ensureView({ name, parquetPath: file, columns: cols }));
+  ok('dedupe: view creates', await dv.ensureView({ name, parquetPath: file, columns: cols }));
   ok('dedupe: DESCRIBE agrees with viewColumns (no silent DuckDB rename)', describe(name).map((c) => c.name).join(',') === vc.map((c) => c.name).join(','));
   const row = q(`SELECT ${vc.map((c) => quoted(c.name)).join(', ')} FROM ${quoted(name)};`)[0];
   ok('dedupe: each exposed name reads its OWN physical column', vc.map((c) => row[c.name]).join(',') === 'p,q,r,s,t');
@@ -199,7 +201,7 @@ if (!duck.isAvailable()) {
   ok('dedupe: non-ASCII case is not folded (matches DuckDB)', uni.map((c) => c.name).join(',') === 'É,é,İ,i');
   const ufile = write([{ name: 'x', type: 'text' }, { name: 'x', type: 'text' }, { name: 'x', type: 'text' }, { name: 'x', type: 'text' }], [['1', '2', '3', '4']]);
   const uname = viewName();
-  ok('dedupe: non-ASCII names create a real view', dv.ensureView({ name: uname, parquetPath: ufile, columns: [{ name: 'É', type: 'text' }, { name: 'é', type: 'text' }, { name: 'İ', type: 'text' }, { name: 'i', type: 'text' }] }));
+  ok('dedupe: non-ASCII names create a real view', await dv.ensureView({ name: uname, parquetPath: ufile, columns: [{ name: 'É', type: 'text' }, { name: 'é', type: 'text' }, { name: 'İ', type: 'text' }, { name: 'i', type: 'text' }] }));
   ok('dedupe: DESCRIBE keeps all four distinct', describe(uname).map((c) => c.name).join(',') === 'É,é,İ,i');
 }
 
@@ -223,7 +225,7 @@ if (!duck.isAvailable()) {
 
   const file = write(cols, [['a', 'b', 'c', 'd', 'e']]);
   const name = viewName();
-  ok('hostile: view creates over the fallback names', dv.ensureView({ name, parquetPath: file, columns: cols }));
+  ok('hostile: view creates over the fallback names', await dv.ensureView({ name, parquetPath: file, columns: cols }));
   ok('hostile: DESCRIBE matches viewColumns', describe(name).map((c) => c.name).join('|') === 'column_1|ok|column_3|column_4|   ');
   ok('hostile: whitespace-only column is queryable', q(`SELECT "   " AS w FROM ${quoted(name)};`)[0].w === 'e');
 
@@ -243,7 +245,7 @@ if (!duck.isAvailable()) {
 {
   const sentinel = viewName();
   const base = write([{ name: 'x', type: 'text' }], [['keep-me']]);
-  ok('injection: sentinel view exists first', dv.ensureView({ name: sentinel, parquetPath: base, columns: [{ name: 'x', type: 'text' }] }));
+  ok('injection: sentinel view exists first', await dv.ensureView({ name: sentinel, parquetPath: base, columns: [{ name: 'x', type: 'text' }] }));
 
   const evil = `evil"; DROP VIEW ${sentinel}; SELECT ' --`;
   const alsoEvil = "o'brien'); DELETE FROM x; --";
@@ -259,7 +261,7 @@ if (!duck.isAvailable()) {
 
   const sql = dv.viewSql({ name, parquetPath: file, columns: cols });
   ok('injection: embedded `"` is doubled inside the identifier', sql.includes('"evil""; DROP VIEW '));
-  ok('injection: view creates', dv.ensureView({ name, parquetPath: file, columns: cols }));
+  ok('injection: view creates', await dv.ensureView({ name, parquetPath: file, columns: cols }));
 
   ok(
     'injection: the sentinel view SURVIVED — nothing broke out',
@@ -281,7 +283,7 @@ if (!duck.isAvailable()) {
   const rows: Cell[][] = [[null], [''], ['  '], ['x']];
   const file = write(cols, rows);
   const name = viewName();
-  ok('null/empty: view creates', dv.ensureView({ name, parquetPath: file, columns: cols }));
+  ok('null/empty: view creates', await dv.ensureView({ name, parquetPath: file, columns: cols }));
 
   const counts = q(
     `SELECT count(*) FILTER (WHERE "note" IS NULL) AS nulls, ` +
@@ -307,21 +309,21 @@ if (!duck.isAvailable()) {
   const name = viewName();
   const sql = dv.viewSql({ name, parquetPath: file, columns: [] });
   ok('empty: SQL has a non-empty select list', /SELECT CAST\(NULL AS VARCHAR\) AS "__empty" FROM/.test(sql));
-  ok('empty: ensureView succeeds', dv.ensureView({ name, parquetPath: file, columns: [] }));
+  ok('empty: ensureView succeeds', await dv.ensureView({ name, parquetPath: file, columns: [] }));
   ok('empty: the 3 stored rows survive', Number(q(`SELECT count(*) AS n FROM ${quoted(name)};`)[0].n) === 3);
   ok('empty: exactly one sentinel column, not a user column', describe(name).length === 1 && describe(name)[0].name === '__empty');
 
   // Zero rows AND zero columns.
   const none = write([], []);
   const nname = viewName();
-  ok('empty: 0 rows × 0 columns creates', dv.ensureView({ name: nname, parquetPath: none, columns: [] }));
+  ok('empty: 0 rows × 0 columns creates', await dv.ensureView({ name: nname, parquetPath: none, columns: [] }));
   ok('empty: 0 rows × 0 columns counts 0', Number(q(`SELECT count(*) AS n FROM ${quoted(nname)};`)[0].n) === 0);
 
   // Zero rows, real columns — DESCRIBE must still report the types.
   const cols: ParsedColumn[] = [{ name: 'a', type: 'number' }, { name: 'b', type: 'text' }];
   const empty = write(cols, []);
   const ename = viewName();
-  ok('empty: 0-row table with columns creates', dv.ensureView({ name: ename, parquetPath: empty, columns: cols }));
+  ok('empty: 0-row table with columns creates', await dv.ensureView({ name: ename, parquetPath: empty, columns: cols }));
   ok('empty: 0-row table still DESCRIBEs as DOUBLE,VARCHAR', describe(ename).map((c) => c.type).join(',') === 'DOUBLE,VARCHAR');
 }
 
@@ -334,21 +336,21 @@ if (!duck.isAvailable()) {
   const name = viewName();
   const spec = { name, parquetPath: file, columns: cols };
 
-  ok('lifecycle: ensureView once', dv.ensureView(spec) === true);
-  ok('lifecycle: ensureView twice (idempotent)', dv.ensureView(spec) === true);
+  ok('lifecycle: ensureView once', await dv.ensureView(spec) === true);
+  ok('lifecycle: ensureView twice (idempotent)', await dv.ensureView(spec) === true);
   ok('lifecycle: still one usable view after two creates', Number(q(`SELECT count(*) AS n FROM ${quoted(name)};`)[0].n) === 2);
 
   // A replace picks up NEW metadata without touching the file.
   const renamed: ParsedColumn[] = [{ name: 'renamed', type: 'text' }];
-  ok('lifecycle: CREATE OR REPLACE re-types and renames in place', dv.ensureView({ name, parquetPath: file, columns: renamed }));
+  ok('lifecycle: CREATE OR REPLACE re-types and renames in place', await dv.ensureView({ name, parquetPath: file, columns: renamed }));
   const d = describe(name);
   ok('lifecycle: replaced view exposes the new name/type', d[0].name === 'renamed' && d[0].type === 'VARCHAR');
   ok('lifecycle: retyped to text, the number is now its string form', q(`SELECT "renamed" FROM ${quoted(name)};`)[0].renamed === '1');
 
-  ok('lifecycle: dropView returns true', dv.dropView(name) === true);
+  ok('lifecycle: dropView returns true', await dv.dropView(name) === true);
   ok('lifecycle: the dropped view is GONE', threw(() => q(`SELECT * FROM ${quoted(name)};`)));
-  ok('lifecycle: dropView is idempotent (IF EXISTS)', dv.dropView(name) === true);
-  ok('lifecycle: dropView of a never-created name', dv.dropView('ds_never_created_at_all') === true);
+  ok('lifecycle: dropView is idempotent (IF EXISTS)', await dv.dropView(name) === true);
+  ok('lifecycle: dropView of a never-created name', await dv.dropView('ds_never_created_at_all') === true);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -358,19 +360,19 @@ if (!duck.isAvailable()) {
   const cols: ParsedColumn[] = [{ name: 'a', type: 'number' }];
 
   const missing = path.join(dir, 'does-not-exist.parquet');
-  ok('fail: missing parquet → false, no throw', dv.ensureView({ name: viewName(), parquetPath: missing, columns: cols }) === false);
+  ok('fail: missing parquet → false, no throw', await dv.ensureView({ name: viewName(), parquetPath: missing, columns: cols }) === false);
 
   const junk = path.join(dir, 'junk.parquet');
   fs.writeFileSync(junk, 'not parquet at all');
-  ok('fail: corrupt parquet → false', dv.ensureView({ name: viewName(), parquetPath: junk, columns: cols }) === false);
+  ok('fail: corrupt parquet → false', await dv.ensureView({ name: viewName(), parquetPath: junk, columns: cols }) === false);
 
   const narrow = write([{ name: 'a', type: 'text' }], [['x']]);
   ok(
     'fail: spec wider than the file → false (c1 does not bind)',
-    dv.ensureView({ name: viewName(), parquetPath: narrow, columns: [{ name: 'a', type: 'text' }, { name: 'b', type: 'text' }] }) === false,
+    await dv.ensureView({ name: viewName(), parquetPath: narrow, columns: [{ name: 'a', type: 'text' }, { name: 'b', type: 'text' }] }) === false,
   );
 
-  ok('fail: non-.parquet path → false', dv.ensureView({ name: viewName(), parquetPath: '/tmp/x.csv', columns: cols }) === false);
+  ok('fail: non-.parquet path → false', await dv.ensureView({ name: viewName(), parquetPath: '/tmp/x.csv', columns: cols }) === false);
   ok('fail: viewSql throws on a non-.parquet path', threw(() => dv.viewSql({ name: viewName(), parquetPath: '/tmp/x.csv', columns: cols })));
 
   // View names: validated, never built from a raw id here.
@@ -378,16 +380,16 @@ if (!duck.isAvailable()) {
   let allRejected = true;
   for (const n of bad) {
     if (dv.isViewName(n)) allRejected = false;
-    if (dv.ensureView({ name: n as string, parquetPath: narrow, columns: [{ name: 'a', type: 'text' }] }) !== false) allRejected = false;
+    if (await dv.ensureView({ name: n as string, parquetPath: narrow, columns: [{ name: 'a', type: 'text' }] }) !== false) allRejected = false;
     if (!threw(() => dv.viewSql({ name: n as string, parquetPath: narrow, columns: [{ name: 'a', type: 'text' }] }))) allRejected = false;
-    if (dv.dropView(n as string) !== false) allRejected = false;
+    if (await dv.dropView(n as string) !== false) allRejected = false;
   }
   ok('fail: every unsafe view name is rejected by isViewName/viewSql/ensureView/dropView', allRejected);
   ok('ok: a UUID-derived name is accepted', dv.isViewName('ds_550e8400_e29b_41d4_a716_446655440000'));
   ok('ok: a raw UUID (with hyphens) is NOT — the caller must map it', !dv.isViewName('550e8400-e29b-41d4-a716-446655440000'));
   ok('ok: 128 chars accepted, 129 rejected', dv.isViewName('a'.repeat(128)) && !dv.isViewName('a'.repeat(129)));
 
-  ok('fail: malformed spec → false, no throw', dv.ensureView(null as unknown as dv.ViewSpec) === false);
+  ok('fail: malformed spec → false, no throw', await dv.ensureView(null as unknown as dv.ViewSpec) === false);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -403,7 +405,7 @@ if (!duck.isAvailable()) {
   const name = viewName();
 
   ok('BOM: viewColumns reports the name FAITHFULLY', dv.viewColumns(cols)[0].name === bomName);
-  ok('BOM: the view creates', dv.ensureView({ name, parquetPath: file, columns: cols }));
+  ok('BOM: the view creates', await dv.ensureView({ name, parquetPath: file, columns: cols }));
   ok('BOM: the faithful identifier binds — the view really holds it', q(`SELECT ${quoted(bomName)} AS v FROM ${quoted(name)};`)[0].v === 'north');
   ok('BOM: DESCRIBE read-back LOSES the leading BOM (duckdb.ts transport, not this module)', describe(name)[0].name === 'region');
 }
@@ -432,7 +434,7 @@ if (!duck.isAvailable()) {
   ];
   const file = write(cols, rows);
   const name = viewName();
-  ok('parity: view creates', dv.ensureView({ name, parquetPath: file, columns: cols }));
+  ok('parity: view creates', await dv.ensureView({ name, parquetPath: file, columns: cols }));
 
   // The view keeps NULL and '' as two distinct groups, so `aggregateResident`'s
   // label transform (NULL → '') would collapse them in a Map. Compare as a
@@ -452,7 +454,7 @@ if (!duck.isAvailable()) {
     );
 
     // Path B — residentQuery, straight off the same file, no view involved.
-    const out = rq.aggregateResident(
+    const out = await rq.aggregateResident(
       { parquetPath: file, columns: cols },
       'region',
       [{ column: measure, aggregation: 'sum' }],
@@ -492,3 +494,9 @@ if (failureCount() > 0) {
   process.exit(1);
 }
 console.log('\nAll datasetView checks passed.');
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

@@ -21,6 +21,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as rq from '../src/engine/residentQuery';
 import * as pq from '../src/engine/parquetStore';
+import * as rs from '../src/engine/residentSync';
 import * as duck from '../src/engine/duckdb';
 import * as metricValue from '../src/analysis/metricValue';
 import * as vizData from '../src/analysis/vizData';
@@ -29,6 +30,8 @@ import type { Cell, FilterStep } from '../src/data/transforms';
 import type { VizEncoding } from '../src/analysis/visuals';
 
 import { ok, failureCount } from './selfcheck';
+
+async function main(): Promise<void> {
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-resident-'));
 let seq = 0;
@@ -68,12 +71,14 @@ function fixture(columns: ParsedColumn[], rows: Cell[][]): Fixture {
 const AGGS: metricValue.MetricAggregation[] = ['sum', 'avg', 'count', 'min', 'max'];
 
 /** computeMetricResident must equal computeMetric, for every aggregation. */
-function diffMetric(label: string, f: Fixture, column: string, filters?: FilterStep[]): void {
+async function diffMetric(label: string, f: Fixture, column: string, filters?: FilterStep[]): Promise<void> {
   const rows = filters && filters.length > 0 ? applyFilters(f, filters) : f.rows;
   for (const agg of AGGS) {
     const want = metricValue.computeMetric(f.columns, rows, { column, aggregation: agg });
-    const got = rq.computeMetricResident(f.src, { column, aggregation: agg }, filters);
+    const got = await rq.computeMetricResident(f.src, { column, aggregation: agg }, filters);
     ok(`${label}: ${agg}(${column}) === computeMetric (${fmt(want)})`, Object.is(want, got));
+    // The sync twin (residentSync, kept for T4.2's consumers) runs the same plan.
+    ok(`${label}: ${agg}(${column}) sync twin === async`, Object.is(rs.computeMetricResidentSync(f.src, { column, aggregation: agg }, filters), got));
   }
 }
 
@@ -85,13 +90,13 @@ function applyFilters(f: Fixture, filters: FilterStep[]): Cell[][] {
 }
 
 /** aggregateResident must equal buildVizData, label-for-label and value-for-value. */
-function diffAggregate(
+async function diffAggregate(
   label: string,
   f: Fixture,
   category: string,
   measures: rq.ResidentMeasure[],
   filters?: FilterStep[],
-): void {
+): Promise<void> {
   const encoding: VizEncoding = {
     category,
     values: measures.map((m) => ({ column: m.column, aggregation: m.aggregation })),
@@ -102,16 +107,20 @@ function diffAggregate(
   // runs, so the pairing compared here is the pairing the app ships. Resolving
   // it separately is what lets `aggregateResident` still be called bare below,
   // where the raw group key is the thing under test.
-  const plan = rq.resolveCatKey(f.src, category, measures, filters);
+  const plan = await rq.resolveCatKey(f.src, category, measures, filters);
   if (!plan) {
     ok(`${label}: resolveCatKey produced a key`, false);
     return;
   }
-  const got = rq.aggregateResident(f.src, category, measures, filters, plan.key);
+  const got = await rq.aggregateResident(f.src, category, measures, filters, plan.key);
   if (!got) {
     ok(`${label}: aggregateResident returned a result`, false);
     return;
   }
+  const twinPlan = rs.resolveCatKeySync(f.src, category, measures, filters);
+  const twin = rs.aggregateResidentSync(f.src, category, measures, filters, plan.key);
+  ok(`${label}: sync twins === async (key + chart)`, JSON.stringify(twinPlan) === JSON.stringify(plan) && !!twin
+    && sameLabels(twin.labels, got.labels) && twin.series.every((s, i) => sameValues(s.values, got.series[i].values)));
   ok(
     `${label}: labels === buildVizData (${want.labels.length} groups)`,
     sameLabels(want.labels, got.labels),
@@ -161,22 +170,22 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
     ['North', 50],
     ['East', 0],
   ]);
-  diffMetric('numeric column', f, 'sales');
-  ok('numeric: sum is the real total', rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'sum' }) === 350);
-  ok('numeric: min sees 0 as a real value', rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'min' }) === 0);
+  await diffMetric('numeric column', f, 'sales');
+  ok('numeric: sum is the real total', await rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'sum' }) === 350);
+  ok('numeric: min sees 0 as a real value', await rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'min' }) === 0);
   ok(
     'numeric: avg divides by finite-numeric count, not row count',
-    rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'avg' }) === 350 / 4,
+    await rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'avg' }) === 350 / 4,
   );
   ok(
     'unknown column → null (not an error)',
-    rq.computeMetricResident(f.src, { column: 'nope', aggregation: 'sum' }) === null,
+    await rq.computeMetricResident(f.src, { column: 'nope', aggregation: 'sum' }) === null,
   );
   ok(
     'unsupported aggregation → null',
-    rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'median' as metricValue.MetricAggregation }) === null,
+    await rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'median' as metricValue.MetricAggregation }) === null,
   );
-  diffAggregate('numeric', f, 'region', [
+  await diffAggregate('numeric', f, 'region', [
     { column: 'sales', aggregation: 'sum' },
     { column: 'sales', aggregation: 'avg' },
     { column: 'sales', aggregation: 'count' },
@@ -200,15 +209,15 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
     ['Boston', '012'],
     ['Reno', '90210'],
   ]);
-  diffMetric('text column', f, 'zip');
+  await diffMetric('text column', f, 'zip');
   for (const agg of ['sum', 'avg', 'min', 'max'] as metricValue.MetricAggregation[]) {
     ok(
       `text: ${agg}(zip) is null, NOT a cast of '007'`,
-      rq.computeMetricResident(f.src, { column: 'zip', aggregation: agg }) === null,
+      await rq.computeMetricResident(f.src, { column: 'zip', aggregation: agg }) === null,
     );
   }
-  ok('text: count(zip) === 3', rq.computeMetricResident(f.src, { column: 'zip', aggregation: 'count' }) === 3);
-  diffAggregate('text measure', f, 'city', [
+  ok('text: count(zip) === 3', await rq.computeMetricResident(f.src, { column: 'zip', aggregation: 'count' }) === 3);
+  await diffAggregate('text measure', f, 'city', [
     { column: 'zip', aggregation: 'sum' },
     { column: 'zip', aggregation: 'count' },
   ]);
@@ -225,13 +234,13 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
     ['b', null],
     ['a', null],
   ]);
-  diffMetric('all-empty column', f, 'v');
+  await diffMetric('all-empty column', f, 'v');
   for (const agg of ['sum', 'avg', 'min', 'max'] as metricValue.MetricAggregation[]) {
-    const got = rq.computeMetricResident(f.src, { column: 'v', aggregation: agg });
+    const got = await rq.computeMetricResident(f.src, { column: 'v', aggregation: agg });
     ok(`all-empty: ${agg} is null — NOT 0, NOT NaN`, got === null);
   }
-  ok('all-empty: count is 0, not null', rq.computeMetricResident(f.src, { column: 'v', aggregation: 'count' }) === 0);
-  diffAggregate('all-empty', f, 'k', [
+  ok('all-empty: count is 0, not null', await rq.computeMetricResident(f.src, { column: 'v', aggregation: 'count' }) === 0);
+  await diffAggregate('all-empty', f, 'k', [
     { column: 'v', aggregation: 'sum' },
     { column: 'v', aggregation: 'count' },
   ]);
@@ -252,12 +261,12 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
     ['y', null],
     ['x', 'b'],
   ]);
-  diffMetric('blank-heavy column', f, 'note');
+  await diffMetric('blank-heavy column', f, 'note');
   ok(
     "count excludes '' , whitespace-only and null → 2",
-    rq.computeMetricResident(f.src, { column: 'note', aggregation: 'count' }) === 2,
+    await rq.computeMetricResident(f.src, { column: 'note', aggregation: 'count' }) === 2,
   );
-  diffAggregate('blank-heavy', f, 'g', [{ column: 'note', aggregation: 'count' }]);
+  await diffAggregate('blank-heavy', f, 'g', [{ column: 'note', aggregation: 'count' }]);
 
   // The full JS whitespace class, which neither DuckDB trim() nor RE2 \s covers
   // on its own (tab vs NBSP). sqlGen.sqlEmpty spells it out; this proves the
@@ -269,10 +278,10 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
     ['x', '\r\n'],
     ['x', 'real'],
   ]);
-  diffMetric('unicode-whitespace column', ws, 'note');
+  await diffMetric('unicode-whitespace column', ws, 'note');
   ok(
     'count treats tab/NBSP/VT/CRLF as empty → 1',
-    rq.computeMetricResident(ws.src, { column: 'note', aggregation: 'count' }) === 1,
+    await rq.computeMetricResident(ws.src, { column: 'note', aggregation: 'count' }) === 1,
   );
 }
 
@@ -292,8 +301,8 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
     ['0090210', 1],
     ['9007199254740993', 2],
   ]);
-  diffAggregate('leading zeros', f, 'code', [{ column: 'amt', aggregation: 'sum' }]);
-  const got = rq.aggregateResident(f.src, 'code', [{ column: 'amt', aggregation: 'sum' }]);
+  await diffAggregate('leading zeros', f, 'code', [{ column: 'amt', aggregation: 'sum' }]);
+  const got = await rq.aggregateResident(f.src, 'code', [{ column: 'amt', aggregation: 'sum' }]);
   ok("leading zeros: '007' stays the string '007'", !!got && Object.is(got.labels[0], '007'));
   // 5 rows, 4 distinct codes — '007' and '7' must NOT collapse into one group.
   ok("leading zeros: '007' and '7' are DIFFERENT groups", !!got && got.labels.length === 4);
@@ -305,7 +314,7 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
   ok('leading zeros: sum of the 007 group is 15', !!got && got.series[0].values[0] === 15);
 
   // …and the same column as a MEASURE is null, not 7+7+5.
-  diffMetric('leading-zero column as measure', f, 'code');
+  await diffMetric('leading-zero column as measure', f, 'code');
 }
 
 // ── 6. Filters ──────────────────────────────────────────────────────────────
@@ -383,8 +392,8 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
     { name: 'in on a column this dataset lacks', steps: [{ type: 'filter', column: 'nope', op: 'in', values: ['x'] }] },
   ];
   for (const c of cases) {
-    diffMetric(`filter ${c.name}`, f, 'sales', c.steps);
-    diffAggregate(`filter ${c.name}`, f, 'region', [{ column: 'sales', aggregation: 'sum' }], c.steps);
+    await diffMetric(`filter ${c.name}`, f, 'sales', c.steps);
+    await diffAggregate(`filter ${c.name}`, f, 'region', [{ column: 'sales', aggregation: 'sum' }], c.steps);
   }
 
   // ── Proof that the `in` predicate REACHED SQL ────────────────────────────
@@ -399,19 +408,19 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
   // from the unfiltered one. Rows are West/100, East/200, West/150, North/300,
   // East/50 → 800 in total, 500 within {West, East}.
   const inWE: FilterStep[] = [{ type: 'filter', column: 'region', op: 'in', values: ['West', 'East'] }];
-  const unfiltered = rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'sum' });
-  const filtered = rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'sum' }, inWE);
+  const unfiltered = await rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'sum' });
+  const filtered = await rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'sum' }, inWE);
   ok('in: the resident sum is the FILTERED total (500), not the whole column', filtered === 500);
   ok('in: …and the unfiltered total really is different (800)', unfiltered === 800);
   ok('in: so the predicate reached SQL rather than being skipped', filtered !== unfiltered);
 
-  const notWest = rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'sum' }, [
+  const notWest = await rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'sum' }, [
     { type: 'filter', column: 'region', op: 'not in', values: ['West'] },
   ]);
   ok('not in: the resident sum excludes the listed value (550)', notWest === 550);
 
   // The same proof one level up, on the chart path: 2 groups, not 3.
-  const chart = rq.aggregateResident(f.src, 'region', [{ column: 'sales', aggregation: 'sum' }], inWE);
+  const chart = await rq.aggregateResident(f.src, 'region', [{ column: 'sales', aggregation: 'sum' }], inWE);
   ok('in: aggregateResident returns only the listed groups', !!chart && chart.labels.length === 2);
   ok('in: …in first-seen order', !!chart && Object.is(chart.labels[0], 'West') && Object.is(chart.labels[1], 'East'));
 }
@@ -427,23 +436,23 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
     ['East', 200],
   ]);
   const none: FilterStep[] = [{ type: 'filter', column: 'region', op: '=', value: 'Nowhere' }];
-  diffMetric('filtered to nothing', f, 'sales', none);
+  await diffMetric('filtered to nothing', f, 'sales', none);
   ok(
     'filtered to nothing: count is 0 (card shows 0)',
-    rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'count' }, none) === 0,
+    await rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'count' }, none) === 0,
   );
   ok(
     'filtered to nothing: sum is null (card shows —)',
-    rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'sum' }, none) === null,
+    await rq.computeMetricResident(f.src, { column: 'sales', aggregation: 'sum' }, none) === null,
   );
-  diffAggregate('filtered to nothing', f, 'region', [{ column: 'sales', aggregation: 'sum' }], none);
-  const got = rq.aggregateResident(f.src, 'region', [{ column: 'sales', aggregation: 'sum' }], none);
+  await diffAggregate('filtered to nothing', f, 'region', [{ column: 'sales', aggregation: 'sum' }], none);
+  const got = await rq.aggregateResident(f.src, 'region', [{ column: 'sales', aggregation: 'sum' }], none);
   ok('filtered to nothing: zero labels', !!got && got.labels.length === 0);
 
   // A genuinely zero-row table.
   const empty = fixture(cols, []);
-  diffMetric('zero-row table', empty, 'sales');
-  diffAggregate('zero-row table', empty, 'region', [{ column: 'sales', aggregation: 'sum' }]);
+  await diffMetric('zero-row table', empty, 'sales');
+  await diffAggregate('zero-row table', empty, 'region', [{ column: 'sales', aggregation: 'sum' }]);
 }
 
 // ── 8. Null / '' / duplicate-name / unknown-measure edges ───────────────────
@@ -461,17 +470,17 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
   ]);
   // null and '' are DIFFERENT groups even though both label as '' — three
   // groups, three distinct sums, and buildVizData agrees on the ordering.
-  diffAggregate('null vs empty category', f, 'g', [{ column: 'v', aggregation: 'sum' }]);
-  const got = rq.aggregateResident(f.src, 'g', [{ column: 'v', aggregation: 'sum' }]);
+  await diffAggregate('null vs empty category', f, 'g', [{ column: 'v', aggregation: 'sum' }]);
+  const got = await rq.aggregateResident(f.src, 'g', [{ column: 'v', aggregation: 'sum' }]);
   ok('null and "" stay separate groups', !!got && got.labels.length === 3);
 
   // Unknown MEASURE column → null values (transforms warns and returns null).
-  diffAggregate('unknown measure column', f, 'g', [{ column: 'nope', aggregation: 'sum' }]);
+  await diffAggregate('unknown measure column', f, 'g', [{ column: 'nope', aggregation: 'sum' }]);
 
   // Unknown CATEGORY / no measures → null, meaning "fall back to JS".
-  ok('unknown category → null', rq.aggregateResident(f.src, 'nope', [{ column: 'v', aggregation: 'sum' }]) === null);
-  ok('no measures → null', rq.aggregateResident(f.src, 'g', []) === null);
-  ok('empty category name → null', rq.aggregateResident(f.src, '', [{ column: 'v', aggregation: 'sum' }]) === null);
+  ok('unknown category → null', await rq.aggregateResident(f.src, 'nope', [{ column: 'v', aggregation: 'sum' }]) === null);
+  ok('no measures → null', await rq.aggregateResident(f.src, 'g', []) === null);
+  ok('empty category name → null', await rq.aggregateResident(f.src, '', [{ column: 'v', aggregation: 'sum' }]) === null);
 }
 
 // ── 9. A NUMBER column as the category ──────────────────────────────────────
@@ -487,8 +496,8 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
     [null, 4],
     [2023, 5],
   ]);
-  diffAggregate('numeric category', f, 'year', [{ column: 'v', aggregation: 'sum' }]);
-  const got = rq.aggregateResident(f.src, 'year', [{ column: 'v', aggregation: 'sum' }]);
+  await diffAggregate('numeric category', f, 'year', [{ column: 'v', aggregation: 'sum' }]);
+  const got = await rq.aggregateResident(f.src, 'year', [{ column: 'v', aggregation: 'sum' }]);
   ok('numeric category: labels stay JS numbers', !!got && Object.is(got.labels[0], 2024));
   ok('numeric category: null groups to the "" label', !!got && Object.is(got.labels[2], ''));
 }
@@ -507,8 +516,8 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
     ['﻿bom-leading', 5],
     ['tab\there', 6],
   ]);
-  diffAggregate('awkward labels', f, 'label', [{ column: 'v', aggregation: 'sum' }]);
-  const got = rq.aggregateResident(f.src, 'label', [{ column: 'v', aggregation: 'sum' }]);
+  await diffAggregate('awkward labels', f, 'label', [{ column: 'v', aggregation: 'sum' }]);
+  const got = await rq.aggregateResident(f.src, 'label', [{ column: 'v', aggregation: 'sum' }]);
   ok(
     'a leading BOM survives the transport (bomSafe projection)',
     !!got && Object.is(got.labels[4], '﻿bom-leading'),
@@ -561,7 +570,7 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
   let allSame = true;
   let firstRun: (string | number)[] | null = null;
   for (let run = 0; run < 5; run++) {
-    const got = rq.aggregateResident(f.src, 'cat', [{ column: 'v', aggregation: 'sum' }]);
+    const got = await rq.aggregateResident(f.src, 'cat', [{ column: 'v', aggregation: 'sum' }]);
     if (!got) {
       allSame = false;
       break;
@@ -596,8 +605,8 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
     })`,
   );
 
-  diffMetric('60k table', f, 'v');
-  diffAggregate('60k leading-zero categories', f, 'code', [{ column: 'v', aggregation: 'count' }]);
+  await diffMetric('60k table', f, 'v');
+  await diffAggregate('60k leading-zero categories', f, 'code', [{ column: 'v', aggregation: 'count' }]);
 }
 
 // ── 12. The one semantic that could NOT be reproduced: float summation ──────
@@ -622,7 +631,7 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
   const f = fixture(cols, rows);
 
   const want = metricValue.computeMetric(f.columns, f.rows, { column: 'v', aggregation: 'sum' }) as number;
-  const got = rq.computeMetricResident(f.src, { column: 'v', aggregation: 'sum' }) as number;
+  const got = await rq.computeMetricResident(f.src, { column: 'v', aggregation: 'sum' }) as number;
   const relErr = Math.abs(got - want) / Math.abs(want);
   ok(`float sum: relative error ${relErr.toExponential(2)} < 1e-12`, relErr < 1e-12);
   ok('float sum: not silently a different magnitude', Math.abs(got - want) < 1e-6 * Math.abs(want));
@@ -633,7 +642,7 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
   // min/max/count are exact even on fractional data — no summation involved.
   for (const agg of ['count', 'min', 'max'] as metricValue.MetricAggregation[]) {
     const w = metricValue.computeMetric(f.columns, f.rows, { column: 'v', aggregation: agg });
-    const g = rq.computeMetricResident(f.src, { column: 'v', aggregation: agg });
+    const g = await rq.computeMetricResident(f.src, { column: 'v', aggregation: agg });
     ok(`float data: ${agg} is EXACT`, Object.is(w, g));
   }
 }
@@ -660,13 +669,13 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
   ]);
   for (const op of ['=', '!=', 'contains'] as FilterStep['op'][]) {
     for (const needle of ['\u{10000}', 'é', 'a', '']) {
-      diffMetric(`astral ${op} ${JSON.stringify(needle)}`, f, 'v', [
+      await diffMetric(`astral ${op} ${JSON.stringify(needle)}`, f, 'v', [
         { type: 'filter', column: 's', op, value: needle },
       ]);
     }
   }
   // BMP-only ordering agrees.
-  diffMetric('BMP ordering filter', f, 'v', [{ type: 'filter', column: 's', op: '>', value: 'a' }]);
+  await diffMetric('BMP ordering filter', f, 'v', [{ type: 'filter', column: 's', op: '>', value: 'a' }]);
 
   // The documented divergence, asserted as a DIVERGENCE so it cannot rot.
   const astral: FilterStep[] = [{ type: 'filter', column: 's', op: '>', value: '�' }];
@@ -674,7 +683,7 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
     column: 'v',
     aggregation: 'sum',
   });
-  const resAnswer = rq.computeMetricResident(f.src, { column: 'v', aggregation: 'sum' }, astral);
+  const resAnswer = await rq.computeMetricResident(f.src, { column: 'v', aggregation: 'sum' }, astral);
   ok('astral ordering: JS (UTF-16 code units) keeps no row', jsAnswer === null);
   ok('astral ordering: DuckDB (UTF-8 bytes) keeps the astral row — KNOWN DIVERGENCE', resAnswer === 2);
 }
@@ -685,29 +694,29 @@ ok('isResident(): true when the bridge is up', rq.isResident() === true);
     parquetPath: path.join(dir, 'does-not-exist.parquet'),
     columns: [{ name: 'a', type: 'number' }],
   };
-  ok('missing file: metric → null', rq.computeMetricResident(missing, { column: 'a', aggregation: 'sum' }) === null);
-  ok('missing file: aggregate → null', rq.aggregateResident(missing, 'a', [{ column: 'a', aggregation: 'sum' }]) === null);
+  ok('missing file: metric → null', await rq.computeMetricResident(missing, { column: 'a', aggregation: 'sum' }) === null);
+  ok('missing file: aggregate → null', await rq.aggregateResident(missing, 'a', [{ column: 'a', aggregation: 'sum' }]) === null);
 
   const junk = path.join(dir, 'junk.parquet');
   fs.writeFileSync(junk, 'not parquet at all');
   const bad: rq.ResidentSource = { parquetPath: junk, columns: [{ name: 'a', type: 'number' }] };
-  ok('corrupt file: metric → null', rq.computeMetricResident(bad, { column: 'a', aggregation: 'sum' }) === null);
-  ok('corrupt file: aggregate → null', rq.aggregateResident(bad, 'a', [{ column: 'a', aggregation: 'sum' }]) === null);
+  ok('corrupt file: metric → null', await rq.computeMetricResident(bad, { column: 'a', aggregation: 'sum' }) === null);
+  ok('corrupt file: aggregate → null', await rq.aggregateResident(bad, 'a', [{ column: 'a', aggregation: 'sum' }]) === null);
 
   const badPath: rq.ResidentSource = { parquetPath: '/tmp/x.csv', columns: [{ name: 'a', type: 'number' }] };
-  ok('non-.parquet path → null, no throw', rq.computeMetricResident(badPath, { column: 'a', aggregation: 'sum' }) === null);
+  ok('non-.parquet path → null, no throw', await rq.computeMetricResident(badPath, { column: 'a', aggregation: 'sum' }) === null);
 
   ok(
     'empty schema → null',
-    rq.computeMetricResident({ parquetPath: missing.parquetPath, columns: [] }, { column: 'a', aggregation: 'sum' }) === null,
+    await rq.computeMetricResident({ parquetPath: missing.parquetPath, columns: [] }, { column: 'a', aggregation: 'sum' }) === null,
   );
   ok(
     'malformed source → null',
-    rq.computeMetricResident(null as unknown as rq.ResidentSource, { column: 'a', aggregation: 'sum' }) === null,
+    await rq.computeMetricResident(null as unknown as rq.ResidentSource, { column: 'a', aggregation: 'sum' }) === null,
   );
   ok(
     'malformed spec → null',
-    rq.computeMetricResident(missing, null as unknown as { column: string; aggregation: metricValue.MetricAggregation }) === null,
+    await rq.computeMetricResident(missing, null as unknown as { column: string; aggregation: metricValue.MetricAggregation }) === null,
   );
 }
 
@@ -720,3 +729,9 @@ if (failureCount() > 0) {
   process.exit(1);
 }
 console.log('\nAll residentQuery checks passed.');
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

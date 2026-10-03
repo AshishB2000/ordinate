@@ -90,11 +90,8 @@
 // which costs far more than the case is worth. Pinned by a test so it stays
 // visible rather than being discovered by a user.
 
-import type { ColumnType, ParsedColumn } from '../data/parse';
-import { coerceValue } from '../data/parse';
-import type { Cell, FilterStep } from '../data/transforms';
-import type { FilterOp } from '../data/filterOps';
-import { FILTER_OPS, COMPARE_OPS, LIST_OPS } from '../data/filterOps';
+import type { ParsedColumn } from '../data/parse';
+import type { FilterStep } from '../data/transforms';
 import type { MetricAggregation } from '../analysis/metricValue';
 import {
   CATEGORY_CAP, DATE_GRAINS, OTHER_LABEL, OTHER_NOTE,
@@ -108,9 +105,10 @@ import { relationSql } from './parquetStore';
 import { bomSafe, catKeyExpr, catLabel, dateBucketSql, phys, sqlCanonicalDate, sqlNum } from './residentCategory';
 import type { ResidentCatKey } from './residentCategory';
 import * as duck from './duckdb';
-import { sqlPeriodPredicate } from './periodSql';
-import { sqlRadiusPredicate } from './geoSql';
-import { resolvePeriodNow } from '../analysis/dateIntel';
+// The filter compiler lives in its own file since this one hit the 800-line
+// cap; re-exported so every existing importer keeps its import.
+import { colIndex, filterPredicates } from './residentFilter';
+export { filterPredicate, filterPredicates } from './residentFilter';
 
 export type { ResidentCatKey } from './residentCategory';
 
@@ -145,7 +143,6 @@ export interface ResidentChartData {
 // ── Constants shared with transforms.ts ──────────────────────────────────────
 
 const AGG_FNS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
-const SQL_OP: Record<string, string> = { '=': '=', '!=': '<>', '>': '>', '<': '<', '>=': '>=', '<=': '<=' };
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -162,6 +159,31 @@ export function isResident(): boolean {
   }
 }
 
+// ── Plan → run → read ───────────────────────────────────────────────────────
+//
+// Every entry point is a pure PLAN (a statement plus how to read its rows) run
+// through the ASYNC bridge, so a request never parks the event loop. The split
+// is what lets `residentSync.ts` run the very same statements through the sync
+// bridge for the consumers T4.2 has not made async yet: one SQL builder, two
+// transports, never a second copy of the SQL.
+
+/** One resident statement. An `ordered` one gets its FROM and ordinal from `runOrdered`. */
+export interface Stmt<T> {
+  path: string;
+  ordered: boolean;
+  sql: (from: string, ord: string) => string;
+  params: duck.DuckValue[];
+  read: (rows: duck.DuckRow[]) => T | null;
+}
+
+async function run<T>(s: Stmt<T> | null): Promise<T | null> {
+  if (!s) return null;
+  const rows = s.ordered
+    ? await runOrderedAsync(s.path, s.sql, s.params)
+    : await duck.queryAsync(s.sql(plainFrom(s.path), ''), s.params);
+  return s.read(rows);
+}
+
 /**
  * The ONE number a metric card shows, computed without hydrating a single row.
  *
@@ -174,38 +196,49 @@ export function isResident(): boolean {
  * is unavailable or the query fails, in which case the caller must fall back.
  * `count` is the exception that returns 0 rather than null over no rows.
  */
-export function computeMetricResident(
+export async function computeMetricResident(
   src: ResidentSource,
   spec: { column: string; aggregation: MetricAggregation },
   filters?: FilterStep[],
-): number | null {
+): Promise<number | null> {
   try {
-    const cols = schemaOf(src);
-    if (!cols) return null;
-    // The guards stay in TS, before any SQL exists. In DuckDB an unknown column
-    // is a binder error and an unknown aggregation a catalog error; today both
-    // of those render "—" via a null, not an error state (phase-0/04 R-METRIC-07).
-    if (!spec || typeof spec.column !== 'string' || !AGG_FNS.has(spec.aggregation)) return null;
-    const ci = colIndex(cols, spec.column);
-    if (ci < 0) return null;
-
-    const params: duck.DuckValue[] = [];
-    const where = whereClause(cols, filters, params);
-    const expr = aggExpr(cols, ci, spec.aggregation);
-
-    // No GROUP BY, so a global aggregate over zero qualifying rows returns ONE
-    // row: count → 0, sum/avg/min/max → NULL. That is exactly metricValue's
-    // asymmetric empty-table contract (R-METRIC-08), for free and with no
-    // HAVING and no COALESCE.
-    const sql = `SELECT ${expr} AS m0 FROM ${plainFrom(src.parquetPath)}${where};`;
-    const out = duck.query(sql, params);
-    if (out.length === 0) return null;
-    return metricNumber(out[0].m0);
+    return await run(metricStmt(src, spec, filters));
   } catch {
     // Bridge down, missing file, non-Parquet bytes, width mismatch, overflow —
     // one answer: the caller keeps its working JS path.
     return null;
   }
+}
+
+export function metricStmt(
+  src: ResidentSource,
+  spec: { column: string; aggregation: MetricAggregation },
+  filters?: FilterStep[],
+): Stmt<number> | null {
+  const cols = schemaOf(src);
+  if (!cols) return null;
+  // The guards stay in TS, before any SQL exists. In DuckDB an unknown column
+  // is a binder error and an unknown aggregation a catalog error; today both
+  // of those render "—" via a null, not an error state (phase-0/04 R-METRIC-07).
+  if (!spec || typeof spec.column !== 'string' || !AGG_FNS.has(spec.aggregation)) return null;
+  const ci = colIndex(cols, spec.column);
+  if (ci < 0) return null;
+
+  const params: duck.DuckValue[] = [];
+  const where = whereClause(cols, filters, params);
+  const expr = aggExpr(cols, ci, spec.aggregation);
+
+  // No GROUP BY, so a global aggregate over zero qualifying rows returns ONE
+  // row: count → 0, sum/avg/min/max → NULL. That is exactly metricValue's
+  // asymmetric empty-table contract (R-METRIC-08), for free and with no
+  // HAVING and no COALESCE.
+  return {
+    path: src.parquetPath,
+    ordered: false,
+    params,
+    sql: (from) => `SELECT ${expr} AS m0 FROM ${from}${where};`,
+    read: (out) => (out.length === 0 ? null : metricNumber(out[0].m0)),
+  };
 }
 
 /**
@@ -220,37 +253,50 @@ export function computeMetricResident(
  * this API — so the honest answer is "fall back", not a silently warning-free
  * empty chart.
  */
-export function aggregateResident(
+export async function aggregateResident(
   src: ResidentSource,
   category: string,
   measures: ResidentMeasure[],
   filters?: FilterStep[],
   catKey: ResidentCatKey = { kind: 'raw' },
-): ResidentChartData | null {
+): Promise<ResidentChartData | null> {
   try {
-    const cols = schemaOf(src);
-    if (!cols) return null;
-    if (typeof category !== 'string' || category === '') return null;
-    const gi = colIndex(cols, category);
-    if (gi < 0) return null;
-    const list = Array.isArray(measures) ? measures : [];
-    if (list.length === 0) return null;
-
-    const out = runAggregate(src, cols, gi, list, filters, catKey);
-    if (out === null) return null;
-
-    const catType = cols[gi].type;
-    const labels = out.map((r) => catLabel(r.g0 ?? null, catType, catKey));
-    const series = list.map((m, i) => ({
-      name: measureLabel(m),
-      // vizData.numOrNull: ONLY a finite number survives; anything else is null,
-      // because every renderer tests `typeof v === 'number'`.
-      values: out.map((r) => finiteOrNull(r[`m${i}`] ?? null)),
-    }));
-    return { labels, series };
+    return await run(aggregateStmt(src, category, measures, filters, catKey));
   } catch {
     return null;
   }
+}
+
+export function aggregateStmt(
+  src: ResidentSource,
+  category: string,
+  measures: ResidentMeasure[],
+  filters?: FilterStep[],
+  catKey: ResidentCatKey = { kind: 'raw' },
+): Stmt<ResidentChartData> | null {
+  const cols = schemaOf(src);
+  if (!cols) return null;
+  if (typeof category !== 'string' || category === '') return null;
+  const gi = colIndex(cols, category);
+  if (gi < 0) return null;
+  const list = Array.isArray(measures) ? measures : [];
+  if (list.length === 0) return null;
+
+  const catType = cols[gi].type;
+  return {
+    ...aggregateSql(cols, gi, list, filters, catKey),
+    path: src.parquetPath,
+    ordered: true,
+    read: (out) => ({
+      labels: out.map((r) => catLabel(r.g0 ?? null, catType, catKey)),
+      series: list.map((m, i) => ({
+        name: measureLabel(m),
+        // vizData.numOrNull: ONLY a finite number survives; anything else is null,
+        // because every renderer tests `typeof v === 'number'`.
+        values: out.map((r) => finiteOrNull(r[`m${i}`] ?? null)),
+      })),
+    }),
+  };
 }
 
 /**
@@ -266,30 +312,43 @@ export function aggregateResident(
  * but the two canonical shapes, which SQL does not implement and the JS
  * `Date.parse` fallback does.
  */
-export function resolveCatKey(
+export async function resolveCatKey(
   src: ResidentSource,
   category: string,
   measures: ResidentMeasure[],
   filters?: FilterStep[],
   grain?: DateGrain,
   bins?: number,
-): { key: ResidentCatKey; info: CategoryInfo } | null {
+): Promise<CatKeyPlan | null> {
   try {
-    const cols = schemaOf(src);
-    if (!cols) return null;
-    if (typeof category !== 'string' || category === '') return null;
-    const gi = colIndex(cols, category);
-    if (gi < 0) return null;
-    const list = Array.isArray(measures) ? measures : [];
-    if (list.length === 0) return null;
-
-    const type = cols[gi].type;
-    if (type === 'number') return binKey(src, cols, gi, filters, bins);
-    if (type === 'date') return dateKey(src, cols, gi, filters, grain);
-    return textKey(src, cols, gi, list[0], filters);
+    return await run(catKeyStmt(src, category, measures, filters, grain, bins));
   } catch {
     return null;
   }
+}
+
+export interface CatKeyPlan { key: ResidentCatKey; info: CategoryInfo }
+
+export function catKeyStmt(
+  src: ResidentSource,
+  category: string,
+  measures: ResidentMeasure[],
+  filters?: FilterStep[],
+  grain?: DateGrain,
+  bins?: number,
+): Stmt<CatKeyPlan> | null {
+  const cols = schemaOf(src);
+  if (!cols) return null;
+  if (typeof category !== 'string' || category === '') return null;
+  const gi = colIndex(cols, category);
+  if (gi < 0) return null;
+  const list = Array.isArray(measures) ? measures : [];
+  if (list.length === 0) return null;
+
+  const type = cols[gi].type;
+  if (type === 'number') return binKey(src, cols, gi, filters, bins);
+  if (type === 'date') return dateKey(src, cols, gi, filters, grain);
+  return textKey(src, cols, gi, list[0], filters);
 }
 
 /** min/max of the FILTERED numeric cells → the bin edges. */
@@ -299,19 +358,25 @@ function binKey(
   gi: number,
   filters: FilterStep[] | undefined,
   bins: number | undefined,
-): { key: ResidentCatKey; info: CategoryInfo } | null {
+): Stmt<CatKeyPlan> {
   const params: duck.DuckValue[] = [];
   const where = whereClause(cols, filters, params);
   const n = sqlNum(phys(gi));
-  const sql =
-    `SELECT CAST(min(${n}) AS DOUBLE) AS lo, CAST(max(${n}) AS DOUBLE) AS hi ` +
-    `FROM ${plainFrom(src.parquetPath)}${where};`;
-  const out = duck.query(sql, params);
-  if (out.length === 0) return null;
-  // binPlan is shared with the JS path, so the degenerate cases (one distinct
-  // value, no numeric cells at all) collapse to one bucket identically.
-  const plan = binPlan(finiteOrNull(out[0].lo), finiteOrNull(out[0].hi), bins);
-  return { key: { kind: 'bin', ...plan }, info: { kind: 'number', binned: true } };
+  return {
+    path: src.parquetPath,
+    ordered: false,
+    params,
+    sql: (from) =>
+      `SELECT CAST(min(${n}) AS DOUBLE) AS lo, CAST(max(${n}) AS DOUBLE) AS hi ` +
+      `FROM ${from}${where};`,
+    read: (out) => {
+      if (out.length === 0) return null;
+      // binPlan is shared with the JS path, so the degenerate cases (one distinct
+      // value, no numeric cells at all) collapse to one bucket identically.
+      const plan = binPlan(finiteOrNull(out[0].lo), finiteOrNull(out[0].hi), bins);
+      return { key: { kind: 'bin', ...plan }, info: { kind: 'number', binned: true } };
+    },
+  };
 }
 
 /**
@@ -324,7 +389,7 @@ function dateKey(
   gi: number,
   filters: FilterStep[] | undefined,
   grain: DateGrain | undefined,
-): { key: ResidentCatKey; info: CategoryInfo } | null {
+): Stmt<CatKeyPlan> {
   const p = phys(gi);
   const d = sqlCanonicalDate(p);
   const named = isDateGrain(grain) ? grain : null;
@@ -338,23 +403,30 @@ function dateKey(
 
   const params: duck.DuckValue[] = [];
   const where = whereClause(cols, filters, params);
-  const out = duck.query(`SELECT ${select.join(', ')} FROM ${plainFrom(src.parquetPath)}${where};`, params);
-  if (out.length === 0) return null;
-  // sum() over zero qualifying rows is NULL, and zero rows means zero unparsable
-  // cells — so `?? 0` is the right reading, not a defensive coalesce.
-  if ((finiteOrNull(out[0].bad) ?? 0) !== 0) return null;
+  return {
+    path: src.parquetPath,
+    ordered: false,
+    params,
+    sql: (from) => `SELECT ${select.join(', ')} FROM ${from}${where};`,
+    read: (out) => {
+      if (out.length === 0) return null;
+      // sum() over zero qualifying rows is NULL, and zero rows means zero unparsable
+      // cells — so `?? 0` is the right reading, not a defensive coalesce.
+      if ((finiteOrNull(out[0].bad) ?? 0) !== 0) return null;
 
-  let g: DateGrain;
-  if (named) {
-    g = named;
-  } else {
-    const counts = {} as Record<DateGrain, number>;
-    // count(DISTINCT …) skips NULLs, exactly as the JS side counts only parsed
-    // buckets. An unreadable count is Infinity so chooseGrain coarsens past it.
-    for (const x of DATE_GRAINS) counts[x] = finiteOrNull(out[0][`g_${x}`]) ?? Infinity;
-    g = chooseGrain(counts);
-  }
-  return { key: { kind: 'date', grain: g }, info: { kind: 'date', grain: g } };
+      let g: DateGrain;
+      if (named) {
+        g = named;
+      } else {
+        const counts = {} as Record<DateGrain, number>;
+        // count(DISTINCT …) skips NULLs, exactly as the JS side counts only parsed
+        // buckets. An unreadable count is Infinity so chooseGrain coarsens past it.
+        for (const x of DATE_GRAINS) counts[x] = finiteOrNull(out[0][`g_${x}`]) ?? Infinity;
+        g = chooseGrain(counts);
+      }
+      return { key: { kind: 'date', grain: g }, info: { kind: 'date', grain: g } };
+    },
+  };
 }
 
 /**
@@ -368,7 +440,7 @@ function textKey(
   gi: number,
   first: ResidentMeasure,
   filters: FilterStep[] | undefined,
-): { key: ResidentCatKey; info: CategoryInfo } | null {
+): Stmt<CatKeyPlan> {
   const p = phys(gi);
   const params: duck.DuckValue[] = [];
   const where = whereClause(cols, filters, params);
@@ -376,25 +448,27 @@ function textKey(
 
   // DESC NULLS LAST then the ordinal: the JS twin sorts the first-seen group
   // list by value descending with nulls last and breaks ties on position.
-  const out = runOrdered(
-    src.parquetPath,
-    (from, ord) =>
+  return {
+    path: src.parquetPath,
+    ordered: true,
+    params,
+    sql: (from, ord) =>
       `SELECT ${bomSafe(p)} AS g0, ${agg} AS m0 FROM ${from}${where} ` +
       `GROUP BY ${p} ORDER BY m0 DESC NULLS LAST, min(${ord}) LIMIT ${CATEGORY_CAP + 1};`,
-    params,
-  );
-  if (out.length <= CATEGORY_CAP) return { key: { kind: 'raw' }, info: { kind: 'text' } };
-
-  const keep: string[] = [];
-  let keepNull = false;
-  for (const r of out.slice(0, CATEGORY_CAP)) {
-    const v = r.g0;
-    if (v == null) keepNull = true;
-    else keep.push(typeof v === 'string' ? v : String(v));
-  }
-  return {
-    key: { kind: 'other', keep, keepNull, label: OTHER_LABEL },
-    info: { kind: 'text', note: OTHER_NOTE },
+    read: (out) => {
+      if (out.length <= CATEGORY_CAP) return { key: { kind: 'raw' }, info: { kind: 'text' } };
+      const keep: string[] = [];
+      let keepNull = false;
+      for (const r of out.slice(0, CATEGORY_CAP)) {
+        const v = r.g0;
+        if (v == null) keepNull = true;
+        else keep.push(typeof v === 'string' ? v : String(v));
+      }
+      return {
+        key: { kind: 'other', keep, keepNull, label: OTHER_LABEL },
+        info: { kind: 'text', note: OTHER_NOTE },
+      };
+    },
   };
 }
 
@@ -427,23 +501,42 @@ export function runOrdered(
   try {
     return duck.query(sqlFor(first.from, first.ord), params);
   } catch (err) {
-    if (ordinalMode === 'file_row_number' && /file_row_number/i.test(String((err as Error)?.message ?? ''))) {
-      ordinalMode = 'row_number';
-      const next = orderedFrom(parquetPath, 'row_number');
-      return duck.query(sqlFor(next.from, next.ord), params);
-    }
-    throw err;
+    if (!downgradeOrdinal(err)) throw err;
+    const next = orderedFrom(parquetPath, 'row_number');
+    return duck.query(sqlFor(next.from, next.ord), params);
   }
 }
 
-function runAggregate(
-  src: ResidentSource,
+/** `runOrdered` through the async bridge — same statement, same one-time downgrade. */
+export async function runOrderedAsync(
+  parquetPath: string,
+  sqlFor: (from: string, ord: string) => string,
+  params: duck.DuckValue[],
+): Promise<duck.DuckRow[]> {
+  const first = orderedFrom(parquetPath, ordinalMode);
+  try {
+    return await duck.queryAsync(sqlFor(first.from, first.ord), params);
+  } catch (err) {
+    if (!downgradeOrdinal(err)) throw err;
+    const next = orderedFrom(parquetPath, 'row_number');
+    return duck.queryAsync(sqlFor(next.from, next.ord), params);
+  }
+}
+
+/** True — and the mode downgraded, permanently — when `err` is the build rejecting `file_row_number`. */
+function downgradeOrdinal(err: unknown): boolean {
+  if (ordinalMode !== 'file_row_number' || !/file_row_number/i.test(String((err as Error)?.message ?? ''))) return false;
+  ordinalMode = 'row_number';
+  return true;
+}
+
+function aggregateSql(
   cols: ParsedColumn[],
   gi: number,
   measures: ResidentMeasure[],
   filters: FilterStep[] | undefined,
   catKey: ResidentCatKey,
-): duck.DuckRow[] | null {
+): { sql: (from: string, ord: string) => string; params: duck.DuckValue[] } {
   // Params are positional, so they are pushed in STATEMENT-TEXT order: the key
   // expression's, then the WHERE's.
   const params: duck.DuckValue[] = [];
@@ -455,27 +548,25 @@ function runAggregate(
   if (catKey.kind === 'raw') {
     // Unchanged: the label projection and the group key differ here (bomSafe vs
     // the raw column) and neither carries a parameter.
-    return runOrdered(
-      src.parquetPath,
-      (from, ord) =>
+    return {
+      params,
+      sql: (from, ord) =>
         `SELECT ${key.label} AS g0, ${aggs.join(', ')} FROM ${from}${where} ` +
         `GROUP BY ${key.group} ORDER BY min(${ord});`,
-      params,
-    );
+    };
   }
   // A BUCKETED key is one expression serving as both the label and the group,
   // and it carries bound parameters. Computing it once in a subquery and
   // grouping by NAME keeps each parameter bound exactly once — repeating the
   // expression in GROUP BY would mean binding the same values twice, in an
   // order that has to stay in step with the statement text.
-  return runOrdered(
-    src.parquetPath,
-    (from, ord) =>
+  return {
+    params,
+    sql: (from, ord) =>
       `SELECT __k AS g0, ${aggs.join(', ')} FROM ` +
       `(SELECT ${key.label} AS __k, ${ord} AS __o, * FROM ${from}${where}) ` +
       `GROUP BY __k ORDER BY min(__o);`,
-    params,
-  );
+  };
 }
 
 // ── FROM targets ─────────────────────────────────────────────────────────────
@@ -530,11 +621,6 @@ function orderedFrom(parquetPath: string, mode: OrdinalMode): { from: string; or
   return { from: `(SELECT row_number() OVER () AS __ord, * FROM ${base})`, ord: '__ord' };
 }
 
-/** `transforms.cellToString` for a stored cell: NULL becomes ''. */
-function sqlStr(p: string): string {
-  return `coalesce(CAST(${p} AS VARCHAR), '')`;
-}
-
 /**
  * One aggregation, mirroring `transforms.aggregate` / `metricValue.computeMetric`.
  * `ci < 0` (unknown measure column) yields NULL — transforms warns and returns
@@ -573,154 +659,11 @@ export function aggExpr(cols: ParsedColumn[], ci: number, fn: MetricAggregation)
   return `CAST(${f}(${n}) AS DOUBLE)`;
 }
 
-// ── Filters ──────────────────────────────────────────────────────────────────
-//
-// `transforms` applies filter steps in sequence, but each one is a pure row
-// predicate over an unchanged column set, so a sequence is exactly a
-// conjunction. An unknown column or operator is SKIPPED (transforms skips it
-// with a warning), which is what makes one dashboard-wide filter able to span
-// heterogeneous datasets.
+// ── Filters (compiled in ./residentFilter) ───────────────────────────────────
 
 function whereClause(cols: ParsedColumn[], filters: FilterStep[] | undefined, params: duck.DuckValue[]): string {
   const preds = filterPredicates(cols, filters, params);
   return preds.length === 0 ? '' : ` WHERE ${preds.join(' AND ')}`;
-}
-
-/**
- * The filter list as SQL conjuncts, EXPORTED so a caller that already has a
- * WHERE of its own can AND these into it instead of building a second predicate
- * compiler.
- *
- * `datasetPage.readPage` is that caller: the rows behind a number and the number
- * itself must be selected by the SAME predicate, or the drill-down panel would
- * quietly contradict the figure above it. One compiler, two callers.
- *
- * Order matters: `params` is positional, so a caller must splice these
- * predicates into its statement in the same order it called this.
- */
-export function filterPredicates(
-  cols: ParsedColumn[],
-  filters: FilterStep[] | undefined,
-  params: duck.DuckValue[],
-): string[] {
-  if (!Array.isArray(filters) || filters.length === 0) return [];
-  const preds: string[] = [];
-  for (const f of filters) {
-    const p = filterPredicate(cols, f, params);
-    if (p) preds.push(p);
-  }
-  return preds;
-}
-
-/**
- * ONE filter step as a SQL predicate, or `null` when the step applies NOTHING
- * (unknown column, unknown operator, empty `in` list) — exactly the cases
- * `transforms.stepFilter` skips with a warning.
- *
- * Exported for the same reason as `filterPredicates`.
- */
-export function filterPredicate(cols: ParsedColumn[], s: FilterStep, params: duck.DuckValue[]): string | null {
-  if (!s || typeof s !== 'object' || s.type !== 'filter') return null;
-  const ci = colIndex(cols, s.column);
-  if (ci < 0) return null; // "Filter skipped: unknown column"
-  if (!FILTER_OPS.has(s.op)) return null; // "Filter skipped: unknown operator"
-
-  const p = phys(ci);
-  const op: FilterOp = s.op;
-
-  if (op === 'within_km') return sqlRadiusPredicate(cols, ci, s, params); // r6:geo — ./geoSql
-  if (op === 'is_empty') return sqlEmpty(p);
-  if (op === 'not_empty') return `NOT ${sqlEmpty(p)}`;
-  if (op === 'period') {
-    // Resolved HERE, at query time — the stored step carries only its preset.
-    // No range → null, i.e. no predicate: transforms skips the step the same way.
-    const r = s.period ? resolvePeriodNow(s.period) : null;
-    return r ? sqlPeriodPredicate(p, r, params) : null;
-  }
-  if (op === 'contains') {
-    // Always string-based regardless of column type. A null cell becomes '' and
-    // an omitted needle is '' — which matches EVERY row, exactly as JS does.
-    params.push(cellToString(s.value));
-    return `contains(${sqlStr(p)}, CAST(? AS VARCHAR))`;
-  }
-  if (LIST_OPS.has(op)) {
-    const values = Array.isArray(s.values) ? s.values : [];
-    // Empty list → null, i.e. NO predicate. transforms skips the step with a
-    // warning and applies nothing, so "apply nothing" is the row-identical
-    // answer. (A caller that must not lose the warning — `ipc/visuals.ts`'s
-    // warning-freedom gate — rejects this case before it ever gets here.)
-    if (values.length === 0) return null;
-    return sqlInPredicate(cols[ci].type, p, values, op === 'not in', params);
-  }
-  if (!COMPARE_OPS.has(op)) return 'FALSE';
-
-  if (cols[ci].type === 'number') {
-    // The target goes through the SAME strict gate as transforms (coerceValue →
-    // isFiniteNumber), so '007' / '1,200' / 'abc' all become null and the filter
-    // keeps ZERO rows for every operator, `!=` included.
-    const t = coerceValue(s.value ?? null, 'number');
-    const tn = typeof t === 'number' && Number.isFinite(t) ? t : null;
-    if (tn === null) return 'FALSE';
-    params.push(tn);
-    // NULL <op> x is NULL → the row drops for every operator, matching the
-    // `cn === null → false` branch.
-    return `${sqlNum(p)} ${SQL_OP[op]} CAST(? AS DOUBLE)`;
-  }
-  params.push(cellToString(s.value));
-  return `${sqlStr(p)} ${SQL_OP[op]} CAST(? AS VARCHAR)`;
-}
-
-/**
- * `in` / `not in` as one never-NULL boolean. The twin of `sqlGen.sqlInPredicate`
- * — same three rules, same order, and pinned to it by the differential tests in
- * scripts/test-residentQuery.ts:
- *
- *  1. Every value is a bound `?`; a value list is untrusted input and is the
- *     only operand here whose COUNT the renderer controls.
- *  2. Cast on the DECLARED type — `sqlNum` only for a `number` column, so
- *     `'007' in ('7')` stays false.
- *  3. `coalesce(… , FALSE)` before negating, because `NULL IN (…)` is NULL and a
- *     bare `NOT` would drop null rows. `not in` is the EXACT complement of `in`
- *     in the JS fold, so a null cell — which is in no list — has to survive.
- */
-function sqlInPredicate(
-  type: ColumnType,
-  p: string,
-  values: Cell[],
-  negate: boolean,
-  params: duck.DuckValue[],
-): string {
-  let inner: string;
-  if (type === 'number') {
-    // The same strict gate as transforms: an entry that is not a finite number
-    // can never equal a finite cell, so it is dropped. All dropped → matches
-    // nothing, exactly as `= 'abc'` on a number column keeps zero rows.
-    const targets = new Set<number>();
-    for (const v of values) {
-      const n = coerceValue(v ?? null, 'number');
-      if (typeof n === 'number' && Number.isFinite(n)) targets.add(n);
-    }
-    if (targets.size === 0) {
-      inner = 'FALSE';
-    } else {
-      const holes: string[] = [];
-      for (const n of targets) {
-        holes.push('CAST(? AS DOUBLE)');
-        params.push(n);
-      }
-      inner = `coalesce(${sqlNum(p)} IN (${holes.join(', ')}), FALSE)`;
-    }
-  } else {
-    // De-duplicated to mirror the JS `Set` and to bound the parameter count.
-    const targets = new Set<string>(values.map((v) => cellToString(v)));
-    const holes: string[] = [];
-    for (const t of targets) {
-      holes.push('CAST(? AS VARCHAR)');
-      params.push(t);
-    }
-    inner = `coalesce(${sqlStr(p)} IN (${holes.join(', ')}), FALSE)`;
-  }
-  return negate ? `NOT ${inner}` : inner;
 }
 
 // ── Result decoding ──────────────────────────────────────────────────────────
@@ -744,18 +687,6 @@ function metricNumber(raw: duck.DuckValue): number | null {
 }
 
 // ── Small mirrors of transforms.ts / vizData.ts ──────────────────────────────
-
-/** Exact, case-sensitive, FIRST match — `transforms.colIndex`. */
-function colIndex(cols: ParsedColumn[], name: string): number {
-  for (let i = 0; i < cols.length; i += 1) {
-    if (cols[i] && cols[i].name === name) return i;
-  }
-  return -1;
-}
-
-function cellToString(cell: Cell | undefined): string {
-  return cell == null ? '' : String(cell);
-}
 
 /** `vizData.measureLabel` — the series name a chart legend shows. */
 function measureLabel(m: ResidentMeasure): string {

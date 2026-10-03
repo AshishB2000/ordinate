@@ -21,7 +21,8 @@ import type { VizEncoding } from '../analysis/visuals';
 import type { VizDataResult } from '../analysis/vizData';
 import { recommendChartType } from '../analysis/vizData';
 import type { ResidentCatKey, ResidentMeasure, ResidentSource } from './residentQuery';
-import { aggExpr, filterPredicates, resolveCatKey, runOrdered } from './residentQuery';
+import { aggExpr, filterPredicates, runOrdered } from './residentQuery';
+import { resolveCatKeySync } from './residentSync';
 import * as trace from './residentTrace';
 import { bomSafe, catKeyExpr, catLabel, phys } from './residentCategory';
 import { sqlEmpty } from './sqlGen';
@@ -151,7 +152,7 @@ export function facetDataResident(src: ResidentSource, enc: VizEncoding, filters
     dims.push(planFacetDim(d.column, ranked, d.cap, order));
   }
   const catType = type.get(enc.category);
-  const plan = resolveCatKey(src, enc.category, measures, filters, enc.grain, enc.bins);
+  const plan = resolveCatKeySync(src, enc.category, measures, filters, enc.grain, enc.bins);
   if (!plan) { trace.record('vizFacets', catType === 'date' ? 'skipped' : 'failed', `category type ${catType}`); return null; }
   const groups = facetGroupsResident(src, enc.category, plan.key, measures, filters, dims, split);
   if (!groups) { trace.record('vizFacets', 'failed', `${dims.length} dims`); return null; }

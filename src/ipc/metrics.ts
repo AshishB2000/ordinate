@@ -240,7 +240,7 @@ async function distinctValues(projectId: string, datasetId: string, column: stri
   try {
     const src = await datasets.residentSource(projectId, datasetId);
     if (src) {
-      const fast = readDistinctPage(src, column, { limit: SERIES_SCAN, search: '' });
+      const fast = await readDistinctPage(src, column, { limit: SERIES_SCAN, search: '' });
       if (fast) return fast.values;
     }
     const ds = await datasets.getDataset(projectId, datasetId);

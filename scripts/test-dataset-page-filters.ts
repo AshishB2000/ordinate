@@ -36,6 +36,8 @@ import type { Cell, FilterStep } from '../src/data/transforms';
 
 import { ok, failureCount } from './selfcheck';
 
+async function main(): Promise<void> {
+
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-page-filters-'));
 function cleanup(): void {
   try {
@@ -94,9 +96,9 @@ function sameRows(a: Cell[][], b: Cell[][]): boolean {
 }
 
 /** readPage must equal pageRowsJs over the round-tripped rows, exactly. */
-function diff(label: string, req: dp.PageRequest): dp.PageResult | null {
+async function diff(label: string, req: dp.PageRequest): Promise<dp.PageResult | null> {
   const want = dp.pageRowsJs(back!.columns, table, req);
-  const got = dp.readPage(src, req);
+  const got = await dp.readPage(src, req);
   if (!got) {
     ok(`${label}: readPage served the page (did not fall back)`, false);
     return null;
@@ -184,7 +186,7 @@ for (const f of FILTERS) {
         const label =
           `[${f.label}] search=${JSON.stringify(search)} ` +
           `sort=${sort.sortColumn ?? '-'}${sort.sortDir === 'desc' ? '↓' : ''} offset=${offset}`;
-        diff(label, req);
+        await diff(label, req);
       }
     }
   }
@@ -196,8 +198,8 @@ ok(`matrix covered ${combos} filter × search × sort × offset combinations`, c
 // A filter really does narrow, and `total` is the FILTERED count — the number
 // the drill panel puts in its header.
 {
-  const all = dp.readPage(src, { offset: 0, limit: 1 });
-  const north = dp.readPage(src, {
+  const all = await dp.readPage(src, { offset: 0, limit: 1 });
+  const north = await dp.readPage(src, {
     offset: 0,
     limit: 1,
     filters: [{ type: 'filter', column: 'region', op: '=', value: 'North' }],
@@ -217,7 +219,7 @@ ok(`matrix covered ${combos} filter × search × sort × offset combinations`, c
     search: 'north',
     filters: [{ type: 'filter', column: 'region', op: 'not_empty' }],
   };
-  const got = dp.readPage(src, req);
+  const got = await dp.readPage(src, req);
   const want = dp.pageRowsJs(back.columns, table, req);
   ok('filter + search compose into one total', got !== null && got.total === want.total && got.total > 5);
   ok('the window is bounded by limit, the total is not', got !== null && got.rows.length === 5);
@@ -227,7 +229,7 @@ ok(`matrix covered ${combos} filter × search × sort × offset combinations`, c
 // two answers, decided by the declared type and nothing else.
 {
   const codeIdx = 1;
-  const seven = dp.readPage(src, {
+  const seven = await dp.readPage(src, {
     offset: 0,
     limit: 500,
     filters: [{ type: 'filter', column: 'code', op: '=', value: '7' }],
@@ -244,14 +246,14 @@ ok(`matrix covered ${combos} filter × search × sort × offset combinations`, c
   // hold it. Both paths agree (the matrix covers this filter); the point here is
   // WHICH answer they agree on.
   const amountIdx = 2;
-  const asNum = dp.readPage(src, {
+  const asNum = await dp.readPage(src, {
     offset: 0,
     limit: 500,
     filters: [{ type: 'filter', column: 'amount', op: '=', value: '007' }],
   });
   ok("number column: '007' is not a numeric target — it matches nothing", asNum !== null && asNum.rows.length === 0);
 
-  const seven7 = dp.readPage(src, {
+  const seven7 = await dp.readPage(src, {
     offset: 0,
     limit: 500,
     filters: [{ type: 'filter', column: 'amount', op: '=', value: 7 }],
@@ -267,7 +269,7 @@ ok(`matrix covered ${combos} filter × search × sort × offset combinations`, c
 // two rules coexist without either leaking into the other.)
 {
   const idx = 0;
-  const empty = dp.readPage(src, {
+  const empty = await dp.readPage(src, {
     offset: 0,
     limit: 500,
     filters: [{ type: 'filter', column: 'region', op: 'is_empty' }],
@@ -289,8 +291,8 @@ ok(`matrix covered ${combos} filter × search × sort × offset combinations`, c
     limit: 10,
     filters: [{ type: 'filter', column: 'nope', op: '=', value: 'x' }],
   };
-  const got = dp.readPage(src, req);
-  const none = dp.readPage(src, { offset: 0, limit: 10 });
+  const got = await dp.readPage(src, req);
+  const none = await dp.readPage(src, { offset: 0, limit: 10 });
   ok(
     'a filter on a missing column is skipped, exactly as transforms skips it',
     got !== null && none !== null && got.total === none.total && sameRows(got.rows, none.rows),
@@ -303,13 +305,13 @@ ok(`matrix covered ${combos} filter × search × sort × offset combinations`, c
 {
   const filters: FilterStep[] = [{ type: 'filter', column: 'region', op: 'not_empty' }];
   const req = { limit: 7, sortColumn: 'amount', sortDir: 'asc' as const, filters };
-  const first = dp.readPage(src, { ...req, offset: 0 });
+  const first = await dp.readPage(src, { ...req, offset: 0 });
   if (!first) {
     ok('filtered paging: first page served', false);
   } else {
     const seen: Cell[][] = [];
     for (let off = 0; off < first.total; off += 7) {
-      const page = dp.readPage(src, { ...req, offset: off });
+      const page = await dp.readPage(src, { ...req, offset: off });
       if (!page) {
         ok(`filtered paging: page at ${off} served`, false);
         break;
@@ -337,8 +339,8 @@ ok(`matrix covered ${combos} filter × search × sort × offset combinations`, c
 
 // A malformed filter list is shape-checked, not trusted.
 {
-  const junk = dp.readPage(src, { offset: 0, limit: 5, filters: 'not-an-array' as any });
-  const none = dp.readPage(src, { offset: 0, limit: 5 });
+  const junk = await dp.readPage(src, { offset: 0, limit: 5, filters: 'not-an-array' as any });
+  const none = await dp.readPage(src, { offset: 0, limit: 5 });
   ok('a non-array `filters` is ignored, not thrown', junk !== null && none !== null && junk.total === none.total);
 }
 
@@ -348,3 +350,9 @@ if (failureCount() > 0) {
   process.exit(1);
 }
 console.log('\nAll dataset page filter checks passed');
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

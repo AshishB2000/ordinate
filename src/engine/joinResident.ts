@@ -32,7 +32,8 @@ import type { KeyStats } from '../analysis/joinJs';
 import { relationSql } from './parquetStore';
 import { sqlEmpty } from './sqlGen';
 import { catKeyExpr, catLabel, sqlNum } from './residentCategory';
-import { aggExpr, filterPredicates, resolveCatKey, withRelation } from './residentQuery';
+import { aggExpr, filterPredicates, withRelation } from './residentQuery';
+import { resolveCatKeySync } from './residentSync';
 import type { ResidentMeasure } from './residentQuery';
 import * as duck from './duckdb';
 
@@ -139,7 +140,7 @@ export function joinedAggregateResident(
     const gi = cols.findIndex((c) => c.name === enc.category);
 
     return withRelation(key, relation, () => {
-      const plan = resolveCatKey(src, enc.category, measures, join.filters, enc.grain, enc.bins);
+      const plan = resolveCatKeySync(src, enc.category, measures, join.filters, enc.grain, enc.bins);
       if (!plan) return null;
       const params: duck.DuckValue[] = [];
       const ck = catKeyExpr(cols, gi, plan.key, params);

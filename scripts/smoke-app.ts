@@ -56,7 +56,7 @@ async function main(): Promise<void> {
     out.hasResidentSource = !!src;
 
     let t = Date.now();
-    const agg = src && residentQuery.aggregateResident(src, 'region', [
+    const agg = src && await residentQuery.aggregateResident(src, 'region', [
       { column: 'amount', aggregation: 'sum' },
     ]);
     out.aggMs = Date.now() - t;
@@ -65,7 +65,7 @@ async function main(): Promise<void> {
     out.values = agg && agg.series[0] && agg.series[0].values;
 
     t = Date.now();
-    out.metric = src && residentQuery.computeMetricResident(src, {
+    out.metric = src && await residentQuery.computeMetricResident(src, {
       column: 'amount',
       aggregation: 'sum',
     });
@@ -86,14 +86,14 @@ async function main(): Promise<void> {
     const ipcVisuals = req('./src/ipc/visualsResident.js');
     const inFilter = [{ type: 'filter', column: 'region', op: 'in', values: ['region0', 'region2', 'region4'] }];
 
-    out.inChart = src && residentQuery.aggregateResident(src, 'region', [
+    out.inChart = src && await residentQuery.aggregateResident(src, 'region', [
       { column: 'amount', aggregation: 'sum' },
     ], inFilter);
     out.inLabels = out.inChart && out.inChart.labels;
-    out.inMetric = src && residentQuery.computeMetricResident(
+    out.inMetric = src && await residentQuery.computeMetricResident(
       src, { column: 'amount', aggregation: 'sum' }, inFilter,
     );
-    out.notInMetric = src && residentQuery.computeMetricResident(
+    out.notInMetric = src && await residentQuery.computeMetricResident(
       src, { column: 'amount', aggregation: 'sum' },
       [{ type: 'filter', column: 'region', op: 'not in', values: ['region0', 'region2', 'region4'] }],
     );
@@ -120,7 +120,7 @@ async function main(): Promise<void> {
 
     // One page of the Explore grid — the path that replaced holding the table.
     t = Date.now();
-    const page = src && datasetPage.readPage(src, { offset: 0, limit: 500 });
+    const page = src && await datasetPage.readPage(src, { offset: 0, limit: 500 });
     out.pageMs = Date.now() - t;
     out.pageRows = page && page.rows.length;
     out.pageTotal = page && page.total;

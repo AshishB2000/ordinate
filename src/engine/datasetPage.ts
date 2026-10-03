@@ -185,7 +185,7 @@ export function isPageResident(): boolean {
  * finite numbers, or the query fails. `null` ALWAYS means "fall back", never
  * "no rows": an empty page is returned as a real `PageResult` with `rows: []`.
  */
-export function readPage(src: PageSource, req: PageRequest): PageResult | null {
+export async function readPage(src: PageSource, req: PageRequest): Promise<PageResult | null> {
   try {
     const cols = schemaOf(src);
     if (!cols) return null;
@@ -194,12 +194,12 @@ export function readPage(src: PageSource, req: PageRequest): PageResult | null {
     // A text sort on a build with no ICU cannot be served faithfully (note 3).
     if (r.sort && r.sort.kind === 'text' && !collationOk) return null;
 
-    const total = countRows(src.parquetPath, cols, r);
+    const total = await countRows(src.parquetPath, cols, r);
     if (total === null) return null;
 
     if (r.limit === 0 || r.offset >= total) return { rows: [], total, offset: r.offset };
 
-    const out = runPage(src.parquetPath, cols, r, ordinalMode);
+    const out = await runPage(src.parquetPath, cols, r, ordinalMode);
     if (out === null) return null;
 
     const rows: Cell[][] = out.map((row) => {
@@ -531,12 +531,12 @@ function orderedFrom(parquetPath: string, mode: OrdinalMode): { from: string; or
  * stable (header note 1). For the unsorted case the ordinal is the ONLY term,
  * which is file order — what the grid shows today.
  */
-function runPage(
+async function runPage(
   parquetPath: string,
   cols: ParsedColumn[],
   r: NormalRequest,
   mode: OrdinalMode,
-): duck.DuckRow[] | null {
+): Promise<duck.DuckRow[] | null> {
   const params: duck.DuckValue[] = [];
   const where = whereFor(cols, r, params);
   const { from, ord } = orderedFrom(parquetPath, mode);
@@ -557,7 +557,7 @@ function runPage(
   params.push(r.limit, r.offset);
 
   try {
-    return duck.query(sql, params);
+    return await duck.queryAsync(sql, params);
   } catch (err) {
     const msg = String((err as Error)?.message ?? '');
     if (mode === 'file_row_number' && /file_row_number/i.test(msg)) {
@@ -572,10 +572,10 @@ function runPage(
 }
 
 /** Rows matching the filters and the search, before paging. `null` = fall back. */
-function countRows(parquetPath: string, cols: ParsedColumn[], r: NormalRequest): number | null {
+async function countRows(parquetPath: string, cols: ParsedColumn[], r: NormalRequest): Promise<number | null> {
   const params: duck.DuckValue[] = [];
   const where = whereFor(cols, r, params);
-  const out = duck.query(`SELECT count(*) AS n FROM ${relationSql(parquetPath)}${where};`, params);
+  const out = await duck.queryAsync(`SELECT count(*) AS n FROM ${relationSql(parquetPath)}${where};`, params);
   if (out.length !== 1) return null;
   return intOrNull(out[0].n);
 }
@@ -665,8 +665,8 @@ export interface DistinctRequest {
  * table, without hydrating a row. `null` ALWAYS means "fall back", never "no
  * values" — an empty column returns `[]`.
  */
-export function readDistinct(src: PageSource, column: string, limit: number): string[] | null {
-  const r = readDistinctPage(src, column, { limit });
+export async function readDistinct(src: PageSource, column: string, limit: number): Promise<string[] | null> {
+  const r = await readDistinctPage(src, column, { limit });
   return r === null ? null : r.values;
 }
 
@@ -682,11 +682,11 @@ export function readDistinct(src: PageSource, column: string, limit: number): st
  * ONE statement does both jobs: `COUNT(*) OVER ()` is evaluated over the whole
  * grouped set before `LIMIT` applies, so the total costs no second query.
  */
-export function readDistinctPage(
+export async function readDistinctPage(
   src: PageSource,
   column: string,
   req?: DistinctRequest,
-): DistinctResult | null {
+): Promise<DistinctResult | null> {
   try {
     const cols = schemaOf(src);
     if (!cols) return null;
@@ -722,11 +722,11 @@ export function readDistinctPage(
     // A zero cap still needs the total (the UI shows "0 of 4,812"), and LIMIT 0
     // returns no rows to read it from — so ask for the count on its own.
     if (cap === 0) {
-      const only = duck.query(`SELECT CAST(COUNT(*) AS DOUBLE) AS t FROM (${inner});`, params.slice(0, -1));
+      const only = await duck.queryAsync(`SELECT CAST(COUNT(*) AS DOUBLE) AS t FROM (${inner});`, params.slice(0, -1));
       return { values: [], total: only.length > 0 ? Number(only[0].t) || 0 : 0 };
     }
 
-    const rows = duck.query(sql, params);
+    const rows = await duck.queryAsync(sql, params);
     return {
       values: rows.map((r) => String(r.v ?? '')),
       total: rows.length > 0 ? Number(rows[0].t) || 0 : 0,

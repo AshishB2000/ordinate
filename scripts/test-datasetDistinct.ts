@@ -30,6 +30,8 @@ import type { Cell } from '../src/data/transforms';
 
 import { ok, failureCount } from './selfcheck';
 
+async function main(): Promise<void> {
+
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-distinct-'));
 let seq = 0;
 function tmpFile(): string {
@@ -67,9 +69,9 @@ function same(a: string[] | null, b: string[]): boolean {
 }
 
 /** Assert the resident answer equals the JS reference, when the bridge is up. */
-function differential(label: string, f: Fixture, column: string, limit: number): void {
+async function differential(label: string, f: Fixture, column: string, limit: number): Promise<void> {
   const js = dp.distinctValuesJs(f.columns, f.rows, column, limit);
-  const sql = dp.readDistinct(f.src, column, limit);
+  const sql = await dp.readDistinct(f.src, column, limit);
   if (sql === null) {
     // null ALWAYS means "fall back", never "no values" — the caller keeps the JS
     // path, so this is not a failure, just an unexercised comparison.
@@ -98,11 +100,11 @@ const f1 = fixture(cols, [
 ]);
 
 ok('JS: dedupes, first-seen order', same(dp.distinctValuesJs(f1.columns, f1.rows, 'city', 200), ['Oslo', 'Bergen', 'Tromso']));
-differential('resident matches JS on a plain column', f1, 'city', 200);
-differential('resident matches JS on a number-typed column', f1, 'amount', 200);
+await differential('resident matches JS on a plain column', f1, 'city', 200);
+await differential('resident matches JS on a number-typed column', f1, 'amount', 200);
 
 ok('unknown column → JS gives []', same(dp.distinctValuesJs(f1.columns, f1.rows, 'nope', 200), []));
-ok('unknown column → resident falls back (null), never a wrong []', dp.readDistinct(f1.src, 'nope', 200) === null);
+ok('unknown column → resident falls back (null), never a wrong []', await dp.readDistinct(f1.src, 'nope', 200) === null);
 
 // ── §2 emptiness: ONLY null and '' (rule 1) ──────────────────────────────────
 
@@ -119,14 +121,14 @@ const f2 = fixture([{ name: 'v', type: 'text' }], [
 const js2 = dp.distinctValuesJs(f2.columns, f2.rows, 'v', 200);
 ok('JS: null and "" dropped; whitespace-only KEPT', same(js2, ['a', '   ', '\t', 'b']));
 ok('JS: "" is not in the output', js2.indexOf('') === -1);
-differential('resident agrees on the emptiness rule', f2, 'v', 200);
+await differential('resident agrees on the emptiness rule', f2, 'v', 200);
 
 // ── §3 order is first-seen, not sorted (rule 2) ──────────────────────────────
 
 const f3 = fixture([{ name: 'v', type: 'text' }], [['zebra'], ['apple'], ['mango'], ['apple'], ['zebra']]);
 
 ok('JS: NOT alphabetical — insertion order', same(dp.distinctValuesJs(f3.columns, f3.rows, 'v', 200), ['zebra', 'apple', 'mango']));
-differential('resident preserves first-seen order, not GROUP BY order', f3, 'v', 200);
+await differential('resident preserves first-seen order, not GROUP BY order', f3, 'v', 200);
 
 // ── §4 the cap counts outputs, not rows (rule 3) ─────────────────────────────
 
@@ -136,12 +138,12 @@ const f4 = fixture([{ name: 'v', type: 'text' }], manyRows);
 
 ok('JS: 37 distinct from 500 rows, under the cap', dp.distinctValuesJs(f4.columns, f4.rows, 'v', 200).length === 37);
 ok('JS: cap truncates to exactly the cap', dp.distinctValuesJs(f4.columns, f4.rows, 'v', 10).length === 10);
-differential('resident matches under the cap', f4, 'v', 200);
-differential('resident matches AT the cap', f4, 'v', 10);
-differential('resident matches at cap 1', f4, 'v', 1);
+await differential('resident matches under the cap', f4, 'v', 200);
+await differential('resident matches AT the cap', f4, 'v', 10);
+await differential('resident matches at cap 1', f4, 'v', 1);
 
 ok('JS: cap 0 → []', dp.distinctValuesJs(f4.columns, f4.rows, 'v', 0).length === 0);
-ok('resident: cap 0 → [] (not a fallback)', same(dp.readDistinct(f4.src, 'v', 0), []));
+ok('resident: cap 0 → [] (not a fallback)', same(await dp.readDistinct(f4.src, 'v', 0), []));
 ok('cap is clamped to MAX_DISTINCT', dp.distinctValuesJs(f4.columns, f4.rows, 'v', 10_000).length <= dp.MAX_DISTINCT);
 
 // ── §5 leading zeros survive (the landmine this whole layer exists for) ──────
@@ -149,13 +151,13 @@ ok('cap is clamped to MAX_DISTINCT', dp.distinctValuesJs(f4.columns, f4.rows, 'v
 const f5 = fixture([{ name: 'zip', type: 'text' }], [['007'], ['00210'], ['007'], ['90210']]);
 
 ok('JS: "007" stays a string, not 7', same(dp.distinctValuesJs(f5.columns, f5.rows, 'zip', 200), ['007', '00210', '90210']));
-differential('resident does not turn "007" into 7', f5, 'zip', 200);
+await differential('resident does not turn "007" into 7', f5, 'zip', 200);
 
 // ── §6 an all-empty column yields [], not a fallback ─────────────────────────
 
 const f6 = fixture([{ name: 'v', type: 'text' }], [[null], [''], [null]]);
 ok('JS: all-empty → []', same(dp.distinctValuesJs(f6.columns, f6.rows, 'v', 200), []));
-if (resident) ok('resident: all-empty → [] (a real answer, not null)', same(dp.readDistinct(f6.src, 'v', 200), []));
+if (resident) ok('resident: all-empty → [] (a real answer, not null)', same(await dp.readDistinct(f6.src, 'v', 200), []));
 else ok('resident: all-empty (bridge down — skipped)', true);
 
 // ── §7 the searched page: server-side search + the pre-cap total ─────────────
@@ -168,9 +170,9 @@ else ok('resident: all-empty (bridge down — skipped)', true);
 // implying 200 is all there is.
 
 /** Same differential idea as above, over the {values,total} pair. */
-function differentialPage(label: string, f: Fixture, column: string, req: any): void {
+async function differentialPage(label: string, f: Fixture, column: string, req: any): Promise<void> {
   const js = dp.distinctValuesPageJs(f.columns, f.rows, column, req);
-  const sql = dp.readDistinctPage(f.src, column, req);
+  const sql = await dp.readDistinctPage(f.src, column, req);
   if (sql === null) {
     ok(label + ' (bridge down — JS path only)', true);
     return;
@@ -211,25 +213,25 @@ const f7 = fixture([{ name: 'v', type: 'text' }], [
     dp.distinctValuesPageJs(f7.columns, f7.rows, 'v', { limit: 0 }).total === 6);
 }
 
-differentialPage('resident matches JS with no search', f7, 'v', {});
-differentialPage('resident matches JS on a search', f7, 'v', { search: 'cal' });
-differentialPage('resident matches JS on an upper-case search', f7, 'v', { search: 'WASH' });
-differentialPage('resident matches JS on a no-match search', f7, 'v', { search: 'zzz' });
-differentialPage('resident matches JS on a blank search', f7, 'v', { search: '' });
-differentialPage('resident matches JS when the cap truncates', f7, 'v', { limit: 2 });
-differentialPage('resident matches JS on search + cap together', f7, 'v', { search: 'a', limit: 1 });
-differentialPage('resident matches JS at a zero cap', f7, 'v', { limit: 0 });
-differentialPage('resident matches JS on the emptiness rule', f2, 'v', { search: '' });
-differentialPage('resident matches JS searching a number-typed column', f1, 'amount', { search: '0' });
+await differentialPage('resident matches JS with no search', f7, 'v', {});
+await differentialPage('resident matches JS on a search', f7, 'v', { search: 'cal' });
+await differentialPage('resident matches JS on an upper-case search', f7, 'v', { search: 'WASH' });
+await differentialPage('resident matches JS on a no-match search', f7, 'v', { search: 'zzz' });
+await differentialPage('resident matches JS on a blank search', f7, 'v', { search: '' });
+await differentialPage('resident matches JS when the cap truncates', f7, 'v', { limit: 2 });
+await differentialPage('resident matches JS on search + cap together', f7, 'v', { search: 'a', limit: 1 });
+await differentialPage('resident matches JS at a zero cap', f7, 'v', { limit: 0 });
+await differentialPage('resident matches JS on the emptiness rule', f2, 'v', { search: '' });
+await differentialPage('resident matches JS searching a number-typed column', f1, 'amount', { search: '0' });
 
 // The search is untrusted input from a text box: it must stay a bound parameter.
 {
   const evil = "' OR 1=1 --";
   const js = dp.distinctValuesPageJs(f7.columns, f7.rows, 'v', { search: evil });
-  const sql = dp.readDistinctPage(f7.src, 'v', { search: evil });
+  const sql = await dp.readDistinctPage(f7.src, 'v', { search: evil });
   ok('a SQL-shaped search term matches nothing rather than executing',
     js.total === 0 && (sql === null || sql.total === 0));
-  const quote = dp.readDistinctPage(f7.src, 'v', { search: "'" });
+  const quote = await dp.readDistinctPage(f7.src, 'v', { search: "'" });
   ok("a lone quote is a search term, not a syntax error", quote !== null && quote.total === 0);
 }
 
@@ -238,14 +240,14 @@ differentialPage('resident matches JS searching a number-typed column', f1, 'amo
 {
   const over = dp.distinctValuesPageJs(f4.columns, f4.rows, 'v', { limit: 10_000 });
   ok('JS: a caller cannot request more than MAX_DISTINCT', over.values.length <= dp.MAX_DISTINCT);
-  differentialPage('resident honours the same ceiling', f4, 'v', { limit: 10_000 });
+  await differentialPage('resident honours the same ceiling', f4, 'v', { limit: 10_000 });
 }
 
 // readDistinct is now a thin wrapper — assert it still answers identically, so
 // the existing `dataset:distinct` callers are provably unaffected.
 {
-  const wrapped = dp.readDistinct(f7.src, 'v', 200);
-  const paged = dp.readDistinctPage(f7.src, 'v', { limit: 200 });
+  const wrapped = await dp.readDistinct(f7.src, 'v', 200);
+  const paged = await dp.readDistinctPage(f7.src, 'v', { limit: 200 });
   ok('readDistinct still equals readDistinctPage().values',
     (wrapped === null && paged === null) || (paged !== null && same(wrapped, paged.values)));
   ok('distinctValuesJs still equals distinctValuesPageJs().values',
@@ -261,3 +263,9 @@ if (failureCount() > 0) {
   process.exit(1);
 }
 console.log('\nAll datasetDistinct checks passed');
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

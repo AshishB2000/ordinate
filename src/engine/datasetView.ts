@@ -237,11 +237,10 @@ export function viewSelectSql(parquetPath: string, columns: ParsedColumn[]): str
  * Idempotent by construction: `CREATE OR REPLACE` on the same spec is a no-op
  * with the same result.
  */
-export function ensureView(spec: ViewSpec): boolean {
+export async function ensureView(spec: ViewSpec): Promise<boolean> {
   try {
     const sql = viewSql(spec);
-    if (!duck.isAvailable()) return false;
-    duck.exec(sql);
+    await duck.execAsync(sql);
     return true;
   } catch {
     return false;
@@ -253,11 +252,10 @@ export function ensureView(spec: ViewSpec): boolean {
  * bridge. `IF EXISTS`, so dropping a view that was never created succeeds:
  * the postcondition is "no view by that name", and that is idempotent.
  */
-export function dropView(name: string): boolean {
+export async function dropView(name: string): Promise<boolean> {
   try {
     if (!isViewName(name)) return false;
-    if (!duck.isAvailable()) return false;
-    duck.exec(`DROP VIEW IF EXISTS ${quoteIdent(name)};`);
+    await duck.execAsync(`DROP VIEW IF EXISTS ${quoteIdent(name)};`);
     return true;
   } catch {
     return false;
