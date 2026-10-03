@@ -199,8 +199,12 @@ const findJob = (e: Ev, id: string): Job | undefined => {
   ok('C (another org) received no events', C.events.length === 0, JSON.stringify(C.events));
 
   // org-b names A's client id on its RPC: the binding refuses, the job still runs.
+  // T3.3: org-a's project id is refused in org-b before any handler, so org-b
+  // names a project of its OWN (which has no such dataset).
   const seenA = A.events.length;
-  const steal = await rpc('org-b', 'quality:run', { projectId: pid, datasetId: dsid }, kA);
+  const pidB = await context.runInContext(who('org-b'), 'seed', async () => (await projects.createProject('B project')).id);
+  ok('org-b naming org-a\'s project: 403', (await rpc('org-b', 'quality:run', { projectId: pid, datasetId: dsid }, kA)).status === 403);
+  const steal = await rpc('org-b', 'quality:run', { projectId: pidB, datasetId: dsid }, kA);
   ok('org-b\'s RPC naming A\'s client id: still served (its own org: no such dataset)', steal.status === 200 && (steal.body as { ok: boolean }).ok === false, JSON.stringify(steal.body));
   await sleep(120);
   ok('…and none of org-b\'s job events reached A', A.events.length === seenA, JSON.stringify(A.events.slice(seenA)));

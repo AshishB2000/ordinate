@@ -311,7 +311,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   SameSite=Lax, rotated on login, idle and absolute expiry.
 - **Done when:** e2e logs in against a mock OIDC provider; header mode rejects a spoofed header from an untrusted IP.
 
-### [ ] T3.3 Authorization, sharing, audit
+### [x] T3.3 Authorization, sharing, audit
 - **Branch** `web/t3.3-authz` · **Depends** T3.2
 - Project membership: owner team + shared teams/users with `viewer | editor | admin`. Every
   contract's `access` is checked against the project the input names (each contract declares how

@@ -1077,3 +1077,9 @@ scripts/**/*.js
 /scripts/mockOidc.js
 /scripts/test-auth.js
 /scripts/test-auth-db.js
+
+# web/t3.3-authz
+/src/server/authz/*.js
+/scripts/check-contracts.js
+/scripts/test-authz.js
+/scripts/test-authz-db.js

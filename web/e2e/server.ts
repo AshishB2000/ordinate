@@ -38,7 +38,9 @@ export async function startServer(extraEnv: Record<string, string> = {}): Promis
 
   const child = spawn(process.execPath, [MAIN], {
     cwd: REPO,
-    env: { ...process.env, PORT: '0', DATA_DIR: dataDir, ORDINATE_ENV: 'dev', LOG_LEVEL: 'info', ...extraEnv },
+    // DATABASE_URL is NOT inherited: a spec that wants Postgres creates its own scratch database
+    // and passes it in extraEnv. Inheriting it pointed every spec at one shared database.
+    env: { ...process.env, DATABASE_URL: '', PORT: '0', DATA_DIR: dataDir, ORDINATE_ENV: 'dev', LOG_LEVEL: 'info', ...extraEnv },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let out = '';

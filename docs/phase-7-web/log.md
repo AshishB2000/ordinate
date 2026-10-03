@@ -291,3 +291,33 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
 - **Blocked:** GitHub Actions refuses to start jobs ("recent account payments have failed or your
   spending limit needs to be increased") since 2026-10-03 02:22 UTC, so the Done-when ("the PR shows
   the new job green") cannot be met yet. Firefox/WebKit have never run (not cached locally).
+
+## 2026-10-02 — T3.3 Authorization, sharing, audit
+
+- **Contracts declare scope:** every contract has `project: (input) => id` (sync or async resolver)
+  or `org: true` — neither or both fails `tsc`. `scripts/check-contracts.ts`: 8 contracts,
+  0 unresolved (asserted in `npm test`, with a negative control). `visible` trims cross-project
+  lists fail-closed; `creates` grants the creator admin; `audit: true` audits reads (exports).
+  New: `projects:create` (org write), `project:access` (read), `project:share` (project admin).
+- **Rules:** org admin = admin on every project of their org; otherwise effective project role =
+  max(user grant, every team grant), none if no grant. read ≤ viewer, write ≤ editor,
+  admin ≤ admin. The project must exist in the caller's org. Unknown / non-UUID / throwing resolver
+  / unscoped contract → 403 before the handler, never 500. `/api/files` POST needs org write;
+  `/api/events` and downloads need membership.
+- **DECISION PENDING (user):** org-level *write* channels allow org **editors**, not only admins
+  (otherwise only an admin could create a project or upload a file). The spec read "org-level
+  channels need org admin"; reverting is one line in `orgAllows`.
+- **Schema `0006_authz.sql`:** `project_grants` (user XOR team, owner = one admin team per
+  project; composite FKs make a cross-org grant impossible in the DB); `audit_log` (actor, action
+  rpc|login|logout|logout_everywhere, channel, project, `target_ids uuid[]` harvested only from
+  `id`/`…Id` keys, outcome ok|denied|error, request id) on every write/admin RPC and OIDC sign-in/out.
+- **Proof:** real-HTTP matrix (viewer/editor/admin/org-admin × read/write/admin × own / other
+  project / other org) — every cell equals the expected table, ZERO unexpected allows; spies show a
+  denied call never reaches its handler; sabotaging the grant check yields 12 unexpected allows.
+  Canary project name absent from every audit row and a full-table dump.
+- **Measured:** `authorize()` ≈ 330 µs for a member (project.json read + 1 grant query), ≈ 61 µs
+  for an org admin, idle; 20 ms / 1 ms at load average 31. The suite's "< 5 ms" wall-clock assert
+  failed under that load, so it now asserts the WORK instead — exactly one query per member
+  decision, none for an org admin — and prints the timing.
+- **Open:** no owner-team assignment/transfer yet (T3.4); projects created before T3.3 have no
+  grants (only org admins see them until shared); header-mode sign-ins are not audited (no event).

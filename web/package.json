@@ -8,7 +8,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "size": "node scripts/bundle-size.ts",
-    "e2e": "tsc --noEmit -p tsconfig.e2e.json && node --test --test-reporter=spec \"e2e/*.e2e.ts\""
+    "e2e": "tsc --noEmit -p tsconfig.e2e.json && E2E_NO_BUILD=1 node --test --test-concurrency=1 --test-reporter=spec \"e2e/*.e2e.ts\""
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.3.7",

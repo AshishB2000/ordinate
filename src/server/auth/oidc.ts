@@ -18,6 +18,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import * as client from 'openid-client';
 import type { Pool } from 'pg';
 import type { ServerEnv } from '../env';
+import { audit, type Outcome } from '../authz/audit';
 import { createSession, normalEmail, provision } from './store';
 import { cookieOpts, safeNext, type CookieNames } from './cookies';
 
@@ -123,21 +124,30 @@ export function registerOidc(app: FastifyInstance, cfg: ServerEnv, pool: Pool, n
       return fail(reply, denied ? 'denied' : 'failed');
     }
 
+    // The audit trail (../authz/audit.ts) gets every sign-in the IdP vouched
+    // for, allowed or refused — the actor only when the address is verified.
+    const trail = (actor: string | null, outcome: Outcome) =>
+      audit(pool, { org: cfg.auth.org, actor, action: 'login', outcome, requestId: String(req.id) }).catch((err: unknown) =>
+        req.log.error({ err: errInfo(err) }, 'audit write failed'),
+      );
     const claims = tokens.claims();
     const email = normalEmail(claims?.email);
     // An IdP that says the address is unverified must not sign anyone in as it.
     if (!email || claims?.email_verified === false) {
       req.log.warn({ hasEmail: email !== null }, 'oidc sign-in refused: no verified email in the id_token');
+      await trail(null, 'denied');
       return fail(reply, 'email');
     }
     const m = await provision(pool, cfg.auth, email);
     if (typeof m === 'string') {
       req.log.warn({ reason: m }, 'oidc sign-in refused');
+      await trail(email, 'denied');
       return fail(reply, m);
     }
     const id = await createSession(pool, cfg.auth, m.userId, req.cookies[names.session]);
     reply.setCookie(names.session, id, { ...cookieOpts(secure, '/'), maxAge: Math.floor(cfg.auth.sessionAbsoluteMs / 1000) });
     req.log.info({ role: m.identity.user.role }, 'signed in');
+    await trail(email, 'ok');
     return reply.redirect(tx.r);
   });
 }

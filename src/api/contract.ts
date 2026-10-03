@@ -4,20 +4,62 @@
 //
 // `input` validates the handler's ONE payload argument — every contracted
 // channel takes `(event, payload)`. `access` is the narrowest role that may
-// call it; enforcement arrives with roles (T3.3), dev mode runs as admin.
+// call it, and every contract says WHAT that role is checked against
+// (src/server/authz/, before the handler runs):
+//
+//   project  the project the parsed input names — `(i) => i.projectId`, or an
+//            async lookup for a channel that names only a record id. The
+//            caller's role on THAT project must reach `access`. Nothing
+//            resolved → 403.
+//   org      no project: the caller's org role must reach `access`
+//            (read → any member). `visible` trims a cross-project list to the
+//            projects the caller may read; `creates` names the project a
+//            channel just made, so its creator is granted admin on it.
+//
+// A contract with neither is refused at compile time here and listed by
+// scripts/check-contracts.ts (part of `npm test`).
 
 import { z } from 'zod';
 
 export type Access = 'read' | 'write' | 'admin';
 
-export interface Contract<I extends z.ZodType = z.ZodType> {
+interface Base<I extends z.ZodType> {
   readonly access: Access;
   readonly input: I;
+  /** Audit a `read` channel too (exports). `write` and `admin` are always audited. */
+  readonly audit?: true;
 }
 
-export function rpc<I extends z.ZodType>(c: { access: Access; input: I }): Contract<I> {
-  return Object.freeze({ access: c.access, input: c.input });
+export interface ProjectScoped<I extends z.ZodType = z.ZodType> extends Base<I> {
+  /** The project id the input names; null/undefined (or a throw) → 403. Method syntax: bivariant in its input. */
+  project(input: z.output<I>): string | null | undefined | Promise<string | null | undefined>;
 }
+
+export interface OrgScoped<I extends z.ZodType = z.ZodType> extends Base<I> {
+  readonly org: true;
+  /** A list spanning projects: keep what `canRead(projectId)` allows. */
+  visible?(output: unknown, canRead: (projectId: string) => boolean): unknown;
+  /** The id of the project this call created (from its output), or undefined. */
+  creates?(output: unknown): string | undefined;
+}
+
+export type Contract<I extends z.ZodType = z.ZodType> = ProjectScoped<I> | OrgScoped<I>;
+
+export function rpc<I extends z.ZodType>(c: ProjectScoped<I>): ProjectScoped<I>;
+export function rpc<I extends z.ZodType>(c: OrgScoped<I>): OrgScoped<I>;
+export function rpc<I extends z.ZodType>(c: Contract<I>): Contract<I> {
+  return Object.freeze({ ...c });
+}
+
+/** The projectId field of an input — the resolver almost every project channel uses. */
+export const byProjectId = (input: { projectId: string }): string => input.projectId;
+
+/** Keeps the items of a list whose `key` field names a project the caller may read. */
+export const onlyReadable =
+  (key: string) =>
+  (output: unknown, canRead: (projectId: string) => boolean): unknown =>
+    // Fail closed: a reply that is not a list shows nothing.
+    Array.isArray(output) ? output.filter((x: unknown) => !!x && typeof x === 'object' && canRead(String((x as Record<string, unknown>)[key]))) : [];
 
 /** A record id, as UUID_RE spells it everywhere a record id reaches a path. */
 export const Uuid = z.guid();
