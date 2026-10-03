@@ -19,7 +19,7 @@
 // block, `guardAnswer` audits the reply against that ledger — exactly like every
 // other narration in this app.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 
 import * as store from '../analysis/alertStore';
 import * as alerts from '../analysis/alerts';

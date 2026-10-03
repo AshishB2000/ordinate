@@ -19,7 +19,8 @@ const Module: any = require('module');
 
 const REPO = path.resolve(__dirname, '..');
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-sample-'));
-const ipcHandlers = new Map<string, (e: unknown, payload: unknown) => Promise<any>>();
+// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+const ipcHandlers: Map<string, (e: unknown, payload: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
 
 // The stub goes in BEFORE the first require of anything that reads app paths:
 // visuals.ts and analysis.ts memoize their projects base on first use, so a late
@@ -31,9 +32,6 @@ Module._load = function (request: string, ...rest: any[]): any {
       // getAppPath is the repo root, exactly as it is in dev — that is how the
       // seeder finds the committed CSV.
       app: { getPath: (_name: string) => tmpUserData, getAppPath: () => REPO },
-      ipcMain: {
-        handle: (ch: string, fn: (e: unknown, p: unknown) => Promise<any>) => { ipcHandlers.set(ch, fn); },
-      },
       net: {},
       safeStorage: { isEncryptionAvailable: () => false },
     };

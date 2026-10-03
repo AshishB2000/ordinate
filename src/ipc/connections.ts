@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as connections from '../connectors/connections';
 import * as connectionRun from '../connectors/connectionRun';
 import * as datasets from '../data/datasets';

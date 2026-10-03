@@ -26,7 +26,7 @@
 // column a later step renames is not. Fixing it means re-running the pipeline
 // to step i-1 per keystroke; revisit if anyone actually hits it.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 
 import { compile, type FValue, type SourceSpan } from '../formula/formula';
 import { tokenize, type Tok } from '../formula/formulaTokens';

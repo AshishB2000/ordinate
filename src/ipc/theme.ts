@@ -1,4 +1,5 @@
-import { ipcMain, nativeTheme } from 'electron';
+import { nativeTheme } from 'electron';
+import { ipcMain } from './bus';
 import * as config from '../app/config';
 import { setHubTitleBarOverlay } from '../windows/hubWindow';
 import * as hubs from '../windows/hubRegistry';

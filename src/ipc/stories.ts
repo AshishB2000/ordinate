@@ -10,7 +10,7 @@
 // sheet, a metric row for its KPIs, a visual block per chart, prose for its
 // notes. The model never writes a figure; every block is a live reference.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as stories from '../analysis/stories';
 import * as metrics from '../analysis/metrics';
 import { buildPlanRecords } from '../analysis/planBuild';

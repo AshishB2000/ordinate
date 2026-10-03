@@ -11,7 +11,7 @@
 //                    and Cancel — and the ordinary save path then finds it warm
 //                    (data/stepsText.ts); a small table saves directly.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import * as jobs from '../app/jobs';
 import * as trace from '../engine/residentTrace';

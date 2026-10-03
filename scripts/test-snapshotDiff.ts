@@ -28,13 +28,13 @@ type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-snapdiff-'));
-const handlers = new Map<string, IpcHandler>();
+// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+const handlers: Map<string, IpcHandler> = require('../src/server/rpc').handlers;
 const origLoad = Module._load;
 Module._load = function (request: string, ...rest: any[]): any {
   if (request === 'electron') {
     return {
       app: { getPath: (_name: string) => tmpUserData, getVersion: () => '0.0.0-test', getAppPath: () => path.resolve(__dirname, '..') },
-      ipcMain: { handle: (channel: string, fn: IpcHandler) => { handlers.set(channel, fn); }, on: () => {} },
       dialog: {}, net: {}, nativeImage: {}, shell: {}, safeStorage: { isEncryptionAvailable: () => false },
     };
   }

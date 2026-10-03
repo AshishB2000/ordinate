@@ -12,7 +12,7 @@
 // A search box that reads a million rows to answer a keystroke is not a search
 // box, it is a freeze.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import * as analysis from '../analysis/analysis';

@@ -13,7 +13,7 @@
 // too, so a card with Compare makes this ONE call rather than two that could
 // race. Nothing is stored.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 
 import * as datasets from '../data/datasets';
 import * as metrics from '../analysis/metrics';

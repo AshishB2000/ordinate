@@ -12,7 +12,8 @@
 // manual refresh runs (alert rules, data-quality rules, dependent SQL datasets)
 // and the same `hub:dataset-refreshed` push the scheduler sends.
 
-import { app, ipcMain } from 'electron';
+import { app } from 'electron';
+import { ipcMain } from './bus';
 import * as connections from '../connectors/connections';
 import * as folderWatch from '../connectors/folderWatch';
 import * as datasets from '../data/datasets';

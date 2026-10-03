@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
+import { ipcMain } from './bus';
 import { captureHtmlToPng } from '../app/reportCapture';
 
 // Snapshot a rectangular region of the hub window's rendered page to a PNG data URL.

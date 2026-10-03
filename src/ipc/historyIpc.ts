@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as history from '../app/history';
 
 // History / persistence IPC — load & delete persisted threads, and persist

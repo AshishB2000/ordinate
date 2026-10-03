@@ -29,7 +29,8 @@ const Module: any = require('module');
 const REPO = path.resolve(__dirname, '..');
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-share-'));
 const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-share-out-'));
-const handlers = new Map<string, (...a: any[]) => any>();
+// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+const handlers: Map<string, (...a: any[]) => any> = require('../src/server/rpc').handlers;
 let savePath = '';
 
 // Every line the modules under test print, to prove the salt is never logged.
@@ -47,7 +48,6 @@ Module._load = function (request: string, ...rest: any[]): any {
   if (request === 'electron') {
     return {
       app: { getPath: (name: string) => (name === 'downloads' ? outDir : tmpUserData), getAppPath: () => REPO, getVersion: () => '9.9.9' },
-      ipcMain: { handle: (ch: string, fn: (...a: any[]) => any) => handlers.set(ch, fn), on: () => {} },
       dialog: {
         showSaveDialog: async () => ({ canceled: false, filePath: savePath }),
         showMessageBox: async () => ({ response: 0 }),

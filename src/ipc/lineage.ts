@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import { buildGraph, focus } from '../analysis/lineage';
 import type { LineageInput, FocusedLineage } from '../analysis/lineage';
 import * as datasets from '../data/datasets';

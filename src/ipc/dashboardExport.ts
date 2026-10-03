@@ -1,4 +1,5 @@
-import { ipcMain, dialog, app, shell } from 'electron';
+import { dialog, app, shell } from 'electron';
+import { ipcMain } from './bus';
 import * as fs from 'fs';
 import * as path from 'path';
 import { buildSelfContainedHtml } from '../analysis/dashboardExport';

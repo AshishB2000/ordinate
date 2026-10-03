@@ -16,7 +16,7 @@
 // Registered from ./copilot's register(), which hands over its number guard —
 // the guard is a safety control and there is exactly one of it.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as execConfig from '../app/execConfig';
 import * as copilot from '../ai/copilot';
 import * as datasets from '../data/datasets';

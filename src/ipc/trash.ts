@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as trash from '../app/trash';
 import * as scheduler from '../app/refreshScheduler';
 import * as hubs from '../windows/hubRegistry';

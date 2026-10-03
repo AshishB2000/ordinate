@@ -3,7 +3,8 @@
 // — renderer scripts build labels at load time, so an async answer would arrive
 // after the English had already been drawn — and the Settings switch.
 
-import { ipcMain, app } from 'electron';
+import { app } from 'electron';
+import { ipcMain } from './bus';
 import * as config from '../app/config';
 import { bootPayload, isLanguage, languages } from '../app/i18n';
 

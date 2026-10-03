@@ -7,7 +7,7 @@
 // Both handlers stand on ONE engine, combine.composeTables. The renderer sends a
 // chain and paints what comes back; it never computes a joined row.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import * as combine from '../data/combine';
 import * as history from '../app/history';

@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import * as dashboards from '../analysis/dashboards';
 import * as jobs from '../app/jobs';

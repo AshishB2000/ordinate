@@ -13,7 +13,7 @@
 // second window's card counts follow the first's. An empty projectId means
 // "all projects" — the display name changed.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as comments from '../app/comments';
 import * as config from '../app/config';
 import * as hubs from '../windows/hubRegistry';

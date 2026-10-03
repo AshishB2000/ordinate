@@ -1,7 +1,8 @@
 // Boundaries IPC: import a GeoJSON file into the project (through the native
 // picker this handler opens itself), list the project's sets, read one.
 
-import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { BrowserWindow, dialog } from 'electron';
+import { ipcMain } from './bus';
 import { getBoundary, importBoundaryFile, listBoundaries } from '../app/projectBoundaries';
 
 export function register(): void {

@@ -10,7 +10,7 @@
 //
 // NO MODEL. Placing an event is date arithmetic in ../analysis/events.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import { randomUUID } from 'crypto';
 import { parseCsv } from '../data/parse';
 import type { FilterStep } from '../data/transforms';

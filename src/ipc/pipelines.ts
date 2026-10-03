@@ -10,7 +10,7 @@
 // .afterTick), so there is no second timer — and in a headless run nothing is
 // hooked at all, as the round's wiring asks.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import * as reportSpec from '../analysis/reportSpec';
 import * as versions from '../app/versions';

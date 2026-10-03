@@ -1,4 +1,5 @@
-import { ipcMain, app } from 'electron';
+import { app } from 'electron';
+import { ipcMain } from './bus';
 import * as fs from 'fs';
 import * as datasets from '../data/datasets';
 import * as datasetView from '../engine/datasetView';

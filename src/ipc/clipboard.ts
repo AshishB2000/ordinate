@@ -1,4 +1,5 @@
-import { ipcMain, clipboard, nativeImage } from 'electron';
+import { clipboard, nativeImage } from 'electron';
+import { ipcMain } from './bus';
 
 // Clipboard IPC — copy a captured image (data URL or file://) or text to the
 // system clipboard. Extracted from main.js as a pure structural move. No state.

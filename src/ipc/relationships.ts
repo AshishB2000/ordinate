@@ -6,7 +6,7 @@
 // fields all belong to the primary dataset. Only then does the caller's own,
 // unchanged single-dataset path run.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import type { TableData, FilterStep } from '../data/transforms';
 import type { MetricAggregation } from '../analysis/metricValue';

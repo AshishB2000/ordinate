@@ -1,4 +1,5 @@
-import { ipcMain, shell, app } from 'electron';
+import { shell, app } from 'electron';
+import { ipcMain } from './bus';
 import * as os from 'os';
 import { providerLogos, agentLogos, connectorLogos } from '../app/icons';
 

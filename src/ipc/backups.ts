@@ -1,4 +1,5 @@
-import { ipcMain, dialog, shell, app, BrowserWindow } from 'electron';
+import { dialog, shell, app, BrowserWindow } from 'electron';
+import { ipcMain } from './bus';
 import type { OpenDialogOptions, WebContents } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';

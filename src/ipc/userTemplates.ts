@@ -1,4 +1,5 @@
-import { dialog, app, BrowserWindow, ipcMain } from 'electron';
+import { dialog, app, BrowserWindow } from 'electron';
+import { ipcMain } from './bus';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';

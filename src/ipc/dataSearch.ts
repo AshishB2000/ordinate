@@ -8,7 +8,7 @@
 // ipc/filterParse.ts), so a hit can offer "Filter this dashboard". A newer
 // query cancels an older one in flight — the renderer drops stale replies too.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import { isValidId } from '../app/ids';
 import { runSearch } from '../data/dataSearchRun';
 import { dashboardDatasetIds } from './filterParse';

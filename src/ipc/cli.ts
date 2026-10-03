@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
 import * as localCli from '../cli/localCli';

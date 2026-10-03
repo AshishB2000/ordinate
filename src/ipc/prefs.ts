@@ -11,7 +11,8 @@
 // URL — never a path — so a renderer can show it, a report can embed it and
 // an export can carry it, all without file access.
 
-import { ipcMain, dialog, app } from 'electron';
+import { dialog, app } from 'electron';
+import { ipcMain } from './bus';
 import * as fs from 'fs';
 
 import * as config from '../app/config';

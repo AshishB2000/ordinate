@@ -6,7 +6,7 @@
 // PUSHED to every hub window (`themes:changed`), so a sheet already open
 // repaints under the edited theme without a reload.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as store from '../app/themeStore';
 import * as hubs from '../windows/hubRegistry';
 

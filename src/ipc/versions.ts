@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as versions from '../app/versions';
 import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';

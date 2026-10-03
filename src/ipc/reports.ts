@@ -1,4 +1,5 @@
-import { ipcMain, dialog, shell, app } from 'electron';
+import { dialog, shell, app } from 'electron';
+import { ipcMain } from './bus';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as reportSpec from '../analysis/reportSpec';

@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import * as captureDataset from '../data/captureDataset';
 import * as history from '../app/history';

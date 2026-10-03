@@ -15,7 +15,7 @@
 // moment the table does. Every handler answers `{ ok:false, error }` rather than
 // throwing.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as store from '../data/inputTable/store';
 import { afterRefresh } from './datasets';
 

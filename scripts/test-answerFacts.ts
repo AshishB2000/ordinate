@@ -25,13 +25,13 @@ const path: typeof import('path') = require('path');
 const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-answers-'));
-const handlers = new Map<string, (e: unknown, payload: unknown) => Promise<any>>();
+// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+const handlers: Map<string, (e: unknown, payload: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
 const origLoad = Module._load;
 Module._load = function (request: string, ...rest: any[]): any {
   if (request === 'electron') {
     return {
       app: { getPath: () => tmpUserData },
-      ipcMain: { handle: (ch: string, fn: any) => { handlers.set(ch, fn); } },
       net: {},
       safeStorage: { isEncryptionAvailable: () => false },
     };

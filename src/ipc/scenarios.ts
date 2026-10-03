@@ -9,7 +9,7 @@
 // go through sanitizeDashboardFilters (a security control) and paramValues
 // before anything is computed, exactly as `metric:compare` treats them.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 
 import * as scenarios from '../analysis/scenarios';
 import * as metrics from '../analysis/metrics';

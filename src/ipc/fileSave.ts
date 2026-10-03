@@ -1,4 +1,5 @@
-import { ipcMain, app } from 'electron';
+import { app } from 'electron';
+import { ipcMain } from './bus';
 
 // File-save dialogs — route image / PDF / PPTX / DOCX exports through the native
 // save panel (no broad folder entitlement; the user picks each destination file).

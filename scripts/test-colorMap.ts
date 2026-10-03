@@ -132,27 +132,27 @@ ok('a sanitized map round-trips through JSON unchanged',
 
 // ── Through main: the project record and the format IPC ─────────────────────
 // The real projects.ts and ipc/format.ts over a temp userData, with Electron
-// stubbed the way scripts/test-visuals.ts does — `ipcMain.handle` just keeps
-// the handler, so each channel is called exactly as the renderer's invoke is.
+// stubbed the way scripts/test-visuals.ts does; the handlers land in the RPC
+// registry, so each channel is called exactly as the renderer's invoke is.
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const Module: any = require('module');
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-colormap-'));
-const handlers: Record<string, (e: unknown, arg: any) => Promise<any>> = {};
+// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+const handlers: Map<string, (e: unknown, arg: any) => Promise<any>> = require('../src/server/rpc').handlers;
 const origLoad = Module._load;
 Module._load = function (request: string, ...rest: any[]): any {
   if (request === 'electron') {
     return {
       app: { getPath: () => tmpUserData },
-      ipcMain: { handle: (name: string, fn: any) => { handlers[name] = fn; } },
     };
   }
   return origLoad.apply(this, [request, ...rest]);
 };
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 require('../src/ipc/format').register();
-const call = (name: string, arg: any) => handlers['format:colors:' + name](null, arg);
+const call = (name: string, arg: any) => handlers.get('format:colors:' + name)!(null, arg);
 
 async function main(): Promise<void> {
   await projects.init();

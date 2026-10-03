@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as visuals from '../analysis/visuals';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import { sanitizeEncoding } from '../analysis/visuals';

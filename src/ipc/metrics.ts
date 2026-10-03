@@ -24,7 +24,7 @@
 // the results. Folding a stored ratio, or averaging per-row ratios, gives a
 // number that is wrong in a way no one can see.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 
 import * as metrics from '../analysis/metrics';
 import type { Metric, MetricDefinition } from '../analysis/metrics';
