@@ -92,3 +92,29 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
 - **Open:** `src/app/sampleProject.ts` still imports Electron at load (T0.8 seeds the sample on the
   server); `config.ts` format/calendar/language are process-wide — two orgs can race (`ponytail:`,
   P5).
+
+## 2026-10-02 — T0.6 Web app shell
+
+- **Stack installed:** react / react-dom 19.3.0, react-router 7.18.4 (pinned to 7 per §2; 8.4 is
+  out), @tanstack/react-query 5.104.1; dev: vite 8.3.2, typescript 7.0.2, vitest 5.0.3,
+  @testing-library/react 16.3.3 + @testing-library/dom 10.4.2, jsdom 29.1.1 (30 needs Node ≥ 24.15;
+  this machine has 24.14), @types/react(-dom) 19.3.0 (React 19 ships no types). Root:
+  @fastify/static 10.1.5.
+- **Decided (orchestrator):** `jsdom` and `@types/react*` are implied by the §2 choices (Testing
+  Library needs a DOM; TS strict needs React's types). No `@vitejs/plugin-react` — Vite 8 compiles
+  JSX with oxc (`jsx: automatic`).
+- **Measured:** initial JS chunk 351.4 KB raw / **110.8 KB gzip** (T0.8 caps at 300 KB) with the wire
+  codec in and zod out; CSS 3.3 KB gzip; Home 3.6 KB gzip; each area its own lazy chunk.
+- **CSP:** the build emits a `<meta>` CSP and no inline script/style; theme applied before first
+  paint by an external `theme-boot.js`. Live check: `npm run server` with 3 seeded projects in
+  `DATA_DIR/orgs/default` → Home lists them, zero console errors.
+- **Client:** `rpc(channel, payload?)` typed from `src/api` contracts (type-only import of the `.ts`
+  source so Vite never picks up tsc's CommonJS `.js`); results stay `unknown` (contracts carry
+  inputs only) and the hooks narrow with commented casts. `web/tsconfig.json` drops
+  `noUncheckedIndexedAccess` (not part of `strict`; T0.2's `wire.ts` fails it).
+- **Static serving:** hashed assets immutable, `index.html` no-cache, client routes fall back to
+  `index.html`, but a miss under `/api/*` or a missing asset is a JSON 404, never HTML.
+- **Dependency graph note:** the spec lists T0.6 → T0.2, but the real project list needs T0.3's
+  per-org paths; the plan's graph (T0.6 after T0.3) was right and was followed.
+- `build.target` is chrome149/edge149/firefox151/safari26 — estimated "latest two" from the
+  browsers Playwright 1.62 bundles; T0.8's nightly WebKit/Firefox runs will catch a wrong guess.

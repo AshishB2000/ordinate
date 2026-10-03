@@ -89,7 +89,7 @@ row of the plan's dependency graph.
 - Job progress/cancel (`src/app/jobs.ts`, `computePool`) emits over SSE.
 - **Done when:** a test starts a job over RPC and receives progress and completion events on the stream.
 
-### [ ] T0.6 Web app shell
+### [x] T0.6 Web app shell
 - **Branch** `web/t0.6-shell` · **Depends** T0.2 · **Scope** `web/` (new), root `package.json` scripts
 - `web/` with Vite + React 19 + TS strict, React Router 7, TanStack Query 5. `npm --prefix web run
   dev` proxies `/api` to `:8080`; `npm run server` serves `web/dist` in prod.
