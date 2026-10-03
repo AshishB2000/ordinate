@@ -3,6 +3,11 @@
 // Never imports Electron and never touches the filesystem beyond the database
 // path it is handed.
 //
+// On the server (T4.3) one of these runs PER ORG (src/engine/duckdbPool.ts):
+// started with `setup` statements that lock it to the org's directory before
+// `ready`, spoken to only asynchronously, and also serving ports the pool
+// leases to compute threads. An async call can be interrupted by id.
+//
 // TWO REPLY CHANNELS, chosen per message by whether it carries an `id`:
 //
 //   no `id`  → SYNCHRONOUS caller, parked in `Atomics.wait`. Reply by writing
@@ -32,6 +37,7 @@
 // message can never reach `handle()` before the connection exists.
 
 import { parentPort, workerData } from 'worker_threads';
+import type { MessagePort } from 'worker_threads';
 import type { DuckDBConnection } from '@duckdb/node-api';
 // The type mapping and result encoder live in src/duckdbEngine.ts so the stdio
 // sidecar shares exactly ONE definition of them with this worker.
@@ -45,6 +51,25 @@ interface WorkerInit {
   dbPath: string;
   /** Result ceiling. The async path has no shared buffer, so it needs this told. */
   maxBytes: number;
+  /**
+   * Statements run once after connecting and BEFORE `ready` (src/engine/duckdbPool.ts:
+   * memory_limit, threads, the org's allowed_directories and the lock). A failure
+   * is an init failure — a worker that could not lock itself never answers.
+   */
+  setup?: string[];
+}
+
+/**
+ * Who sent a call: the parent (src/engine/duckdb.ts or the per-org pool), or a
+ * port the pool leased to a compute thread. Ids are per sender. Calls from one
+ * sender are served in order, so `lastStarted` tells a finished id from a
+ * queued one when an interrupt arrives.
+ */
+interface Sender {
+  post(msg: AsyncReply): void;
+  skip: Set<number>;
+  lastStarted: number;
+  closed: boolean;
 }
 
 interface CallMessage {
@@ -83,21 +108,13 @@ const ctl = new Int32Array(init.control);
 const sab = init.payload as GrowableSAB;
 let view = new Uint8Array(sab);
 let connection: DuckDBConnection | null = null;
+// The async call DuckDB is running now — what an interrupt for its id stops.
+let running: { from: Sender; id: number } | null = null;
 
 function finish(signal: number, bytes: number): void {
   Atomics.store(ctl, LEN, bytes);
   Atomics.store(ctl, SIG, signal);
   Atomics.notify(ctl, SIG);
-}
-
-/**
- * Async reply. `postMessage` is non-blocking on this side even when the main
- * thread is parked in `Atomics.wait` — the message lands in the port's queue and
- * is delivered whenever the main thread next reaches its event loop, which the
- * sync signal above is what eventually lets it do.
- */
-function reply(msg: AsyncReply): void {
-  if (parentPort) parentPort.postMessage(msg);
 }
 
 /**
@@ -135,8 +152,8 @@ function fail(err: unknown): void {
 
 // ── Message loop ─────────────────────────────────────────────────────────────
 
-function handle(msg: CallMessage): Promise<void> {
-  return msg.id === undefined ? handleSync(msg) : handleAsync(msg, msg.id);
+function handle(msg: CallMessage, from: Sender): Promise<void> {
+  return msg.id === undefined ? handleSync(msg) : handleAsync(msg, msg.id, from);
 }
 
 /** Reply through the control block. The caller is parked in `Atomics.wait`. */
@@ -169,8 +186,20 @@ async function handleSync(msg: CallMessage): Promise<void> {
  * though only one of them has a buffer to overflow; `Buffer.byteLength` costs
  * ~1.3 ms on an 11 MB payload (~9 GB/s), i.e. nothing next to the query.
  */
-async function handleAsync(msg: CallMessage, id: number): Promise<void> {
+async function handleAsync(msg: CallMessage, id: number, from: Sender): Promise<void> {
   const t0 = process.hrtime.bigint();
+  from.lastStarted = id;
+  // Cancelled or timed out while queued, or its sender is gone: never start it.
+  // The caller already settled, so this reply is read by nobody.
+  if (from.closed || from.skip.delete(id)) {
+    from.post({ id, ok: false, code: 'query', message: 'cancelled before it started', micros: 0 });
+    return;
+  }
+  // Async reply. `postMessage` is non-blocking on this side even when the main
+  // thread is parked in `Atomics.wait` — the message lands in the port's queue
+  // and is delivered when the main thread next reaches its event loop.
+  const reply = (m: AsyncReply): void => from.post(m);
+  running = { from, id };
   try {
     if (!connection) throw new Error('DuckDB connection is not open');
     if (msg.kind === 'exec') {
@@ -187,7 +216,24 @@ async function handleAsync(msg: CallMessage, id: number): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     reply({ id, ok: false, code: 'query', message, micros: elapsedMicros(t0) });
+  } finally {
+    running = null;
   }
+}
+
+/**
+ * Stop call `id` from `from` (a timeout or a cancel on the caller's side).
+ * Handled the moment it arrives, NOT through the queue: the queue is busy
+ * awaiting exactly the call to stop. Running → `connection.interrupt()`, the
+ * query rejects with DuckDB's INTERRUPT error and the connection serves the next
+ * call (measured: a 10^10-row scan stops in ~2 ms, `SELECT 42` answers after).
+ * Still queued → skipped when its turn comes. Already finished → nothing.
+ * Never `Worker.terminate()`: that aborts the process mid-native-call (see
+ * `closeWorker` in src/engine/duckdb.ts).
+ */
+function interrupt(from: Sender, id: number): void {
+  if (running && running.from === from && running.id === id) connection?.interrupt();
+  else if (id > from.lastStarted) from.skip.add(id);
 }
 
 function elapsedMicros(t0: bigint): number {
@@ -204,6 +250,7 @@ const ready = (async () => {
   const { DuckDBInstance } = await import('@duckdb/node-api');
   const instance = await DuckDBInstance.create(init.dbPath);
   connection = await instance.connect();
+  for (const sql of init.setup ?? []) await connection.run(sql);
   await connection.run('SELECT 1'); // warm the engine before reporting ready
   finish(OK, 0);
   if (parentPort) parentPort.postMessage({ type: 'ready' });
@@ -220,10 +267,37 @@ const ready = (async () => {
 // handshake to wait on. A rejected `handle()` must not poison the chain: every
 // exit path already replies, and the `catch` here only keeps the queue alive.
 let queue: Promise<void> = ready;
-if (parentPort) {
-  parentPort.on('message', (msg: CallMessage | { kind: 'close' }) => {
-    queue = queue.then(() => (msg.kind === 'close' ? closeNow() : handle(msg as CallMessage))).catch(() => undefined);
+
+type Inbound = CallMessage | { kind: 'close' } | { kind: 'interrupt'; id: number } | { kind: 'port'; port: MessagePort };
+
+function listen(on: (fn: (msg: Inbound) => void) => void, post: (msg: AsyncReply) => void): Sender {
+  const from: Sender = { post, skip: new Set(), lastStarted: 0, closed: false };
+  on((msg) => {
+    if (msg.kind === 'interrupt') return interrupt(from, msg.id);
+    // A compute thread's own line to this worker (src/engine/duckdbPool.ts
+    // `lease`): same queue, same connection, replies on that port.
+    if (msg.kind === 'port') {
+      attach(msg.port);
+      return;
+    }
+    queue = queue.then(() => (msg.kind === 'close' ? closeNow() : handle(msg, from))).catch(() => undefined);
   });
+  return from;
+}
+
+function attach(port: MessagePort): void {
+  const from = listen((fn) => port.on('message', fn), (m) => port.postMessage(m));
+  // The compute thread finished, or was terminated by a cancel: stop what it
+  // was running and skip what it queued.
+  port.on('close', () => {
+    from.closed = true;
+    if (running && running.from === from) connection?.interrupt();
+  });
+}
+
+if (parentPort) {
+  const pp = parentPort;
+  listen((fn) => pp.on('message', fn), (m) => pp.postMessage(m));
 }
 
 /**

@@ -66,3 +66,10 @@ export const Uuid = z.guid();
 
 /** A token from `POST /api/files` (src/server/files.ts): 32 random bytes, base64url. */
 export const FileToken = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+
+/**
+ * Pipeline / filter steps from a client. Bounded in shape and count only: every
+ * handler that takes them runs its own whitelist (`transforms.sanitizeSteps`,
+ * `visuals.sanitizeFilters`) before anything reads a step.
+ */
+export const Steps = z.array(z.looseObject({ type: z.string().max(64) })).max(200);

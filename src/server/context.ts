@@ -36,6 +36,8 @@ export interface Identity {
 export interface RequestContext extends Identity {
   readonly requestId: string;
   readonly client: Client;
+  /** Aborts when the caller goes away before its reply is sent; its DuckDB queries are interrupted (src/engine/duckdbPool.ts). */
+  readonly signal?: AbortSignal;
 }
 
 export type Headers = Readonly<Record<string, string | string[] | undefined>>;
@@ -95,8 +97,8 @@ export function orgKey(key: string): string {
 }
 
 /** Runs `fn` as a request with this identity (app.ts's hook; tests), pushing to `client`'s stream. */
-export function runInContext<T>(identity: Identity, requestId: string, fn: () => T, client: Client = NO_CLIENT): T {
-  return als.run({ ...identity, requestId, client }, fn);
+export function runInContext<T>(identity: Identity, requestId: string, fn: () => T, client: Client = NO_CLIENT, signal?: AbortSignal): T {
+  return als.run({ ...identity, requestId, client, signal }, fn);
 }
 
 /**

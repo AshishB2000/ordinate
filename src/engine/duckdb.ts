@@ -132,6 +132,7 @@
 
 import * as path from 'path';
 import { Worker, isMainThread } from 'worker_threads';
+import type { MessagePort } from 'worker_threads';
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -146,7 +147,8 @@ export type DuckErrorCode =
   | 'unavailable' // worker/native module never came up — use the JS fallback
   | 'query' // DuckDB rejected the SQL, or a caller passed a bad argument
   | 'overflow' // result larger than the shared buffer ceiling
-  | 'timeout' // worker stopped answering; bridge shut down
+  | 'timeout' // worker stopped answering; bridge shut down — or (pool) the query ran past its limit
+  | 'cancelled' // (pool) the request that asked was aborted; the query was interrupted
   | 'config' // configure() called at the wrong time
   | 'sync'; // query()/exec() on the main thread after forbidSyncOnMainThread()
 
@@ -283,7 +285,7 @@ export function configure(next: DuckDBOptions): void {
  * throws — a false answer means: use the pure-JS path.
  */
 export function isAvailable(): boolean {
-  return ensureStarted();
+  return router ? router.available() : ensureStarted();
 }
 
 // SERVER MODE. One process serves every request, so a sync call parks ALL of
@@ -300,6 +302,38 @@ let syncForbidden = false;
 /** Make the sync API throw on the main thread (`false` lifts it — tests). */
 export function forbidSyncOnMainThread(on = true): void {
   syncForbidden = on;
+}
+
+// SERVER MODE, ROUTED (T4.3). One worker per org instead of this module's one
+// (src/engine/duckdbPool.ts): set, every async call and `isAvailable()` go to
+// the router — which picks the caller's org worker from `ctx()` — and this
+// module's own worker is never started. A sync call then THROWS on any thread:
+// it would reach this module's unlocked worker, not the org's. A compute thread
+// gets a router too (a port to the org worker, leased per op by computePool).
+export interface Router {
+  call(kind: 'query' | 'exec', sql: string, params: DuckValue[]): Promise<string>;
+  available(): boolean;
+  /** Readiness (/readyz): can a worker actually start and answer? */
+  probe?(): Promise<boolean>;
+  /** A port to the caller's org worker for a compute thread, released when its op ends. */
+  lease?(): { port: MessagePort; timeoutMs: number; release(): void };
+  shutdown?(): void;
+}
+let router: Router | null = null;
+
+/** Route async calls through `r` (null restores this module's own worker). */
+export function setRouter(r: Router | null): void {
+  router = r;
+}
+
+/** computePool: a port for its thread to the caller's org worker; null on the desktop. */
+export function leasePort(): ReturnType<NonNullable<Router['lease']>> | null {
+  return router?.lease ? router.lease() : null;
+}
+
+/** /readyz: the router's real probe, or `isAvailable()` (blocks once at startup). */
+export function probe(): Promise<boolean> {
+  return router?.probe ? router.probe() : Promise.resolve(isAvailable());
 }
 
 /** Run a query and return its rows. SYNCHRONOUS — blocks the calling thread. */
@@ -340,6 +374,7 @@ export async function execAsync(sql: string): Promise<void> {
  * see, so the shutdown path owes them an answer.
  */
 export function shutdown(): void {
+  router?.shutdown?.();
   const w = worker;
   worker = null;
   ctl = null;
@@ -586,8 +621,8 @@ function onWorkerMessage(w: Worker, reply: WorkerReply): void {
 // ── Call path ────────────────────────────────────────────────────────────────
 
 function call(kind: 'query' | 'exec', sql: string, params?: readonly DuckValue[]): string {
-  if (syncForbidden && isMainThread) {
-    throw new DuckDBError('sync', `synchronous duck.${kind}() on the main thread is forbidden in server mode — use ${kind}Async()`);
+  if ((syncForbidden && isMainThread) || router) {
+    throw new DuckDBError('sync', `synchronous duck.${kind}() is forbidden in server mode — use ${kind}Async()`);
   }
   if (!ensureStarted() || !worker || !ctl) {
     throw new DuckDBError('unavailable', 'DuckDB is not available' + (failReason ? ': ' + failReason : ''));
@@ -621,6 +656,7 @@ function callAsync(kind: 'query' | 'exec', sql: string, params?: readonly DuckVa
   } catch (err) {
     return Promise.reject(err);
   }
+  if (router) return router.call(kind, sql, bound);
   // Post NOW when the bridge is already up, rather than after an `await` that
   // would defer it by a microtask. Otherwise a sync call issued later in the
   // same tick would reach the worker FIRST and be served ahead of async work

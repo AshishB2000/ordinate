@@ -6,12 +6,14 @@ import { projects } from './projects';
 import { datasets } from './datasets';
 import { home } from './home';
 import { quality } from './quality';
+import { visuals } from './visuals';
 
 export const contracts = {
   ...projects,
   ...datasets,
   ...home,
   ...quality,
+  ...visuals,
 } as const;
 
 export type Channel = keyof typeof contracts;
