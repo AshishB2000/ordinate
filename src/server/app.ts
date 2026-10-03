@@ -351,6 +351,10 @@ export function registerHandlers(): void {
   for (const mod of ['../ipc/projects', '../ipc/datasets', '../ipc/recent', '../ipc/quality', '../ipc/visuals', '../ipc/projectBoundaries', '../ipc/geoAnalysis', '../ipc/connections', '../ipc/trash', '../ipc/versions']) {
     (require(mod) as { register: () => void }).register();
   }
+  // The Data section (T2.3): catalog, lineage, relationships, search inside the data, and the browser's dataset views.
+  for (const mod of ['../ipc/catalog', '../ipc/lineage', '../ipc/relationships', '../ipc/dataSearch', '../ipc/datasetViews']) {
+    (require(mod) as { register: () => void }).register();
+  }
   (require('./authz/share') as typeof import('./authz/share')).register(() => dbPool);
   // Admin and personal API tokens (T3.4). The env is read per call, like the pool.
   const env = (): ServerEnv => {

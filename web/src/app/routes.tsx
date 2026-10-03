@@ -49,6 +49,8 @@ export const pages: RouteObject[] = [
   page('/data/import', () => import('../features/import/ImportPage')),
   page('/data/captures', () => import('../features/import/CapturesPage')),
   page('/data/input/:projectId/:datasetId', () => import('../features/import/InputTablePage')),
+  // The Data section (T2.3): one project's datasets / captures / catalog / relationships.
+  page('/data/:projectId', () => import('../features/data/DataSection')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

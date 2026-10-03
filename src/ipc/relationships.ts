@@ -30,6 +30,15 @@ import { isValidId } from '../app/ids';
 
 type Infos = Map<string, DsInfo>;
 
+/** A share as the Relationships page shows it: a percent to one decimal (relationshipsPage.ts relPct). */
+export const pct1 = (x: number): number => Math.round(x * 1000) / 10;
+
+/** A relationship with its match rate — matched rows over the many side's keyed rows — as a percent. */
+export function withMatchPct(r: Relationship): Relationship & { matchPct: number } {
+  const n = r.verified.matched + r.verified.unmatchedFrom;
+  return { ...r, matchPct: n ? pct1(r.verified.matched / n) : 0 };
+}
+
 async function infoFor(projectId: string, id: string): Promise<DsInfo | null> {
   const meta = await datasets.getDatasetMeta(projectId, id);
   return meta ? { id, name: meta.name, columns: meta.columns } : null;
@@ -216,7 +225,7 @@ async function suggest(projectId: string, fromId: string, toId: string): Promise
     fromRows = (await datasets.getDataset(projectId, fromId))?.rows || [];
     toRows = (await datasets.getDataset(projectId, toId))?.rows || [];
   }
-  const ranked = await rankKeys(from.columns, to.columns, rateOf);
+  const ranked = (await rankKeys(from.columns, to.columns, rateOf)).map((c) => ({ ...c, ratePct: c.rate === null ? null : pct1(c.rate) }));
   const best = ranked[0];
   const stats = best ? await keyStats(projectId, from, best.from, to, best.to) : null;
   return { ok: true, candidates: ranked, best: best ? { ...best, stats, cardinality: stats ? inferCardinality(stats) : null } : null };
@@ -235,13 +244,13 @@ async function save(projectId: string, raw: any): Promise<any> {
   rel.verified = { matched: stats.matched, unmatchedFrom: stats.unmatchedFrom };
   const saved = await rels.saveRelationship(projectId, rel);
   if (!saved) return { ok: false, error: 'Could not save the relationship.' };
-  return { ok: true, relationship: saved, stats };
+  return { ok: true, relationship: withMatchPct(saved), stats };
 }
 
 export function register(): void {
   ipcMain.handle('relationship:list', async (_e, { projectId }: any = {}) => {
     try {
-      return { ok: true, relationships: await rels.listRelationships(projectId) };
+      return { ok: true, relationships: (await rels.listRelationships(projectId)).map(withMatchPct) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not read relationships' };
     }

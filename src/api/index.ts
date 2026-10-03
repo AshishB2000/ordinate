@@ -14,6 +14,9 @@ import { connections } from './connections';
 import { assistant } from './assistant';
 import { captures } from './captures';
 import { inputTables } from './inputTables';
+import { catalog } from './catalog';
+import { lineage } from './lineage';
+import { relationships } from './relationships';
 
 import { trash } from './trash';
 import { versions } from './versions';
@@ -34,6 +37,9 @@ export const contracts = {
   ...versions,
   ...captures,
   ...inputTables,
+  ...catalog,
+  ...lineage,
+  ...relationships,
 } as const;
 
 export type Channel = keyof typeof contracts;

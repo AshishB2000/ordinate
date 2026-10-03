@@ -1,8 +1,0 @@
-/* The grid takes the rest of the page (the page frame is a min-height:100%
-   column) — and at least a usable height on a short window. */
-.grid {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 0;
-  min-height: 360px;
-}

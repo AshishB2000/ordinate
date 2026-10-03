@@ -1,24 +1,173 @@
-// /data/:projectId/:datasetId — a dataset's rows in the DataGrid, paged from
-// the server. The shell of the dataset page: T2.3 adds the profile, search,
-// sort, prepare and lineage around the same grid.
+// /data/:projectId/:datasetId — one dataset (dsExplorer.ts, dsLineage.ts,
+// dataSection.ts's tabs): its identity header — source, tags, freshness,
+// schedule, what it is built from and what uses it — then three tabs: the
+// rows (Data), the checks (Quality) and the column docs (Columns). Tab,
+// profiled column and grid filter live in the URL, so a link reopens them.
 
-import { useMemo } from 'react';
-import { useParams } from 'react-router';
-import { formatNumber } from '../../../../src/app/format.ts';
-import { datasetPageSource, useDatasetColumns } from '../../api/datasets';
-import { EmptyState, ErrorState, Page, PageSkeleton } from '../../app/blocks';
-import { DataGrid } from '../../ui/DataGrid/DataGrid';
-import s from './DatasetPage.module.css';
+import { useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { useDatasetColumns, useDatasets, type DatasetSummary } from '../../api/datasets';
+import { ErrorState, Page, PageSkeleton } from '../../app/blocks';
+import { Button, buttonClass, IconButton } from '../../ui/Button';
+import { Icon } from '../../ui/icons/Icon';
+import { Menu } from '../../ui/Menu';
+import { EmptyState } from '../../ui/States';
+import { Tab, TabList, TabPanel, Tabs } from '../../ui/Tabs';
+import { useLineage, useSource, useTags } from './api';
+import { ColumnsTab } from './ColumnsTab';
+import { DataTab } from './DataTab';
+import { QualityDot, SchedulePicker, useDeleteDataset, useRefresh, WatchToggle } from './DatasetList';
+import { useAdoptProject } from '../projects/current';
+import { RecordDetails } from './Details';
+import { formatNumber, freshness, NOT_REFRESHABLE, rowsText } from './format';
+import { LineageDrawer, usedInText } from './LineageDrawer';
+import { QualityTab } from './QualityTab';
+import { TagChips, tagsOf } from './tags';
+import s from './Data.module.css';
+
+const TABS = ['data', 'quality', 'columns'] as const;
+type TabId = (typeof TABS)[number];
+
+/** Reads from / Used by — the datasets this one is built from, and the SQL datasets built on it. */
+function LineageLine({ projectId, id, list }: { projectId: string; id: string; list: DatasetSummary[] }) {
+  const me = list.find((d) => d.id === id);
+  const up = me?.originDeps ?? [];
+  const down = list.filter((d) => (d.originKind === 'sql' || d.originKind === 'notebook') && d.originDeps?.includes(id));
+  if (!up.length && !down.length) return null;
+  const chip = (dsId: string, label: string | undefined, kind = '') =>
+    label ? (
+      <Link key={dsId} className={s.lineChip} to={`/data/${projectId}/${dsId}`} title={`Open ${label}`}>
+        <Icon name={kind === 'sql' ? 'code' : kind === 'notebook' ? 'file-text' : 'database'} size={16} />
+        {label}
+      </Link>
+    ) : (
+      <span key={dsId} className={`${s.lineChip} ${s.lineGone}`} title="This dataset has been deleted">
+        <Icon name="database" size={16} />
+        Deleted dataset
+      </span>
+    );
+  return (
+    <div className={s.lineage}>
+      {up.length > 0 && (
+        <span className={s.lineGroup}>
+          <span className={s.lineLabel}>Reads from</span>
+          {up.map((u) => {
+            const d = list.find((x) => x.id === u);
+            return chip(u, d?.name, d?.sourceKind);
+          })}
+        </span>
+      )}
+      {down.length > 0 && (
+        <span className={s.lineGroup}>
+          <span className={s.lineLabel}>Used by</span>
+          {down.map((d) => chip(d.id, d.name, d.originKind))}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Header({ projectId, id, name, rowCount, columnCount }: { projectId: string; id: string; name: string; rowCount: number; columnCount: number }) {
+  const navigate = useNavigate();
+  const list = useDatasets(projectId);
+  const source = useSource(projectId, id);
+  const tags = useTags(projectId);
+  const lineage = useLineage(projectId, id);
+  const refresh = useRefresh(projectId);
+  const remove = useDeleteDataset(projectId, () => void navigate(`/data/${projectId}`));
+  const [graph, setGraph] = useState(false);
+  const d = list.data?.find((x) => x.id === id);
+  const outcome = refresh.state[id];
+  return (
+    <header className={s.dsHead}>
+      <Link className={buttonClass('ghost', 'sm', s.back)} to={`/data/${projectId}`}>
+        <Icon name="arrow-left" />
+        <span>Datasets</span>
+      </Link>
+      <div className={s.dsTop}>
+        <div className={s.dsIdent}>
+          <div className={s.dsTitleRow}>
+            <h1 className={s.title}>{name}</h1>
+            {source.data && (
+              <span className={s.badge} title={source.data.refreshable ? 'Where the rows come from' : NOT_REFRESHABLE}>
+                {source.data.label}
+              </span>
+            )}
+            <TagChips tags={tagsOf(tags.data, `dataset:${id}`)} max={4} />
+          </div>
+          <div className={s.dsMeta}>
+            <span>
+              {rowsText(rowCount)} · {formatNumber(columnCount)} {columnCount === 1 ? 'column' : 'columns'}
+            </span>
+            {d && (
+              <span className={s.freshLine} title={d.lastRefreshStatus === 'error' ? d.lastRefreshError || 'The last refresh failed.' : undefined}>
+                <QualityDot n={d.qualityFailing} />
+                {d.lastRefreshStatus === 'error' && <span className={s.failDot} role="img" aria-label="Last refresh failed" />}
+                {freshness(d)}
+              </span>
+            )}
+            {d && <SchedulePicker projectId={projectId} d={d} />}
+            {d && <WatchToggle projectId={projectId} d={d} />}
+            {lineage.data && (
+              <button type="button" className={s.usedIn} onClick={() => setGraph(true)}>
+                <Icon name="lineage" size={16} />
+                {usedInText(lineage.data.usedIn) || 'Not used yet'}
+              </button>
+            )}
+            {d?.originKind && (
+              <Button size="sm" icon="refresh" loading={outcome?.busy} onClick={() => void refresh.run(id)}>
+                Refresh
+              </Button>
+            )}
+          </div>
+          {outcome?.message && (
+            <p className={outcome.error ? s.rowError : s.rowNote} role="status">
+              {outcome.message}
+            </p>
+          )}
+          {list.data && <LineageLine projectId={projectId} id={id} list={list.data} />}
+        </div>
+        <div className={s.dsActions}>
+          <Link className={buttonClass('primary', 'sm')} to={`/visuals?project=${projectId}&datasetId=${id}`}>
+            New visual
+          </Link>
+          <RecordDetails projectId={projectId} kind="dataset" id={id} name={name} trigger={<Button size="sm" icon="info">Details</Button>} />
+          <Menu
+            align="end"
+            label="More dataset actions"
+            trigger={<IconButton icon="more-horizontal" size="sm" label="More dataset actions" />}
+            items={[
+              { label: 'Lineage', icon: 'lineage', onSelect: () => setGraph(true) },
+              { label: 'Pipeline history', icon: 'history', onSelect: () => void navigate(`/versions/${projectId}/dataset/${id}`) },
+              { kind: 'separator' },
+              { label: 'Move to Trash', icon: 'trash', danger: true, disabled: !d, onSelect: () => d && remove(d) },
+            ]}
+          />
+        </div>
+      </div>
+      {graph && <LineageDrawer projectId={projectId} id={id} name={name} onClose={() => setGraph(false)} />}
+    </header>
+  );
+}
 
 export default function DatasetPage() {
-  const { projectId, datasetId } = useParams();
+  const { projectId = '', datasetId = '' } = useParams();
+  const [params, setParams] = useSearchParams();
   const q = useDatasetColumns(projectId, datasetId);
-  const source = useMemo(
-    () => (projectId && datasetId ? datasetPageSource(projectId, datasetId) : null),
-    [projectId, datasetId],
-  );
+  // The URL names the project: the shell's switcher shows it (T2.2).
+  useAdoptProject(projectId);
+  const list = useDatasets(projectId);
+  const asked = params.get('tab');
+  const tab: TabId = (TABS as readonly string[]).includes(asked ?? '') ? (asked as TabId) : 'data';
+  const setTab = (v: string) =>
+    setParams((p) => {
+      const n = new URLSearchParams(p);
+      if (v === 'data') n.delete('tab');
+      else n.set('tab', v);
+      return n;
+    }, { replace: true });
 
-  if (q.isPending || !source) return <PageSkeleton />;
+  if (q.isPending) return <PageSkeleton />;
   if (q.isError) {
     return (
       <Page title="Dataset">
@@ -29,20 +178,47 @@ export default function DatasetPage() {
   if (!q.data) {
     return (
       <Page title="Dataset">
-        <EmptyState icon="database" title="Dataset not found">
+        <EmptyState
+          icon="database"
+          title="Dataset not found"
+          actions={
+            <Link className={buttonClass('primary')} to={`/data/${projectId}`}>
+              Back to datasets
+            </Link>
+          }
+        >
           It may have been deleted, or moved to the Trash with its project.
         </EmptyState>
       </Page>
     );
   }
-  const d = q.data;
-  const rows = d.rowCount === 1 ? '1 row' : `${formatNumber(d.rowCount)} rows`;
-  const cols = d.columns.length === 1 ? '1 column' : `${d.columns.length} columns`;
+  const header = q.data;
+  const failing = list.data?.find((x) => x.id === datasetId)?.qualityFailing;
   return (
-    <Page title={d.name} sub={`${rows} · ${cols}`}>
-      <div className={s.grid}>
-        <DataGrid columns={d.columns} source={source} label={`${d.name} rows`} />
-      </div>
-    </Page>
+    <div className={s.page}>
+      <Header projectId={projectId} id={datasetId} name={header.name} rowCount={header.rowCount} columnCount={header.columns.length} />
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabList label="Dataset views">
+          <Tab value="data" icon="table">
+            Data
+          </Tab>
+          <Tab value="quality" icon="circle-check" count={failing ? `${formatNumber(failing)} failing` : undefined}>
+            Quality
+          </Tab>
+          <Tab value="columns" icon="columns">
+            Columns
+          </Tab>
+        </TabList>
+        <TabPanel value="data">
+          <DataTab projectId={projectId} datasetId={datasetId} header={header} />
+        </TabPanel>
+        <TabPanel value="quality">
+          <QualityTab projectId={projectId} datasetId={datasetId} header={header} />
+        </TabPanel>
+        <TabPanel value="columns">
+          <ColumnsTab projectId={projectId} datasetId={datasetId} header={header} />
+        </TabPanel>
+      </Tabs>
+    </div>
   );
 }

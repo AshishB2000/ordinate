@@ -84,12 +84,45 @@ export const datasets = {
   'dataset:columns': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
   // preload: invoke('dataset:stats', { projectId, datasetId }) — column summaries + quality issues.
   'dataset:stats': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, datasetId: Uuid }), project: byProjectId }),
-  // preload: invoke('dataset:update', { projectId, datasetId, autoRefresh }) — the
-  // refresh SCHEDULE only (T2.5's connection rail). The handler also takes
-  // `columns` and `watch`; widen this input when a screen needs them.
+
+  // ── The Data section (T2.3) ──────────────────────────────────────────────
+  // preload: invoke('dataset:delete', { projectId, id }) — a move to the Trash.
+  'dataset:delete': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
+  // preload: invoke('dataset:refresh', { projectId, id }) — re-fetch from the origin, as a job.
+  // The reply names the dataset by its header only (src/ipc/datasets.ts `headerOf`), never its origin.
+  'dataset:refresh': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
+  // preload: invoke('dataset:update', { projectId, datasetId, columns | autoRefresh | watch }) —
+  // rename / retype columns (indexed against the stored columns), the refresh
+  // schedule and the anomaly watch. Same header-only reply.
   'dataset:update': rpc({
     access: 'write',
-    input: z.strictObject({ projectId: Uuid, datasetId: Uuid, autoRefresh: z.enum(['hourly', 'daily', 'weekly']).nullable() }),
+    input: z.strictObject({
+      projectId: Uuid,
+      datasetId: Uuid,
+      columns: z.array(z.strictObject({ name: z.string().min(1).max(512), type: z.enum(['text', 'number', 'date']) })).max(5_000).optional(),
+      autoRefresh: z.enum(['hourly', 'daily', 'weekly', 'off']).nullable().optional(),
+      watch: z.boolean().optional(),
+    }),
+    project: byProjectId,
+  }),
+  // Server only (src/ipc/datasetViews.ts): where the rows came from, REDACTED —
+  // a kind, a display label and whether it can be re-fetched. Never a path, a
+  // URL's path or query, a statement or a key (`dataset:meta` has all of those).
+  'dataset:source': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
+  // Server only: one column's profile panel — every figure on it (filled %,
+  // distinct, min / median / max, the histogram or top values and their bar
+  // lengths) computed here, so the browser only formats.
+  'dataset:profile': rpc({
+    access: 'read',
+    input: z.strictObject({ projectId: Uuid, datasetId: Uuid, column: z.string().min(1).max(512) }),
+    project: byProjectId,
+  }),
+  // preload: invoke('dataSearch:query', { projectId, term }) — values inside this
+  // project's datasets. A project is REQUIRED here: the desktop's '' (every
+  // project) would read projects the caller may not.
+  'dataSearch:query': rpc({
+    access: 'read',
+    input: z.strictObject({ projectId: Uuid, term: z.string().min(2).max(200) }),
     project: byProjectId,
   }),
   // preload: invoke('dataset:parsePaste', { text }) — parses pasted CSV / TSV /
@@ -131,7 +164,7 @@ export const datasets = {
   }),
   // preload: invoke('dataset:distinct', { projectId, datasetId, column, limit, search })
   // — a column's distinct values, searched in SQL, with the true total (an
-  // input table's lookup list).
+  // input table's lookup list; a quality rule's allowed-values prefill, T2.3).
   'dataset:distinct': rpc({
     access: 'read',
     input: z.strictObject({

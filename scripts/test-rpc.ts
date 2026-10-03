@@ -59,7 +59,7 @@ const PID = '1b4e28ba-2fa1-11d2-883f-0016d3cca427';
 
   appMod.registerHandlers();
   ok('registerHandlers: the Home channels are stored', ['projects:list', 'dataset:list', 'recent:list'].every((c) => rpc.handlers.has(c)));
-  ok('registerHandlers: so are their uncontracted neighbours', rpc.handlers.has('dataset:delete') && rpc.handlers.has('projects:create'));
+  ok('registerHandlers: so are their uncontracted neighbours', rpc.handlers.has('dataset:meta') && rpc.handlers.has('dataset:get'));
 
   const projects: typeof import('../src/app/projects') = require('../src/app/projects');
   const sample: typeof import('../src/app/sampleProject') = require('../src/app/sampleProject');
@@ -97,9 +97,13 @@ const PID = '1b4e28ba-2fa1-11d2-883f-0016d3cca427';
   ok('recent:list {limit: undefined} (what the preload sends): 200', ru.statusCode === 200, ru.body);
 
   // ── No contract → 404, even with a handler registered ────────────────────
-  const del = await post('dataset:delete', { args: [{ projectId, id: dsId }] });
-  ok('dataset:delete (registered, uncontracted): 404', del.statusCode === 404, del.body);
-  ok('…and the handler never ran: the dataset still exists', (await datasets.listDatasets(projectId)).some((d) => d.id === dsId));
+  // `dataset:meta` stays uncontracted for good (its reply carries the origin:
+  // a path, a URL that may hold a key, a statement). `dataset:delete` was the
+  // example here until T2.3 contracted it.
+  const meta = await post('dataset:meta', { args: [{ projectId, id: dsId }] });
+  const name = (await datasets.listDatasets(projectId)).find((d) => d.id === dsId)?.name ?? '';
+  ok('dataset:meta (registered, uncontracted): 404', meta.statusCode === 404, meta.body);
+  ok('…and the handler never answered: the reply is not the record', !!name && !meta.body.includes(name), meta.body);
   for (const ch of ['nope:nope', 'toString', '__proto__', 'constructor', 'hasOwnProperty']) {
     const r = await post(ch, { args: [] });
     ok(`"${ch}": 404`, r.statusCode === 404, r.statusCode);

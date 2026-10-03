@@ -1,0 +1,764 @@
+/* The Data section (T2.3): the list, the dataset page, the catalog, quality
+   and relationships. hub.css's look — dense tables on one card, hairlines,
+   pill badges, the 300px profile panel — on the web tokens. */
+
+/* ── Page frame ─────────────────────────────────────────────────────── */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  padding: var(--sp-24) var(--sp-32) var(--sp-48);
+  min-height: 100%;
+}
+@media (max-width: 900px) {
+  .page {
+    padding: var(--sp-16);
+  }
+}
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-12) var(--sp-24);
+}
+.headText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.headTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.title {
+  font-size: var(--t-20);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tighter);
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.sub,
+.lead {
+  color: var(--muted);
+  max-width: 72ch;
+}
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.listBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8) var(--sp-12);
+}
+.barEnd {
+  margin-left: auto;
+}
+.muted {
+  color: var(--muted);
+}
+.meta {
+  color: var(--muted);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+.note {
+  margin: var(--sp-4) 0 0;
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.strong {
+  font-weight: 500;
+  color: var(--text-strong);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+}
+.good {
+  color: var(--ok);
+}
+.bad,
+.failText {
+  color: var(--error);
+}
+.warnText {
+  color: var(--warn);
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.linkBtn {
+  background: none;
+  border: 0;
+  padding: 0 var(--sp-4);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
+}
+.linkBtn:hover {
+  text-decoration: underline;
+}
+
+/* ── Tables (Home's list language: one card, hairlines, 36px head) ──── */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-13);
+}
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 36px;
+  padding: 0 var(--sp-12);
+  text-align: left;
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+  white-space: nowrap;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border-hairline);
+}
+.table td {
+  height: 44px;
+  padding: var(--sp-4) var(--sp-12);
+  border-top: 1px solid var(--border-hairline);
+  vertical-align: middle;
+}
+.table tbody tr:first-child td {
+  border-top: 0;
+}
+.table tbody tr:hover td {
+  background: var(--surface-2);
+}
+.table .num,
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.actions,
+.table th.actions,
+.table th.num {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+.clickRow {
+  cursor: pointer;
+}
+.rowOn td {
+  background: var(--accent-soft);
+}
+.rowActions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-4);
+}
+/* "New visual" and "Combine" are there when the row is pointed at or focused —
+   present where wanted, not a column of noise down the list (hub.css). */
+.hoverAction {
+  opacity: 0;
+}
+.clickRow:hover .hoverAction,
+.clickRow:focus-within .hoverAction,
+.hoverAction:focus-visible {
+  opacity: 1;
+}
+@media (hover: none) {
+  .hoverAction {
+    opacity: 1;
+  }
+}
+.nameCell {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-width: 0;
+}
+.nameLink {
+  color: var(--text-strong);
+  font-weight: 500;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nameLink:hover {
+  color: var(--accent);
+}
+.nameLink:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+.badge {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px var(--sp-8);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-full);
+  background: var(--surface-1);
+  font-size: var(--t-11);
+  font-weight: 500;
+  color: var(--muted);
+}
+.typeChip {
+  padding: 1px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-11);
+  font-weight: 500;
+}
+
+/* ── Freshness, schedule, watch ─────────────────────────────────────── */
+.fresh {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.freshLine {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.freshTools {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.schedule {
+  min-width: 140px;
+}
+.failDot,
+.dqDot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+.dqDot {
+  background: var(--error);
+}
+.watch {
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface-1);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
+}
+.watch:hover {
+  border-color: var(--border-2);
+  color: var(--text);
+}
+.watchOn {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.rowError,
+.rowNote {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.rowError {
+  color: var(--error);
+}
+
+/* ── Tags ───────────────────────────────────────────────────────────── */
+.tag0 { --tag-ink: var(--chart-1); }
+.tag1 { --tag-ink: var(--chart-2); }
+.tag2 { --tag-ink: var(--chart-3); }
+.tag3 { --tag-ink: var(--chart-4); }
+.tag4 { --tag-ink: var(--chart-5); }
+.tag5 { --tag-ink: var(--chart-6); }
+.tag6 { --tag-ink: var(--chart-7); }
+.tag7 { --tag-ink: var(--chart-8); }
+.chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 20px;
+  padding: 0 var(--sp-8);
+  border-radius: var(--r-full);
+  border: 1px solid color-mix(in srgb, var(--tag-ink, var(--muted)) 35%, transparent);
+  background: color-mix(in srgb, var(--tag-ink, var(--muted)) 12%, transparent);
+  color: var(--tag-ink, var(--muted));
+  font-size: var(--t-11);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.chipMore {
+  --tag-ink: var(--muted);
+}
+.chipBtn {
+  cursor: pointer;
+  font-family: inherit;
+}
+.chipOn {
+  background: var(--tag-ink);
+  color: var(--surface-1);
+}
+.chipX {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.tagBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.tagBarLabel {
+  margin-right: var(--sp-4);
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+}
+.tagEdit {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: var(--ctl-md);
+  padding: var(--sp-4) var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+.tagEdit:focus-within {
+  border-color: var(--accent-line);
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.tagInput {
+  flex: 1 1 80px;
+  min-width: 80px;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-13);
+}
+.sugg {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-float);
+  box-shadow: var(--shadow-md);
+}
+.suggRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-4) var(--sp-8);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font-size: var(--t-12);
+}
+.suggRow:hover,
+.suggOn {
+  background: var(--surface-2);
+}
+
+/* ── Details popover ────────────────────────────────────────────────── */
+.popHead {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.popKicker {
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+}
+.popName {
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.popFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  width: 320px;
+  max-width: 100%;
+}
+.popField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.popLabel {
+  font-size: var(--t-12);
+  font-weight: 500;
+  color: var(--muted);
+}
+.stamp {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+
+/* ── Search inside the data ─────────────────────────────────────────── */
+.search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  max-width: 720px;
+}
+.hits {
+  padding: var(--sp-4);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+}
+.hitList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hitList > li.muted {
+  padding: var(--sp-4) var(--sp-8);
+  font-size: var(--t-12);
+}
+.hit {
+  display: grid;
+  grid-template-columns: minmax(80px, auto) 1fr auto auto auto;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-4) var(--sp-8);
+  border-radius: var(--r-md);
+}
+.hit:hover {
+  background: var(--surface-2);
+}
+.hitValue {
+  font-weight: 500;
+  color: var(--text-strong);
+}
+.hitWhere {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.hitRows {
+  color: var(--muted);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Catalog ────────────────────────────────────────────────────────── */
+.ctSearch {
+  width: 300px;
+}
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface-1);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
+}
+.pill:hover {
+  border-color: var(--border-2);
+}
+.pillOn {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.pillN {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ctName {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  min-width: 0;
+}
+.kindIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.kind_dataset { color: var(--chart-1); }
+.kind_visual { color: var(--chart-2); }
+.kind_analysis { color: var(--chart-3); }
+.kind_metric { color: var(--chart-4); }
+.kind_report,
+.kind_story { color: var(--chart-5); }
+.ctText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ctTop {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.ctSub {
+  max-width: 56ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+
+/* ── Dataset page header ────────────────────────────────────────────── */
+.dsHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.back {
+  align-self: flex-start;
+}
+.dsTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-12) var(--sp-24);
+}
+.dsIdent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-width: 0;
+}
+.dsTitleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.dsMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8) var(--sp-12);
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.dsActions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.usedIn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
+}
+.usedIn:hover {
+  text-decoration: underline;
+}
+.lineage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8) var(--sp-16);
+}
+.lineGroup {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.lineLabel {
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+}
+.lineChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: 24px;
+  padding: 0 var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface-1);
+  color: var(--text);
+  font-size: var(--t-12);
+  text-decoration: none;
+}
+a.lineChip:hover {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.lineGone {
+  color: var(--text-faint);
+  border-style: dashed;
+}
+
+/* ── Columns tab ────────────────────────────────────────────────────── */
+.docTable td {
+  min-width: 120px;
+}
+.cellInput {
+  width: 100%;
+  min-height: 28px;
+  padding: var(--sp-4) var(--sp-8);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-13);
+  resize: vertical;
+}
+.cellInput:hover {
+  border-color: var(--border);
+}
+.cellInput:focus {
+  border-color: var(--accent-line);
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+  background: var(--surface-1);
+}
+
+/* ── Captures tab ───────────────────────────────────────────────────── */
+.capList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--sp-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.capItem {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  padding: var(--sp-8);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+  color: inherit;
+  text-decoration: none;
+}
+.capItem:hover {
+  border-color: var(--border-2);
+}
+.capItem:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.capThumb {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.capThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.capText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}

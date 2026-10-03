@@ -40,6 +40,19 @@ import { runQualityChecks } from '../analysis/qualityRun';
 import * as versions from '../app/versions';
 import { versionRecordOf } from '../data/inputTable/store';
 import * as trash from '../app/trash';
+import type { ParsedColumn } from '../data/parse';
+import { redactOriginText } from '../data/datasetOrigin';
+import { serverDataDir } from '../server/context';
+import { filledPcts } from '../data/profileView';
+
+/**
+ * A dataset as a grid draws it: name, row count and typed columns — never the
+ * rows, and never the origin (a file path, a URL that may hold a key, a SQL
+ * statement). Every reply that names a dataset back to a renderer uses this.
+ */
+export function headerOf(ds: { id: string; name: string; rowCount: number; columns: ParsedColumn[] }) {
+  return { id: ds.id, name: ds.name, rowCount: ds.rowCount, columns: ds.columns.map((c) => ({ name: c.name, type: c.type })) };
+}
 
 // Datasets (file-based data sources) IPC — pick+parse/paste/save/list/get/delete.
 // All are ipcMain.handle (request/response). Native open dialog runs in MAIN;
@@ -316,7 +329,7 @@ export function register() {
   // a URL with a key in it or a SQL statement, none of which a grid draws.
   ipcMain.handle('dataset:columns', async (_e, { projectId, id }: any = {}) => {
     const meta = await datasets.getDatasetMeta(projectId, id);
-    return meta ? { id: meta.id, name: meta.name, rowCount: meta.rowCount, columns: meta.columns } : null;
+    return meta ? headerOf(meta) : null;
   });
 
   // A delete is a move to the Trash (src/app/trash.ts), taking the dataset's
@@ -333,14 +346,18 @@ export function register() {
   ipcMain.handle('dataset:refresh', async (_e, { projectId, id }: any = {}) => {
     try {
       const res = await refreshAsJob(projectId, id);
-      if (!res.ok) return res;
+      if (!res.ok) {
+        // The reason can quote the URL or the server path it failed on.
+        if (!serverDataDir()) return res;
+        const meta = await datasets.getDatasetMeta(projectId, id);
+        return { ...res, error: redactOriginText(res.error, meta?.origin) };
+      }
       await afterRefresh(projectId, id);
-      // The record without its tables — no caller reads the rows, and a 1M-row
-      // structured clone is seconds of work for nothing.
-      const { rows: _rows, source: _source, ...dataset } = res.dataset as any;
+      // The header only — no caller reads the rows (a 1M-row clone is seconds
+      // of work for nothing), and the origin may hold a key.
       return {
         ok: true,
-        dataset,
+        dataset: headerOf(res.dataset),
         warnings: res.warnings,
         warningCount: res.warnings.length,
       };
@@ -356,8 +373,13 @@ export function register() {
   ipcMain.handle('dataset:stats', async (_e, { projectId, datasetId }: any = {}) => {
     try {
       // Fast path: both answers straight off the .parquet, no rows hydrated.
+      // `filledPct`: each column's filled share as the completeness table shows
+      // it — the server rounds it, the browser only draws it (src/data/profileView.ts).
       const fast = await residentStats(projectId, datasetId);
-      if (fast) return { ok: true, summaries: fast.summaries, issues: fast.issues };
+      if (fast) {
+        const meta = await datasets.getDatasetMeta(projectId, datasetId);
+        return { ok: true, summaries: fast.summaries, issues: fast.issues, filledPct: filledPcts(fast.summaries, meta ? meta.rowCount : 0) };
+      }
 
       const ds = await datasets.getDataset(projectId, datasetId);
       if (!ds) return { ok: false, error: 'Dataset not found' };
@@ -365,7 +387,7 @@ export function register() {
         computeColumnSummary(col, ds.rows.map((row) => (row ? row[c] ?? null : null))),
       );
       const issues = findQualityIssues(ds.columns, ds.rows);
-      return { ok: true, summaries, issues };
+      return { ok: true, summaries, issues, filledPct: filledPcts(summaries, ds.rowCount) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute dataset stats' };
     }
@@ -517,7 +539,7 @@ export function register() {
       });
       if (ds) await runQualityChecks(projectId, datasetId); // a rename/retype can break or fix a rule
       if (ds && Array.isArray(columns)) void refreshDependents(projectId, datasetId); // a retype changes what SQL sees
-      return ds ? { ok: true, dataset: ds } : { ok: false, error: 'Could not update the dataset' };
+      return ds ? { ok: true, dataset: headerOf(ds) } : { ok: false, error: 'Could not update the dataset' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to update the dataset' };
     }

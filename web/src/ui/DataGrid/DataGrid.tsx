@@ -26,12 +26,12 @@
 // <datalist> the editor suggests from — an input table's lookup values).
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
-import type { KeyboardEvent, MouseEvent } from 'react';
+import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { elementScroll, observeElementOffset, useVirtualizer, type Virtualizer } from '@tanstack/react-virtual';
 import { Button } from '../Button';
 import { EmptyState, ErrorState } from '../States';
 import { MAX_SCROLL_PX, move, scrollRatio, scrollTopFor, type Pos } from './geometry';
-import { cellId, HeaderCell, Row, type CellFlag, type GridColumn } from './GridParts';
+import { cellId, cellOf, HeaderCell, Row, sourceCol, type CellFlag, type GridColumn } from './GridParts';
 import { PAGE_ROWS, PageCache, type Cell, type FetchPage } from './pageCache';
 import s from './DataGrid.module.css';
 
@@ -73,6 +73,12 @@ export interface DataGridProps {
   onHeaderActivate?: (col: number, anchor: HTMLElement) => void;
   /** The id of a <datalist> the cell editor suggests from, for a column. */
   editorList?: (col: number) => string | undefined;
+  /**
+   * A header cell's content in place of the plain name (its sort state, say).
+   * Column indexes everywhere a caller sees one — cellFlag, editorList, onEdit —
+   * are SOURCE columns (`GridColumn.at`), so hiding a column moves nothing.
+   */
+  header?: (column: GridColumn, index: number) => ReactNode;
 }
 
 /** One row's height — fixed, so positions are arithmetic (legacy --ds-row-h). */
@@ -123,6 +129,7 @@ export function DataGrid({
   cellFlag,
   onHeaderActivate,
   editorList,
+  header,
 }: DataGridProps) {
   const grid = useId();
   const [, rerender] = useReducer((n: number) => n + 1, 0);
@@ -253,14 +260,16 @@ export function DataGrid({
   const beginEdit = (p: Pos, value?: string) => {
     if (!editable || p.row < 0 || !cache.has(p.row)) return;
     setActive(p);
-    setEditing({ pos: p, value: value ?? cellText(cache.row(p.row)?.[p.col]) });
+    setEditing({ pos: p, value: value ?? cellText(cellOf(cache.row(p.row), columns, p.col)) });
   };
 
   const endEdit = (commit: boolean, then?: Pos) => {
     const e = editRef.current;
     if (!e) return;
     setEditing(null);
-    if (commit && e.value !== cellText(cache.row(e.pos.row)?.[e.pos.col])) onEdit?.({ row: e.pos.row, column: e.pos.col, value: e.value });
+    if (commit && e.value !== cellText(cellOf(cache.row(e.pos.row), columns, e.pos.col))) {
+      onEdit?.({ row: e.pos.row, column: sourceCol(columns, e.pos.col), value: e.value });
+    }
     scrollRef.current?.focus({ preventScroll: true });
     if (then) go(then);
   };
@@ -379,6 +388,7 @@ export function DataGrid({
                 active={active.row === -1 && active.col === c.index}
                 onResize={resize}
                 onActivate={onHeaderActivate}
+                content={header?.(columns[c.index]!, c.index)}
               />
             ))}
           </div>
@@ -403,7 +413,7 @@ export function DataGrid({
                 selFrom={inSel ? Math.min(sel.c0, sel.c1) : -1}
                 selTo={inSel ? Math.max(sel.c0, sel.c1) : -1}
                 flag={cellFlag}
-                list={editing && editing.pos.row === r.index ? editorList?.(editing.pos.col) : undefined}
+                list={editing && editing.pos.row === r.index ? editorList?.(sourceCol(columns, editing.pos.col)) : undefined}
               />
               );
             })}
