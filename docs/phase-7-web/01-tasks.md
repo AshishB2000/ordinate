@@ -56,7 +56,7 @@ row of the plan's dependency graph.
   something to call.
 - **Done when:** the test passes; an uncontracted channel returns 404; a malformed input returns 400.
 
-### [ ] T0.3 Request context, paths, dev auth
+### [x] T0.3 Request context, paths, dev auth
 - **Branch** `web/t0.3-context` · **Depends** T0.2 · **Scope** `src/server/context.ts`, `src/app/paths.ts`, every `app.getPath` call site
 - `src/server/context.ts`: `AsyncLocalStorage<{ user, org, requestId, client }>`; `ctx()` throws
   outside a request in server mode, returns a fixed desktop context under Electron.
