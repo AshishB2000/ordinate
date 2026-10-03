@@ -10,7 +10,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import { isScorePeriod, sanitizeRows } from './scorecardModel';
 import type { Scorecard, ScorePeriod } from './scorecardModel';
@@ -29,7 +29,7 @@ export interface ScorecardSummary {
 
 let base: string | null = null;
 function projectsBase(): string {
-  if (!base) base = path.join(app.getPath('userData'), 'projects');
+  if (!base) base = path.join(appPaths.userData(), 'projects');
   return base;
 }
 

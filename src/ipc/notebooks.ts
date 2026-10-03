@@ -18,7 +18,8 @@
 //                     when already saved) + a visual with the cell's spec
 //   notebook:exportMarkdown   the export, through the native save panel
 
-import { dialog, app } from 'electron';
+import { dialog } from 'electron';
+import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -264,7 +265,7 @@ export function register(): void {
       const md = notebookMarkdown({ name: nb.name, cells: nb.cells, graph: await run.graphFor(projectId, nb), results, charts: pngs });
       const { filePath, canceled } = await dialog.showSaveDialog({
         title: 'Export notebook as Markdown',
-        defaultPath: path.join(app.getPath('downloads'), reportFilename(nb.name, 'md')),
+        defaultPath: path.join(appPaths.downloads(), reportFilename(nb.name, 'md')),
         filters: [{ name: 'Markdown', extensions: ['md'] }],
       });
       if (canceled || !filePath) return { ok: false, canceled: true };

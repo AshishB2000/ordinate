@@ -1,4 +1,5 @@
-import { app, dialog, BrowserWindow, MessageBoxOptions } from 'electron';
+import { dialog, BrowserWindow, MessageBoxOptions } from 'electron';
+import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
@@ -370,7 +371,7 @@ export function register({ getHubWindow, notifyKeyChanged, entryData, entryThrea
     if (response !== 1) return { ok: false, cancelled: true };
 
     const fsp = require('fs').promises;
-    const tmpDir = require('path').join(app.getPath('userData'), 'tmp');
+    const tmpDir = require('path').join(appPaths.userData(), 'tmp');
     const removed: string[] = [];
 
     async function wipeHistory() {

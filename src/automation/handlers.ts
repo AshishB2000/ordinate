@@ -15,7 +15,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { app } from 'electron';
+import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
 import * as sqlDatasets from '../engine/sqlDatasets';
@@ -313,7 +313,7 @@ export async function writeOutput(ctx: Ctx, out: string, fileName: string, bytes
     const isDir = fs.existsSync(target) && fs.statSync(target).isDirectory();
     dest = isDir ? path.join(target, fileName) : target;
   } else {
-    const dir = path.join(app.getPath('downloads'), 'Ordinate');
+    const dir = path.join(appPaths.downloads(), 'Ordinate');
     await fs.promises.mkdir(dir, { recursive: true });
     const ext = path.extname(fileName);
     const base = fileName.slice(0, fileName.length - ext.length);

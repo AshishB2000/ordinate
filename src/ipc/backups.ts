@@ -1,4 +1,5 @@
-import { dialog, shell, app, BrowserWindow } from 'electron';
+import { dialog, shell, BrowserWindow } from 'electron';
+import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import type { OpenDialogOptions, WebContents } from 'electron';
 import * as fs from 'fs';
@@ -28,7 +29,7 @@ const TICK_MS = 10 * 60 * 1000;
 const RETRY_AFTER_FAILURE_MS = 60 * 60 * 1000;
 
 export function backupRoot(): string {
-  return config.get().backups.folder || path.join(app.getPath('userData'), 'backups');
+  return config.get().backups.folder || path.join(appPaths.userData(), 'backups');
 }
 
 function saveBackups(patch: Partial<BackupSettings>): void {

@@ -1041,3 +1041,6 @@ scripts/**/*.js
 /src/api/home.js
 /scripts/test-wire.js
 /scripts/test-rpc.js
+
+# web/t0.3-context
+/src/app/paths.js

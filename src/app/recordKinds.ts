@@ -9,7 +9,7 @@
 // alerts.json, so it has no per-record file and no entry in RECORD_DIR.
 
 import * as path from 'path';
-import { app } from 'electron';
+import * as appPaths from './paths';
 import { isValidId } from './ids';
 
 export type RecordType = 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report' | 'alert';
@@ -30,7 +30,7 @@ export function isRecordType(v: unknown): v is RecordType {
 }
 
 export function projectsBase(): string {
-  return path.join(app.getPath('userData'), 'projects');
+  return path.join(appPaths.userData(), 'projects');
 }
 
 /** userData/projects/<id>, or '' for anything that is not a UUID — never a path

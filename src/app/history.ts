@@ -6,12 +6,12 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { app } from 'electron';
+import * as appPaths from './paths';
 
 let historyDir: string | null = null;
 
 function getHistoryDir(): string {
-  if (!historyDir) historyDir = path.join(app.getPath('userData'), 'history');
+  if (!historyDir) historyDir = path.join(appPaths.userData(), 'history');
   return historyDir;
 }
 

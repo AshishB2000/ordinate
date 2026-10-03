@@ -1,4 +1,5 @@
 import { shell, app } from 'electron';
+import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -38,7 +39,7 @@ const HEARTBEAT_MS = 60 * 1000;
 let machine = '';
 function me(): Me {
   if (!machine) {
-    const file = path.join(app.getPath('userData'), 'machine-id');
+    const file = path.join(appPaths.userData(), 'machine-id');
     try { machine = fs.readFileSync(file, 'utf8').trim(); } catch (_) { machine = ''; }
     if (!isValidId(machine)) {
       machine = randomUUID();

@@ -1,4 +1,5 @@
-import { shell, app } from 'electron';
+import { shell } from 'electron';
+import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -62,7 +63,7 @@ export function register(deps: { hubFocused: () => boolean; focusHub: () => void
   // (src/automation/jobLog.ts) — it must never rewrite or "interrupt" the
   // GUI's running jobs.
   if (!deps.headless) {
-    jobs.configure({ file: path.join(app.getPath('userData'), 'jobs.json') });
+    jobs.configure({ file: path.join(appPaths.userData(), 'jobs.json') });
     const interrupted = jobs.restore();
     if (interrupted.length) console.warn('[jobs]', interrupted.length, 'job(s) were interrupted by the last shutdown');
   }

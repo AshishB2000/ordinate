@@ -1,4 +1,5 @@
-import { dialog, app, BrowserWindow } from 'electron';
+import { dialog, BrowserWindow } from 'electron';
+import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -138,7 +139,7 @@ export function register(): void {
     const win = BrowserWindow.fromWebContents(e.sender);
     const opts = {
       title: 'Export template',
-      defaultPath: path.join(app.getPath('downloads'), safe + '.ordinate-template'),
+      defaultPath: path.join(appPaths.downloads(), safe + '.ordinate-template'),
       filters: [{ name: 'Ordinate template', extensions: ['ordinate-template'] }],
     };
     const { filePath, canceled } = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);

@@ -16,7 +16,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from '../app/paths';
 import { isValidId } from '../app/ids';
 import * as queryCache from '../engine/queryCache';
 
@@ -81,7 +81,7 @@ export function sameEdge(a: Relationship, b: { from: RelEnd; to: RelEnd }): bool
 // ── Disk ─────────────────────────────────────────────────────────────────────
 
 function modelFile(projectId: string): string {
-  return path.join(app.getPath('userData'), 'projects', projectId, 'relationships.json');
+  return path.join(appPaths.userData(), 'projects', projectId, 'relationships.json');
 }
 
 export async function listRelationships(projectId: string): Promise<Relationship[]> {

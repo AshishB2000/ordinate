@@ -18,6 +18,7 @@
 // ours) and that this one no longer writes are removed; nothing else in the
 // folder is ever touched.
 
+import * as appPaths from '../app/paths';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -125,8 +126,7 @@ export function sanitizePublishConfig(raw: unknown): PublishConfig | { error: st
 /** A logo as a data: URL — the workspace's, or a dashboard's own — or undefined. */
 async function logoFor(scope: string): Promise<string | undefined> {
   try {
-    const { app } = require('electron'); // lazy: plain-node tests of this module stub electron
-    return (await readLogoDataUrl(app.getPath('userData'), scope)) || undefined;
+    return (await readLogoDataUrl(appPaths.userData(), scope)) || undefined;
   } catch (_) {
     return undefined;
   }

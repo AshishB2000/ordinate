@@ -25,7 +25,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import type { ConnectorDef } from './types';
 
@@ -115,7 +115,7 @@ export interface PublicConnection {
 let projectsBase: string | null = null;
 
 function getProjectsBase(): string {
-  if (!projectsBase) projectsBase = path.join(app.getPath('userData'), 'projects');
+  if (!projectsBase) projectsBase = path.join(appPaths.userData(), 'projects');
   return projectsBase;
 }
 

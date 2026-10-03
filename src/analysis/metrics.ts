@@ -21,7 +21,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
 import { sanitizeSteps } from '../data/transforms';
@@ -103,7 +103,7 @@ export interface MetricSummary {
 let projectsBase: string | null = null;
 
 function getProjectsBase(): string {
-  if (!projectsBase) projectsBase = path.join(app.getPath('userData'), 'projects');
+  if (!projectsBase) projectsBase = path.join(appPaths.userData(), 'projects');
   return projectsBase;
 }
 

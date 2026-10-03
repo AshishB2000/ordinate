@@ -15,7 +15,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from './paths';
 import type { UserTemplate } from '../analysis/userTemplate';
 import { sanitizeUserTemplate } from '../analysis/userTemplateFile';
 
@@ -25,7 +25,7 @@ export const MAX_TEMPLATES = 500;
 let dirOverride = '';
 /** Tests point the store at a temp dir; the app never calls this. */
 export function _setStoreDir(dir: string): void { dirOverride = dir; }
-function dir(): string { return dirOverride || path.join(app.getPath('userData'), 'templates'); }
+function dir(): string { return dirOverride || path.join(appPaths.userData(), 'templates'); }
 function fileOf(id: string): string { return path.join(dir(), id.toLowerCase() + '.json'); }
 
 async function writeAtomic(file: string, obj: unknown): Promise<void> {

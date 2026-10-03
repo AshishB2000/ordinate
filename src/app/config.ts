@@ -6,7 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { app } from 'electron';
+import * as appPaths from './paths';
 import { setCalendar } from '../analysis/dateIntel';
 import { FORMAT_DEFAULTS, sanitizeFormatPrefs, setFormatPrefs } from './format';
 import type { FormatPrefs } from './format';
@@ -240,7 +240,7 @@ export const MEMORY_MODES: string[] = ['same_as_chat', 'override'];
 let cache: Config | null = null;
 
 function configPath(): string {
-  return path.join(app.getPath('userData'), 'config.json');
+  return path.join(appPaths.userData(), 'config.json');
 }
 
 // Starred pins are "type:id" strings: keep only non-empty strings, dedupe, and

@@ -10,7 +10,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from './paths';
 import { isValidId } from './ids';
 
 export const MAX_ASSET_BYTES = 5 * 1024 * 1024;
@@ -61,7 +61,7 @@ export function imageSize(buf: Buffer, ext: AssetExt): { w: number; h: number } 
 }
 
 function assetsDir(projectId: string): string {
-  return path.join(app.getPath('userData'), 'projects', projectId, 'assets');
+  return path.join(appPaths.userData(), 'projects', projectId, 'assets');
 }
 
 export interface StoredAsset { id: string; ext: AssetExt; aspect?: number }

@@ -20,7 +20,7 @@
 // `registeredDirs` is what lets main.ts pre-register everything at boot, which
 // is what makes these connectors work on the second and every later session.
 
-import { app } from 'electron';
+import * as appPaths from '../app/paths';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -31,7 +31,7 @@ const MAX_REGISTERED_DIRS = 32;
 
 function userDataDir(): string | null {
   try {
-    const d = app.getPath('userData');
+    const d = appPaths.userData();
     return typeof d === 'string' && d ? d : null;
   } catch {
     return null; // no Electron (a unit test, or a stripped harness) — skip hardening

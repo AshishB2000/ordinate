@@ -18,7 +18,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from './paths';
 import { themeModel } from '../analysis/themeTokens';
 import type { ThemeRecord } from '../analysis/themeTokens';
 
@@ -35,7 +35,7 @@ export function _setStoreFile(file: string): void {
   fileOverride = file;
 }
 function storeFile(): string {
-  return fileOverride || path.join(app.getPath('userData'), 'themes.json');
+  return fileOverride || path.join(appPaths.userData(), 'themes.json');
 }
 
 /** Clamp an untrusted state: valid records only, unique ids, a default that exists. */

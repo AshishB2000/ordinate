@@ -27,7 +27,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import { sanitizePages, sanitizeDashboardFilters, sanitizeStyle } from './dashboards';
 import type { CardType } from './dashboards';
@@ -110,7 +110,7 @@ export interface AnalysisSummary {
 let projectsBase: string | null = null;
 
 function getProjectsBase(): string {
-  if (!projectsBase) projectsBase = path.join(app.getPath('userData'), 'projects');
+  if (!projectsBase) projectsBase = path.join(appPaths.userData(), 'projects');
   return projectsBase;
 }
 

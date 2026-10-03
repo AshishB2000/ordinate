@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import * as fs from 'fs';
 import * as datasets from '../data/datasets';
@@ -465,7 +465,7 @@ export function hardenConnection(allowedDirs: readonly string[]): Promise<Harden
  */
 function appAllowedDirs(): string[] {
   try {
-    return [app.getPath('userData')];
+    return [appPaths.userData()];
   } catch {
     return [];
   }

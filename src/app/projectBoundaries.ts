@@ -8,7 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { app } from 'electron';
+import * as appPaths from './paths';
 import { isValidId } from './ids';
 import { checkBoundaries, MAX_BOUNDARY_BYTES } from '../analysis/geojsonCheck';
 import type { BoundaryCheck } from '../analysis/geojsonCheck';
@@ -23,7 +23,7 @@ export interface BoundaryMeta {
 }
 
 function dir(projectId: string): string {
-  return path.join(app.getPath('userData'), 'projects', projectId, 'boundaries');
+  return path.join(appPaths.userData(), 'projects', projectId, 'boundaries');
 }
 
 /** Validate `text` and store it as a boundary set named `name`. */
