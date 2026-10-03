@@ -340,7 +340,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   still spying on `getDataset`.
 - A guard test: in server mode, calling `duckdb.query` (sync) on the main thread throws.
 
-### [ ] T4.2 Async resident layer: the rest
+### [x] T4.2 Async resident layer: the rest
 - **Branch** `web/t4.2-async-b` · **Depends** T4.1
 - Same for `pivotResident`, `statsResident`, `anomaliesResident`, `qualityResident`,
   `medianResident`, `joinResident`, `pipelineDuck`, and the rest of the 38 sync call sites.
