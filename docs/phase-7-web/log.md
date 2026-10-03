@@ -321,3 +321,36 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   decision, none for an org admin — and prints the timing.
 - **Open:** no owner-team assignment/transfer yet (T3.4); projects created before T3.3 have no
   grants (only org admins see them until shared); header-mode sign-ins are not audited (no event).
+
+## 2026-10-02 — T5.4 Jobs and cross-pod events
+
+- **Schema `0005_jobs.sql`:** `jobs` — one row per (org, kind, target) with `next_run_at`,
+  `lease_owner` (`<pod>/<claim uuid>`), `lease_until`, `runs`, last start/finish/error (500 chars);
+  `event_payloads` (UNLOGGED) for event bodies too big for a NOTIFY.
+- **Claim:** one statement — CTE `SELECT … due AND lease expired AND kind = ANY(known) LIMIT 1 FOR
+  UPDATE SKIP LOCKED` feeding the UPDATE that stamps the lease. Heartbeat every lease/3; finish
+  reschedules `WHERE lease_owner = <this claim>` (a run whose lease was retaken neither reschedules nor
+  counts). Defaults: poll 5 s, lease 60 s; one job at a time per pod. Once per run normally;
+  at-least-once on a crash or a loop stalled past the lease (documented).
+- **Wiring:** the real `refreshScheduler.tickNow` runs as kind `tick` every 60 s in each org's
+  context — dataset refresh, alerts (incl. the anomaly watch), quality checks, pipeline cron, Trash
+  purge. `defineJob(kind, …)` is the hook for T5.2's S3 GC. Desktop/no-DB unchanged.
+- **Fan-out:** one LISTEN connection per pod (reconnect 1 s); sends batched in publish order with a
+  sequence number; > 7,900 bytes go by reference (insert + `pg_notify` in one statement, bodies older
+  than 5 min swept). Receivers re-check T0.5's org/user/client binding and refuse line breaks in
+  channel names/payloads (SSE frame injection). `clientFor` returns a remote client for a valid tab
+  on another pod.
+- **Proof (two real server processes, one scratch DB, 69 checks):** 5 due rounds → exactly 5 runs
+  split across pods, no duplicates; a real hourly-refresh dataset ticked once per org across pods
+  and its event reached every `default` tab on both pods once, the other org's tabs nothing; SIGKILL
+  mid-run → the other pod retakes after the lease (2 starts, 1 end, runs=1); 20 concurrent claimers
+  → 1 claim (lease removed: 5/5 — negative control); 20 KB payload arrives whole, in order.
+- **Measured** (loopback): NOTIFY pod A → tab on pod B median 0.66–0.91 ms, p95 1.8–4 ms (13 / 80 ms
+  under the full parallel test load); claim on 1,000 rows 0.19–0.27 ms; SIGKILL → retaken 1.05–1.66 s
+  with a 1.5 s lease. Per-NOTIFY queries queued to a 474 ms median under load → batched.
+- **Migration numbering:** 0004 was reserved for T5.1, which now takes 0007 — a lower number landing
+  after 5 and 6 are applied would run out of order.
+- **Open:** `reports:run-due` not wired (no server report generator); server alert delivery is the
+  SSE push only; pipeline alert/report/publish nodes still `require('../ipc/alerts')` (Electron) and
+  fail as node errors on the server until T2.x; `pipelines:changed` still targets desktop windows;
+  org discovery reads `DATA_DIR/orgs` (T3.2's `orgs` table next — `ponytail:`).
