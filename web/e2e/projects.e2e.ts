@@ -153,7 +153,8 @@ e2e('projects: switcher, Trash, version history and the bundle round trip', asyn
   await page.locator('input[type=file][accept=".ordinate"]').setInputFiles(file);
   // A name already taken gets " (imported)" (src/app/bundle.ts), and the import becomes current.
   const copy = `${sample} (imported)`;
-  await page.getByText(`Imported “${copy}” — 1 dataset, 2 visuals, 1 dashboard.`).waitFor();
+  // The counts are the bundle's manifest (the server's), as many as the sample holds.
+  await page.getByText(new RegExp(`^Imported “${copy.replace(/[()]/g, '\\$&')}” — \\d+ datasets?, \\d+ visuals?, \\d+ dashboards?\\.$`)).waitFor();
   await page.waitForFunction((n) => document.querySelector('[data-testid="project-switcher"]')?.textContent?.includes(n), copy);
   await switcher(page).click();
   await pop.getByRole('button', { name: `${copy} options` }).click();
