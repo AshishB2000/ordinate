@@ -1117,3 +1117,7 @@ scripts/**/*.js
 /scripts/test-tokens-db.js
 
 /src/api/visuals.js
+
+# web/t1.3-maps
+/src/api/maps.js
+/src/server/geo.js

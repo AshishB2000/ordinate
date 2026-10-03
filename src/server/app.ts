@@ -24,6 +24,7 @@ import { fromWire, encode } from './wire';
 import { registerStatic, WEB_DIST } from './static';
 import { uploadCapMb } from './admin/org';
 import { registerMcpRoute } from '../automation/serverMcp';
+import { registerGeoRoutes } from './geo';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Pool } from 'pg';
@@ -278,6 +279,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // MCP for programs, signed in with a personal API token (T3.4).
   registerMcpRoute(app, () => pool);
 
+  // The maps' bundled boundary GeoJSON (./geo.ts) — org-independent, immutable by content hash.
+  registerGeoRoutes(app);
+
   app.addHook('onClose', async () => shutdown());
 
   // The web app, when it has been built (`npm --prefix web run build`). In dev
@@ -294,7 +298,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
  * a handler module.
  */
 export function registerHandlers(): void {
-  for (const mod of ['../ipc/projects', '../ipc/datasets', '../ipc/recent', '../ipc/quality', '../ipc/visuals']) {
+  for (const mod of ['../ipc/projects', '../ipc/datasets', '../ipc/recent', '../ipc/quality', '../ipc/visuals', '../ipc/projectBoundaries', '../ipc/geoAnalysis']) {
     (require(mod) as { register: () => void }).register();
   }
   (require('./authz/share') as typeof import('./authz/share')).register(() => dbPool);

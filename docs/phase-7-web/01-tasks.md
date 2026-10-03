@@ -157,7 +157,7 @@ row of the plan's dependency graph.
   Subtotals come from the server — never recompute them in the browser.
 - **Done when:** visual parity on the sample dashboards' pivot and cohort cards; a11y check (table headers, scope).
 
-### [ ] T1.3 Maps ∥
+### [x] T1.3 Maps ∥
 - **Branch** `web/t1.3-maps` · **Depends** T0.8 · **Scope** `web/src/charts/maps/`
 - **Legacy:** `mapRender`, `mapBasemap`, `mapFlow`, `mapGeoThumb`, `mapHexbin`, `mapKinds`,
   `mapOverlays`, `mapPoints`, `mapThumb`, `mapWorker`, `geoCluster`, `geoMatch`, `geoRadius`.

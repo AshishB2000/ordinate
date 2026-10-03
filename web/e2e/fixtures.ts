@@ -29,7 +29,10 @@ export async function launchBrowser(): Promise<Browser> {
   const types = { chromium, firefox, webkit } as const;
   if (!(name in types)) throw new Error(`E2E_BROWSER must be chromium, firefox or webkit, got ${name}`);
   const executablePath = name === 'chromium' ? process.env.E2E_CHROMIUM || undefined : undefined;
-  return types[name as keyof typeof types].launch({ executablePath });
+  // Maps need WebGL2. Headless Chromium has no GPU and draws through SwiftShader,
+  // which newer Chromium only allows for WebGL with this flag (T1.3).
+  const args = name === 'chromium' ? ['--enable-unsafe-swiftshader'] : [];
+  return types[name as keyof typeof types].launch({ executablePath, args });
 }
 
 /** Starts collecting what must never happen on a page. The returned function lists it so far. */

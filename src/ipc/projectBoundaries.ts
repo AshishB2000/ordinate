@@ -1,7 +1,8 @@
 // Boundaries IPC: import a GeoJSON file into the project (through the native
 // picker this handler opens itself), list the project's sets, read one.
+// Electron loads inside the import handler only: the server registers this
+// module for `boundary:get` (a custom choropleth's shapes) and has no dialog.
 
-import { dialog } from 'electron';
 import { ipcMain } from './bus';
 import { windowOf } from '../server/context';
 import { getBoundary, importBoundaryFile, listBoundaries } from '../app/projectBoundaries';
@@ -9,6 +10,7 @@ import { getBoundary, importBoundaryFile, listBoundaries } from '../app/projectB
 export function register(): void {
   ipcMain.handle('boundary:import', async (e, { projectId }: any = {}) => {
     try {
+      const { dialog } = require('electron') as typeof import('electron');
       const win = windowOf(e);
       const opts = {
         title: 'Import boundaries',

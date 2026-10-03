@@ -35,6 +35,9 @@ export const pages: RouteObject[] = [
   // the e2e drives the production build, and the page reads only what the
   // caller may already read through contracted channels.
   page('/dev/charts', () => import('../charts/dev/ChartsGallery')),
+  // Every map kind over the sample project (T1.3). In the production build too:
+  // the e2e drives the built app. A lazy chunk, never in the initial bundle.
+  page('/dev/maps', () => import('../charts/maps/dev/MapsDev')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.
