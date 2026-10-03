@@ -354,3 +354,40 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   SSE push only; pipeline alert/report/publish nodes still `require('../ipc/alerts')` (Electron) and
   fail as node errors on the server until T2.x; `pipelines:changed` still targets desktop windows;
   org discovery reads `DATA_DIR/orgs` (T3.2's `orgs` table next — `ponytail:`).
+
+## 2026-10-02 — T5.1 Records in Postgres
+
+- **Seam:** `src/app/recordFs.ts`, a drop-in for the `fs.promises` subset the stores use. Desktop or
+  no `DATABASE_URL` → the real file; server + Postgres → a *record path* (a `.json` and its `.tmp` /
+  `.corrupt` companions under userData `projects/`, `history/`, `templates/`, or `themes.json`)
+  becomes a row. Parquet, images, `salt.key` and the search cache stay on the per-org disk. A script
+  swapped 185 `fs.promises.<op>` call sites in 32 stores; every record store was already async, so no
+  signature changed. Atomic write = `.tmp` staged in memory, rename = one upsert.
+- **Schema `0007_records.sql`:** `records(org_id, path COLLATE "C", body text, updated_at)`, PK
+  (org_id, path). `body` is the file's exact text (jsonb would reorder keys and refuse `.corrupt`).
+  RLS enabled and FORCED (`org_id = current_setting('ordinate.org')`, set per transaction); every
+  statement also filters `org_id` from `ctx()`, never from input.
+- **Migration order is now enforced:** a new file numbered below the highest applied version refuses
+  startup and rolls back (tested). This bit us live: T5.1 first ran as 0004 against the shared dev DB
+  and was then renumbered 0007, leaving a stale row and table — the shared `ordinate_test` DB was
+  recreated, and the e2e harness no longer hands the caller's `DATABASE_URL` to every spec (T0.8).
+- **Tenant isolation, found and fixed:** seven in-memory caches were keyed by record ids alone (answer
+  cache, notebook cell keys, fx settings, masking salt, param replay, filter catalog, fx rates) — on a
+  server, ids repeat across orgs after an import, so org B could be served org A's cached answers or
+  salt. Now keyed via `orgKey()`.
+- **Proof:** `test-records` runs one scenario (138 calls across all 28 stores, incl. versions, trash,
+  bundle export) on JSON and on Postgres, frozen clock + counted ids — identical results, the final 25
+  records byte-identical, no record files left on disk by the Postgres run. Tenant: with A's ids org B
+  cannot list/get/rename/update/trash/delete A's records (app filter alone, as superuser); with RLS
+  alone a plain role naming org A sees/changes nothing. `npm test` 257/257 with and without a DB.
+- **Importer:** `npm run import-desktop -- <userData> [--org id]` — records via `recordFs`, Parquet
+  copied, follows sync-folder links, skips `config.json` (secrets) and `.tmp`; idempotent. Round trip
+  of the sample project: 13 rows = 13 files, byte-equal; both Parquet files 5,000 rows; RPC listings
+  equal the desktop handlers'; another org sees nothing.
+- **Measured** (1,000 visuals, local, load ~9): save median 0.26 → 0.44 ms; get 0.05 → 0.11 ms;
+  list 1,000 57 → 111 ms (one query per record — `ponytail:` add a `dir` column + batch read);
+  `projects.list` over 2,003 rows 0.1 → 1.8 ms.
+- **Open:** per-process write queues (alerts.json etc.) do not serialize across pods — `SELECT … FOR
+  UPDATE` per record when N > 1; fx cache can go stale across pods (T5.4's bus can invalidate);
+  `backups.ts` is desktop-only; store suites still run file-only (Postgres coverage is the
+  differential scenario).

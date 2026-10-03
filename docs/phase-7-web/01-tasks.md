@@ -360,7 +360,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
 
 ## P5 — Storage for many pods
 
-### [ ] T5.1 Records in Postgres
+### [x] T5.1 Records in Postgres
 - **Branch** `web/t5.1-records` · **Depends** T3.1
 - Repository layer for every record kind in `src/app/recordKinds.ts` (datasets metadata, projects,
   analyses, dashboards, visuals, history, comments, alerts, pipelines, events, themes, …): same
