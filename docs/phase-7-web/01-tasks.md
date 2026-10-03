@@ -135,7 +135,7 @@ row of the plan's dependency graph.
 
 ## P1 — Rendering core
 
-### [ ] T1.1 Chart engine ∥
+### [x] T1.1 Chart engine ∥
 - **Branch** `web/t1.1-charts` · **Depends** T0.8 · **Scope** `web/src/charts/`
 - **Legacy:** `chartRender`, `chartDatasets`, `chartScales`, `chartShapes`, `chartPalette`,
   `chartValueLabels`, `chartAnnotations`, `chartFamiliesExtra`, `chartFamiliesPlugins`,
@@ -167,7 +167,7 @@ row of the plan's dependency graph.
   external fetch — add the tile host to the web CSP `img-src`/`connect-src` only.
 - **Done when:** every map kind in the sample renders; no CSP violation in e2e.
 
-### [ ] T1.4 Data grid ∥
+### [x] T1.4 Data grid ∥
 - **Branch** `web/t1.4-datagrid` · **Depends** T0.8 · **Scope** `web/src/ui/DataGrid/`
 - **Legacy:** `dsGrid`, `dsVirtual`, `composerGrid` (editable mode), `inputGrid`.
 - Virtualized rows and columns (`@tanstack/react-virtual`), server paging through `datasetPage`
@@ -321,7 +321,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   exports. Never logs field values that may hold data or secrets.
 - **Done when:** a test matrix (viewer/editor/admin × read/write/admin channel × own/other project/other org) passes with zero unexpected allows.
 
-### [ ] T3.4 Admin UI and API tokens
+### [x] T3.4 Admin UI and API tokens
 - **Branch** `web/t3.4-admin` · **Depends** T3.3 · **Scope** `web/src/features/admin/`, `src/automation/`
 - Admin: users (invite, disable, role), teams, project ownership transfer, audit log viewer with
   filters, org settings (public links on/off, allowed AI providers, upload cap).
@@ -346,7 +346,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   `medianResident`, `joinResident`, `pipelineDuck`, and the rest of the 38 sync call sites.
 - **Done when:** grep shows zero synchronous DuckDB calls reachable from an RPC handler.
 
-### [ ] T4.3 Per-org workers, limits, load test
+### [x] T4.3 Per-org workers, limits, load test
 - **Branch** `web/t4.3-workers` · **Depends** T4.2
 - Workers are keyed by org; each locks `allowed_directories` to its org's data root and sets
   `enable_external_access=false` + `lock_configuration` at start. Pool size, `memory_limit`,

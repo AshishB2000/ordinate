@@ -439,3 +439,99 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   re-check then.
 - **Merge order is a chain:** each PR's branch contains its predecessors, conflicts already resolved
   with both sides kept; merge in the stated order with merge commits.
+
+## 2026-10-03 — T4.3 Per-org workers, limits, load test
+
+- **Design:** one DuckDB worker per org (`src/engine/duckdbPool.ts`), locked before it reports ready:
+  `memory_limit`, `threads`, `temp_directory` inside the org, `allowed_directories` = the org root's
+  real path with a trailing `/`, then `enable_external_access=false` and `lock_configuration=true`.
+  LRU beyond `DUCKDB_MAX_WORKERS` (8) plus idle eviction (`DUCKDB_IDLE_SECONDS` 300); a worker is
+  closed through its own queue, never `terminate()` (aborts the process mid native call). Env:
+  `DUCKDB_MEMORY_LIMIT` (80% of cgroup/machine ÷ workers), `DUCKDB_THREADS` (cores),
+  `DUCKDB_QUERY_TIMEOUT_SECONDS` (60). Every request carries an abort signal (`ctx().signal`) fired
+  when the client hangs up; timeout/abort interrupt the worker's query.
+- **Hole closed:** on the server, compute-pool threads ran their own UNLOCKED DuckDB (negative
+  control: without the port lease a compute thread reads org B's file). Each compute op now gets a
+  port to the caller's org worker.
+- **Proof (`test-duckdbPool`, 53):** org A's worker refuses org B's Parquet, a sibling org sharing
+  A's id prefix, `..` escapes, `/etc/passwd` via read_text/read_csv/glob, `COPY TO` B, `ATTACH`,
+  `LOAD httpfs`, `SET allowed_directories/enable_external_access/memory_limit` — DuckDB's own
+  permission/locked errors; an unlocked DuckDB reads them all (control). Timeout at 600 ms then the
+  same worker answers in 1 ms; cancel at 152 ms; a queued cancelled call never runs; a client hang-up
+  over HTTP interrupts (without the abort the next answer took 17 s). `test-serverModeResident` 47 →
+  88: the whole differential section also runs through org `acme`'s locked worker.
+- **Load test** (`npm run loadtest`; 20 users × 5 iterations, 1M rows, real HTTP, 600 requests,
+  0 failed). Event-loop delay p99 (10 ms sampling resolution included; idle reads ~11): 19.6 ms quiet,
+  15.7–19.3 ms at load 9–68; orchestrator re-run on the integrated chain: **p99 22.6 ms at load 20**.
+  Per-op p50/p95 (quiet, ms): open 0.7/16 · page 324/673 · sorted page 589/869 · charts ~650–690/~835
+  · stats 925/976. One user alone: page 34, charts 33–43, stats 53. Requests of one org serialize on
+  its connection — a per-worker connection pool is the upgrade (`ponytail:`).
+- **S3 (for T5.2):** before the lock, `LOAD httpfs` + `CREATE SECRET … SCOPE 's3://…/orgs/<org>/'` and
+  that prefix in `allowed_directories` — accepted by DuckDB 1.5 in a spike, untested against S3/MinIO.
+- **Integration decision (orchestrator):** T4.3 contracted `dataset:meta`, but T1.4 proved its reply
+  carries the dataset's origin (file path, a URL that may hold a key, SQL). The contract was dropped;
+  the browser uses T1.4's `dataset:columns`, and the load test's "open" step now calls it.
+
+## 2026-10-03 — T1.4 Data grid
+
+- `web/src/ui/DataGrid/`: rows and columns virtualized (`@tanstack/react-virtual ^3.14.13`), blocks of
+  500 fetched around the viewport + 200-row margin, ≤ 2 requests in flight, ≤ 20 blocks cached
+  (farthest evicted), stale replies dropped; scroll space compressed above 8M px (as legacy
+  `dsVirtual`); sticky header, column resize, type badges, keyboard grid (one tab stop,
+  `aria-activedescendant`), optional editable cells that only report edits. New `dataset:columns`
+  (header only — never the origin); `dataset:page` contract (limit ≤ 5,000, strict filter shape,
+  still through `sanitizeFilters`). Thin route `/data/:projectId/:datasetId` for T2.3 to build on.
+- **Proof (e2e, 1,000,000-row seeded dataset):** 25 jumps incl. every page boundary and the last row —
+  every drawn row's ordinal equals its index, consecutive, no repeats, ≤ 2 RPCs per jump (max 2); a
+  continuous 10,000-row scroll across 20 boundaries sees exactly 10,000 consecutive rows in 20 RPCs.
+  Negative control: a source shifted by one row fails.
+- **Measured:** first rows 136–257 ms; 20 RPCs per 10k rows; fast scroll p95 frame 17–18 ms (vsync
+  bound); 153 cells in the DOM; heap 10 MB; DatasetPage chunk 12.5 KB gzip. Compression only proven
+  in Chromium (Firefox clamps at ~17.9M px — nightly will tell).
+
+## 2026-10-03 — T3.4 Admin UI and API tokens
+
+- `web/src/features/admin/`: people (invite = pending user row, disable, role), teams + members,
+  project ownership transfer (old owner team keeps an ordinary admin grant), audit log viewer
+  (actor/action/channel/project/date/outcome filters, keyset paging), org settings (public links —
+  off by default, allowed AI providers — stored, enforced by T2.12, per-org upload cap ≤
+  `MAX_UPLOAD_MB`, enforced by `/api/files`). Migration `0008_admin.sql`. 13 admin channels.
+- **API tokens:** `ord_` + 43 base64url chars, shown once; stored as sha256 + 12-char prefix; Bearer on
+  the RPC API and `/api/mcp`, runs as the user with their CURRENT role; disabled user or revoked
+  token → 401; a token cannot mint a token. Redaction gained `apiToken`, `accessToken`, `api_token`,
+  `bearer` (negative control: dropping `apiToken` fails the leak check).
+- **MCP at `/api/mcp`:** bearer only, Origin check (foreign/`null` → 403), 1 MB body cap, JSON-RPC
+  errors kept; tools trimmed to projects the caller can read; writes need editor and are audited.
+  Electron-only automation (report capture, alerts, report runner) now loads lazily; `export_dashboard`
+  and `run_report` are not offered on the server. Desktop loopback transport unchanged.
+- **Proof:** `test-admin-db` 54 (viewer/editor 403 on all 13 channels, admin 200, other org's admin
+  changes nothing; ok/denied audit rows; canary email in no row); `test-tokens-db` 43; e2e admin flow
+  in header mode on a scratch DB. Admin list reads audit only refusals (`audit: 'denials'`) so browsing
+  the log does not write to it.
+- **Measured** (load ~51): `projects:list` 1.23 ms header / 1.55 ms bearer (one UPDATE stamps
+  last_used); MCP initialize 1.18 ms; audit first page on 20k rows 15.7 ms, deep keyset page 2.5 ms.
+- **Process note:** the auto-mode classifier refused `git reset --hard` in the agent's fresh worktree;
+  it used `git switch -c` on the clean tree instead (non-destructive, same start point). The T1.2 agent
+  hit the same refusal and stopped — surfaced to the user.
+
+## 2026-10-03 — T1.1 Chart engine
+
+- `web/src/charts/`: the legacy builders ported as pure modules (`build.ts` returns the config instead
+  of constructing Chart.js), plus `<Chart>` (create on mount, `update()` in place for same-type
+  changes, new instance for a new type, ResizeObserver, theme-token colours, rebuild on
+  `data-theme` change) and a `DataTable` for the `table` id. Chart.js core (69.7 KB gzip) and each
+  family plugin load on first use — initial JS stays 148.8 KB gzip on the integrated chain.
+- **Differential test (Vitest, 137):** the emitted legacy scripts run in a `vm` with a recording
+  `new Chart()`, minimal DOM, the real `format.js` and English `t()`; data = the sample CSV through the
+  server's own `parseFile` + `buildVizData`. 39 ids × 3 override sets + 7 ids × 2 with overlays,
+  pins and events — functions compared by presence/name, everything else Object.is. Negative
+  control: two tweaks fail 48 cases.
+- **`/dev/charts`:** all 39 from the API (`visual:data` contract — read, project scope; T1.1's strict
+  encoding merged with T4.3's filter steps/params/analytics on integration), every canvas non-blank
+  (min 5,825 drawn pixels), zero console/CSP errors, both themes. 25 RPCs per load = the budget
+  exactly (23 distinct encodings) — a batch endpoint before more encodings land.
+- **Deliberate divergence:** the desktop's candlestick never draws a candle (text `x` with
+  `parsing:false`); the port uses the label index. Pinned in the differential test; the desktop fix
+  (`renderer/hub/chartDatasets.ts` + regenerating `test-chartSpec` golden hashes) is its own task.
+- PNG helper composites on the theme surface (`#fff` / `#1c1c20`); off-screen 2× render like the
+  desktop capture.
