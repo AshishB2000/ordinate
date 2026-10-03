@@ -171,3 +171,30 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   contracts yet (need org/user ownership filters when added); the job queue's `MAX_RUNNING=3` is
   process-global across orgs (fairness, not a leak — P5 jobs table); an export job's `result.path`
   must become a T0.4 download token before it reaches a tab.
+
+## 2026-10-02 — T5.3 Secrets at rest
+
+- **Design:** envelope encryption, stdlib `crypto` only. One random 32-byte data key per org in
+  `secret_data_keys`, AES-256-GCM-wrapped by `ORDINATE_MASTER_KEY` (AAD = org + key id). Each secret
+  in `secrets` (PK org_id, kind, ref) is AES-256-GCM under its org's data key, fresh 12-byte IV,
+  AAD = org + kind + ref — a row copied to another org or ref fails to decrypt (4 cases tested).
+  Master key: 32 bytes as hex or base64(url), parsed to a `KeyObject` (never printed by
+  `JSON.stringify`/`inspect`), required in prod with `DATABASE_URL`; `master_kid` = 16-hex
+  fingerprint so a pod on the wrong key names both.
+- **Rotation:** `npm run secrets:rotate` (OLD/NEW from env) re-wraps data keys only in one
+  transaction — payloads byte-identical; idempotent; unknown key aborts with nothing changed.
+  Measured 30 ms for 3 data keys. Gap: a pod accepts one master key, so pods not yet rolled cannot
+  read secrets between rotate and rollout (`ponytail:` — accept a key list).
+- **Measured:** seal 4.6 µs / open 2.5 µs per 30-byte secret; store put 0.41 ms / get 0.21 ms on local
+  Postgres.
+- **Proof:** a canary written through the store and through the real config setters is absent —
+  plain, URL-encoded, hex, base64/base64url at all three alignments — from `pg_dump`, a
+  `row_to_json` dump of every table, the trace-level app logger, 6 child processes, every
+  `SecretError`, and `publicConfig()`/`publicByok()`. A planted-spelling negative control proves the
+  grep finds each form.
+- **REQUIRED FOLLOW-UP (not optional):** the store is a seam; nothing on the server routes through it
+  yet, so a server today would still write connection passwords and AI keys to the per-org plaintext
+  `config.json`. T2.5 must route `src/ipc/connections.ts` `storeSecrets`/`loadSecrets`/
+  `connection:delete` (via `src/app/configSecrets.ts`) through it in server mode; T2.12 must route
+  `src/app/execConfig.ts` (`setApiKey`/`getApiKey`/`hasKey`/BYOK) and `src/ai/analyze.ts`,
+  `src/ai/models.ts` key reads. T6.3's threat model checks both are done.

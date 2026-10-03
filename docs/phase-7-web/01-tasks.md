@@ -376,7 +376,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
 - Old versions are garbage-collected after a grace period by a job.
 - **Done when:** the resident differential tests pass with MinIO in CI.
 
-### [ ] T5.3 Secrets at rest ∥
+### [x] T5.3 Secrets at rest ∥
 - **Branch** `web/t5.3-secrets` · **Depends** T3.1
 - Connection passwords and AI keys: AES-256-GCM per secret with a data key, data keys wrapped by
   `ORDINATE_MASTER_KEY`. Rotation command. `publicConfig()` / `publicByok()` still strip everything.
