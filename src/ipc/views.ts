@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import type { BrowserWindow } from 'electron';
 import { randomUUID } from 'crypto';
 import * as analysis from '../analysis/analysis';

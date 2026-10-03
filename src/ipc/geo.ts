@@ -1,4 +1,5 @@
-import { ipcMain, app } from 'electron';
+import { app } from 'electron';
+import { ipcMain } from './bus';
 
 // Lazy-load a large geo boundary file on demand (the hub CSP blocks fetch, and
 // these files are too big to eager-load at startup). Whitelisted level → file,

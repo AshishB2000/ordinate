@@ -5,7 +5,7 @@
 // matched rate, a date format's failures, a union's column match, and the rows
 // into and out of the step. The renderer only formats what comes back.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import { applyPipeline } from '../data/transforms';
 import type { TableData, TransformStep } from '../data/transforms';

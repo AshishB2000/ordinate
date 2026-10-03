@@ -13,7 +13,7 @@
 // Every figure here is counted by the app; the renderer only prints it. The
 // hexbin and flow MAPS answer through `visual:data` (./geoViz.ts), not here.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import * as jobs from '../app/jobs';
 import { listBoundaries } from '../app/projectBoundaries';

@@ -1,4 +1,5 @@
-import { ipcMain, shell, app } from 'electron';
+import { shell, app } from 'electron';
+import { ipcMain } from './bus';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';

@@ -11,7 +11,7 @@
 // fine, because a secondary window only ever opens on the project it was asked
 // for, and it never writes the saved tab set (see tabStrip.ts).
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import { createHubWindow } from '../windows/hubWindow';
 import * as hubs from '../windows/hubRegistry';
 import { isValidId } from '../app/ids';

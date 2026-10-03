@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as onboarding from '../app/onboarding';
 
 // First-run guidance IPC: what the Get-started card shows, and the three

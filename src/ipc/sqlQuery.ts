@@ -12,7 +12,7 @@
 //   sql:prepareSave  the whole result at the dataset cap, plus the `sql` origin
 //                    that re-runs it — handed to the ordinary composer save
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import { isValidId } from '../app/ids';
 import { viewColumns } from '../engine/datasetView';
 import * as sqlDatasets from '../engine/sqlDatasets';

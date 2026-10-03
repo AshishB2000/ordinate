@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as recent from '../app/recent';
 
 // Cross-project "Recent" list IPC — one read-only channel. See src/recent.ts:

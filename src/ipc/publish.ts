@@ -1,4 +1,5 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron';
+import { dialog, BrowserWindow } from 'electron';
+import { ipcMain } from './bus';
 import * as os from 'os';
 import * as path from 'path';
 import * as jobs from '../app/jobs';

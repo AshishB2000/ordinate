@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as store from '../app/privacyStore';
 import * as sharePolicy from '../app/sharePolicy';
 import * as projects from '../app/projects';

@@ -1,4 +1,5 @@
-import { ipcMain, app, dialog, BrowserWindow, MessageBoxOptions } from 'electron';
+import { app, dialog, BrowserWindow, MessageBoxOptions } from 'electron';
+import { ipcMain } from './bus';
 import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
 import { testProvider } from '../ai/analyze';

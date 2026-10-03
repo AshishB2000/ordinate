@@ -1029,3 +1029,6 @@ scripts/**/*.js
 /src/server/app.js
 /src/server/main.js
 /scripts/test-server-boot.js
+
+# web/t0.2-rpc
+/src/ipc/bus.js

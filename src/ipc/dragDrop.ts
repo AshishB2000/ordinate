@@ -14,7 +14,8 @@
 // written. Temp files live under <temp>/ordinate-drag/, cleared at launch.
 
 import * as path from 'path';
-import { app, clipboard, ipcMain, nativeImage } from 'electron';
+import { app, clipboard, nativeImage } from 'electron';
+import { ipcMain } from './bus';
 import type { IpcMainEvent, NativeImage } from 'electron';
 import * as datasets from '../data/datasets';
 import * as execConfig from '../app/execConfig';

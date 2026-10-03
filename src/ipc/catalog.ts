@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as catalog from '../app/catalog';
 import * as catalogIndex from '../app/catalogIndex';
 

@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import { randomUUID } from 'crypto';
 import { sanitizePlanStep, sanitizePlanSteps, describeStep, STEP_ICONS } from '../ai/planSteps';
 import { checkPlan } from '../ai/planCheck';

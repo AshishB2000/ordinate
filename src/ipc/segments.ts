@@ -13,7 +13,7 @@
 // Every handler answers `{ ok:false, error }` rather than throwing. Nothing
 // here computes a figure: it routes, and the modules above do the math.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import * as transforms from '../data/transforms';
 import * as jobs from '../app/jobs';

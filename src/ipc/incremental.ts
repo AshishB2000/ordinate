@@ -9,7 +9,7 @@
 // cursor must be a number or date column of the stored table, the key one of
 // its columns, the lookback a finite non-negative number.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import * as connections from '../connectors/connections';
 import { getConnector } from '../connectors';

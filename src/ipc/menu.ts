@@ -11,7 +11,8 @@
 // Nothing in a command crosses the boundary except strings: id, title, group
 // and accelerator. Main never learns what a command DOES.
 
-import { app, ipcMain, Menu, MenuItemConstructorOptions, BrowserWindow } from 'electron';
+import { app, Menu, MenuItemConstructorOptions, BrowserWindow } from 'electron';
+import { ipcMain } from './bus';
 
 interface MenuCommand {
   id: string;

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { ipcMain, dialog } from 'electron';
+import { dialog } from 'electron';
+import { ipcMain } from './bus';
 import type { BrowserWindow } from 'electron';
 import * as projects from '../app/projects';
 import * as bundle from '../app/bundle';

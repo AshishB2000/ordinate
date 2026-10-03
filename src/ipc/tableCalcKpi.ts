@@ -26,7 +26,7 @@
 // disabled, saying so. Nothing here is stored — recomputed on every render,
 // through the same resolvers the card's own figure uses.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 
 import * as datasets from '../data/datasets';
 import * as metrics from '../analysis/metrics';

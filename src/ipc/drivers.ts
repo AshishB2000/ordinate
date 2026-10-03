@@ -15,7 +15,7 @@
 // A big table runs as a JOB (app/jobs.ts), so the Jobs popover shows it and it
 // can be cancelled; a small one answers inline.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import { randomUUID } from 'crypto';
 
 import * as datasets from '../data/datasets';

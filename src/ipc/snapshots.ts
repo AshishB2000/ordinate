@@ -11,7 +11,7 @@
 // metric:value, dashboard:metric, visual:rows) with an `asOf` field — see
 // src/data/asOf.ts. Every figure here is computed by the app; nothing is stored.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import * as snapshots from '../data/snapshots';
 import { isEligible } from '../data/snapshotNames';

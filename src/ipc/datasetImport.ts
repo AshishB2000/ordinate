@@ -1,4 +1,5 @@
-import { ipcMain, dialog } from 'electron';
+import { dialog } from 'electron';
+import { ipcMain } from './bus';
 import * as path from 'path';
 import { parsePaste } from '../data/parse';
 import type { ParseResult } from '../data/parse';

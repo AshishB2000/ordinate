@@ -12,7 +12,7 @@
 // keystroke burst, not per keystroke, and a dataset refreshed meanwhile is
 // seen on the next burst.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 
 import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';

@@ -5,7 +5,7 @@
 // coverage IS `computeCardMetric`'s converted sum, so it cannot disagree with a
 // tile.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as fxStore from '../app/fxStore';
 import { COMMON_CODES } from '../analysis/fx';
 import type { FxSettings } from '../analysis/fx';

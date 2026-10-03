@@ -6,7 +6,7 @@
 // ordinary `datasetPage` window with the rule as a main-built row filter — the
 // renderer names a rule by id and never sends a predicate.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as quality from '../analysis/qualityRun';
 import { pageFor } from './datasets';
 import { getDatasetMeta } from '../data/datasets';

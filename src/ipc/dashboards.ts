@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as dashboards from '../analysis/dashboards';
 import * as answerKey from '../data/answerKey';
 import * as queryCache from '../engine/queryCache';

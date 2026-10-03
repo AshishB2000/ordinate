@@ -16,7 +16,7 @@
 // metric card. A model is only on the `summary:rewrite` path, which narrates
 // these same sentences and is audited against their ledger.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import * as alertStore from '../analysis/alertStore';

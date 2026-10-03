@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as analysis from '../analysis/analysis';
 import { listInsights } from './insights';
 import { draftDashboard, dispatch, parseFirstObject, type NeutralMsg } from '../ai/analyze';

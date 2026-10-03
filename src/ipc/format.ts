@@ -14,7 +14,7 @@
 // therefore serialized per project, or two overlapping deals would each write
 // back the map they read and one column's colours would silently vanish.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 import * as projects from '../app/projects';
 import * as colorMap from '../analysis/colorMap';
 import type { ColorMap, ColumnColors } from '../analysis/colorMap';

@@ -18,7 +18,8 @@
 //                     when already saved) + a visual with the cell's spec
 //   notebook:exportMarkdown   the export, through the native save panel
 
-import { ipcMain, dialog, app } from 'electron';
+import { dialog, app } from 'electron';
+import { ipcMain } from './bus';
 import * as fs from 'fs';
 import * as path from 'path';
 import { isValidId } from '../app/ids';

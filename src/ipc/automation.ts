@@ -1,4 +1,5 @@
-import { app, ipcMain } from 'electron';
+import { app } from 'electron';
+import { ipcMain } from './bus';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomBytes } from 'crypto';

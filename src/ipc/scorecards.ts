@@ -18,7 +18,7 @@
 // per call). A scorecard of dozens of metrics over a large table is seconds; a
 // grouped query per metric is the upgrade if that ever shows.
 
-import { ipcMain } from 'electron';
+import { ipcMain } from './bus';
 
 import * as scorecards from '../analysis/scorecards';
 import * as metrics from '../analysis/metrics';

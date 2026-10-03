@@ -2,7 +2,8 @@
 // renderer names a project and an asset id, never a path — the one path this
 // sees comes from the native picker it opens itself.
 
-import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { BrowserWindow, dialog } from 'electron';
+import { ipcMain } from './bus';
 import { importImage, readImageDataUrl } from '../app/projectAssets';
 
 export function register(): void {
