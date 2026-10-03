@@ -6,7 +6,9 @@
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "size": "node scripts/bundle-size.ts",
+    "e2e": "tsc --noEmit -p tsconfig.e2e.json && node --test --test-reporter=spec \"e2e/*.e2e.ts\""
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.3.7",
