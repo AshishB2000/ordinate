@@ -9,6 +9,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -111,7 +112,7 @@ const SAMPLE_CSV = path.join(__dirname, '..', 'assets', 'samples', 'retail-order
   const base = `http://127.0.0.1:${port}`;
   const call = async (channel: string, payload: unknown, org = 'org-a') => {
     const res = await fetch(`${base}/api/rpc/${channel}`, {
-      method: 'POST', body: wire.encode({ args: [payload] }), headers: { 'content-type': 'application/json', 'x-test-org': org },
+      method: 'POST', body: wire.encode({ args: [payload] }), headers: withCsrf({ 'content-type': 'application/json', 'x-test-org': org }),
     });
     return { status: res.status, body: wire.decode(await res.text()) as any }; // any: each channel's own reply
   };
