@@ -15,6 +15,9 @@ import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
 import { handlers } from './rpc';
 import { fromWire, encode } from './wire';
+import { registerStatic, WEB_DIST } from './static';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /** The `event` a handler receives over HTTP. It has no `sender`: handlers ask `senderOf(e)` (./context). */
 const SERVER_EVENT = Object.freeze({});
@@ -136,6 +139,10 @@ export function buildApp(
   });
 
   app.addHook('onClose', async () => shutdown());
+
+  // The web app, when it has been built (`npm --prefix web run build`). In dev
+  // the Vite server serves it instead and proxies /api here.
+  if (fs.existsSync(path.join(WEB_DIST, 'index.html'))) registerStatic(app, WEB_DIST);
 
   return app;
 }

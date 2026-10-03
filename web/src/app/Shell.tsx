@@ -1,0 +1,127 @@
+// The app frame: one 40px top bar across the window, the section rail on the
+// left, the routed page on the right — the desktop hub's layout (.hub-topbar,
+// .app-sidebar, .ws-panel). Every page renders inside <Outlet/>, under its own
+// Suspense (lazy chunk) and error boundary (routes.tsx), so a broken page
+// never takes the nav down with it.
+
+import { Suspense, useRef } from 'react';
+import { NavLink, Outlet } from 'react-router';
+import { Icon } from './Icon';
+import { NAV, type NavItem } from './nav';
+import { PageSkeleton } from './blocks';
+import { THEME_PREFS, useThemePref, type ThemePref } from './theme';
+import s from './Shell.module.css';
+
+const THEME_LABEL: Record<ThemePref, string> = { system: 'System', light: 'Light', dark: 'Dark' };
+
+function NavEntry({ item }: { item: NavItem }) {
+  return (
+    <NavLink
+      to={item.to}
+      end={item.to === '/'}
+      className={({ isActive }) => (isActive ? `${s.navItem} ${s.active}` : s.navItem)}
+    >
+      <Icon name={item.icon} size={20} />
+      <span className={s.navLabel}>{item.label}</span>
+    </NavLink>
+  );
+}
+
+function UserMenu() {
+  const [theme, setTheme] = useThemePref();
+  const menu = useRef<HTMLDivElement>(null);
+  const close = () => menu.current?.hidePopover?.();
+
+  // Native popover: top layer, Escape and outside-click dismissal for free.
+  // ponytail: T0.7's Menu (Radix) replaces this with roving focus and a trap.
+  return (
+    <>
+      <button type="button" className={s.iconBtn} popoverTarget="user-menu" aria-label="Account and theme" title="Account">
+        <Icon name="user" />
+      </button>
+      <div id="user-menu" popover="auto" ref={menu} className={s.menu}>
+        <div className={s.menuHead}>
+          <span className={s.menuName}>You</span>
+          <span className={s.menuMeta}>Sign-in is not set up on this server</span>
+        </div>
+        <div className={s.menuSection}>
+          <span className={s.menuLabel} id="theme-label">
+            Theme
+          </span>
+          <div className={s.seg} role="group" aria-labelledby="theme-label">
+            {THEME_PREFS.map((p) => (
+              <button
+                key={p}
+                type="button"
+                className={s.segOpt}
+                aria-pressed={theme === p}
+                onClick={() => setTheme(p)}
+              >
+                {THEME_LABEL[p]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <NavLink to="/settings" className={s.menuItem} onClick={close}>
+          <Icon name="settings" />
+          <span>Settings</span>
+        </NavLink>
+      </div>
+    </>
+  );
+}
+
+export function Shell() {
+  const main = NAV.filter((n) => !n.bottom);
+  const bottom = NAV.filter((n) => n.bottom);
+  return (
+    <div className={s.win}>
+      <a className={s.skip} href="#main">
+        Skip to content
+      </a>
+      <header className={s.topbar}>
+        <div className={s.side}>
+          <button
+            type="button"
+            className={s.project}
+            aria-disabled="true"
+            aria-label="Switch project (coming soon)"
+            title="Project switching is coming soon"
+          >
+            <span className={s.projectAvatar}>
+              <Icon name="folder" />
+            </span>
+            <span className={s.projectName}>All projects</span>
+            <Icon name="chevron-down" />
+          </button>
+        </div>
+        <div className={s.search} role="search">
+          <Icon name="search" />
+          <input className={s.searchInput} type="search" placeholder="Search" aria-label="Search" />
+        </div>
+        <div className={`${s.side} ${s.right}`}>
+          <UserMenu />
+        </div>
+      </header>
+      <div className={s.body}>
+        <nav className={s.rail} aria-label="Sections">
+          <div className={s.nav}>
+            {main.map((n) => (
+              <NavEntry key={n.to} item={n} />
+            ))}
+          </div>
+          <div className={s.bottom}>
+            {bottom.map((n) => (
+              <NavEntry key={n.to} item={n} />
+            ))}
+          </div>
+        </nav>
+        <main id="main" className={s.stage} tabIndex={-1}>
+          <Suspense fallback={<PageSkeleton />}>
+            <Outlet />
+          </Suspense>
+        </main>
+      </div>
+    </div>
+  );
+}

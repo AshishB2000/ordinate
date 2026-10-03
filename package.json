@@ -17,7 +17,7 @@
     "pretest": "npm run build",
     "test": "node --test --test-reporter=spec \"scripts/test-*.js\"",
     "test:coverage": "node --test --experimental-test-coverage \"scripts/test-*.js\"",
-    "lint": "oxlint --type-aware --tsconfig=tsconfig.main.json src scripts preload && oxlint --type-aware --tsconfig=tsconfig.renderer.json renderer",
+    "lint": "oxlint --type-aware --tsconfig=tsconfig.main.json src scripts preload && oxlint --type-aware --tsconfig=tsconfig.renderer.json renderer && oxlint --type-aware --tsconfig=web/tsconfig.json web/src web/public web/vite.config.ts",
     "icons:verify": "node scripts/verify-icons.js",
     "predist:mac": "npm run build && npm i --force --no-save --no-audit --no-fund @duckdb/node-bindings-darwin-x64@1.5.5-r.3",
     "dist:mac": "electron-builder --mac --publish never",
@@ -32,7 +32,10 @@
     "shoot:design": "npm run build:ts && node scripts/shoot-design.js",
     "build:icons": "node scripts/build-icons.js",
     "build:appicon": "electron scripts/build-appicon.js",
-    "server": "npm run build:ts && node src/server/main.js"
+    "server": "npm run build:ts && node src/server/main.js",
+    "dev:web": "npm --prefix web run dev",
+    "build:web": "npm --prefix web run build",
+    "test:web": "npm --prefix web test"
   },
   "license": "MIT",
   "devDependencies": {
@@ -51,6 +54,7 @@
   },
   "dependencies": {
     "@duckdb/node-api": "^1.5.5-r.3",
+    "@fastify/static": "^10.1.5",
     "@sgratzl/chartjs-chart-boxplot": "^4.4.5",
     "chart.js": "^4.5.1",
     "chartjs-chart-financial": "^0.2.1",

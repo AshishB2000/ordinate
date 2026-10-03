@@ -1,0 +1,153 @@
+/* Page frame: 24px panel gutters, the 20px page title (theme.css type scale). */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-24);
+  padding: var(--sp-24) var(--sp-32) var(--sp-48);
+  min-height: 100%;
+}
+@media (max-width: 900px) {
+  .page {
+    padding: var(--sp-16);
+  }
+}
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.title {
+  font-size: var(--t-20);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tighter);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.sub {
+  color: var(--muted);
+  max-width: 72ch;
+}
+
+/* Empty / error: hub.css `.ws-empty` — one component, icon in a 48px circle. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--sp-4);
+  padding: var(--sp-48);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.emptyIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.error .emptyIcon {
+  background: var(--error-soft);
+  border-color: transparent;
+  color: var(--error);
+}
+.emptyTitle {
+  font-size: var(--t-15);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tr-tight);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.emptyBody {
+  max-width: 46ch;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-8);
+  margin-top: var(--sp-16);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ctl-gap);
+  height: var(--ctl-md);
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.btn:hover {
+  background: var(--surface-2);
+  border-color: var(--border-3);
+}
+
+/* Skeletons: hub.css `.sk` — the shimmer is a plain animation, so the
+   reduced-motion rule in base.css stops it. */
+.sk {
+  display: block;
+  border-radius: var(--r-sm);
+  background-color: var(--surface-1);
+  background-image: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.skList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.skRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  height: 44px;
+  padding: 0 var(--sp-16);
+}
+.skRow:nth-child(n + 4) {
+  opacity: 0.6;
+}
+.skIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+}
+.skText {
+  width: 32%;
+  height: 12px;
+}
+.skMeta {
+  width: 14%;
+  height: 10px;
+  margin-left: auto;
+}
+.skTitle {
+  width: 180px;
+  height: 22px;
+}
+.skBlock {
+  height: 44px;
+}
