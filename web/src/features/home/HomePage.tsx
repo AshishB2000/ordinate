@@ -1,62 +1,99 @@
-// Home, shell edition: the project list from the API, with its loading,
-// empty and error states. T2.1 ports the real Home (greeting, ask bar,
-// recent, starred) on top of this.
+// Home — homePage.ts, homeAsk.ts, homeData.ts and getStarted.ts, ported. In
+// weight order: the greeting, the ASK BAR (the one dominant element), the
+// Get-started card while first-run guidance lasts, then two columns — Starred
+// and Recent on the left, "Your data" and "Saved visuals" on the right.
+//
+// The project Home speaks for is the most recently updated one the caller can
+// read (projects:list comes newest first). T2.2's switcher will make it the
+// session's chosen project instead.
 
+import { useNavigate } from 'react-router';
+import { useOverview, useRecent } from '../../api/home';
 import { useProjects, type Project } from '../../api/projects';
-import { EmptyState, ErrorState, Page, SkeletonRows } from '../../app/blocks';
+import { openDockWith } from '../assistant/dockState';
+import { useMe } from '../auth/api';
+import { Button } from '../../ui/Button';
+import { Menu } from '../../ui/Menu';
+import { Skeleton } from '../../ui/Skeleton';
+import { AskBar } from './AskBar';
+import { GetStarted, GetStartedPill } from './GetStarted';
+import { displayName, greeting, plural, suggestPrompts } from './homeText';
+import { RecentColumn } from './RecentColumn';
+import { SideColumn } from './SideColumn';
 import s from './HomePage.module.css';
 
-const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
+function homeProject(list: Project[] | undefined): Project | undefined {
+  return list?.find((p) => !p.archivedAt) ?? list?.[0];
+}
 
-function ProjectRow({ p }: { p: Project }) {
+function Subtitle({ project, failed, loading }: { project: Project | undefined; failed: boolean; loading: boolean }) {
+  const ov = useOverview(project?.id);
+  if (loading) return <Skeleton className={s.subSk} />;
+  if (failed) return <p className={s.sub}>Your projects could not be loaded.</p>;
+  if (!project) return <p className={s.sub}>No project yet — bring some data in to begin.</p>;
+  const c = ov.data?.counts;
+  const parts = [project.name || 'Untitled project'];
+  // Captures only when there are any: a project that never took one is not told it has none.
+  if (c) parts.push(plural(c.datasets, 'dataset'), plural(c.dashboards, 'dashboard'), ...(c.captures ? [plural(c.captures, 'capture')] : []));
   return (
-    <li className={s.row}>
-      <span className={s.avatar} aria-hidden="true">
-        {p.name.trim().charAt(0).toUpperCase() || '·'}
-      </span>
-      <span className={s.name}>{p.name}</span>
-      {p.archivedAt && <span className={s.badge}>Archived</span>}
-      <time className={s.meta} dateTime={p.updatedAt}>
-        Updated {dateFmt.format(new Date(p.updatedAt))}
-      </time>
-    </li>
+    <p className={s.sub} data-testid="home-sub">
+      {parts.join('  ·  ')}
+    </p>
   );
 }
 
-function Projects() {
-  const q = useProjects();
-  if (q.isPending) return <SkeletonRows label="Loading projects" />;
-  if (q.isError) {
-    return (
-      <ErrorState title="Projects could not be loaded" message={q.error.message} onRetry={() => void q.refetch()} />
-    );
-  }
-  if (q.data.length === 0) {
-    return (
-      <EmptyState icon="folder" title="No projects yet">
-        A project groups datasets, visuals and dashboards that belong together. The first one is created when you
-        bring in data.
-      </EmptyState>
-    );
-  }
+function NewMenu() {
+  const navigate = useNavigate();
   return (
-    <ul className={s.list}>
-      {q.data.map((p) => (
-        <ProjectRow key={p.id} p={p} />
-      ))}
-    </ul>
+    <Menu
+      align="end"
+      label="New"
+      trigger={
+        <Button variant="primary" icon="plus" iconEnd="chevron-down">
+          New
+        </Button>
+      }
+      items={[
+        { label: 'Dashboard', icon: 'layout-dashboard', onSelect: () => void navigate('/dashboards') },
+        { label: 'Visual', icon: 'chart-bar', onSelect: () => void navigate('/visuals') },
+        { label: 'Data source', icon: 'database', onSelect: () => void navigate('/data') },
+      ]}
+    />
   );
 }
 
 export default function HomePage() {
+  const me = useMe();
+  const projects = useProjects();
+  const project = homeProject(projects.data);
+  const ov = useOverview(project?.id);
+  const recent = useRecent();
+  const prompts = suggestPrompts(
+    (ov.data?.datasets ?? []).map((d) => d.name),
+    (recent.data ?? []).filter((r) => r.type === 'dataset').map((r) => r.name),
+  );
   return (
-    <Page title="Home" sub="Your projects on this server.">
-      <section className={s.section} aria-labelledby="home-projects">
-        <h2 id="home-projects" className={s.label}>
-          Projects
-        </h2>
-        <Projects />
-      </section>
-    </Page>
+    <div className={s.scroll}>
+      <header className={s.head}>
+        <div className={s.greetBlock}>
+          {/* The page's name for the outline and the tab, like every section's; the greeting is what shows. */}
+          <h1 className={s.srOnly}>Home</h1>
+          <p className={s.greet} data-testid="home-greet">
+            {greeting(displayName(me.data?.user?.email), new Date().getHours())}
+          </p>
+          <Subtitle project={project} failed={projects.isError} loading={projects.isPending} />
+        </div>
+        <div className={s.headActions}>
+          <GetStartedPill />
+          <NewMenu />
+        </div>
+      </header>
+      <AskBar prompts={prompts} onAsk={openDockWith} />
+      <GetStarted />
+      <div className={s.cols}>
+        <RecentColumn projectId={project?.id} recent={recent} />
+        <SideColumn project={project} projectsFailed={projects.isError} retryProjects={() => void projects.refetch()} />
+      </div>
+    </div>
   );
 }

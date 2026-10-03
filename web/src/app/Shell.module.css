@@ -42,6 +42,14 @@
 }
 .right {
   justify-content: flex-end;
+  gap: var(--sp-4);
+}
+/* hub.css `.hub-topbar-div`: a hairline between the window tools and the Assistant. */
+.divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 var(--sp-4);
+  background: var(--border);
 }
 
 .project {

@@ -193,7 +193,9 @@ const findJob = (e: Ev, id: string): Job | undefined => {
   ok('A saw its progress (0.1, "1 rule(s)")', changed.some((j) => j.state === 'running' && j.progress === 0.1 && j.note === '1 rule(s)'), JSON.stringify(changed));
   ok('A saw it done in the list', changed.some((j) => j.state === 'done' && j.progress === 1), JSON.stringify(changed));
   ok('every event A got is about its own job', A.events.every((e) => jobEvents(A, id).includes(e)), JSON.stringify(A.events));
-  ok('the job is tagged with A\'s client, nobody else\'s', fin.client === sse.clientFor(kA, who('org-a'))!.id);
+  ok('the job is tagged with A\'s client, nobody else\'s', jobs.get(id)?.client === sse.clientFor(kA, who('org-a'))!.id);
+  ok('the job is owned by A\'s user in A\'s org', jobs.get(id)?.owner === 'org-a\n' + who('org-a').user.email);
+  ok('no event carries the stream number, the owner or a result path', A.events.every((e) => !/"(client|owner|path)"/.test(JSON.stringify(e.data))), JSON.stringify(A.events));
   console.log(`     (quality:run round trip with ${A.events.length} events: ${Date.now() - t0} ms)`);
   await sleep(120);
   ok('B (another tab, same user) received no events', B.events.length === 0, JSON.stringify(B.events));

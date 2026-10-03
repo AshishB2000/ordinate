@@ -22,9 +22,14 @@ e2e('the shell loads and Home lists the sample project', async (s) => {
   assert.equal(await heading(s).textContent(), 'Home');
   const nav = page.getByRole('navigation', { name: 'Sections' });
   for (const item of NAV) assert.ok(await nav.getByRole('link', { name: item.label, exact: true }).isVisible(), item.label);
-  const projects = page.getByRole('region', { name: 'Projects' });
-  await projects.getByText(server.sample.projectName, { exact: true }).waitFor();
-  assert.equal(await projects.getByRole('listitem').count(), 1);
+  // T2.1's Home: no project list (the switcher is T2.2's) — the sample project
+  // is the one Home speaks for, and its records are what Recent and Starred list.
+  assert.match((await page.getByTestId('home-sub').textContent()) ?? '', new RegExp(`^${server.sample.projectName}  ·  `));
+  const rows = page.getByRole('region', { name: /^(Recent|Starred)/ }).getByRole('listitem');
+  assert.ok((await rows.count()) >= 1);
+  for (const label of await rows.getByRole('link').evaluateAll((as) => as.map((a) => a.getAttribute('aria-label') ?? ''))) {
+    assert.ok(label.includes(`in ${server.sample.projectName}`), label);
+  }
   const files = await screens(page, 'shell-home');
   console.log(`screens: ${files.join(', ')}`);
   report(s);
@@ -70,7 +75,8 @@ e2e('security headers and CSRF in the browser', async (s) => {
   assert.equal(h['referrer-policy'], 'strict-origin-when-cross-origin');
   assert.ok(h['permissions-policy']?.includes('camera=()'));
   assert.equal(h['strict-transport-security'], undefined, 'no HSTS on a dev server');
-  await page.getByRole('region', { name: 'Projects' }).getByText(server.sample.projectName, { exact: true }).waitFor();
+  // Home has spoken to the server (T2.1's Home names the sample project in its subtitle).
+  await page.getByTestId('home-sub').getByText(new RegExp(`^${server.sample.projectName}  ·  `)).waitFor();
 
   const token = (await page.context().cookies()).find((c) => c.name === 'ordinate_csrf');
   assert.ok(token && /^[A-Za-z0-9_-]{43}$/.test(token.value) && !token.httpOnly && token.sameSite === 'Lax', JSON.stringify(token));

@@ -18,6 +18,43 @@ type Reply = ({ ok: true } & VizData) | { ok: false; error: string };
 
 export type VizRequest = RpcInput<'visual:data'>;
 
+// A page of charts is one round trip: the requests made in the same tick for
+// one project go out as ONE `visual:dataBatch` (at most BATCH each), answered
+// in order by the same server function. A lone request stays `visual:data`.
+const BATCH = 50;
+type Waiting = { req: VizRequest; resolve: (r: Reply) => void; reject: (e: unknown) => void };
+const waiting = new Map<string, Waiting[]>();
+
+function flush(projectId: string): void {
+  const all = waiting.get(projectId) ?? [];
+  waiting.delete(projectId);
+  if (all.length === 1) {
+    const [w] = all as [Waiting];
+    rpc('visual:data', w.req).then((r) => w.resolve(r as Reply), w.reject);
+    return;
+  }
+  for (let i = 0; i < all.length; i += BATCH) {
+    const part = all.slice(i, i + BATCH);
+    const items = part.map(({ req: { projectId: _p, ...item } }) => item);
+    rpc('visual:dataBatch', { projectId, items }).then(
+      (out) => part.forEach((w, j) => w.resolve(Array.isArray(out) && out[j] ? (out[j] as Reply) : { ok: false, error: 'No answer for this chart.' })),
+      (err: unknown) => part.forEach((w) => w.reject(err)),
+    );
+  }
+}
+
+/** One chart's answer; batched with the others the page asks for in the same tick. */
+export function loadVizData(req: VizRequest): Promise<Reply> {
+  return new Promise((resolve, reject) => {
+    let list = waiting.get(req.projectId);
+    if (!list) {
+      waiting.set(req.projectId, (list = []));
+      setTimeout(() => flush(req.projectId), 0);
+    }
+    list.push({ req, resolve, reject });
+  });
+}
+
 /** One chart's answer, computed by the server. A refusal (`ok: false`) is a query error with its message. */
 export function useVizData(req: VizRequest | undefined) {
   return useQuery({
@@ -26,7 +63,7 @@ export function useVizData(req: VizRequest | undefined) {
       req === undefined
         ? skipToken
         : async () => {
-            const r = (await rpc('visual:data', req)) as Reply;
+            const r = await loadVizData(req);
             if (!r.ok) throw new Error(r.error);
             return r;
           },

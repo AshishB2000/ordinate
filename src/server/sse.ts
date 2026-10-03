@@ -253,6 +253,7 @@ export function registerEvents(app: FastifyInstance): void {
 // Jobs → the tab that submitted each one. `jobs:changed` is that tab's slice of
 // the list (what the desktop broadcast to every window); `jobs:finished` is the
 // completion, once per job, standing in for the desktop's OS notification.
+// Both carry `jobs.publicJob` — never a server file path or the job's owner.
 // ponytail: a tab whose last job leaves the global recent list gets no final
 // empty list; send to last time's recipients too if a stale row ever shows.
 jobs.onChange((snap) => {
@@ -262,7 +263,7 @@ jobs.onChange((snap) => {
       if (!j.client || !byId.has(j.client)) continue;
       let s = per.get(j.client);
       if (!s) per.set(j.client, (s = { active: [], recent: [] }));
-      s[k].push(j);
+      s[k].push(jobs.publicJob(j));
     }
   }
   for (const [id, s] of per) {
@@ -274,5 +275,5 @@ jobs.onChange((snap) => {
   }
 });
 jobs.onFinish((job) => {
-  if (job.client) byId.get(job.client)?.send('jobs:finished', job);
+  if (job.client) byId.get(job.client)?.send('jobs:finished', jobs.publicJob(job));
 });

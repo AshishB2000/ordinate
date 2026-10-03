@@ -117,6 +117,9 @@ interface Config {
   // ONE array for all four record types, so a record never carries a starred flag
   // and there are no per-type migrations.
   starred: string[];
+  /** Server only: each user's own pins, by email. A user with no entry sees
+   *  `starred` (the org's — the sample seed pins its dashboard there). */
+  starredBy: Record<string, string[]>;
   /** Settings → Automation (src/ipc/automation.ts). The HTTP token is never stored. */
   automation: AutomationPrefs;
   /** Settings → General: the name on your comments. '' → the OS user name
@@ -227,6 +230,7 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
   // Home "Starred" pins, as "type:id" keys. One flat array, one setter — no
   // per-record flag, no migration.
   starred: [],
+  starredBy: {},
   // Automation (MCP) is OFF until the user turns it on; the loopback HTTP
   // transport is a second, separate opt-in.
   automation: { enabled: false, http: false, port: AUTOMATION_PORT },
@@ -338,6 +342,11 @@ function sanitize(input: any): Partial<Config> {
   else if (input.onboarding && typeof input.onboarding === 'object') out.onboarding = cleanOnboarding(input.onboarding);
   // Whitelisted so it survives disk load ({...DEFAULTS, ...sanitize(onDisk)}).
   if (Array.isArray(input.starred)) out.starred = cleanStarred(input.starred);
+  if (input.starredBy && typeof input.starredBy === 'object') {
+    out.starredBy = Object.fromEntries(
+      Object.entries(input.starredBy).slice(0, 10_000).filter(([k]) => k.length <= 320).map(([k, v]) => [k, cleanStarred(v)]),
+    );
+  }
   if (input.automation && typeof input.automation === 'object') out.automation = cleanAutomation(input.automation);
   if (typeof input.displayName === 'string') out.displayName = input.displayName.replace(/\s+/g, ' ').trim().slice(0, 80);
   if (isLanguage(input.language)) out.language = input.language;
@@ -500,6 +509,21 @@ export function setStarred(ids: unknown): { ok: boolean; starred: string[] } {
   cfg.starred = cleanStarred(ids);
   persist(cfg);
   return { ok: true, starred: cfg.starred };
+}
+
+/** Server: `user`'s pins, or the org's until they set their own. */
+export function starredFor(user: string): string[] {
+  const cfg = get();
+  return [...(Object.hasOwn(cfg.starredBy, user) ? cfg.starredBy[user] : cfg.starred)];
+}
+
+/** Server: replace `user`'s pins only — another member's stay as they are. */
+export function setStarredFor(user: string, ids: unknown): { ok: boolean; starred: string[] } {
+  const cfg = get();
+  const starred = cleanStarred(ids);
+  cfg.starredBy = { ...cfg.starredBy, [user]: starred };
+  persist(cfg);
+  return { ok: true, starred };
 }
 
 // Persist the user's global rules (Instructions / Rules box). Empty allowed.

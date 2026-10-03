@@ -1,69 +1,591 @@
-.section {
+/* hub.css "home" — the greeting, the ask-bar hero, the two-column body:
+   .home-scroll, .home-head, .home-ask*, .home-cols, .home-pill, .home-rows,
+   .home-row*, .home-card, .home-data*, .home-quick*, .home-viz*. */
+
+/* One measure for the whole page, so a wide monitor keeps its spine. */
+.scroll {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  padding: var(--sp-24) var(--sp-32) var(--sp-32);
+}
+.scroll > * {
+  max-width: 1080px;
+  width: 100%;
+  margin-inline: auto;
+}
+
+/* ── greeting ── */
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-16);
+}
+.greetBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.greet {
+  margin: 0;
+  font-size: var(--t-28);
+  line-height: var(--lh-tight);
+  font-weight: 600;
+  letter-spacing: var(--tr-tighter);
+  color: var(--text-strong);
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.sub {
+  margin: 0;
+  font-size: var(--t-13);
+  color: var(--muted);
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.subSk {
+  width: 260px;
+  height: 14px;
+  margin-top: 4px;
+}
+.headActions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  flex: none;
+}
+
+/* ── THE HERO: the ask bar — the one element that lifts off the page ── */
+.ask {
   display: flex;
   flex-direction: column;
   gap: var(--sp-8);
 }
-.label {
-  font-size: var(--t-11);
-  line-height: var(--lh-body);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tr-label);
-  color: var(--muted);
-}
-
-/* A dense list on one card: hairline rows, no per-row shadow. */
-.list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  background: var(--surface-1);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--r-lg);
-  overflow: hidden;
-}
-.row {
+.askBar {
   display: flex;
   align-items: center;
-  gap: var(--sp-12);
-  height: 44px;
-  padding: 0 var(--sp-16);
+  gap: var(--ctl-gap);
+  min-height: 52px;
+  padding: var(--sp-8) var(--sp-8) var(--sp-8) var(--sp-16);
+  background: var(--surface-float);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-md);
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
-.row + .row {
-  border-top: 1px solid var(--border-hairline);
+.askBar:focus-within {
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-lg);
 }
-.avatar {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border-radius: var(--r-sm);
-  background: var(--accent-soft);
+.askIcon {
+  flex: none;
+  display: flex;
   color: var(--accent);
-  font-weight: 600;
 }
-.name {
+.askInput {
+  flex: 1 1 auto;
   min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font: inherit;
+  font-size: var(--t-15);
+  letter-spacing: var(--tr-tight);
+  line-height: var(--lh-snug);
+  color: var(--text);
+}
+.askInput::placeholder {
+  color: var(--text-dim);
+}
+.askSend {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ctl-lg);
+  height: var(--ctl-lg);
+  border: none;
+  border-radius: var(--r-lg);
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+  transition: filter var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
+}
+.askSend:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.askSend:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+/* Starter chips: ghost, never the accent — these are prompts, not a selection. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.chip:hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+/* ── two-column body ── */
+.cols {
+  flex: 1 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--sp-24);
+  align-items: stretch;
+}
+.colMain,
+.colSide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  min-width: 0;
+}
+.colSide {
+  align-self: start;
+}
+@media (max-width: 900px) {
+  .cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Filter pills over Recent, and the scope at their far end. */
+.filter {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.pills {
+  display: flex;
+  gap: var(--sp-4);
+}
+.pill,
+.scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-full);
+  background: var(--surface-1);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 500;
+  cursor: pointer;
+}
+.scope {
+  margin-left: auto;
+  background: transparent;
+}
+.pill:hover,
+.scope:hover {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+.pillOn,
+.pillOn:hover,
+.scope[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── Starred and Recent ── */
+.sec {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-height: 0;
+}
+.grow {
+  flex: 1 1 auto;
+}
+.secHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-8);
+}
+.secH {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-8);
+  margin: 0;
+  font-size: var(--t-11);
+  line-height: var(--lh-body);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.secCount {
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.showAll {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
+}
+.showAll:hover {
+  color: var(--text-strong);
+  text-decoration: underline;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--surface-1);
+}
+.grow > .rows {
+  flex: 1 0 auto;
+}
+/* An empty section is one designed panel, not a panel inside a panel. */
+.emptyBox > * {
+  border: 1px dashed var(--border-2);
+  background: transparent;
+}
+.emptyGrow {
+  flex: 1 0 auto;
+  display: flex;
+}
+.emptyGrow > * {
+  flex: 1;
+  justify-content: center;
+}
+
+/* One 40px line: type icon · name · meta · time (right, tabular) · star. */
+.row {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding-right: var(--sp-8);
+  border-bottom: 1px solid var(--border-hairline);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.row:last-child {
+  border-bottom: none;
+}
+.row:hover {
+  background: var(--surface-2);
+}
+.rowLink {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--ctl-gap);
+  padding-left: var(--sp-12);
+  color: inherit;
+  text-decoration: none;
+}
+.rowLink:focus-visible {
+  outline-offset: -2px;
+}
+.rowIcon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sp-24);
+  height: var(--sp-24);
+  border-radius: var(--r-sm);
+  color: var(--text-faint);
+}
+.row:hover .rowIcon {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.rowBody {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--ctl-gap);
+}
+.rowName {
+  flex: 0 0 auto;
+  max-width: 60%; /* the name keeps its width; the meta gives way first */
+  min-width: 0;
+  font-size: var(--t-13);
   font-weight: 500;
   color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.badge {
-  flex: 0 0 auto;
-  padding: 1px var(--sp-8);
-  border-radius: var(--r-full);
-  background: var(--surface-2);
-  color: var(--muted);
-  font-size: var(--t-11);
-  font-weight: 500;
-}
-.meta {
-  margin-left: auto;
-  flex: 0 0 auto;
+/* Separators are CSS, so a screen reader never reads them as punctuation. */
+.rowMeta {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-8);
+  overflow: hidden;
+  white-space: nowrap;
   font-size: var(--t-12);
-  color: var(--muted);
+  color: var(--text-dim);
+}
+.rowMeta > * + *::before {
+  content: '·';
+  margin-right: var(--sp-8);
+  color: var(--text-faint);
+}
+.rowMeta > :not(.rowProj) {
+  flex: none;
+}
+.rowProj {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tnum,
+.rowTime {
   font-variant-numeric: tabular-nums;
+}
+.rowTime {
+  flex: none;
+  margin-left: auto;
+  padding: 0 var(--sp-8) 0 var(--sp-12);
+  font-size: var(--t-12);
+  color: var(--text-dim);
+}
+@media (max-width: 860px) {
+  .rowProj {
+    display: none;
+  }
+}
+/* The star shows on hover or focus; a starred row keeps it at rest — that is
+   the state it reports. Opacity, not display, so it stays in the tab order. */
+.star {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--ctl-sm);
+  height: var(--ctl-sm);
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+}
+.row:hover .star,
+.star:focus-visible,
+.starOn {
+  opacity: 1;
+}
+/* Gold, not accent: "pinned" is a different signal from "the way forward". */
+.star:hover,
+.starOn {
+  color: var(--warn);
+}
+/* dsRules.ts dqDot: a failing quality rule. */
+.dq {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: var(--r-full);
+  background: var(--error);
+  vertical-align: middle;
+}
+
+/* ── right column cards: surface-1 behind a hairline, no shadow ── */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+}
+.cardH {
+  margin: 0;
+  font-size: var(--t-15);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tr-tight);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.dataList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 210px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+.dataEmpty {
+  margin: 2px 0;
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.dataRow {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--sp-8);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  text-decoration: none;
+}
+.dataRow:hover {
+  background: var(--surface-2);
+}
+.dataRow:focus-visible {
+  outline-offset: -2px;
+}
+.dataName {
+  font-size: var(--t-13);
+  font-weight: 500;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dataMeta {
+  font-size: var(--t-12);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.connect {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding-top: var(--sp-12);
+  border-top: 1px solid var(--border);
+}
+.quickLabel {
+  font-size: var(--t-11);
+  line-height: var(--lh-body);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.quickRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+/* Neutral on hover, NOT accent: these are secondary to the hero. */
+.quickBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--t-13);
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.quickBtn > svg {
+  color: var(--muted);
+}
+.quickBtn:hover {
+  background: var(--surface-2);
+  border-color: var(--border-3);
+  color: var(--text-strong);
+}
+
+/* Saved visuals: two tiles a row, the chart type's glyph on the tile. */
+.vizStrip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.vizCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.vizCard:hover {
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-sm);
+}
+.vizTile {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 10;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--chart-1);
+}
+.vizName {
+  padding: 0 var(--sp-8) var(--sp-8);
+  font-size: var(--t-12);
+  font-weight: 500;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

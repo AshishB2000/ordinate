@@ -61,6 +61,32 @@ export function useDockOpen(): boolean {
   return useSyncExternalStore(subscribe, () => open);
 }
 
+// A question handed over from outside the dock (Home's ask bar — homeAsk.ts
+// dkAsk): the dock opens and asks it as if typed, or, when it cannot ask yet
+// (no project, no model), keeps it in the composer so nothing is lost.
+let question = '';
+
+/** Opens the dock with `q` to ask. */
+export function openDockWith(q: string): void {
+  question = q.trim();
+  open = true;
+  write(OPEN_KEY, '1');
+  emit();
+}
+
+/** The question waiting for the dock, if any. */
+export function usePendingQuestion(): string {
+  return useSyncExternalStore(subscribe, () => question);
+}
+
+/** The dock took the question: it is asked or in the composer now. */
+export function takePendingQuestion(): string {
+  const q = question;
+  question = '';
+  if (q) emit();
+  return q;
+}
+
 export function pickDockProject(id: string): void {
   picked = id;
   write(PROJECT_KEY, id);

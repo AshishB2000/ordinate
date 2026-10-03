@@ -362,4 +362,7 @@ export function registerHandlers(): void {
   (require('./auth/tokens') as typeof import('./auth/tokens')).register(() => dbPool);
   // The Assistant dock (T2.12): conversations, answers, plans, provider keys.
   for (const mod of ['../ipc/copilot', '../ipc/plan', '../ipc/providersServer']) (require(mod) as { register: () => void }).register();
+  // Home and the app chrome (T2.1): first-run guidance, workspace prefs, the Jobs popover.
+  for (const mod of ['../ipc/onboarding', '../ipc/prefs']) (require(mod) as { register: () => void }).register();
+  (require('../ipc/jobs') as typeof import('../ipc/jobs')).registerServer();
 }

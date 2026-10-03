@@ -571,7 +571,7 @@ export function register() {
   // here, after vizDataFor, so a cached answer is shaped on its way out and the
   // cache never holds a masked one (app/sharePolicy.ts).
   // `asOf` (view state, data/asOf.ts): every dataset read as of that time.
-  ipcMain.handle('visual:data', async (_e, { projectId, datasetId, encoding, filters, params, share, analytics, asOf, currency }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
+  const vizData = async ({ projectId, datasetId, encoding, filters, params, share, analytics, asOf, currency }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
     try {
       // Sanitisation FIRST, always — the encoding and the filters are untrusted
       // renderer input, and both paths below consume the sanitized values.
@@ -601,7 +601,13 @@ export function register() {
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the visual data' };
     }
-  })));
+  }));
+  ipcMain.handle('visual:data', (_e, args: any = {}) => vizData(args));
+  // Server: several charts of ONE project in one round trip (a page of tiles —
+  // web/src/api/visuals.ts batches the requests a page makes in one tick). Each
+  // item is exactly a `visual:data` request, answered by the same function, in order.
+  ipcMain.handle('visual:dataBatch', async (_e, { projectId, items }: any = {}) =>
+    Promise.all((Array.isArray(items) ? items : []).map((it: any) => vizData({ ...it, projectId }))));
 
   // ── The rows behind one mark (drill-down) ────────────────────────────────
   //
