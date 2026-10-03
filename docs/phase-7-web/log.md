@@ -66,3 +66,29 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   branch filter touched.
 - **Known:** a DB-recorded version with no file (image rollback) is ignored, not refused; no per-file
   non-transactional migration (`CREATE INDEX CONCURRENTLY`) yet — `ponytail:` in `migrate.ts`.
+## 2026-10-02 — T0.3 Request context, paths, dev auth
+
+- **Bulk edit (scripted, orchestrator):** 64 `app.getPath(...)` in 44 files → `appPaths.<name>()`
+  (`src/app/paths.ts`); `app` dropped from the electron import wherever nothing else used it; the
+  import is `appPaths` because some files have a local `paths`. Zero `getPath(` outside `paths.ts`.
+  One allowlisted file (`cli/localCliRun.ts`) would have grown by the split import; its two
+  `child_process` imports were merged instead of raising the ratchet.
+- **Tenant isolation bug found and fixed:** 14 modules cached the first caller's `userData()/projects`
+  (or `history`) path in a module variable — on the server org B would have read org A's records.
+  Caches removed (desktop re-asks Electron per call; cheap). The new concurrent-org test fails with
+  the old cache put back.
+- **Server mode** is explicit: `enterServerMode(dataDir)`, called only by `src/server/main.ts`.
+  Without it `ctx()` is a fixed desktop context; with it `ctx()` throws outside a request. Every
+  `/api/` request runs in `AsyncLocalStorage` with Fastify's `req.id`.
+- **Org layout:** `DATA_DIR/orgs/<orgId>/{userData,downloads,temp,documents}`, created on first use;
+  org id must match `^[a-z0-9][a-z0-9-]{0,62}$` before touching a path.
+- **Dev auth:** dev → `dev@local`, org `default`, admin. prod refuses to start with one line until
+  T3.2's `AUTH_MODE`.
+- **Senders:** `senderOf(e)` (desktop `e.sender`, server `ctx().client`, a no-op `send` until T0.5)
+  and `windowOf(e)` for dialog parents (null on the server). `dnd` OS drag-out stays desktop-only.
+- **Electron at load:** moved inside desktop-only functions in `ipc/projects`, `ipc/datasetImport`,
+  `ipc/backups`, `ai/analyze`, `ai/analyzeStream`, `cli/localCliRun`, `app/bundle`. `main.ts` now
+  calls `registerHandlers()`, so `test-server-boot` (Electron blocked) covers the whole Home graph.
+- **Open:** `src/app/sampleProject.ts` still imports Electron at load (T0.8 seeds the sample on the
+  server); `config.ts` format/calendar/language are process-wide — two orgs can race (`ponytail:`,
+  P5).
