@@ -107,11 +107,9 @@ export interface AnalysisSummary {
   views?: Array<{ id: string; name: string }>;
 }
 
-let projectsBase: string | null = null;
 
 function getProjectsBase(): string {
-  if (!projectsBase) projectsBase = path.join(appPaths.userData(), 'projects');
-  return projectsBase;
+  return path.join(appPaths.userData(), 'projects');
 }
 
 // Ids arrive from the renderer over IPC. Validate the SHAPE before either id

@@ -8,11 +8,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as appPaths from './paths';
 
-let historyDir: string | null = null;
-
 function getHistoryDir(): string {
-  if (!historyDir) historyDir = path.join(appPaths.userData(), 'history');
-  return historyDir;
+  return path.join(appPaths.userData(), 'history');
 }
 
 // History ids are Date.now()-ish (digits, occasionally with a suffix), always
@@ -198,6 +195,5 @@ export async function deleteThread(id: string | number): Promise<boolean> {
 export async function clearAll(): Promise<string> {
   const dir = getHistoryDir();
   await fs.promises.rm(dir, { recursive: true, force: true });
-  historyDir = null; // force re-resolve (and re-create on next init)
   return dir;
 }

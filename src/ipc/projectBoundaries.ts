@@ -1,14 +1,15 @@
 // Boundaries IPC: import a GeoJSON file into the project (through the native
 // picker this handler opens itself), list the project's sets, read one.
 
-import { BrowserWindow, dialog } from 'electron';
+import { dialog } from 'electron';
 import { ipcMain } from './bus';
+import { windowOf } from '../server/context';
 import { getBoundary, importBoundaryFile, listBoundaries } from '../app/projectBoundaries';
 
 export function register(): void {
   ipcMain.handle('boundary:import', async (e, { projectId }: any = {}) => {
     try {
-      const win = BrowserWindow.fromWebContents(e.sender);
+      const win = windowOf(e);
       const opts = {
         title: 'Import boundaries',
         properties: ['openFile' as const],

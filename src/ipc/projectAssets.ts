@@ -2,14 +2,15 @@
 // renderer names a project and an asset id, never a path — the one path this
 // sees comes from the native picker it opens itself.
 
-import { BrowserWindow, dialog } from 'electron';
+import { dialog } from 'electron';
 import { ipcMain } from './bus';
+import { windowOf } from '../server/context';
 import { importImage, readImageDataUrl } from '../app/projectAssets';
 
 export function register(): void {
   ipcMain.handle('asset:pickImage', async (e, { projectId }: any = {}) => {
     try {
-      const win = BrowserWindow.fromWebContents(e.sender);
+      const win = windowOf(e);
       const opts = {
         title: 'Add an image',
         properties: ['openFile' as const],

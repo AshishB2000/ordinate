@@ -23,11 +23,9 @@ import type { AutoRefresh, AutoRefreshEvery } from './datasets';
 import { sanitizeIncremental } from './incremental';
 import type { IncrementalSettings } from './incremental';
 
-let projectsBase: string | null = null;
 
 function getProjectsBase(): string {
-  if (!projectsBase) projectsBase = path.join(appPaths.userData(), 'projects');
-  return projectsBase;
+  return path.join(appPaths.userData(), 'projects');
 }
 
 export function datasetsDir(projectId: string): string {

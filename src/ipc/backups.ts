@@ -1,7 +1,7 @@
-import { dialog, shell, BrowserWindow } from 'electron';
 import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
-import type { OpenDialogOptions, WebContents } from 'electron';
+import type { BrowserWindow, OpenDialogOptions, WebContents } from 'electron';
+import { windowOf } from '../server/context';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as config from '../app/config';
@@ -43,13 +43,16 @@ function view() {
   return { ...b, folder: backupRoot(), custom: !!b.folder, running: !!running, nextAt: next ? next.toISOString() : null };
 }
 
-function parentOf(sender: WebContents): BrowserWindow | undefined {
-  const w = BrowserWindow.fromWebContents(sender);
+// Electron is required inside the desktop-only bodies below: ipc/projects
+// imports this file, and the server must load it without Electron.
+function parentOf(e: { sender: WebContents }): BrowserWindow | undefined {
+  const w = windowOf(e);
   return w && !w.isDestroyed() ? w : undefined;
 }
 
-export async function pickFolder(sender: WebContents, opts: OpenDialogOptions): Promise<string | null> {
-  const win = parentOf(sender);
+export async function pickFolder(e: { sender: WebContents }, opts: OpenDialogOptions): Promise<string | null> {
+  const { dialog } = (require('electron') as typeof import('electron'));
+  const win = parentOf(e);
   const full: OpenDialogOptions = { ...opts, properties: ['openDirectory', 'createDirectory'] };
   const r = win ? await dialog.showOpenDialog(win, full) : await dialog.showOpenDialog(full);
   return r.canceled || !r.filePaths || !r.filePaths[0] ? null : r.filePaths[0];
@@ -152,7 +155,7 @@ export function register(deps: PlatformDeps): void {
   });
 
   ipcMain.handle('backups:chooseFolder', async (e) => {
-    const picked = await pickFolder(e.sender, { title: 'Choose a folder for backups', buttonLabel: 'Use this folder', defaultPath: backupRoot() });
+    const picked = await pickFolder(e, { title: 'Choose a folder for backups', buttonLabel: 'Use this folder', defaultPath: backupRoot() });
     if (!picked) return { ok: false, canceled: true };
     saveBackups({ folder: picked });
     return { ok: true, settings: view() };
@@ -166,7 +169,7 @@ export function register(deps: PlatformDeps): void {
   ipcMain.handle('backups:reveal', async () => {
     const root = backupRoot();
     await fs.promises.mkdir(root, { recursive: true }).catch(() => { /* openPath reports it */ });
-    const err = await shell.openPath(root);
+    const err = await (require('electron') as typeof import('electron')).shell.openPath(root);
     return err ? { ok: false, error: err } : { ok: true };
   });
 

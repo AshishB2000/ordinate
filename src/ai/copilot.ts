@@ -140,10 +140,8 @@ const V1_THREAD_ID = '00000000-0000-4000-8000-000000000001';
 
 // ── Persistence ────────────────────────────────────────────────────────────────
 
-let projectsBase: string | null = null;
 function getProjectsBase(): string {
-  if (!projectsBase) projectsBase = path.join(appPaths.userData(), 'projects');
-  return projectsBase;
+  return path.join(appPaths.userData(), 'projects');
 }
 
 // projectId arrives from the renderer over IPC. Validate the SHAPE before it ever

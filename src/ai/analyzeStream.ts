@@ -23,7 +23,6 @@
 // model is called and stored on the assistant turn independent of the reply text
 // (src/ipc/copilot.ts). No number is ever parsed out of a streamed token.
 
-import { net } from 'electron';
 // Reused from analyze.ts. The `import type` ones are erased at compile time (no
 // runtime require, so no load-order hazard); the value imports are read only
 // inside functions at call time, which in CommonJS is after both modules have
@@ -193,7 +192,8 @@ export async function streamProvider(
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), STREAM_TIMEOUT_MS);
   try {
-    const res = await net.fetch(sreq.url, {
+    // Lazy: loaded by the server's Home graph, which has no Electron.
+    const res = await (require('electron') as typeof import('electron')).net.fetch(sreq.url, {
       method: 'POST',
       headers: sreq.headers,
       body: JSON.stringify(sreq.body),

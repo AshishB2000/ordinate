@@ -211,10 +211,8 @@ export function sanitizeCatalog(raw: any): CatalogFile {
 
 // ── Disk ─────────────────────────────────────────────────────────────────────
 
-let projectsBase: string | null = null;
 function getProjectsBase(): string {
-  if (!projectsBase) projectsBase = path.join(appPaths.userData(), 'projects');
-  return projectsBase;
+  return path.join(appPaths.userData(), 'projects');
 }
 
 function catalogPath(projectId: string): string {

@@ -1,7 +1,6 @@
 // Analyze a captured image using the configured AI provider.
 // Runs in the MAIN PROCESS ONLY — the API key never leaves main.
 
-import { net } from 'electron';
 import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
 import { withLanguage } from '../app/i18n';
@@ -481,7 +480,8 @@ async function callProvider(provider: string, systemPrompt: string, messages: Ne
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 60000);
   try {
-    const res = await net.fetch(req.url, {
+    // Lazy: loaded by the server's Home graph, which has no Electron.
+    const res = await (require('electron') as typeof import('electron')).net.fetch(req.url, {
       method: 'POST',
       headers: req.headers,
       body: JSON.stringify(req.body),

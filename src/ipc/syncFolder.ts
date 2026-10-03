@@ -1,6 +1,7 @@
 import { shell, app } from 'electron';
 import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
+import { senderOf } from '../server/context';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -122,7 +123,7 @@ export function register(deps: PlatformDeps): void {
   // A window adopted `id`: hold it, release what it held before, take the lock.
   ipcMain.handle('sync:take', async (e, { id }: { id?: unknown } = {}) => {
     if (!isValidId(id)) return { synced: false };
-    const sender = e.sender;
+    const sender = senderOf(e);
     const prev = held.get(sender.id);
     if (!held.has(sender.id)) {
       sender.once('destroyed', () => {
@@ -168,7 +169,7 @@ export function register(deps: PlatformDeps): void {
 
   ipcMain.handle('sync:moveTo', async (e, { id }: { id?: unknown } = {}) => {
     if (!isValidId(id)) return { ok: false, error: 'That project is gone.' };
-    const parent = await pickFolder(e.sender, {
+    const parent = await pickFolder(e, {
       title: 'Move to a sync folder',
       message: 'Choose a folder you sync with iCloud Drive or Dropbox. The project moves into it.',
       buttonLabel: 'Move here',
@@ -179,7 +180,7 @@ export function register(deps: PlatformDeps): void {
   });
 
   ipcMain.handle('sync:openFrom', async (e) => {
-    const folder = await pickFolder(e.sender, {
+    const folder = await pickFolder(e, {
       title: 'Open a project from a folder',
       message: 'Choose a project folder (…ordinate-project) from iCloud Drive, Dropbox or another synced folder.',
       buttonLabel: 'Open',

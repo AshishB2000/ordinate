@@ -237,7 +237,13 @@ const DEFAULTS: Omit<Config, 'providers' | 'byok'> = {
 
 export const MEMORY_MODES: string[] = ['same_as_chat', 'override'];
 
+// The cache is keyed by the file it came from: on the server configPath() is
+// per org, and one org must never be handed another's config (it holds keys).
+// ponytail: setCalendar/setFormatPrefs/setLanguage below are process-wide, so
+// two orgs' format settings still race on the server; per-org config moves to
+// Postgres in P5.
 let cache: Config | null = null;
+let cacheFile = '';
 
 function configPath(): string {
   return path.join(appPaths.userData(), 'config.json');
@@ -425,6 +431,7 @@ function migrate(cfg: any): Config {
 // goes through save().
 export function persist(cfg: Config): void {
   cache = cfg;
+  cacheFile = configPath();
   // Every write passes here, reset-to-defaults included, so the calendar the
   // date evaluators read and the formats every figure is written in can never
   // lag the ones on disk.
@@ -467,6 +474,7 @@ export function load(): Config {
   // carry them verbatim from disk, exactly like byok keys.
   if (onDisk.connectionSecrets && typeof onDisk.connectionSecrets === 'object') merged.connectionSecrets = onDisk.connectionSecrets;
   cache = migrate(merged);
+  cacheFile = p;
   setCalendar(cache.formats);
   setFormatPrefs(cache.formats);
   setLanguage(cache.language);
@@ -474,7 +482,7 @@ export function load(): Config {
 }
 
 export function get(): Config {
-  return cache || load();
+  return cache && cacheFile === configPath() ? cache : load();
 }
 
 export function save(partial: any): Config {

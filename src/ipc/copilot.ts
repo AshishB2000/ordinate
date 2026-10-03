@@ -1,4 +1,5 @@
 import { ipcMain } from './bus';
+import { senderOf } from '../server/context';
 import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
 import * as copilot from '../ai/copilot';
@@ -428,18 +429,19 @@ export function register() {
       // dropped and Ask/dock never cross. Every step is emitted from buildFacts
       // (real ops) plus the one 'model' step below that brackets the narration.
       const aid = typeof askId === 'string' && askId ? askId : '';
+      const client = senderOf(event);
       // ACTIVITY chips: push each real operation to the window that asked. Wired
       // ONLY when an askId is present AND a model is configured — so with no model
       // the ask short-circuits to not_ready and the chips stay invisible. Scoped
       // by askId so a stale ask's chips are dropped and Ask/dock never cross.
       const emit: ActivityEmit = aid && execConfig.executionReady()
-        ? (step) => { try { event.sender.send('copilot:ask:activity', { askId: aid, step }); } catch (_) { /* window gone */ } }
+        ? (step) => { try { client.send('copilot:ask:activity', { askId: aid, step }); } catch (_) { /* window gone */ } }
         : NO_ACTIVITY;
       // STREAMING deltas: only BYOK models actually stream (analyzeStream.ts);
       // with no model or a local CLI, onDelta never fires, so no chunk traffic and
       // the not_ready / error paths stay exactly as they were.
       const onDelta = aid
-        ? (delta: string) => { try { event.sender.send('copilot:ask:chunk', { askId: aid, delta }); } catch (_) { /* window gone */ } }
+        ? (delta: string) => { try { client.send('copilot:ask:chunk', { askId: aid, delta }); } catch (_) { /* window gone */ } }
         : undefined;
 
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;

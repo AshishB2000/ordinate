@@ -1,5 +1,5 @@
-import { BrowserWindow } from 'electron';
 import { ipcMain } from './bus';
+import { windowOf } from '../server/context';
 import { captureHtmlToPng } from '../app/reportCapture';
 
 // Snapshot a rectangular region of the hub window's rendered page to a PNG data URL.
@@ -21,7 +21,7 @@ export function register() {
   // ponytail: untrusted renderer payloads — any, validated field-by-field below.
   ipcMain.handle('hub:captureRegion', async (event, rect: any) => {
     try {
-      const win = BrowserWindow.fromWebContents(event.sender);
+      const win = windowOf(event);
       if (!win || win.isDestroyed()) return null;
       const r = rect || {};
       const box = {

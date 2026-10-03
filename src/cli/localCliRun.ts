@@ -28,7 +28,6 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import * as fsp from 'fs/promises';
 import { spawn, type ChildProcess } from 'child_process';
-import { nativeImage } from 'electron';
 import * as appPaths from '../app/paths';
 import * as execConfig from '../app/execConfig';
 import { wrapCommand } from './disclaim';
@@ -120,7 +119,8 @@ function debugRaw(tag: string, raw: string | null | undefined): void {
 // Cap longest edge at 1568 (Claude's max useful size); fall back to JPEG q80
 // only if PNG still exceeds 2MB.
 function encodeImage(base64: string): { buf: Buffer; ext: string } {
-  let img = nativeImage.createFromBuffer(Buffer.from(base64, 'base64'));
+  // Lazy: loaded by the server's Home graph, which has no Electron.
+  let img = (require('electron') as typeof import('electron')).nativeImage.createFromBuffer(Buffer.from(base64, 'base64'));
   const { width, height } = img.getSize();
   const longest = Math.max(width, height);
   if (longest > MAX_DIMENSION) {

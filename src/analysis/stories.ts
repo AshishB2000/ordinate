@@ -35,10 +35,8 @@ export interface StorySummary {
   updatedAt: string;
 }
 
-let projectsBase: string | null = null;
 function getProjectsBase(): string {
-  if (!projectsBase) projectsBase = path.join(appPaths.userData(), 'projects');
-  return projectsBase;
+  return path.join(appPaths.userData(), 'projects');
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

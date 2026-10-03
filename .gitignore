@@ -1044,3 +1044,5 @@ scripts/**/*.js
 
 # web/t0.3-context
 /src/app/paths.js
+/src/server/context.js
+/scripts/test-server-context.js

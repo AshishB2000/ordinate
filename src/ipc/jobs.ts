@@ -1,6 +1,7 @@
 import { shell } from 'electron';
 import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
+import { senderOf } from '../server/context';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as jobs from '../app/jobs';
@@ -93,8 +94,8 @@ export function register(deps: { hubFocused: () => boolean; focusHub: () => void
 
   ipcMain.handle('jobs:rendererStart', (e, { kind, label, projectId, silent }: { kind?: unknown; label?: unknown; projectId?: unknown; silent?: unknown } = {}) => {
     if (typeof kind !== 'string' || !RENDERER_KINDS.has(kind)) return { ok: false, error: 'Not a renderer job kind.' };
-    const entry: RendererJob = { ctx: null, settle: null, pending: {}, senderId: e.sender.id };
-    const sender = e.sender;
+    const sender = senderOf(e);
+    const entry: RendererJob = { ctx: null, settle: null, pending: {}, senderId: sender.id };
     const job = jobs.submit<RendererOutcome>({
       kind: kind as jobs.JobKind,
       label: typeof label === 'string' && label ? label : 'Working…',
@@ -124,7 +125,7 @@ export function register(deps: { hubFocused: () => boolean; focusHub: () => void
 
   ipcMain.handle('jobs:rendererUpdate', (e, { id, progress, note }: { id?: unknown; progress?: unknown; note?: unknown } = {}) => {
     const r = rendererJobs.get(String(id || ''));
-    if (!r || r.senderId !== e.sender.id) return { ok: false };
+    if (!r || r.senderId !== senderOf(e).id) return { ok: false };
     const p = Number(progress);
     const n = typeof note === 'string' ? note : undefined;
     if (r.ctx) r.ctx.progress(p, n); else r.pending = { ...r.pending, progress: p, note: n };
@@ -133,7 +134,7 @@ export function register(deps: { hubFocused: () => boolean; focusHub: () => void
 
   ipcMain.handle('jobs:rendererFinish', (e, { id, ok, error, message, path: out }: { id?: unknown; ok?: unknown; error?: unknown; message?: unknown; path?: unknown } = {}) => {
     const r = rendererJobs.get(String(id || ''));
-    if (!r || r.senderId !== e.sender.id) return { ok: false };
+    if (!r || r.senderId !== senderOf(e).id) return { ok: false };
     const outcome = {
       ok: ok === true,
       error: typeof error === 'string' ? error : undefined,

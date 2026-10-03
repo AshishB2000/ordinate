@@ -322,10 +322,8 @@ export function timeOfDayReached(now: number, at: string): boolean {
 
 // ── the store ────────────────────────────────────────────────────────────────
 
-let projectsBase: string | null = null;
 function getProjectsBase(): string {
-  if (!projectsBase) projectsBase = path.join(appPaths.userData(), 'projects');
-  return projectsBase;
+  return path.join(appPaths.userData(), 'projects');
 }
 
 function reportsDir(projectId: string): string {

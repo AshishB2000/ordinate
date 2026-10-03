@@ -53,10 +53,8 @@ const EMPTY: AlertFile = { rules: [], events: [], digest: false };
 
 // ── Disk ─────────────────────────────────────────────────────────────────────
 
-let projectsBase: string | null = null;
 function baseDir(): string {
-  if (!projectsBase) projectsBase = path.join(appPaths.userData(), 'projects');
-  return projectsBase;
+  return path.join(appPaths.userData(), 'projects');
 }
 
 function alertsFile(projectId: string): string {
