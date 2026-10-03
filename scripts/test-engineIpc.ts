@@ -20,13 +20,13 @@ const path: typeof import('path') = require('path');
 const Module: any = require('module'); // any: the loader hook has no public type
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-engine-ipc-'));
-const handlers = new Map<string, (e: unknown, arg: unknown) => Promise<any>>(); // any: IPC replies
+// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers; // any: IPC replies
 const origLoad = Module._load;
 Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
   if (request === 'electron') {
     return {
       app: { getPath: () => tmpUserData },
-      ipcMain: { handle: (channel: string, fn: (e: unknown, arg: unknown) => Promise<any>) => { handlers.set(channel, fn); } }, // any: IPC replies
     };
   }
   return origLoad.apply(this, [request, ...rest]);

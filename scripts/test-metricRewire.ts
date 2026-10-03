@@ -18,8 +18,8 @@
 //      below it therefore exercise different code and must still agree.
 //
 // The handler is invoked for real: `electron` is stubbed (as test-datasets.ts
-// does for userData) so `ipcMain.handle` records its callbacks, `register()` is
-// called, and the recorded `dashboard:metric` callback is what every assertion
+// does for userData), `register()` stores the callbacks in the RPC registry,
+// and the stored `dashboard:metric` callback is what every assertion
 // runs. No logic is copied out of the shipped file.
 //
 //   npm run build:ts && node scripts/test-metricRewire.js
@@ -42,20 +42,17 @@ const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-metric-rewir
 
 // ── The electron stub ────────────────────────────────────────────────────────
 // `app.getPath` points every store at a throwaway userData dir (test-datasets.ts
-// pattern); `ipcMain.handle` captures the real handlers so they can be invoked.
+// pattern); the real handlers are read from the RPC registry and invoked.
 // The rest are inert placeholders for modules that merely destructure them at
 // require time (analyze → net, localCliRun → nativeImage).
-const handlers = new Map<string, IpcHandler>();
+// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+const handlers: Map<string, IpcHandler> = require('../src/server/rpc').handlers;
 
 const origLoad = Module._load;
 Module._load = function (request: string, ...rest: any[]): any {
   if (request === 'electron') {
     return {
       app: { getPath: (_name: string) => tmpUserData, getVersion: () => '0.0.0-test' },
-      ipcMain: {
-        handle: (channel: string, fn: IpcHandler) => { handlers.set(channel, fn); },
-        on: () => {},
-      },
       net: {},
       nativeImage: {},
       shell: {},

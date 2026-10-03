@@ -5,7 +5,7 @@
 // hydrating the whole table. `buildVizData` remains the reference
 // implementation, so this suite is DIFFERENTIAL by construction: a real dataset
 // is written to disk with `datasets.saveDataset`, the SHIPPED handler is invoked
-// (captured by stubbing `ipcMain.handle`), and its output is compared cell for
+// (read from the RPC registry), and its output is compared cell for
 // cell — labels, series names, values, and the JS `typeof` of every one — with
 // `buildVizData` over the SAME round-tripped columns/rows.
 //
@@ -31,21 +31,16 @@ void assert; // parity with test-datasets.ts (asserts done via ok())
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-vizrewire-'));
 
 // ── The electron stub ────────────────────────────────────────────────────────
-// Two jobs: point userData at a temp dir (as test-datasets.ts does), and CAPTURE
-// every ipcMain.handle registration so the test can invoke the real, shipped
-// handler rather than a copy of its logic.
-const handlers = new Map<string, (e: unknown, arg: unknown) => Promise<any>>();
+// Point userData at a temp dir (as test-datasets.ts does); the test invokes the
+// real, shipped handler from the RPC registry rather than a copy of its logic.
+// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
 
 const origLoad = Module._load;
 Module._load = function (request: string, ...rest: any[]): any {
   if (request === 'electron') {
     return {
       app: { getPath: (_name: string) => tmpUserData },
-      ipcMain: {
-        handle: (channel: string, fn: (e: unknown, arg: unknown) => Promise<any>) => {
-          handlers.set(channel, fn);
-        },
-      },
     };
   }
   return origLoad.apply(this, [request, ...rest]);

@@ -1032,3 +1032,12 @@ scripts/**/*.js
 
 # web/t0.2-rpc
 /src/ipc/bus.js
+/src/server/rpc.js
+/src/server/wire.js
+/src/api/contract.js
+/src/api/index.js
+/src/api/projects.js
+/src/api/datasets.js
+/src/api/home.js
+/scripts/test-wire.js
+/scripts/test-rpc.js

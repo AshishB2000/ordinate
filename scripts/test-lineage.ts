@@ -25,13 +25,13 @@ const Module: any = require('module');
 
 const REPO = path.resolve(__dirname, '..');
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-lineage-'));
-const ipcHandlers = new Map<string, (e: unknown, payload: unknown) => Promise<any>>();
+// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+const ipcHandlers: Map<string, (e: unknown, payload: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
 const origLoad = Module._load;
 Module._load = function (request: string, ...rest: any[]): any {
   if (request === 'electron') {
     return {
       app: { getPath: (_name: string) => tmpUserData, getAppPath: () => REPO },
-      ipcMain: { handle: (ch: string, fn: (e: unknown, p: unknown) => Promise<any>) => { ipcHandlers.set(ch, fn); } },
       net: {}, dialog: {}, shell: {},
       safeStorage: { isEncryptionAvailable: () => false },
     };

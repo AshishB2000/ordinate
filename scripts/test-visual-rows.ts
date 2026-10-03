@@ -4,7 +4,7 @@
 // only assertion that really matters is: the rows the panel lists, re-aggregated,
 // reproduce the number the chart drew. So the centre of this suite is
 // differential — `buildVizData` computes a bar, `visual:rows` fetches that bar's
-// rows through the SHIPPED handler (captured by stubbing `ipcMain.handle`), and
+// rows through the SHIPPED handler (read from the RPC registry), and
 // the two are compared. A hand-written row count could agree with a bug in both;
 // an equivalence assertion cannot.
 //
@@ -26,9 +26,10 @@ const Module: any = require('module');
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-drill-'));
 
 // ── The electron stub ────────────────────────────────────────────────────────
-// Point userData at a temp dir and CAPTURE every ipcMain.handle registration, so
-// the real, shipped handler is invoked rather than a copy of its logic.
-const handlers = new Map<string, (e: unknown, arg: unknown) => Promise<any>>();
+// Point userData at a temp dir; the real, shipped handler (from the RPC
+// registry) is invoked rather than a copy of its logic.
+// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
 
 // The save panel is stubbed rather than shown: `saveTo` is where the next
 // export lands, and `null` stands for the user cancelling.
@@ -40,11 +41,6 @@ Module._load = function (request: string, ...rest: any[]): any {
   if (request === 'electron') {
     return {
       app: { getPath: (_name: string) => tmpUserData },
-      ipcMain: {
-        handle: (channel: string, fn: (e: unknown, arg: unknown) => Promise<any>) => {
-          handlers.set(channel, fn);
-        },
-      },
       dialog: {
         showSaveDialog: async () => (saveTo ? { canceled: false, filePath: saveTo } : { canceled: true }),
         showMessageBox: async () => {

@@ -27,13 +27,13 @@ const Module: any = require('module');
 
 type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-segments-'));
-const handlers = new Map<string, IpcHandler>();
+// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+const handlers: Map<string, IpcHandler> = require('../src/server/rpc').handlers;
 const origLoad = Module._load;
 Module._load = function (request: string, ...rest: any[]): any {
   if (request === 'electron') {
     return {
       app: { getPath: (_n: string) => tmp, getVersion: () => '0.0.0-test', getAppPath: () => path.resolve(__dirname, '..') },
-      ipcMain: { handle: (ch: string, fn: IpcHandler) => { handlers.set(ch, fn); }, on: () => {} },
       net: {}, nativeImage: {}, shell: {}, dialog: {}, BrowserWindow: { getAllWindows: () => [] },
       Notification: function () { return { show: () => {} }; },
     };

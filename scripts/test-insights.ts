@@ -31,13 +31,13 @@ type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-insights-ud-'));
 
 // ── The electron stub (test-anomaliesResident.ts pattern) ───────────────────
-const handlers = new Map<string, IpcHandler>();
+// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+const handlers: Map<string, IpcHandler> = require('../src/server/rpc').handlers;
 const origLoad = Module._load;
 Module._load = function (request: string, ...rest: any[]): any {
   if (request === 'electron') {
     return {
       app: { getPath: (_n: string) => tmpUserData, getVersion: () => '0.0.0-test' },
-      ipcMain: { handle: (c: string, fn: IpcHandler) => { handlers.set(c, fn); }, on: () => {} },
       dialog: {}, net: {}, nativeImage: {}, shell: {},
     };
   }

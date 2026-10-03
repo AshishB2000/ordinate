@@ -66,7 +66,8 @@
     "pdfmake": "^0.3.11",
     "pg": "^8.22.0",
     "pptxgenjs": "^4.0.1",
-    "tedious": "^20.0.0"
+    "tedious": "^20.0.0",
+    "zod": "^4.6.5"
   },
   "build": {
     "appId": "app.screenshot.desktop",

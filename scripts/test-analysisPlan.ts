@@ -2,8 +2,8 @@
 // validated, previewed, built.
 //
 // Style follows test-analysis.ts / test-vizRewire.ts: stub 'electron' via
-// Module._load so userData is a fresh temp dir and every ipcMain.handle
-// registration is captured, then drive the REAL modules against real disk. No
+// Module._load so userData is a fresh temp dir, read the registered handlers
+// from the RPC registry, then drive the REAL modules against real disk. No
 // framework.
 //
 // This suite exists to hold six properties, each of which fails silently
@@ -47,16 +47,14 @@ const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-analysisplan-'));
 
-const ipcHandlers = new Map<string, (e: unknown, payload: unknown) => Promise<any>>();
+// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+const ipcHandlers: Map<string, (e: unknown, payload: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
 
 const origLoad = Module._load;
 Module._load = function (request: string, ...rest: any[]): any {
   if (request === 'electron') {
     return {
       app: { getPath: (_name: string) => tmpUserData },
-      ipcMain: {
-        handle: (ch: string, fn: (e: unknown, p: unknown) => Promise<any>) => { ipcHandlers.set(ch, fn); },
-      },
       net: {},
       safeStorage: { isEncryptionAvailable: () => false },
     };
@@ -746,8 +744,7 @@ async function checkGarbage(): Promise<void> {
 
 // ── §10 The IPC surface ────────────────────────────────────────────────────
 async function checkChannels(): Promise<void> {
-  analysesIpc.register();
-  ipcVisuals.register();
+  analysesIpc.register(); // visuals registered once at the start, as in main
   for (const ch of ['analysis:draft', 'analysis:previewPlan', 'analysis:buildPlan']) {
     ok('channel registered: ' + ch, ipcHandlers.has(ch));
   }
