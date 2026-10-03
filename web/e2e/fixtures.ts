@@ -134,9 +134,24 @@ export function withLargeDataset(): void {
   seedOpts.large = true;
 }
 
+let serverEnv: Record<string, string> = {};
+let contextHeaders: Record<string, string> | undefined;
 before(async () => {
   browser = await launchBrowser();
 });
+
+/**
+ * For a spec that needs another sign-in mode (T3.4's admin spec runs header
+ * mode on its own Postgres): the server's extra env, and headers every page
+ * of the spec sends (X-Forwarded-Email, as a trusted proxy would). Call at the
+ * spec's top level. The server starts with the first session, not in
+ * `before`: a spec that awaits (a scratch database) before calling this would
+ * otherwise race the hook.
+ */
+export function configureServer(opts: { env?: Record<string, string>; headers?: Record<string, string> }): void {
+  serverEnv = opts.env ?? {};
+  contextHeaders = opts.headers;
+}
 after(async () => {
   await browser?.close();
   await (await server?.catch(() => undefined))?.stop();
@@ -145,9 +160,13 @@ after(async () => {
 /** Opens a fixture-wired page. Exported for negative controls; specs use `e2e()`. */
 export async function openSession(opts: E2eOptions = {}): Promise<Session & { close(): Promise<void> }> {
   if (!browser) throw new Error('openSession() before the suite started');
-  server ??= startServer({}, { ...seedOpts });
+  server ??= startServer(serverEnv, { ...seedOpts });
   const srv = await server;
-  const context = await browser.newContext({ baseURL: srv.base, viewport: { width: 1440, height: 900 } });
+  const context = await browser.newContext({
+    baseURL: srv.base,
+    viewport: { width: 1440, height: 900 },
+    ...(contextHeaders ? { extraHTTPHeaders: contextHeaders } : {}),
+  });
   const page = await context.newPage();
   const consoleProblems = await failOnConsoleError(page);
   const rpc = rpcBudget(page, opts.rpcBudget);

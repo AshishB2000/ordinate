@@ -60,9 +60,14 @@ export async function provision(pool: Pool, auth: AuthEnv, email: string): Promi
   return { userId: row.id, identity: { user: { email, role: row.role }, org: { id: auth.org } } };
 }
 
-/** The member for `email` if it exists and is enabled — no write (header mode asks this per request). */
+/**
+ * The member for `email` if it exists, is enabled and has signed in before —
+ * no write (header mode asks this per request). An invited member (T3.4: a row
+ * with no last_login_at yet) is not returned, so their first request goes
+ * through `provision`, which stamps the sign-in and keeps the invited role.
+ */
 export async function member(pool: Pool, auth: AuthEnv, email: string): Promise<Identity | null> {
-  const r = await pool.query<{ role: Role }>('SELECT role FROM users WHERE org_id = $1 AND email = $2 AND disabled_at IS NULL', [
+  const r = await pool.query<{ role: Role }>('SELECT role FROM users WHERE org_id = $1 AND email = $2 AND disabled_at IS NULL AND last_login_at IS NOT NULL', [
     auth.org,
     email,
   ]);

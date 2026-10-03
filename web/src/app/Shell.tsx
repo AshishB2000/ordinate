@@ -88,6 +88,7 @@ function UserMenu() {
         },
         { kind: 'separator' },
         { label: 'Settings', icon: 'settings', onSelect: () => void navigate('/settings') },
+        { label: 'API tokens', icon: 'terminal', onSelect: () => void navigate('/tokens') },
         ...signOutItems,
       ]}
     />
@@ -95,9 +96,13 @@ function UserMenu() {
 }
 
 export function Shell() {
-  const main = NAV.filter((n) => !n.bottom);
-  const bottom = NAV.filter((n) => n.bottom);
   const me = useMe();
+  // Admin is for org admins (the server refuses its channels to anyone else):
+  // hidden once the role is known to be another; the page explains itself too.
+  const role = me.data?.user?.role;
+  const shown = NAV.filter((n) => n.to !== '/admin' || role === undefined || role === 'admin');
+  const main = shown.filter((n) => !n.bottom);
+  const bottom = shown.filter((n) => n.bottom);
   const here = useLocation();
   // Signed out while the app is open (expired, signed out in another tab):
   // the server already sends a signed-out first visit to /sign-in.

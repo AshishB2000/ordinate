@@ -29,11 +29,15 @@ import { describeDefinitionShort } from '../analysis/metricFormat';
 import * as analysis from '../analysis/analysis';
 import * as reportSpec from '../analysis/reportSpec';
 import * as publishing from '../publish/publish';
-import { captureHtmlToPdf, captureHtmlToPng } from '../app/reportCapture';
-import { evaluateAndDeliver } from '../ipc/alerts';
 import { resolveMetric } from '../ipc/metrics';
 import { insightsForDataset } from '../ipc/insights';
-import { runReport } from './reportRunner';
+// Electron at load (BrowserWindow, OS notifications) — required where used, so
+// the server (/api/mcp, serverMcp.ts) loads this module without Electron.
+const electronOnly = {
+  capture: () => require('../app/reportCapture') as typeof import('../app/reportCapture'),
+  alerts: () => require('../ipc/alerts') as typeof import('../ipc/alerts'),
+  reports: () => require('./reportRunner') as typeof import('./reportRunner'),
+};
 import { AutomationError } from './errors';
 import { defaultProject, pick, resolveProject, runJob } from './resolve';
 import type { Ctx } from './registry';
@@ -51,8 +55,8 @@ async function datasetFor(ctx: Ctx, ref: string): Promise<datasets.DatasetSummar
 
 // ── Projects and datasets ────────────────────────────────────────────────────
 
-export async function projectsList(): Promise<unknown> {
-  const list = await projects.listProjects();
+export async function projectsList(ctx?: Ctx): Promise<unknown> {
+  const list = (await projects.listProjects()).filter((p) => !ctx?.canRead || ctx.canRead(p.id));
   const def = defaultProject(list);
   return list.map((p) => ({
     id: p.id,
@@ -148,7 +152,7 @@ export async function datasetsRefresh(ctx: Ctx, ref: string): Promise<unknown> {
       const res = await refreshDataset(ctx.projectId, d.id);
       if (!res.ok) throw new AutomationError('runtime', res.error);
       progress(0.8, 'Checking rules');
-      await evaluateAndDeliver(ctx.projectId, d.id);
+      await electronOnly.alerts().evaluateAndDeliver(ctx.projectId, d.id);
       await runQualityChecks(ctx.projectId, d.id);
       await refreshDependents(ctx.projectId, d.id);
       return { id: d.id, name: res.dataset.name, rows: res.dataset.rowCount, refreshedAt: res.dataset.lastRefreshedAt || null, warnings: res.warnings };
@@ -238,11 +242,11 @@ export async function dashboardsExport(ctx: Ctx, ref: string, format: string, ou
   let bytes: Buffer;
   if (format === 'html') bytes = Buffer.from(html, 'utf8');
   else if (format === 'png') {
-    const url = await captureHtmlToPng(html, 1280);
+    const url = await electronOnly.capture().captureHtmlToPng(html, 1280);
     if (!url) throw new AutomationError('runtime', 'Could not render the dashboard to PNG.');
     bytes = Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
   } else {
-    const pdf = await captureHtmlToPdf(html);
+    const pdf = await electronOnly.capture().captureHtmlToPdf(html);
     if (!pdf) throw new AutomationError('runtime', 'Could not render the dashboard to PDF.');
     bytes = pdf;
   }
@@ -255,7 +259,7 @@ export async function reportsRun(ctx: Ctx, ref: string, out: string): Promise<un
   const summary = pick(await reportSpec.listReports(ctx.projectId), ref, 'report');
   const report = await reportSpec.getReport(ctx.projectId, summary.id);
   if (!report) throw new AutomationError('not_found', `Report "${ref}" could not be read.`);
-  const res = await runReport(ctx.projectId, report.id, { headless: ctx.headless });
+  const res = await electronOnly.reports().runReport(ctx.projectId, report.id, { headless: ctx.headless });
   // Laid out by the report renderer, which asks main for the REPORT share path.
   const dest = await writeOutput(ctx, out, reportSpec.reportFilename(report.name, res.ext), res.bytes);
   // A map needs WebGL2 in the VISIBLE window (src/app/reportCapture.ts), so an

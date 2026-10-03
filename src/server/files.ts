@@ -1,7 +1,8 @@
 // Files over HTTP: what replaces the desktop app's open and save dialogs.
 //
 //   POST /api/files         multipart, ONE file, streamed to the org's temp()
-//                           and never held in memory; capped at MAX_UPLOAD_MB.
+//                           and never held in memory; capped at MAX_UPLOAD_MB,
+//                           or lower when the org's admin set a lower cap.
 //                           Replies { fileToken, name, size }. A handler takes
 //                           the token instead of a path: `resolveUpload(token)`.
 //   GET  /api/files/:token  streams a file a handler produced and handed over
@@ -164,22 +165,28 @@ function tooLarge(req: FastifyRequest, reply: FastifyReply, maxMb: number): Fast
   return reply.code(413).send({ error: 'file too large', maxMb });
 }
 
-/** Registers the multipart parser and both routes on `app`. Uploads above `maxMb` get 413. */
-export function registerFileRoutes(app: FastifyInstance, maxMb: number): void {
-  const maxBytes = maxMb * 1024 * 1024;
+/**
+ * Registers the multipart parser and both routes on `app`. Uploads above the
+ * cap get 413: `ceilingMb` (MAX_UPLOAD_MB) is the ceiling, and `capMb()` — the
+ * caller's org cap (Admin → Settings, T3.4), asked per upload — may only lower it.
+ */
+export function registerFileRoutes(app: FastifyInstance, ceilingMb: number, capMb: () => Promise<number> = async () => ceilingMb): void {
+  const ceilingBytes = ceilingMb * 1024 * 1024;
   // Lazy: only the server needs the multipart parser.
   void app.register((require('@fastify/multipart') as typeof import('@fastify/multipart')).default, {
-    limits: { fileSize: maxBytes, files: 1, fields: 0, parts: 1 },
+    limits: { fileSize: ceilingBytes, files: 1, fields: 0, parts: 1 },
   });
 
   // ponytail: no role check — dev auth is an admin; T3.3 makes this `write`.
   app.post('/api/files', async (req, reply) => {
+    const maxMb = Math.min(ceilingMb, await capMb());
+    const maxBytes = maxMb * 1024 * 1024;
     const declared = Number(req.headers['content-length']);
     if (declared > maxBytes + FRAMING_SLACK) return tooLarge(req, reply, maxMb);
 
     let part;
     try {
-      part = await req.file();
+      part = await req.file({ limits: { fileSize: maxBytes, files: 1, fields: 0, parts: 1 } });
     } catch {
       return reply.code(400).send({ error: 'expected one file as multipart/form-data' });
     }

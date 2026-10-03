@@ -1,8 +1,9 @@
 // The automation COMMAND REGISTRY — MAIN PROCESS.
 //
-// ONE list, three front doors: `ordinate --cli <command>` (cli.ts), MCP over
-// stdio (`--mcp`, headless.ts) and MCP over loopback HTTP (httpTransport.ts,
-// started by src/ipc/automation.ts). Each entry names its CLI words and/or its
+// ONE list, four front doors: `ordinate --cli <command>` (cli.ts), MCP over
+// stdio (`--mcp`, headless.ts), MCP over loopback HTTP (httpTransport.ts,
+// started by src/ipc/automation.ts) and, on the server, MCP at /api/mcp with
+// a personal API token (serverMcp.ts). Each entry names its CLI words and/or its
 // MCP tool, carries ONE argument schema — plain JSON Schema, handed verbatim to
 // MCP clients as `inputSchema` and used by the CLI parser for its flags — and a
 // handler that returns plain JSON. docs/automation.md is GENERATED from this
@@ -54,6 +55,18 @@ export interface Ctx {
   headless: boolean;
   /** A progress line — stderr on the CLI, dropped elsewhere. */
   progress: (note: string) => void;
+  /** Server only (/api/mcp): the projects the caller may read. Absent = every project. */
+  canRead?: (projectId: string) => boolean;
+}
+
+/**
+ * Server only (serverMcp.ts): who the caller may act for. `canRead` trims
+ * every project lookup, so another member's project is "not found", never
+ * "forbidden"; `allow` decides whether THIS command may run in the project.
+ */
+export interface Scope {
+  canRead(projectId: string): boolean;
+  allow(cmd: Command, projectId: string): Promise<boolean>;
 }
 
 export type Args = Record<string, unknown>;
@@ -133,7 +146,7 @@ export const COMMANDS: readonly Command[] = [
     cli: 'projects list', tool: 'list_projects', project: false, readOnly: true,
     summary: 'List projects, newest first, marking the default one.',
     args: {},
-    run: () => h.projectsList(),
+    run: (_a, ctx) => h.projectsList(ctx),
   },
   {
     cli: 'datasets list', tool: 'list_datasets', readOnly: true,
@@ -338,11 +351,16 @@ export function validateArgs(cmd: Command, raw: unknown, transport: Transport): 
 export async function dispatch(
   cmd: Command,
   raw: unknown,
-  opts: { transport: Transport; cwd?: string; headless: boolean; progress?: (note: string) => void },
+  opts: { transport: Transport; cwd?: string; headless: boolean; progress?: (note: string) => void; scope?: Scope },
 ): Promise<unknown> {
   const args = validateArgs(cmd, raw, opts.transport);
-  const projectId = cmd.project === false ? '' : (await h.resolveProject(args.project as string | undefined)).id;
+  const scope = opts.scope;
+  const projectId = cmd.project === false ? '' : (await h.resolveProject(args.project as string | undefined, scope?.canRead)).id;
+  if (scope && projectId && !(await scope.allow(cmd, projectId))) {
+    throw new AutomationError('usage', `${cmd.tool || cmd.cli} needs ${cmd.readOnly ? 'viewer' : 'editor'} access to this project.`);
+  }
   return cmd.run(args, {
+    ...(scope ? { canRead: (id: string) => scope.canRead(id) } : {}),
     projectId,
     transport: opts.transport,
     cwd: opts.cwd || process.cwd(),
