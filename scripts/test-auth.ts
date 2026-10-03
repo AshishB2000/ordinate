@@ -94,7 +94,7 @@ ok('gate: dev with AUTH_MODE=dev is the dev admin', context.identityFor(envMod.p
 
 const childEnv = (extra: Record<string, string>): NodeJS.ProcessEnv => {
   const e: NodeJS.ProcessEnv = { ...process.env, ...extra };
-  for (const k of ['ELECTRON_RUN_AS_NODE', 'AUTH_MODE', 'DATABASE_URL', 'OIDC_CLIENT_SECRET']) if (!(k in extra)) delete e[k];
+  for (const k of ['ELECTRON_RUN_AS_NODE', 'AUTH_MODE', 'DATABASE_URL', 'OIDC_CLIENT_SECRET', 'STORAGE_URL']) if (!(k in extra)) delete e[k];
   return e;
 };
 const prodDev = spawnSync(process.execPath, [MAIN], {

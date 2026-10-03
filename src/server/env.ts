@@ -37,6 +37,8 @@ export interface ServerEnv {
   readonly duckdb: DuckEnv;
   /** Rate limits, the JSON body cap and the RPC time limit (T6.2, src/server/limits.ts). */
   readonly limits: LimitsEnv;
+  /** Where Parquet tables live (T5.2, src/engine/storage.ts). */
+  readonly storage: StorageEnv;
 }
 
 export interface LimitsEnv {
@@ -50,6 +52,30 @@ export interface LimitsEnv {
   readonly jsonBodyBytes: number;
   /** RPC_TIMEOUT_SECONDS: a call running longer answers 504 and its DuckDB queries are interrupted. */
   readonly rpcTimeoutMs: number;
+}
+
+/** STORAGE_URL=s3://bucket/prefix (T5.2). No keys here: the pod's credential chain signs. */
+export interface S3Env {
+  readonly bucket: string;
+  /** '' or 'a/b' — no leading or trailing slash. */
+  readonly prefix: string;
+  /** S3_REGION, else AWS_REGION / AWS_DEFAULT_REGION, else us-east-1. */
+  readonly region: string;
+  /** S3_ENDPOINT's host[:port] for an S3-compatible store (MinIO); null = AWS. Path-style when set. */
+  readonly endpoint: string | null;
+  /** False only for an http:// S3_ENDPOINT. */
+  readonly useSsl: boolean;
+  /** DUCKDB_EXTENSION_DIR: where httpfs + aws are installed (the image bakes them); null = DuckDB's default. */
+  readonly extensionDir: string | null;
+}
+
+export interface StorageEnv {
+  /** null: Parquet on DATA_DIR (STORAGE_URL unset or file://). */
+  readonly s3: S3Env | null;
+  /** STORAGE_CACHE_MB: local LRU cache of S3 Parquet, per pod; 0 = off. */
+  readonly cacheBytes: number;
+  /** STORAGE_GC_GRACE_MINUTES: an unreferenced version is deleted this long after it was first seen unreferenced. */
+  readonly gcGraceMs: number;
 }
 
 export interface DuckEnv {
@@ -135,9 +161,14 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
 
   // In prod the data directory must be declared: a pod writing to its own
   // container filesystem loses every dataset on restart.
+  // STORAGE_URL=file:///data names the same directory, so either may declare it.
+  const fileDir = storageFileDir(src.STORAGE_URL ?? '');
   const rawDir = src.DATA_DIR ?? '';
-  if (rawDir === '' && env === 'prod') throw new EnvError('DATA_DIR is required when ORDINATE_ENV=prod');
-  const dataDir = path.resolve(rawDir === '' ? 'data' : rawDir);
+  if (fileDir !== null && rawDir !== '' && path.resolve(rawDir) !== fileDir) {
+    throw new EnvError('STORAGE_URL=file://… and DATA_DIR name different directories; set one of them');
+  }
+  if (rawDir === '' && fileDir === null && env === 'prod') throw new EnvError('DATA_DIR is required when ORDINATE_ENV=prod');
+  const dataDir = fileDir ?? path.resolve(rawDir === '' ? 'data' : rawDir);
 
   // The value is NEVER echoed in the error: it usually carries a password.
   const rawDb = src.DATABASE_URL ?? '';
@@ -178,7 +209,76 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
     jsonBodyBytes: positiveInt('MAX_RPC_BODY_KB', src.MAX_RPC_BODY_KB, 1024) * 1024,
     rpcTimeoutMs: positiveInt('RPC_TIMEOUT_SECONDS', src.RPC_TIMEOUT_SECONDS, 60) * 1000,
   });
-  return Object.freeze({ port, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits });
+  const storage = parseStorage(src, databaseUrl);
+  return Object.freeze({ port, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits, storage });
+}
+
+/** The directory of a file:// STORAGE_URL, null for unset or s3://. */
+function storageFileDir(raw: string): string | null {
+  if (raw === '' || raw.startsWith('s3://')) return null;
+  let u: URL | null = null;
+  try {
+    u = new URL(raw);
+  } catch {
+    // falls through
+  }
+  if (!u || u.protocol !== 'file:' || (u.host !== '' && u.host !== 'localhost') || u.search || u.hash) {
+    throw new EnvError(`STORAGE_URL must be file:///absolute/dir or s3://bucket/prefix, got ${JSON.stringify(raw)}`);
+  }
+  return path.resolve(decodeURIComponent(u.pathname));
+}
+
+const BUCKET_RE = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
+const SEGMENT_RE = /^[A-Za-z0-9_.-]{1,200}$/;
+const REGION_RE = /^[a-z0-9-]{1,32}$/;
+
+// Bucket, prefix, region and endpoint are written into DuckDB SQL and S3 URLs,
+// so each is held to a charset that cannot quote, escape or traverse.
+function parseStorage(src: Readonly<Record<string, string | undefined>>, databaseUrl: string | null): StorageEnv {
+  const raw = src.STORAGE_URL ?? '';
+  const rawCache = src.STORAGE_CACHE_MB ?? '';
+  if (rawCache !== '' && !/^\d{1,7}$/.test(rawCache)) {
+    throw new EnvError(`STORAGE_CACHE_MB must be a whole number of megabytes (0 turns the cache off), got ${JSON.stringify(rawCache)}`);
+  }
+  const cacheBytes = (rawCache === '' ? 2048 : Number(rawCache)) * 2 ** 20;
+  const gcGraceMs = positiveInt('STORAGE_GC_GRACE_MINUTES', src.STORAGE_GC_GRACE_MINUTES, 60) * 60_000;
+  if (!raw.startsWith('s3://')) return Object.freeze({ s3: null, cacheBytes, gcGraceMs });
+
+  const m = /^s3:\/\/([^/?#]+)(\/[^?#]*)?$/.exec(raw);
+  const bucket = m ? m[1] : '';
+  const segs = (m?.[2] ?? '').split('/').filter(Boolean);
+  if (!BUCKET_RE.test(bucket) || segs.some((p) => !SEGMENT_RE.test(p) || p === '.' || p === '..')) {
+    throw new EnvError(`STORAGE_URL must be s3://bucket/optional/prefix (bucket a-z 0-9 . -, prefix segments A-Z a-z 0-9 _ . -), got ${JSON.stringify(raw)}`);
+  }
+  // The version pointers live in Postgres (T5.1's records) and GC tracks objects there.
+  if (databaseUrl === null) throw new EnvError('DATABASE_URL is required when STORAGE_URL is s3://');
+
+  const region = src.S3_REGION || src.AWS_REGION || src.AWS_DEFAULT_REGION || 'us-east-1';
+  if (!REGION_RE.test(region)) throw new EnvError(`S3_REGION must be an AWS region like eu-west-1, got ${JSON.stringify(region)}`);
+
+  let endpoint: string | null = null;
+  let useSsl = true;
+  const rawEndpoint = src.S3_ENDPOINT ?? '';
+  if (rawEndpoint !== '') {
+    let u: URL | null = null;
+    try {
+      u = new URL(rawEndpoint);
+    } catch {
+      // falls through
+    }
+    if (!u || (u.protocol !== 'http:' && u.protocol !== 'https:') || u.username || u.password || u.pathname !== '/' || u.search || u.hash) {
+      throw new EnvError(`S3_ENDPOINT must be http(s)://host[:port] with nothing after it, got ${JSON.stringify(rawEndpoint)}`);
+    }
+    endpoint = u.host;
+    useSsl = u.protocol === 'https:';
+  }
+
+  const rawExt = src.DUCKDB_EXTENSION_DIR ?? '';
+  if (rawExt !== '' && (!path.isAbsolute(rawExt) || /['\0\n]/.test(rawExt))) {
+    throw new EnvError(`DUCKDB_EXTENSION_DIR must be an absolute path, got ${JSON.stringify(rawExt)}`);
+  }
+  const s3 = Object.freeze({ bucket, prefix: segs.join('/'), region, endpoint, useSsl, extensionDir: rawExt || null });
+  return Object.freeze({ s3, cacheBytes, gcGraceMs });
 }
 
 // A DuckDB size literal. Validated here because it is written into a SET.

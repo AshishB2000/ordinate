@@ -32,7 +32,7 @@ import { randomUUID } from 'crypto';
 import * as datasets from './datasets';
 import type { Dataset, DatasetOrigin } from './datasets';
 import type { RefreshResult } from './datasetRefresh';
-import { datasetsDir, parquetPath, sourceParquetPath } from './datasetRecord';
+import { datasetsDir, tablePath } from './datasetRecord';
 import * as inc from './incremental';
 import type { FetchHow, IncrementalLogEntry, IncrementalSettings } from './incremental';
 import type { ParsedColumn } from './parse';
@@ -157,7 +157,7 @@ async function runIncremental(
   let dataset: Dataset | null = null;
   if (batch.rows.length) {
     const merged = await incrementalDuck.mergeInDuck({
-      basePath: hasSource ? sourceParquetPath(projectId, id) : parquetPath(projectId, id),
+      basePath: tablePath(projectId, id, (await datasets.getDatasetMeta(projectId, id))?.storageVersion, hasSource),
       columns,
       batch: batch.rows,
       keys: batch.keys,

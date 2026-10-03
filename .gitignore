@@ -1121,3 +1121,6 @@ scripts/**/*.js
 # web/t1.3-maps
 /src/api/maps.js
 /src/server/geo.js
+
+# DuckDB extensions for S3 storage (T5.2), installed by scripts/duckdb-extensions.js.
+.duckdb-extensions/

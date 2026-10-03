@@ -14,6 +14,12 @@
 //    dataset:median and insights:list (anomalies + the insights aggregator, run
 //    INLINE on this thread — ORDINATE_COMPUTE_INLINE=1 — so the guard sees them).
 //
+// 4. T5.2 — with STORAGE_URL=s3://… (MinIO) and DATABASE_URL: the routed pass
+//    again with the tables as versioned S3 objects and the records (and their
+//    version pointers) in Postgres — once with the cache off (every read
+//    through httpfs in the org worker) and once read from the local cache.
+//    Without both variables it prints one `skip` line (scripts/s3TestEnv.ts).
+//
 //   npm run build:ts && node scripts/test-serverModeResident.js
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -70,6 +76,10 @@ const columnProfile: typeof import('../src/data/columnProfile') = require('../sr
 const statsJob: typeof import('../src/engine/statsJob') = require('../src/engine/statsJob');
 const vectorsJs: typeof import('../src/analysis/stats/vectorsJs') = require('../src/analysis/stats/vectorsJs');
 const statsSpec: typeof import('../src/analysis/stats/spec') = require('../src/analysis/stats/spec');
+const storage: typeof import('../src/engine/storage') = require('../src/engine/storage');
+const parquetCache: typeof import('../src/engine/parquetCache') = require('../src/engine/parquetCache');
+const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
+const s3Test: typeof import('./s3TestEnv') = require('./s3TestEnv');
 require('../src/ipc/datasets').register();
 require('../src/ipc/visuals').register();
 require('../src/ipc/dashboards').register();
@@ -165,6 +175,35 @@ async function main(): Promise<void> {
   await context.runInContext({ user: { email: 'u@acme', role: 'admin' }, org: { id: 'acme' } }, 'routed', () => differential('routed: '));
   process.env.ORDINATE_COMPUTE_INLINE = '1';
   ok("routed: the answers came from org acme's worker", JSON.stringify(pool.orgs()) === '["acme"]', JSON.stringify(pool.orgs()));
+
+  // ── 4. T5.2 — the same, with the tables on S3 ──────────────────────────────
+  const t = await s3Test.setup('smr');
+  if (typeof t === 'string') {
+    console.log(`skip S3 pass: ${t}`);
+    return;
+  }
+  pool.shutdown();
+  const dataDir = path.join(tmpUserData, 'server-data');
+  recordFs.useRecordDb(t.pool);
+  storage.useStorageDb(t.pool);
+  const s3Pool = poolMod.routeByOrg({ dataDir, maxWorkers: 4, memoryLimit: '512MiB', threads: 2, queryTimeoutMs: 60_000, idleMs: 60_000, s3: t.s3 });
+  try {
+    const acme = { user: { email: 'u@acme', role: 'admin' as const }, org: { id: 'acme' } };
+    delete process.env.ORDINATE_COMPUTE_INLINE;
+    storage.configure(dataDir, t.s3, 0);
+    await context.runInContext(acme, 's3', () => differential('s3, httpfs: '));
+    storage.configure(dataDir, t.s3, 64 * 2 ** 20);
+    await context.runInContext(acme, 's3c', () => differential('s3, cached: '));
+    process.env.ORDINATE_COMPUTE_INLINE = '1';
+    const c = parquetCache.stats();
+    ok('s3, cached: reads were served from the local cache', c.hits > 0 && c.fills > 0 && c.fillErrors === 0, JSON.stringify(c));
+  } finally {
+    s3Pool.shutdown();
+    recordFs.useRecordDb(null);
+    storage.useStorageDb(null);
+    storage.configure(dataDir, null, 0);
+    await t.teardown();
+  }
 }
 
 async function differential(mode: string): Promise<void> {
@@ -177,9 +216,21 @@ async function differential(mode: string): Promise<void> {
   if (!saved) throw new Error('saveDataset failed');
   const back = await datasets.getDataset(projectId, saved.id);
   if (!back) throw new Error('getDataset failed');
-  const src = await datasets.residentSource(projectId, saved.id);
+  let src = await datasets.residentSource(projectId, saved.id);
   ok('fixture is Parquet-backed', !!src);
   if (!src) return;
+  if (storage.isS3()) {
+    const meta = await datasets.getDatasetMeta(projectId, saved.id);
+    ok('the record carries the S3 version pointer', /^[0-9a-f-]{36}$/.test(meta?.storageVersion ?? ''), JSON.stringify(meta?.storageVersion));
+    ok('no Parquet file was written beside the record',
+      !fs.existsSync((require('../src/data/datasetRecord') as typeof import('../src/data/datasetRecord')).parquetPath(projectId, saved.id)));
+    ok('the S3 round trip is lossless (every cell Object.is)', sameCells(back.rows, ROWS));
+    await parquetCache.settle();
+    src = (await datasets.residentSource(projectId, saved.id))!;
+    const cached = parquetCache.stats().capBytes > 0;
+    ok(cached ? 'once fetched, reads resolve to the local cached copy' : 'with the cache off, every read stays s3://',
+      cached ? src.parquetPath.startsWith(path.join(tmpUserData, 'server-data', 'orgs', 'acme', 'cache')) : src.parquetPath.startsWith('s3://'), src.parquetPath);
+  }
 
   const realGet = datasets.getDataset;
   let hydrations = 0;

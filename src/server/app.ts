@@ -66,6 +66,9 @@ export const REDACT_PATHS: readonly string[] = SECRET_KEYS.flatMap((k) => {
 // ponytail: one pool per process (a pod builds one app); the sharing handlers
 // registered once by registerHandlers() read it per call. Tests building two
 // apps in one process must point both at the same database (and env).
+// How often each org's S3 garbage pass runs (T5.2). An unreferenced version
+// goes at the first pass a grace period after a pass first saw it unreferenced.
+const STORAGE_GC_EVERY_MS = 15 * 60_000;
 let dbPool: Pool | null = null;
 let appEnv: ServerEnv | null = null;
 
@@ -147,6 +150,15 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // runner: a job's handler reads records like a request does.
       useRecordDb(pool);
       (require('./jobs/schedules') as typeof import('./jobs/schedules')).wireSchedules();
+      // S3 (T5.2): objects are registered in Postgres; old versions are collected by a job.
+      if (cfg.storage.s3) {
+        const storage = require('../engine/storage') as typeof import('../engine/storage');
+        storage.useStorageDb(pool);
+        (require('./jobs/runner') as typeof import('./jobs/runner')).defineJob('storage:gc', {
+          everyMs: STORAGE_GC_EVERY_MS,
+          run: async () => { await storage.collectGarbage(cfg.storage.gcGraceMs); },
+        });
+      }
       bus = await (require('./jobs/bus') as typeof import('./jobs/bus')).startBus(pool, dbUrl, app.log);
       jobs = (require('./jobs/runner') as typeof import('./jobs/runner')).startRunner(pool, cfg.dataDir, app.log);
     });
@@ -158,6 +170,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     });
     app.addHook('onClose', async () => {
       useRecordDb(null);
+      if (cfg.storage.s3) (require('../engine/storage') as typeof import('../engine/storage')).useStorageDb(null);
       await pool.end();
     });
   }

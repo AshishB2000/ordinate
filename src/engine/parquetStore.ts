@@ -53,6 +53,7 @@
 // `null` and `''` distinct with no quoting convention to get wrong.
 
 import * as fs from 'fs';
+import * as path from 'path';
 import { randomUUID } from 'crypto';
 import type { ParsedColumn } from '../data/parse';
 import type { Cell } from '../data/transforms';
@@ -113,6 +114,8 @@ export function relationSql(
 export interface WriteProgress {
   onProgress?: (fraction: number, note?: string) => void;
   checkCancelled?: () => void;
+  /** For an s3:// target: a LOCAL directory the org's worker may read, for the NDJSON staging file. */
+  stageDir?: string;
 }
 
 /** True when the bridge is up, WITHOUT blocking the event loop to start it. */
@@ -145,8 +148,13 @@ export async function writeTableAsync(
   if (!(await isSupportedAsync())) {
     throw new duck.DuckDBError('unavailable', 'parquetStore: DuckDB is not available');
   }
-  const stem = `${filePath}.${randomUUID()}`;
-  const tmpParquet = `${stem}.tmp`;
+  // An s3:// target (src/engine/storage.ts) is COPYed to directly — the object
+  // appears only when its upload completes, so there is no temp to rename — and
+  // the NDJSON staging file goes to `opts.stageDir` (the org's temp) instead.
+  const remote = filePath.startsWith('s3://');
+  if (remote && !opts.stageDir) throw new TypeError('parquetStore.writeTableAsync: an s3:// target needs opts.stageDir');
+  const stem = remote ? path.join(opts.stageDir!, randomUUID()) : `${filePath}.${randomUUID()}`;
+  const tmpParquet = remote ? filePath : `${stem}.tmp`;
   const tmpJson = `${stem}.ndjson.tmp`;
   try {
     let source: string;
@@ -170,10 +178,10 @@ export async function writeTableAsync(
     if (opts.checkCancelled) opts.checkCancelled();
     if (opts.onProgress) opts.onProgress(0.8, 'Writing Parquet');
     await duck.execAsync(`COPY (${source}) TO '${sqlStr(tmpParquet)}' (FORMAT PARQUET, COMPRESSION ${COMPRESSION});`);
-    await fs.promises.rename(tmpParquet, filePath);
+    if (!remote) await fs.promises.rename(tmpParquet, filePath);
     if (opts.onProgress) opts.onProgress(1);
   } catch (err) {
-    unlinkQuiet(tmpParquet);
+    if (!remote) unlinkQuiet(tmpParquet);
     throw err;
   } finally {
     unlinkQuiet(tmpJson);

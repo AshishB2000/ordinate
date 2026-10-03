@@ -46,6 +46,9 @@ function childEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   // master-key check before the sign-in check this suite asserts. The DB boot
   // path is covered by test-db-migrate and test-jobs-pods on scratch databases.
   delete e.DATABASE_URL;
+  // Same for an S3 STORAGE_URL (it requires a DATABASE_URL); test-storageS3 and
+  // test-jobs-pods cover the S3 boot path.
+  delete e.STORAGE_URL;
   e.NODE_PATH = (process.env.NODE_PATH ?? '')
     .split(path.delimiter)
     .filter((p) => p && !/electron/i.test(p))

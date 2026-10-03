@@ -19,7 +19,7 @@
 // it sits next to the Parquet that holds the same cells.
 
 import * as datasets from './datasets';
-import { parquetPath } from './datasetRecord';
+import { tablePath } from './datasetRecord';
 import * as projects from '../app/projects';
 import * as privacyStore from '../app/privacyStore';
 import { withheldColumns } from '../app/sharePolicy';
@@ -96,7 +96,7 @@ export async function runSearch(opts: RunOpts): Promise<DataSearchReply> {
       const exclude = excludedColumns(exportAction, await withheldColumns(project.id, meta.id).catch(() => new Set<string>()));
       let found;
       if (meta.resident && resident) {
-        const src = { parquetPath: parquetPath(project.id, meta.id), columns: meta.columns };
+        const src = { parquetPath: tablePath(project.id, meta.id, meta.storageVersion), columns: meta.columns };
         const index = await readIndex(src.parquetPath);
         if (!index) scheduleIndex(src, LAZY_BUILD_MS);
         const r = await searchDataset(src, { term, exclude, index, cancelled });
