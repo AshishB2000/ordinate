@@ -1,0 +1,357 @@
+/* A map and its overlays — hub.css "Map visualizations", geo.css and the
+   point-map rules of authoring.css. MapLibre's own sheet is hard-coded for a
+   light page (white panels, dark SVG icons), so its chrome is re-skinned onto
+   the theme tokens here, scoped under .wrap so nothing leaks. Marks MapLibre
+   creates from our code (value labels, cluster buttons, tooltip spans) carry
+   plain class names, styled as globals under .wrap too. */
+
+.wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--surface-2);
+  isolation: isolate;
+}
+.canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* Loading / no WebGL / error: the frame keeps its size. */
+.state {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+}
+.state > * {
+  width: 100%;
+  height: 100%;
+}
+
+/* ── MapLibre chrome on the theme ── */
+.wrap :global(.maplibregl-map) {
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  line-height: 20px;
+  color: var(--text);
+}
+.wrap :global(.maplibregl-canvas) {
+  background: transparent;
+}
+.wrap :global(.maplibregl-ctrl-group) {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.wrap :global(.maplibregl-ctrl-group:not(:empty)) {
+  box-shadow: var(--shadow-md);
+}
+.wrap :global(.maplibregl-ctrl-group button) {
+  background-color: transparent;
+  color: var(--text);
+}
+.wrap :global(.maplibregl-ctrl-group button + button) {
+  border-top: 1px solid var(--border);
+}
+.wrap :global(.maplibregl-ctrl button:not(:disabled):hover) {
+  background-color: var(--surface-2);
+}
+.wrap :global(.maplibregl-ctrl-group button:focus-visible),
+.wrap :global(.maplibregl-ctrl-attrib-button:focus-visible) {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+/* The control glyphs are dark SVG data URIs: flip their luminance in dark mode (icons only, never the canvas). */
+:global([data-theme='dark']) .wrap :global(.maplibregl-ctrl-icon),
+:global([data-theme='dark']) .wrap :global(.maplibregl-ctrl-attrib-button),
+:global([data-theme='dark']) .wrap :global(.maplibregl-ctrl-attrib.maplibregl-compact::after) {
+  filter: invert(1) hue-rotate(180deg);
+}
+/* The OpenStreetMap credit — required by the tile licence. */
+.wrap :global(.maplibregl-ctrl.maplibregl-ctrl-attrib) {
+  background-color: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--muted);
+  font-size: var(--t-11);
+}
+.wrap :global(.maplibregl-ctrl-attrib.maplibregl-compact) {
+  background-color: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.wrap :global(.maplibregl-ctrl-attrib a) {
+  color: var(--accent);
+}
+.wrap :global(.maplibregl-ctrl-attrib-button) {
+  background-color: transparent;
+}
+
+/* Tooltips (one shared Popup per layer, following the cursor). */
+.wrap :global(.maplibregl-popup-content) {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-md);
+  padding: var(--sp-8);
+  font-size: var(--t-12);
+  line-height: 1.6;
+}
+.wrap :global(.maplibregl-popup-content strong) {
+  color: var(--text-strong);
+  font-size: var(--t-13);
+}
+.wrap :global(.maplibregl-popup-anchor-top .maplibregl-popup-tip),
+.wrap :global(.maplibregl-popup-anchor-top-left .maplibregl-popup-tip),
+.wrap :global(.maplibregl-popup-anchor-top-right .maplibregl-popup-tip) {
+  border-bottom-color: var(--surface);
+}
+.wrap :global(.maplibregl-popup-anchor-bottom .maplibregl-popup-tip),
+.wrap :global(.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip),
+.wrap :global(.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip) {
+  border-top-color: var(--surface);
+}
+.wrap :global(.maplibregl-popup-anchor-left .maplibregl-popup-tip) {
+  border-right-color: var(--surface);
+}
+.wrap :global(.maplibregl-popup-anchor-right .maplibregl-popup-tip) {
+  border-left-color: var(--surface);
+}
+.wrap :global(.cv-map-tt-muted) {
+  color: var(--muted);
+}
+
+/* Permanent "CA 1.2M" labels (DOM markers — no glyphs URL). */
+.wrap :global(.cv-map-value-label) {
+  background: var(--surface);
+  color: var(--text-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 1px var(--sp-4);
+  font-family: var(--font-ui);
+  font-size: var(--t-11);
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+/* Point clusters: the count in an accent disc; a click zooms in. */
+.wrap :global(.cv-map-cluster) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font: 600 var(--t-11) / 1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px var(--accent-soft);
+  cursor: zoom-in;
+}
+.wrap :global(.cv-map-cluster:focus-visible) {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ── Overlays ── */
+.legend {
+  position: absolute;
+  /* Clear of the OSM credit, which opens expanded in the bottom-right corner. */
+  bottom: 40px;
+  right: 8px;
+  z-index: 1;
+  min-width: 100px;
+  padding: var(--sp-4) var(--sp-8);
+  font-size: var(--t-11);
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  pointer-events: none;
+}
+.legendColors {
+  left: 8px;
+  right: auto;
+  bottom: 36px;
+  max-height: 180px;
+  overflow: auto;
+  pointer-events: auto;
+}
+.legendTitle {
+  margin-bottom: var(--sp-4);
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text);
+}
+.legendRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+.legendRange {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+
+.unmatched,
+.note {
+  font-size: var(--t-11);
+  border-radius: var(--r-sm);
+  padding: 3px var(--sp-8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid var(--border);
+}
+.unmatched {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  z-index: 1;
+  max-width: calc(100% - 120px);
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: var(--warn);
+  pointer-events: none;
+}
+.notes {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: calc(100% - 140px);
+  pointer-events: none;
+}
+.note {
+  max-width: 100%;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.noteWarn {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-8);
+  padding: var(--sp-16);
+  text-align: center;
+  font-size: var(--t-13);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  pointer-events: none;
+}
+.empty > svg {
+  color: var(--accent);
+}
+
+/* Top-right cluster: [Values ▾] [period] [⋯] */
+.controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  font: 500 var(--t-12) / 1.2 var(--font-ui);
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: var(--sp-4) var(--sp-12);
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+.pill:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.pill:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.pillOn,
+.pillOn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.period {
+  min-width: 96px;
+}
+.menuBtn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+/* The "showing the data instead" fallback for regions the map cannot place. */
+.fallback {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  height: 100%;
+  padding: var(--sp-12);
+  overflow: auto;
+  background: var(--surface);
+}
+.fallbackNote {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.fallback table {
+  border-collapse: collapse;
+  font-size: var(--t-12);
+}
+.fallback th,
+.fallback td {
+  padding: var(--sp-4) var(--sp-8);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.fallback td:last-child,
+.fallback th:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.fallback th {
+  color: var(--muted);
+  font-weight: 600;
+}

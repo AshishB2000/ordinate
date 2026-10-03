@@ -1,0 +1,51 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr));
+  gap: var(--sp-16);
+}
+.card,
+.radius {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.radius {
+  max-width: 560px;
+}
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+}
+.cardTitle {
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.blurb {
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.mapBox {
+  height: 360px;
+}
+.thumbRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+}
+.thumbLabel {
+  font-size: var(--t-11);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.thumbBox {
+  width: 160px;
+  height: 96px;
+}

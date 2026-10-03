@@ -4,7 +4,9 @@
 // an ordinary record saved empty, then its Parquet written straight by DuckDB
 // from range() — `ordinal` 0..999,999 is each row's position, so a spec can
 // prove no row was skipped or drawn twice. ~1 s, where building the rows in JS
-// and saving them would take many. Run as its own
+// and saving them would take many.
+// Plus a "Shipments" dataset with coordinates for the maps (scripts/geoFixture.ts —
+// the sample itself has none). Run as its own
 // process by server.ts — the seed loads DuckDB, which would otherwise keep the
 // test runner alive — and with Electron made unloadable, so the e2e also
 // proves the sample seeds on a server that has no Electron at all.
@@ -44,10 +46,15 @@ const sample = require('../../src/app/sampleProject.js') as {
   seedSampleProject(): Promise<{ seeded: boolean; projectId?: string }>;
 };
 const projects = require('../../src/app/projects.js') as { init(): Promise<void> };
-type Column = { name: string; type: 'text' | 'number' | 'date' };
 const datasets = require('../../src/data/datasets.js') as {
-  saveDataset(projectId: string, input: { name: string; sourceKind: 'csv'; columns: Column[]; rows: [] }): Promise<{ id: string } | null>;
+  saveDataset(projectId: string, input: { name: string; sourceKind: string; columns: unknown[]; rows: unknown[] }): Promise<{ id: string } | null>;
 };
+// The sample has states but no coordinates: the point, hexbin and flow maps read this (T1.3).
+const geo = require('../../scripts/geoFixture.js') as {
+  GEO_FIXTURE_NAME: string;
+  geoFixture(): { columns: unknown[]; rows: unknown[][] };
+};
+type Column = { name: string; type: 'text' | 'number' | 'date' };
 const record = require('../../src/data/datasetRecord.js') as {
   parquetPath(projectId: string, id: string): string;
   datasetFilePath(projectId: string, id: string): string;
@@ -88,6 +95,10 @@ if (!dev) throw new Error('dev auth returned no identity');
 const seeded = await context.runInContext(dev, 'e2e-seed', async () => {
   await projects.init();
   const s = await sample.seedSampleProject();
+  if (s.projectId) {
+    const fixture = geo.geoFixture();
+    if (!(await datasets.saveDataset(s.projectId, { name: geo.GEO_FIXTURE_NAME, sourceKind: 'csv', ...fixture }))) throw new Error('the Shipments dataset was not saved');
+  }
   return { ...s, large: large && s.projectId ? await seedLarge(s.projectId) : undefined };
 });
 if (!seeded.seeded || !seeded.projectId) throw new Error(`sample project was not seeded: ${JSON.stringify(seeded)}`);

@@ -1,0 +1,91 @@
+/* geo.css "Radius control" — the editor only (chip and dialog port with dashboards). */
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.word {
+  font-size: var(--t-13);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.input {
+  height: 32px;
+  padding: 0 var(--sp-8);
+  font: inherit;
+  font-size: var(--t-13);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+}
+.input:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.km {
+  width: 76px;
+  flex: 0 0 auto;
+}
+.place {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.preset {
+  font: inherit;
+  font-size: var(--t-12);
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px var(--sp-8);
+  cursor: pointer;
+}
+.preset:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.preset:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.match {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: 28px;
+  padding: var(--sp-4) var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-sm);
+}
+.ok {
+  color: var(--text);
+  background: var(--ok-soft);
+  border: 1px solid var(--ok);
+}
+.ok > svg {
+  color: var(--ok);
+}
+.err {
+  color: var(--text);
+  background: var(--error-soft);
+  border: 1px solid var(--error);
+}
