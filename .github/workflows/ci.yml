@@ -24,6 +24,21 @@ jobs:
   check:
     name: Install + parse + tests
     runs-on: ubuntu-latest
+    # The metadata DB (Phase 7, T3.1). scripts/test-db-*.ts create and drop
+    # their own scratch databases on it; without DATABASE_URL they skip.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ordinate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,6 +52,8 @@ jobs:
         run: npm run build:ts
       - name: Run self-checks
         run: npm test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/ordinate_test
 
   # Four shards in parallel, balanced by scripts/smoke-durations.json — the
   # serial chain had grown past 40 minutes. Each smoke is killed by name after 10
