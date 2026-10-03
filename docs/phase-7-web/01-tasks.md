@@ -70,7 +70,7 @@ row of the plan's dependency graph.
 - **Done when:** `npm test` green under Electron **and** server mode; a test proves two concurrent
   requests with different orgs resolve different `userData()` paths.
 
-### [ ] T0.4 Files: upload and download ∥
+### [x] T0.4 Files: upload and download ∥
 - **Branch** `web/t0.4-files` · **Depends** T0.3 · **Scope** `src/server/files.ts`, `web/src/api/files.ts` (if web exists, else stub)
 - `POST /api/files` multipart, streamed to `temp()`, cap from `MAX_UPLOAD_MB` (default 200), returns
   `{ fileToken, name, size }`; token is single-use, org-bound, expires in 1 h.

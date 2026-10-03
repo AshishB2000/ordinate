@@ -118,3 +118,30 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   per-org paths; the plan's graph (T0.6 after T0.3) was right and was followed.
 - `build.target` is chrome149/edge149/firefox151/safari26 — estimated "latest two" from the
   browsers Playwright 1.62 bundles; T0.8's nightly WebKit/Firefox runs will catch a wrong guess.
+
+## 2026-10-02 — T0.4 Files: upload and download
+
+- **Dependency:** `@fastify/multipart ^10.1.2` (§2), required lazily inside `registerFileRoutes`
+  so the desktop never loads it. `MAX_UPLOAD_MB` (default 200) validated in `env.ts`.
+- **Tokens:** `randomBytes(32)` base64url (43 chars, one zod `FileToken` shared by contract and
+  server), in-memory, single-use, bound to org + user, 1 h expiry, 60 s sweep. One message for
+  unknown/forbidden/used/expired so a caller cannot probe existence. Upload lands as
+  `orgs/<org>/temp/upload-<hex>` (`wx`, 0600); the client filename is display text only.
+  Downloads: `offerDownload(path, name)` → `{ downloadToken }`, single use, deleted after send;
+  `Content-Disposition` with an ASCII fallback + RFC 5987 `filename*` (a hostile name cannot inject
+  a header). The token in `/api/files/<token>` is masked in the request log.
+- **Oversize without buffering:** the file stream is destroyed at the cap (otherwise busboy drains
+  the rest of the part — the first attempt read all 200 MB). Then a lingering close: discard what is
+  still arriving, half-close, drop after 2 s or 16 MB. `Connection: close` alone lost the 413 to a TCP
+  reset 1 run in 3. Measured with a 200 MB generator body and `MAX_UPLOAD_MB=2`: browser-like client
+  gets 413 after 5 MB sent; a hostile client ignoring 413 and FIN is cut after 23 MB; RSS +6.8 / +9.4
+  MB; declared Content-Length over the cap → 413 before reading.
+- **150 MB upload:** 168–329 ms over loopback (~456–895 MB/s, machine at load 43–80); peak RSS
+  +18–78 MB over ~140 MB idle — the body is never held.
+- **Converted:** `dataset:pickAndParse` takes `{fileToken, sheetName?}` on the server (`write`);
+  the desktop dialog path is unchanged and the server never returns its temp path.
+- **Open:** tokens are per-process — N pods need sticky sessions until P5 moves them to Postgres
+  (`ponytail:`); `/api/files` role check comes with T3.3; xlsx sheet switching re-uploads;
+  **security follow-up:** `importStage`'s `stagedId` is a random UUID not bound to an org, so
+  `dataset:save` could take another org's staged table given its id — bind it when `dataset:save`
+  gets a contract (T2.4) and check in T6.3.
