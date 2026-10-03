@@ -1115,3 +1115,5 @@ scripts/**/*.js
 /src/server/auth/tokens.js
 /scripts/test-admin-db.js
 /scripts/test-tokens-db.js
+
+/src/api/visuals.js

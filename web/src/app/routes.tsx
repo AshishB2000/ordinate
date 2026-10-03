@@ -31,6 +31,10 @@ export const pages: RouteObject[] = [
     ? [page('/dev/ui', () => import('../ui/gallery/Gallery'))]
     : []),
   page('/data/:projectId/:datasetId', () => import('../features/data/DatasetPage')),
+  // Every chart id drawn from the API (T1.1). In every build, not in the nav:
+  // the e2e drives the production build, and the page reads only what the
+  // caller may already read through contracted channels.
+  page('/dev/charts', () => import('../charts/dev/ChartsGallery')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

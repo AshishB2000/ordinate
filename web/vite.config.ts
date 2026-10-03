@@ -35,8 +35,8 @@ export default defineConfig({
     // web/ plus the one server file the client shares: the wire codec.
     // …and the desktop icon set, which a test diffs the generated icons against
     // (its directory: a `?raw` id only passes the check as a child path).
-    // …and the app's number formatter (the data grid's cells).
-    fs: { allow: ['.', '../src/server/wire.ts', '../renderer/hub', '../src/app/format.ts'] },
+    // …and the app's formatter and message formatter, which the chart engine shares (no runtime imports).
+    fs: { allow: ['.', '../src/server/wire.ts', '../renderer/hub', '../src/app/format.ts', '../src/app/i18nCore.ts'] },
   },
   build: {
     // The latest two releases of each supported browser, as of 2026-10
