@@ -20,6 +20,7 @@
 // parallel by different hands.
 
 import type { ConnectorDef, ConnectorField } from './types';
+import { serverDataDir } from '../server/context';
 
 // Load order. Also the fallback ordering inside a category.
 const FAMILY_MODULES: readonly string[] = [
@@ -140,16 +141,35 @@ function loadAll(): ConnectorDef[] {
 const REGISTRY: ConnectorDef[] = loadAll();
 const BY_ID: ReadonlyMap<string, ConnectorDef> = new Map(REGISTRY.map((d) => [d.id, d]));
 
-/** Every registered connector, grouped by category in picker order. */
+// The sources that read THIS MACHINE's filesystem (local.ts): a DuckDB file, a
+// Parquet folder, a CSV folder. On the desktop that is the user's own disk; on
+// the server it would be the pod's — other orgs' data, the config, the secrets.
+// So the server does not have them at all: not in the picker, not runnable from
+// a record imported off a desktop (getConnector → null → "Unknown connection
+// kind"). URL stays: it fetches over https, and T6.1's SSRF guard covers it.
+const LOCAL_FILE_SOURCES: ReadonlySet<string> = new Set(['duckdb-file', 'parquet-folder', 'csv-folder']);
+
+/** What this process may offer. `localFiles` is false on the server (enterServerMode). */
+export function capabilities(): { localFiles: boolean } {
+  return { localFiles: serverDataDir() === null };
+}
+
+function offered(d: ConnectorDef): boolean {
+  return !LOCAL_FILE_SOURCES.has(d.id) || capabilities().localFiles;
+}
+
+/** Every connector this process offers, grouped by category in picker order. */
 export function listConnectors(): ConnectorDef[] {
-  return REGISTRY.slice();
+  return REGISTRY.filter(offered);
 }
 
 /** Resolve one connector. Returns null for an unknown id — NEVER throws, because
- *  the id comes off a stored record and a record can outlive a connector. */
+ *  the id comes off a stored record and a record can outlive a connector. Null
+ *  too for a local-file source on the server (see LOCAL_FILE_SOURCES). */
 export function getConnector(id: unknown): ConnectorDef | null {
   if (typeof id !== 'string' || !id) return null;
-  return BY_ID.get(id) ?? null;
+  const def = BY_ID.get(id);
+  return def && offered(def) ? def : null;
 }
 
 /** True when this id is one the registry can actually run. */
@@ -230,7 +250,7 @@ function catalogField(f: ConnectorField): CatalogField {
 /** The ONLY connector data a renderer may see: identity + form shape. No
  *  functions, no values, nothing secret. Safe to send over IPC as-is. */
 export function connectorCatalog(): CatalogEntry[] {
-  return REGISTRY.map((d) => {
+  return listConnectors().map((d) => {
     const entry: CatalogEntry = {
       id: d.id,
       label: d.label,

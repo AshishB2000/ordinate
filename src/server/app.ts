@@ -21,6 +21,8 @@ import { registerLimits, RPC_ROUTE, RpcTimeout, untilAborted } from './limits';
 import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
 import { useRecordDb } from '../app/recordFs';
+import { useSecretStore } from '../app/configSecrets';
+import { createSecretStore } from './secrets/store';
 import { handlers } from './rpc';
 import { maskFileToken, registerFileRoutes } from './files';
 import { clientFor, registerEvents } from './sse';
@@ -149,6 +151,10 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // only; recordFs ignores the pool under the desktop (T5.1). Before the
       // runner: a job's handler reads records like a request does.
       useRecordDb(pool);
+      // Connection passwords/tokens: the encrypted store (T5.3), never the
+      // per-org config.json. Without a master key there is no store, and a
+      // connection secret is refused (src/app/configSecrets.ts).
+      if (cfg.masterKey) useSecretStore(createSecretStore(pool, cfg.masterKey));
       (require('./jobs/schedules') as typeof import('./jobs/schedules')).wireSchedules();
       // S3 (T5.2): objects are registered in Postgres; old versions are collected by a job.
       if (cfg.storage.s3) {
@@ -171,6 +177,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     app.addHook('onClose', async () => {
       useRecordDb(null);
       if (cfg.storage.s3) (require('../engine/storage') as typeof import('../engine/storage')).useStorageDb(null);
+      useSecretStore(null);
       await pool.end();
     });
   }
@@ -337,7 +344,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
  * a handler module.
  */
 export function registerHandlers(): void {
-  for (const mod of ['../ipc/projects', '../ipc/datasets', '../ipc/recent', '../ipc/quality', '../ipc/visuals', '../ipc/projectBoundaries', '../ipc/geoAnalysis']) {
+  for (const mod of ['../ipc/projects', '../ipc/datasets', '../ipc/recent', '../ipc/quality', '../ipc/visuals', '../ipc/projectBoundaries', '../ipc/geoAnalysis', '../ipc/connections']) {
     (require(mod) as { register: () => void }).register();
   }
   (require('./authz/share') as typeof import('./authz/share')).register(() => dbPool);

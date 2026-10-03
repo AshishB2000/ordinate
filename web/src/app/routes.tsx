@@ -38,6 +38,10 @@ export const pages: RouteObject[] = [
   // Every map kind over the sample project (T1.3). In the production build too:
   // the e2e drives the built app. A lazy chunk, never in the initial bundle.
   page('/dev/maps', () => import('../charts/maps/dev/MapsDev')),
+  // Connect data (T2.5): the project's connections and the source picker, and one connection's workbench.
+  page('/connections', () => import('../features/connections/ConnectionsPage')),
+  page('/connections/:projectId', () => import('../features/connections/ConnectionsPage')),
+  page('/connections/:projectId/:connId', () => import('../features/connections/WorkbenchPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

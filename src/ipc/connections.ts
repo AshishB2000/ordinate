@@ -3,8 +3,11 @@ import * as connections from '../connectors/connections';
 import * as connectionRun from '../connectors/connectionRun';
 import * as datasets from '../data/datasets';
 import * as configSecrets from '../app/configSecrets';
+import { connectorLogos } from '../app/icons';
 import { connectorCatalog, getConnector } from '../connectors';
 import type { ConnectorDef, ConnectorField } from '../connectors/types';
+import { buildSecrets, fieldsOf, isSecretField, loadSecrets, secretStatus, storeSecrets } from './connectionSecrets';
+import { composeSave } from './datasetCompose';
 
 // Connected-data-source IPC. Every source is a ConnectorDef in src/connectors, so
 // these handlers are source-agnostic: they resolve a connectorId, shape the form
@@ -13,26 +16,22 @@ import type { ConnectorDef, ConnectorField } from '../connectors/types';
 // handlers are ipcMain.handle (request/response) and are wrapped so any throw
 // becomes { ok:false, error } — the renderer never sees an unhandled rejection.
 //
-// SECURITY: a secret arrives from the renderer form ONLY in the `secret` payload
-// of connection:testAndSave, goes straight into configSecrets.setConnectionSecret
-// (plaintext in the gitignored config.json), and is read back solely here, in
-// MAIN, via configSecrets.getConnectionSecret. Secrets are never written into a
-// project's connections/*.json, never returned to a renderer, and every error
+// SECURITY: a secret arrives from the client ONLY in the `secret(s)` payload of
+// connection:testAndSave or connection:replaceSecret, goes straight into
+// ./connectionSecrets (the desktop's gitignored config.json, the server's
+// encrypted store — never its config.json; a server without that store refuses
+// the secret), and is read back solely there, in MAIN, to run a connection.
+// Secrets are never written into a project's connections/*.json, never returned
+// to a client (`secretSet` says WHICH are stored, as booleans), and every error
 // string leaving a runner has been through safeError(). connectors:catalog
 // returns form SHAPE only — the `secret` flag on a field travels, a value never
 // does. No deps object (pure disk + drivers + fetch), matching datasets.register().
 //
-// KNOWN LIMIT (config.ts, not ours to change): config.ConnectionSecret has
-// exactly two slots, `password` and `token`. A connector with more than one
-// non-password secret field can therefore only persist the first of them. The
-// mapping is explicit in secretSlot() so the day a connector needs a third
-// credential, the failure is a one-line fix in config.ts rather than a mystery.
+// NETWORK: every socket a connection opens — test, tables, describe, sample,
+// run, explain, refresh, import — goes through src/connectors/connectionRun.ts,
+// which is where T6.1's SSRF guard hooks in. Nothing here dials out itself.
 
 // ── Form payload → connector fields ──────────────────────────────────────────
-
-function fieldsOf(def: ConnectorDef): ConnectorField[] {
-  return Array.isArray(def.fields) ? def.fields : [];
-}
 
 // Coerce one form value to the field's declared type. Forms send strings for
 // everything, including numbers and checkboxes.
@@ -69,57 +68,6 @@ function buildValues(def: ConnectorDef, raw: Record<string, unknown>): Record<st
   return out;
 }
 
-// Which of config.json's two secret slots this field key uses. 'password' is its
-// own slot; everything else (token, apiKey, serviceAccount, …) shares `token`.
-function secretSlot(key: string): 'password' | 'token' {
-  return key === 'password' ? 'password' : 'token';
-}
-
-// Pull the secret values out of a form payload, keyed by field key. Also accepts
-// the two legacy key names the pre-registry renderer sends ({password}/{token})
-// when the connector declares a differently-named single secret field.
-function buildSecrets(def: ConnectorDef, raw: Record<string, unknown>): Record<string, string> {
-  const out: Record<string, string> = {};
-  const secretFields = fieldsOf(def).filter((f) => f.secret === true);
-  for (const f of secretFields) {
-    const direct = raw[f.key];
-    if (typeof direct === 'string' && direct) { out[f.key] = direct; continue; }
-    const legacy = raw[secretSlot(f.key)];
-    if (typeof legacy === 'string' && legacy) out[f.key] = legacy;
-  }
-  return out;
-}
-
-// Persist a connection's secrets into config.json's two slots.
-function storeSecrets(connId: string, secrets: Record<string, string>): void {
-  const payload: { password?: string; token?: string } = {};
-  for (const [key, value] of Object.entries(secrets)) {
-    if (!value) continue;
-    const slot = secretSlot(key);
-    if (payload[slot] === undefined) payload[slot] = value; // first writer wins — see KNOWN LIMIT
-  }
-  if (payload.password || payload.token) configSecrets.setConnectionSecret(connId, payload);
-}
-
-// Read a connection's secrets back, re-keyed by the connector's field keys — the
-// shape ConnectorContext.secrets promises. MAIN ONLY; never returned anywhere.
-function loadSecrets(connId: string, def: ConnectorDef | null): Record<string, string> {
-  const stored = configSecrets.getConnectionSecret(connId);
-  const out: Record<string, string> = {};
-  const password = typeof stored.password === 'string' ? stored.password : '';
-  const token = typeof stored.token === 'string' ? stored.token : '';
-  const secretFields = def ? fieldsOf(def).filter((f) => f.secret === true) : [];
-  for (const f of secretFields) {
-    const v = secretSlot(f.key) === 'password' ? password : token;
-    if (v) out[f.key] = v;
-  }
-  // Always expose the two legacy names too: a connector written against the old
-  // vocabulary reads ctx.secrets.password / .token directly.
-  if (password) out.password = password;
-  if (token) out.token = token;
-  return out;
-}
-
 // Accept both payload vocabularies: the registry one ({connectorId, values}) and
 // the pre-registry one ({kind, config}). The renderer is migrated separately.
 function readConnectorId(payload: Record<string, unknown>): string {
@@ -149,7 +97,7 @@ async function runSaved(
   const conn = await connections.getConnection(projectId, connId);
   if (!conn) return { ok: false, error: 'Connection not found' };
   const def = getConnector(conn.connectorId);
-  const secrets = loadSecrets(connId, def);
+  const secrets = await loadSecrets(connId, def);
   const which = tableOrQuery && (tableOrQuery.table || tableOrQuery.query)
     ? { table: str(tableOrQuery.table), query: str(tableOrQuery.query) }
     : { table: conn.table, query: conn.query };
@@ -169,7 +117,7 @@ export async function runSavedText(
 ): ReturnType<typeof connectionRun.runConnectionText> {
   const conn = await connections.getConnection(projectId, connId);
   if (!conn) return { ok: false, error: 'Connection not found' };
-  const secrets = loadSecrets(connId, getConnector(conn.connectorId));
+  const secrets = await loadSecrets(connId, getConnector(conn.connectorId));
   return connectionRun.runConnectionText(conn.connectorId, conn.values, secrets, selection);
 }
 
@@ -243,6 +191,42 @@ export async function refreshConnectionInto(
   }
 }
 
+/** The public connection plus which of its secret fields hold a value. */
+async function withSecretSet(c: connections.Connection) {
+  return { ...connections.publicConnection(c), secretSet: await secretStatus(c.id, getConnector(c.connectorId)) };
+}
+
+/** `connection:import` — what produced the preview, re-run at the import bound and saved as a dataset. */
+async function importAsDataset(p: Record<string, unknown>) {
+  const projectId = str(p.projectId);
+  const connId = str(p.connId);
+  const conn = await connections.getConnection(projectId, connId);
+  if (!conn) return { ok: false, error: 'Connection not found' };
+  const sql = str(p.sql);
+  const table = sql ? '' : str(p.table);
+  if (!sql && !table) return { ok: false, error: 'Pick a table or run a query first.' };
+  // The preview on screen is bounded at 500 rows; the import re-runs at the
+  // chosen limit (≤ the app's cap — buildContext clamps it again).
+  const res = await runSaved(projectId, connId, sql ? { query: sql } : { table }, { rowLimit: Number(p.limit) || 100_000 });
+  if (!res.ok) return res;
+  const name = str(p.name) || table || 'Connection data';
+  // The dataset's origin is what RE-RUNS it (selectionForDataset); a saved
+  // query's id rides along as a label only.
+  const origin: Record<string, unknown> = { kind: 'connection', connId };
+  if (sql) origin.sql = sql;
+  else origin.table = table;
+  if (sql && str(p.queryId)) origin.queryId = str(p.queryId);
+  // The composer's own save, server side: same quality checks, same sensitivity
+  // scan as any import. sourceKind is a display label the 35 sources share.
+  return composeSave({
+    projectId,
+    name,
+    base: { inline: { name, columns: res.result.columns, rows: res.result.rows } },
+    sourceKind: conn.connectorId === 'url' ? 'url' : 'postgres',
+    origin,
+  });
+}
+
 export function register(): void {
   // The renderer-safe connector catalog: identity + form shape for every
   // registered source. No functions, no values, nothing secret. Returns a BARE
@@ -258,10 +242,17 @@ export function register(): void {
   });
 
   // List a project's connections (renderer-safe view — no secrets ever present).
+  // `secretSet` says, per secret field, whether a value is stored — booleans,
+  // so a form can show "set" / "replace" without a value ever leaving main.
+  // `datasetCount`: the datasets imported from each, counted here, not in a client.
   ipcMain.handle('connections:list', async (_e, { projectId }: any = {}) => {
     try {
       const list = await connections.listConnections(projectId);
-      return list.map(connections.publicConnection);
+      const counts = new Map<string, number>();
+      for (const d of await datasets.listDatasets(projectId)) {
+        if (d.originConnId) counts.set(d.originConnId, (counts.get(d.originConnId) ?? 0) + 1);
+      }
+      return await Promise.all(list.map(async (c) => ({ ...(await withSecretSet(c)), datasetCount: counts.get(c.id) ?? 0 })));
     } catch (_) {
       return [];
     }
@@ -285,6 +276,11 @@ export function register(): void {
       const secrets = buildSecrets(def, rawSecret);
       const table = str(p.table) || str(form.table);
       const query = str(p.query) || str(form.query);
+      // A server that cannot keep a secret encrypted refuses it up front —
+      // before a socket opens, and never by writing it somewhere plaintext.
+      if (Object.keys(secrets).length > 0 && !configSecrets.canStoreConnectionSecrets()) {
+        return { ok: false, error: configSecrets.NO_SECRET_STORE };
+      }
 
       const test = await connectionRun.testConnection(connectorId, values, secrets, { table, query });
       if (!test.ok) return { ok: false, error: test.error };
@@ -300,12 +296,19 @@ export function register(): void {
       });
       if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
 
-      // Persist the secrets separately (plaintext config.json), keyed by connId.
-      storeSecrets(saved.id, secrets);
+      // Persist the secrets separately, keyed by connId (./connectionSecrets).
+      // If that fails the connection is not kept: a record whose credential is
+      // missing would fail every run with a misleading driver error.
+      try {
+        await storeSecrets(saved.id, secrets);
+      } catch (err: unknown) {
+        await connections.deleteConnection(projectId, saved.id);
+        return { ok: false, error: err instanceof Error ? err.message : 'Could not store the credentials' };
+      }
 
       return {
         ok: true,
-        connection: connections.publicConnection(saved),
+        connection: await withSecretSet(saved),
         status: 'ok',
         tables: test.tables,
       };
@@ -321,7 +324,7 @@ export function register(): void {
       const conn = await connections.getConnection(projectId, connId);
       if (!conn) return { ok: false, error: 'Connection not found' };
       const def = getConnector(conn.connectorId);
-      const secrets = loadSecrets(connId, def);
+      const secrets = await loadSecrets(connId, def);
       const res = await connectionRun.listTables(conn.connectorId, conn.values, secrets);
       return res.ok ? { ok: true, tables: res.tables } : { ok: false, error: res.error };
     } catch (err: any) {
@@ -362,7 +365,7 @@ export function register(): void {
       const conn = await connections.getConnection(projectId, connId);
       if (!conn) return { ok: false, error: 'Connection not found' };
       const def = getConnector(conn.connectorId);
-      const secrets = loadSecrets(connId, def);
+      const secrets = await loadSecrets(connId, def);
       const res = await connectionRun.describeTable(conn.connectorId, conn.values, secrets, str(table));
       if (res === null) return { ok: true, schema: null };
       if (!res.ok) return { ok: false, error: res.error };
@@ -381,7 +384,7 @@ export function register(): void {
       const conn = await connections.getConnection(projectId, connId);
       if (!conn) return { ok: false, error: 'Connection not found' };
       const def = getConnector(conn.connectorId);
-      const secrets = loadSecrets(connId, def);
+      const secrets = await loadSecrets(connId, def);
       const want = Number(limit);
       const res = await connectionRun.sampleTable(
         conn.connectorId, conn.values, secrets, str(table),
@@ -400,7 +403,7 @@ export function register(): void {
       const conn = await connections.getConnection(projectId, connId);
       if (!conn) return { ok: false, error: 'Connection not found' };
       const def = getConnector(conn.connectorId);
-      const secrets = loadSecrets(connId, def);
+      const secrets = await loadSecrets(connId, def);
       const res = await connectionRun.explainSql(conn.connectorId, conn.values, secrets, str(sql));
       return res.ok ? { ok: true, columns: res.columns } : { ok: false, error: res.error };
     } catch (err: any) {
@@ -423,6 +426,43 @@ export function register(): void {
     }
   });
 
+  // Replace ONE stored secret (the web form's "Replace"): tested with the new
+  // value against the saved fields first, stored only on success — the same
+  // rule as testAndSave. The value is never echoed back.
+  ipcMain.handle('connection:replaceSecret', async (_e, { projectId, connId, key, value }: any = {}) => {
+    try {
+      const conn = await connections.getConnection(projectId, connId);
+      if (!conn) return { ok: false, error: 'Connection not found' };
+      const def = getConnector(conn.connectorId);
+      if (!def || typeof key !== 'string' || !isSecretField(def, key)) return { ok: false, error: 'That is not a secret of this connection.' };
+      if (typeof value !== 'string' || !value) return { ok: false, error: 'Type the new value first.' };
+      if (!configSecrets.canStoreConnectionSecrets()) return { ok: false, error: configSecrets.NO_SECRET_STORE };
+      const secrets = { ...(await loadSecrets(connId, def)), [key]: value };
+      const test = await connectionRun.testConnection(conn.connectorId, conn.values, secrets, { table: conn.table, query: conn.query });
+      if (!test.ok) return { ok: false, error: test.error };
+      await storeSecrets(connId, { [key]: value });
+      const saved = await connections.updateConnection(projectId, connId, { lastStatus: 'ok', lastError: null });
+      return { ok: true, connection: await withSecretSet(saved ?? conn) };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Could not replace that secret' };
+    }
+  });
+
+  // Save the workbench's current result as a dataset (server form of the
+  // desktop's "Save as dataset" → composer hand-off): the rows never make a
+  // round trip through the browser.
+  ipcMain.handle('connection:import', async (_e, payload: any = {}) => {
+    try {
+      return await importAsDataset(asRecord(payload));
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Could not save the dataset' };
+    }
+  });
+
+  // The picker's brand marks (src/app/icons.ts): id → glyph path or data: image.
+  // The desktop preload reads them synchronously over `connector:logos`.
+  ipcMain.handle('connectors:logos', () => connectorLogos);
+
   // Remove a saved query. A dataset built from it keeps refreshing — its origin
   // carries the SQL, not just the id.
   ipcMain.handle('connection:deleteQuery', async (_e, { projectId, connId, queryId }: any = {}) => {
@@ -434,11 +474,15 @@ export function register(): void {
     }
   });
 
-  // Delete a connection (also drops its secret from config.json).
+  // Delete a connection (also drops its secrets — config.json or the store).
   ipcMain.handle('connection:delete', async (_e, { projectId, connId }: any = {}) => {
     try {
+      // The connection must be THIS project's: the delete itself treats a
+      // missing file as success, and secrets are keyed by connection id alone,
+      // so without this check a caller could drop another project's credential.
+      if (!(await connections.getConnection(projectId, connId))) return { ok: false, error: 'Connection not found' };
       const ok = await connections.deleteConnection(projectId, connId);
-      configSecrets.deleteConnectionSecret(connId);
+      if (ok) await configSecrets.dropConnectionSecrets(connId);
       return { ok };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not delete the connection' };

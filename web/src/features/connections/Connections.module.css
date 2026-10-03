@@ -1,0 +1,303 @@
+/* Connect data — hub.css "Connect data": saved connections as cards, the
+   grouped picker of tiles, and the chosen source's form. Tokens only, so both
+   themes follow. */
+
+.toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-12);
+  flex-wrap: wrap;
+}
+.project {
+  min-width: 240px;
+}
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-13);
+}
+.sectionH {
+  margin: 0;
+  font-size: var(--t-15);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tr-tight);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+/* ── Logos: a 42px tile (hub.css .conn-logo) ─────────────────────────── */
+.logo {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  box-sizing: border-box;
+  padding: var(--sp-8);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--muted);
+  overflow: hidden;
+}
+.logoSm {
+  flex-basis: 32px;
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+}
+.logo svg,
+.logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.logoFallback {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* ── Saved connections ───────────────────────────────────────────────── */
+.saved {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding-bottom: var(--sp-16);
+  border-bottom: 1px solid var(--border-hairline);
+}
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--sp-8);
+}
+.cardWrap {
+  position: relative;
+}
+.card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  min-width: 0;
+  padding: var(--sp-12) 44px var(--sp-12) var(--sp-12);
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.card:hover {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.card:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.cardBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cardTop {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-width: 0;
+}
+.cardName {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cardSub {
+  font-size: var(--t-12);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cardDel {
+  position: absolute;
+  top: 50%;
+  right: var(--sp-8);
+  transform: translateY(-50%);
+}
+/* The last TEST's verdict: colour and a title that says which. */
+.dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.dot_ok {
+  background: var(--ok);
+}
+.dot_error {
+  background: var(--error);
+}
+.dot_untested {
+  background: var(--text-faint);
+}
+
+/* ── Picker ──────────────────────────────────────────────────────────── */
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  max-width: 620px;
+}
+.searchRow > :first-child {
+  flex: 1;
+}
+.count {
+  font-size: var(--t-12);
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.groupH {
+  margin: 0;
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--sp-8);
+}
+.tile {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-width: 0;
+  padding: var(--sp-8) var(--sp-12);
+  text-align: left;
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  color: var(--text-strong);
+  font: inherit;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.tile:hover {
+  background: var(--surface-2);
+  border-color: var(--border-2);
+}
+.tile:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.tileCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.tileLabel {
+  font-size: var(--t-13);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.tileBlurb {
+  font-size: var(--t-11);
+  line-height: 1.35;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.tileSkeleton {
+  max-width: 620px;
+}
+
+/* ── Form ────────────────────────────────────────────────────────────── */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  max-width: 620px;
+}
+.chosenHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  padding-bottom: var(--sp-12);
+  border-bottom: 1px solid var(--border-hairline);
+}
+.chosenIdent {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  min-width: 0;
+}
+.chosenText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.chosenName {
+  margin: 0;
+  font-size: var(--t-15);
+  line-height: var(--lh-snug);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+}
+.error {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  font-size: var(--t-12);
+  color: var(--error);
+  background: var(--error-soft);
+  border: 1px solid var(--error);
+  border-radius: var(--r-sm);
+  overflow-wrap: anywhere;
+}
+.formActions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  flex-wrap: wrap;
+}
