@@ -1124,3 +1124,8 @@ scripts/**/*.js
 
 # DuckDB extensions for S3 storage (T5.2), installed by scripts/duckdb-extensions.js.
 .duckdb-extensions/
+
+# web/t2.5-connections
+/src/api/connections.js
+/src/ipc/connectionSecrets.js
+/scripts/test-connections-server.js

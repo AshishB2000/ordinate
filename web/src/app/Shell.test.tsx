@@ -16,7 +16,10 @@ describe('shell', () => {
     stubFetch(200, []);
     renderApp('/');
     const nav = screen.getByRole('navigation', { name: 'Sections' });
-    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(NAV.map((n) => n.label));
+    // The rail draws the main items, then the `bottom` ones pinned to its foot
+    // (NAV is append-only, so a later main item can follow a bottom one in it).
+    const shown = [...NAV.filter((n) => !n.bottom), ...NAV.filter((n) => n.bottom)];
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(shown.map((n) => n.label));
     expect(screen.getByRole('search')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Account and theme' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Switch project/ })).toBeTruthy();

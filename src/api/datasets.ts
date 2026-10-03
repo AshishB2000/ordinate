@@ -56,4 +56,12 @@ export const datasets = {
   'dataset:columns': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
   // preload: invoke('dataset:stats', { projectId, datasetId }) — column summaries + quality issues.
   'dataset:stats': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, datasetId: Uuid }), project: byProjectId }),
+  // preload: invoke('dataset:update', { projectId, datasetId, autoRefresh }) — the
+  // refresh SCHEDULE only (T2.5's connection rail). The handler also takes
+  // `columns` and `watch`; widen this input when a screen needs them.
+  'dataset:update': rpc({
+    access: 'write',
+    input: z.strictObject({ projectId: Uuid, datasetId: Uuid, autoRefresh: z.enum(['hourly', 'daily', 'weekly']).nullable() }),
+    project: byProjectId,
+  }),
 } as const;
