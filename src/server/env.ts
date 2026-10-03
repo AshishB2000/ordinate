@@ -18,6 +18,8 @@ export interface ServerEnv {
   readonly dataDir: string;
   readonly env: OrdinateEnv;
   readonly logLevel: LogLevel;
+  /** Postgres metadata DB (T3.1), or null when unset — then nothing touches Postgres. Holds a password: never log it. */
+  readonly databaseUrl: string | null;
 }
 
 const ENVS: readonly OrdinateEnv[] = ['dev', 'prod'];
@@ -55,7 +57,23 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   if (rawDir === '' && env === 'prod') throw new EnvError('DATA_DIR is required when ORDINATE_ENV=prod');
   const dataDir = path.resolve(rawDir === '' ? 'data' : rawDir);
 
-  return Object.freeze({ port, dataDir, env, logLevel });
+  // The value is NEVER echoed in the error: it usually carries a password.
+  const rawDb = src.DATABASE_URL ?? '';
+  let databaseUrl: string | null = null;
+  if (rawDb !== '') {
+    let protocol = '';
+    try {
+      protocol = new URL(rawDb).protocol;
+    } catch {
+      // falls through to the error below
+    }
+    if (protocol !== 'postgres:' && protocol !== 'postgresql:') {
+      throw new EnvError('DATABASE_URL must be a postgres:// or postgresql:// URL (value not shown: it may hold a password)');
+    }
+    databaseUrl = rawDb;
+  }
+
+  return Object.freeze({ port, dataDir, env, logLevel, databaseUrl });
 }
 
 let cached: ServerEnv | null = null;
