@@ -3,14 +3,14 @@
 // (what Kubernetes and Compose send on a rollout).
 
 import { buildApp, registerHandlers } from './app';
-import { enterServerMode, identityFor, type Identify } from './context';
+import { enterServerMode, identityFor } from './context';
 import { env, type ServerEnv } from './env';
 
 let cfg: ServerEnv;
-let identify: Identify;
 try {
   cfg = env();
-  identify = identityFor(cfg);
+  // The gate on dev sign-in: refuses prod with AUTH_MODE=dev or unset.
+  if (cfg.auth.mode === 'dev') identityFor(cfg);
 } catch (err) {
   // One line, no stack: the operator needs the variable name, not a trace.
   process.stderr.write(`ordinate: ${err instanceof Error ? err.message : String(err)}\n`);
@@ -21,7 +21,7 @@ try {
 // request throws (./context.ts).
 enterServerMode(cfg.dataDir);
 registerHandlers();
-const app = buildApp(cfg, undefined, identify);
+const app = buildApp(cfg);
 
 // dev binds loopback only: dev mode runs every request as an admin (context.ts),
 // which must not be reachable from the LAN. prod runs in a container behind an

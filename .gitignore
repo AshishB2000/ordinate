@@ -1071,3 +1071,9 @@ scripts/**/*.js
 
 # web/t0.7-ui: the UI kit review screenshots (web/scripts/ui-screens.mjs)
 /web/e2e/__screens__/
+
+# web/t3.2-auth
+/src/server/auth/*.js
+/scripts/mockOidc.js
+/scripts/test-auth.js
+/scripts/test-auth-db.js

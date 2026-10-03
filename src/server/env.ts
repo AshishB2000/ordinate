@@ -6,6 +6,7 @@
 // feed it plain objects); `env()` is the process-wide cached read.
 
 import { createSecretKey, type KeyObject } from 'crypto';
+import { BlockList, isIP } from 'net';
 import * as path from 'path';
 
 export type OrdinateEnv = 'dev' | 'prod';
@@ -29,7 +30,48 @@ export interface ServerEnv {
    * reach JSON, `util.inspect` or a log line. Null when unset.
    */
   readonly masterKey: KeyObject | null;
+  /** Sign-in (T3.2). Holds the OIDC client secret: never log this object. */
+  readonly auth: AuthEnv;
 }
+
+/** dev: everyone is the dev admin (refused in prod). oidc: SSO sign-in. header: trust a proxy's X-Forwarded-Email. */
+export type AuthMode = 'dev' | 'oidc' | 'header';
+
+export interface OidcEnv {
+  readonly issuer: string;
+  readonly clientId: string;
+  readonly clientSecret: string;
+  /** This server's callback, exactly as registered at the IdP: https://<host>/api/auth/callback. */
+  readonly redirectUrl: string;
+}
+
+export interface AuthEnv {
+  readonly mode: AuthMode;
+  /** The org every sign-in lands in (single-org deployments; the schema is multi-org). */
+  readonly org: string;
+  /** Lower-cased. Made (or kept) org admin at every sign-in — the bootstrap and the recovery path. */
+  readonly adminEmail: string | null;
+  /** Lower-cased email domains allowed to sign in; empty = any. */
+  readonly allowedDomains: readonly string[];
+  readonly sessionIdleMs: number;
+  readonly sessionAbsoluteMs: number;
+  /** Set when mode is oidc. */
+  readonly oidc: OidcEnv | null;
+  /** CIDRs whose TCP peers may assert X-Forwarded-Email; set when mode is header. */
+  readonly trustedProxies: readonly string[];
+}
+
+const AUTH_MODES: readonly AuthMode[] = ['dev', 'oidc', 'header'];
+
+/** Org ids become directory names (src/app/paths.ts applies the same rule). */
+const ORG_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+$/;
+
+// Session lifetimes. Idle: a working day without a request signs you out.
+// Absolute: a week, however active — a stolen cookie dies with it.
+const IDLE_MINUTES = 8 * 60;
+const ABSOLUTE_HOURS = 7 * 24;
 
 const ENVS: readonly OrdinateEnv[] = ['dev', 'prod'];
 const LEVELS: readonly LogLevel[] = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'];
@@ -96,7 +138,8 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   }
   const masterKey = rawKey === '' ? null : parseMasterKey('ORDINATE_MASTER_KEY', rawKey);
 
-  return Object.freeze({ port, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey });
+  const auth = parseAuth(src, env, databaseUrl);
+  return Object.freeze({ port, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth });
 }
 
 /**
@@ -115,6 +158,106 @@ export function parseMasterKey(name: string, raw: string): KeyObject {
   const key = createSecretKey(buf);
   buf.fill(0);
   return key;
+}
+
+
+function positiveInt(name: string, raw: string | undefined, dflt: number): number {
+  if (raw === undefined || raw === '') return dflt;
+  if (!/^\d{1,7}$/.test(raw) || Number(raw) === 0) throw new EnvError(`${name} must be a positive integer, got ${JSON.stringify(raw)}`);
+  return Number(raw);
+}
+
+function required(src: Readonly<Record<string, string | undefined>>, name: string, why: string): string {
+  const v = src[name] ?? '';
+  if (v === '') throw new EnvError(`${name} is required when ${why}`);
+  return v;
+}
+
+function httpUrl(name: string, raw: string, env: OrdinateEnv): string {
+  let u: URL | null = null;
+  try {
+    u = new URL(raw);
+  } catch {
+    // falls through
+  }
+  // Plain http only in dev (a local mock IdP); prod speaks TLS to the IdP and to browsers.
+  const okProto = u && (u.protocol === 'https:' || (env === 'dev' && u.protocol === 'http:'));
+  if (!okProto) throw new EnvError(`${name} must be an ${env === 'dev' ? 'http(s)' : 'https'}:// URL, got ${JSON.stringify(raw)}`);
+  return raw;
+}
+
+/**
+ * CIDRs, comma-separated, v4 or v6 ("10.0.0.0/8, fd00::/8"); a bare address is
+ * a /32 or /128. Built into a BlockList once here so a typo fails startup.
+ */
+export function proxyList(cidrs: readonly string[]): BlockList {
+  const list = new BlockList();
+  for (const c of cidrs) {
+    const [addr, bits, extra] = c.split('/');
+    const family = isIP(addr);
+    const max = family === 6 ? 128 : 32;
+    const prefix = bits === undefined ? max : /^\d{1,3}$/.test(bits) ? Number(bits) : NaN;
+    if (family === 0 || extra !== undefined || !(prefix >= 0 && prefix <= max)) {
+      throw new EnvError(`TRUSTED_PROXY_CIDRS: ${JSON.stringify(c)} is not an IPv4 or IPv6 CIDR`);
+    }
+    list.addSubnet(addr, prefix, family === 6 ? 'ipv6' : 'ipv4');
+  }
+  return list;
+}
+
+const csv = (raw: string | undefined): string[] =>
+  (raw ?? '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+
+function parseAuth(src: Readonly<Record<string, string | undefined>>, env: OrdinateEnv, databaseUrl: string | null): AuthEnv {
+  const mode = oneOf('AUTH_MODE', src.AUTH_MODE, AUTH_MODES, 'dev');
+  // dev + prod is refused by identityFor (context.ts) — the one gate main.ts runs.
+
+  const org = src.ORDINATE_ORG || 'default';
+  if (!ORG_RE.test(org)) throw new EnvError(`ORDINATE_ORG must match ${ORG_RE.source}, got ${JSON.stringify(org)}`);
+
+  const adminEmail = (src.ORDINATE_ADMIN_EMAIL ?? '').trim().toLowerCase() || null;
+  if (adminEmail !== null && !EMAIL_RE.test(adminEmail)) throw new EnvError(`ORDINATE_ADMIN_EMAIL is not an email address, got ${JSON.stringify(adminEmail)}`);
+
+  const allowedDomains = csv(src.ALLOWED_EMAIL_DOMAINS);
+  for (const d of allowedDomains) {
+    if (!DOMAIN_RE.test(d)) throw new EnvError(`ALLOWED_EMAIL_DOMAINS: ${JSON.stringify(d)} is not a domain`);
+  }
+
+  const sessionIdleMs = positiveInt('SESSION_IDLE_MINUTES', src.SESSION_IDLE_MINUTES, IDLE_MINUTES) * 60_000;
+  const sessionAbsoluteMs = positiveInt('SESSION_ABSOLUTE_HOURS', src.SESSION_ABSOLUTE_HOURS, ABSOLUTE_HOURS) * 3_600_000;
+
+  // Users, sessions and roles live in Postgres; only dev sign-in works without it.
+  if (mode !== 'dev' && databaseUrl === null) throw new EnvError(`DATABASE_URL is required when AUTH_MODE=${mode}`);
+
+  let oidc: OidcEnv | null = null;
+  if (mode === 'oidc') {
+    const why = 'AUTH_MODE=oidc';
+    oidc = Object.freeze({
+      issuer: httpUrl('OIDC_ISSUER', required(src, 'OIDC_ISSUER', why), env),
+      clientId: required(src, 'OIDC_CLIENT_ID', why),
+      // Never echoed: only its presence is checked.
+      clientSecret: required(src, 'OIDC_CLIENT_SECRET', why),
+      redirectUrl: httpUrl('OIDC_REDIRECT_URL', required(src, 'OIDC_REDIRECT_URL', why), env),
+    });
+  }
+
+  let trustedProxies: string[] = [];
+  if (mode === 'header') {
+    trustedProxies = csv(required(src, 'TRUSTED_PROXY_CIDRS', 'AUTH_MODE=header'));
+    if (trustedProxies.length === 0) throw new EnvError('TRUSTED_PROXY_CIDRS is required when AUTH_MODE=header');
+    proxyList(trustedProxies);
+  }
+
+  return Object.freeze({
+    mode,
+    org,
+    adminEmail,
+    allowedDomains: Object.freeze(allowedDomains),
+    sessionIdleMs,
+    sessionAbsoluteMs,
+    oidc,
+    trustedProxies: Object.freeze(trustedProxies),
+  });
 }
 
 let cached: ServerEnv | null = null;

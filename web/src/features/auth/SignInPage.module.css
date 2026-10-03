@@ -1,0 +1,223 @@
+/* Sign-in: a brand panel (accent plane, grid texture, a rising bar motif) and
+   the form on the page plane. Tokens only (theme.css), so both themes follow.
+   Narrow windows drop the brand panel and show a compact mark instead. */
+
+.wrap {
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: minmax(360px, 5fr) 7fr;
+  background: var(--bg);
+}
+
+/* ── brand panel ── */
+.brand {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--sp-32);
+  padding: var(--sp-32) var(--sp-48);
+  overflow: hidden;
+  color: var(--accent-ink);
+  background-color: var(--accent);
+  background-image:
+    radial-gradient(120% 80% at 0% 0%, rgba(255, 255, 255, 0.18), transparent 60%),
+    linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    32px 32px,
+    32px 32px;
+}
+/* Dark: the same plane sunk toward the page, so it does not glare beside it. */
+:global([data-theme='dark']) .brand {
+  background-color: color-mix(in srgb, var(--accent) 42%, var(--bg));
+  border-right: 1px solid var(--border-hairline);
+}
+.brand::after {
+  /* a darker foot so the panel reads as lit from above, like the mark */
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 45%;
+  background: linear-gradient(transparent, rgba(8, 20, 60, 0.28));
+  pointer-events: none;
+}
+.brandTop,
+.compactMark {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+}
+.mark {
+  border-radius: var(--r-sm);
+  box-shadow: 0 6px 18px -6px rgba(8, 20, 60, 0.45);
+}
+.word {
+  font-size: var(--t-20);
+  font-weight: 650;
+  letter-spacing: var(--tr-tighter);
+}
+.pitch {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-24);
+  max-width: 420px;
+}
+.pitchTitle {
+  font-size: var(--t-28);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tighter);
+  font-weight: 650;
+}
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-8);
+  height: 120px;
+  padding: var(--sp-16);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--r-lg);
+  background: rgba(255, 255, 255, 0.08);
+}
+.bar {
+  flex: 1;
+  border-radius: 4px 4px 2px 2px;
+  background: rgba(255, 255, 255, 0.55);
+}
+.bar:nth-child(1) { height: 38%; }
+.bar:nth-child(2) { height: 56%; }
+.bar:nth-child(3) { height: 44%; }
+.bar:nth-child(4) { height: 72%; }
+.bar:nth-child(5) { height: 63%; }
+.bar:nth-child(6) {
+  height: 90%;
+  background: #ffffff;
+}
+.points {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.points li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  font-size: var(--t-13);
+  opacity: 0.92;
+}
+.points svg {
+  flex: 0 0 auto;
+  opacity: 0.85;
+}
+.brandFoot {
+  position: relative;
+  z-index: 1;
+  font-size: var(--t-12);
+  opacity: 0.75;
+}
+
+/* ── form panel ── */
+.panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-48) var(--sp-32);
+}
+.form {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.compactMark {
+  display: none;
+  margin-bottom: var(--sp-16);
+  color: var(--text-strong);
+}
+.compactMark img {
+  border-radius: var(--r-sm);
+}
+.title {
+  font-size: var(--t-28);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tighter);
+  font-weight: 650;
+  color: var(--text-strong);
+}
+.lede {
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 44ch;
+}
+
+.alert {
+  display: flex;
+  gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--error-soft);
+  border-radius: var(--r-md);
+  background: var(--error-soft);
+}
+.alertIcon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--error);
+}
+.alertTitle {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.alertBody {
+  margin-top: 2px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.go {
+  /* the kit's primary button (buttonClass), full width, a touch taller */
+  width: 100%;
+  height: 44px;
+  margin-top: var(--sp-8);
+}
+.go svg {
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.go:hover svg {
+  transform: translateX(2px);
+}
+
+.fine {
+  padding-top: var(--sp-16);
+  border-top: 1px solid var(--border-hairline);
+  font-size: var(--t-12);
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+@media (max-width: 900px) {
+  .wrap {
+    grid-template-columns: 1fr;
+  }
+  .brand {
+    display: none;
+  }
+  .compactMark {
+    display: flex;
+  }
+  .panel {
+    align-items: flex-start;
+    padding: var(--sp-48) var(--sp-16);
+  }
+}

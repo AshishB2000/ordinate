@@ -10,7 +10,8 @@ import { fastify, type FastifyInstance, type FastifyRequest } from 'fastify';
 import { isAvailable, shutdown } from '../engine/duckdb';
 import { contractFor } from '../api/index';
 import type { ServerEnv } from './env';
-import { identityFor, runInContext, type Identify } from './context';
+import { runInContext, type Identify } from './context';
+import { registerAuth } from './auth/index';
 import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
 import { handlers } from './rpc';
@@ -46,21 +47,30 @@ export const REDACT_PATHS: readonly string[] = SECRET_KEYS.flatMap((k) => {
   return Array.from({ length: MAX_DEPTH + 1 }, (_, d) => '*.'.repeat(d) + leaf);
 });
 
-export function buildApp(
-  cfg: ServerEnv,
-  logStream?: NodeJS.WritableStream,
-  identify: Identify = identityFor(cfg),
-): FastifyInstance {
+const NOT_PAGES = new Set(['/healthz', '/readyz', '/sign-in']);
+
+/** A browser opening an app route — not a file (`.js`, `.svg`), a probe or the sign-in page. */
+function isPageNavigation(method: string, path: string, accept: string | undefined): boolean {
+  return method === 'GET' && (accept ?? '').includes('text/html') && !NOT_PAGES.has(path) && !/\.[A-Za-z0-9]+$/.test(path);
+}
+
+/**
+ * `identify` replaces the AUTH_MODE's own (tests). Without it, dev mode is the
+ * dev admin and oidc/header resolve through ./auth/ against Postgres.
+ */
+export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, identifyOverride?: Identify): FastifyInstance {
   const app = fastify({
     logger: {
       level: cfg.logLevel,
       redact: { paths: [...REDACT_PATHS], censor: '[redacted]' },
-      // Fastify's own request serializer, except a file token in the URL
-      // (GET /api/files/<token>) is masked: the URL is a credential there.
+      // Fastify's own request serializer, with two cuts: the query string is
+      // dropped (the OIDC callback's carries an authorization code and state,
+      // and a query is where a future token would go too), and a file token in
+      // the path (GET /api/files/<token>) is masked — the URL is a credential there.
       serializers: {
         req: (req: FastifyRequest) => ({
           method: req.method,
-          url: maskFileToken(req.url),
+          url: maskFileToken(req.url.split('?')[0]),
           host: req.host,
           remoteAddress: req.ip,
           remotePort: req.socket?.remotePort,
@@ -69,21 +79,6 @@ export function buildApp(
       ...(logStream ? { stream: logStream } : {}),
     },
   });
-
-  // Every /api/ request runs inside its own context (./context.ts): who is
-  // asking, for which org, and which tab's event stream a push from the
-  // handler goes to (X-Ordinate-Client, honoured only when that stream is
-  // bound to this caller — ./sse.ts). Callback-style on purpose — `als.run(store, done)`
-  // is what carries the store into the route handler and every await below it.
-  // The probes stay outside: Kubernetes never signs in.
-  app.addHook('onRequest', (req, reply, done) => {
-    if (!req.url.startsWith('/api/')) return done();
-    const who = identify(req.headers);
-    if (!who) return void reply.code(401).send({ error: 'not signed in' });
-    runInContext(who, String(req.id), done, clientFor(req.headers['x-ordinate-client'], who) ?? undefined);
-  });
-
-  registerEvents(app);
 
   // Liveness: the process is up and serving. Checks nothing else on purpose —
   // a failing dependency must not make Kubernetes restart a healthy pod.
@@ -105,6 +100,43 @@ export function buildApp(
     });
     app.addHook('onClose', async () => pool.end());
   }
+
+  // Sign-in routes (/api/auth/*) and how every other /api/ request is identified.
+  const identify = registerAuth(app, cfg, pool, identifyOverride);
+
+  // Every other /api/ request runs inside its own context (./context.ts): who
+  // is asking, for which org — or 401. Callback-style on purpose:
+  // `als.run(store, done)` is what carries the store into the route handler
+  // and every await below it. The probes stay outside: Kubernetes never signs
+  // in; so does /api/auth/* (matched by ROUTE, so no path trick reaches
+  // another route through the exemption). The peer handed to identify is the
+  // socket's address — X-Forwarded-For never decides who is trusted.
+  //
+  // A signed-out browser NAVIGATING to the app (a GET that wants HTML, not a
+  // file, not the probes or /sign-in itself) is redirected to /sign-in before
+  // any of the app loads: no flash of the shell, no burst of 401s.
+  app.addHook('onRequest', (req, reply, done) => {
+    const path = req.url.split('?')[0];
+    const api = path.startsWith('/api/');
+    if (api ? req.routeOptions.url?.startsWith('/api/auth/') : !isPageNavigation(req.method, path, req.headers.accept)) return done();
+    Promise.resolve(identify(req.headers, req.socket.remoteAddress)).then(
+      (who) => {
+        if (!who && !api) return void reply.redirect(path === '/' ? '/sign-in' : `/sign-in?next=${encodeURIComponent(req.url)}`);
+        if (!who) return void reply.code(401).send({ error: 'not signed in' });
+        if (!api) return done();
+        // Which tab's event stream a push from the handler goes to:
+        // X-Ordinate-Client, honoured only when that stream is bound to this
+        // caller (./sse.ts). /api/events itself is behind this gate too.
+        runInContext(who, String(req.id), done, clientFor(req.headers['x-ordinate-client'], who) ?? undefined);
+      },
+      (err: unknown) => {
+        req.log.error({ err }, 'identify failed');
+        void reply.code(503).send({ error: 'sign-in unavailable' });
+      },
+    );
+  });
+
+  registerEvents(app);
 
   // Readiness: can this pod answer queries? DuckDB, plus Postgres when
   // configured. The first call starts the DuckDB worker (~115 ms, blocking) —
