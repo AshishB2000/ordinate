@@ -265,7 +265,19 @@ type Cell = 'allow' | 'deny';
     const asMember = await time('alice@acme.test', 'viewer', true);
     const asAdmin = await time('boss@acme.test', 'admin', true);
     console.log(`     authorize(): member (project.json read + 1 grant query) ${asMember.toFixed(0)} µs, org admin (project.json read only) ${asAdmin.toFixed(0)} µs, mean of ${N}`);
-    ok('measured: a decision costs under 5 ms on local Postgres', asMember < 5000 && asAdmin < 5000, `${asMember} ${asAdmin}`);
+    // The timing above is printed, not asserted: a wall-clock bound fails on a loaded runner
+    // (20 ms at load 31, ~330 µs idle). What must not regress is the WORK per decision: one
+    // grant query for a member, none for an org admin. Counted through a wrapping pool.
+    const queriesFor = async (email: string, role: 'viewer' | 'admin'): Promise<number> => {
+      let n = 0;
+      const counting = { query: (...a: unknown[]) => { n++; return (pool.query as (...x: unknown[]) => unknown)(...a); } } as unknown as typeof pool;
+      const who: import('../src/server/context').Identity = { user: { email, role }, org: { id: 'acme' } };
+      await context.runInContext(who, 'count', () => authz.authorize(readC, { projectId: own }, who, counting));
+      return n;
+    };
+    const memberQ = await queriesFor('alice@acme.test', 'viewer');
+    const adminQ = await queriesFor('boss@acme.test', 'admin');
+    ok('measured: a member decision is exactly one query, an org admin\'s none', memberQ === 1 && adminQ === 0, `${memberQ} ${adminQ}`);
   } finally {
     for (const a of apps) await a.close().catch(() => undefined);
     await pool.end();
