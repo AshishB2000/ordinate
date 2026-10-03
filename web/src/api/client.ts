@@ -62,6 +62,23 @@ function toError(status: number, statusText: string, text: string): RpcError {
   return new RpcError(status, code, message, paths);
 }
 
+/** Where the app goes on a 401 — a seam so tests can watch it (jsdom cannot navigate). */
+export const nav = {
+  assign: (url: string): void => window.location.assign(url),
+};
+
+/**
+ * A 401 means the session ended under us (idle or absolute expiry, signed out
+ * in another tab, logged out everywhere): go to sign-in, and come back here
+ * afterwards. Same path rule as features/auth's `signInPath`.
+ */
+function toSignIn(): void {
+  const { pathname, search } = window.location;
+  if (pathname === '/sign-in') return;
+  const next = pathname + search;
+  nav.assign(next === '/' ? '/sign-in' : `/sign-in?next=${encodeURIComponent(next)}`);
+}
+
 /**
  * Calls a contracted channel. Contracts carry inputs only, so the result is
  * `unknown` here; each hook in this folder narrows it to the shape its handler
@@ -80,6 +97,7 @@ export async function rpc<C extends Channel>(channel: C, ...args: RpcArgs<C>): P
     throw new RpcError(0, 'network', 'Could not reach the Ordinate server.');
   }
   const text = await res.text();
+  if (res.status === 401) toSignIn();
   if (!res.ok) throw toError(res.status, res.statusText, text);
   return decode(text);
 }

@@ -25,9 +25,11 @@ export interface Client {
   once(event: 'destroyed', fn: () => void): unknown;
 }
 
+/** The caller's role in the org (stored on the org membership, `users.role`). T3.3 enforces it. */
+export type Role = 'admin' | 'editor' | 'viewer';
+
 export interface Identity {
-  // Only dev auth exists so far; T3.3 widens the role set.
-  readonly user: { readonly email: string; readonly role: 'admin' };
+  readonly user: { readonly email: string; readonly role: Role };
   readonly org: { readonly id: string };
 }
 
@@ -36,8 +38,14 @@ export interface RequestContext extends Identity {
   readonly client: Client;
 }
 
-/** Turns a request's headers into who is asking, or null (→ 401). */
-export type Identify = (headers: Readonly<Record<string, string | string[] | undefined>>) => Identity | null;
+export type Headers = Readonly<Record<string, string | string[] | undefined>>;
+
+/**
+ * Turns a request into who is asking, or null (→ 401). `peer` is the TCP
+ * peer's address (never X-Forwarded-For): header mode trusts a proxy by it.
+ * Async because real sign-in looks the session up in Postgres (./auth/).
+ */
+export type Identify = (headers: Headers, peer?: string) => Identity | null | Promise<Identity | null>;
 
 // A request with no open event stream (no X-Ordinate-Client, or a tab that
 // never opened one): pushes to it go nowhere, as to a closed window.
@@ -92,14 +100,18 @@ export function requestClient(): Client | null {
 }
 
 /**
- * How requests are authenticated, decided once at startup. dev: everyone is
- * the dev admin (main.ts binds loopback only for that reason). prod: refuse to
- * start — no sign-in exists until T3.2 adds AUTH_MODE, and an open prod server
- * would make every caller an admin.
+ * Dev sign-in: everyone is the dev admin (main.ts binds loopback only for that
+ * reason). This is the ONE gate for "is dev sign-in allowed here": prod
+ * refuses to start with it, whether AUTH_MODE=dev was set or left unset — an
+ * open prod server would make every caller an admin. AUTH_MODE=oidc|header
+ * resolve through ./auth/ (they need Postgres), never through here.
  */
-export function identityFor(cfg: ServerEnv): Identify {
-  if (cfg.env === 'dev') return () => DEV;
-  throw new EnvError('ORDINATE_ENV=prod needs sign-in configured, and none exists yet (AUTH_MODE arrives with T3.2)');
+export function identityFor(cfg: ServerEnv): (headers: Headers) => Identity {
+  if (cfg.env === 'prod' && cfg.auth.mode === 'dev') {
+    throw new EnvError('ORDINATE_ENV=prod needs sign-in configured: set AUTH_MODE=oidc or AUTH_MODE=header (dev sign-in makes every caller an admin)');
+  }
+  if (cfg.auth.mode !== 'dev') throw new Error(`AUTH_MODE=${cfg.auth.mode} resolves through src/server/auth, not identityFor`);
+  return () => DEV;
 }
 
 /**

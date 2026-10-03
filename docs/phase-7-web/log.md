@@ -236,3 +236,36 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   lodResident, scenarioResident, segmentResident, qualityResident, anomaliesResident,
   insightsAgg.residentAgg, statsResident, medianResident, pipelineDuck (flagged), plus
   `runOrdered` and `residentSync.ts`. Startup probes (`isAvailable`) block once (~115 ms).
+
+## 2026-10-02 — T3.2 Users, orgs, teams, login
+
+- **Dependencies:** `openid-client ^6.8.8`, `@fastify/cookie ^11.1.2` (§2). Migration `0003_auth.sql`:
+  orgs, users, teams, team_members, sessions, api_tokens (issuing tokens is T3.4).
+- **Modes (`AUTH_MODE`):** `oidc` — authorization code + PKCE, users auto-provisioned as **viewer**,
+  optional `ALLOWED_EMAIL_DOMAINS`, `email_verified=false` refused; `header` — `X-Forwarded-Email`
+  trusted only when the kernel's TCP peer (`req.socket.remoteAddress`, never `X-Forwarded-For` or
+  Fastify `trustProxy`) is in `TRUSTED_PROXY_CIDRS` (a `net.BlockList`, v4/v6/v4-mapped); `dev` —
+  refused when `ORDINATE_ENV=prod`. `ORDINATE_ADMIN_EMAIL` is made admin at every sign-in (also the
+  recovery path). Single org by default (`ORDINATE_ORG=default`); schema is multi-org.
+- **Sessions:** 256-bit random id, only its sha256 stored; cookie `__Host-ordinate_session` in prod
+  (`ordinate_session` in dev), httpOnly, SameSite=Lax, Secure in prod. Idle 8 h
+  (`SESSION_IDLE_MINUTES`), absolute 7 d (`SESSION_ABSOLUTE_HOURS`), both against the DB's `now()` so
+  drifting pod clocks agree; rotated on every sign-in; logout and logout-everywhere delete rows.
+  Login state/nonce/PKCE verifier ride a 10-min httpOnly cookie scoped to the callback — any pod can
+  finish any login. One UPDATE per request slides the idle window (`ponytail:` throttle if needed).
+- **Gate:** `/api/*` needs an identity except `/api/auth/*` (matched by route); `/api/events` and
+  `/api/files*` return 401 signed out (tested). Signed-out HTML navigations redirect server-side to
+  `/sign-in?next=…` (off-site `next` refused). Logged URLs drop the query string and mask file tokens.
+- **Proof:** real-browser e2e against a stdlib mock OIDC provider (`scripts/mockOidc.ts`: discovery,
+  JWKS, authorize, token with client-secret + PKCE S256 checks, RS256 id_token) — 21/21: redirect,
+  denial error state, sign-in to the shell's kit menu, rotation, sign-out, deep link; zero console
+  errors; 17 secret values absent from 142 server log lines. `test-auth` 86, `test-auth-db` 66
+  (rotation, planted id, idle/absolute expiry, logout-everywhere, spoofed header from untrusted v4/v6
+  peers incl. with a trusted-looking X-Forwarded-For, real-socket 127.0.0.1 vs ::1). Negative
+  control (no URL serializer / no rotation / forced peer trust) fails exactly the expected checks.
+- **Found on the integrated base:** `test-server-boot`'s prod child inherited `DATABASE_URL`, so
+  T5.3's master-key check refused before the sign-in check it asserts — fixed in the test's spawn env
+  (`DATABASE_URL: ''`), assertion unchanged.
+- **Open:** e2e needs `E2E_CHROMIUM` locally (Playwright 1.62.1 wants Chromium 1234; the cache has
+  1243) — T0.8 owns the harness and CI browser install. No userinfo fallback (an id_token without
+  email is refused). CSRF tokens are T6.2 (SameSite=Lax + POST-only logout meanwhile).

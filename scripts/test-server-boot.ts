@@ -179,7 +179,9 @@ M._resolveFilename = function (req, ...rest) {
   ok('bad env: no stack trace', !errLines.some((l) => /^\s+at /.test(l)), bad.stderr);
 
   // ── prod with no sign-in configured refuses to start ──────────────────────
-  const prod = spawnSync(process.execPath, [MAIN], { env: childEnv({ ORDINATE_ENV: 'prod', DATA_DIR: tmp, PORT: '0' }), encoding: 'utf8', timeout: 20_000 });
+  // DATABASE_URL blanked: with it inherited (CI, a DB run), prod's
+  // ORDINATE_MASTER_KEY check (T5.3) refuses first and this never reaches sign-in.
+  const prod = spawnSync(process.execPath, [MAIN], { env: childEnv({ ORDINATE_ENV: 'prod', DATA_DIR: tmp, PORT: '0', DATABASE_URL: '' }), encoding: 'utf8', timeout: 20_000 });
   const prodOurs = prod.stderr.split('\n').filter((l) => l.startsWith('ordinate: '));
   ok('prod without auth: exits non-zero with one line naming sign-in', prod.status !== 0 && prod.status !== null && prodOurs.length === 1 && prodOurs[0].includes('sign-in'), prod.stderr);
 

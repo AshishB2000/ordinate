@@ -3,7 +3,7 @@
 // chunk (only the shell is in the initial bundle) with its own error boundary,
 // so one broken page leaves the nav and every other page working.
 
-import { lazy, type ComponentType } from 'react';
+import { lazy, Suspense, type ComponentType } from 'react';
 import type { RouteObject } from 'react-router';
 import { Shell } from './Shell';
 import { NotFound, RouteError } from './errors';
@@ -30,6 +30,9 @@ export const pages: RouteObject[] = [
     : []),
 ];
 
+// Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.
+const SignInPage = lazy(() => import('../features/auth/SignInPage'));
+
 /** The whole tree: the shell, every page inside it, and the 404 for anything else. */
 export function appRoutes(children: RouteObject[] = pages): RouteObject[] {
   return [
@@ -38,6 +41,15 @@ export function appRoutes(children: RouteObject[] = pages): RouteObject[] {
       element: <Shell />,
       errorElement: <RouteError />,
       children: [...children, { path: '*', element: <NotFound /> }],
+    },
+    {
+      path: '/sign-in',
+      element: (
+        <Suspense fallback={null}>
+          <SignInPage />
+        </Suspense>
+      ),
+      errorElement: <RouteError />,
     },
   ];
 }

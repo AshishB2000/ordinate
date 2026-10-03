@@ -5,12 +5,14 @@
 // never takes the nav down with it.
 
 import { Suspense } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router';
+import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
+import { nav } from '../api/client';
+import { signInPath, signOut, useMe, type Me } from '../features/auth/api';
 import { Icon } from '../ui/icons/Icon';
 import { IconButton } from '../ui/Button';
-import { Menu } from '../ui/Menu';
+import { Menu, type MenuEntry } from '../ui/Menu';
 import { PageSkeleton } from '../ui/Skeleton';
-import { Toaster } from '../ui/Toast';
+import { toast, Toaster } from '../ui/Toast';
 import { NAV, type NavItem } from './nav';
 import { THEME_PREFS, useThemePref, type ThemePref } from './theme';
 import s from './Shell.module.css';
@@ -30,20 +32,50 @@ function NavEntry({ item }: { item: NavItem }) {
   );
 }
 
+/** The menu's head: who is signed in (T3.2), or why that is not known. */
+function Who({ me, failed }: { me: Me | undefined; failed: boolean }) {
+  if (me?.user) {
+    const role = me.user.role[0].toUpperCase() + me.user.role.slice(1);
+    return (
+      <div className={s.menuHead}>
+        <span className={s.menuName} data-testid="user-email">
+          {me.user.email}
+        </span>
+        <span className={s.menuMeta}>{me.mode === 'dev' ? 'Development sign-in' : `${role} · ${me.org}`}</span>
+      </div>
+    );
+  }
+  return (
+    <div className={s.menuHead}>
+      <span className={s.menuName}>You</span>
+      <span className={s.menuMeta}>{failed ? 'Could not check who is signed in' : 'Checking sign-in…'}</span>
+    </div>
+  );
+}
+
+// A full navigation, not a router push: it drops every cached query the
+// signed-out user must not keep seeing.
+function onSignOut() {
+  signOut().then(
+    () => nav.assign('/sign-in'),
+    () => toast('Sign out failed. Check your connection and try again.', { kind: 'error' }),
+  );
+}
+
 function UserMenu() {
   const [theme, setTheme] = useThemePref();
   const navigate = useNavigate();
+  const me = useMe();
+  // Only a session can be ended here: dev has none, header mode signs out at the proxy.
+  const signOutItems: MenuEntry[] = me.data?.canSignOut
+    ? [{ kind: 'separator' }, { label: 'Sign out', icon: 'log-out', onSelect: onSignOut }]
+    : [];
   return (
     <Menu
       align="end"
       label="Account"
       trigger={<IconButton icon="user" label="Account and theme" />}
-      header={
-        <div className={s.menuHead}>
-          <span className={s.menuName}>You</span>
-          <span className={s.menuMeta}>Sign-in is not set up on this server</span>
-        </div>
-      }
+      header={<Who me={me.data} failed={me.isError} />}
       items={[
         { kind: 'separator' },
         { kind: 'heading', label: 'Theme' },
@@ -56,6 +88,7 @@ function UserMenu() {
         },
         { kind: 'separator' },
         { label: 'Settings', icon: 'settings', onSelect: () => void navigate('/settings') },
+        ...signOutItems,
       ]}
     />
   );
@@ -64,6 +97,11 @@ function UserMenu() {
 export function Shell() {
   const main = NAV.filter((n) => !n.bottom);
   const bottom = NAV.filter((n) => n.bottom);
+  const me = useMe();
+  const here = useLocation();
+  // Signed out while the app is open (expired, signed out in another tab):
+  // the server already sends a signed-out first visit to /sign-in.
+  if (me.data && me.data.user === null) return <Navigate to={signInPath(here.pathname + here.search)} replace />;
   return (
     <div className={s.win}>
       <a className={s.skip} href="#main">
