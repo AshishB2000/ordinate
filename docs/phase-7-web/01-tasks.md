@@ -301,7 +301,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   `DATABASE_URL` is unset.
 - **Done when:** two server processes starting at once apply migrations exactly once.
 
-### [ ] T3.2 Users, orgs, teams, login
+### [x] T3.2 Users, orgs, teams, login
 - **Branch** `web/t3.2-auth` · **Depends** T3.1 · **Scope** `src/server/auth/`, `web/src/features/auth/`
 - Schema: `orgs`, `users`, `teams`, `team_members`, `sessions`, `api_tokens`.
 - Modes (env `AUTH_MODE`): `oidc` (authorization code + PKCE via `openid-client`; issuer, client id,
