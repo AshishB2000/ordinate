@@ -1050,3 +1050,21 @@ scripts/**/*.js
 /src/app/paths.js
 /src/server/context.js
 /scripts/test-server-context.js
+
+# web/t0.6-shell (web/node_modules and web/dist are covered by the node_modules and dist/ rules)
+/src/server/static.js
+/scripts/test-server-static.js
+
+# web/t0.4-files
+/src/server/files.js
+/scripts/test-files.js
+
+# web/t0.5-sse
+/src/server/sse.js
+/src/api/quality.js
+/scripts/test-sse.js
+
+# web/t5.3-secrets
+/src/server/secrets/store.js
+/src/server/secrets/rotate.js
+/scripts/test-secrets.js

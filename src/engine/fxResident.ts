@@ -33,7 +33,8 @@ import type { FxPlan, RateRow } from '../analysis/fx';
 import { relationSql } from './parquetStore';
 import { sqlEmpty } from './sqlGen';
 import { sqlNum, sqlCanonicalDate } from './residentCategory';
-import { aggExpr, computeMetricResident, filterPredicates, plainFrom } from './residentQuery';
+import { aggExpr, filterPredicates, plainFrom } from './residentQuery';
+import { computeMetricResidentSync } from './residentSync';
 import type { ResidentSource } from './residentQuery';
 import * as duck from './duckdb';
 
@@ -174,7 +175,7 @@ export function fxColumns(columns: ParsedColumn[]): ParsedColumn[] {
  */
 export function fxMissingResident(fxSrc: ResidentSource, filters: FilterStep[]): { missing: number; pairs: string[] } | null {
   try {
-    const missing = computeMetricResident(fxSrc, { column: FX_MARK, aggregation: 'count' }, filters);
+    const missing = computeMetricResidentSync(fxSrc, { column: FX_MARK, aggregation: 'count' }, filters);
     if (missing === null) return null;
     let pairs: string[] = [];
     if (missing > 0) {

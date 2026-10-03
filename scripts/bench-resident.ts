@@ -48,6 +48,8 @@ import * as os from 'os';
 import * as path from 'path';
 import * as pq from '../src/engine/parquetStore';
 import * as rq from '../src/engine/residentQuery';
+// The sync twins: this bench times the blocking resident query against the JS fold.
+import { aggregateResidentSync, computeMetricResidentSync, resolveCatKeySync } from '../src/engine/residentSync';
 import * as duck from '../src/engine/duckdb';
 import * as metricValue from '../src/analysis/metricValue';
 import * as vizData from '../src/analysis/vizData';
@@ -146,14 +148,14 @@ const CASES: Case[] = [
     id: 'metric_sum',
     what: 'metric — sum(sales)',
     js: (c, r) => metricValue.computeMetric(c, r, { column: 'sales', aggregation: 'sum' }),
-    resident: (s) => rq.computeMetricResident(s, { column: 'sales', aggregation: 'sum' }),
+    resident: (s) => computeMetricResidentSync(s, { column: 'sales', aggregation: 'sum' }),
     sig: (v) => (typeof v === 'number' ? v.toFixed(4) : String(v)),
   },
   {
     id: 'metric_count',
     what: 'metric — count(code)',
     js: (c, r) => metricValue.computeMetric(c, r, { column: 'code', aggregation: 'count' }),
-    resident: (s) => rq.computeMetricResident(s, { column: 'code', aggregation: 'count' }),
+    resident: (s) => computeMetricResidentSync(s, { column: 'code', aggregation: 'count' }),
     sig: (v) => String(v),
   },
   {
@@ -161,7 +163,7 @@ const CASES: Case[] = [
     what: 'aggregate — 7 groups × sum',
     js: (c, r) =>
       vizData.buildVizData(c, r, { category: 'region', values: [{ column: 'sales', aggregation: 'sum' }] }).data,
-    resident: (s) => rq.aggregateResident(s, 'region', [{ column: 'sales', aggregation: 'sum' }]),
+    resident: (s) => aggregateResidentSync(s, 'region', [{ column: 'sales', aggregation: 'sum' }]),
     sig: chartSig,
   },
   {
@@ -175,7 +177,7 @@ const CASES: Case[] = [
     // means nothing — the pairing `ipc/visuals.residentVizData` actually ships.
     resident: (s) => {
       const m = [{ column: 'sales', aggregation: 'sum' as const }];
-      return rq.aggregateResident(s, 'sku', m, undefined, rq.resolveCatKey(s, 'sku', m)?.key);
+      return aggregateResidentSync(s, 'sku', m, undefined, resolveCatKeySync(s, 'sku', m)?.key);
     },
     sig: chartSig,
   },
@@ -197,7 +199,7 @@ const CASES: Case[] = [
         FILTERS,
       ).data,
     resident: (s) =>
-      rq.aggregateResident(
+      aggregateResidentSync(
         s,
         'region',
         [

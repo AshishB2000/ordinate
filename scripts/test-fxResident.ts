@@ -30,6 +30,8 @@ import type { VizEncoding } from '../src/analysis/visuals';
 import { sampleRates } from '../src/app/fxStore';
 import { ok, finish } from './selfcheck';
 
+async function main(): Promise<void> {
+
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-fx-'));
 let seq = 0;
 
@@ -95,6 +97,14 @@ function withFx<T>(plan: fx.FxPlan, src: fr.FxRateSource, run: (s: rq.ResidentSo
   return rq.withRelation(key, rel, () => run({ parquetPath: key, columns: fr.fxColumns(SRC.columns) }));
 }
 
+/** `withFx` for an awaiting run: the relation must stay registered across its awaits. */
+async function withFxAsync<T>(plan: fx.FxPlan, src: fr.FxRateSource, run: (s: rq.ResidentSource) => Promise<T>): Promise<T | null> {
+  const rel = fr.fxRelationSql(SRC, src, plan);
+  if (!rel) return null;
+  const key = 'fx:test' + seq++;
+  return rq.withRelationAsync(key, rel, () => run({ parquetPath: key, columns: fr.fxColumns(SRC.columns) }));
+}
+
 const AGGS: MetricAggregation[] = ['sum', 'avg', 'min', 'max'];
 const FILTERS: Array<[string, FilterStep[]]> = [
   ['no filter', []],
@@ -149,10 +159,10 @@ for (const [label, enc] of [
   const plan = fx.resolvePlan(COLS, DECLS[0][1], ['amount'], 'EUR') as fx.FxPlan;
   const conv = fx.convertTable(data.table, plan, DS_TABLE);
   const js = buildVizData(conv.columns, conv.rows, enc, []);
-  const res = withFx(plan, DS_RATES, (s) => {
+  const res = await withFxAsync(plan, DS_RATES, async (s) => {
     const measures = enc.values.map((v) => ({ column: v.column, aggregation: v.aggregation === 'none' ? 'sum' as const : v.aggregation }));
-    const k = rq.resolveCatKey(s, enc.category, measures, [], enc.grain);
-    return k ? rq.aggregateResident(s, enc.category, measures, [], k.key) : null;
+    const k = await rq.resolveCatKey(s, enc.category, measures, [], enc.grain);
+    return k ? await rq.aggregateResident(s, enc.category, measures, [], k.key) : null;
   });
   const same = !!res && JSON.stringify(res.labels) === JSON.stringify(js.data.labels)
     && res.series.every((sr, i) => sr.values.length === js.data.series[i].values.length && sr.values.every((v, j) => Object.is(v, js.data.series[i].values[j])));
@@ -169,11 +179,11 @@ for (const [label, enc] of [
   const conv = fx.convertTable(clean.table, plan, DS_TABLE);
   const js = buildVizData(conv.columns, conv.rows, enc, []);
   const rel = fr.fxRelationSql(cleanSrc, DS_RATES, plan);
-  const res = rel ? rq.withRelation('fx:clean', rel, () => {
+  const res = rel ? await rq.withRelationAsync('fx:clean', rel, async () => {
     const s = { parquetPath: 'fx:clean', columns: fr.fxColumns(cleanSrc.columns) };
     const m = [{ column: 'amount', aggregation: 'sum' as const }];
-    const k = rq.resolveCatKey(s, 'day', m, [], 'month');
-    return k ? rq.aggregateResident(s, 'day', m, [], k.key) : null;
+    const k = await rq.resolveCatKey(s, 'day', m, [], 'month');
+    return k ? await rq.aggregateResident(s, 'day', m, [], k.key) : null;
   }) : null;
   ok('chart: JPY by month — labels and every value agree', !!res && JSON.stringify(res.labels) === JSON.stringify(js.data.labels)
     && res.series[0].values.every((v, j) => Object.is(v, js.data.series[0].values[j])), JSON.stringify({ js: js.data, res }));
@@ -212,3 +222,9 @@ for (const [label, enc] of [
 
 try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* best effort */ }
 finish();
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

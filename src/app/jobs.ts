@@ -36,6 +36,7 @@
 import * as fs from 'fs';
 import { randomUUID } from 'crypto';
 import { AsyncLocalStorage } from 'async_hooks';
+import { requestClient } from '../server/context';
 
 export type JobKind =
   | 'import' | 'refresh' | 'export' | 'report' | 'bundle' | 'sql-save' | 'quality'
@@ -67,6 +68,8 @@ export interface Job {
   error?: string;
   /** Finishing does not notify — the work already says so itself (a scheduled report's own notification). */
   silent?: boolean;
+  /** Server only: the browser tab that submitted it — its events go to that tab's stream alone (src/server/sse.ts). */
+  client?: number;
 }
 
 export interface JobContext {
@@ -181,6 +184,8 @@ export function submit<T>(spec: JobSpec<T>): { id: string; done: Promise<T> } {
   if (spec.projectId) job.projectId = spec.projectId;
   if (spec.datasetId) job.datasetId = spec.datasetId;
   if (spec.silent) job.silent = true;
+  const client = requestClient();
+  if (client) job.client = client.id;
   let resolve!: (v: unknown) => void;
   let reject!: (e: unknown) => void;
   const done = new Promise<T>((res, rej) => {

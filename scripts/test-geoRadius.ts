@@ -74,7 +74,7 @@ function radius(lat: number, lng: number, km: number, latCol = 'lat', lngCol = '
   return { type: 'filter', column: latCol, op: 'within_km', radius: { lngColumn: lngCol, lat, lng, km } };
 }
 
-function diff(label: string, filters: FilterStep[], expectSome = true): void {
+async function diff(label: string, filters: FilterStep[], expectSome = true): Promise<void> {
   const want = jsIds(filters);
   const got = sqlIds(filters);
   const n = (JSON.parse(want) as unknown[]).length;
@@ -82,12 +82,12 @@ function diff(label: string, filters: FilterStep[], expectSome = true): void {
   const rows = applyPipeline({ columns: back!.columns, rows: back!.rows }, filters).rows;
   for (const aggregation of ['sum', 'count', 'avg'] as metricValue.MetricAggregation[]) {
     const w = metricValue.computeMetric(back!.columns, rows, { column: 'amount', aggregation });
-    const g = rq.computeMetricResident(src, { column: 'amount', aggregation }, filters);
+    const g = await rq.computeMetricResident(src, { column: 'amount', aggregation }, filters);
     ok(`${label}: ${aggregation}(amount) resident === JS (${w})`, Object.is(w, g), `resident ${g}`);
   }
 }
 
-function main(): void {
+async function main(): Promise<void> {
   if (!rq.isResident()) {
     console.error('FAIL geoRadius: DuckDB bridge unavailable — nothing was verified');
     process.exit(1);
@@ -126,13 +126,13 @@ function main(): void {
   }
 
   // ── The radius filter ─────────────────────────────────────────────────────
-  diff('25 km of Austin', [radius(30.2672, -97.7431, 25)]);
-  diff('100 km of Dallas', [radius(32.7767, -96.797, 100)]);
-  diff('0.8 km of a point (very few rows)', [radius(30.2672, -97.7431, 0.8)], false);
-  diff('500 km of Denver', [radius(39.7392, -104.9903, 500)]);
-  diff('the whole Earth keeps every coordinate row', [radius(0, 0, 20_016)]);
-  diff('radius AND a value filter', [radius(29.7604, -95.3698, 60), { type: 'filter', column: 'amount', op: '>', value: 250 }]);
-  diff('a TEXT-declared latitude matches nothing (never cast)', [radius(30.2672, -97.7431, 25, 'tlat')], false);
+  await diff('25 km of Austin', [radius(30.2672, -97.7431, 25)]);
+  await diff('100 km of Dallas', [radius(32.7767, -96.797, 100)]);
+  await diff('0.8 km of a point (very few rows)', [radius(30.2672, -97.7431, 0.8)], false);
+  await diff('500 km of Denver', [radius(39.7392, -104.9903, 500)]);
+  await diff('the whole Earth keeps every coordinate row', [radius(0, 0, 20_016)]);
+  await diff('radius AND a value filter', [radius(29.7604, -95.3698, 60), { type: 'filter', column: 'amount', op: '>', value: 250 }]);
+  await diff('a TEXT-declared latitude matches nothing (never cast)', [radius(30.2672, -97.7431, 25, 'tlat')], false);
   {
     const all = jsIds([]);
     ok('an unknown longitude column: the fold skips the step (every row)', jsIds([radius(30, -97, 25, 'lat', 'nope')]) === all);
@@ -156,13 +156,16 @@ function main(): void {
   ok('radiusText names the centre by coordinates when there is no place', radiusText({ lngColumn: 'x', lat: 1, lng: 2, km: 2.5 }) === 'within 2.5 km of 1.000, 2.000');
 }
 
-try {
-  main();
-} finally {
-  cleanup();
-}
-if (failureCount()) {
-  console.error(`\n${failureCount()} geoRadius check(s) FAILED.`);
-  process.exit(1);
-}
-console.log('\nAll geoRadius checks passed.');
+main()
+  .finally(cleanup)
+  .then(() => {
+    if (failureCount()) {
+      console.error(`\n${failureCount()} geoRadius check(s) FAILED.`);
+      process.exit(1);
+    }
+    console.log('\nAll geoRadius checks passed.');
+  })
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });

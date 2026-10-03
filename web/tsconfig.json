@@ -1,0 +1,23 @@
+{
+  // The web app: type-check only (Vite transpiles). Separate from the repo's
+  // tsconfig.main/renderer worlds — this one is ESM, DOM, JSX, bundler resolution.
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "noEmit": true,
+    // The client imports the server's wire codec by its .ts path, so Vite never
+    // picks up the CommonJS sibling tsc emits next to it.
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "include": ["src", "vite.config.ts"]
+}

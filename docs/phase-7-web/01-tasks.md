@@ -70,7 +70,7 @@ row of the plan's dependency graph.
 - **Done when:** `npm test` green under Electron **and** server mode; a test proves two concurrent
   requests with different orgs resolve different `userData()` paths.
 
-### [ ] T0.4 Files: upload and download ∥
+### [x] T0.4 Files: upload and download ∥
 - **Branch** `web/t0.4-files` · **Depends** T0.3 · **Scope** `src/server/files.ts`, `web/src/api/files.ts` (if web exists, else stub)
 - `POST /api/files` multipart, streamed to `temp()`, cap from `MAX_UPLOAD_MB` (default 200), returns
   `{ fileToken, name, size }`; token is single-use, org-bound, expires in 1 h.
@@ -80,7 +80,7 @@ row of the plan's dependency graph.
 - **Done when:** a test uploads a CSV, imports it via RPC with the token, and a second use of the
   token fails; an oversize upload gets 413 without the body being buffered.
 
-### [ ] T0.5 Server-sent events and jobs ∥
+### [x] T0.5 Server-sent events and jobs ∥
 - **Branch** `web/t0.5-sse` · **Depends** T0.3 · **Scope** `src/server/sse.ts`, `src/app/jobs.ts` (wiring only)
 - `GET /api/events?client=<id>`: one stream per browser tab, heartbeat every 20 s, cleaned up on
   close. `ctx().client.send(channel, payload)` writes to it (wire-encoded).
@@ -89,7 +89,7 @@ row of the plan's dependency graph.
 - Job progress/cancel (`src/app/jobs.ts`, `computePool`) emits over SSE.
 - **Done when:** a test starts a job over RPC and receives progress and completion events on the stream.
 
-### [ ] T0.6 Web app shell
+### [x] T0.6 Web app shell
 - **Branch** `web/t0.6-shell` · **Depends** T0.2 · **Scope** `web/` (new), root `package.json` scripts
 - `web/` with Vite + React 19 + TS strict, React Router 7, TanStack Query 5. `npm --prefix web run
   dev` proxies `/api` to `:8080`; `npm run server` serves `web/dist` in prod.
@@ -332,7 +332,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
 
 ## P4 — Engine
 
-### [ ] T4.1 Async resident layer: charts and paging
+### [x] T4.1 Async resident layer: charts and paging
 - **Branch** `web/t4.1-async-a` · **Depends** T0.3 · **Scope** `src/engine/`
 - Route `residentQuery`, `datasetPage`, `datasetView`, `parquetStore` through `computePool`
   (or `queryAsync`) so no RPC path calls the synchronous bridge. Make the API async upward;
@@ -376,7 +376,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
 - Old versions are garbage-collected after a grace period by a job.
 - **Done when:** the resident differential tests pass with MinIO in CI.
 
-### [ ] T5.3 Secrets at rest ∥
+### [x] T5.3 Secrets at rest ∥
 - **Branch** `web/t5.3-secrets` · **Depends** T3.1
 - Connection passwords and AI keys: AES-256-GCM per secret with a data key, data keys wrapped by
   `ORDINATE_MASTER_KEY`. Rotation command. `publicConfig()` / `publicByok()` still strip everything.

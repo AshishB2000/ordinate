@@ -21,3 +21,6 @@ export function rpc<I extends z.ZodType>(c: { access: Access; input: I }): Contr
 
 /** A record id, as UUID_RE spells it everywhere a record id reaches a path. */
 export const Uuid = z.guid();
+
+/** A token from `POST /api/files` (src/server/files.ts): 32 random bytes, base64url. */
+export const FileToken = z.string().regex(/^[A-Za-z0-9_-]{43}$/);

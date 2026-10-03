@@ -67,14 +67,16 @@ const ALLOWED: Record<string, number> = {
 
 // Roots to walk. `scripts` is included for the hand-written build tools that
 // have no `.ts` sibling as much as for the test sources themselves.
-const ROOTS = ['src', 'renderer', 'preload', 'scripts'];
+const ROOTS = ['src', 'renderer', 'preload', 'scripts', 'web'];
 
 // Not sources: dependencies, the committed vgplot bundle (build output of
-// scripts/build-vendor.js), and the esbuild-generated Svelte island bundle.
+// scripts/build-vendor.js), the esbuild-generated Svelte island bundle, and
+// the web app's Vite output.
 const SKIP_DIRS = new Set(['node_modules']);
 const SKIP_PATHS = new Set([
   'renderer/hub/vendor',
   'renderer/hub/svelte/bundle.js',
+  'web/dist',
 ]);
 
 function rel(abs: string): string {
@@ -95,7 +97,7 @@ function collect(abs: string, out: string[]): void {
     for (const name of fs.readdirSync(abs).sort()) collect(path.join(abs, name), out);
     return;
   }
-  if (!/\.(ts|js)$/.test(abs)) return;
+  if (!/\.(tsx?|js)$/.test(abs)) return;
   // An emitted sibling of a .ts is build output, not a source.
   if (abs.endsWith('.js') && fs.existsSync(abs.slice(0, -3) + '.ts')) return;
   out.push(r);

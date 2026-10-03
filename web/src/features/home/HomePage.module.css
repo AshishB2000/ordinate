@@ -1,0 +1,69 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.label {
+  font-size: var(--t-11);
+  line-height: var(--lh-body);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+}
+
+/* A dense list on one card: hairline rows, no per-row shadow. */
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  height: 44px;
+  padding: 0 var(--sp-16);
+}
+.row + .row {
+  border-top: 1px solid var(--border-hairline);
+}
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+.badge {
+  flex: 0 0 auto;
+  padding: 1px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-11);
+  font-weight: 500;
+}
+.meta {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: var(--t-12);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}

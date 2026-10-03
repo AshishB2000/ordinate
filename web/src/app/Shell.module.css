@@ -1,0 +1,328 @@
+/* The hub's chrome, ported from renderer/hub/hub.css: .win, .hub-topbar,
+   .hub-search, .app-sidebar, .as-nav-item, .as-bottom, .icon-btn. */
+
+.win {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.skip {
+  position: absolute;
+  left: var(--sp-8);
+  top: -48px;
+  z-index: 10;
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-sm);
+  background: var(--surface-float);
+  color: var(--text-strong);
+  box-shadow: var(--shadow-md);
+}
+.skip:focus {
+  top: var(--sp-8);
+}
+
+/* ── top bar: 40px, equal-flex sides so the search centres on the window ── */
+.topbar {
+  flex: 0 0 40px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  padding: 0 var(--sp-12) 0 var(--sp-8);
+  background: var(--titlebar);
+  border-bottom: 1px solid var(--border);
+}
+.side {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+.right {
+  justify-content: flex-end;
+}
+
+.project {
+  display: flex;
+  align-items: center;
+  gap: var(--ctl-gap);
+  max-width: 216px;
+  height: var(--ctl-md);
+  padding: 0 var(--sp-8);
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-strong);
+  cursor: default;
+}
+.project > svg {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+.project:hover {
+  background: var(--surface-2);
+}
+.projectAvatar {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.projectName {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search {
+  flex: 0 1 520px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--ctl-gap);
+  height: var(--ctl-md);
+  padding: 0 var(--sp-12);
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-full);
+  color: var(--text-faint);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.search:hover {
+  border-color: var(--border-2);
+}
+.search:focus-within {
+  border-color: var(--accent-line);
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.search > svg {
+  flex: 0 0 auto;
+}
+.searchInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  color: var(--text);
+}
+.searchInput::placeholder {
+  color: var(--text-faint);
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ctl-md);
+  height: var(--ctl-md);
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.iconBtn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* ── user menu: a floating surface (shadow means "floating") ── */
+.menu {
+  inset: 44px var(--sp-12) auto auto;
+  margin: 0;
+  width: 248px;
+  padding: var(--menu-pad);
+  background: var(--surface-float);
+  color: var(--text);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+}
+.menuHead,
+.menuSection {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-8);
+}
+.menuSection {
+  gap: var(--sp-8);
+  border-top: 1px solid var(--border-hairline);
+}
+.menuName {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.menuMeta {
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.menuLabel {
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+}
+.seg {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.segOpt {
+  height: var(--ctl-sm);
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--t-12);
+  font-weight: 500;
+  cursor: pointer;
+}
+.segOpt:hover {
+  color: var(--text);
+}
+.segOpt[aria-pressed='true'] {
+  background: var(--surface-float);
+  color: var(--text-strong);
+  box-shadow: var(--shadow-sm);
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: var(--ctl-gap);
+  height: var(--menu-row);
+  padding: 0 var(--sp-8);
+  border-top: 1px solid var(--border-hairline);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  text-decoration: none;
+}
+.menuItem:hover {
+  background: var(--surface-2);
+}
+.menuItem:focus-visible {
+  outline-offset: -2px;
+}
+
+/* ── body: rail + stage ── */
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* The rail sits on the page plane (--bg) behind a hairline; the ACTIVE row is a
+   card lifted off it with a 2px accent bar, hover is a darkening. */
+.rail {
+  width: 232px;
+  flex: 0 0 232px;
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-8);
+  background: var(--bg);
+  border-right: 1px solid var(--border-hairline);
+  overflow-y: auto;
+}
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.bottom {
+  margin-top: auto;
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--border-hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: var(--ctl-gap);
+  height: var(--ctl-md);
+  padding: 0 var(--sp-8);
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  font-weight: 500;
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.navItem > svg {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+.navItem:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.navItem:hover > svg {
+  color: var(--muted);
+}
+.active {
+  background: var(--surface-1);
+  box-shadow: inset 2px 0 0 0 var(--accent);
+  color: var(--text-strong);
+  font-weight: 600;
+}
+.active > svg {
+  color: var(--accent);
+}
+.active:hover {
+  background: var(--surface-2);
+}
+
+.stage {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  background: var(--bg);
+}
+.stage:focus {
+  outline: none;
+}
+
+/* Narrow windows: the rail folds to its icons. The label stays in the
+   accessibility tree (visually hidden), so each link keeps its name. */
+@media (max-width: 900px) {
+  .rail {
+    width: 56px;
+    flex-basis: 56px;
+  }
+  .navItem {
+    justify-content: center;
+    padding: 0;
+  }
+  .navLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .projectName {
+    display: none;
+  }
+  /* The sides stop sharing the width equally: the search takes what is left. */
+  .side {
+    flex: 0 0 auto;
+  }
+  .search {
+    flex: 1 1 auto;
+  }
+}

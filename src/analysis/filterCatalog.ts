@@ -43,18 +43,23 @@ function shape(
 }
 
 /** Off the Parquet. Null when any distinct read fails — the caller then builds the JS one. */
-export function catalogResident(src: PageSource, datasetId: string): FilterCatalog | null {
-  return shape(
-    src.columns,
-    datasetId,
-    (column) => {
-      const r = readDistinctPage(src, column, { limit: MAX_DISTINCT });
-      return r ? r.values : null;
-    },
-    // A resident null is "no numeric cells" OR "failed"; either way the %
-    // rule then takes the number as typed, the same as the JS path's null.
-    (column) => computeMetricResident(src, { column, aggregation: 'max' }),
-  );
+export async function catalogResident(src: PageSource, datasetId: string): Promise<FilterCatalog | null> {
+  // The reads are async, so they run first, in shape()'s column order, and
+  // shape() then reads them back — one shaper for both builds.
+  const distinct = new Map<string, string[] | null>();
+  const max = new Map<string, number | null>();
+  for (const c of src.columns) {
+    if (c.type === 'text' && !distinct.has(c.name)) {
+      const r = await readDistinctPage(src, c.name, { limit: MAX_DISTINCT });
+      if (!r) return null;
+      distinct.set(c.name, r.values);
+    } else if (c.type === 'number' && !max.has(c.name)) {
+      // A resident null is "no numeric cells" OR "failed"; either way the %
+      // rule then takes the number as typed, the same as the JS path's null.
+      max.set(c.name, await computeMetricResident(src, { column: c.name, aggregation: 'max' }));
+    }
+  }
+  return shape(src.columns, datasetId, (column) => distinct.get(column) ?? null, (column) => max.get(column) ?? null);
 }
 
 /** The reference, over hydrated rows. Never null. */

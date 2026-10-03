@@ -18,7 +18,7 @@ import { EnvError, type ServerEnv } from './env';
 
 /** The caller's browser tab (server) or window (desktop) — what `event.sender` was. */
 export interface Client {
-  // A number, like a WebContents id; T0.5 numbers each browser tab's stream.
+  // A number, like a WebContents id: each browser tab's event stream gets one (./sse.ts), never reused.
   readonly id: number;
   send(channel: string, payload?: unknown): void;
   isDestroyed(): boolean;
@@ -39,7 +39,8 @@ export interface RequestContext extends Identity {
 /** Turns a request's headers into who is asking, or null (→ 401). */
 export type Identify = (headers: Readonly<Record<string, string | string[] | undefined>>) => Identity | null;
 
-// ponytail: a no-op until T0.5 gives each tab an SSE stream to write to.
+// A request with no open event stream (no X-Ordinate-Client, or a tab that
+// never opened one): pushes to it go nowhere, as to a closed window.
 const NO_CLIENT: Client = Object.freeze({ id: 0, send() {}, isDestroyed: () => false, once: () => undefined });
 
 const DESKTOP: RequestContext = Object.freeze({
@@ -75,9 +76,19 @@ export function ctx(): RequestContext {
   throw new Error('ctx() called outside a request');
 }
 
-/** Runs `fn` as a request with this identity (app.ts's hook; tests). */
-export function runInContext<T>(identity: Identity, requestId: string, fn: () => T): T {
-  return als.run({ ...identity, requestId, client: NO_CLIENT }, fn);
+/** Runs `fn` as a request with this identity (app.ts's hook; tests), pushing to `client`'s stream. */
+export function runInContext<T>(identity: Identity, requestId: string, fn: () => T, client: Client = NO_CLIENT): T {
+  return als.run({ ...identity, requestId, client }, fn);
+}
+
+/**
+ * The browser tab behind the current server request, or null — under the
+ * desktop app, outside a request, or when the tab has no event stream open.
+ * src/app/jobs.ts tags a job with it so the job's events reach that tab only.
+ */
+export function requestClient(): Client | null {
+  const c = als.getStore()?.client;
+  return c && c !== NO_CLIENT ? c : null;
 }
 
 /**

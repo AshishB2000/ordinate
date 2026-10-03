@@ -131,7 +131,7 @@
 //     `timeout`) rather than abandoning it.
 
 import * as path from 'path';
-import { Worker } from 'worker_threads';
+import { Worker, isMainThread } from 'worker_threads';
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -147,7 +147,8 @@ export type DuckErrorCode =
   | 'query' // DuckDB rejected the SQL, or a caller passed a bad argument
   | 'overflow' // result larger than the shared buffer ceiling
   | 'timeout' // worker stopped answering; bridge shut down
-  | 'config'; // configure() called at the wrong time
+  | 'config' // configure() called at the wrong time
+  | 'sync'; // query()/exec() on the main thread after forbidSyncOnMainThread()
 
 export class DuckDBError extends Error {
   readonly code: DuckErrorCode;
@@ -283,6 +284,21 @@ export function configure(next: DuckDBOptions): void {
  */
 export function isAvailable(): boolean {
   return ensureStarted();
+}
+
+// SERVER MODE. One process serves every request, so a sync call parks ALL of
+// them, not one window. `forbidSyncOnMainThread()` makes `query()`/`exec()`
+// THROW on the main thread instead, so a sync call site still reachable from a
+// request fails loudly rather than freezing the server. Worker threads (the
+// compute pool) are exempt — parking their own thread is what they are for.
+// The web server (src/server/main.ts) calls it at boot — wired by T0.3/T4.2;
+// the desktop never does. `isAvailable()` is NOT guarded: it blocks only for the
+// one-time ~115 ms startup handshake, which the server pays at boot (/readyz).
+let syncForbidden = false;
+
+/** Make the sync API throw on the main thread (`false` lifts it — tests). */
+export function forbidSyncOnMainThread(on = true): void {
+  syncForbidden = on;
 }
 
 /** Run a query and return its rows. SYNCHRONOUS — blocks the calling thread. */
@@ -569,6 +585,9 @@ function onWorkerMessage(w: Worker, reply: WorkerReply): void {
 // ── Call path ────────────────────────────────────────────────────────────────
 
 function call(kind: 'query' | 'exec', sql: string, params?: readonly DuckValue[]): string {
+  if (syncForbidden && isMainThread) {
+    throw new DuckDBError('sync', `synchronous duck.${kind}() on the main thread is forbidden in server mode — use ${kind}Async()`);
+  }
   if (!ensureStarted() || !worker || !ctl) {
     throw new DuckDBError('unavailable', 'DuckDB is not available' + (failReason ? ': ' + failReason : ''));
   }

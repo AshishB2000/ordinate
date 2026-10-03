@@ -31,6 +31,8 @@ import type { Cell, FilterStep } from '../src/data/transforms';
 
 import { ok, failureCount } from './selfcheck';
 
+async function main(): Promise<void> {
+
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-period-'));
 function cleanup(): void {
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
@@ -87,13 +89,13 @@ function sqlIds(filters: FilterStep[]): string {
   return JSON.stringify(rows.map((r) => r.id));
 }
 
-function diff(label: string, filters: FilterStep[]): void {
+async function diff(label: string, filters: FilterStep[]): Promise<void> {
   const want = jsIds(filters);
   ok(`${label}: resident rows === fold rows`, want === sqlIds(filters), `fold ${want}\n     sql  ${sqlIds(filters)}`);
   for (const aggregation of ['sum', 'count'] as metricValue.MetricAggregation[]) {
     const rows = applyPipeline({ columns: back!.columns, rows: back!.rows }, filters).rows;
     const w = metricValue.computeMetric(back!.columns, rows, { column: 'v', aggregation });
-    const g = rq.computeMetricResident(src, { column: 'v', aggregation }, filters);
+    const g = await rq.computeMetricResident(src, { column: 'v', aggregation }, filters);
     ok(`${label}: ${aggregation}(v) resident === JS (${w})`, Object.is(w, g), `resident ${g}`);
   }
   const pipe = runResidentPipeline(file, COLS, filters);
@@ -138,14 +140,14 @@ for (const run of RUNS) {
   for (const spec of specs()) {
     const step: FilterStep = { type: 'filter', column: 'd', op: 'period', period: spec };
     const name = `${tag} ${spec.preset}${spec.n ? '(' + spec.n + ')' : ''}${spec.from || spec.to ? `[${spec.from || ''}..${spec.to || ''}]` : ''}`;
-    diff(name, [step]);
-    diff(name + ' & East', [east, step]);
+    await diff(name, [step]);
+    await diff(name + ' & East', [east, step]);
     // The SHIFTED scopes a Compare and an overlay issue.
     for (const mode of ['previous_period', 'previous_year'] as const) {
       const moved = compareScope([east, step], cols, { mode });
-      if (moved) diff(`${name} → ${mode}`, moved.filters);
+      if (moved) await diff(`${name} → ${mode}`, moved.filters);
     }
-    diff(`${name} → overlay`, overlayFilters([step], cols));
+    await diff(`${name} → overlay`, overlayFilters([step], cols));
   }
 }
 
@@ -156,8 +158,8 @@ for (const run of RUNS) {
   for (const spec of [{ preset: 'this_year' }, { preset: 'last_n_months', n: 6 }] as PeriodSpec[]) {
     const filters: FilterStep[] = [{ type: 'filter', column: 'd', op: 'period', period: spec }];
     const want = vizData.buildVizData(back.columns, back.rows, { category: 'region', values: [{ column: 'v', aggregation: 'sum' }] }, filters).data;
-    const plan = rq.resolveCatKey(src, 'region', [{ column: 'v', aggregation: 'sum' }], filters);
-    const got = plan ? rq.aggregateResident(src, 'region', [{ column: 'v', aggregation: 'sum' }], filters, plan.key) : null;
+    const plan = await rq.resolveCatKey(src, 'region', [{ column: 'v', aggregation: 'sum' }], filters);
+    const got = plan ? await rq.aggregateResident(src, 'region', [{ column: 'v', aggregation: 'sum' }], filters, plan.key) : null;
     ok(`group by region under ${spec.preset}: labels agree`, !!got && JSON.stringify(got.labels) === JSON.stringify(want.labels));
     ok(`group by region under ${spec.preset}: values agree (Object.is)`, !!got && got.series[0].values.every((v, i) => Object.is(v, want.series[0].values[i])));
   }
@@ -172,3 +174,9 @@ if (failureCount() > 0) {
   process.exit(1);
 }
 console.log('\nAll period differential checks passed.');
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

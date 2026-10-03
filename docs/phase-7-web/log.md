@@ -92,3 +92,147 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
 - **Open:** `src/app/sampleProject.ts` still imports Electron at load (T0.8 seeds the sample on the
   server); `config.ts` format/calendar/language are process-wide — two orgs can race (`ponytail:`,
   P5).
+
+## 2026-10-02 — T0.6 Web app shell
+
+- **Stack installed:** react / react-dom 19.3.0, react-router 7.18.4 (pinned to 7 per §2; 8.4 is
+  out), @tanstack/react-query 5.104.1; dev: vite 8.3.2, typescript 7.0.2, vitest 5.0.3,
+  @testing-library/react 16.3.3 + @testing-library/dom 10.4.2, jsdom 29.1.1 (30 needs Node ≥ 24.15;
+  this machine has 24.14), @types/react(-dom) 19.3.0 (React 19 ships no types). Root:
+  @fastify/static 10.1.5.
+- **Decided (orchestrator):** `jsdom` and `@types/react*` are implied by the §2 choices (Testing
+  Library needs a DOM; TS strict needs React's types). No `@vitejs/plugin-react` — Vite 8 compiles
+  JSX with oxc (`jsx: automatic`).
+- **Measured:** initial JS chunk 351.4 KB raw / **110.8 KB gzip** (T0.8 caps at 300 KB) with the wire
+  codec in and zod out; CSS 3.3 KB gzip; Home 3.6 KB gzip; each area its own lazy chunk.
+- **CSP:** the build emits a `<meta>` CSP and no inline script/style; theme applied before first
+  paint by an external `theme-boot.js`. Live check: `npm run server` with 3 seeded projects in
+  `DATA_DIR/orgs/default` → Home lists them, zero console errors.
+- **Client:** `rpc(channel, payload?)` typed from `src/api` contracts (type-only import of the `.ts`
+  source so Vite never picks up tsc's CommonJS `.js`); results stay `unknown` (contracts carry
+  inputs only) and the hooks narrow with commented casts. `web/tsconfig.json` drops
+  `noUncheckedIndexedAccess` (not part of `strict`; T0.2's `wire.ts` fails it).
+- **Static serving:** hashed assets immutable, `index.html` no-cache, client routes fall back to
+  `index.html`, but a miss under `/api/*` or a missing asset is a JSON 404, never HTML.
+- **Dependency graph note:** the spec lists T0.6 → T0.2, but the real project list needs T0.3's
+  per-org paths; the plan's graph (T0.6 after T0.3) was right and was followed.
+- `build.target` is chrome149/edge149/firefox151/safari26 — estimated "latest two" from the
+  browsers Playwright 1.62 bundles; T0.8's nightly WebKit/Firefox runs will catch a wrong guess.
+
+## 2026-10-02 — T0.4 Files: upload and download
+
+- **Dependency:** `@fastify/multipart ^10.1.2` (§2), required lazily inside `registerFileRoutes`
+  so the desktop never loads it. `MAX_UPLOAD_MB` (default 200) validated in `env.ts`.
+- **Tokens:** `randomBytes(32)` base64url (43 chars, one zod `FileToken` shared by contract and
+  server), in-memory, single-use, bound to org + user, 1 h expiry, 60 s sweep. One message for
+  unknown/forbidden/used/expired so a caller cannot probe existence. Upload lands as
+  `orgs/<org>/temp/upload-<hex>` (`wx`, 0600); the client filename is display text only.
+  Downloads: `offerDownload(path, name)` → `{ downloadToken }`, single use, deleted after send;
+  `Content-Disposition` with an ASCII fallback + RFC 5987 `filename*` (a hostile name cannot inject
+  a header). The token in `/api/files/<token>` is masked in the request log.
+- **Oversize without buffering:** the file stream is destroyed at the cap (otherwise busboy drains
+  the rest of the part — the first attempt read all 200 MB). Then a lingering close: discard what is
+  still arriving, half-close, drop after 2 s or 16 MB. `Connection: close` alone lost the 413 to a TCP
+  reset 1 run in 3. Measured with a 200 MB generator body and `MAX_UPLOAD_MB=2`: browser-like client
+  gets 413 after 5 MB sent; a hostile client ignoring 413 and FIN is cut after 23 MB; RSS +6.8 / +9.4
+  MB; declared Content-Length over the cap → 413 before reading.
+- **150 MB upload:** 168–329 ms over loopback (~456–895 MB/s, machine at load 43–80); peak RSS
+  +18–78 MB over ~140 MB idle — the body is never held.
+- **Converted:** `dataset:pickAndParse` takes `{fileToken, sheetName?}` on the server (`write`);
+  the desktop dialog path is unchanged and the server never returns its temp path.
+- **Open:** tokens are per-process — N pods need sticky sessions until P5 moves them to Postgres
+  (`ponytail:`); `/api/files` role check comes with T3.3; xlsx sheet switching re-uploads;
+  **security follow-up:** `importStage`'s `stagedId` is a random UUID not bound to an org, so
+  `dataset:save` could take another org's staged table given its id — bind it when `dataset:save`
+  gets a contract (T2.4) and check in T6.3.
+
+## 2026-10-02 — T0.5 Server-sent events and jobs
+
+- **Design:** `GET /api/events?client=<uuid>` — the tab's own UUID, the same value it sends as
+  `X-Ordinate-Client`. A stream is bound at open to org + user; another owner opening that id gets
+  403, the same owner reopening replaces it. `clientFor(header, who)` hands an RPC the stream only
+  if it is open and bound to the caller. Frames are named events
+  (`event: <channel>` + wire-encoded `data:`); heartbeat comment every 20 s.
+- **Backpressure:** queue on `write() === false`, cap 256 per stream; a newer `jobs:changed` (the
+  tab's whole list) replaces its queued copy; completions are never dropped — if the queue still
+  fills, the stream is closed rather than grown.
+- **Jobs:** `jobs.ts` tags `job.client` at submit (server only, 5 lines); each tab receives only its
+  own jobs' slice, and only when that slice changed (another org's job ticking used to re-send every
+  tab's list — caught by the test). `jobs:finished` replaces the desktop OS notification. First
+  contract that starts a job: `quality:run` (`write`).
+- **Measured** (loopback, 200 events): send → receive median 0.30 ms, p95 1.15 ms, max 3.4 ms.
+  1,000 idle streams: ~8.4 KB heap / ~40 KB RSS each; registry back to 0 after close.
+- **Push channels:** keep `hub:new-entry` (a capture becoming an entry — upload-based on the
+  server). Drop `hub:open-settings` (Settings is a route), `hub:show-permission` (macOS Screen
+  Recording; the server never captures), `menu:run` (native menu; the web shell has its own menus
+  and palette), `overlay:frame` (the screenshot overlay window is gone).
+- **No Last-Event-ID resume** — a reconnecting tab re-reads state over RPC.
+- **Open:** `src/ipc/jobs.ts` still imports Electron at load → `jobs:list/cancel/clear` have no
+  contracts yet (need org/user ownership filters when added); the job queue's `MAX_RUNNING=3` is
+  process-global across orgs (fairness, not a leak — P5 jobs table); an export job's `result.path`
+  must become a T0.4 download token before it reaches a tab.
+
+## 2026-10-02 — T5.3 Secrets at rest
+
+- **Design:** envelope encryption, stdlib `crypto` only. One random 32-byte data key per org in
+  `secret_data_keys`, AES-256-GCM-wrapped by `ORDINATE_MASTER_KEY` (AAD = org + key id). Each secret
+  in `secrets` (PK org_id, kind, ref) is AES-256-GCM under its org's data key, fresh 12-byte IV,
+  AAD = org + kind + ref — a row copied to another org or ref fails to decrypt (4 cases tested).
+  Master key: 32 bytes as hex or base64(url), parsed to a `KeyObject` (never printed by
+  `JSON.stringify`/`inspect`), required in prod with `DATABASE_URL`; `master_kid` = 16-hex
+  fingerprint so a pod on the wrong key names both.
+- **Rotation:** `npm run secrets:rotate` (OLD/NEW from env) re-wraps data keys only in one
+  transaction — payloads byte-identical; idempotent; unknown key aborts with nothing changed.
+  Measured 30 ms for 3 data keys. Gap: a pod accepts one master key, so pods not yet rolled cannot
+  read secrets between rotate and rollout (`ponytail:` — accept a key list).
+- **Measured:** seal 4.6 µs / open 2.5 µs per 30-byte secret; store put 0.41 ms / get 0.21 ms on local
+  Postgres.
+- **Proof:** a canary written through the store and through the real config setters is absent —
+  plain, URL-encoded, hex, base64/base64url at all three alignments — from `pg_dump`, a
+  `row_to_json` dump of every table, the trace-level app logger, 6 child processes, every
+  `SecretError`, and `publicConfig()`/`publicByok()`. A planted-spelling negative control proves the
+  grep finds each form.
+- **REQUIRED FOLLOW-UP (not optional):** the store is a seam; nothing on the server routes through it
+  yet, so a server today would still write connection passwords and AI keys to the per-org plaintext
+  `config.json`. T2.5 must route `src/ipc/connections.ts` `storeSecrets`/`loadSecrets`/
+  `connection:delete` (via `src/app/configSecrets.ts`) through it in server mode; T2.12 must route
+  `src/app/execConfig.ts` (`setApiKey`/`getApiKey`/`hasKey`/BYOK) and `src/ai/analyze.ts`,
+  `src/ai/models.ts` key reads. T6.3's threat model checks both are done.
+
+## 2026-10-02 — T4.1 Async resident layer: charts and paging
+
+- **Chosen transport: the bridge's `queryAsync`/`execAsync`, not `computePool`.** 1M-row Parquet,
+  medians of 31 interleaved runs (load avg 33–112 from parallel sessions — ratios matter, not
+  absolutes):
+
+  | case | path | latency ms | main thread blocked ms |
+  |---|---|---|---|
+  | page unsorted (count + 100 rows @500k) | sync | 93 | 93 |
+  | | queryAsync | 92 | 9 |
+  | | computePool | 65 | 14 |
+  | page sorted | sync | 196 | 196 |
+  | | queryAsync | 265 | 8 |
+  | | computePool | 204 | 19 |
+  | chart (cat-key + grouped sum) | sync | 28 | 28 |
+  | | queryAsync | 31 | 1.2 |
+  | | computePool | 29 | 4.9 |
+
+  Quieter pre-change run: sync page 35 / sorted 80 / chart 19.5 ms. Pool threads cost 133–537 ms
+  cold each AND run their own DuckDB, which cannot see the main bridge's views (`datasetView`) or
+  registered join/fx relations — decisive against the pool for request paths.
+- **Converted:** `residentQuery` (metric/aggregate/cat-key), `datasetPage`, `datasetView`, the
+  request-path `parquetStore` write; all IPC callers await. SQL text unchanged (ordinal last in every
+  ORDER BY; casts on declared type). `residentFilter.ts` split out (residentQuery 863 → 700 lines);
+  `residentSync.ts` keeps sync twins only for T4.2's unconverted consumers.
+- **Guard:** `forbidSyncOnMainThread()` in `duckdb.ts` (worker threads exempt). Not yet switched on
+  by `src/server/main.ts` — T4.2 wires it once the remaining sync sites are converted.
+  `test-serverModeResident` drives the real handlers with the guard on: Object.is-equal to the JS
+  reference, `getDataset` never called, trace `resident` never `failed`; sabotaging `datasetPage.js`
+  back to sync fails it loudly.
+- **Differential suites:** 14 now await; pass counts match the develop baseline; residentQuery
+  533 → 859 (sync-vs-async equality added). None weakened.
+- **T4.2's input** (sync sites still reachable from IPC): pivotResident, cohortResident,
+  funnelResident, facetResident, joinResident (5 queries + `withRelation`), fxResident,
+  lodResident, scenarioResident, segmentResident, qualityResident, anomaliesResident,
+  insightsAgg.residentAgg, statsResident, medianResident, pipelineDuck (flagged), plus
+  `runOrdered` and `residentSync.ts`. Startup probes (`isAvailable`) block once (~115 ms).

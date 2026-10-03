@@ -38,8 +38,11 @@
 //    the string verbatim (`''` and whitespace included); number → `Number(s)`.
 //    Identical to `pipelineDuck.toCell` — the two must stay in lockstep.
 //
-// Everything runs through the existing synchronous bridge in `src/duckdb.ts`.
-// No second DuckDB connection, no new dependency.
+// Everything runs through the one bridge in `src/engine/duckdb.ts` — no second
+// DuckDB connection, no new dependency. A request path uses the `…Async` twins
+// (async bridge, the loop keeps turning); the sync `readTable`/`writeTable`
+// remain for tests, fixtures and the compute worker, and their queries throw on
+// the main thread in server mode (`duck.forbidSyncOnMainThread`).
 //
 // ── Why a temp NDJSON file instead of INSERT ────────────────────────────────
 // Loading 100k rows with bound-parameter INSERTs costs ~1,650 ms — the per-row

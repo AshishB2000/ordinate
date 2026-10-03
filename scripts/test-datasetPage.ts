@@ -30,6 +30,8 @@ import type { Cell } from '../src/data/transforms';
 
 import { ok, failureCount } from './selfcheck';
 
+async function main(): Promise<void> {
+
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-page-'));
 let seq = 0;
 function tmpFile(): string {
@@ -76,9 +78,9 @@ function sameRows(a: Cell[][], b: Cell[][]): boolean {
 }
 
 /** readPage must equal pageRowsJs over the round-tripped rows, exactly. */
-function diff(label: string, f: Fixture, req: dp.PageRequest): dp.PageResult | null {
+async function diff(label: string, f: Fixture, req: dp.PageRequest): Promise<dp.PageResult | null> {
   const want = dp.pageRowsJs(f.columns, f.rows, req);
-  const got = dp.readPage(f.src, req);
+  const got = await dp.readPage(f.src, req);
   if (!got) {
     ok(`${label}: readPage returned a page`, false);
     return null;
@@ -117,36 +119,36 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
   const f = fixture(cols, rows);
 
   for (const [offset, limit] of [[0, 10], [50, 10], [130, 10], [136, 10], [0, 500], [7, 1]]) {
-    const got = dp.readPage(f.src, { offset, limit });
+    const got = await dp.readPage(f.src, { offset, limit });
     ok(
       `source order: offset ${offset} limit ${limit} === rows.slice()`,
       got !== null && sameRows(got.rows, f.rows.slice(offset, offset + limit)) && got.total === 137,
     );
-    diff(`source order (${offset}/${limit})`, f, { offset, limit });
+    await diff(`source order (${offset}/${limit})`, f, { offset, limit });
   }
 
   // Paging boundaries.
-  const past = dp.readPage(f.src, { offset: 500, limit: 25 });
+  const past = await dp.readPage(f.src, { offset: 500, limit: 25 });
   ok('past the end: empty rows, real total', past !== null && past.rows.length === 0 && past.total === 137);
   ok('past the end: offset echoed back', past !== null && past.offset === 500);
 
-  const all = dp.readPage(f.src, { offset: 0, limit: 1000 });
+  const all = await dp.readPage(f.src, { offset: 0, limit: 1000 });
   ok('limit larger than the table returns the whole table', all !== null && all.rows.length === 137);
 
-  const zero = dp.readPage(f.src, { offset: 0, limit: 0 });
+  const zero = await dp.readPage(f.src, { offset: 0, limit: 0 });
   ok('limit 0: no rows, real total', zero !== null && zero.rows.length === 0 && zero.total === 137);
 
-  const clamped = dp.readPage(f.src, { offset: -5, limit: 9_999_999 });
+  const clamped = await dp.readPage(f.src, { offset: -5, limit: 9_999_999 });
   ok('negative offset clamps to 0', clamped !== null && clamped.offset === 0);
   ok(`limit clamps to MAX_LIMIT (${dp.MAX_LIMIT})`, clamped !== null && clamped.rows.length === 137);
 
-  ok('non-finite offset → null (fall back)', dp.readPage(f.src, { offset: NaN, limit: 10 }) === null);
-  ok('non-finite limit → null (fall back)', dp.readPage(f.src, { offset: 0, limit: Infinity }) === null);
+  ok('non-finite offset → null (fall back)', await dp.readPage(f.src, { offset: NaN, limit: 10 }) === null);
+  ok('non-finite limit → null (fall back)', await dp.readPage(f.src, { offset: 0, limit: Infinity }) === null);
 
   // Every page, concatenated, is the table.
   const seen: Cell[][] = [];
   for (let o = 0; o < 137; o += 20) {
-    const p = dp.readPage(f.src, { offset: o, limit: 20 });
+    const p = await dp.readPage(f.src, { offset: o, limit: 20 });
     if (p) seen.push(...p.rows);
   }
   ok('paging through in 20s reassembles the table exactly', sameRows(seen, f.rows));
@@ -169,19 +171,19 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
   ]);
 
   for (const dir of ['asc', 'desc'] as const) {
-    const got = diff(`number sort ${dir}`, f, { offset: 0, limit: 10, sortColumn: 'score', sortDir: dir });
+    const got = await diff(`number sort ${dir}`, f, { offset: 0, limit: 10, sortColumn: 'score', sortDir: dir });
     if (got) console.log(`     score ${dir}: ${show(got.rows, 1)}`);
   }
-  const asc = dp.readPage(f.src, { offset: 0, limit: 10, sortColumn: 'score', sortDir: 'asc' });
+  const asc = await dp.readPage(f.src, { offset: 0, limit: 10, sortColumn: 'score', sortDir: 'asc' });
   ok('number asc: numeric, not lexical (-3 < 0 < 7.5 < 12 < 1000)',
     asc !== null && JSON.stringify(asc.rows.map((r) => r[1])) === JSON.stringify([-3, 0, 7.5, 12, 1000, null, null]));
-  const desc = dp.readPage(f.src, { offset: 0, limit: 10, sortColumn: 'score', sortDir: 'desc' });
+  const desc = await dp.readPage(f.src, { offset: 0, limit: 10, sortColumn: 'score', sortDir: 'desc' });
   ok('number desc: empties still last',
     desc !== null && JSON.stringify(desc.rows.map((r) => r[1])) === JSON.stringify([1000, 12, 7.5, 0, -3, null, null]));
 
   // Paged, sorted — the window must be the window of the SORTED table.
-  diff('number sort, page 2', f, { offset: 2, limit: 3, sortColumn: 'score', sortDir: 'asc' });
-  diff('number sort, past the end', f, { offset: 99, limit: 3, sortColumn: 'score', sortDir: 'desc' });
+  await diff('number sort, page 2', f, { offset: 2, limit: 3, sortColumn: 'score', sortDir: 'asc' });
+  await diff('number sort, past the end', f, { offset: 99, limit: 3, sortColumn: 'score', sortDir: 'desc' });
 }
 
 // ── 3. Sorting: text column, both directions ────────────────────────────────
@@ -209,10 +211,10 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
   ]);
 
   for (const dir of ['asc', 'desc'] as const) {
-    const got = diff(`text sort ${dir}`, f, { offset: 0, limit: 50, sortColumn: 'label', sortDir: dir });
+    const got = await diff(`text sort ${dir}`, f, { offset: 0, limit: 50, sortColumn: 'label', sortDir: dir });
     if (got) console.log(`     label ${dir}: ${show(got.rows, 0)}`);
   }
-  const asc = dp.readPage(f.src, { offset: 0, limit: 50, sortColumn: 'label', sortDir: 'asc' });
+  const asc = await dp.readPage(f.src, { offset: 0, limit: 50, sortColumn: 'label', sortDir: 'asc' });
   ok("text asc: ICU collation, not byte order ('a' before 'B')",
     asc !== null && asc.rows.findIndex((r) => r[0] === 'a') < asc.rows.findIndex((r) => r[0] === 'B'));
   ok("text asc: accents collate ('é' before 'f')",
@@ -223,13 +225,13 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
     asc !== null && asc.rows.slice(-2).every((r) => r[0] === '' || r[0] === null));
 
   // Paged text sort.
-  for (const o of [0, 3, 6, 12, 20]) diff(`text sort page @${o}`, f, { offset: o, limit: 3, sortColumn: 'label', sortDir: 'asc' });
+  for (const o of [0, 3, 6, 12, 20]) await diff(`text sort page @${o}`, f, { offset: o, limit: 3, sortColumn: 'label', sortDir: 'asc' });
 
   // A date column sorts as text — the grid's `type !== 'number'` branch.
   const dcols: ParsedColumn[] = [{ name: 'day', type: 'date' }];
   const df = fixture(dcols, [['2024-03-01'], ['2023-12-31'], ['2024-01-15'], [null], ['2024-03-01']]);
-  diff('date sort asc (lexical)', df, { offset: 0, limit: 10, sortColumn: 'day', sortDir: 'asc' });
-  diff('date sort desc (lexical)', df, { offset: 0, limit: 10, sortColumn: 'day', sortDir: 'desc' });
+  await diff('date sort asc (lexical)', df, { offset: 0, limit: 10, sortColumn: 'day', sortDir: 'asc' });
+  await diff('date sort desc (lexical)', df, { offset: 0, limit: 10, sortColumn: 'day', sortDir: 'desc' });
 }
 
 // ── 4. Leading zeros: a TEXT column must never be cast to sort ──────────────
@@ -241,8 +243,8 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
   const cols: ParsedColumn[] = [{ name: 'id', type: 'text' }];
   const f = fixture(cols, [['7'], ['007'], ['70'], ['07'], ['0007'], ['10'], ['9']]);
 
-  const asc = diff('leading-zero text sort asc', f, { offset: 0, limit: 10, sortColumn: 'id', sortDir: 'asc' });
-  const desc = diff('leading-zero text sort desc', f, { offset: 0, limit: 10, sortColumn: 'id', sortDir: 'desc' });
+  const asc = await diff('leading-zero text sort asc', f, { offset: 0, limit: 10, sortColumn: 'id', sortDir: 'asc' });
+  const desc = await diff('leading-zero text sort desc', f, { offset: 0, limit: 10, sortColumn: 'id', sortDir: 'desc' });
   if (asc) console.log(`     id asc: ${show(asc.rows, 0)}`);
 
   ok('leading zeros survive the round trip as strings',
@@ -263,8 +265,8 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
   // The same values DECLARED number: now they really are numbers, and 007 === 7.
   const ncols: ParsedColumn[] = [{ name: 'id', type: 'number' }];
   const nf = fixture(ncols, [[7], [70], [10], [9]]);
-  diff('same digits as a number column sort numerically', nf, { offset: 0, limit: 10, sortColumn: 'id', sortDir: 'asc' });
-  const nasc = dp.readPage(nf.src, { offset: 0, limit: 10, sortColumn: 'id', sortDir: 'asc' });
+  await diff('same digits as a number column sort numerically', nf, { offset: 0, limit: 10, sortColumn: 'id', sortDir: 'asc' });
+  const nasc = await dp.readPage(nf.src, { offset: 0, limit: 10, sortColumn: 'id', sortDir: 'asc' });
   ok('number column: 9 before 10 (numeric, unlike the text column above)',
     nasc !== null && JSON.stringify(nasc.rows.map((r) => r[0])) === JSON.stringify([7, 9, 10, 70]));
 }
@@ -286,36 +288,36 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
   ]);
 
   for (const q of ['par', 'PAR', 'Par', 'capital', '13', '3769495', 'zzz', '', '   ', ' par ', 'no']) {
-    diff(`search ${JSON.stringify(q)}`, f, { offset: 0, limit: 50, search: q });
+    await diff(`search ${JSON.stringify(q)}`, f, { offset: 0, limit: 50, search: q });
   }
 
-  const par = dp.readPage(f.src, { offset: 0, limit: 50, search: 'PAR' });
+  const par = await dp.readPage(f.src, { offset: 0, limit: 50, search: 'PAR' });
   ok('search is case-insensitive across all columns', par !== null && par.total === 2);
-  const num = dp.readPage(f.src, { offset: 0, limit: 50, search: '3769495' });
+  const num = await dp.readPage(f.src, { offset: 0, limit: 50, search: '3769495' });
   ok('search matches a NUMERIC cell by its rendered string', num !== null && num.total === 1);
-  const partialNum = dp.readPage(f.src, { offset: 0, limit: 50, search: '148' });
+  const partialNum = await dp.readPage(f.src, { offset: 0, limit: 50, search: '148' });
   ok('search matches a SUBSTRING of a numeric cell', partialNum !== null && partialNum.total === 1);
-  const none = dp.readPage(f.src, { offset: 0, limit: 50, search: 'zzz' });
+  const none = await dp.readPage(f.src, { offset: 0, limit: 50, search: 'zzz' });
   ok('no match: total 0 and no rows', none !== null && none.total === 0 && none.rows.length === 0);
-  const blank = dp.readPage(f.src, { offset: 0, limit: 50, search: '   ' });
+  const blank = await dp.readPage(f.src, { offset: 0, limit: 50, search: '   ' });
   ok('whitespace-only search is trimmed away → no filter', blank !== null && blank.total === 6);
-  const trimmed = dp.readPage(f.src, { offset: 0, limit: 50, search: ' par ' });
+  const trimmed = await dp.readPage(f.src, { offset: 0, limit: 50, search: ' par ' });
   ok('search is trimmed before matching', trimmed !== null && trimmed.total === 2);
-  const nullish = dp.readPage(f.src, { offset: 0, limit: 50, search: 'null' });
+  const nullish = await dp.readPage(f.src, { offset: 0, limit: 50, search: 'null' });
   ok('a null cell is never searched (does not match "null")', nullish !== null && nullish.total === 0);
-  const emptyStr = dp.readPage(f.src, { offset: 0, limit: 50, search: 'capital' });
+  const emptyStr = await dp.readPage(f.src, { offset: 0, limit: 50, search: 'capital' });
   ok('search spans every column, not just the first', emptyStr !== null && emptyStr.total === 2);
 
   // total is post-search, pre-page — and paging inside a search is stable.
-  const page = dp.readPage(f.src, { offset: 1, limit: 1, search: 'p' });
+  const page = await dp.readPage(f.src, { offset: 1, limit: 1, search: 'p' });
   const ref = dp.pageRowsJs(f.columns, f.rows, { offset: 1, limit: 1, search: 'p' });
   ok('total is the SEARCH count, not the page length',
     page !== null && page.total === ref.total && page.rows.length === 1 && page.total > 1);
 
   // Search + sort together.
   for (const dir of ['asc', 'desc'] as const) {
-    diff(`search + sort ${dir}`, f, { offset: 0, limit: 50, search: 'p', sortColumn: 'pop', sortDir: dir });
-    diff(`search + text sort ${dir}`, f, { offset: 0, limit: 50, search: 'a', sortColumn: 'city', sortDir: dir });
+    await diff(`search + sort ${dir}`, f, { offset: 0, limit: 50, search: 'p', sortColumn: 'pop', sortDir: dir });
+    await diff(`search + text sort ${dir}`, f, { offset: 0, limit: 50, search: 'a', sortColumn: 'city', sortDir: dir });
   }
 }
 
@@ -332,15 +334,15 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
     ['x', null],
   ]);
 
-  const p = dp.readPage(f.src, { offset: 0, limit: 10 });
+  const p = await dp.readPage(f.src, { offset: 0, limit: 10 });
   ok('null stays null', p !== null && p.rows[0][0] === null);
   ok("'' stays '' (NOT re-parsed to null)", p !== null && p.rows[1][0] === '');
   ok('whitespace stays verbatim', p !== null && p.rows[2][0] === '   ');
   ok('a null number cell stays null', p !== null && p.rows[3][1] === null);
   ok('number cells come back as JS numbers', p !== null && typeof p.rows[0][1] === 'number');
-  diff('null vs empty: unsorted', f, { offset: 0, limit: 10 });
-  diff('null vs empty: text sort', f, { offset: 0, limit: 10, sortColumn: 't', sortDir: 'asc' });
-  diff('null vs empty: number sort', f, { offset: 0, limit: 10, sortColumn: 'n', sortDir: 'desc' });
+  await diff('null vs empty: unsorted', f, { offset: 0, limit: 10 });
+  await diff('null vs empty: text sort', f, { offset: 0, limit: 10, sortColumn: 't', sortDir: 'asc' });
+  await diff('null vs empty: number sort', f, { offset: 0, limit: 10, sortColumn: 'n', sortDir: 'desc' });
 }
 
 // ── 7. STABLE PAGING over a column with many ties ──────────────────────────
@@ -365,7 +367,7 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
     const seen: number[] = [];
     const PAGE = 137; // deliberately not a divisor of N
     for (let o = 0; o < N; o += PAGE) {
-      const p = dp.readPage(f.src, { offset: o, limit: PAGE, sortColumn: col, sortDir: dir });
+      const p = await dp.readPage(f.src, { offset: o, limit: PAGE, sortColumn: col, sortDir: dir });
       if (!p) {
         ok(`stable paging (${col} ${dir}): every page read`, false);
         break;
@@ -384,8 +386,8 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
   }
 
   // Repeating the same page must give the same answer.
-  const a = dp.readPage(f.src, { offset: 2000, limit: 50, sortColumn: 'bucket', sortDir: 'asc' });
-  const b = dp.readPage(f.src, { offset: 2000, limit: 50, sortColumn: 'bucket', sortDir: 'asc' });
+  const a = await dp.readPage(f.src, { offset: 2000, limit: 50, sortColumn: 'bucket', sortDir: 'asc' });
+  const b = await dp.readPage(f.src, { offset: 2000, limit: 50, sortColumn: 'bucket', sortDir: 'asc' });
   ok('the same page read twice is identical', a !== null && b !== null && sameRows(a.rows, b.rows));
 }
 
@@ -394,22 +396,22 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
   const cols: ParsedColumn[] = [{ name: 'a', type: 'text' }];
   const f = fixture(cols, [['x']]);
 
-  ok('missing file → null', dp.readPage({ parquetPath: path.join(dir, 'nope.parquet'), columns: cols }, { offset: 0, limit: 5 }) === null);
-  ok('non-.parquet path → null', dp.readPage({ parquetPath: path.join(dir, 'x.txt'), columns: cols }, { offset: 0, limit: 5 }) === null);
-  ok('0-column schema → null', dp.readPage({ parquetPath: f.src.parquetPath, columns: [] }, { offset: 0, limit: 5 }) === null);
+  ok('missing file → null', await dp.readPage({ parquetPath: path.join(dir, 'nope.parquet'), columns: cols }, { offset: 0, limit: 5 }) === null);
+  ok('non-.parquet path → null', await dp.readPage({ parquetPath: path.join(dir, 'x.txt'), columns: cols }, { offset: 0, limit: 5 }) === null);
+  ok('0-column schema → null', await dp.readPage({ parquetPath: f.src.parquetPath, columns: [] }, { offset: 0, limit: 5 }) === null);
   // ponytail: deliberately malformed input — the point is that it cannot throw.
-  ok('malformed schema → null', dp.readPage({ parquetPath: f.src.parquetPath, columns: [null as any] }, { offset: 0, limit: 5 }) === null);
-  ok('no request at all → null', dp.readPage(f.src, undefined as any) === null);
+  ok('malformed schema → null', await dp.readPage({ parquetPath: f.src.parquetPath, columns: [null as any] }, { offset: 0, limit: 5 }) === null);
+  ok('no request at all → null', await dp.readPage(f.src, undefined as any) === null);
 
   // An unknown sort column is simply not a sort — same as the grid, whose
   // expSortCol can only ever be a real index.
-  const unknown = dp.readPage(f.src, { offset: 0, limit: 5, sortColumn: 'nope', sortDir: 'desc' });
+  const unknown = await dp.readPage(f.src, { offset: 0, limit: 5, sortColumn: 'nope', sortDir: 'desc' });
   ok('unknown sort column → unsorted page, not an error', unknown !== null && unknown.rows.length === 1);
-  diff('unknown sort column matches pageRowsJs', f, { offset: 0, limit: 5, sortColumn: 'nope', sortDir: 'desc' });
+  await diff('unknown sort column matches pageRowsJs', f, { offset: 0, limit: 5, sortColumn: 'nope', sortDir: 'desc' });
 
   // An empty table is a real answer, not a fallback.
   const empty = fixture(cols, []);
-  const ep = dp.readPage(empty.src, { offset: 0, limit: 10, search: 'x', sortColumn: 'a', sortDir: 'asc' });
+  const ep = await dp.readPage(empty.src, { offset: 0, limit: 10, search: 'x', sortColumn: 'a', sortDir: 'asc' });
   ok('empty table: a real page with total 0', ep !== null && ep.total === 0 && ep.rows.length === 0);
 }
 
@@ -457,9 +459,9 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
 
   console.log(`     200k: write ${tWrite} ms, full hydrate (what the grid used to pay) ${tHydrate} ms`);
 
-  function timed(label: string, req: dp.PageRequest): void {
+  async function timed(label: string, req: dp.PageRequest): Promise<void> {
     const s = Date.now();
-    const got = dp.readPage(src, req);
+    const got = await dp.readPage(src, req);
     const resident = Date.now() - s;
     const s2 = Date.now();
     const want = dp.pageRowsJs(f.columns, f.rows, req);
@@ -469,14 +471,14 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
     console.log(`     200k ${label}: resident ${resident} ms, JS-over-hydrated ${js} ms`);
   }
 
-  timed('page @0', { offset: 0, limit: 100 });
-  timed('page @150000', { offset: 150_000, limit: 100 });
-  timed('sort number asc', { offset: 0, limit: 100, sortColumn: 'sales', sortDir: 'asc' });
-  timed('sort number desc @100000', { offset: 100_000, limit: 100, sortColumn: 'sales', sortDir: 'desc' });
-  timed('sort text asc', { offset: 0, limit: 100, sortColumn: 'name', sortDir: 'asc' });
-  timed('sort ties (region) @99900', { offset: 99_900, limit: 100, sortColumn: 'region', sortDir: 'asc' });
-  timed('search "note 42"', { offset: 0, limit: 100, search: 'note 42' });
-  timed('search + sort', { offset: 0, limit: 100, search: 'West', sortColumn: 'sales', sortDir: 'desc' });
+  await timed('page @0', { offset: 0, limit: 100 });
+  await timed('page @150000', { offset: 150_000, limit: 100 });
+  await timed('sort number asc', { offset: 0, limit: 100, sortColumn: 'sales', sortDir: 'asc' });
+  await timed('sort number desc @100000', { offset: 100_000, limit: 100, sortColumn: 'sales', sortDir: 'desc' });
+  await timed('sort text asc', { offset: 0, limit: 100, sortColumn: 'name', sortDir: 'asc' });
+  await timed('sort ties (region) @99900', { offset: 99_900, limit: 100, sortColumn: 'region', sortDir: 'asc' });
+  await timed('search "note 42"', { offset: 0, limit: 100, search: 'note 42' });
+  await timed('search + sort', { offset: 0, limit: 100, search: 'West', sortColumn: 'sales', sortDir: 'desc' });
 
   // Stability at scale: page through the whole ties-heavy sort.
   const seen = new Set<number>();
@@ -484,7 +486,7 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
   const PAGE = dp.MAX_LIMIT;
   const sStable = Date.now();
   for (let o = 0; o < N; o += PAGE) {
-    const p = dp.readPage(src, { offset: o, limit: PAGE, sortColumn: 'region', sortDir: 'asc' });
+    const p = await dp.readPage(src, { offset: o, limit: PAGE, sortColumn: 'region', sortDir: 'asc' });
     if (!p) break;
     for (const r of p.rows) {
       seen.add(Number(r[0]));
@@ -503,3 +505,9 @@ if (failureCount() > 0) {
   process.exit(1);
 }
 console.log('\nAll datasetPage checks passed');
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

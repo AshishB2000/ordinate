@@ -209,7 +209,7 @@ async function metricFor(
   const joined = await joinedMetricFor(projectId, datasetId, spec, filters);
   if (joined) return joined;
   if (target.src) {
-    const resident = residentQuery.computeMetricResident(target.src, spec, filters);
+    const resident = await residentQuery.computeMetricResident(target.src, spec, filters);
     if (resident !== null) {
       trace.record('metric', 'resident');
       return { ok: true, value: resident };

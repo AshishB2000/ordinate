@@ -28,6 +28,8 @@ import * as pq from '../src/engine/parquetStore';
 
 import { ok, finish } from './selfcheck';
 
+async function main(): Promise<void> {
+
 const TODAY = '2024-10-15'; // a Tuesday
 const CAT: FilterCatalog = {
   dimensions: [
@@ -246,7 +248,7 @@ ok('§1 a positive and a negative on one column are two chips', same(chipsOf('we
     const back = pq.readTable(file, parsed.columns);
     if (!back) throw new Error('fixture read-back failed');
     const js = catalogJs(back.columns, back.rows, 'sample');
-    const fast = catalogResident({ parquetPath: file, columns: parsed.columns }, 'sample');
+    const fast = await catalogResident({ parquetPath: file, columns: parsed.columns }, 'sample');
     ok('§5 the sample has the dimensions, measures and date the smoke types against',
       same(js.dimensions.map((d) => d.column), ['region', 'state', 'category', 'sub_category', 'customer_segment'])
       && same(js.measures.map((m) => m.column), ['units', 'unit_price', 'discount', 'revenue', 'profit', 'ship_days'])
@@ -276,3 +278,9 @@ ok('§1 a positive and a negative on one column are two chips', same(chipsOf('we
 }
 
 finish();
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

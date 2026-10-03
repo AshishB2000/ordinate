@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Ordinate</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Classic, blocking, external: sets data-theme before first paint so a
+         dark-mode user never sees a white flash. External because the CSP
+         forbids inline script. -->
+    <script src="/theme-boot.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

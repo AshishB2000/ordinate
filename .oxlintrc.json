@@ -53,6 +53,14 @@
         "typescript/no-useless-default-assignment": "off",
         "eslint/no-unused-vars": "off"
       }
+    },
+    {
+      "files": ["web/**"],
+      "plugins": ["typescript", "unicorn", "oxc", "react"],
+      "rules": {
+        "react/rules-of-hooks": "error",
+        "react/exhaustive-deps": "error"
+      }
     }
   ],
 
@@ -63,6 +71,7 @@
     "renderer/hub/vendor/**",
     "renderer/hub/svelte/bundle.js",
     "assets/geo/*.js",
-    "geo/**"
+    "geo/**",
+    "web/dist/**"
   ]
 }

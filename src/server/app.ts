@@ -6,7 +6,7 @@
 // `require('electron')` made to fail, so an Electron import anywhere in this
 // graph breaks the build's tests, not a deploy.
 
-import { fastify, type FastifyInstance } from 'fastify';
+import { fastify, type FastifyInstance, type FastifyRequest } from 'fastify';
 import { isAvailable, shutdown } from '../engine/duckdb';
 import { contractFor } from '../api/index';
 import type { ServerEnv } from './env';
@@ -14,7 +14,12 @@ import { identityFor, runInContext, type Identify } from './context';
 import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
 import { handlers } from './rpc';
+import { maskFileToken, registerFileRoutes } from './files';
+import { clientFor, registerEvents } from './sse';
 import { fromWire, encode } from './wire';
+import { registerStatic, WEB_DIST } from './static';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /** The `event` a handler receives over HTTP. It has no `sender`: handlers ask `senderOf(e)` (./context). */
 const SERVER_EVENT = Object.freeze({});
@@ -50,20 +55,35 @@ export function buildApp(
     logger: {
       level: cfg.logLevel,
       redact: { paths: [...REDACT_PATHS], censor: '[redacted]' },
+      // Fastify's own request serializer, except a file token in the URL
+      // (GET /api/files/<token>) is masked: the URL is a credential there.
+      serializers: {
+        req: (req: FastifyRequest) => ({
+          method: req.method,
+          url: maskFileToken(req.url),
+          host: req.host,
+          remoteAddress: req.ip,
+          remotePort: req.socket?.remotePort,
+        }),
+      },
       ...(logStream ? { stream: logStream } : {}),
     },
   });
 
   // Every /api/ request runs inside its own context (./context.ts): who is
-  // asking, for which org. Callback-style on purpose — `als.run(store, done)`
+  // asking, for which org, and which tab's event stream a push from the
+  // handler goes to (X-Ordinate-Client, honoured only when that stream is
+  // bound to this caller — ./sse.ts). Callback-style on purpose — `als.run(store, done)`
   // is what carries the store into the route handler and every await below it.
   // The probes stay outside: Kubernetes never signs in.
   app.addHook('onRequest', (req, reply, done) => {
     if (!req.url.startsWith('/api/')) return done();
     const who = identify(req.headers);
     if (!who) return void reply.code(401).send({ error: 'not signed in' });
-    runInContext(who, String(req.id), done);
+    runInContext(who, String(req.id), done, clientFor(req.headers['x-ordinate-client'], who) ?? undefined);
   });
+
+  registerEvents(app);
 
   // Liveness: the process is up and serving. Checks nothing else on purpose —
   // a failing dependency must not make Kubernetes restart a healthy pod.
@@ -135,7 +155,14 @@ export function buildApp(
     }
   });
 
+  // Uploads and downloads (./files.ts) — the open and save dialogs' replacement.
+  registerFileRoutes(app, cfg.maxUploadMb);
+
   app.addHook('onClose', async () => shutdown());
+
+  // The web app, when it has been built (`npm --prefix web run build`). In dev
+  // the Vite server serves it instead and proxies /api here.
+  if (fs.existsSync(path.join(WEB_DIST, 'index.html'))) registerStatic(app, WEB_DIST);
 
   return app;
 }
@@ -147,7 +174,7 @@ export function buildApp(
  * a handler module.
  */
 export function registerHandlers(): void {
-  for (const mod of ['../ipc/projects', '../ipc/datasets', '../ipc/recent']) {
+  for (const mod of ['../ipc/projects', '../ipc/datasets', '../ipc/recent', '../ipc/quality']) {
     (require(mod) as { register: () => void }).register();
   }
 }

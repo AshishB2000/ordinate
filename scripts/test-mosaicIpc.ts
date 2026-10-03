@@ -343,7 +343,7 @@ async function main(): Promise<void> {
       const viaChannel = await rows(
         `SELECT "region" AS g, sum("${measure}") AS m FROM "${viewName}" GROUP BY "region";`,
       );
-      const viaResident = residentQuery.aggregateResident(src, 'region', [{ column: measure, aggregation: 'sum' }]);
+      const viaResident = await residentQuery.aggregateResident(src, 'region', [{ column: measure, aggregation: 'sum' }]);
       ok(`differential(${measure}): aggregateResident returned data`, viaResident !== null);
       if (!viaResident) continue;
 

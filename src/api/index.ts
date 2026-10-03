@@ -5,11 +5,13 @@ import type { Contract } from './contract';
 import { projects } from './projects';
 import { datasets } from './datasets';
 import { home } from './home';
+import { quality } from './quality';
 
 export const contracts = {
   ...projects,
   ...datasets,
   ...home,
+  ...quality,
 } as const;
 
 export type Channel = keyof typeof contracts;

@@ -182,7 +182,7 @@ export async function pageFor(
 ): Promise<PageReply> {
   const src = await datasets.residentSource(projectId, datasetId);
   if (src) {
-    const fast = readPage(src, req);
+    const fast = await readPage(src, req);
     if (fast) {
       trace.record(op, 'resident');
       return { ok: true, rows: fast.rows, total: fast.total, offset: fast.offset };
@@ -403,7 +403,7 @@ export function register() {
 
       const src = await datasets.residentSource(projectId, datasetId);
       if (src) {
-        const fast = readDistinctPage(src, col, req);
+        const fast = await readDistinctPage(src, col, req);
         if (fast) {
           trace.record('datasetDistinct', 'resident');
           return fast;
