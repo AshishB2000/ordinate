@@ -1,0 +1,50 @@
+name: e2e nightly (Firefox, WebKit)
+
+# The web e2e (web/e2e/) in the two browsers the per-PR job does not run —
+# ci.yml's `web` job covers Chromium on every PR. Nightly because each engine
+# adds a browser download and a full run; it also checks the Vite
+# build.target guess (web/vite.config.ts) against real Firefox and Safari engines.
+# A schedule runs on the default branch only, so there is no branch filter here.
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: e2e (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - run: npm ci
+      - run: npm --prefix web ci
+      - name: Build the web app
+        run: npm --prefix web run build
+      - name: Install ${{ matrix.browser }} for Playwright
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+      - name: e2e (${{ matrix.browser }})
+        run: npm --prefix web run e2e
+        env:
+          E2E_BROWSER: ${{ matrix.browser }}
+      - name: Upload the e2e screenshots
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screens-${{ matrix.browser }}
+          path: web/e2e/__screens__/*.png
+          if-no-files-found: warn
+          retention-days: 7

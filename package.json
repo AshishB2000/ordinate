@@ -17,7 +17,7 @@
     "pretest": "npm run build",
     "test": "node --test --test-reporter=spec \"scripts/test-*.js\"",
     "test:coverage": "node --test --experimental-test-coverage \"scripts/test-*.js\"",
-    "lint": "oxlint --type-aware --tsconfig=tsconfig.main.json src scripts preload && oxlint --type-aware --tsconfig=tsconfig.renderer.json renderer && oxlint --type-aware --tsconfig=web/tsconfig.json web/src web/public web/vite.config.ts",
+    "lint": "oxlint --type-aware --tsconfig=tsconfig.main.json src scripts preload && oxlint --type-aware --tsconfig=tsconfig.renderer.json renderer && oxlint --type-aware --tsconfig=web/tsconfig.json web/src web/public web/vite.config.ts && oxlint --type-aware --tsconfig=web/tsconfig.e2e.json web/e2e web/scripts/bundle-size.ts",
     "icons:verify": "node scripts/verify-icons.js",
     "predist:mac": "npm run build && npm i --force --no-save --no-audit --no-fund @duckdb/node-bindings-darwin-x64@1.5.5-r.3",
     "dist:mac": "electron-builder --mac --publish never",

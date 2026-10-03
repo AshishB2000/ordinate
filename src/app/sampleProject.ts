@@ -41,7 +41,6 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { app } from 'electron';
 
 import * as config from './config';
 import * as onboarding from './onboarding';
@@ -72,11 +71,12 @@ const SAMPLE_NOTE_TEXT =
   'A generated retail orders dataset, bundled so the app has something to show on '
   + 'first launch. Nothing here is real — remove it whenever you like; your project stays.';
 
-/** The bundled CSV. `app.getAppPath()` is the repo root in dev and app.asar when
- *  packaged, and Electron patches fs to read inside asar, so one path works for
- *  both — the same resolution src/ipc/geo.ts uses for the map boundaries. */
+/** The bundled CSV, resolved from this file (src/app/ → the app root): the repo
+ *  root in dev and on the server, app.asar when packaged — the directory
+ *  `app.getAppPath()` named, and Electron patches fs to read inside asar. Not
+ *  through Electron, so the server can seed the sample (T0.8's e2e does). */
 export function sampleCsvPath(): string {
-  return path.join(app.getAppPath(), 'assets', 'samples', 'retail-orders.csv');
+  return path.join(__dirname, '..', '..', 'assets', 'samples', 'retail-orders.csv');
 }
 
 /**

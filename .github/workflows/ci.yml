@@ -55,6 +55,49 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/ordinate_test
 
+  # The web app (Phase 7): build, initial-bundle budget, Vitest, then the
+  # Playwright e2e (web/e2e/) against the BUILT server on a temp DATA_DIR seeded
+  # with the sample project. Chromium only here; Firefox and WebKit run nightly
+  # (e2e-nightly.yml). The e2e fails on any console error, page error or CSP
+  # violation, and on a page load over its RPC budget.
+  web:
+    name: web (build, Vitest, e2e)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      # Root postinstall compiles the TypeScript tree, so src/server/main.js exists after this.
+      - run: npm ci
+      - run: npm --prefix web ci
+      - name: Build the web app
+        run: npm --prefix web run build
+      - name: Initial JS bundle ≤ 300 KB gzip
+        run: npm --prefix web run size
+      - name: Vitest
+        run: npm --prefix web test
+      # Playwright's own Chromium build (the revision the pinned playwright
+      # wants) plus the system libraries it needs.
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: e2e (Chromium)
+        run: npm --prefix web run e2e
+      - name: Upload the e2e screenshots
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screens-chromium
+          path: web/e2e/__screens__/*.png
+          if-no-files-found: warn
+          retention-days: 7
+
   # Four shards in parallel, balanced by scripts/smoke-durations.json — the
   # serial chain had grown past 40 minutes. Each smoke is killed by name after 10
   # minutes (scripts/run-smokes.ts) and the job after 60, so a hung app can

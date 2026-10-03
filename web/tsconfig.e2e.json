@@ -1,0 +1,23 @@
+{
+  // The e2e harness and the build scripts: Node (type-stripped .ts, run as-is),
+  // not the browser bundle. Type-check only; `npm --prefix web run e2e` runs it first.
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2023",
+    // DOM: the callbacks passed to page.evaluate run in the page.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["node"],
+    // The spec imports the app's NAV list, whose icon type lives in a .tsx.
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    // Node strips types and runs the file; anything that needs a transform must fail here.
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": ["e2e", "scripts/*.ts"]
+}
