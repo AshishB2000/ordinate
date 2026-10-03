@@ -40,6 +40,11 @@ function envFails(label: string, src: Record<string, string>, needle: string): v
 function childEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   const e: NodeJS.ProcessEnv = { ...process.env, ...extra };
   delete e.ELECTRON_RUN_AS_NODE;
+  // The caller's DATABASE_URL (CI sets one for the DB suites) is not this
+  // suite's: it would migrate that shared database, and in prod it trips the
+  // master-key check before the sign-in check this suite asserts. The DB boot
+  // path is covered by test-db-migrate and test-jobs-pods on scratch databases.
+  delete e.DATABASE_URL;
   e.NODE_PATH = (process.env.NODE_PATH ?? '')
     .split(path.delimiter)
     .filter((p) => p && !/electron/i.test(p))

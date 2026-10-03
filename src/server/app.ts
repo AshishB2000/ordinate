@@ -106,6 +106,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   const pool = dbUrl ? createPool(dbUrl, (err) => app.log.warn({ err }, 'postgres idle client error')) : null;
   dbPool = pool;
   if (pool && dbUrl) {
+    // Scheduled jobs and cross-pod events (./jobs/): started once the schema
+    // is current, stopped on close after the job in flight finishes and
+    // reschedules. Lazy requires: nothing loads them without a DB.
+    let jobs: { stop(): Promise<void> } | null = null;
+    let bus: { stop(): Promise<void> } | null = null;
     app.addHook('onReady', async () => {
       try {
         const r = await migrate(pool);
@@ -113,6 +118,15 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       } catch (err) {
         throw scrubbed(err, dbUrl);
       }
+      (require('./jobs/schedules') as typeof import('./jobs/schedules')).wireSchedules();
+      bus = await (require('./jobs/bus') as typeof import('./jobs/bus')).startBus(pool, dbUrl, app.log);
+      jobs = (require('./jobs/runner') as typeof import('./jobs/runner')).startRunner(pool, cfg.dataDir, app.log);
+    });
+    // preClose, not onClose: onClose hooks run last-registered first, so
+    // DuckDB's shutdown (below) would close under a tick still running.
+    app.addHook('preClose', async () => {
+      await jobs?.stop();
+      await bus?.stop();
     });
     app.addHook('onClose', async () => pool.end());
   }

@@ -1083,3 +1083,10 @@ scripts/**/*.js
 /scripts/check-contracts.js
 /scripts/test-authz.js
 /scripts/test-authz-db.js
+
+# web/t5.4-jobs
+/src/server/jobs/runner.js
+/src/server/jobs/bus.js
+/src/server/jobs/schedules.js
+/scripts/jobsPodPreload.js
+/scripts/test-jobs-pods.js

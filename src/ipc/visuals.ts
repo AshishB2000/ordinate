@@ -1,4 +1,3 @@
-import { dialog } from 'electron';
 import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import * as fs from 'fs';
@@ -688,6 +687,8 @@ export function register() {
       };
       const counted = await pageFor(projectId, datasetId, base, 'drillExport');
       if (!counted.ok) return counted;
+      // Desktop-only (native dialogs); required here so the server loads this module without Electron.
+      const { dialog } = (require('electron') as typeof import('electron'));
       const total = counted.total;
       if (total === 0) return { ok: false, error: 'There are no rows to export.' };
 
