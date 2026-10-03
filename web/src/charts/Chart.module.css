@@ -1,0 +1,62 @@
+/* The chart's box (hub.css .cv-canvas-wrap): the parent decides the size; the
+   canvas fills it. Chart.js's `responsive` mode reads this box. */
+.wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.wrap canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+/* The one-shot fade-in per mount (hub.css chartIn); base.css's reduced-motion rule stops it. */
+.fresh {
+  animation: chartIn var(--dur-panel) var(--ease-out);
+}
+@keyframes chartIn {
+  from {
+    opacity: 0;
+  }
+}
+.hidden {
+  visibility: hidden;
+}
+/* Loading / empty / error sit over the (hidden) canvas, so the box never jumps. */
+.state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The word cloud's hover (wordCloud.ts creates these; text.css on the desktop). */
+.wrap :global(canvas.wc-hot) {
+  cursor: pointer;
+}
+.wrap :global(.wc-tip) {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 260px;
+  padding: var(--sp-4) var(--sp-8);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: var(--surface-float, var(--surface));
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-md);
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.wrap :global(.wc-tip strong) {
+  color: var(--text-strong);
+}

@@ -1,0 +1,50 @@
+/* hub.css .cv-col-body / .cv-data-table / .cv-swatch */
+.scroll {
+  height: 100%;
+  overflow: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+.table th,
+.table td {
+  padding: var(--sp-4) var(--sp-8);
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+}
+.table thead th {
+  position: sticky;
+  top: 0;
+  font-size: var(--t-11);
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-2);
+}
+.table tbody th {
+  font-weight: 500;
+  color: var(--text);
+}
+.swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: var(--sp-4);
+  vertical-align: middle;
+}
+.c1 { background: var(--chart-1); }
+.c2 { background: var(--chart-2); }
+.c3 { background: var(--chart-3); }
+.c4 { background: var(--chart-4); }
+.c5 { background: var(--chart-5); }
+.c6 { background: var(--chart-6); }
+.c7 { background: var(--chart-7); }
+.c8 { background: var(--chart-8); }
