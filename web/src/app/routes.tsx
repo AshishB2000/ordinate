@@ -23,6 +23,11 @@ export const pages: RouteObject[] = [
   page('/explore', () => import('../features/explore/ExplorePage')),
   page('/reports', () => import('../features/reports/ReportsPage')),
   page('/settings', () => import('../features/settings/SettingsPage')),
+  // Dev-only UI kit gallery. Both conditions are build-time constants, so a
+  // production build drops this entry and never emits the chunk.
+  ...(import.meta.env.DEV || import.meta.env.MODE === 'gallery'
+    ? [page('/dev/ui', () => import('../ui/gallery/Gallery'))]
+    : []),
 ];
 
 /** The whole tree: the shell, every page inside it, and the 404 for anything else. */

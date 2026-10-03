@@ -40,25 +40,46 @@ describe('shell', () => {
     expect(screen.getByRole('link', { name: 'Home' }).getAttribute('aria-current')).toBeNull();
   });
 
-  it('switches theme between system, light and dark', () => {
+  it('switches theme between system, light and dark from the account menu', () => {
     stubFetch(200, []);
     renderApp('/');
-    // The menu is a native popover, which jsdom does not open: query it hidden.
     const root = document.documentElement;
     expect(root.dataset.theme).toBe('light'); // system default, OS light
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dark', hidden: true }));
+    const account = screen.getByRole('button', { name: 'Account and theme' });
+    const pick = (name: string) => {
+      fireEvent.keyDown(account, { key: 'Enter' });
+      fireEvent.click(screen.getByRole('menuitemradio', { name }));
+    };
+
+    pick('Dark');
     expect(root.dataset.theme).toBe('dark');
     expect(localStorage.getItem('ordinate.theme')).toBe('dark');
-    expect(screen.getByRole('button', { name: 'Dark', hidden: true }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.keyDown(account, { key: 'Enter' });
+    expect(screen.getByRole('menuitemradio', { name: 'Dark' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Light', hidden: true }));
+    pick('Light');
     expect(root.dataset.theme).toBe('light');
 
     media.systemDark = true;
-    fireEvent.click(screen.getByRole('button', { name: 'System', hidden: true }));
+    pick('System');
     expect(root.dataset.theme).toBe('dark');
     expect(localStorage.getItem('ordinate.theme')).toBeNull();
+  });
+
+  it('the account menu reaches Settings', async () => {
+    stubFetch(200, []);
+    renderApp('/');
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Account and theme' }), { key: 'Enter' });
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Settings' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy();
+  });
+
+  it('mounts the toast stack once', () => {
+    stubFetch(200, []);
+    renderApp('/');
+    expect(screen.getAllByRole('status', { name: 'Notifications' })).toHaveLength(1);
   });
 
   it('shows a 404 inside the shell for an unknown address', () => {

@@ -4,11 +4,14 @@
 // Suspense (lazy chunk) and error boundary (routes.tsx), so a broken page
 // never takes the nav down with it.
 
-import { Suspense, useRef } from 'react';
-import { NavLink, Outlet } from 'react-router';
-import { Icon } from './Icon';
+import { Suspense } from 'react';
+import { NavLink, Outlet, useNavigate } from 'react-router';
+import { Icon } from '../ui/icons/Icon';
+import { IconButton } from '../ui/Button';
+import { Menu } from '../ui/Menu';
+import { PageSkeleton } from '../ui/Skeleton';
+import { Toaster } from '../ui/Toast';
 import { NAV, type NavItem } from './nav';
-import { PageSkeleton } from './blocks';
 import { THEME_PREFS, useThemePref, type ThemePref } from './theme';
 import s from './Shell.module.css';
 
@@ -29,45 +32,32 @@ function NavEntry({ item }: { item: NavItem }) {
 
 function UserMenu() {
   const [theme, setTheme] = useThemePref();
-  const menu = useRef<HTMLDivElement>(null);
-  const close = () => menu.current?.hidePopover?.();
-
-  // Native popover: top layer, Escape and outside-click dismissal for free.
-  // ponytail: T0.7's Menu (Radix) replaces this with roving focus and a trap.
+  const navigate = useNavigate();
   return (
-    <>
-      <button type="button" className={s.iconBtn} popoverTarget="user-menu" aria-label="Account and theme" title="Account">
-        <Icon name="user" />
-      </button>
-      <div id="user-menu" popover="auto" ref={menu} className={s.menu}>
+    <Menu
+      align="end"
+      label="Account"
+      trigger={<IconButton icon="user" label="Account and theme" />}
+      header={
         <div className={s.menuHead}>
           <span className={s.menuName}>You</span>
           <span className={s.menuMeta}>Sign-in is not set up on this server</span>
         </div>
-        <div className={s.menuSection}>
-          <span className={s.menuLabel} id="theme-label">
-            Theme
-          </span>
-          <div className={s.seg} role="group" aria-labelledby="theme-label">
-            {THEME_PREFS.map((p) => (
-              <button
-                key={p}
-                type="button"
-                className={s.segOpt}
-                aria-pressed={theme === p}
-                onClick={() => setTheme(p)}
-              >
-                {THEME_LABEL[p]}
-              </button>
-            ))}
-          </div>
-        </div>
-        <NavLink to="/settings" className={s.menuItem} onClick={close}>
-          <Icon name="settings" />
-          <span>Settings</span>
-        </NavLink>
-      </div>
-    </>
+      }
+      items={[
+        { kind: 'separator' },
+        { kind: 'heading', label: 'Theme' },
+        {
+          kind: 'radio',
+          label: 'Theme',
+          value: theme,
+          options: THEME_PREFS.map((p) => ({ value: p, label: THEME_LABEL[p] })),
+          onChange: (v) => setTheme(v as ThemePref),
+        },
+        { kind: 'separator' },
+        { label: 'Settings', icon: 'settings', onSelect: () => void navigate('/settings') },
+      ]}
+    />
   );
 }
 
@@ -122,6 +112,7 @@ export function Shell() {
           </Suspense>
         </main>
       </div>
+      <Toaster />
     </div>
   );
 }

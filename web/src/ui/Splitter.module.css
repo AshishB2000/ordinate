@@ -1,0 +1,30 @@
+/* hub.css `.dk-handle`: a hairline at rest; under the pointer, on keyboard
+   focus and while dragging it becomes a 3px accent bar. The hit target is 9px
+   (the ::before), astride the line, so half reads "inside" and half "outside". */
+.handle {
+  position: relative;
+  flex: 0 0 1px;
+  align-self: stretch;
+  background: var(--border-hairline);
+  cursor: col-resize;
+  touch-action: none;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.handle::before {
+  content: '';
+  position: absolute;
+  inset: 0 -4px;
+}
+.handle:hover,
+.handle:focus-visible,
+.handle[data-dragging] {
+  z-index: 1;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.handle:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}

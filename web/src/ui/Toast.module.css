@@ -1,0 +1,68 @@
+/* hub.css "Toast notification". The stack never takes the pointer — a
+   transparent box over the corner would swallow clicks meant for the page —
+   only a toast's action button opts back in. */
+
+.stack {
+  position: fixed;
+  right: var(--sp-24);
+  bottom: var(--sp-24);
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sp-8);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  max-width: 380px;
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-float);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  animation: toastIn var(--dur-menu) var(--ease-out);
+}
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+.text {
+  flex: 1 1 auto;
+}
+
+/* Only the icon carries the KIND, and by shape before colour. */
+.info > svg {
+  color: var(--muted);
+}
+.success > svg {
+  color: var(--ok);
+}
+.error > svg {
+  color: var(--error);
+}
+
+.action {
+  flex: 0 0 auto;
+  margin-left: var(--sp-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.action:hover {
+  text-decoration: underline;
+}

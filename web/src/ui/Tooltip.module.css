@@ -1,0 +1,25 @@
+/* hub.css `.tip`: inverted in both themes. */
+.tip {
+  z-index: 120;
+  max-width: 260px;
+  padding: var(--sp-4) var(--sp-8);
+  border-radius: var(--r-sm);
+  background: #18181b;
+  color: #fafafa;
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  pointer-events: none;
+}
+/* Open states only (delayed-open / instant-open): see floating.module.css. */
+.tip[data-state$='open'] {
+  animation: tipIn var(--dur-fast) var(--ease-out);
+}
+:global([data-theme='dark']) .tip {
+  background: #3a3a42;
+}
+@keyframes tipIn {
+  from {
+    opacity: 0;
+  }
+}

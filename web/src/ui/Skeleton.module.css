@@ -1,0 +1,97 @@
+/* hub.css `.sk`: --surface-1 base with the sweep painted over it as an
+   IMAGE, so a skeleton on a white card is still a visible block. */
+.sk {
+  display: block;
+  border-radius: var(--r-sm);
+  background-color: var(--surface-1);
+  background-image: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  height: 44px;
+  padding: 0 var(--sp-16);
+}
+.row:nth-child(n + 4) {
+  opacity: 0.6;
+}
+.icon {
+  width: 28px;
+  height: 28px;
+}
+.text {
+  width: 32%;
+  height: 12px;
+}
+.meta {
+  width: 14%;
+  height: 10px;
+  margin-left: auto;
+}
+
+.table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-8) 0;
+}
+.tr {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--sp-8);
+}
+.cell {
+  height: 14px;
+}
+.head .cell {
+  height: 10px;
+  opacity: 0.75;
+}
+.tr:nth-child(n + 8) {
+  opacity: 0.6;
+}
+.tr:nth-child(n + 11) {
+  opacity: 0.35;
+}
+
+.blockWrap {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 48px;
+}
+.block {
+  flex: 1 1 auto;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-24);
+  padding: var(--sp-24) var(--sp-32) var(--sp-48);
+}
+.title {
+  width: 180px;
+  height: 22px;
+}
+.bar {
+  height: 44px;
+}

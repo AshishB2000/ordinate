@@ -33,7 +33,9 @@ export default defineConfig({
     // `npm run server` listens on :8080 (src/server/env.ts default).
     proxy: { '/api': 'http://127.0.0.1:8080' },
     // web/ plus the one server file the client shares: the wire codec.
-    fs: { allow: ['.', '../src/server/wire.ts'] },
+    // …and the desktop icon set, which a test diffs the generated icons against
+    // (its directory: a `?raw` id only passes the check as a child path).
+    fs: { allow: ['.', '../src/server/wire.ts', '../renderer/hub'] },
   },
   build: {
     // The latest two releases of each supported browser, as of 2026-10

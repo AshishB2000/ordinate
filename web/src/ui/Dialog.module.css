@@ -1,0 +1,142 @@
+/* hub.css `.ws-modal` / `.ws-modal-overlay` (the dialog) and sidePanel.ts's
+   `.ds-profile.ws-side` surface (the drawer). Entrances are hub.css's two
+   idioms: the scrim fades, the surface scales 0.98 → 1. */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.45);
+  animation: fadeIn var(--dur-panel) var(--ease-out);
+}
+/* A drawer sits beside the page it is about — dim it less. */
+.scrimLight {
+  background: rgba(0, 0, 0, 0.2);
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes panelIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.98);
+  }
+}
+@keyframes sheetIn {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+.dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - var(--sp-48));
+  padding: var(--sp-16);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface-float);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  transform: translate(-50%, -50%);
+}
+/* Open state only: see floating.module.css on Radix Presence. */
+.dialog[data-state='open'] {
+  animation: panelIn var(--dur-panel) var(--ease-out);
+}
+.dialog:focus {
+  outline: none;
+}
+.sm {
+  width: min(360px, calc(100vw - var(--sp-48)));
+}
+.md {
+  width: min(480px, calc(100vw - var(--sp-48)));
+}
+.lg {
+  width: min(760px, calc(100vw - var(--sp-48)));
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  margin-bottom: var(--sp-12);
+}
+.ident {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.title {
+  margin: 0;
+  font-size: var(--t-15);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tr-tight);
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.description {
+  margin: 0;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.body {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-8);
+  margin-top: var(--sp-16);
+}
+
+/* ── drawer: pinned to the right edge under the 40px top bar ── */
+.drawer {
+  position: fixed;
+  top: 48px;
+  right: var(--sp-8);
+  bottom: var(--sp-8);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  width: min(380px, calc(100vw - var(--sp-32)));
+  padding: var(--sp-16);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface-float);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+}
+.drawer[data-state='open'] {
+  animation: sheetIn var(--dur-panel) var(--ease-out);
+}
+.drawer:focus {
+  outline: none;
+}
+.wide {
+  width: min(1240px, calc(100vw - var(--sp-48)));
+}
+.drawerBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}

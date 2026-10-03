@@ -1,0 +1,114 @@
+/* hub.css "fields" — the floor every control stands on. `.box` is the shared
+   control frame: Select's and Combobox's triggers compose it, so a select
+   beside an input is the same box. */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--t-12);
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.hint,
+.error {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.error {
+  color: var(--error);
+}
+
+.box {
+  display: flex;
+  align-items: center;
+  gap: var(--ctl-gap);
+  width: 100%;
+  height: var(--ctl-md);
+  padding: 0 var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--t-13);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.box:hover {
+  border-color: var(--border-2);
+}
+/* The ring sits on the box, not the bare <input> inside it, so the leading
+   icon is inside the focused shape. */
+.box:focus-within {
+  border-color: var(--accent-line);
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.box > svg {
+  color: var(--text-faint);
+}
+.box:has(:disabled) {
+  opacity: 0.55;
+}
+.box:has([aria-invalid='true']),
+.textarea[aria-invalid='true'] {
+  border-color: var(--error);
+}
+.box:has([aria-invalid='true']):focus-within,
+.textarea[aria-invalid='true']:focus-visible {
+  outline-color: var(--error-soft);
+}
+.sm {
+  height: var(--ctl-sm);
+  font-size: var(--t-12);
+  border-radius: var(--r-sm);
+}
+
+.input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--text-faint);
+}
+
+.textarea {
+  width: 100%;
+  min-height: calc(var(--ctl-md) * 2);
+  padding: var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  resize: vertical;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.textarea:hover {
+  border-color: var(--border-2);
+}
+.textarea:focus-visible {
+  border-color: var(--accent-line);
+}
+.textarea:disabled {
+  opacity: 0.55;
+}

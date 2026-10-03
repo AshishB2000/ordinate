@@ -1068,3 +1068,6 @@ scripts/**/*.js
 /src/server/secrets/store.js
 /src/server/secrets/rotate.js
 /scripts/test-secrets.js
+
+# web/t0.7-ui: the UI kit review screenshots (web/scripts/ui-screens.mjs)
+/web/e2e/__screens__/

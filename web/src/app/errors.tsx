@@ -2,8 +2,9 @@
 // errorElement) and the 404. Both render INSIDE the shell, so the nav stays.
 
 import { isRouteErrorResponse, Link, useRouteError } from 'react-router';
-import { EmptyState, ErrorState, Page } from './blocks';
-import s from './blocks.module.css';
+import { buttonClass } from '../ui/Button';
+import { EmptyState, ErrorState } from '../ui/States';
+import { Page } from './blocks';
 
 export function RouteError() {
   const err = useRouteError();
@@ -26,7 +27,7 @@ export function NotFound() {
         icon="search"
         title="There is nothing at this address"
         actions={
-          <Link className={s.btn} to="/">
+          <Link className={buttonClass()} to="/">
             Go to Home
           </Link>
         }

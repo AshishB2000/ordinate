@@ -1,0 +1,46 @@
+// Popover — Radix Popover, non-modal: focus moves into the panel on open and
+// back to the trigger on close; Escape, an outside press or focus leaving the
+// panel dismisses it. Modal (a focus TRAP) is deliberately not offered: Radix
+// implements it with react-remove-scroll, whose injected <style> element the
+// CSP refuses. Something that needs a trap is a Dialog.
+
+import type { ReactElement, ReactNode } from 'react';
+import * as P from '@radix-ui/react-popover';
+import f from './floating.module.css';
+import s from './Popover.module.css';
+
+export interface PopoverProps {
+  trigger: ReactElement;
+  children: ReactNode;
+  /** Names the panel (aria-label) and, if `heading`, is drawn as its title. */
+  title: string;
+  heading?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  align?: 'start' | 'center' | 'end';
+  side?: 'top' | 'right' | 'bottom' | 'left';
+}
+
+export function Popover({ trigger, children, title, heading, open, onOpenChange, align = 'start', side = 'bottom' }: PopoverProps) {
+  return (
+    <P.Root open={open} onOpenChange={onOpenChange}>
+      <P.Trigger asChild>{trigger}</P.Trigger>
+      <P.Portal>
+        <P.Content
+          className={`${f.surface} ${s.popover}`}
+          align={align}
+          side={side}
+          sideOffset={6}
+          collisionPadding={8}
+          aria-label={title}
+        >
+          {heading && <h2 className={s.title}>{title}</h2>}
+          {children}
+        </P.Content>
+      </P.Portal>
+    </P.Root>
+  );
+}
+
+/** A control inside the popover that closes it (Done, Cancel). */
+export const PopoverClose = P.Close;
