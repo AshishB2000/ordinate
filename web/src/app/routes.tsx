@@ -42,6 +42,9 @@ export const pages: RouteObject[] = [
   page('/connections', () => import('../features/connections/ConnectionsPage')),
   page('/connections/:projectId', () => import('../features/connections/ConnectionsPage')),
   page('/connections/:projectId/:connId', () => import('../features/connections/WorkbenchPage')),
+
+  page('/trash', () => import('../features/projects/TrashPage')),
+  page('/versions/:projectId/:type/:id', () => import('../features/projects/VersionsPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

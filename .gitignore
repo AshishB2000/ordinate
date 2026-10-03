@@ -1129,3 +1129,8 @@ scripts/**/*.js
 /src/api/connections.js
 /src/ipc/connectionSecrets.js
 /scripts/test-connections-server.js
+
+# web/t2.2-projects: emitted siblings
+/src/api/trash.js
+/src/api/versions.js
+/scripts/test-projects-server.js

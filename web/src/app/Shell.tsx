@@ -13,6 +13,8 @@ import { IconButton } from '../ui/Button';
 import { Menu, type MenuEntry } from '../ui/Menu';
 import { PageSkeleton } from '../ui/Skeleton';
 import { toast, Toaster } from '../ui/Toast';
+import { ProjectProvider } from '../features/projects/current';
+import { ProjectSwitcher } from '../features/projects/ProjectSwitcher';
 import { JobsButton } from './JobsButton';
 import { NAV, type NavItem } from './nav';
 import { Dock, DockToggle } from '../features/assistant/DockParts';
@@ -136,58 +138,48 @@ export function Shell() {
   // the server already sends a signed-out first visit to /sign-in.
   if (me.data && me.data.user === null) return <Navigate to={signInPath(here.pathname + here.search)} replace />;
   return (
-    <div className={s.win}>
-      <a className={s.skip} href="#main">
-        Skip to content
-      </a>
-      <header className={s.topbar}>
-        <div className={s.side}>
-          <button
-            type="button"
-            className={s.project}
-            aria-disabled="true"
-            aria-label="Switch project (coming soon)"
-            title="Project switching is coming soon"
-          >
-            <span className={s.projectAvatar}>
-              <Icon name="folder" />
-            </span>
-            <span className={s.projectName}>All projects</span>
-            <Icon name="chevron-down" />
-          </button>
-        </div>
-        <div className={s.search} role="search">
-          <Icon name="search" />
-          <input className={s.searchInput} type="search" placeholder="Search" aria-label="Search" />
-        </div>
-        <div className={`${s.side} ${s.right}`}>
-          <JobsButton />
-          <span className={s.divider} aria-hidden="true" />
-          <DockToggle />
-          <UserMenu />
-        </div>
-      </header>
-      <div className={s.body}>
-        <nav className={s.rail} aria-label="Sections">
-          <div className={s.nav}>
-            {main.map((n) => (
-              <NavEntry key={n.to} item={n} />
-            ))}
+    <ProjectProvider>
+      <div className={s.win}>
+        <a className={s.skip} href="#main">
+          Skip to content
+        </a>
+        <header className={s.topbar}>
+          <div className={s.side}>
+            <ProjectSwitcher />
           </div>
-          <div className={s.bottom}>
-            {bottom.map((n) => (
-              <NavEntry key={n.to} item={n} />
-            ))}
+          <div className={s.search} role="search">
+            <Icon name="search" />
+            <input className={s.searchInput} type="search" placeholder="Search" aria-label="Search" />
           </div>
-        </nav>
-        <main id="main" className={s.stage} tabIndex={-1}>
-          <Suspense fallback={<PageSkeleton />}>
-            <Outlet />
-          </Suspense>
-        </main>
-        <Dock />
+          <div className={`${s.side} ${s.right}`}>
+            <JobsButton />
+            <span className={s.divider} aria-hidden="true" />
+            <DockToggle />
+            <UserMenu />
+          </div>
+        </header>
+        <div className={s.body}>
+          <nav className={s.rail} aria-label="Sections">
+            <div className={s.nav}>
+              {main.map((n) => (
+                <NavEntry key={n.to} item={n} />
+              ))}
+            </div>
+            <div className={s.bottom}>
+              {bottom.map((n) => (
+                <NavEntry key={n.to} item={n} />
+              ))}
+            </div>
+          </nav>
+          <main id="main" className={s.stage} tabIndex={-1}>
+            <Suspense fallback={<PageSkeleton />}>
+              <Outlet />
+            </Suspense>
+          </main>
+          <Dock />
+        </div>
+        <Toaster />
       </div>
-      <Toaster />
-    </div>
+    </ProjectProvider>
   );
 }

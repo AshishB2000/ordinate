@@ -22,4 +22,6 @@ export const NAV: readonly NavItem[] = [
   { to: '/settings', label: 'Settings', icon: 'settings', bottom: true },
   { to: '/admin', label: 'Admin', icon: 'shield', bottom: true },
   { to: '/connections', label: 'Connections', icon: 'plug' },
+
+  { to: '/trash', label: 'Trash', icon: 'trash', bottom: true },
 ];
