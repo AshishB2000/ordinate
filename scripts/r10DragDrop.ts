@@ -30,6 +30,7 @@ type Win = Smoke['win'];
 declare const dashCurrent: any;
 declare let dashSaveTimer: number | null;
 declare const tabState: any;
+declare const chartInstances: WeakMap<Element, any>;
 
 async function until(win: Win, fn: () => boolean | Promise<boolean>, ms = 20_000): Promise<boolean> {
   const end = Date.now() + ms;
@@ -246,9 +247,17 @@ export async function dragDropSection(s: Smoke, fx: Fixture): Promise<void> {
       const c = document.querySelector('#viz-area canvas') as HTMLCanvasElement;
       c.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
       const g = document.querySelector('.dnd-grip') as HTMLElement | null;
-      return !!g && !g.hidden && g.getClientRects().length > 0;
+      // The grip must not sit on the plot: a mark under it cannot be clicked.
+      let chart: any = null; // the container is up to three levels up (dndChartCanvas)
+      for (let p: HTMLElement | null = c.parentElement, i = 0; p && !chart && i < 3; p = p.parentElement, i++) chart = chartInstances.get(p);
+      const a = chart && chart.chartArea;
+      const cr = c.getBoundingClientRect();
+      const gr = g ? g.getBoundingClientRect() : null;
+      const onPlot = !!(a && gr && gr.right > cr.left + a.left && gr.left < cr.left + a.right && gr.bottom > cr.top + a.top && gr.top < cr.top + a.bottom);
+      return { shown: !!g && !g.hidden && g.getClientRects().length > 0, area: !!a, onPlot };
     });
-    ok('dragdrop: hovering a chart shows its drag-out grip', canvasUp && grip);
+    ok('dragdrop: hovering a chart shows its drag-out grip', canvasUp && grip.shown);
+    ok('dragdrop: the grip sits off the plot, so no mark is under it', grip.area && !grip.onPlot, JSON.stringify(grip));
     await win.evaluate(() => {
       document.querySelector('.dnd-grip')!.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }));
     });

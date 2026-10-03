@@ -55,9 +55,12 @@ function dndPlaceGrip(c: HTMLCanvasElement | null): void {
   if (!dndGrip) return;
   dndGripCanvas = c;
   if (!c) { dndGrip.hidden = true; return; }
+  // Bottom-left: where a cartesian chart's two axes meet, so no mark is ever
+  // under it (a pie's corner is empty too). Top-right sat on the newest point
+  // of every line chart and swallowed its click — the drill and "Why?" door.
   const r = c.getBoundingClientRect();
-  dndGrip.style.top = Math.round(r.top + 6) + 'px';
-  dndGrip.style.left = Math.round(r.right - 34) + 'px';
+  dndGrip.style.top = Math.round(r.bottom - 34) + 'px';
+  dndGrip.style.left = Math.round(r.left + 6) + 'px';
   dndGrip.hidden = false;
 }
 

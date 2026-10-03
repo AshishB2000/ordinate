@@ -175,9 +175,9 @@ function fxProfileSection(): HTMLElement | null {
   if (!sec) {
     sec = fxEl('section', 'fx-dsp');
     sec.setAttribute('aria-label', t('common.currency'));
-    const facts = body.querySelector('.js-dsp-facts');
-    if (facts) facts.after(sec);
-    else body.appendChild(sec);
+    // After the histogram, never above it: the distribution keeps the body's
+    // full height (index.html, #ds-profile) and the currency is a setting.
+    body.appendChild(sec);
   }
   return sec;
 }
