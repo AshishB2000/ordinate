@@ -37,7 +37,7 @@ row of the plan's dependency graph.
   `node src/server/main.js` with `NODE_PATH` stripped of electron and hits `/healthz`.
 - **Done when:** `npm run server` → `curl :8080/healthz` is 200; `scripts/test-server-boot.ts` passes; lint zero.
 
-### [ ] T0.2 RPC registry, contracts and wire codec
+### [x] T0.2 RPC registry, contracts and wire codec
 - **Branch** `web/t0.2-rpc` · **Depends** T0.1 · **Scope** `src/server/rpc.ts`, `src/server/wire.ts`, `src/api/`, `src/ipc/*.ts` (one import line each)
 - `src/server/rpc.ts`: an `ipcMain`-compatible registry (`handle`, `on`, `removeHandler`) that
   stores handlers. Every `src/ipc/*.ts` imports `ipcMain` from a new `src/ipc/bus.ts`, which
