@@ -92,7 +92,9 @@ const SAMPLE_CSV = path.join(__dirname, '..', 'assets', 'samples', 'retail-order
   ok('visual:data takes a map encoding', vd.safeParse({ projectId: P, datasetId: P, encoding: enc }).success);
   ok('…and a radius filter', vd.safeParse({ projectId: P, datasetId: P, encoding: enc, filters: [{ type: 'filter', column: 'lat', op: 'within_km', radius: { lngColumn: 'lon', lat: 30.27, lng: -97.74, km: 25, place: 'Austin, TX' } }] }).success);
   ok('visual:data refuses an unknown map level', !vd.safeParse({ projectId: P, datasetId: P, encoding: { ...enc, geo: { level: 'mars' } } }).success);
-  ok('visual:data refuses a shelf no map sends (pivot)', !vd.safeParse({ projectId: P, datasetId: P, encoding: { ...enc, pivot: {} } }).success);
+  // One channel serves charts (T1.1) and maps: a chart shelf such as `pivot` is valid input; the handler's
+  // sanitizeEncoding whitelists it field by field.
+  ok('visual:data (shared with charts) takes a chart shelf too (pivot)', vd.safeParse({ projectId: P, datasetId: P, encoding: { ...enc, pivot: {} } }).success);
   ok('visual:data refuses a non-UUID dataset', !vd.safeParse({ projectId: P, datasetId: '../x', encoding: enc }).success);
   ok('visual:data refuses a radius off the globe', !vd.safeParse({ projectId: P, datasetId: P, encoding: enc, filters: [{ type: 'filter', column: 'lat', op: 'within_km', radius: { lngColumn: 'lon', lat: 91, lng: 0, km: 5 } }] }).success);
   ok('boundary:get is project-scoped', 'project' in contracts['boundary:get'] && contracts['boundary:get'].project({ projectId: P, id: P }) === P);
