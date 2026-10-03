@@ -8,6 +8,7 @@
 import type { AutoRefresh, Dataset, DatasetOrigin } from './datasets';
 import { qualityFailingCount } from '../analysis/qualityRules';
 import { stepRefIds } from './stepTypes';
+import { redactOriginText } from './datasetOrigin';
 import { serverDataDir } from '../server/context';
 
 export interface DatasetSummary {
@@ -81,7 +82,11 @@ export function summarize(ds: Dataset): DatasetSummary {
   if (stepDeps.length) summary.stepDeps = stepDeps;
   if (ds.lastRefreshedAt) summary.lastRefreshedAt = ds.lastRefreshedAt;
   if (ds.lastRefreshStatus) summary.lastRefreshStatus = ds.lastRefreshStatus;
-  if (ds.lastRefreshStatus === 'error' && ds.lastRefreshError) summary.lastRefreshError = ds.lastRefreshError;
+  if (ds.lastRefreshStatus === 'error' && ds.lastRefreshError) {
+    // On the server the reason goes to every viewer of the project: no URL
+    // past its host, no server path (a refresh error can quote either).
+    summary.lastRefreshError = serverDataDir() ? redactOriginText(ds.lastRefreshError, ds.origin) : ds.lastRefreshError;
+  }
   if (ds.autoRefresh) summary.autoRefresh = ds.autoRefresh;
   const qualityFailing = qualityFailingCount(ds.quality);
   if (qualityFailing !== undefined) summary.qualityFailing = qualityFailing;

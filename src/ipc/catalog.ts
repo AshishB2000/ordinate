@@ -42,7 +42,11 @@ export function register(): void {
 
   ipcMain.handle('catalog:list', async (_e, { projectId }: any = {}) => {
     try {
-      return { ok: true, rows: await catalogIndex.listRows(str(projectId)) };
+      const rows = await catalogIndex.listRows(str(projectId));
+      // The kind pills' counts, counted here rather than by the page.
+      const kinds = catalogIndex.SOURCES.map((k) => ({ kind: k.kind, label: k.label, count: rows.filter((r) => r.kind === k.kind).length }))
+        .filter((k) => k.count > 0);
+      return { ok: true, rows, kinds };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not read the catalog.', rows: [] };
     }

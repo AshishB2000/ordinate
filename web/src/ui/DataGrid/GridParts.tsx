@@ -2,7 +2,7 @@
 // handle), a body row and the cell editor. DataGrid.tsx owns the state and
 // the scrolling; these only draw what they are handed.
 
-import { memo, useRef, type KeyboardEvent, type PointerEvent } from 'react';
+import { memo, useRef, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import type { VirtualItem } from '@tanstack/react-virtual';
 import { formatNumber } from '../../../../src/app/format.ts';
 import { Icon } from '../icons/Icon';
@@ -15,7 +15,16 @@ export type ColumnType = 'text' | 'number' | 'date';
 export interface GridColumn {
   name: string;
   type: ColumnType;
+  /** Where this column's cell sits in a fetched row, when that is not its position (hidden columns before it). */
+  at?: number;
 }
+
+/** The source column a drawn column shows: its `at`, else its position. Flags, lists and edits are keyed by it. */
+export const sourceCol = (columns: readonly GridColumn[], i: number): number => columns[i]?.at ?? i;
+
+/** The cell of `cells` a column draws. */
+export const cellOf = (cells: readonly Cell[] | undefined, columns: readonly GridColumn[], i: number): Cell | undefined =>
+  cells?.[sourceCol(columns, i)];
 
 /** A cell the server flagged: `bad` fails a check, `warn` is a warning; `text` says why. */
 export interface CellFlag {
@@ -58,6 +67,7 @@ export function HeaderCell({
   active,
   onResize,
   onActivate,
+  content,
 }: {
   grid: string;
   col: VirtualItem;
@@ -66,6 +76,8 @@ export function HeaderCell({
   onResize: (index: number, width: number) => void;
   /** A header with a menu: a click opens it (the resize handle excepted). */
   onActivate?: (index: number, anchor: HTMLElement) => void;
+  /** Replaces the plain name: what the caller draws for this column (its sort state, say). */
+  content?: ReactNode;
 }) {
   const drag = useRef<{ x: number; w: number } | null>(null);
   const down = (e: PointerEvent<HTMLSpanElement>) => {
@@ -93,9 +105,11 @@ export function HeaderCell({
       aria-haspopup={onActivate ? 'dialog' : undefined}
       onClick={onActivate ? (e) => onActivate(col.index, e.currentTarget) : undefined}
     >
-      <span className={s.thName} title={column.name}>
-        {column.name}
-      </span>
+      {content ?? (
+        <span className={s.thName} title={column.name}>
+          {column.name}
+        </span>
+      )}
       <TypeBadge type={column.type} />
       {onActivate && <Icon name="chevron-down" size={12} />}
       <span
@@ -145,11 +159,11 @@ export const Row = memo(function Row(p: RowProps) {
       style={{ transform: `translateY(${p.start}px)` }}
     >
       {p.cols.map((c) => {
-        const v = p.cells?.[c.index];
+        const v = cellOf(p.cells, p.columns, c.index);
         const num = typeof v === 'number' || (p.columns[c.index]?.type === 'number' && v != null);
         const active = c.index === p.activeCol;
         const inSel = p.selFrom !== undefined && p.selFrom >= 0 && c.index >= p.selFrom && c.index <= (p.selTo ?? -1);
-        const flag = p.cells ? p.flag?.(p.index, c.index) : undefined;
+        const flag = p.cells ? p.flag?.(p.index, sourceCol(p.columns, c.index)) : undefined;
         return (
           <div
             key={c.key}
