@@ -25,6 +25,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 import { Client, Pool } from 'pg';
 import { randomBytes, randomUUID } from 'crypto';
 import * as http from 'http';
@@ -163,7 +164,7 @@ function caller(base: string, headers: Record<string, string>) {
   return async (channel: string, payload?: unknown, client?: string) => {
     const res = await fetch(`${base}/api/rpc/${channel}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...headers, ...(client ? { 'x-ordinate-client': client } : {}) },
+      headers: withCsrf({ 'content-type': 'application/json', ...headers, ...(client ? { 'x-ordinate-client': client } : {}) }),
       body: wire.encode({ args: payload === undefined ? [] : [payload] }),
     });
     const text = await res.text();

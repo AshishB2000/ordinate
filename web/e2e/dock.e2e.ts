@@ -19,7 +19,7 @@ import http from 'node:http';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { randomBytes } from 'node:crypto';
-import { after, test } from 'node:test';
+import { after } from 'node:test';
 import pg from 'pg';
 import type { Page } from 'playwright';
 
@@ -112,7 +112,10 @@ if (!dbUrl) {
 
   e2e('dock: connect a provider, stream an answer into the dock, run a plan fed by an upload', async ({ page, server }) => {
     // Records live in Postgres here: make the project over RPC.
-    const made = await page.request.post(`${server.base}/api/rpc/projects:create`, { data: { args: [{ name: 'Ledger' }] } });
+    // Any GET hands the context its CSRF cookie (T6.2); the POST repeats it, as the app does.
+    await page.request.get(`${server.base}/api/auth/me`);
+    const csrf = (await page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';
+    const made = await page.request.post(`${server.base}/api/rpc/projects:create`, { headers: { 'x-csrf-token': csrf }, data: { args: [{ name: 'Ledger' }] } });
     assert.equal(made.status(), 200);
 
     // ── Connect (write-only key, through the server's encrypted store) ──────

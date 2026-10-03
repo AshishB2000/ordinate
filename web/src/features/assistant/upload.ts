@@ -3,12 +3,14 @@
 // ponytail: the dock's import step is its only caller here; T2.4's importer
 // moves this to web/src/api when it ports the composer.
 
+import { send } from '../../api/client';
+
 export async function uploadFile(file: File): Promise<{ fileToken: string; name: string; size: number }> {
   const body = new FormData();
   body.append('file', file, file.name);
   let res: Response;
   try {
-    res = await fetch('/api/files', { method: 'POST', body, credentials: 'same-origin' });
+    res = await send('/api/files', { method: 'POST', body }); // with the CSRF header (T6.2)
   } catch {
     throw new Error('Could not reach the Ordinate server.');
   }
