@@ -603,3 +603,96 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   — raise `RATE_LIMIT_RPC_PER_MINUTE` for it. `/api/mcp` has no rate limit yet.
 - Observed under load (8 agents, load avg > 30): `test-auth-db` failed once in a full DB run and passed
   twice alone — watch for a recurrence.
+
+## 2026-10-03 — T5.2 Parquet on S3
+
+- **Config:** `STORAGE_URL` unset | `file:///dir` (= DATA_DIR) | `s3://bucket/prefix` (needs
+  `DATABASE_URL`); `S3_ENDPOINT` (MinIO, path style), `S3_REGION`, `STORAGE_CACHE_MB` (2048; 0 = off),
+  `STORAGE_GC_GRACE_MINUTES` (60), `DUCKDB_EXTENSION_DIR`. File mode and the desktop are unchanged.
+- **Write = new versioned key, then the pointer switches:** `persistNow` registers the keys in
+  `storage_objects` (`0009_storage.sql`, RLS forced), the org worker COPYs straight to
+  `s3://…/orgs/<org>/<project>/<id>.<version>[.source].parquet`, then the record row (Postgres since
+  T5.1) is upserted with `storageVersion` — that upsert is the atomic switch. Reads resolve the pointer
+  each call: the pod's cached copy if present, else the `s3://` URL via httpfs while the exact bytes
+  download in the background (byte-capped LRU across orgs, re-adopted on restart).
+- **Isolation:** each org worker loads httpfs + aws (never installed at runtime), creates one
+  `credential_chain` secret (`REFRESH auto`) scoped to the org's prefix, and adds that prefix to
+  `allowed_directories` — all before the lock. Node-side S3 (GET/DELETE/create-bucket) is ~40 lines of
+  SigV4, credentials from the same chain; no AWS SDK, no static keys in config.
+- **GC (`storage:gc`, every 15 min per org):** a version no record body mentions (live, trashed or
+  versioned) is stamped `unreferenced_since`; deleted once unreferenced longer than the grace.
+- **Proof (MinIO):** `test-serverModeResident` 88 → 177 — two S3 passes (cache off: every read via
+  httpfs in the org worker; cache on), all Object.is-equal to the JS reference, no local Parquet
+  written. `test-storageS3` 40: org `evil` cannot read `acme`'s object, a `..` key, a sibling prefix
+  `orgs/acmex/`, or acme's cached copy (DuckDB's own Permission Errors). Atomic switch: readers looping
+  through six writes always see exactly one version (pointer-before-upload sabotage → "Dataset not
+  found"). GC deletes exactly the superseded versions past the grace; current/trashed/in-flight
+  survive. `test-jobs-pods` 69/69 with S3 (the spawned pods need `DUCKDB_EXTENSION_DIR` exported —
+  note for operators/CI).
+- **Measured** (MinIO on loopback, 1M rows, 8.5 MiB table, load 36–45): page median disk 37.4 / S3
+  httpfs 41.9 / S3 cached 35.4 ms; chart 33.7 / 37.0 / 31.1 ms; cold first page 98 / 95 / 93 ms
+  (heavier load: httpfs cold 4.6 s vs cached 0.8 s — the cache earns its keep on cold reads and other
+  pods). Save 1M rows ~equal on disk and S3. Hot table cache hit rate 90% (1 miss, 9 hits).
+- **Open:** snapshots are off in S3 mode (keep the old pointer instead of copying a file); bundle
+  export/import-desktop/pointer-less desktop records still use local files until their next write
+  (migration command = follow-up); IRSA `REFRESH auto` and real AWS untested; a locked worker still
+  accepts `CREATE SECRET` (unreachable from user SQL via `sqlGate` — threat-model item for T6.3);
+  operators should set an `AbortIncompleteMultipartUpload` lifecycle rule; CI's `minio/minio:latest`
+  image may be unmaintained — re-check when CI returns.
+- **Found (T4.3 code, logged for a fix):** under heavy load `test-duckdbPool`'s LRU/idle section fails
+  ("DuckDB worker stopped") — the idle sweep can close a worker still starting while a call waits on
+  `ready`. Reproduced on the T4.3 base alone; fix as its own change.
+
+## 2026-10-03 — T2.5 Connections
+
+- **Secrets (T5.3 follow-up, DONE for connections):** on the server `connection:testAndSave`,
+  `connection:replaceSecret` and `connection:delete` route through the encrypted store
+  (org from `ctx()`, kind `connection.password|token`, connection id) via `src/app/configSecrets.ts`,
+  never `config.json`. No DB or master key → refused before a socket opens ("This server cannot store
+  passwords or tokens…"); a failed store after the record write removes the record again. Replies carry
+  only `secretSet` flags; Replace tests the new value before keeping it. Canary passwords: absent from
+  every DATA_DIR file, `row_to_json` dumps, `pg_dump`, the trace log, process output, every RPC reply,
+  the DOM; the connector is proven to receive the stored value (`test-connections-server` 46).
+- **Bug found and fixed:** `connection:delete` treated a missing file as success and secrets were keyed
+  by connection id alone — an editor of project A could delete project B's stored credential. The
+  handler now checks the connection belongs to the project first.
+- **Server mode hides local-file sources** (`capabilities().localFiles === false`): `duckdb-file`,
+  `parquet-folder`, `csv-folder` are hidden and a desktop-imported record with one is refused; URL
+  stays; 38 sources on the server.
+- **T6.1 hook points:** every socket a connection opens goes through `src/connectors/connectionRun.ts`'s
+  four dispatches — `def.listTables` (~l.219), `def.run` in `fetchRows` (~282), `def.describeTable`
+  (~341), `def.run` in `explainSql` (~413) — plus `datasetRefresh.ts`'s `runConnection('url', …)`.
+- **Contracts:** 15 channels; viewers can see cards but every channel that uses a stored credential
+  against the source is `write`. Read-only + server-side row bounds unchanged (a DELETE refused; a
+  1,000,001 limit is a 400). `connections:list` returns a server-counted `datasetCount`.
+- **Measured:** 4 RPCs on the list, 7 opening a table in the workbench, ≤ 16 in a whole session;
+  WorkbenchPage 9.0 KB / ConnectionsPage 3.4 KB gzip, lazy.
+- Changed: identifiers inserted qualified part by part (`"sales"."orders"` — the desktop quoted the
+  whole name as one identifier, wrong for Postgres); confirm/prompt → Dialogs; Save as dataset saves on
+  the server. Connector logos still live in `renderer/hub/assets/connectors` — T8.1 must move them.
+
+## 2026-10-03 — T2.12 AI dock, ask, plans
+
+- **Secrets (T5.3 follow-up, DONE for AI keys):** in server mode `execConfig` `setApiKey`/`getApiKey`/
+  `hasKey`/BYOK route to the encrypted store, one row per org + provider (`src/server/aiKeys.ts`);
+  `config.json` keeps a `keyStored` flag only; `publicConfig()`/`publicByok()` report has-key flags; no
+  DB or master key → saving a key is refused with the reason. `analyze.ts`/`models.ts` read keys through
+  `byokCredentials`. Provider calls go through `src/ai/providerFetch.ts` (Electron `net.fetch` on the
+  desktop, Node `fetch` on the server). Canary key: received by the stub provider, absent from every
+  file, all 15 tables, the trace log, process output, every RPC reply and SSE frame
+  (`test-dockServer` 43; config.json sabotage fails it).
+- **API-key providers only on the server:** `src/cli` loads lazily from desktop branches; execution mode
+  forced to `byok`; `cli:*`/`exec:setMode` uncontracted (404). `test-server-boot` now fails if any module
+  resolves into `src/cli` (with a control). Org "allowed AI providers" (T3.4) enforced: not-ready status,
+  `dispatch` refuses without calling the provider, save/test/activate refuse.
+- **Scoping fixes found:** conversations were per project (every member saw every thread) — per member on
+  the server now; a `capture` context could read another project's capture by id — restricted to the
+  asked project.
+- **Web:** dock (⌘L/⌘J, Splitter-resized, route-derived context), streaming over SSE to the asking tab
+  only (a second tab of the same user gets nothing), activity chips, answer cards (all figures from the
+  server), plan card (run all, step, edit, fix, skip, stop, undo; import step via upload), connect-a-
+  provider form (write-only key). 18 contracts; asking is `read`, running a plan `write`, provider
+  settings org `admin`.
+- **Open:** a gateway provider's `baseUrl` is not SSRF-guarded (T6.1 `safeFetch`); plan runs live in one
+  pod's memory (sticky sessions; `ponytail:`); proposal cards needing other screens (T2.6–T2.9, T2.13)
+  deferred — the server already returns the suggested action.
