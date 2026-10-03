@@ -39,10 +39,13 @@ if (!adminUrl) {
   });
 
   e2e('projects: share from the switcher, and what the grantee then sees', async ({ page, server }) => {
+    // Any GET hands the context its CSRF cookie (T6.2); a non-GET repeats it in X-CSRF-Token, as the app does.
+    await page.request.get(`${server.base}/api/auth/me`);
+    const csrf = (await page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';
     const rpc = async (as: string, channel: string, payload?: unknown) => {
       const r = await page.request.post(`${server.base}/api/rpc/${channel}`, {
         data: { args: payload === undefined ? [] : [payload] },
-        headers: { 'x-forwarded-email': as },
+        headers: { 'x-forwarded-email': as, 'x-csrf-token': csrf },
       });
       assert.equal(r.status(), 200, `${channel} as ${as}`);
       return r.json() as Promise<unknown>;

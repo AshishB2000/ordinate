@@ -9,8 +9,8 @@
 import { lazy, Suspense, useRef, useState, type KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { rpc } from '../../api/client';
-import { startDownload, uploadFile } from '../../api/files';
+import { rpc, upload } from '../../api/client';
+import { startDownload } from '../../api/files';
 import { NAV } from '../../app/nav';
 import { Badge } from '../../ui/Badge';
 import { Button, IconButton } from '../../ui/Button';
@@ -133,7 +133,7 @@ export function ProjectSwitcher() {
     if (!file) return;
     setImporting(true);
     try {
-      const up = await uploadFile(file);
+      const up = await upload(file, file.name);
       const r = (await rpc('projects:import', { fileToken: up.fileToken })) as {
         ok: boolean;
         error?: string;

@@ -18,6 +18,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 import { Client, Pool } from 'pg';
 import type { FastifyInstance } from 'fastify';
 
@@ -67,7 +68,7 @@ function client(base: string, headers: Record<string, string> = {}) {
   const call = async (channel: string, payload?: unknown): Promise<Reply> => {
     const res = await fetch(`${base}/api/rpc/${channel}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...headers },
+      headers: withCsrf({ 'content-type': 'application/json', ...headers }),
       body: wire.encode({ args: payload === undefined ? [] : [payload] }),
     });
     const text = await res.text();
@@ -76,7 +77,7 @@ function client(base: string, headers: Record<string, string> = {}) {
   const upload = async (bytes: Buffer, name: string) => {
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array(bytes)]), name);
-    const res = await fetch(`${base}/api/files`, { method: 'POST', body: form, headers });
+    const res = await fetch(`${base}/api/files`, { method: 'POST', body: form, headers: withCsrf(headers) });
     return { status: res.status, body: (await res.json()) as { fileToken: string } };
   };
   const download = async (token: string) => {
