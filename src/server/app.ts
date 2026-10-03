@@ -15,6 +15,7 @@ import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
 import { handlers } from './rpc';
 import { maskFileToken, registerFileRoutes } from './files';
+import { clientFor, registerEvents } from './sse';
 import { fromWire, encode } from './wire';
 import { registerStatic, WEB_DIST } from './static';
 import * as fs from 'fs';
@@ -70,15 +71,19 @@ export function buildApp(
   });
 
   // Every /api/ request runs inside its own context (./context.ts): who is
-  // asking, for which org. Callback-style on purpose — `als.run(store, done)`
+  // asking, for which org, and which tab's event stream a push from the
+  // handler goes to (X-Ordinate-Client, honoured only when that stream is
+  // bound to this caller — ./sse.ts). Callback-style on purpose — `als.run(store, done)`
   // is what carries the store into the route handler and every await below it.
   // The probes stay outside: Kubernetes never signs in.
   app.addHook('onRequest', (req, reply, done) => {
     if (!req.url.startsWith('/api/')) return done();
     const who = identify(req.headers);
     if (!who) return void reply.code(401).send({ error: 'not signed in' });
-    runInContext(who, String(req.id), done);
+    runInContext(who, String(req.id), done, clientFor(req.headers['x-ordinate-client'], who) ?? undefined);
   });
+
+  registerEvents(app);
 
   // Liveness: the process is up and serving. Checks nothing else on purpose —
   // a failing dependency must not make Kubernetes restart a healthy pod.
@@ -169,7 +174,7 @@ export function buildApp(
  * a handler module.
  */
 export function registerHandlers(): void {
-  for (const mod of ['../ipc/projects', '../ipc/datasets', '../ipc/recent']) {
+  for (const mod of ['../ipc/projects', '../ipc/datasets', '../ipc/recent', '../ipc/quality']) {
     (require(mod) as { register: () => void }).register();
   }
 }

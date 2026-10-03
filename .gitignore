@@ -1058,3 +1058,8 @@ scripts/**/*.js
 # web/t0.4-files
 /src/server/files.js
 /scripts/test-files.js
+
+# web/t0.5-sse
+/src/server/sse.js
+/src/api/quality.js
+/scripts/test-sse.js
