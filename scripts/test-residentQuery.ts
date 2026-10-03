@@ -21,7 +21,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as rq from '../src/engine/residentQuery';
 import * as pq from '../src/engine/parquetStore';
-import * as rs from '../src/engine/residentSync';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import * as duck from '../src/engine/duckdb';
 import * as metricValue from '../src/analysis/metricValue';
 import * as vizData from '../src/analysis/vizData';
@@ -62,8 +62,8 @@ interface Fixture {
 
 function fixture(columns: ParsedColumn[], rows: Cell[][]): Fixture {
   const file = tmpFile();
-  pq.writeTable(file, columns, rows);
-  const back = pq.readTable(file, columns);
+  pqSync.writeTable(file, columns, rows);
+  const back = pqSync.readTable(file, columns);
   if (!back) throw new Error('fixture read-back failed');
   return { src: { parquetPath: file, columns }, columns: back.columns, rows: back.rows };
 }
@@ -77,8 +77,6 @@ async function diffMetric(label: string, f: Fixture, column: string, filters?: F
     const want = metricValue.computeMetric(f.columns, rows, { column, aggregation: agg });
     const got = await rq.computeMetricResident(f.src, { column, aggregation: agg }, filters);
     ok(`${label}: ${agg}(${column}) === computeMetric (${fmt(want)})`, Object.is(want, got));
-    // The sync twin (residentSync, kept for T4.2's consumers) runs the same plan.
-    ok(`${label}: ${agg}(${column}) sync twin === async`, Object.is(rs.computeMetricResidentSync(f.src, { column, aggregation: agg }, filters), got));
   }
 }
 
@@ -117,10 +115,6 @@ async function diffAggregate(
     ok(`${label}: aggregateResident returned a result`, false);
     return;
   }
-  const twinPlan = rs.resolveCatKeySync(f.src, category, measures, filters);
-  const twin = rs.aggregateResidentSync(f.src, category, measures, filters, plan.key);
-  ok(`${label}: sync twins === async (key + chart)`, JSON.stringify(twinPlan) === JSON.stringify(plan) && !!twin
-    && sameLabels(twin.labels, got.labels) && twin.series.every((s, i) => sameValues(s.values, got.series[i].values)));
   ok(
     `${label}: labels === buildVizData (${want.labels.length} groups)`,
     sameLabels(want.labels, got.labels),

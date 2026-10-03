@@ -5,7 +5,7 @@
 // column replaced by its converted value, plus the FX_MARK column naming the
 // missing pair — re-exposed positionally as `c0..cN` with `__ord` (the file
 // row), exactly like engine/joinResident.ts. Registered under a key with
-// `residentQuery.withRelation`, it lets the EXISTING resident layer — the
+// `residentQuery.withRelationAsync`, it lets the EXISTING resident layer — the
 // metric aggregate, the category key, the grouped aggregate, every filter
 // operator — run unchanged over converted money, and a missing count is just
 // `count` of FX_MARK under the same filters.
@@ -33,8 +33,7 @@ import type { FxPlan, RateRow } from '../analysis/fx';
 import { relationSql } from './parquetStore';
 import { sqlEmpty } from './sqlGen';
 import { sqlNum, sqlCanonicalDate } from './residentCategory';
-import { aggExpr, filterPredicates, plainFrom } from './residentQuery';
-import { computeMetricResidentSync } from './residentSync';
+import { aggExpr, computeMetricResident, filterPredicates, plainFrom } from './residentQuery';
 import type { ResidentSource } from './residentQuery';
 import * as duck from './duckdb';
 
@@ -67,15 +66,15 @@ function ordered(parquetPath: string): string {
 const SHAPES = ['(\\d{4})[-/](\\d{1,2})[-/](\\d{1,2})', '(\\d{1,2})[-/](\\d{1,2})[-/](\\d{4})'];
 
 /** Non-empty cells of `c<i>` in neither canonical date shape. */
-function nonCanonical(parquetPath: string, i: number): number {
+async function nonCanonical(parquetPath: string, i: number): Promise<number> {
   const p = `c${i}`;
   const v = `CAST(${p} AS VARCHAR)`;
   const shaped = SHAPES.map((re) => `regexp_full_match(${v}, '${re}')`).join(' OR ');
-  const out = duck.query(`SELECT CAST(count(*) AS DOUBLE) AS n FROM ${relationSql(parquetPath)} WHERE NOT ${sqlEmpty(p)} AND NOT (${shaped});`, []);
+  const out = await duck.queryAsync(`SELECT CAST(count(*) AS DOUBLE) AS n FROM ${relationSql(parquetPath)} WHERE NOT ${sqlEmpty(p)} AND NOT (${shaped});`, []);
   return out.length ? Number(out[0].n) : 1;
 }
 
-function ratesSql(rates: FxRateSource): string | null {
+async function ratesSql(rates: FxRateSource): Promise<string | null> {
   let rows: string;
   if (rates.kind === 'sample') {
     if (!rates.rows.length) return `SELECT CAST(NULL AS VARCHAR) AS f, CAST(NULL AS VARCHAR) AS t, CAST(NULL AS INTEGER) AS d, CAST(NULL AS DOUBLE) AS r WHERE false`;
@@ -89,7 +88,7 @@ function ratesSql(rates: FxRateSource): string | null {
     const ti = at(rates.map.to);
     const ri = at(rates.map.rate);
     if (di < 0 || fi < 0 || ti < 0 || ri < 0) return null;
-    if (nonCanonical(rates.parquetPath, di) > 0) return null;
+    if ((await nonCanonical(rates.parquetPath, di)) > 0) return null;
     // Cast on the DECLARED type only: a rate column that is not `number` has no rates.
     const rate = rates.columns[ri].type === 'number' ? sqlNum(`c${ri}`) : 'CAST(NULL AS DOUBLE)';
     rows = `SELECT ${codeSql(`c${fi}`)} AS f, ${codeSql(`c${ti}`)} AS t, ${daySql(`c${di}`)} AS d, ${rate} AS r, file_row_number AS o ` +
@@ -104,15 +103,15 @@ function ratesSql(rates: FxRateSource): string | null {
  * would — or null when the resident path must decline. Throws on a malformed
  * plan; callers wrap.
  */
-export function fxRelationSql(src: ResidentSource, rates: FxRateSource, plan: FxPlan): string | null {
+export async function fxRelationSql(src: ResidentSource, rates: FxRateSource, plan: FxPlan): Promise<string | null> {
   const cols = src.columns;
   const T = lit(plan.target);
   const USD = lit(PIVOT_CURRENCY);
   const viaUsd = plan.target !== PIVOT_CURRENCY;
   for (const di of new Set(plan.cols.map((c) => c.dateIndex))) {
-    if (di >= 0 && nonCanonical(src.parquetPath, di) > 0) return null;
+    if (di >= 0 && (await nonCanonical(src.parquetPath, di)) > 0) return null;
   }
-  const fx = ratesSql(rates);
+  const fx = await ratesSql(rates);
   if (fx === null) return null;
 
   const extra: string[] = [];
@@ -173,16 +172,16 @@ export function fxColumns(columns: ParsedColumn[]): ParsedColumn[] {
  * Missing rows and their pairs under `filters`, over a relation already
  * registered under `fxSrc.parquetPath`. Null on failure.
  */
-export function fxMissingResident(fxSrc: ResidentSource, filters: FilterStep[]): { missing: number; pairs: string[] } | null {
+export async function fxMissingResident(fxSrc: ResidentSource, filters: FilterStep[]): Promise<{ missing: number; pairs: string[] } | null> {
   try {
-    const missing = computeMetricResidentSync(fxSrc, { column: FX_MARK, aggregation: 'count' }, filters);
+    const missing = await computeMetricResident(fxSrc, { column: FX_MARK, aggregation: 'count' }, filters);
     if (missing === null) return null;
     let pairs: string[] = [];
     if (missing > 0) {
       const params: duck.DuckValue[] = [];
       const m = `c${fxSrc.columns.length - 1}`;
       const preds = [`${m} IS NOT NULL`].concat(filterPredicates(fxSrc.columns, filters, params));
-      const rows = duck.query(`SELECT DISTINCT CAST(${m} AS VARCHAR) AS p FROM ${plainFrom(fxSrc.parquetPath)} WHERE ${preds.join(' AND ')};`, params);
+      const rows = await duck.queryAsync(`SELECT DISTINCT CAST(${m} AS VARCHAR) AS p FROM ${plainFrom(fxSrc.parquetPath)} WHERE ${preds.join(' AND ')};`, params);
       pairs = sortPairs(rows.map((r) => String(r.p)));
     }
     return { missing, pairs };
@@ -197,11 +196,11 @@ export function fxMissingResident(fxSrc: ResidentSource, filters: FilterStep[]):
  * count beside it. A null VALUE here is a real answer — every row missing, say
  * — because a failure throws instead; null overall means "use the reference".
  */
-export function fxMetricOn(
+export async function fxMetricOn(
   fxSrc: ResidentSource,
   spec: { column: string; aggregation: MetricAggregation },
   filters: FilterStep[],
-): { value: number | null; missing: number; pairs: string[] } | null {
+): Promise<{ value: number | null; missing: number; pairs: string[] } | null> {
   try {
     const cols = fxSrc.columns;
     const ci = cols.findIndex((c) => c.name === spec.column);
@@ -209,11 +208,11 @@ export function fxMetricOn(
     const params: duck.DuckValue[] = [];
     const preds = filterPredicates(cols, filters, params);
     const where = preds.length ? ` WHERE ${preds.join(' AND ')}` : '';
-    const out = duck.query(`SELECT ${aggExpr(cols, ci, spec.aggregation)} AS m0 FROM ${plainFrom(fxSrc.parquetPath)}${where};`, params);
+    const out = await duck.queryAsync(`SELECT ${aggExpr(cols, ci, spec.aggregation)} AS m0 FROM ${plainFrom(fxSrc.parquetPath)}${where};`, params);
     if (!out.length) return null;
     const raw = out[0].m0;
     const n = raw == null ? null : typeof raw === 'number' ? raw : Number(raw);
-    const miss = fxMissingResident(fxSrc, filters);
+    const miss = await fxMissingResident(fxSrc, filters);
     return miss ? { value: n === null || Number.isNaN(n) ? null : n, ...miss } : null;
   } catch (_) {
     return null;

@@ -56,8 +56,8 @@ function describe(v: Cell): string {
   return `${v === null ? 'null' : typeof v}:${String(v)}`;
 }
 
-function compare(label: string, src: TableData, steps: TransformStep[]): void {
-  const viaSql = runOnDuckDb(src, steps, { force: true });
+async function compare(label: string, src: TableData, steps: TransformStep[]): Promise<void> {
+  const viaSql = await runOnDuckDb(src, steps, { force: true });
   if (viaSql === null) {
     console.log(`skip ${label} — sqlGen declined (falls back to the fold, by design)`);
     return;
@@ -104,8 +104,8 @@ function foldOnly(src: TableData, steps: TransformStep[]): ReturnType<typeof app
 
 // For the big table, applyPipeline WILL take the SQL path. Compare it against
 // the fold by running the fold on the identical data through a forced-small call.
-function compareBig(label: string, src: TableData, steps: TransformStep[]): void {
-  const viaSql = runOnDuckDb(src, steps, { force: true });
+async function compareBig(label: string, src: TableData, steps: TransformStep[]): Promise<void> {
+  const viaSql = await runOnDuckDb(src, steps, { force: true });
   if (viaSql === null) {
     console.log(`skip ${label} — sqlGen declined`);
     return;
@@ -134,140 +134,147 @@ function foldReference(src: TableData, steps: TransformStep[]): ReturnType<typeo
 
 // ── Cases ───────────────────────────────────────────────────────────────────
 
-console.log('— small-table equivalence (forced onto the SQL path) —');
+async function main(): Promise<void> {
+  console.log('— small-table equivalence (forced onto the SQL path) —');
 
-compare('filter =', table, [{ type: 'filter', column: 'city', op: '=', value: 'Paris' }]);
-compare('filter != on text', table, [{ type: 'filter', column: 'city', op: '!=', value: 'Paris' }]);
-compare('filter numeric >', table, [{ type: 'filter', column: 'amount', op: '>', value: 5 }]);
-compare('filter contains', table, [{ type: 'filter', column: 'note', op: 'contains', value: 'a' }]);
-compare('filter is_empty', table, [{ type: 'filter', column: 'note', op: 'is_empty' }]);
-compare('filter not_empty', table, [{ type: 'filter', column: 'note', op: 'not_empty' }]);
-compare('filter on leading-zero sku', table, [
-  { type: 'filter', column: 'sku', op: '=', value: '007' },
-]);
-compare('filter unknown column (skip + warn)', table, [
-  { type: 'filter', column: 'nope', op: '=', value: 'x' },
-]);
-
-compare('group sum', table, [
-  { type: 'group_aggregate', groupBy: ['city'], aggregations: [{ column: 'amount', fn: 'sum', as: 'total' }] },
-] as TransformStep[]);
-compare('group count over text (non-empty semantics)', table, [
-  { type: 'group_aggregate', groupBy: ['city'], aggregations: [{ column: 'note', fn: 'count', as: 'n' }] },
-] as TransformStep[]);
-compare('group min/max/avg', table, [
-  {
-    type: 'group_aggregate',
-    groupBy: ['city'],
-    aggregations: [
-      { column: 'amount', fn: 'min', as: 'lo' },
-      { column: 'amount', fn: 'max', as: 'hi' },
-      { column: 'amount', fn: 'avg', as: 'mean' },
-    ],
-  },
-] as TransformStep[]);
-compare('group by leading-zero column', table, [
-  { type: 'group_aggregate', groupBy: ['sku'], aggregations: [{ column: 'amount', fn: 'sum', as: 't' }] },
-] as TransformStep[]);
-compare('aggregate a TEXT column (must be null, not an error)', table, [
-  { type: 'group_aggregate', groupBy: ['city'], aggregations: [{ column: 'sku', fn: 'sum', as: 's' }] },
-] as TransformStep[]);
-
-compare('dedupe all columns', table, [{ type: 'dedupe' } as TransformStep]);
-compare('dedupe by subset (first wins)', table, [
-  { type: 'dedupe', columns: ['city', 'sku'] } as TransformStep,
-]);
-
-compare('trim all text', table, [{ type: 'trim' } as TransformStep]);
-compare('trim named column', table, [{ type: 'trim', column: 'note' } as TransformStep]);
-compare('fill_empty', table, [{ type: 'fill_empty', column: 'note', value: 'X' } as TransformStep]);
-compare('drop_column', table, [{ type: 'drop_column', column: 'note' } as TransformStep]);
-compare('rename_column', table, [
-  { type: 'rename_column', from: 'note', to: 'comment' } as TransformStep,
-]);
-
-compare('chain: filter → group', table, [
-  { type: 'filter', column: 'amount', op: '>=', value: 0 },
-  { type: 'group_aggregate', groupBy: ['city'], aggregations: [{ column: 'amount', fn: 'sum', as: 't' }] },
-] as TransformStep[]);
-compare('chain: trim → dedupe → drop', table, [
-  { type: 'trim' },
-  { type: 'dedupe' },
-  { type: 'drop_column', column: 'note' },
-] as TransformStep[]);
-
-compare('unknown step type is skipped', table, [
-  { type: 'not_a_step' } as unknown as TransformStep,
-]);
-compare('empty step list', table, []);
-
-console.log('');
-console.log('— injection safety —');
-compare("value containing '; DROP TABLE", table, [
-  { type: 'filter', column: 'city', op: '=', value: "'; DROP TABLE t; --" },
-]);
-compare('value containing a quote', table, [
-  { type: 'filter', column: 'city', op: '=', value: "Pa'ris" },
-]);
-{
-  const after = runOnDuckDb(table, [{ type: 'filter', column: 'city', op: '=', value: 'Paris' }], {
-    force: true,
-  });
-  ok('bridge still usable after injection attempts', after !== null && after.rowCount === 3);
-}
-
-console.log('');
-console.log('— large table: row-order stability under parallel execution —');
-{
-  const big = bigTable(60_000);
-  compareBig('60k filter (source order preserved)', big, [
-    { type: 'filter', column: 'amount', op: '>', value: 100 },
+  await compare('filter =', table, [{ type: 'filter', column: 'city', op: '=', value: 'Paris' }]);
+  await compare('filter != on text', table, [{ type: 'filter', column: 'city', op: '!=', value: 'Paris' }]);
+  await compare('filter numeric >', table, [{ type: 'filter', column: 'amount', op: '>', value: 5 }]);
+  await compare('filter contains', table, [{ type: 'filter', column: 'note', op: 'contains', value: 'a' }]);
+  await compare('filter is_empty', table, [{ type: 'filter', column: 'note', op: 'is_empty' }]);
+  await compare('filter not_empty', table, [{ type: 'filter', column: 'note', op: 'not_empty' }]);
+  await compare('filter on leading-zero sku', table, [
+    { type: 'filter', column: 'sku', op: '=', value: '007' },
   ]);
-  compareBig('60k group (first-seen group order)', big, [
-    { type: 'group_aggregate', groupBy: ['city'], aggregations: [{ column: 'amount', fn: 'sum', as: 't' }] },
+  await compare('filter unknown column (skip + warn)', table, [
+    { type: 'filter', column: 'nope', op: '=', value: 'x' },
+  ]);
+
+  await compare('group sum', table, [
+    { type: 'group_aggregate', groupBy: ['city'], aggregations: [{ column: 'amount', fn: 'sum', as: 'total' }] },
+  ] as TransformStep[]);
+  await compare('group count over text (non-empty semantics)', table, [
+    { type: 'group_aggregate', groupBy: ['city'], aggregations: [{ column: 'note', fn: 'count', as: 'n' }] },
+  ] as TransformStep[]);
+  await compare('group min/max/avg', table, [
+    {
+      type: 'group_aggregate',
+      groupBy: ['city'],
+      aggregations: [
+        { column: 'amount', fn: 'min', as: 'lo' },
+        { column: 'amount', fn: 'max', as: 'hi' },
+        { column: 'amount', fn: 'avg', as: 'mean' },
+      ],
+    },
+  ] as TransformStep[]);
+  await compare('group by leading-zero column', table, [
+    { type: 'group_aggregate', groupBy: ['sku'], aggregations: [{ column: 'amount', fn: 'sum', as: 't' }] },
+  ] as TransformStep[]);
+  await compare('aggregate a TEXT column (must be null, not an error)', table, [
+    { type: 'group_aggregate', groupBy: ['city'], aggregations: [{ column: 'sku', fn: 'sum', as: 's' }] },
   ] as TransformStep[]);
 
-  // Determinism: the same query must give the same order every time. This is the
-  // failure mode docs/phase-0/06 proved is real for a bare GROUP BY.
-  const orders = new Set<string>();
-  for (let i = 0; i < 5; i++) {
-    const r = runOnDuckDb(
-      big,
-      [
-        {
-          type: 'group_aggregate',
-          groupBy: ['city'],
-          aggregations: [{ column: 'amount', fn: 'sum', as: 't' }],
-        },
-      ] as TransformStep[],
-      { force: true },
-    );
-    if (r) orders.add(r.rows.map((x) => String(x[0])).join(','));
+  await compare('dedupe all columns', table, [{ type: 'dedupe' } as TransformStep]);
+  await compare('dedupe by subset (first wins)', table, [
+    { type: 'dedupe', columns: ['city', 'sku'] } as TransformStep,
+  ]);
+
+  await compare('trim all text', table, [{ type: 'trim' } as TransformStep]);
+  await compare('trim named column', table, [{ type: 'trim', column: 'note' } as TransformStep]);
+  await compare('fill_empty', table, [{ type: 'fill_empty', column: 'note', value: 'X' } as TransformStep]);
+  await compare('drop_column', table, [{ type: 'drop_column', column: 'note' } as TransformStep]);
+  await compare('rename_column', table, [
+    { type: 'rename_column', from: 'note', to: 'comment' } as TransformStep,
+  ]);
+
+  await compare('chain: filter → group', table, [
+    { type: 'filter', column: 'amount', op: '>=', value: 0 },
+    { type: 'group_aggregate', groupBy: ['city'], aggregations: [{ column: 'amount', fn: 'sum', as: 't' }] },
+  ] as TransformStep[]);
+  await compare('chain: trim → dedupe → drop', table, [
+    { type: 'trim' },
+    { type: 'dedupe' },
+    { type: 'drop_column', column: 'note' },
+  ] as TransformStep[]);
+
+  await compare('unknown step type is skipped', table, [
+    { type: 'not_a_step' } as unknown as TransformStep,
+  ]);
+  await compare('empty step list', table, []);
+
+  console.log('');
+  console.log('— injection safety —');
+  await compare("value containing '; DROP TABLE", table, [
+    { type: 'filter', column: 'city', op: '=', value: "'; DROP TABLE t; --" },
+  ]);
+  await compare('value containing a quote', table, [
+    { type: 'filter', column: 'city', op: '=', value: "Pa'ris" },
+  ]);
+  {
+    const after = await runOnDuckDb(table, [{ type: 'filter', column: 'city', op: '=', value: 'Paris' }], {
+      force: true,
+    });
+    ok('bridge still usable after injection attempts', after !== null && after.rowCount === 3);
   }
-  ok(`group order identical across 5 runs (got ${orders.size} distinct)`, orders.size === 1);
+
+  console.log('');
+  console.log('— large table: row-order stability under parallel execution —');
+  {
+    const big = bigTable(60_000);
+    await compareBig('60k filter (source order preserved)', big, [
+      { type: 'filter', column: 'amount', op: '>', value: 100 },
+    ]);
+    await compareBig('60k group (first-seen group order)', big, [
+      { type: 'group_aggregate', groupBy: ['city'], aggregations: [{ column: 'amount', fn: 'sum', as: 't' }] },
+    ] as TransformStep[]);
+
+    // Determinism: the same query must give the same order every time. This is the
+    // failure mode docs/phase-0/06 proved is real for a bare GROUP BY.
+    const orders = new Set<string>();
+    for (let i = 0; i < 5; i++) {
+      const r = await runOnDuckDb(
+        big,
+        [
+          {
+            type: 'group_aggregate',
+            groupBy: ['city'],
+            aggregations: [{ column: 'amount', fn: 'sum', as: 't' }],
+          },
+        ] as TransformStep[],
+        { force: true },
+      );
+      if (r) orders.add(r.rows.map((x) => String(x[0])).join(','));
+    }
+    ok(`group order identical across 5 runs (got ${orders.size} distinct)`, orders.size === 1);
+  }
+
+  console.log('');
+  console.log('— threshold behaviour —');
+  ok(
+    'small table declines the SQL path (fold is cheaper)',
+    await runOnDuckDb(table, [{ type: 'filter', column: 'city', op: '=', value: 'Paris' }]) === null,
+  );
+  ok(
+    'calculated_field declines (formula→SQL is out of Phase 1 scope)',
+    await runOnDuckDb(table, [{ type: 'calculated_field', name: 'x', expression: '1+1' }], { force: true }) ===
+      null,
+  );
+  ok(
+    'applyPipeline still correct when the SQL path declines',
+    applyPipeline(table, [{ type: 'filter', column: 'city', op: '=', value: 'Paris' }]).rowCount === 3,
+  );
+
+  duck.shutdown();
+
+  console.log('');
+  if (failureCount()) {
+    console.error(`${failureCount()} check(s) FAILED.`);
+    process.exit(1);
+  }
+  console.log('All pipelineDuck differential checks passed.');
 }
 
-console.log('');
-console.log('— threshold behaviour —');
-ok(
-  'small table declines the SQL path (fold is cheaper)',
-  runOnDuckDb(table, [{ type: 'filter', column: 'city', op: '=', value: 'Paris' }]) === null,
-);
-ok(
-  'calculated_field declines (formula→SQL is out of Phase 1 scope)',
-  runOnDuckDb(table, [{ type: 'calculated_field', name: 'x', expression: '1+1' }], { force: true }) ===
-    null,
-);
-ok(
-  'applyPipeline still correct when the SQL path declines',
-  applyPipeline(table, [{ type: 'filter', column: 'city', op: '=', value: 'Paris' }]).rowCount === 3,
-);
-
-duck.shutdown();
-
-console.log('');
-if (failureCount()) {
-  console.error(`${failureCount()} check(s) FAILED.`);
+main().catch((err) => {
+  console.error(err);
   process.exit(1);
-}
-console.log('All pipelineDuck differential checks passed.');
+});

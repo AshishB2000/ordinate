@@ -12,7 +12,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as sampling from '../src/analysis/sampling';
 import { sampleRowsResident } from '../src/engine/sampleResident';
-import * as parquetStore from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import type { Cell } from '../src/data/transforms';
 
 // A skewed table: 'big' has most rows, 'rare' has 3, one null-category run.
@@ -66,7 +66,7 @@ void (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sampling-'));
   const file = path.join(dir, 's.parquet');
   const columns = [{ name: 'cat', type: 'text' as const }, { name: 'i', type: 'number' as const }, { name: 'note', type: 'text' as const }];
-  parquetStore.writeTable(file, columns, rows);
+  pqSync.writeTable(file, columns, rows);
   const sql = await sampleRowsResident({ parquetPath: file, columns }, 0, 10_000);
   const js = a.map((i) => rows[i]);
   ok('resident: the SQL sample answered', !!sql && sql.total === rows.length);

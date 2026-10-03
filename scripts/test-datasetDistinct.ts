@@ -24,7 +24,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as dp from '../src/engine/datasetPage';
-import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import type { ParsedColumn } from '../src/data/parse';
 import type { Cell } from '../src/data/transforms';
 
@@ -54,8 +54,8 @@ interface Fixture {
 
 function fixture(columns: ParsedColumn[], rows: Cell[][]): Fixture {
   const file = tmpFile();
-  pq.writeTable(file, columns, rows);
-  const back = pq.readTable(file, columns);
+  pqSync.writeTable(file, columns, rows);
+  const back = pqSync.readTable(file, columns);
   if (!back) throw new Error('fixture read-back failed');
   return { src: { parquetPath: file, columns }, columns: back.columns, rows: back.rows };
 }

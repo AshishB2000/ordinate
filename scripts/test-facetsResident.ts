@@ -17,7 +17,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as rq from '../src/engine/residentQuery';
-import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import * as duck from '../src/engine/duckdb';
 import { facetDataResident } from '../src/engine/facetResident';
 import { buildFacetData } from '../src/analysis/facets';
@@ -50,8 +50,8 @@ for (let i = 0; i < 1500; i++) {
   ]);
 }
 const file = path.join(dir, 'fixture.parquet');
-pq.writeTable(file, COLS, ROWS);
-const back = pq.readTable(file, COLS);
+pqSync.writeTable(file, COLS, ROWS);
+const back = pqSync.readTable(file, COLS);
 if (!back) throw new Error('fixture read-back failed');
 const src: rq.ResidentSource = { parquetPath: file, columns: COLS };
 
@@ -66,9 +66,9 @@ function same(a: unknown, b: unknown): boolean {
   return a === b;
 }
 
-function diff(label: string, enc: VizEncoding, filters: FilterStep[] = []): void {
+async function diff(label: string, enc: VizEncoding, filters: FilterStep[] = []): Promise<void> {
   const want = buildFacetData(back!.columns, back!.rows, enc, filters);
-  const got = facetDataResident(src, enc, filters);
+  const got = await facetDataResident(src, enc, filters);
   ok(`${label}: resident answered`, !!got);
   if (!got) return;
   ok(`${label}: JS raised no warning (the fast path's precondition)`, want.warnings.length === 0, want.warnings.join('; '));
@@ -78,35 +78,42 @@ function diff(label: string, enc: VizEncoding, filters: FilterStep[] = []): void
   ok(`${label}: category info identical`, same(got.category, want.category));
 }
 
-if (!rq.isResident()) {
-  console.error('FAIL facetsResident: DuckDB bridge unavailable — nothing was verified');
-  process.exit(1);
+async function main(): Promise<void> {
+  if (!rq.isResident()) {
+    console.error('FAIL facetsResident: DuckDB bridge unavailable — nothing was verified');
+    process.exit(1);
+  }
+
+  const sum = [{ column: 'v', aggregation: 'sum' as const }];
+  await diff('1-D by label, blanks + "Other" value + BOM', { category: 'seg', values: sum, facet: { cols: 'region' } });
+  await diff('1-D folded at 5 by measure', { category: 'seg', values: sum, facet: { cols: 'region', max: 5, order: 'measure' } });
+  await diff('2-D rows × cols, folded', { category: 'seg', values: sum, facet: { rows: 'region', cols: 'seg', max: 4 } });
+  await diff('multi-measure avg/count/min/max', {
+    category: 'seg',
+    values: [{ column: 'v', aggregation: 'avg' }, { column: 'region', aggregation: 'count' }, { column: 'qty', aggregation: 'min' }, { column: 'v', aggregation: 'none' }],
+    facet: { cols: 'region', title: '{field} = {value}' },
+  });
+  await diff('text category over the top-50 cap', { category: 'sku', values: sum, facet: { cols: 'seg' } });
+  await diff('number category (bins)', { category: 'qty', values: sum, bins: 6, facet: { cols: 'seg' } });
+  await diff('date category (auto grain)', { category: 'd', values: sum, facet: { cols: 'seg', order: 'measure' } });
+  await diff('date category (quarter)', { category: 'd', values: sum, grain: 'quarter', facet: { rows: 'seg', cols: 'region', max: 3 } });
+  await diff('split by a text column', { category: 'd', grain: 'month', values: sum, series: 'seg', facet: { cols: 'region', max: 4 } });
+  await diff('under filters', { category: 'seg', values: sum, facet: { cols: 'region' } }, [
+    { type: 'filter', column: 'qty', op: '>', value: 20 },
+    { type: 'filter', column: 'region', op: 'not in', values: ['East'] },
+  ]);
+  ok('a number facet column declines (JS answers)', await facetDataResident(src, { category: 'seg', values: sum, facet: { cols: 'qty' } }, []) === null);
+
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+  duck.shutdown();
+  if (failureCount() > 0) {
+    console.error(`\n${failureCount()} facet differential check(s) failed`);
+    process.exit(1);
+  }
+  console.log('\nAll facet differential checks passed.');
 }
 
-const sum = [{ column: 'v', aggregation: 'sum' as const }];
-diff('1-D by label, blanks + "Other" value + BOM', { category: 'seg', values: sum, facet: { cols: 'region' } });
-diff('1-D folded at 5 by measure', { category: 'seg', values: sum, facet: { cols: 'region', max: 5, order: 'measure' } });
-diff('2-D rows × cols, folded', { category: 'seg', values: sum, facet: { rows: 'region', cols: 'seg', max: 4 } });
-diff('multi-measure avg/count/min/max', {
-  category: 'seg',
-  values: [{ column: 'v', aggregation: 'avg' }, { column: 'region', aggregation: 'count' }, { column: 'qty', aggregation: 'min' }, { column: 'v', aggregation: 'none' }],
-  facet: { cols: 'region', title: '{field} = {value}' },
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
 });
-diff('text category over the top-50 cap', { category: 'sku', values: sum, facet: { cols: 'seg' } });
-diff('number category (bins)', { category: 'qty', values: sum, bins: 6, facet: { cols: 'seg' } });
-diff('date category (auto grain)', { category: 'd', values: sum, facet: { cols: 'seg', order: 'measure' } });
-diff('date category (quarter)', { category: 'd', values: sum, grain: 'quarter', facet: { rows: 'seg', cols: 'region', max: 3 } });
-diff('split by a text column', { category: 'd', grain: 'month', values: sum, series: 'seg', facet: { cols: 'region', max: 4 } });
-diff('under filters', { category: 'seg', values: sum, facet: { cols: 'region' } }, [
-  { type: 'filter', column: 'qty', op: '>', value: 20 },
-  { type: 'filter', column: 'region', op: 'not in', values: ['East'] },
-]);
-ok('a number facet column declines (JS answers)', facetDataResident(src, { category: 'seg', values: sum, facet: { cols: 'qty' } }, []) === null);
-
-try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
-duck.shutdown();
-if (failureCount() > 0) {
-  console.error(`\n${failureCount()} facet differential check(s) failed`);
-  process.exit(1);
-}
-console.log('\nAll facet differential checks passed.');

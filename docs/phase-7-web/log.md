@@ -391,3 +391,51 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   UPDATE` per record when N > 1; fx cache can go stale across pods (T5.4's bus can invalidate);
   `backups.ts` is desktop-only; store suites still run file-only (Postgres coverage is the
   differential scenario).
+
+## 2026-10-02 — T4.2 Async resident layer: the rest
+
+- **Converted** to the bridge's async calls, awaited up to the handler: pivot, cohort, funnel, facet,
+  join (async `withRelationAsync`, UUID key), fx, lod, scenario, segment, quality, anomalies,
+  statsResident, median, the insights aggregator, pipelineDuck, pipelinePower. SQL text unchanged.
+  Deleted: `residentSync.ts`, sync `runOrdered`/`withRelation`. Sync Parquet helpers moved to
+  `parquetStoreSync.ts` (tests/benches/fixtures only; 38 scripts repointed by script).
+- **Guard ON:** `src/server/main.ts` calls `forbidSyncOnMainThread()` right after `enterServerMode()`.
+  `test-server-boot` passes with it on.
+- **Done-when proof — `scripts/test-asyncReach.ts`:** roots = every `src/server/*.ts` and
+  `src/ipc/*.ts`; edges = runtime `import`/`export from`/`require()` (lazy too; `import type` and
+  `new Worker(file)` are not edges); a sync site = `<duckdb>.query(`/`.exec(`, a renamed named import
+  of them, or `runOrdered(`. 106 roots reach 446 modules with **zero** sync sites (still zero with
+  T5.1's stores on the chain). Worker-only (allowed sync, asserted unreachable): `computeWorker`,
+  `duckdbWorker`, `duckdbSidecarChild`, `parquetStoreSync`.
+- **`test-serverModeResident`** (guard on, compute inlined): 29 → 47 checks — pivot, cohort,
+  `dataset:stats`, two `stats:run` specs, `dataset:median`, `insights:list` added; each Object.is-equal
+  to the JS reference, trace resident never failed, zero `getDataset`. Sync call re-inserted into the
+  built pivot/stats modules → fails loudly and hydrates.
+- **Measured** (1M rows, medians of 3×11 interleaved, load ~9–10; "blocked" = delay of a 1 ms
+  main-thread timer):
+
+  | case | before latency / blocked | after latency / blocked (longest single block) |
+  |---|---|---|
+  | pivot (2 row dims × quarter, 2 measures, totals) | 124–138 / 123–137 ms | 133–137 / 17–21 ms (6–6.5) |
+  | stats (summaries + quality issues) | 82–95 / 81–94 ms | 93–99 / 35–43 ms (9.5–11) |
+
+- **Behaviour change:** `transforms.applyPipeline` (sync, every request) no longer tries
+  `runOnDuckDb` first — that path was already off by default (`ORDINATE_DUCKDB_PIPELINE`), so the
+  default desktop is unchanged; the flag now has no effect in the shipped app; `runOnDuckDb` stays
+  async with its differential tests.
+- `test-residentQuery` 859 → 533: the removed 326 were T4.1's sync-twin checks on the deleted
+  `residentSync`; every JS-reference differential check is kept.
+
+## 2026-10-03 — Ticking T0.7 and T0.8; CI is unavailable
+
+- GitHub Actions refuses every job ("recent account payments have failed or your spending limit
+  needs to be increased") since 2026-10-03 02:22 UTC. The user decided not to fix billing now and to
+  merge on the orchestrator's local gate runs instead: build, `npm test` with and without
+  `DATABASE_URL`, lint, web build + Vitest, the e2e harness (Chromium 1243 via `E2E_CHROMIUM`), and
+  the Electron smokes the change touches — run at every step of each merge chain.
+- **T0.7:** the gallery screenshots (both themes + dialog/drawer/select) went to the user for review;
+  the user merged #199. **T0.8:** the CI job is defined but has never run on GitHub; it passes
+  locally (5/5 incl. the T3.2 auth spec). Its first real run happens when billing is restored —
+  re-check then.
+- **Merge order is a chain:** each PR's branch contains its predecessors, conflicts already resolved
+  with both sides kept; merge in the stated order with merge commits.

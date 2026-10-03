@@ -106,7 +106,7 @@ row of the plan's dependency graph.
 - oxlint covers `web/` with the react and react-hooks plugins; zero findings.
 - **Done when:** `npm run server` + browser shows the shell and a real project list from the API.
 
-### [ ] T0.7 UI kit
+### [x] T0.7 UI kit
 - **Branch** `web/t0.7-ui` · **Depends** T0.6 · **Scope** `web/src/ui/`
 - Primitives on Radix, styled with CSS Modules + theme tokens, matching the current hub look
   (study `renderer/hub/hub.css` and the running desktop app): Button, IconButton, Input, Textarea,
@@ -118,7 +118,7 @@ row of the plan's dependency graph.
 - Vitest + Testing Library for each: renders, keyboard, focus trap where relevant.
 - **Done when:** gallery reviewed by a human; tests and lint green.
 
-### [ ] T0.8 E2E harness and CI
+### [x] T0.8 E2E harness and CI
 - **Branch** `web/t0.8-e2e` · **Depends** T0.7, T0.4, T0.5 · **Scope** `web/e2e/`, `.github/workflows/`
 - Playwright starts the built server on a temp `DATA_DIR` seeded with the sample project
   (`src/app/sampleProject.ts`), opens Chrome, signs in as dev.
@@ -340,7 +340,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   still spying on `getDataset`.
 - A guard test: in server mode, calling `duckdb.query` (sync) on the main thread throws.
 
-### [ ] T4.2 Async resident layer: the rest
+### [x] T4.2 Async resident layer: the rest
 - **Branch** `web/t4.2-async-b` · **Depends** T4.1
 - Same for `pivotResident`, `statsResident`, `anomaliesResident`, `qualityResident`,
   `medianResident`, `joinResident`, `pipelineDuck`, and the rest of the 38 sync call sites.

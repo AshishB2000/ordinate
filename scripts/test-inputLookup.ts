@@ -40,6 +40,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
@@ -76,8 +77,8 @@ async function main(): Promise<void> {
   if (!bridge) {
     ok('# no DuckDB bridge — JS reference only', true);
   } else {
-    parquetStore.writeTable(file, cols, rows);
-    const hydrated = parquetStore.readTable(file, cols)!.rows;
+    pqSync.writeTable(file, cols, rows);
+    const hydrated = pqSync.readTable(file, cols)!.rows;
     for (const c of cols) {
       const js = lookup.lookupKeysJs(cols, hydrated, c.name);
       const sql = await resident.lookupKeysResident({ parquetPath: file, columns: cols }, c.name);

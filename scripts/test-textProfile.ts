@@ -44,7 +44,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
-const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const resident: typeof import('../src/engine/textSampleResident') = require('../src/engine/textSampleResident');
 const tp: typeof import('../src/analysis/text/textProfile') = require('../src/analysis/text/textProfile');
 const statsResident: typeof import('../src/engine/statsResident') = require('../src/engine/statsResident');
@@ -93,8 +93,8 @@ async function main(): Promise<void> {
   ];
   for (const c of cases) {
     const file = fixtureFile();
-    parquetStore.writeTable(file, c.columns, c.rows);
-    const back = parquetStore.readTable(file, c.columns);
+    pqSync.writeTable(file, c.columns, c.rows);
+    const back = pqSync.readTable(file, c.columns);
     ok(`${c.label}: fixture reads back`, !!back);
     if (!back) continue;
     const want = tp.textSampleOf(c.columns, back.rows, c.column, c.limit);
@@ -109,7 +109,7 @@ async function main(): Promise<void> {
   {
     const file = fixtureFile();
     const cols = [T('k'), N('n')];
-    parquetStore.writeTable(file, cols, [['a', 7], ['b', 8]]);
+    pqSync.writeTable(file, cols, [['a', 7], ['b', 8]]);
     ok('a NUMBER column: JS reference answers null', tp.textSampleOf(cols, [['a', 7]], 'n', 10) === null);
     ok('…and the resident path falls back (null), never casting', (await resident.textSampleResident({ parquetPath: file, columns: cols }, 'n', 10)) === null);
     ok('an unknown column: both null', tp.textSampleOf(cols, [], 'zz', 10) === null

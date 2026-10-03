@@ -346,7 +346,7 @@ async function anomaliesFor(projectId: string, rule: AlertRule) {
   try {
     const src = await datasets.residentSource(projectId, rule.datasetId);
     if (src) {
-      const fast = detectAnomaliesResident(src, opts);
+      const fast = await detectAnomaliesResident(src, opts);
       if (fast) return fast;
     }
     const ds = await datasets.getDataset(projectId, rule.datasetId);

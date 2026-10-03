@@ -7,7 +7,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import * as duck from '../src/engine/duckdb';
 import * as jr from '../src/engine/joinResident';
 import * as js from '../src/analysis/joinJs';
@@ -27,8 +27,8 @@ interface Fx { id: string; name: string; file: string; columns: ParsedColumn[]; 
 
 function fx(id: string, name: string, columns: ParsedColumn[], rows: Cell[][]): Fx {
   const file = path.join(dir, `t${seq++}.parquet`);
-  pq.writeTable(file, columns, rows);
-  const back = pq.readTable(file, columns);
+  pqSync.writeTable(file, columns, rows);
+  const back = pqSync.readTable(file, columns);
   if (!back) throw new Error('fixture read-back failed');
   return { id, name, file, columns: back.columns, rows: back.rows };
 }
@@ -90,24 +90,24 @@ async function main(): Promise<void> {
   const jsRate = (fc: string, tc: string): number | null =>
     js.joinRateJs(orders.rows.map((r) => r[fi(orders, fc)]), orders.columns[fi(orders, fc)].type,
       targets.rows.map((r) => r[fi(targets, tc)]), targets.columns[fi(targets, tc)].type, ks.RATE_SAMPLE);
-  const sqlRate = (fc: string, tc: string): number | null =>
+  const sqlRate = (fc: string, tc: string): Promise<number | null> =>
     jr.joinRateResident({ parquetPath: orders.file, index: fi(orders, fc), type: orders.columns[fi(orders, fc)].type },
       { parquetPath: targets.file, index: fi(targets, tc), type: targets.columns[fi(targets, tc)].type }, ks.RATE_SAMPLE);
-  const rankedJs = ks.rankKeys(orders.columns, targets.columns, jsRate);
-  const rankedSql = ks.rankKeys(orders.columns, targets.columns, sqlRate);
+  const rankedJs = await ks.rankKeys(orders.columns, targets.columns, jsRate);
+  const rankedSql = await ks.rankKeys(orders.columns, targets.columns, sqlRate);
   ok('rank: region → Region is the top suggestion', rankedJs[0].from === 'region' && rankedJs[0].to === 'Region', JSON.stringify(rankedJs[0]));
   // 60 rows, 5/7 keyed; 3 of those 5 region values exist in Targets.
   // 60 rows: 44 carry a region key, 36 of those exist in Targets.
   ok('rank: its sampled match rate is 36/44 of keyed rows', rankedJs[0].rate === 36 / 44, String(rankedJs[0].rate));
   ok('rank: SQL and JS rankings agree pair for pair', JSON.stringify(rankedJs) === JSON.stringify(rankedSql));
   for (const c of rankedJs.slice(0, 5)) {
-    ok(`rate: ${c.from}→${c.to} SQL === JS (${c.rate})`, Object.is(sqlRate(c.from, c.to), jsRate(c.from, c.to)));
+    ok(`rate: ${c.from}→${c.to} SQL === JS (${c.rate})`, Object.is(await sqlRate(c.from, c.to), jsRate(c.from, c.to)));
   }
   ok('rank: a sample of 1 row counts only that row', Object.is(
     js.joinRateJs(['East', 'Nope'], 'text', ['East'], 'text', 1), 1));
 
   const stJs = js.keyStatsJs(orders.rows.map((r) => r[1]), 'text', targets.rows.map((r) => r[0]), 'text');
-  const stSql = jr.keyStatsResident({ parquetPath: orders.file, index: 1, type: 'text' }, { parquetPath: targets.file, index: 0, type: 'text' });
+  const stSql = await jr.keyStatsResident({ parquetPath: orders.file, index: 1, type: 'text' }, { parquetPath: targets.file, index: 0, type: 'text' });
   ok('stats: SQL === JS', JSON.stringify(stJs) === JSON.stringify(stSql), JSON.stringify([stJs, stSql]));
   ok('stats: empty and unknown keys are unmatched', stJs.unmatchedFrom === 60 - stJs.matched && stJs.matched === 36, JSON.stringify(stJs));
   ok('stats: Targets repeats a key, so no cardinality is inferred', ks.inferCardinality(stJs) === null);
@@ -152,7 +152,7 @@ async function main(): Promise<void> {
     const j = jp.resolveVizJoin(orders.id, c.enc, c.filters || [], RELS, infos);
     if (!j || !j.ok) { ok(`${c.label}: plans`, false, JSON.stringify(j)); continue; }
     const want = js.joinedVizDataJs(j.value, tables, infos);
-    const got = jr.joinedAggregateResident(j.value.plan.tables.map((t) => sourceOf(t.datasetId)), j.value, infos);
+    const got = await jr.joinedAggregateResident(j.value.plan.tables.map((t) => sourceOf(t.datasetId)), j.value, infos);
     ok(`${c.label}: resident path answers`, got !== null);
     if (!got) continue;
     ok(`${c.label}: labels SQL === JS`, JSON.stringify(got.data.labels) === JSON.stringify(want.data.labels),
@@ -185,14 +185,14 @@ async function main(): Promise<void> {
     for (const agg of ['sum', 'avg', 'count', 'min', 'max'] as const) {
       const spec = { column: 'Targets.target', aggregation: agg };
       const want = js.joinedMetricJs(plan.value, layout, tables, infos, { ...spec, table: 1 }, flt);
-      const got = jr.joinedMetricResident([sourceOf(orders.id), sourceOf(targets.id)], plan.value, layout, infos, spec, flt);
+      const got = await jr.joinedMetricResident([sourceOf(orders.id), sourceOf(targets.id)], plan.value, layout, infos, spec, flt);
       ok(`metric: ${agg}(Targets.target) where category = Tech — SQL === JS (${want})`, Object.is(want, got));
     }
     const all = js.joinedMetricJs(plan.value, layout, tables, infos, { column: 'Targets.target', aggregation: 'sum', table: 1 }, []);
     ok('metric: sum of target over all orders counts each region once (100+200+50)', all === 350, String(all));
     const rev = js.joinedMetricJs(plan.value, layout, tables, infos, { column: 'revenue', aggregation: 'sum', table: 0 },
       [{ type: 'filter', column: 'Targets.tier', op: '=', value: 'A' }]);
-    const revSql = jr.joinedMetricResident([sourceOf(orders.id), sourceOf(targets.id)], plan.value, layout, infos,
+    const revSql = await jr.joinedMetricResident([sourceOf(orders.id), sourceOf(targets.id)], plan.value, layout, infos,
       { column: 'revenue', aggregation: 'sum' }, [{ type: 'filter', column: 'Targets.tier', op: '=', value: 'A' }]);
     ok('metric: revenue filtered by a related tier — SQL === JS', Object.is(rev, revSql), JSON.stringify([rev, revSql]));
   } else {

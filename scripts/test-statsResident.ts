@@ -59,7 +59,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
-const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const datasetStats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');
 const statsResident: typeof import('../src/engine/statsResident') = require('../src/engine/statsResident');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
@@ -133,8 +133,8 @@ interface Fixture {
  */
 function makeFixture(label: string, columns: ParsedColumn[], rows: Cell[][]): Fixture {
   const file = fixtureFile();
-  parquetStore.writeTable(file, columns, rows);
-  const back = parquetStore.readTable(file, columns);
+  pqSync.writeTable(file, columns, rows);
+  const back = pqSync.readTable(file, columns);
   if (!back) throw new Error(`fixture read-back failed: ${label}`);
   const want = columns.map((col, c) =>
     datasetStats.computeColumnSummary(col, back.rows.map((r) => (r ? r[c] ?? null : null))),
@@ -144,9 +144,9 @@ function makeFixture(label: string, columns: ParsedColumn[], rows: Cell[][]): Fi
 }
 
 /** The whole differential: summaries per column + the quality-issue list. */
-function diff(f: Fixture): { summaries: ColumnSummary[] | null; issues: QualityIssue[] | null } {
+async function diff(f: Fixture): Promise<{ summaries: ColumnSummary[] | null; issues: QualityIssue[] | null }> {
   const src = { parquetPath: f.file, columns: f.columns };
-  const got = statsResident.computeColumnSummariesResident(src);
+  const got = await statsResident.computeColumnSummariesResident(src);
   ok(`${f.label}: summaries are resident (not a fallback)`, got !== null);
   if (got) {
     ok(`${f.label}: one summary per column, in declaration order`,
@@ -157,7 +157,7 @@ function diff(f: Fixture): { summaries: ColumnSummary[] | null; issues: QualityI
         Boolean(gotCol) && sameSummary(wantCol, gotCol));
     });
   }
-  const issues = statsResident.findQualityIssuesResident(src);
+  const issues = await statsResident.findQualityIssuesResident(src);
   ok(`${f.label}: issues are resident (not a fallback)`, issues !== null);
   if (issues) {
     ok(`${f.label}: issues === findQualityIssues  ${show(f.wantIssues)}`,
@@ -211,7 +211,7 @@ async function main(): Promise<void> {
       [' ', 5, '2024-01-01', '007', '', null],
     ];
     const f = makeFixture('mixed', columns, rows);
-    const { summaries } = diff(f);
+    const { summaries } = await diff(f);
 
     // Spot-checks that pin WHAT the shared answer actually is, so a change that
     // moves both sides together still fails.
@@ -258,12 +258,12 @@ async function main(): Promise<void> {
   {
     const cols = [T('v')];
     const a = makeFixture('tie a-first', cols, [['a'], ['b'], ['a'], ['b']]);
-    const ra = diff(a);
+    const ra = await diff(a);
     ok("tie: 'a' occurs first and wins the 2–2 tie",
       summaryOf(ra.summaries, 'v')?.mostCommon?.value === 'a');
 
     const b = makeFixture('tie b-first', cols, [['b'], ['a'], ['b'], ['a']]);
-    const rb = diff(b);
+    const rb = await diff(b);
     ok("tie: 'b' occurs first and wins the same tie the other way round",
       summaryOf(rb.summaries, 'v')?.mostCommon?.value === 'b');
 
@@ -271,7 +271,7 @@ async function main(): Promise<void> {
     // table and empties interleaved (which must not shift the ordinal).
     const c = makeFixture('tie three-way', cols,
       [[''], ['z'], [null], ['y'], ['z'], ['x'], ['y'], ['   '], ['x']]);
-    const rc = diff(c);
+    const rc = await diff(c);
     ok("tie: a 2–2–2 tie goes to the earliest first occurrence ('z')",
       summaryOf(rc.summaries, 'v')?.mostCommon?.value === 'z');
   }
@@ -280,7 +280,7 @@ async function main(): Promise<void> {
   {
     const f = makeFixture('leading zeros', [T('code'), N('n')],
       [['007', 7], ['007', 7], ['0012', 12], ['00', 0], ['7', 7]]);
-    const r = diff(f);
+    const r = await diff(f);
     const code = summaryOf(r.summaries, 'code');
     ok("leading zeros: '007' and '7' are DIFFERENT values (distinct 4)", code?.distinct === 4);
     ok("leading zeros: the modal value is the string '007'", code?.mostCommon?.value === '007');
@@ -291,7 +291,7 @@ async function main(): Promise<void> {
   // ── 4. A zero-row table ────────────────────────────────────────────────────
   {
     const f = makeFixture('zero rows', [T('a'), N('b'), D('c')], []);
-    const r = diff(f);
+    const r = await diff(f);
     ok('zero rows: every nonEmpty is 0',
       (r.summaries ?? []).every((s) => s.nonEmpty === 0));
     ok('zero rows: the number column has count 0 and no min/max/mean',
@@ -314,7 +314,7 @@ async function main(): Promise<void> {
         [null, 'z', 'same', 'r'],
         ['w', '', 'same', 's'],
       ]);
-    const rh = diff(half);
+    const rh = await diff(half);
     const kinds = (list: QualityIssue[] | null, col: string) =>
       (list ?? []).filter((i) => i.column === col).map((i) => i.kind).join('+');
     ok('quality: 2 of 4 empty (exactly 0.5) → empty_heavy fires', kinds(rh.issues, 'a') === 'empty_heavy');
@@ -332,7 +332,7 @@ async function main(): Promise<void> {
     const both = makeFixture('constant + empty_heavy together',
       [T('one'), T('none')],
       [['v', ''], ['', null], [null, '   '], ['v', '']]);
-    const rb = diff(both);
+    const rb = await diff(both);
     ok('quality: one value + half empties is empty_heavy AND constant',
       kinds(rb.issues, 'one') === 'empty_heavy+constant_column');
     ok('quality: an ALL-empty column is empty_heavy but NOT constant',
@@ -342,20 +342,20 @@ async function main(): Promise<void> {
     // same cell, and a row differing only in a number is not a duplicate.
     const dup = makeFixture('duplicate rows', [T('city'), N('n')],
       [['Paris', 1], ['Paris', 1], ['Paris', 3], ['', 1], [null, 1], ['Paris', 1]]);
-    const rd = diff(dup);
+    const rd = await diff(dup);
     // ['Paris',1] appears three times → 2 duplicates. ['',1] and [null,1] are
     // each unique: if the row key conflated '' with null there would be 3.
     ok('quality: 2 fully-duplicate rows, counted and pluralised',
       (rd.issues ?? []).some((i) => i.kind === 'duplicate_rows' && i.detail === '2 fully-duplicate rows'));
 
     const one = makeFixture('one duplicate row', [T('city')], [['a'], ['a'], ['b']]);
-    const r1 = diff(one);
+    const r1 = await diff(one);
     ok('quality: exactly one duplicate is singular, not "1 fully-duplicate rows"',
       (r1.issues ?? []).some((i) => i.detail === '1 fully-duplicate row'));
 
     const uniq = makeFixture('no duplicates', [T('city'), N('n')],
       [['a', 1], ['b', 2], ['', 1], [null, 1]]);
-    const ru = diff(uniq);
+    const ru = await diff(uniq);
     ok('quality: an all-unique table reports no duplicate_rows (\'\' ≠ null ≠ a value)',
       !(ru.issues ?? []).some((i) => i.kind === 'duplicate_rows'));
 
@@ -364,7 +364,7 @@ async function main(): Promise<void> {
     const ord = makeFixture('issue order',
       [T('a'), T('b')],
       [['v', ''], ['v', ''], ['v', ''], ['v', '']]);
-    const ro = diff(ord);
+    const ro = await diff(ord);
     ok('quality: emission order is per-column, then duplicate_rows last',
       (ro.issues ?? []).map((i) => `${i.column ?? '-'}:${i.kind}`).join(',')
         === 'a:constant_column,b:empty_heavy,-:duplicate_rows');
@@ -378,7 +378,7 @@ async function main(): Promise<void> {
     const f = makeFixture('whitespace flavours', [T('w')],
       [[''], ['   '], ['\t'], ['\n'], ['\r'], [''], [''], [' '], ['﻿'],
         [' \t  '], [null], ['x'], [' x ']]);
-    const r = diff(f);
+    const r = await diff(f);
     const w = summaryOf(r.summaries, 'w');
     ok('whitespace: only \'x\' and \' x \' are non-empty (2 of 13)', w?.nonEmpty === 2);
     ok('whitespace: a non-blank value is NEVER trimmed (\'x\' ≠ \' x \')', w?.distinct === 2);
@@ -391,30 +391,30 @@ async function main(): Promise<void> {
     const cols = [T('a')];
     const missing = { parquetPath: path.join(tmpDir, 'does-not-exist.parquet'), columns: cols };
     ok('missing file → null, not a throw (summaries)',
-      statsResident.computeColumnSummariesResident(missing) === null);
+      await statsResident.computeColumnSummariesResident(missing) === null);
     ok('missing file → null, not a throw (issues)',
-      statsResident.findQualityIssuesResident(missing) === null);
+      await statsResident.findQualityIssuesResident(missing) === null);
 
     const good = makeFixture('good file for the negative cases', cols, [['x']]);
     ok('0 columns → null (fall back; the file holds only the row-count sentinel)',
-      statsResident.computeColumnSummariesResident({ parquetPath: good.file, columns: [] }) === null);
+      await statsResident.computeColumnSummariesResident({ parquetPath: good.file, columns: [] }) === null);
     ok('a schema WIDER than the file → null, never a partial answer',
-      statsResident.computeColumnSummariesResident(
+      await statsResident.computeColumnSummariesResident(
         { parquetPath: good.file, columns: [T('a'), T('b'), T('c')] }) === null);
     ok('a malformed column entry → null',
-      statsResident.computeColumnSummariesResident(
+      await statsResident.computeColumnSummariesResident(
         { parquetPath: good.file, columns: [null as any] }) === null);
     ok('a non-string path → null',
-      statsResident.computeColumnSummariesResident({ parquetPath: 42 as any, columns: cols }) === null);
+      await statsResident.computeColumnSummariesResident({ parquetPath: 42 as any, columns: cols }) === null);
     ok('a path with a quote in it → null (relationSql rejects/escapes it), never a throw',
-      statsResident.findQualityIssuesResident(
+      await statsResident.findQualityIssuesResident(
         { parquetPath: "/tmp/no'such.parquet", columns: cols }) === null);
 
-    const sample = statsResident.sampleRowsResident({ parquetPath: good.file, columns: cols }, 5);
+    const sample = await statsResident.sampleRowsResident({ parquetPath: good.file, columns: cols }, 5);
     ok('sampleRowsResident returns the stored rows in file order',
       Array.isArray(sample) && sample.length === 1 && sample[0][0] === 'x');
     ok('sampleRowsResident(0) is an empty array, not null',
-      JSON.stringify(statsResident.sampleRowsResident({ parquetPath: good.file, columns: cols }, 0)) === '[]');
+      JSON.stringify(await statsResident.sampleRowsResident({ parquetPath: good.file, columns: cols }, 0)) === '[]');
   }
 
   // ── 8. A column name that is a SQL identifier is never SQL ────────────────
@@ -424,7 +424,7 @@ async function main(): Promise<void> {
     const nasty = '"; DROP TABLE x; --';
     const f = makeFixture('hostile column name', [T(nasty), N('n')],
       [['a', 1], ['a', 2], ['b', 3]]);
-    const r = diff(f);
+    const r = await diff(f);
     ok('a hostile column name is echoed verbatim and changes no number',
       summaryOf(r.summaries, nasty)?.mostCommon?.value === 'a');
   }
@@ -433,7 +433,7 @@ async function main(): Promise<void> {
   {
     const f = makeFixture('leading BOM value', [T('v')],
       [['﻿alpha'], ['﻿alpha'], ['beta']]);
-    const r = diff(f);
+    const r = await diff(f);
     ok('a leading U+FEFF in the modal value is not eaten by the bridge',
       summaryOf(r.summaries, 'v')?.mostCommon?.value === '﻿alpha');
   }
@@ -453,7 +453,7 @@ async function main(): Promise<void> {
       ];
     }
     const f = makeFixture('60k rows', columns, rows);
-    const r = diff(f);
+    const r = await diff(f);
     ok('60k: the number column agrees on an integer mean exactly',
       Object.is(summaryOf(r.summaries, 'sales')?.mean, summaryOf(f.want, 'sales')?.mean));
     ok('60k: distinct counts are large and exact',
@@ -470,7 +470,7 @@ async function main(): Promise<void> {
     for (let i = 0; i < rows.length; i += 1) rows[i] = [((i * 7919) % 100_000) / 7 + 0.1];
     const f = makeFixture('float summation', [N('x')], rows);
     const src = { parquetPath: f.file, columns: f.columns };
-    const got = statsResident.computeColumnSummariesResident(src);
+    const got = await statsResident.computeColumnSummariesResident(src);
     const wantMean = f.want[0].mean as number;
     const gotMean = got?.[0].mean as number;
     const relErr = Math.abs(gotMean - wantMean) / Math.abs(wantMean);
@@ -483,7 +483,7 @@ async function main(): Promise<void> {
     const ints: Cell[][] = new Array(50_000);
     for (let i = 0; i < ints.length; i += 1) ints[i] = [(i % 977) - 400];
     const fi = makeFixture('integer summation', [N('x')], ints);
-    const gi = statsResident.computeColumnSummariesResident({ parquetPath: fi.file, columns: fi.columns });
+    const gi = await statsResident.computeColumnSummariesResident({ parquetPath: fi.file, columns: fi.columns });
     ok('integer summation: the mean is bit-for-bit identical',
       gi !== null && Object.is(gi[0].mean, fi.want[0].mean));
   }
@@ -563,7 +563,7 @@ async function main(): Promise<void> {
 
     // The sample block the prompt quotes must be the FIRST rows, in row order.
     const sampleSrc = await datasets.residentSource(proj.id, rec.id);
-    const sample = sampleSrc ? statsResident.sampleRowsResident(sampleSrc, 5) : null;
+    const sample = sampleSrc ? await statsResident.sampleRowsResident(sampleSrc, 5) : null;
     ok('dataset:explain: the resident sample is the first rows in stored order',
       JSON.stringify(sample) === JSON.stringify(ds!.rows.slice(0, 5)));
 

@@ -18,7 +18,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import * as duck from '../src/engine/duckdb';
 import { memberAggsJs, memberCountsJs } from '../src/analysis/driversJs';
 import type { DriverQuery, MemberTable } from '../src/analysis/driversJs';
@@ -35,8 +35,8 @@ let seq = 0;
 
 function fixture(columns: ParsedColumn[], rows: Cell[][]): { src: { parquetPath: string; columns: ParsedColumn[] }; rows: Cell[][]; columns: ParsedColumn[] } {
   const file = path.join(dir, `t${seq++}.parquet`);
-  pq.writeTable(file, columns, rows);
-  const back = pq.readTable(file, columns);
+  pqSync.writeTable(file, columns, rows);
+  const back = pqSync.readTable(file, columns);
   if (!back) throw new Error('fixture read-back failed');
   return { src: { parquetPath: file, columns }, rows: back.rows, columns: back.columns };
 }

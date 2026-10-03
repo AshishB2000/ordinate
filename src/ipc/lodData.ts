@@ -89,7 +89,7 @@ export async function lodMetricFor(
     ? compile(spec.column) : null;
   const lod = only && only.ok && only.fn.lods.length === 1 ? residentLod(only.fn.lods[0]) : null;
   if (target.src && lod) {
-    const v = lodMetricResident(target.src, lod, spec.aggregation, context, normal);
+    const v = await lodMetricResident(target.src, lod, spec.aggregation, context, normal);
     if (v !== null) {
       trace.record('lodMetric', 'resident');
       return { ok: true, value: v };
@@ -114,7 +114,8 @@ export async function lodPreview(projectId: string, datasetId: string, fn: Compi
   const specs = fn.lods.map((l) => residentLod(l));
   const src = meta.rowCount >= LOD_RESIDENT_MIN_ROWS ? await datasets.residentSource(projectId, datasetId) : null;
   if (src && specs.every((s) => s !== null)) {
-    const vals = specs.map((s) => lodValuesResident(src, s as ResidentLod, [], n));
+    const vals: Array<(number | null)[] | null> = [];
+    for (const s of specs) vals.push(await lodValuesResident(src, s as ResidentLod, [], n));
     if (vals.every((v) => v !== null)) {
       trace.record('lodPreview', 'resident');
       return vals as FValue[][];

@@ -291,8 +291,9 @@ export function isAvailable(): boolean {
 // THROW on the main thread instead, so a sync call site still reachable from a
 // request fails loudly rather than freezing the server. Worker threads (the
 // compute pool) are exempt — parking their own thread is what they are for.
-// The web server (src/server/main.ts) calls it at boot — wired by T0.3/T4.2;
-// the desktop never does. `isAvailable()` is NOT guarded: it blocks only for the
+// The web server (src/server/main.ts) calls it at boot (T4.2) and
+// scripts/test-asyncReach.ts proves no RPC handler reaches a sync call; the
+// desktop never calls it. `isAvailable()` is NOT guarded: it blocks only for the
 // one-time ~115 ms startup handshake, which the server pays at boot (/readyz).
 let syncForbidden = false;
 

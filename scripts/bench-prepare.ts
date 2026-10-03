@@ -21,7 +21,7 @@ const fs = require('fs');
 
 const transforms = require('../src/data/transforms');
 const pipelineDuck = require('../src/engine/pipelineDuck');
-const parquetStore = require('../src/engine/parquetStore');
+const pqSync = require('../src/engine/parquetStoreSync');
 
 // A representative pipeline: one of each shape that costs something — a
 // row-wise expression, a predicate, and an aggregate.
@@ -69,9 +69,9 @@ function buildRows(n: number): any[][] {
   return rows;
 }
 
-function time(label: string, fn: () => any): any {
+async function time(label: string, fn: () => any): Promise<any> {
   const t0 = process.hrtime.bigint();
-  const out = fn();
+  const out = await fn();
   const ms = Number(process.hrtime.bigint() - t0) / 1e6;
   return { label, ms, out };
 }
@@ -82,44 +82,51 @@ const SIZES = sizes.length ? sizes : [10_000, 100_000, 1_000_000];
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-bench-'));
 const results: any[] = [];
 
-for (const n of SIZES) {
-  const source = { columns: COLUMNS.map((c) => ({ ...c })), rows: buildRows(n) };
+async function main(): Promise<void> {
+  for (const n of SIZES) {
+    const source = { columns: COLUMNS.map((c) => ({ ...c })), rows: buildRows(n) };
 
-  const file = path.join(tmp, `bench-${n}.source.parquet`);
-  parquetStore.writeTable(file, source.columns, source.rows);
+    const file = path.join(tmp, `bench-${n}.source.parquet`);
+    pqSync.writeTable(file, source.columns, source.rows);
 
-  // Warm both paths once — first call pays module init and DuckDB attach.
-  transforms.applyPipeline({ columns: source.columns, rows: source.rows.slice(0, 100) }, STEPS);
+    // Warm both paths once — first call pays module init and DuckDB attach.
+    transforms.applyPipeline({ columns: source.columns, rows: source.rows.slice(0, 100) }, STEPS);
 
-  const fold = time('fold', () => transforms.applyPipeline(source, STEPS));
-  const duck = time('duck+load', () => pipelineDuck.runOnDuckDb(source, STEPS, { force: true }));
-  const read = time('parquet read', () => parquetStore.readTable(file, source.columns));
-  const resident = time('resident', () =>
-    pipelineDuck.runResidentPipeline(file, source.columns, STEPS));
-  // What updateSteps actually pays today: hydrate the source out of Parquet,
-  // THEN fold. The resident number replaces both, which is the real comparison.
-  const foldTotal = read.ms + fold.ms;
-  const calc = time('fold+calc', () => transforms.applyPipeline(source, STEPS_CALC));
-  const calcDuck = pipelineDuck.runOnDuckDb(source, STEPS_CALC, { force: true });
+    const fold = await time('fold', () => transforms.applyPipeline(source, STEPS));
+    const duck = await time('duck+load', () => pipelineDuck.runOnDuckDb(source, STEPS, { force: true }));
+    const read = await time('parquet read', () => pqSync.readTable(file, source.columns));
+    const resident = await time('resident', () =>
+      pipelineDuck.runResidentPipeline(file, source.columns, STEPS));
+    // What updateSteps actually pays today: hydrate the source out of Parquet,
+    // THEN fold. The resident number replaces both, which is the real comparison.
+    const foldTotal = read.ms + fold.ms;
+    const calc = await time('fold+calc', () => transforms.applyPipeline(source, STEPS_CALC));
+    const calcDuck = await pipelineDuck.runOnDuckDb(source, STEPS_CALC, { force: true });
 
-  const ok = duck.out !== null;
-  results.push({ n, fold: fold.ms, duck: ok ? duck.ms : NaN, read: read.ms,
-                 resident: resident.out === null ? NaN : resident.ms, foldTotal,
-                 calc: calc.ms, calcResident: calcDuck !== null, rows: fold.out.rowCount });
-  console.log(`${n.toLocaleString()} rows -> ${fold.out.rowCount} out | ` +
-    `fold ${fold.ms.toFixed(0)}ms | duck+load ${ok ? duck.ms.toFixed(0) + 'ms' : 'NULL (fell back)'} | ` +
-    `parquet read ${read.ms.toFixed(0)}ms | RESIDENT ${resident.out === null ? 'NULL' : resident.ms.toFixed(0) + 'ms'} ` +
-    `(vs ${foldTotal.toFixed(0)}ms read+fold) | with calc field: fold ${calc.ms.toFixed(0)}ms, ` +
-    `resident ${calcDuck === null ? 'NULL (sqlGen bails)' : 'ok'}`);
+    const ok = duck.out !== null;
+    results.push({ n, fold: fold.ms, duck: ok ? duck.ms : NaN, read: read.ms,
+                   resident: resident.out === null ? NaN : resident.ms, foldTotal,
+                   calc: calc.ms, calcResident: calcDuck !== null, rows: fold.out.rowCount });
+    console.log(`${n.toLocaleString()} rows -> ${fold.out.rowCount} out | ` +
+      `fold ${fold.ms.toFixed(0)}ms | duck+load ${ok ? duck.ms.toFixed(0) + 'ms' : 'NULL (fell back)'} | ` +
+      `parquet read ${read.ms.toFixed(0)}ms | RESIDENT ${resident.out === null ? 'NULL' : resident.ms.toFixed(0) + 'ms'} ` +
+      `(vs ${foldTotal.toFixed(0)}ms read+fold) | with calc field: fold ${calc.ms.toFixed(0)}ms, ` +
+      `resident ${calcDuck === null ? 'NULL (sqlGen bails)' : 'ok'}`);
+  }
+
+  console.log('\n| rows | read+fold (today) | pipelineDuck w/ hydrate | RESIDENT | speedup vs today |');
+  console.log('|---|---|---|---|---|');
+  for (const r of results) {
+    const gain = Number.isNaN(r.resident) ? 'n/a' : (r.foldTotal / r.resident).toFixed(1) + 'x';
+    console.log(`| ${r.n.toLocaleString()} | ${r.foldTotal.toFixed(0)} ms ` +
+      `(${r.read.toFixed(0)} read + ${r.fold.toFixed(0)} fold) | ` +
+      `${Number.isNaN(r.duck) ? 'n/a' : r.duck.toFixed(0) + ' ms'} | ` +
+      `${Number.isNaN(r.resident) ? 'NULL' : r.resident.toFixed(0) + ' ms'} | ${gain} |`);
+  }
+  fs.rmSync(tmp, { recursive: true, force: true });
 }
 
-console.log('\n| rows | read+fold (today) | pipelineDuck w/ hydrate | RESIDENT | speedup vs today |');
-console.log('|---|---|---|---|---|');
-for (const r of results) {
-  const gain = Number.isNaN(r.resident) ? 'n/a' : (r.foldTotal / r.resident).toFixed(1) + 'x';
-  console.log(`| ${r.n.toLocaleString()} | ${r.foldTotal.toFixed(0)} ms ` +
-    `(${r.read.toFixed(0)} read + ${r.fold.toFixed(0)} fold) | ` +
-    `${Number.isNaN(r.duck) ? 'n/a' : r.duck.toFixed(0) + ' ms'} | ` +
-    `${Number.isNaN(r.resident) ? 'NULL' : r.resident.toFixed(0) + ' ms'} | ${gain} |`);
-}
-fs.rmSync(tmp, { recursive: true, force: true });
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

@@ -47,7 +47,7 @@ export async function fitDataset(projectId: string, datasetId: string, features:
   if (src) {
     const out = computePool.available()
       ? await computePool.run<FitResult | { error: string } | null>('segmentFit', { src, features }, { onProgress: progress, signal: ctx?.signal })
-      : fitResident(src, features, progress);
+      : await fitResident(src, features, progress);
     trace.record('segmentFit', out ? 'resident' : 'failed', out ? undefined : `${features.length} feature(s)`);
     if (out) return out;
   } else {
@@ -56,7 +56,7 @@ export async function fitDataset(projectId: string, datasetId: string, features:
   const ds = await datasets.getDataset(projectId, datasetId);
   if (!ds) return { error: 'Dataset not found' };
   const jsProgress: Progress = (f, note) => { if (ctx) ctx.checkCancelled(); progress(f, note); };
-  return runFit(ds.columns, features, jsSegmentIo(ds.columns, ds.rows), jsProgress) || { error: 'Could not read the dataset' };
+  return (await runFit(ds.columns, features, jsSegmentIo(ds.columns, ds.rows), jsProgress)) || { error: 'Could not read the dataset' };
 }
 
 /** Per-customer aggregates: resident first, the JS reference as the fallback. */
@@ -65,7 +65,7 @@ export async function rfmCustomers(projectId: string, datasetId: string, spec: R
   if (src) {
     const out = computePool.available()
       ? await computePool.run<RfmCustomers | null>('rfm', { src, spec }, { signal: ctx?.signal })
-      : rfmCustomersResident(src, spec);
+      : await rfmCustomersResident(src, spec);
     trace.record('segmentRfm', out ? 'resident' : 'failed', out ? undefined : 'rfm');
     if (out) return out;
   } else {
@@ -87,7 +87,7 @@ export function register(): void {
       const meta = await datasets.getDatasetMeta(String(projectId || ''), String(datasetId || ''));
       if (!meta) return NOT_FOUND;
       const src = await datasets.residentSource(meta.projectId, meta.id);
-      let summaries = src ? computeColumnSummariesResident(src) : null;
+      let summaries = src ? await computeColumnSummariesResident(src) : null;
       trace.record('segmentFeatures', src ? (summaries ? 'resident' : 'failed') : 'skipped');
       if (!summaries) {
         const ds = await datasets.getDataset(meta.projectId, meta.id);

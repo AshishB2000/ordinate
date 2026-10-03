@@ -24,7 +24,7 @@ import { catalogResident, catalogJs, mergeCatalogs } from '../src/analysis/filte
 import { resolvePeriod } from '../src/analysis/dateIntel';
 import type { CalendarPrefs } from '../src/analysis/dateIntel';
 import { parseCsv } from '../src/data/parse';
-import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 
 import { ok, finish } from './selfcheck';
 
@@ -244,8 +244,8 @@ ok('§1 a positive and a negative on one column are two chips', same(chipsOf('we
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-filterparse-'));
   try {
     const file = path.join(dir, 'sample.parquet');
-    pq.writeTable(file, parsed.columns, parsed.rows);
-    const back = pq.readTable(file, parsed.columns);
+    pqSync.writeTable(file, parsed.columns, parsed.rows);
+    const back = pqSync.readTable(file, parsed.columns);
     if (!back) throw new Error('fixture read-back failed');
     const js = catalogJs(back.columns, back.rows, 'sample');
     const fast = await catalogResident({ parquetPath: file, columns: parsed.columns }, 'sample');

@@ -205,7 +205,7 @@ export function isAnomaliesResident(): boolean {
  * key, the whole call falls back. Unreachable from the shipped caller, which
  * passes no options at all.
  */
-export function detectAnomaliesResident(src: AnomalySource, opts?: AnomalyOptions): Anomaly[] | null {
+export async function detectAnomaliesResident(src: AnomalySource, opts?: AnomalyOptions): Promise<Anomaly[] | null> {
   try {
     const cols = schemaOf(src);
     if (!cols) return null;
@@ -225,30 +225,30 @@ export function detectAnomaliesResident(src: AnomalySource, opts?: AnomalyOption
       if (c.type === 'number') numIdx.push(i);
     });
 
-    const base = runOnce(() => baseSql(src.parquetPath, numIdx));
+    const base = await runOnce(() => baseSql(src.parquetPath, numIdx));
     if (!base) return null;
     const rowCount = intOrNull(base.n);
     if (rowCount === null) return null;
     // `detectAnomalies` short-circuits on an empty table BEFORE any rule runs.
     if (rowCount === 0) return [];
 
-    const outliers = outlierAnomalies(src, cols, numIdx, base, o);
+    const outliers = await outlierAnomalies(src, cols, numIdx, base, o);
     if (outliers === null) return null;
 
     // ── Stage 2: dominant_category, off the shared column summaries ──────────
     const textIdx = cols.map((_, i) => i).filter((i) => cols[i].type !== 'number');
     let summaries: ColumnSummary[] | null = null;
     if (textIdx.length > 0) {
-      summaries = statsResident.computeColumnSummariesResident(src);
+      summaries = await statsResident.computeColumnSummariesResident(src);
       if (!summaries || summaries.length !== cols.length) return null;
     }
 
     // ── Stage 3: empty_heavy / constant_column, off the shared quality scan ──
-    const issues: QualityIssue[] | null = statsResident.findQualityIssuesResident(src);
+    const issues: QualityIssue[] | null = await statsResident.findQualityIssuesResident(src);
     if (!issues) return null;
 
     // ── Stage 4: the single biggest period-over-period step ─────────────────
-    const period = periodChangeAnomaly(src, cols, dateIdx, o, opts?.measureCol);
+    const period = await periodChangeAnomaly(src, cols, dateIdx, o, opts?.measureCol);
     if (period === undefined) return null; // query failure, not "no finding"
 
     // ── Assembly, in `detectAnomalies`'s discovery order ─────────────────────
@@ -331,13 +331,13 @@ interface OutlierStats {
  * `null` on any query failure — a partial answer would be a silently different
  * anomaly SET, which is worse than a fallback.
  */
-function outlierAnomalies(
+async function outlierAnomalies(
   src: AnomalySource,
   cols: ParsedColumn[],
   numIdx: number[],
   base: duck.DuckRow,
   o: Opts,
-): Map<number, Anomaly> | null {
+): Promise<Map<number, Anomaly> | null> {
   const out = new Map<number, Anomaly>();
   if (numIdx.length === 0) return out;
 
@@ -369,7 +369,7 @@ function outlierAnomalies(
   // Pass 2: the two-pass population variance, over the TS mean.
   const devIdx = [...stats.keys()];
   const devParams: duck.DuckValue[] = [];
-  const dev = runOnce(() => devSql(src.parquetPath, devIdx, stats, devParams), devParams);
+  const dev = await runOnce(() => devSql(src.parquetPath, devIdx, stats, devParams), devParams);
   if (!dev) return null;
   for (const i of devIdx) {
     const s = stats.get(i) as OutlierStats;
@@ -380,7 +380,7 @@ function outlierAnomalies(
 
   // Pass 3: the union of the fence test and the z test, per value.
   const hitParams: duck.DuckValue[] = [];
-  const hits = runOnce(() => hitsSql(src.parquetPath, devIdx, stats, o, hitParams), hitParams);
+  const hits = await runOnce(() => hitsSql(src.parquetPath, devIdx, stats, o, hitParams), hitParams);
   if (!hits) return null;
 
   for (const i of devIdx) {
@@ -470,20 +470,20 @@ function dominantAnomaly(name: string, summary: ColumnSummary | undefined, o: Op
  * Returns `undefined` for "the query failed" (which must become a fallback) and
  * `null` for "no finding", which is a real answer.
  */
-function periodChangeAnomaly(
+async function periodChangeAnomaly(
   src: AnomalySource,
   cols: ParsedColumn[],
   dateIdx: number,
   o: Opts,
   measureCol?: string,
-): Anomaly | null | undefined {
+): Promise<Anomaly | null | undefined> {
   if (dateIdx < 0) return null;
   const numericCols = cols
     .map((c, i) => ({ name: c.name, type: c.type, i }))
     .filter((c) => c.type === 'number' && (!measureCol || c.name === measureCol));
   if (numericCols.length === 0) return null;
 
-  const rows = runQuery((mode) => periodSql(src.parquetPath, dateIdx, numericCols.map((c) => c.i), mode));
+  const rows = await runQuery((mode) => periodSql(src.parquetPath, dateIdx, numericCols.map((c) => c.i), mode));
   if (rows === null) return undefined;
   if (rows.length < 2) return null; // `dateKeys.length < 2`
 
@@ -793,22 +793,22 @@ function orderedFrom(parquetPath: string, mode: OrdinalMode): { from: string; or
 // ── Execution ────────────────────────────────────────────────────────────────
 
 /** Run a built statement, downgrading the ordinal once if the build rejects it. */
-function runQuery(build: (mode: OrdinalMode) => string, params?: duck.DuckValue[]): duck.DuckRow[] | null {
+async function runQuery(build: (mode: OrdinalMode) => string, params?: duck.DuckValue[]): Promise<duck.DuckRow[] | null> {
   if (!duck.isAvailable()) return null;
   try {
-    return duck.query(build(ordinalMode), params);
+    return await duck.queryAsync(build(ordinalMode), params);
   } catch (err) {
     if (ordinalMode === 'file_row_number' && /file_row_number/i.test(String((err as Error)?.message ?? ''))) {
       ordinalMode = 'row_number';
-      return duck.query(build('row_number'), params);
+      return duck.queryAsync(build('row_number'), params);
     }
     throw err;
   }
 }
 
 /** The single-row variant: a global aggregate always returns exactly one row. */
-function runOnce(build: (mode: OrdinalMode) => string, params?: duck.DuckValue[]): duck.DuckRow | null {
-  const rows = runQuery(build, params);
+async function runOnce(build: (mode: OrdinalMode) => string, params?: duck.DuckValue[]): Promise<duck.DuckRow | null> {
+  const rows = await runQuery(build, params);
   if (!rows || rows.length !== 1) return null;
   return rows[0];
 }

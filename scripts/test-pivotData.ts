@@ -22,7 +22,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as pivotData from '../src/analysis/pivotData';
 import * as pivotResident from '../src/engine/pivotResident';
-import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import * as duck from '../src/engine/duckdb';
 import { parseCsv } from '../src/data/parse';
 import { setCalendar } from '../src/analysis/dateIntel';
@@ -55,8 +55,8 @@ interface Fixture {
  */
 function fixture(columns: ParsedColumn[], rows: Cell[][]): Fixture {
   const file = tmpFile();
-  pq.writeTable(file, columns, rows);
-  const back = pq.readTable(file, columns);
+  pqSync.writeTable(file, columns, rows);
+  const back = pqSync.readTable(file, columns);
   if (!back) throw new Error('fixture read-back failed');
   return { src: { parquetPath: file, columns }, columns: back.columns, rows: back.rows };
 }
@@ -362,9 +362,9 @@ function testSanitize(): void {
 
 // ── 6. The differential: resident vs JS ──────────────────────────────────────
 
-function diffGrid(label: string, f: Fixture, e: PivotEncoding, filters?: FilterStep[]): void {
+async function diffGrid(label: string, f: Fixture, e: PivotEncoding, filters?: FilterStep[]): Promise<void> {
   const want = js(f, e, filters);
-  const got = pivotResident.pivotGridResident(f.src, e, filters);
+  const got = await pivotResident.pivotGridResident(f.src, e, filters);
   if (!got) {
     ok(`${label}: resident answered`, false, 'null — the fast path declined');
     return;
@@ -398,15 +398,15 @@ function diffGrid(label: string, f: Fixture, e: PivotEncoding, filters?: FilterS
   ok(`${label}: same truncation verdict`, got.truncated === want.truncated);
 }
 
-function testDifferential(): void {
+async function testDifferential(): Promise<void> {
   const f = fixture(SALES_COLS, SALES_ROWS);
-  diffGrid('diff/two-level', f, enc());
-  diffGrid('diff/no-columns', f, enc({ columns: [] }));
-  diffGrid('diff/single-level', f, enc({ rows: [{ column: 'category' }] }));
-  diffGrid('diff/three-levels', f,
+  await diffGrid('diff/two-level', f, enc());
+  await diffGrid('diff/no-columns', f, enc({ columns: [] }));
+  await diffGrid('diff/single-level', f, enc({ rows: [{ column: 'category' }] }));
+  await diffGrid('diff/three-levels', f,
            enc({ rows: [{ column: 'category' }, { column: 'sub' }, { column: 'region' }] }));
-  diffGrid('diff/no-totals', f, enc({ totals: { rows: false, columns: false, grand: false } }));
-  diffGrid('diff/four-values', f, enc({
+  await diffGrid('diff/no-totals', f, enc({ totals: { rows: false, columns: false, grand: false } }));
+  await diffGrid('diff/four-values', f, enc({
     values: [
       { column: 'amount', aggregation: 'sum' },
       { column: 'amount', aggregation: 'avg' },
@@ -414,18 +414,18 @@ function testDifferential(): void {
       { column: 'sub', aggregation: 'count' },
     ],
   }));
-  diffGrid('diff/pct_row', f, enc({ showAs: 'pct_row' }));
-  diffGrid('diff/rank', f, enc({ showAs: 'rank' }));
-  diffGrid('diff/sorted-by-value', f, enc({ sort: { by: 0, dir: 'desc' } }));
-  diffGrid('diff/sorted-by-label', f, enc({ sort: { by: 'label', dir: 'desc' } }));
-  diffGrid('diff/topN', f, enc({ rows: [{ column: 'sub' }], topN: { n: 2, byValueIdx: 0 } }));
-  diffGrid('diff/date-grain-year', f, enc({ rows: [{ column: 'day', grain: 'year' }] }));
-  diffGrid('diff/date-grain-quarter', f,
+  await diffGrid('diff/pct_row', f, enc({ showAs: 'pct_row' }));
+  await diffGrid('diff/rank', f, enc({ showAs: 'rank' }));
+  await diffGrid('diff/sorted-by-value', f, enc({ sort: { by: 0, dir: 'desc' } }));
+  await diffGrid('diff/sorted-by-label', f, enc({ sort: { by: 'label', dir: 'desc' } }));
+  await diffGrid('diff/topN', f, enc({ rows: [{ column: 'sub' }], topN: { n: 2, byValueIdx: 0 } }));
+  await diffGrid('diff/date-grain-year', f, enc({ rows: [{ column: 'day', grain: 'year' }] }));
+  await diffGrid('diff/date-grain-quarter', f,
            enc({ rows: [{ column: 'day', grain: 'quarter' }], columns: [{ column: 'region' }] }));
-  diffGrid('diff/filtered', f, enc(), [{ type: 'filter', column: 'region', op: '=', value: 'West' }]);
-  diffGrid('diff/filtered-in', f, enc(),
+  await diffGrid('diff/filtered', f, enc(), [{ type: 'filter', column: 'region', op: '=', value: 'West' }]);
+  await diffGrid('diff/filtered-in', f, enc(),
            [{ type: 'filter', column: 'category', op: 'in', values: ['Tech'] }]);
-  diffGrid('diff/filtered-to-nothing', f, enc(),
+  await diffGrid('diff/filtered-to-nothing', f, enc(),
            [{ type: 'filter', column: 'region', op: '=', value: 'Nowhere' }]);
 
   // The shapes the resident layer gets wrong when it is careless: an empty
@@ -445,16 +445,16 @@ function testDifferential(): void {
     values: [{ column: 'n', aggregation: 'sum' }, { column: 'k', aggregation: 'count' }],
     totals: { rows: true, columns: true, grand: true },
   };
-  diffGrid('diff/nulls-empties-and-leading-zeros', mf, messyEnc);
-  diffGrid('diff/number-dimension', mf, {
+  await diffGrid('diff/nulls-empties-and-leading-zeros', mf, messyEnc);
+  await diffGrid('diff/number-dimension', mf, {
     ...messyEnc, rows: [{ column: 'num' }], columns: [],
   });
-  diffGrid('diff/empty-table', fixture(messy, []), messyEnc);
+  await diffGrid('diff/empty-table', fixture(messy, []), messyEnc);
 }
 
 // ── 7. The differential over the BUNDLED SAMPLE ──────────────────────────────
 
-function testSample(): void {
+async function testSample(): Promise<void> {
   const csv = path.join(__dirname, '..', 'assets', 'samples', 'retail-orders.csv');
   if (!fs.existsSync(csv)) {
     ok('sample: assets/samples/retail-orders.csv exists', false, csv);
@@ -468,8 +468,8 @@ function testSample(): void {
     values: [{ column: 'revenue', aggregation: 'sum' }],
     totals: { rows: true, columns: true, grand: true },
   };
-  diffGrid('sample/revenue by category × region', f, e);
-  diffGrid('sample/avg profit by month', f, {
+  await diffGrid('sample/revenue by category × region', f, e);
+  await diffGrid('sample/avg profit by month', f, {
     rows: [{ column: 'order_date', grain: 'month' }],
     columns: [{ column: 'customer_segment' }],
     values: [{ column: 'profit', aggregation: 'avg' }],
@@ -479,7 +479,7 @@ function testSample(): void {
   // quarters and years — compiled in SQL (engine/weekCalSql), labelled in JS.
   setCalendar({ calendarType: '454', yearEnd: 'nearest' });
   for (const grain of ['month', 'quarter', 'year'] as const) {
-    diffGrid(`sample/4-5-4 ${grain}`, f, {
+    await diffGrid(`sample/4-5-4 ${grain}`, f, {
       rows: [{ column: 'order_date', grain }], columns: [{ column: 'region' }],
       values: [{ column: 'revenue', aggregation: 'sum' }], totals: { rows: true, columns: true, grand: true },
     });
@@ -504,7 +504,7 @@ function testSample(): void {
 
 // ── run ──────────────────────────────────────────────────────────────────────
 
-function main(): void {
+async function main(): Promise<void> {
   testShape();
   testAvgSubtotal();
   testShowAs();
@@ -523,11 +523,14 @@ function main(): void {
   if (!bridge) {
     console.log('ok   (skipped) the DuckDB bridge is unavailable — differential not run');
   } else {
-    testDifferential();
-    testSample();
+    await testDifferential();
+    await testSample();
   }
   cleanup();
   process.exit(failureCount() ? 1 : 0);
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

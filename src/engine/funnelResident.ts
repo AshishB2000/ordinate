@@ -20,7 +20,7 @@
 import type { FilterStep } from '../data/transforms';
 import type { EventFunnel, FunnelEncoding, FunnelGroups } from '../analysis/funnelEvents';
 import { TS_RE, foldEventFunnel, funnelNeeds, windowMs } from '../analysis/funnelEvents';
-import { filterPredicates, runOrdered } from './residentQuery';
+import { filterPredicates, runOrderedAsync } from './residentQuery';
 import type { ResidentSource } from './residentQuery';
 import { bomSafe, phys, sqlNum } from './residentCategory';
 import { entityKeySql } from './cohortResident';
@@ -40,11 +40,11 @@ function msFromParts(ts: string): string {
 const num = (raw: duck.DuckValue): number => (typeof raw === 'number' ? raw : Number(raw));
 
 /** Counts per breakdown label, middle gaps per step, and the excluded count — or null. */
-export function funnelGroupsResident(
+export async function funnelGroupsResident(
   src: ResidentSource,
   enc: FunnelEncoding,
   filters?: FilterStep[],
-): FunnelGroups | null {
+): Promise<FunnelGroups | null> {
   try {
     const cols = Array.isArray(src.columns) ? src.columns : [];
     if (funnelNeeds(cols, enc)) return null;
@@ -89,13 +89,13 @@ export function funnelGroupsResident(
     const lastS = `s${S - 1}`;
 
     const counts = Array.from({ length: S }, (_, k) => `CAST(count(m${k}) AS DOUBLE) AS c${k}`).join(', ');
-    const groupRows = runOrdered(src.parquetPath, (from, ord) =>
+    const groupRows = await runOrderedAsync(src.parquetPath, (from, ord) =>
       withSql(from, ord) + `SELECT d AS g, CAST(min(o0) AS DOUBLE) AS first, ${counts} FROM ${lastS} GROUP BY d;`,
     params);
 
     const gaps = Array.from({ length: S - 1 }, (_, i) =>
       `SELECT ${i + 1} AS k, m${i + 1} - m${i} AS dt FROM ${lastS} WHERE m${i + 1} IS NOT NULL`).join(' UNION ALL ');
-    const midRows = runOrdered(src.parquetPath, (from, ord) =>
+    const midRows = await runOrderedAsync(src.parquetPath, (from, ord) =>
       withSql(from, ord) +
       `, gaps AS (${gaps}), ` +
       `med AS (SELECT k, dt, row_number() OVER (PARTITION BY k ORDER BY dt) AS rn, ` +
@@ -103,7 +103,7 @@ export function funnelGroupsResident(
       `SELECT CAST(k AS DOUBLE) AS k, CAST(min(dt) AS DOUBLE) AS lo, CAST(max(dt) AS DOUBLE) AS hi FROM med ` +
       `WHERE rn = (cnt + 1) // 2 OR rn = cnt // 2 + 1 GROUP BY k;`, params);
 
-    const meta = runOrdered(src.parquetPath, (from, ord) =>
+    const meta = await runOrderedAsync(src.parquetPath, (from, ord) =>
       withSql(from, ord) +
       `SELECT CAST(count(*) AS DOUBLE) AS total, ` +
       `CAST(sum(CASE WHEN e IS NOT NULL AND t IS NOT NULL THEN 1 ELSE 0 END) AS DOUBLE) AS kept FROM base;`, params);
@@ -129,7 +129,7 @@ export function funnelGroupsResident(
 }
 
 /** The whole resident answer, folded — or null to run `funnelEvents.buildEventFunnel`. */
-export function eventFunnelResident(src: ResidentSource, enc: FunnelEncoding, filters?: FilterStep[]): EventFunnel | null {
-  const groups = funnelGroupsResident(src, enc, filters);
+export async function eventFunnelResident(src: ResidentSource, enc: FunnelEncoding, filters?: FilterStep[]): Promise<EventFunnel | null> {
+  const groups = await funnelGroupsResident(src, enc, filters);
   return groups ? foldEventFunnel(enc, groups) : null;
 }

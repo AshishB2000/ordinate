@@ -18,6 +18,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as rq from '../src/engine/residentQuery';
 import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import * as duck from '../src/engine/duckdb';
 import * as metricValue from '../src/analysis/metricValue';
 import * as vizData from '../src/analysis/vizData';
@@ -71,8 +72,8 @@ const ROWS: Cell[][] = [];
 }
 
 const file = path.join(dir, 'fixture.parquet');
-pq.writeTable(file, COLS, ROWS);
-const back = pq.readTable(file, COLS);
+pqSync.writeTable(file, COLS, ROWS);
+const back = pqSync.readTable(file, COLS);
 if (!back) throw new Error('fixture read-back failed');
 const src: rq.ResidentSource = { parquetPath: file, columns: COLS };
 
@@ -98,7 +99,7 @@ async function diff(label: string, filters: FilterStep[]): Promise<void> {
     const g = await rq.computeMetricResident(src, { column: 'v', aggregation }, filters);
     ok(`${label}: ${aggregation}(v) resident === JS (${w})`, Object.is(w, g), `resident ${g}`);
   }
-  const pipe = runResidentPipeline(file, COLS, filters);
+  const pipe = await runResidentPipeline(file, COLS, filters);
   ok(`${label}: prepare-pipeline SQL rows === fold`, !!pipe && JSON.stringify(pipe.rows.map((r) => r[0])) === want);
 }
 

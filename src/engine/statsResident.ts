@@ -136,11 +136,11 @@ export function isStatsResident(): boolean {
  * malformed, or the query fails. `null` always means "fall back", never "no
  * data": an all-empty column is a perfectly good summary and is returned as one.
  */
-export function computeColumnSummariesResident(src: StatsSource): ColumnSummary[] | null {
+export async function computeColumnSummariesResident(src: StatsSource): Promise<ColumnSummary[] | null> {
   try {
     const cols = schemaOf(src);
     if (!cols) return null;
-    const row = runOnce((mode) => summarySql(cols, src.parquetPath, mode));
+    const row = await runOnce((mode) => summarySql(cols, src.parquetPath, mode));
     if (!row) return null;
 
     const out: ColumnSummary[] = [];
@@ -166,11 +166,11 @@ export function computeColumnSummariesResident(src: StatsSource): ColumnSummary[
  * Returns `null` on any failure or unavailability. An empty ARRAY is a real
  * answer (a clean table, or a table with no rows).
  */
-export function findQualityIssuesResident(src: StatsSource): QualityIssue[] | null {
+export async function findQualityIssuesResident(src: StatsSource): Promise<QualityIssue[] | null> {
   try {
     const cols = schemaOf(src);
     if (!cols) return null;
-    const row = runOnce(() => qualitySql(cols, src.parquetPath));
+    const row = await runOnce(() => qualitySql(cols, src.parquetPath));
     if (!row) return null;
 
     const rowCount = intOrNull(row.n);
@@ -235,7 +235,7 @@ export function findQualityIssuesResident(src: StatsSource): QualityIssue[] | nu
  *
  * Returns `null` on any failure; `[]` is a real answer for an empty table.
  */
-export function sampleRowsResident(src: StatsSource, limit: number): Cell[][] | null {
+export async function sampleRowsResident(src: StatsSource, limit: number): Promise<Cell[][] | null> {
   try {
     const cols = schemaOf(src);
     if (!cols) return null;
@@ -243,7 +243,7 @@ export function sampleRowsResident(src: StatsSource, limit: number): Cell[][] | 
     if (!Number.isFinite(n) || n < 0) return null;
     if (n === 0) return [];
 
-    const rows = runQuery((mode) => {
+    const rows = await runQuery((mode) => {
       const { from, ord } = orderedFrom(src.parquetPath, mode);
       const projection = cols.map((_, i) => `${bomSafe(phys(i))} AS v${i}`).join(', ');
       // ORDER BY the ordinal rather than trusting an unordered LIMIT: a parallel
@@ -516,22 +516,22 @@ function orderedFrom(parquetPath: string, mode: OrdinalMode): { from: string; or
 // ── Execution ────────────────────────────────────────────────────────────────
 
 /** Run a built statement, downgrading the ordinal once if the build rejects it. */
-function runQuery(build: (mode: OrdinalMode) => string): duck.DuckRow[] | null {
+async function runQuery(build: (mode: OrdinalMode) => string): Promise<duck.DuckRow[] | null> {
   if (!duck.isAvailable()) return null;
   try {
-    return duck.query(build(ordinalMode));
+    return await duck.queryAsync(build(ordinalMode));
   } catch (err) {
     if (ordinalMode === 'file_row_number' && /file_row_number/i.test(String((err as Error)?.message ?? ''))) {
       ordinalMode = 'row_number';
-      return duck.query(build('row_number'));
+      return duck.queryAsync(build('row_number'));
     }
     throw err;
   }
 }
 
 /** The single-row variant: a global aggregate always returns exactly one row. */
-function runOnce(build: (mode: OrdinalMode) => string): duck.DuckRow | null {
-  const rows = runQuery(build);
+async function runOnce(build: (mode: OrdinalMode) => string): Promise<duck.DuckRow | null> {
+  const rows = await runQuery(build);
   if (!rows || rows.length !== 1) return null;
   return rows[0];
 }

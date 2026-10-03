@@ -46,7 +46,7 @@ async function residentFacets(projectId: string, datasetId: string, enc: VizEnco
     const used = [enc.category, enc.series, enc.facet!.rows, enc.facet!.cols].concat((enc.values || []).map((v) => v.column));
     if (used.some((c) => c && !names.has(c))) return null;
     if (!filters.every((f) => filterCannotWarn(f, names))) return null;
-    return facetDataResident(src, enc, filters);
+    return await facetDataResident(src, enc, filters);
   } catch (_) {
     return null;
   }
@@ -64,7 +64,7 @@ async function pivotFacets(projectId: string, datasetId: string, enc: VizEncodin
   let table: Dataset | null = null as Dataset | null; // hydrated only when a rank cannot run resident
   const dims: FacetDim[] = [];
   for (const d of facetDims(facet)) {
-    let ranked: { key: string | null }[] | null = src ? rankFacetResident(src, d.column, asResident(m0), filters, d.cap + 1) : null;
+    let ranked: { key: string | null }[] | null = src ? await rankFacetResident(src, d.column, asResident(m0), filters, d.cap + 1) : null;
     if (!ranked) {
       const ds: Dataset | null = table || (await datasets.getDataset(projectId, datasetId));
       if (!ds) return { ok: false, error: 'Dataset not found' };

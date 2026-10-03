@@ -97,12 +97,15 @@ export interface SegmentSummary {
   means: Array<Array<number | null>>;
 }
 
+/** The JS reader answers synchronously, the resident one on the async DuckDB bridge. */
+type Awaitable<T> = T | Promise<T>;
+
 export interface SegmentIo {
   /** Null = this reader failed; the caller falls back. */
-  stats(idx: number[]): FeatureStats | null;
+  stats(idx: number[]): Awaitable<FeatureStats | null>;
   /** The complete rows at strideIndexes(complete, cap), in stored order. */
-  sample(idx: number[], complete: number, cap: number): number[][] | null;
-  summary(step: SegmentStep): SegmentSummary | null;
+  sample(idx: number[], complete: number, cap: number): Awaitable<number[][] | null>;
+  summary(step: SegmentStep): Awaitable<SegmentSummary | null>;
 }
 
 /** The shared finishing arithmetic, so both readers divide identically. */
@@ -123,8 +126,8 @@ export function finishSummary(sizes: number[], empty: number, sums: number[][]):
 
 const isNum = (v: Cell | undefined): v is number => typeof v === 'number' && Number.isFinite(v);
 
-/** The JS REFERENCE reader over hydrated rows. */
-export function jsSegmentIo(columns: ParsedColumn[], rows: Cell[][]): SegmentIo {
+/** The JS REFERENCE reader over hydrated rows (synchronous — its type says so). */
+export function jsSegmentIo(columns: ParsedColumn[], rows: Cell[][]) {
   const complete = (r: Cell[], idx: number[]): boolean => idx.every((i) => isNum(r[i]));
   return {
     stats(idx) {
@@ -172,7 +175,7 @@ export function jsSegmentIo(columns: ParsedColumn[], rows: Cell[][]): SegmentIo 
       }
       return finishSummary(sizes, empty, sums);
     },
-  };
+  } satisfies SegmentIo;
 }
 
 // ── The fit ─────────────────────────────────────────────────────────────────
@@ -320,18 +323,18 @@ export function featureProblem(columns: ParsedColumn[], features: unknown): stri
  * The whole fit through one reader. Null = the reader failed (fall back to
  * the other one); `{ error }` = a real answer the user sees.
  */
-export function runFit(columns: ParsedColumn[], features: string[], io: SegmentIo, progress: Progress = () => {}): FitResult | { error: string } | null {
+export async function runFit(columns: ParsedColumn[], features: string[], io: SegmentIo, progress: Progress = () => {}): Promise<FitResult | { error: string } | null> {
   const problem = featureProblem(columns, features);
   if (problem) return { error: problem };
   const idx = features.map((f) => columns.findIndex((c) => c.name === f));
   progress(0.03, 'Reading the columns');
-  const stats = io.stats(idx);
+  const stats = await io.stats(idx);
   if (!stats) return null;
   if (stats.count < MIN_ROWS) {
     return { error: `Only ${stats.count} row${stats.count === 1 ? ' has' : 's have'} a number in every chosen column — at least ${MIN_ROWS} are needed.` };
   }
   progress(0.08, 'Sampling rows');
-  const sample = io.sample(idx, stats.count, SAMPLE_CAP);
+  const sample = await io.sample(idx, stats.count, SAMPLE_CAP);
   if (!sample) return null;
   const core = fitCore(sample, stats, progress);
   if ('error' in core) return core;
@@ -346,7 +349,7 @@ export function runFit(columns: ParsedColumn[], features: string[], io: SegmentI
     names,
   };
   progress(0.9, 'Assigning every row');
-  const summary = io.summary(step);
+  const summary = await io.summary(step);
   if (!summary) return null;
   const axes = pca(core.z);
   const points = core.plot.map((i): [number, number, number] => {

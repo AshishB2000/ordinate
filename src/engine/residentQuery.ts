@@ -162,12 +162,10 @@ export function isResident(): boolean {
 // ── Plan → run → read ───────────────────────────────────────────────────────
 //
 // Every entry point is a pure PLAN (a statement plus how to read its rows) run
-// through the ASYNC bridge, so a request never parks the event loop. The split
-// is what lets `residentSync.ts` run the very same statements through the sync
-// bridge for the consumers T4.2 has not made async yet: one SQL builder, two
-// transports, never a second copy of the SQL.
+// through the ASYNC bridge, so a request never parks the event loop. There is no
+// sync twin: T4.2 made every consumer async and deleted `residentSync.ts`.
 
-/** One resident statement. An `ordered` one gets its FROM and ordinal from `runOrdered`. */
+/** One resident statement. An `ordered` one gets its FROM and ordinal from `runOrderedAsync`. */
 export interface Stmt<T> {
   path: string;
   ordered: boolean;
@@ -483,31 +481,15 @@ type OrdinalMode = 'file_row_number' | 'row_number';
 let ordinalMode: OrdinalMode = 'file_row_number';
 
 /**
- * Run a statement that needs the ordinal, downgrading the mode ONCE and
- * permanently if the build rejects `file_row_number`. `sqlFor` is called again
- * on the retry with the fallback FROM/ordinal; `params` is unchanged by the
- * ordinal, so the same array is reused.
+ * Run a statement that needs the ordinal on the ASYNC bridge, downgrading the
+ * mode ONCE and permanently if the build rejects `file_row_number`. `sqlFor` is
+ * called again on the retry with the fallback FROM/ordinal; `params` is
+ * unchanged by the ordinal, so the same array is reused.
  */
-// EXPORTED for `engine/pivotResident`: a pivot runs the same kind of ordered
-// group-by over several grouping sets, and a second copy of the ordinal
-// downgrade / the aggregate SQL / the FROM target is exactly the silent
-// divergence this layer's differential tests exist to prevent.
-export function runOrdered(
-  parquetPath: string,
-  sqlFor: (from: string, ord: string) => string,
-  params: duck.DuckValue[],
-): duck.DuckRow[] {
-  const first = orderedFrom(parquetPath, ordinalMode);
-  try {
-    return duck.query(sqlFor(first.from, first.ord), params);
-  } catch (err) {
-    if (!downgradeOrdinal(err)) throw err;
-    const next = orderedFrom(parquetPath, 'row_number');
-    return duck.query(sqlFor(next.from, next.ord), params);
-  }
-}
-
-/** `runOrdered` through the async bridge — same statement, same one-time downgrade. */
+// EXPORTED for every resident module that needs an ordered statement (pivot,
+// cohort, funnel, facet, lod, scenario, segment, quality): a second copy of the
+// ordinal downgrade / the FROM target is exactly the silent divergence this
+// layer's differential tests exist to prevent.
 export async function runOrderedAsync(
   parquetPath: string,
   sqlFor: (from: string, ord: string) => string,
@@ -583,19 +565,12 @@ function aggregateSql(
 // A JOINED relation (engine/joinResident.ts) registered under a key that stands
 // in for a path, so every probe and aggregate in this file runs unchanged over a
 // join. The relation exposes the merged `c0..cN` plus the primary's `__ord`.
-// Registered for the duration of one synchronous call and removed after it.
+// Registered for the duration of one awaited run and removed after it. Runs
+// interleave on the event loop, so the key must be unique per call (both
+// callers use a random UUID).
 const joinRelations = new Map<string, string>();
 
-export function withRelation<T>(key: string, sql: string, run: () => T): T {
-  joinRelations.set(key, sql);
-  try {
-    return run();
-  } finally {
-    joinRelations.delete(key);
-  }
-}
-
-/** `withRelation` for a run that awaits (engine/fxResident): the key must be unique per call. */
+/** Register `sql` under `key` while `run` awaits (engine/joinResident, ipc/fxQuery). */
 export async function withRelationAsync<T>(key: string, sql: string, run: () => Promise<T>): Promise<T> {
   joinRelations.set(key, sql);
   try {

@@ -29,7 +29,7 @@ import type { Anomaly } from './anomalies';
 import {
   DEFAULTS, foldPeriods, measureEncoding, orderPeriods, periodPlan, round,
 } from './insightsAgg';
-import type { Agg, Insight, InsightChart, InsightKind, InsightOptions } from './insightsAgg';
+import type { Agg, AggOut, Insight, InsightChart, InsightKind, InsightOptions } from './insightsAgg';
 import { formatNumber, formatPercent } from '../app/format';
 import { t } from '../app/i18n';
 
@@ -100,8 +100,8 @@ interface Ctx {
  * Upgrade path: roll up through `categoryKey.chooseGrain` and drop a final
  * bucket whose span has not closed.
  */
-function moverInsights(ctx: Ctx, dateCol: string, measure: string, catCol: string): Insight[] {
-  const raw = ctx.agg(dateCol, measure);
+async function moverInsights(ctx: Ctx, dateCol: string, measure: string, catCol: string): Promise<Insight[]> {
+  const raw = await ctx.agg(dateCol, measure);
   if (!raw || raw.labels.length < 2) return [];
   const plan = periodPlan(raw.labels);
   const ordered = orderPeriods([...foldPeriods(raw, plan).keys()]);
@@ -111,8 +111,8 @@ function moverInsights(ctx: Ctx, dateCol: string, measure: string, catCol: strin
 
   const at = (p: string): ReturnType<Agg> =>
     ctx.agg(catCol, measure, [{ type: 'filter', column: dateCol, op: plan.op, value: p }]);
-  const before = at(prev);
-  const after = at(now);
+  const before = await at(prev);
+  const after = await at(now);
   if (!before || !after) return [];
 
   const prevBy = new Map<string, number>();
@@ -180,8 +180,8 @@ function moverInsights(ctx: Ctx, dateCol: string, measure: string, catCol: strin
 }
 
 /** Least-squares slope over the last 12 periods, reported past ±trendPct. */
-function trendInsight(ctx: Ctx, dateCol: string, measure: string): Insight | null {
-  const agg = ctx.agg(dateCol, measure);
+async function trendInsight(ctx: Ctx, dateCol: string, measure: string): Promise<Insight | null> {
+  const agg = await ctx.agg(dateCol, measure);
   if (!agg) return null;
   const by = foldPeriods(agg, periodPlan(agg.labels));
   const periods = orderPeriods([...by.keys()]).slice(-TREND_PERIODS);
@@ -369,12 +369,12 @@ export function rankInsights(
  * The anomaly kinds are added by the CALLER (`ipc/insights.ts`), which already
  * owns the resident/JS choice for `detectAnomalies` and must not make it twice.
  */
-export function detectInsights(
+export async function detectInsights(
   datasetId: string,
   columns: ParsedColumn[],
   agg: Agg,
   opts?: InsightOptions,
-): Insight[] {
+): Promise<Insight[]> {
   try {
     const cols = Array.isArray(columns) ? columns.filter((c) => c && typeof c.name === 'string') : [];
     if (cols.length === 0 || typeof agg !== 'function') return [];
@@ -397,12 +397,12 @@ export function detectInsights(
     // `moverInsights` go on to use, so the aggregate is computed once and
     // cached here. With no date column there is nothing to total over and the
     // first three stand, which is the old behaviour unchanged.
-    const periodSeries = new Map<string, NonNullable<ReturnType<Agg>>>();
+    const periodSeries = new Map<string, NonNullable<AggOut>>();
     let measures = numberCols.slice(0, MEASURES);
     if (dateCol) {
       const scale: { name: string; total: number }[] = [];
       for (const name of numberCols) {
-        const out = ctx.agg(dateCol, name);
+        const out = await ctx.agg(dateCol, name);
         if (!out) continue;
         periodSeries.set(name, out);
         let total = 0;
@@ -417,7 +417,7 @@ export function detectInsights(
     // Serve the cached series to the two rules that want it, transparently.
     const cachedAgg: Agg = (category, measure, filters) =>
       (!filters && category === dateCol && periodSeries.has(measure)
-        ? (periodSeries.get(measure) as NonNullable<ReturnType<Agg>>)
+        ? (periodSeries.get(measure) as NonNullable<AggOut>)
         : agg(category, measure, filters));
     ctx.agg = cachedAgg;
 
@@ -428,7 +428,7 @@ export function detectInsights(
     const dimensions: string[] = [];
     for (const catCol of textCols) {
       for (const measure of measures) {
-        const out = ctx.agg(catCol, measure);
+        const out = await ctx.agg(catCol, measure);
         if (!out) continue;
         if (!dimensions.includes(catCol) && out.labels.length >= MIN_CATS && out.labels.length <= MAX_CATS) {
           dimensions.push(catCol);
@@ -440,7 +440,7 @@ export function detectInsights(
 
     if (dateCol) {
       for (const measure of measures) {
-        const t = trendInsight(ctx, dateCol, measure);
+        const t = await trendInsight(ctx, dateCol, measure);
         if (t) found.push(t);
       }
       let triples = 0;
@@ -448,7 +448,7 @@ export function detectInsights(
         for (const measure of measures) {
           if (triples >= MOVER_TRIPLES) break;
           triples += 1;
-          found.push(...moverInsights(ctx, dateCol, measure, catCol));
+          found.push(...(await moverInsights(ctx, dateCol, measure, catCol)));
         }
       }
     }

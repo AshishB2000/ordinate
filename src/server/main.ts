@@ -5,6 +5,7 @@
 import { buildApp, registerHandlers } from './app';
 import { enterServerMode, identityFor } from './context';
 import { env, type ServerEnv } from './env';
+import { forbidSyncOnMainThread } from '../engine/duckdb';
 
 let cfg: ServerEnv;
 try {
@@ -20,6 +21,10 @@ try {
 // From here on paths resolve per org under DATA_DIR and ctx() outside a
 // request throws (./context.ts).
 enterServerMode(cfg.dataDir);
+// One process serves every request, so a sync DuckDB call would park all of
+// them: from here on `duck.query()`/`exec()` on this thread THROW (worker
+// threads are exempt). scripts/test-asyncReach.ts proves no handler reaches one.
+forbidSyncOnMainThread();
 registerHandlers();
 const app = buildApp(cfg);
 

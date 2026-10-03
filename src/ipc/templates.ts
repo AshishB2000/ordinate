@@ -43,7 +43,7 @@ export async function geoHitsFor(projectId: string, ds: PlanDataset): Promise<Ge
   const src = await datasets.residentSource(projectId, ds.id);
   // A non-resident dataset contributes no geo signal, for the same reason
   // loadPlanContext gives it no summaries: it is never worth a hydrate.
-  const rows = src ? sampleRowsResident(src, GEO_SAMPLE_ROWS) : null;
+  const rows = src ? await sampleRowsResident(src, GEO_SAMPLE_ROWS) : null;
   if (!rows) return {};
   const samples: Record<string, (string | number | null)[]> = {};
   for (const { c, i } of textCols) samples[c.name] = rows.map((r) => r[i] ?? null);

@@ -18,7 +18,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fe from '../src/analysis/funnelEvents';
 import * as funnelResident from '../src/engine/funnelResident';
-import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import * as duck from '../src/engine/duckdb';
 import { parseCsv } from '../src/data/parse';
 import type { ParsedColumn } from '../src/data/parse';
@@ -135,8 +135,8 @@ let seq = 0;
 
 function fixture(columns: ParsedColumn[], rows: Cell[][]): { src: { parquetPath: string; columns: ParsedColumn[] }; rows: Cell[][]; columns: ParsedColumn[] } {
   const file = path.join(dir, `t${seq++}.parquet`);
-  pq.writeTable(file, columns, rows);
-  const back = pq.readTable(file, columns);
+  pqSync.writeTable(file, columns, rows);
+  const back = pqSync.readTable(file, columns);
   if (!back) throw new Error('fixture read-back failed');
   return { src: { parquetPath: file, columns }, rows: back.rows, columns: back.columns };
 }
@@ -157,16 +157,16 @@ function firstDiff(a: unknown, b: unknown, where = '$'): string {
   return Object.is(a, b) ? '' : `${where}: ${String(a)} vs ${String(b)}`;
 }
 
-function diff(label: string, f: ReturnType<typeof fixture>, e: FunnelEncoding, filters?: FilterStep[]): void {
+async function diff(label: string, f: ReturnType<typeof fixture>, e: FunnelEncoding, filters?: FilterStep[]): Promise<void> {
   const js = fe.buildEventFunnel(f.columns, f.rows, e, filters).funnel;
-  const res = funnelResident.eventFunnelResident(f.src, e, filters);
+  const res = await funnelResident.eventFunnelResident(f.src, e, filters);
   ok(`${label}: resident answered`, !!res);
   if (!res) return;
   const d = firstDiff(js, res);
   ok(`${label}: resident ≡ JS, Object.is leaf by leaf`, d === '', d);
 }
 
-function testDifferential(): void {
+async function testDifferential(): Promise<void> {
   const rows: Cell[][] = [
     ['a', 'signup', '2024-03-01T09:00:00Z', 'pro', 1], ['a', 'trial', '2024-03-01 09:30', 'x', 1], ['a', 'purchase', '2024-03-02', 'x', 1],
     ['a', 'signup', '2024-03-01T09:00:00Z', 'free', 1], ['a', 'trial', '2024-03-01 09:30', 'x', 1],
@@ -179,24 +179,24 @@ function testDifferential(): void {
     ['007', 'signup', '2024-03-01', 'x', 1], ['7', 'signup', '2024-03-01', 'y', 1], ['7', 'trial', '2024-03-02', 'y', 1],
   ];
   const f = fixture(COLS, rows);
-  diff('diff/three steps', f, enc());
-  diff('diff/text breakdown (null, blank, whitespace)', f, enc({ breakdown: 'plan' }));
-  diff('diff/number breakdown', f, enc({ breakdown: 'tier' }));
-  diff('diff/hours window', f, enc({ window: { n: 1.5, unit: 'hours' } }));
-  diff('diff/repeated step name', f, enc({ steps: ['signup', 'trial', 'trial', 'purchase'] }));
-  diff('diff/filtered', f, enc({ breakdown: 'plan' }), [{ type: 'filter', column: 'tier', op: '>', value: 1 }]);
-  diff('diff/filtered-to-nothing', f, enc(), [{ type: 'filter', column: 'plan', op: '=', value: 'none' }]);
-  diff('diff/nobody enters', f, enc({ steps: ['nope', 'trial'] }));
-  diff('diff/empty-table', fixture(COLS, []), enc({ breakdown: 'plan' }));
+  await diff('diff/three steps', f, enc());
+  await diff('diff/text breakdown (null, blank, whitespace)', f, enc({ breakdown: 'plan' }));
+  await diff('diff/number breakdown', f, enc({ breakdown: 'tier' }));
+  await diff('diff/hours window', f, enc({ window: { n: 1.5, unit: 'hours' } }));
+  await diff('diff/repeated step name', f, enc({ steps: ['signup', 'trial', 'trial', 'purchase'] }));
+  await diff('diff/filtered', f, enc({ breakdown: 'plan' }), [{ type: 'filter', column: 'tier', op: '>', value: 1 }]);
+  await diff('diff/filtered-to-nothing', f, enc(), [{ type: 'filter', column: 'plan', op: '=', value: 'none' }]);
+  await diff('diff/nobody enters', f, enc({ steps: ['nope', 'trial'] }));
+  await diff('diff/empty-table', fixture(COLS, []), enc({ breakdown: 'plan' }));
   const numCols: ParsedColumn[] = [{ name: 'user', type: 'number' }, { name: 'event', type: 'text' }, { name: 'ts', type: 'date' }];
-  diff('diff/number entity', fixture(numCols, [[1, 'signup', '2024-03-01'], [1.0, 'trial', '2024-03-02'], [null, 'signup', '2024-03-01'], [2, 'signup', '2024-03-01']]),
+  await diff('diff/number entity', fixture(numCols, [[1, 'signup', '2024-03-01'], [1.0, 'trial', '2024-03-02'], [null, 'signup', '2024-03-01'], [2, 'signup', '2024-03-01']]),
        enc({ steps: ['signup', 'trial'] }));
   ok('a number-typed event column declines the resident path',
-     funnelResident.eventFunnelResident({ parquetPath: f.src.parquetPath, columns: COLS.map((c) => (c.name === 'event' ? { ...c, type: 'number' as const } : c)) },
+     await funnelResident.eventFunnelResident({ parquetPath: f.src.parquetPath, columns: COLS.map((c) => (c.name === 'event' ? { ...c, type: 'number' as const } : c)) },
        enc()) === null);
 }
 
-function testSample(): void {
+async function testSample(): Promise<void> {
   const csv = path.join(__dirname, '..', 'assets', 'samples', 'retail-orders.csv');
   if (!fs.existsSync(csv)) { ok('sample: assets/samples/retail-orders.csv exists', false, csv); return; }
   const parsed = parseCsv(fs.readFileSync(csv, 'utf8'), ',');
@@ -205,24 +205,27 @@ function testSample(): void {
     entity: 'state', event: 'category', time: 'order_date', steps: ['Office Supplies', 'Furniture', 'Technology'],
     window: { n: 30, unit: 'days' }, breakdown: 'region',
   };
-  diff('sample/state funnel, 30 days, by region', f, e);
-  diff('sample/two steps, 3 days, by segment', f, { ...e, steps: ['Technology', 'Furniture'], window: { n: 3, unit: 'days' }, breakdown: 'customer_segment' });
-  diff('sample/filtered to West', f, e, [{ type: 'filter', column: 'region', op: '=', value: 'West' }]);
+  await diff('sample/state funnel, 30 days, by region', f, e);
+  await diff('sample/two steps, 3 days, by segment', f, { ...e, steps: ['Technology', 'Furniture'], window: { n: 3, unit: 'days' }, breakdown: 'customer_segment' });
+  await diff('sample/filtered to West', f, e, [{ type: 'filter', column: 'region', op: '=', value: 'West' }]);
   const js = fe.buildEventFunnel(f.columns, f.rows, e).funnel;
   ok('sample: a real funnel — counts never increase down the steps', js.counts[0] > 0 && js.counts.every((c, k) => k === 0 || c <= js.counts[k - 1]),
      JSON.stringify(js.counts));
 }
 
-function main(): void {
+async function main(): Promise<void> {
   testTimestamps();
   testStrictOrder();
   testFigures();
   let bridge = false;
   try { bridge = duck.isAvailable(); } catch { bridge = false; }
   if (!bridge) console.log('ok   (skipped) the DuckDB bridge is unavailable — differential not run');
-  else { testDifferential(); testSample(); }
+  else { await testDifferential(); await testSample(); }
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
   finish();
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

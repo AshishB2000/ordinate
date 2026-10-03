@@ -34,7 +34,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 const tc: typeof import('../src/analysis/tableCalc') = require('../src/analysis/tableCalc');
 const pivotData: typeof import('../src/analysis/pivotData') = require('../src/analysis/pivotData');
 const pivotResident: typeof import('../src/engine/pivotResident') = require('../src/engine/pivotResident');
-const pq: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const dashboards: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
@@ -282,13 +282,13 @@ function testPivot(): void {
 
 // ── 5. The resident path agrees, over the same bytes ─────────────────────────
 
-function testResident(): void {
+async function testResident(): Promise<void> {
   let bridge = false;
   try { bridge = duck.isAvailable(); } catch { bridge = false; }
   if (!bridge) { console.log('ok   (skipped) the DuckDB bridge is unavailable — pivot differential not run'); return; }
   const file = path.join(tmpUserData, 'tc.parquet');
-  pq.writeTable(file, COLS, ROWS);
-  const back = pq.readTable(file, COLS);
+  pqSync.writeTable(file, COLS, ROWS);
+  const back = pqSync.readTable(file, COLS);
   if (!back) { ok('resident: fixture read back', false); return; }
   const cases: Array<[string, PivotEncoding]> = [
     ['pct_of_total down', penc({ kind: 'pct_of_total', along: 'down' }, {}, 'avg')],
@@ -298,7 +298,7 @@ function testResident(): void {
   ];
   for (const [label, e] of cases) {
     const want = pivotData.buildPivotGrid(back.columns, back.rows, e).grid;
-    const got = pivotResident.pivotGridResident({ parquetPath: file, columns: COLS }, e);
+    const got = await pivotResident.pivotGridResident({ parquetPath: file, columns: COLS }, e);
     ok(`resident: ${label} matches the JS reference cell for cell`,
        !!got && JSON.stringify(got.cells) === JSON.stringify(want.cells) && got.cells.every((row, i) => same(row, want.cells[i])),
        JSON.stringify({ got: got && got.cells, want: want.cells }));
@@ -380,12 +380,12 @@ function testDisplay(): void {
   ok('facts: an answer citing the raw figure is clean', audit.auditNumbers('Berlin has 300.', f.ledger).ok);
 }
 
-function main(): void {
+async function main(): Promise<void> {
   testSanitize();
   testKernel();
   testCharts();
   testPivot();
-  testResident();
+  await testResident();
   testRoundTrip();
   testDisplay();
   try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* best effort */ }
@@ -393,4 +393,7 @@ function main(): void {
   process.exit(failureCount() ? 1 : 0);
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

@@ -56,7 +56,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
-const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const anomalies: typeof import('../src/analysis/anomalies') = require('../src/analysis/anomalies');
 const anomaliesResident: typeof import('../src/engine/anomaliesResident') = require('../src/engine/anomaliesResident');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
@@ -124,8 +124,8 @@ interface Fixture {
  */
 function makeFixture(label: string, columns: ParsedColumn[], rows: Cell[][]): Fixture {
   const file = fixtureFile();
-  parquetStore.writeTable(file, columns, rows);
-  const back = parquetStore.readTable(file, columns);
+  pqSync.writeTable(file, columns, rows);
+  const back = pqSync.readTable(file, columns);
   if (!back) throw new Error(`fixture read-back failed: ${label}`);
   return { label, file, columns, rows: back.rows };
 }
@@ -135,9 +135,9 @@ function makeFixture(label: string, columns: ParsedColumn[], rows: Cell[][]): Fi
  * WHAT the shared answer is (a change that moves both sides together must still
  * fail).
  */
-function diff(f: Fixture, opts?: AnomalyOptions): Anomaly[] | null {
+async function diff(f: Fixture, opts?: AnomalyOptions): Promise<Anomaly[] | null> {
   const want = anomalies.detectAnomalies(f.columns, f.rows, opts);
-  const got = anomaliesResident.detectAnomaliesResident({ parquetPath: f.file, columns: f.columns }, opts);
+  const got = await anomaliesResident.detectAnomaliesResident({ parquetPath: f.file, columns: f.columns }, opts);
   ok(`${f.label}: resident (not a fallback)`, got !== null);
   if (got === null) return null;
   const equal = sameList(want, got);
@@ -189,7 +189,7 @@ async function main(): Promise<void> {
       [10, 10], [11, 11], [12, 12], [10, 10],
       [11, 11], [12, 12], [10, 10], [11, 1000],
     ]);
-    const got = diff(f);
+    const got = await diff(f);
     const spike = find(got, 'numeric_outlier', 'spike');
     ok('outlier: only the spike column is flagged', kinds(got) === 'numeric_outlier:spike');
     ok('outlier: the fences are type-7 [7, 15], NOT quantile_disc [5, 21]',
@@ -209,11 +209,11 @@ async function main(): Promise<void> {
   {
     const f = makeFixture('z-score: population σ', [N('v')],
       [[10], [11], [12], [13], [14], [15], [16], [20]]);
-    const atDefault = diff(f);
+    const atDefault = await diff(f);
     ok('z: at the default threshold 3 nothing fires (20 is inside the fences too)',
       (atDefault ?? []).length === 0);
 
-    const at2 = diff(f, { zThreshold: 2 });
+    const at2 = await diff(f, { zThreshold: 2 });
     ok('z: at threshold 2 the population σ DOES flag 20 (sample σ would not)',
       find(at2, 'numeric_outlier', 'v')?.facts.maxOutlier === 20);
     ok('z: …and the fences in the detail are still the type-7 pair',
@@ -221,8 +221,8 @@ async function main(): Promise<void> {
         === 'Column "v" has 1 outlier value outside the expected range [6.5, 20.5] (20).');
 
     // The exact boundary: z(20) = 2.0578…, so 2.05 flags and 2.06 does not.
-    const below = diff(f, { zThreshold: 2.05 });
-    const above = diff(f, { zThreshold: 2.06 });
+    const below = await diff(f, { zThreshold: 2.05 });
+    const above = await diff(f, { zThreshold: 2.06 });
     ok('z: threshold 2.05 (< 2.0578) flags, 2.06 (> 2.0578) does not — the σ divisor is pinned',
       (below ?? []).length === 1 && (above ?? []).length === 0);
   }
@@ -231,26 +231,26 @@ async function main(): Promise<void> {
   {
     const seven = makeFixture('outlier: 7 finite values', [N('v')],
       [[1], [1], [1], [1], [1], [1], [999]]);
-    const r7 = diff(seven);
+    const r7 = await diff(seven);
     ok('outlier: 7 finite values → no finding however extreme', !find(r7, 'numeric_outlier'));
 
     const eight = makeFixture('outlier: 8 finite values', [N('v')],
       [[1], [1], [1], [1], [1], [1], [1], [999]]);
-    const r8 = diff(eight);
+    const r8 = await diff(eight);
     ok('outlier: 8 finite values → the rule engages', Boolean(find(r8, 'numeric_outlier')));
 
     // 8 CELLS but only 7 finite: nulls and non-finite readings must not count
     // toward the sample size on either side.
     const nulls = makeFixture('outlier: 8 cells, 7 finite', [N('v')],
       [[1], [1], [1], [1], [1], [1], [999], [null]]);
-    const rn = diff(nulls);
+    const rn = await diff(nulls);
     ok('outlier: a null cell does not count toward the 8-value minimum', !find(rn, 'numeric_outlier'));
 
     // NaN/Infinity round-trip to null through Parquet, so they are excluded on
     // BOTH sides — the differential above is the real assertion.
     const nonFinite = makeFixture('outlier: NaN/Infinity cells', [N('v')],
       [[1], [1], [1], [1], [1], [1], [999], [NaN], [Infinity]]);
-    const rnf = diff(nonFinite);
+    const rnf = await diff(nonFinite);
     ok('outlier: NaN/Infinity are not finite values on either path', !find(rnf, 'numeric_outlier'));
   }
 
@@ -258,7 +258,7 @@ async function main(): Promise<void> {
   {
     const f = makeFixture('outlier: several', [N('v')],
       [[10], [11], [12], [10], [11], [12], [10], [-500], [900], [11], [1000]]);
-    const got = diff(f);
+    const got = await diff(f);
     const a = find(got, 'numeric_outlier', 'v');
     ok('outlier: the count is plural-aware and min/max span the outlier set',
       a?.facts.count === 3 && a?.facts.minOutlier === -500 && a?.facts.maxOutlier === 1000
@@ -272,7 +272,7 @@ async function main(): Promise<void> {
     const cells = (vals: string[]): Cell[][] => vals.map((v) => [v]);
     const at = makeFixture('dominant: exactly 0.6',
       [T('c')], cells(['A', 'A', 'A', 'A', 'A', 'A', 'B', 'C', 'D', 'E']));
-    const rAt = diff(at);
+    const rAt = await diff(at);
     ok('dominant: a share of exactly 0.6 FIRES (>= is inclusive)',
       find(rAt, 'dominant_category', 'c')?.facts.share === 0.6);
     ok('dominant: the detail is the shipped wording with app-computed counts',
@@ -282,40 +282,40 @@ async function main(): Promise<void> {
 
     const below = makeFixture('dominant: just below 0.6',
       [T('c')], cells(['A', 'A', 'A', 'A', 'A', 'B', 'C', 'D', 'E', 'F']));
-    ok('dominant: a share of 0.5 does NOT fire', !find(diff(below), 'dominant_category'));
+    ok('dominant: a share of 0.5 does NOT fire', !find(await diff(below), 'dominant_category'));
 
     // The denominator is NON-EMPTY cells: '' / '   ' / NBSP / U+FEFF must not
     // dilute the share. DuckDB's trim() strips spaces only, so a naive port
     // silently SUPPRESSES this finding.
     const empties = makeFixture('dominant: empties excluded from the denominator',
       [T('c')], [['A'], ['A'], ['A'], ['B'], [''], ['   '], [' '], ['﻿'], [null], ['\t']]);
-    const rE = diff(empties);
+    const rE = await diff(empties);
     ok('dominant: JS trim() whitespace is empty, so the share is 3/4 not 3/10',
       find(rE, 'dominant_category', 'c')?.facts.share === 0.75);
 
     // counts.size >= 2: a single-valued column is constant_column, NOT dominant.
     const single = makeFixture('dominant: one distinct value only',
       [T('c')], cells(['A', 'A', 'A', 'A']));
-    const rS = diff(single);
+    const rS = await diff(single);
     ok('dominant: a single-valued column is constant_column, never dominant',
       kinds(rS) === 'constant_column:c');
 
     // Ties resolve to FIRST OCCURRENCE — `mode()` is unspecified there.
     const tie = makeFixture('dominant: 3–3 tie over 5 non-empty… ',
       [T('c')], cells(['b', 'a', 'b', 'a', 'b', 'a', 'z']));
-    diff(tie); // 3/7 = 0.43 → silent; the differential still pins the tie logic
+    await diff(tie); // 3/7 = 0.43 → silent; the differential still pins the tie logic
     const tieFires = makeFixture('dominant: tie that clears the threshold',
       [T('c')], [['b'], ['a'], ['b'], ['a'], ['b'], ['a'], ['b'], ['a'], ['z'], ['z']]);
-    diff(tieFires);
+    await diff(tieFires);
     const tieFires2 = makeFixture('dominant: same tie, other order',
       [T('c')], [['a'], ['b'], ['a'], ['b'], ['a'], ['b'], ['a'], ['b'], ['z'], ['z']]);
-    diff(tieFires2);
+    await diff(tieFires2);
 
     // A date column behaves exactly like text.
     const day = makeFixture('dominant: a date column is categorical',
       [D('day')], cells(['2024-01-01', '2024-01-01', '2024-01-01', '2024-01-02']));
     ok('dominant: a date column can be dominant_category',
-      find(diff(day), 'dominant_category', 'day')?.facts.value === '2024-01-01');
+      find(await diff(day), 'dominant_category', 'day')?.facts.value === '2024-01-01');
   }
 
   // ── 6. empty_heavy / constant_column pass through, duplicate_rows never does ─
@@ -330,7 +330,7 @@ async function main(): Promise<void> {
         ['x', 'k', 'a'],
         ['', 'k', 'b'],
       ]);
-    const got = diff(f);
+    const got = await diff(f);
     ok('quality: empty_heavy fires at 0.5 and carries the rounded percentage',
       find(got, 'empty_heavy', 'half')?.detail === 'Column "half" is 50% empty');
     ok('quality: empty_heavy is remapped to severity warn with empty facts',
@@ -348,14 +348,14 @@ async function main(): Promise<void> {
     const blank = makeFixture('quality: an all-empty column', [T('blank'), T('v')],
       [['', 'a'], ['   ', 'b'], [null, 'c'], ['﻿', 'd']]);
     ok('quality: an all-empty column is empty_heavy only',
-      kinds(diff(blank)) === 'empty_heavy:blank');
+      kinds(await diff(blank)) === 'empty_heavy:blank');
   }
 
   // ── 7. period_change: the 50% step, the ordering, and the skip rules ────────
   {
     const f = makeFixture('period: a doubling', [D('year'), N('rev')],
       [['2023', 60], ['2023', 40], ['2024', 200]]);
-    const got = diff(f);
+    const got = await diff(f);
     const pc = find(got, 'period_change');
     ok('period: the step is flagged and names the MEASURE column, not the date',
       pc?.column === 'rev' && pc?.facts.dateColumn === 'year');
@@ -367,48 +367,48 @@ async function main(): Promise<void> {
 
     const small = makeFixture('period: a 10% step', [D('year'), N('rev')],
       [['2023', 100], ['2024', 110]]);
-    ok('period: a 10% step does not fire', !find(diff(small), 'period_change'));
+    ok('period: a 10% step does not fire', !find(await diff(small), 'period_change'));
 
     // Exactly 50% fires (>=), 49.9% does not.
     const at = makeFixture('period: exactly 50%', [D('year'), N('rev')],
       [['2023', 100], ['2024', 150]]);
-    ok('period: exactly 50% fires', Boolean(find(diff(at), 'period_change')));
+    ok('period: exactly 50% fires', Boolean(find(await diff(at), 'period_change')));
     const under = makeFixture('period: 49%', [D('year'), N('rev')],
       [['2023', 100], ['2024', 149]]);
-    ok('period: 49% does not fire', !find(diff(under), 'period_change'));
+    ok('period: 49% does not fire', !find(await diff(under), 'period_change'));
 
     // A negative step reads "fell" and rounds half-UP in JS — kept in TS.
     const fell = makeFixture('period: a fall', [D('year'), N('rev')],
       [['2023', 200], ['2024', 50]]);
     ok('period: a fall reads "fell" with the absolute percentage',
-      find(diff(fell), 'period_change')?.detail === '"rev" fell 75% from 2023 (200) to 2024 (50).');
+      find(await diff(fell), 'period_change')?.detail === '"rev" fell 75% from 2023 (200) to 2024 (50).');
 
     // from === 0 → the step is skipped, never a division by zero.
     const zero = makeFixture('period: a zero base', [D('year'), N('rev')],
       [['2023', 0], ['2024', 500]]);
-    ok('period: a zero prior period is skipped, not Infinity', !find(diff(zero), 'period_change'));
+    ok('period: a zero prior period is skipped, not Infinity', !find(await diff(zero), 'period_change'));
 
     // A measure missing from a bucket is UNDEFINED, not 0 — the step is skipped.
     const missing = makeFixture('period: a measure missing from a bucket',
       [D('year'), N('rev')], [['2023', null], ['2024', 500], ['2025', 100]]);
-    const rm = diff(missing);
+    const rm = await diff(missing);
     ok('period: a bucket with no finite value skips the step (never reads as 0)',
       find(rm, 'period_change')?.facts.fromPeriod === '2024');
 
     // Fewer than 2 distinct dates → nothing.
     const one = makeFixture('period: one distinct date', [D('year'), N('rev')],
       [['2023', 1], ['2023', 500]]);
-    ok('period: one distinct date → no finding', !find(diff(one), 'period_change'));
+    ok('period: one distinct date → no finding', !find(await diff(one), 'period_change'));
 
     // No date column at all → nothing (and the numeric rule still runs).
     const noDate = makeFixture('period: no date column', [T('year'), N('rev')],
       [['2023', 1], ['2024', 500]]);
-    ok('period: a TEXT year column is not a date column', !find(diff(noDate), 'period_change'));
+    ok('period: a TEXT year column is not a date column', !find(await diff(noDate), 'period_change'));
 
     // Empty date cells are skipped by the JS trim() whitespace class.
     const blanks = makeFixture('period: empty date cells', [D('year'), N('rev')],
       [['2023', 100], ['', 999], ['   ', 999], [' ', 999], [null, 999], ['2024', 200]]);
-    const rb = diff(blanks);
+    const rb = await diff(blanks);
     ok('period: whitespace-only date cells form no bucket',
       find(rb, 'period_change')?.facts.fromValue === 100);
 
@@ -418,7 +418,7 @@ async function main(): Promise<void> {
     const unordered = makeFixture('period: sorted by Date.parse, not row order',
       [D('day'), N('rev')],
       [['2024-03-01', 300], ['2024-01-01', 100], ['2024-02-01', 105], ['2024-04-01', 306]]);
-    const ru = diff(unordered);
+    const ru = await diff(unordered);
     ok('period: the biggest step is Jan→Feb… no — Feb→Mar (105→300)',
       find(ru, 'period_change')?.facts.fromPeriod === '2024-02-01'
         && find(ru, 'period_change')?.facts.toPeriod === '2024-03-01');
@@ -429,7 +429,7 @@ async function main(): Promise<void> {
     const lex = makeFixture('period: lexical fallback for unparseable keys',
       [D('q'), N('rev')],
       [['Q3', 400], ['Q1', 100], ['Q4', 410], ['Q2', 105]]);
-    const rl = diff(lex);
+    const rl = await diff(lex);
     ok('period: unparseable keys sort lexically (Q2→Q3 is the biggest step)',
       find(rl, 'period_change')?.facts.fromPeriod === 'Q2'
         && find(rl, 'period_change')?.facts.toPeriod === 'Q3');
@@ -440,21 +440,21 @@ async function main(): Promise<void> {
       [D('year'), N('a'), N('b')],
       [['2023', 100, 100], ['2024', 200, 400]]);
     ok('period: the largest step across all numeric columns wins',
-      find(diff(multi), 'period_change')?.column === 'b');
+      find(await diff(multi), 'period_change')?.column === 'b');
     const tieM = makeFixture('period: a tie between measures goes to the first column',
       [D('year'), N('a'), N('b')],
       [['2023', 100, 100], ['2024', 300, 300]]);
     ok('period: an exact tie is won by the first-found (column order)',
-      find(diff(tieM), 'period_change')?.column === 'a');
+      find(await diff(tieM), 'period_change')?.column === 'a');
 
     // A pinned measureCol restricts the scan.
     ok('period: measureCol pins the measure',
-      find(diff(multi, { measureCol: 'a' }), 'period_change')?.column === 'a');
+      find(await diff(multi, { measureCol: 'a' }), 'period_change')?.column === 'a');
 
     // A pinned dateCol on a NUMBER column cannot reproduce keyOf() faithfully →
     // the whole call falls back rather than approximating the key.
     ok('period: a dateCol pinned to a NUMBER column returns null (documented gap)',
-      anomaliesResident.detectAnomaliesResident(
+      await anomaliesResident.detectAnomaliesResident(
         { parquetPath: multi.file, columns: multi.columns }, { dateCol: 'a' }) === null);
   }
 
@@ -470,7 +470,7 @@ async function main(): Promise<void> {
         ['A', 10, '2023'], ['A', 11, '2023'], ['A', 12, '2023'], ['A', 10, '2023'],
         ['', 11, '2023'], ['', 12, '2023'], ['', 10, '2023'], [null, 5000, '2024'],
       ]);
-    const got = diff(f);
+    const got = await diff(f);
     ok('multi-rule: every kind that should fire, fires',
       new Set((got ?? []).map((a) => a.kind)).size >= 3);
     ok('multi-rule: warn precedes info in the final list',
@@ -485,7 +485,7 @@ async function main(): Promise<void> {
     const rows: Cell[][] = [];
     for (let r = 0; r < 10; r += 1) rows.push(cols.map(() => (r < 8 ? 'A' : `x${r}`)));
     const f = makeFixture('caps: six dominant columns', cols, rows);
-    const got = diff(f);
+    const got = await diff(f);
     ok('caps: at most maxPerKind (3) findings of one kind',
       (got ?? []).filter((a) => a.kind === 'dominant_category').length === 3);
     ok('caps: the 3 kept are the FIRST three in column order',
@@ -493,8 +493,8 @@ async function main(): Promise<void> {
         === 'd0,d1,d2');
 
     ok('caps: maxTotal 1 keeps exactly one finding',
-      (diff(f, { maxTotal: 1 }) ?? []).length === 1);
-    ok('caps: maxPerKind 1 keeps one per kind', (diff(f, { maxPerKind: 1 }) ?? []).length === 1);
+      (await diff(f, { maxTotal: 1 }) ?? []).length === 1);
+    ok('caps: maxPerKind 1 keeps one per kind', (await diff(f, { maxPerKind: 1 }) ?? []).length === 1);
 
     // warn before info, discovery order preserved inside a severity.
     const mixed = makeFixture('caps: warn before info',
@@ -503,7 +503,7 @@ async function main(): Promise<void> {
         ['A', 'x', 10], ['A', '', 11], ['A', '', 12], ['A', 'y', 10],
         ['A', '', 11], ['A', '', 12], ['B', 'z', 10], ['C', '', 1000],
       ]);
-    const rm = diff(mixed);
+    const rm = await diff(mixed);
     ok('caps: every warn precedes every info',
       (() => {
         const list = rm ?? [];
@@ -516,7 +516,7 @@ async function main(): Promise<void> {
   // ── 10. Degenerate inputs ──────────────────────────────────────────────────
   {
     const empty = makeFixture('degenerate: zero rows', [T('a'), N('b'), D('c')], []);
-    const got = diff(empty);
+    const got = await diff(empty);
     ok('degenerate: a zero-row table yields [] (a real answer, not a fallback)',
       got !== null && got.length === 0);
 
@@ -524,7 +524,7 @@ async function main(): Promise<void> {
       [N('n'), T('t')],
       [[null, 'a'], [null, 'b'], [null, 'c'], [null, 'd'],
         [null, 'e'], [null, 'f'], [null, 'g'], [null, 'h']]);
-    const rn = diff(allNull);
+    const rn = await diff(allNull);
     ok('degenerate: an all-null number column produces empty_heavy and no outlier',
       kinds(rn) === 'empty_heavy:n');
 
@@ -532,7 +532,7 @@ async function main(): Promise<void> {
     // path — the single most dangerous implicit-cast bug in the port.
     const ids = makeFixture('degenerate: leading-zero identifiers', [T('code')],
       [['007'], ['012'], ['0042'], ['00'], ['7'], ['12'], ['90210'], ['0001']]);
-    const ri = diff(ids);
+    const ri = await diff(ids);
     ok('degenerate: a leading-zero text column yields NO findings at all',
       ri !== null && ri.length === 0);
 
@@ -542,7 +542,7 @@ async function main(): Promise<void> {
     // NULL or Infinity depending on the type).
     const flat = makeFixture('degenerate: a constant number column', [N('n')],
       [[7], [7], [7], [7], [7], [7], [7], [7]]);
-    const rf = diff(flat);
+    const rf = await diff(flat);
     ok('degenerate: a constant number column is constant_column, never an outlier',
       kinds(rf) === 'constant_column:n');
 
@@ -550,7 +550,7 @@ async function main(): Promise<void> {
     // fences are degenerate (q1 === q3 === 7 → [7, 7]).
     const flatish = makeFixture('degenerate: constant plus one', [N('n')],
       [[7], [7], [7], [7], [7], [7], [7], [900]]);
-    const rfi = diff(flatish);
+    const rfi = await diff(flatish);
     ok('degenerate: a single deviating value clears a zero-width fence',
       find(rfi, 'numeric_outlier', 'n')?.facts.maxOutlier === 900);
 
@@ -559,31 +559,31 @@ async function main(): Promise<void> {
       [T('code')],
       [['007'], ['007'], ['007'], ['007'], ['007'], ['007'], ['007'], ['0999999999']]);
     ok('degenerate: a text id column is never scanned for numeric outliers',
-      !find(diff(idSpike), 'numeric_outlier'));
+      !find(await diff(idSpike), 'numeric_outlier'));
   }
 
   // ── 11. Failure modes: null means fall back, and nothing ever throws ───────
   {
     const cols = [T('a')];
     ok('missing file → null, not a throw',
-      anomaliesResident.detectAnomaliesResident(
+      await anomaliesResident.detectAnomaliesResident(
         { parquetPath: path.join(tmpDir, 'nope.parquet'), columns: cols }) === null);
 
     const good = makeFixture('good file for the negative cases', cols, [['x'], ['y']]);
     ok('0 columns → null (fall back; the file holds only the row-count sentinel)',
-      anomaliesResident.detectAnomaliesResident({ parquetPath: good.file, columns: [] }) === null);
+      await anomaliesResident.detectAnomaliesResident({ parquetPath: good.file, columns: [] }) === null);
     ok('a schema WIDER than the file → null, never a partial answer',
-      anomaliesResident.detectAnomaliesResident(
+      await anomaliesResident.detectAnomaliesResident(
         { parquetPath: good.file, columns: [T('a'), T('b'), T('c')] }) === null);
     ok('a malformed column entry → null',
-      anomaliesResident.detectAnomaliesResident(
+      await anomaliesResident.detectAnomaliesResident(
         { parquetPath: good.file, columns: [null as any] }) === null);
     ok('a non-string path → null',
-      anomaliesResident.detectAnomaliesResident({ parquetPath: 42 as any, columns: cols }) === null);
+      await anomaliesResident.detectAnomaliesResident({ parquetPath: 42 as any, columns: cols }) === null);
     ok('a path with a quote in it → null, never a throw',
-      anomaliesResident.detectAnomaliesResident(
+      await anomaliesResident.detectAnomaliesResident(
         { parquetPath: "/tmp/no'such.parquet", columns: cols }) === null);
-    ok('a null source → null', anomaliesResident.detectAnomaliesResident(null as any) === null);
+    ok('a null source → null', await anomaliesResident.detectAnomaliesResident(null as any) === null);
   }
 
   // ── 12. A column name that is SQL, and a BOM in a period key ──────────────
@@ -591,7 +591,7 @@ async function main(): Promise<void> {
     const nasty = '"; DROP TABLE x; --';
     const f = makeFixture('hostile column name', [T(nasty), N('n')],
       [['A', 1], ['A', 2], ['A', 3], ['B', 4]]);
-    const got = diff(f);
+    const got = await diff(f);
     ok('a hostile column name is echoed verbatim and changes no number',
       find(got, 'dominant_category', nasty)?.facts.value === 'A');
 
@@ -599,7 +599,7 @@ async function main(): Promise<void> {
     // `detail` string.
     const bom = makeFixture('leading BOM in a period key', [D('day'), N('rev')],
       [['﻿2023', 100], ['﻿2024', 400]]);
-    const rb = diff(bom);
+    const rb = await diff(bom);
     ok('a leading BOM in a period key is not eaten by the bridge',
       find(rb, 'period_change')?.facts.fromPeriod === '﻿2023');
   }
@@ -628,7 +628,7 @@ async function main(): Promise<void> {
       const t0 = process.hrtime.bigint();
       const want = anomalies.detectAnomalies(f.columns, f.rows);
       const t1 = process.hrtime.bigint();
-      const got = anomaliesResident.detectAnomaliesResident({ parquetPath: f.file, columns: f.columns });
+      const got = await anomaliesResident.detectAnomaliesResident({ parquetPath: f.file, columns: f.columns });
       const t2 = process.hrtime.bigint();
 
       const equal = got !== null && sameList(want, got);
@@ -675,11 +675,11 @@ async function main(): Promise<void> {
     }
     const f = makeFixture('wide: 90 columns (30 numeric)', cols, rows);
     const uncapped: AnomalyOptions = { maxPerKind: 1000, maxTotal: 1000 };
-    const got = diff(f, uncapped);
+    const got = await diff(f, uncapped);
     ok('wide: every numeric column with a planted spike is flagged',
       (got ?? []).filter((a) => a.kind === 'numeric_outlier').length >= 3);
     ok('wide: the capped list agrees too (the caps run over a long list here)',
-      (diff(f) ?? []).length <= 12);
+      (await diff(f) ?? []).length <= 12);
   }
 
   // ── 14. The one semantic that genuinely differs: float summation order ─────
@@ -695,7 +695,7 @@ async function main(): Promise<void> {
     rows[777] = [1e9]; // guarantee a finding, so the fences are actually compared
     const f = makeFixture('float summation', [N('x')], rows);
     const want = anomalies.detectAnomalies(f.columns, f.rows);
-    const got = anomaliesResident.detectAnomaliesResident({ parquetPath: f.file, columns: f.columns });
+    const got = await anomaliesResident.detectAnomaliesResident({ parquetPath: f.file, columns: f.columns });
     const w = want.find((a) => a.kind === 'numeric_outlier');
     const g = (got ?? []).find((a) => a.kind === 'numeric_outlier');
     ok('float: both paths find the same NUMBER of outliers', Boolean(w) && Boolean(g)

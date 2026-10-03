@@ -13,7 +13,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ok, failureCount } from './selfcheck';
-import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import * as duck from '../src/engine/duckdb';
 import { lodMetricResident, lodValuesResident } from '../src/engine/lodResident';
 import { compile } from '../src/formula/formula';
@@ -37,8 +37,8 @@ interface Fx {
 /** Write, read back, and compare against what was READ — the post-round-trip cells. */
 function fixture(columns: ParsedColumn[], rows: Cell[][]): Fx {
   const file = path.join(dir, `t${seq++}.parquet`);
-  pq.writeTable(file, columns, rows);
-  const back = pq.readTable(file, columns);
+  pqSync.writeTable(file, columns, rows);
+  const back = pqSync.readTable(file, columns);
   if (!back) throw new Error('fixture read-back failed');
   return { src: { parquetPath: file, columns }, columns: back.columns, rows: back.rows };
 }
@@ -50,7 +50,7 @@ function firstDiff(a: unknown[], b: unknown[]): string {
 }
 
 /** One LOD, every context-filter set: JS reference vs SQL, row by row. */
-function diffValues(label: string, f: Fx, expr: string, vizDims: string[], contexts: FilterStep[][]): void {
+async function diffValues(label: string, f: Fx, expr: string, vizDims: string[], contexts: FilterStep[][]): Promise<void> {
   const c = compile(expr);
   if (!c.ok || c.fn.lods.length !== 1 || !c.fn.lods[0].argCol) {
     ok(`${label}: ${expr} compiles to one bare-column LOD`, false, c.ok ? 'shape' : c.error);
@@ -60,18 +60,18 @@ function diffValues(label: string, f: Fx, expr: string, vizDims: string[], conte
   for (const ctx of contexts) {
     const t = ctx.length ? applyPipeline({ columns: f.columns, rows: f.rows }, ctx) : { columns: f.columns, rows: f.rows };
     const js = lodValues([spec], t.columns, t.rows, { vizDims })[0];
-    const sql = lodValuesResident(f.src, { groupDims: lodGroupDims(spec, vizDims), agg: spec.agg, argCol: spec.argCol as string }, ctx);
+    const sql = await lodValuesResident(f.src, { groupDims: lodGroupDims(spec, vizDims), agg: spec.agg, argCol: spec.argCol as string }, ctx);
     const tag = `${label}: ${expr}${vizDims.length ? ` in [${vizDims.join(', ')}]` : ''}${ctx.length ? ` | ctx ${JSON.stringify(ctx.map((s) => [s.column, s.op, s.value ?? s.values]))}` : ''}`;
     ok(tag, sql !== null && firstDiff(js, sql) === '', sql === null ? 'resident returned null' : firstDiff(js, sql));
   }
 }
 
-function diffMetric(label: string, f: Fx, expr: string, agg: MetricAggregation, filters: FilterStep[]): void {
+async function diffMetric(label: string, f: Fx, expr: string, agg: MetricAggregation, filters: FilterStep[]): Promise<void> {
   const c = compile(expr);
   if (!c.ok) { ok(`${label}: compiles`, false, c.error); return; }
   const spec = c.fn.lods[0];
   const js = lodMetricValue(f.columns, f.rows, [], { column: expr, aggregation: agg }, filters);
-  const sql = lodMetricResident(f.src, { groupDims: lodGroupDims(spec), agg: spec.agg, argCol: spec.argCol as string }, agg,
+  const sql = await lodMetricResident(f.src, { groupDims: lodGroupDims(spec), agg: spec.agg, argCol: spec.argCol as string }, agg,
     filters.filter((s) => s.context), filters.filter((s) => !s.context));
   ok(`${label}: ${agg}(${expr}) under ${filters.map((s) => (s.context ? 'ctx ' : '') + s.column + s.op + String(s.value ?? s.values)).join(', ') || 'no filter'}`,
     Object.is(js, sql), `js ${js} vs sql ${sql}`);
@@ -103,7 +103,7 @@ function edgeFixture(): Fx {
   return fixture(COLS, rows);
 }
 
-function testEdges(): void {
+async function testEdges(): Promise<void> {
   const f = edgeFixture();
   const ctxs: FilterStep[][] = [
     [],
@@ -111,77 +111,80 @@ function testEdges(): void {
     [{ type: 'filter', column: 'v', op: '>=', value: 3, context: true }],
     [{ type: 'filter', column: 't', op: 'not_empty', context: true }],
   ];
-  diffValues('edge', f, '{FIXED [g] : SUM([v])}', [], ctxs);
-  diffValues('edge', f, '{FIXED [g], [n] : AVG([v])}', [], ctxs);
-  diffValues('edge', f, '{FIXED : COUNT([t])}', [], ctxs);
-  diffValues('edge', f, '{FIXED [n] : COUNTD([t])}', [], ctxs);
-  diffValues('edge', f, '{FIXED [g] : COUNTD([n])}', [], ctxs);
-  diffValues('edge', f, '{FIXED [t] : COUNTD([code])}', [], ctxs);
-  diffValues('edge', f, '{FIXED [g] : MIN([v])}', [], ctxs);
-  diffValues('edge', f, '{FIXED [code] : MAX([v])}', [], ctxs);
-  diffValues('edge', f, '{FIXED [g] : SUM([t])}', [], ctxs.slice(0, 1)); // text: null on both sides
-  diffValues('edge', f, '{INCLUDE [n] : SUM([v])}', ['g'], ctxs);
-  diffValues('edge', f, '{EXCLUDE [g] : SUM([v])}', ['g', 'n'], ctxs);
-  diffValues('edge', f, '{EXCLUDE [g] : COUNT([v])}', ['g'], ctxs.slice(0, 2));
+  await diffValues('edge', f, '{FIXED [g] : SUM([v])}', [], ctxs);
+  await diffValues('edge', f, '{FIXED [g], [n] : AVG([v])}', [], ctxs);
+  await diffValues('edge', f, '{FIXED : COUNT([t])}', [], ctxs);
+  await diffValues('edge', f, '{FIXED [n] : COUNTD([t])}', [], ctxs);
+  await diffValues('edge', f, '{FIXED [g] : COUNTD([n])}', [], ctxs);
+  await diffValues('edge', f, '{FIXED [t] : COUNTD([code])}', [], ctxs);
+  await diffValues('edge', f, '{FIXED [g] : MIN([v])}', [], ctxs);
+  await diffValues('edge', f, '{FIXED [code] : MAX([v])}', [], ctxs);
+  await diffValues('edge', f, '{FIXED [g] : SUM([t])}', [], ctxs.slice(0, 1)); // text: null on both sides
+  await diffValues('edge', f, '{INCLUDE [n] : SUM([v])}', ['g'], ctxs);
+  await diffValues('edge', f, '{EXCLUDE [g] : SUM([v])}', ['g', 'n'], ctxs);
+  await diffValues('edge', f, '{EXCLUDE [g] : COUNT([v])}', ['g'], ctxs.slice(0, 2));
 
   // The preview reads the first rows only — the same values, in order.
   const c = compile('{FIXED [g] : SUM([v])}');
   if (c.ok) {
     const s = c.fn.lods[0];
-    const head = lodValuesResident(f.src, { groupDims: lodGroupDims(s), agg: s.agg, argCol: 'v' }, [], 8);
+    const head = await lodValuesResident(f.src, { groupDims: lodGroupDims(s), agg: s.agg, argCol: 'v' }, [], 8);
     const js = lodValues([s], f.columns, f.rows)[0].slice(0, 8);
     ok('edge: LIMIT 8 is the first eight rows of the whole-table answer', head !== null && firstDiff(js, head) === '', head ? firstDiff(js, head) : 'null');
   }
 
   // Declines — the caller then runs the reference.
-  const decline = (label: string, lod: Parameters<typeof lodValuesResident>[1]): void =>
-    ok(`edge: declines ${label}`, lodValuesResident(f.src, lod, []) === null);
-  decline('MIN of a text column (the date rule is JS-only)', { groupDims: ['g'], agg: 'min', argCol: 't' });
-  decline('an unknown argument column', { groupDims: ['g'], agg: 'sum', argCol: 'nope' });
-  decline('an unknown dimension', { groupDims: ['nope'], agg: 'sum', argCol: 'v' });
+  const decline = async (label: string, lod: Parameters<typeof lodValuesResident>[1]): Promise<void> =>
+    ok(`edge: declines ${label}`, await lodValuesResident(f.src, lod, []) === null);
+  await decline('MIN of a text column (the date rule is JS-only)', { groupDims: ['g'], agg: 'min', argCol: 't' });
+  await decline('an unknown argument column', { groupDims: ['g'], agg: 'sum', argCol: 'nope' });
+  await decline('an unknown dimension', { groupDims: ['nope'], agg: 'sum', argCol: 'v' });
 
   // Metrics over an LOD: context inside, ordinary after.
   const ctxA: FilterStep = { type: 'filter', column: 'g', op: '=', value: 'a', context: true };
   const normA: FilterStep = { type: 'filter', column: 'g', op: '=', value: 'a' };
   const big: FilterStep = { type: 'filter', column: 'v', op: '>=', value: 0 };
   for (const agg of ['sum', 'avg', 'min', 'max', 'count'] as MetricAggregation[]) {
-    diffMetric('edge metric', f, '{FIXED [g] : SUM([v])}', agg, []);
-    diffMetric('edge metric', f, '{FIXED : SUM([v])}', agg, [normA]);
-    diffMetric('edge metric', f, '{FIXED : SUM([v])}', agg, [ctxA]);
-    diffMetric('edge metric', f, '{FIXED [n] : COUNTD([t])}', agg, [ctxA, big]);
+    await diffMetric('edge metric', f, '{FIXED [g] : SUM([v])}', agg, []);
+    await diffMetric('edge metric', f, '{FIXED : SUM([v])}', agg, [normA]);
+    await diffMetric('edge metric', f, '{FIXED : SUM([v])}', agg, [ctxA]);
+    await diffMetric('edge metric', f, '{FIXED [n] : COUNTD([t])}', agg, [ctxA, big]);
   }
 }
 
 // ── The bundled sample ───────────────────────────────────────────────────────
 
-function testSample(): void {
+async function testSample(): Promise<void> {
   const csv = path.join(__dirname, '..', 'assets', 'samples', 'retail-orders.csv');
   if (!fs.existsSync(csv)) { ok('sample: assets/samples/retail-orders.csv exists', false, csv); return; }
   const parsed = parseCsv(fs.readFileSync(csv, 'utf8'), ',');
   const f = fixture(parsed.columns, parsed.rows);
   const east: FilterStep[][] = [[], [{ type: 'filter', column: 'region', op: '=', value: 'East', context: true }]];
-  diffValues('sample', f, '{FIXED [region] : SUM([revenue])}', [], east);
-  diffValues('sample', f, '{FIXED [category], [region] : AVG([profit])}', [], east);
-  diffValues('sample', f, '{FIXED [state] : MAX([ship_days])}', [], east);
-  diffValues('sample', f, '{FIXED : COUNTD([state])}', [], east);
-  diffValues('sample', f, '{INCLUDE [customer_segment] : COUNT([units])}', ['region'], east);
-  diffValues('sample', f, '{EXCLUDE [region] : SUM([units])}', ['region', 'category'], east);
-  diffValues('sample', f, '{FIXED [order_date] : MIN([discount])}', [], east);
-  diffMetric('sample metric', f, '{FIXED [region] : SUM([units])}', 'max', east[1]);
-  diffMetric('sample metric', f, '{FIXED [customer_segment] : COUNT([units])}', 'avg', [{ type: 'filter', column: 'region', op: '=', value: 'West' }]);
+  await diffValues('sample', f, '{FIXED [region] : SUM([revenue])}', [], east);
+  await diffValues('sample', f, '{FIXED [category], [region] : AVG([profit])}', [], east);
+  await diffValues('sample', f, '{FIXED [state] : MAX([ship_days])}', [], east);
+  await diffValues('sample', f, '{FIXED : COUNTD([state])}', [], east);
+  await diffValues('sample', f, '{INCLUDE [customer_segment] : COUNT([units])}', ['region'], east);
+  await diffValues('sample', f, '{EXCLUDE [region] : SUM([units])}', ['region', 'category'], east);
+  await diffValues('sample', f, '{FIXED [order_date] : MIN([discount])}', [], east);
+  await diffMetric('sample metric', f, '{FIXED [region] : SUM([units])}', 'max', east[1]);
+  await diffMetric('sample metric', f, '{FIXED [customer_segment] : COUNT([units])}', 'avg', [{ type: 'filter', column: 'region', op: '=', value: 'West' }]);
 }
 
-function main(): void {
+async function main(): Promise<void> {
   let bridge = false;
   try { bridge = duck.isAvailable(); } catch { bridge = false; }
   if (!bridge) {
     console.log('ok   (skipped) the DuckDB bridge is unavailable — differential not run');
   } else {
-    testEdges();
-    testSample();
+    await testEdges();
+    await testSample();
   }
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
   process.exit(failureCount() ? 1 : 0);
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
