@@ -146,7 +146,7 @@ async function withConverted<T>(
   const plan = src ? fx.resolvePlan(src.columns, ctx.decls, ctx.wanted, ctx.target) : null;
   if (!src || !rates || !plan) { trace.record(op, 'skipped'); return null; }
   let rel: string | null = null;
-  try { rel = fxRelationSql(src, rates, plan); } catch (_) { rel = null; }
+  try { rel = await fxRelationSql(src, rates, plan); } catch (_) { rel = null; }
   if (!rel) { trace.record(op, 'skipped', 'a date the SQL grammar does not read'); return null; }
   const key = 'fx:' + randomUUID();
   const fxSrc = { parquetPath: key, columns: fxColumns(src.columns) };
@@ -176,7 +176,7 @@ export async function fxCardMetric(
   const replay = await paramTable(projectId, datasetId, params);
   if (!replay) {
     const fast = await withConverted('fxMetric', projectId, datasetId, ctx, async (fxSrc, sample) => {
-      const r = fxMetricOn(fxSrc, spec, filters);
+      const r = await fxMetricOn(fxSrc, spec, filters);
       return r ? { ok: true, value: r.value, fx: fx.fxInfo(ctx.target, r, sample) } : null;
     });
     if (fast) return fast;
@@ -239,7 +239,7 @@ export async function fxVizData(
   if (!replay && !isFaceted(encoding)) {
     const fast = await withConverted('fxViz', projectId, datasetId, ctx, async (fxSrc, sample) => {
       const viz = await residentVizData(projectId, datasetId, encoding, filters, fxSrc);
-      const miss = viz ? fxMissingResident(fxSrc, filters) : null;
+      const miss = viz ? await fxMissingResident(fxSrc, filters) : null;
       if (!viz || !miss) return null;
       const info: FxInfo = fx.fxInfo(ctx.target, miss, sample);
       return { ok: true as const, data: viz.data, recommendedShape: viz.recommendedShape, warnings: viz.warnings.concat(fxNotes(info)), category: viz.category, fx: info };

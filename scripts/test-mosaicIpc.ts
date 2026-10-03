@@ -54,7 +54,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 const mosaic: typeof import('../src/ipc/mosaic') = require('../src/ipc/mosaic');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
-const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const residentQuery: typeof import('../src/engine/residentQuery') = require('../src/engine/residentQuery');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 
@@ -88,7 +88,7 @@ async function main(): Promise<void> {
   // The escape target for block 9, written NOW: once the first Mosaic call has
   // hardened the engine, DuckDB cannot write outside the allowed root either.
   const outsideParquet = path.join(outside, 'secret.parquet');
-  parquetStore.writeTable(outsideParquet, [{ name: 'a', type: 'text' }], [['classified']]);
+  pqSync.writeTable(outsideParquet, [{ name: 'a', type: 'text' }], [['classified']]);
 
   // ───────────────────────────────────────────────────────────────────────────
   // 1. THE STATEMENT LEXER — pure, and cross-checked against THIS DuckDB build.

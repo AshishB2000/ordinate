@@ -44,7 +44,7 @@ Module._load = function (request: string, ...rest: any[]): any {
   return origLoad.apply(this, [request, ...rest]);
 };
 
-const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const insights: typeof import('../src/analysis/insights') = require('../src/analysis/insights');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
@@ -69,8 +69,8 @@ interface Fixture {
 
 function makeFixture(label: string, columns: ParsedColumn[], rows: Cell[][]): Fixture {
   const file = fixtureFile();
-  parquetStore.writeTable(file, columns, rows);
-  const back = parquetStore.readTable(file, columns);
+  pqSync.writeTable(file, columns, rows);
+  const back = pqSync.readTable(file, columns);
   if (!back) throw new Error(`fixture read-back failed: ${label}`);
   return { label, file, columns, rows: back.rows };
 }
@@ -102,9 +102,9 @@ function same(a: Insight[], b: Insight[]): boolean {
 }
 
 /** THE differential. Returns the resident list so a test can also pin it. */
-function diff(f: Fixture, opts?: import('../src/analysis/insights').InsightOptions): Insight[] {
-  const want = insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows), opts);
-  const got = insights.detectInsights('ds', f.columns, insights.residentAgg({ parquetPath: f.file, columns: f.columns }), opts);
+async function diff(f: Fixture, opts?: import('../src/analysis/insights').InsightOptions): Promise<Insight[]> {
+  const want = await insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows), opts);
+  const got = await insights.detectInsights('ds', f.columns, insights.residentAgg({ parquetPath: f.file, columns: f.columns }), opts);
   ok(`${f.label}: resident found something (not a silent empty fast path)`, got.length > 0);
   const equal = same(want, got);
   ok(`${f.label}: resident === JS (${want.length} insight${want.length === 1 ? '' : 's'})`, equal);
@@ -135,7 +135,7 @@ async function main(): Promise<void> {
       ['2024-02', 'West', 150], ['2024-02', 'East', 180], ['2024-02', 'North', 25],
     ];
     const f = makeFixture('movers', cols, rows);
-    const list = diff(f);
+    const list = await diff(f);
     const movers = byKind(list, 'mover');
     ok('movers: all three regions moved, so all three are reported', movers.length === 3);
 
@@ -169,7 +169,7 @@ async function main(): Promise<void> {
       ['2024-01', 'West', 100], ['2024-01', 'East', 200],
       ['2024-02', 'West', 100], ['2024-02', 'East', 200], ['2024-02', 'South', 70],
     ]);
-    const list = diff(f);
+    const list = await diff(f);
     const south = byKind(list, 'mover').find((m) => m.facts.category === 'South');
     ok('movers: a brand-new category is reported', !!south && Object.is(south.facts.change, 70));
     ok('movers: …with NO pctChange fact (0 → 70 has no percentage)',
@@ -186,7 +186,7 @@ async function main(): Promise<void> {
     const f = makeFixture('trend/up', cols, [
       ['2024-01', 100], ['2024-02', 110], ['2024-03', 120], ['2024-04', 130],
     ]);
-    const list = diff(f);
+    const list = await diff(f);
     const t = byKind(list, 'trend')[0];
     ok('trend: slope 10, change 30, +30% over 4 periods',
       !!t && Object.is(t.facts.slope, 10) && Object.is(t.facts.change, 30)
@@ -201,19 +201,19 @@ async function main(): Promise<void> {
     const f = makeFixture('trend/flat', cols, [
       ['2024-01', 100], ['2024-02', 103], ['2024-03', 106], ['2024-04', 109],
     ]);
-    const jsList = insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows));
-    const resList = insights.detectInsights('ds', f.columns, insights.residentAgg({ parquetPath: f.file, columns: f.columns }));
+    const jsList = await insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows));
+    const resList = await insights.detectInsights('ds', f.columns, insights.residentAgg({ parquetPath: f.file, columns: f.columns }));
     ok('trend: +9% is under the 15% gate — no trend insight', byKind(jsList, 'trend').length === 0);
     ok('trend: the gate is the same on both paths', same(jsList, resList));
     ok('trend: lowering the gate to 5% makes the SAME series report',
-      byKind(insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows), { trendPct: 0.05 }), 'trend').length === 1);
+      byKind(await insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows), { trendPct: 0.05 }), 'trend').length === 1);
   }
   {
     // Three periods is under MIN_TREND_PERIODS — a two-point "line" is not a trend.
     const cols = COLS(['month', 'date'], ['sales', 'number']);
     const f = makeFixture('trend/too-short', cols, [['2024-01', 10], ['2024-02', 50], ['2024-03', 90]]);
     ok('trend: three periods is too short to fit',
-      byKind(insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows)), 'trend').length === 0);
+      byKind(await insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows)), 'trend').length === 0);
   }
   {
     // Sixteen periods; only the LAST TWELVE are fitted. Periods 1-4 are noise at
@@ -223,7 +223,7 @@ async function main(): Promise<void> {
     for (let i = 0; i < 4; i += 1) rows.push([`2023-0${i + 1}`, 1000]);
     for (let i = 0; i < 12; i += 1) rows.push([`2024-${String(i + 1).padStart(2, '0')}`, 100 + 10 * i]);
     const f = makeFixture('trend/window', cols, rows);
-    const t = byKind(diff(f), 'trend')[0];
+    const t = byKind(await diff(f), 'trend')[0];
     ok('trend: only the last 12 periods are fitted (slope 10, +110%)',
       !!t && Object.is(t.facts.periods, 12) && Object.is(t.facts.slope, 10)
       && Object.is(t.facts.change, 110) && Object.is(t.facts.pctChange, 1.1)
@@ -238,7 +238,7 @@ async function main(): Promise<void> {
     const vals = [60, 20, 5, 5, 3, 3, 2, 2];
     const f = makeFixture('concentration', cols,
       vals.map((v, i) => [`S${i}`, v] as Cell[]));
-    const list = diff(f);
+    const list = await diff(f);
     const c = byKind(list, 'concentration')[0];
     ok('concentration: 1 of 8 carries 60 of 100',
       !!c && Object.is(c.facts.head, 1) && Object.is(c.facts.categories, 8)
@@ -253,8 +253,8 @@ async function main(): Promise<void> {
     const cols = COLS(['state', 'text'], ['revenue', 'number']);
     const f = makeFixture('concentration/flat', cols,
       [10, 10, 10, 10, 10, 10, 10, 10].map((v, i) => [`S${i}`, v] as Cell[]));
-    const jsList = insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows));
-    const resList = insights.detectInsights('ds', f.columns, insights.residentAgg({ parquetPath: f.file, columns: f.columns }));
+    const jsList = await insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows));
+    const resList = await insights.detectInsights('ds', f.columns, insights.residentAgg({ parquetPath: f.file, columns: f.columns }));
     ok('concentration: an even spread is not a finding', byKind(jsList, 'concentration').length === 0);
     ok('concentration: both paths agree it is not', same(jsList, resList));
   }
@@ -278,7 +278,7 @@ async function main(): Promise<void> {
     };
     days(1, 31); days(2, 29); days(3, 31);
     const f = makeFixture('rollup', cols, rows);
-    const list = diff(f);
+    const list = await diff(f);
     const movers = byKind(list, 'mover');
     const west = movers.find((m) => m.facts.category === 'West');
     ok('roll-up: 91 daily dates become monthly periods',
@@ -298,7 +298,7 @@ async function main(): Promise<void> {
       rows.push([iso, 'East', 10]);
     }
     const f = makeFixture('rollup/under', cols, rows);
-    const west = byKind(diff(f), 'mover').find((m) => m.facts.category === 'West');
+    const west = byKind(await diff(f), 'mover').find((m) => m.facts.category === 'West');
     ok('roll-up: under 24 distinct dates, a period is still one day',
       !!west && west.facts.fromPeriod === '2024-01-19' && west.facts.toPeriod === '2024-01-20');
   }
@@ -312,7 +312,7 @@ async function main(): Promise<void> {
       rows.push([`P${String(q).padStart(2, '0')}`, 'East', 1]);
     }
     const f = makeFixture('rollup/non-iso', cols, rows);
-    const west = byKind(diff(f), 'mover').find((m) => m.facts.category === 'West');
+    const west = byKind(await diff(f), 'mover').find((m) => m.facts.category === 'West');
     ok('roll-up: a non-ISO date column keeps its raw values as periods',
       !!west && west.facts.fromPeriod === 'P29' && west.facts.toPeriod === 'P30');
   }
@@ -325,7 +325,7 @@ async function main(): Promise<void> {
     const cols = COLS(['state', 'text'], ['revenue', 'number']);
     const f = makeFixture('concentration/wide', cols,
       Array.from({ length: 40 }, (_, i) => [`S${i}`, i === 0 ? 600 : 10] as Cell[]));
-    const c = byKind(diff(f), 'concentration')[0];
+    const c = byKind(await diff(f), 'concentration')[0];
     ok('concentration: reported on a 40-value column the movers rule skips',
       !!c && Object.is(c.facts.categories, 40) && Object.is(c.facts.head, 1));
   }
@@ -349,17 +349,17 @@ async function main(): Promise<void> {
       rows.push(['2024-02', r, p, 1000 + step, 1000 + step]);
     }
     const f = makeFixture('cap', cols, rows);
-    const list = diff(f);
+    const list = await diff(f);
     ok('cap: no more than 6 cards of any ONE kind', list.length === 6 && byKind(list, 'mover').length === 6);
     ok('cap: warn findings are ranked before info',
       list.findIndex((i) => i.severity === 'info') === -1
       || list.slice(list.findIndex((i) => i.severity === 'info')).every((i) => i.severity === 'info'));
     // With the per-kind cap lifted, 24 candidate movers meet the 12 total cap.
-    const wide = insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows), { maxPerKind: 99 });
+    const wide = await insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows), { maxPerKind: 99 });
     ok('cap: never more than 12 insights for one dataset', wide.length === 12);
     ok('cap: maxTotal is honoured when lowered',
-      insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows),
-        { maxTotal: 3, maxPerKind: 99 }).length === 3);
+      (await insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows),
+        { maxTotal: 3, maxPerKind: 99 })).length === 3);
     ok('cap: the survivors are the biggest contributors',
       wide.every((i) => typeof i.facts.contribution === 'number' && (i.facts.contribution as number) >= 0.02));
   }
@@ -375,8 +375,8 @@ async function main(): Promise<void> {
       ['2024-01', 'West', 9900], ['2024-01', 'Tiny', 100],
       ['2024-02', 'West', 9850], ['2024-02', 'Tiny', 150],
     ]);
-    const jsList = insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows));
-    const resList = insights.detectInsights('ds', f.columns, insights.residentAgg({ parquetPath: f.file, columns: f.columns }));
+    const jsList = await insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows));
+    const resList = await insights.detectInsights('ds', f.columns, insights.residentAgg({ parquetPath: f.file, columns: f.columns }));
     ok('materiality: +50% on 0.5% of the period is not a mover',
       byKind(jsList, 'mover').length === 0, JSON.stringify(jsList.map((i) => i.title)));
     ok('materiality: both paths agree', same(jsList, resList));
@@ -389,8 +389,8 @@ async function main(): Promise<void> {
       ['2024-01', 'West', 500], ['2024-01', 'Blip', 1],
       ['2024-02', 'West', 500], ['2024-02', 'Blip', 500],
     ]);
-    const jsList = insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows));
-    const resList = insights.detectInsights('ds', f.columns, insights.residentAgg({ parquetPath: f.file, columns: f.columns }));
+    const jsList = await insights.detectInsights('ds', f.columns, insights.jsAgg(f.columns, f.rows));
+    const resList = await insights.detectInsights('ds', f.columns, insights.residentAgg({ parquetPath: f.file, columns: f.columns }));
     ok('base effect: +49 900% off a base of 1 is suppressed',
       byKind(jsList, 'mover').length === 0, JSON.stringify(jsList.map((i) => i.title)));
     ok('base effect: both paths agree', same(jsList, resList));
@@ -410,7 +410,7 @@ async function main(): Promise<void> {
       rows.push([mm, 'East', 0.1, 4, 5000]);
     }
     const f = makeFixture('measures', cols, rows);
-    const list = diff(f);
+    const list = await diff(f);
     ok('measures: the three biggest totals are chosen, not the first three',
       list.some((i) => i.facts.measure === 'revenue'), JSON.stringify(list.map((i) => i.title)));
     ok('measures: the trend is fitted on revenue',
@@ -426,7 +426,7 @@ async function main(): Promise<void> {
     const js = insights.jsAgg(f.columns, f.rows);
     const res = insights.residentAgg({ parquetPath: f.file, columns: f.columns });
     ok('a text column is never summed (JS)', js('month', 'code') === null);
-    ok('a text column is never summed (resident)', res('month', 'code') === null);
+    ok('a text column is never summed (resident)', (await res('month', 'code')) === null);
   }
   {
     // Empty is null OR '' OR whitespace, on both sides, and a group of them is
@@ -436,7 +436,7 @@ async function main(): Promise<void> {
       ['West', 10], [null, 20], ['', 30], ['   ', 40], ['\t', 50], ['East', 60],
     ]);
     const js = insights.jsAgg(f.columns, f.rows)('region', 'sales');
-    const res = insights.residentAgg({ parquetPath: f.file, columns: f.columns })('region', 'sales');
+    const res = await insights.residentAgg({ parquetPath: f.file, columns: f.columns })('region', 'sales');
     ok('empty groups are dropped, first-seen order preserved (JS)',
       JSON.stringify(js) === JSON.stringify({ labels: ['West', 'East'], values: [10, 60] }));
     ok('…and identically on the resident path', JSON.stringify(js) === JSON.stringify(res));
@@ -446,17 +446,17 @@ async function main(): Promise<void> {
     const cols = COLS(['region', 'text'], ['sales', 'number']);
     const f = makeFixture('null-sum', cols, [['West', null], ['East', 5]]);
     const js = insights.jsAgg(f.columns, f.rows)('region', 'sales');
-    const res = insights.residentAgg({ parquetPath: f.file, columns: f.columns })('region', 'sales');
+    const res = await insights.residentAgg({ parquetPath: f.file, columns: f.columns })('region', 'sales');
     ok('a group with nothing to sum is null, not 0 (JS)', js !== null && Object.is(js.values[0], null));
     ok('…and identically on the resident path', res !== null && Object.is(res.values[0], null));
   }
 
   // ── degenerate inputs never throw ─────────────────────────────────────────
-  ok('no columns → []', insights.detectInsights('ds', [], () => null).length === 0);
-  ok('a dead aggregator → []', insights.detectInsights('ds', COLS(['a', 'number']), () => null).length === 0);
+  ok('no columns → []', (await insights.detectInsights('ds', [], () => null)).length === 0);
+  ok('a dead aggregator → []', (await insights.detectInsights('ds', COLS(['a', 'number']), () => null)).length === 0);
   ok('a THROWING aggregator → []',
-    insights.detectInsights('ds', COLS(['a', 'number'], ['b', 'date']), () => { throw new Error('x'); }).length === 0);
-  ok('a null column list → []', insights.detectInsights('ds', null as any, () => null).length === 0);
+    (await insights.detectInsights('ds', COLS(['a', 'number'], ['b', 'date']), () => { throw new Error('x'); })).length === 0);
+  ok('a null column list → []', (await insights.detectInsights('ds', null as any, () => null)).length === 0);
 
   // ── dismiss persistence (the IPC + the project record) ────────────────────
   {

@@ -16,6 +16,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import * as duck from '../src/engine/duckdb';
 import type { ParsedColumn } from '../src/data/parse';
 import type { Cell } from '../src/data/transforms';
@@ -53,8 +54,8 @@ function same(a: Cell[][], b: Cell[][]): boolean {
 // A whole-table round trip through disk, re-typed with the caller's schema.
 function roundTrip(columns: ParsedColumn[], rows: Cell[][]): { columns: ParsedColumn[]; rows: Cell[][] } | null {
   const f = tmpFile();
-  pq.writeTable(f, columns, rows);
-  return pq.readTable(f, columns);
+  pqSync.writeTable(f, columns, rows);
+  return pqSync.readTable(f, columns);
 }
 
 // ── Availability gate ────────────────────────────────────────────────────────
@@ -130,10 +131,10 @@ ok('isSupported(): true when the bridge is up', pq.isSupported() === true);
   // repair must be a no-op on every value that does NOT start with a BOM.
   const f = tmpFile();
   const bomRows: Cell[][] = [['\uFEFF'], ['\uFEFF\uFEFFtwo'], ['mid\uFEFFdle'], ['trailing\uFEFF'], ['plain'], [null], ['']];
-  pq.writeTable(f, columns, bomRows);
+  pqSync.writeTable(f, columns, bomRows);
   const lens = duck.query(`SELECT length("c0") AS n FROM ${pq.relationSql(f)};`).map((r) => Number(r.n ?? -1));
   ok('BOM: the stored Parquet value was never truncated', lens[0] === 1 && lens[1] === 5 && lens[3] === 9);
-  ok('BOM: every leading-BOM shape round-trips', same(pq.readTable(f, columns)?.rows ?? [], bomRows));
+  ok('BOM: every leading-BOM shape round-trips', same(pqSync.readTable(f, columns)?.rows ?? [], bomRows));
 }
 
 // ── The one value class JSON cannot carry: unpaired surrogates ──────────────
@@ -200,21 +201,21 @@ ok('isSupported(): true when the bridge is up', pq.isSupported() === true);
   ];
   const rows: Cell[][] = [['p', 'q', 1, 'r', 's', 't'], [null, '', 2, '  ', '\n', '"']];
   const f = tmpFile();
-  pq.writeTable(f, columns, rows);
+  pqSync.writeTable(f, columns, rows);
 
-  const raw = pq.readTable(f);
+  const raw = pqSync.readTable(f);
   ok('naming: without a schema, columns are positional c0..cN', raw?.columns.map((c) => c.name).join(',') === 'c0,c1,c2,c3,c4,c5');
   ok("naming: without a schema, every column is typed 'text'", raw?.columns.every((c) => c.type === 'text') === true);
   ok('naming: without a schema, cells are the raw storage strings', raw?.rows[0][2] === '1' && raw?.rows[1][2] === '2');
   ok('naming: raw view keeps null/empty distinct', raw?.rows[1][0] === null && raw?.rows[1][1] === '');
 
-  const back = pq.readTable(f, columns);
+  const back = pqSync.readTable(f, columns);
   ok('naming: with a schema, hostile/duplicate/empty names round-trip exactly', JSON.stringify(back?.columns) === JSON.stringify(columns));
   ok('naming: with a schema, the duplicate-named number column is re-typed', back?.rows[0][2] === 1 && back?.rows[1][2] === 2);
   ok('naming: with a schema, cells deep-equal the input', back !== null && same(back.rows, rows));
 
   // A short schema must not silently drop or invent columns.
-  const partial = pq.readTable(f, columns.slice(0, 2));
+  const partial = pqSync.readTable(f, columns.slice(0, 2));
   ok('naming: a short schema keeps the file width, falling back to c<i>', partial?.columns.map((c) => c.name).join(',') === ',a,c2,c3,c4,c5');
 }
 
@@ -232,16 +233,16 @@ ok('isSupported(): true when the bridge is up', pq.isSupported() === true);
 
 {
   const f = tmpFile();
-  pq.writeTable(f, [], []);
-  const back = pq.readTable(f);
+  pqSync.writeTable(f, [], []);
+  const back = pqSync.readTable(f);
   ok('0-col: 0 columns / 0 rows round-trips', back !== null && back.columns.length === 0 && back.rows.length === 0);
 }
 
 {
   const f = tmpFile();
   const rows: Cell[][] = [[], [], []];
-  pq.writeTable(f, [], rows);
-  const back = pq.readTable(f);
+  pqSync.writeTable(f, [], rows);
+  const back = pqSync.readTable(f);
   ok('0-col: 0 columns but 3 rows keeps the row count', back?.columns.length === 0 && back?.rows.length === 3);
   ok('0-col: each row is an empty array', back !== null && same(back.rows, rows));
 }
@@ -262,14 +263,14 @@ ok('isSupported(): true when the bridge is up', pq.isSupported() === true);
 
 {
   const f = path.join(dir, 'atomic.parquet');
-  pq.writeTable(f, [{ name: 'a', type: 'text' }], [['first']]);
+  pqSync.writeTable(f, [{ name: 'a', type: 'text' }], [['first']]);
   const after1 = fs.readdirSync(dir).filter((n) => n.startsWith('atomic.'));
   ok('atomic: exactly one file exists after a write', after1.length === 1 && after1[0] === 'atomic.parquet');
   ok('atomic: no .tmp / .ndjson.tmp debris left behind', fs.readdirSync(dir).every((n) => !n.endsWith('.tmp')));
 
   // Overwrite in place — the rename must replace, not fail or duplicate.
-  pq.writeTable(f, [{ name: 'a', type: 'text' }], [['second'], ['third']]);
-  const back = pq.readTable(f);
+  pqSync.writeTable(f, [{ name: 'a', type: 'text' }], [['second'], ['third']]);
+  const back = pqSync.readTable(f);
   ok('atomic: overwrite replaces the previous content', back?.rows.length === 2 && back?.rows[0][0] === 'second');
   ok('atomic: still exactly one file after an overwrite', fs.readdirSync(dir).filter((n) => n.startsWith('atomic.')).length === 1);
 }
@@ -279,7 +280,7 @@ ok('isSupported(): true when the bridge is up', pq.isSupported() === true);
   const f = path.join(dir, 'nosuchdir', 'x.parquet');
   let threw = false;
   try {
-    pq.writeTable(f, [{ name: 'a', type: 'text' }], [['v']]);
+    pqSync.writeTable(f, [{ name: 'a', type: 'text' }], [['v']]);
   } catch {
     threw = true;
   }
@@ -292,26 +293,26 @@ ok('isSupported(): true when the bridge is up', pq.isSupported() === true);
 
 {
   const missing = path.join(dir, 'does-not-exist.parquet');
-  ok('robust: a missing file returns null', pq.readTable(missing) === null);
+  ok('robust: a missing file returns null', pqSync.readTable(missing) === null);
 
   const garbage = path.join(dir, 'garbage.parquet');
   fs.writeFileSync(garbage, Buffer.from([0xde, 0xad, 0xbe, 0xef, 0x00, 0x01, 0x02]));
-  ok('robust: garbage bytes return null', pq.readTable(garbage) === null);
+  ok('robust: garbage bytes return null', pqSync.readTable(garbage) === null);
 
   const empty = path.join(dir, 'zero-bytes.parquet');
   fs.writeFileSync(empty, '');
-  ok('robust: a zero-byte file returns null', pq.readTable(empty) === null);
+  ok('robust: a zero-byte file returns null', pqSync.readTable(empty) === null);
 
   // A real Parquet file truncated mid-way — the realistic "crash during write"
   // shape that the atomic rename is meant to prevent.
   const good = tmpFile();
-  pq.writeTable(good, [{ name: 'a', type: 'text' }], [['x'], ['y']]);
+  pqSync.writeTable(good, [{ name: 'a', type: 'text' }], [['x'], ['y']]);
   const truncated = path.join(dir, 'truncated.parquet');
   const bytes = fs.readFileSync(good);
   fs.writeFileSync(truncated, bytes.subarray(0, Math.max(1, bytes.length - 32)));
-  ok('robust: a truncated Parquet file returns null', pq.readTable(truncated) === null);
+  ok('robust: a truncated Parquet file returns null', pqSync.readTable(truncated) === null);
 
-  ok('robust: the bridge is still usable after those failureCount()', pq.readTable(good) !== null);
+  ok('robust: the bridge is still usable after those failureCount()', pqSync.readTable(good) !== null);
 }
 
 // ── Path safety ──────────────────────────────────────────────────────────────
@@ -325,19 +326,19 @@ ok('isSupported(): true when the bridge is up', pq.isSupported() === true);
       return true;
     }
   }
-  ok('path: writeTable rejects a non-.parquet path', throws(() => pq.writeTable(path.join(dir, 'x.json'), [], [])));
-  ok('path: writeTable rejects a null byte', throws(() => pq.writeTable(path.join(dir, 'x\u0000.parquet'), [], [])));
-  ok('path: writeTable rejects an empty path', throws(() => pq.writeTable('', [], [])));
+  ok('path: writeTable rejects a non-.parquet path', throws(() => pqSync.writeTable(path.join(dir, 'x.json'), [], [])));
+  ok('path: writeTable rejects a null byte', throws(() => pqSync.writeTable(path.join(dir, 'x\u0000.parquet'), [], [])));
+  ok('path: writeTable rejects an empty path', throws(() => pqSync.writeTable('', [], [])));
   ok('path: relationSql rejects a non-.parquet path', throws(() => pq.relationSql(path.join(dir, 'x.csv'))));
   ok('path: relationSql rejects a null byte', throws(() => pq.relationSql('/a\u0000/b.parquet')));
-  ok('path: readTable returns null (never throws) for a bad path', pq.readTable(path.join(dir, 'x.json')) === null && pq.readTable('\u0000.parquet') === null);
+  ok('path: readTable returns null (never throws) for a bad path', pqSync.readTable(path.join(dir, 'x.json')) === null && pqSync.readTable('\u0000.parquet') === null);
 
   // A single quote in a directory name must not break out of the SQL literal.
   const oddDir = path.join(dir, "it's a dir");
   fs.mkdirSync(oddDir, { recursive: true });
   const odd = path.join(oddDir, "o'brien.parquet");
-  pq.writeTable(odd, [{ name: 'a', type: 'text' }], [['quoted path']]);
-  ok("path: a single quote in the path is escaped, not injected", pq.readTable(odd)?.rows[0][0] === 'quoted path');
+  pqSync.writeTable(odd, [{ name: 'a', type: 'text' }], [['quoted path']]);
+  ok("path: a single quote in the path is escaped, not injected", pqSync.readTable(odd)?.rows[0][0] === 'quoted path');
   ok('path: relationSql doubles the quote', pq.relationSql(odd).includes("it''s a dir"));
 }
 
@@ -347,7 +348,7 @@ ok('isSupported(): true when the bridge is up', pq.isSupported() === true);
   const f = tmpFile();
   const rows: Cell[][] = [];
   for (let i = 0; i < 25; i++) rows.push([`n${i}`, i]);
-  pq.writeTable(f, [{ name: 'name', type: 'text' }, { name: 'v', type: 'number' }], rows);
+  pqSync.writeTable(f, [{ name: 'name', type: 'text' }, { name: 'v', type: 'number' }], rows);
 
   const rel = pq.relationSql(f);
   ok('relationSql: is a read_parquet expression', /^read_parquet\('.*\.parquet'\)$/.test(rel));
@@ -400,11 +401,11 @@ for (const n of [10_000, 100_000]) {
   const f = path.join(dir, `scale-${n}.parquet`);
 
   let t0 = Date.now();
-  pq.writeTable(f, columns, rows);
+  pqSync.writeTable(f, columns, rows);
   const wrote = Date.now() - t0;
 
   t0 = Date.now();
-  const back = pq.readTable(f, columns);
+  const back = pqSync.readTable(f, columns);
   const read = Date.now() - t0;
 
   const jsonFile = path.join(dir, `scale-${n}.json`);

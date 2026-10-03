@@ -20,6 +20,7 @@ Module._load = function (request: string, ...rest: any[]): any { // any: Module.
 };
 
 const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const jobs: typeof import('../src/app/jobs') = require('../src/app/jobs');
@@ -44,14 +45,14 @@ void (async () => {
   const rows = rowsOf(50_000);
   const syncFile = path.join(dir, 'sync.parquet');
   const asyncFile = path.join(dir, 'async.parquet');
-  parquetStore.writeTable(syncFile, cols, rows);
+  pqSync.writeTable(syncFile, cols, rows);
   const seen: number[] = [];
   let ticks = 0;
   const timer = setInterval(() => { ticks++; }, 1);
   await parquetStore.writeTableAsync(asyncFile, cols, rows, { onProgress: (f) => seen.push(f) });
   clearInterval(timer);
-  const a = parquetStore.readTable(syncFile, cols);
-  const b = parquetStore.readTable(asyncFile, cols);
+  const a = pqSync.readTable(syncFile, cols);
+  const b = pqSync.readTable(asyncFile, cols);
   ok('writeTableAsync round-trips exactly what writeTable does (007, "", "  ", null)',
     !!a && !!b && a.rows.length === b.rows.length && a.rows.every((r, i) => r.every((c, j) => Object.is(c, b.rows[i][j]))));
   ok('progress is reported and reaches 1', seen.length > 2 && seen[seen.length - 1] === 1);
@@ -63,11 +64,11 @@ void (async () => {
   ok('readTableAsync: a missing file is null, never a throw', (await parquetStore.readTableAsync(path.join(dir, 'nope.parquet'), cols)) === null);
   const emptyFile = path.join(dir, 'empty.parquet');
   await parquetStore.writeTableAsync(emptyFile, cols, []);
-  const empty = parquetStore.readTable(emptyFile, cols);
+  const empty = pqSync.readTable(emptyFile, cols);
   ok('a 0-row table writes and reads back with its width', !!empty && empty.rows.length === 0 && empty.columns.length === 3);
   const noColsFile = path.join(dir, 'nocols.parquet');
   await parquetStore.writeTableAsync(noColsFile, [], [[], [], []]);
-  ok('a 0-column table keeps its row count', (parquetStore.readTable(noColsFile)?.rows.length ?? -1) === 3);
+  ok('a 0-column table keeps its row count', (pqSync.readTable(noColsFile)?.rows.length ?? -1) === 3);
 
   // ── Cancel leaves nothing behind ──────────────────────────────────────────
   const cancelFile = path.join(dir, 'cancel.parquet');

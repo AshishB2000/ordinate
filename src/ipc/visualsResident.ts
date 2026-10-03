@@ -95,7 +95,7 @@ export async function residentPivotData(
     for (const v of pivot.values) if (!names.has(v.column)) return null;
     for (const f of filters) if (!filterCannotWarn(f, names)) return null;
 
-    const grid = pivotGridResident(src, pivot, filters);
+    const grid = await pivotGridResident(src, pivot, filters);
     if (!grid) {
       trace.record('vizPivot', 'failed', `${pivot.rows.length}×${pivot.columns.length} dims`);
       return null;

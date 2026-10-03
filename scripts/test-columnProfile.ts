@@ -58,7 +58,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
-const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const columnProfile: typeof import('../src/data/columnProfile') = require('../src/data/columnProfile');
 const medianResidentMod: typeof import('../src/engine/medianResident') = require('../src/engine/medianResident');
 const statsResident: typeof import('../src/engine/statsResident') = require('../src/engine/statsResident');
@@ -145,15 +145,15 @@ async function main(): Promise<void> {
 
   for (const c of cases) {
     const file = fixtureFile();
-    parquetStore.writeTable(file, c.columns, c.rows);
-    const back = parquetStore.readTable(file, c.columns);
+    pqSync.writeTable(file, c.columns, c.rows);
+    const back = pqSync.readTable(file, c.columns);
     ok(`${c.label}: fixture reads back`, !!back);
     if (!back) continue;
     // The reference runs on the ROUND-TRIPPED rows: a Parquet round trip is not
     // an identity on every cell type, so anything else would compare two
     // different tables.
     const want = columnProfile.medianOf(c.columns, back.rows, c.column);
-    agree(c.label, want, medianResidentMod.medianResident({ parquetPath: file, columns: c.columns }, c.column));
+    agree(c.label, want, await medianResidentMod.medianResident({ parquetPath: file, columns: c.columns }, c.column));
   }
 
   // ── 2. Cast on the DECLARED type, never inference ──────────────────────────
@@ -167,14 +167,14 @@ async function main(): Promise<void> {
     const cols = [T('code')];
     const rows: Cell[][] = [['007'], ['013'], ['021']];
     const file = fixtureFile();
-    parquetStore.writeTable(file, cols, rows);
-    const back = parquetStore.readTable(file, cols);
+    pqSync.writeTable(file, cols, rows);
+    const back = pqSync.readTable(file, cols);
     ok('text column: fixture reads back', !!back);
     if (back) {
       ok('text column: medianOf declines a non-number column',
         Object.is(columnProfile.medianOf(cols, back.rows, 'code'), null));
       ok('text column: medianResident falls back rather than casting 007 to 7',
-        medianResidentMod.medianResident({ parquetPath: file, columns: cols }, 'code') === null);
+        await medianResidentMod.medianResident({ parquetPath: file, columns: cols }, 'code') === null);
     }
   }
 
@@ -182,10 +182,10 @@ async function main(): Promise<void> {
   {
     const cols = [N('v')];
     const file = fixtureFile();
-    parquetStore.writeTable(file, cols, [[1], [2]]);
+    pqSync.writeTable(file, cols, [[1], [2]]);
     ok('unknown column: medianOf → null', Object.is(columnProfile.medianOf(cols, [[1], [2]], 'nope'), null));
     ok('unknown column: medianResident → fall back',
-      medianResidentMod.medianResident({ parquetPath: file, columns: cols }, 'nope') === null);
+      await medianResidentMod.medianResident({ parquetPath: file, columns: cols }, 'nope') === null);
   }
 
   // ── 4. The SHIPPED handler, with the table never hydrated ──────────────────

@@ -212,7 +212,7 @@ export async function loadPlanContext(
     };
     const src = await datasets.residentSource(projectId, meta.id);
     if (src) {
-      const stats = computeColumnSummariesResident(src);
+      const stats = await computeColumnSummariesResident(src);
       if (stats) entry.summaries = stats;
     }
     out.push(entry);

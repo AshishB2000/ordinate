@@ -120,12 +120,12 @@ async function residentStats(
     trace.record('datasetStats', 'skipped');
     return null;
   }
-  const summaries = computeColumnSummariesResident(src);
+  const summaries = await computeColumnSummariesResident(src);
   if (!summaries) {
     trace.record('datasetStats', 'failed', `summaries, ${src.columns.length} cols`);
     return null;
   }
-  const issues = findQualityIssuesResident(src);
+  const issues = await findQualityIssuesResident(src);
   if (!issues) {
     trace.record('datasetStats', 'failed', `quality issues, ${src.columns.length} cols`);
     return null;
@@ -146,7 +146,7 @@ async function residentPromptFacts(
   if (!meta) return null;
   const fast = await residentStats(projectId, datasetId);
   if (!fast) return null;
-  const sample = sampleRowsResident(fast.src, EXPLAIN_SAMPLE_ROWS);
+  const sample = await sampleRowsResident(fast.src, EXPLAIN_SAMPLE_ROWS);
   if (!sample) return null;
   return { meta, summaries: fast.summaries, issues: fast.issues, sample };
 }
@@ -451,7 +451,7 @@ export function register() {
         // `{ value: null }` is "no finite cells" and ends the call; only a bare
         // `null` is "fall back". Conflating them would hydrate a million rows
         // for the JS reference to reach the same answer.
-        const fast = medianResident(src, col);
+        const fast = await medianResident(src, col);
         if (fast) {
           trace.record('datasetMedian', 'resident');
           return { ok: true, median: fast.value };

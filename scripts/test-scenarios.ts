@@ -309,7 +309,7 @@ async function resolverChecks(): Promise<void> {
     ];
     for (const [c, scope, filters] of cases) {
       const js = inputsJs.scenarioInputsJs(COLUMNS, ROWS, c, scope, filters);
-      const sql = resident.scenarioInputsResident(src, c, scope, filters);
+      const sql = await resident.scenarioInputsResident(src, c, scope, filters);
       const same = !!js && !!sql && js.length === sql.length && js.every((p, i) =>
         p.key.join() === sql[i].key.join()
         && (['sum', 'n', 'nonEmpty', 'min', 'max'] as const).every((k) => Object.is(p.pieces[k], sql[i].pieces[k])));
@@ -317,7 +317,7 @@ async function resolverChecks(): Promise<void> {
         same, JSON.stringify({ js, sql }));
     }
     ok('differential: an unknown column is null on both', inputsJs.scenarioInputsJs(COLUMNS, ROWS, 'nope', [], [WEST]) === null
-      && resident.scenarioInputsResident(src, 'nope', [], [WEST]) === null);
+      && await resident.scenarioInputsResident(src, 'nope', [], [WEST]) === null);
     hydrations = 0;
     const r0 = trace.snapshot().scenario ? trace.snapshot().scenario.resident : 0;
     await resolve.computeScenario(pid, { ...rec, drivers: model.sanitizeDrivers([P('revenue', 5), A('units', 1, WEST), P('unit_price', -2)]) });

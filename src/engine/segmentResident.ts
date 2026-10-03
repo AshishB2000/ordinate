@@ -1,5 +1,5 @@
-// Find segments and RFM off the stored Parquet, IN PLACE — MAIN PROCESS or a
-// compute worker (engine/computeWorker.ts runs it off the main thread).
+// Find segments and RFM off the stored Parquet, IN PLACE — MAIN PROCESS (async
+// bridge) or a compute worker (engine/computeWorker.ts runs it off the main thread).
 //
 // The resident twin of segmentModel.jsSegmentIo and rfm.rfmCustomersJs, held
 // to them with Object.is by scripts/test-segmentsDuck.ts. Every method returns
@@ -17,7 +17,7 @@
 //   · rows are assigned by sqlGenSegment.segmentRelation — the Prepare step's
 //     own SQL.
 
-import { runOrdered } from './residentQuery';
+import { runOrderedAsync } from './residentQuery';
 import { sqlEmpty } from './sqlGen';
 import { sqlNum } from './sqlGenPower';
 import type { Param } from './sqlGenPower';
@@ -50,10 +50,10 @@ function featureRows(idx: number[], from: string, ord: string): string {
 
 export function residentSegmentIo(src: SegmentSource): SegmentIo {
   return {
-    stats(idx) {
+    async stats(idx) {
       try {
         const sums = idx.map((_, j) => `sum(x${j} ORDER BY __o) AS s${j}`).join(', ');
-        const first = runOrdered(src.parquetPath, (from, ord) => `SELECT count(*) AS n, ${sums} FROM (${featureRows(idx, from, ord)});`, []);
+        const first = await runOrderedAsync(src.parquetPath, (from, ord) => `SELECT count(*) AS n, ${sums} FROM (${featureRows(idx, from, ord)});`, []);
         const n = num(first[0]?.n);
         if (!Number.isFinite(n)) return null;
         if (n === 0) return { count: 0, means: [], stds: [] };
@@ -64,20 +64,20 @@ export function residentSegmentIo(src: SegmentSource): SegmentIo {
           params.push(dbl(m), dbl(m));
           return `sum((x${j} - CAST(? AS DOUBLE)) * (x${j} - CAST(? AS DOUBLE)) ORDER BY __o) AS q${j}`;
         }).join(', ');
-        const second = runOrdered(src.parquetPath, (from, ord) => `SELECT ${sq} FROM (${featureRows(idx, from, ord)});`, params);
+        const second = await runOrderedAsync(src.parquetPath, (from, ord) => `SELECT ${sq} FROM (${featureRows(idx, from, ord)});`, params);
         return finishStats(n, s, idx.map((_, j) => num(second[0][`q${j}`])));
       } catch {
         return null;
       }
     },
 
-    sample(idx, n, cap) {
+    async sample(idx, n, cap) {
       try {
         const T = Math.floor(cap);
         const N = Math.floor(n);
         const keep = N <= T ? 'TRUE' : `(i * ${T}) // ${N} > ((i - 1) * ${T}) // ${N}`;
         const xs = idx.map((_, j) => `x${j}`).join(', ');
-        const rows = runOrdered(src.parquetPath, (from, ord) =>
+        const rows = await runOrderedAsync(src.parquetPath, (from, ord) =>
           `SELECT ${xs} FROM (SELECT ${xs}, row_number() OVER (ORDER BY __o) AS i FROM (${featureRows(idx, from, ord)})) ` +
           `WHERE ${keep} ORDER BY i;`, []);
         return rows.map((r) => idx.map((_, j) => num(r[`x${j}`])));
@@ -86,7 +86,7 @@ export function residentSegmentIo(src: SegmentSource): SegmentIo {
       }
     },
 
-    summary(step) {
+    async summary(step) {
       try {
         const idx = featureIndexes(src.columns, step);
         if (idx.some((i) => i < 0)) return null;
@@ -94,7 +94,7 @@ export function residentSegmentIo(src: SegmentSource): SegmentIo {
         const tpl = segmentRelation(REL, idx.map(phys), step, params);
         const xs = idx.map((ci, j) => `${sqlNum(phys(ci))} AS x${j}`).join(', ');
         const sums = idx.map((_, j) => `sum(x${j} ORDER BY __o) AS s${j}`).join(', ');
-        const rows = runOrdered(src.parquetPath, (from, ord) =>
+        const rows = await runOrderedAsync(src.parquetPath, (from, ord) =>
           `SELECT __sg AS g, count(*) AS n, ${sums} FROM (SELECT __sg, __o, ${xs} FROM (` +
           tpl.replace(REL, `(SELECT *, ${ord} AS __o FROM ${from})`) +
           ')) GROUP BY __sg;', params);
@@ -117,23 +117,23 @@ export function residentSegmentIo(src: SegmentSource): SegmentIo {
 }
 
 /** The whole fit off the Parquet; null = fall back to the JS reference. */
-export function fitResident(src: SegmentSource, features: string[], progress?: (f: number, note?: string) => void): FitResult | { error: string } | null {
+export function fitResident(src: SegmentSource, features: string[], progress?: (f: number, note?: string) => void): Promise<FitResult | { error: string } | null> {
   return runFit(src.columns, features, residentSegmentIo(src), progress);
 }
 
 /** rfm.rfmCustomersJs off the Parquet: one row per customer, first-seen order. */
-export function rfmCustomersResident(src: SegmentSource, spec: RfmSpec): RfmCustomers | null {
+export async function rfmCustomersResident(src: SegmentSource, spec: RfmSpec): Promise<RfmCustomers | null> {
   try {
     const at = (n: string): number => src.columns.findIndex((c) => c.name === n);
     const [ii, di, ai] = [at(spec.id), at(spec.date), at(spec.amount)];
     if (ii < 0 || di < 0 || ai < 0 || src.columns[ai].type !== 'number') return null;
     const day = `date_diff('day', DATE '1970-01-01', ${sqlPeriodDate(phys(di))})`;
-    const rows = runOrdered(src.parquetPath, (from, ord) =>
+    const rows = await runOrderedAsync(src.parquetPath, (from, ord) =>
       `SELECT k, max(d) AS last, count(*) AS fq, sum(a ORDER BY __o) AS mon, min(__o) AS first FROM (` +
       `SELECT CAST(${phys(ii)} AS VARCHAR) AS k, ${day} AS d, ${sqlNum(phys(ai))} AS a, ${ord} AS __o ` +
       `FROM ${from} WHERE NOT ${sqlEmpty(phys(ii))}) ` +
       'WHERE d IS NOT NULL AND a IS NOT NULL GROUP BY k ORDER BY first;', []);
-    const total = runOrdered(src.parquetPath, (from) => `SELECT count(*) AS n FROM ${from};`, []);
+    const total = await runOrderedAsync(src.parquetPath, (from) => `SELECT count(*) AS n FROM ${from};`, []);
     const customers: RfmCustomer[] = rows.map((r) => ({
       id: String(r.k),
       last: num(r.last),

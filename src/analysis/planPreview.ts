@@ -141,7 +141,7 @@ async function previewValidated(
     const unknownRefs = compiled.fn.refs.filter((r) => !names.has(r));
     const sample: CalcFieldPreview['sample'] = [];
     const src = await datasets.residentSource(projectId, cf.datasetId);
-    const rows = src ? sampleRowsResident(src, CALC_SAMPLE_ROWS) : null;
+    const rows = src ? await sampleRowsResident(src, CALC_SAMPLE_ROWS) : null;
     if (rows && src) {
       for (const row of rows) {
         const rowMap: Record<string, FValue> = {};

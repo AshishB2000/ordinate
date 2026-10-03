@@ -24,7 +24,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as dp from '../src/engine/datasetPage';
-import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import type { ParsedColumn } from '../src/data/parse';
 import type { Cell } from '../src/data/transforms';
 
@@ -59,8 +59,8 @@ interface Fixture {
 
 function fixture(columns: ParsedColumn[], rows: Cell[][]): Fixture {
   const file = tmpFile();
-  pq.writeTable(file, columns, rows);
-  const back = pq.readTable(file, columns);
+  pqSync.writeTable(file, columns, rows);
+  const back = pqSync.readTable(file, columns);
   if (!back) throw new Error('fixture read-back failed');
   return { src: { parquetPath: file, columns }, columns: back.columns, rows: back.rows };
 }
@@ -446,12 +446,12 @@ ok('isPageResident(): true when the bridge is up', dp.isPageResident() === true)
 
   const t0 = Date.now();
   const file = tmpFile();
-  pq.writeTable(file, cols, rows);
+  pqSync.writeTable(file, cols, rows);
   const tWrite = Date.now() - t0;
   const src: dp.PageSource = { parquetPath: file, columns: cols };
 
   const t1 = Date.now();
-  const back = pq.readTable(file, cols);
+  const back = pqSync.readTable(file, cols);
   const tHydrate = Date.now() - t1;
   if (!back) throw new Error('200k fixture read-back failed');
   const f: Fixture = { src, columns: back.columns, rows: back.rows };

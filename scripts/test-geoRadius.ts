@@ -17,6 +17,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as rq from '../src/engine/residentQuery';
 import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import * as duck from '../src/engine/duckdb';
 import * as metricValue from '../src/analysis/metricValue';
 import { applyPipeline, sanitizeSteps } from '../src/data/transforms';
@@ -54,8 +55,8 @@ for (let i = 0; i < 4000; i += 1) {
 ROWS.push([4000, null, -97.7, 5, null], [4001, 30.2, null, 5, ''], [4002, 95, -97.7, 5, '95'], [4003, 30.2, -190, 5, 'x']);
 
 const file = path.join(dir, 'points.parquet');
-pq.writeTable(file, COLS, ROWS);
-const back = pq.readTable(file, COLS);
+pqSync.writeTable(file, COLS, ROWS);
+const back = pqSync.readTable(file, COLS);
 if (!back) throw new Error('fixture read-back failed');
 const src: rq.ResidentSource = { parquetPath: file, columns: COLS };
 
@@ -140,7 +141,7 @@ async function main(): Promise<void> {
     const warn = applyPipeline({ columns: back!.columns, rows: back!.rows }, [radius(30, -97, 25, 'lat', 'nope')]).warnings;
     ok('…with a warning that names the column', warn.some((w) => /unknown column "nope"/.test(w)), warn.join(' | '));
   }
-  ok('the prepare-pipeline SQL declines a radius filter (the fold runs it)', runResidentPipeline(file, COLS, [radius(30.2672, -97.7431, 25)]) === null);
+  ok('the prepare-pipeline SQL declines a radius filter (the fold runs it)', await runResidentPipeline(file, COLS, [radius(30.2672, -97.7431, 25)]) === null);
 
   // ── Sanitising and the dashboard control ─────────────────────────────────
   ok('sanitizeSteps keeps a well-formed within_km step', sanitizeSteps([radius(30, -97, 25)]).length === 1);

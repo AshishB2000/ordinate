@@ -44,7 +44,7 @@ process.env.ORDINATE_COMPUTE_INLINE = '1'; // section 4 turns it off once to pro
 
 const { applyPipeline }: typeof import('../src/data/transforms') = require('../src/data/transforms');
 const { runOnDuckDb, runResidentPipeline }: typeof import('../src/engine/pipelineDuck') = require('../src/engine/pipelineDuck');
-const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const model: typeof import('../src/analysis/segmentModel') = require('../src/analysis/segmentModel');
 const math: typeof import('../src/analysis/segmentMath') = require('../src/analysis/segmentMath');
@@ -78,8 +78,8 @@ function same(a: unknown, b: unknown, at = '$'): string | null {
 let staged = 0;
 function stage(t: TableData): { file: string; rows: Cell[][] } {
   const file = path.join(tmp, `t${staged++}.parquet`);
-  parquetStore.writeTable(file, t.columns, t.rows);
-  const back = parquetStore.readTable(file, t.columns);
+  pqSync.writeTable(file, t.columns, t.rows);
+  const back = pqSync.readTable(file, t.columns);
   return { file, rows: back ? back.rows : [] };
 }
 
@@ -100,7 +100,7 @@ function fixture(n: number, seed: number): TableData {
 async function main(): Promise<void> {
   // ── 1. the step ───────────────────────────────────────────────────────────
   const small = fixture(90, 11);
-  const fit = model.runFit(small.columns, ['revenue', 'discount', 'units'], model.jsSegmentIo(small.columns, small.rows));
+  const fit = await model.runFit(small.columns, ['revenue', 'discount', 'units'], model.jsSegmentIo(small.columns, small.rows));
   ok('fixture fit ran', !!fit && !('error' in fit), JSON.stringify(fit).slice(0, 200));
   if (!fit || 'error' in fit) return;
   const step = fit.step;
@@ -110,49 +110,49 @@ async function main(): Promise<void> {
     const d = same({ columns: js.columns, rows: js.rows, warnings: js.warnings, counts: js.stepCounts }, { columns: sql.columns, rows: sql.rows, warnings: sql.warnings, counts: sql.stepCounts });
     ok(`${label}: columns, every cell, warnings and counts agree`, d === null, d);
   };
-  const both = (label: string, steps: TransformStep[], t: TableData = small): void => {
+  const both = async (label: string, steps: TransformStep[], t: TableData = small): Promise<void> => {
     const js = applyPipeline(t, steps);
-    compare(`${label} (in memory)`, runOnDuckDb(t, steps, { force: true }), js);
+    compare(`${label} (in memory)`, await runOnDuckDb(t, steps, { force: true }), js);
     const { file } = stage(t);
-    compare(`${label} (resident)`, runResidentPipeline(file, t.columns, steps), js);
+    compare(`${label} (resident)`, await runResidentPipeline(file, t.columns, steps), js);
   };
-  both('segment step', [step]);
-  both('after a rename and a filter', [{ type: 'rename_column', from: 'tag', to: 'kind' }, { type: 'filter', column: 'units', op: '>', value: -25 }, step]);
-  both('an unknown feature skips with the fold’s warning', [{ ...step, features: ['revenue', 'discount', 'gone'] }]);
-  both('a taken column name skips', [{ ...step, column: 'tag' }]);
-  both('a text feature skips', [{ ...step, features: ['revenue', 'discount', 'tag'] }]);
+  await both('segment step', [step]);
+  await both('after a rename and a filter', [{ type: 'rename_column', from: 'tag', to: 'kind' }, { type: 'filter', column: 'units', op: '>', value: -25 }, step]);
+  await both('an unknown feature skips with the fold’s warning', [{ ...step, features: ['revenue', 'discount', 'gone'] }]);
+  await both('a taken column name skips', [{ ...step, column: 'tag' }]);
+  await both('a text feature skips', [{ ...step, features: ['revenue', 'discount', 'tag'] }]);
   const ties: TransformStep = { ...step, centroids: [step.centroids[0], step.centroids[0], ...step.centroids.slice(2)] };
-  both('duplicate centroids: the lowest index wins in both', [ties]);
+  await both('duplicate centroids: the lowest index wins in both', [ties]);
   const huge: TransformStep = { ...step, means: [1e20, -3.5e-7, 12], stds: [2e19, 1e-9, 0.1] };
-  both('extreme means and stds bind exactly', [huge]);
+  await both('extreme means and stds bind exactly', [huge]);
   const oddRows: TableData = { columns: small.columns, rows: [[0, 0, 0, 'a'], [-0.0000001, 1e-12, 5, 'b'], ['x', 1, 2, 'c'], [3, null, 1, 'd'], [2.5, 0.25, -7, ''], [1e15, 0.5, 3, null]] as Cell[][] };
-  both('zeros, a string in a number column, tiny and large values', [step], oddRows);
+  await both('zeros, a string in a number column, tiny and large values', [step], oddRows);
   ok('a feature typed from data declines to the fold, never a guess',
-    runOnDuckDb(small, [{ type: 'fill_empty', column: 'revenue', value: 0 }, step], { force: true }) === null);
+    await runOnDuckDb(small, [{ type: 'fill_empty', column: 'revenue', value: 0 }, step], { force: true }) === null);
 
   // ── 2. the reader ─────────────────────────────────────────────────────────
-  const readers = (label: string, t: TableData, features: string[], cap: number): void => {
+  const readers = async (label: string, t: TableData, features: string[], cap: number): Promise<void> => {
     const { file, rows } = stage(t);
     const js = model.jsSegmentIo(t.columns, rows);
     const res = resident.residentSegmentIo({ parquetPath: file, columns: t.columns });
     const idx = features.map((f) => t.columns.findIndex((c) => c.name === f));
     const a = js.stats(idx);
-    const b = res.stats(idx);
+    const b = await res.stats(idx);
     ok(`${label}: stats agree (count, means, stds)`, !!b && same(a, b) === null, same(a, b));
     const sa = js.sample(idx, a!.count, cap);
-    const sb = res.sample(idx, a!.count, cap);
+    const sb = await res.sample(idx, a!.count, cap);
     ok(`${label}: the stride sample agrees row for row`, !!sb && sa!.length === Math.min(cap, a!.count) && same(sa, sb) === null, same(sa, sb));
-    const fj = model.runFit(t.columns, features, js);
-    const fr = model.runFit(t.columns, features, res);
+    const fj = await model.runFit(t.columns, features, js);
+    const fr = await model.runFit(t.columns, features, res);
     ok(`${label}: the whole fit agrees`, !!fr && same(fj, fr) === null, same(fj, fr));
     if (fj && !('error' in fj)) {
       const ua = js.summary(fj.step);
-      const ub = res.summary(fj.step);
+      const ub = await res.summary(fj.step);
       ok(`${label}: the all-row summary agrees`, !!ub && same(ua, ub) === null, same(ua, ub));
     }
   };
-  readers('small', small, ['revenue', 'discount', 'units'], 25);
-  readers('60,000 rows', fixture(60_000, 5), ['revenue', 'units'], 7_000);
+  await readers('small', small, ['revenue', 'discount', 'units'], 25);
+  await readers('60,000 rows', fixture(60_000, 5), ['revenue', 'units'], 7_000);
 
   // ── 3. RFM ────────────────────────────────────────────────────────────────
   const rfmTable = (n: number, seed: number): TableData => {
@@ -174,7 +174,7 @@ async function main(): Promise<void> {
     const { file, rows } = stage(t);
     const spec = { id: 'customer', date: 'day', amount: 'amount' };
     const a = rfm.rfmCustomersJs({ columns: t.columns, rows }, spec);
-    const b = resident.rfmCustomersResident({ parquetPath: file, columns: t.columns }, spec);
+    const b = await resident.rfmCustomersResident({ parquetPath: file, columns: t.columns }, spec);
     ok(`${label}: per-customer aggregates agree (ids, last day, frequency, monetary)`, !!b && same(a, b) === null, same(a, b));
     if (rows.length > 1000) ok(`${label}: '007' and '7' stay two customers`, a.customers.filter((c) => c.id === '007' || c.id === '7').length === 2);
   }
@@ -202,7 +202,7 @@ async function main(): Promise<void> {
   const snap = trace.snapshot();
   ok('the fit was answered by the resident path', (snap.segmentFit?.resident || 0) === 1 && (snap.segmentFit?.failed || 0) === 0, JSON.stringify(snap.segmentFit));
   const ds = await realGet(proj.id, rec.id);
-  const ref = model.runFit(ds!.columns, ['revenue', 'discount', 'units'], model.jsSegmentIo(ds!.columns, ds!.rows));
+  const ref = await model.runFit(ds!.columns, ['revenue', 'discount', 'units'], model.jsSegmentIo(ds!.columns, ds!.rows));
   ok('segments:fit equals the JS reference over the hydrated table', same(got.result, ref) === null, same(got.result, ref));
   const job = jobs.snapshot().recent.find((j) => j.kind === 'analysis');
   ok('the fit ran as an "analysis" job and finished', !!job && job.state === 'done' && /Find segments/.test(job.label), JSON.stringify(job));

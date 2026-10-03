@@ -43,10 +43,10 @@ interface Src { parquetPath: string; columns: ParsedColumn[] }
 const OPS: Record<string, (args: any, progress: Progress) => Promise<unknown>> = { // any: validated per op below
   /** One dataset's insights off its Parquet; null = the resident path declined. */
   async insights(args: { datasetId: string; src: Src }): Promise<Insight[] | null> {
-    const anomalies = detectAnomaliesResident(args.src);
+    const anomalies = await detectAnomaliesResident(args.src);
     if (!anomalies) return null;
     return [
-      ...detectInsights(args.datasetId, args.src.columns, residentAgg(args.src)),
+      ...(await detectInsights(args.datasetId, args.src.columns, residentAgg(args.src))),
       ...anomalies.map((a) => fromAnomaly(args.datasetId, a, args.src.columns)).filter((i): i is Insight => !!i),
     ];
   },

@@ -90,7 +90,7 @@ async function scan(projectId: string, datasetId: string, signal?: AbortSignal):
   if (src) {
     found = computePool.available()
       ? await computePool.run<Insight[] | null>('insights', { datasetId, src }, { signal })
-      : residentInline(datasetId, src);
+      : await residentInline(datasetId, src);
     trace.record('insights', found ? 'resident' : 'failed', found ? undefined : `${src.columns.length} column(s)`);
   } else {
     trace.record('insights', 'skipped');
@@ -100,7 +100,7 @@ async function scan(projectId: string, datasetId: string, signal?: AbortSignal):
     const ds = await datasets.getDataset(projectId, datasetId);
     if (!ds) return [];
     found = [
-      ...detectInsights(datasetId, ds.columns, jsAgg(ds.columns, ds.rows)),
+      ...(await detectInsights(datasetId, ds.columns, jsAgg(ds.columns, ds.rows))),
       ...detectAnomalies(ds.columns, ds.rows)
         .map((a) => fromAnomaly(datasetId, a, ds.columns))
         .filter((i): i is Insight => !!i),
@@ -110,11 +110,11 @@ async function scan(projectId: string, datasetId: string, signal?: AbortSignal):
 }
 
 /** The worker's op, on this thread — for when worker threads are off. */
-function residentInline(datasetId: string, src: { parquetPath: string; columns: ParsedColumn[] }): Insight[] | null {
-  const anomalies = detectAnomaliesResident(src);
+async function residentInline(datasetId: string, src: { parquetPath: string; columns: ParsedColumn[] }): Promise<Insight[] | null> {
+  const anomalies = await detectAnomaliesResident(src);
   if (!anomalies) return null;
   return [
-    ...detectInsights(datasetId, src.columns, residentAgg(src)),
+    ...(await detectInsights(datasetId, src.columns, residentAgg(src))),
     // `fromAnomaly` returns null for a finding that is true but useless as a
     // card (a change off a near-zero base) — the anomaly itself is untouched
     // for the watch and explain paths.

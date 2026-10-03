@@ -745,7 +745,7 @@ export function register() {
       const meta = await datasets.getDatasetMeta(projectId, datasetId);
       const src = await datasets.residentSource(projectId, datasetId);
       if (meta && src) {
-        const summaries = computeColumnSummariesResident(src);
+        const summaries = await computeColumnSummariesResident(src);
         if (summaries) {
           summaryText = buildColumnSummaryText(meta, summaries);
           trace.record('columnSummaries', 'resident');

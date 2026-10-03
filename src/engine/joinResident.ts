@@ -32,8 +32,7 @@ import type { KeyStats } from '../analysis/joinJs';
 import { relationSql } from './parquetStore';
 import { sqlEmpty } from './sqlGen';
 import { catKeyExpr, catLabel, sqlNum } from './residentCategory';
-import { aggExpr, filterPredicates, withRelation } from './residentQuery';
-import { resolveCatKeySync } from './residentSync';
+import { aggExpr, filterPredicates, resolveCatKey, withRelationAsync } from './residentQuery';
 import type { ResidentMeasure } from './residentQuery';
 import * as duck from './duckdb';
 
@@ -114,11 +113,11 @@ function cannotWarn(f: FilterStep, names: Set<string>): boolean {
  * Branch (A) of `buildVizData` — no split, no geo, not all-'none' — over a
  * join. Null for anything else, and whenever the JS reference would warn.
  */
-export function joinedAggregateResident(
+export async function joinedAggregateResident(
   sources: JoinSource[],
   join: VizJoin,
   infos: Map<string, DsInfo>,
-): VizDataResult | null {
+): Promise<VizDataResult | null> {
   try {
     const enc = join.encoding;
     if (enc.geo || enc.series || enc.pivot) return null;
@@ -139,8 +138,8 @@ export function joinedAggregateResident(
     const src = { parquetPath: key, columns: cols };
     const gi = cols.findIndex((c) => c.name === enc.category);
 
-    return withRelation(key, relation, () => {
-      const plan = resolveCatKeySync(src, enc.category, measures, join.filters, enc.grain, enc.bins);
+    return await withRelationAsync(key, relation, async () => {
+      const plan = await resolveCatKey(src, enc.category, measures, join.filters, enc.grain, enc.bins);
       if (!plan) return null;
       const params: duck.DuckValue[] = [];
       const ck = catKeyExpr(cols, gi, plan.key, params);
@@ -155,7 +154,7 @@ export function joinedAggregateResident(
         `SELECT __k, __o, ${mcis.map((ci) => maskedCol(join.layout, ci, '__k')).join(', ')} FROM (` +
         `SELECT ${ck.label} AS __k, __ord AS __o, * FROM ${relation}${where})) ` +
         `GROUP BY __k ORDER BY min(__o);`;
-      const out = duck.query(sql, params);
+      const out = await duck.queryAsync(sql, params);
       const catType = cols[gi].type;
       return {
         data: {
@@ -173,14 +172,14 @@ export function joinedAggregateResident(
 }
 
 /** One metric over a join (`joinJs.joinedMetricJs`). `column` is a merged name. */
-export function joinedMetricResident(
+export async function joinedMetricResident(
   sources: JoinSource[],
   plan: JoinPlan,
   layout: JoinLayout,
   infos: Map<string, DsInfo>,
   spec: { column: string; aggregation: MetricAggregation },
   filters: FilterStep[],
-): number | null {
+): Promise<number | null> {
   try {
     const cols = layout.columns;
     const ci = cols.findIndex((c) => c.name === spec.column);
@@ -192,7 +191,7 @@ export function joinedMetricResident(
     const sql =
       `SELECT ${aggExpr(cols, ci, spec.aggregation)} AS m0 FROM (` +
       `SELECT ${maskedCol(layout, ci, '')} FROM (SELECT __ord AS __o, * FROM ${relation}${where}));`;
-    const out = duck.query(sql, params);
+    const out = await duck.queryAsync(sql, params);
     const raw = out.length ? out[0].m0 : null;
     if (raw == null) return null;
     const n = typeof raw === 'number' ? raw : Number(raw);
@@ -203,23 +202,23 @@ export function joinedMetricResident(
 }
 
 /** Full-table relationship check (`joinJs.keyStatsJs`). */
-export function keyStatsResident(
+export async function keyStatsResident(
   from: { parquetPath: string; index: number; type: ParsedColumn['type'] },
   to: { parquetPath: string; index: number; type: ParsedColumn['type'] },
-): KeyStats | null {
+): Promise<KeyStats | null> {
   try {
     const fk = keySql(`c${from.index}`, from.type);
     const tk = keySql(`c${to.index}`, to.type);
-    const a = duck.query(
+    const a = (await duck.queryAsync(
       `SELECT CAST(count(*) AS DOUBLE) AS n, CAST(count(t.k) AS DOUBLE) AS matched, ` +
         `CAST(count(DISTINCT f.k) AS DOUBLE) AS fkeys, CAST(count(f.k) AS DOUBLE) AS fkeyed ` +
         `FROM (SELECT ${fk} AS k FROM ${relationSql(from.parquetPath)}) f ` +
         `LEFT JOIN (SELECT DISTINCT ${tk} AS k FROM ${relationSql(to.parquetPath)}) t ON f.k = t.k;`,
-    )[0];
-    const b = duck.query(
+    ))[0];
+    const b = (await duck.queryAsync(
       `SELECT CAST(count(DISTINCT k) AS DOUBLE) AS tkeys, CAST(count(k) AS DOUBLE) AS tkeyed ` +
         `FROM (SELECT ${tk} AS k FROM ${relationSql(to.parquetPath)});`,
-    )[0];
+    ))[0];
     const n = Number(a.n);
     const matched = Number(a.matched);
     return {
@@ -236,20 +235,20 @@ export function keyStatsResident(
 }
 
 /** The sampled join rate (`joinJs.joinRateJs`): first `sample` FROM rows, all of TO. */
-export function joinRateResident(
+export async function joinRateResident(
   from: { parquetPath: string; index: number; type: ParsedColumn['type'] },
   to: { parquetPath: string; index: number; type: ParsedColumn['type'] },
   sample: number,
-): number | null {
+): Promise<number | null> {
   try {
     const fk = keySql(`c${from.index}`, from.type);
     const tk = keySql(`c${to.index}`, to.type);
-    const r = duck.query(
+    const r = (await duck.queryAsync(
       `SELECT CAST(count(k) AS DOUBLE) AS n, ` +
         `CAST(count(*) FILTER (WHERE k IN (SELECT k2 FROM (SELECT ${tk} AS k2 FROM ${relationSql(to.parquetPath)}) WHERE k2 IS NOT NULL)) AS DOUBLE) AS hit ` +
         `FROM (SELECT ${fk} AS k FROM ${ordered(from.parquetPath)} WHERE file_row_number < CAST(? AS BIGINT));`,
       [sample],
-    )[0];
+    ))[0];
     const n = Number(r.n);
     return n === 0 ? null : Number(r.hit) / n;
   } catch (_) {

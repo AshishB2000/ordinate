@@ -49,6 +49,7 @@ process.env.ORDINATE_COMPUTE_INLINE = '1'; // no worker threads in a unit test
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
 const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const statsVectors: typeof import('../src/engine/statsVectors') = require('../src/engine/statsVectors');
 const vectorsJs: typeof import('../src/analysis/stats/vectorsJs') = require('../src/analysis/stats/vectorsJs');
 const run: typeof import('../src/analysis/stats/run') = require('../src/analysis/stats/run');
@@ -72,8 +73,8 @@ const D = (name: string): ParsedColumn => ({ name, type: 'date' });
 /** Both loaders over the same file; every vector compared with Object.is. */
 async function agree(label: string, columns: ParsedColumn[], rows: Cell[][], needs: VectorNeed[], filters: FilterStep[] = []): Promise<import('../src/analysis/stats/run').StatsVectors | null> {
   const file = path.join(tmpDir, `f${++seq}.parquet`);
-  parquetStore.writeTable(file, columns, rows);
-  const back = parquetStore.readTable(file, columns);
+  pqSync.writeTable(file, columns, rows);
+  const back = pqSync.readTable(file, columns);
   if (!back) { ok(`${label}: fixture reads back`, false); return null; }
   const want = vectorsJs.loadVectorsJs(columns, back.rows, needs, filters);
   const got = await statsVectors.loadVectorsResident({ parquetPath: file, columns }, needs, filters);
@@ -140,8 +141,8 @@ async function main(): Promise<void> {
   // The gate: a declared-text column is never read as a number, on either side.
   {
     const file = path.join(tmpDir, `gate.parquet`);
-    parquetStore.writeTable(file, [T('code')], [['007'], ['13']]);
-    const back = parquetStore.readTable(file, [T('code')]);
+    pqSync.writeTable(file, [T('code')], [['007'], ['13']]);
+    const back = pqSync.readTable(file, [T('code')]);
     ok('gate: the JS reference declines a text column as a number', vectorsJs.loadVectorsJs([T('code')], back!.rows, [{ column: 'code', as: 'number' }]) === null);
     ok('gate: the resident loader declines it too (no TRY_CAST of text)',
       (await statsVectors.loadVectorsResident({ parquetPath: file, columns: [T('code')] }, [{ column: 'code', as: 'number' }])) === null);
@@ -151,7 +152,7 @@ async function main(): Promise<void> {
 
   // ── 2. The analyses agree on either vector set ────────────────────────────
   if (bv) {
-    const back = parquetStore.readTable(path.join(tmpDir, `f${seq}.parquet`), bigCols)!;
+    const back = pqSync.readTable(path.join(tmpDir, `f${seq}.parquet`), bigCols)!;
     const js = vectorsJs.loadVectorsJs(bigCols, back.rows, bigNeeds)!;
     const specs: any[] = [
       { kind: 'correlation', datasetId: 'x', columns: ['x', 'y'], method: 'spearman' },

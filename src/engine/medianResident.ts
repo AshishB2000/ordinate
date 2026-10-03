@@ -50,7 +50,7 @@ export interface MedianSource {
  * turn a zero-padded id into arithmetic. A non-number column is a fallback, and
  * the JS reference returns `null` for it too.
  */
-export function medianResident(src: MedianSource, column: string): { value: number | null } | null {
+export async function medianResident(src: MedianSource, column: string): Promise<{ value: number | null } | null> {
   try {
     if (!src || typeof src.parquetPath !== 'string' || !Array.isArray(src.columns)) return null;
     const ci = src.columns.findIndex((c) => c && typeof c.name === 'string' && c.name === column);
@@ -68,7 +68,7 @@ export function medianResident(src: MedianSource, column: string): { value: numb
     // aggregate over an INTEGER is HUGEINT and reaches JS as a BigInt.
     const sql = `SELECT CAST(quantile_cont(${n}, 0.5) AS DOUBLE) AS m FROM ${relationSql(src.parquetPath)};`;
 
-    const rows = duck.query(sql);
+    const rows = await duck.queryAsync(sql);
     // No GROUP BY, so a global aggregate always returns exactly one row. Any
     // other shape is an internally inconsistent answer, which is a fallback.
     if (rows.length !== 1) return null;

@@ -40,7 +40,7 @@ import { re2Pattern } from '../analysis/qualityRegex';
 import { sqlEmpty } from './sqlGen';
 import { phys, sqlNum, bomSafe, sqlCanonicalDate, toCell } from './residentCategory';
 import { relationSql } from './parquetStore';
-import { runOrdered } from './residentQuery';
+import { runOrderedAsync } from './residentQuery';
 import * as duck from './duckdb';
 
 /** A dataset's stored table, positionally aligned to its record — `datasets.residentSource`. */
@@ -126,11 +126,11 @@ function failingPredicateSql(
  * Returns `null` — never throws — on any failure; `null` always means "fall
  * back", never "nothing failed".
  */
-export function evaluateRulesResident(
+export async function evaluateRulesResident(
   src: QualitySource,
   rules: QualityRule[],
   refs: ReadonlyMap<string, QualitySource | null>,
-): RuleResult[] | null {
+): Promise<RuleResult[] | null> {
   try {
     const cols = schemaOf(src);
     if (!cols || !duck.isAvailable()) return null;
@@ -146,7 +146,7 @@ export function evaluateRulesResident(
       }
       return { rule, r, ref };
     });
-    const out = duck.query(`SELECT ${sel.join(', ')} FROM ${relationSql(src.parquetPath)};`, params);
+    const out = await duck.queryAsync(`SELECT ${sel.join(', ')} FROM ${relationSql(src.parquetPath)};`, params);
     const n = out.length === 1 ? countOf(out[0].n) : null;
     if (n === null) return null;
 
@@ -163,7 +163,7 @@ export function evaluateRulesResident(
       }
       const failing = countOf(out[0][`f${i}`]);
       if (failing === null) return null;
-      const sample = failing > 0 ? sampleRows(src.parquetPath, cols, rule, r, ref ? ref.parquetPath : undefined) : [];
+      const sample = failing > 0 ? await sampleRows(src.parquetPath, cols, rule, r, ref ? ref.parquetPath : undefined) : [];
       results.push({ ruleId: rule.id, passed: failing === 0, failing, sample });
     }
     return results;
@@ -190,12 +190,12 @@ export function failingRowSql(
 }
 
 /** The first SAMPLE_ROWS failing rows, whole, in stored order. */
-function sampleRows(parquetPath: string, cols: ParsedColumn[], rule: QualityRule, r: Bound, refPath?: string): Cell[][] {
+async function sampleRows(parquetPath: string, cols: ParsedColumn[], rule: QualityRule, r: Bound, refPath?: string): Promise<Cell[][]> {
   const params: duck.DuckValue[] = [];
   const pred = failingPredicateSql(rule, r, parquetPath, params, refPath);
   if (pred === null) throw new Error('unexpressible rule');
   const projection = cols.map((_, c) => `${bomSafe(phys(c))} AS v${c}`).join(', ');
-  const rows = runOrdered(
+  const rows = await runOrderedAsync(
     parquetPath,
     (from, ord) => `SELECT ${projection} FROM ${from} WHERE ${pred} ORDER BY ${ord} LIMIT ${SAMPLE_ROWS};`,
     params,

@@ -25,7 +25,7 @@
 import type { FilterStep } from '../data/transforms';
 import type { ParsedColumn } from '../data/parse';
 import type { Partition } from '../analysis/scenarioModel';
-import { filterPredicate, filterPredicates, runOrdered } from './residentQuery';
+import { filterPredicate, filterPredicates, runOrderedAsync } from './residentQuery';
 import type { ResidentSource } from './residentQuery';
 import { phys, sqlNum } from './residentCategory';
 import { sqlEmpty } from './sqlGen';
@@ -37,12 +37,12 @@ function num(v: DuckValue): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
-export function scenarioInputsResident(
+export async function scenarioInputsResident(
   src: ResidentSource,
   column: string,
   scope: FilterStep[],
   filters: Array<FilterStep | null>,
-): Partition[] | null {
+): Promise<Partition[] | null> {
   try {
     const cols: ParsedColumn[] = src && Array.isArray(src.columns) ? src.columns : [];
     const ci = cols.findIndex((c) => !!c && c.name === column); // first match, as transforms.colIndex
@@ -57,7 +57,7 @@ export function scenarioInputsResident(
     const where = filterPredicates(cols, scope, params);
     const n = cols[ci].type === 'number' ? sqlNum(p) : 'CAST(NULL AS DOUBLE)';
     const group = filters.map((_, j) => `k${j}`).join(', ');
-    const rows = runOrdered(src.parquetPath, (from, ord) =>
+    const rows = await runOrderedAsync(src.parquetPath, (from, ord) =>
       `SELECT ${group}, CAST(sum(__n) AS DOUBLE) AS s, CAST(count(__n) AS DOUBLE) AS c, ` +
       `CAST(count(__e) AS DOUBLE) AS e, CAST(min(__n) AS DOUBLE) AS lo, CAST(max(__n) AS DOUBLE) AS hi FROM ` +
       `(SELECT ${keys.join(', ')}, ${ord} AS __o, ${n} AS __n, CASE WHEN NOT ${sqlEmpty(p)} THEN 1 END AS __e ` +

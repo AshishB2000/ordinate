@@ -39,10 +39,11 @@
 //    Identical to `pipelineDuck.toCell` — the two must stay in lockstep.
 //
 // Everything runs through the one bridge in `src/engine/duckdb.ts` — no second
-// DuckDB connection, no new dependency. A request path uses the `…Async` twins
-// (async bridge, the loop keeps turning); the sync `readTable`/`writeTable`
-// remain for tests, fixtures and the compute worker, and their queries throw on
-// the main thread in server mode (`duck.forbidSyncOnMainThread`).
+// DuckDB connection, no new dependency. Every read and write here is on the
+// ASYNC bridge (the loop keeps turning). The synchronous `readTable`/`writeTable`
+// live in ./parquetStoreSync.ts — tests, benches and fixtures only; nothing a
+// request reaches may import it (scripts/test-asyncReach.ts). The helpers marked
+// `export` below the public API are shared with it, not public API.
 //
 // ── Why a temp NDJSON file instead of INSERT ────────────────────────────────
 // Loading 100k rows with bound-parameter INSERTs costs ~1,650 ms — the per-row
@@ -67,15 +68,11 @@ export interface ParquetTable {
 // has no concept of a zero-column relation and DuckDB rejects the projection
 // (06 §4 G7), so this sentinel is the encoding. It cannot collide: real columns
 // are always `c<digits>`.
-const EMPTY_MARK = '__empty';
+export const EMPTY_MARK = '__empty';
 
 // ZSTD over the SNAPPY default: measured ~20% smaller on real column data for no
 // meaningful read cost, and this phase is partly about on-disk size.
-const COMPRESSION = 'ZSTD';
-
-// Rows per write to the temp NDJSON file. Bounds peak string memory instead of
-// materialising the whole serialised table at once.
-const CHUNK_ROWS = 4096;
+export const COMPRESSION = 'ZSTD';
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -110,44 +107,6 @@ export function relationSql(
   // column, and readers that only want cells should not pay for it.
   const args = opts.fileRowNumber ? ', file_row_number=true' : '';
   return `read_parquet('${filePath.replace(/'/g, "''")}'${args})`;
-}
-
-/**
- * Write `rows` to `filePath` as Parquet, atomically.
- *
- * Only the CELLS are written; `columns` is used for its LENGTH and nothing else
- * (each row is padded/truncated to it, so a ragged caller cannot desynchronise
- * the file from the record). Names and types stay in the caller's JSON.
- *
- * Atomic: DuckDB writes a temp sibling, then `rename` publishes it — a reader
- * never observes a partial `.parquet`, matching `datasets.writeJsonAtomic`.
- *
- * Throws if the bridge is unavailable or the write fails; a failed save must be
- * visible to the caller, unlike a failed read.
- */
-export function writeTable(filePath: string, columns: ParsedColumn[], rows: Cell[][]): void {
-  assertPath(filePath);
-  if (!Array.isArray(columns) || !Array.isArray(rows)) {
-    throw new TypeError('parquetStore.writeTable: columns and rows must be arrays');
-  }
-  if (!isSupported()) {
-    throw new duck.DuckDBError('unavailable', 'parquetStore: DuckDB is not available');
-  }
-
-  const stem = `${filePath}.${randomUUID()}`;
-  const tmpParquet = `${stem}.tmp`; // NOT *.parquet — a stray temp must never be globbed as data
-  const tmpJson = `${stem}.ndjson.tmp`;
-
-  try {
-    const source = columns.length === 0 ? emptySourceSql(rows.length) : jsonSourceSql(tmpJson, columns.length, rows);
-    duck.exec(`COPY (${source}) TO '${sqlStr(tmpParquet)}' (FORMAT PARQUET, COMPRESSION ${COMPRESSION});`);
-    fs.renameSync(tmpParquet, filePath); // atomic on the same filesystem
-  } catch (err) {
-    unlinkQuiet(tmpParquet);
-    throw err;
-  } finally {
-    unlinkQuiet(tmpJson);
-  }
 }
 
 /** Progress (0–1) and a cancel check a background job hands in; both optional. */
@@ -222,46 +181,6 @@ export async function writeTableAsync(
 }
 
 /**
- * Read a Parquet file back. Returns `null` — never throws — when the file is
- * missing, truncated, not Parquet, or when the bridge is unavailable, so a
- * corrupt record is SKIPPED rather than fatal (`datasets.listDatasets`
- * convention). Use `isSupported()` to tell "no DuckDB" from "bad file".
- *
- * Without `schema`, the result is the raw storage view: columns named `c0..cN`,
- * all typed `'text'`, every cell a string or null. Pass the record's stored
- * `ParsedColumn[]` as `schema` and the result is re-labelled and re-typed
- * through the inverse of `String(cell)` — that is the exact `Cell[][]` that went
- * in. `schema` only ever renames/retypes positionally; it can never change the
- * column COUNT the file actually holds.
- */
-export function readTable(filePath: string, schema?: ParsedColumn[]): ParquetTable | null {
-  try {
-    assertPath(filePath);
-    if (!isSupported()) return null;
-
-    const relation = relationSql(filePath);
-    const described = duck.query(`DESCRIBE SELECT * FROM ${relation};`);
-    const physical = described.map((r) => String(r.column_name ?? ''));
-
-    // 0-column table: the sentinel carries only the row count.
-    if (physical.length === 1 && physical[0] === EMPTY_MARK) {
-      const n = Number(duck.query(`SELECT count(*) AS n FROM ${relation};`)[0]?.n ?? 0);
-      const rows: Cell[][] = [];
-      for (let i = 0; i < n; i++) rows.push([]);
-      return { columns: [], rows };
-    }
-
-    const projection = physical.map((p) => bomSafe(`"${p.replace(/"/g, '""')}"`)).join(', ');
-    const out = duck.query(`SELECT ${projection} FROM ${relation};`);
-    return decodeTable(physical, out, schema);
-  } catch {
-    // Missing file, truncated file, non-Parquet bytes, dead bridge — all the
-    // same answer: this record has no readable table.
-    return null;
-  }
-}
-
-/**
  * `readTable` on the ASYNC bridge: DuckDB scans in its worker while the main
  * thread keeps turning, then the rows are decoded here exactly as `readTable`
  * decodes them. Same null-on-any-failure contract.
@@ -286,7 +205,7 @@ export async function readTableAsync(filePath: string, schema?: ParsedColumn[]):
   }
 }
 
-function decodeTable(physical: string[], out: Record<string, unknown>[], schema?: ParsedColumn[]): ParquetTable {
+export function decodeTable(physical: string[], out: Record<string, unknown>[], schema?: ParsedColumn[]): ParquetTable {
   const width = physical.length;
   const columns: ParsedColumn[] = physical.map((name, i) => ({
     name: schema?.[i]?.name ?? name,
@@ -338,13 +257,13 @@ function physicalName(i: number): string {
 // but it keeps `readTable` working (as text) on a Parquet file written by
 // something else, instead of failing the whole read on a typed column.
 const BOM = 'chr(65279)';
-function bomSafe(quotedName: string): string {
+export function bomSafe(quotedName: string): string {
   const v = `CAST(${quotedName} AS VARCHAR)`;
   return `CASE WHEN starts_with(${v}, ${BOM}) THEN ${BOM} || ${v} ELSE ${v} END AS ${quotedName}`;
 }
 
 // A 0-column table: N rows of a single all-NULL sentinel column.
-function emptySourceSql(rowCount: number): string {
+export function emptySourceSql(rowCount: number): string {
   const n = Math.max(0, Math.floor(Number(rowCount) || 0));
   return n === 0
     ? `SELECT CAST(NULL AS VARCHAR) AS "${EMPTY_MARK}" WHERE 1=0`
@@ -354,71 +273,29 @@ function emptySourceSql(rowCount: number): string {
 // Serialise the rows to a temp NDJSON sibling and hand DuckDB an explicit
 // all-VARCHAR schema. `columns=` is given, so no sniffing happens and a `007`
 // can never be re-typed on the way in.
-function physicalNames(width: number): string[] {
+export function physicalNames(width: number): string[] {
   const names: string[] = [];
   for (let i = 0; i < width; i++) names.push(physicalName(i));
   return names;
 }
 
 // read_json cannot read a zero-byte file; a 0-row table projects the schema.
-function emptyTypedSql(width: number): string {
+export function emptyTypedSql(width: number): string {
   const nulls = physicalNames(width).map((n) => `CAST(NULL AS VARCHAR) AS "${n}"`).join(', ');
   return `SELECT ${nulls} WHERE 1=0`;
 }
 
-function readJsonSql(tmpJson: string, names: string[]): string {
+export function readJsonSql(tmpJson: string, names: string[]): string {
   const spec = names.map((n) => `'${n}':'VARCHAR'`).join(', ');
   return `read_json('${sqlStr(tmpJson)}', format='newline_delimited', columns={${spec}})`;
 }
 
-function jsonSourceSql(tmpJson: string, width: number, rows: Cell[][]): string {
-  const names = physicalNames(width);
-  const select = names.map((n) => `"${n}"`).join(', ');
-  if (rows.length === 0) return emptyTypedSql(width);
-
-  writeNdjson(tmpJson, names, rows, false);
-  const read = readJsonSql(tmpJson, names);
-  try {
-    // Force the parse now (rather than inside the COPY) so a JSON-level failure
-    // can be retried on a sanitised file — see wellFormed().
-    duck.query(`SELECT 1 FROM ${read} LIMIT 1;`);
-  } catch (err) {
-    if (!isMalformedJson(err)) throw err;
-    // The only value class JSON cannot carry is an unpaired UTF-16 surrogate.
-    // Rewriting those as U+FFFD is lossy but total; failing the save is worse,
-    // and the input can only have come from a source that was already broken.
-    writeNdjson(tmpJson, names, rows, true);
-    duck.query(`SELECT 1 FROM ${read} LIMIT 1;`);
-  }
-  return `SELECT ${select} FROM ${read}`;
-}
-
-function isMalformedJson(err: unknown): boolean {
+export function isMalformedJson(err: unknown): boolean {
   return err instanceof Error && /Malformed JSON|surrogate/i.test(err.message);
 }
 
-// Chunked so a large table never needs its whole serialised form in memory.
-function writeNdjson(file: string, names: string[], rows: Cell[][], sanitize: boolean): void {
-  const fd = fs.openSync(file, 'w');
-  try {
-    let buf = '';
-    let pending = 0;
-    for (let r = 0; r < rows.length; r++) {
-      buf += ndjsonLine(names, rows[r] || [], sanitize);
-      if (++pending >= CHUNK_ROWS) {
-        fs.writeSync(fd, buf, null, 'utf8');
-        buf = '';
-        pending = 0;
-      }
-    }
-    if (buf) fs.writeSync(fd, buf, null, 'utf8');
-  } finally {
-    fs.closeSync(fd);
-  }
-}
-
 /** One NDJSON line per row — the storage encoding both writers share. */
-function ndjsonLine(names: string[], row: Cell[], sanitize: boolean): string {
+export function ndjsonLine(names: string[], row: Cell[], sanitize: boolean): string {
   const obj: Record<string, string | null> = {};
   for (let c = 0; c < names.length; c++) {
     const v = toStorage(row[c] ?? null);
@@ -467,7 +344,7 @@ function wellFormed(s: string): string {
 
 // Paths are BUILT BY THE CALLER (datasets.ts owns id→path, with its UUID guard).
 // This is a defensive last line: reject anything that could not be one of ours.
-function assertPath(filePath: unknown): asserts filePath is string {
+export function assertPath(filePath: unknown): asserts filePath is string {
   if (typeof filePath !== 'string' || filePath === '') {
     throw new TypeError('parquetStore: path must be a non-empty string');
   }
@@ -479,11 +356,11 @@ function assertPath(filePath: unknown): asserts filePath is string {
   }
 }
 
-function sqlStr(s: string): string {
+export function sqlStr(s: string): string {
   return s.replace(/'/g, "''");
 }
 
-function unlinkQuiet(file: string): void {
+export function unlinkQuiet(file: string): void {
   try {
     fs.unlinkSync(file);
   } catch {

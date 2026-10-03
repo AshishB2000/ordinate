@@ -34,7 +34,7 @@ const transforms: typeof import('../src/data/transforms') = require('../src/data
 const mask: typeof import('../src/data/maskSteps') = require('../src/data/maskSteps');
 const sqlGen: typeof import('../src/engine/sqlGen') = require('../src/engine/sqlGen');
 const pipelineDuck: typeof import('../src/engine/pipelineDuck') = require('../src/engine/pipelineDuck');
-const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const trace: typeof import('../src/engine/residentTrace') = require('../src/engine/residentTrace');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
@@ -148,9 +148,9 @@ async function main(): Promise<void> {
     ok(`sqlGen BAILS on ${step.type} (it would otherwise warn and continue)`, gen.sql === null, gen.sql || '');
   }
   const pq = path.join(tmpUserData, 'direct.source.parquet');
-  parquetStore.writeTable(pq, columns, rows);
+  pqSync.writeTable(pq, columns, rows);
   ok('runResidentPipeline returns null for a mask step (the fold must run)',
-    pipelineDuck.runResidentPipeline(pq, columns, [{ type: 'mask_redact', column: 'card' }]) === null);
+    await pipelineDuck.runResidentPipeline(pq, columns, [{ type: 'mask_redact', column: 'card' }]) === null);
 
   // End to end through the store, on a RESIDENT dataset: the second step edit
   // has a source Parquet, which is exactly when runResidentPipeline is tried.

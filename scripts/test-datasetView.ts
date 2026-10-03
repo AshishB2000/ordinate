@@ -20,7 +20,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as dv from '../src/engine/datasetView';
-import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import * as rq from '../src/engine/residentQuery';
 import * as duck from '../src/engine/duckdb';
 import type { ParsedColumn } from '../src/data/parse';
@@ -46,7 +46,7 @@ function cleanup(): void {
 /** Write a real Parquet fixture and return the path. */
 function write(columns: ParsedColumn[], rows: Cell[][]): string {
   const file = tmpFile();
-  pq.writeTable(file, columns, rows);
+  pqSync.writeTable(file, columns, rows);
   return file;
 }
 

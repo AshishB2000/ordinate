@@ -25,7 +25,7 @@ import type { ParsedColumn } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';
 import type { VizEncoding } from './visuals';
 import type * as residentQuery from '../engine/residentQuery';
-import { aggregateResidentSync } from '../engine/residentSync';
+import { aggregateResident } from '../engine/residentQuery';
 
 export type InsightKind =
   | 'mover'
@@ -69,11 +69,15 @@ export interface Insight {
 }
 
 /** One group-by, one measure. `null` means "this aggregator has no answer". */
+/** One aggregator answer: groups in first-seen order, or null (this reader declined). */
+export type AggOut = { labels: string[]; values: (number | null)[] } | null;
+
+/** `jsAgg` answers synchronously, `residentAgg` on the async DuckDB bridge. */
 export type Agg = (
   category: string,
   measure: string,
   filters?: FilterStep[],
-) => { labels: string[]; values: (number | null)[] } | null;
+) => AggOut | Promise<AggOut>;
 
 export interface InsightOptions {
   /** Least-squares total change must exceed this to be reported. */
@@ -184,9 +188,9 @@ export function foldPeriods(
  * filter a plain `=` and keeps this equal to `jsAgg` by construction.
  */
 export function residentAgg(src: residentQuery.ResidentSource): Agg {
-  return (category, measure, filters) => {
+  return async (category, measure, filters) => {
     if (!isNumberColumn(src.columns, measure)) return null;
-    const out = aggregateResidentSync(
+    const out = await aggregateResident(
       src,
       category,
       [{ column: measure, aggregation: 'sum' }],
@@ -198,8 +202,8 @@ export function residentAgg(src: residentQuery.ResidentSource): Agg {
   };
 }
 
-/** The reference: a first-seen-order fold over already-hydrated rows. */
-export function jsAgg(columns: ParsedColumn[], rows: Cell[][]): Agg {
+/** The reference: a first-seen-order fold over already-hydrated rows (synchronous). */
+export function jsAgg(columns: ParsedColumn[], rows: Cell[][]): (...args: Parameters<Agg>) => AggOut {
   const idx = (name: string): number => columns.findIndex((c) => c && c.name === name);
   return (category, measure, filters) => {
     const gi = idx(category);

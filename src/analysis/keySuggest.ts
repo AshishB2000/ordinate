@@ -68,13 +68,15 @@ const W_RATE = 0.4;
  * Every column pair, ranked. `rateOf` is called for at most `RATE_CANDIDATES`
  * pairs — the best by name and type — and may return null (unmeasurable).
  * Ties keep FROM column order, then TO column order, so the ranking is stable.
+ * Async because the resident `rateOf` runs on the async DuckDB bridge; the
+ * candidates are measured one at a time, in the same order as before.
  */
-export function rankKeys(
+export async function rankKeys(
   fromCols: ParsedColumn[],
   toCols: ParsedColumn[],
-  rateOf: (from: string, to: string) => number | null,
+  rateOf: (from: string, to: string) => number | null | Promise<number | null>,
   limit = 8,
-): KeyCandidate[] {
+): Promise<KeyCandidate[]> {
   const pairs: KeyCandidate[] = [];
   for (const f of fromCols) {
     for (const t of toCols) {
@@ -85,7 +87,7 @@ export function rankKeys(
   }
   const byCheap = pairs.map((p, i) => ({ p, i })).sort((a, b) => b.p.score - a.p.score || a.i - b.i);
   for (const { p } of byCheap.slice(0, RATE_CANDIDATES)) {
-    p.rate = rateOf(p.from, p.to);
+    p.rate = await rateOf(p.from, p.to);
     p.score += W_RATE * (p.rate ?? 0);
   }
   return pairs

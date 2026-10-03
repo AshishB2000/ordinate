@@ -11,7 +11,7 @@
 // ── What is compared ────────────────────────────────────────────────────────
 // Three columns, per case, per size:
 //
-//   (a) HYDRATE+COMPUTE  parquetStore.readTable(file, schema) followed by the
+//   (a) HYDRATE+COMPUTE  pqSync.readTable(file, schema) followed by the
 //                        existing JS metricValue.computeMetric /
 //                        vizData.buildVizData. This is TODAY'S PATH: every IPC
 //                        handler goes through datasets.getDataset, which reads
@@ -46,10 +46,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import * as rq from '../src/engine/residentQuery';
-// The sync twins: this bench times the blocking resident query against the JS fold.
-import { aggregateResidentSync, computeMetricResidentSync, resolveCatKeySync } from '../src/engine/residentSync';
 import * as duck from '../src/engine/duckdb';
 import * as metricValue from '../src/analysis/metricValue';
 import * as vizData from '../src/analysis/vizData';
@@ -109,12 +107,14 @@ interface Stat {
   p95: number;
 }
 
-function time(reps: number, fn: () => unknown): Stat {
-  fn(); // warm
+// Awaits `fn` — the resident side runs on the async bridge (T4.2); for the JS
+// side the await is one microtask, noise next to these timings.
+async function time(reps: number, fn: () => unknown): Promise<Stat> {
+  await fn(); // warm
   const samples: number[] = [];
   for (let i = 0; i < reps; i++) {
     const t0 = process.hrtime.bigint();
-    fn();
+    await fn();
     samples.push(Number(process.hrtime.bigint() - t0) / 1e6);
   }
   samples.sort((a, b) => a - b);
@@ -148,14 +148,14 @@ const CASES: Case[] = [
     id: 'metric_sum',
     what: 'metric — sum(sales)',
     js: (c, r) => metricValue.computeMetric(c, r, { column: 'sales', aggregation: 'sum' }),
-    resident: (s) => computeMetricResidentSync(s, { column: 'sales', aggregation: 'sum' }),
+    resident: (s) => rq.computeMetricResident(s, { column: 'sales', aggregation: 'sum' }),
     sig: (v) => (typeof v === 'number' ? v.toFixed(4) : String(v)),
   },
   {
     id: 'metric_count',
     what: 'metric — count(code)',
     js: (c, r) => metricValue.computeMetric(c, r, { column: 'code', aggregation: 'count' }),
-    resident: (s) => computeMetricResidentSync(s, { column: 'code', aggregation: 'count' }),
+    resident: (s) => rq.computeMetricResident(s, { column: 'code', aggregation: 'count' }),
     sig: (v) => String(v),
   },
   {
@@ -163,7 +163,7 @@ const CASES: Case[] = [
     what: 'aggregate — 7 groups × sum',
     js: (c, r) =>
       vizData.buildVizData(c, r, { category: 'region', values: [{ column: 'sales', aggregation: 'sum' }] }).data,
-    resident: (s) => aggregateResidentSync(s, 'region', [{ column: 'sales', aggregation: 'sum' }]),
+    resident: (s) => rq.aggregateResident(s, 'region', [{ column: 'sales', aggregation: 'sum' }]),
     sig: chartSig,
   },
   {
@@ -175,9 +175,9 @@ const CASES: Case[] = [
     // caps it at the top 50 plus 'Other'. The resident side has to be given the
     // SAME key or the two answers are not comparable and the timing below them
     // means nothing — the pairing `ipc/visuals.residentVizData` actually ships.
-    resident: (s) => {
+    resident: async (s) => {
       const m = [{ column: 'sales', aggregation: 'sum' as const }];
-      return aggregateResidentSync(s, 'sku', m, undefined, resolveCatKeySync(s, 'sku', m)?.key);
+      return rq.aggregateResident(s, 'sku', m, undefined, (await rq.resolveCatKey(s, 'sku', m))?.key);
     },
     sig: chartSig,
   },
@@ -199,7 +199,7 @@ const CASES: Case[] = [
         FILTERS,
       ).data,
     resident: (s) =>
-      aggregateResidentSync(
+      rq.aggregateResident(
         s,
         'region',
         [
@@ -234,89 +234,96 @@ function say(s: string): void {
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-bench-resident-'));
 
-if (!rq.isResident()) {
-  console.error('DuckDB bridge unavailable — nothing to benchmark.');
-  process.exit(1);
-}
-// Warm the worker + the query planner so neither shows up as a first-iteration
-// outlier in the numbers below.
-duck.query('SELECT 1;');
-
-say('# Phase 3 — resident Parquet query vs hydrate-then-fold');
-say('');
-say(`Node ${process.version} · ${os.cpus()[0]?.model ?? 'unknown cpu'} · ${os.cpus().length} cores · ${new Date().toISOString()}`);
-say('');
-say('`(a) hydrate+compute` = `parquetStore.readTable` + the existing JS function (today\'s path).');
-say('`(a2) compute only` = the same JS function with the table already in memory (perfect-cache best case).');
-say('`(b) resident` = `residentQuery.*` — one query straight against `read_parquet(...)`.');
-say('');
-
-for (const n of SIZES) {
-  const file = path.join(dir, `bench-${n}.parquet`);
-  const t0 = Date.now();
-  pq.writeTable(file, COLUMNS, buildRows(n));
-  const writeMs = Date.now() - t0;
-  const bytes = fs.statSync(file).size;
-
-  const hydrated = pq.readTable(file, COLUMNS);
-  if (!hydrated) throw new Error('bench: read-back failed');
-  const src: rq.ResidentSource = { parquetPath: file, columns: COLUMNS };
-  const reps = repsFor(n);
-
-  const hydrateStat = time(Math.min(reps, 5), () => pq.readTable(file, COLUMNS));
-
-  say(`## ${n.toLocaleString()} rows × ${COLUMNS.length} columns`);
-  say('');
-  say(
-    `Parquet on disk: ${(bytes / 1024).toFixed(0)} KB · written in ${writeMs} ms · ` +
-      `\`readTable\` alone: **${ms(hydrateStat.median)} ms** (median of ${Math.min(reps, 5)}) · ${reps} reps per case`,
-  );
-  say('');
-  say('| case | (a) hydrate+compute | (a2) compute only | (b) resident | b vs a | b vs a2 | same answer |');
-  say('|---|---:|---:|---:|---|---|:--:|');
-
-  for (const c of CASES) {
-    const wantSig = c.sig(c.js(hydrated.columns, hydrated.rows));
-    const gotSig = c.sig(c.resident(src));
-    const agree = wantSig === gotSig;
-
-    const a = time(reps, () => {
-      const t = pq.readTable(file, COLUMNS);
-      return t ? c.js(t.columns, t.rows) : null;
-    });
-    const a2 = time(reps, () => c.js(hydrated.columns, hydrated.rows));
-    const b = time(reps, () => c.resident(src));
-
-    say(
-      `| ${c.what} | ${ms(a.median)} ms <br><sub>${ms(a.min)} / ${ms(a.p95)}</sub> ` +
-        `| ${ms(a2.median)} ms <br><sub>${ms(a2.min)} / ${ms(a2.p95)}</sub> ` +
-        `| ${ms(b.median)} ms <br><sub>${ms(b.min)} / ${ms(b.p95)}</sub> ` +
-        `| **${ratio(a.median, b.median)}** | ${ratio(a2.median, b.median)} | ${agree ? '✅' : '❌'} |`,
-    );
-    if (!agree) {
-      say('');
-      say(`> ⚠ **${c.id} DISAGREES** — the timings below it are meaningless.`);
-      say(`> js:       \`${wantSig.slice(0, 200)}\``);
-      say(`> resident: \`${gotSig.slice(0, 200)}\``);
-      say('');
-    }
+async function main(): Promise<void> {
+  if (!rq.isResident()) {
+    console.error('DuckDB bridge unavailable — nothing to benchmark.');
+    process.exit(1);
   }
+  // Warm the worker + the query planner so neither shows up as a first-iteration
+  // outlier in the numbers below.
+  await duck.queryAsync('SELECT 1;');
+
+  say('# Phase 3 — resident Parquet query vs hydrate-then-fold');
   say('');
-  say('<sub>cells are median, with min / p95 underneath</sub>');
+  say(`Node ${process.version} · ${os.cpus()[0]?.model ?? 'unknown cpu'} · ${os.cpus().length} cores · ${new Date().toISOString()}`);
+  say('');
+  say('`(a) hydrate+compute` = `parquetStore.readTable` + the existing JS function (today\'s path).');
+  say('`(a2) compute only` = the same JS function with the table already in memory (perfect-cache best case).');
+  say('`(b) resident` = `residentQuery.*` — one query straight against `read_parquet(...)`.');
   say('');
 
-  fs.rmSync(file, { force: true });
+  for (const n of SIZES) {
+    const file = path.join(dir, `bench-${n}.parquet`);
+    const t0 = Date.now();
+    pqSync.writeTable(file, COLUMNS, buildRows(n));
+    const writeMs = Date.now() - t0;
+    const bytes = fs.statSync(file).size;
+
+    const hydrated = pqSync.readTable(file, COLUMNS);
+    if (!hydrated) throw new Error('bench: read-back failed');
+    const src: rq.ResidentSource = { parquetPath: file, columns: COLUMNS };
+    const reps = repsFor(n);
+
+    const hydrateStat = await time(Math.min(reps, 5), () => pqSync.readTable(file, COLUMNS));
+
+    say(`## ${n.toLocaleString()} rows × ${COLUMNS.length} columns`);
+    say('');
+    say(
+      `Parquet on disk: ${(bytes / 1024).toFixed(0)} KB · written in ${writeMs} ms · ` +
+        `\`readTable\` alone: **${ms(hydrateStat.median)} ms** (median of ${Math.min(reps, 5)}) · ${reps} reps per case`,
+    );
+    say('');
+    say('| case | (a) hydrate+compute | (a2) compute only | (b) resident | b vs a | b vs a2 | same answer |');
+    say('|---|---:|---:|---:|---|---|:--:|');
+
+    for (const c of CASES) {
+      const wantSig = c.sig(c.js(hydrated.columns, hydrated.rows));
+      const gotSig = c.sig(await c.resident(src));
+      const agree = wantSig === gotSig;
+
+      const a = await time(reps, () => {
+        const t = pqSync.readTable(file, COLUMNS);
+        return t ? c.js(t.columns, t.rows) : null;
+      });
+      const a2 = await time(reps, () => c.js(hydrated.columns, hydrated.rows));
+      const b = await time(reps, () => c.resident(src));
+
+      say(
+        `| ${c.what} | ${ms(a.median)} ms <br><sub>${ms(a.min)} / ${ms(a.p95)}</sub> ` +
+          `| ${ms(a2.median)} ms <br><sub>${ms(a2.min)} / ${ms(a2.p95)}</sub> ` +
+          `| ${ms(b.median)} ms <br><sub>${ms(b.min)} / ${ms(b.p95)}</sub> ` +
+          `| **${ratio(a.median, b.median)}** | ${ratio(a2.median, b.median)} | ${agree ? '✅' : '❌'} |`,
+      );
+      if (!agree) {
+        say('');
+        say(`> ⚠ **${c.id} DISAGREES** — the timings below it are meaningless.`);
+        say(`> js:       \`${wantSig.slice(0, 200)}\``);
+        say(`> resident: \`${gotSig.slice(0, 200)}\``);
+        say('');
+      }
+    }
+    say('');
+    say('<sub>cells are median, with min / p95 underneath</sub>');
+    say('');
+
+    fs.rmSync(file, { force: true });
+  }
+
+  say('---');
+  say('');
+  say('Notes: the bridge is warmed before timing; the file is warm in the page cache for both paths;');
+  say('`(a)` allocates a fresh `Cell[][]` every iteration, which is the cost the app actually pays today.');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+  duck.shutdown();
+
+  if (OUT) {
+    fs.writeFileSync(OUT, lines.join('\n') + '\n', 'utf8');
+    console.error(`\nwrote ${OUT}`);
+  }
 }
 
-say('---');
-say('');
-say('Notes: the bridge is warmed before timing; the file is warm in the page cache for both paths;');
-say('`(a)` allocates a fresh `Cell[][]` every iteration, which is the cost the app actually pays today.');
-
-fs.rmSync(dir, { recursive: true, force: true });
-duck.shutdown();
-
-if (OUT) {
-  fs.writeFileSync(OUT, lines.join('\n') + '\n', 'utf8');
-  console.error(`\nwrote ${OUT}`);
-}
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

@@ -28,7 +28,7 @@ import type { CohortEncoding, CohortGrain, CohortGrid, CohortGroups } from '../a
 import { cohortNeeds, foldCohort } from '../analysis/cohortData';
 import { sqlEmpty } from './sqlGen';
 import { sqlPeriodDate } from './periodSql';
-import { filterPredicates, runOrdered } from './residentQuery';
+import { filterPredicates, runOrderedAsync } from './residentQuery';
 import type { ResidentSource } from './residentQuery';
 import { phys, sqlNum } from './residentCategory';
 import type * as duck from './duckdb';
@@ -54,12 +54,12 @@ export function entityKeySql(p: string, isNumber: boolean): string {
 const num = (raw: duck.DuckValue): number => (typeof raw === 'number' ? raw : Number(raw));
 
 /** The per-(cohort, k) groups, the last period and the excluded count — or null. */
-export function cohortGroupsResident(
+export async function cohortGroupsResident(
   src: ResidentSource,
   enc: CohortEncoding,
   filters?: FilterStep[],
   cal: CalendarPrefs = getCalendar(),
-): CohortGroups | null {
+): Promise<CohortGroups | null> {
   try {
     const cols = Array.isArray(src.columns) ? src.columns : [];
     if (cohortNeeds(cols, enc)) return null;
@@ -80,11 +80,11 @@ export function cohortGroupsResident(
       `ev AS (SELECT o, e, v, ${period} AS p FROM base WHERE e IS NOT NULL AND dt IS NOT NULL), ` +
       `co AS (SELECT o, e, v, p, min(p) OVER (PARTITION BY e) AS c FROM ev) `;
 
-    const cellRows = runOrdered(src.parquetPath, (from, ord) =>
+    const cellRows = await runOrderedAsync(src.parquetPath, (from, ord) =>
       withSql(from, ord) +
       `SELECT CAST(c AS DOUBLE) AS c, CAST(p - c AS DOUBLE) AS k, CAST(count(DISTINCT e) AS DOUBLE) AS active, ` +
       `CAST(sum(v ORDER BY o) AS DOUBLE) AS val FROM co GROUP BY c, p - c;`, params);
-    const meta = runOrdered(src.parquetPath, (from, ord) =>
+    const meta = await runOrderedAsync(src.parquetPath, (from, ord) =>
       withSql(from, ord) +
       `SELECT CAST(count(*) AS DOUBLE) AS n, (SELECT CAST(count(*) AS DOUBLE) FROM ev) AS kept, ` +
       `(SELECT CAST(max(p) AS DOUBLE) FROM ev) AS last FROM base;`, params);
@@ -104,12 +104,12 @@ export function cohortGroupsResident(
 }
 
 /** The whole resident answer, folded — or null to run `cohortData.buildCohort`. */
-export function cohortGridResident(
+export async function cohortGridResident(
   src: ResidentSource,
   enc: CohortEncoding,
   filters?: FilterStep[],
   cal: CalendarPrefs = getCalendar(),
-): CohortGrid | null {
-  const groups = cohortGroupsResident(src, enc, filters, cal);
+): Promise<CohortGrid | null> {
+  const groups = await cohortGroupsResident(src, enc, filters, cal);
   return groups ? foldCohort(enc, groups, cal) : null;
 }

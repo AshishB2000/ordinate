@@ -99,7 +99,7 @@ export async function joinedVizDataFor(
 
   const sources = await residentSources(projectId, j.plan);
   if (sources) {
-    const fast = joinedAggregateResident(sources, j, infos);
+    const fast = await joinedAggregateResident(sources, j, infos);
     trace.record('vizJoin', fast ? 'resident' : 'skipped');
     if (fast) return { ok: true, ...fast };
   }
@@ -146,7 +146,7 @@ export async function joinedMetricFor(
 
   const sources = await residentSources(projectId, plan);
   if (sources) {
-    const v = joinedMetricResident(sources, plan, layout, infos, { column, aggregation: spec.aggregation }, flt);
+    const v = await joinedMetricResident(sources, plan, layout, infos, { column, aggregation: spec.aggregation }, flt);
     if (v !== null) return { ok: true, value: v };
   }
   const tables = await hydrate(projectId, plan);
@@ -182,7 +182,7 @@ async function keyStats(projectId: string, from: DsInfo, fromCol: string, to: Ds
   const a = await side(projectId, from, fromCol);
   const b = await side(projectId, to, toCol);
   if (a.ref && b.ref) {
-    const s = keyStatsResident(a.ref, b.ref);
+    const s = await keyStatsResident(a.ref, b.ref);
     if (s) return s;
   }
   const fType = from.columns.find((c) => c.name === fromCol)?.type || 'text';
@@ -199,7 +199,7 @@ async function suggest(projectId: string, fromId: string, toId: string): Promise
   const toSrc = isResident() ? await datasets.residentSource(projectId, toId) : null;
   let fromRows: any[][] | null = null;
   let toRows: any[][] | null = null;
-  const rateOf = (fc: string, tc: string): number | null => {
+  const rateOf = (fc: string, tc: string): number | null | Promise<number | null> => {
     const fi = from.columns.findIndex((c) => c.name === fc);
     const ti = to.columns.findIndex((c) => c.name === tc);
     if (fromSrc && toSrc) {
@@ -216,7 +216,7 @@ async function suggest(projectId: string, fromId: string, toId: string): Promise
     fromRows = (await datasets.getDataset(projectId, fromId))?.rows || [];
     toRows = (await datasets.getDataset(projectId, toId))?.rows || [];
   }
-  const ranked = rankKeys(from.columns, to.columns, rateOf);
+  const ranked = await rankKeys(from.columns, to.columns, rateOf);
   const best = ranked[0];
   const stats = best ? await keyStats(projectId, from, best.from, to, best.to) : null;
   return { ok: true, candidates: ranked, best: best ? { ...best, stats, cardinality: stats ? inferCardinality(stats) : null } : null };

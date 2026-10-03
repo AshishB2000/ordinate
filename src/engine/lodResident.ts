@@ -29,7 +29,7 @@ import type { LodAgg } from '../formula/formulaParse';
 import type { MetricAggregation } from '../analysis/metricValue';
 import { sqlEmpty } from './sqlGen';
 import { phys, sqlNum } from './residentCategory';
-import { aggExpr, filterPredicates, runOrdered } from './residentQuery';
+import { aggExpr, filterPredicates, runOrderedAsync } from './residentQuery';
 import type { ResidentSource } from './residentQuery';
 import * as duck from './duckdb';
 
@@ -94,19 +94,19 @@ function finiteOrNull(raw: duck.DuckValue): number | null {
  * order — `formula/lod.lodValues` for one LOD over the context-filtered
  * table. `limit` reads only the first rows (the formula editor's preview).
  */
-export function lodValuesResident(
+export async function lodValuesResident(
   src: ResidentSource,
   lod: ResidentLod,
   context: FilterStep[] = [],
   limit?: number,
-): (number | null)[] | null {
+): Promise<(number | null)[] | null> {
   try {
     const p = plan(src.columns, lod);
     if (!p) return null;
     const params: duck.DuckValue[] = [];
     const rel = joined(src.columns, p, context, [], params);
     const tail = typeof limit === 'number' ? ` LIMIT ${Math.max(0, Math.floor(limit))}` : '';
-    const out = runOrdered(src.parquetPath, (from, ord) => `SELECT __v FROM ${rel(from, ord)} ORDER BY __o${tail};`, params);
+    const out = await runOrderedAsync(src.parquetPath, (from, ord) => `SELECT __v FROM ${rel(from, ord)} ORDER BY __o${tail};`, params);
     return out.map((r) => finiteOrNull(r.__v ?? null));
   } catch (_) {
     return null;
@@ -119,13 +119,13 @@ export function lodValuesResident(
  * `analysis/lodQuery.lodMetricValue` for a dataset with no LOD fields of its
  * own to recompute.
  */
-export function lodMetricResident(
+export async function lodMetricResident(
   src: ResidentSource,
   lod: ResidentLod,
   aggregation: MetricAggregation,
   context: FilterStep[],
   normal: FilterStep[],
-): number | null {
+): Promise<number | null> {
   try {
     const p = plan(src.columns, lod);
     if (!p) return null;
@@ -141,7 +141,7 @@ export function lodMetricResident(
       count: `count(${n})`,
     };
     if (!m[aggregation]) return null;
-    const out = runOrdered(src.parquetPath, (from, ord) => `SELECT CAST(${m[aggregation]} AS DOUBLE) AS m0 FROM ${rel(from, ord)};`, params);
+    const out = await runOrderedAsync(src.parquetPath, (from, ord) => `SELECT CAST(${m[aggregation]} AS DOUBLE) AS m0 FROM ${rel(from, ord)};`, params);
     const raw = out.length ? out[0].m0 : null;
     if (raw == null) return null;
     const v = typeof raw === 'number' ? raw : Number(raw);

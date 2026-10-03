@@ -26,7 +26,7 @@ import type { FilterStep } from '../data/transforms';
 import type { PivotDim, PivotEncoding, PivotGrid, PivotGroups, PivotSet, PivotValue } from '../analysis/pivotData';
 import { foldPivotGrid, pivotSets, pivotTopNFilter } from '../analysis/pivotData';
 import { sqlEmpty } from './sqlGen';
-import { aggExpr, filterPredicates, plainFrom, runOrdered } from './residentQuery';
+import { aggExpr, filterPredicates, plainFrom, runOrderedAsync } from './residentQuery';
 import type { ResidentSource } from './residentQuery';
 import { bomSafe, dateBucketSql, phys, sqlCanonicalDate } from './residentCategory';
 import { dateBucketLabel } from '../analysis/categoryKey';
@@ -102,12 +102,12 @@ function planDim(cols: ParsedColumn[], dim: PivotDim): DimPlan | null {
  * `Date.parse`) would bucket differently — so the whole pivot goes to the JS
  * path. Identical in intent, and in its `bad` count, to `residentQuery.dateKey`.
  */
-function datesAreCanonical(
+async function datesAreCanonical(
   src: ResidentSource,
   cols: ParsedColumn[],
   dims: PivotDim[],
   filters: FilterStep[] | undefined,
-): boolean {
+): Promise<boolean> {
   const grained = dims.filter((d) => d.grain);
   if (grained.length === 0) return true;
   const params: duck.DuckValue[] = [];
@@ -123,7 +123,7 @@ function datesAreCanonical(
   const preds = filterPredicates(cols, filters, params);
   const where = preds.length ? ` WHERE ${preds.join(' AND ')}` : '';
   const aliased = select.map((e, i) => `${e} AS bad${i}`);
-  const out = duck.query(`SELECT ${aliased.join(', ')} FROM ${plainFrom(src.parquetPath)}${where};`, params);
+  const out = await duck.queryAsync(`SELECT ${aliased.join(', ')} FROM ${plainFrom(src.parquetPath)}${where};`, params);
   if (out.length === 0) return true; // no rows, nothing to misparse
   for (let i = 0; i < grained.length; i += 1) {
     const raw = out[0][`bad${i}`];
@@ -136,7 +136,7 @@ function datesAreCanonical(
 }
 
 /** One grouping set as one ordered aggregate query. */
-function runSet(
+async function runSet(
   src: ResidentSource,
   cols: ParsedColumn[],
   rowPlans: DimPlan[],
@@ -144,7 +144,7 @@ function runSet(
   set: PivotSet,
   values: PivotValue[],
   filters: FilterStep[] | undefined,
-): PivotGroups {
+): Promise<PivotGroups> {
   const dims = rowPlans.slice(0, set.rowDims).concat(colPlans.slice(0, set.colDims));
   const params: duck.DuckValue[] = [];
   const preds = filterPredicates(cols, filters, params);
@@ -154,7 +154,7 @@ function runSet(
     return `${aggExpr(cols, colIndex(cols, v.column), fn)} AS m${i}`;
   });
 
-  const out = runOrdered(
+  const out = await runOrderedAsync(
     src.parquetPath,
     (from, ord) => {
       const keys = dims.map((d, i) => `${d.expr} AS g${i}`);
@@ -198,11 +198,11 @@ function runSet(
  * is passed in as an ordinary `in` step, exactly as the JS path applies it), so
  * that every set here is computed over the same rows.
  */
-export function pivotGroupsResident(
+export async function pivotGroupsResident(
   src: ResidentSource,
   enc: PivotEncoding,
   filters?: FilterStep[],
-): PivotGroups[] | null {
+): Promise<PivotGroups[] | null> {
   try {
     const cols = Array.isArray(src.columns) ? src.columns : [];
     if (!cols.length) return null;
@@ -222,9 +222,12 @@ export function pivotGroupsResident(
     }
     for (const v of enc.values) if (colIndex(cols, v.column) < 0) return null;
 
-    if (!datesAreCanonical(src, cols, enc.rows.concat(enc.columns), filters)) return null;
+    if (!(await datesAreCanonical(src, cols, enc.rows.concat(enc.columns), filters))) return null;
 
-    return pivotSets(enc).map((set) => runSet(src, cols, rowPlans, colPlans, set, enc.values, filters));
+    // One set at a time, in order: the bridge serves one statement at a time anyway.
+    const out: PivotGroups[] = [];
+    for (const set of pivotSets(enc)) out.push(await runSet(src, cols, rowPlans, colPlans, set, enc.values, filters));
+    return out;
   } catch {
     return null;
   }
@@ -237,11 +240,11 @@ export function pivotGroupsResident(
  * applies the identical "fewer groups than `n` means no narrowing at all" rule
  * on both paths rather than each deciding for itself.
  */
-export function pivotRankedKeys(
+export async function pivotRankedKeys(
   src: ResidentSource,
   enc: PivotEncoding,
   filters?: FilterStep[],
-): string[] | null {
+): Promise<string[] | null> {
   try {
     const topN = enc.topN;
     if (!topN) return null;
@@ -261,7 +264,7 @@ export function pivotRankedKeys(
     const fn = v.aggregation === 'none' ? 'sum' : v.aggregation;
     const agg = aggExpr(cols, colIndex(cols, v.column), fn);
 
-    const out = runOrdered(
+    const out = await runOrderedAsync(
       src.parquetPath,
       (from, ord) =>
         `SELECT g0, m0 FROM (SELECT ${plan.expr} AS g0, ${agg} AS m0, min(__ord_p) AS __o FROM ` +
@@ -284,21 +287,21 @@ export function pivotRankedKeys(
  * `ipc/visuals` ships: a differential over the pieces would pass while the
  * assembly of them diverged.
  */
-export function pivotGridResident(
+export async function pivotGridResident(
   src: ResidentSource,
   enc: PivotEncoding,
   filters?: FilterStep[],
-): PivotGrid | null {
+): Promise<PivotGrid | null> {
   const base = Array.isArray(filters) ? filters : [];
   let merged = base;
   // A grained outermost dimension declines Top N on BOTH paths — see
   // `pivotData.pivotTopNFilter`.
   if (enc && enc.topN && enc.rows[0] && !enc.rows[0].grain) {
-    const ranked = pivotRankedKeys(src, enc, base);
+    const ranked = await pivotRankedKeys(src, enc, base);
     if (!ranked) return null;
     const step = pivotTopNFilter(enc, ranked);
     if (step) merged = base.concat([step]);
   }
-  const groups = pivotGroupsResident(src, enc, merged);
+  const groups = await pivotGroupsResident(src, enc, merged);
   return groups ? foldPivotGrid(enc, groups) : null;
 }

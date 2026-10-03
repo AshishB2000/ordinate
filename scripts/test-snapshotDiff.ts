@@ -42,7 +42,7 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
-const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const sqlDiff: typeof import('../src/engine/snapshotDiff') = require('../src/engine/snapshotDiff');
 const jsDiff: typeof import('../src/data/snapshotDiffJs') = require('../src/data/snapshotDiffJs');
 
@@ -83,8 +83,8 @@ interface Case {
 async function both(c: Case): Promise<any> {
   const of = file();
   const nf = file();
-  parquetStore.writeTable(of, c.oldCols, c.oldRows);
-  parquetStore.writeTable(nf, c.newCols, c.newRows);
+  pqSync.writeTable(of, c.oldCols, c.oldRows);
+  pqSync.writeTable(nf, c.newCols, c.newRows);
   const sql = await sqlDiff.diffParquet({ parquetPath: of, columns: c.oldCols }, { parquetPath: nf, columns: c.newCols }, c.key, c.limit);
   const js = jsDiff.diffTablesJs({ columns: c.oldCols, rows: c.oldRows }, { columns: c.newCols, rows: c.newRows }, c.key, c.limit);
   ok(`${c.label}: DuckDB answered (not the fallback)`, sql !== null);
@@ -197,8 +197,8 @@ async function main(): Promise<void> {
     c.newRows = c.newRows.map((r) => [r[2], r[0], r[1]]);
     const of = file();
     const nf = file();
-    parquetStore.writeTable(of, c.oldCols, c.oldRows);
-    parquetStore.writeTable(nf, c.newCols, c.newRows);
+    pqSync.writeTable(of, c.oldCols, c.oldRows);
+    pqSync.writeTable(nf, c.newCols, c.newRows);
     const a = await sqlDiff.diffParquet({ parquetPath: of, columns: c.oldCols }, { parquetPath: nf, columns: c.newCols }, c.key, c.limit);
     const b = jsDiff.diffTablesJs({ columns: c.oldCols, rows: c.oldRows }, { columns: c.newCols, rows: c.newRows }, c.key, c.limit);
     if (same(a, b)) agreed++;

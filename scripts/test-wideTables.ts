@@ -112,7 +112,7 @@ async function main(): Promise<void> {
     const jsSummaries = columns.map((col, c) =>
       datasetStats.computeColumnSummary(col, rows.map((row) => row[c] ?? null)),
     );
-    const resSummaries = statsResident.computeColumnSummariesResident(src);
+    const resSummaries = await statsResident.computeColumnSummariesResident(src);
     ok(`stats returned for all ${C} columns`, resSummaries !== null && resSummaries.length === C);
     const keyed = (s: any) => Object.keys(s).sort().map((k) => [k, s[k]]);
     ok(
@@ -199,7 +199,7 @@ async function main(): Promise<void> {
       const src = await datasets.residentSource(proj.id, ds.id);
       if (!src) continue;
       let t = Date.now();
-      const s = statsResident.computeColumnSummariesResident(src);
+      const s = await statsResident.computeColumnSummariesResident(src);
       const statsMs = Date.now() - t;
       t = Date.now();
       const p = await datasetPage.readPage(src, { offset: 0, limit: 500 });

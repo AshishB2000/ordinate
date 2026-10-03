@@ -61,7 +61,7 @@ export async function evaluateRules(
     // that thread, not the one every window and the hotkey run on.
     const fast = computePool.available()
       ? await computePool.run<RuleResult[] | null>('quality', { src, rules, refs: [...refSrc] }).catch(() => null)
-      : evaluateRulesResident(src, rules, refSrc);
+      : await evaluateRulesResident(src, rules, refSrc);
     if (fast) {
       trace.record('qualityRules', 'resident');
       return fast;

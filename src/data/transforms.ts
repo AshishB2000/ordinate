@@ -18,7 +18,6 @@ import { detectColumnType, coerceValue } from './parse';
 import { compile } from '../formula/formula';
 import type { FValue } from '../formula/formula';
 import { evaluateTable, lodDimProblem } from '../formula/lod';
-import { runOnDuckDb } from '../engine/pipelineDuck';
 import type { FilterOp } from './filterOps';
 import { FILTER_OPS, LIST_OPS, PERIOD_OP, emptyListWarning, periodSkipWarning } from './filterOps';
 import { sanitizePeriod, resolvePeriodNow, periodDay, daysFromIso } from '../analysis/dateIntel';
@@ -238,14 +237,11 @@ function skip(t: TableData, warning: string): StepResult {
 // `ctx.salt` is the project's masking key for a mask_hash step (maskSteps.ts);
 // without it that step is skipped, never hashed unsalted. `ctx.tables` are the
 // datasets a union / lookup step reads (stepRefs.ts); without them it is skipped.
+// Pure JS and synchronous. The in-memory DuckDB twin (pipelineDuck.runOnDuckDb,
+// off by default) is no longer tried here: it needs the async bridge, and this
+// fold is called synchronously from every request (T4.2). The Parquet-resident
+// twin (pipelineDuck.runResidentPipeline) is tried by datasets.updateSteps.
 export function applyPipeline(source: TableData, steps: TransformStep[], ctx: PipelineCtx = {}): ApplyResult {
-  // Phase 1: try the DuckDB path first. It returns null — and we fall through to
-  // the fold below — whenever the pipeline is not faithfully expressible in SQL,
-  // the bridge is unavailable, or the table is small enough that the round-trip
-  // costs more than the fold. The fold remains the reference implementation.
-  const viaSql = runOnDuckDb(source, steps, { ctx: powerCtx(ctx) });
-  if (viaSql) return viaSql;
-
   let table = cloneTable(source);
   const warnings: string[] = [];
   const list = Array.isArray(steps) ? steps : [];

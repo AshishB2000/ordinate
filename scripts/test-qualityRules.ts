@@ -39,7 +39,7 @@ Module._load = function (request: string, ...rest: any[]): any {
   return origLoad.apply(this, [request, ...rest]);
 };
 
-const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const rules: typeof import('../src/analysis/qualityRules') = require('../src/analysis/qualityRules');
 const rx: typeof import('../src/analysis/qualityRegex') = require('../src/analysis/qualityRegex');
@@ -195,10 +195,10 @@ async function main(): Promise<void> {
   const refRows: Cell[][] = [['C1', 10], ['C2', 20.5], ['C3', 7], ['C4', null], [null, 0], ['', 99.99], ['  ', 1], ['C1', 55]];
   const mainFile = path.join(tmp, 'main.parquet');
   const refFile = path.join(tmp, 'ref.parquet');
-  parquetStore.writeTable(mainFile, mainCols, mainRows);
-  parquetStore.writeTable(refFile, refCols, refRows);
-  const mainBack = parquetStore.readTable(mainFile, mainCols);
-  const refBack = parquetStore.readTable(refFile, refCols);
+  pqSync.writeTable(mainFile, mainCols, mainRows);
+  pqSync.writeTable(refFile, refCols, refRows);
+  const mainBack = pqSync.readTable(mainFile, mainCols);
+  const refBack = pqSync.readTable(refFile, refCols);
   ok('fixtures read back', !!mainBack && !!refBack);
   if (!mainBack || !refBack) return;
 
@@ -233,7 +233,7 @@ async function main(): Promise<void> {
   const js = list.map((r) => rules.evaluateRuleJs(r, mainCols, mainBack.rows,
     r.kind === 'references' ? (r.args.datasetId === REF ? refTable : null) : undefined));
   const refs = new Map<string, { parquetPath: string; columns: ParsedColumn[] } | null>([[REF, { parquetPath: refFile, columns: refCols }], [GONE, null]]);
-  const res = resident.evaluateRulesResident({ parquetPath: mainFile, columns: mainCols }, list, refs);
+  const res = await resident.evaluateRulesResident({ parquetPath: mainFile, columns: mainCols }, list, refs);
   ok('resident answered every rule (not a fallback)', Array.isArray(res) && res.length === list.length);
   if (!res) return;
 

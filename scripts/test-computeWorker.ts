@@ -17,7 +17,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as pool from '../src/engine/computePool';
-import * as parquetStore from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import { detectAnomaliesResident } from '../src/engine/anomaliesResident';
 import { detectInsights, fromAnomaly, residentAgg } from '../src/analysis/insights';
 import type { Insight } from '../src/analysis/insights';
@@ -87,11 +87,11 @@ void (async () => {
     const d = new Date(Date.UTC(2025, 0, 1) + (i % 180) * 86400000).toISOString().slice(0, 10);
     rows.push(['r' + (i % 5), d, i % 97 === 0 ? 5000 : (i % 50) + (i % 180 > 150 ? 40 : 0), i % 7 === 0 ? null : i % 11]);
   }
-  parquetStore.writeTable(file, columns, rows);
+  pqSync.writeTable(file, columns, rows);
   const src = { parquetPath: file, columns };
-  const inlineAnoms = detectAnomaliesResident(src);
+  const inlineAnoms = await detectAnomaliesResident(src);
   const inline: Insight[] | null = inlineAnoms
-    ? [...detectInsights('ds', columns, residentAgg(src)),
+    ? [...(await detectInsights('ds', columns, residentAgg(src))),
       ...inlineAnoms.map((x) => fromAnomaly('ds', x, columns)).filter((i): i is Insight => !!i)]
     : null;
   const viaWorker = await pool.run<Insight[] | null>('insights', { datasetId: 'ds', src });
@@ -107,7 +107,7 @@ void (async () => {
     { id: 'r1', kind: 'not_null', severity: 'fail', column: 'units', args: {} },
     { id: 'r2', kind: 'range', severity: 'warn', column: 'amount', args: { min: 0, max: 100 } },
   ];
-  const qInline = evaluateRulesResident(src, rules, new Map());
+  const qInline = await evaluateRulesResident(src, rules, new Map());
   const qWorker = await pool.run('quality', { src, rules, refs: [] });
   ok('quality: the resident path answered (not a null on both sides)', Array.isArray(qInline) && qInline.length === 2, JSON.stringify(qInline));
   ok('quality: worker and this thread agree exactly', JSON.stringify(qWorker) === JSON.stringify(qInline), JSON.stringify(qWorker));

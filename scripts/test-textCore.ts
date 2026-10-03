@@ -196,14 +196,16 @@ const table = (): TableData => ({
     const g = generateSql('t', schema, [{ type: 'filter', column: 'region', op: '=', value: 'West' }, step] as TransformStep[]);
     ok(`sqlGen BAILS on ${step.type} (never warns-and-continues without its column)`, g.sql === null && /text steps/.test(g.unsupported || ''), g.unsupported);
   }
-  const steps = sanitizeSteps([{ type: 'text_sentiment', column: 'review' }]);
-  ok('runOnDuckDb (forced) declines a text pipeline', runOnDuckDb(table(), steps, { force: true }) === null);
-  ok('runResidentPipeline declines a text pipeline before any query',
-    runResidentPipeline('/nonexistent/x.parquet', table().columns, steps) === null);
 }
 
 // ── The warm runner a job leaves behind ──────────────────────────────────────
 void (async () => {
+  // The SQL paths are async (T4.2), so their declines are checked in here.
+  const steps = sanitizeSteps([{ type: 'text_sentiment', column: 'review' }]);
+  ok('runOnDuckDb (forced) declines a text pipeline', (await runOnDuckDb(table(), steps, { force: true })) === null);
+  ok('runResidentPipeline declines a text pipeline before any query',
+    (await runResidentPipeline('/nonexistent/x.parquet', table().columns, steps)) === null);
+
   const N = stepsText.WARM_MIN_ROWS as number;
   const words = ['great', 'slow', 'friendly', 'late', 'broken', 'love', 'terrible', 'ok'];
   const rows: Cell[][] = [];

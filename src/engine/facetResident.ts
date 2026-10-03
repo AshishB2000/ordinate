@@ -21,8 +21,7 @@ import type { VizEncoding } from '../analysis/visuals';
 import type { VizDataResult } from '../analysis/vizData';
 import { recommendChartType } from '../analysis/vizData';
 import type { ResidentCatKey, ResidentMeasure, ResidentSource } from './residentQuery';
-import { aggExpr, filterPredicates, runOrdered } from './residentQuery';
-import { resolveCatKeySync } from './residentSync';
+import { aggExpr, filterPredicates, resolveCatKey, runOrderedAsync } from './residentQuery';
 import * as trace from './residentTrace';
 import { bomSafe, catKeyExpr, catLabel, phys } from './residentCategory';
 import { sqlEmpty } from './sqlGen';
@@ -47,9 +46,9 @@ function finiteOrNull(raw: DuckValue): number | null {
  * twin of `facets.rankGroups` over `rankFacetJs`: descending, nulls last, ties
  * by first-seen. Empty cells are one null key.
  */
-export function rankFacetResident(
+export async function rankFacetResident(
   src: ResidentSource, column: string, m0: ResidentMeasure, filters: FilterStep[], limit: number,
-): { key: string | null }[] | null {
+): Promise<{ key: string | null }[] | null> {
   try {
     const cols = src.columns;
     const fi = colIndex(cols, column);
@@ -58,7 +57,7 @@ export function rankFacetResident(
     const params: DuckValue[] = [];
     const w = where(cols, filters, params);
     const agg = aggExpr(cols, colIndex(cols, m0.column), m0.aggregation);
-    const out = runOrdered(src.parquetPath, (from, ord) =>
+    const out = await runOrderedAsync(src.parquetPath, (from, ord) =>
       `SELECT __f AS v, ${agg} AS m0 FROM ` +
       `(SELECT CASE WHEN ${sqlEmpty(p)} THEN NULL ELSE ${bomSafe(p)} END AS __f, ${ord} AS __o, * FROM ${from}${w}) ` +
       `GROUP BY __f ORDER BY m0 DESC NULLS LAST, min(__o) LIMIT ${Math.max(1, Math.floor(limit))};`, params);
@@ -85,7 +84,7 @@ function panelIndexExpr(cols: ParsedColumn[], dim: FacetDim, params: DuckValue[]
  * measures, in first-seen order. `split` names a TEXT column; with one, only
  * the first measure is aggregated (the split IS the series), as in buildVizData.
  */
-export function facetGroupsResident(
+export async function facetGroupsResident(
   src: ResidentSource,
   category: string,
   catKey: ResidentCatKey,
@@ -93,7 +92,7 @@ export function facetGroupsResident(
   filters: FilterStep[],
   dims: FacetDim[],
   split?: string,
-): FacetGroup[] | null {
+): Promise<FacetGroup[] | null> {
   try {
     const cols = src.columns;
     const gi = colIndex(cols, category);
@@ -110,7 +109,7 @@ export function facetGroupsResident(
     const keys = ['__k'].concat(fs, split ? ['__s'] : []);
     const inner = [`${key.label} AS __k`]
       .concat(idx.map((e, i) => `${e} AS __f${i}`), split ? [`${bomSafe(phys(si))} AS __s`] : []);
-    const out = runOrdered(src.parquetPath, (from, ord) =>
+    const out = await runOrderedAsync(src.parquetPath, (from, ord) =>
       `SELECT ${keys.join(', ')}, ${aggs.join(', ')} FROM ` +
       `(SELECT ${inner.join(', ')}, ${ord} AS __o, * FROM ${from}${w}) ` +
       `GROUP BY ${keys.join(', ')} ORDER BY min(__o);`, params);
@@ -133,7 +132,7 @@ export function facetGroupsResident(
  * category key, run the one grouped query, fold. The caller has already proved
  * no warning is possible (every column exists, every filter applies).
  */
-export function facetDataResident(src: ResidentSource, enc: VizEncoding, filters: FilterStep[]): VizDataResult | null {
+export async function facetDataResident(src: ResidentSource, enc: VizEncoding, filters: FilterStep[]): Promise<VizDataResult | null> {
   const facet = enc.facet;
   const values = Array.isArray(enc.values) ? enc.values : [];
   const split = typeof enc.series === 'string' && enc.series ? enc.series : undefined;
@@ -147,14 +146,14 @@ export function facetDataResident(src: ResidentSource, enc: VizEncoding, filters
   const order = facet.order === 'measure' ? 'measure' : 'label';
   const dims: FacetDim[] = [];
   for (const d of dimsIn) {
-    const ranked = rankFacetResident(src, d.column, measures[0], filters, d.cap + 1);
+    const ranked = await rankFacetResident(src, d.column, measures[0], filters, d.cap + 1);
     if (!ranked) { trace.record('vizFacets', 'failed', 'rank'); return null; }
     dims.push(planFacetDim(d.column, ranked, d.cap, order));
   }
   const catType = type.get(enc.category);
-  const plan = resolveCatKeySync(src, enc.category, measures, filters, enc.grain, enc.bins);
+  const plan = await resolveCatKey(src, enc.category, measures, filters, enc.grain, enc.bins);
   if (!plan) { trace.record('vizFacets', catType === 'date' ? 'skipped' : 'failed', `category type ${catType}`); return null; }
-  const groups = facetGroupsResident(src, enc.category, plan.key, measures, filters, dims, split);
+  const groups = await facetGroupsResident(src, enc.category, plan.key, measures, filters, dims, split);
   if (!groups) { trace.record('vizFacets', 'failed', `${dims.length} dims`); return null; }
   trace.record('vizFacets', 'resident');
   // vizData.measureLabel over the coerced aggregation, as residentQuery names its series.

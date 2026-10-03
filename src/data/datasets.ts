@@ -723,7 +723,7 @@ export async function updateSteps(
   // pipelines, and the fold gets the tables here (src/data/stepRefs.ts).
   const output =
     (residentReady
-      ? runResidentPipeline(sourceParquetPath(projectId, id), source.columns, steps)
+      ? await runResidentPipeline(sourceParquetPath(projectId, id), source.columns, steps)
       : null) ?? transforms.applyPipeline(source, steps, { salt: await saltForSteps(projectId, steps), ...(await loadStepRefs(projectId, id, steps)) });
 
   const updated: Dataset = {

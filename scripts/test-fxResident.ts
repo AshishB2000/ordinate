@@ -16,7 +16,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import * as rq from '../src/engine/residentQuery';
 import * as fr from '../src/engine/fxResident';
 import * as fx from '../src/analysis/fx';
@@ -37,8 +37,8 @@ let seq = 0;
 
 function write(columns: ParsedColumn[], rows: Cell[][]): { file: string; table: TableData } {
   const file = path.join(dir, `t${seq++}.parquet`);
-  pq.writeTable(file, columns, rows);
-  const back = pq.readTable(file, columns);
+  pqSync.writeTable(file, columns, rows);
+  const back = pqSync.readTable(file, columns);
   if (!back) throw new Error('read-back failed');
   return { file, table: { columns: back.columns, rows: back.rows } };
 }
@@ -90,16 +90,9 @@ function jsAnswer(plan: fx.FxPlan, table: fx.RateTable, spec: { column: string; 
   return { value: computeMetric(t.columns, t.rows, spec), ...fx.missingOf(t) };
 }
 
-function withFx<T>(plan: fx.FxPlan, src: fr.FxRateSource, run: (s: rq.ResidentSource) => T): T | null {
-  const rel = fr.fxRelationSql(SRC, src, plan);
-  if (!rel) return null;
-  const key = 'fx:test' + seq++;
-  return rq.withRelation(key, rel, () => run({ parquetPath: key, columns: fr.fxColumns(SRC.columns) }));
-}
-
-/** `withFx` for an awaiting run: the relation must stay registered across its awaits. */
+/** Run over the converted relation; it must stay registered across the run's awaits. */
 async function withFxAsync<T>(plan: fx.FxPlan, src: fr.FxRateSource, run: (s: rq.ResidentSource) => Promise<T>): Promise<T | null> {
-  const rel = fr.fxRelationSql(SRC, src, plan);
+  const rel = await fr.fxRelationSql(SRC, src, plan);
   if (!rel) return null;
   const key = 'fx:test' + seq++;
   return rq.withRelationAsync(key, rel, () => run({ parquetPath: key, columns: fr.fxColumns(SRC.columns) }));
@@ -128,7 +121,7 @@ for (const target of ['USD', 'EUR', 'JPY', 'GBP']) {
         for (const column of Object.keys(decls)) {
           const spec = { column, aggregation: agg };
           const js = jsAnswer(plan, DS_TABLE, spec, filters);
-          const res = withFx(plan, DS_RATES, (s) => fr.fxMetricOn(s, spec, filters));
+          const res = await withFxAsync(plan, DS_RATES, (s) => fr.fxMetricOn(s, spec, filters));
           const same = !!res && Object.is(res.value, js.value) && res.missing === js.missing && JSON.stringify(res.pairs) === JSON.stringify(js.pairs);
           ok(`differential: ${target} · ${dl} · ${fl} · ${agg}(${column})`, same, JSON.stringify({ js, res }));
           compared += 1;
@@ -144,7 +137,7 @@ ok(`differential: ${compared} comparisons, most with missing rows (${missingSeen
 {
   const plan = fx.resolvePlan(COLS, DECLS[0][1], ['amount'], 'USD') as fx.FxPlan;
   const js = jsAnswer(plan, DS_TABLE, { column: 'amount', aggregation: 'sum' }, []);
-  const res = withFx(plan, DS_RATES, (s) => fr.fxMetricOn(s, { column: 'amount', aggregation: 'sum' }, []));
+  const res = await withFxAsync(plan, DS_RATES, (s) => fr.fxMetricOn(s, { column: 'amount', aggregation: 'sum' }, []));
   ok('differential sum: per-row currencies to USD, bit for bit', !!res && Object.is(res.value, js.value) && typeof js.value === 'number', JSON.stringify({ js, res }));
   ok('differential sum: missing rows are counted, not converted at 1', !!res && res.missing === js.missing && js.missing > 0
     && js.pairs.includes('SEK→USD') && js.pairs.includes('?→USD'), JSON.stringify(js));
@@ -178,7 +171,7 @@ for (const [label, enc] of [
   const plan = fx.resolvePlan(COLS, DECLS[0][1], ['amount'], 'JPY') as fx.FxPlan;
   const conv = fx.convertTable(clean.table, plan, DS_TABLE);
   const js = buildVizData(conv.columns, conv.rows, enc, []);
-  const rel = fr.fxRelationSql(cleanSrc, DS_RATES, plan);
+  const rel = await fr.fxRelationSql(cleanSrc, DS_RATES, plan);
   const res = rel ? await rq.withRelationAsync('fx:clean', rel, async () => {
     const s = { parquetPath: 'fx:clean', columns: fr.fxColumns(cleanSrc.columns) };
     const m = [{ column: 'amount', aggregation: 'sum' as const }];
@@ -198,7 +191,7 @@ for (const [label, enc] of [
     for (const agg of AGGS) {
       const spec = { column: 'amount', aggregation: agg };
       const js = jsAnswer(plan, sample.table, spec, []);
-      const res = withFx(plan, sampleSrc, (s) => fr.fxMetricOn(s, spec, []));
+      const res = await withFxAsync(plan, sampleSrc, (s) => fr.fxMetricOn(s, spec, []));
       const exact = agg === 'min' || agg === 'max';
       const close = !!res && js.value !== null && res.value !== null
         && (exact ? Object.is(res.value, js.value) : Math.abs(res.value - js.value) / Math.abs(js.value) < 1e-12);
@@ -212,11 +205,11 @@ for (const [label, enc] of [
 {
   const odd = write(COLS, [[10, 'EUR', 'Jan 5, 2024', 'West', 1]]);
   const plan = fx.resolvePlan(COLS, DECLS[0][1], ['amount'], 'USD') as fx.FxPlan;
-  ok('declined: a date SQL does not read sends the answer to JS', fr.fxRelationSql({ parquetPath: odd.file, columns: odd.table.columns }, DS_RATES, plan) === null);
+  ok('declined: a date SQL does not read sends the answer to JS', await fr.fxRelationSql({ parquetPath: odd.file, columns: odd.table.columns }, DS_RATES, plan) === null);
   const oddRates = write(RCOLS, [['March 1, 2024', 'EUR', 'USD', 2]]);
-  ok('declined: …in the rate table too', fr.fxRelationSql(SRC, { ...DS_RATES, parquetPath: oddRates.file }, plan) === null);
-  ok('a bad code never reaches SQL', (() => {
-    try { fr.fxRelationSql(SRC, DS_RATES, { target: "US'; --", cols: plan.cols }); return false; } catch (_) { return true; }
+  ok('declined: …in the rate table too', await fr.fxRelationSql(SRC, { ...DS_RATES, parquetPath: oddRates.file }, plan) === null);
+  ok('a bad code never reaches SQL', await (async () => {
+    try { await fr.fxRelationSql(SRC, DS_RATES, { target: "US'; --", cols: plan.cols }); return false; } catch (_) { return true; }
   })());
 }
 

@@ -162,7 +162,7 @@ async function loadInputs(ctx: Ctx, datasetId: string, column: string, all: Filt
   if (replay) return scenarioInputsJs(replay.columns, replay.rows, column, all, filters);
   const src = residentQuery.isResident() ? await datasets.residentSource(ctx.projectId, datasetId) : null;
   if (src) {
-    const fast = scenarioInputsResident(src, column, all, filters);
+    const fast = await scenarioInputsResident(src, column, all, filters);
     if (fast) {
       trace.record('scenario', 'resident');
       return fast;

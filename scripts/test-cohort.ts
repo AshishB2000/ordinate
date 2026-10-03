@@ -18,7 +18,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as cohort from '../src/analysis/cohortData';
 import * as cohortResident from '../src/engine/cohortResident';
-import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import * as duck from '../src/engine/duckdb';
 import { parseCsv } from '../src/data/parse';
 import type { ParsedColumn } from '../src/data/parse';
@@ -182,8 +182,8 @@ let seq = 0;
 
 function fixture(columns: ParsedColumn[], rows: Cell[][]): { src: { parquetPath: string; columns: ParsedColumn[] }; rows: Cell[][]; columns: ParsedColumn[] } {
   const file = path.join(dir, `t${seq++}.parquet`);
-  pq.writeTable(file, columns, rows);
-  const back = pq.readTable(file, columns);
+  pqSync.writeTable(file, columns, rows);
+  const back = pqSync.readTable(file, columns);
   if (!back) throw new Error('fixture read-back failed');
   return { src: { parquetPath: file, columns }, rows: back.rows, columns: back.columns };
 }
@@ -203,16 +203,16 @@ function firstDiff(a: unknown, b: unknown, at = '$'): string {
   return Object.is(a, b) ? '' : `${at}: ${String(a)} vs ${String(b)}`;
 }
 
-function diff(label: string, f: ReturnType<typeof fixture>, e: CohortEncoding, cal = MON, filters?: FilterStep[]): void {
+async function diff(label: string, f: ReturnType<typeof fixture>, e: CohortEncoding, cal = MON, filters?: FilterStep[]): Promise<void> {
   const js = cohort.buildCohort(f.columns, f.rows, e, filters, cal).grid;
-  const res = cohortResident.cohortGridResident(f.src, e, filters, cal);
+  const res = await cohortResident.cohortGridResident(f.src, e, filters, cal);
   ok(`${label}: resident answered`, !!res);
   if (!res) return;
   const d = firstDiff(js, res);
   ok(`${label}: resident ≡ JS, Object.is leaf by leaf`, d === '', d);
 }
 
-function testDifferential(): void {
+async function testDifferential(): Promise<void> {
   const rows: Cell[][] = [
     ['a', '2024-01-05', 10.1, 'x'], ['b', '2024-01-09', 0.2, 'x'], ['c', '2024-01-20', 0.3, 'y'], ['d', '2024-01-28', 1e16, 'y'],
     ['a', '2024-02-02', 1, 'x'], ['d', '2024-02-03', -1e16, 'y'], ['b', '2024-03-15', 0.7, 'x'], ['a', '2024-03-16T08:00:00', null, 'x'],
@@ -222,40 +222,40 @@ function testDifferential(): void {
   ];
   const f = fixture(COLS, rows);
   for (const grain of ['week', 'month', 'quarter'] as const) {
-    diff(`diff/${grain}/retention`, f, enc({ grain }));
-    diff(`diff/${grain}/value`, f, enc({ grain, show: 'value', value: 'amount' }));
+    await diff(`diff/${grain}/retention`, f, enc({ grain }));
+    await diff(`diff/${grain}/value`, f, enc({ grain, show: 'value', value: 'amount' }));
   }
-  diff('diff/week/Sunday start', f, enc({ grain: 'week' }), SUN);
-  diff('diff/quarter/fiscal April', f, enc({ grain: 'quarter', show: 'value', value: 'amount' }), APRIL);
+  await diff('diff/week/Sunday start', f, enc({ grain: 'week' }), SUN);
+  await diff('diff/quarter/fiscal April', f, enc({ grain: 'quarter', show: 'value', value: 'amount' }), APRIL);
   for (const grain of ['week', 'month', 'quarter'] as const) {
-    diff(`diff/${grain}/retail 4-5-4`, f, enc({ grain, show: 'value', value: 'amount' }), RETAIL);
-    diff(`diff/${grain}/ISO week-year`, f, enc({ grain }), ISO_WEEKS);
+    await diff(`diff/${grain}/retail 4-5-4`, f, enc({ grain, show: 'value', value: 'amount' }), RETAIL);
+    await diff(`diff/${grain}/ISO week-year`, f, enc({ grain }), ISO_WEEKS);
   }
-  diff('diff/filtered', f, enc(), MON, [{ type: 'filter', column: 'plan', op: '=', value: 'x' }]);
-  diff('diff/filtered-to-nothing', f, enc(), MON, [{ type: 'filter', column: 'plan', op: '=', value: 'none' }]);
-  diff('diff/empty-table', fixture(COLS, []), enc());
+  await diff('diff/filtered', f, enc(), MON, [{ type: 'filter', column: 'plan', op: '=', value: 'x' }]);
+  await diff('diff/filtered-to-nothing', f, enc(), MON, [{ type: 'filter', column: 'plan', op: '=', value: 'none' }]);
+  await diff('diff/empty-table', fixture(COLS, []), enc());
 
   const numCols: ParsedColumn[] = [{ name: 'id', type: 'number' }, { name: 'day', type: 'date' }];
-  diff('diff/number entity keys on the number', fixture(numCols, [[1, '2024-01-01'], [1.0, '2024-02-01'], [null, '2024-01-01'], [2, '2024-03-01']]),
+  await diff('diff/number entity keys on the number', fixture(numCols, [[1, '2024-01-01'], [1.0, '2024-02-01'], [null, '2024-01-01'], [2, '2024-03-01']]),
        enc({ entity: 'id' }));
 }
 
-function testSample(): void {
+async function testSample(): Promise<void> {
   const csv = path.join(__dirname, '..', 'assets', 'samples', 'retail-orders.csv');
   if (!fs.existsSync(csv)) { ok('sample: assets/samples/retail-orders.csv exists', false, csv); return; }
   const parsed = parseCsv(fs.readFileSync(csv, 'utf8'), ',');
   const f = fixture(parsed.columns, parsed.rows);
   const e = enc({ entity: 'state', date: 'order_date' });
-  diff('sample/states by first-order month', f, e);
-  diff('sample/cumulative revenue per state, weekly', f, { ...e, grain: 'week', show: 'value', value: 'revenue' });
-  diff('sample/quarterly, filtered to Technology', f, { ...e, grain: 'quarter' }, MON,
+  await diff('sample/states by first-order month', f, e);
+  await diff('sample/cumulative revenue per state, weekly', f, { ...e, grain: 'week', show: 'value', value: 'revenue' });
+  await diff('sample/quarterly, filtered to Technology', f, { ...e, grain: 'quarter' }, MON,
        [{ type: 'filter', column: 'category', op: '=', value: 'Technology' }]);
   const g = cohort.buildCohort(f.columns, f.rows, e, [], MON).grid;
   ok('sample: every state is in exactly one cohort', g.sizes.reduce((a, b) => a + b, 0)
      === new Set(f.rows.map((r) => r[parsed.columns.findIndex((c) => c.name === 'state')])).size);
 }
 
-function main(): void {
+async function main(): Promise<void> {
   testBoundaries();
   testRetention();
   testEdges();
@@ -264,9 +264,12 @@ function main(): void {
   let bridge = false;
   try { bridge = duck.isAvailable(); } catch { bridge = false; }
   if (!bridge) console.log('ok   (skipped) the DuckDB bridge is unavailable — differential not run');
-  else { testDifferential(); testSample(); }
+  else { await testDifferential(); await testSample(); }
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
   finish();
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

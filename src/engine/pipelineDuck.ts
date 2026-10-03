@@ -3,8 +3,11 @@
 // pipelineDuck — execute a prepare pipeline in DuckDB instead of the JS fold.
 //
 // This is the Phase 1 compute swap. It is deliberately a SIDECAR, not a
-// replacement: `applyPipeline` calls `runOnDuckDb` first and falls back to the
-// existing fold whenever this module returns null. Every guard, every warning
+// replacement: a caller tries it first and falls back to the existing fold
+// whenever this module returns null. Both entry points run on the ASYNC bridge
+// (T4.2), so `transforms.applyPipeline` — synchronous, and called from every
+// request — no longer tries `runOnDuckDb`; `datasets.updateSteps` awaits
+// `runResidentPipeline` before its fold. Every guard, every warning
 // string, and the data-dependent retype pass stay in TypeScript — DuckDB only
 // does set-based work over an all-VARCHAR relation.
 //
@@ -48,7 +51,8 @@ import type { RunSql } from './pipelinePower';
 // step at all. That is Phase 2 (Parquet storage). Until then this path stays
 // built, tested and proven equivalent — but not enabled.
 //
-// Set ORDINATE_DUCKDB_PIPELINE=1 to turn it on; tests force it via opts.force.
+// Set ORDINATE_DUCKDB_PIPELINE=1 to let an unforced `runOnDuckDb` call run;
+// tests force it via opts.force. Since T4.2 no shipped path calls it unforced.
 // ponytail: an env flag, not a config schema entry. Config is user-facing and
 // this is a developer switch that should disappear when Phase 2 lands.
 const ENABLED = process.env.ORDINATE_DUCKDB_PIPELINE === '1';
@@ -162,11 +166,11 @@ function retype(columns: ParsedColumn[], rows: Cell[][], c: number): void {
  * an unavailable bridge, a table small enough that the fold is cheaper, or ANY
  * error. Never throws. transforms.applyPipeline stays the reference.
  */
-export function runResidentPipeline(
+export async function runResidentPipeline(
   parquetPath: string,
   columns: ParsedColumn[],
   steps: TransformStep[],
-): ApplyResult | null {
+): Promise<ApplyResult | null> {
   const op = 'preparePipeline';
   if (!parquetPath || !Array.isArray(columns) || columns.length === 0) {
     trace.record(op, 'skipped');
@@ -194,16 +198,16 @@ export function runResidentPipeline(
     const base =
       `(SELECT file_row_number AS ${ORD}, ${schema.map((c) => `"${c.physical}"`).join(', ')} ` +
       `FROM ${parquetStore.relationSql(parquetPath, { fileRowNumber: true })}) AS t`;
-    const run: RunSql = (sql, params) => duck.query(sql.replace(/\bFROM\s+"t"/g, `FROM ${base}`), params);
+    const run: RunSql = (sql, params) => duck.queryAsync(sql.replace(/\bFROM\s+"t"/g, `FROM ${base}`), params);
     // Pivot keys and per-step counts are facts about the data (pipelinePower).
     // No union/lookup relations here: those steps bail to the fold, which has them.
-    const planned = planPower(schema, list, {}, run);
+    const planned = await planPower(schema, list, {}, run);
     if (!planned) {
       trace.record(op, 'skipped');
       return null;
     }
     const gen = planned.gen;
-    const out = run(gen.sql as string, gen.params);
+    const out = await run(gen.sql as string, gen.params);
 
     const outColumns: ParsedColumn[] = gen.columns.map((c) => ({ name: c.name, type: c.type }));
     const rows: Cell[][] = out.map((row) =>
@@ -245,11 +249,11 @@ export interface DuckRunOptions {
  * throws: a failure here must degrade to the working implementation, never to a
  * broken app.
  */
-export function runOnDuckDb(
+export async function runOnDuckDb(
   source: TableData,
   steps: TransformStep[],
   opts: DuckRunOptions = {},
-): ApplyResult | null {
+): Promise<ApplyResult | null> {
   if (!source || !Array.isArray(source.columns) || !Array.isArray(source.rows)) return null;
   if (!opts.force && !ENABLED) return null;
   if (!opts.force && source.rows.length < DUCKDB_MIN_ROWS) return null;
@@ -267,16 +271,16 @@ export function runOnDuckDb(
   const created: string[] = [];
   try {
     created.push(relation);
-    loadRelation(relation, source);
+    await loadRelation(relation, source);
     for (const l of refs.loads) {
       created.push(l.relation);
-      loadRelation(l.relation, (opts.ctx as PipelineContext).tables[l.id]);
+      await loadRelation(l.relation, (opts.ctx as PipelineContext).tables[l.id]);
     }
-    const run: RunSql = (sql, params) => duck.query(sql.replace(/\bFROM\s+"t"/g, `FROM "${relation}"`), params);
-    const planned = planPower(schema, list, refs.opts, run);
+    const run: RunSql = (sql, params) => duck.queryAsync(sql.replace(/\bFROM\s+"t"/g, `FROM "${relation}"`), params);
+    const planned = await planPower(schema, list, refs.opts, run);
     if (!planned) return null;
     const gen = planned.gen;
-    const out = run(gen.sql as string, gen.params);
+    const out = await run(gen.sql as string, gen.params);
 
     const columns: ParsedColumn[] = gen.columns.map((c) => ({ name: c.name, type: c.type }));
     const rows: Cell[][] = out.map((row) =>
@@ -299,7 +303,7 @@ export function runOnDuckDb(
   } finally {
     for (const name of created) {
       try {
-        duck.exec(`DROP TABLE IF EXISTS "${name}";`);
+        await duck.execAsync(`DROP TABLE IF EXISTS "${name}";`);
       } catch {
         /* the relation is per-call and the connection is in-memory; leaking one
            on a dying bridge is not worth masking the original failure. */
@@ -310,10 +314,10 @@ export function runOnDuckDb(
 
 // One all-VARCHAR relation (ORD + c0..cN) holding `table`. Values are bound,
 // never interpolated — a cell is data, and this is a trust boundary.
-function loadRelation(relation: string, table: TableData): void {
+async function loadRelation(relation: string, table: TableData): Promise<void> {
   const width = table.columns.length;
   const cols = table.columns.map((_, i) => `"${physicalName(i)}" VARCHAR`).join(', ');
-  duck.exec(`CREATE TABLE "${relation}" ("${ORD}" BIGINT${cols ? ', ' + cols : ''});`);
+  await duck.execAsync(`CREATE TABLE "${relation}" ("${ORD}" BIGINT${cols ? ', ' + cols : ''});`);
   const placeholders = `(${Array(width + 1).fill('?').join(', ')})`;
   const BATCH = 500;
   for (let start = 0; start < table.rows.length; start += BATCH) {
@@ -326,6 +330,6 @@ function loadRelation(relation: string, table: TableData): void {
       for (let c = 0; c < width; c++) params.push(toStorage(row[c] ?? null));
       tuples.push(placeholders);
     }
-    duck.query(`INSERT INTO "${relation}" VALUES ${tuples.join(', ')};`, params);
+    await duck.queryAsync(`INSERT INTO "${relation}" VALUES ${tuples.join(', ')};`, params);
   }
 }

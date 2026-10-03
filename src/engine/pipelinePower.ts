@@ -21,8 +21,8 @@ import { pivotKeyExpr } from './sqlGenReshape';
 import { dupesSql } from './sqlGenCombine';
 import type { DuckRow } from './duckdb';
 
-/** Runs SQL whose base relation is written `FROM "t"`; the caller substitutes it. */
-export type RunSql = (sql: string, params: Param[]) => DuckRow[];
+/** Runs SQL whose base relation is written `FROM "t"`; the caller substitutes it. Async bridge. */
+export type RunSql = (sql: string, params: Param[]) => Promise<DuckRow[]>;
 
 /** A generateSql bail that planPower can satisfy with a query. */
 export function isNeed(reason: string | undefined): boolean {
@@ -56,9 +56,9 @@ export function refOpts(
   return { opts, loads };
 }
 
-function pivotKeys(schema: SqlColumn[], steps: TransformStep[], i: number, opts: PowerSqlOpts, run: RunSql): {
+async function pivotKeys(schema: SqlColumn[], steps: TransformStep[], i: number, opts: PowerSqlOpts, run: RunSql): Promise<{
   keys: string[]; distinct: number;
-} | null {
+} | null> {
   const prefix = generateSql('t', schema, steps.slice(0, i), opts);
   if (prefix.sql === null) return null;
   const key = prefix.columns.find((c) => c.name === (steps[i] as PivotStep).key);
@@ -68,7 +68,7 @@ function pivotKeys(schema: SqlColumn[], steps: TransformStep[], i: number, opts:
   const sql = `${prefix.sql.slice(0, tail.index)}\nSELECT k, CAST(count(*) OVER () AS DOUBLE) AS n FROM ` +
     `(SELECT ${pivotKeyExpr(key.physical)} AS k, min(__ord) AS o FROM ${tail[1]} GROUP BY 1) AS g ` +
     `WHERE k IS NOT NULL ORDER BY o LIMIT ${MAX_PIVOT_COLUMNS}`;
-  const rows = run(sql, prefix.params);
+  const rows = await run(sql, prefix.params);
   return { keys: rows.map((r) => String(r.k)), distinct: rows.length ? Number(rows[0].n) : 0 };
 }
 
@@ -77,24 +77,25 @@ function pivotKeys(schema: SqlColumn[], steps: TransformStep[], i: number, opts:
  * pipeline is not expressible even with the data's answers (the caller folds).
  * `opts` carries the union/lookup relations from refOpts; it is filled in place.
  */
-export function planPower(schema: SqlColumn[], steps: TransformStep[], opts: PowerSqlOpts, run: RunSql): {
+export async function planPower(schema: SqlColumn[], steps: TransformStep[], opts: PowerSqlOpts, run: RunSql): Promise<{
   gen: GenResult; counts: StepCount[];
-} | null {
-  steps.forEach((s, i) => {
-    if (s.type !== 'lookup_join') return;
+} | null> {
+  for (let i = 0; i < steps.length; i += 1) {
+    const s = steps[i];
+    if (s.type !== 'lookup_join') continue;
     const ref = opts.refs && opts.refs[s.datasetId];
     const col = ref && ref.columns.find((c) => c.name === s.rightKey);
-    if (!ref || !col) return;
-    const rows = run(dupesSql(ref.relation, col), []);
+    if (!ref || !col) continue;
+    const rows = await run(dupesSql(ref.relation, col), []);
     opts.dupes = { ...(opts.dupes || {}), [i]: Number(rows[0] ? rows[0].d : 0) };
-  });
+  }
 
   let gen = generateSql('t', schema, steps, opts);
   for (let guard = 0; gen.sql === null && guard < steps.length; guard += 1) {
     const need = /^need-pivot:(\d+)$/.exec(gen.unsupported || '');
     if (!need) return null;
     const i = Number(need[1]);
-    const resolved = pivotKeys(schema, steps, i, opts, run);
+    const resolved = await pivotKeys(schema, steps, i, opts, run);
     if (!resolved) return null;
     opts.pivots = { ...(opts.pivots || {}), [i]: resolved };
     gen = generateSql('t', schema, steps, opts);
@@ -110,7 +111,7 @@ export function planPower(schema: SqlColumn[], steps: TransformStep[], opts: Pow
     parts.push(`(SELECT CAST(count(*) AS DOUBLE) FROM (${g.sql}) AS q${k}) AS n${k}`);
     params.push(...g.params);
   }
-  const row = run(`SELECT ${parts.join(', ')}`, params)[0] || {};
+  const row = (await run(`SELECT ${parts.join(', ')}`, params))[0] || {};
   const n = (k: number): number => Number(row['n' + k]);
   return { gen, counts: steps.map((_, k) => ({ before: n(k), after: n(k + 1) })) };
 }

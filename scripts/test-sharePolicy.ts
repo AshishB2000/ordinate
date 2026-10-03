@@ -68,7 +68,7 @@ const store: typeof import('../src/app/privacyStore') = require('../src/app/priv
 const share: typeof import('../src/app/sharePolicy') = require('../src/app/sharePolicy');
 const bundle: typeof import('../src/app/bundle') = require('../src/app/bundle');
 const versions: typeof import('../src/app/versions') = require('../src/app/versions');
-const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
+const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const mask: typeof import('../src/data/maskSteps') = require('../src/data/maskSteps');
 const { refreshDataset }: typeof import('../src/data/datasetRefresh') = require('../src/data/datasetRefresh');
 require('../src/ipc/visuals').register();
@@ -256,7 +256,7 @@ async function main(): Promise<void> {
   ok('bundle/mask: the record has no source and no steps', rec.source === undefined && Array.isArray(rec.steps) && rec.steps.length === 0);
   const pq = path.join(outDir, 'bundled.parquet');
   fs.writeFileSync(pq, entries.find((e) => e.name === `datasets/${did}.parquet`)!.data);
-  const bundled = parquetStore.readTable(pq, rec.columns)!;
+  const bundled = pqSync.readTable(pq, rec.columns)!;
   ok('bundle/mask: card is masked in the table that travels', bundled.rows[0][2] === mask.maskToken(salt, '4111111111111111') && rec.columns[2].type === 'text');
   ok('bundle/mask: email travels as its Prepare token', bundled.rows[0][1] === mask.maskToken(salt, 'grace@example.com'));
   ok('bundle/mask: no raw value is anywhere in the bundle', !entries.some((e) => RAW.some((v) => e.data.includes(v))));

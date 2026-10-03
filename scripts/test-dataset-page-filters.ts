@@ -30,7 +30,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as dp from '../src/engine/datasetPage';
-import * as pq from '../src/engine/parquetStore';
+import * as pqSync from '../src/engine/parquetStoreSync';
 import type { ParsedColumn } from '../src/data/parse';
 import type { Cell, FilterStep } from '../src/data/transforms';
 
@@ -74,8 +74,8 @@ rows.push(['North', '007', 7, '2024-01-01']);
 rows.push([null, null, null, '']);
 
 const file = path.join(dir, 'filters.parquet');
-pq.writeTable(file, cols, rows);
-const back = pq.readTable(file, cols);
+pqSync.writeTable(file, cols, rows);
+const back = pqSync.readTable(file, cols);
 if (!back) {
   console.error('FAIL fixture read-back failed — nothing was verified');
   cleanup();

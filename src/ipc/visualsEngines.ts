@@ -42,7 +42,7 @@ export async function residentEngineData(
     if (needs) return engineVizData(src.columns, [], encoding, filters);
 
     if (encoding.cohort) {
-      const grid = cohortGridResident(src, encoding.cohort, filters);
+      const grid = await cohortGridResident(src, encoding.cohort, filters);
       if (!grid) {
         trace.record(op, 'failed', `grain=${encoding.cohort.grain} show=${encoding.cohort.show}`);
         return null;
@@ -59,7 +59,7 @@ export async function residentEngineData(
       trace.record(op, 'skipped');
       return null;
     }
-    const funnel = eventFunnelResident(src, f, filters);
+    const funnel = await eventFunnelResident(src, f, filters);
     if (!funnel) {
       trace.record(op, 'failed', `${f.steps.length} steps, breakdown=${f.breakdown ? 'yes' : 'no'}`);
       return null;
