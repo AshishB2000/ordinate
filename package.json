@@ -54,6 +54,7 @@
   },
   "dependencies": {
     "@duckdb/node-api": "^1.5.5-r.3",
+    "@fastify/multipart": "^10.1.2",
     "@fastify/static": "^10.1.5",
     "@sgratzl/chartjs-chart-boxplot": "^4.4.5",
     "chart.js": "^4.5.1",

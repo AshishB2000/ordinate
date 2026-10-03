@@ -6,7 +6,7 @@
 // `require('electron')` made to fail, so an Electron import anywhere in this
 // graph breaks the build's tests, not a deploy.
 
-import { fastify, type FastifyInstance } from 'fastify';
+import { fastify, type FastifyInstance, type FastifyRequest } from 'fastify';
 import { isAvailable, shutdown } from '../engine/duckdb';
 import { contractFor } from '../api/index';
 import type { ServerEnv } from './env';
@@ -14,6 +14,7 @@ import { identityFor, runInContext, type Identify } from './context';
 import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
 import { handlers } from './rpc';
+import { maskFileToken, registerFileRoutes } from './files';
 import { fromWire, encode } from './wire';
 import { registerStatic, WEB_DIST } from './static';
 import * as fs from 'fs';
@@ -53,6 +54,17 @@ export function buildApp(
     logger: {
       level: cfg.logLevel,
       redact: { paths: [...REDACT_PATHS], censor: '[redacted]' },
+      // Fastify's own request serializer, except a file token in the URL
+      // (GET /api/files/<token>) is masked: the URL is a credential there.
+      serializers: {
+        req: (req: FastifyRequest) => ({
+          method: req.method,
+          url: maskFileToken(req.url),
+          host: req.host,
+          remoteAddress: req.ip,
+          remotePort: req.socket?.remotePort,
+        }),
+      },
       ...(logStream ? { stream: logStream } : {}),
     },
   });
@@ -137,6 +149,9 @@ export function buildApp(
       return reply.code(500).send({ error: 'handler failed' });
     }
   });
+
+  // Uploads and downloads (./files.ts) — the open and save dialogs' replacement.
+  registerFileRoutes(app, cfg.maxUploadMb);
 
   app.addHook('onClose', async () => shutdown());
 

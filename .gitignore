@@ -1054,3 +1054,7 @@ scripts/**/*.js
 # web/t0.6-shell (web/node_modules and web/dist are covered by the node_modules and dist/ rules)
 /src/server/static.js
 /scripts/test-server-static.js
+
+# web/t0.4-files
+/src/server/files.js
+/scripts/test-files.js

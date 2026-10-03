@@ -20,6 +20,8 @@ export interface ServerEnv {
   readonly logLevel: LogLevel;
   /** Postgres metadata DB (T3.1), or null when unset — then nothing touches Postgres. Holds a password: never log it. */
   readonly databaseUrl: string | null;
+  /** Largest file `POST /api/files` accepts, in MB (MAX_UPLOAD_MB). */
+  readonly maxUploadMb: number;
 }
 
 const ENVS: readonly OrdinateEnv[] = ['dev', 'prod'];
@@ -73,7 +75,13 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
     databaseUrl = rawDb;
   }
 
-  return Object.freeze({ port, dataDir, env, logLevel, databaseUrl });
+  const rawMax = src.MAX_UPLOAD_MB ?? '';
+  if (rawMax !== '' && !/^[1-9]\d{0,5}$/.test(rawMax)) {
+    throw new EnvError(`MAX_UPLOAD_MB must be a whole number of megabytes 1-999999, got ${JSON.stringify(rawMax)}`);
+  }
+  const maxUploadMb = rawMax === '' ? 200 : Number(rawMax);
+
+  return Object.freeze({ port, dataDir, env, logLevel, databaseUrl, maxUploadMb });
 }
 
 let cached: ServerEnv | null = null;

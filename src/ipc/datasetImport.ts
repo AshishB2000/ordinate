@@ -6,6 +6,8 @@ import { parseFile, sourceKindFor } from '../data/fileImport';
 import * as importStage from '../data/importStage';
 import * as jobs from '../app/jobs';
 import * as computePool from '../engine/computePool';
+import { serverDataDir } from '../server/context';
+import { resolveUpload, type Upload } from '../server/files';
 
 // Import IPC — pick a data file and parse it, or parse pasted text. Split out
 // of ./datasets.ts at its 800-line cap. MAIN PROCESS.
@@ -26,10 +28,15 @@ import * as computePool from '../engine/computePool';
 const pickedPaths = new Set<string>();
 
 /** Parse one picked file as a job; resolves with the parse, rejects on error or cancel. */
-export function parseAsJob(filePath: string, kind: 'csv' | 'json' | 'xlsx', sheetName?: string): Promise<ParseResult> {
+export function parseAsJob(
+  filePath: string,
+  kind: 'csv' | 'json' | 'xlsx',
+  sheetName?: string,
+  name: string = path.basename(filePath),
+): Promise<ParseResult> {
   const job = jobs.submit<ParseResult>({
     kind: 'import',
-    label: `Read ${path.basename(filePath)}`,
+    label: `Read ${name}`,
     run: (ctx) => computePool.available()
       ? computePool.run<ParseResult>('parse', { filePath, kind, sheetName }, { onProgress: ctx.progress, signal: ctx.signal })
       : parseFile(filePath, kind, sheetName),
@@ -44,10 +51,19 @@ export function register(): void {
   // parsed preview WITHOUT saving.
   // ponytail: dual behavior (dialog vs re-parse) keeps sheet switching stateless
   // — the renderer passes back the filePath it already received, no re-picking.
-  ipcMain.handle('dataset:pickAndParse', async (_e, { sheetName, filePath }: any = {}) => {
+  //
+  // On the server there is neither: the file was uploaded through POST
+  // /api/files and arrives as { fileToken } (src/server/files.ts). The token is
+  // single use and its file is deleted after the parse, so a sheet switch there
+  // uploads again; the server's temp path never goes back to the browser.
+  ipcMain.handle('dataset:pickAndParse', async (_e, { sheetName, filePath, fileToken }: any = {}) => {
+    let upload: Upload | null = null;
     try {
       let chosenPath: string;
-      if (typeof filePath === 'string' && filePath) {
+      if (serverDataDir() !== null) {
+        upload = resolveUpload(fileToken);
+        chosenPath = upload.path;
+      } else if (typeof filePath === 'string' && filePath) {
         // Re-parse an already-picked file (e.g. sheet switch). Only honor a path
         // main previously returned from the dialog — never an arbitrary path.
         if (!pickedPaths.has(filePath)) return { ok: false, error: 'File was not picked in this session' };
@@ -69,21 +85,25 @@ export function register(): void {
         pickedPaths.add(chosenPath); // allow later sheet-switch re-parses of this file
       }
 
-      const ext = path.extname(chosenPath).toLowerCase();
+      // An upload's own path is `upload-<hex>`: its kind comes from the client's name.
+      const fileName = upload ? upload.name : path.basename(chosenPath);
+      const ext = path.extname(fileName).toLowerCase();
       const kind = sourceKindFor(ext);
       if (!kind) return { ok: false, error: `Unsupported file type: ${ext || '(none)'}` };
 
-      const parsed = await parseAsJob(chosenPath, kind, typeof sheetName === 'string' ? sheetName : undefined);
+      const parsed = await parseAsJob(chosenPath, kind, typeof sheetName === 'string' ? sheetName : undefined, fileName);
       return {
         ok: true,
-        filePath: chosenPath,
-        fileName: path.basename(chosenPath),
+        ...(upload ? {} : { filePath: chosenPath }),
+        fileName,
         sourceKind: kind,
         preview: importStage.previewOf(parsed, importStage.put(parsed)),
       };
     } catch (err: any) {
       if (err instanceof jobs.JobCancelled || (err && err.name === 'JobCancelled')) return { ok: true, canceled: true };
       return { ok: false, error: err?.message || 'Failed to read or parse the file' };
+    } finally {
+      upload?.done();
     }
   });
 
