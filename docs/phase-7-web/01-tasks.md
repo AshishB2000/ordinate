@@ -382,7 +382,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   `ORDINATE_MASTER_KEY`. Rotation command. `publicConfig()` / `publicByok()` still strip everything.
 - **Done when:** a test greps the DB dump and logs for a known secret and finds nothing.
 
-### [ ] T5.4 Jobs and cross-pod events ∥
+### [x] T5.4 Jobs and cross-pod events ∥
 - **Branch** `web/t5.4-jobs` · **Depends** T3.1, T0.5
 - `jobs` table claimed with `FOR UPDATE SKIP LOCKED`; `refreshScheduler`, `pipelineCron`,
   `anomalyWatch`, alerts and S3 GC run through it, so each fires once across N pods.
