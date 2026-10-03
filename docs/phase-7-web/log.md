@@ -535,3 +535,33 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   (`renderer/hub/chartDatasets.ts` + regenerating `test-chartSpec` golden hashes) is its own task.
 - PNG helper composites on the theme surface (`#fff` / `#1c1c20`); off-screen 2× render like the
   desktop capture.
+
+## 2026-10-03 — T1.3 Maps
+
+- `web/src/charts/maps/`: the 13 legacy files ported as pure modules (`geoMatch`, `geoCluster`,
+  `mapKinds`, `geometry`, `colors`, `features`, `thumb`, `radius`) + `MapView` (all kinds, period,
+  Values menu, legends; empty / skeleton / no-WebGL / data-instead / error states; theme redraw),
+  `MapThumb`, `RadiusEditor`. MapLibre **4.7.1 pinned** (exact), dynamic import, the `-csp` build with
+  its worker emitted as a same-origin asset (`setWorkerUrl`) — no blob:/eval. No glyphs, no sprite;
+  value labels and cluster counts are DOM markers. Upgrading to v5/v6 is now feasible (Vite bundles
+  ESM) — a separate decision: re-check the CSP worker and `canvasContextAttributes`.
+- **GeoJSON:** `GET /api/geo/index.json` → `GET /api/geo/<level>.<sha256-16>.json` (immutable 1 y,
+  gzip), served by exact name from a 3-level whitelist — no request path reaches the filesystem;
+  same for every org, sign-in required (`test-geoRoutes`: 10 traversal attempts 404).
+- **CSP:** only the three OSM tile hosts added to `img-src`/`connect-src`. Negative control: without
+  them the maps spec fails with 1,437 problems (479 CSP events).
+- **Proof:** `/dev/maps` draws region, bubble, offline-basemap region (sample retail data), points,
+  hexbin, flow (a seeded deterministic "Shipments" dataset — the sample has no coordinates); WebGL
+  canvases verified by sampled colours, 144 flow routes, 6 cluster markers, radius "Chicago" 50 km →
+  75 points; no request leaves the server + OSM hosts. Differential Vitest vs the legacy draw code on
+  real server replies (sources, markers, camera fit, both themes) — sabotage fails it. Headless WebGL2
+  via SwiftShader (`--enable-unsafe-swiftshader` in the shared e2e launch).
+- **Measured:** 8 RPCs per `/dev/maps`; MapLibre CSP bundle 187 KB gzip + 352 KB worker, all lazy —
+  initial JS unchanged.
+- **Integration (orchestrator):** T1.1 and T1.3 both contracted `visual:data`. One contract now: the
+  charts' loose encoding (`sanitizeEncoding` whitelists every shelf) + the maps' strict `geo` block
+  (unknown level → 400 naming the path, never the value) + a bounded `radius` on filter steps. The maps
+  test that asserted "refuses a pivot shelf" now asserts the shared channel accepts it.
+- **Desktop bug carried and pinned:** `geoMatch`'s substring rule gives West Virginia Virginia's value
+  (26 labels for 25 states in the sample) — fix both copies as its own task. Point colours use the
+  default palette until the project colour map has a web channel (T2.7).
