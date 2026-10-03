@@ -29,6 +29,7 @@
 // finished loading — so the analyze.ts ⇄ analyzeStream.ts cycle is safe.
 import { ADAPTERS, parseMaxTokens, errNetwork, errAuth, errRateLimit, errProvider, errTruncated } from './analyze';
 import type { NeutralMsg, ProviderOpts, CallResult, WireReq } from './analyze';
+import { providerFetch } from './providerFetch';
 
 // Streaming can legitimately run longer than a buffered call (tokens trickle in),
 // but a copilot answer is short prose; keep the same 60s cap the buffered path
@@ -192,8 +193,7 @@ export async function streamProvider(
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), STREAM_TIMEOUT_MS);
   try {
-    // Lazy: loaded by the server's Home graph, which has no Electron.
-    const res = await (require('electron') as typeof import('electron')).net.fetch(sreq.url, {
+    const res = await providerFetch(sreq.url, {
       method: 'POST',
       headers: sreq.headers,
       body: JSON.stringify(sreq.body),

@@ -2,7 +2,8 @@
 //
 // Every executor below is the sequence an existing door already runs, called
 // directly rather than re-implemented:
-//   import     the native open dialog → parseAsJob (a job, parsed in a compute
+//   import     the native open dialog (on the server: the upload plan:next
+//              hands over, T0.4) → parseAsJob (a job, parsed in a compute
 //              worker) → datasets.saveDataset → runQualityChecks — the file
 //              import's own three calls (src/ipc/datasetImport.ts, and
 //              automation's `datasets import`)
@@ -21,7 +22,6 @@
 // per record (src/ai/planRun.ts): created → the Trash, changed → writeBack of
 // what it was before (src/ipc/versions.ts's restore primitive).
 
-import { dialog, BrowserWindow } from 'electron';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as datasets from '../data/datasets';
@@ -38,6 +38,8 @@ import { buildPlanRecords } from '../analysis/planBuild';
 import { DASHBOARD_STYLE_PRESETS } from '../analysis/dashboards';
 import type { DashboardStylePreset } from '../analysis/dashboards';
 import { sourceKindForPath } from '../data/fileImport';
+import { serverDataDir } from '../server/context';
+import { resolveUpload } from '../server/files';
 import { runQualityChecks } from '../analysis/qualityRun';
 import { commitSteps } from '../ipc/datasets';
 import { writeBack } from '../ipc/versions';
@@ -92,8 +94,14 @@ async function kpiOf(projectId: string, metricId: string): Promise<{ name: strin
   return r && r.ok ? { name: r.name, display: r.display } : null;
 }
 
-async function runImport(run: PlanRun, step: Extract<PlanStep, { kind: 'import' }>): Promise<StepOutcome> {
-  const pid = run.projectId;
+/** The file an import step reads: the desktop's native picker, or the server's upload (single use). */
+async function pickImportFile(run: PlanRun, step: Extract<PlanStep, { kind: 'import' }>): Promise<{ path: string; name: string; done(): void } | null> {
+  if (serverDataDir() !== null) {
+    const token = run.fileToken;
+    run.fileToken = undefined;
+    return token ? resolveUpload(token) : null;
+  }
+  const { dialog, BrowserWindow } = require('electron') as typeof import('electron'); // desktop only
   const opts: Electron.OpenDialogOptions = {
     title: step.file ? `Pick ${step.file} to import` : 'Pick the file to import',
     defaultPath: step.file || undefined,
@@ -102,21 +110,35 @@ async function runImport(run: PlanRun, step: Extract<PlanStep, { kind: 'import' 
   };
   const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
   const picked = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
-  if (picked.canceled || !picked.filePaths.length) return { ok: false, error: 'No file was picked.' };
-  const filePath = picked.filePaths[0];
-  const kind = sourceKindForPath(filePath);
-  if (!kind) return { ok: false, error: `${path.basename(filePath)} is not a CSV, JSON or Excel file.` };
-  const parsed = await parseAsJob(filePath, kind);
-  const name = step.name || path.basename(filePath, path.extname(filePath));
+  return picked.canceled || !picked.filePaths.length ? null : { path: picked.filePaths[0], name: path.basename(picked.filePaths[0]), done() {} };
+}
+
+async function runImport(run: PlanRun, step: Extract<PlanStep, { kind: 'import' }>): Promise<StepOutcome> {
+  const pid = run.projectId;
+  const picked = await pickImportFile(run, step);
+  if (!picked) return { ok: false, error: serverDataDir() !== null ? 'Choose the file to import, then run the step.' : 'No file was picked.' };
+  // An upload's own path is `upload-<hex>`: its kind and name come from the client's file name.
+  const kind = sourceKindForPath(picked.name);
+  let parsed: Awaited<ReturnType<typeof parseAsJob>>;
+  try {
+    if (!kind) return { ok: false, error: `${picked.name} is not a CSV, JSON or Excel file.` };
+    parsed = await parseAsJob(picked.path, kind, undefined, picked.name);
+  } finally {
+    picked.done();
+  }
+  const filePath = picked.path;
+  const name = step.name || path.basename(picked.name, path.extname(picked.name));
   const saved = await datasets.saveDataset(pid, {
-    name, sourceKind: kind, columns: parsed.columns, rows: parsed.rows, origin: { kind: 'file', path: filePath },
+    name, sourceKind: kind, columns: parsed.columns, rows: parsed.rows,
+    // The server's upload was a temp file, deleted above: nothing to refresh from.
+    ...(serverDataDir() !== null ? {} : { origin: { kind: 'file' as const, path: filePath } }),
   });
   if (!saved) return { ok: false, error: 'Could not save the dataset.' };
   await runQualityChecks(pid, saved.id);
   return {
     ok: true,
     result: {
-      summary: `${fmt(saved.rowCount)} rows × ${saved.columns.length} columns from ${path.basename(filePath)}`,
+      summary: `${fmt(saved.rowCount)} rows × ${saved.columns.length} columns from ${picked.name}`,
       rowsAfter: saved.rowCount,
       link: { type: 'dataset', id: saved.id, name: saved.name },
     },

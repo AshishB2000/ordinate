@@ -209,7 +209,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
 - Captures: new "Upload or paste a screenshot" source → `captureDataset:draft`; the capture list
   stays a tab under Data. Model reads the image server-side; preview cells editable for this source only.
 
-### [ ] T2.5 Connections
+### [x] T2.5 Connections
 - **Branch** `web/t2.5-connections` · **Legacy:** `connections`, `connNew`, `connEditor`,
   `connDetails`, `connRun`, `connWorkbench`, `saas`.
 - Remove the 3 local-folder sources from the registry in server mode (`capabilities()`), keep URL.
@@ -264,7 +264,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   `queryEditor`, `queryParams`.
 - The SQL tab runs only through `sqlGate`; nothing in the browser builds SQL.
 
-### [ ] T2.12 AI dock, ask, plans
+### [x] T2.12 AI dock, ask, plans
 - **Branch** `web/t2.12-dock` · **Legacy:** `dock`, `dockEdit`, `dockHero`, `dockPropose`,
   `dockResize`, `askCore`, `askActivity`, `answerCard`, `planCard`, `planEdit`, `execMenu`,
   `hubResultMenus`, `sidePanel`.
@@ -368,7 +368,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
 - Importer: `ordinate import-desktop <path-to-userData>` loads a desktop install into an org.
 - **Done when:** the whole test suite passes against Postgres; the importer round-trips the sample project.
 
-### [ ] T5.2 Parquet on S3 ∥
+### [x] T5.2 Parquet on S3 ∥
 - **Branch** `web/t5.2-s3` · **Depends** T4.3
 - `STORAGE_URL` = `file:///data` or `s3://bucket/prefix`. Writes go to a new versioned key, then
   the record pointer switches in Postgres (replaces temp-then-rename). Local disk cache with LRU

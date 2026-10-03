@@ -4,7 +4,7 @@
 import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
 import { withLanguage } from '../app/i18n';
-import { runLocalCli } from '../cli/localCliRun';
+import { providerFetch } from './providerFetch';
 import { computeMetrics, deriveChartData } from '../formula/calc';
 import { writeHeadline, verifyHeadlineNumbers } from './headline';
 import { DRAFT_DASHBOARD_SYSTEM_PROMPT } from '../analysis/analysisPlan';
@@ -480,8 +480,7 @@ async function callProvider(provider: string, systemPrompt: string, messages: Ne
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 60000);
   try {
-    // Lazy: loaded by the server's Home graph, which has no Electron.
-    const res = await (require('electron') as typeof import('electron')).net.fetch(req.url, {
+    const res = await providerFetch(req.url, {
       method: 'POST',
       headers: req.headers,
       body: JSON.stringify(req.body),
@@ -529,14 +528,15 @@ async function callProvider(provider: string, systemPrompt: string, messages: Ne
 }
 
 // Resolve the active BYOK provider + credentials, or return an error.
-function resolveByok():
+async function resolveByok(): Promise<
   | { error: TypedError }
-  | { error?: undefined; provider: string; apiKey?: string | null; baseUrl?: string; model: string; maxTokens?: number | string } {
+  | { error?: undefined; provider: string; apiKey?: string | null; baseUrl?: string; model: string; maxTokens?: number | string }> {
   // Only ever run a provider that is actually Connected (verified). A stale or
   // keyless active provider resolves to null → ask the user to connect one.
   const provider = execConfig.effectiveByokActive();
   if (!provider) return { error: errNoKey() };
-  const entry = execConfig.getByokProvider(provider); // includes apiKey — main only
+  if (!(await execConfig.providerAllowed(provider))) return { error: errProvider2(`Your organization does not allow ${ADAPTERS[provider]?.label || provider}. Ask an admin to connect an allowed provider.`) };
+  const entry = await execConfig.byokCredentials(provider); // includes apiKey — main only
   if (provider !== 'gateway' && !entry.apiKey) return { error: errNoKey() };
   if (provider === 'gateway' && !entry.baseUrl) {
     return { error: Object.assign(errProvider(), { detail: 'Gateway · set a base URL in Settings' }) };
@@ -566,7 +566,7 @@ const RUNNABLE_LOCAL_CLIS = ['claude', 'antigravity', 'codex', 'grok', 'opencode
 export async function dispatch(systemPrompt: string, messages: NeutralMsg[], onDelta?: (delta: string) => void, opts?: { prose?: boolean }): Promise<CallResult> {
   systemPrompt = withLanguage(systemPrompt); // Settings → Language: one line, absent in English
   const cfg = config.get();
-  if ((cfg.executionMode || 'byok') === 'local') {
+  if (!execConfig.serverMode() && (cfg.executionMode || 'byok') === 'local') { // a server runs API-key providers only
     const activeId = cfg.localCli && cfg.localCli.activeId;
     if (!RUNNABLE_LOCAL_CLIS.includes(activeId as string)) {
       return {
@@ -575,9 +575,9 @@ export async function dispatch(systemPrompt: string, messages: NeutralMsg[], onD
           : errProvider2('No app picked yet — choose one in Settings → Assistant.'),
       };
     }
-    return runLocalCli(activeId as string, systemPrompt, messages, opts); // onDelta unused → local CLI is reveal-on-complete (buffered)
+    return (require('../cli/localCliRun') as typeof import('../cli/localCliRun')).runLocalCli(activeId as string, systemPrompt, messages, opts); // onDelta unused → local CLI is reveal-on-complete (buffered)
   }
-  const creds = resolveByok();
+  const creds = await resolveByok();
   if (creds.error) return { error: creds.error };
   return callProvider(creds.provider, systemPrompt, messages, creds, onDelta);
 }
@@ -588,7 +588,7 @@ function errProvider2(message: string): TypedError { return { ok: false, errorTy
 // Returns a typed result: { ok:true, message } or a typed error object.
 export async function testProvider(provider: string): Promise<TypedError | { ok: true; message: string }> {
   if (!ADAPTERS[provider]) return errUnknown();
-  const entry = execConfig.getByokProvider(provider);
+  const entry = await execConfig.byokCredentials(provider);
   if (provider !== 'gateway' && !entry.apiKey) return errNoKey();
   if (provider === 'gateway' && !entry.baseUrl) {
     return Object.assign(errProvider(), { message: 'Set a base URL for the gateway.' });
@@ -614,7 +614,7 @@ const LOCAL_CLI_NAMES: Record<string, string> = { claude: 'Claude Code', antigra
 export async function testLocalCli(cliId: string): Promise<TypedError | { ok: true; message: string }> {
   if (!RUNNABLE_LOCAL_CLIS.includes(cliId)) return errUnknown();
   const messages = [{ role: 'user', text: 'Reply with the single word OK.' }];
-  const { rawText, error } = (await runLocalCli(cliId, 'You are a connectivity test. Reply with OK.', messages, {})) as CallResult;
+  const { rawText, error } = (await (require('../cli/localCliRun') as typeof import('../cli/localCliRun')).runLocalCli(cliId, 'You are a connectivity test. Reply with OK.', messages, {})) as CallResult;
   if (error) return error;
   if (!rawText) return errBadReply();
   return { ok: true, message: `Connected — ${LOCAL_CLI_NAMES[cliId] || 'the CLI'} responded.` };

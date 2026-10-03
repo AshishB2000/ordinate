@@ -1,0 +1,151 @@
+/* The answer card — hub.css .ans-*: a card on the panel (surface, hairline,
+   --r-lg), denser than a proposal: the headline figures first, then a
+   320×180 chart, the app's caption, the actions and the follow-up chips. */
+
+.card {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+.error {
+  border-style: dashed;
+  box-shadow: none;
+}
+.loading {
+  gap: var(--sp-12);
+}
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.title {
+  font-size: var(--t-13);
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  color: var(--text-strong);
+}
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.dataset {
+  font-size: var(--t-11);
+  color: var(--muted);
+  margin-right: var(--sp-4);
+}
+.filter {
+  font-size: var(--t-11);
+  padding: 1px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+}
+.kpis {
+  display: flex;
+  gap: var(--sp-16);
+  flex-wrap: wrap;
+}
+.kpi {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.kpiValue {
+  font-family: var(--font-numeric);
+  font-size: var(--t-20);
+  font-weight: 600;
+  letter-spacing: var(--tr-tighter);
+  line-height: var(--lh-tight);
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.kpiLabel {
+  font-size: var(--t-11);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chart {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  height: 180px;
+}
+.skel {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  height: 180px;
+  border-radius: var(--r-md);
+}
+.caption {
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--text);
+}
+.note {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.facts {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12) var(--sp-8) var(--sp-24);
+  background: var(--inset);
+  border-radius: var(--r-md);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--text);
+}
+.facts li + li {
+  margin-top: var(--sp-4);
+}
+.table {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.chip {
+  padding: 2px var(--sp-8);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
+}
+.chip:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.chip:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.chip:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}

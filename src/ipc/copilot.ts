@@ -244,7 +244,9 @@ export async function buildFacts(
   if (kind === 'capture' && id) {
     const thread = await history.loadThread(id);
     const extracted = thread && thread.result ? thread.result.extractedTable : null;
-    if (thread && extracted) {
+    // Only a capture OF THIS PROJECT: the history store is org-wide, and a
+    // caller cleared for this project must not read another's by id.
+    if (thread && extracted && thread.projectId === projectId) {
       emit({ kind: 'read', label: 'Read ' + (thread.title || 'capture') });
       const draft = captureDataset.buildDraft(extracted);
       emit({ kind: 'read', label: 'Read the extracted table', detail: plural(draft.rows.length, 'row') });

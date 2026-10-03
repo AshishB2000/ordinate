@@ -26,6 +26,8 @@ const appMod: typeof import('../src/server/app') = require('../src/server/app');
 
 const MAIN = path.join(__dirname, '..', 'src', 'server', 'main.js');
 const MARK = 'ELECTRON-REQUIRED-IN-SERVER';
+// T2.12: a pod never runs a local CLI, so src/cli must not even load.
+const CLI_MARK = 'SRC-CLI-LOADED-IN-SERVER';
 
 function envFails(label: string, src: Record<string, string>, needle: string): void {
   try {
@@ -127,7 +129,9 @@ M._resolveFilename = function (req, ...rest) {
     process.stderr.write(${JSON.stringify(MARK + '\n')});
     throw new Error('electron is not installed (server boot test)');
   }
-  return orig.call(this, req, ...rest);
+  const file = orig.call(this, req, ...rest);
+  if (/[\\/]src[\\/]cli[\\/]/.test(file)) process.stderr.write(${JSON.stringify(CLI_MARK + '\n')} + file + ${JSON.stringify('\n')});
+  return file;
 };
 `);
 
@@ -176,6 +180,9 @@ M._resolveFilename = function (req, ...rest) {
     child.kill('SIGKILL');
   }
   ok('boot: nothing in the server graph asked for electron', !stderr.includes(MARK), stderr);
+  ok('boot: nothing in the server graph loaded src/cli (no local CLI execution on a server)', !stderr.includes(CLI_MARK), stderr);
+  const cliControl = spawnSync(process.execPath, ['-r', hook, '-e', "require('./src/cli/localCli')"], { cwd: path.join(__dirname, '..'), env: childEnv({}), encoding: 'utf8' });
+  ok('control: the preload really sees a src/cli load', cliControl.stderr.includes(CLI_MARK), cliControl.stderr);
 
   // ── Bad config stops startup with one line ────────────────────────────────
   const bad = spawnSync(process.execPath, [MAIN], { env: childEnv({ ORDINATE_ENV: 'staging', PORT: '0' }), encoding: 'utf8', timeout: 20_000 });
