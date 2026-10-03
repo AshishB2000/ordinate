@@ -7,6 +7,7 @@
 
 import { createSecretKey, type KeyObject } from 'crypto';
 import { BlockList, isIP } from 'net';
+import * as os from 'os';
 import * as path from 'path';
 
 export type OrdinateEnv = 'dev' | 'prod';
@@ -32,6 +33,21 @@ export interface ServerEnv {
   readonly masterKey: KeyObject | null;
   /** Sign-in (T3.2). Holds the OIDC client secret: never log this object. */
   readonly auth: AuthEnv;
+  /** The per-org DuckDB worker pool (T4.3, src/engine/duckdbPool.ts). */
+  readonly duckdb: DuckEnv;
+}
+
+export interface DuckEnv {
+  /** DUCKDB_MAX_WORKERS: live org workers at once; the least recently used idle one is closed past it. */
+  readonly maxWorkers: number;
+  /** DUCKDB_MEMORY_LIMIT, per worker, as DuckDB spells it ('2GB', '512MiB'). */
+  readonly memoryLimit: string;
+  /** DUCKDB_THREADS, per worker. */
+  readonly threads: number;
+  /** DUCKDB_QUERY_TIMEOUT_SECONDS: a query running longer is interrupted. */
+  readonly queryTimeoutMs: number;
+  /** DUCKDB_IDLE_SECONDS: a worker unused this long is closed. */
+  readonly idleMs: number;
 }
 
 /** dev: everyone is the dev admin (refused in prod). oidc: SSO sign-in. header: trust a proxy's X-Forwarded-Email. */
@@ -139,7 +155,31 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   const masterKey = rawKey === '' ? null : parseMasterKey('ORDINATE_MASTER_KEY', rawKey);
 
   const auth = parseAuth(src, env, databaseUrl);
-  return Object.freeze({ port, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth });
+  const duckdb = parseDuck(src);
+  return Object.freeze({ port, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb });
+}
+
+// A DuckDB size literal. Validated here because it is written into a SET.
+const SIZE_RE = /^\d{1,7}(\.\d{1,3})? ?(B|KB|MB|GB|TB|KiB|MiB|GiB|TiB)$/;
+
+function parseDuck(src: Readonly<Record<string, string | undefined>>): DuckEnv {
+  const maxWorkers = positiveInt('DUCKDB_MAX_WORKERS', src.DUCKDB_MAX_WORKERS, 8);
+  const rawMem = src.DUCKDB_MEMORY_LIMIT ?? '';
+  if (rawMem !== '' && !SIZE_RE.test(rawMem)) {
+    throw new EnvError(`DUCKDB_MEMORY_LIMIT must be a size like 512MiB or 2GB, got ${JSON.stringify(rawMem)}`);
+  }
+  // Default: 80% of the memory this process may use (the cgroup limit in a
+  // container, else the machine's), shared by the most workers that can be live.
+  const limit = process.constrainedMemory();
+  const total = limit > 0 && limit < os.totalmem() ? limit : os.totalmem();
+  const memoryLimit = rawMem || `${Math.max(64, Math.floor((total * 0.8) / maxWorkers / 2 ** 20))}MiB`;
+  return Object.freeze({
+    maxWorkers,
+    memoryLimit,
+    threads: positiveInt('DUCKDB_THREADS', src.DUCKDB_THREADS, os.availableParallelism()),
+    queryTimeoutMs: positiveInt('DUCKDB_QUERY_TIMEOUT_SECONDS', src.DUCKDB_QUERY_TIMEOUT_SECONDS, 60) * 1000,
+    idleMs: positiveInt('DUCKDB_IDLE_SECONDS', src.DUCKDB_IDLE_SECONDS, 300) * 1000,
+  });
 }
 
 /**

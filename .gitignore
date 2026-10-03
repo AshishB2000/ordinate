@@ -1098,3 +1098,8 @@ scripts/**/*.js
 /scripts/test-records.js
 /scripts/test-importDesktop.js
 /scripts/bench-records.js
+/src/engine/duckdbPool.js
+/src/engine/duckdbClient.js
+/src/api/visuals.js
+/scripts/test-duckdbPool.js
+/scripts/loadtest.js

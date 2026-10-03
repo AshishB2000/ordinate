@@ -17,7 +17,7 @@
 //   npm run build:ts && node scripts/test-serverModeResident.js
 
 export {}; // module scope — sibling test scripts share top-level names
-import { ok, finish } from './selfcheck';
+import { ok, ok as okBase, finish } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -51,6 +51,9 @@ Module._load = function (request: string, ...rest: any[]): any {
 };
 
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
+const poolMod: typeof import('../src/engine/duckdbPool') = require('../src/engine/duckdbPool');
+const context: typeof import('../src/server/context') = require('../src/server/context');
+const computePool: typeof import('../src/engine/computePool') = require('../src/engine/computePool');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const dp: typeof import('../src/engine/datasetPage') = require('../src/engine/datasetPage');
@@ -150,6 +153,22 @@ async function main(): Promise<void> {
   duck.forbidSyncOnMainThread(false);
   ok('lifted: sync query() answers again', duck.query('SELECT 1 AS x')[0].x === 1);
 
+  // Sections 2–3 run twice: on the desktop's single bridge, then ROUTED (T4.3)
+  // — server mode, the caller's org worker picked by ctx(), locked to its org
+  // directory, with compute ops on their own threads talking to that worker
+  // over a leased port. The same answers, Object.is, both ways.
+  await differential('');
+  duck.shutdown();
+  context.enterServerMode(path.join(tmpUserData, 'server-data'));
+  const pool = poolMod.routeByOrg({ dataDir: path.join(tmpUserData, 'server-data'), maxWorkers: 4, memoryLimit: '512MiB', threads: 2, queryTimeoutMs: 60_000, idleMs: 60_000 });
+  delete process.env.ORDINATE_COMPUTE_INLINE;
+  await context.runInContext({ user: { email: 'u@acme', role: 'admin' }, org: { id: 'acme' } }, 'routed', () => differential('routed: '));
+  process.env.ORDINATE_COMPUTE_INLINE = '1';
+  ok("routed: the answers came from org acme's worker", JSON.stringify(pool.orgs()) === '["acme"]', JSON.stringify(pool.orgs()));
+}
+
+async function differential(mode: string): Promise<void> {
+  const ok = (label: string, cond: boolean, extra?: unknown): void => okBase(mode + label, cond, extra);
   // ── 2. Fixture (set up with the desktop rules), then the guard back on ─────
   await projects.init();
   await datasets.init();
@@ -302,6 +321,8 @@ main()
   .catch((err) => ok('threw: ' + String(err && (err as Error).stack), false))
   .finally(() => {
     duck.shutdown();
-    try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* best effort */ }
-    finish();
+    void computePool.shutdown().finally(() => {
+      try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* best effort */ }
+      finish();
+    });
   });

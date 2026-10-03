@@ -5,8 +5,11 @@
 // module runs on the async bridge, so its queries no longer park the main
 // thread — but a big job's DECODING and maths (millions of cells, k-means, a
 // regression) still would. Here that work runs on THIS thread. The module
-// registry is per-thread, so this thread gets its own DuckDB bridge (its own
-// in-memory database; the Parquet files are the shared state, read-only here).
+// registry is per-thread, so on the desktop this thread gets its own DuckDB
+// bridge (its own in-memory database; the Parquet files are the shared state).
+// On the server (T4.3) each op instead arrives with a port to the CALLER'S org
+// worker (src/engine/duckdbPool.ts) and every query goes there, under that
+// org's directory lock — this thread never opens a DuckDB of its own.
 // The same async code runs here unchanged; a worker thread is also exempt
 // from `forbidSyncOnMainThread`, and is never reachable from a handler's
 // require graph (scripts/test-asyncReach.ts).
@@ -21,6 +24,9 @@
 //        { id, type: 'done', result } | { id, type: 'error', message }
 
 import { parentPort } from 'worker_threads';
+import type { MessagePort } from 'worker_threads';
+import { setRouter } from './duckdb';
+import { DuckClient } from './duckdbClient';
 import { detectAnomaliesResident } from './anomaliesResident';
 import { detectInsights, fromAnomaly, residentAgg } from '../analysis/insights';
 import type { Insight } from '../analysis/insights';
@@ -96,16 +102,29 @@ const OPS: Record<string, (args: any, progress: Progress) => Promise<unknown>> =
 
 if (parentPort) {
   const port = parentPort;
-  port.on('message', (msg: { id: number; op: string; args: unknown }) => {
+  port.on('message', (msg: { id: number; op: string; args: unknown; duck?: { port: MessagePort; timeoutMs: number } }) => {
     const fn = OPS[msg && msg.op];
+    // Server: this op's DuckDB is the caller's org worker, over the leased port
+    // (computePool). One op per thread, so a module-level router is this op's.
+    const line = msg && msg.duck;
+    if (line) {
+      const client = new DuckClient(line.port, line.timeoutMs);
+      setRouter({ call: (kind, sql, params) => client.call(kind, sql, params), available: () => true });
+    }
+    const hangUp = (): void => {
+      if (!line) return;
+      setRouter(null);
+      line.port.close();
+    };
     const progress: Progress = (fraction, note) => port.postMessage({ id: msg.id, type: 'progress', fraction, note });
     if (!fn) {
       port.postMessage({ id: msg && msg.id, type: 'error', message: 'Unknown compute op' });
+      hangUp();
       return;
     }
     fn(msg.args, progress).then(
       (result) => port.postMessage({ id: msg.id, type: 'done', result }),
       (err) => port.postMessage({ id: msg.id, type: 'error', message: err instanceof Error ? err.message : String(err) }),
-    );
+    ).finally(hangUp);
   });
 }

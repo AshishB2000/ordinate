@@ -6,6 +6,7 @@ import { buildApp, registerHandlers } from './app';
 import { enterServerMode, identityFor } from './context';
 import { env, type ServerEnv } from './env';
 import { forbidSyncOnMainThread } from '../engine/duckdb';
+import { routeByOrg } from '../engine/duckdbPool';
 
 let cfg: ServerEnv;
 try {
@@ -25,6 +26,9 @@ enterServerMode(cfg.dataDir);
 // them: from here on `duck.query()`/`exec()` on this thread THROW (worker
 // threads are exempt). scripts/test-asyncReach.ts proves no handler reaches one.
 forbidSyncOnMainThread();
+// Every async DuckDB call runs in the caller's org worker, locked to that org's
+// directory (src/engine/duckdbPool.ts); the process-wide worker never starts.
+routeByOrg({ dataDir: cfg.dataDir, ...cfg.duckdb });
 registerHandlers();
 const app = buildApp(cfg);
 

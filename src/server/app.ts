@@ -7,7 +7,7 @@
 // graph breaks the build's tests, not a deploy.
 
 import { fastify, type FastifyInstance, type FastifyRequest } from 'fastify';
-import { isAvailable, shutdown } from '../engine/duckdb';
+import { probe, shutdown } from '../engine/duckdb';
 import { contractFor } from '../api/index';
 import type { ServerEnv } from './env';
 import { ctx, runInContext, type Identify } from './context';
@@ -169,7 +169,12 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         // Which tab's event stream a push from the handler goes to:
         // X-Ordinate-Client, honoured only when that stream is bound to this
         // caller (./sse.ts). /api/events itself is behind this gate too.
-        runInContext(who, String(req.id), done, clientFor(req.headers['x-ordinate-client'], who) ?? undefined);
+        // A caller that goes away before its reply (a closed tab, an aborted
+        // fetch) aborts the request's signal: its DuckDB queries are interrupted
+        // in the org worker instead of running on for nobody (T4.3).
+        const ac = new AbortController();
+        reply.raw.once('close', () => { if (!reply.raw.writableFinished) ac.abort(); });
+        runInContext(who, String(req.id), done, clientFor(req.headers['x-ordinate-client'], who) ?? undefined, ac.signal);
       },
       (err: unknown) => {
         req.log.error({ err }, 'identify failed');
@@ -181,10 +186,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   registerEvents(app);
 
   // Readiness: can this pod answer queries? DuckDB, plus Postgres when
-  // configured. The first call starts the DuckDB worker (~115 ms, blocking) —
-  // later calls are a state check.
+  // configured. With per-org workers (T4.3) the first call starts a locked,
+  // empty probe worker and asks it (awaited, not blocking); once any worker has
+  // started it is a state check.
   app.get('/readyz', async (_req, reply) => {
-    const duckdb = isAvailable();
+    const duckdb = await probe();
     const checks: Record<string, boolean> = { duckdb };
     if (pool) checks.postgres = await ping(pool);
     const ok = Object.values(checks).every(Boolean);
@@ -274,7 +280,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
  * a handler module.
  */
 export function registerHandlers(): void {
-  for (const mod of ['../ipc/projects', '../ipc/datasets', '../ipc/recent', '../ipc/quality']) {
+  for (const mod of ['../ipc/projects', '../ipc/datasets', '../ipc/recent', '../ipc/quality', '../ipc/visuals']) {
     (require(mod) as { register: () => void }).register();
   }
   (require('./authz/share') as typeof import('./authz/share')).register(() => dbPool);

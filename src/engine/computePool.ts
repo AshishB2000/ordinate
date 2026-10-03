@@ -13,6 +13,7 @@
 
 import * as path from 'path';
 import { Worker } from 'worker_threads';
+import { leasePort } from './duckdb';
 
 export const MAX_WORKERS = 3;
 const IDLE_MS = 30_000;
@@ -123,9 +124,20 @@ export async function run<T>(
   opts: { onProgress?: (fraction: number, note?: string) => void; signal?: AbortSignal } = {},
 ): Promise<T> {
   if (opts.signal && opts.signal.aborted) throw new ComputeCancelled();
-  const slot = await acquire();
+  // Server (T4.3): the op's DuckDB calls go down a port to the CALLER'S org
+  // worker — never to a DuckDB of the thread's own, which no org lock covers.
+  // Terminating the thread on cancel closes the port, and the org worker
+  // interrupts whatever that port was running. Null on the desktop.
+  const lease = leasePort();
+  let slot: Slot;
+  try {
+    slot = await acquire();
+  } catch (err) {
+    lease?.release();
+    throw err;
+  }
   const id = nextId++;
-  return new Promise<T>((resolve, reject) => {
+  const done = new Promise<T>((resolve, reject) => {
     pending.set(id, { slot, resolve: resolve as (v: unknown) => void, reject, onProgress: opts.onProgress });
     if (opts.signal) {
       opts.signal.addEventListener('abort', () => {
@@ -135,8 +147,10 @@ export async function run<T>(
         void slot.worker.terminate(); // 'exit' removes the slot and wakes a waiter
       }, { once: true });
     }
-    slot.worker.postMessage({ id, op, args });
+    if (lease) slot.worker.postMessage({ id, op, args, duck: { port: lease.port, timeoutMs: lease.timeoutMs } }, [lease.port]);
+    else slot.worker.postMessage({ id, op, args });
   });
+  return lease ? done.finally(() => lease.release()) : done;
 }
 
 /** Close every worker (app quit, tests). */

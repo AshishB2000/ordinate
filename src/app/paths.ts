@@ -17,7 +17,7 @@ type Kind = 'userData' | 'downloads' | 'temp' | 'documents';
 
 // An org id becomes a path segment. Lowercase slug or UUID; no dot, no
 // separator, so `..` and `a/b` can never reach the filesystem.
-const ORG_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
+export const ORG_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
 const made = new Set<string>();
 
