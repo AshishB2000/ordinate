@@ -5,6 +5,7 @@
 // minutes later in whatever code first reads it. `parseEnv` is pure (the tests
 // feed it plain objects); `env()` is the process-wide cached read.
 
+import { createSecretKey, type KeyObject } from 'crypto';
 import * as path from 'path';
 
 export type OrdinateEnv = 'dev' | 'prod';
@@ -22,6 +23,12 @@ export interface ServerEnv {
   readonly databaseUrl: string | null;
   /** Largest file `POST /api/files` accepts, in MB (MAX_UPLOAD_MB). */
   readonly maxUploadMb: number;
+  /**
+   * ORDINATE_MASTER_KEY (T5.3): wraps the per-org data keys that encrypt every
+   * stored secret (src/server/secrets/). A `KeyObject`, so the bytes never
+   * reach JSON, `util.inspect` or a log line. Null when unset.
+   */
+  readonly masterKey: KeyObject | null;
 }
 
 const ENVS: readonly OrdinateEnv[] = ['dev', 'prod'];
@@ -81,7 +88,33 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   }
   const maxUploadMb = rawMax === '' ? 200 : Number(rawMax);
 
-  return Object.freeze({ port, dataDir, env, logLevel, databaseUrl, maxUploadMb });
+  // Required in prod once there is a database to hold secrets: without it a
+  // pod could store nothing, and would fail on the first connection save.
+  const rawKey = src.ORDINATE_MASTER_KEY ?? '';
+  if (rawKey === '' && env === 'prod' && databaseUrl !== null) {
+    throw new EnvError('ORDINATE_MASTER_KEY is required when ORDINATE_ENV=prod and DATABASE_URL is set (32 random bytes: `openssl rand -base64 32`)');
+  }
+  const masterKey = rawKey === '' ? null : parseMasterKey('ORDINATE_MASTER_KEY', rawKey);
+
+  return Object.freeze({ port, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey });
+}
+
+/**
+ * A 32-byte key written as 64 hex chars, or base64 / base64url (44 chars with
+ * `=`, 43 without). Surrounding whitespace is ignored — a Kubernetes secret
+ * made with `echo` carries a newline. The error NEVER echoes the value.
+ */
+export function parseMasterKey(name: string, raw: string): KeyObject {
+  const v = raw.trim();
+  let buf: Buffer | null = null;
+  if (/^[0-9a-fA-F]{64}$/.test(v)) buf = Buffer.from(v, 'hex');
+  else if (/^[A-Za-z0-9+/_-]{43}=?$/.test(v)) buf = Buffer.from(v, 'base64');
+  if (!buf || buf.length !== 32) {
+    throw new EnvError(`${name} must be 32 bytes written as base64 (44 chars) or hex (64 chars) (value not shown)`);
+  }
+  const key = createSecretKey(buf);
+  buf.fill(0);
+  return key;
 }
 
 let cached: ServerEnv | null = null;

@@ -1063,3 +1063,8 @@ scripts/**/*.js
 /src/server/sse.js
 /src/api/quality.js
 /scripts/test-sse.js
+
+# web/t5.3-secrets
+/src/server/secrets/store.js
+/src/server/secrets/rotate.js
+/scripts/test-secrets.js
