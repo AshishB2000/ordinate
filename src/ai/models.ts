@@ -5,9 +5,9 @@
 // with a fixed args array (no shell). Every path degrades gracefully: callers
 // fall back to cached/default on failure (see main.js models:list).
 
-import { net } from 'electron';
 import { spawn, ChildProcess } from 'child_process';
 import * as execConfig from '../app/execConfig';
+import { providerFetch } from './providerFetch';
 
 const TIMEOUT_MS = 12000;
 export const BYOK: string[] = ['anthropic', 'openai', 'gemini', 'gateway'];
@@ -24,7 +24,7 @@ async function getJson(url: string, headers: Record<string, string>): Promise<Js
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const res = await net.fetch(url, { headers, signal: ctrl.signal });
+    const res = await providerFetch(url, { headers, signal: ctrl.signal });
     clearTimeout(timer);
     // Keep the error body (capped) so failures can be logged with a real cause.
     let json: any = null, bodyText = ''; // ponytail: provider JSON envelope
@@ -70,7 +70,7 @@ function parseByok(provider: string, json: any): ModelRow[] {
 }
 
 async function fetchByokModels(provider: string): Promise<ListResult> {
-  const e = execConfig.getByokProvider(provider); // { apiKey, baseUrl, model } — main only
+  const e = await execConfig.byokCredentials(provider); // { apiKey, baseUrl, model } — main only (the server's from its secrets store)
   const baseUrl = (e.baseUrl || '').replace(/\/+$/, '');
   if (!e.apiKey) return fail('no_key');
   if (provider === 'gateway' && !baseUrl) return fail('no_key');
@@ -113,7 +113,7 @@ function parseAgyModels(stdout: string): ModelRow[] {
 function fetchCliModels(cliId: string): Promise<ListResult> {
   // Only Antigravity exposes a non-interactive list. Claude Code (and others)
   // have no such command — honest "Default (CLI config)".
-  if (cliId !== 'antigravity') return Promise.resolve(ok([]));
+  if (cliId !== 'antigravity' || execConfig.serverMode()) return Promise.resolve(ok([])); // a server runs no CLI
   const rec = execConfig.getLocalCliResult('antigravity');
   const bin = rec && rec.status === 'installed' && rec.resolvedPath;
   if (!bin) return Promise.resolve(fail('not_installed'));

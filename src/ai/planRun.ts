@@ -65,6 +65,8 @@ export interface PlanRun {
   touches: Touch[];
   state: RunState;
   undo?: UndoReport;
+  /** Server only: the upload (POST /api/files token) the next import step reads, handed over by plan:next. */
+  fileToken?: string;
 }
 
 export interface RunDeps {

@@ -11,6 +11,7 @@ import { adminContracts } from './admin';
 import { tokens } from './tokens';
 import { maps } from './maps';
 import { connections } from './connections';
+import { assistant } from './assistant';
 
 export const contracts = {
   ...projects,
@@ -22,6 +23,7 @@ export const contracts = {
   ...tokens,
   ...maps,
   ...connections,
+  ...assistant,
 } as const;
 
 export type Channel = keyof typeof contracts;

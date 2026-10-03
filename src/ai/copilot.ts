@@ -31,6 +31,7 @@ import type { LedgerEntry } from './numberAudit';
 import { sanitizeStoredSpec } from './answerSpec';
 import type { AnswerSpec } from './answerSpec';
 import * as recordFs from '../app/recordFs';
+import { ctx, serverDataDir } from '../server/context';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,9 @@ export interface CopilotThread {
   createdAt: string;   // ISO
   updatedAt: string;   // ISO — bumped on every append; this is what "most recent" means
   turns: CopilotTurn[];
+  // Server only: the member who started it. A project's members share one
+  // copilot.json, but a conversation is its owner's alone (see `mine`).
+  owner?: string;
 }
 
 // What listThreads() hands the renderer — no turn bodies, so a sidebar of 50
@@ -266,6 +270,7 @@ export function normalize(data: any): CopilotThread[] {
       createdAt,
       updatedAt: typeof t.updatedAt === 'string' && t.updatedAt ? t.updatedAt : createdAt,
       turns,
+      ...(typeof t.owner === 'string' && t.owner ? { owner: t.owner } : {}),
     });
   }
   // Defensive cap on load too, in case a file predates a lower MAX_THREADS.
@@ -295,6 +300,18 @@ export async function loadThreads(projectId: string): Promise<CopilotThread[]> {
   }
 }
 
+// On the server every read and write below sees only the CALLER's threads: the
+// file is per project, the conversations are per person. The desktop has one
+// person, so it sees them all. A pre-server thread (no owner) belongs to nobody
+// on the server. ponytail: MAX_THREADS still caps the project's file as a whole.
+function ownerNow(): string | undefined {
+  return serverDataDir() === null ? undefined : ctx().user.email;
+}
+function mine(threads: CopilotThread[]): CopilotThread[] {
+  const who = ownerNow();
+  return who === undefined ? threads : threads.filter((t) => t.owner === who);
+}
+
 // "Most recent" is the LATEST-TOUCHED thread, not the last-created one: reopening
 // an old conversation and typing in it should make it the one that reopens next
 // time.
@@ -315,7 +332,7 @@ function mostRecent(threads: CopilotThread[]): CopilotThread | null {
 // reverse of the on-disk order. Reverse BEFORE sorting: Array.sort is stable, so
 // same-millisecond ties then come out in the same order mostRecent() would pick.
 export async function listThreads(projectId: string): Promise<CopilotThreadSummary[]> {
-  const threads = await loadThreads(projectId);
+  const threads = mine(await loadThreads(projectId));
   return threads
     .slice()
     .reverse()
@@ -326,7 +343,7 @@ export async function listThreads(projectId: string): Promise<CopilotThreadSumma
 // The id of the thread a bare loadHistory()/appendTurn() targets, or null when the
 // project has no conversation yet.
 export async function latestThreadId(projectId: string): Promise<string | null> {
-  const t = mostRecent(await loadThreads(projectId));
+  const t = mostRecent(mine(await loadThreads(projectId)));
   return t ? t.id : null;
 }
 
@@ -347,6 +364,8 @@ export async function createThread(projectId: string): Promise<CopilotThreadSumm
     updatedAt: now,
     turns: [],
   };
+  const who = ownerNow();
+  if (who !== undefined) thread.owner = who;
   const threads = [...(await loadThreads(projectId)), thread];
   await writeThreads(projectId, threads);
   return { id: thread.id, title: thread.title, updatedAt: thread.updatedAt, turnCount: 0 };
@@ -369,7 +388,7 @@ async function writeThreads(projectId: string, threads: CopilotThread[]): Promis
 // unchanged. An unknown threadId falls back to the most recent thread rather than
 // erroring: a stale id in a reopened window should show a conversation, not a void.
 export async function loadHistory(projectId: string, threadId?: string): Promise<CopilotTurn[]> {
-  const threads = await loadThreads(projectId);
+  const threads = mine(await loadThreads(projectId));
   const target = (threadId && threads.find((t) => t.id === threadId)) || mostRecent(threads);
   return target ? target.turns : [];
 }
@@ -401,9 +420,12 @@ export async function appendTurn(
   if (answer) record.answer = answer;
 
   const threads = await loadThreads(projectId);
-  let target = (threadId && threads.find((t) => t.id === threadId)) || mostRecent(threads);
+  const own = mine(threads);
+  let target = (threadId && own.find((t) => t.id === threadId)) || mostRecent(own);
   if (!target) {
     target = { id: randomUUID(), title: FALLBACK_TITLE, createdAt: record.createdAt, updatedAt: record.createdAt, turns: [] };
+    const who = ownerNow();
+    if (who !== undefined) target.owner = who;
     threads.push(target);
   }
 

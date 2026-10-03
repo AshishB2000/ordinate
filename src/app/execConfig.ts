@@ -13,7 +13,6 @@
 //
 // The moved code is unchanged apart from these imports.
 
-import * as localCli from '../cli/localCli';
 import type {
   ByokProviderEntry, CliDetectionResult, LegacyProviderEntry, MemoryModel,
 } from './config';
@@ -21,6 +20,20 @@ import {
   BYOK_PROVIDERS, EXECUTION_MODES, MEMORY_MODES, PROVIDERS,
   freshByokProvider, get, persist,
 } from './config';
+import { serverDataDir } from '../server/context';
+
+// SERVER MODE (T2.12). Two rules, both enforced here so no caller can forget:
+//   1. Models are API-key providers only. A pod never runs a local CLI: src/cli
+//      is required lazily, by desktop-only branches, so the server never even
+//      loads it (scripts/test-dockServer.ts and test-server-boot assert it).
+//   2. An API key never reaches config.json. It goes to the encrypted secrets
+//      store (src/server/aiKeys.ts → T5.3), and config.json keeps only the
+//      provider's `keyStored` flag. With no store, saving a key is refused.
+const onServer = (): boolean => serverDataDir() !== null;
+export const serverMode = onServer;
+// Lazy: the server never loads src/cli, the desktop never loads the key store.
+const localCli = (): typeof import('../cli/localCli') => require('../cli/localCli') as typeof import('../cli/localCli');
+const aiKeys = (): typeof import('../server/aiKeys') => require('../server/aiKeys') as typeof import('../server/aiKeys');
 
 // ── Per-provider key / model helpers ────────────────────────────────────────
 
@@ -29,6 +42,7 @@ function provData(prov: string): Partial<LegacyProviderEntry> {
 }
 
 export function hasKey(prov: string): boolean {
+  if (onServer()) return Boolean(get().byok.providers[prov]?.keyStored);
   const d = provData(prov);
   return prov === 'ollama' ? Boolean(d.endpoint) : Boolean(d.apiKey);
 }
@@ -39,6 +53,8 @@ export async function setApiKey(plaintext: unknown, provider?: unknown): Promise
   const prov = (typeof provider === 'string' && PROVIDERS.includes(provider))
     ? provider : get().activeProvider;
   if (prov === 'ollama') return { ok: false };
+  // The server's legacy key IS the provider's BYOK key: one secret per provider.
+  if (onServer()) return saveByokProvider(prov, { apiKey: plaintext });
   const cfg = get();
   cfg.providers[prov] = { ...cfg.providers[prov], apiKey: plaintext };
   cfg.activeProvider = prov;
@@ -49,6 +65,7 @@ export async function setApiKey(plaintext: unknown, provider?: unknown): Promise
 // Return the raw key for a provider — main-process only.
 export async function getApiKey(provider?: string): Promise<string | null> {
   const prov = provider || get().activeProvider;
+  if (onServer()) return aiKeys().getKey(prov);
   return provData(prov).apiKey || null;
 }
 
@@ -136,16 +153,51 @@ export function setMemoryModel(fields: any): { ok: boolean; memoryModel: MemoryM
   return { ok: true, memoryModel: next };
 }
 
-// Full byok entry for a provider INCLUDING the raw key — main-process only.
+// Full byok entry for a provider INCLUDING the raw key — main-process only. On
+// the server the entry holds no key (apiKey null): read it with byokCredentials.
 export function getByokProvider(prov: string): { provider: string } & ByokProviderEntry {
   const p = BYOK_PROVIDERS.includes(prov) ? prov : get().byok.activeProvider;
   return { provider: p, ...freshByokProvider(p), ...(get().byok.providers[p] || {}) };
+}
+
+// The byok entry WITH its key, wherever the key lives: config.json on the
+// desktop, the org's secrets store on the server. Every outbound provider call
+// (analyze.ts, models.ts) reads its key here. Main-process only.
+export async function byokCredentials(prov: string): Promise<{ provider: string } & ByokProviderEntry> {
+  const e = getByokProvider(prov);
+  return onServer() ? { ...e, apiKey: e.keyStored ? await aiKeys().getKey(e.provider) : null } : e;
+}
+
+// setByokProvider for every caller that may carry a key. On the server the key
+// goes to the secrets store FIRST (refused, with the reason, when there is
+// none) and config.json records only that one is stored; the desktop path is
+// setByokProvider unchanged. An empty apiKey removes the key.
+// ponytail: fields is an IPC payload, validated per-field in setByokProvider.
+export async function saveByokProvider(prov: string, fields: any): Promise<{ ok: boolean; error?: string }> {
+  if (!onServer() || !fields || typeof fields.apiKey !== 'string') return setByokProvider(prov, fields || {});
+  if (!BYOK_PROVIDERS.includes(prov)) return { ok: false };
+  const keys = aiKeys();
+  if (fields.apiKey) {
+    const why = keys.keyStoreUnavailable();
+    if (why) return { ok: false, error: why };
+    await keys.putKey(prov, fields.apiKey);
+  } else {
+    await keys.deleteKey(prov);
+  }
+  const res = setByokProvider(prov, { ...fields, apiKey: undefined });
+  if (!res.ok) return res;
+  const cfg = get();
+  cfg.byok.providers[prov] = { ...cfg.byok.providers[prov], apiKey: null, keyStored: Boolean(fields.apiKey), verified: false };
+  persist(cfg);
+  return { ok: true };
 }
 
 // Merge editable fields (apiKey/baseUrl/maxTokens/model) into a provider entry.
 // ponytail: fields is an IPC payload, validated per-field below.
 export function setByokProvider(prov: string, fields: any): { ok: boolean } {
   if (!BYOK_PROVIDERS.includes(prov)) return { ok: false };
+  // The server never writes a key here: saveByokProvider stores it encrypted.
+  if (onServer() && typeof fields.apiKey === 'string') return { ok: false };
   const cfg = get();
   const cur = cfg.byok.providers[prov] || freshByokProvider(prov);
   const next = { ...cur };
@@ -166,7 +218,7 @@ export function byokConnected(prov: string): boolean {
   if (!BYOK_PROVIDERS.includes(prov)) return false;
   const d = get().byok.providers[prov] || {};
   if (!d.verified) return false;
-  return prov === 'gateway' ? Boolean(d.baseUrl) : Boolean(d.apiKey);
+  return prov === 'gateway' ? Boolean(d.baseUrl) : Boolean(onServer() ? d.keyStored : d.apiKey);
 }
 
 // The provider that should actually be Active: the stored one if it's connected,
@@ -186,6 +238,12 @@ export function setByokVerified(prov: string, ok: unknown): { ok: boolean } {
   cfg.byok.providers[prov] = { ...cur, verified: Boolean(ok) };
   persist(cfg);
   return { ok: true };
+}
+
+// The org's provider policy (Admin → Settings): on the server a provider the org
+// does not allow is never called. The desktop has no org — every provider.
+export async function providerAllowed(prov: string): Promise<boolean> {
+  return !onServer() || (await aiKeys().allowedProviders()).includes(prov);
 }
 
 // Active requires Connected: refuse to activate a provider that hasn't verified.
@@ -213,7 +271,8 @@ export function saveLocalCliDetection(results: unknown): { ok: boolean } {
 
 // Set the selected Local CLI (must be a known registry id, or null to clear).
 export function setLocalCliActive(id: string | null): { ok: boolean } {
-  const valid = id === null || localCli.REGISTRY.some((e: { id: string }) => e.id === id);
+  if (onServer()) return { ok: false }; // no local CLIs on a server
+  const valid = id === null || localCli().REGISTRY.some((e: { id: string }) => e.id === id);
   if (!valid) return { ok: false };
   const cfg = get();
   cfg.localCli.activeId = id;
@@ -231,7 +290,7 @@ export function getLocalCliResult(id: string): CliDetectionResult | null {
 // Persist the chosen model for a Local CLI (must be a known registry id).
 // Empty/non-string clears it (CLI default).
 export function setLocalCliModel(id: string, model: unknown): { ok: boolean } {
-  if (!localCli.REGISTRY.some((e: { id: string }) => e.id === id)) return { ok: false };
+  if (onServer() || !localCli().REGISTRY.some((e: { id: string }) => e.id === id)) return { ok: false };
   const cfg = get();
   const m = typeof model === 'string' ? model.trim() : '';
   if (m) cfg.localCli.models[id] = m;
@@ -261,13 +320,14 @@ export function getModelCache(key: string): { at: string; models: any[] } | null
 
 // Renderer-safe view: activeId + merged registry/detection list, NO resolvedPath.
 export function publicLocalCli() {
+  if (onServer()) return { activeId: null, detectedAt: null, models: {}, clis: [] };
   const cfg = get();
   const det = cfg.localCli.lastDetection;
   return {
     activeId: cfg.localCli.activeId || null,
     detectedAt: (det && det.at) || null,
     models: { ...(cfg.localCli.models || {}) },
-    clis: localCli.toPublic(det && (det.results as any)), // ponytail: disk JSON rows; toPublic tolerates junk
+    clis: localCli().toPublic(det && (det.results as any)), // ponytail: disk JSON rows; toPublic tolerates junk
   };
 }
 
@@ -281,7 +341,7 @@ export function publicByok() {
   for (const p of BYOK_PROVIDERS) {
     const d = cfg.byok.providers[p] || freshByokProvider(p);
     providers[p] = {
-      hasKey:    Boolean(d.apiKey),
+      hasKey:    Boolean(onServer() ? d.keyStored : d.apiKey),
       verified:  Boolean(d.verified),
       connected: byokConnected(p),  // hasKey/baseUrl AND verified
       baseUrl:   d.baseUrl || '',
@@ -311,7 +371,7 @@ export const AI_NOT_CONFIGURED = 'The Assistant isn’t set up yet.';
 //   BYOK   → a connected (key saved + validated) provider exists.
 export function executionReady(): boolean {
   const cfg = get();
-  if ((cfg.executionMode || 'local') === 'local') {
+  if (!onServer() && (cfg.executionMode || 'local') === 'local') {
     const id = cfg.localCli.activeId;
     if (!id || !RUNNABLE_LOCAL.includes(id)) return false;
     const r = getLocalCliResult(id);
@@ -322,6 +382,7 @@ export function executionReady(): boolean {
 
 // True iff the *local* path is usable right now (active CLI detected installed).
 export function localExecutionReady(): boolean {
+  if (onServer()) return false;
   const cfg = get();
   const id = cfg.localCli && cfg.localCli.activeId;
   if (!id || !RUNNABLE_LOCAL.includes(id)) return false;
@@ -356,7 +417,7 @@ export function publicConfig() {
   for (const prov of PROVIDERS) {
     const d = cfg.providers[prov] || {};
     providerStatus[prov] = {
-      hasKey: prov === 'ollama' ? Boolean(d.endpoint) : Boolean(d.apiKey),
+      hasKey: hasKey(prov),
       model:  d.model || '',
     };
   }
@@ -365,7 +426,7 @@ export function publicConfig() {
   return {
     version:        cfg.version,
     activeProvider: active,
-    executionMode:  cfg.executionMode || 'byok',
+    executionMode:  onServer() ? 'byok' : cfg.executionMode || 'byok',
     isReady:        executionReady(), // single readiness source (Local CLI OR BYOK)
     byok:           publicByok(), // { activeProvider, providers: { name: { hasKey, baseUrl, maxTokens, model } } }
     localCli:       publicLocalCli(), // { activeId, detectedAt, clis: [...] } — no resolvedPath

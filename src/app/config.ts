@@ -26,6 +26,8 @@ export interface ByokProviderEntry {
   maxTokens: string;
   model: string;
   verified: boolean;
+  /** Server only: a key for this provider is in the org's secrets store (apiKey stays null). */
+  keyStored?: boolean;
 }
 
 interface ByokBlock { activeProvider: string; providers: Record<string, ByokProviderEntry> }

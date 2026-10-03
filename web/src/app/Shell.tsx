@@ -14,6 +14,7 @@ import { Menu, type MenuEntry } from '../ui/Menu';
 import { PageSkeleton } from '../ui/Skeleton';
 import { toast, Toaster } from '../ui/Toast';
 import { NAV, type NavItem } from './nav';
+import { Dock, DockToggle } from '../features/assistant/DockParts';
 import { THEME_PREFS, useThemePref, type ThemePref } from './theme';
 import s from './Shell.module.css';
 
@@ -145,6 +146,7 @@ export function Shell() {
           <input className={s.searchInput} type="search" placeholder="Search" aria-label="Search" />
         </div>
         <div className={`${s.side} ${s.right}`}>
+          <DockToggle />
           <UserMenu />
         </div>
       </header>
@@ -166,6 +168,7 @@ export function Shell() {
             <Outlet />
           </Suspense>
         </main>
+        <Dock />
       </div>
       <Toaster />
     </div>

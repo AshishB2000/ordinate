@@ -1,0 +1,453 @@
+/* The AI dock — renderer/hub/hub.css "AI dock" (.dk-*), "Transcript bubbles"
+   (.xp-*) and "Ask activity", ported. A flex sibling of the routed page, so an
+   open dock PUSHES the page over; below 1100px it overlays with a scrim. */
+
+.panel {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+.panel:focus-visible {
+  outline: none;
+}
+
+/* The kit's Splitter, astride the panel's left border. */
+.handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  z-index: 5;
+}
+
+.head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  height: var(--sp-48);
+  padding: 0 var(--sp-12);
+  border-bottom: 1px solid var(--border-hairline);
+}
+/* A chip sized to the thread's name; margin-right:auto pins the actions right. */
+.threadTitle {
+  flex: 0 1 auto;
+  margin-right: auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface-1);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.threadTitle:hover {
+  background: var(--surface-2);
+  color: var(--text-strong);
+}
+.threadTitle:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.threadTitle > svg {
+  flex: none;
+  color: var(--text-faint);
+}
+.threadText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.headActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+/* The on/off pill: a toggle when a model is ready, a signpost when not. */
+.pill {
+  flex: none;
+  padding: 3px var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 600;
+  cursor: pointer;
+}
+.pill:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border-3);
+}
+.pill:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.pill:disabled {
+  cursor: default;
+}
+.pillOff {
+  color: var(--text-dim);
+}
+.pillNone {
+  color: var(--text-faint);
+  border-style: dashed;
+  font-weight: 500;
+}
+
+/* "Based on …" — its own row under the header; only the label truncates. */
+.context {
+  flex: none;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-8) var(--sp-12) 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--muted);
+}
+.contextLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.provChip {
+  flex: none;
+  padding: 2px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  color: var(--text-dim);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.projectPick {
+  flex: none;
+  margin-left: auto;
+  max-width: 50%;
+}
+
+/* THE STAGE — accent washes over a dot lattice, fixed while the turns scroll. */
+.stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  overflow-y: auto;
+  padding: var(--sp-12);
+  background:
+    radial-gradient(80% 22% at 14% 3%, var(--accent-soft), transparent 68%),
+    radial-gradient(66% 19% at 88% 10%, var(--accent-soft), transparent 72%),
+    radial-gradient(140% 30% at 50% -9%, var(--accent-line), transparent 76%),
+    radial-gradient(circle at 1px 1px, rgba(15, 23, 42, 0.05) 1px, transparent 1.5px), var(--surface);
+  background-size: auto, auto, auto, 22px 22px;
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+}
+:global([data-theme='dark']) .stage {
+  background:
+    radial-gradient(80% 22% at 14% 3%, var(--accent-soft), transparent 68%),
+    radial-gradient(66% 19% at 88% 10%, var(--accent-soft), transparent 72%),
+    radial-gradient(140% 30% at 50% -9%, var(--accent-line), transparent 76%),
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.05) 1px, transparent 1.5px), var(--surface);
+  background-size: auto, auto, auto, 22px 22px;
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+}
+/* A transcript hangs from the composer: the first turn takes the slack. */
+.stageTop {
+  margin-top: auto;
+}
+
+.hint {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--text);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+}
+.powered {
+  flex: none;
+  font-size: var(--t-12);
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ── Transcript ─────────────────────────────────────────────────────────── */
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  max-width: 82%;
+}
+.user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.assistant {
+  align-self: flex-start;
+  align-items: flex-start;
+  max-width: 100%;
+  width: 100%;
+}
+.bubble {
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-lg);
+  font-size: var(--t-13);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.user .bubble {
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  color: var(--text);
+}
+.assistant .bubble {
+  padding: 0;
+  color: var(--text);
+}
+.thinking {
+  color: var(--muted);
+}
+/* A caret while the answer streams in — CSS only. */
+.streaming::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  animation: caret 1s steps(2, start) infinite;
+}
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+.provenance {
+  font-size: var(--t-11);
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+/* ── Activity: the app showing its work, never persisted ────────────────── */
+.activity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.chip {
+  padding: 2px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  color: var(--text-dim);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  animation: chipIn var(--dur-fast) var(--ease-out);
+}
+.chipModel {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+@keyframes chipIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+.summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  max-width: 100%;
+  padding: 2px var(--sp-4);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--t-11);
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+.summary:hover {
+  color: var(--text);
+}
+.summary:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+}
+.summaryText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Starter chips and the composer ─────────────────────────────────────── */
+.suggests {
+  flex: none;
+  margin: 0 var(--sp-12) var(--sp-8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.suggest {
+  max-width: 100%;
+  padding: var(--sp-4) var(--sp-12);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-13);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.suggest:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface-2);
+}
+.suggest:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.composer {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0 var(--sp-12) var(--sp-12);
+  padding: var(--sp-8) var(--sp-8) var(--sp-8) var(--sp-12);
+  background: var(--surface-float);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+}
+.composer:focus-within {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 3px var(--accent-soft),
+    var(--shadow-md);
+}
+.composeRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-8);
+}
+.input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: none;
+  resize: none;
+  font: inherit;
+  font-size: var(--t-15);
+  letter-spacing: var(--tr-tight);
+  line-height: 1.5;
+  color: var(--text);
+  max-height: 140px;
+  overflow-y: auto;
+  padding: var(--sp-4) 0;
+  /* Grows with what is typed — and with a placeholder longer than one line. */
+  field-sizing: content;
+}
+.input:focus-visible {
+  outline: none;
+}
+.input::placeholder {
+  color: var(--text-dim);
+}
+.input:disabled {
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+.composeFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.model {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: 22px;
+  padding: 0 var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-11);
+  font-weight: 600;
+  cursor: pointer;
+}
+.model:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.model:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+}
+
+/* ── Narrow windows: an overlay with a scrim, chrome left reachable ──────── */
+.scrim {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .panel {
+    position: fixed;
+    top: 40px;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    box-shadow: var(--shadow-lg);
+  }
+  .scrim {
+    display: block;
+    position: fixed;
+    top: 40px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 49;
+    background: rgba(15, 23, 42, 0.45);
+  }
+}
+
+/* While the panel's chunk loads: the panel's own frame, so nothing jumps. */
+.loadingPanel {
+  width: 340px;
+}

@@ -1,0 +1,249 @@
+/* The plan card — renderer/hub/plan.css, on the proposal card's frame
+   (hub.css .dk-proposal.ai-interp + .ai-badge). Tokens only. */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+  margin: var(--sp-8) 0 var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.badge {
+  flex: none;
+  padding: 2px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.label {
+  font-size: var(--t-11);
+  font-weight: 600;
+  color: var(--muted);
+}
+.intent {
+  font-size: var(--t-13);
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.hint {
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.step {
+  display: grid;
+  grid-template-columns: 20px 20px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--surface);
+}
+.step + .step {
+  border-top: 1px solid var(--border);
+}
+.step.running {
+  background: var(--accent-soft);
+}
+.step.failed,
+.step.invalid {
+  background: var(--error-soft);
+}
+.step.skipped .line {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.num {
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 20px;
+  text-align: right;
+}
+.ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  color: var(--accent);
+}
+.step.done .ic {
+  color: var(--ok);
+}
+.step.failed .ic {
+  color: var(--error);
+}
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.line {
+  font-size: var(--t-13);
+  line-height: 20px;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.note {
+  font-size: var(--t-12);
+  color: var(--muted);
+  line-height: var(--lh-snug);
+}
+.note.error {
+  color: var(--error);
+}
+.status {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--muted);
+  white-space: nowrap;
+  line-height: 16px;
+  margin-top: 2px;
+}
+.status.running {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.status.done {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.status.failed {
+  background: var(--error-soft);
+  color: var(--error);
+}
+.status.skipped {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--text);
+}
+.resultText {
+  font-variant-numeric: tabular-nums;
+}
+.kpi {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+}
+.kpiName {
+  color: var(--muted);
+}
+.kpiValue {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+.link:hover {
+  text-decoration: underline;
+}
+.link:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+.linkText {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.actions.fail {
+  padding-top: var(--sp-4);
+  border-top: 1px dashed var(--border-2);
+}
+
+/* ── Edit mode ─────────────────────────────────────────────────────────── */
+.edit {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--sp-8);
+  margin-top: 4px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.field.wide {
+  grid-column: 1 / -1;
+}
+.fieldLabel {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.input {
+  height: var(--ctl-sm);
+  padding: 0 8px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-12);
+  min-width: 0;
+}
+.input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.editCtl {
+  display: flex;
+  gap: 2px;
+}

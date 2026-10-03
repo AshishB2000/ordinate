@@ -6,6 +6,8 @@ import type { StepCheck } from '../ai/planCheck';
 import { newRun, runNext, skipStep, replaceStep, stopRun, undoRun, canUndo, nextIndex } from '../ai/planRun';
 import type { PlanRun } from '../ai/planRun';
 import { RUN_DEPS, loadProjectCtx, undoGroup, logRun, fixStep } from '../ai/planExec';
+import { orgKey } from '../server/context';
+import { planRuns } from '../api/assistant';
 
 // Assistant plans IPC — check a proposed plan, then run it one click at a time.
 // MAIN PROCESS. The model proposed the steps (src/ai/suggestedAction.ts); every
@@ -24,13 +26,19 @@ import { RUN_DEPS, loadProjectCtx, undoGroup, logRun, fixStep } from '../ai/plan
 // captured, and a restart ends it (every write is still in version history and
 // the Trash). Finishing, stopping or undoing logs the run to the dock
 // conversation it came from.
+//
+// On the server a run is keyed by org as well as id (orgKey), so another org's
+// caller holding a run id finds nothing, and `plan:next` may carry the upload
+// (`fileToken`, POST /api/files) an import step reads instead of a native picker.
+// ponytail: runs live in this pod's memory — N pods need sticky sessions for a
+// plan run until runs move to Postgres.
 
 const MAX_RUNS = 20;
 const runs = new Map<string, PlanRun>();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function keep(run: PlanRun): void {
-  runs.set(run.id, run);
+  runs.set(orgKey(run.id), run);
   while (runs.size > MAX_RUNS) {
     const oldest = runs.keys().next().value;
     if (oldest === undefined) break;
@@ -66,12 +74,18 @@ async function logIfOver(run: PlanRun): Promise<string | undefined> {
 }
 
 function runOf(runId: unknown): PlanRun | null {
-  return typeof runId === 'string' ? runs.get(runId) || null : null;
+  return typeof runId === 'string' ? runs.get(orgKey(runId)) || null : null;
+}
+
+/** The project a run of the caller's org belongs to — the contracts' scope resolver (src/api/assistant.ts). */
+export function runProject(runId: string): string | null {
+  return runOf(runId)?.projectId ?? null;
 }
 
 const GONE = { ok: false, error: 'That plan run has ended — ask again to start a new one.' };
 
 export function register(): void {
+  planRuns.project = runProject;
   ipcMain.handle('plan:check', async (_e, { projectId, steps }: any = {}) => {
     try {
       if (!UUID_RE.test(String(projectId || ''))) return { ok: false, error: 'No project.' };
@@ -99,9 +113,10 @@ export function register(): void {
     return snapshot(run);
   });
 
-  ipcMain.handle('plan:next', async (_e, { runId }: any = {}) => {
+  ipcMain.handle('plan:next', async (_e, { runId, fileToken }: any = {}) => {
     const run = runOf(runId);
     if (!run) return GONE;
+    if (typeof fileToken === 'string') run.fileToken = fileToken;
     const ran = await runNext(run, RUN_DEPS);
     return snapshot(run, { ran, log: await logIfOver(run) });
   });
