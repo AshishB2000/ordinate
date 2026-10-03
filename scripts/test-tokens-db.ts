@@ -19,6 +19,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 import { Writable } from 'stream';
 import { Client, Pool } from 'pg';
 import type { FastifyInstance } from 'fastify';
@@ -84,7 +85,8 @@ const sink = new Writable({
     const call = async (w: Who, channel: string, payload?: unknown) => {
       const res = await fetch(`${base}/api/rpc/${channel}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', ...authHeaders(w) },
+        // A bearer call carries no CSRF pair: it is exempt (src/server/csrf.ts).
+        headers: w.bearer ? { 'content-type': 'application/json', ...authHeaders(w) } : withCsrf({ 'content-type': 'application/json', ...authHeaders(w) }),
         body: wire.encode({ args: payload === undefined ? [] : [payload] }),
       });
       const text = await res.text();

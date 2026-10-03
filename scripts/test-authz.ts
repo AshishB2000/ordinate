@@ -9,6 +9,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 import { z } from 'zod';
 
 const fs: typeof import('fs') = require('fs');
@@ -111,7 +112,7 @@ const CANARY = 'c4nary-VALUE-never-audited';
   const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) =>
     typeof h['x-role'] === 'string' ? as(h['x-role'] as Role) : null);
   const post = (role: Role, ch: string, payload?: unknown) => app.inject({
-    method: 'POST', url: `/api/rpc/${ch}`, headers: { 'content-type': 'application/json', 'x-role': role },
+    method: 'POST', url: `/api/rpc/${ch}`, headers: withCsrf({ 'content-type': 'application/json', 'x-role': role }),
     payload: wire.encode({ args: payload === undefined ? [] : [payload] }),
   });
   const before = (ch: string) => calls.get(ch) ?? 0;
@@ -133,7 +134,7 @@ const CANARY = 'c4nary-VALUE-never-audited';
   ok('route: projects:list as a viewer with no grants → 200, trimmed to nothing', lv.statusCode === 200 && JSON.stringify(wire.decode(lv.body)) === '[]', lv.body);
   const la = await post('admin', 'projects:list');
   ok('route: projects:list as an org admin → every item', la.statusCode === 200 && (wire.decode(la.body) as unknown[]).length === 2, la.body);
-  const up = (role: Role) => app.inject({ method: 'POST', url: '/api/files', headers: { 'x-role': role, 'content-type': 'multipart/form-data; boundary=x' }, payload: '--x--\r\n' });
+  const up = (role: Role) => app.inject({ method: 'POST', url: '/api/files', headers: withCsrf({ 'x-role': role, 'content-type': 'multipart/form-data; boundary=x' }), payload: '--x--\r\n' });
   ok('/api/files upload: org viewer → 403', (await up('viewer')).statusCode === 403);
   ok('/api/files upload: org editor → past authorization', (await up('editor')).statusCode !== 403);
   const ev = await app.inject({ method: 'GET', url: '/api/events?client=bad', headers: { 'x-role': 'viewer' } });

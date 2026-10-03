@@ -198,7 +198,7 @@ try {
 
   // ── Sign out ─────────────────────────────────────────────────────────────
   await page.getByRole('button', { name: 'Account and theme' }).click();
-  await page.getByRole('menuitem', { name: 'Sign out' }).click();
+  await page.getByRole('menuitem', { name: 'Sign out', exact: true }).click();
   await page.waitForURL(base + '/sign-in');
   check('sign out: back on the sign-in page', page.url() === base + '/sign-in');
   check('sign out: the session cookie is gone', (await session()) === undefined);
@@ -217,6 +217,26 @@ try {
   await page.getByRole('button', { name: 'Account and theme' }).click();
   check('deep link: a new user is provisioned as a viewer', (await page.getByTestId('user-email').textContent()) === 'pat@acme.test' && (await page.getByText('Viewer · default').count()) === 1);
   await harvest();
+
+  // ── Sign out everywhere (T6.2): the account menu ends every device ───────
+  const phone = await browser.newContext({ colorScheme: 'light' });
+  const phonePage = await phone.newPage();
+  phonePage.on('console', (m) => {
+    if (m.type() === 'error') consoleErrors.push(`phone ${phonePage.url()} :: ${m.text()}`);
+  });
+  await phonePage.goto(base + '/api/auth/login');
+  await phonePage.waitForURL((u) => u.href.startsWith(mock.issuer));
+  await phonePage.getByLabel('Email').fill('pat@acme.test');
+  await phonePage.getByRole('button', { name: 'Sign in' }).click();
+  await phonePage.waitForURL(base + '/');
+  const phoneMe = () => phonePage.evaluate(async () => ((await (await fetch('/api/auth/me')).json()) as { user: unknown }).user);
+  check('everywhere: precondition — a second device is signed in as the same user', (await phoneMe()) !== null);
+  for (const c of await phone.cookies()) seen.add(c.value);
+  await page.getByRole('menuitem', { name: 'Sign out everywhere' }).click();
+  await page.waitForURL(base + '/sign-in');
+  check('everywhere: this device is back on the sign-in page, cookie gone', page.url() === base + '/sign-in' && (await session()) === undefined);
+  check('everywhere: the other device is signed out too', (await phoneMe()) === null);
+  await phone.close();
 
   check('console: zero errors across every page', consoleErrors.length === 0, '\n  ' + consoleErrors.join('\n  '));
 } finally {

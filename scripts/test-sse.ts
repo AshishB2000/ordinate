@@ -10,6 +10,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -103,10 +104,10 @@ function rpc(org: string, channel: string, payload: unknown, clientKey?: string)
     const body = wire.encode({ args: [payload] });
     const req = http.request({
       host: '127.0.0.1', port, method: 'POST', path: `/api/rpc/${channel}`,
-      headers: {
+      headers: withCsrf({
         'content-type': 'application/json', 'x-test-org': org, 'x-test-user': 'u',
         ...(clientKey ? { 'x-ordinate-client': clientKey } : {}),
-      },
+      }),
     }, (res) => {
       let text = '';
       res.setEncoding('utf8');

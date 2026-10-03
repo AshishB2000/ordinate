@@ -100,6 +100,47 @@ describe('shell sign-in wiring', () => {
     expect(spy.mock.calls.some(([url, init]) => url === '/api/auth/logout' && init?.method === 'POST')).toBe(true);
   });
 
+  it('sign-out carries the CSRF header (T6.2)', async () => {
+    vi.spyOn(document, 'cookie', 'get').mockReturnValue(`ordinate_csrf=${'c'.repeat(43)}`);
+    const spy = routeFetch({ '/api/auth/me': { body: ALICE }, '/api/auth/logout': { status: 204 } });
+    vi.spyOn(nav, 'assign').mockImplementation(() => {});
+    renderApp('/');
+    await waitFor(async () => {
+      await openMenu();
+      expect(screen.getByRole('menuitem', { name: 'Sign out' })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }));
+    await waitFor(() => expect(spy.mock.calls.some(([url]) => url === '/api/auth/logout')).toBe(true));
+    const init = spy.mock.calls.find(([url]) => url === '/api/auth/logout')?.[1];
+    expect((init?.headers as Record<string, string> | undefined)?.['X-CSRF-Token']).toBe('c'.repeat(43));
+  });
+
+  it('signs out everywhere: POST /api/auth/logout-everywhere, then to the sign-in page', async () => {
+    const spy = routeFetch({ '/api/auth/me': { body: ALICE }, '/api/auth/logout-everywhere': { body: { ended: 3 } } });
+    const go = vi.spyOn(nav, 'assign').mockImplementation(() => {});
+    renderApp('/');
+    await waitFor(async () => {
+      await openMenu();
+      expect(screen.getByRole('menuitem', { name: 'Sign out everywhere' })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out everywhere' }));
+    await waitFor(() => expect(go).toHaveBeenCalledWith('/sign-in'));
+    expect(spy.mock.calls.some(([url, init]) => url === '/api/auth/logout-everywhere' && init?.method === 'POST')).toBe(true);
+  });
+
+  it('says so when signing out everywhere fails, and stays put', async () => {
+    routeFetch({ '/api/auth/me': { body: ALICE }, '/api/auth/logout-everywhere': { status: 500 } });
+    const go = vi.spyOn(nav, 'assign').mockImplementation(() => {});
+    renderApp('/');
+    await waitFor(async () => {
+      await openMenu();
+      expect(screen.getByRole('menuitem', { name: 'Sign out everywhere' })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out everywhere' }));
+    expect(await screen.findByText(/Signing out everywhere failed/)).toBeTruthy();
+    expect(go).not.toHaveBeenCalled();
+  });
+
   it('says so when sign-out fails, and stays put', async () => {
     routeFetch({ '/api/auth/me': { body: ALICE }, '/api/auth/logout': { status: 500 } });
     const go = vi.spyOn(nav, 'assign').mockImplementation(() => {});
@@ -121,6 +162,7 @@ describe('shell sign-in wiring', () => {
       expect(screen.getByText('Development sign-in')).toBeTruthy();
     });
     expect(screen.queryByRole('menuitem', { name: 'Sign out' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Sign out everywhere' })).toBeNull();
   });
 
   it('sends a signed-out user to sign-in, keeping where they were', async () => {

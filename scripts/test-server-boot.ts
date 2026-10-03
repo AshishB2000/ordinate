@@ -14,6 +14,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -162,7 +163,7 @@ M._resolveFilename = function (req, ...rest) {
     ok('boot: GET /readyz is 200 (DuckDB up, no Electron)', rz.status === 200, await rz.text());
     // main.ts registered the Home handlers: their whole graph loaded without
     // Electron, and dev auth ran this as org `default` under DATA_DIR.
-    const pl = await fetch(base + '/api/rpc/projects:list', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"args":[]}' });
+    const pl = await fetch(base + '/api/rpc/projects:list', { method: 'POST', headers: withCsrf({ 'content-type': 'application/json' }), body: '{"args":[]}' });
     const plBody = await pl.text();
     ok('boot: POST /api/rpc/projects:list is 200 with a list', pl.status === 200 && Array.isArray(JSON.parse(plBody)), plBody);
     ok('boot: …resolved under DATA_DIR/orgs/default', fs.existsSync(path.join(tmp, 'orgs', 'default', 'userData')));

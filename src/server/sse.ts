@@ -235,7 +235,8 @@ export function registerEvents(app: FastifyInstance): void {
     if (old && old.owner !== ownerOf(who)) return reply.code(403).send({ error: 'client id in use' });
     old?.close();
     reply.hijack();
-    reply.raw.writeHead(200, HEADERS);
+    // The security headers set at onRequest (./headers.ts) — writeHead bypasses Fastify's own.
+    reply.raw.writeHead(200, { ...(reply.getHeaders() as import('http').OutgoingHttpHeaders), ...HEADERS });
     reply.raw.write(': open\n\n'); // first bytes now, so the browser fires `open`
     const s = open(key, who, reply.raw);
     mine.add(s);

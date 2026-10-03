@@ -16,6 +16,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 import { Client, Pool } from 'pg';
 import type { FastifyInstance } from 'fastify';
 
@@ -91,7 +92,7 @@ type Cell = 'allow' | 'deny';
     const call = async (org: string, email: string, channel: string, payload?: unknown) => {
       const res = await fetch(`${base[org]}/api/rpc/${channel}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-forwarded-email': email },
+        headers: withCsrf({ 'content-type': 'application/json', 'x-forwarded-email': email }),
         body: wire.encode({ args: payload === undefined ? [] : [payload] }),
       });
       const text = await res.text();

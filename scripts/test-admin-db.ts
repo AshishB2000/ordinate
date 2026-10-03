@@ -16,6 +16,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 import { Client, Pool } from 'pg';
 import type { FastifyInstance } from 'fastify';
 
@@ -89,7 +90,7 @@ const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-admin-db-'));
     const call = async (org: string, email: string, channel: string, payload?: unknown) => {
       const res = await fetch(`${base[org]}/api/rpc/${channel}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-forwarded-email': email },
+        headers: withCsrf({ 'content-type': 'application/json', 'x-forwarded-email': email }),
         body: wire.encode({ args: payload === undefined ? [] : [payload] }),
       });
       const text = await res.text();
@@ -246,7 +247,7 @@ const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-admin-db-'));
     const upload = async (org: string, mb: number) => {
       const form = new FormData();
       form.append('file', new Blob([Buffer.alloc(mb * 1024 * 1024 + 1024, 97)]), 'big.csv');
-      const r = await fetch(`${base[org]}/api/files`, { method: 'POST', headers: { 'x-forwarded-email': `boss@${org}.test` }, body: form }).catch(() => null);
+      const r = await fetch(`${base[org]}/api/files`, { method: 'POST', headers: withCsrf({ 'x-forwarded-email': `boss@${org}.test` }), body: form }).catch(() => null);
       return r ? r.status : 0;
     };
     ok('upload cap: acme (org cap 1 MB) refuses 2 MB with 413', (await upload('acme', 2)) === 413);

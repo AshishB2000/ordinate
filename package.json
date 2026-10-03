@@ -59,6 +59,7 @@
     "@duckdb/node-api": "^1.5.5-r.3",
     "@fastify/cookie": "^11.1.2",
     "@fastify/multipart": "^10.1.2",
+    "@fastify/rate-limit": "^11.2.0",
     "@fastify/static": "^10.1.5",
     "@sgratzl/chartjs-chart-boxplot": "^4.4.5",
     "chart.js": "^4.5.1",

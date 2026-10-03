@@ -12,6 +12,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -79,7 +80,7 @@ function throws(fn: () => unknown): boolean {
 
   // ── Over HTTP, dev auth: everything lands in orgs/default ─────────────────
   const devApp = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA }));
-  const dl = await devApp.inject({ method: 'POST', url: '/api/rpc/projects:list', headers: { 'content-type': 'application/json' }, payload: '{"args":[]}' });
+  const dl = await devApp.inject({ method: 'POST', url: '/api/rpc/projects:list', headers: withCsrf({ 'content-type': 'application/json' }), payload: '{"args":[]}' });
   ok('dev: projects:list is 200 with a wire-encoded list', dl.statusCode === 200 && Array.isArray(wire.decode(dl.body)), dl.body);
   ok('dev: it ran as org default', fs.existsSync(path.join(DATA, 'orgs', 'default', 'userData')));
   const hz = await devApp.inject({ method: 'GET', url: '/healthz' });
@@ -108,7 +109,7 @@ function throws(fn: () => unknown): boolean {
   });
   const call = (org: string | null, url: string, body = '{}') => app.inject({
     method: 'POST', url, payload: body,
-    headers: { 'content-type': 'application/json', ...(org ? { 'x-test-org': org } : {}) },
+    headers: withCsrf({ 'content-type': 'application/json', ...(org ? { 'x-test-org': org } : {}) }),
   });
 
   const [ra, rb] = await Promise.all(ORGS.map((o) => call(o, '/api/test/paths')));

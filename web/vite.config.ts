@@ -1,40 +1,12 @@
-import { defineConfig, type Plugin } from 'vitest/config';
+import { defineConfig } from 'vitest/config';
 
-// The built app's CSP. No inline script or style anywhere: Vite emits external
-// <script type="module"> and <link rel="stylesheet"> only, and this meta makes
-// any regression a console error (which T0.8's e2e fails on). Build only — the
-// dev server injects CSS as <style> elements for HMR, which this would block.
-// ponytail: meta tag, not a response header; T6.2 moves it to a header with the
-// rest of the security headers (frame-ancestors only works there).
-//
-// OpenStreetMap's raster tile hosts: the ONE declared external fetch, made only
-// when a map with the OSM basemap is on screen (web/src/charts/maps/maplibre.ts).
-// MapLibre fetches tiles (connect-src) and decodes them as images (img-src).
-// Nothing else external is allowed anywhere.
-const OSM_TILES = ['a', 'b', 'c'].map((h) => `https://${h}.tile.openstreetmap.org`).join(' ');
-
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self'",
-  `img-src 'self' data: ${OSM_TILES}`,
-  "font-src 'self'",
-  `connect-src 'self' ${OSM_TILES}`,
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join('; ');
-
-const cspMeta: Plugin = {
-  name: 'ordinate-csp-meta',
-  apply: 'build',
-  transformIndexHtml: () => [
-    { tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', content: CSP }, injectTo: 'head-prepend' },
-  ],
-};
+// The CSP is a response HEADER set by the server (src/server/headers.ts,
+// APP_CSP) — the one place it is written, frame-ancestors included. The build
+// emits no inline script or style (external <script type="module"> and
+// <link rel="stylesheet"> only), which the e2e harness proves: any CSP
+// violation is a test failure. The dev server (HMR injects <style>) has none.
 
 export default defineConfig({
-  plugins: [cspMeta],
   oxc: { jsx: { runtime: 'automatic' } },
   server: {
     // `npm run server` listens on :8080 (src/server/env.ts default).

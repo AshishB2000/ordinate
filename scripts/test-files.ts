@@ -12,6 +12,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf, CSRF_TOKEN } from './csrfPair';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -67,7 +68,7 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
   await app.listen({ port: 0, host: '127.0.0.1' });
   const { port } = app.server.address() as import('net').AddressInfo;
   const base = `http://127.0.0.1:${port}`;
-  const hdr = (org: string, user?: string) => ({ 'x-test-org': org, ...(user ? { 'x-test-user': user } : {}) });
+  const hdr = (org: string, user?: string) => withCsrf({ 'x-test-org': org, ...(user ? { 'x-test-user': user } : {}) });
 
   const upload = async (org: string, name: string, body: string) => {
     const form = new FormData();
@@ -201,7 +202,7 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
     sock.on('close', () => resolve({ status: Number(/^HTTP\/1\.1 (\d{3})/.exec(head)?.[1]) || null, sent, rssGrowth: rssPeak - rssBefore }));
     const frame = (b: Buffer | string) => `${Buffer.byteLength(b).toString(16)}\r\n`;
     void (async () => {
-      sock.write(`POST /api/files HTTP/1.1\r\nHost: x\r\nx-test-org: org-a\r\ntransfer-encoding: chunked\r\ncontent-type: multipart/form-data; boundary=${B}\r\n\r\n`);
+      sock.write(`POST /api/files HTTP/1.1\r\nHost: x\r\nx-test-org: org-a\r\ncookie: ordinate_csrf=${CSRF_TOKEN}\r\nx-csrf-token: ${CSRF_TOKEN}\r\ntransfer-encoding: chunked\r\ncontent-type: multipart/form-data; boundary=${B}\r\n\r\n`);
       const first = `--${B}\r\nContent-Disposition: form-data; name="file"; filename="big.csv"\r\n\r\n`;
       sock.write(frame(first) + first + '\r\n');
       while (sent < TOTAL && !sock.destroyed && sock.writable) {
