@@ -1,15 +1,15 @@
 // The compute worker — a worker_thread that runs a job's CPU and DuckDB work
 // OFF the main thread. Started and fed by ./computePool.ts; never imported.
 //
-// WHY A SECOND THREAD AND NOT THE ASYNC BRIDGE. The resident modules
-// (anomaliesResident, insightsAgg, qualityResident) are written against the
-// SYNCHRONOUS `duck.query()`, and on the main thread every one of those calls
-// parks the event loop — all windows, the menu bar, the hotkey. Rewriting each
-// module to `queryAsync` would fork them from their differential tests. Here
-// the same synchronous code runs unchanged: `duck.query()` parks THIS thread
-// instead, which is exactly what a background job is allowed to do. The module
+// WHY A SECOND THREAD AS WELL AS THE ASYNC BRIDGE. Since T4.2 every resident
+// module runs on the async bridge, so its queries no longer park the main
+// thread — but a big job's DECODING and maths (millions of cells, k-means, a
+// regression) still would. Here that work runs on THIS thread. The module
 // registry is per-thread, so this thread gets its own DuckDB bridge (its own
 // in-memory database; the Parquet files are the shared state, read-only here).
+// The same async code runs here unchanged; a worker thread is also exempt
+// from `forbidSyncOnMainThread`, and is never reachable from a handler's
+// require graph (scripts/test-asyncReach.ts).
 //
 // NOTHING HERE IMPORTS ELECTRON (a worker thread has no `app`): every op takes
 // plain paths and records, and scripts/test-computeWorker.ts checks the import
