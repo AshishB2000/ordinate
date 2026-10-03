@@ -1046,3 +1046,7 @@ scripts/**/*.js
 /src/server/db/pool.js
 /src/server/db/migrate.js
 /scripts/test-db-migrate.js
+# web/t0.3-context
+/src/app/paths.js
+/src/server/context.js
+/scripts/test-server-context.js
