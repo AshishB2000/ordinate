@@ -269,3 +269,25 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
 - **Open:** e2e needs `E2E_CHROMIUM` locally (Playwright 1.62.1 wants Chromium 1234; the cache has
   1243) — T0.8 owns the harness and CI browser install. No userinfo fallback (an id_token without
   email is refused). CSRF tokens are T6.2 (SameSite=Lax + POST-only logout meanwhile).
+
+## 2026-10-02 — T0.8 E2E harness and CI (box NOT ticked: CI blocked)
+
+- **Harness:** `@playwright/test` is not installed (only `playwright`), so specs are `node:test` +
+  the `playwright` library, run by Node 24 type stripping; no new dependency. `startServer()` seeds a
+  temp `DATA_DIR` (the ordinary `seedSampleProject()`, Electron blocked) and spawns the built server
+  in dev. Fixtures: `failOnConsoleError` (console error, pageerror, CSP violation),
+  `rpcBudget(n=25)` (per document load or client-side URL change), `screens(name)` (light + dark).
+  `E2E_BROWSER` chromium|firefox|webkit; `E2E_CHROMIUM` overrides the binary.
+- **Measured:** RPCs per page load — Home 1 (`projects:list`), every other area 0. e2e 4/4 in ~12 s.
+  Initial JS 142.7 KB gzip vs the 300 KB budget (`web/scripts/bundle-size.ts`).
+- **Negative controls:** budget 0 fails on Home (budget 1 would pass — Home makes exactly one RPC);
+  an injected console error, uncaught throw and inline `<style>` are each caught; bundle limit 100 KB
+  exits 1; a re-added `require('electron')` in sampleProject fails the seed.
+- **sampleProject** no longer imports Electron (CSV resolved from `__dirname` — the same directory
+  `app.getAppPath()` named, unpacked or in app.asar).
+- **CI:** new `web` job in `ci.yml` (web build, size check, Vitest,
+  `npx playwright install --with-deps chromium`, e2e, screenshots as an artifact) and
+  `e2e-nightly.yml` (Firefox + WebKit, 07:00 UTC + manual). No branch filter touched.
+- **Blocked:** GitHub Actions refuses to start jobs ("recent account payments have failed or your
+  spending limit needs to be increased") since 2026-10-03 02:22 UTC, so the Done-when ("the PR shows
+  the new job green") cannot be met yet. Firefox/WebKit have never run (not cached locally).
