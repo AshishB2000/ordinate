@@ -192,7 +192,7 @@ async function main(): Promise<void> {
       open: !!panel && !panel.hidden,
       name: (panel?.querySelector('.js-dsp-name')?.textContent || '').trim(),
       kind: (panel?.querySelector('.js-dsp-kind')?.textContent || '').trim(),
-      heading: (panel?.querySelector('.dsp-head')?.textContent || '').trim(),
+      heading: (panel?.querySelector('.js-dsp-chart .dsp-head')?.textContent || '').trim(),
       facts,
       bars,
       // The header the panel describes is marked, so it is obvious which column
@@ -247,7 +247,7 @@ async function main(): Promise<void> {
     return {
       name: (panel?.querySelector('.js-dsp-name')?.textContent || '').trim(),
       kind: (panel?.querySelector('.js-dsp-kind')?.textContent || '').trim(),
-      heading: (panel?.querySelector('.dsp-head')?.textContent || '').trim(),
+      heading: (panel?.querySelector('.js-dsp-chart .dsp-head')?.textContent || '').trim(),
       // A numeric column draws `.dsp-hist-bar` (vertical), a text/date one
       // `.dsp-bar-row` (labelled rows) — see dsProfile.dsPaintProfileChart.
       bars: (panel?.querySelectorAll('.dsp-hist-bar') || []).length,
@@ -285,18 +285,22 @@ async function main(): Promise<void> {
   // And the panel is tall enough to show them without scrolling — a histogram
   // you have to scroll is one whose shape you cannot read.
   const fits = await win.evaluate(() => {
+    // The histogram must sit inside the body's unscrolled viewport. Settings
+    // sections below it (a number column's Currency) may scroll; the bars may not.
     const body = document.querySelector('#ds-profile .dsp-body') as HTMLElement | null;
+    const chart = document.querySelector('#ds-profile .js-dsp-chart') as HTMLElement | null;
     const actions = document.querySelector('#ds-profile .dsp-actions') as HTMLElement | null;
+    const need = body && chart ? Math.ceil(chart.getBoundingClientRect().bottom - body.getBoundingClientRect().top + body.scrollTop) : 0;
     return {
-      scrolled: !!body && body.scrollHeight > body.clientHeight + 1,
-      need: body ? body.scrollHeight : 0,
+      scrolled: !body || !chart || body.scrollTop !== 0 || need > body.clientHeight + 1,
+      need,
       have: body ? body.clientHeight : 0,
       panel: (document.getElementById('ds-profile') as HTMLElement | null)?.offsetHeight ?? 0,
       actionsVisible: !!actions && actions.getClientRects().length > 0,
     };
   });
   ok('all twenty bars fit without scrolling', !fits.scrolled,
-     `body needs ${fits.need}px, has ${fits.have}px; panel ${fits.panel}px`);
+     `histogram needs ${fits.need}px, body has ${fits.have}px; panel ${fits.panel}px`);
   ok('and the scoped actions are still on screen below them', fits.actionsVisible);
 
   await win.screenshot({ path: `${shotDir}/dataset-profile-number.png` });
