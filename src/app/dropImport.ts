@@ -16,17 +16,16 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { randomUUID } from 'crypto';
 import * as appPaths from './paths';
 import * as jobs from './jobs';
 import * as bundle from './bundle';
 import * as datasets from '../data/datasets';
 import * as computePool from '../engine/computePool';
-import * as duck from '../engine/duckdb';
 import { importBoundaryFile } from './projectBoundaries';
-import { parseCsv, finalizeTable } from '../data/parse';
+import { parseCsv } from '../data/parse';
 import type { ParseResult } from '../data/parse';
 import { parseFile, sourceKindForPath, MAX_FILE_BYTES } from '../data/fileImport';
+import { readParquet } from '../data/parquetImport';
 import { sniffBytes, classifyZip, classifyJson, HEAD_BYTES, TAIL_BYTES } from '../data/sniff';
 import { MAX_BOUNDARY_BYTES } from '../analysis/geojsonCheck';
 
@@ -36,7 +35,6 @@ export type Classified = { ok: true; kind: DropKind; delimiter?: string } | { ok
 export const MAX_DROP_FILES = 20;
 /** JSON up to this size is parsed to classify it; past it, it can only be records. */
 const JSON_CLASSIFY_BYTES = 16 * 1024 * 1024;
-const MAX_ROWS = 1_000_000;
 
 /** Read a file's head and tail and say what it is. */
 export async function classifyFile(file: string): Promise<Classified> {
@@ -71,31 +69,6 @@ export async function classifyFile(file: string): Promise<Classified> {
     return { ok: false, reason: 'could not be read' };
   } finally {
     if (fh) await fh.close().catch(() => undefined);
-  }
-}
-
-/**
- * A dropped Parquet file as a ParseResult. DuckDB's connection is locked to
- * userData (src/connectors/local.ts §1), so the file is COPIED into
- * userData/drop-stage first and read there — every column cast to VARCHAR and
- * typed by the importer's own rules, in file order, capped at the row limit.
- */
-async function readParquet(file: string): Promise<ParseResult> {
-  const stage = path.join(appPaths.userData(), 'drop-stage');
-  await fs.promises.mkdir(stage, { recursive: true });
-  const copy = path.join(stage, randomUUID() + '.parquet');
-  await fs.promises.copyFile(file, copy);
-  try {
-    const rel = `read_parquet('${copy.replace(/'/g, "''")}', file_row_number=true)`;
-    const cols = (await duck.queryAsync(`DESCRIBE SELECT * FROM ${rel};`))
-      .map((r) => String(r.column_name ?? ''))
-      .filter((c) => c !== 'file_row_number');
-    if (!cols.length) throw new Error('That Parquet file has no columns.');
-    const proj = cols.map((c, i) => `CAST("${c.replace(/"/g, '""')}" AS VARCHAR) AS c${i}`).join(', ');
-    const out = await duck.queryAsync(`SELECT ${proj} FROM ${rel} ORDER BY file_row_number LIMIT ${MAX_ROWS + 1};`);
-    return finalizeTable(cols, out.map((r) => cols.map((_c, i) => (r['c' + i] == null ? '' : String(r['c' + i])))));
-  } finally {
-    await fs.promises.rm(copy, { force: true }).catch(() => undefined);
   }
 }
 

@@ -4,13 +4,15 @@
 // implements it with react-remove-scroll, whose injected <style> element the
 // CSP refuses. Something that needs a trap is a Dialog.
 
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactElement, ReactNode, RefObject } from 'react';
 import * as P from '@radix-ui/react-popover';
 import f from './floating.module.css';
 import s from './Popover.module.css';
 
 export interface PopoverProps {
-  trigger: ReactElement;
+  /** The control that opens it. Or, instead, `anchorRef`: an element it is placed against (a grid header). */
+  trigger?: ReactElement;
+  anchorRef?: RefObject<HTMLElement | null>;
   children: ReactNode;
   /** Names the panel (aria-label) and, if `heading`, is drawn as its title. */
   title: string;
@@ -23,10 +25,11 @@ export interface PopoverProps {
   className?: string;
 }
 
-export function Popover({ trigger, children, title, heading, open, onOpenChange, align = 'start', side = 'bottom', className }: PopoverProps) {
+export function Popover({ trigger, anchorRef, children, title, heading, open, onOpenChange, align = 'start', side = 'bottom', className }: PopoverProps) {
   return (
     <P.Root open={open} onOpenChange={onOpenChange}>
-      <P.Trigger asChild>{trigger}</P.Trigger>
+      {trigger && <P.Trigger asChild>{trigger}</P.Trigger>}
+      {anchorRef && <P.Anchor virtualRef={anchorRef} />}
       <P.Portal>
         <P.Content
           className={`${f.surface} ${className ?? s.popover}`}

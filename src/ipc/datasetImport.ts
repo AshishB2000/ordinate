@@ -2,7 +2,8 @@ import { ipcMain } from './bus';
 import * as path from 'path';
 import { parsePaste } from '../data/parse';
 import type { ParseResult } from '../data/parse';
-import { parseFile, sourceKindFor } from '../data/fileImport';
+import { sourceKindFor, storedKind, type FileSourceKind } from '../data/fileImport';
+import { parseAnyFile } from '../data/parquetImport';
 import * as importStage from '../data/importStage';
 import * as jobs from '../app/jobs';
 import * as computePool from '../engine/computePool';
@@ -30,16 +31,18 @@ const pickedPaths = new Set<string>();
 /** Parse one picked file as a job; resolves with the parse, rejects on error or cancel. */
 export function parseAsJob(
   filePath: string,
-  kind: 'csv' | 'json' | 'xlsx',
+  kind: FileSourceKind,
   sheetName?: string,
   name: string = path.basename(filePath),
 ): Promise<ParseResult> {
   const job = jobs.submit<ParseResult>({
     kind: 'import',
     label: `Read ${name}`,
-    run: (ctx) => computePool.available()
+    // Parquet is read by DuckDB itself (async, in the caller's org worker on the
+    // server), not by a compute worker's tokenizer.
+    run: (ctx) => kind !== 'parquet' && computePool.available()
       ? computePool.run<ParseResult>('parse', { filePath, kind, sheetName }, { onProgress: ctx.progress, signal: ctx.signal })
-      : parseFile(filePath, kind, sheetName),
+      : parseAnyFile(filePath, kind, sheetName),
     resultOf: (r) => ({ message: `${r.rowCount.toLocaleString('en-US')} rows × ${r.columns.length} columns` }),
   });
   return job.done;
@@ -74,10 +77,12 @@ export function register(): void {
           title: 'Import data file',
           properties: ['openFile'],
           filters: [
-            { name: 'Data files', extensions: ['csv', 'json', 'xlsx'] },
+            { name: 'Data files', extensions: ['csv', 'tsv', 'json', 'xlsx', 'parquet'] },
             { name: 'CSV', extensions: ['csv'] },
+            { name: 'TSV', extensions: ['tsv'] },
             { name: 'JSON', extensions: ['json'] },
             { name: 'Excel', extensions: ['xlsx'] },
+            { name: 'Parquet', extensions: ['parquet'] },
           ],
         });
         if (canceled || !filePaths?.length) return { ok: true, canceled: true };
@@ -96,7 +101,7 @@ export function register(): void {
         ok: true,
         ...(upload ? {} : { filePath: chosenPath }),
         fileName,
-        sourceKind: kind,
+        sourceKind: storedKind(kind),
         preview: importStage.previewOf(parsed, importStage.put(parsed)),
       };
     } catch (err: any) {
@@ -115,7 +120,11 @@ export function register(): void {
       if (typeof text !== 'string' || text.trim() === '') {
         return { ok: true, preview: { columns: [], rows: [], rowCount: 0, warnings: ['Empty file'] } };
       }
-      return { ok: true, preview: parsePaste(text) };
+      const parsed = parsePaste(text);
+      // On the server pasted rows are STAGED like a file's, so the composer's
+      // preview and save never send them back over HTTP (the desktop renderer
+      // keeps sending its inline rows, as before).
+      return { ok: true, preview: serverDataDir() !== null ? importStage.previewOf(parsed, importStage.put(parsed)) : parsed };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to parse the pasted text' };
     }

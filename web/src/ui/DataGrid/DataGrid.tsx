@@ -17,6 +17,13 @@
 // double-click to edit; Enter or Tab commits, Escape cancels. An edit is
 // REPORTED through `onEdit` and never applied here: the cell keeps showing the
 // server's value until the caller hands the grid a new `source`.
+//
+// Optional, for the editors built on it (T2.4): a controlled `selection`
+// (Shift+arrows / Shift+click grow a range from the anchor — input tables
+// fill, clear, copy and delete rows over it), `cellFlag` (a cell the server
+// flagged, with the reason as its tooltip), `onHeaderActivate` (a header
+// that opens a menu — the composer's field mapper) and `editorList` (a
+// <datalist> the editor suggests from — an input table's lookup values).
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
@@ -24,11 +31,19 @@ import { elementScroll, observeElementOffset, useVirtualizer, type Virtualizer }
 import { Button } from '../Button';
 import { EmptyState, ErrorState } from '../States';
 import { MAX_SCROLL_PX, move, scrollRatio, scrollTopFor, type Pos } from './geometry';
-import { cellId, HeaderCell, Row, type GridColumn } from './GridParts';
+import { cellId, HeaderCell, Row, type CellFlag, type GridColumn } from './GridParts';
 import { PAGE_ROWS, PageCache, type Cell, type FetchPage } from './pageCache';
 import s from './DataGrid.module.css';
 
-export type { GridColumn };
+export type { CellFlag, GridColumn };
+
+/** A rectangle of cells: r0/c0 the anchor, r1/c1 the active cell (the one keys act on). */
+export interface GridRange {
+  r0: number;
+  c0: number;
+  r1: number;
+  c1: number;
+}
 
 export interface CellEdit {
   /** Row index in the source's order (0-based). */
@@ -49,6 +64,15 @@ export interface DataGridProps {
   /** Shown when the source has no rows. */
   emptyTitle?: string;
   emptyBody?: string;
+  /** Controlled selection; without it the grid keeps its own single active cell. */
+  selection?: GridRange;
+  onSelectionChange?: (selection: GridRange) => void;
+  /** A flag the server put on a cell, or undefined. Keep the function stable (memoize it). */
+  cellFlag?: (row: number, col: number) => CellFlag | undefined;
+  /** Makes each header a button: click or Enter on it calls this with the header element. */
+  onHeaderActivate?: (col: number, anchor: HTMLElement) => void;
+  /** The id of a <datalist> the cell editor suggests from, for a column. */
+  editorList?: (col: number) => string | undefined;
 }
 
 /** One row's height — fixed, so positions are arithmetic (legacy --ds-row-h). */
@@ -84,7 +108,22 @@ interface Editing {
 
 const cellText = (v: Cell | undefined) => (v === null || v === undefined ? '' : String(v));
 
-export function DataGrid({ columns, source, label, editable = false, onEdit, emptyTitle, emptyBody }: DataGridProps) {
+const ORIGIN: GridRange = { r0: 0, c0: 0, r1: 0, c1: 0 };
+
+export function DataGrid({
+  columns,
+  source,
+  label,
+  editable = false,
+  onEdit,
+  emptyTitle,
+  emptyBody,
+  selection,
+  onSelectionChange,
+  cellFlag,
+  onHeaderActivate,
+  editorList,
+}: DataGridProps) {
   const grid = useId();
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   // A new source starts from the last known row count, so re-sourcing after an
@@ -97,7 +136,15 @@ export function DataGrid({ columns, source, label, editable = false, onEdit, emp
   const [sized, setSized] = useState({ columns, widths: columns.map(defaultWidth) });
   const widths = sized.columns === columns ? sized.widths : columns.map(defaultWidth);
   if (sized.columns !== columns) setSized({ columns, widths });
-  const [rawActive, setActive] = useState<Pos>({ row: 0, col: 0 });
+  const [ownSel, setOwnSel] = useState<GridRange>(ORIGIN);
+  const sel = selection ?? ownSel;
+  const rawActive: Pos = { row: sel.r1, col: sel.c1 };
+  /** Moves the active cell; `extend` keeps the anchor (a range). */
+  const setActive = (p: Pos, extend = false) => {
+    const next = extend ? { r0: sel.r0, c0: sel.c0, r1: p.row, c1: p.col } : { r0: p.row, c0: p.col, r1: p.row, c1: p.col };
+    if (!selection) setOwnSel(next);
+    onSelectionChange?.(next);
+  };
   const [editing, setEditingState] = useState<Editing | null>(null);
   // Mirrors `editing` synchronously: Escape focuses the grid, which blurs the
   // editor before React re-renders — the blur must see the edit already closed.
@@ -192,10 +239,16 @@ export function DataGrid({ columns, source, label, editable = false, onEdit, emp
     else if (c && c.end > el.scrollLeft + el.clientWidth) el.scrollLeft = c.end - el.clientWidth;
   };
 
-  const go = (p: Pos) => {
-    setActive(p);
+  const go = (p: Pos, extend = false) => {
+    setActive(p, extend);
     reveal(p);
   };
+  // A selection the caller moved (next flagged cell, a new row) comes into view.
+  const revealRef = useRef(reveal);
+  revealRef.current = reveal;
+  useEffect(() => {
+    if (selection) revealRef.current({ row: selection.r1, col: selection.c1 });
+  }, [selection]);
 
   const beginEdit = (p: Pos, value?: string) => {
     if (!editable || p.row < 0 || !cache.has(p.row)) return;
@@ -248,11 +301,21 @@ export function DataGrid({ columns, source, label, editable = false, onEdit, emp
         return;
       }
     }
+    if (onHeaderActivate && active.row === -1 && !ctrl && (e.key === 'Enter' || e.key === ' ')) {
+      const head = document.getElementById(cellId(grid, -1, active.col));
+      if (head) {
+        e.preventDefault();
+        onHeaderActivate(active.col, head);
+        return;
+      }
+    }
     const page = Math.max(1, Math.floor((viewport - HEAD_H) / ROW_H) - 1);
-    const next = move(active, { key: e.key, ctrl, shift: e.shiftKey, alt: e.altKey }, total, columns.length, page);
-    if (!next) return;
+    // With a selection, Shift grows a range from the anchor (in the body; the header's Shift+arrows resize).
+    const extend = !!onSelectionChange && e.shiftKey && active.row >= 0;
+    const next = move(active, { key: e.key, ctrl, shift: e.shiftKey && !extend, alt: e.altKey }, total, columns.length, page);
+    if (!next || (extend && next.row < 0)) return;
     e.preventDefault();
-    go(next);
+    go(next, extend);
   };
 
   const target = (e: MouseEvent): Pos | null => {
@@ -298,7 +361,7 @@ export function DataGrid({ columns, source, label, editable = false, onEdit, emp
         onKeyDown={onKeyDown}
         onMouseDown={(e) => {
           const p = target(e);
-          if (p && !(editing && p.row === editing.pos.row && p.col === editing.pos.col)) setActive(p);
+          if (p && !(editing && p.row === editing.pos.row && p.col === editing.pos.col)) setActive(p, e.shiftKey && !!onSelectionChange && p.row >= 0);
         }}
         onDoubleClick={(e) => {
           const p = target(e);
@@ -315,11 +378,14 @@ export function DataGrid({ columns, source, label, editable = false, onEdit, emp
                 column={columns[c.index]!}
                 active={active.row === -1 && active.col === c.index}
                 onResize={resize}
+                onActivate={onHeaderActivate}
               />
             ))}
           </div>
           <div ref={bodyRef} className={s.body} role="presentation" style={{ width }}>
-            {items.map((r) => (
+            {items.map((r) => {
+              const inSel = r.index >= Math.min(sel.r0, sel.r1) && r.index <= Math.max(sel.r0, sel.r1) && (sel.r0 !== sel.r1 || sel.c0 !== sel.c1);
+              return (
               <Row
                 key={r.key}
                 grid={grid}
@@ -334,8 +400,13 @@ export function DataGrid({ columns, source, label, editable = false, onEdit, emp
                 onEditKey={editKey}
                 onEditChange={editChange}
                 onEditBlur={editBlur}
+                selFrom={inSel ? Math.min(sel.c0, sel.c1) : -1}
+                selTo={inSel ? Math.max(sel.c0, sel.c1) : -1}
+                flag={cellFlag}
+                list={editing && editing.pos.row === r.index ? editorList?.(editing.pos.col) : undefined}
               />
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

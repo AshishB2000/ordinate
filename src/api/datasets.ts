@@ -1,8 +1,36 @@
 import { z } from 'zod';
-import { byProjectId, FileToken, rpc, Uuid } from './contract';
+import { byProjectId, FileToken, rpc, Steps, Uuid } from './contract';
 
 /** One stored cell, as `dataset:page` returns and a filter value carries it. */
-const Cell = z.union([z.string().max(10_000), z.number(), z.null()]);
+export const Cell = z.union([z.string().max(10_000), z.number(), z.null()]);
+
+/** A column as a parse or a dataset record types it. */
+export const TypedColumn = z.strictObject({ name: z.string().max(512), type: z.enum(['text', 'number', 'date']) });
+
+/**
+ * One table of the composer chain (src/ipc/datasetCompose.ts): a saved
+ * dataset, or the import being made — staged on the server by its parse
+ * (`stagedId`, bound to the caller: src/data/importStage.ts) or, for a
+ * screenshot capture whose cells the user corrects, carried inline.
+ */
+const TableRef = z.union([
+  z.strictObject({ datasetId: Uuid }),
+  z.strictObject({
+    inline: z.strictObject({
+      name: z.string().max(200),
+      stagedId: Uuid.optional(),
+      columns: z.array(TypedColumn).max(1_000).optional(),
+      rows: z.array(z.array(Cell).max(1_000)).max(20_000).optional(),
+    }),
+  }),
+]);
+
+/** A table joined (or appended) onto the chain — always a saved dataset. */
+const Join = z.strictObject({
+  datasetId: Uuid,
+  mode: z.enum(['inner', 'left', 'append']),
+  on: z.strictObject({ left: z.string().max(512), right: z.string().max(512) }).optional(),
+});
 
 /**
  * A row filter, as a visual carries it (src/data/transforms.ts `FilterStep`).
@@ -62,6 +90,57 @@ export const datasets = {
   'dataset:update': rpc({
     access: 'write',
     input: z.strictObject({ projectId: Uuid, datasetId: Uuid, autoRefresh: z.enum(['hourly', 'daily', 'weekly']).nullable() }),
+    project: byProjectId,
+  }),
+  // preload: invoke('dataset:parsePaste', { text }) — parses pasted CSV / TSV /
+  // JSON and stages the rows for the composer. Org-level like the file parse
+  // (the save that follows names the project). The RPC body cap (1 MiB) bounds
+  // a paste; a bigger table is uploaded as a file.
+  'dataset:parsePaste': rpc({ access: 'write', org: true, input: z.strictObject({ text: z.string().max(900_000) }) }),
+  // The composer (src/ipc/datasetCompose.ts): one window of the folded chain,
+  // computed from the first 50k rows of each table. `offset` + `limit` are
+  // the DataGrid's blocks (the desktop pages by `page`).
+  'dataset:composePreview': rpc({
+    access: 'read',
+    input: z.strictObject({
+      projectId: Uuid,
+      base: TableRef,
+      joins: z.array(Join).max(20),
+      offset: z.number().int().min(0).max(1_000_000),
+      limit: z.number().int().min(0).max(500),
+    }),
+    project: byProjectId,
+  }),
+  // Save the chain as a new dataset (a job). The field mapping arrives as
+  // prepare steps (renames, drops — whitelisted again by commitSteps) and
+  // retypes. A server import has no re-readable origin: only a capture's link
+  // back to its screenshot, checked against THIS project by the handler.
+  'dataset:composeSave': rpc({
+    access: 'write',
+    input: z.strictObject({
+      projectId: Uuid,
+      name: z.string().max(200),
+      base: TableRef,
+      joins: z.array(Join).max(20),
+      steps: Steps,
+      sourceKind: z.enum(['csv', 'json', 'xlsx', 'parquet', 'paste', 'capture']).optional(),
+      origin: z.strictObject({ kind: z.literal('capture'), captureId: z.string().regex(/^[0-9a-zA-Z_-]{1,64}$/) }).optional(),
+      retype: z.array(TypedColumn).max(1_000).optional(),
+    }),
+    project: byProjectId,
+  }),
+  // preload: invoke('dataset:distinct', { projectId, datasetId, column, limit, search })
+  // — a column's distinct values, searched in SQL, with the true total (an
+  // input table's lookup list).
+  'dataset:distinct': rpc({
+    access: 'read',
+    input: z.strictObject({
+      projectId: Uuid,
+      datasetId: Uuid,
+      column: z.string().max(512),
+      limit: z.number().int().min(1).max(200).optional(),
+      search: z.string().max(200).optional(),
+    }),
     project: byProjectId,
   }),
 } as const;

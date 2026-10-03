@@ -12,6 +12,8 @@ import { tokens } from './tokens';
 import { maps } from './maps';
 import { connections } from './connections';
 import { assistant } from './assistant';
+import { captures } from './captures';
+import { inputTables } from './inputTables';
 
 import { trash } from './trash';
 import { versions } from './versions';
@@ -30,6 +32,8 @@ export const contracts = {
 
   ...trash,
   ...versions,
+  ...captures,
+  ...inputTables,
 } as const;
 
 export type Channel = keyof typeof contracts;

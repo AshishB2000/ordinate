@@ -365,4 +365,8 @@ export function registerHandlers(): void {
   // Home and the app chrome (T2.1): first-run guidance, workspace prefs, the Jobs popover.
   for (const mod of ['../ipc/onboarding', '../ipc/prefs']) (require(mod) as { register: () => void }).register();
   (require('../ipc/jobs') as typeof import('../ipc/jobs')).registerServer();
+  // Import, composer, captures and input tables (T2.4).
+  for (const mod of ['../ipc/datasetCompose', '../ipc/input', '../ipc/captureDataset']) {
+    (require(mod) as { register: () => void }).register();
+  }
 }

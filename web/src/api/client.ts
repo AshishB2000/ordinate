@@ -148,6 +148,17 @@ export async function upload(file: Blob, name: string): Promise<Uploaded> {
   }
   const text = await res.text();
   if (res.status === 401) toSignIn();
+  if (res.status === 413) {
+    // Said in words, with the cap the server (or the org) applied.
+    let maxMb: unknown;
+    try {
+      maxMb = (JSON.parse(text) as { maxMb?: unknown }).maxMb;
+    } catch {
+      maxMb = undefined;
+    }
+    const e = toError(res.status, res.statusText, text);
+    throw new RpcError(413, e.code, typeof maxMb === 'number' ? `That file is over the ${maxMb} MB upload limit.` : 'That file is over the upload limit.');
+  }
   if (!res.ok) throw toError(res.status, res.statusText, text);
   return JSON.parse(text) as Uploaded; // the server's own reply shape (src/server/files.ts)
 }

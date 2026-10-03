@@ -6,54 +6,72 @@
 // renderer gets a display slice and a `stagedId`, and the composer's preview
 // and save resolve that id in main. One copy of the rows, never crossing IPC.
 //
-// Bounded: at most MAX_STAGED tables (the oldest goes first) and each for at
-// most TTL_MS — an abandoned import must not pin a million rows forever. A
-// save takes its table out.
+// Bounded: at most MAX_STAGED tables PER OWNER (their oldest goes first) and
+// each for at most TTL_MS — an abandoned import must not pin a million rows
+// forever. A save takes its table out.
+//
+// OWNED: a staged table belongs to the org + user who parsed it (ctx(); the
+// desktop is one fixed owner). On the server a stagedId is only a random UUID,
+// so without this anyone who learned one could save — or drop — another org's
+// upload. `get` / `drop` by anyone else behave exactly as for an unknown id.
 
 import { randomUUID } from 'crypto';
+import { ctx } from '../server/context';
 import type { ParseResult } from './parse';
 
+// ponytail: per owner, so a server holds at most users × MAX_STAGED tables; add a global byte budget if that bites.
 export const MAX_STAGED = 2;
 export const TTL_MS = 30 * 60 * 1000;
 /** Rows the renderer gets to paint — the composer draws 100 per page. */
 export const PREVIEW_ROWS = 2000;
+/** What a save says when the staged table it names is gone (or was never the caller's). */
+export const GONE = 'This import is no longer available — bring the file in again.';
 
 interface Staged {
   table: ParseResult;
   at: number;
+  owner: string;
 }
 
 const staged = new Map<string, Staged>();
 let now = (): number => Date.now();
 
+/** Who is asking: org + user on the server, the one desktop user otherwise. */
+function ownerNow(): string {
+  const c = ctx();
+  return c.org.id + '\u0000' + c.user.email;
+}
+
 function sweep(): void {
   const t = now();
   for (const [id, s] of staged) if (t - s.at > TTL_MS) staged.delete(id);
-  while (staged.size > MAX_STAGED) {
-    const oldest = staged.keys().next();
-    if (oldest.done) break;
-    staged.delete(oldest.value);
+  // Insertion order is age order: walking newest-first keeps each owner's newest MAX_STAGED.
+  const kept = new Map<string, number>();
+  for (const [id, s] of [...staged].reverse()) {
+    const n = (kept.get(s.owner) ?? 0) + 1;
+    kept.set(s.owner, n);
+    if (n > MAX_STAGED) staged.delete(id);
   }
 }
 
-/** Hold a parsed table; returns the id the renderer refers to it by. */
+/** Hold a parsed table for the caller; returns the id the renderer refers to it by. */
 export function put(table: ParseResult): string {
   const id = randomUUID();
-  staged.set(id, { table, at: now() });
+  staged.set(id, { table, at: now(), owner: ownerNow() });
   sweep();
   return id;
 }
 
-/** The staged table, or null (unknown, expired, or already saved). */
+/** The caller's own staged table, or null (unknown, expired, already saved — or someone else's). */
 export function get(id: unknown): ParseResult | null {
   sweep();
   if (typeof id !== 'string') return null;
   const s = staged.get(id);
-  return s ? s.table : null;
+  return s && s.owner === ownerNow() ? s.table : null;
 }
 
 export function drop(id: unknown): void {
-  if (typeof id === 'string') staged.delete(id);
+  if (typeof id === 'string' && staged.get(id)?.owner === ownerNow()) staged.delete(id);
 }
 
 /** What the renderer receives: the parse minus most rows, plus the handle. */
