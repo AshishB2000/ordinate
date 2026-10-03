@@ -34,6 +34,8 @@ jobs:
         with:
           node-version: '20'
       - run: npm ci
+      # web/tsconfig.json references vite/client types: the web/ lint pass needs web's deps.
+      - run: npm --prefix web ci
       - run: npm run lint
 
   prettier:
