@@ -10,7 +10,9 @@ import { fastify, type FastifyInstance, type FastifyRequest } from 'fastify';
 import { isAvailable, shutdown } from '../engine/duckdb';
 import { contractFor } from '../api/index';
 import type { ServerEnv } from './env';
-import { runInContext, type Identify } from './context';
+import { ctx, runInContext, type Identify } from './context';
+import { authorize, grantCreator, orgAllows, readable } from './authz/index';
+import { audit, targetIds, type Outcome } from './authz/audit';
 import { registerAuth } from './auth/index';
 import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
@@ -21,6 +23,7 @@ import { fromWire, encode } from './wire';
 import { registerStatic, WEB_DIST } from './static';
 import * as fs from 'fs';
 import * as path from 'path';
+import type { Pool } from 'pg';
 
 /** The `event` a handler receives over HTTP. It has no `sender`: handlers ask `senderOf(e)` (./context). */
 const SERVER_EVENT = Object.freeze({});
@@ -46,6 +49,18 @@ export const REDACT_PATHS: readonly string[] = SECRET_KEYS.flatMap((k) => {
   const leaf = /^[a-z]+$/.test(k) ? k : `["${k}"]`;
   return Array.from({ length: MAX_DEPTH + 1 }, (_, d) => '*.'.repeat(d) + leaf);
 });
+
+// ponytail: one pool per process (a pod builds one app); the sharing handlers
+// registered once by registerHandlers() read it per call. Tests building two
+// apps in one process must point both at the same database.
+let dbPool: Pool | null = null;
+
+/** The org role a non-RPC /api/ route needs: uploading stages data (write); the event stream is for any member. */
+function routeAccess(method: string, route: string | undefined): 'read' | 'write' | null {
+  if (method === 'POST' && route === '/api/files') return 'write';
+  if (route === '/api/files/:token' || route === '/api/events') return 'read';
+  return null;
+}
 
 const NOT_PAGES = new Set(['/healthz', '/readyz', '/sign-in']);
 
@@ -89,6 +104,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // a failure (DB down, edited migration) rejects listen and exits main.ts 1.
   const dbUrl = cfg.databaseUrl;
   const pool = dbUrl ? createPool(dbUrl, (err) => app.log.warn({ err }, 'postgres idle client error')) : null;
+  dbPool = pool;
   if (pool && dbUrl) {
     app.addHook('onReady', async () => {
       try {
@@ -124,6 +140,10 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         if (!who && !api) return void reply.redirect(path === '/' ? '/sign-in' : `/sign-in?next=${encodeURIComponent(req.url)}`);
         if (!who) return void reply.code(401).send({ error: 'not signed in' });
         if (!api) return done();
+        // Uploads and the event stream are checked against the org role
+        // (./authz/); RPC calls are checked per contract in the route below.
+        const need = routeAccess(req.method, req.routeOptions.url);
+        if (need && !orgAllows(who.user.role, need)) return void reply.code(403).send({ error: 'forbidden' });
         // Which tab's event stream a push from the handler goes to:
         // X-Ordinate-Client, honoured only when that stream is bound to this
         // caller (./sse.ts). /api/events itself is behind this gate too.
@@ -175,14 +195,40 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       return reply.code(400).send({ error: 'invalid input', issues });
     }
 
+    // Authorization (./authz/): the caller's role on the project the input
+    // names, or on the org, must reach the contract's access — else 403 and
+    // the handler never runs. Writes, admin calls and audited reads leave an
+    // audit row: ids only, never an input value (./authz/audit.ts).
+    const who = ctx();
+    const audited = contract.access !== 'read' || contract.audit === true;
+    const targets = audited ? targetIds(parsed.data) : [];
+    const record = async (outcome: Outcome, projectId: string | null, extra: string[] = []): Promise<void> => {
+      if (!audited) return;
+      await audit(pool, {
+        org: who.org.id, actor: who.user.email, action: 'rpc', channel, projectId,
+        targets: [...targets, ...extra], outcome, requestId: who.requestId,
+      }).catch((err: unknown) => req.log.error({ err: scrubbed(err, dbUrl ?? ''), channel }, 'audit write failed'));
+    };
+    const decision = await authorize(contract, parsed.data, who, pool);
+    if (!decision.ok) {
+      await record('denied', decision.projectId);
+      return reply.code(403).send({ error: 'forbidden' });
+    }
+
     const handler = handlers.get(channel);
     if (!handler) return reply.code(501).send({ error: 'channel not available on this server' });
     try {
-      const result: unknown = await handler(SERVER_EVENT, ...(args.length ? [parsed.data] : []));
-      return reply.type('application/json').send(encode(result));
+      let result: unknown = await handler(SERVER_EVENT, ...(args.length ? [parsed.data] : []));
+      const created = 'creates' in contract && contract.creates ? contract.creates(result) : undefined;
+      if (created) await grantCreator(pool, who, created);
+      if ('visible' in contract && contract.visible) result = contract.visible(result, await readable(pool, who));
+      const body = encode(result);
+      await record('ok', decision.projectId, created ? [created] : []);
+      return reply.type('application/json').send(body);
     } catch (err) {
       // The message can carry a path or a value; it goes to the log, not the wire.
       req.log.error({ err, channel }, 'rpc handler failed');
+      await record('error', decision.projectId);
       return reply.code(500).send({ error: 'handler failed' });
     }
   });
@@ -209,4 +255,5 @@ export function registerHandlers(): void {
   for (const mod of ['../ipc/projects', '../ipc/datasets', '../ipc/recent', '../ipc/quality']) {
     (require(mod) as { register: () => void }).register();
   }
+  (require('./authz/share') as typeof import('./authz/share')).register(() => dbPool);
 }

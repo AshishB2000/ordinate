@@ -148,7 +148,8 @@ function throws(fn: () => unknown): boolean {
   ok('org-b projects:list: 200 and does NOT see org-a\'s project', pb.statusCode === 200 && !pb.body.includes(pid), pb.body);
   ok('org-a dataset:list: its dataset', da.statusCode === 200 && (wire.decode(da.body) as { name: string }[]).some((d) => d.name === DS), da.body);
   ok('org-a dataset:list ≡ direct', da.body === await direct('org-a', 'dataset:list', { projectId: pid }));
-  ok('org-b dataset:list for org-a\'s project id: nothing', db.statusCode === 200 && (wire.decode(db.body) as unknown[]).length === 0, db.body);
+  // T3.3: the project is not in org-b, so authorization refuses before the handler (it used to answer an empty list).
+  ok('org-b dataset:list for org-a\'s project id: 403, nothing listed', db.statusCode === 403 && !db.body.includes(DS), db.body);
   ok('org-a recent:list: 200 and ≡ direct', recA.statusCode === 200 && recA.body === await direct('org-a', 'recent:list', { limit: 6 }), recA.body);
   ok('the project is on disk under orgs/org-a only',
     fs.existsSync(path.join(DATA, 'orgs', 'org-a', 'userData', 'projects', pid))

@@ -15,6 +15,7 @@ import { BlockList, isIP } from 'net';
 import type { Pool } from 'pg';
 import { identityFor, type Identify } from '../context';
 import { proxyList, type AuthEnv, type ServerEnv } from '../env';
+import { audit, type AuditAction } from '../authz/audit';
 import { cookieNames, cookieOpts, safeNext } from './cookies';
 import { registerOidc } from './oidc';
 import { endAllSessions, endSession, ensureOrg, member, normalEmail, provision, sessionIdentity } from './store';
@@ -98,9 +99,20 @@ export function registerAuth(app: FastifyInstance, cfg: ServerEnv, pool: Pool | 
     app.get<{ Querystring: { next?: string } }>('/api/auth/login', async (req, reply) => reply.redirect(safeNext(req.query.next)));
   }
 
+  // Sign-outs go to the audit trail (../authz/audit.ts) with who signed out.
+  const trail = (req: FastifyRequest, org: string, actor: string, action: AuditAction) =>
+    audit(pool, { org, actor, action, outcome: 'ok', requestId: String(req.id) }).catch((err: unknown) =>
+      req.log.error({ err: { name: (err as Error | null)?.name, code: (err as { code?: unknown } | null)?.code } }, 'audit write failed'),
+    );
+
   app.post('/api/auth/logout', async (req, reply) => {
     const id = req.cookies[names.session];
-    if (id && pool) await endSession(pool, id);
+    if (id && pool) {
+      // Who it was, before the session is gone — oidc only (the cookie is the identity).
+      const was = auth.mode === 'oidc' ? await sessionIdentity(pool, auth, id) : null;
+      await endSession(pool, id);
+      if (was) await trail(req, was.org.id, was.user.email, 'logout');
+    }
     reply.clearCookie(names.session, cookieOpts(secure, '/'));
     return reply.code(204).send();
   });
@@ -110,6 +122,7 @@ export function registerAuth(app: FastifyInstance, cfg: ServerEnv, pool: Pool | 
     const id = await who(req);
     if (!id) return reply.code(401).send({ error: 'not signed in' });
     const ended = pool ? await endAllSessions(pool, id.org.id, id.user.email) : 0;
+    await trail(req, id.org.id, id.user.email, 'logout_everywhere');
     reply.clearCookie(names.session, cookieOpts(secure, '/'));
     return reply.send({ ended });
   });

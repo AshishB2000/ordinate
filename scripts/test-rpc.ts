@@ -135,9 +135,11 @@ const PID = '1b4e28ba-2fa1-11d2-883f-0016d3cca427';
   }
 
   // ── The wire codec end to end, and failures that must stay quiet ──────────
-  rpc.registry.removeHandler('recent:list');
-  rpc.registry.handle('recent:list', async () => ({ n: NaN, z: -0, d: new Date(0), m: new Map([[1, undefined]]) }));
-  const w = await post('recent:list', { args: [] });
+  // The two reply-shape cases go through dataset:list: recent:list's reply is
+  // trimmed to readable projects since T3.3 (a non-list reply becomes []).
+  rpc.registry.removeHandler('dataset:list');
+  rpc.registry.handle('dataset:list', async () => ({ n: NaN, z: -0, d: new Date(0), m: new Map([[1, undefined]]) }));
+  const w = await post('dataset:list', { args: [{ projectId }] });
   const wv = wire.decode(w.body) as { n: number; z: number; d: Date; m: Map<number, undefined> };
   ok('a NaN / -0 / Date / Map reply survives the route', w.statusCode === 200 && Number.isNaN(wv.n) && Object.is(wv.z, -0)
     && wv.d instanceof Date && wv.d.getTime() === 0 && wv.m.has(1), w.body);
@@ -147,9 +149,9 @@ const PID = '1b4e28ba-2fa1-11d2-883f-0016d3cca427';
   const thrown = await post('recent:list', { args: [] });
   ok('a throwing handler: 500 without its message', thrown.statusCode === 500 && !thrown.body.includes(SECRET), thrown.body);
 
-  rpc.registry.removeHandler('recent:list');
-  rpc.registry.handle('recent:list', async () => () => SECRET);
-  const unenc = await post('recent:list', { args: [] });
+  rpc.registry.removeHandler('dataset:list');
+  rpc.registry.handle('dataset:list', async () => () => SECRET);
+  const unenc = await post('dataset:list', { args: [{ projectId }] });
   ok('a reply the codec refuses (a function): 500, not a mangled 200', unenc.statusCode === 500 && !unenc.body.includes(SECRET), unenc.body);
 
   rpc.registry.removeHandler('recent:list');

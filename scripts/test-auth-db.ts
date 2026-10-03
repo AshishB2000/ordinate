@@ -208,6 +208,18 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
     ok('open redirect: next=//evil.example lands on /', evil.to === '/' && !!evil.id, evil.to);
     ok('carol was provisioned only by the successful sign-in', (await pool.query(`SELECT 1 FROM users WHERE email = 'carol@acme.test'`)).rowCount === 1);
 
+    // ── Audit trail (T3.3): sign-ins and sign-outs, with ids only ─────────
+    const trail = await pool.query<{ action: string; actor: string | null; outcome: string; j: string }>(
+      `SELECT action, actor, outcome, row_to_json(a)::text AS j FROM audit_log a ORDER BY id`);
+    const has = (action: string, actor: string | null, outcome: string) =>
+      trail.rows.some((r) => r.action === action && r.actor === actor && r.outcome === outcome);
+    ok('audit: a successful sign-in is a login/ok row for that member', has('login', 'alice@acme.test', 'ok'), JSON.stringify(trail.rows.map((r) => [r.action, r.actor, r.outcome])));
+    ok('audit: refused sign-ins are login/denied (disabled, domain, unverified → no actor)',
+      has('login', 'bob@acme.test', 'denied') && has('login', 'eve@elsewhere.test', 'denied') && has('login', null, 'denied'));
+    ok('audit: logout and logout-everywhere name who signed out', trail.rows.some((r) => r.action === 'logout' && !!r.actor) && has('logout_everywhere', 'alice@acme.test', 'ok'));
+    const trailText = trail.rows.map((r) => r.j).join('\n');
+    ok('audit: no session id, cookie, code or token in any row', [...secrets, ...idp.issued].every((s) => !s || !trailText.includes(s)));
+
     // ── Header mode ────────────────────────────────────────────────────────
     const hcfg = (cidrs: string) => envMod.parseEnv({ LOG_LEVEL: 'trace', DATABASE_URL: scratch.toString(), AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: cidrs, ORDINATE_ORG: 'acme' });
     const happ = appMod.buildApp(hcfg('10.0.0.0/8, fd00::/8'), sink);
