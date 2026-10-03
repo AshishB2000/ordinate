@@ -80,7 +80,7 @@ row of the plan's dependency graph.
 - **Done when:** a test uploads a CSV, imports it via RPC with the token, and a second use of the
   token fails; an oversize upload gets 413 without the body being buffered.
 
-### [ ] T0.5 Server-sent events and jobs ∥
+### [x] T0.5 Server-sent events and jobs ∥
 - **Branch** `web/t0.5-sse` · **Depends** T0.3 · **Scope** `src/server/sse.ts`, `src/app/jobs.ts` (wiring only)
 - `GET /api/events?client=<id>`: one stream per browser tab, heartbeat every 20 s, cleaned up on
   close. `ctx().client.send(channel, payload)` writes to it (wire-encoded).

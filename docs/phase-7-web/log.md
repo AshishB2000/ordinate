@@ -145,3 +145,29 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   **security follow-up:** `importStage`'s `stagedId` is a random UUID not bound to an org, so
   `dataset:save` could take another org's staged table given its id — bind it when `dataset:save`
   gets a contract (T2.4) and check in T6.3.
+
+## 2026-10-02 — T0.5 Server-sent events and jobs
+
+- **Design:** `GET /api/events?client=<uuid>` — the tab's own UUID, the same value it sends as
+  `X-Ordinate-Client`. A stream is bound at open to org + user; another owner opening that id gets
+  403, the same owner reopening replaces it. `clientFor(header, who)` hands an RPC the stream only
+  if it is open and bound to the caller. Frames are named events
+  (`event: <channel>` + wire-encoded `data:`); heartbeat comment every 20 s.
+- **Backpressure:** queue on `write() === false`, cap 256 per stream; a newer `jobs:changed` (the
+  tab's whole list) replaces its queued copy; completions are never dropped — if the queue still
+  fills, the stream is closed rather than grown.
+- **Jobs:** `jobs.ts` tags `job.client` at submit (server only, 5 lines); each tab receives only its
+  own jobs' slice, and only when that slice changed (another org's job ticking used to re-send every
+  tab's list — caught by the test). `jobs:finished` replaces the desktop OS notification. First
+  contract that starts a job: `quality:run` (`write`).
+- **Measured** (loopback, 200 events): send → receive median 0.30 ms, p95 1.15 ms, max 3.4 ms.
+  1,000 idle streams: ~8.4 KB heap / ~40 KB RSS each; registry back to 0 after close.
+- **Push channels:** keep `hub:new-entry` (a capture becoming an entry — upload-based on the
+  server). Drop `hub:open-settings` (Settings is a route), `hub:show-permission` (macOS Screen
+  Recording; the server never captures), `menu:run` (native menu; the web shell has its own menus
+  and palette), `overlay:frame` (the screenshot overlay window is gone).
+- **No Last-Event-ID resume** — a reconnecting tab re-reads state over RPC.
+- **Open:** `src/ipc/jobs.ts` still imports Electron at load → `jobs:list/cancel/clear` have no
+  contracts yet (need org/user ownership filters when added); the job queue's `MAX_RUNNING=3` is
+  process-global across orgs (fairness, not a leak — P5 jobs table); an export job's `result.path`
+  must become a T0.4 download token before it reaches a tab.
