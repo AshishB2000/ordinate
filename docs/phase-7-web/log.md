@@ -198,3 +198,41 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   `connection:delete` (via `src/app/configSecrets.ts`) through it in server mode; T2.12 must route
   `src/app/execConfig.ts` (`setApiKey`/`getApiKey`/`hasKey`/BYOK) and `src/ai/analyze.ts`,
   `src/ai/models.ts` key reads. T6.3's threat model checks both are done.
+
+## 2026-10-02 — T4.1 Async resident layer: charts and paging
+
+- **Chosen transport: the bridge's `queryAsync`/`execAsync`, not `computePool`.** 1M-row Parquet,
+  medians of 31 interleaved runs (load avg 33–112 from parallel sessions — ratios matter, not
+  absolutes):
+
+  | case | path | latency ms | main thread blocked ms |
+  |---|---|---|---|
+  | page unsorted (count + 100 rows @500k) | sync | 93 | 93 |
+  | | queryAsync | 92 | 9 |
+  | | computePool | 65 | 14 |
+  | page sorted | sync | 196 | 196 |
+  | | queryAsync | 265 | 8 |
+  | | computePool | 204 | 19 |
+  | chart (cat-key + grouped sum) | sync | 28 | 28 |
+  | | queryAsync | 31 | 1.2 |
+  | | computePool | 29 | 4.9 |
+
+  Quieter pre-change run: sync page 35 / sorted 80 / chart 19.5 ms. Pool threads cost 133–537 ms
+  cold each AND run their own DuckDB, which cannot see the main bridge's views (`datasetView`) or
+  registered join/fx relations — decisive against the pool for request paths.
+- **Converted:** `residentQuery` (metric/aggregate/cat-key), `datasetPage`, `datasetView`, the
+  request-path `parquetStore` write; all IPC callers await. SQL text unchanged (ordinal last in every
+  ORDER BY; casts on declared type). `residentFilter.ts` split out (residentQuery 863 → 700 lines);
+  `residentSync.ts` keeps sync twins only for T4.2's unconverted consumers.
+- **Guard:** `forbidSyncOnMainThread()` in `duckdb.ts` (worker threads exempt). Not yet switched on
+  by `src/server/main.ts` — T4.2 wires it once the remaining sync sites are converted.
+  `test-serverModeResident` drives the real handlers with the guard on: Object.is-equal to the JS
+  reference, `getDataset` never called, trace `resident` never `failed`; sabotaging `datasetPage.js`
+  back to sync fails it loudly.
+- **Differential suites:** 14 now await; pass counts match the develop baseline; residentQuery
+  533 → 859 (sync-vs-async equality added). None weakened.
+- **T4.2's input** (sync sites still reachable from IPC): pivotResident, cohortResident,
+  funnelResident, facetResident, joinResident (5 queries + `withRelation`), fxResident,
+  lodResident, scenarioResident, segmentResident, qualityResident, anomaliesResident,
+  insightsAgg.residentAgg, statsResident, medianResident, pipelineDuck (flagged), plus
+  `runOrdered` and `residentSync.ts`. Startup probes (`isAvailable`) block once (~115 ms).

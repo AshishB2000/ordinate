@@ -332,7 +332,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
 
 ## P4 — Engine
 
-### [ ] T4.1 Async resident layer: charts and paging
+### [x] T4.1 Async resident layer: charts and paging
 - **Branch** `web/t4.1-async-a` · **Depends** T0.3 · **Scope** `src/engine/`
 - Route `residentQuery`, `datasetPage`, `datasetView`, `parquetStore` through `computePool`
   (or `queryAsync`) so no RPC path calls the synchronous bridge. Make the API async upward;
