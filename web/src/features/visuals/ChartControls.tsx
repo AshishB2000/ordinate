@@ -19,7 +19,9 @@ import { Menu } from '../../ui/Menu';
 import { Popover } from '../../ui/Popover';
 import { Select } from '../../ui/Select';
 import { toast } from '../../ui/Toast';
-import s from './Builder.module.css';
+import { FormatPanel, type FormatCtx } from './format/FormatPanel';
+import b from './Builder.module.css';
+import s from './Controls.module.css';
 
 export type Patch = Record<string, unknown>;
 
@@ -62,8 +64,12 @@ export interface MenuActions {
   /** The figures as the Share policy shapes them for leaving the app. */
   sharedData(): Promise<ChartDataShape>;
   explain(): void;
+  /** Open the rows behind the whole visual (drill.ts, the ⋯ route — the only one a map or table has). */
+  drill(): void;
   /** File name for a downloaded picture. */
   name: string;
+  /** What the Format panel edits (./format). */
+  format: Omit<FormatCtx, "overrides" | "patch" | "type">;
 }
 
 export function ChartControls({
@@ -202,6 +208,10 @@ function ChartMenu({ type, overrides, chart, onPatch, menu }: { type: string; ov
         {item('copy', 'Copy chart as image', () => void copyImage(), !chart)}
         {item('download', 'Download chart (PNG)', download, !chart)}
         {item('file-text', 'Copy data', () => void copyData())}
+        {item('table', 'Show underlying rows', () => {
+          close();
+          menu.drill();
+        })}
         {item('message-square', 'Explain', () => {
           close();
           menu.explain();
@@ -226,7 +236,7 @@ function ChartMenu({ type, overrides, chart, onPatch, menu }: { type: string; ov
               }}
             />
             <div className={s.field}>
-              <span className={s.label} id="cm-color">
+              <span className={b.label} id="cm-color">
                 Color
               </span>
               <div className={s.swatches} role="group" aria-labelledby="cm-color">
@@ -267,6 +277,7 @@ function ChartMenu({ type, overrides, chart, onPatch, menu }: { type: string; ov
             {LINE_TYPES.has(type) && (
               <Switch label="Smooth lines" checked={overrides.smooth !== false} onCheckedChange={(on) => onPatch({ smooth: on ? null : false })} />
             )}
+            <FormatPanel ctx={{ ...menu.format, type, overrides, patch: onPatch }} />
             <Button
               size="sm"
               variant="ghost"

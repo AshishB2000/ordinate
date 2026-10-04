@@ -205,6 +205,83 @@ e2e('visuals: a new visual from the dialog, a region map, and the card menu', as
   report(s);
 });
 
+e2e('visuals: filters, analytics, small multiples, the rows behind a bar, and Format', async (s) => {
+  const { page } = s;
+  const pid = s.server.sample.projectId;
+  await page.goto(`/visuals/${pid}`);
+  await settled(page);
+  // The first spec saved this one as 'Average revenue by category'; alone it is still the sample's name.
+  await page.getByRole('button', { name: /^(Average r|R)evenue by category/ }).first().click();
+  await page.locator('[data-chart-type="column"] canvas').waitFor();
+  const builderUrl = page.url();
+
+  // A filter: the type-aware dialog lists the column's values from the server.
+  await page.getByRole('button', { name: 'Add filter' }).click();
+  await page.getByRole('combobox', { name: 'Filter column' }).click();
+  await page.getByRole('option', { name: 'region', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit the filter on region' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Filter: region' });
+  await dialog.getByLabel('West', { exact: true }).check();
+  await dialog.getByLabel('East', { exact: true }).check();
+  const filtered = rpcReply(page, 'visual:preview');
+  await dialog.getByRole('button', { name: 'Apply' }).click();
+  const fbody = JSON.stringify(await (await filtered).json());
+  assert.ok(fbody.includes('"ok":true'), 'the filtered chart recomputed');
+  await page.getByRole('button', { name: 'Edit the filter on region' }).filter({ hasText: /is any of (West, East|East, West)/ }).waitFor();
+
+  // Analytics: a reference line, its readout written by the server.
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByRole('menuitem', { name: /Reference line/ }).click();
+  await page.locator('[data-kind="reference"]').getByText(/^Average /).waitFor();
+
+  // Format → Colours → colour bars by category: the project's colours list appears.
+  await page.getByRole('button', { name: 'Chart options' }).click();
+  await page.getByRole('button', { name: 'Customize' }).click();
+  await page.getByRole('button', { name: 'Colours', exact: true }).click();
+  const kept = rpcReply(page, 'visual:update');
+  await page.getByLabel('Colour bars by category').check();
+  assert.equal((await kept).status(), 200, 'a saved visual keeps its styling as it changes');
+  await page.getByText('“category” colours').waitFor();
+  await page.keyboard.press('Escape');
+
+  // Save it, with the filter and the overlay.
+  await page.getByRole('button', { name: 'Save visual' }).click();
+  await page.getByRole('dialog', { name: 'Rename this visual' }).getByRole('button', { name: 'Save' }).click();
+  await page.waitForURL(new RegExp(`/visuals/${pid}$`));
+
+  // Reopen: everything came back from the record; screens of the rail and the chart.
+  await page.goto(builderUrl);
+  await page.locator('[data-chart-type="column"] canvas').waitFor();
+  await page.getByRole('button', { name: 'Edit the filter on region' }).filter({ hasText: /is any of/ }).waitFor();
+  await page.locator('[data-kind="reference"]').waitFor();
+  await screens(page, 'visuals-panels');
+
+  // Small multiples: one panel per segment, drawn the same way.
+  await page.getByRole('combobox', { name: 'Columns' }).click();
+  await page.getByRole('option', { name: 'customer_segment' }).click();
+  const grid = page.getByRole('group', { name: 'Small multiples' });
+  await grid.waitFor();
+  await page.waitForFunction(() => document.querySelectorAll('[aria-label="Small multiples"] canvas').length === 3);
+  await page.getByRole('button', { name: 'Clear', exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector('[aria-label="Small multiples"] canvas') && document.querySelectorAll('[data-chart-type="column"] canvas').length === 1);
+
+  // The rows behind a bar: a click on the mark opens the drill panel.
+  await page.reload();
+  const canvas = page.locator('[data-chart-type="column"] canvas');
+  await canvas.waitFor();
+  await page.waitForTimeout(600);
+  const box = (await canvas.boundingBox())!;
+  await page.mouse.click(box.x + box.width * 0.84, box.y + box.height * 0.75);
+  const drawer = page.getByRole('dialog', { name: /^(Average r|R)evenue by category$/ });
+  await drawer.getByText('The rows behind the selected mark').waitFor();
+  await drawer.getByText(/^category = /).waitFor();
+  await drawer.getByRole('grid').waitFor();
+  const download = page.waitForEvent('download');
+  await drawer.getByRole('button', { name: 'Export these rows (CSV)' }).click();
+  assert.match((await download).suggestedFilename(), /\.csv$/);
+  report(s);
+});
+
 e2e('visuals: a project with nothing in it shows the designed empty state', async (s) => {
   const { page } = s;
   const made = await post(s, 'projects:create', { name: 'Empty for visuals' });

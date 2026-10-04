@@ -240,10 +240,6 @@
 .chipBtn:focus-visible,
 .more:focus-visible,
 .moreBtn:focus-visible,
-.pill:focus-visible,
-.swatch:focus-visible,
-.menuItem:focus-visible,
-.customHead:focus-visible,
 .moreRemove:focus-visible {
   outline: var(--focus-ring-w) solid var(--focus-ring);
   outline-offset: 1px;
@@ -319,122 +315,6 @@
 .moreRemove:hover {
   color: var(--error);
   background: var(--error-soft);
-}
-
-/* ── The chart's controls: Values ▾ / Periods ▾ pills, ⋯ ── */
-.controls {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-}
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  font: inherit;
-  font-size: var(--t-12);
-  font-weight: 500;
-  color: var(--muted);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: var(--sp-4) var(--sp-12);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.pill:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.pillOn,
-.pillOn:hover {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
-}
-.checks {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-  min-width: 180px;
-  max-height: 50vh;
-  overflow-y: auto;
-}
-.menu {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 240px;
-}
-.menuItem {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  padding: var(--sp-8);
-  font: inherit;
-  font-size: var(--t-13);
-  text-align: left;
-  color: var(--text);
-  background: transparent;
-  border: 0;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-}
-.menuItem:hover:not(:disabled) {
-  background: var(--surface-2);
-}
-.menuItem:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.sep {
-  height: 1px;
-  margin: var(--sp-4) 0;
-  background: var(--border);
-}
-.customHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--sp-8);
-  font: inherit;
-  font-size: var(--t-12);
-  font-weight: 600;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  background: transparent;
-  border: 0;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-}
-.custom {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-12);
-  padding: var(--sp-4) var(--sp-8) var(--sp-8);
-}
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
-.swatches {
-  display: flex;
-  gap: var(--sp-8);
-  flex-wrap: wrap;
-}
-.swatch {
-  width: 22px;
-  height: 22px;
-  border-radius: var(--r-full);
-  background: var(--sw-color);
-  border: 2px solid var(--surface);
-  box-shadow: 0 0 0 1px var(--border);
-  cursor: pointer;
-}
-.swatch[aria-pressed='true'] {
-  box-shadow: 0 0 0 2px var(--text-strong);
 }
 
 /* ── The chart area ── */

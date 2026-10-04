@@ -9,7 +9,7 @@ import { useRef } from 'react';
 import { axisOf, detectLatLon } from '../../charts/maps/geoCluster';
 import { Select, type SelectOption } from '../../ui/Select';
 import { toast } from '../../ui/Toast';
-import { uploadFile } from '../assistant/upload';
+import { upload } from '../../api/client';
 import { importBoundaries, useBoundaries, type Boundary, type Geo } from './api';
 import type { Column } from './model';
 import s from './Builder.module.css';
@@ -80,7 +80,7 @@ export function MapRegions({ projectId, cols, geo, onChange }: { projectId: stri
 
   async function imported(f: File) {
     try {
-      const up = await uploadFile(f);
+      const up = await upload(f, f.name);
       const b = await importBoundaries(projectId, up.fileToken);
       toast(`Imported ${b.featureCount} regions from ${b.name}`, { kind: 'success' });
       await qc.invalidateQueries({ queryKey: ['boundary:list', projectId] });

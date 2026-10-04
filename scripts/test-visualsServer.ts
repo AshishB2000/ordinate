@@ -184,6 +184,49 @@ function same(a: unknown, b: unknown): boolean {
   const rel = await call('org-a', 'relationship:related', { projectId: pid, datasetId: dsid });
   ok('relationship:related: reachable, no relationships → no groups', rel.status === 200 && same(rel.body, { ok: true, groups: [] }), JSON.stringify(rel.body));
 
+  // ── drill: the rows behind a figure, and the same set as a download ───────────
+  const whole = await call('org-a', 'visual:rows', { projectId: pid, datasetId: dsid, encoding: enc, filters: [], page: { offset: 0, limit: 500 } });
+  ok('visual:rows: the whole visual is every row, with the dataset\'s columns', whole.body.ok && whole.body.available && whole.body.total === 120
+    && whole.body.columns.length === 4 && whole.body.rows.length === 120, JSON.stringify(whole.body).slice(0, 200));
+  const north = await call('org-a', 'visual:rows', { projectId: pid, datasetId: dsid, encoding: enc, filters: [], mark: { category: 'North' }, page: { offset: 0, limit: 5, sortColumn: 'zip', sortDir: 'desc' } });
+  ok('visual:rows: a clicked mark is exactly its category\'s rows (30), paged and sorted in SQL', north.body.total === 30 && north.body.rows.length === 5
+    && north.body.rows.every((r: unknown[]) => r[0] === 'North') && north.body.rows[0][3] === '00116', JSON.stringify(north.body).slice(0, 300));
+  ok('visual:rows: the mark becomes a chip-able filter step', north.body.filters.some((f: any) => f.column === 'region')); // any: a step
+  ok('visual:rows: a page over 5,000 is a 400', (await call('org-a', 'visual:rows', { projectId: pid, datasetId: dsid, encoding: enc, page: { limit: 5001 } })).status === 400);
+  const dl = await call('org-a', 'visual:rowsDownload', { projectId: pid, datasetId: dsid, encoding: enc, mark: { category: 'North' }, name: 'Amount / North' });
+  ok('visual:rowsDownload: a single-use download token, and the row count', dl.body.ok === true && /^[A-Za-z0-9_-]{43}$/.test(dl.body.downloadToken) && dl.body.rows === 30, JSON.stringify(dl.body));
+  const file = await fetch(`${base}/api/files/${dl.body.downloadToken}`, { headers: hdr('org-a') });
+  const csv = await file.text();
+  ok('the file is the drilled set as CSV: a header, then 30 rows, all North', file.status === 200 && csv.split('\r\n').filter(Boolean).length === 31
+    && csv.startsWith('region,month,amount,zip') && /filename="amount-north\.csv"/.test(file.headers.get('content-disposition') || ''), csv.slice(0, 120));
+  ok('…and the token is single-use', (await fetch(`${base}/api/files/${dl.body.downloadToken}`, { headers: hdr('org-a') })).status === 404);
+
+  // ── period picker: the presets' names and a spec's dates, both the server's ──────
+  const dateIntel: typeof import('../src/analysis/dateIntel') = require('../src/analysis/dateIntel');
+  const pk = await call('org-a', 'period:picker', { spec: { preset: 'last_n_days', n: 30 } });
+  const allNamed = pk.body.groups.flatMap((g: any) => g.items).every((it: any) => it.label === dateIntel.describePeriod(it.spec, dateIntel.getCalendar())); // any: picker rows
+  ok('period:picker: every preset named by dateIntel.describePeriod', pk.status === 200 && pk.body.groups.length === 3 && allNamed, JSON.stringify(pk.body).slice(0, 300));
+  const r30 = dateIntel.resolvePeriodNow({ preset: 'last_n_days', n: 30 })!;
+  ok('period:picker: the spec resolved today, with its range text', pk.body.current.label === 'Last 30 days' && pk.body.current.from === r30.from && pk.body.current.to === r30.to
+    && typeof pk.body.current.range === 'string' && pk.body.current.range.length > 0, JSON.stringify(pk.body.current));
+  ok('period:picker: no spec, no `current`', (await call('org-a', 'period:picker', {})).body.current === undefined);
+
+  // ── distinct values (the filter dialog's list), searched in SQL ──────────────────
+  const dist = await call('org-a', 'dataset:distinct', { projectId: pid, datasetId: dsid, column: 'region', limit: 200 });
+  ok('dataset:distinct: the column\'s distinct values and their total', dist.status === 200 && dist.body.total === 4 && dist.body.values.length === 4, JSON.stringify(dist.body));
+  const ds2 = await call('org-a', 'dataset:distinct', { projectId: pid, datasetId: dsid, column: 'region', limit: 200, search: 'or' });
+  ok('dataset:distinct: a search narrows on the server', same(ds2.body.values, ['North']), JSON.stringify(ds2.body));
+
+  // ── the project's colour map ───────────────────────────────────────────────────
+  const dealt = await call('org-a', 'format:colors:assign', { projectId: pid, column: 'region', values: ['West', 'East'] });
+  ok('format:colors:assign: values dealt the first free slots, stored', dealt.body.changed === true && dealt.body.colors.West === 'chart-1' && dealt.body.colors.East === 'chart-2', JSON.stringify(dealt.body));
+  const set = await call('org-a', 'format:colors:set', { projectId: pid, column: 'region', value: 'East', token: 'chart-7' });
+  ok('format:colors:set: one value moved', set.body.colors.East === 'chart-7');
+  ok('format:colors:get: the stored map', same((await call('org-a', 'format:colors:get', { projectId: pid })).body, { region: { West: 'chart-1', East: 'chart-7' } }));
+  ok('format:colors:set: an unknown slot is a 400', (await call('org-a', 'format:colors:set', { projectId: pid, column: 'region', value: 'East', token: 'red' })).status === 400);
+  await call('org-a', 'format:colors:reset', { projectId: pid, column: 'region' });
+  ok('format:colors:reset: the column forgotten', same((await call('org-a', 'format:colors:get', { projectId: pid })).body, {}));
+
   // ── scope: another org never reaches the project ─────────────────────────────────
   const foreign: [string, unknown][] = [
     ['visual:list', { projectId: pid }],
@@ -193,6 +236,10 @@ function same(a: unknown, b: unknown): boolean {
     ['visual:delete', { projectId: pid, id: ids[0] }],
     ['visual:preview', { projectId: pid, datasetId: dsid, encoding: enc }],
     ['boundary:list', { projectId: pid }],
+    ['visual:rows', { projectId: pid, datasetId: dsid, encoding: enc }],
+    ['visual:rowsDownload', { projectId: pid, datasetId: dsid, encoding: enc }],
+    ['format:colors:get', { projectId: pid }],
+    ['dataset:distinct', { projectId: pid, datasetId: dsid, column: 'region' }],
   ];
   for (const [channel, payload] of foreign) ok(`${channel}: another org's caller → 403`, (await call('org-b', channel, payload)).status === 403);
   const still = (await call('org-a', 'visual:list', { projectId: pid })).body;

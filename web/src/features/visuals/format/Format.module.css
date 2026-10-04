@@ -1,0 +1,163 @@
+/* The Format panel inside Customize (hub format.css `.fmt-*`). */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.sec {
+  border-top: 1px solid var(--border);
+}
+.secHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  padding: var(--sp-8) 0;
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text-strong);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.secHead:focus-visible,
+.swatch:focus-visible,
+.slot:focus-visible,
+.orderRow:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.secBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding-bottom: var(--sp-8);
+}
+.sub {
+  margin-top: var(--sp-4);
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.axis {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-8);
+}
+.note {
+  margin: 0;
+  font-size: var(--t-11);
+  line-height: 1.45;
+  color: var(--muted);
+}
+.warn {
+  color: var(--warn);
+}
+.order {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.orderRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-8);
+  font-size: var(--t-12);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  cursor: grab;
+  color: var(--muted);
+}
+.orderName {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.colorList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.colorRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.swatch {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+}
+.auto {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--border-3);
+}
+.colorName {
+  font-size: var(--t-12);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.slots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4) 0 var(--sp-4) 26px;
+}
+.slot {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: var(--r-full);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+}
+.slot[aria-pressed='true'] {
+  box-shadow: 0 0 0 2px var(--text-strong);
+}
+.actions {
+  display: flex;
+  gap: var(--sp-8);
+}
+.rampField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.ramp {
+  display: flex;
+  height: 8px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.ramp span {
+  flex: 1;
+}

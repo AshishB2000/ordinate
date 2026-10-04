@@ -373,6 +373,7 @@ export function registerHandlers(): void {
   for (const mod of ['../ipc/datasetCompose', '../ipc/input', '../ipc/captureDataset']) {
     (require(mod) as { register: () => void }).register();
   }
-  // The Visuals screen (T2.7): the builder's sampled preview and the gallery's thumbnails.
-  for (const mod of ['../ipc/vizSample', '../ipc/visualsServer']) (require(mod) as { register: () => void }).register();
+  // The Visuals screen (T2.7): the builder's sampled preview, the gallery's thumbnails, the drill
+  // panel and period picker, and the project colour map that Format → Colours edits.
+  for (const mod of ['../ipc/vizSample', '../ipc/visualsServer', '../ipc/format']) (require(mod) as { register: () => void }).register();
 }

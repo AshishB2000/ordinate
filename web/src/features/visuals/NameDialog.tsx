@@ -10,12 +10,15 @@ export function NameDialog({
   name,
   title = 'Rename this visual',
   action = 'Rename',
+  field = 'Name',
   onClose,
   onRename,
 }: {
   name: string;
   title?: string;
   action?: string;
+  /** The field's label. */
+  field?: string;
   onClose: () => void;
   onRename: (name: string) => Promise<unknown>;
 }) {
@@ -54,7 +57,7 @@ export function NameDialog({
           submit();
         }}
       >
-        <Input label="Name" value={value} maxLength={200} autoFocus error={error || undefined} onChange={(e) => setValue(e.target.value)} />
+        <Input label={field} value={value} maxLength={200} autoFocus error={error || undefined} onChange={(e) => setValue(e.target.value)} />
       </form>
     </Dialog>
   );

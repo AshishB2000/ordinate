@@ -81,6 +81,31 @@ const Patch = {
   analytics: Definition.analytics,
 };
 
+/** One stored cell — a clicked mark's category / series value. */
+const Cell = z.union([z.string().max(10_000), z.number(), z.null()]);
+
+/** What a drill reads: the figure's definition and filters, and optionally ONE clicked mark. */
+const Drill = {
+  projectId: Uuid,
+  datasetId: Uuid,
+  encoding: Encoding,
+  filters: Filters.optional(),
+  params: z.record(z.string().max(200), z.unknown()).optional(),
+  mark: z.strictObject({ category: Cell.optional(), series: Cell.optional() }).nullable().optional(),
+};
+const DrillPage = z.strictObject({
+  offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  limit: z.number().int().min(1).max(5_000).optional(),
+  search: z.string().max(1_000).optional(),
+  sortColumn: z.string().max(1_000).optional(),
+  sortDir: z.enum(['asc', 'desc']).optional(),
+});
+
+/** The eight colour slots (src/analysis/colorMap.ts COLOR_TOKENS). */
+const COLOR_TOKENS = ['chart-1', 'chart-2', 'chart-3', 'chart-4', 'chart-5', 'chart-6', 'chart-7', 'chart-8'] as const;
+const ColorColumn = { projectId: Uuid, column: Column };
+const ColorValues = z.array(Cell).max(1_000);
+
 export const visuals = {
   // preload: invoke('visual:data', { projectId, datasetId, encoding, filters }) — the
   // `{labels, series}` a chart draws (T1.1). The dataset is read from the
@@ -136,4 +161,30 @@ export const visuals = {
   // Columns of the datasets this one reaches without fan-out — the builder's
   // "from <dataset>" groups. Handler: src/ipc/relationships.ts.
   'relationship:related': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, datasetId: Uuid }), project: byProjectId }),
+
+  // ── T2.7 part 2: drill, period picker, the project colour map ────────────
+  // The rows behind a figure (or one clicked mark): main composes the filters
+  // (resolveDrill) and pages, searches and sorts in SQL; a refusal says why.
+  'visual:rows': rpc({ access: 'read', input: z.strictObject({ ...Drill, page: DrillPage.optional() }), project: byProjectId }),
+  // Server only: the same row set as a CSV download (T0.4 token), Share-policy shaped.
+  'visual:rowsDownload': rpc({
+    access: 'read',
+    audit: true,
+    input: z.strictObject({ ...Drill, page: DrillPage.omit({ offset: true, limit: true }).optional(), name: z.string().max(200).optional() }),
+    project: byProjectId,
+  }),
+  // Server only: the relative-period presets with their names, and a spec's
+  // dates today — both under the workspace calendar (src/analysis/dateIntel.ts).
+  'period:picker': rpc({ access: 'read', org: true, input: z.strictObject({ spec: z.looseObject({ preset: z.string().max(40) }).optional() }) }),
+  // The project's category colours (src/ipc/format.ts): read; deal the values
+  // a chart drew; set one value; reset a column; re-deal a palette.
+  'format:colors:get': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
+  'format:colors:assign': rpc({ access: 'write', input: z.strictObject({ ...ColorColumn, values: ColorValues }), project: byProjectId }),
+  'format:colors:set': rpc({
+    access: 'write',
+    input: z.strictObject({ ...ColorColumn, value: z.string().max(1_000), token: z.enum(COLOR_TOKENS).nullable() }),
+    project: byProjectId,
+  }),
+  'format:colors:reset': rpc({ access: 'write', input: z.strictObject(ColorColumn), project: byProjectId }),
+  'format:colors:palette': rpc({ access: 'write', input: z.strictObject({ ...ColorColumn, values: ColorValues }), project: byProjectId }),
 } as const;

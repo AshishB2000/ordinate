@@ -318,7 +318,7 @@ export function csvLine(cells: readonly Cell[]): string {
 }
 
 /** `price by region` → `price-by-region.csv`, and never a path. */
-function csvFileName(name: unknown): string {
+export function csvFileName(name: unknown): string {
   const raw = typeof name === 'string' ? name : '';
   const slug = raw.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
   return (slug || 'underlying-rows') + '.csv';
@@ -335,7 +335,7 @@ function csvFileName(name: unknown): string {
  * run away — the file is the row set as counted, which is the count the panel
  * showed.
  */
-async function writeDrillCsv(
+export async function writeDrillCsv(
   filePath: string,
   projectId: string,
   datasetId: string,
