@@ -51,28 +51,6 @@ export const pages: RouteObject[] = [
   page('/data/input/:projectId/:datasetId', () => import('../features/import/InputTablePage')),
   // The Data section (T2.3): one project's datasets / captures / catalog / relationships.
   page('/data/:projectId', () => import('../features/data/DataSection')),
-  // Visuals (T2.7): one project's gallery, and the builder — new on a dataset, or a saved visual.
-  page('/visuals/:projectId', () => import('../features/visuals/VisualsPage')),
-  page('/visuals/:projectId/new', () => import('../features/visuals/BuilderPage')),
-  page('/visuals/:projectId/:visualId', () => import('../features/visuals/BuilderPage')),
-
-  // Prepare (T2.6): a dataset's reversible step pipeline beside its prepared rows.
-  page('/data/:projectId/:datasetId/prepare', () => import('../features/prepare/PreparePage')),
-  // Pipelines (T2.6): every scheduled or dependent thing in a project as one DAG.
-  page('/pipelines', () => import('../features/prepare/PipelinesPage')),
-  page('/pipelines/:projectId', () => import('../features/prepare/PipelinesPage')),
-
-  // Analytics workbenches A (T2.10): the doors, the three dataset workbenches, and scenarios.
-  page('/analytics', () => import('../features/analytics/AnalyticsPage')),
-  page('/analytics/:projectId/:datasetId/stats', () => import('../features/analytics/stats/StatsPage')),
-  page('/analytics/:projectId/:datasetId/drivers', () => import('../features/analytics/drivers/DriversPage')),
-  page('/analytics/:projectId/:datasetId/segments', () => import('../features/analytics/segments/SegmentsPage')),
-  page('/analytics/scenarios/:projectId', () => import('../features/analytics/scenarios/ScenariosPage')),
-  page('/analytics/scenarios/:projectId/compare', () => import('../features/analytics/scenarios/ScenarioComparePage')),
-  page('/analytics/scenarios/:projectId/:scenarioId', () => import('../features/analytics/scenarios/ScenarioPage')),
-
-  // About (T2.14): version, links, the licences of every bundled package.
-  page('/about', () => import('../features/settings/AboutPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.
