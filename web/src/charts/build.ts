@@ -9,9 +9,9 @@
 // _matrixCols/_matrixGrid, _funnelMax/_funnelVals) that buildChartScales and
 // buildChartPlugins then read.
 //
-// Not ported here (each lands with the screen that owns it): the project
-// colour map and Format → Colours (fmtResolve/fmtApply, fmtColors.ts — T2.3),
-// dashboard linked hover and transitions (lhPlugin/mtPlugin — T2.7). The
+// The project colour map and Format → Colours are ./fmtApply (T2.7). Not
+// ported here: dashboard linked hover and its transitions (lhPlugin /
+// mtPlugin — the dashboard grid, T2.9; <Chart> already animates an update). The
 // desktop guards every one with `typeof … === 'function'`, so without them it
 // builds exactly this config.
 
@@ -19,6 +19,7 @@ import { annDrawable, annExtent, annotationsPlugin, annWanted, type AnnCommentPi
 import { buildChartDatasets } from './datasets';
 import { evDrawable, eventsPlugin } from './events';
 import { applyExtraTooltip, extraChartOptions, isExtraFamily } from './familiesExtra';
+import { fmtApply, fmtResolve } from './fmtApply';
 import { fmtVal, fmtWith, tcAxisFmt, tcTooltip } from './format';
 import { CHART_PALETTE, getCSSVar, paletteFromSeed } from './palette';
 import { buildChartScales } from './scales';
@@ -207,6 +208,10 @@ export function buildChart(
   const showGridlines = overrides.showGridlines !== false; // default on
   const tickFont   = { family: fontFamily, size: 10 };
 
+  // Formatting depth (./fmtApply, T2.7): series colours into the palette, and
+  // the project's colour per category.
+  const fmtCat = fmtResolve(labels, series, overrides, palette, type);
+
   // ── The parameter object every family module reads ───────────────────────
   const c: ChartCtx = {
     ...spec,
@@ -222,6 +227,7 @@ export function buildChart(
   if (!built) return null;   // nothing drawable (a calendar without dates)
   const { datasets, chartLabels } = built;
   const scales = buildChartScales(c);
+  fmtApply(c, datasets, scales, fmtCat, type);
   // The value axis must reach every overlay — a target above the tallest bar
   // would otherwise be drawn off the chart. `suggested*`, so an explicit
   // min/max (a percent-stacked 0–100) still wins.

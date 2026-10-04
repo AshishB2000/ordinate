@@ -4,12 +4,24 @@
 // module for `boundary:get` (a custom choropleth's shapes) and has no dialog.
 
 import { ipcMain } from './bus';
-import { windowOf } from '../server/context';
+import { serverDataDir, windowOf } from '../server/context';
+import { resolveUpload } from '../server/files';
 import { getBoundary, importBoundaryFile, listBoundaries } from '../app/projectBoundaries';
 
 export function register(): void {
-  ipcMain.handle('boundary:import', async (e, { projectId }: any = {}) => {
+  ipcMain.handle('boundary:import', async (e, { projectId, fileToken }: any = {}) => {
     try {
+      // Server: the file was uploaded first (POST /api/files) and arrives as a
+      // single-use token; the client's filename is display text only.
+      if (serverDataDir() !== null) {
+        const upload = resolveUpload(fileToken);
+        try {
+          const res = await importBoundaryFile(projectId, upload.path);
+          return 'error' in res ? { ok: false, error: res.error } : { ok: true, boundary: res };
+        } finally {
+          upload.done();
+        }
+      }
       const { dialog } = require('electron') as typeof import('electron');
       const win = windowOf(e);
       const opts = {

@@ -1,0 +1,172 @@
+/* The Analytics section (hub analytics.css `.anp*`): a head with the count and
+   + Add, then one row per overlay with its readout and an inline editor. */
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding-top: var(--sp-16);
+  border-top: 1px solid var(--border);
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.title {
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.count {
+  font-size: var(--t-11);
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+  padding: 0 var(--sp-8);
+}
+.add {
+  margin-left: auto;
+}
+.empty,
+.note {
+  margin: 0;
+  font-size: var(--t-12);
+  line-height: 1.45;
+  color: var(--muted);
+}
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 280px;
+}
+.menuItem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  padding: var(--sp-8);
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.menuItem:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.menuItem:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.menuItem:focus-visible,
+.main:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.menuText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.menuName {
+  font-size: var(--t-13);
+  font-weight: 500;
+}
+.menuHint {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.row {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+.open {
+  border-color: var(--accent-line);
+}
+.hidden .main {
+  opacity: 0.55;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: var(--sp-4);
+}
+.main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-8);
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+.glyph {
+  display: flex;
+  color: var(--accent);
+}
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.name {
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.read {
+  font-size: var(--t-11);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.warn {
+  color: var(--warn);
+}
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12) var(--sp-12);
+  border-top: 1px solid var(--border);
+}
+.source {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.colorField {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.colorField input {
+  width: 40px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: transparent;
+  cursor: pointer;
+}

@@ -221,7 +221,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   `textSteps`, `textProfile`, `textPreviews`, `pipelinesPage`, `pipelinesDetail`, `pipelinesGraph`.
 - The formula editor validates through the server parser — no client-side evaluation.
 
-### [ ] T2.7 Visuals builder
+### [x] T2.7 Visuals builder
 - **Branch** `web/t2.7-visuals` · **Legacy:** `visuals`, `vizGallery`, `vizNew`, `vizBuilder`,
   `vizThumbs`, `encodingForm`, `encodingMap`, `encodingRelated`, `chartControls`, `formatPanel`,
   `formatBind`, `fmtApply`, `fmtColors`, `fmtColorsUi`, `fmtProfile`, `fmtSort`, `facetGrid`,

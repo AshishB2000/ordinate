@@ -1,0 +1,165 @@
+/* Small multiples: the shelf (hub facets.css `.fc-shelf*`) and the grid
+   (`.fc-grid`, `.fc-cell`). */
+
+.shelf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding-top: var(--sp-16);
+  border-top: 1px solid var(--border);
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.title,
+.label {
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.badge {
+  font-size: var(--t-11);
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--r-full);
+  padding: 0 var(--sp-8);
+}
+.clear {
+  margin-left: auto;
+}
+.empty {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.dims,
+.opts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-8);
+}
+.wide {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  align-self: flex-start;
+}
+.segOpt {
+  padding: var(--sp-4) var(--sp-12);
+  font: inherit;
+  font-size: var(--t-12);
+  color: var(--muted);
+  background: var(--surface);
+  border: 0;
+  cursor: pointer;
+}
+.segOpt + .segOpt {
+  border-left: 1px solid var(--border);
+}
+.segOpt[aria-pressed='true'] {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+.segOpt:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* ── The grid ── */
+.wrap {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-height: 0;
+}
+.scroll {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--sp-8);
+}
+.matrix {
+  grid-template-columns: auto repeat(var(--fc-cols, 2), minmax(200px, 1fr));
+}
+.headCell,
+.rowHead,
+.cellTitle {
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.headCell {
+  text-align: center;
+}
+.rowHead {
+  align-self: center;
+  max-width: 140px;
+}
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-8);
+  background: var(--bg);
+  border: 1px solid var(--border-hairline, var(--border));
+  border-radius: var(--r-md);
+  min-width: 0;
+}
+.isEmpty {
+  opacity: 0.6;
+}
+.canvas {
+  height: 200px;
+  min-width: 0;
+}
+.none {
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-12);
+  justify-content: center;
+}
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: var(--t-12);
+  color: var(--text);
+}
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--chart-1);
+}
+.note {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
