@@ -19,7 +19,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { after } from 'node:test';
 import type { Page } from 'playwright';
-import { e2e, SCREENS, screens, settled } from './fixtures.ts';
+import { configureServer, e2e, SCREENS, screens, settled } from './fixtures.ts';
 
 const REPLY = {
   title: 'Regional sales',
@@ -52,6 +52,8 @@ const mock = http.createServer((req, res) => {
 await new Promise<void>((r) => mock.listen(0, '127.0.0.1', r));
 const port = (mock.address() as { port: number }).port;
 after(() => mock.close());
+// The stub model is on loopback, which the SSRF guard refuses unless allowlisted (T6.1).
+configureServer({ env: { SSRF_ALLOW: '127.0.0.1/32' } });
 
 function connectModel(dataDir: string): void {
   const dir = path.join(dataDir, 'orgs', 'default', 'userData');
