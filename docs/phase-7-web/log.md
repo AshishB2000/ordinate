@@ -802,23 +802,3 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
 - **Open:** rename/retype index against stored columns (same as desktop `updateDataset`) — can hit the
   wrong column on a dataset with prepare steps; T2.6 should fix both. Connector logos in the Source
   column dropped (crop thumbnails stay out: summaries carry `hasImage` only).
-
-## 2026-10-04 — T2.7 Visuals builder
-
-- **Part 1:** gallery (thumbs through T2.1's `visual:dataBatch`), new-visual flow, builder, encoding form;
-  chart-type eligibility checked against `renderResult.js` + `mapKinds.js` (`eligibility.test.ts`).
-  Pivot/cohort/funnel show a designed "not yet available" state until T1.2.
-- **Part 2:** format (axes, legend, labels, sort incl. custom order, series/value palettes, colour by
-  category, project colour map), filters (values paged 200 from the server, conditions, ranges, relative
-  periods via `period:picker`), analytics overlays (readouts are the server's text), small multiples,
-  drill (rows drawer + audited CSV download). `web/src/charts/fmtApply.ts` is differential-tested
-  against the desktop's `fmtApply.js` + `fmtColors.js` (58 tests; a broken port fails 14).
-- **Server:** `src/ipc/visualsServer.ts` (`visual:rows`, `visual:rowsDownload`, `period:picker`);
-  `../ipc/format` (`format:colors:*`) registered on the server once. `test-visualsServer` 65 incl. 403s
-  per role. One `dataset:distinct` (T2.4's).
-- **Changed:** a new target overlay starts at the server's max (not a browser-rounded value); period
-  filters kept on save (desktop dropped them); facet PNG copy disabled; facet interior-tick muting dropped.
-- **Measured:** RPCs gallery 5–7, saved builder 12–17, new builder 15; initial JS 167 KB gzip, builder
-  chunk 25 KB; 145 contracts, 0 unresolved.
-- **Chain gates (on develop 40abbdc + T2.3):** `npm test` 273/273 with and without DB; Vitest 468/468;
-  e2e 33/33 (DB), 29 + 2 skip; lint 0; file sizes pass. Agent: `smoke-viz-builder`/`-thumbs` pass.
