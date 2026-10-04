@@ -178,7 +178,8 @@ const quietLog = () => {
     for (const org of ['default', 'orgx']) fs.mkdirSync(path.join(data, 'orgs', org), { recursive: true });
     const probe = path.join(data, 'probe.jsonl');
 
-    // A REAL scheduled dataset in org `default`: a file origin, refreshed hourly,
+    // A REAL scheduled dataset in org `default`: a combined origin (an append of
+    // two datasets — a server keeps no file origin since T6.3), refreshed hourly,
     // never run — so the first tick finds it due. Written in this process
     // through the app's own modules, as the org's request would.
     const context: typeof import('../src/server/context') = require('../src/server/context');
@@ -188,16 +189,17 @@ const quietLog = () => {
     // With DATABASE_URL a record is a row (T5.1): the fixture goes where the pods read it.
     await mig.migrate(pool);
     (require('../src/app/recordFs') as typeof import('../src/app/recordFs')).useRecordDb(pool);
-    const csv = path.join(data, 'source.csv');
-    fs.writeFileSync(csv, 'region,revenue\nnorth,10\n');
+    const cols = [{ name: 'region', type: 'text' as const }, { name: 'revenue', type: 'number' as const }];
     const fixture = await context.runInContext(who('default', 'dev@local'), 'fixture', async () => {
       const p = await projects.createProject('Scheduled');
-      const d = await datasets.saveDataset(p.id, {
-        name: 'Nightly', sourceKind: 'csv', columns: [{ name: 'region', type: 'text' }, { name: 'revenue', type: 'number' }],
-        rows: [['north', 10]], origin: { kind: 'file', path: csv },
-      });
+      const left = await datasets.saveDataset(p.id, { name: 'North', sourceKind: 'csv', columns: cols, rows: [['north', 10]] });
+      const right = await datasets.saveDataset(p.id, { name: 'Others', sourceKind: 'csv', columns: cols, rows: [] });
+      const d = left && right ? await datasets.saveDataset(p.id, {
+        name: 'Nightly', sourceKind: 'combined', columns: cols,
+        rows: [['north', 10]], origin: { kind: 'combined', leftId: left.id, rightId: right.id, mode: 'append' },
+      }) : null;
       if (d) await datasets.setAutoRefresh(p.id, d.id, { every: 'hourly' });
-      return { projectId: p.id, datasetId: d?.id ?? '' };
+      return { projectId: p.id, datasetId: d?.id ?? '', rightId: right?.id ?? '' };
     });
     ok('fixture: a scheduled dataset exists in org default', !!fixture.datasetId);
     const metaOf = () => context.runInContext(who('default', 'dev@local'), 'fixture', () => datasets.getDatasetMeta(fixture.projectId, fixture.datasetId));
@@ -316,7 +318,9 @@ const quietLog = () => {
     console.log(`     due → running on a pod (poll ${POLL_MS} ms): ${fmt(dueLatency)}`);
 
     // ── The real scheduler tick runs once per org ──────────────────────────
-    fs.writeFileSync(csv, 'region,revenue\nnorth,10\nsouth,20\neast,30\n'); // the source moved on
+    // The source moved on: the appended dataset gained two rows.
+    await context.runInContext(who('default', 'dev@local'), 'fixture', () =>
+      datasets.updateDatasetData(fixture.projectId, fixture.rightId, { columns: cols, rows: [['south', 20], ['east', 30]] }));
     await pool.query(`UPDATE jobs SET next_run_at = now() WHERE kind = 'tick'`);
     const ticks = () => readProbe(probe).filter((l) => l.kind === 'tick');
     await until(() => ticks().length >= 2, 10_000);

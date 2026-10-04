@@ -42,6 +42,7 @@ export const BUNDLE_VERSION = 1;
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const UUID_G = new RegExp(UUID, 'gi');
+const CONNECTION_FILE = new RegExp(`^connections/(${UUID})\\.json$`, 'i');
 const KEY = '\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}-\\d{3}Z(?:-\\d{1,3})?';
 
 /** Every entry a bundle may hold, and what it counts as in the manifest. */
@@ -469,6 +470,14 @@ export async function importBundle(bytes: Buffer, opts: BundleProgress & { name?
       const k = id.toLowerCase();
       if (used.has(k) && !remap.has(k)) remap.set(k, randomUUID());
     }
+  }
+  // A connection ALWAYS gets a fresh id (T6.3): its stored password/token is
+  // keyed by connection id (src/app/configSecrets.ts), so an id kept from the
+  // bundle — one whose project was deleted, say — could adopt a secret this
+  // importer never entered.
+  for (const e of entries) {
+    const id = CONNECTION_FILE.exec(e.name)?.[1].toLowerCase();
+    if (id && !remap.has(id)) remap.set(id, randomUUID());
   }
   const swap = (s: string): string => s.replace(UUID_G, (m) => remap.get(m.toLowerCase()) || m);
 

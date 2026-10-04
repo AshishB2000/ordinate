@@ -11,6 +11,7 @@ import { isValidId } from '../app/ids';
 import type { CombineMode } from './combine';
 import { normalizeCombineMode } from './combine';
 import { sanitizeSqlParams } from '../analysis/params';
+import { serverDataDir } from '../server/context';
 import type { SqlParam } from '../analysis/params';
 
 /**
@@ -116,6 +117,12 @@ export function sanitizeOrigin(raw: unknown): DatasetOrigin | undefined {
 
   switch (o.kind) {
     case 'file': {
+      // Never on the server (T6.3): a server keeps no user's path, and a stored
+      // one — planted through an imported bundle or a restored backup — would let
+      // a refresh read any file the pod can (another org's DATA_DIR, a mounted
+      // credential). Dropped here, where every dataset load passes, so the record
+      // becomes an ordinary non-refreshable snapshot.
+      if (serverDataDir() !== null) return undefined;
       const p = typeof o.path === 'string' ? o.path : '';
       // Absolute only. A relative path has no meaning outside the cwd it was
       // captured in, and main's cwd is not the user's.

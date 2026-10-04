@@ -108,7 +108,7 @@ describe('project switcher', () => {
     fireEvent.keyDown(admin, { key: 'Escape' });
     fireEvent.keyDown(within(pop).getByRole('button', { name: 'Beta options' }), { key: 'Enter' });
     const viewer = await screen.findByRole('menu', { name: 'Beta options' });
-    expect(within(viewer).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Who has access', 'Export project']);
+    expect(within(viewer).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Who has access']); // no Export below admin (T6.3)
   });
 
   it('creates a project from its name and switches to it', async () => {

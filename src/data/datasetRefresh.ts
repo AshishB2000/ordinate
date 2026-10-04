@@ -33,6 +33,7 @@ import { runForDataset } from '../engine/sqlDatasets';
 import { scanDataset } from '../app/privacyStore';
 import { getNotebook } from '../analysis/notebook/store';
 import { cellTable } from '../analysis/notebook/run';
+import { serverDataDir } from '../server/context';
 
 /**
  * Row ceiling for a refreshed table. Deliberately the same 1,000,000 the import
@@ -207,6 +208,8 @@ async function refreshFromFile(
   origin: Extract<DatasetOrigin, { kind: 'file' }>,
   warnings: string[],
 ): Promise<RefreshResult> {
+  // Backstop for sanitizeOrigin (T6.3): the server never reads a stored path.
+  if (serverDataDir() !== null) return fail('This dataset has no re-fetchable source.');
   const kind = sourceKindForPath(origin.path);
   if (!kind) return fail('That file type is no longer supported.');
 

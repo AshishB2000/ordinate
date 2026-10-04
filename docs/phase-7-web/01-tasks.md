@@ -409,11 +409,26 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   session fixation and logout-everywhere.
 - **Done when:** an automated header + CSRF test passes; e2e still has zero console errors.
 
-### [ ] T6.3 Review, threat model, policy
+### [x] T6.3 Review, threat model, policy
 - **Branch** `web/t6.3-security-review` · **Depends** T6.1, T6.2, T4.3
 - `docs/phase-7-web/threat-model.md` (assets, trust boundaries, each mitigation and its test).
   `SECURITY.md` with disclosure process. `npm audit --omit=dev` gate in CI (high = fail).
   Run `/security-review` over the branch history and fix or file every finding.
+
+### [ ] T6.4 User regex off the request thread
+- **Branch** `web/t6.4-regex-deadline` · **Depends** T6.3 · **Scope** `src/data/`, `src/analysis/`, `src/engine/`, `scripts/`
+- Added 2026-10-04 from T6.3's open risk R1 (threat-model §6), by the user's decision. A user regex
+  (prepare/text steps through `regexSubset`/`checkRegex`, quality rules, keyword rules) runs in V8 on the
+  request thread, so one catastrophic pattern (`(\w+)+!` over a 40-char cell, via `text:preview` with only
+  `read`) stalls the pod for every org. V8's linear engine does not cover the `u` flag the subset needs.
+- Evaluate user regexes off the request thread (a worker with a per-call deadline, killed and replaced on
+  timeout) wherever a server request can reach them; a timed-out step fails with a clear, translated
+  reason, never a hang. Resident (DuckDB/RE2) paths are linear already — leave them, but keep the JS
+  reference and the resident path agreeing (differential tests, `Object.is`).
+- **Done when:** `scripts/test-regexDeadline.ts` — the R1 patterns over hostile cells return a timeout
+  error within the deadline while the event loop keeps serving (measure the max loop delay); ordinary
+  patterns give byte-identical results to before; a negative control without the worker hangs past the
+  deadline; R1 marked mitigated in the threat model with the measured numbers.
 
 ---
 

@@ -56,7 +56,11 @@ export function register({ onActive, getHubWindow }: {
   ipcMain.handle('projects:rename', async (_e, { id, name }: any) => projects.renameProject(id, name));
 
   ipcMain.handle('projects:delete', async (_e, { id }: any) => {
+    // Its connections' stored passwords/tokens go with it (T6.3): they are keyed
+    // by connection id, not by project, so they would otherwise outlive it.
+    const conns = await (require('../connectors/connections') as typeof import('../connectors/connections')).listConnections(id).catch(() => []);
     const ok = await projects.deleteProject(id);
+    if (ok) for (const c of conns) await (require('../app/configSecrets') as typeof import('../app/configSecrets')).dropConnectionSecrets(c.id);
     // Server: who could open it goes with it (src/server/authz/share.ts).
     if (ok && serverDataDir() !== null) await (require('../server/authz/share') as typeof import('../server/authz/share')).dropGrants(id);
     return { ok };

@@ -47,8 +47,11 @@ export const projects = {
   // it, for good (there is no Trash for a whole project); its grants go too.
   'projects:delete': rpc({ access: 'admin', input: z.strictObject({ id: Uuid }), project: byId }),
   // Server form of "Export project…": the .ordinate bundle comes back as a T0.4
-  // download token, never a path. An export is an audited read (T3.3).
-  'projects:export': rpc({ access: 'read', audit: true, input: z.strictObject({ id: Uuid }), project: byId }),
+  // download token, never a path. Audited (T3.3). Project ADMIN (T6.3): the
+  // bundle carries every dataset's raw origin — a source URL with its key in the
+  // query, SQL text, connection settings — which no other channel shows a viewer
+  // or editor (`dataset:meta` has no contract for that reason).
+  'projects:export': rpc({ access: 'admin', audit: true, input: z.strictObject({ id: Uuid }), project: byId }),
   // Server form of "Import project…": the bundle was uploaded through POST
   // /api/files first. It makes a NEW project, so it is org-level like
   // `projects:create`, and the importer is granted admin on it.

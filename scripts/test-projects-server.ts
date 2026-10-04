@@ -247,7 +247,7 @@ async function partTwo(adminUrl: string): Promise<void> {
     type Cell = [string, (key: string) => unknown, 'read' | 'write' | 'admin'];
     const cells: Cell[] = [
       ['projects:open', () => ({ id: pid }), 'read'],
-      ['projects:export', () => ({ id: pid }), 'read'],
+      ['projects:export', () => ({ id: pid }), 'admin'], // T6.3: the bundle holds raw origins
       ['trash:list', () => ({ projectId: pid }), 'read'],
       ['versions:list', () => ({ projectId: pid, type: 'visual', id: v1 }), 'read'],
       ['versions:get', (key) => ({ projectId: pid, type: 'visual', id: v1, key }), 'read'],

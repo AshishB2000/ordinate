@@ -165,12 +165,11 @@ const ROWS: Cell[][] = Array.from({ length: 600 }, (_, i) => [
     const r = await post(ch, payload);
     ok(`${ch} → 200`, r.status === 200, r.body.slice(0, 200));
   }
-  // A refresh of the file origin fails — and its reason names the path.
+  // T6.3: a server keeps no file origin — the planted path is dropped on load, so
+  // the dataset is a plain snapshot and a refresh never opens a server path.
   const rf = await post('dataset:refresh', { projectId: P, id: seed.file });
-  ok('dataset:refresh of a vanished file → ok:false with a reason', rf.status === 200 && rf.value?.ok === false && /sales\.csv/.test(rf.value?.error), rf.body);
+  ok('dataset:refresh of a planted file origin → ok:false, not re-fetchable, no path', rf.status === 200 && rf.value?.ok === false && /no re-fetchable source/.test(rf.value?.error) && !rf.body.includes(CANARY), rf.body);
   const listAfter = await post('dataset:list', { projectId: P });
-  const fileRow = (listAfter.value as { id: string; lastRefreshError?: string }[]).find((d) => d.id === seed.file);
-  ok('…the stored reason is shown by name only', !!fileRow?.lastRefreshError && /sales\.csv/.test(fileRow.lastRefreshError), JSON.stringify(fileRow));
   const urlRow = (listAfter.value as { id: string; lastRefreshError?: string }[]).find((d) => d.id === seed.url);
   ok('…a stored URL in a reason is cut to its origin', urlRow?.lastRefreshError === 'Could not fetch https://api.example.com: 401', JSON.stringify(urlRow));
 
@@ -180,14 +179,14 @@ const ROWS: Cell[][] = Array.from({ length: 600 }, (_, i) => [
   ok('negative control: dataset:meta (uncontracted) does carry it', meta.includes(CANARY));
   const metaRoute = await post('dataset:meta', { projectId: P, id: seed.url });
   ok('…and dataset:meta is not reachable over HTTP (404)', metaRoute.status === 404, String(metaRoute.status));
-  const refreshRaw = await context.runInContext(ADMIN, 'raw', async () =>
-    (require('../src/data/refreshJob') as typeof import('../src/data/refreshJob')).refreshAsJob(P, seed.file));
-  ok('negative control: the raw refresh reason quotes the full path', !refreshRaw.ok && refreshRaw.error.includes(CANARY), JSON.stringify(refreshRaw));
+  const fileMeta = await context.runInContext(ADMIN, 'raw', async () =>
+    (require('../src/data/datasets') as typeof import('../src/data/datasets')).getDatasetMeta(P, seed.file));
+  ok('T6.3: the file origin is gone from the record itself (server mode drops it on load)', !!fileMeta && fileMeta.origin === undefined, JSON.stringify(fileMeta?.origin));
 
   // ── 2. dataset:source ─────────────────────────────────────────────────────
   const src = async (id: string) => (await post('dataset:source', { projectId: P, id })).value;
   ok('source: a URL → its host only', firstDiff(await src(seed.url), { kind: 'url', label: 'Web address · api.example.com', refreshable: true }) === '', JSON.stringify(await src(seed.url)));
-  ok('source: a file → the format, no name or path', firstDiff(await src(seed.file), { kind: 'file', label: 'CSV file', refreshable: true }) === '');
+  ok('source: a (dropped) file origin → the format, no name or path, not refreshable', firstDiff(await src(seed.file), { kind: 'csv', label: 'CSV file', refreshable: false }) === '', JSON.stringify(await src(seed.file)));
   ok('source: a deleted connection, its table', firstDiff(await src(seed.conn), { kind: 'connection', label: 'Connection · a deleted connection · orders', refreshable: true }) === '', JSON.stringify(await src(seed.conn)));
   ok('source: SQL → how many datasets it reads', firstDiff(await src(seed.sql), { kind: 'sql', label: 'SQL query over 1 dataset', refreshable: true }) === '');
   ok('source: no origin → not refreshable', firstDiff(await src(seed.orders), { kind: 'csv', label: 'CSV file', refreshable: false }) === '');

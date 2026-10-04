@@ -121,6 +121,25 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  # Known vulnerabilities in RUNTIME dependencies (Phase 7, T6.3): a high or
+  # critical advisory fails the job. Dev-only packages are left out — they never
+  # reach the server image or the browser. Reads only the lockfiles, so no
+  # install. scripts/audit-gate.ts allows only the advisories on its short list
+  # (unreachable, no fix in range — each reasoned in docs/phase-7-web/threat-model.md
+  # §7, with a review date); a new one, an expired entry or a stale entry fails.
+  # Node 24 runs the .ts directly (type stripping), so no build either.
+  audit:
+    name: npm audit (runtime, high = fail)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Server and web app dependencies
+        run: node scripts/audit-gate.ts . web
+
   # Four shards in parallel, balanced by scripts/smoke-durations.json — the
   # serial chain had grown past 40 minutes. Each smoke is killed by name after 10
   # minutes (scripts/run-smokes.ts) and the job after 60, so a hung app can

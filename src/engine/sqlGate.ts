@@ -13,9 +13,10 @@ const ONLY_DATASETS = "Only this project's datasets can be queried here — not 
 const FIRST_WORDS: ReadonlySet<string> = new Set(['select', 'with', 'from', 'values']);
 // Table functions (and two scalars) that read a file, run a string as SQL, or
 // look into the engine. `query('…')` would otherwise run any read hidden in a
-// string literal, past every token check here.
+// string literal, past every token check here; `json_execute_serialized_sql`
+// is the same thing spelled as a serialized statement (T6.3).
 const FILE_FUNC_RE =
-  /^(read_\w+|\w+_scan|glob|sniff_csv|parquet_\w+|query|query_table|iceberg_\w+|delta_\w+|st_read\w*|duckdb_\w+|pragma_\w+|which_secret|current_setting|getenv)$/i;
+  /^(read_\w+|\w+_scan|glob|sniff_csv|parquet_\w+|query|query_table|iceberg_\w+|delta_\w+|st_read\w*|duckdb_\w+|pragma_\w+|which_secret|current_setting|getenv|json_execute_serialized_sql)$/i;
 /** `mosaic.viewNameFor` — a view over ANY project's dataset, in the shared catalog. */
 const MOSAIC_VIEW_RE = /^ds_[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12}$/i;
 /** A quoted name DuckDB's replacement scan would open as a file. */
@@ -23,7 +24,7 @@ const PATHISH_RE = /[\\/~]|\.[A-Za-z0-9]{1,8}$/;
 /** Words that end a FROM list at their depth (ON/USING do not: a comma after a join condition is another table). */
 const FROM_ENDS: ReadonlySet<string> = new Set([
   'where', 'group', 'order', 'having', 'limit', 'offset', 'qualify', 'window', 'union', 'except',
-  'intersect', 'select', 'returning', 'fetch',
+  'intersect', 'select', 'returning', 'fetch', 'values',
 ]);
 
 /**
@@ -49,11 +50,16 @@ export function readOnlyError(sql: string, known: ReadonlySet<string> = new Set(
   for (let i = 0; i < toks.length; i += 1) {
     const t = toks[i];
     const next = toks[i + 1];
-    const atTable = tablePos;
+    const atTable: boolean = tablePos;
     tablePos = false;
     if (t.kind === 'punct') {
-      if (t.text === '(') inFrom[++depth] = false;
-      else if (t.text === ')') depth = Math.max(0, depth - 1);
+      // A `(` IN table position opens a parenthesised join (T6.3): its first item
+      // is in table position too, and so is each item after a comma in it —
+      // `FROM ('x.csv' CROSS JOIN range(1))` is DuckDB's replacement scan again.
+      if (t.text === '(') {
+        inFrom[++depth] = atTable;
+        tablePos = atTable;
+      } else if (t.text === ')') depth = Math.max(0, depth - 1);
       else if (t.text === ',' && inFrom[depth]) tablePos = true;
       continue;
     }
