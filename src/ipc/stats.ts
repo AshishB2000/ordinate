@@ -21,6 +21,12 @@ import { statsFacts } from '../ai/statsFacts';
 import type { StatsFactItem } from '../ai/statsFacts';
 import type { CopilotFacts } from '../ai/copilot';
 import { commitSteps } from './datasets';
+import { randomUUID } from 'crypto';
+import * as analysis from '../analysis/analysis';
+import * as config from '../app/config';
+import * as versions from '../app/versions';
+import { DASHBOARD_STYLE_PRESETS } from '../analysis/dashboards';
+import { pairLine, statsFigures } from '../analysis/stats/figures';
 
 // Statistics workbench IPC — every figure the panel, a dashboard "stats" tile
 // and the Assistant show is computed here, by src/analysis/stats, on vectors
@@ -209,6 +215,26 @@ export async function withStatsTiles(projectId: string, pages: dashboards.Page[]
   return { ...base, text: base.text + '\n\nStatistics tiles on this dashboard:\n' + extra.text, ledger: [...base.ledger, ...extra.ledger] };
 }
 
+/** Append a "stats" card (6×6) under everything on the last sheet of a dashboard, or of a new one. */
+async function addStatsCard(projectId: string, spec: StatsSpec, analysisId: string, name: string) {
+  let a = analysisId ? await analysis.getAnalysis(projectId, analysisId) : null;
+  if (!analysisId) {
+    const preset = DASHBOARD_STYLE_PRESETS[config.get().branding.dashboardStyle];
+    a = await analysis.saveAnalysis(projectId, { name: name.trim().slice(0, 200) || 'Untitled dashboard', style: preset });
+    if (a) await versions.record(projectId, 'dashboard', a);
+  }
+  if (!a) return { ok: false, error: 'That dashboard could not be opened.' };
+  const sheets = a.sheets.map((p) => ({ ...p, cards: [...(p.cards || [])] }));
+  const last = sheets[sheets.length - 1];
+  const y = last.cards.reduce((m, c) => Math.max(m, (c.layout?.y ?? 0) + (c.layout?.h ?? 0)), 0);
+  last.cards.push({ id: randomUUID(), type: 'stats', stats: spec, layout: { x: 0, y, w: 6, h: 6 } } as (typeof last.cards)[number]);
+  const before = analysisId ? a : undefined;
+  const saved = await analysis.updateAnalysis(projectId, a.id, { sheets });
+  if (!saved) return { ok: false, error: 'Could not add it to that dashboard.' };
+  await versions.record(projectId, 'dashboard', saved, before ? { before } : undefined);
+  return { ok: true, analysisId: saved.id, name: saved.name };
+}
+
 const fail = (err: unknown, fallback: string) => ({ ok: false, error: err instanceof Error && err.message ? err.message : fallback });
 
 export function register(): void {
@@ -218,7 +244,8 @@ export function register(): void {
       const s = sanitizeStatsSpec(spec);
       if (!s) return { ok: false, error: 'That analysis is not valid.' };
       const out = await compute<StatsResult>(projectId, s, { filters: tileFilters(filters, params), asOf });
-      return out.ok ? { ok: true, result: out.value, datasetName: out.datasetName } : out;
+      // `figures`: the few derived numbers a view shows (stats/figures.ts) — the web never adds them up itself.
+      return out.ok ? { ok: true, result: out.value, datasetName: out.datasetName, figures: statsFigures(out.value) } : out;
     } catch (err) {
       return fail(err, 'Could not run the analysis.');
     }
@@ -230,7 +257,7 @@ export function register(): void {
       const s = sanitizeStatsSpec(spec);
       if (!s || typeof x !== 'string' || typeof y !== 'string') return { ok: false, error: 'That pair is not valid.' };
       const out = await compute<PairScatter>(projectId, s, { pair: [x, y] });
-      return out.ok ? { ok: true, pair: out.value } : out;
+      return out.ok ? { ok: true, pair: out.value, line: pairLine(out.value) } : out;
     } catch (err) {
       return fail(err, 'Could not draw that pair.');
     }
@@ -245,6 +272,25 @@ export function register(): void {
       return fail(err, 'Could not compute this tile.');
     }
   }));
+
+  // Server only (web): the dashboards "Add to dashboard" can put a card on —
+  // ids and names, nothing else of the records.
+  ipcMain.handle('stats:dashboards', async (_e, { projectId }: any = {}) =>
+    (await analysis.listAnalyses(projectId)).map((a) => ({ id: a.id, name: a.name })));
+
+  // "Add to dashboard", server side (web): the spec becomes a "stats" card at
+  // the foot of the dashboard's last sheet — an existing one, or a new one
+  // named `name`. The card stores only the spec; every render recomputes it.
+  ipcMain.handle('stats:addToDashboard', async (_e, { projectId, spec, view, analysisId, name }: any = {}) => {
+    try {
+      const s = sanitizeStatsSpec({ ...(spec && typeof spec === 'object' ? spec : {}), view: view === 'chart' ? 'chart' : 'table' });
+      if (!s) return { ok: false, error: 'That analysis is not valid.' };
+      if (!(await datasets.getDatasetMeta(projectId, s.datasetId))) return { ok: false, error: 'This dataset is no longer in the project.' };
+      return await addStatsCard(projectId, s, typeof analysisId === 'string' ? analysisId : '', typeof name === 'string' ? name : '');
+    } catch (err) {
+      return fail(err, 'Could not add it to that dashboard.');
+    }
+  });
 
   // "Save as calculated field": the regression, refit here, as predicted_<target>.
   ipcMain.handle('stats:saveFormula', async (_e, { projectId, spec }: any = {}) => {

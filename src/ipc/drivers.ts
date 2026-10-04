@@ -95,8 +95,9 @@ export interface DimensionView {
   members: MemberView[];
   waterfall: {
     start: number; end: number; startText: string; endText: string;
-    steps: MemberView[];
-    other: { delta: number; deltaText: string; count: number };
+    /** `from` / `to`: the running level each step starts and ends at (start + the deltas so far) — what a waterfall draws. */
+    steps: Array<MemberView & { from: number; to: number }>;
+    other: { delta: number; deltaText: string; count: number; from: number; to: number };
   };
 }
 
@@ -160,6 +161,7 @@ function dimensionView(d: DimensionResult, f: Fmt, ratio: boolean, delta: number
   const byKey = new Map(d.members.map((m) => [m.key, m]));
   let gross = 0;
   for (const m of d.members) gross += Math.abs(m.delta);
+  let run = d.waterfall.start;
   return {
     column: d.column,
     explained: d.explained,
@@ -171,8 +173,12 @@ function dimensionView(d: DimensionResult, f: Fmt, ratio: boolean, delta: number
       end: d.waterfall.end,
       startText: f.value(d.waterfall.start),
       endText: f.value(d.waterfall.end),
-      steps: d.waterfall.steps.map((s) => memberView(byKey.get(s.key) as MemberEffect, f, ratio, gross)),
-      other: { delta: d.waterfall.other.delta, deltaText: f.change(d.waterfall.other.delta), count: d.waterfall.other.count },
+      steps: d.waterfall.steps.map((s) => {
+        const from = run;
+        run += s.delta;
+        return { ...memberView(byKey.get(s.key) as MemberEffect, f, ratio, gross), from, to: run };
+      }),
+      other: { delta: d.waterfall.other.delta, deltaText: f.change(d.waterfall.other.delta), count: d.waterfall.other.count, from: run, to: run + d.waterfall.other.delta },
     },
   };
 }

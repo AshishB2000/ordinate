@@ -1,0 +1,596 @@
+/* The statistics workbench — renderer/hub/stats.css, ported: the settings
+   column, the results, the heatmap, the coefficient table, the test cards.
+   Tokens only (theme.css) — both themes follow. */
+
+/* The heatmap's two ends. Deep enough to read as colour, capped at a 55% mix
+   into the surface, so --text on any cell keeps AA contrast in both themes. */
+.body {
+  --sw-pos: #1d4ed8;
+  --sw-neg: #b91c1c;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  border-top: 1px solid var(--border-hairline);
+}
+:global([data-theme='dark']) .body {
+  --sw-pos: #60a5fa;
+  --sw-neg: #f87171;
+}
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  padding: var(--sp-16) var(--sp-16) var(--sp-24) var(--sp-24);
+  border-right: 1px solid var(--border-hairline);
+}
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  padding: var(--sp-16) var(--sp-24) var(--sp-32);
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .controls {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-hairline);
+  }
+}
+
+/* ── Settings ──────────────────────────────────────────────────────────── */
+.ctl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.ctlLabel {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ctlHint,
+.ctlNone {
+  margin: 0;
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.ctlNone {
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--surface-2);
+  border-radius: var(--r-sm);
+}
+.checkBar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.checkCount {
+  flex: 1;
+  font-variant-numeric: tabular-nums;
+}
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: var(--t-12);
+  cursor: pointer;
+}
+.link:hover {
+  text-decoration: underline;
+}
+.link:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.checks {
+  display: flex;
+  flex-direction: column;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-height: var(--ctl-sm);
+  padding: 0 var(--sp-8);
+  border-radius: var(--r-sm);
+}
+.check:hover {
+  background: var(--surface-2);
+}
+.check > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.tag {
+  flex: none;
+  padding: 1px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-11);
+  font-variant-numeric: tabular-nums;
+}
+.seg {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.segOpt {
+  padding: 3px 12px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 600;
+  cursor: pointer;
+}
+.segOpt[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.segOpt:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+}
+.ctlFoot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  margin-top: auto;
+  padding-top: var(--sp-12);
+  border-top: 1px solid var(--border-hairline);
+}
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  height: 320px;
+}
+
+/* ── Result chrome ─────────────────────────────────────────────────────── */
+.resultHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-16);
+  flex-wrap: wrap;
+}
+.resultTitle {
+  margin: 0;
+  font-size: var(--t-15);
+  line-height: var(--lh-snug);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.resultMeta {
+  margin: 2px 0 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.resultActions {
+  display: flex;
+  gap: var(--sp-8);
+  flex-wrap: wrap;
+}
+.sentence {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  margin: 0;
+  padding: var(--sp-12) var(--sp-16);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  font-size: var(--t-15);
+  line-height: var(--lh-snug);
+  color: var(--text-strong);
+}
+.sentence > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: var(--sp-8);
+}
+.stat {
+  padding: var(--sp-12);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  min-width: 0;
+}
+.statLabel {
+  font-size: var(--t-11);
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.statValue {
+  margin-top: var(--sp-4);
+  font-size: var(--t-20);
+  line-height: var(--lh-tight);
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.statNote {
+  margin-top: 2px;
+  font-size: var(--t-11);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.footnote {
+  margin: calc(-1 * var(--sp-8)) 0 0;
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.warn {
+  display: flex;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--warn-soft);
+  border-radius: var(--r-sm);
+  font-size: var(--t-12);
+  color: var(--text);
+}
+.warn > svg {
+  flex: none;
+  color: var(--warn);
+}
+
+/* ── Tables ────────────────────────────────────────────────────────────── */
+.tableWrap {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-13);
+}
+.table th,
+.table td {
+  padding: var(--sp-8) var(--sp-12);
+  border-bottom: 1px solid var(--border-hairline);
+  text-align: left;
+  white-space: nowrap;
+}
+.table thead th {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--surface-2);
+}
+.table tbody th {
+  font-weight: 500;
+  color: var(--text-strong);
+}
+.table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.coef .sig {
+  width: 36px;
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.coef .rowSig th {
+  color: var(--text-strong);
+}
+.coef .ci {
+  min-width: 240px;
+}
+.ciText {
+  display: inline-block;
+  min-width: 128px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.ciBar {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+  width: 120px;
+  height: 12px;
+  margin-left: var(--sp-8);
+}
+.ciZero {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-3);
+}
+.ciRange {
+  position: absolute;
+  top: 5px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--muted);
+}
+.ciRangeSig {
+  background: var(--accent);
+}
+.ciDot {
+  position: absolute;
+  top: 2px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: var(--r-full);
+  background: var(--text-strong);
+}
+
+/* ── Correlation heatmap ───────────────────────────────────────────────── */
+.heatWrap {
+  position: relative;
+  overflow-x: auto;
+  padding-bottom: var(--sp-4);
+}
+.heat {
+  border-collapse: separate;
+  border-spacing: 3px;
+}
+.heat thead th {
+  max-width: 110px;
+  padding: 0 var(--sp-4) var(--sp-4);
+  font-size: var(--t-12);
+  font-weight: 500;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.heat tbody th {
+  max-width: 160px;
+  padding-right: var(--sp-8);
+  font-size: var(--t-12);
+  font-weight: 500;
+  color: var(--text);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.heat td {
+  padding: 0;
+}
+.cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  height: 52px;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--t-13);
+  font-variant-numeric: tabular-nums;
+}
+button.cell {
+  cursor: pointer;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+button.cell:hover {
+  box-shadow: 0 0 0 2px var(--accent-line);
+  transform: translateY(-1px);
+}
+.cell:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.isStrong {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.isDiag {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.isPicked {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.heatLegend {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.legBar {
+  width: 180px;
+  height: 8px;
+  border-radius: var(--r-full);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--sw-neg) 55%, var(--surface)),
+    var(--surface),
+    color-mix(in srgb, var(--sw-pos) 55%, var(--surface))
+  );
+  border: 1px solid var(--border-hairline);
+}
+.pair {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.pairHint {
+  margin: 0;
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.pairHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-12);
+}
+.pairTitle {
+  margin: 0;
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.pair .sentence {
+  font-size: var(--t-13);
+}
+.pair figure {
+  padding: 0;
+  border: 0;
+}
+
+/* ── Figures and cards ─────────────────────────────────────────────────── */
+.figGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--sp-16);
+}
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-16);
+  align-items: start;
+}
+.splitWide {
+  grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+}
+@media (max-width: 1100px) {
+  .split,
+  .splitWide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--sp-16);
+}
+.cardsStack {
+  grid-template-columns: minmax(0, 1fr);
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+}
+.cardTitle {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.verdict {
+  padding: 2px var(--sp-8);
+  border-radius: var(--r-full);
+  font-size: var(--t-11);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.isSig {
+  background: var(--ok-soft);
+  color: var(--text-strong);
+}
+.isNs {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.dl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  margin: 0;
+  font-size: var(--t-13);
+}
+.dlRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-16);
+}
+.dlRow dt {
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dlRow dd {
+  margin: 0;
+  text-align: right;
+  color: var(--text-strong);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.cardNote {
+  margin: 0;
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--border-hairline);
+  font-size: var(--t-12);
+  color: var(--muted);
+  line-height: var(--lh-body);
+}
+
+/* ── Add to dashboard ──────────────────────────────────────────────────── */
+.addForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.addView {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+}

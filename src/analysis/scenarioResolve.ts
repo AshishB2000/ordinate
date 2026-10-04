@@ -354,6 +354,10 @@ export async function compareScenarios(projectId: string, list: Scenario[]): Pro
     columns.push({ id: s.id, name: s.name, drivers: (await driverInfo(ctx)).map((d) => d.label), figs: (await figures(ctx, ids)).map((r) => r.fig) });
   }
   const baseline = columns.length ? columns[0].figs : [];
+  const cellsOf = (i: number) => columns.map((c) => {
+    const f = c.figs[i];
+    return { value: f.value, display: f.display, delta: f.delta, deltaDisplay: f.deltaDisplay, pct: f.pct, tone: f.tone };
+  });
   return {
     ok: true,
     scenarios: columns.map((c) => ({ id: c.id, name: c.name, drivers: c.drivers })),
@@ -361,12 +365,28 @@ export async function compareScenarios(projectId: string, list: Scenario[]): Pro
       metricId: id, name: baseline[i] ? baseline[i].name : '', missing: baseline[i] ? !!baseline[i].missing : true,
       baseline: baseline[i] ? baseline[i].baseline : null, baselineDisplay: baseline[i] ? baseline[i].baselineDisplay : '—',
       direction: baseline[i] ? baseline[i].direction : undefined,
-      cells: columns.map((c) => {
-        const f = c.figs[i];
-        return { value: f.value, display: f.display, delta: f.delta, deltaDisplay: f.deltaDisplay, pct: f.pct, tone: f.tone };
-      }),
+      cells: cellsOf(i),
+      best: bestCell(cellsOf(i), baseline[i] ? baseline[i].direction : undefined),
     })),
   };
+}
+
+/**
+ * The best column of a compare row (scenarioCompare.ts's rule, moved here so a
+ * browser never ranks figures): only when the metric says which way is good,
+ * among ≥ 2 scenarios, and only an outright winner — a tie is nobody's best.
+ * −1 = none.
+ */
+export function bestCell(cells: Array<{ value: number | null }>, direction: 'up_good' | 'down_good' | undefined): number {
+  if (!direction || cells.length < 2) return -1;
+  let best = -1;
+  cells.forEach((c, i) => {
+    if (typeof c.value !== 'number') return;
+    const b = best >= 0 ? cells[best].value : null;
+    if (b === null || (direction === 'down_good' ? c.value < (b as number) : c.value > (b as number))) best = i;
+  });
+  if (best >= 0 && cells.some((c, i) => i !== best && c.value === cells[best].value)) return -1;
+  return best;
 }
 
 /** One metric under a scenario, for a dashboard KPI card — its filters and parameters apply to both sides. */

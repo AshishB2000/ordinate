@@ -61,6 +61,11 @@ export const pages: RouteObject[] = [
   // Pipelines (T2.6): every scheduled or dependent thing in a project as one DAG.
   page('/pipelines', () => import('../features/prepare/PipelinesPage')),
   page('/pipelines/:projectId', () => import('../features/prepare/PipelinesPage')),
+
+  // Analytics workbenches A (T2.10): the doors and the dataset workbenches.
+  page('/analytics', () => import('../features/analytics/AnalyticsPage')),
+  page('/analytics/:projectId/:datasetId/stats', () => import('../features/analytics/stats/StatsPage')),
+  page('/analytics/:projectId/:datasetId/drivers', () => import('../features/analytics/drivers/DriversPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

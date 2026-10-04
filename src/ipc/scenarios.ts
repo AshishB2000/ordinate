@@ -103,6 +103,16 @@ export function register(): void {
     }
   });
 
+  // Server only (web): the project's metrics as the setup needs them — what
+  // "Add metric" lists and how a new scenario picks its first ones (a column
+  // rollup, a formula, a count). Names and kinds only.
+  ipcMain.handle('scenario:metrics', async (_e, { projectId }: any = {}) =>
+    (await metrics.listMetrics(id(projectId))).map((m) => ({
+      id: m.id,
+      name: m.name,
+      kind: metrics.isFormulaDefinition(m.definition) ? 'formula' : m.definition.aggregation === 'count' ? 'count' : 'column',
+    })));
+
   ipcMain.handle('scenario:targets', async (_e, { projectId, baseMetricIds }: any = {}) => {
     try {
       return await scenarioTargets(id(projectId), sanitizeBaseMetricIds(baseMetricIds));
