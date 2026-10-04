@@ -38,9 +38,10 @@
 // At most `maxWorkers` live workers. A new org beyond that evicts the least
 // recently used one with nothing in flight (or, if every one is busy, the least
 // recently used anyway — it drains its queue, then exits). A worker idle for
-// `idleMs` is closed. Closing is ALWAYS the worker's own queued exit, never
-// `terminate()` (that aborts the process mid-native-call — src/engine/duckdb.ts
-// `closeWorker`). Views and per-run relations live in the worker that ran them:
+// `idleMs` is closed; idle means no call waiting on its start, queued, in flight
+// or leased — a call handed a worker before its close always runs. Closing is
+// ALWAYS the worker's own queued exit, never `terminate()` (that aborts the
+// process mid-native-call — src/engine/duckdb.ts `closeWorker`). Views and per-run relations live in the worker that ran them:
 // `datasetView.ensureView` and the queries that read it run in the same org's
 // worker because both go through `ctx()`; `withRelationAsync` is SQL text,
 // inlined into the query, so it travels with it. Eviction drops an org's views;
@@ -83,8 +84,14 @@ interface OrgWorker {
   readonly client: DuckClient;
   readonly ready: Promise<void>;
   leases: number;
+  /** `call()`s from `get()` until their reply — covers the start and the wait on `ready`, which the client cannot see. */
+  waiting: number;
+  /** Out of the map; the exit is posted once `waiting` drains, so it queues behind every call already handed this worker. */
+  closing: boolean;
   lastUsed: number;
 }
+
+const idle = (w: OrgWorker): boolean => w.waiting === 0 && w.client.busy === 0 && w.leases === 0;
 
 const sqlStr = (s: string): string => `'${s.replace(/'/g, "''")}'`;
 
@@ -101,11 +108,14 @@ export class DuckPool {
 
   async call(org: string, kind: 'query' | 'exec', sql: string, params: duck.DuckValue[], signal?: AbortSignal): Promise<string> {
     const w = this.get(org);
-    await w.ready;
+    w.waiting++;
     try {
+      await w.ready;
       return await w.client.call(kind, sql, params, signal);
     } finally {
+      w.waiting--;
       w.lastUsed = Date.now();
+      if (w.closing && w.waiting === 0) postClose(w);
     }
   }
 
@@ -163,8 +173,8 @@ export class DuckPool {
       return hit;
     }
     if (this.workers.size >= this.cfg.maxWorkers) {
-      const idle = [...this.workers].find(([, w]) => w.client.busy === 0 && w.leases === 0);
-      this.close(idle ? idle[0] : this.workers.keys().next().value as string);
+      const free = [...this.workers].find(([, w]) => idle(w));
+      this.close(free ? free[0] : this.workers.keys().next().value as string);
     }
     const w = this.spawn(org);
     this.workers.set(org, w);
@@ -203,7 +213,7 @@ export class DuckPool {
       this.forget(org, entry);
       worker.postMessage({ kind: 'close' }); // a worker that could not lock itself is never used
     });
-    const entry: OrgWorker = { worker, client, ready, leases: 0, lastUsed: Date.now() };
+    const entry: OrgWorker = { worker, client, ready, leases: 0, waiting: 0, closing: false, lastUsed: Date.now() };
     const gone = (): void => {
       client.fail(new duck.DuckDBError('unavailable', 'the DuckDB worker stopped'));
       this.forget(org, entry);
@@ -225,18 +235,23 @@ export class DuckPool {
     const w = this.workers.get(org);
     if (!w) return;
     this.workers.delete(org);
-    try {
-      w.worker.postMessage({ kind: 'close' });
-    } catch {
-      /* already gone */
-    }
+    w.closing = true;
+    if (w.waiting === 0) postClose(w);
   }
 
   private closeIdle(): void {
     const cutoff = Date.now() - this.cfg.idleMs;
     for (const [org, w] of this.workers) {
-      if (w.client.busy === 0 && w.leases === 0 && w.lastUsed < cutoff) this.close(org);
+      if (idle(w) && w.lastUsed < cutoff) this.close(org);
     }
+  }
+}
+
+function postClose(w: OrgWorker): void {
+  try {
+    w.worker.postMessage({ kind: 'close' });
+  } catch {
+    /* already gone */
   }
 }
 

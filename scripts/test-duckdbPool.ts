@@ -214,7 +214,10 @@ async function main(): Promise<void> {
   ok(`a terminated compute thread's query is interrupted: the org answers in ${Date.now() - t0} ms`, Date.now() - t0 < 1000);
 
   // ── 5. Limits ───────────────────────────────────────────────────────────────
-  const small = new poolMod.DuckPool({ ...cfg, maxWorkers: 2, idleMs: 300 });
+  // Lifecycle only: a 60 s query limit (a 600 ms one fails a `SELECT 1` under load) and, here, idleMs 60 s
+  // so only LRU closes workers (a 300 ms sweep closed `a` while `ab` started under load).
+  const life = { ...cfg, queryTimeoutMs: 60_000 };
+  const small = new poolMod.DuckPool({ ...life, maxWorkers: 2 });
   await small.call('a', 'query', 'SELECT 1', []);
   await small.call('b', 'query', 'SELECT 1', []);
   await small.call('a', 'query', 'SELECT 1', []);
@@ -223,10 +226,40 @@ async function main(): Promise<void> {
   const reopened = await small.call('b', 'query', `SELECT count(*)::DOUBLE AS n FROM read_parquet('${fileOf('b')}')`, []);
   ok('…and a closed org gets a fresh, still-locked worker', JSON.parse(reopened).rows[0][0] === 5
     && isPermission(await refused(small.call('b', 'query', `SELECT * FROM read_parquet('${fileOf('a')}')`, []))));
-  await new Promise((r) => setTimeout(r, 900));
-  ok('idle workers are closed after idleMs', small.orgs().length === 0, JSON.stringify(small.orgs()));
   ok('an invalid org id never reaches a path', (await refused(small.call('../x', 'query', 'SELECT 1', []))) === 'invalid org id');
   small.shutdown();
+  const idler = new poolMod.DuckPool({ ...life, idleMs: 300 });
+  await idler.call('a', 'query', 'SELECT 1', []);
+  await idler.call('b', 'query', 'SELECT 1', []);
+  for (let waited = 0; idler.orgs().length && waited < 10_000; waited += 50) await new Promise((r) => setTimeout(r, 50));
+  ok('idle workers are closed after idleMs (the real sweep timer)', idler.orgs().length === 0, JSON.stringify(idler.orgs()));
+  idler.shutdown();
+
+  // Regression: a worker still starting, or with a call waiting on `ready`, had
+  // nothing in its client yet, so the sweep (or LRU) closed it under the caller.
+  // A fake clock jumps past idleMs and sweeps while the call waits — no timing luck.
+  const race = new poolMod.DuckPool({ ...life, maxWorkers: 2 });
+  const sweepAnHourLater = (): void => {
+    const realNow = Date.now;
+    Date.now = () => realNow() + 3_600_000;
+    try { (race as unknown as { closeIdle(): void }).closeIdle(); } finally { Date.now = realNow; }
+  };
+  const starting = race.call('a', 'query', 'SELECT 1', []);
+  sweepAnHourLater();
+  const kept = JSON.stringify(race.orgs());
+  const startMsg = await refused(starting);
+  ok('sweep: a worker still starting is kept, and its first query answers', kept === '["a"]' && startMsg === 'RESOLVED', `${kept} ${startMsg}`);
+  const waiting = race.call('a', 'query', 'SELECT 1', []); // ready, but this call is not dispatched yet
+  sweepAnHourLater();
+  const waitMsg = await refused(waiting);
+  ok('sweep: a ready worker with a call not yet dispatched is kept, and the call answers', waitMsg === 'RESOLVED', waitMsg);
+  sweepAnHourLater();
+  ok('…and once idle, the sweep does close it', race.orgs().length === 0, JSON.stringify(race.orgs()));
+  const lru = [race.call('a', 'query', 'SELECT 1', []), race.call('b', 'query', 'SELECT 1', []), race.call('ab', 'query', 'SELECT 1', [])];
+  const lruMsgs = await Promise.all(lru.map(refused));
+  ok('LRU: evicting a still-starting worker (every one busy) lets its first query answer first',
+    lruMsgs.every((m) => m === 'RESOLVED') && JSON.stringify(race.orgs()) === '["b","ab"]', `${JSON.stringify(lruMsgs)} ${JSON.stringify(race.orgs())}`);
+  race.shutdown();
 
   // ── 6. Over real HTTP: a caller that goes away mid-query ──────────────────
   // app.ts aborts the request's signal when the socket closes before the reply;
@@ -244,6 +277,7 @@ async function main(): Promise<void> {
   const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA })); // dev sign-in: org `default`
   await app.listen({ port: 0, host: '127.0.0.1' });
   const { port } = app.server.address() as import('net').AddressInfo;
+  await inOrg('default', () => q('SELECT 1 AS x')); // started first: its start is not interrupt latency
   const gone = new AbortController();
   const slow = fetch(`http://127.0.0.1:${port}/api/rpc/test:slow`, {
     method: 'POST', body: wire.encode({ args: [] }), headers: withCsrf({ 'content-type': 'application/json' }), signal: gone.signal,
