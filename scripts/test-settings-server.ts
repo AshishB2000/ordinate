@@ -168,7 +168,9 @@ async function partOne(): Promise<void> {
 
     // ── Backups: download → restore ───────────────────────────────────────
     const before: Array<{ id: string; name: string }> = (await call('projects:list')).body;
+    let t0 = performance.now();
     const dl = await call('backups:download');
+    const dlMs = performance.now() - t0;
     ok('backups:download: a download token and the project count, no path', dl.body.ok === true && dl.body.count === before.length && /^[A-Za-z0-9_-]{43}$/.test(dl.body.downloadToken) && !('path' in dl.body), JSON.stringify(dl.body));
     const file = await download(dl.body.downloadToken);
     const entries = bundle.readZip(file.bytes);
@@ -183,7 +185,9 @@ async function partOne(): Promise<void> {
 
     const tok = (await upload(file.bytes, 'backup.zip')).fileToken;
     ok('backups:restore: without the typed word it is a 400', (await call('backups:restore', { fileToken: tok })).status === 400 && (await call('backups:restore', { fileToken: tok, confirm: 'yes' })).status === 400);
+    t0 = performance.now();
     const rs = await call('backups:restore', { fileToken: tok, confirm: 'restore' });
+    console.log(`     measured: backups:download ${dlMs.toFixed(0)} ms, backups:restore ${(performance.now() - t0).toFixed(0)} ms for ${before.length} projects (${(file.bytes.length / 1024).toFixed(0)} KB)`);
     const after: Array<{ id: string; name: string }> = (await call('projects:list')).body;
     ok('backups:restore: every project back as a NEW one, named "(restored …)", nothing overwritten', rs.body.ok === true && rs.body.restored.length === before.length && rs.body.failed.length === 0 && after.length === 2 * before.length && rs.body.restored.every((p: { id: string; name: string }) => / \(restored [A-Z][a-z]{2} \d{1,2}, \d{4}\)$/.test(p.name) && !before.some((b) => b.id === p.id)), JSON.stringify(rs.body));
     const copy = rs.body.restored.find((p: { name: string }) => p.name.startsWith('Privacy'));
