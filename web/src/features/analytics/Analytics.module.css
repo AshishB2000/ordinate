@@ -1,0 +1,182 @@
+/* The analytics area's shared surfaces: the workbench head (stats.css .sw-head),
+   the hub's workbench cards, and the plot frame (.sw-fig). Tokens only — both
+   themes follow. */
+
+/* ── A workbench page: head, then its body ─────────────────────────────── */
+.wb {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  background: var(--bg);
+}
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-16);
+  flex-wrap: wrap;
+  padding: var(--sp-16) var(--sp-24) var(--sp-8);
+}
+.ident {
+  min-width: 0;
+}
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin: 0;
+  font-size: var(--t-20);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tighter);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.sub {
+  margin: var(--sp-4) 0 0 36px;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.actions {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-8);
+  flex: none;
+}
+.dsPick {
+  width: 240px;
+}
+.tabs {
+  padding: 0 var(--sp-24);
+}
+.state {
+  padding: var(--sp-48) var(--sp-24);
+}
+
+/* ── The hub (/analytics) ──────────────────────────────────────────────── */
+.hubGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--sp-16);
+}
+.hubCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-16) var(--sp-16) var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+.hubIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.hubName {
+  margin: 0;
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.hubBlurb {
+  margin: 0;
+  flex: 1;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.hubBar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-12);
+  flex-wrap: wrap;
+}
+.hubBar > :first-child {
+  width: 320px;
+  max-width: 100%;
+}
+.hubNote {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+
+/* ── Plots (statsCharts.ts swChartFrame) ───────────────────────────────── */
+.fig {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-12) var(--sp-16) var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  min-width: 0;
+}
+.figCap {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  flex-wrap: wrap;
+}
+.figTitle {
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.figNote {
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.figBox {
+  position: relative;
+  height: 260px;
+}
+.figTall {
+  height: 340px;
+}
+.plot {
+  position: absolute;
+  inset: 0;
+}
+.plot canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.plotState {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+}
+
+/* Screen-reader-only text (a table caption). */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

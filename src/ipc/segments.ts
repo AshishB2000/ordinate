@@ -22,7 +22,7 @@ import * as computePool from '../engine/computePool';
 import * as trace from '../engine/residentTrace';
 import { computeColumnSummariesResident } from '../engine/statsResident';
 import { computeColumnSummary } from '../data/datasetStats';
-import { featureChoices, featureProblem, jsSegmentIo, runFit, SAMPLE_CAP } from '../analysis/segmentModel';
+import { featureChoices, featureProblem, jsSegmentIo, runFit, SAMPLE_CAP, sizeShares } from '../analysis/segmentModel';
 import type { FitResult } from '../analysis/segmentModel';
 import { fitResident, rfmCustomersResident } from '../engine/segmentResident';
 import { rfmBreakdown, rfmCustomersJs, rfmDefaults, rfmProblem, rfmTable } from '../analysis/rfm';
@@ -126,7 +126,7 @@ export function register(): void {
       });
       const out = await job.done;
       if ('error' in out) return { ok: false, error: out.error };
-      return { ok: true, result: out };
+      return { ok: true, result: out, shares: sizeShares(out) };
     } catch (err) {
       return failure(err, 'Could not find segments');
     }

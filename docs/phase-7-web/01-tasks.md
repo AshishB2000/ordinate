@@ -252,7 +252,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   inlined into every page by `src/publish/siteHtml.ts`) to `src/publish/site/` and fix the paths, so
   T8.1 can delete `renderer/` without breaking publishing. Its CSP and whitelist stay as they are.
 
-### [ ] T2.10 Analytics workbenches A — stats, drivers, scenarios, segments
+### [x] T2.10 Analytics workbenches A — stats, drivers, scenarios, segments
 - **Branch** `web/t2.10-analytics-a` · **Legacy:** `statsPanel`, `statsCharts`, `statsControls`,
   `statsTile`, `statsViews`, `statsViewsGroups`, `driversEntry`, `driversPanel`, `scenarioPage`,
   `scenarioList`, `scenarioCard`, `scenarioCompare`, `scenarioDrivers`, `segments`, `segmentsRfm`,

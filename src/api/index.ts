@@ -18,6 +18,8 @@ import { catalog } from './catalog';
 import { lineage } from './lineage';
 import { relationships } from './relationships';
 
+import { analytics } from './analytics';
+
 import { trash } from './trash';
 import { versions } from './versions';
 import { prepare } from './prepare';
@@ -42,6 +44,8 @@ export const contracts = {
   ...lineage,
   ...relationships,
   ...prepare,
+
+  ...analytics,
 } as const;
 
 export type Channel = keyof typeof contracts;

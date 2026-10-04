@@ -306,6 +306,16 @@ export interface FitResult {
   pca: { variance: [number, number]; points: Array<[number, number, number]> };
 }
 
+/**
+ * Each segment's share of every row (and the share with no segment), as the
+ * page shows them — over max(1, total), segments.ts's own rule. Server side so
+ * the web app never divides a figure (plan §6.4).
+ */
+export function sizeShares(r: Pick<FitResult, 'sizes' | 'empty' | 'total'>): { sizes: number[]; empty: number } {
+  const total = Math.max(1, r.total);
+  return { sizes: r.sizes.map((n) => n / total), empty: r.empty / total };
+}
+
 /** Why these features cannot be fitted, or null. */
 export function featureProblem(columns: ParsedColumn[], features: unknown): string | null {
   if (!Array.isArray(features) || features.length < 2) return 'Pick at least two number columns.';

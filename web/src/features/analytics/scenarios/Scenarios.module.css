@@ -1,0 +1,396 @@
+/* What-if scenarios — renderer/hub/scenarios.css, ported: the list's cards,
+   the open scenario (setup | results + tornado) and Compare. Tokens only. The
+   tornado's two sides are chart-6 / chart-1 — a direction, not good or bad,
+   so never ok/error. */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-family: var(--font-numeric);
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chipMore {
+  font-family: var(--font-ui);
+  color: var(--muted);
+}
+.none {
+  color: var(--muted);
+  font-size: var(--t-12);
+  font-style: italic;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ── The list ──────────────────────────────────────────────────────────── */
+.listBar {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-8);
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--sp-16);
+}
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.card:hover {
+  border-color: var(--border-2);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+.cardLink {
+  display: flex;
+  flex-direction: column;
+  color: inherit;
+  text-decoration: none;
+}
+.cardLink:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
+  border-radius: var(--r-lg);
+}
+.art {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  height: 96px;
+  padding: 0 var(--sp-24);
+  border-bottom: 1px solid var(--border-hairline);
+  background: linear-gradient(180deg, var(--inset), var(--surface));
+}
+.art::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 50%;
+  width: 1px;
+  background: var(--border-2);
+}
+.artRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.artBar {
+  display: block;
+  height: 8px;
+}
+.artLow {
+  justify-self: end;
+  border-radius: var(--r-full) 0 0 var(--r-full);
+  background: var(--chart-6);
+  opacity: 0.75;
+}
+.artHigh {
+  justify-self: start;
+  border-radius: 0 var(--r-full) var(--r-full) 0;
+  background: var(--chart-1);
+  opacity: 0.85;
+}
+.w38 { width: 76%; }
+.w44 { width: 88%; }
+.w26 { width: 52%; }
+.w30 { width: 60%; }
+.w16 { width: 32%; }
+.w12 { width: 24%; }
+.w8 { width: 16%; }
+.w10 { width: 20%; }
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--sp-12) var(--sp-16) var(--sp-16);
+}
+.cardTitle {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: var(--t-15);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cardMeta {
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.cardDrivers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.cardMore {
+  position: absolute;
+  top: var(--sp-8);
+  right: var(--sp-8);
+}
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-48) var(--sp-24);
+  text-align: center;
+}
+.emptyArt {
+  width: 220px;
+  height: 84px;
+  margin-bottom: var(--sp-8);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+}
+.emptyH {
+  margin: 0;
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.emptyP {
+  margin: 0;
+  max-width: 560px;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-8);
+  margin: var(--sp-4) 0 var(--sp-16);
+  padding: 0;
+  list-style: none;
+}
+.examples .chip {
+  padding: 3px 10px;
+  font-size: var(--t-12);
+}
+
+/* ── A scenario page's frame (the editor's own parts: ScenarioEditor.module.css) */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  min-height: 100%;
+  padding: var(--sp-24);
+}
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-12);
+  padding-bottom: var(--sp-12);
+  border-bottom: 1px solid var(--border);
+}
+.isLoading {
+  opacity: 0.6;
+}
+
+/* ── Compare ───────────────────────────────────────────────────────────── */
+.cmpTitle {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--t-15);
+  font-weight: 700;
+}
+.cmpCount {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.cmpPick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+.cmpChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 600;
+  cursor: pointer;
+}
+.cmpChip:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.cmpChip[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.cmpChip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.cmpChip:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.cmpBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.cmpTable {
+  min-width: 560px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+.cmpRow {
+  display: grid;
+  align-items: stretch;
+  border-top: 1px solid var(--border-hairline);
+}
+.cmpRow:first-child {
+  border-top: 0;
+}
+.cmpRow.isMissing {
+  opacity: 0.6;
+}
+.cmpHeadRow {
+  background: var(--surface-2);
+}
+.cmpCell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  padding: var(--sp-12) var(--sp-16);
+  border-left: 1px solid var(--border-hairline);
+}
+.cmpCell:first-child {
+  border-left: 0;
+}
+.cmpCorner {
+  color: var(--muted);
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.cmpColhead {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+.cmpBase {
+  background: var(--inset);
+}
+.cmpColname {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: var(--t-13);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmpOpen {
+  text-decoration: none;
+}
+.cmpOpen:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.cmpOpen:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.cmpColsub {
+  color: var(--muted);
+  font-size: var(--t-11);
+}
+.cmpDrivers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.cmpMetric {
+  color: var(--text-strong);
+  font-size: var(--t-13);
+  font-weight: 600;
+}
+.cmpVal {
+  position: relative;
+}
+.cmpValBase {
+  background: var(--inset);
+  color: var(--text-dim);
+  font-family: var(--font-numeric);
+  font-size: var(--t-15);
+  font-weight: 600;
+}
+.cmpNum {
+  color: var(--text-strong);
+  font-family: var(--font-numeric);
+  font-size: var(--t-15);
+  font-weight: 700;
+}
+.cmpDelta {
+  font-family: var(--font-numeric);
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--muted);
+}
+.cmpDelta.good {
+  color: var(--ok);
+}
+.cmpDelta.bad {
+  color: var(--error);
+}
+.isBest {
+  background: color-mix(in srgb, var(--ok-soft) 70%, var(--surface));
+}
+.cmpBest {
+  position: absolute;
+  top: var(--sp-8);
+  right: var(--sp-8);
+  padding: 0 8px;
+  border-radius: var(--r-full);
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: var(--t-11);
+  font-weight: 700;
+}
