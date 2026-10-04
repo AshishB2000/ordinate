@@ -19,6 +19,7 @@ import { JobsButton } from './JobsButton';
 import { NAV, type NavItem } from './nav';
 import { Dock, DockToggle } from '../features/assistant/DockParts';
 import { useWorkspacePrefs } from './prefs';
+import { CommandPalette, openPalette } from '../features/palette/CommandPalette';
 import { THEME_PREFS, useThemePref, type ThemePref } from './theme';
 import s from './Shell.module.css';
 
@@ -118,6 +119,7 @@ function UserMenu() {
         { label: 'Settings', icon: 'settings', onSelect: () => void navigate('/settings') },
         { label: 'API tokens', icon: 'terminal', onSelect: () => void navigate('/tokens') },
         ...HELP_ITEMS,
+        { label: 'About Ordinate', icon: 'info', onSelect: () => void navigate('/about') },
         ...signOutItems,
       ]}
     />
@@ -149,7 +151,7 @@ export function Shell() {
           </div>
           <div className={s.search} role="search">
             <Icon name="search" />
-            <input className={s.searchInput} type="search" placeholder="Search" aria-label="Search" />
+            <input className={s.searchInput} type="search" placeholder="Search" aria-label="Search" aria-haspopup="dialog" readOnly onClick={openPalette} onKeyDown={(e) => (e.key === 'Enter' || e.key.length === 1) && openPalette(e)} />
           </div>
           <div className={`${s.side} ${s.right}`}>
             <JobsButton />
@@ -179,6 +181,7 @@ export function Shell() {
           <Dock />
         </div>
         <Toaster />
+        <CommandPalette />
       </div>
     </ProjectProvider>
   );

@@ -1,0 +1,351 @@
+/* Themes (theme-editor.css `.te-*`): the list's rows with their thumbnail, the
+   editor's two columns — controls left, the sample sheet right, sticky — and the
+   sheet itself, painted ONLY from the theme's tokens (each with the app's own
+   value as its fallback, so a theme that sets fewer still draws). */
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-16);
+  border-top: 1px solid var(--border-hairline);
+}
+.item:first-child {
+  border-top: 0;
+}
+.itemMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.itemName {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  color: var(--text-strong);
+  font-weight: 500;
+}
+.itemNote {
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.itemActions {
+  display: flex;
+  gap: var(--sp-4);
+}
+.confirm {
+  background: var(--error-soft);
+}
+.empty {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+  color: var(--muted);
+}
+.empty strong {
+  display: block;
+  color: var(--text-strong);
+  font-weight: 500;
+}
+.emptyIcon {
+  display: inline-flex;
+  padding: var(--sp-8);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ── Thumbnail ───────────────────────────────────────────────────── */
+.thumb {
+  display: inline-flex;
+  flex: none;
+  width: 64px;
+  height: 44px;
+  padding: 6px;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+.thumbCard {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  gap: 3px;
+  padding: 4px;
+  border: var(--dash-card-border-w, 1px) solid var(--border);
+  border-radius: calc(var(--dash-card-radius, 12px) / 3);
+  background: var(--surface);
+}
+.thumbBar {
+  flex: 1;
+  border-radius: 1px;
+}
+
+/* ── Editor ──────────────────────────────────────────────────────── */
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  padding-top: var(--sp-16);
+}
+.editorHead {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-8);
+}
+.nameField {
+  width: 320px;
+}
+.spacer {
+  flex: 1;
+}
+.warnSummary {
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--warn-soft);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--text);
+  font-size: var(--t-13);
+}
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
+  gap: var(--sp-24);
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.sec {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+}
+.secHead {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.secDesc {
+  margin-top: -6px;
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-16);
+}
+.fieldLabel {
+  color: var(--text);
+}
+.fieldControl {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.fontSelect {
+  width: 200px;
+}
+.fontSample {
+  width: 64px;
+  color: var(--text-strong);
+  font-size: var(--t-20);
+}
+.colorGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--sp-8) var(--sp-16);
+}
+.color {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.colorTop {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.picker {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  background: none;
+  cursor: pointer;
+}
+.colorText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.colorName {
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.hexIn {
+  width: 96px;
+  height: 24px;
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+}
+.hexIn[aria-invalid='true'] {
+  border-color: var(--error);
+}
+.warn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  color: var(--warn);
+  font-size: var(--t-11);
+}
+.range {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.range input {
+  width: 160px;
+  accent-color: var(--accent);
+}
+.rangeVal {
+  width: 40px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.previewPane {
+  position: sticky;
+  top: var(--sp-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.previewLabel {
+  color: var(--muted);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+}
+.previewNote {
+  color: var(--text-dim);
+  font-size: var(--t-12);
+}
+
+/* ── The sample sheet ────────────────────────────────────────────── */
+.sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dash-gap, 12px);
+  padding: var(--sp-16);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui, inherit);
+}
+.sheetTitle {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--dash-gap, 12px);
+}
+.charts {
+  display: grid;
+  grid-template-columns: 7fr 5fr;
+  gap: var(--dash-gap, 12px);
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: var(--dash-card-border-w, 1px) solid var(--border);
+  border-radius: var(--dash-card-radius, 12px);
+  background: var(--surface-2);
+  box-shadow: var(--dash-card-shadow, none);
+}
+.cardHead {
+  padding: 4px 8px;
+  border-bottom: var(--dash-card-rule, 1px) solid var(--border-hairline);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kpi {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  background: var(--surface);
+}
+.kpiValue {
+  order: 0;
+  color: var(--text-strong);
+  font-family: var(--font-numeric, inherit);
+  font-size: calc(var(--dash-kpi-size, 28px) * 0.6);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.kpiLabel {
+  order: var(--dash-kpi-label, 1);
+  color: var(--text-dim);
+  font-size: 9px;
+}
+.line {
+  width: 100%;
+  height: 96px;
+  padding: 6px;
+  background: var(--surface);
+}
+.line polyline {
+  fill: none;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 96px;
+  padding: 8px;
+  background: var(--surface);
+}
+.bars span {
+  flex: 1;
+  border-radius: 2px 2px 0 0;
+}

@@ -279,7 +279,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   images from T1.1's PNG helper; maps composite their DOM markers onto the canvas (replaces
   `capturePage`). Scheduled server-side reports render in a later task if needed — log it, don't build it.
 
-### [ ] T2.14 Settings, themes, privacy, command palette
+### [x] T2.14 Settings, themes, privacy, command palette
 - **Branch** `web/t2.14-settings` · **Legacy:** `settingsPanels`, `settingsFormats`,
   `settingsBackups`, `settingsCollab`, `settingsAutomation`, `themeEditor`, `themeModel`,
   `themeApply`, `themeSettings`, `privacyReview`, `privacySettings`, `privacyShare`, `a11y`,

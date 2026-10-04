@@ -385,4 +385,10 @@ export function registerHandlers(): void {
   for (const mod of ['../ipc/stats', '../ipc/drivers', '../ipc/scenarios', '../ipc/segments']) {
     (require(mod) as { register: () => void }).register();
   }
+
+  // Settings, themes, privacy, the palette's record search and the calendar
+  // preview (T2.14). Each module once; the registry throws on a second.
+  for (const mod of ['../ipc/settingsServer', '../ipc/themes', '../ipc/privacy', '../ipc/search', '../ipc/periods']) {
+    (require(mod) as { register: () => void }).register();
+  }
 }
