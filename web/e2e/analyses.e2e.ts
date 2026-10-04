@@ -169,3 +169,47 @@ e2e('draft with the Assistant, no model: the dialog says how to connect one', as
   await dlg.getByRole('heading', { name: 'Connect a model to draft' }).waitFor();
   await dlg.getByRole('button', { name: 'Close' }).first().click();
 });
+
+e2e('metrics: the table from the server, a new metric with a live preview and a filter, delete to Trash', async ({ page, server }) => {
+  const pid = server.sample.projectId;
+  await page.goto(`/data/metrics?project=${pid}`);
+  await settled(page);
+  const table = page.getByRole('table');
+  const revenue = table.getByRole('row').filter({ has: page.getByRole('button', { name: 'Revenue', exact: true }) });
+  await revenue.getByRole('cell', { name: '$5.2M' }).waitFor(); // metric:value's display, through metric:table
+  await revenue.getByRole('img', { name: 'Revenue trend' }).waitFor(); // metric:series
+  await revenue.getByText(/card/).waitFor(); // metric:usage — the sample dashboard's KPI uses it
+  await page.getByText('6 metrics').waitFor();
+  await screens(page, 'metrics-table');
+
+  await page.getByRole('button', { name: 'New metric' }).click();
+  const dlg = page.getByRole('dialog', { name: 'New metric' });
+  await dlg.getByLabel('Name').fill('Large orders');
+  await dlg.getByRole('combobox', { name: 'Dataset' }).click();
+  await page.getByRole('option', { name: 'Retail orders' }).click();
+  await dlg.getByRole('combobox', { name: 'Column', exact: true }).click();
+  await page.getByRole('option', { name: 'revenue (number)' }).click();
+  await dlg.getByRole('radio', { name: 'Count' }).click();
+  await dlg.getByRole('combobox', { name: 'Filter column' }).click();
+  await page.getByRole('option', { name: 'revenue', exact: true }).click();
+  await dlg.getByRole('combobox', { name: 'Operator' }).click();
+  await page.getByRole('option', { name: '>', exact: true }).click();
+  await dlg.getByLabel('Filter value').fill('1000');
+  await dlg.getByRole('button', { name: 'Add filter' }).click();
+  const preview = dlg.getByRole('complementary', { name: 'Preview' });
+  await preview.getByText(/revenue > 1000/).waitFor(); // the server's own words for the definition
+  const figure = (await preview.getByText(/^[\d,.]+[KM]?$/).first().textContent()) ?? '';
+  assert.match(figure, /^\d/, `a figure computed by the server, got ${figure}`);
+  await screensInPlace(page, 'metrics-editor');
+  await dlg.getByRole('button', { name: 'Create metric' }).click();
+  const row = table.getByRole('row').filter({ has: page.getByRole('button', { name: 'Large orders' }) });
+  await row.getByRole('cell', { name: figure }).waitFor();
+
+  await page.getByRole('button', { name: 'Actions for Large orders' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Delete “Large orders”?' });
+  await confirm.getByText('Nothing uses it yet.').waitFor();
+  await confirm.getByRole('button', { name: 'Delete' }).click();
+  await page.getByText('Moved “Large orders” to Trash').waitFor();
+  await row.waitFor({ state: 'detached' });
+});
