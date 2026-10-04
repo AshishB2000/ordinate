@@ -76,7 +76,6 @@ COPY --from=build /app/package.json ./
 # renderer; then assets (samples, geo) and the built web app.
 COPY --from=build /app/src src
 COPY --from=build /app/renderer/i18n renderer/i18n
-COPY --from=build /app/renderer/publish renderer/publish
 COPY --from=build /app/renderer/hub/assets/connectors renderer/hub/assets/connectors
 COPY --from=build /app/renderer/hub/assets/agents renderer/hub/assets/agents
 COPY --from=build ["/app/renderer/hub/geoMatch.js", "/app/renderer/hub/geoCluster.js", "/app/renderer/hub/themeModel.js", "/app/renderer/hub/cardModel.js", "/app/renderer/hub/sizeLayout.js", "renderer/hub/"]
