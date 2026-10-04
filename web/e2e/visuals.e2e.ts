@@ -6,7 +6,7 @@
 //   builder   reopen a saved visual: the chart draws, an aggregation edit
 //             recomputes on the server, a chip switches the type, Customize
 //             persists a title on the saved visual, Download PNG / Copy data,
-//             a pivot says it is not in the browser yet, Save renames
+//             a pivot draws its grid on its own shelves, Save renames
 //   new       "+ New visual" → dataset → Open the builder → Map regions → the
 //             region map draws → Save; the card's menu duplicates, renames and
 //             deletes (to the Trash)
@@ -116,10 +116,12 @@ e2e('visuals: the gallery with live thumbnails, and the builder on a saved visua
   assert.ok(/^Label\tavg of revenue\n/.test(tsv) && tsv.split('\n').length === 4, `TSV: ${tsv}`);
   await screens(page, 'visuals-builder');
 
-  // A pivot table is honest about not being in the browser yet.
+  // A pivot table draws its grid (T1.2's GridViz, T2.11's shelves): the server's cells, row headers and all.
   await page.getByRole('button', { name: 'More chart types' }).click();
   await page.getByRole('dialog', { name: 'All chart types' }).getByRole('button', { name: 'Pivot table' }).click();
-  await page.getByRole('heading', { name: 'Pivot table isn’t in the browser yet' }).waitFor();
+  await page.getByRole('group', { name: 'Rows' }).waitFor();
+  await area.getByRole('table').waitFor();
+  await area.getByRole('rowheader').first().waitFor();
   await page.getByRole('radio', { name: /^Column$/ }).click();
   await area.locator('canvas').waitFor();
 

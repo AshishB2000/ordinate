@@ -13,6 +13,8 @@ import * as jobs from '../app/jobs';
 import type { ParsedColumn } from '../data/parse';
 import { attributeInsights } from '../analysis/events'; // r8:events
 import { projectEvents } from '../analysis/eventStore';
+import { vizDataFor } from './visuals';
+import { sanitizeEncoding, sanitizeFilters } from '../analysis/visuals';
 
 // Insights IPC — two channels, both request/response, both wrapped so a throw
 // becomes { ok:false, error }.
@@ -147,6 +149,38 @@ export async function listInsights(projectId: string, datasetId?: string): Promi
   // Per-dataset lists are already ranked and capped; re-rank so a cross-dataset
   // Home row leads with the strongest finding in the whole project.
   return datasetId ? out : rankInsights(out, MAX_DATASETS * 2);
+}
+
+/** A card's sparkline: the insight's own chart, computed by the same function a tile uses. */
+export interface Spark extends Record<string, unknown> {
+  labels: unknown[];
+  series: unknown[];
+}
+
+/** Rows above which Home draws no sparkline rather than hydrate a table without a resident fast path. */
+const SPARK_MAX_HYDRATE = 250_000;
+
+/**
+ * Home's "What stands out" (T2.11, insights.ts insRenderHome): the project's
+ * strongest findings that have a chart, at most `max`, each with its chart's
+ * figures — one reply inside `home:overview`, so the row costs Home no round
+ * trip (plan §9's RPC budget). A chart that cannot be computed gets no
+ * sparkline; the card still carries its numbers.
+ */
+export async function standsOut(projectId: string, max = 6): Promise<Array<Insight & { spark: Spark | null }>> {
+  const list = (await listInsights(projectId)).filter((i) => i.chart).slice(0, max);
+  return Promise.all(list.map(async (i) => {
+    let spark: Spark | null = null;
+    try {
+      const r = await vizDataFor(projectId, i.datasetId, sanitizeEncoding(i.chart!.encoding), sanitizeFilters(i.chart!.filters || []), { maxHydrateRows: SPARK_MAX_HYDRATE });
+      // The chart's whole reply (minus event marks, which bury a 56px line), exactly what a tile draws from.
+      if (r.ok) {
+        const { events: _marks, ...data } = r.data as typeof r.data & { events?: unknown };
+        spark = data as Spark;
+      }
+    } catch (_) { /* no sparkline */ }
+    return { ...i, spark };
+  }));
 }
 
 export function register() {

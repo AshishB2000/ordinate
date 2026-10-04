@@ -23,6 +23,8 @@ export interface HomeOverview {
   counts: { datasets: number; dashboards: number; captures: number; visuals: number };
   datasets: { id: string; name: string; rowCount: number; columnCount: number; qualityFailing?: number }[];
   visuals: { id: string; name: string; chartType: string }[];
+  /** T2.11: "What stands out" — insights with a chart, each with its sparkline's figures (src/ipc/insights.ts standsOut). */
+  standsOut: Array<{ id: string; spark: { labels: unknown[]; series: unknown[] } | null } & Record<string, unknown>>;
 }
 
 export type StepId = 'import' | 'visual' | 'dashboard' | 'assistant';
@@ -81,6 +83,7 @@ export function useOverview(projectId: string | undefined) {
         counts: { datasets: n(c.datasets), dashboards: n(c.dashboards), captures: n(c.captures), visuals: n(c.visuals) },
         datasets: list(o.datasets),
         visuals: list(o.visuals),
+        standsOut: list(o.standsOut),
       };
     },
   });

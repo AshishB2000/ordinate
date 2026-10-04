@@ -15,7 +15,7 @@ import { randomUUID } from 'crypto';
 import { parseCsv } from '../data/parse';
 import type { FilterStep } from '../data/transforms';
 import { axisOf } from '../analysis/analytics';
-import { eventsFromTable, eventsOnAxis, inScope, sanitizeEvent, MAX_EVENTS } from '../analysis/events';
+import { eventDays, eventsFromTable, eventsOnAxis, eventWhen, inScope, sanitizeEvent, MAX_EVENTS } from '../analysis/events';
 import * as store from '../analysis/eventStore';
 import { CALENDARS, loadCalendar, sanitizeCalendars } from '../analysis/holidays';
 import type { VizDataReply } from './visuals';
@@ -45,7 +45,10 @@ async function listState(projectId: string): Promise<unknown> {
     const file = loadCalendar(c.code);
     return { code: c.code, name: c.name, note: file ? file.note : '', perYear: file ? Math.round(file.days.length / (file.to - file.from + 1)) : 0 };
   });
-  return { ok: true, events: f.events, calendars: f.calendars, available };
+  // Each event's "when" line and its inclusive day count ride with it, so no
+  // screen does date arithmetic (T2.11) — eventWhen is what Insights write too.
+  const events = f.events.map((e) => ({ ...e, when: eventWhen(e), days: eventDays(e) }));
+  return { ok: true, events, calendars: f.calendars, available };
 }
 
 // ponytail: IPC payloads are untrusted JSON envelopes, sanitized field by field below

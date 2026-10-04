@@ -37,11 +37,13 @@ export function register() {
   // counts a figure; every field is picked, so no origin, path or crop path
   // the summaries carry reaches a browser.
   ipcMain.handle('home:overview', async (_e, { projectId }: { projectId: string }) => {
-    const [ds, an, caps, vis] = await Promise.all([
+    const [ds, an, caps, vis, stands] = await Promise.all([
       datasets.listDatasets(projectId),
       analysis.listAnalyses(projectId),
       history.loadAllSummaries(projectId),
       visuals.listVisuals(projectId),
+      // T2.11: "What stands out", with each card's sparkline — inside this reply, so Home makes no extra call.
+      (require('./insights') as typeof import('./insights')).standsOut(projectId).catch(() => []),
     ]);
     return {
       counts: { datasets: ds.length, dashboards: an.length, captures: caps.length, visuals: vis.length },
@@ -53,6 +55,7 @@ export function register() {
         ...(d.qualityFailing !== undefined ? { qualityFailing: d.qualityFailing } : {}),
       })),
       visuals: vis.slice(0, HOME_VISUALS).map((v) => ({ id: v.id, name: v.name, chartType: v.chartType })),
+      standsOut: stands,
     };
   });
 }

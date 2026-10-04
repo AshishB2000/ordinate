@@ -21,6 +21,7 @@ import { facetControlsData } from './facets/FacetGrid';
 import { liveFilters } from './filters/filterText';
 import { useColorEdits, useColorMap, usePersistDeal } from './format/colorMap';
 import { categoryType, suggestName, type Column } from './model';
+import { engineKind, engineName, switchEncoding } from '../analytics/grids/gridEncoding';
 
 export interface Initial {
   visualId?: string;
@@ -68,6 +69,8 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
   const [overrides, setOverrides] = useState<Overrides>(initial.overrides);
   const [filters, setFilters] = useState<FilterStep[]>(initial.filters);
   const [overlays, setOverlays] = useState<Overlay[]>(initial.analytics as Overlay[]);
+  // "As of" (snapshotAsOf.ts): view state only — never saved, back to Latest on every open.
+  const [asOf, setAsOf] = useState<string | null>(null);
   const { visualId, datasetId } = initial;
   const persist = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(persist.current), []);
@@ -77,8 +80,8 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
   const live = useMemo(() => liveFilters(filters), [filters]);
   const complete = !!eff.pivot || (!!eff.category && eff.values.length > 0);
   const wanted = useMemo(
-    () => (complete ? { projectId, datasetId, encoding: eff, filters: live, ...(overlays.length ? { analytics: overlays } : {}) } : undefined),
-    [complete, projectId, datasetId, eff, live, overlays],
+    () => (complete ? { projectId, datasetId, encoding: eff, filters: live, ...(overlays.length ? { analytics: overlays } : {}), ...(asOf ? { asOf } : {}) } : undefined),
+    [complete, projectId, datasetId, eff, live, overlays, asOf],
   );
   const preview = usePreview(useSettled(wanted, 160));
   const reply = complete ? preview.data : undefined;
@@ -91,7 +94,8 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
   const shape = data?.geo ? (isDate ? 'time_series' : 'categorical') : (reply?.recommendedShape ?? 'unstructured');
   const recommended = fit ? withGeoChartType(eligibleChartTypes(shape, countNumericSeries(fit), (fit.labels || []).length), data?.geo) : [];
   const current = fit && chartType && (recommended.includes(chartType) || chartCanRender(chartType, fit, hasGeo)) ? chartType : (recommended[0] ?? '');
-  const label = initial.name || suggestName(eff, current);
+  const engine = engineKind(current);
+  const label = initial.name || (engine && engineName(engine, eff)) || suggestName(eff, current);
 
   // The project's colours: the category / split columns this chart reads (not a related dataset's).
   const colorMap = useColorMap(projectId);
@@ -107,6 +111,9 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
   const pickType = (t: string) => {
     // A calendar is one cell per DAY: an auto-grained axis would leave a handful of lonely cells.
     if (t === 'calendar' && isDate && enc.grain !== 'day') setEnc({ ...enc, grain: 'day' });
+    // Entering or leaving a pivot / cohort / funnel changes what the encoding IS (vizBuilder's onSelect).
+    const next = switchEncoding(enc, current || chartType, t, columns);
+    if (next !== enc) setEnc(next);
     setChartType(t);
   };
 
@@ -149,7 +156,7 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
   return {
     enc, setEnc, chartType, setChartType, overrides, patch, filters, setFilters, live, overlays, setOverlays,
     eff, isDate, complete, preview, reply, data, fit, hasGeo, recommended, current, label, pickType, save, explain,
-    drawn, scope, measures: measureNames(eff), visualId, datasetId,
+    drawn, scope, measures: measureNames(eff), visualId, datasetId, asOf, setAsOf,
   };
 }
 

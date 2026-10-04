@@ -24,7 +24,7 @@ export const ALL_CHART_TYPE_IDS = [
 /** The builder's "+ More" pool: every chart, the table, every map. */
 export const PICKER_POOL: readonly string[] = [...ALL_CHART_TYPE_IDS, 'table', ...MAP_CHART_TYPES];
 
-/** Drawn as grids by T1.2's renderers, which have not landed: the stage says so. */
+/** Drawn as grids by T1.2's renderers (charts/grids/GridViz), with their own shelves (analytics/grids). */
 export const GRID_TYPES: ReadonlySet<string> = new Set(['pivot', 'cohort', 'event_funnel']);
 
 const SHAPE_CHARTS: Record<string, string[]> = {

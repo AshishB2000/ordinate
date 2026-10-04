@@ -1,0 +1,100 @@
+/* The SQL workbench's own bits on top of the connection workbench's panes
+   (../../connections/Workbench.module.css): the page frame, the dataset
+   rows' slug line, the parameters row and the status colour. Tokens only. */
+
+.page {
+  height: 100%;
+}
+.wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--sp-24) var(--sp-24);
+}
+.body {
+  min-height: 560px;
+}
+.composer {
+  padding: var(--sp-8) 0;
+}
+.dsText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.slug {
+  font-family: var(--font-mono);
+  font-size: var(--t-11);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dsRow {
+  height: auto;
+  min-height: 40px;
+  padding-block: var(--sp-4);
+}
+.noteEnd {
+  text-align: right;
+}
+/* The title block takes the row, so the head's actions stay on its right. */
+.identGrow {
+  flex: 1 1 360px;
+}
+.off {
+  opacity: 0.55;
+  cursor: default;
+}
+.params {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8) var(--sp-16);
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+.paramsLabel {
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.param {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.paramName {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.paramKind {
+  width: 104px;
+}
+.paramValue {
+  width: 160px;
+}
+.statusErr {
+  color: var(--error);
+}
+.code {
+  font-family: var(--font-mono);
+  font-size: var(--t-11);
+}
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

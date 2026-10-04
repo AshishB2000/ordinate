@@ -16,6 +16,7 @@ import { Button } from '../../ui/Button';
 import { useRelated, useVisual, type Encoding } from './api';
 import { Editor, type Initial } from './Editor';
 import { defaultEncoding, fitEncoding, type Column } from './model';
+import { switchEncoding } from '../analytics/grids/gridEncoding';
 
 export default function BuilderPage() {
   const { projectId: routeId, visualId } = useParams();
@@ -100,7 +101,8 @@ function Load({ projectId, visualId, datasetParam }: { projectId: string; visual
     visualId: v?.id,
     name: v?.name ?? '',
     datasetId,
-    encoding: preset ? fitEncoding(preset, columns, rel) : defaultEncoding(columns),
+    // A grid type opened from a door (/analytics) starts with its own shelves filled (T2.11).
+    encoding: switchEncoding(preset ? fitEncoding(preset, columns, rel) : defaultEncoding(columns), 'column', v?.chartType ?? suggested?.chartType ?? '', columns),
     chartType: v?.chartType ?? suggested?.chartType ?? '',
     overrides: v?.overrides ?? {},
     filters: v?.filters ?? [],

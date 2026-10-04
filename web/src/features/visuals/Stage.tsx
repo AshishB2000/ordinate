@@ -109,6 +109,11 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
             label={b.label}
             onChart={setChart}
             onMark={onMark}
+            onPivotSort={(sort) => {
+              const pivot = b.enc.pivot as Record<string, unknown> | undefined;
+              if (pivot) b.setEnc({ ...b.enc, pivot: { ...pivot, sort } });
+            }}
+            exportData={() => sharedData({ projectId, datasetId: b.datasetId, encoding: b.eff, filters: b.live })}
           />
         )}
       </div>

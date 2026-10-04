@@ -81,6 +81,10 @@ export const pages: RouteObject[] = [
   page('/reports/:projectId/:reportId', () => import('../features/reports/builder/ReportBuilder')),
   page('/stories/:projectId/:storyId', () => import('../features/reports/stories/StoryPage')),
   page('/scorecards/:projectId/:scorecardId', () => import('../features/reports/scorecards/ScorecardPage')),
+
+  // Analytics workbenches B (T2.11): SQL over the project's datasets, and its event annotations.
+  page('/analytics/:projectId/sql', () => import('../features/analytics/sql/QueryPage')),
+  page('/analytics/:projectId/events', () => import('../features/analytics/events/EventsPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

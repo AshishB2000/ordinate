@@ -318,7 +318,9 @@ describe('behaviour', () => {
     const sorted = screen.getByRole('button', { name: /descending$/ });
     fireEvent.click(sorted);
     expect(onSort).toHaveBeenLastCalledWith({ by: 1, dir: 'asc' });
-    fireEvent.click(screen.getByRole('button', { name: 'Sort by label' }));
+    const corner = screen.getByRole('button', { name: 'Sort by label' });
+    expect(corner.textContent).toContain('Label'); // a visible word, not an empty button
+    fireEvent.click(corner);
     expect(onSort).toHaveBeenLastCalledWith({ by: 'label', dir: 'asc' });
   });
 

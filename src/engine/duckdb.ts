@@ -326,6 +326,9 @@ export function setRouter(r: Router | null): void {
   router = r;
 }
 
+/** True once async calls go to the org workers — each locked to its org before it answers. */
+export const routed = (): boolean => router !== null;
+
 /** computePool: a port for its thread to the caller's org worker; null on the desktop. */
 export function leasePort(): ReturnType<NonNullable<Router['lease']>> | null {
   return router?.lease ? router.lease() : null;

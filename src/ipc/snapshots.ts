@@ -101,6 +101,8 @@ export function register(deps: BuildDeps): void {
         current: { at: meta.lastRefreshedAt || meta.updatedAt, rowCount: meta.rowCount, columns: meta.columns.map((c) => c.name) },
         items: items.map((s) => ({
           stamp: s.stamp, at: s.at, rowCount: s.rowCount, columns: s.columns.map((c) => c.name), hasSource: Boolean(s.sourcePath),
+          // "vs now": the current row count minus this snapshot's — the app's figure, not the browser's (T2.11).
+          delta: meta.rowCount - s.rowCount,
         })),
       };
     } catch (err: any) {

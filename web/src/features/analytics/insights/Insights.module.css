@@ -1,0 +1,160 @@
+/* Insights (insights.css): the card — a dashboard card's surface, a severity
+   dot, fact chips, a sparkline — on Home's row and in the dataset tab's
+   grouped grid. Tokens only — both themes follow. */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-width: 0;
+  padding: var(--sp-12) var(--sp-12) var(--sp-12) var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+}
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: var(--r-full);
+  background: var(--accent);
+}
+.dotWarn {
+  background: var(--warn);
+}
+.cardTitle {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  font-weight: 600;
+  color: var(--text-strong);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  padding: 2px var(--sp-8);
+  font-size: var(--t-12);
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+}
+.chipK {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.chipV {
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.spark {
+  display: block;
+  width: 100%;
+  height: 56px;
+  overflow: visible;
+}
+.sparkLine {
+  fill: none;
+  stroke: var(--chart-1);
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.sparkBar {
+  fill: var(--chart-1);
+  opacity: 0.85;
+}
+.sparkSk {
+  height: 56px;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  margin-top: auto;
+  padding-top: var(--sp-4);
+}
+
+/* ── The dataset tab ── */
+.tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-24);
+  padding: var(--sp-16) 0;
+}
+.tabEmpty {
+  padding: var(--sp-48) 0;
+}
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.groupH {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin: 0;
+  font-size: var(--t-15);
+  font-weight: 600;
+  letter-spacing: var(--tr-tight);
+  color: var(--text-strong);
+}
+.groupN {
+  padding: 0 var(--sp-8);
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--sp-12);
+}
+
+/* ── Home's row ── */
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.homeH {
+  margin: 0;
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(250px, 1fr);
+  gap: var(--sp-12);
+  overflow-x: auto;
+  padding-bottom: var(--sp-4);
+}
+.cardSk {
+  height: 168px;
+  border-radius: var(--r-lg);
+}

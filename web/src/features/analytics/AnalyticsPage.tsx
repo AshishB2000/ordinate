@@ -37,6 +37,19 @@ const WORKBENCHES: Array<{ kind: string; icon: IconName; name: string; blurb: st
   },
 ];
 
+/**
+ * T2.11's doors on the chosen dataset: the three grid chart types open the
+ * Visuals builder on that type (its own shelves filled), Insights and
+ * Snapshots open the dataset page's tab.
+ */
+const DATASET_DOORS: Array<{ key: string; icon: IconName; name: string; blurb: string; open: string; to: (p: string, d: string) => string; state?: { chartType: string } }> = [
+  { key: 'pivot', icon: 'table', name: 'Pivot table', blurb: 'Rows, columns and values with subtotals, Top N, “show as” and conditional formatting — every total computed from the data, never folded from the cells.', open: 'New pivot table', to: (p, d) => `/visuals/${p}/new?dataset=${d}`, state: { chartType: 'pivot' } },
+  { key: 'cohort', icon: 'grid', name: 'Cohorts', blurb: 'Group members by the period of their first event and see who came back — retention or cumulative value, as a grid or a curve.', open: 'New cohort grid', to: (p, d) => `/visuals/${p}/new?dataset=${d}`, state: { chartType: 'cohort' } },
+  { key: 'event_funnel', icon: 'filter', name: 'Event funnel', blurb: 'Pick the steps from an event column; entities move through them in strict order inside a conversion window, with a breakdown.', open: 'New event funnel', to: (p, d) => `/visuals/${p}/new?dataset=${d}`, state: { chartType: 'event_funnel' } },
+  { key: 'insights', icon: 'zap', name: 'Insights', blurb: 'What the app found on its own: movers, trends, concentration, period changes, outliers — each with the figures behind it.', open: 'Open insights', to: (p, d) => `/data/${p}/${d}?tab=insights` },
+  { key: 'snapshots', icon: 'history', name: 'Snapshots', blurb: 'The table as it was before each refresh: compare any version with now, restore one, or view a chart as of that time.', open: 'Open snapshots', to: (p, d) => `/data/${p}/${d}?tab=snapshots` },
+];
+
 function Hub({ projectId }: { projectId: string }) {
   const list = useDatasets(projectId);
   const [picked, setPicked] = useState<string | null>(null);
@@ -44,7 +57,7 @@ function Hub({ projectId }: { projectId: string }) {
   const id = picked && datasets.some((d) => d.id === picked) ? picked : (datasets[0]?.id ?? null);
   const chosen = datasets.find((d) => d.id === id);
   return (
-    <Page title="Analytics" sub="Every statistic, driver, scenario and segment is computed by Ordinate from your data — the Assistant only puts them into words.">
+    <Page title="Analytics" sub="Every statistic, driver, scenario, segment, pivot and insight is computed by Ordinate from your data — the Assistant only puts them into words.">
       {list.isPending ? (
         <SkeletonRows rows={3} label="Loading datasets" />
       ) : list.isError ? (
@@ -85,6 +98,19 @@ function Hub({ projectId }: { projectId: string }) {
                 </Link>
               </li>
             ))}
+            {id &&
+              DATASET_DOORS.map((w) => (
+                <li key={w.key} className={s.hubCard}>
+                  <span className={s.hubIcon} aria-hidden="true">
+                    <Icon name={w.icon} size={20} />
+                  </span>
+                  <h2 className={s.hubName}>{w.name}</h2>
+                  <p className={s.hubBlurb}>{w.blurb}</p>
+                  <Link className={buttonClass('secondary', 'sm')} to={w.to(projectId, id)} state={w.state}>
+                    {w.open}
+                  </Link>
+                </li>
+              ))}
           </ul>
         </>
       )}
@@ -97,6 +123,26 @@ function Hub({ projectId }: { projectId: string }) {
           <p className={s.hubBlurb}>What-if: move a price, a volume or a metric and see every figure that depends on it — side by side with the baseline.</p>
           <Link className={buttonClass('secondary', 'sm')} to={`/analytics/scenarios/${projectId}`}>
             Open scenarios
+          </Link>
+        </li>
+        <li className={s.hubCard}>
+          <span className={s.hubIcon} aria-hidden="true">
+            <Icon name="code" size={20} />
+          </span>
+          <h2 className={s.hubName}>SQL query</h2>
+          <p className={s.hubBlurb}>Every dataset in this project is a table: join, filter and aggregate them in SQL, with typed [[parameters]], and save the result as a dataset that stays up to date.</p>
+          <Link className={buttonClass('secondary', 'sm')} to={`/analytics/${projectId}/sql`}>
+            Open SQL
+          </Link>
+        </li>
+        <li className={s.hubCard}>
+          <span className={s.hubIcon} aria-hidden="true">
+            <Icon name="calendar" size={20} />
+          </span>
+          <h2 className={s.hubName}>Events</h2>
+          <p className={s.hubBlurb}>Launches, campaigns, incidents and holidays: every chart with a date axis marks them, and findings that change during one name it.</p>
+          <Link className={buttonClass('secondary', 'sm')} to={`/analytics/${projectId}/events`}>
+            Open events
           </Link>
         </li>
       </ul>

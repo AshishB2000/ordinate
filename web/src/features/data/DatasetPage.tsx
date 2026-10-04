@@ -1,7 +1,8 @@
 // /data/:projectId/:datasetId — one dataset (dsExplorer.ts, dsLineage.ts,
 // dataSection.ts's tabs): its identity header — source, tags, freshness,
-// schedule, what it is built from and what uses it — then three tabs: the
-// rows (Data), the checks (Quality) and the column docs (Columns). Tab,
+// schedule, what it is built from and what uses it — then the tabs: the
+// rows (Data), the checks (Quality), the column docs (Columns), what the app
+// found (Insights) and the versions kept on refresh (Snapshots, T2.11). Tab,
 // profiled column and grid filter live in the URL, so a link reopens them.
 
 import { useState } from 'react';
@@ -23,9 +24,11 @@ import { formatNumber, freshness, NOT_REFRESHABLE, rowsText } from './format';
 import { LineageDrawer, usedInText } from './LineageDrawer';
 import { QualityTab } from './QualityTab';
 import { TagChips, tagsOf } from './tags';
+import { InsightsTab } from '../analytics/insights/InsightsTab';
+import { SnapshotsTab } from '../analytics/snapshots/SnapshotsTab';
 import s from './Data.module.css';
 
-const TABS = ['data', 'quality', 'columns'] as const;
+const TABS = ['data', 'quality', 'columns', 'insights', 'snapshots'] as const;
 type TabId = (typeof TABS)[number];
 
 /** Reads from / Used by — the datasets this one is built from, and the SQL datasets built on it. */
@@ -133,6 +136,13 @@ function Header({ projectId, id, name, rowCount, columnCount }: { projectId: str
             <Icon name="sliders" />
             <span>Prepare</span>
           </Link>
+          {/* A SQL dataset's own statement, in the SQL workbench (queryTab.ts qtOpenWithSql, T2.11). */}
+          {d?.originKind === 'sql' && (
+            <Link className={buttonClass('secondary', 'sm')} to={`/analytics/${projectId}/sql?dataset=${id}`}>
+              <Icon name="code" />
+              <span>View query</span>
+            </Link>
+          )}
           <Link className={buttonClass('primary', 'sm')} to={`/visuals?project=${projectId}&datasetId=${id}`}>
             New visual
           </Link>
@@ -217,6 +227,13 @@ export default function DatasetPage() {
           <Tab value="columns" icon="columns">
             Columns
           </Tab>
+          {/* T2.11: what the app found in this table, and the versions kept on refresh. */}
+          <Tab value="insights" icon="zap">
+            Insights
+          </Tab>
+          <Tab value="snapshots" icon="history">
+            Snapshots
+          </Tab>
         </TabList>
         <TabPanel value="data">
           <DataTab projectId={projectId} datasetId={datasetId} header={header} />
@@ -226,6 +243,12 @@ export default function DatasetPage() {
         </TabPanel>
         <TabPanel value="columns">
           <ColumnsTab projectId={projectId} datasetId={datasetId} header={header} />
+        </TabPanel>
+        <TabPanel value="insights">
+          <InsightsTab projectId={projectId} datasetId={datasetId} />
+        </TabPanel>
+        <TabPanel value="snapshots">
+          <SnapshotsTab projectId={projectId} datasetId={datasetId} />
         </TabPanel>
       </Tabs>
     </div>
