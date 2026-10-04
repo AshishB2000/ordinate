@@ -14,3 +14,4 @@ web/dist
 web/e2e/__screens__
 deploy/.env
 **/.DS_Store
+deploy/helm

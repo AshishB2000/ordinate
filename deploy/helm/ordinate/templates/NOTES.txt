@@ -1,0 +1,20 @@
+Ordinate {{ .Chart.AppVersion }}: {{ include "ordinate.fullname" . }} in {{ .Release.Namespace }}.
+
+Secrets come from the Secret "{{ .Values.existingSecret | default (include "ordinate.fullname" .) }}" (DATABASE_URL, ORDINATE_MASTER_KEY, ...).
+{{- if not (hasPrefix "s3://" (toString (.Values.config.STORAGE_URL | default ""))) }}
+{{- if .Values.data.existingClaim }}
+
+Tables live on the volume "{{ .Values.data.existingClaim }}": more than one replica needs it ReadWriteMany.
+{{- else }}
+
+WARNING: config.STORAGE_URL is not s3:// and data.existingClaim is empty, so datasets are written
+to an emptyDir and LOST when a pod restarts. Set STORAGE_URL=s3://bucket/prefix or name a claim.
+{{- end }}
+{{- end }}
+{{- if .Values.ingress.enabled }}
+
+Open: http{{ if .Values.ingress.tls }}s{{ end }}://{{ (first .Values.ingress.hosts).host }}/
+{{- else }}
+
+No Ingress. To look around: kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ordinate.fullname" . }} {{ .Values.service.port }}
+{{- end }}

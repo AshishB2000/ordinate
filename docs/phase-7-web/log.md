@@ -1078,3 +1078,30 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   Screens `analyticsB-*-{light,dark}.png` reviewed.
 - **Deferred:** the dashboard "As of" picker and metric-history chart (T2.9's screens); Home "Alert me"
   (alerts, T2.9).
+
+## 2026-10-04 — T7.2 Helm chart
+
+- **Chart** `deploy/helm/ordinate`: Deployment (`maxUnavailable: 0`, `maxSurge: 1`, 5 s `preStop`), app Service +
+  a separate `-metrics` Service (never on the Ingress), Ingress, HPA (autoscaling/v2), PDB (only when > 1
+  pod), ServiceAccount with an IRSA annotation, pre-install/pre-upgrade migration Job
+  (`src/server/db/migrateMain.ts`), resources, optional NetworkPolicy (egress allowlist, off by default). Every
+  value documented in `values.yaml`. Secrets only via `envFrom: secretRef` (`existingSecret`); a secret name
+  under `config` fails the render.
+- **Migrations, measured:** the server already migrates on boot in one transaction under
+  `pg_advisory_xact_lock`. Hook off, 3 pods booting on a fresh DB: one applied all 8, two waited 178 / 435 ms
+  and applied none. With the hook, the Job applies 8 in 163 ms and pods log `applied: []` in 34–63 ms. A failed
+  hook fails the upgrade before any pod rolls → migrations must be additive (documented).
+- **Done when** (kind v0.33, `deploy/helm/ci/kind-e2e.sh`, same script in the new CI `helm` job):
+  `helm lint --strict` 0 failed; server dry-run accepts all 9 kinds; `helm install --wait` 12.3 s; compose.e2e
+  through a port-forward 21.1 s, zero console errors, ≤ 16 RPCs/page; `helm upgrade` hook Job 3 s, revision
+  1 → 2, **`/readyz` 267/267 OK over 27 s** (fresh connection through the Service every 100 ms). PDB with 2
+  replicas refused the second eviction. NetworkPolicy on: DNS/Postgres/MinIO reachable, Kubernetes API blocked
+  (kindnet enforces), e2e passes again (29.4 s). `helm template` with every option on: 0 secret matches.
+- **Gates (agent, orchestrator's gates script):** `npm test` 282/282 without DB, with DB and CI env; Vitest
+  594/594; e2e 50 + compose skipped; lint 0 (two earlier runs each had one load flake — `backups`,
+  `datasetPageRpc` native abort — passing alone). Orchestrator after rebasing onto develop af2cbfd: helm lint,
+  secret grep and secret-name refusal re-checked; build, lint, `server-boot`, `file-size`, `promMetrics` green.
+- **Open:** the CI `helm` job's first run is also the first amd64 kind run; IRSA untested (no EKS); a Secret
+  change needs `kubectl rollout restart`; with NetworkPolicy on, every connector host and the IdP must be
+  allowlisted; `DUCKDB_THREADS` defaults to node cores, not the CPU limit (documented); `chainguard/minio:latest`
+  unpinned.

@@ -445,7 +445,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   Bound to a separate `METRICS_PORT` so it is never exposed through the ingress by accident.
 - **Done when:** `docker compose up` on a clean machine → sign in → import CSV → chart → dashboard.
 
-### [ ] T7.2 Helm chart
+### [x] T7.2 Helm chart
 - **Branch** `web/t7.2-helm` · **Depends** T7.1
 - `deploy/helm/ordinate`: Deployment, Service, Ingress, HPA, PDB, ServiceAccount (IRSA annotation
   for S3), migration Job (pre-upgrade hook), Secret refs, resource requests/limits, optional
