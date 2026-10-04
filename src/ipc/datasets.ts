@@ -1,5 +1,4 @@
 import { ipcMain } from './bus';
-import { serverDataDir } from '../server/context';
 // One parser and one byte ceiling, shared with the refresh service — see
 // src/fileImport.ts for why they moved out of this file.
 import * as importIpc from './datasetImport';
@@ -295,13 +294,9 @@ export function register() {
     }
   });
 
-  // A capture dataset's summary carries its screenshot's crop PATH, which the
-  // desktop list draws through file://. A browser can do nothing with a server
-  // path and must never learn one: on the server it becomes a yes/no.
+  // On the server a capture summary carries `hasImage`, never its crop path (datasetSummary.ts).
   ipcMain.handle('dataset:list', async (_e, { projectId }: any = {}) => {
-    const list = await datasets.listDatasets(projectId);
-    if (serverDataDir() === null) return list;
-    return list.map(({ capture, ...d }) => (capture ? { ...d, capture: { hasImage: !!capture.cropPath } } : d));
+    return datasets.listDatasets(projectId);
   });
 
   ipcMain.handle('dataset:get', async (_e, { projectId, id }: any = {}) => datasets.getDataset(projectId, id));

@@ -245,6 +245,11 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
   const capRow = (listed.body as { id: string; capture?: Record<string, unknown> }[]).find((d) => d.id === capDsId);
   ok('dataset:list: a capture dataset says it has an image, never the crop’s server path',
     capRow?.capture?.hasImage === true && !('cropPath' in (capRow.capture ?? {})) && !JSON.stringify(listed.body).includes(DATA), JSON.stringify(capRow));
+  // The strip is in the summary itself, so recent, search, the catalog and every
+  // other caller of listDatasets get it too — not just this one channel.
+  const summaries = await context.runInContext(as('org-a'), 'h', () => datasets.listDatasets(PA));
+  ok('every listDatasets caller on the server: the summary itself carries no crop path',
+    !JSON.stringify(summaries).includes(DATA) && summaries.some((d) => d.capture && 'hasImage' in d.capture), JSON.stringify(summaries.find((d) => d.id === capDsId)));
   const crossLink = await save('org-a', PA2, { inline: { name: 'x', columns: drafted.body.columns, rows: edited } }, { sourceKind: 'capture', origin: { kind: 'capture', captureId: capId } });
   const crossDs = crossLink.body?.dataset?.id ? await getDs('org-a', PA2, crossLink.body.dataset.id) : null;
   const threadAfter = await context.runInContext(as('org-a'), 'h', () => history.loadThread(capId));
