@@ -1050,3 +1050,31 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   shared with the desktop parser, a behaviour change — kept in R1); `notebook/exportMd.ts` still trims with
   `/\s+$/`; the keyword job on large text has no warm-up on the server (progress bar skips that phase);
   `test-publishSite` can flake when its random privacy token contains "000" (follow-up task suggested).
+
+## 2026-10-04 — T2.11 Analytics workbenches B
+
+- **Built:** pivot shelves (rows/columns/values, roll-ups, aggregation / show-as / format / use-instead, totals,
+  sort, Top N, conditional formatting, "Use a metric…" through `metric:list` + `metric:values`), cohort and
+  event-funnel shelves; ChartStage now draws T1.2's `GridViz`. Dataset Snapshots tab (keep, compare with row
+  matching, restore) and the builder's "As of"; Events at `/analytics/:p/events` (kinds, holiday calendars,
+  CSV import); Insights (dataset tab, Home "What stands out" carried in `home:overview` so Home stays at 25
+  RPCs); SQL workbench at `/analytics/:p/sql` (dataset tree, highlight, completions, typed `[[params]]`,
+  explain, save as a dataset with a `sql` origin, "View query").
+- **Server:** `src/api/analyticsB.ts`, 17 contracts (284 total); role matrix over HTTP, wrong=0, leaks=0. "vs now",
+  event days and sparklines are server figures (`Object.is` against the reference). **Bug found and fixed:**
+  in server mode `sqlDatasets.compile` re-ran the process-wide `SET allowed_directories` on an already-locked
+  org worker, so SQL never ran over HTTP ("SQL is off"); it now relies on the org worker's own lock. Gate
+  refusals (`read_csv('/etc/passwd')`, `glob`, `read_text`, `../`, other orgs' Parquet, other projects'
+  names) proven twice — once through the gate, once with the gate sabotaged (the worker lock alone).
+  `composeSave` now derives an sql origin's `deps` on the server (`sqlDeps`); a forged list is not stored and
+  a refused statement is not saved.
+- **Also:** T1.2's empty, zero-size corner "Sort by label" button now has a visible label and a 24×56 px hit
+  area — fixed in the web grid and in the desktop `pivotRender.ts`/`hub.css`, so the parity test still
+  compares like with like.
+- **Measured:** RPCs per load — hub 4, pivot builder 22, cohort 9, funnel 15, snapshots 11–14, events 5–11,
+  insights 7–11, SQL 11 (3 via "View query"); initial JS 179.2 KB gzip. Gates (orchestrator, on f287c0b over
+  develop 88f020b): `npm test` 284/284 in CI env, without/with DB 283 + `duckdb` / `backups` passing alone;
+  Vitest 613/613 on re-run (5 timeouts under machine load, pass alone); e2e 57 + compose skipped; lint 0.
+  Screens `analyticsB-*-{light,dark}.png` reviewed.
+- **Deferred:** the dashboard "As of" picker and metric-history chart (T2.9's screens); Home "Alert me"
+  (alerts, T2.9).
