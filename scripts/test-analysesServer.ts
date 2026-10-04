@@ -48,6 +48,7 @@ const visuals: typeof import('../src/analysis/visuals') = require('../src/analys
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const usageMod: typeof import('../src/analysis/metricUsage') = require('../src/analysis/metricUsage');
+const dashData: typeof import('../src/publish/dashboardData') = require('../src/publish/dashboardData');
 
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-analyses-'));
 type Identity = import('../src/server/context').Identity;
@@ -244,8 +245,24 @@ async function partOne(): Promise<void> {
     ok('edge: analysis:list / analysis:get stay uncontracted (404)', (await call('analysis:list', { projectId: pid })).status === 404
       && (await call('analysis:get', { projectId: pid, id: s.aid })).status === 404);
 
+    // ── Publish copies BY VALUE (docs/analysis/00-model.md §0, §3) ─────────
+    // The single-artifact model has no `analysis:publish`: what leaves the app
+    // is a snapshot the publisher BUILDS from the dashboard (src/publish).
+    ok('publish: no analysis:publish channel (404)', (await call('analysis:publish', { projectId: pid, id: s.aid })).status === 404);
+    const build = () => context.runInContext(dev, 'publish', () => dashData.buildDashboard(pid, s.aid, 1));
+    const snap = await build();
+    const before = JSON.stringify(snap);
+    const live = (await call('analysis:open', { projectId: pid, id: s.aid })).body.analysis;
+    const edited = live.sheets.map((sh: { cards: Array<{ heading?: string }> }) => ({ ...sh, cards: sh.cards.map((c) => (c.heading === 'Hello' ? { ...c, heading: 'Changed' } : c)) }));
+    await call('analysis:update', { projectId: pid, id: s.aid, sheets: edited });
+    await context.runInContext(dev, 'edit', () => visuals.updateVisual(pid, s.v1, { chartType: 'line' }));
+    ok('publish: a published copy holds its own values (text and chart type)', before.includes('"heading":"Hello"') && before.includes('"chartType":"bar"'), before.slice(0, 300));
+    ok('publish: editing the dashboard and its visual after publishing leaves the copy untouched', JSON.stringify(snap) === before);
+    const again = JSON.stringify(await build());
+    ok('publish: only a re-publish carries the edits', again.includes('"heading":"Changed"') && !again.includes('"heading":"Hello"') && !again.includes('"chartType":"bar"'), again.slice(0, 300));
+
     // Metric CRUD.
-    const ms = await call('metric:save', { projectId: pid, input: { name: 'Orders', datasetId: s.ds, definition: { column: 'amount', aggregation: 'count' } } });
+    const ms =await call('metric:save', { projectId: pid, input: { name: 'Orders', datasetId: s.ds, definition: { column: 'amount', aggregation: 'count' } } });
     ok('metric:save: ok', ms.body.ok && ms.body.metric.name === 'Orders', JSON.stringify(ms.body));
     const dup = await call('metric:save', { projectId: pid, input: { name: 'orders', datasetId: s.ds, definition: { column: 'amount', aggregation: 'sum' } } });
     ok('metric:save: a duplicate name is refused with a reason', dup.body.ok === false && /already exists/.test(dup.body.error));
