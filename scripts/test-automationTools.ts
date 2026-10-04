@@ -58,6 +58,11 @@ const ins: typeof import('../src/ipc/insights') = require('../src/ipc/insights')
 const reg: typeof import('../src/automation/registry') = require('../src/automation/registry');
 const cli: typeof import('../src/automation/cli') = require('../src/automation/cli');
 
+// The search index is written beside the Parquet on a 1.5 s timer after the
+// seed — inside the creators' before/after window when the machine is slow,
+// which adds `<id>.search.json` files no creator wrote. A cache, not a dataset file.
+(require('../src/engine/dataSearchResident') as { scheduleIndex: () => void }).scheduleIndex = () => undefined;
+
 type Transport = import('../src/automation/registry').Transport;
 
 async function call(tool: string, args: Record<string, unknown>, transport: Transport = 'stdio'): Promise<any> {
