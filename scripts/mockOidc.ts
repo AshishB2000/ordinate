@@ -44,7 +44,7 @@ const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeA
 
 function page(params: URLSearchParams): string {
   const hidden = [...params].map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`).join('');
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Mock IdP</title></head><body>
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Mock IdP</title><link rel="icon" href="data:,"></head><body>
 <h1>Mock identity provider</h1>
 <form method="post" action="/authorize">${hidden}
 <label>Email <input name="email" type="email" autocomplete="off"></label>
