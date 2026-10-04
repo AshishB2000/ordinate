@@ -1,0 +1,509 @@
+/* The builder — hub.css `.viz-builder*`: a workbench filling the page. A header
+   row, then a fixed controls rail that scrolls on its own beside a stage (the
+   chart-type chips, the chart's controls, the chart) that takes the rest. */
+
+.builder {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 520px;
+  padding: var(--sp-24);
+  display: flex;
+  flex-direction: column;
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  flex: 0 0 auto;
+  padding: var(--sp-12) var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+.name {
+  margin: 0;
+  font-size: var(--t-15);
+  letter-spacing: var(--tr-tight);
+  line-height: var(--lh-snug);
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.headActions {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-8);
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.dataset {
+  min-width: 200px;
+}
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  overflow: hidden;
+}
+.rail {
+  flex: 0 0 300px;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--sp-16);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-16);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+@media (max-width: 900px) {
+  .builder {
+    padding: var(--sp-16);
+    height: auto;
+  }
+  .head {
+    flex-wrap: wrap;
+  }
+  .body {
+    flex-direction: column;
+  }
+  .rail {
+    flex-basis: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .stage {
+    min-height: 460px;
+  }
+}
+
+/* ── The encoding form: label above field, each block a column ── */
+.encoding {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-4);
+}
+.label {
+  font-size: var(--t-12);
+  font-weight: 500;
+  color: var(--text);
+}
+/* The form's labels read as section heads (hub.css `.viz-encoding .viz-field-label`). */
+.encoding label,
+.encoding .label {
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.note {
+  margin: 0;
+  font-size: var(--t-11);
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+.valueRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.grow {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.agg {
+  flex: 0 0 104px;
+}
+.metric {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: var(--sp-4) var(--sp-8);
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-full);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* "+ Add measure" reads as an empty SLOT, not a button: full width, dashed. */
+.addSlot {
+  width: 100%;
+  background: transparent !important;
+  border-style: dashed !important;
+  color: var(--muted) !important;
+}
+.addSlot:hover:not(:disabled) {
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+}
+.mapFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  margin-top: var(--sp-4);
+  padding: var(--sp-8) 0 0 var(--sp-12);
+  border-left: 2px solid var(--border);
+}
+.hiddenFile {
+  display: none;
+}
+.warnings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin-top: auto;
+  padding-top: var(--sp-12);
+}
+.warning {
+  font-size: var(--t-12);
+  border-radius: var(--r-md);
+  padding: var(--sp-8);
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--warn) 22%, transparent);
+  color: var(--warn);
+}
+
+/* ── The stage head: chips left, the chart's controls right ── */
+.stageHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  flex: 0 0 auto;
+}
+.slot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.chipBtn,
+.more,
+.moreBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 500;
+  line-height: 1.4;
+  padding: var(--sp-4) var(--sp-12);
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+.chipBtn:hover,
+.moreBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.chipBtn:focus-visible,
+.more:focus-visible,
+.moreBtn:focus-visible,
+.pill:focus-visible,
+.swatch:focus-visible,
+.menuItem:focus-visible,
+.customHead:focus-visible,
+.moreRemove:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.active,
+.active:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.more {
+  font-weight: 600;
+  border: 1px dashed var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.more:hover {
+  border-color: var(--accent);
+}
+.morePanel {
+  max-width: 340px;
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.moreLabel {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 2px var(--sp-4);
+}
+.moreGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.moreItem {
+  display: inline-flex;
+  align-items: center;
+}
+.moreBtn {
+  padding: var(--sp-4) var(--sp-8);
+  color: var(--text);
+}
+.isOther .moreBtn {
+  color: var(--muted);
+  border-style: dashed;
+}
+.isSelected .moreBtn {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.unfit {
+  opacity: 0.5;
+}
+.moreRemove {
+  margin-left: 2px;
+  width: 20px;
+  height: 20px;
+  font: inherit;
+  font-size: var(--t-13);
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-full);
+  cursor: pointer;
+}
+.moreRemove:hover {
+  color: var(--error);
+  background: var(--error-soft);
+}
+
+/* ── The chart's controls: Values ▾ / Periods ▾ pills, ⋯ ── */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: var(--sp-4) var(--sp-12);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pill:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.pillOn,
+.pillOn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 180px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 240px;
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-8);
+  font: inherit;
+  font-size: var(--t-13);
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.menuItem:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.menuItem:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.sep {
+  height: 1px;
+  margin: var(--sp-4) 0;
+  background: var(--border);
+}
+.customHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-8);
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.custom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-4) var(--sp-8) var(--sp-8);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.swatches {
+  display: flex;
+  gap: var(--sp-8);
+  flex-wrap: wrap;
+}
+.swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-full);
+  background: var(--sw-color);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+}
+.swatch[aria-pressed='true'] {
+  box-shadow: 0 0 0 2px var(--text-strong);
+}
+
+/* ── The chart area ── */
+.sample {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.area {
+  flex: 1 1 auto;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--sp-16);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.loading {
+  opacity: 0.6;
+}
+.canvas {
+  flex: 1 1 auto;
+  min-height: 280px;
+}
+.map {
+  flex: 1 1 auto;
+  min-height: 320px;
+}
+.fallback {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-8);
+  padding: var(--sp-24) 0;
+  font-size: var(--t-13);
+  color: var(--muted);
+  text-align: center;
+}
+.fallbackGlyph {
+  display: flex;
+  opacity: 0.7;
+}
+.gridNote {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.caption {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin: var(--sp-8) 0 0;
+  font-size: var(--t-12);
+  line-height: 1.4;
+  color: var(--text);
+}
+.captionStrong span:last-child {
+  font-weight: 600;
+}
+.captionKey {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 0;
+  border-top: 2px dashed var(--chart-1, var(--accent));
+  opacity: 0.5;
+}

@@ -373,4 +373,6 @@ export function registerHandlers(): void {
   for (const mod of ['../ipc/datasetCompose', '../ipc/input', '../ipc/captureDataset']) {
     (require(mod) as { register: () => void }).register();
   }
+  // The Visuals screen (T2.7): the builder's sampled preview and the gallery's thumbnails.
+  for (const mod of ['../ipc/vizSample', '../ipc/visualsServer']) (require(mod) as { register: () => void }).register();
 }

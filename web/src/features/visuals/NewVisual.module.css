@@ -1,0 +1,159 @@
+/* "+ New visual" (hub.css `.vn-*`): the dataset list, the two doors, and the
+   drawn proposals. */
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.sub {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  max-height: 320px;
+  overflow: auto;
+  padding: 2px;
+}
+.row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: var(--sp-8) var(--sp-12);
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.row:hover,
+.row[aria-checked='true'] {
+  border-color: var(--accent);
+}
+.row:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.rowName {
+  font-size: var(--t-13);
+  font-weight: 500;
+  color: var(--text-strong);
+}
+.rowMeta {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.none {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  padding: var(--sp-24);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-sm);
+}
+.choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-12);
+}
+@media (max-width: 640px) {
+  .choices {
+    grid-template-columns: 1fr;
+  }
+}
+.choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.choice {
+  align-items: stretch;
+}
+.choice > button {
+  align-self: flex-start;
+}
+.disabled {
+  opacity: 0.75;
+}
+.choiceH {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.note {
+  margin: 0;
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--sp-8);
+}
+.option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  padding: var(--sp-8);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.broken {
+  opacity: 0.7;
+}
+.art {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.art > :global(*) {
+  width: 100%;
+  height: 100%;
+}
+.artSkel {
+  width: 100%;
+  height: 150px;
+}
+.whySkel {
+  width: 70%;
+  height: 12px;
+}
+.optionNote {
+  display: inline-flex !important;
+  width: auto !important;
+  height: auto !important;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.why {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--text);
+}
+.actions {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: center;
+}

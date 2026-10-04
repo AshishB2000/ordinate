@@ -51,6 +51,10 @@ export const pages: RouteObject[] = [
   page('/data/input/:projectId/:datasetId', () => import('../features/import/InputTablePage')),
   // The Data section (T2.3): one project's datasets / captures / catalog / relationships.
   page('/data/:projectId', () => import('../features/data/DataSection')),
+  // Visuals (T2.7): one project's gallery, and the builder — new on a dataset, or a saved visual.
+  page('/visuals/:projectId', () => import('../features/visuals/VisualsPage')),
+  page('/visuals/:projectId/new', () => import('../features/visuals/BuilderPage')),
+  page('/visuals/:projectId/:visualId', () => import('../features/visuals/BuilderPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

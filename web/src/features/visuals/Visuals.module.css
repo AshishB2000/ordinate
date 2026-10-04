@@ -1,0 +1,341 @@
+/* The Visuals gallery — hub.css "Gallery: the saved visuals as cards", the
+   chart-glyph motif, the empty state and "Start from a dataset", and the
+   "+ New visual" dialog. Tokens only, so both themes follow. */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  flex-wrap: wrap;
+}
+.project {
+  min-width: 220px;
+}
+.spacer {
+  flex: 1;
+}
+.count {
+  font-size: var(--t-11);
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+  padding: 2px var(--sp-8);
+  white-space: nowrap;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--sp-12);
+}
+
+/* ── A card: one button (the body) with the star and ⋯ over its tile ── */
+.card {
+  position: relative;
+}
+.body {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  text-align: left;
+  padding: 0 0 var(--sp-16);
+  background: var(--surface-1, var(--surface));
+  border: 1px solid var(--border-hairline, var(--border));
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  overflow: hidden;
+  font: inherit;
+  color: inherit;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.body:hover {
+  background: var(--surface-float, var(--surface));
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-md);
+  transform: translateY(-1px);
+}
+.body:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .body:hover {
+    transform: none;
+  }
+}
+.fav .body {
+  border-color: var(--accent-line);
+}
+.tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 10;
+  margin-bottom: var(--sp-12);
+  background: linear-gradient(160deg, var(--surface-2), var(--inset));
+  border-bottom: 1px solid var(--border-hairline, var(--border));
+  color: var(--viz-accent, var(--accent));
+}
+.glyph {
+  display: flex;
+}
+.glyph svg {
+  width: 40px;
+  height: 40px;
+}
+.drawn .glyph {
+  display: none;
+}
+.thumb {
+  position: absolute;
+  inset: 10px 12px 8px;
+  pointer-events: none;
+}
+.thumb canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+.thumbSkel {
+  position: absolute;
+  inset: 10px 12px 8px;
+}
+.name {
+  font-size: var(--t-13);
+  font-weight: 500;
+  color: var(--text-strong);
+  padding: 0 var(--sp-16);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.meta {
+  font-size: var(--t-12);
+  color: var(--muted);
+  padding: 0 var(--sp-16);
+}
+.chip {
+  position: absolute;
+  top: var(--sp-8);
+  width: var(--ctl-sm, 28px);
+  height: var(--ctl-sm, 28px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+.star {
+  left: var(--sp-8);
+}
+.menuBtn {
+  right: var(--sp-8);
+}
+.card:hover .chip,
+.card:focus-within .chip,
+.chip:focus-visible,
+.chip[data-state='open'] {
+  opacity: 1;
+}
+.chip:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.star[aria-pressed='true'] {
+  opacity: 1;
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+.chip:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.cardSkel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding-bottom: var(--sp-16);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.cardSkelTile {
+  aspect-ratio: 16 / 10;
+  border-radius: 0;
+}
+.cardSkelLine {
+  height: 12px;
+  margin: 0 var(--sp-16);
+  width: 60%;
+}
+.cardSkelLine + .cardSkelLine {
+  width: 40%;
+}
+
+/* ── The chart-glyph motif: real chart glyphs, overlapped into one cluster ── */
+.art {
+  display: flex;
+  align-items: center;
+}
+.artGlyph {
+  display: flex;
+  color: var(--accent-line);
+}
+.artGlyph + .artGlyph {
+  margin-left: -6px;
+}
+.artGlyph svg {
+  width: 28px;
+  height: 28px;
+}
+.artFocus {
+  color: var(--accent);
+}
+
+/* ── Empty state: the card, then "Start from a dataset" ── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-8);
+  min-height: 220px;
+  padding: var(--sp-32) var(--sp-24);
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.emptyH {
+  margin: var(--sp-8) 0 0;
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.emptyP {
+  margin: 0;
+  max-width: 520px;
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.emptyActions {
+  display: flex;
+  gap: var(--sp-8);
+  margin-top: var(--sp-8);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.hint {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--text-dim);
+}
+.start {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.startHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-12);
+}
+.startH {
+  margin: 0;
+  font-size: var(--t-12);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.startGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--sp-12);
+}
+.dsCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  text-align: left;
+  padding: var(--sp-12);
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.dsCard:hover {
+  border-color: var(--border-2);
+  box-shadow: var(--shadow-md);
+}
+.dsCard:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.dsName {
+  max-width: 100%;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dsMeta {
+  font-size: var(--t-12);
+  color: var(--text-dim);
+}
+.dsKind {
+  margin-top: 2px;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+  padding: 2px var(--sp-8);
+}
+.noData {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  padding: var(--sp-16);
+  background: var(--surface);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-lg);
+}
+.noDataH {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.noDataP {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
