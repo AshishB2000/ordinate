@@ -822,3 +822,26 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   chunk 25 KB; 145 contracts, 0 unresolved.
 - **Chain gates (on develop 40abbdc + T2.3):** `npm test` 273/273 with and without DB; Vitest 468/468;
   e2e 33/33 (DB), 29 + 2 skip; lint 0; file sizes pass. Agent: `smoke-viz-builder`/`-thumbs` pass.
+
+## 2026-10-04 — T2.6 Prepare and pipelines
+
+- **Prepare** at `/data/:projectId/:datasetId/prepare` (a "Prepare" button on the dataset page): step
+  rail on a splitter beside the prepared rows; all 25 step types; `?add=<type>&column=<name>` opens a
+  prefilled editor (T2.3's profile links to it). Formula editor validates through the server parser
+  (server-coloured tokens, "did you mean", 8-row preview equal to the engine with `Object.is`) — no
+  client-side evaluation. **Pipelines** at `/pipelines` (nav), DAG, cron editor, run history, live over SSE.
+- **Server:** step-edit replies carry no rows, source or origin (`src/ipc/stepReply.ts`); every printed
+  figure is the server's (keyword shares, text-profile bars, spatial match %, parse-dates "of N",
+  pipeline summaries, run tallies). Origin leak fixed: `pipelines:get` node ids held a file path or a URL
+  with its key → masked `source:url:#<hash>`, mapped back for run/pause (`src/app/pipelineIds.ts`).
+  `pipelines:changed` per org over SSE; live-run map per org.
+- **Column fix (T2.3's open item):** rename/retype resolves by name against the shown columns
+  (`src/data/columnEdit.ts`): a source column edits the source by name, or becomes a `rename_column` step
+  when a step reads it; a step-made column gets a `rename_column` step; retyping one is refused.
+  `test-columnEdit` 15 (negative control: the old by-position rule hits the wrong column).
+- **Measured:** RPCs Prepare 13–16, Pipelines 9–11; chunks 22.3 / 8.0 KB gzip; 169 contracts, 0 unresolved.
+- **Chain gates (on T2.7):** `npm test` 275/275 with and without DB; Vitest 486/486; e2e 35/35 (DB; one
+  connections timeout in the first run, see the flake investigation), 31 + 2 skip; lint 0.
+- **Open:** `pipelines:run` waits for the whole run in one RPC (> 60 s → 504) — should become a job;
+  report/alert/publish nodes still fail on the server (T5.4 gap); desktop `smoke-round6` word-cloud label
+  check fails (outside this diff; being fixed separately).
