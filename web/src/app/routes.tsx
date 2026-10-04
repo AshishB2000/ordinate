@@ -77,6 +77,10 @@ export const pages: RouteObject[] = [
   page('/analyses/:projectId/:analysisId', () => import('../features/analyses/AuthoringPage')),
   // The project's metrics (T2.8) — the Metrics tab of Data on the desktop.
   page('/data/metrics', () => import('../features/analyses/metrics/MetricsPage')),
+  // Reports, stories, scorecards (T2.13): the report builder, a story, a scorecard. The tabs are /reports.
+  page('/reports/:projectId/:reportId', () => import('../features/reports/builder/ReportBuilder')),
+  page('/stories/:projectId/:storyId', () => import('../features/reports/stories/StoryPage')),
+  page('/scorecards/:projectId/:scorecardId', () => import('../features/reports/scorecards/ScorecardPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

@@ -1,0 +1,347 @@
+/* The Reports, Stories and Scorecards tabs (hub.css .rb-card / .st-card /
+   .sc-card): card grids whose picture says what the record IS — a cover sheet,
+   a page of prose, rows of status dots. Tokens only, so both themes follow. */
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  padding-top: var(--sp-16);
+}
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  flex-wrap: wrap;
+}
+.barActions {
+  display: flex;
+  gap: var(--sp-8);
+}
+.count {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+.grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: var(--sp-16);
+}
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.card:hover,
+.card:focus-within {
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-sm);
+}
+.cardLink {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.cardLink:focus-visible,
+.cardOpen:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.band {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 150px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  height: 118px;
+  padding: 14px 10px 10px;
+  background: #ffffff;
+  border-radius: 2px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.thumbLetter {
+  aspect-ratio: 8.5 / 11;
+}
+.thumbLetterLand {
+  aspect-ratio: 11 / 8.5;
+  height: 92px;
+}
+.thumbA4 {
+  aspect-ratio: 8.27 / 11.69;
+}
+.thumbA4Land {
+  aspect-ratio: 11.69 / 8.27;
+  height: 92px;
+}
+.thumbDeck {
+  aspect-ratio: 16 / 9;
+  height: 92px;
+}
+.thumbMark {
+  width: 14px;
+  height: 14px;
+}
+.thumbTitle {
+  font-size: 9px;
+  font-weight: 700;
+  color: #0f1117;
+  text-align: center;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.thumbLines {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 70%;
+  margin-top: auto;
+}
+.thumbLines span {
+  height: 3px;
+  border-radius: 2px;
+  background: #e5e7eb;
+}
+.thumbLines span:last-child {
+  width: 60%;
+}
+.badge {
+  position: absolute;
+  top: var(--sp-8);
+  right: var(--sp-8);
+  padding: 1px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+}
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-12) var(--sp-12) var(--sp-8);
+  min-width: 0;
+}
+.cardName {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cardLine {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.cardActions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin-top: auto;
+  padding: var(--sp-8) var(--sp-12) var(--sp-12);
+}
+.cardActions > :last-child {
+  margin-left: auto;
+}
+.skBand {
+  height: 150px;
+}
+.skLine {
+  height: 14px;
+  width: 60%;
+  margin: var(--sp-12) var(--sp-12) var(--sp-4);
+}
+.skMeta {
+  height: 12px;
+  width: 40%;
+  margin: 0 var(--sp-12) var(--sp-12);
+}
+
+/* New report: pick a dashboard. */
+.pickList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.pickSkeleton {
+  height: 36px;
+  margin-bottom: var(--sp-4);
+}
+.pickRow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pickRow:hover,
+.pickRow:focus-visible {
+  background: var(--surface-2);
+  outline: none;
+}
+.pickName {
+  flex: 1;
+  font-weight: 500;
+}
+.pickMeta {
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+
+/* Story cards: a page of prose, drawn small. */
+.cardOpen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.prose {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 112px;
+  height: 118px;
+  padding: 16px 14px;
+  background: #ffffff;
+  border-radius: 2px;
+  box-shadow: var(--shadow-sm);
+}
+.prose span {
+  height: 4px;
+  border-radius: 2px;
+  background: #e5e7eb;
+}
+.prose span:first-child {
+  height: 7px;
+  width: 70%;
+  background: #cbd5e1;
+  margin-bottom: 4px;
+}
+.prose span:last-child {
+  width: 55%;
+}
+.excerpt {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--text-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.cardMenu {
+  position: absolute;
+  top: var(--sp-8);
+  right: var(--sp-8);
+}
+
+/* Scorecard cards: rows of dots and bars — what a scorecard IS. */
+.art {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 150px;
+}
+.artRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.artBar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border-2);
+}
+.artBar1 {
+  width: 72%;
+}
+.artBar2 {
+  width: 48%;
+}
+.artBar3 {
+  width: 86%;
+}
+.artBar4 {
+  width: 34%;
+}
+.dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.good {
+  background: var(--ok);
+}
+.warn {
+  background: var(--warn);
+}
+.off {
+  background: var(--error);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  margin-top: var(--sp-4);
+}
+.chip {
+  padding: 0 var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-11);
+  line-height: 18px;
+}

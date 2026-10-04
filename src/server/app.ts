@@ -395,4 +395,8 @@ export function registerHandlers(): void {
   for (const mod of ['../ipc/analyses', '../ipc/templates', '../ipc/dashboards', '../ipc/metrics', '../ipc/analysesServer']) {
     (require(mod) as { register: () => void }).register();
   }
+  // Reports, stories and scorecards (T2.13): the records, the server-resolved pages a file is written from.
+  for (const mod of ['../ipc/reports', '../ipc/stories', '../ipc/scorecards', '../ipc/reportsServer']) {
+    (require(mod) as { register: () => void }).register();
+  }
 }

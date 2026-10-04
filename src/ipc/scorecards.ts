@@ -26,6 +26,7 @@ import type { Metric } from '../analysis/metrics';
 import * as datasets from '../data/datasets';
 import type { FilterStep } from '../data/transforms';
 import { formatMetricValue, describeDefinition } from '../analysis/metricFormat';
+import { formatNumber } from '../app/format';
 import { getCalendar, todayIso } from '../analysis/dateIntel';
 import { periodWindow, rowStatus, periodChange, rollupGroups, STATUS_WORDS } from '../analysis/scorecardModel';
 import type { PeriodWindow, RowStatus, Scorecard, ScorecardRow, ScorePeriod, GroupRollup } from '../analysis/scorecardModel';
@@ -68,6 +69,10 @@ export interface ScoreRow {
   alert?: { message: string; at: string };
   /** Open comment threads on the surfaces this metric appears on (feature: comments). */
   comments?: number;
+  /** "87%" — the attainment as the page prints it; '' with no target. */
+  attainmentDisplay: string;
+  /** "+4.2%" — the change on the previous period as a percentage; '' when there is none. */
+  pctDisplay: string;
 }
 
 export interface ScoreResult {
@@ -78,7 +83,29 @@ export interface ScoreResult {
   window: PeriodWindow & { offset: number };
   anchor: string;
   rows: ScoreRow[];
-  groups: GroupRollup[];
+  groups: Array<GroupRollup & { share: number }>;
+  /** How many rows are on track / at risk / off track / without a target. */
+  counts: Record<RowStatus, number>;
+}
+
+/** "87%": attainment rounded to a whole percent (scorecardPage.ts). */
+export function attainmentText(a: number | null): string {
+  return a === null ? '' : formatNumber(Math.round(a), { decimals: 0 }) + '%';
+}
+
+/** "+4.2%" / "−12%": one decimal under 10%, none above, a real minus (scorecardPage.ts scRow). */
+export function pctText(pct: number | null): string {
+  if (pct === null || !Number.isFinite(pct)) return '';
+  const a = Math.abs(pct);
+  return (pct > 0 ? '+' : pct < 0 ? '−' : '') + formatNumber(a, { decimals: a < 10 ? 1 : 0 }) + '%';
+}
+
+/** Rows per status, and each group's on-track share for its meter — counted here, never in a page. */
+export function scoreTallies(rows: Array<{ group?: string; status: RowStatus }>): { counts: Record<RowStatus, number>; groups: Array<GroupRollup & { share: number }> } {
+  const counts: Record<RowStatus, number> = { good: 0, warn: 0, off: 0, none: 0 };
+  for (const r of rows) counts[r.status] += 1;
+  const groups = rollupGroups(rows).map((g) => ({ ...g, share: g.scored ? Math.round((g.onTrack / g.scored) * 100) : 0 }));
+  return { counts, groups };
 }
 
 const SPARK = 12;
@@ -235,7 +262,7 @@ export async function computeScorecard(projectId: string, sc: Scorecard, offset 
       rows.push({
         metricId: def.metricId, name: 'Missing metric', missing: true, value: null, display: '—', target: null,
         targetDisplay: '', attainment: null, status: 'none', previous: null, delta: null, deltaDisplay: '', pct: null,
-        tone: 'flat', spark: [], sparkLabels: [], owner: def.owner, group: def.group,
+        tone: 'flat', spark: [], sparkLabels: [], owner: def.owner, group: def.group, attainmentDisplay: '', pctDisplay: '',
       });
       continue;
     }
@@ -259,6 +286,7 @@ export async function computeScorecard(projectId: string, sc: Scorecard, offset 
       target, targetDisplay: target === null ? '' : formatMetricValue(target, m.format), attainment, status,
       previous, delta: change.delta, deltaDisplay: signedDisplay(change.delta, m), pct: change.pct, tone: change.tone,
       spark, sparkLabels: dated ? windows.map((w) => w.label) : [],
+      attainmentDisplay: attainmentText(attainment), pctDisplay: pctText(change.pct),
     };
     if (!dated) row.undated = true;
     if (targetName) row.targetName = targetName;
@@ -273,7 +301,7 @@ export async function computeScorecard(projectId: string, sc: Scorecard, offset 
   }
   return {
     ok: true, id: sc.id, name: sc.name, period: sc.period,
-    window: { ...current, offset: off }, anchor, rows, groups: rollupGroups(rows),
+    window: { ...current, offset: off }, anchor, rows, ...scoreTallies(rows),
   };
 }
 
@@ -359,7 +387,7 @@ export async function scorecardDetail(projectId: string, sc: Scorecard, metricId
     window: current ? { ...current, offset: off } : null,
     value, display: formatMetricValue(value, m.format),
     target, targetDisplay: target === null ? '' : formatMetricValue(target, m.format),
-    attainment, status, statusWord: STATUS_WORDS[status],
+    attainment, attainmentDisplay: attainmentText(attainment), status, statusWord: STATUS_WORDS[status],
     series: data, breakdown, dateColumn: col,
   };
 }

@@ -3597,6 +3597,7 @@
   "reportList.never_generated": "Nie erzeugt",
   "reportList.no_schedule": "Kein Zeitplan",
   "reportList.what_ifs_over_your_metrics_move": "Was-wäre-wenn über Ihre Kennzahlen — verschieben Sie einen Preis, das Volumen einer Region oder einen Rabatt, und sehen Sie, wie jede Zahl folgt.",
+  "reportPages.this_table_prints_once_pivot_and": null,
   "reportRender.select_a_page_to_preview_it": "Wählen Sie eine Seite für die Vorschau.",
   "reportRender.this_tile_could_not_be_drawn": "Diese Kachel konnte nicht gezeichnet werden.",
   "reportRender.this_tile_is_no_longer_on": "Diese Kachel ist nicht mehr auf dem Dashboard.",

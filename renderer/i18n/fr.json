@@ -3597,6 +3597,7 @@
   "reportList.never_generated": "Jamais généré",
   "reportList.no_schedule": "Aucune planification",
   "reportList.what_ifs_over_your_metrics_move": "Des « et si » sur vos métriques — modifiez un prix, le volume d’une région ou une remise, et voyez chaque chiffre suivre.",
+  "reportPages.this_table_prints_once_pivot_and": null,
   "reportRender.select_a_page_to_preview_it": "Sélectionnez une page pour la prévisualiser.",
   "reportRender.this_tile_could_not_be_drawn": "Cette tuile n’a pas pu être tracée.",
   "reportRender.this_tile_is_no_longer_on": "Cette tuile n’est plus sur le tableau de bord.",

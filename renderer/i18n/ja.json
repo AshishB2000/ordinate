@@ -3597,6 +3597,7 @@
   "reportList.never_generated": "未生成",
   "reportList.no_schedule": "スケジュールなし",
   "reportList.what_ifs_over_your_metrics_move": "指標に対する「もし〜なら」。価格、地域の数量、割引を動かすと、すべての数値が連動して変わります。",
+  "reportPages.this_table_prints_once_pivot_and": null,
   "reportRender.select_a_page_to_preview_it": "ページを選択するとプレビューできます。",
   "reportRender.this_tile_could_not_be_drawn": "このタイルは描画できませんでした。",
   "reportRender.this_tile_is_no_longer_on": "このタイルは、ダッシュボードにはもうありません。",

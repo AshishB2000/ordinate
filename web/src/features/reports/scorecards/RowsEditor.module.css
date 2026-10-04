@@ -1,0 +1,85 @@
+/* The scorecard rows editor (hub.css .sc-ed-*): a dense table of inputs. */
+
+/* ── rows editor ── */
+.edTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-13);
+}
+.edTable th,
+.edTable td {
+  padding: var(--sp-4) var(--sp-4);
+  text-align: left;
+  vertical-align: middle;
+}
+.edTable thead th {
+  font-size: var(--t-11);
+  font-weight: 600;
+  color: var(--muted);
+}
+.edTable tbody th {
+  font-weight: 400;
+  min-width: 120px;
+}
+.edName {
+  display: block;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+.edDir {
+  font-size: var(--t-11);
+  color: var(--text-dim);
+}
+.edTarget {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.edInput,
+.edNum {
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-8);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-13);
+  width: 100px;
+}
+.edNum {
+  width: 58px;
+}
+.edScroll {
+  overflow-x: auto;
+}
+.edInput:focus-visible,
+.edNum:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  border-color: transparent;
+}
+.edActs {
+  white-space: nowrap;
+}
+.edEmpty {
+  margin: 0;
+  color: var(--muted);
+}
+.chip {
+  padding: 0 var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  font-size: var(--t-12);
+  line-height: 22px;
+}
+.addMetric {
+  margin-right: auto;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
