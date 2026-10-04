@@ -19,6 +19,7 @@ import * as queryCache from '../engine/queryCache';
 import * as jobs from '../app/jobs';
 import { saltForSteps } from '../app/privacyStore';
 import * as transforms from './transforms';
+import { resolveColumnEdit } from './columnEdit';
 import { runResidentPipeline } from '../engine/pipelineDuck';
 import type { TableData, TransformStep, ApplyResult } from './transforms';
 // The origin whitelist and the id check both moved out; re-exported here so
@@ -626,7 +627,7 @@ async function updateDatasetDataNow(
 }
 
 // Edit a dataset's column DEFINITIONS: rename columns and/or correct types.
-// `patch.columns` is the FULL new columns array (same length + order as stored).
+// `patch.columns` is the FULL new columns array, in the order the SHOWN (prepared) columns have.
 // A renamed column needs no cell work; a column whose TYPE changed has all its
 // cells re-coerced through parse.coerceValue (text→number parses / nulls
 // non-numeric, number→text keeps the digits, etc). Bumps updatedAt. Returns null
@@ -646,21 +647,13 @@ export async function updateDataset(
 
   // Edit the SOURCE when a pipeline exists (so the change survives the next
   // recompute and the invariant output === applyPipeline(source, steps) holds);
-  // otherwise edit the stored columns/rows directly (the no-pipeline case, i.e.
-  // the Week-5 explorer on a plain dataset — unchanged behavior).
-  // ponytail: patch is indexed against the base being edited; for a stepped
-  // dataset that base is `source`, so edits map to source columns (rename a
-  // step-generated column via a rename_column step instead).
+  // otherwise the stored columns/rows. The patch is indexed against the SHOWN
+  // (prepared) columns and resolved by name (./columnEdit.ts): a step-made
+  // column's rename becomes a rename_column step; its retype is refused.
   const base: TableData = existing.source ?? { columns: existing.columns, rows: existing.rows };
   const width = base.columns.length;
-  const newColumns: ParsedColumn[] = base.columns.map((old, c) => {
-    const next = incoming[c];
-    if (!next || typeof next !== 'object') return old;
-    const name = typeof next.name === 'string' && next.name.trim() ? next.name.trim() : old.name;
-    const type: ParsedColumn['type'] =
-      next.type === 'text' || next.type === 'number' || next.type === 'date' ? next.type : old.type;
-    return { ...old, name, type }; // keeps an input table's required/lookup
-  });
+  const { columns: newColumns, addSteps } = resolveColumnEdit(existing.columns, base.columns, incoming, existing.source !== undefined ? existing.steps ?? [] : null);
+  const steps = addSteps.length ? transforms.sanitizeSteps([...(existing.steps ?? []), ...addSteps]) : existing.steps;
 
   // Re-coerce only the columns whose type actually changed (cheap; a pure rename
   // skips the rows rewrite).
@@ -681,10 +674,10 @@ export async function updateDataset(
   let updated: Dataset;
   if (existing.source !== undefined) {
     const source: TableData = { columns: newColumns, rows: baseRows };
-    const salt = await saltForSteps(projectId, existing.steps);
-    const output = transforms.applyPipeline(source, existing.steps ?? [], { salt, ...(await loadStepRefs(projectId, id, existing.steps)) });
+    const salt = await saltForSteps(projectId, steps);
+    const output = transforms.applyPipeline(source, steps ?? [], { salt, ...(await loadStepRefs(projectId, id, steps)) });
     updated = {
-      ...existing, source, columns: output.columns, rows: output.rows,
+      ...existing, source, steps, columns: output.columns, rows: output.rows,
       rowCount: output.rowCount, stepCounts: output.stepCounts, updatedAt: now,
     };
   } else {

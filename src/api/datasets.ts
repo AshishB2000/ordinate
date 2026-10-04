@@ -92,7 +92,7 @@ export const datasets = {
   // The reply names the dataset by its header only (src/ipc/datasets.ts `headerOf`), never its origin.
   'dataset:refresh': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
   // preload: invoke('dataset:update', { projectId, datasetId, columns | autoRefresh | watch }) —
-  // rename / retype columns (indexed against the stored columns), the refresh
+  // rename / retype columns (indexed against the shown, prepared columns; resolved by name — src/data/columnEdit.ts), the refresh
   // schedule and the anomaly watch. Same header-only reply.
   'dataset:update': rpc({
     access: 'write',
