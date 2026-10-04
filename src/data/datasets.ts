@@ -22,6 +22,7 @@ import * as transforms from './transforms';
 import { resolveColumnEdit } from './columnEdit';
 import { runResidentPipeline } from '../engine/pipelineDuck';
 import type { TableData, TransformStep, ApplyResult } from './transforms';
+import { applyPipelineAsync } from './regexOffThread';
 // The origin whitelist and the id check both moved out; re-exported here so
 // `datasets.sanitizeOrigin` and `import type { DatasetOrigin } from './datasets'`
 // keep working for every existing caller and test.
@@ -607,7 +608,7 @@ async function updateDatasetDataNow(
     const source: TableData = { columns: cols, rows };
     const salt = await saltForSteps(projectId, existing.steps);
     const ctx = { salt, ...(await loadStepRefs(projectId, id, existing.steps)) };
-    const output = transforms.applyPipeline(source, existing.steps ?? [], ctx);
+    const output = await applyPipelineAsync(source, existing.steps ?? [], ctx);
     if (outWarnings && Array.isArray(output.warnings)) outWarnings.push(...output.warnings);
     updated = {
       ...existing, source, columns: output.columns, rows: output.rows,
@@ -675,7 +676,7 @@ export async function updateDataset(
   if (existing.source !== undefined) {
     const source: TableData = { columns: newColumns, rows: baseRows };
     const salt = await saltForSteps(projectId, steps);
-    const output = transforms.applyPipeline(source, steps ?? [], { salt, ...(await loadStepRefs(projectId, id, steps)) });
+    const output = await applyPipelineAsync(source, steps ?? [], { salt, ...(await loadStepRefs(projectId, id, steps)) });
     updated = {
       ...existing, source, steps, columns: output.columns, rows: output.rows,
       rowCount: output.rowCount, stepCounts: output.stepCounts, updatedAt: now,
@@ -733,7 +734,7 @@ export async function updateSteps(
   const output =
     (residentReady
       ? await runResidentPipeline(tablePath(projectId, id, (await getDatasetMeta(projectId, id))?.storageVersion, true), source.columns, steps)
-      : null) ?? transforms.applyPipeline(source, steps, { salt: await saltForSteps(projectId, steps), ...(await loadStepRefs(projectId, id, steps)) });
+      : null) ?? await applyPipelineAsync(source, steps, { salt: await saltForSteps(projectId, steps), ...(await loadStepRefs(projectId, id, steps)) });
 
   const updated: Dataset = {
     ...existing,

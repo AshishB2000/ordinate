@@ -12,7 +12,9 @@ import { colIndex, cellToString, isEmptyCell, retypeColumn } from './transforms'
 import type { ParsedColumn } from './parse';
 import type { PivotStep, SplitColumnStep, UnpivotStep } from './stepTypes';
 import { MAX_PIVOT_COLUMNS } from './stepTypes';
-import { checkRegex, jsRegex } from './regexSubset';
+import { checkRegex, regexSplitter } from './regexSubset';
+import type { RegexMemo } from './regexMemo';
+import { inlineRegexRefused, regexRefusedWarning } from './regexMemo';
 
 export interface PowerResult {
   table: TableData;
@@ -51,22 +53,23 @@ export function splitProblem(s: SplitColumnStep): string | null {
   return null;
 }
 
-function partsOf(text: string, s: SplitColumnStep, re: RegExp | null): string[] {
+function partsOf(text: string, s: SplitColumnStep, regex: ((text: string) => string[]) | null): string[] {
   if (s.mode === 'delimiter') return text.split(s.delimiter as string);
-  if (s.mode === 'regex') return text.split(re as RegExp);
+  if (s.mode === 'regex') return (regex as (text: string) => string[])(text);
   // Code points, as DuckDB's substring counts — an emoji is ONE character.
   const cps = Array.from(text);
   const cuts = [0, ...(s.positions as number[])];
   return cuts.map((a, k) => cps.slice(a, k + 1 < cuts.length ? cuts[k + 1] : undefined).join(''));
 }
 
-export function applySplit(t: TableData, s: SplitColumnStep): PowerResult {
+/** `memo`: each cell text's parts from the regex worker (./regexMemo.ts) — required for a regex split on the server. */
+export function applySplit(t: TableData, s: SplitColumnStep, memo?: RegexMemo): PowerResult {
   const ci = colIndex(t.columns, s.column);
   if (ci < 0) return skipped(t, `Split skipped: unknown column "${s.column}"`);
   const problem = splitProblem(s);
   if (problem) return skipped(t, problem);
-  const chk = s.mode === 'regex' ? checkRegex(s.pattern) : null;
-  const re = chk && chk.ok ? jsRegex(chk.js, !!s.ignoreCase) : null;
+  if (s.mode === 'regex' && !memo && inlineRegexRefused(t.rows.length)) return skipped(t, regexRefusedWarning());
+  const re = s.mode !== 'regex' ? null : memo ? (x: string) => memo.get(x) as string[] : regexSplitter(s.pattern as string, !!s.ignoreCase);
 
   if (s.into === 'rows') {
     const columns = t.columns.map((c) => ({ ...c }));

@@ -11,7 +11,9 @@ import { colIndex, cellToString, isEmptyCell, retypeColumn } from './transforms'
 import type { ParsedColumn } from './parse';
 import { coerceValue } from './parse';
 import type { ConditionalColumnStep, DedupeKeyStep, ParseDateStep, ReplaceValuesStep } from './stepTypes';
-import { checkRegex, jsRegex } from './regexSubset';
+import { checkRegex, regexReplacer } from './regexSubset';
+import type { RegexMemo } from './regexMemo';
+import { inlineRegexRefused, regexRefusedWarning } from './regexMemo';
 import type { PowerResult } from './stepsReshape';
 import { skipped } from './stepsReshape';
 
@@ -205,18 +207,15 @@ export function replaceProblem(columns: ParsedColumn[], s: ReplaceValuesStep): s
   return null;
 }
 
-export function applyReplace(t: TableData, s: ReplaceValuesStep): PowerResult {
+/** `memo`: each cell text's result from the regex worker (./regexMemo.ts) — required for a regex step on the server. */
+export function applyReplace(t: TableData, s: ReplaceValuesStep, memo?: RegexMemo): PowerResult {
   const problem = replaceProblem(t.columns, s);
   if (problem) return skipped(t, problem);
+  if (s.mode === 'regex' && !memo && inlineRegexRefused(t.rows.length)) return skipped(t, regexRefusedWarning());
   const ci = colIndex(t.columns, s.column);
   const exact = new Map<string, string>();
   if (s.mode === 'exact') for (const r of s.rules) if (!exact.has(r.from)) exact.set(r.from, r.to);
-  const res = s.mode === 'regex'
-    ? s.rules.map((r) => {
-      const chk = checkRegex(r.from);
-      return chk.ok ? jsRegex(chk.js, !!s.ignoreCase) : null;
-    })
-    : [];
+  const regex = s.mode !== 'regex' ? null : memo ? (x: string) => memo.get(x) as string : regexReplacer(s.rules, !!s.ignoreCase);
   const rewrite = (cell: Cell): Cell => {
     if (s.mode === 'exact') {
       const hit = exact.get(cellToString(cell));
@@ -224,11 +223,7 @@ export function applyReplace(t: TableData, s: ReplaceValuesStep): PowerResult {
     }
     if (cell === null) return null;
     const before = cellToString(cell);
-    let text = before;
-    s.rules.forEach((r, k) => {
-      // A replacer FUNCTION, so `$&` / `$1` in the replacement stay literal text.
-      text = s.mode === 'contains' ? text.split(r.from).join(r.to) : text.replace(res[k] as RegExp, () => r.to);
-    });
+    const text = regex ? regex(before) : s.rules.reduce((acc, r) => acc.split(r.from).join(r.to), before);
     return text === before ? cell : text;
   };
   const columns = t.columns.map((c) => ({ ...c }));

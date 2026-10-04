@@ -30,6 +30,7 @@ import type { Cell } from './edits';
 import type { InputBlock, InputColumn } from './columns';
 import { failingPredicateJs, rowCountResult, ruleSignature } from '../../analysis/qualityRules';
 import type { QualityRule, RefTable } from '../../analysis/qualityRules';
+import type { RegexMemo } from '../regexMemo';
 
 export type IssueKind = 'type' | 'required' | 'lookup' | 'rule';
 
@@ -65,6 +66,8 @@ export interface CheckContext {
   rules: QualityRule[];
   /** A references rule's dataset id → its RefTable. */
   refs: Map<string, RefTable | null>;
+  /** Server: a regex rule's id → the regex worker's answers, or why it could not run (src/data/regexOffThread.ts). */
+  regexMemos?: Map<string, RegexMemo | string>;
 }
 
 const MAX_ISSUES = 5000;
@@ -176,7 +179,8 @@ export function checkTable(columns: InputColumn[], rows: Cell[][], ctx: CheckCon
     const c = columns.findIndex((x) => x.name === rule.column);
     if (c < 0) continue;
     const ref = rule.kind === 'references' ? ctx.refs.get(rule.args.datasetId ?? '') ?? null : undefined;
-    const p = failingPredicateJs(rule, columns, stored, ref);
+    const memo = ctx.regexMemos?.get(rule.id);
+    const p = typeof memo === 'string' ? { error: memo } : failingPredicateJs(rule, columns, stored, ref, memo);
     if ('error' in p) { notes.push(`Rule ${ruleSignature(rule)} cannot run: ${p.error}`); continue; }
     stored.forEach((row, r) => {
       if (p.test(row)) add({ r, c, kind: 'rule', severity: rule.severity, message: ruleSignature(rule), ruleId: rule.id });

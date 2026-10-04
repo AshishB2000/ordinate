@@ -14,7 +14,7 @@
 // the parameter into sqlGen's calculated-field compile once that exists.
 
 import * as datasets from './datasets';
-import { applyPipeline } from './transforms';
+import { applyPipelineAsync } from './regexOffThread';
 import { saltForSteps } from '../app/privacyStore';
 import { loadStepRefs } from './stepRefs';
 import type { Cell } from './transforms';
@@ -48,7 +48,7 @@ export async function paramTable(projectId: string, datasetId: string, values: P
   const ds = await datasets.getDataset(projectId, datasetId);
   if (!ds || !ds.source) return null;
   const bound = bindStepParams(ds.steps || [], values);
-  const out = applyPipeline(ds.source, bound.steps, { salt: await saltForSteps(projectId, bound.steps), ...(await loadStepRefs(projectId, datasetId, bound.steps)) });
+  const out = await applyPipelineAsync(ds.source, bound.steps, { salt: await saltForSteps(projectId, bound.steps), ...(await loadStepRefs(projectId, datasetId, bound.steps)) });
   const table: ReplayedTable = { columns: out.columns, rows: out.rows, errors: bound.errors };
   memo.set(orgKey(projectId + '/' + datasetId), { key, table });
   if (memo.size > MEMO_MAX) memo.delete(memo.keys().next().value as string);

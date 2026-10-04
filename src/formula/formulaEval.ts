@@ -10,6 +10,7 @@
 
 import type { FValue } from './formula';
 import { haversineKm, validCoord } from '../analysis/geo/haversine';
+import { isServerMode } from '../server/mode';
 
 // ── Evaluation helpers ───────────────────────────────────────────────────────
 
@@ -197,10 +198,25 @@ function dateTrunc(part: string, d: Date): Date | null {
 }
 
 // ── Regex cache (compile each pattern once, not per row) ──────────────────────
-// ponytail: user-authored patterns run over the user's own local data; a
-// pathological pattern can backtrack slowly, but there is no remote input here.
+// SERVER (T6.4, threat-model R1): a formula pattern is a user regex on the
+// request thread, and one like (\w+)+! over a 40-character cell would stall the
+// pod for every org. Formula patterns run WITHOUT the u flag, so V8's linear-time
+// engine (the `l` flag) covers them: no backtracking, so no pattern can stall.
+// A pattern that engine cannot run (a backreference, a lookahead) is null on
+// the server, exactly as an invalid pattern is. The desktop is unchanged.
+let linearEngine = false;
+function serverFlags(flags: string): string {
+  if (!isServerMode()) return flags;
+  if (!linearEngine) {
+    (require('v8') as typeof import('v8')).setFlagsFromString('--enable-experimental-regexp-engine');
+    linearEngine = true;
+  }
+  return flags + 'l';
+}
+
 const RE_CACHE = new Map<string, RegExp | null>();
-function getRe(pattern: string, flags: string): RegExp | null {
+function getRe(pattern: string, plainFlags: string): RegExp | null {
+  const flags = serverFlags(plainFlags);
   const key = flags + ' ' + pattern;
   if (RE_CACHE.has(key)) return RE_CACHE.get(key)!;
   let re: RegExp | null;

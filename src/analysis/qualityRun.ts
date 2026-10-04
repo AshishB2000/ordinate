@@ -28,6 +28,8 @@ import type { RowFilter } from '../engine/datasetPage';
 import { isValidId } from '../app/ids';
 import * as q from './qualityRules';
 import type { DatasetQuality, QualityRule, RefTable, RuleResult } from './qualityRules';
+import { evaluateRuleAsync, failingPredicateAsync } from '../data/regexOffThread';
+import { regexWorkerOnly } from '../data/regexMemo';
 import type { AlertEvent } from './alerts';
 
 // ── Evaluation ───────────────────────────────────────────────────────────────
@@ -78,8 +80,12 @@ export async function evaluateRules(
     const other = id === datasetId ? ds : await datasets.getDataset(projectId, id);
     refs.set(id, other ? { columns: other.columns, rows: other.rows } : null);
   }
-  return rules.map((rule) =>
-    q.evaluateRuleJs(rule, ds.columns, ds.rows, rule.kind === 'references' ? refs.get(rule.args.datasetId ?? '') ?? null : undefined));
+  // A regex rule's pattern runs off the request thread on the server (T6.4); otherwise this is evaluateRuleJs.
+  const out: RuleResult[] = [];
+  for (const rule of rules) {
+    out.push(await evaluateRuleAsync(rule, ds.columns, ds.rows, rule.kind === 'references' ? refs.get(rule.args.datasetId ?? '') ?? null : undefined));
+  }
+  return out;
 }
 
 // ── Alerts (feature-detected) ────────────────────────────────────────────────
@@ -288,12 +294,18 @@ export async function failingRowFilter(
     const other = await datasets.getDataset(projectId, refId);
     refTable = other ? { columns: other.columns, rows: other.rows } : null;
   }
+  // Server, JS half certain: a regex rule's answers come from the regex worker first (T6.4).
+  let offThread: ReturnType<typeof q.failingPredicateJs> | undefined;
+  if (rule.kind === 'regex' && !fast && regexWorkerOnly()) {
+    const ds = await datasets.getDataset(projectId, datasetId);
+    if (ds) offThread = await failingPredicateAsync(rule, ds.columns, ds.rows);
+  }
   return {
     sql: fast ? fast.sql : null,
     params: fast ? fast.params : [],
     keepFor: (columns, rows) => {
       if (refId && refTable === undefined) throw new Error('The referenced dataset could not be read');
-      const p = q.failingPredicateJs(rule, columns, rows, refTable);
+      const p = offThread ?? q.failingPredicateJs(rule, columns, rows, refTable);
       if ('error' in p) throw new Error(p.error);
       return p.test;
     },
