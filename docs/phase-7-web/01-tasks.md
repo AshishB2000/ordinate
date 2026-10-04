@@ -270,7 +270,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   `hubResultMenus`, `sidePanel`.
 - Streaming answers over SSE (`analyzeStream`). Models are API-key providers only in server mode.
 
-### [ ] T2.13 Reports, stories, scorecards
+### [x] T2.13 Reports, stories, scorecards
 - **Branch** `web/t2.13-reports` · **Legacy:** `reportList`, `reportBuilder`, `reportRender`,
   `reportExport`, `reportWriters`, `reportDiscussion`, `reportScorecard`, `storyList`, `storyPage`,
   `storyBlocks`, `storyPickers`, `storyPresent`, `storyPropose`, `storyText`, `scorecardPage`,

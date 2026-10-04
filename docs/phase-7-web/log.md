@@ -976,3 +976,22 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   themes reviewed.
 - **Open:** "Create report…" in the dashboard menu lands with T2.13's follow-up; pivot "Copy as table" /
   "Export CSV" belong to the T2.9 card menu.
+
+## 2026-10-04 — T2.13 Reports, stories, scorecards
+
+- **Built:** reports (list, new from a dashboard, three-pane builder with true-size preview, Generate now),
+  stories (list, new, Assistant draft, Markdown editor with outline, slash picker, live charts/metrics from
+  `story:figures`, pinned filters, images, callouts, undo/redo, autosave, present mode, PDF), scorecards (list,
+  seeded new, rows editor, period table with server-computed tallies/attainment/change strings, detail drawer).
+- **Server does the math:** `src/analysis/reportPages.ts` resolves every page (`report:preview`/`report:build`)
+  through the same handlers a single call uses, on the Share policy's report path; desktop paths are stripped
+  from replies. The Markdown parser moved to `src/analysis/storyText.ts`, shared by server and browser and
+  differential-tested against the desktop's. 28 contracts; local-path channels stay uncontracted.
+- **Browser export:** PDF/PPTX/DOCX with pdfmake / pptxgenjs / docx loaded on first use (plan §1 approved
+  these); charts via T1.1's PNG helper; maps render off-screen with their DOM markers composited onto the
+  WebGL canvas (replaces `capturePage`).
+- **Measured:** `/reports` 1–4 RPCs per load; initial JS 178.86 KB gzip. Gates (orchestrator): `npm test`
+  281/281 without and with DB; CI env 280 + `backups` passing alone 3/3 (failed once under load); Vitest
+  594/594; e2e 50/50; lint 0. Screens in both themes reviewed.
+- **Logged, not built (per spec):** scheduled server-side reports. **Follow-ups:** "Create report…" in the
+  T2.8 dashboard menu; pivot/cohort tiles in printed reports (now possible through T1.2's `GridViz`).
