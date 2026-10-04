@@ -1,0 +1,194 @@
+# Ordinate — Helm values.
+#
+# Nothing in this file is a secret, and the chart refuses to render one from it:
+# every secret lives in ONE Kubernetes Secret you create before installing
+# (existingSecret below). Postgres and the S3 bucket are yours (RDS / Cloud SQL,
+# S3 / GCS / MinIO); this chart runs the server and its schema migration.
+#
+#   kubectl create secret generic ordinate \
+#     --from-literal=DATABASE_URL='postgres://ordinate:…@db.internal:5432/ordinate' \
+#     --from-literal=ORDINATE_MASTER_KEY="$(openssl rand -base64 32)"
+#   helm install ordinate deploy/helm/ordinate -f my-values.yaml
+
+image:
+  repository: ghcr.io/ashishb2000/ordinate
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Ignored when hpa.enabled (the HPA owns the count). Two or more for a rollout
+# and a node drain without downtime (see pdb).
+replicaCount: 2
+
+# The name of a Secret in the release namespace, created by you (empty:
+# <release>-ordinate, or the release name when it contains "ordinate"). Every key in it
+# becomes an environment variable of the server pods and the migration Job:
+#   DATABASE_URL          postgres://user:password@host:5432/db          (required)
+#   ORDINATE_MASTER_KEY   32 random bytes, base64: `openssl rand -base64 32` (required)
+#                         Wraps every stored connection password and AI key — back it up.
+#   OIDC_CLIENT_SECRET    when config.AUTH_MODE is oidc
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+#                         only for an S3 store without pod identity (MinIO);
+#                         on EKS use IRSA instead (serviceAccount.annotations)
+# A change to the Secret does not restart pods: `kubectl rollout restart deploy/<release>-ordinate`.
+existingSecret: ""
+
+# Plain server settings, passed as environment variables (src/server/env.ts is
+# the reference). Empty values are left out. A bad value stops the migration
+# Job with one line naming the variable, before any pod rolls.
+# The chart sets PORT, METRICS_PORT, DATA_DIR and ORDINATE_ENV=prod itself and
+# refuses those names here, and refuses every secret name listed above.
+config:
+  # oidc (sign-in with your IdP) | header (trust X-Forwarded-Email from a proxy
+  # such as oauth2-proxy in TRUSTED_PROXY_CIDRS).
+  AUTH_MODE: oidc
+  OIDC_ISSUER: ""          # https://idp.example.com/realms/acme
+  OIDC_CLIENT_ID: ""
+  OIDC_REDIRECT_URL: ""    # https://<ingress host>/api/auth/callback, as registered at the IdP
+  # Made org admin at every sign-in: the first admin, and the way back in.
+  ORDINATE_ADMIN_EMAIL: ""
+  ALLOWED_EMAIL_DOMAINS: ""   # comma-separated; empty = any domain your IdP lets through
+  # CIDRs of the proxies in front (your ingress controller's pods). Their
+  # X-Forwarded-For names the client for rate limits; in header mode they may
+  # also assert who is signed in, so keep this exactly as narrow as the proxy.
+  TRUSTED_PROXY_CIDRS: ""
+  # Where Parquet tables live. s3://bucket/optional/prefix for any replica count
+  # (the pod signs with its credential chain — IRSA on EKS). Leave empty only
+  # with data.existingClaim, and then one replica unless the claim is ReadWriteMany.
+  STORAGE_URL: ""
+  S3_REGION: ""
+  S3_ENDPOINT: ""          # http(s)://host:port for an S3-compatible store (MinIO); empty = AWS
+  LOG_LEVEL: info
+  # More knobs, all optional (defaults in src/server/env.ts): ORDINATE_ORG,
+  # MAX_UPLOAD_MB, STORAGE_CACHE_MB, STORAGE_GC_GRACE_MINUTES, DUCKDB_MAX_WORKERS,
+  # DUCKDB_MEMORY_LIMIT, DUCKDB_THREADS (set it to the CPU limit: Node counts the
+  # node's cores), DUCKDB_QUERY_TIMEOUT_SECONDS, DUCKDB_IDLE_SECONDS,
+  # SESSION_IDLE_MINUTES, SESSION_ABSOLUTE_HOURS, RATE_LIMIT_*_PER_MINUTE,
+  # MAX_RPC_BODY_KB, RPC_TIMEOUT_SECONDS, SSRF_ALLOW.
+
+# DATA_DIR (/data): per-org temp files, uploads in flight and the local cache
+# of S3 tables. With S3 storage an emptyDir is right. Without S3 the tables
+# themselves live here, so name a PersistentVolumeClaim.
+data:
+  existingClaim: ""
+  # Cap on the emptyDir (keep it above STORAGE_CACHE_MB, 2 GiB by default).
+  sizeLimit: 10Gi
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+# GET /metrics (Prometheus text) on its own port. It is never on the app port
+# and never behind the Ingress: it gets its own ClusterIP Service,
+# <release>-ordinate-metrics, for a ServiceMonitor or annotation-based scraping.
+metrics:
+  enabled: true
+  port: 9464
+  # prometheus.io/* annotations on the pods and the metrics Service (no CRD needed).
+  annotations: true
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: ordinate.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: ordinate-tls
+  #    hosts: [ordinate.example.com]
+
+# Requests size the scheduler; DuckDB takes 80% of the memory limit by default
+# (split over DUCKDB_MAX_WORKERS), so the limit is what a query may use.
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+hpa:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  # targetMemoryUtilizationPercentage: 80
+
+# Rendered when more than one pod runs (replicaCount > 1 or hpa.enabled): a
+# node drain then never takes the last ready pod.
+pdb:
+  enabled: true
+  minAvailable: 1
+
+serviceAccount:
+  create: true
+  # Defaults to the release's full name.
+  name: ""
+  # IRSA on EKS, for S3 without keys:
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/ordinate-s3
+  annotations: {}
+
+# The schema migration, as a pre-install/pre-upgrade hook Job running the image's
+# `node src/server/db/migrateMain.js`. It takes the same Postgres advisory lock
+# the server takes at boot, so pods never race it: a pod that starts meanwhile
+# waits, then finds the schema current. A failed migration fails the
+# `helm upgrade` and the old pods keep serving. Migrations must therefore be
+# additive (the old pods run against the new schema until the rollout ends).
+# With this off, the first pod to boot migrates instead.
+migration:
+  enabled: true
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+# Recommended, off by default: the operator decides. When on, the pods (server
+# and migration Job) accept traffic only on the app and metrics ports and may
+# open connections only to DNS plus the egress rules below. Everything the
+# server talks to must be listed: Postgres, the S3 endpoint, your IdP (443),
+# and every data source a connector reads (or connectors to it fail).
+networkPolicy:
+  enabled: false
+  # Who may reach the app port — your ingress controller. Empty = anyone.
+  #   - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: ingress-nginx } }
+  ingressFrom: []
+  # Who may scrape the metrics port. Empty = anyone.
+  metricsFrom: []
+  # NetworkPolicy egress rules, verbatim (DNS on port 53 is always allowed).
+  #   - to: [{ ipBlock: { cidr: 10.0.12.0/24 } }]      # RDS subnet
+  #     ports: [{ port: 5432, protocol: TCP }]
+  #   - to: [{ ipBlock: { cidr: 0.0.0.0/0, except: [169.254.169.254/32] } }]
+  #     ports: [{ port: 443, protocol: TCP }]          # S3 + IdP over HTTPS
+  egress: []
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Long enough for the request in flight and a scheduled job's current tick.
+terminationGracePeriodSeconds: 30
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]

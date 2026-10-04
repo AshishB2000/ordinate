@@ -1,0 +1,10 @@
+apiVersion: v2
+name: ordinate
+description: Ordinate, a self-hosted BI workspace — the server, its schema migration and the recommended network policy. Postgres and the S3 bucket are yours.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.25.0-0"
+home: https://github.com/AshishB2000/ordinate
+sources:
+  - https://github.com/AshishB2000/ordinate

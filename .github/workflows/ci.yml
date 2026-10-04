@@ -266,3 +266,46 @@ jobs:
           path: web/e2e/__screens__/compose-*.png
           if-no-files-found: warn
           retention-days: 7
+
+  # The Helm chart (Phase 7, T7.2): helm lint, then deploy/helm/ci/kind-e2e.sh on
+  # a kind cluster (kind, kubectl and helm ship on the runner image) — the
+  # locally built image, in-cluster Postgres + MinIO, helm install with the
+  # pre-install migration hook, web/e2e/compose.e2e.ts through a port-forward,
+  # a helm upgrade that must rerun the hook and roll the pods with /readyz
+  # answering throughout, a drain the PDB must refuse, and the NetworkPolicy on.
+  helm:
+    name: helm (lint, kind, e2e, upgrade)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: helm version && kind version && kubectl version --client
+      - name: Build the image
+        run: docker build -f deploy/Dockerfile -t ordinate:local .
+      # The spec needs only the `playwright` library from the root tree.
+      - run: npm ci --ignore-scripts
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: Chart on kind
+        run: deploy/helm/ci/kind-e2e.sh
+        env:
+          IMAGE: ordinate:local
+          KIND_CLUSTER: ordinate-ci
+      - name: Cluster state
+        if: failure()
+        run: |
+          kubectl --context kind-ordinate-ci -n ordinate get all,pdb,networkpolicy,events -o wide || true
+          kubectl --context kind-ordinate-ci -n ordinate logs -l app.kubernetes.io/instance=ordinate --all-containers --tail=200 --prefix || true
+      - name: Upload the screenshots
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-screens
+          path: web/e2e/__screens__/compose-*.png
+          if-no-files-found: warn
+          retention-days: 7

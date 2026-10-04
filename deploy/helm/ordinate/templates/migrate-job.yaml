@@ -1,0 +1,57 @@
+{{- if .Values.migration.enabled }}
+# The schema migration, before the chart's resources on install and before the
+# rollout on upgrade (values.yaml: migration). Runs under the default service
+# account: it needs Postgres only, and a pre-install hook runs before the
+# chart's own ServiceAccount exists. Kept after success (logs), replaced on the
+# next run.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "ordinate.fullname" . }}-migrate
+  labels:
+    {{- include "ordinate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: {{ .Values.migration.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migration.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "ordinate.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "ordinate.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["node", "src/server/db/migrateMain.js"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- include "ordinate.env" . | nindent 10 }}
+          resources:
+            {{- toYaml .Values.migration.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
