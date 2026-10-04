@@ -925,3 +925,33 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
 - **Open:** the Visuals builder (`ChartStage.tsx`) still says "not in the browser yet" for these ids — T2.11
   wires `GridViz` there; pivot "Copy as table"/"Export CSV" belong to the dashboard card menu (T2.8/T2.9); the
   sample yields a single quarterly cohort (same on the desktop).
+
+## 2026-10-04 — T6.3 Review, threat model, policy
+
+- **`docs/phase-7-web/threat-model.md`:** assets, actors, trust boundaries, every mitigation with the
+  `scripts/test-*.ts` / e2e that proves it (each cited file and check name grepped), findings (§5), open and
+  accepted risks (§6), dependency audit (§7). **`SECURITY.md`:** reports through GitHub private
+  vulnerability reporting — **switched off on the repo; the user has to enable it** (Settings → Code security).
+- **Review** (`6391e6f..HEAD`, 159 commits, by hand — `/security-review` only reads a pending diff). Fixed, each
+  with a regression test that fails on the old code (`test-securityReview` +283 lines):
+  F1 high — an imported bundle could plant a dataset `file` origin and `dataset:refresh` read any csv/json/xlsx
+  on the pod (other orgs' data) → server drops file origins on load, `refreshFromFile` refuses;
+  F2 high — connection secrets outlived a deleted project and a bundle naming that id took the password →
+  fresh ids on import, `projects:delete` drops secrets;
+  F3 high — Postgres connector sent user SQL as simple multi-statement text (`; commit; begin read write; …`
+  wrote to the source, a trailing `--` dropped the row cap) → extended protocol (one statement), user SQL on
+  its own line; F3b medium — MySQL trailing comment; F4 medium (latent) — sqlGate missed a path in a
+  parenthesised join and `json_execute_serialized_sql`; F5 medium — `alerts:fired` / `hub:dataset-refreshed`
+  went org-wide → project readers only, errors redacted; F6 medium — `projects:export` (raw origins: URL keys,
+  SQL) was `read` → `admin`; F7 low — `/api/mcp` had no rate limit; F8 low — composeSave linked a capture from
+  no project. No cross-project IDOR in 213 contracts.
+- **Audit gate (user decision):** in-range `npm audit fix` (lockfile only: fast-uri 3.1.8, brace-expansion
+  1.1.21/2.1.7/5.0.12); `scripts/audit-gate.ts` fails on any high/critical advisory outside a 3-entry allowlist
+  (maplibre-gl GHSA-jrc7-96c5-q579; image-size GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr — unreachable, no fix
+  in range, review by 2027-01-04), on an expired entry and on a stale entry; negative controls fail 3 + 3.
+  Node 24 runs it as `.ts` in CI, no install.
+- **Open:** R1 high — user regex on the request thread (ReDoS stalls the pod for every org; V8's linear engine
+  does not cover the `u` flag) → **new task T6.4** (user decision); R2 SQL gate is a deny-list lexer; R3
+  bundle import can inflate to 4 GB in memory; lows/info in §6.
+- **Gates (orchestrator, on T1.2):** `npm test` 278/278 without DB, with DB 278 (`secrets`, `geoAgg` once
+  each under load, both pass alone); Vitest 516/516; e2e 41/41; lint 0; file sizes pass.
