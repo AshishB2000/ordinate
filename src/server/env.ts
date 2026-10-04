@@ -201,6 +201,8 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   const masterKey = rawKey === '' ? null : parseMasterKey('ORDINATE_MASTER_KEY', rawKey);
 
   const auth = parseAuth(src, env, databaseUrl);
+  // SSRF_ALLOW (T6.1): internal ranges connectors may reach. Read by src/connectors/ssrf.ts; a typo stops startup here.
+  proxyList(csv(src.SSRF_ALLOW), 'SSRF_ALLOW');
   const duckdb = parseDuck(src);
   const limits = Object.freeze({
     loginPerMinute: positiveInt('RATE_LIMIT_LOGIN_PER_MINUTE', src.RATE_LIMIT_LOGIN_PER_MINUTE, 60),
@@ -352,7 +354,7 @@ function httpUrl(name: string, raw: string, env: OrdinateEnv): string {
  * CIDRs, comma-separated, v4 or v6 ("10.0.0.0/8, fd00::/8"); a bare address is
  * a /32 or /128. Built into a BlockList once here so a typo fails startup.
  */
-export function proxyList(cidrs: readonly string[]): BlockList {
+export function proxyList(cidrs: readonly string[], name = 'TRUSTED_PROXY_CIDRS'): BlockList {
   const list = new BlockList();
   for (const c of cidrs) {
     const [addr, bits, extra] = c.split('/');
@@ -360,7 +362,7 @@ export function proxyList(cidrs: readonly string[]): BlockList {
     const max = family === 6 ? 128 : 32;
     const prefix = bits === undefined ? max : /^\d{1,3}$/.test(bits) ? Number(bits) : NaN;
     if (family === 0 || extra !== undefined || !(prefix >= 0 && prefix <= max)) {
-      throw new EnvError(`TRUSTED_PROXY_CIDRS: ${JSON.stringify(c)} is not an IPv4 or IPv6 CIDR`);
+      throw new EnvError(`${name}: ${JSON.stringify(c)} is not an IPv4 or IPv6 CIDR`);
     }
     list.addSubnet(addr, prefix, family === 6 ? 'ipv6' : 'ipv4');
   }

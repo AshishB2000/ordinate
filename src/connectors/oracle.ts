@@ -36,6 +36,25 @@ import type {
   ConnectorTables,
 } from './types';
 import { safeError } from './types';
+import { checkHost, guardOn, type PinnedHost } from './ssrf';
+
+/**
+ * Every host an Oracle connect string can dial: each `(HOST=…)` and
+ * `(HTTPS_PROXY=…)` of a descriptor, or the comma-separated hosts (and an
+ * `https_proxy=` parameter) of an Easy Connect string. `''` when none is found,
+ * which checkHost refuses.
+ */
+export function connectStringHosts(cs: string): string[] {
+  const s = cs.trim();
+  const proxies = [...s.matchAll(/https_proxy\s*=\s*([^)&\s]+)/gi)].map((m) => m[1]);
+  if (s.includes('(')) {
+    const hosts = [...s.matchAll(/\(\s*host\s*=\s*([^)\s]+)\s*\)/gi)].map((m) => m[1]);
+    return [...(hosts.length ? hosts : ['']), ...proxies];
+  }
+  const authority = s.replace(/^[a-z]+:\/\//i, '').split(/[/?]/)[0];
+  const hosts = authority.split(',').map((h) => h.trim()).map((h) => (h.startsWith('[') ? h.slice(1, h.indexOf(']')) : h.replace(/:\d+$/, '')));
+  return [...hosts, ...proxies];
+}
 
 // ── driver surface ────────────────────────────────────────────────────────────
 //
@@ -322,9 +341,10 @@ function fieldsFor(v: OracleVariant): ConnectorDef['fields'] {
 }
 
 /** host:port/serviceName — the "Easy Connect" form, so nobody hand-builds a DSN. */
-export function buildConnectString(v: OracleVariant, values: Record<string, unknown>): string {
+export function buildConnectString(v: OracleVariant, values: Record<string, unknown>, pin?: PinnedHost): string {
   if (v.autonomous) return str(values.connectString).trim();
-  const host = str(values.host).trim();
+  // Server (T6.1): the address the SSRF guard checked, bracketed if IPv6.
+  const host = pin ? (pin.family === 6 ? `[${pin.address}]` : pin.address) : str(values.host).trim();
   const port = num(values.port, DEFAULT_PORT);
   const service = str(values.serviceName).trim().replace(/^\//, '');
   return `${host}:${port}/${service}`;
@@ -336,7 +356,7 @@ export function buildConnAttrs(v: OracleVariant, ctx: ConnectorContext): OracleC
   const attrs: OracleConnAttrs = {
     user: str(ctx.values.user).trim(),
     password: str(ctx.secrets.password),
-    connectString: buildConnectString(v, ctx.values),
+    connectString: buildConnectString(v, ctx.values, ctx.pinned),
     // SECONDS here (the driver multiplies by 1000), milliseconds for
     // callTimeout below. At least 1s so a small ctx.timeoutMs never floors to
     // 0, which the driver reads as "no timeout".
@@ -361,6 +381,9 @@ async function withConnection<T>(
   fn: (conn: OracleConnection) => Promise<T>,
 ): Promise<T> {
   const oracledb = loadOracle();
+  // ponytail: an ADB connect string is CHECKED, not pinned — TLS matches the
+  // certificate against the host in the string. ADB hosts are Oracle's own.
+  if (v.autonomous && guardOn()) for (const h of connectStringHosts(str(ctx.values.connectString))) await checkHost(h);
   const conn = await oracledb.getConnection(buildConnAttrs(v, ctx));
   try {
     // Server-side bound on a single round trip, in MILLISECONDS.

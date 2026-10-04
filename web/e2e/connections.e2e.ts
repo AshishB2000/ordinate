@@ -53,6 +53,8 @@ if (adminUrl) {
       AUTH_MODE: 'header',
       TRUSTED_PROXY_CIDRS: '127.0.0.1/32',
       ORDINATE_ADMIN_EMAIL: ADMIN,
+      // The source Postgres is on loopback, which the SSRF guard refuses unless allowlisted (T6.1).
+      SSRF_ALLOW: '127.0.0.1/32',
     },
     headers: { 'x-forwarded-email': ADMIN },
   });

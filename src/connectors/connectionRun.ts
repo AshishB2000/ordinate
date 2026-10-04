@@ -16,6 +16,7 @@
 import { coerceValue, finalizeTable, ParseResult } from '../data/parse';
 import { getConnector } from './index';
 import { safeError } from './types';
+import { checkHost, guardOn } from './ssrf';
 import type {
   ConnectorColumn,
   ConnectorColumnDetail,
@@ -63,6 +64,24 @@ export function buildContext(
 
 function resolve(connectorId: unknown): ConnectorDef | null {
   return getConnector(connectorId);
+}
+
+/**
+ * The SSRF guard for a typed host (T6.1), on the server only: the `host` field
+ * is resolved and checked, and its address pinned into `ctx.pinned` for the DB
+ * driver to connect to. Every source naming its server in a `host` field goes
+ * through here; the URL source, the HTTP engines' transport, the SaaS transport
+ * and Oracle's ADB connect string check their own hosts (ssrf.ts). A refusal
+ * string, or null to go ahead.
+ */
+async function guardHost(def: ConnectorDef, ctx: ConnectorContext): Promise<string | null> {
+  if (!guardOn() || !(def.fields || []).some((f) => f.key === 'host')) return null;
+  try {
+    ctx.pinned = await checkHost(String(ctx.values.host ?? ''));
+    return null;
+  } catch (err: unknown) {
+    return safeError(err, ctx.secrets);
+  }
 }
 
 // ── Table → SQL ──────────────────────────────────────────────────────────────
@@ -215,6 +234,8 @@ export async function listTables(
   const def = resolve(connectorId);
   if (!def) return { ok: false, error: unknownConnector(connectorId) };
   const ctx = buildContext(values, secrets, bounds);
+  const refused = await guardHost(def, ctx);
+  if (refused) return { ok: false, error: refused };
   try {
     const res = await def.listTables(ctx);
     if (!res.ok) return { ok: false, error: safeError(res.error, ctx.secrets) };
@@ -277,6 +298,8 @@ async function fetchRows(
 
   const sql = selectionSql(def, selection || {}, ctx.rowLimit);
   if (!sql.ok) return sql;
+  const refused = await guardHost(def, ctx);
+  if (refused) return { ok: false, error: refused };
 
   try {
     const res = await def.run(ctx, sql.sql);
@@ -337,6 +360,8 @@ export async function describeTable(
   if (!def) return { ok: false, error: unknownConnector(connectorId) };
   if (typeof def.describeTable !== 'function') return null;
   const ctx = buildContext(values, secrets, bounds);
+  const refused = await guardHost(def, ctx);
+  if (refused) return { ok: false, error: refused };
   try {
     const res = await def.describeTable(ctx, String(table ?? ''));
     if (!res.ok) return { ok: false, error: safeError(res.error, ctx.secrets) };
@@ -409,6 +434,8 @@ export async function explainSql(
   const statement = typeof sql === 'string' ? sql.trim() : '';
   if (!statement) return { ok: false, error: 'No query to check' };
   const ctx = buildContext(values, secrets, { rowLimit: 1 });
+  const refused = await guardHost(def, ctx);
+  if (refused) return { ok: false, error: refused };
   try {
     const res = await def.run(ctx, statement.replace(/;\s*$/, ''));
     if (!res.ok) return { ok: false, error: safeError(res.error, ctx.secrets) };

@@ -28,6 +28,8 @@ import type {
   ConnectorTables,
 } from './types';
 import { safeError } from './types';
+import { connect as netConnect, type Socket } from 'net';
+import { checkHost, guardOn, type PinnedHost } from './ssrf';
 
 // Loaded lazily so requiring the connector registry does not pull the driver
 // (and its socket/TLS machinery) into every app start.
@@ -368,8 +370,33 @@ export function buildTediousConfig(v: MssqlVariant, ctx: ConnectorContext): Conn
       // readable secondary. Belt to the read-only guard's braces.
       readOnlyIntent: true,
       appName: 'Ordinate',
+      // Server (T6.1): tedious dials through this, so the typed server AND an
+      // Azure gateway's routing redirect are each checked and pinned. `server`
+      // stays the typed name (TLS and the login packet use it).
+      // ponytail: a named instance's SQL Browser lookup (UDP 1434) resolves on its own; the TCP connect is still checked.
+      // tedious 20 calls connector(opts, lookup, signal) though its .d.ts declares no arguments.
+      ...(guardOn() ? { connector: pinnedConnector(str(ctx.values.host).trim(), ctx.pinned) as unknown as () => Promise<Socket> } : {}),
     },
   };
+}
+
+/** Dials the typed server at connectionRun's pin; any other host (a routing redirect) is checked first. */
+function pinnedConnector(typed: string, typedPin: PinnedHost | undefined) {
+  return async (opts: { host: string; port: number }, _lookup: unknown, signal: AbortSignal): Promise<Socket> => {
+    const pin = typedPin && opts.host === typed ? typedPin : await checkHost(opts.host);
+    signal.throwIfAborted();
+    return dial(pin.address, opts.port, signal);
+  };
+}
+
+function dial(address: string, port: number, signal: AbortSignal): Promise<Socket> {
+  return new Promise<Socket>((resolve, reject) => {
+    const socket = netConnect({ host: address, port });
+    const abort = (): void => { socket.destroy(); reject(signal.reason); };
+    signal.addEventListener('abort', abort, { once: true });
+    socket.once('connect', () => { signal.removeEventListener('abort', abort); socket.removeAllListeners('error'); resolve(socket); });
+    socket.once('error', (err) => { signal.removeEventListener('abort', abort); reject(err); });
+  });
 }
 
 // ── driver plumbing ───────────────────────────────────────────────────────────

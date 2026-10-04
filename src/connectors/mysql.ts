@@ -20,6 +20,7 @@
 // its error messages ("Access denied for user 'x'@'y'"), and a DSN-style message
 // would otherwise carry a password to a renderer.
 
+import { connect as netConnect } from 'net';
 import { createConnection, Connection, ConnectionOptions, FieldPacket } from 'mysql2/promise';
 import {
   ConnectorContext,
@@ -174,9 +175,14 @@ function port(v: unknown, fallback: number): number {
  *  assert the foot-guns are off without opening a socket. */
 export function connectionOptions(variant: MysqlVariant, ctx: ConnectorContext): ConnectionOptions {
   const useSsl = variant.sslRequired ? true : bool(ctx.values.ssl, variant.sslDefault);
+  const portNo = port(ctx.values.port, variant.port);
+  const pin = ctx.pinned;
   return {
     host: str(ctx.values.host, 'localhost'),
-    port: port(ctx.values.port, variant.port),
+    port: portNo,
+    // Server (T6.1): the socket goes to the address the SSRF guard checked.
+    // `host` stays the typed name — mysql2 sends it as the TLS SNI.
+    ...(pin ? { stream: () => netConnect({ host: pin.address, port: portNo }).setNoDelay(true) } : {}),
     database: str(ctx.values.database) || undefined,
     user: str(ctx.values.user) || undefined,
     password: str(ctx.secrets.password) || undefined,
