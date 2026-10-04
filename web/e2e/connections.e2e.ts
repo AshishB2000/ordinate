@@ -54,7 +54,8 @@ if (adminUrl) {
       TRUSTED_PROXY_CIDRS: '127.0.0.1/32',
       ORDINATE_ADMIN_EMAIL: ADMIN,
       // The source Postgres is on loopback, which the SSRF guard refuses unless allowlisted (T6.1).
-      SSRF_ALLOW: '127.0.0.1/32',
+      // Both families: `localhost` resolves to ::1 and 127.0.0.1, and every answer must pass.
+      SSRF_ALLOW: '127.0.0.1/32,::1/128',
     },
     headers: { 'x-forwarded-email': ADMIN },
   });
