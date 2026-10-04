@@ -43,6 +43,7 @@ const realPgTypes: unknown = require('pg').types;
 interface Recorded {
   text: string;
   values?: unknown[];
+  mode?: string;
 }
 
 interface FakeResult {
@@ -70,10 +71,10 @@ class FakeClient {
     await connectImpl();
   }
 
-  async query(arg: string | { text: string; values?: unknown[] }): Promise<FakeResult> {
+  async query(arg: string | { text: string; values?: unknown[]; queryMode?: string }): Promise<FakeResult> {
     const text = typeof arg === 'string' ? arg : String(arg.text);
     const values = typeof arg === 'string' ? undefined : arg.values;
-    this.queries.push({ text, values });
+    this.queries.push({ text, values, mode: typeof arg === 'string' ? 'simple' : arg.queryMode });
     return queryImpl(text, values);
   }
 
@@ -274,7 +275,7 @@ async function main(): Promise<void> {
   }
   ok(
     'the wrapper is select * from ( … ) with a LIMIT bounded by rowLimit + 1',
-    dataSql() === 'select * from ( select n from big ) as _ord_wrap limit 4',
+    dataSql() === 'select * from (\nselect n from big\n) as _ord_wrap limit 4',
     dataSql(),
   );
 
@@ -292,9 +293,19 @@ async function main(): Promise<void> {
 
   reset();
   await byId('postgres').run(makeCtx({ rowLimit: 5 }), 'select 1;   ');
+  // T6.3: the data statement goes over the EXTENDED protocol — one statement,
+  // so `select 1 ) x; commit; begin read write; delete …` cannot run — and a
+  // trailing `--` comment cannot swallow the wrapper's LIMIT (own line).
+  ok('the data statement is sent with queryMode extended (one statement per call)',
+    clients.flatMap((c) => c.queries).filter((q) => /_ord_wrap/.test(q.text)).every((q) => q.mode === 'extended'));
+  reset();
+  await byId('postgres').run(makeCtx({ rowLimit: 5 }), 'select * from big ) x --');
+  ok('a trailing -- comment ends at the newline; the LIMIT survives on its own line', /\n\) as _ord_wrap limit 6$/.test(dataSql()), dataSql());
+  reset();
+  await byId('postgres').run(makeCtx({ rowLimit: 5 }), 'select 1;   ');
   ok(
     'a trailing semicolon is stripped so it cannot end the statement before the LIMIT',
-    dataSql() === 'select * from ( select 1 ) as _ord_wrap limit 6',
+    dataSql() === 'select * from (\nselect 1\n) as _ord_wrap limit 6',
     dataSql(),
   );
 

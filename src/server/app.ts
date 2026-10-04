@@ -158,7 +158,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       if (cfg.masterKey) useSecretStore(createSecretStore(pool, cfg.masterKey));
       // AI provider keys go to the encrypted secrets store (T5.3) — with no master key, nowhere (T2.12).
       useAiKeys(pool, cfg.masterKey);
-      (require('./jobs/schedules') as typeof import('./jobs/schedules')).wireSchedules();
+      (require('./jobs/schedules') as typeof import('./jobs/schedules')).wireSchedules(pool, cfg.auth.mode === 'dev');
       // S3 (T5.2): objects are registered in Postgres; old versions are collected by a job.
       if (cfg.storage.s3) {
         const storage = require('../engine/storage') as typeof import('../engine/storage');
@@ -327,7 +327,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   registerFileRoutes(app, cfg.maxUploadMb, () => uploadCapMb(pool, ctx().org.id, cfg.maxUploadMb));
 
   // MCP for programs, signed in with a personal API token (T3.4).
-  registerMcpRoute(app, () => pool);
+  registerMcpRoute(app, () => pool, limits.perUser);
 
   // The maps' bundled boundary GeoJSON (./geo.ts) — org-independent, immutable by content hash.
   registerGeoRoutes(app);

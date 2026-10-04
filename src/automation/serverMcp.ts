@@ -19,7 +19,7 @@
 // as channel `mcp:<tool>`. Two tools are desktop-only (they render through an
 // Electron window) and are not offered here.
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { z } from 'zod';
 import type { ProjectScoped } from '../api/contract';
@@ -37,7 +37,8 @@ export const SERVER_COMMANDS: readonly registry.Command[] = registry.COMMANDS.fi
 
 const version = (): string => (require('../../package.json') as { version: string }).version;
 
-export function registerMcpRoute(app: FastifyInstance, pool: () => Pool | null): void {
+/** `perUser`: the RPC route's per-user rate limit (src/server/limits.ts) — a tool call spends the same budget. */
+export function registerMcpRoute(app: FastifyInstance, pool: () => Pool | null, perUser?: (req: FastifyRequest, reply: FastifyReply) => Promise<void>): void {
   // Inside its own plugin, so the raw-text JSON parser (for a JSON-RPC parse
   // error instead of Fastify's) and the body cap apply to this route only.
   void app.register(async (mcp) => {
@@ -45,7 +46,7 @@ export function registerMcpRoute(app: FastifyInstance, pool: () => Pool | null):
 
     mcp.get('/api/mcp', async (_req, reply) => reply.code(405).header('allow', 'POST').send({ error: 'Use POST.' }));
 
-    mcp.post('/api/mcp', { bodyLimit: MAX_BODY }, async (req, reply) => {
+    mcp.post('/api/mcp', { bodyLimit: MAX_BODY, ...(perUser ? { onRequest: perUser } : {}) }, async (req, reply) => {
       reply.header('cache-control', 'no-store');
       const who = ctx();
       if (who.via !== 'token') {

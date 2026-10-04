@@ -162,16 +162,18 @@ async function main(): Promise<void> {
   // ── row cap ────────────────────────────────────────────────────────────────
 
   const wrapped = mysqlConn.wrapSelect('select * from sales', 100);
-  ok('wrapper is a sub-SELECT', /^SELECT \* FROM \( select \* from sales \) AS t /.test(wrapped), wrapped);
+  ok('wrapper is a sub-SELECT', /^SELECT \* FROM \(\nselect \* from sales\n\) AS t /.test(wrapped), wrapped);
   // rowLimit + 1: the extra probe row is how truncation is DETECTED; run() slices
   // back to rowLimit, so the cap the caller sees is exactly ctx.rowLimit.
   ok('wrapper caps at rowLimit (+1 probe row to detect truncation)', / LIMIT 101$/.test(wrapped), wrapped);
   ok('wrapper caps at rowLimit for a 1M limit', / LIMIT 1000001$/.test(mysqlConn.wrapSelect('select 1', 1_000_000)));
   ok(
     'a trailing semicolon is stripped so it cannot close the sub-select',
-    mysqlConn.wrapSelect('select 1;  ', 5) === 'SELECT * FROM ( select 1 ) AS t LIMIT 6',
+    mysqlConn.wrapSelect('select 1;  ', 5) === 'SELECT * FROM (\nselect 1\n) AS t LIMIT 6',
     mysqlConn.wrapSelect('select 1;  ', 5),
   );
+  ok('T6.3: a trailing -- or # comment ends at the newline; the LIMIT survives on its own line',
+    /\n\) AS t LIMIT 6$/.test(mysqlConn.wrapSelect('select * from big ) t -- ', 5)) && /\n\) AS t LIMIT 6$/.test(mysqlConn.wrapSelect('select * from big ) t #', 5)));
   ok('a garbage rowLimit still yields a finite cap', / LIMIT 2$/.test(mysqlConn.wrapSelect('select 1', NaN)));
   ok('a zero rowLimit still yields a finite cap', mysqlConn.effectiveRowLimit(0) === 1);
   ok('effectiveRowLimit passes a sane limit through', mysqlConn.effectiveRowLimit(1_000_000) === 1_000_000);

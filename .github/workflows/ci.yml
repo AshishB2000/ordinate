@@ -121,6 +121,26 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  # Known vulnerabilities in RUNTIME dependencies (Phase 7, T6.3): a high or
+  # critical advisory fails the job. Dev-only packages are left out — they never
+  # reach the server image or the browser. Reads only the lockfiles, so no
+  # install. An advisory judged unreachable is recorded in
+  # docs/phase-7-web/threat-model.md, but the job stays red until it is fixed.
+  audit:
+    name: npm audit (runtime, high = fail)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Server dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Web app dependencies
+        if: always()
+        run: npm --prefix web audit --omit=dev --audit-level=high
+
   # Four shards in parallel, balanced by scripts/smoke-durations.json — the
   # serial chain had grown past 40 minutes. Each smoke is killed by name after 10
   # minutes (scripts/run-smokes.ts) and the job after 60, so a hung app can

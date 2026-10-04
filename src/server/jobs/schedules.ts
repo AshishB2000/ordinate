@@ -10,9 +10,12 @@
 // Trash purge.
 //
 // What changes on the server is delivery — no OS notification, no hub window:
-//   hub:dataset-refreshed  → every tab of the org (desktop: every hub window)
-//   alerts:fired           → every tab of the org, one per project per tick
-// both through sse.publish, so a tab on any pod gets them.
+//   hub:dataset-refreshed  → every tab of a member who may READ the project
+//   alerts:fired           → the same, one per project per tick
+// both through sse.publish, so a tab on any pod gets them. Not the whole org
+// (T6.3): an alert carries the project's figures and a refresh its dataset's
+// name, and an org member with no grant on the project must see neither. A
+// refresh error is cut like every other origin text (no URL query, no path).
 //
 // Not carried over: `reports:run-due` (the desktop renderer generates reports;
 // the server has no generator until the reports port), the alert "explain"
@@ -22,6 +25,9 @@ import * as scheduler from '../../app/refreshScheduler';
 import * as config from '../../app/config';
 import * as pipelineRunner from '../../app/pipelineRunner';
 import * as alertStore from '../../analysis/alertStore';
+import type { Pool } from 'pg';
+import { redactOriginText } from '../../data/datasetOrigin';
+import { readerEmails } from '../authz/index';
 import { ctx } from '../context';
 import { publish } from '../sse';
 import { defineJob } from './runner';
@@ -31,21 +37,37 @@ export const TICK_EVERY_MS = 60_000;
 
 let wired = false;
 
-/** Hooks the tick's callbacks to server delivery and declares the `tick` job. Once per process. */
-export function wireSchedules(): void {
+/**
+ * Pushes `channel` to the tabs of every member who may read `projectId`. Under
+ * dev sign-in (`everyone`) there is one identity and it is an org admin, so the
+ * org is the same set of tabs.
+ */
+export async function toReaders(pool: Pool, everyone: boolean, projectId: string, channel: string, payload: unknown): Promise<void> {
+  const org = ctx().org.id;
+  if (everyone) return publish({ org }, channel, payload);
+  for (const user of await readerEmails(pool, org, projectId)) publish({ org, user }, channel, payload);
+}
+
+/**
+ * Hooks the tick's callbacks to server delivery and declares the `tick` job.
+ * Once per process. `devAuth`: AUTH_MODE=dev (see `toReaders`).
+ */
+export function wireSchedules(pool: Pool, devAuth: boolean): void {
   if (wired) return;
   wired = true;
-  const org = () => ({ org: ctx().org.id });
+  const push = (projectId: string, channel: string, payload: unknown): void => {
+    void toReaders(pool, devAuth, projectId, channel, payload).catch(() => undefined);
+  };
 
   scheduler.setEnabledCheck(() => config.get().autoRefresh !== false);
-  scheduler.onRefreshed((o) => publish(org(), 'hub:dataset-refreshed', o));
+  scheduler.onRefreshed((o) => push(o.projectId, 'hub:dataset-refreshed', o.error === undefined ? o : { ...o, error: redactOriginText(o.error) }));
   // ipc/alerts' evaluateOnly, which cannot load here (its delivery imports Electron).
   scheduler.onEvaluateAlerts(async (projectId, datasetId) => {
     await alertStore.syncWatchRules(projectId);
     return alertStore.evaluateProject(projectId, datasetId);
   });
   scheduler.onTickAlerts((batches) => {
-    for (const b of batches) publish(org(), 'alerts:fired', b);
+    for (const b of batches) push(b.projectId, 'alerts:fired', b);
   });
   // ponytail: ipc/pipelines adds this same hook when registered; it is not
   // registered on the server yet — drop this when it is. (ipc/trash is, since

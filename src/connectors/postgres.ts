@@ -437,7 +437,10 @@ interface ArrayResult {
 }
 
 async function queryArray(client: Client, text: string, values?: unknown[]): Promise<ArrayResult> {
-  const cfg = { text, rowMode: 'array', values } as unknown as Parameters<Client['query']>[0];
+  // queryMode 'extended' (T6.3): ONE statement per call. Without values pg uses
+  // the simple protocol, which runs `select 1 ) x; commit; begin read write;
+  // delete …` as four statements — past the read-only session and the LIMIT.
+  const cfg = { text, rowMode: 'array', values, queryMode: 'extended' } as unknown as Parameters<Client['query']>[0];
   return (await client.query(cfg)) as unknown as ArrayResult;
 }
 
@@ -557,7 +560,9 @@ async function run(v: PgVariant, ctx: ConnectorContext, sql: string): Promise<Co
     // Their database, their SQL — but always sub-select wrapped so the row cap
     // applies no matter what they wrote. A trailing `;` would end the statement
     // before the wrapper's `limit`, so strip it (verbatim from connectionRun).
-    text = `select * from ( ${input.replace(/;\s*$/, '')} ) as _ord_wrap limit ${probe}`;
+    // Their text on its OWN line (T6.3): a trailing `--` comment would
+    // otherwise swallow the wrapper's `) … limit` and lift the row cap.
+    text = `select * from (\n${input.replace(/;\s*$/, '')}\n) as _ord_wrap limit ${probe}`;
   } else {
     // Anything that is not recognisably a query is treated as a TABLE NAME and
     // must survive the whitelist. This is what makes a hostile string safe:

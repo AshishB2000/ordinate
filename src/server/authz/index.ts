@@ -129,6 +129,25 @@ export async function readable(pool: Pool | null, who: Identity): Promise<(proje
   return (id) => typeof id === 'string' && ids.has(id.toLowerCase());
 }
 
+/**
+ * Every enabled member of `org` who may read `projectId` — org admins and its
+ * grantees, directly or through a team. The inverse of `readable`, for a push
+ * about one project that must reach only them (../jobs/schedules.ts).
+ */
+export async function readerEmails(pool: Pool, org: string, projectId: string): Promise<string[]> {
+  const r = await pool.query<{ email: string }>(
+    `SELECT u.email FROM users u
+      WHERE u.org_id = $1 AND u.disabled_at IS NULL
+        AND (u.role = 'admin' OR EXISTS (
+              SELECT 1 FROM project_grants g
+               WHERE g.org_id = u.org_id AND g.project_id = $2
+                 AND (g.user_id = u.id OR g.team_id IN (SELECT team_id FROM team_members WHERE user_id = u.id))))
+      ORDER BY u.email`,
+    [org, projectId],
+  );
+  return r.rows.map((row) => row.email);
+}
+
 /** Project creation: the creator becomes the new project's admin. */
 export async function grantCreator(pool: Pool | null, who: Identity, projectId: string): Promise<void> {
   if (!pool) return; // dev without Postgres: the only caller is the dev admin

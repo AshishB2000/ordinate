@@ -163,7 +163,7 @@ export function ProjectSwitcher() {
     const items: MenuEntry[] = [];
     if (write) items.push({ label: 'Rename', icon: 'pencil', onSelect: () => setDialog({ kind: 'rename', p }) });
     if (sharing) items.push({ label: admin ? 'Share…' : 'Who has access', icon: 'user', onSelect: () => setDialog({ kind: 'share', p }) });
-    items.push({ label: 'Export project', icon: 'package', onSelect: () => void exportOne(p) });
+    if (admin) items.push({ label: 'Export project', icon: 'package', onSelect: () => void exportOne(p) });
     if (admin) {
       items.push({
         // The last open project cannot be archived: there would be nowhere to be.

@@ -101,7 +101,8 @@ if (!adminUrl) {
     assert.equal(await pop.getByRole('button', { name: 'New project' }).count(), 0, 'an org viewer creates no projects');
     await pop.getByRole('button', { name: `${PROJECT} options` }).click();
     const items = (await page.getByRole('menuitem').allTextContents()).map((t) => t.trim());
-    assert.deepEqual(items, ['Who has access', 'Export project']);
+    // No Export for a viewer (T6.3): a bundle carries the datasets' raw origins.
+    assert.deepEqual(items, ['Who has access']);
     await page.getByRole('menuitem', { name: 'Who has access' }).click();
     const ro = page.getByRole('dialog', { name: `Who has access to ${PROJECT}` });
     await ro.getByText(SAM).waitFor();

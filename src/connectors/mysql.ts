@@ -141,7 +141,9 @@ export function quoteIdent(id: string): string {
  *  A trailing semicolon would close the sub-select early, so it is stripped. */
 export function wrapSelect(sql: string, rowLimit: number): string {
   const inner = String(sql).trim().replace(/;\s*$/, '');
-  return `SELECT * FROM ( ${inner} ) AS t LIMIT ${probeLimit(rowLimit)}`;
+  // `inner` on its own line (T6.3): a trailing `-- ` or `#` comment would
+  // otherwise swallow `) AS t LIMIT …` and the whole table would be buffered.
+  return `SELECT * FROM (\n${inner}\n) AS t LIMIT ${probeLimit(rowLimit)}`;
 }
 
 export function effectiveRowLimit(rowLimit: number): number {

@@ -269,7 +269,7 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
   // ── 3. Rate limits ─────────────────────────────────────────────────────────
   // RPC per user and per IP, on the real app (identity from a test header).
   const rl = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA, RATE_LIMIT_RPC_PER_MINUTE: '3', RATE_LIMIT_RPC_IP_PER_MINUTE: '6', RATE_LIMIT_LOGIN_PER_MINUTE: '3' }),
-    undefined, (h) => ({ user: { email: String(h['x-test-user'] ?? 'u1'), role: 'admin' }, org: { id: 'default' } }));
+    undefined, (h) => ({ user: { email: String(h['x-test-user'] ?? 'u1'), role: 'admin' }, org: { id: 'default' }, ...(h['x-test-token'] ? { via: 'token' as const } : {}) }));
   await rl.ready();
   const call = (user: string, ip: string) =>
     rl.inject({ method: 'POST', url: '/api/rpc/projects:list', remoteAddress: ip, headers: withCsrf({ ...JSON_H, 'x-test-user': user }), payload: '{"args":[]}' });
@@ -285,6 +285,15 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
   ok('rpc per IP: …then 429 although that user made only 3', u2[2].statusCode === 429 && Number(u2[2].headers['retry-after']) >= 1);
   ok('rpc per user: u1 is still limited from another IP (the bucket is the person)', (await call('u1', '198.51.100.2')).statusCode === 429);
   ok('rpc: a fresh user from a fresh IP passes', (await call('u3', '198.51.100.3')).statusCode === 200);
+  // T6.3: /api/mcp runs the same handlers, so it spends the same per-user and per-IP buckets (it had none).
+  const mcpCall = (user: string, ip: string) =>
+    rl.inject({ method: 'POST', url: '/api/mcp', remoteAddress: ip, headers: { ...JSON_H, 'x-test-user': user, 'x-test-token': '1' }, payload: '{"jsonrpc":"2.0","id":1,"method":"ping"}' });
+  const m1 = [];
+  for (let i = 0; i < 4; i++) m1.push(await mcpCall('m1', '198.51.100.20'));
+  ok('mcp per user: 3 tool calls pass, the 4th → 429 with Retry-After', m1.slice(0, 3).every((r) => r.statusCode === 200) && m1[3].statusCode === 429 && Number(m1[3].headers['retry-after']) >= 1, m1.map((r) => r.statusCode).join());
+  const m2 = [await mcpCall('m2', '198.51.100.20'), await mcpCall('m2', '198.51.100.20'), await mcpCall('m2', '198.51.100.20')];
+  ok('mcp per IP: another token user from that IP is refused once the IP has made 6', m2[0].statusCode === 200 && m2[1].statusCode === 200 && m2[2].statusCode === 429, m2.map((r) => r.statusCode).join());
+  ok('mcp per user: the bucket is the person — RPC is refused too after the MCP calls', (await call('m1', '198.51.100.21')).statusCode === 429);
   const login = [];
   for (let i = 0; i < 4; i++) login.push(await rl.inject({ url: '/api/auth/login', remoteAddress: '203.0.113.7' }));
   ok('sign-in: 3 logins from one IP pass', login.slice(0, 3).every((r) => r.statusCode === 302), login.map((r) => r.statusCode).join());

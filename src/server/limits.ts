@@ -3,6 +3,8 @@
 //   sign-in   GET /api/auth/login + /api/auth/callback   per client IP   RATE_LIMIT_LOGIN_PER_MINUTE (60)
 //   RPC       POST /api/rpc/<channel>                    per client IP   RATE_LIMIT_RPC_IP_PER_MINUTE (3000)
 //                                                        per user        RATE_LIMIT_RPC_PER_MINUTE (1200)
+//   MCP       POST /api/mcp                              the RPC buckets above (T6.3): a tool call
+//                                                        runs the same handlers, so it spends the same budget
 //
 // Over a limit → 429 with Retry-After (seconds until the window resets). The
 // per-IP checks run before sign-in is looked up, so a flood costs no Postgres
@@ -27,6 +29,7 @@ import type { LimitsEnv } from './env';
 
 const MINUTE = 60_000;
 export const RPC_ROUTE = '/api/rpc/:channel';
+const MCP_ROUTE = '/api/mcp';
 const SIGN_IN_ROUTES = new Set(['/api/auth/login', '/api/auth/callback']);
 
 /** The address a request came from, trusting X-Forwarded-For only as far as the proxies in `proxies`. */
@@ -52,7 +55,7 @@ async function refused(limiter: Limiter, req: FastifyRequest, reply: FastifyRepl
 }
 
 export interface Limits {
-  /** The per-user RPC check: a route-level onRequest hook, after sign-in. */
+  /** The per-user RPC check (also /api/mcp's): a route-level onRequest hook, after sign-in. */
   perUser(req: FastifyRequest, reply: FastifyReply): Promise<void>;
 }
 
@@ -74,7 +77,7 @@ export function registerLimits(app: FastifyInstance, cfg: LimitsEnv, proxies: Bl
     if (SIGN_IN_ROUTES.has(route)) {
       signIn ??= app.createRateLimit({ max: cfg.loginPerMinute, timeWindow: MINUTE, keyGenerator: ipKey('login:') });
       await refused(signIn, req, reply);
-    } else if (route === RPC_ROUTE) {
+    } else if (route === RPC_ROUTE || (route === MCP_ROUTE && req.method === 'POST')) {
       rpcIp ??= app.createRateLimit({ max: cfg.rpcIpPerMinute, timeWindow: MINUTE, keyGenerator: ipKey('rpc:') });
       await refused(rpcIp, req, reply);
     }

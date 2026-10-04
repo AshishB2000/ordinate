@@ -11,6 +11,7 @@ import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import * as combine from '../data/combine';
 import * as history from '../app/history';
+import { serverDataDir } from '../server/context';
 import { runQualityChecks } from '../analysis/qualityRun';
 import * as importStage from '../data/importStage';
 import * as jobs from '../app/jobs';
@@ -172,8 +173,11 @@ async function resolveCaptureLink(
   const thread = await history.loadThread(origin.captureId).catch(() => null);
   // A capture is a project record: a dataset links only to one of its own
   // project's captures (the caller's role was checked on THIS project, not on
-  // the capture's). Another project's — or no such capture — links nothing.
-  if (!thread || (thread.projectId && thread.projectId !== projectId)) return null;
+  // the capture's). Another project's — or no such capture — links nothing. On
+  // the server a capture with NO project links nothing either (T6.3): no role
+  // was ever checked on it.
+  const own = thread && (thread.projectId ? thread.projectId === projectId : serverDataDir() === null);
+  if (!thread || !own) return null;
   return { entryId: String(origin.captureId), cropPath: thread.cropPath || null };
 }
 
