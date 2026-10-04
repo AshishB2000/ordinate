@@ -845,3 +845,20 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
 - **Open:** `pipelines:run` waits for the whole run in one RPC (> 60 s → 504) — should become a job;
   report/alert/publish nodes still fail on the server (T5.4 gap); desktop `smoke-round6` word-cloud label
   check fails (outside this diff; being fixed separately).
+
+## 2026-10-04 — T2.10 Analytics workbenches A — stats, drivers, scenarios, segments
+
+- **Routes:** `/analytics` (doors + dataset picker), `/analytics/:projectId/:datasetId/{stats,drivers,
+  segments}`, `/analytics/scenarios/:projectId[/compare|/:scenarioId]`; nav "Analytics".
+- **Figures moved to the server** (the desktop renderer computed them): `stats:run` `figures`
+  (group totals, cross-tab shares, residual/QQ reference spans — `src/analysis/stats/figures.ts`),
+  `stats:pair` fit-line end points, drivers waterfall running levels, `scenario:compare` `best`,
+  `segments:fit` `shares`. `test-analyticsServer`: every derived figure `Object.is` the desktop's
+  arithmetic; role matrix wrong=0, leaks=0.
+- **Server-only channels** `stats:addToDashboard` (server merges the card), `stats:dashboards`,
+  `scenario:metrics` — instead of contracting `analysis:*`/`metric:list`, which T2.8 owns.
+- **Measured:** RPCs /analytics 4, stats flow 7, drivers 8, segments 8, scenarios 2–6; chunks 4–10.5 KB gzip.
+- **Chain gates (on T2.6):** `npm test` 276/276 without DB, with DB 275 + `test-projects-server` passing
+  alone (shared-DB contention); Vitest 491/491; e2e 40/40 (DB), 36 + 2 skip; lint 0; 191 contracts.
+- **Open:** dock context for analytics routes not wired (needs `dockState.ts` route match);
+  `drivers:explainAlert`/`scenario:card` uncontracted until T2.9; three analytics CSS modules ~600 lines.
