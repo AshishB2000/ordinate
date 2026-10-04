@@ -173,7 +173,7 @@ ownership and result path (`jobs.publicJob`, `test-home`). No cross-project IDOR
 
 | # | Risk | Severity | Why it is accepted / what closes it |
 |---|---|---|---|
-| R1 | **ReDoS in user regex on the main thread.** Prepare/text steps (`checkRegex` subset, `qualityRegex`) run in V8 on the request thread; `(\w+)+!`, `(a&#124;a)+!` or `\w+\w+…\w+!` over a ~40-char cell stalls the pod for every org. `text:preview` needs only `read`. | **High (availability) — OPEN** | No static rule is complete, and V8's linear fallback (`--enable-experimental-regexp-engine-on-excessive-backtracks`) does not cover the `u` flag the subset needs — measured: every pattern above still ran > 5 s with it, only the non-`u` one finished (1 ms). Fix = run user-regex folds off the request thread with a deadline (compute pool + terminate). Needs its own task. Meanwhile a stuck pod fails `/healthz` and Kubernetes restarts it. |
+| R1 | **ReDoS in user regex on the main thread.** Prepare/text steps (`checkRegex` subset, `qualityRegex`) run in V8 on the request thread; `(\w+)+!`, `(a&#124;a)+!` or `\w+\w+…\w+!` over a ~40-char cell stalls the pod for every org. `text:preview` needs only `read`. | **High (availability) — OPEN → T6.4** (user decision 2026-10-04) | No static rule is complete, and V8's linear fallback (`--enable-experimental-regexp-engine-on-excessive-backtracks`) does not cover the `u` flag the subset needs — measured: every pattern above still ran > 5 s with it, only the non-`u` one finished (1 ms). Fix = run user-regex folds off the request thread with a deadline (compute pool + terminate). Needs its own task. Meanwhile a stuck pod fails `/healthz` and Kubernetes restarts it. |
 | R2 | User SQL over DuckDB rests on a lexer denylist (`sqlGate`) for the **project** boundary inside an org (the org lock holds the org boundary). The review also reports that the server's SQL path (`query_sql`, SQL-dataset refresh) is refused today because `hardenConnection` re-issues `SET` on an already locked worker — unverified; a functional bug either way. | Medium — OPEN | Before server SQL is turned on: replace the denylist with an allow-list over DuckDB's own AST (`json_serialize_sql`: only known dataset/CTE base tables, no table functions) and skip `hardenConnection` behind the router. |
 | R3 | Bundle / backup import inflates up to 4 GB (`MAX_TOTAL_BYTES`) in memory from a ≤ `MAX_UPLOAD_MB` upload; the org backup is built in memory too. | Medium (availability) | Bounded, editor/admin-only. Stream entries to disk or cap the inflated total per server when an org outgrows it. |
 | R4 | A source URL with an API key in its query is stored in the dataset origin as plaintext (Postgres `records`), not in the secrets store. Never reaches a browser (F6, `test-dataViews`). | Low | Operator's DB is encrypted at rest (plan §8). A URL-connector "secret parameter" would move it into the store. |
@@ -184,21 +184,24 @@ ownership and result path (`jobs.publicJob`, `test-home`). No cross-project IDOR
 | R9 | SSRF (T6.1): an allowlist entry also allows its IPv4-mapped IPv6 form (same range — informational); `SSRF_ALLOW=0.0.0.0/0` turns the guard off (operator's choice, out of scope in SECURITY.md); SQL Server named-instance UDP 1434 lookup is unpinned (one datagram; TCP stays pinned); Oracle ADB connect strings are checked, not pinned, and listener redirects are not re-checked; no Content-Encoding decoding (rules out decompression bombs). | Low | Each needs a hostile DNS or listener plus a reachable internal service; the TCP connection itself is checked and pinned. |
 | R10 | A locked DuckDB worker still accepts `CREATE SECRET` (T5.2). | Low | Unreachable from user SQL: one statement, must start SELECT/WITH/FROM/VALUES, and runs inside `FROM ( … )`. |
 | R11 | Header-mode sign-ins leave no audit row (the proxy has none to hand us). `onboarding:status` tells any member the sample's ids; `project:access` (read) shows grantees' emails. | Info | The proxy logs sign-ins; ids and emails within one org are not secrets here. |
-| R12 | MapLibre 4.7.1 has a critical `DOM.sanitize()` bypass (GHSA-jrc7-96c5-q579). | Low (unreachable) | Ordinate never calls `setHTML` — popups use `setDOMContent` with DOM it built — and `script-src 'self'` stands behind it. Pinned to v4 on purpose (CLAUDE.md); the upgrade to 6.x is a decision for the user. CI's audit job stays red until then. |
+| R12 | MapLibre 4.7.1 has a critical `DOM.sanitize()` bypass (GHSA-jrc7-96c5-q579). | Low (unreachable) | The web app never calls `setHTML` — popups use `setDOMContent` with DOM it built — and `script-src 'self'` stands behind it (the desktop renderer's one `setHTML` escapes its input and is deleted at T8.1). Pinned to v4 on purpose (CLAUDE.md). Allowlisted in `scripts/audit-gate.ts` until 2027-01-04 (user decision, 2026-10-04). |
 | R13 | T3.3 decision still pending with the user: org **editors** may call org-level write channels (create a project, upload, import a bundle). | Info | One line in `orgAllows` to make them admin-only. |
 
 ## 7. Dependency audit (`npm audit --omit=dev`, 2026-10-04)
 
-CI gate: job `audit` in `.github/workflows/ci.yml` runs `npm audit --omit=dev --audit-level=high` for
-the root and `web/` (no branch filter touched). **It fails today** on the advisories below; none can be
-fixed without a dependency change that needs the user's approval (plan §2 / rule 11).
+CI gate: job `audit` in `.github/workflows/ci.yml` runs `scripts/audit-gate.ts` over the root and
+`web/`: it fails on any high/critical advisory outside a three-entry allowlist (below, each with a
+reason and a 2027-01-04 review date), on an entry past its review date, and on an entry no longer
+reported. Negative controls: dropping the maplibre entry fails 3 checks; an expired date fails 3. The
+in-range `npm audit fix` (lockfile only: `fast-uri` 3.1.8, `brace-expansion` 1.1.21/2.1.7/5.0.12) was
+applied with the user's approval on 2026-10-04.
 
 | Package (path) | Severity | Advisory | Reachable from the server/web app? | Fix |
 |---|---|---|---|---|
-| `maplibre-gl` 4.7.1 (root + web, direct) | critical | GHSA-jrc7-96c5-q579 — `DOM.sanitize()` bypass | No — `setHTML` never called (R12) | 6.12.0 (major; CLAUDE.md pins v4) |
-| `pptxgenjs` 4.0.1 → `image-size` 1.2.1 (root) | high | GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr — JXL/HEIF/ICNS parser infinite loops | No — reports (`src/ipc/reports.ts`) are not registered on the server; images are chart PNGs the app drew | none in range (audit offers a downgrade to 4.0.0) |
-| `fast-uri` 3.1.2 via `ajv` (fastify) | high | 8 advisories — host confusion / SSRF in URI parsing | No — parses Fastify's own JSON-schema `$id`s, never a request URL | in-range: `npm audit fix` (lockfile only) |
-| `brace-expansion` 1.1.15 / 2.1.3 / 5.0.6 via `glob`/`minimatch` (`@fastify/static`, `exceljs` → `archiver`) | high | 6 advisories — ReDoS/OOM on crafted brace patterns | No — patterns are fixed in code (static root listing, xlsx writer) | in-range: `npm audit fix` (lockfile only) |
+| `maplibre-gl` 4.7.1 (root + web, direct) | critical | GHSA-jrc7-96c5-q579 — `DOM.sanitize()` bypass | No — `setHTML` never called in the web app (R12) | 6.12.0 (major; CLAUDE.md pins v4) — **allowlisted** |
+| `pptxgenjs` 4.0.1 → `image-size` 1.2.1 (root) | high | GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr — JXL/HEIF/ICNS parser infinite loops | No — reports (`src/ipc/reports.ts`) are not registered on the server; images are chart PNGs the app drew | none (audit offers a downgrade to 4.0.0) — **allowlisted** |
+| `fast-uri` 3.1.2 via `ajv` (fastify) | high | 8 advisories — host confusion / SSRF in URI parsing | No — parses Fastify's own JSON-schema `$id`s, never a request URL | **fixed**: in-range `npm audit fix` (lockfile only) |
+| `brace-expansion` 1.1.15 / 2.1.3 / 5.0.6 via `glob`/`minimatch` (`@fastify/static`, `exceljs` → `archiver`) | high | 6 advisories — ReDoS/OOM on crafted brace patterns | No — patterns are fixed in code (static root listing, xlsx writer) | **fixed**: in-range `npm audit fix` (lockfile only) |
 | `exceljs` 4.4.0 → `uuid` 8.3.2 (root) | moderate | GHSA-w5hq-g745-h8pq — v3/v5/v6 with a caller buffer | No — exceljs calls v4 | none in range |
 
 `web/` alone: only `maplibre-gl` (critical).
