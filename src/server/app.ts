@@ -391,4 +391,8 @@ export function registerHandlers(): void {
   for (const mod of ['../ipc/settingsServer', '../ipc/themes', '../ipc/privacy', '../ipc/search', '../ipc/periods']) {
     (require(mod) as { register: () => void }).register();
   }
+  // Analyses and authoring, metrics (T2.8). `periods` (metric:compare) is T2.14's registration above.
+  for (const mod of ['../ipc/analyses', '../ipc/templates', '../ipc/dashboards', '../ipc/metrics', '../ipc/analysesServer']) {
+    (require(mod) as { register: () => void }).register();
+  }
 }

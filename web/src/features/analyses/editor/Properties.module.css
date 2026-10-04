@@ -1,0 +1,105 @@
+/* The Properties flyout (hub.css .an-sec / .an-prop-*). */
+
+.props {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  padding: var(--sp-12);
+}
+.hint {
+  margin: 0;
+  padding: var(--sp-12);
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.h {
+  margin: 0;
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-strong);
+}
+.note {
+  margin: 0;
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+  color: var(--muted);
+}
+.visualLine {
+  margin: 0;
+  color: var(--text-dim);
+}
+.visualLine strong {
+  color: var(--text-strong);
+}
+.row {
+  display: flex;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+.tabRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-4);
+}
+.tabRow > :first-child {
+  flex: 1 1 auto;
+}
+.range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-8);
+}
+.dateField {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.dateField input {
+  height: var(--ctl-md);
+  padding: 0 var(--sp-8);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.dateField input:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+/* A navigation card's button rows (actionEditor.ts .ae-row). */
+.navRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.navLegend {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-4);
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.warn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--warn);
+}

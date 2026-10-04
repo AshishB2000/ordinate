@@ -11,7 +11,7 @@ import { Drawer } from '../../ui/Dialog';
 import { Icon, type IconName } from '../../ui/icons/Icon';
 import { SkeletonBlock } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
-import { useLineage, type Lineage, type LineageNode } from './api';
+import { useLineage, type Lineage, type LineageNode, type LineageType } from './api';
 import { recordHref } from './CatalogTab';
 import { formatNumber } from './format';
 import s from './Data.module.css';
@@ -165,11 +165,13 @@ function Graph({ projectId, g }: { projectId: string; g: Lineage }) {
   );
 }
 
-export function LineageDrawer({ projectId, id, name, onClose }: { projectId: string; id: string; name: string; onClose: () => void }) {
-  const q = useLineage(projectId, id);
+const TYPE_WORD: Record<LineageType, string> = { dataset: 'Dataset', visual: 'Visual', dashboard: 'Dashboard', metric: 'Metric', report: 'Report', alert: 'Alert' };
+
+export function LineageDrawer({ projectId, id, name, onClose, type = 'dataset' }: { projectId: string; id: string; name: string; onClose: () => void; type?: LineageType }) {
+  const q = useLineage(projectId, id, true, type);
   const g = q.data;
   return (
-    <Drawer open wide onOpenChange={(o) => !o && onClose()} title={name} description="Lineage · Dataset">
+    <Drawer open wide onOpenChange={(o) => !o && onClose()} title={name} description={`Lineage · ${TYPE_WORD[type]}`}>
       {q.isPending ? (
         <SkeletonBlock label="Tracing what this is built from" />
       ) : q.isError ? (
