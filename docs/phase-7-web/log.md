@@ -778,3 +778,27 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
 - **For T6.3:** an allowlist entry also allows its IPv4-mapped IPv6 form; `SSRF_ALLOW=0.0.0.0/0` turns the
   guard off; SQL Server named-instance UDP 1434 lookup is unpinned (`ponytail:`); no Content-Encoding
   decoding in `safeFetch` (never sends Accept-Encoding).
+
+## 2026-10-04 — T2.3 Data: list, dataset page, catalog
+
+- **Screens:** `/data` → current project; `/data/:projectId` tabs Datasets / Captures (T2.4's
+  `useCaptures`) / Catalog / Relationships + search inside the data; `/data/:projectId/:datasetId` tabs
+  Data / Quality / Columns. Delete → `toastMovedToTrash` with Undo; "Pipeline history" → `/versions`.
+- **DataGrid (merged with T2.4's):** one header-activation API (`onHeaderActivate(col, anchor)` → a
+  `ColumnMenu` popover: profile, sort, rename, type, hide); `header(column, i)` content slot; hidden
+  columns via `GridColumn.at` with `sourceCol`/`cellOf` so `cellFlag`/`editorList`/`onEdit` never shift.
+- **No origin reaches the browser:** new `dataset:source` → `{kind, label, refreshable}`;
+  `dataset:columns/update/refresh` reply name/rows/columns only; refresh errors cut URLs to host and paths
+  to file name (server); `lineage:get` re-keys file/URL nodes. `test-dataViews` (83): a canary planted in
+  4 origins + a refresh error is absent from all 44 Data replies over HTTP; negative control 3 FAIL.
+- **Server computes every figure:** `dataset:profile` (one column's whole panel, == JS reference for all 4
+  types, never hydrates, traced resident); filled %, `matchPct`, `ratePct`, catalog kind counts, upstream
+  count. Histogram now 20 buckets in axis order with empty buckets at 0 (the desktop drew them scrambled).
+- **Contracts:** catalog, lineage, relationship, quality, dataSearch (`projectId` required — the desktop's
+  empty value searched every project), dataset delete/refresh/source/profile; `dataset:distinct` is T2.4's.
+- **Measured:** dataset page ≈ 9 RPCs; initial JS 167 KB gzip; 125 contracts, 0 unresolved.
+- **Chain gates (on T6.1):** `npm test` 272/272 with and without DB; Vitest 386/386; e2e 29/29 (DB),
+  25 + 2 skip; lint 0; file sizes pass. Agent: Electron dataset/depth/composer/workspace smokes pass.
+- **Open:** rename/retype index against stored columns (same as desktop `updateDataset`) — can hit the
+  wrong column on a dataset with prepare steps; T2.6 should fix both. Connector logos in the Source
+  column dropped (crop thumbnails stay out: summaries carry `hasImage` only).

@@ -13,6 +13,16 @@ export interface DatasetSummary {
   rowCount: number;
   columnCount: number;
   updatedAt: string;
+  /** Freshness and lineage, as the Data list reads them (T2.3). */
+  originKind?: string;
+  originDeps?: string[];
+  stepDeps?: string[];
+  lastRefreshedAt?: string;
+  lastRefreshStatus?: 'ok' | 'error';
+  lastRefreshError?: string | null;
+  autoRefresh?: { every: 'hourly' | 'daily' | 'weekly'; watch?: boolean };
+  /** FAIL rules failing in the latest quality run. */
+  qualityFailing?: number;
 }
 
 /** The project's saved datasets; idle until a project is chosen. */
@@ -50,6 +60,8 @@ export interface PageQuery {
   search?: string;
   sortColumn?: string;
   sortDir?: 'asc' | 'desc';
+  /** Row filters (`column = value` from a data search hit). */
+  filters?: { type: 'filter'; column: string; op: string; value?: string | number | null }[];
 }
 
 /**

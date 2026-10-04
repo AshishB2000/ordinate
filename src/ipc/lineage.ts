@@ -51,9 +51,34 @@ export async function loadInput(projectId: string): Promise<LineageInput> {
   };
 }
 
-export async function lineageFor(projectId: string, type: string, id: string): Promise<FocusedLineage | null> {
+export async function lineageFor(projectId: string, type: string, id: string): Promise<(FocusedLineage & { upstream: number }) | null> {
   if (!isValidId(projectId) || !isValidId(id) || !PREFIX[type]) return null;
-  return focus(buildGraph(await loadInput(projectId)), PREFIX[type] + id);
+  const g = redactSources(focus(buildGraph(await loadInput(projectId)), PREFIX[type] + id));
+  // "Built from N": the records left of the focus, counted here rather than by a renderer.
+  const at = g.nodes.find((n) => n.id === g.focus)?.col ?? 0;
+  return { ...g, upstream: g.nodes.filter((n) => (n.col ?? 0) < at).length };
+}
+
+/**
+ * A file or web-address source is keyed by its full path or URL inside the
+ * graph — that is how two datasets from one file share a node — and a URL can
+ * carry a key in its query. Every such id leaves as `source:<kind>:<n>`; the
+ * edges follow. Names stay: a file's base name, a URL's host.
+ */
+export function redactSources(g: FocusedLineage): FocusedLineage {
+  const map = new Map<string, string>();
+  g.nodes.forEach((n, i) => {
+    const m = /^source:(file|url):/.exec(n.id);
+    if (m) map.set(n.id, `source:${m[1]}:${i}`);
+  });
+  if (!map.size) return g;
+  const re = (s: string): string => map.get(s) ?? s;
+  return {
+    ...g,
+    focus: re(g.focus),
+    nodes: g.nodes.map((n) => (map.has(n.id) ? { ...n, id: re(n.id) } : n)),
+    edges: g.edges.map((e) => ({ from: re(e.from), to: re(e.to) })),
+  };
 }
 
 export function register(): void {

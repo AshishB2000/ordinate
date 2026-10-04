@@ -32,6 +32,7 @@ import { randomUUID } from 'crypto';
 import * as appPaths from './paths';
 import { isValidId } from './ids';
 import * as recordFs from './recordFs';
+import { ctx, serverDataDir } from '../server/context';
 
 // ── Kinds ────────────────────────────────────────────────────────────────────
 // A dashboard is stored as an Analysis record, so its kind is 'analysis' — the
@@ -259,8 +260,9 @@ async function mutate<T>(projectId: string, fn: (file: CatalogFile) => T): Promi
   }
 }
 
-/** The OS account name, for `updatedBy`. Throws on some locked-down accounts. */
+/** Who is editing, for `updatedBy`: the signed-in user on the server, else the OS account (which throws on some locked-down accounts). */
 export function osUser(): string {
+  if (serverDataDir()) return ctx().user.email.slice(0, MAX_OWNER);
   try {
     return String(os.userInfo().username || '').trim().slice(0, MAX_OWNER);
   } catch (_) {

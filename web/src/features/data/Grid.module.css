@@ -1,0 +1,205 @@
+/* The Data tab: the rows toolbar, the filter banner, the grid's column headers
+   and the column profile panel (dsGrid.ts, dsProfile.ts). */
+
+/* ── Data tab: toolbar, banner, grid, profile ───────────────────────── */
+.dataTab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.rowSearch {
+  width: 280px;
+}
+.colsMenu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  max-height: 360px;
+  min-width: 200px;
+  overflow-y: auto;
+}
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-12);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: var(--t-13);
+}
+.banner > span {
+  flex: 1 1 auto;
+}
+.gridRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+}
+.gridBox {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  height: max(420px, calc(100vh - 340px));
+}
+.thCell {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.thName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.thName:hover,
+.thOn {
+  color: var(--accent);
+}
+.thMenu {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+}
+
+.profile {
+  flex: 0 0 300px;
+  max-width: 300px;
+  max-height: max(420px, calc(100vh - 340px));
+}
+.profileDoc {
+  margin-bottom: var(--sp-8);
+  color: var(--text);
+  font-size: var(--t-12);
+}
+.profileActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px var(--sp-8);
+  margin: 0 0 var(--sp-12);
+  font-size: var(--t-12);
+}
+.fact {
+  display: contents;
+}
+.facts dt {
+  color: var(--muted);
+}
+.facts dd {
+  margin: 0;
+  text-align: right;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.chartHead {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+}
+.hist {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 120px;
+  padding: 0 1px;
+  border-bottom: 1px solid var(--border);
+}
+.histBar {
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+}
+.histBar:hover {
+  background: var(--text-strong);
+}
+/* An empty bucket keeps its slot — a gap in a distribution is a fact — but a hairline, not a bar. */
+.histEmpty {
+  height: 1px;
+  background: var(--border);
+}
+.histAxis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--sp-4);
+  font-size: var(--t-11);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.barRow {
+  display: grid;
+  grid-template-columns: 84px 1fr auto;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: var(--t-11);
+}
+.barLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.barTrack {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+}
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+}
+.barN {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The column menu (a popover on the header): actions in a column, left-aligned. */
+.colMenu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+}
+.menuItem {
+  justify-content: flex-start;
+}
+.menuSep {
+  margin: var(--sp-4) 0;
+  border: 0;
+  border-top: 1px solid var(--border-hairline);
+}

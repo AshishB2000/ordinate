@@ -219,3 +219,77 @@ export function sanitizeOrigin(raw: unknown): DatasetOrigin | undefined {
       return undefined;
   }
 }
+
+// ── What a browser may be told about an origin ───────────────────────────────
+//
+// On the server an origin is not the viewer's own: a URL can carry an API key
+// in its query, a file origin is a path inside the server's DATA_DIR, and a
+// statement was written by someone else. These are the ONLY two ways an origin
+// reaches a browser — a kind with a display label, and error text with every
+// URL cut to its origin and the file path cut to its name.
+
+/** Every http(s) URL in `text` cut to scheme + host (no path, query or fragment), and the origin's file path to its name. */
+export function redactOriginText(text: string, origin?: DatasetOrigin): string {
+  // A URL ends before trailing punctuation: "…?key=abc: 401" keeps its colon.
+  let out = text.replace(/\bhttps?:\/\/[^\s"'<>`]*[^\s"'<>`.,:;!?)\]]/gi, (u) => {
+    try {
+      return new URL(u).origin;
+    } catch {
+      return '[address]';
+    }
+  });
+  if (origin && origin.kind === 'file' && origin.path) out = out.split(origin.path).join(path.basename(origin.path));
+  return out;
+}
+
+export interface SourceView {
+  /** The origin's kind, or the dataset's `sourceKind` when it has none (pasted, an input table). */
+  kind: string;
+  /** "Web address · api.example.com", "Connection · Warehouse · orders", "SQL query over 2 datasets". */
+  label: string;
+  /** Has an origin a refresh can re-run (a screenshot is the one that cannot). */
+  refreshable: boolean;
+}
+
+const SOURCE_WORD: Record<string, string> = {
+  csv: 'CSV file', xlsx: 'Excel file', json: 'JSON file', parquet: 'Parquet file', paste: 'Pasted data',
+  capture: 'Screenshot', postgres: 'Database', url: 'Web address', combined: 'Combined datasets',
+  input: 'Input table', sql: 'SQL query', notebook: 'Notebook',
+};
+
+/** The redacted view of where a dataset's rows came from. `connName` names a connection by id. */
+export function sourceView(sourceKind: string, origin: DatasetOrigin | undefined, connName: (id: string) => string | undefined): SourceView {
+  const word = SOURCE_WORD[sourceKind] || 'Import';
+  if (!origin) return { kind: sourceKind, label: word, refreshable: false };
+  const view = (label: string): SourceView => ({ kind: origin.kind, label, refreshable: origin.kind !== 'capture' });
+  const n = (k: number, one: string): string => `${k} ${one}${k === 1 ? '' : 's'}`;
+  switch (origin.kind) {
+    case 'file':
+      return view(origin.sheetName ? `${word} · sheet ${origin.sheetName}` : word);
+    case 'url': {
+      let host = '';
+      try {
+        host = new URL(origin.url).hostname;
+      } catch {
+        host = '';
+      }
+      return view(host ? `Web address · ${host}` : 'Web address');
+    }
+    case 'connection': {
+      const parts = ['Connection', connName(origin.connId) || 'a deleted connection'];
+      if (origin.table) parts.push(origin.table);
+      else if (origin.sql) parts.push('a query');
+      return view(parts.join(' · '));
+    }
+    case 'capture':
+      return view('Screenshot');
+    case 'combined':
+      return view('Combined from 2 datasets');
+    case 'composed':
+      return view(`Combined from ${n(origin.joins.length + 1, 'dataset')}`);
+    case 'sql':
+      return view(`SQL query over ${n(origin.deps.length, 'dataset')}`);
+    case 'notebook':
+      return view('Notebook cell');
+  }
+}

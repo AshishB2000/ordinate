@@ -196,7 +196,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
 - **Branch** `web/t2.2-projects` · **Legacy:** `projects`, `projectSwitcher`, `trashPage`,
   `versionsPanel`. Drop `projectSync` (sync folder is desktop-only).
 
-### [ ] T2.3 Data: list, dataset page, catalog
+### [x] T2.3 Data: list, dataset page, catalog
 - **Branch** `web/t2.3-data` · **Legacy:** `dataSection`, `datasets`, `dsList`, `dsExplorer`,
   `dsProfile`, `dsLineage`, `lineagePanel`, `dataSearch`, `catalogPage`, `catalogDetails`,
   `catalogUi`, `dsRules`, `dsRuleEditor`, `relationshipsPage`, `relationshipDialog`.
