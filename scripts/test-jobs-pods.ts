@@ -207,6 +207,14 @@ const quietLog = () => {
       JOBS_TEST_POLL_MS: String(POLL_MS), JOBS_TEST_LEASE_MS: String(LEASE_MS), JOBS_TEST_SLOW_MS: String(SLOW_MS),
       JOBS_TEST_CLIENTS: devKeys.join(','),
     });
+    // With an S3 STORAGE_URL (CI) the pods write the refreshed Parquet there: make
+    // sure the bucket exists, as s3TestEnv does for the storage suites — otherwise
+    // the refresh tick fails with NoSuchBucket unless another suite created it first.
+    if ((process.env.STORAGE_URL ?? '').startsWith('s3://')) {
+      const envMod: typeof import('../src/server/env') = require('../src/server/env');
+      const s3: typeof import('../src/engine/s3') = require('../src/engine/s3');
+      await s3.createBucket(envMod.parseEnv(process.env).storage.s3!);
+    }
     pods.push(startPod(podEnv()), startPod(podEnv()));
     const bases = await Promise.all(pods.map((p) => p.base));
     ok('pods: both servers start and listen', bases.every(Boolean), pods.map((p) => p.out()).join('\n---\n'));

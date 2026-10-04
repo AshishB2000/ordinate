@@ -191,6 +191,7 @@ async function listen(env: Record<string, string>): Promise<{ base: string; clos
   const stamp = `${process.pid}_${Date.now()}`;
   const appDb = `ordinate_t25_${stamp}`;
   const srcDb = `ordinate_t25_src_${stamp}`;
+  const srcRole = `ordinate_t25_role_${stamp}`;
   const at = (db: string): string => { const u = new URL(adminUrl); u.pathname = '/' + db; return u.toString(); };
   const root = new Client({ connectionString: adminUrl });
   await root.connect();
@@ -202,6 +203,11 @@ async function listen(env: Record<string, string>): Promise<{ base: string; clos
     await src.connect();
     await src.query(`CREATE SCHEMA sales; CREATE TABLE sales.orders (id int, region text, amount numeric);
       INSERT INTO sales.orders SELECT g, (ARRAY['North','South','East'])[1 + g % 3], g * 1.5 FROM generate_series(1, 40) g;`);
+    // The connection signs in as a role whose password IS the canary, so the test
+    // also holds where Postgres checks passwords (CI) and not only under trust
+    // auth. Full rights on the table: the write refusal below stays the connector's.
+    await src.query(`CREATE ROLE ${srcRole} LOGIN PASSWORD '${CANARY.replace(/'/g, "''")}';
+      GRANT USAGE ON SCHEMA sales TO ${srcRole}; GRANT ALL ON ALL TABLES IN SCHEMA sales TO ${srcRole};`);
     await src.end();
 
     // The Postgres connector, watched: what secret does each socket it opens carry?
@@ -221,7 +227,7 @@ async function listen(env: Record<string, string>): Promise<{ base: string; clos
     const project = (await call(srv.base, 'projects:create', { name: 'Warehouse' })).body.id as string;
     const other = (await call(srv.base, 'projects:create', { name: 'Elsewhere' })).body.id as string;
     const u = new URL(adminUrl);
-    const values = { host: u.hostname, port: Number(u.port || 5432), database: srcDb, user: decodeURIComponent(u.username) };
+    const values = { host: u.hostname, port: Number(u.port || 5432), database: srcDb, user: srcRole };
 
     const saved = await call(srv.base, 'connection:testAndSave', { projectId: project, connectorId: 'postgres', name: 'Orders DB', values, secrets: { password: CANARY } });
     ok('testAndSave: tested and saved with the canary password', saved.status === 200 && saved.body.ok === true, JSON.stringify(saved.body));
@@ -265,6 +271,8 @@ async function listen(env: Record<string, string>): Promise<{ base: string; clos
     const badHost = await call(srv.base, 'connection:replaceSecret', { projectId: project, connId, key: 'host', value: 'x' });
     ok('replaceSecret: only a declared secret field', badHost.body.ok === false);
     seen.length = 0;
+    // The database's password is rotated first, as a DBA would; the app's copy follows.
+    await root.query(`ALTER ROLE ${srcRole} PASSWORD '${CANARY2.replace(/'/g, "''")}'`);
     const rep = await call(srv.base, 'connection:replaceSecret', { projectId: project, connId, key: 'password', value: CANARY2 });
     ok('replaceSecret: tested with the new value, stored, never echoed', rep.body.ok && rep.body.connection.secretSet.password === true
       && seen.includes(CANARY2) && (await enc.get('default', 'connection.password', connId)) === CANARY2, JSON.stringify(rep.body).slice(0, 200));
@@ -309,6 +317,7 @@ async function listen(env: Record<string, string>): Promise<{ base: string; clos
     await pool.end();
     await root.query(`DROP DATABASE IF EXISTS ${appDb} WITH (FORCE)`);
     await root.query(`DROP DATABASE IF EXISTS ${srcDb} WITH (FORCE)`);
+    await root.query(`DROP ROLE IF EXISTS ${srcRole}`);
     await root.end();
     fs.rmSync(DATA, { recursive: true, force: true });
     fs.rmSync(desktopUserData, { recursive: true, force: true });
