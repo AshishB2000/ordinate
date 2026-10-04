@@ -153,6 +153,11 @@ export async function run<T>(
   return lease ? done.finally(() => lease.release()) : done;
 }
 
+/** Workers alive, how many run an op, and ops waiting for one (the server's /metrics). */
+export function stats(): { workers: number; busy: number; waiting: number } {
+  return { workers: slots.length, busy: slots.filter((s) => s.busy).length, waiting: waiting.length };
+}
+
 /** Close every worker (app quit, tests). */
 export async function shutdown(): Promise<void> {
   const all = slots.splice(0);

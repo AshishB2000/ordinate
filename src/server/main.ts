@@ -5,6 +5,7 @@
 import { buildApp, registerHandlers } from './app';
 import { enterServerMode, identityFor } from './context';
 import { env, type ServerEnv } from './env';
+import { startMetricsServer } from './metrics';
 import { forbidSyncOnMainThread } from '../engine/duckdb';
 import { routeByOrg } from '../engine/duckdbPool';
 import * as storage from '../engine/storage';
@@ -46,9 +47,26 @@ app.listen({ port: cfg.port, host }).catch((err: unknown) => {
   process.exit(1);
 });
 
+// Prometheus metrics on their own port (./metrics.ts) — never through the
+// ingress that routes PORT.
+let metrics: import('http').Server | null = null;
+if (cfg.metricsPort !== null) {
+  startMetricsServer(cfg.metricsPort, host).then(
+    (s) => {
+      metrics = s;
+      app.log.info({ port: cfg.metricsPort }, 'metrics listening');
+    },
+    (err: unknown) => {
+      app.log.fatal({ err }, 'metrics listen failed');
+      process.exit(1);
+    },
+  );
+}
+
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.once(sig, () => {
     app.log.info({ signal: sig }, 'shutting down');
+    metrics?.close();
     app.close().then(
       () => process.exit(0),
       () => process.exit(1),

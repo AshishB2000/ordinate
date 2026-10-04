@@ -17,6 +17,8 @@ export type LogLevel = 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' |
 
 export interface ServerEnv {
   readonly port: number;
+  /** METRICS_PORT: GET /metrics listens here, never on `port` (./metrics.ts). Null when unset: no metrics listener. */
+  readonly metricsPort: number | null;
   /** Absolute. Where Parquet files and per-org data live (a volume in a pod). */
   readonly dataDir: string;
   readonly env: OrdinateEnv;
@@ -159,6 +161,14 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   const port = rawPort === '' ? 8080 : Number(rawPort);
   if (port > 65535) throw new EnvError(`PORT must be an integer 0-65535, got ${JSON.stringify(rawPort)}`);
 
+  // Its own listener so the ingress, which routes PORT, can never expose it.
+  const rawMetrics = src.METRICS_PORT ?? '';
+  if (rawMetrics !== '' && (!/^\d{1,5}$/.test(rawMetrics) || Number(rawMetrics) < 1 || Number(rawMetrics) > 65535)) {
+    throw new EnvError(`METRICS_PORT must be an integer 1-65535, got ${JSON.stringify(rawMetrics)}`);
+  }
+  const metricsPort = rawMetrics === '' ? null : Number(rawMetrics);
+  if (metricsPort !== null && metricsPort === port) throw new EnvError('METRICS_PORT must differ from PORT: /metrics is never served on the app port');
+
   // In prod the data directory must be declared: a pod writing to its own
   // container filesystem loses every dataset on restart.
   // STORAGE_URL=file:///data names the same directory, so either may declare it.
@@ -212,7 +222,7 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
     rpcTimeoutMs: positiveInt('RPC_TIMEOUT_SECONDS', src.RPC_TIMEOUT_SECONDS, 60) * 1000,
   });
   const storage = parseStorage(src, databaseUrl);
-  return Object.freeze({ port, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits, storage });
+  return Object.freeze({ port, metricsPort, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits, storage });
 }
 
 /** The directory of a file:// STORAGE_URL, null for unset or s3://. */

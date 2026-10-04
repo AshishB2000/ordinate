@@ -110,6 +110,12 @@ export async function claimOne(pool: Pool, kindNames: readonly string[], lease: 
   return row ? { orgId: row.org_id, kind: row.kind, target: row.target, owner } : null;
 }
 
+/** Finished runs this pod claimed, by `kind\noutcome` (ok | error) — read by /metrics (../metrics.ts). */
+const runs = new Map<string, number>();
+export function runStats(): ReadonlyMap<string, number> {
+  return runs;
+}
+
 const KEY_WHERE = 'org_id = $1 AND kind = $2 AND target = $3 AND lease_owner = $4';
 
 /** Runs a claimed row to completion and reschedules it, fenced on the claim. Never throws on a job failure. */
@@ -132,6 +138,8 @@ export async function runClaim(pool: Pool, c: Claim, log: FastifyBaseLogger): Pr
   } finally {
     clearInterval(hb);
   }
+  const counted = `${c.kind}\n${error === null ? 'ok' : 'error'}`;
+  runs.set(counted, (runs.get(counted) ?? 0) + 1);
   const every = def ? def.everyMs : 60_000;
   const r = await pool.query(
     `UPDATE jobs SET next_run_at = now() + $5 * interval '1 millisecond', lease_owner = NULL, lease_until = NULL,

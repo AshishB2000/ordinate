@@ -32,6 +32,7 @@ import { registerStatic, WEB_DIST } from './static';
 import { uploadCapMb } from './admin/org';
 import { registerMcpRoute } from '../automation/serverMcp';
 import { registerGeoRoutes } from './geo';
+import { registerRequestMetrics } from './metrics';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Pool } from 'pg';
@@ -82,7 +83,7 @@ function routeAccess(method: string, route: string | undefined): 'read' | 'write
   return null;
 }
 
-const NOT_PAGES = new Set(['/healthz', '/readyz', '/sign-in']);
+const NOT_PAGES = new Set(['/healthz', '/readyz', '/sign-in', '/metrics']);
 
 /** A browser opening an app route — not a file (`.js`, `.svg`), a probe or the sign-in page. */
 function isPageNavigation(method: string, path: string, accept: string | undefined): boolean {
@@ -123,6 +124,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   registerSecurityHeaders(app, cfg.env === 'prod');
   registerCsrf(app, { cookie: cookieNames(cfg.env === 'prod').csrf, secure: cfg.env === 'prod', bearerDecides: !!cfg.databaseUrl && !identifyOverride });
   const limits = registerLimits(app, cfg.limits, proxyList(cfg.auth.trustedProxies));
+  // Request counts and latency for GET /metrics, which itself is served only on METRICS_PORT (./metrics.ts).
+  registerRequestMetrics(app);
 
   // Liveness: the process is up and serving. Checks nothing else on purpose —
   // a failing dependency must not make Kubernetes restart a healthy pod.
