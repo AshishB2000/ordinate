@@ -51,16 +51,6 @@ export const pages: RouteObject[] = [
   page('/data/input/:projectId/:datasetId', () => import('../features/import/InputTablePage')),
   // The Data section (T2.3): one project's datasets / captures / catalog / relationships.
   page('/data/:projectId', () => import('../features/data/DataSection')),
-  // Visuals (T2.7): one project's gallery, and the builder — new on a dataset, or a saved visual.
-  page('/visuals/:projectId', () => import('../features/visuals/VisualsPage')),
-  page('/visuals/:projectId/new', () => import('../features/visuals/BuilderPage')),
-  page('/visuals/:projectId/:visualId', () => import('../features/visuals/BuilderPage')),
-
-  // Prepare (T2.6): a dataset's reversible step pipeline beside its prepared rows.
-  page('/data/:projectId/:datasetId/prepare', () => import('../features/prepare/PreparePage')),
-  // Pipelines (T2.6): every scheduled or dependent thing in a project as one DAG.
-  page('/pipelines', () => import('../features/prepare/PipelinesPage')),
-  page('/pipelines/:projectId', () => import('../features/prepare/PipelinesPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.
