@@ -73,6 +73,8 @@ export const pages: RouteObject[] = [
 
   // About (T2.14): version, links, the licences of every bundled package.
   page('/about', () => import('../features/settings/AboutPage')),
+  // Analyses and authoring (T2.8): one dashboard open on the authoring canvas.
+  page('/analyses/:projectId/:analysisId', () => import('../features/analyses/AuthoringPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

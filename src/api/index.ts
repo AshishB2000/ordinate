@@ -19,6 +19,8 @@ import { lineage } from './lineage';
 import { relationships } from './relationships';
 
 import { analytics } from './analytics';
+import { analyses } from './analyses';
+import { metrics } from './metrics';
 
 import { trash } from './trash';
 import { versions } from './versions';
@@ -49,6 +51,8 @@ export const contracts = {
   ...analytics,
 
   ...settings,
+  ...analyses,
+  ...metrics,
 } as const;
 
 export type Channel = keyof typeof contracts;

@@ -1,0 +1,259 @@
+/* The editor's add dialogs (hub.css .vn-pick-*, .dm-*, .dc-kind*, .mpk-*,
+   .pd-*). */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.empty {
+  margin: 0;
+  padding: var(--sp-16) 0;
+  color: var(--muted);
+  text-align: center;
+}
+.pickBar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-8);
+  margin-bottom: var(--sp-12);
+}
+.pickBar > :first-child {
+  flex: 1 1 auto;
+}
+.pickGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: var(--sp-8);
+  max-height: 420px;
+  overflow-y: auto;
+}
+.pickTile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  padding: var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pickTile:hover {
+  border-color: var(--accent-line);
+  background: var(--surface-2);
+}
+.pickTile:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.pickGlyph {
+  color: var(--chart-1);
+}
+.pickName {
+  max-width: 100%;
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pickMeta {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.mpkRows {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.mpkRow {
+  display: grid;
+  grid-template-columns: 1fr auto minmax(72px, auto);
+  align-items: center;
+  gap: var(--sp-8);
+  min-height: 36px;
+  padding: 0 var(--sp-12);
+  border: 0;
+  border-bottom: 1px solid var(--border-hairline);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mpkRow:last-child {
+  border-bottom: 0;
+}
+.mpkRow:hover {
+  background: var(--surface-2);
+}
+.mpkRow:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.mpkName {
+  font-weight: 500;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.badge {
+  padding: 0 var(--sp-4);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-11);
+}
+.mpkValue {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-dim);
+}
+.pickerFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.link {
+  color: var(--accent);
+  font-size: var(--t-12);
+}
+.aggs {
+  display: flex;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+.agg {
+  height: 28px;
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
+}
+.agg:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.on.agg {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.kpiPreview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.kpiValue {
+  font-size: var(--t-28);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+.kpiLabel {
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.formFoot {
+  display: flex;
+  justify-content: flex-end;
+}
+.kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: var(--sp-8);
+}
+.kind {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kind:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.kind:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.on.kind {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.kindLabel {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.kindHint {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-md);
+}
+.previewH {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.refs {
+  display: flex;
+  gap: var(--sp-16);
+  flex-wrap: wrap;
+  margin-top: calc(-1 * var(--sp-8));
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.refs code {
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+.bounds {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-8);
+}
+.hint {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.error {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--error);
+}

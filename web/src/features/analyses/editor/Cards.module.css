@@ -1,0 +1,199 @@
+/* A card's chrome and bodies (hub.css .dash-card-head / .dash-metric-* /
+   kpiCompare's .dash-metric-delta; layouts.css .grp-*). */
+
+.head {
+  flex: 0 0 var(--ctl-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: var(--ctl-lg);
+  padding: 0 var(--sp-4) 0 var(--sp-12);
+  border-bottom: 1px solid var(--border);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.head:active {
+  cursor: grabbing;
+}
+.title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ctrls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  cursor: default;
+  opacity: 0.55;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.head:hover .ctrls,
+.ctrls:focus-within {
+  opacity: 1;
+}
+.edit {
+  height: 24px;
+}
+.body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--sp-8) var(--sp-12) var(--sp-12);
+  overflow: hidden;
+}
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-8);
+  height: 100%;
+  color: var(--muted);
+  font-size: var(--t-12);
+  text-align: center;
+}
+
+/* KPI */
+.metric {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  height: 100%;
+}
+.value {
+  font-size: var(--t-28);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tighter);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.metricLabel {
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  align-self: flex-start;
+  padding: 1px var(--sp-8);
+  border-radius: var(--r-full);
+  font-size: var(--t-12);
+  font-weight: 600;
+}
+.good {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.bad {
+  background: var(--error-soft);
+  color: var(--error);
+}
+.flat {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.hint {
+  background: none;
+  padding: 0;
+  font-weight: 400;
+  color: var(--muted);
+}
+.vs {
+  font-size: var(--t-11);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+.missing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.paramErr {
+  margin: 0;
+  font-size: var(--t-11);
+  color: var(--warn);
+}
+.skValue {
+  display: block;
+  width: 60%;
+  height: 28px;
+}
+.skLabel {
+  display: block;
+  width: 40%;
+  height: 12px;
+}
+
+/* Text */
+.text {
+  height: 100%;
+  overflow-y: auto;
+  color: var(--text);
+  line-height: var(--lh-body);
+}
+.text p {
+  margin: 0 0 var(--sp-8);
+  white-space: pre-wrap;
+}
+.divider {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--border-2);
+  position: relative;
+  top: 50%;
+}
+
+/* Groups */
+.groupEmpty {
+  margin: 0;
+  padding: var(--sp-12);
+  color: var(--muted);
+  font-size: var(--t-12);
+  text-align: center;
+}
+.tabs {
+  display: flex;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+}
+.tab {
+  height: 28px;
+  padding: 0 var(--sp-12);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tabOn {
+  border-bottom-color: var(--accent);
+  color: var(--text-strong);
+}
+.tab:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
+}
