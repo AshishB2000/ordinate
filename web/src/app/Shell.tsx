@@ -19,7 +19,7 @@ import { JobsButton } from './JobsButton';
 import { NAV, type NavItem } from './nav';
 import { Dock, DockToggle } from '../features/assistant/DockParts';
 import { useWorkspacePrefs } from './prefs';
-import { CommandPalette } from '../features/palette/CommandPalette';
+import { CommandPalette, openPalette } from '../features/palette/CommandPalette';
 import { THEME_PREFS, useThemePref, type ThemePref } from './theme';
 import s from './Shell.module.css';
 
@@ -151,7 +151,7 @@ export function Shell() {
           </div>
           <div className={s.search} role="search">
             <Icon name="search" />
-            <input className={s.searchInput} type="search" placeholder="Search" aria-label="Search" />
+            <input className={s.searchInput} type="search" placeholder="Search" aria-label="Search" aria-haspopup="dialog" readOnly onClick={openPalette} onKeyDown={(e) => (e.key === 'Enter' || e.key.length === 1) && openPalette(e)} />
           </div>
           <div className={`${s.side} ${s.right}`}>
             <JobsButton />

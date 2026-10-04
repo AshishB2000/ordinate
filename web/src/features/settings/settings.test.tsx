@@ -65,6 +65,14 @@ describe('command palette', () => {
     await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Search commands and records' })).toBeNull());
   });
 
+  it('the top bar\'s Search box is the palette\'s door for a pointer', async () => {
+    serve({ '/api/auth/me': { body: ADMIN_DEV } });
+    renderApp('/');
+    await screen.findByRole('heading', { level: 1, name: 'Home' });
+    fireEvent.click(within(screen.getByRole('search')).getByRole('searchbox', { name: 'Search' }));
+    expect(await screen.findByRole('combobox', { name: 'Search commands and records' })).toBeTruthy();
+  });
+
   it('searches record names in the current project and opens a dataset on its route', async () => {
     const calls = serve({
       '/api/auth/me': { body: ADMIN_DEV },
@@ -160,9 +168,14 @@ describe('Organization settings (Admin)', () => {
       '/api/auth/me': { body: ADMIN_DEV },
       'key:status': { body: { globalRules: '', autoRefresh: true, notifications: { alerts: true } } },
       'formats:set': { body: { ok: true, formats: eur, branding: BRANDING } },
+      'calendar:today': { body: { ok: true, today: '2026-10-04', from: '2026-01-01', to: '2026-12-31', label: '', weeks: null } },
     });
     renderApp('/admin?tab=workspace');
     expect((await screen.findByTestId('fmt-money')).textContent).toBe('$5.2M');
+    // The calendar preview is the server's answer, only formatted here.
+    expect((await screen.findByTestId('cal-fiscal-year')).textContent).toMatch(/2026/);
+    expect(screen.queryByTestId('cal-today-is')).toBeNull();
+    expect(calls.some((c) => c.channel === 'calendar:today')).toBe(true);
     fireEvent.click(screen.getByRole('combobox', { name: 'Currency' }));
     fireEvent.click(await screen.findByRole('option', { name: /^EUR/ }));
     await waitFor(() => expect(screen.getByTestId('fmt-money').textContent).toBe('€5.2M'));

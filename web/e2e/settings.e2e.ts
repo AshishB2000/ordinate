@@ -80,7 +80,11 @@ e2e('settings: my settings, privacy, the palette, About, and the organization ta
   await screens(page, 'settings-privacy');
   await page.getByRole('radiogroup', { name: 'Exports' }).getByRole('radio', { name: 'Mask' }).click();
 
-  // ── Palette → About ──────────────────────────────────────────────────────
+  // ── Palette → About (opened from the top bar's Search box, then by key) ──
+  await page.getByRole('search').getByRole('searchbox', { name: 'Search' }).click();
+  await palette().waitFor();
+  await page.keyboard.press('Escape');
+  await palette().waitFor({ state: 'detached' });
   await page.keyboard.press(`${mod}+k`);
   await palette().waitFor();
   await palette().fill('> about');
@@ -132,7 +136,16 @@ e2e('settings: my settings, privacy, the palette, About, and the organization ta
   await page.reload();
   await settled(page);
   assert.equal(await page.getByTestId('fmt-money').textContent(), '€5.2M', 'kept by the server');
+  // The calendar: a retail 4-4-5 year — the preview is the server's (calendar:today).
+  await page.getByRole('combobox', { name: 'Calendar' }).click();
+  await page.getByRole('option', { name: 'Retail 4-4-5' }).click();
+  await page.getByTestId('cal-today-is').waitFor();
+  assert.match((await page.getByTestId('cal-today-is').textContent()) ?? '', /\S/);
+  await page.getByTestId('cal-this-year').filter({ hasText: /^5[23]-week year$/ }).waitFor();
   await screens(page, 'settings-org-workspace');
+  await page.getByRole('combobox', { name: 'Calendar' }).click();
+  await page.getByRole('option', { name: 'Gregorian' }).click();
+  await page.getByTestId('cal-today-is').waitFor({ state: 'detached' });
   await page.getByRole('combobox', { name: 'Currency' }).click();
   await page.getByRole('option', { name: /^USD/ }).click();
   await money.filter({ hasText: '$5.2M' }).waitFor();

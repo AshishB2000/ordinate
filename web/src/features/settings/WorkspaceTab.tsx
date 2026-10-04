@@ -6,9 +6,9 @@
 // these controls cannot disagree.
 
 import { useRef, useState, type CSSProperties } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as OrdFormat from '../../../../src/app/format.ts';
-import { upload } from '../../api/client';
+import { rpc, upload } from '../../api/client';
 import { applyBrandTokens } from '../../charts/palette';
 import { Button } from '../../ui/Button';
 import { Switch } from '../../ui/Choice';
@@ -83,6 +83,43 @@ function Preview({ formats }: { formats: FormatPrefs }) {
   );
 }
 
+interface Today {
+  ok: boolean;
+  today?: string;
+  from?: string;
+  to?: string;
+  label?: string;
+  weeks?: number | null;
+}
+
+/** settingsCalendar.ts's preview line: the server's answer under the saved calendar (`calendar:today`), never computed here. */
+function CalendarPreview({ f }: { f: FormatPrefs }) {
+  const q = useQuery({
+    // The calendar fields in the key: a change re-asks the server.
+    queryKey: ['calendar:today', f.calendarType, f.yearEnd, f.fiscalYearStart, f.weekStart],
+    queryFn: async () => (await rpc('calendar:today')) as Today,
+  });
+  const r = q.data;
+  if (q.isPending) return <div className={s.preview} aria-busy="true" aria-label="Loading the calendar preview" />;
+  if (!r?.ok || !r.from || !r.to) return null;
+  const cells: Array<[string, string]> = [];
+  if (r.label) cells.push(['Today is', r.label]);
+  if (r.weeks) cells.push(['This year', `${r.weeks}-week year`]);
+  cells.push([f.calendarType === 'iso' ? 'ISO year' : 'Fiscal year', OrdFormat.formatDateRange(r.from, r.to)]);
+  return (
+    <div className={s.preview} role="group" aria-label="This calendar today" aria-live="polite">
+      {cells.map(([k, v]) => (
+        <div key={k} className={s.cell}>
+          <span className={s.cellK}>{k}</span>
+          <span className={s.cellV} data-testid={`cal-${k.toLowerCase().replace(/ /g, '-')}`}>
+            {v}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Formats({ f }: { f: FormatPrefs }) {
   const save = useSavePrefs('formats:set');
   const set = (patch: Parameters<typeof save.mutate>[0]) => save.mutate(patch);
@@ -145,6 +182,7 @@ function Formats({ f }: { f: FormatPrefs }) {
         />
       </Group>
       <Group title="Calendar" desc="How weeks, periods, quarters and years are counted in relative filters, comparisons and date grains.">
+        <CalendarPreview f={f} />
         <Row title="Calendar" desc="Retail calendars run Sunday–Saturday weeks in 4-4-5, 4-5-4 or 5-4-4 periods.">
           <div className={s.select}>
             <Select aria-label="Calendar" value={f.calendarType} onValueChange={(v) => set({ calendarType: v as FormatPrefs['calendarType'] })} options={CALENDARS} />

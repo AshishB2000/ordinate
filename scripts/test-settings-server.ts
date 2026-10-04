@@ -100,6 +100,11 @@ async function partOne(): Promise<void> {
     const fmt = await call('formats:set', { locale: 'de-DE', currency: 'EUR', weekStart: 0, compact: false, calendarType: '445' });
     const prefs = (await call('prefs:get')).body;
     ok('formats:set: prefs:get reads back exactly what was set (merged over the rest)', fmt.status === 200 && prefs.formats.locale === 'de-DE' && prefs.formats.currency === 'EUR' && prefs.formats.weekStart === 0 && prefs.formats.compact === false && prefs.formats.calendarType === '445' && prefs.formats.dateFormat === 'medium', JSON.stringify(prefs.formats));
+    const cal = (await call('calendar:today')).body;
+    ok('calendar:today: under the 4-4-5 just set, a period label, a 52/53-week year and its range', cal.ok === true && /\S/.test(cal.label) && (cal.weeks === 52 || cal.weeks === 53) && cal.from < cal.today && cal.today <= cal.to, JSON.stringify(cal));
+    await call('formats:set', { calendarType: 'gregorian', fiscalYearStart: 4 });
+    const greg = (await call('calendar:today')).body;
+    ok('calendar:today: back on Gregorian with an April fiscal year, no week label and the year starts on the 1st of a month', greg.ok === true && greg.label === '' && greg.weeks === null && /-04-01$/.test(greg.from), JSON.stringify(greg));
     ok('formats:set: an unknown key is a 400 (strict input)', (await call('formats:set', { locale: 'en-US', path: '/etc' })).status === 400);
     ok('formats:set: an out-of-range week start is a 400', (await call('formats:set', { weekStart: 9 })).status === 400);
     await call('branding:set', { accent: '#0d9488', dashboardStyle: 'executive' });

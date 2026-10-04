@@ -218,6 +218,14 @@ function PaletteBox({ onClose }: { onClose: () => void }) {
   );
 }
 
+let opener: (() => void) | null = null;
+
+/** Opens the palette — the top bar's Search box is its door for a pointer. */
+export function openPalette(e?: { preventDefault(): void }): void {
+  e?.preventDefault();
+  opener?.();
+}
+
 /** The palette, the shortcuts sheet, the app-wide commands and the keymap. Mount once. */
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
@@ -244,6 +252,13 @@ export function CommandPalette() {
       [navigate, role, theme, setTheme, dockOpen],
     ),
   );
+
+  useEffect(() => {
+    opener = () => setOpen(true);
+    return () => {
+      opener = null;
+    };
+  }, []);
 
   // The keymap. Capture phase, so a focused textarea cannot swallow a ⌘ chord.
   useEffect(() => {
