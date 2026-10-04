@@ -1,0 +1,211 @@
+name: Release (server image + Helm chart)
+
+# The server's release (Phase 7, T7.3). On a version tag — v1.2.3, or
+# v1.2.3-rc.1 for a pre-release:
+#
+#   image    build deploy/Dockerfile for linux/amd64 and linux/arm64 (arm64
+#            under QEMU; the Dockerfile compiles on the runner's own arch and
+#            installs only the native parts emulated), start EACH image against
+#            Postgres until /readyz reports duckdb + postgres, hold each under
+#            600 MB, then push ghcr.io/<owner>/ordinate:<version> (+ :latest for
+#            a non-pre-release) with OCI labels and annotations. Nothing is
+#            pushed unless both images booted.
+#   release  package deploy/helm/ordinate with version = appVersion = <version>
+#            (so its default image is the one just pushed), then create the
+#            GitHub Release — or add to it — and attach ordinate-<version>.tgz.
+#
+# build.yml (the desktop installers) also runs on v* tags and publishes to the
+# same Release: whichever finishes first creates it, the other adds its assets.
+#
+# The tag must equal package.json's version (the server writes that version
+# into every backup's manifest). Cutting a release: docs/server/upgrade.md.
+#
+# Third-party actions are pinned to the commit of the release named beside it.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions: {}
+
+# A re-pushed tag queues behind the run in flight instead of publishing twice
+# at once; the re-run overwrites the same image tags and re-attaches the chart.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Image (amd64 + arm64) → GHCR
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      image: ${{ steps.version.outputs.image }}
+      digest: ${{ steps.push.outputs.digest }}
+    # The boot check's metadata DB. The server migrates it on start.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: release-smoke
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Version from the tag
+        id: version
+        run: |
+          tag="$GITHUB_REF_NAME"
+          if ! [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::tag '$tag' is not v<major>.<minor>.<patch>[-pre-release]"
+            exit 1
+          fi
+          version="${tag#v}"
+          pkg=$(jq -r .version package.json)
+          if [ "$pkg" != "$version" ]; then
+            echo "::error::tag $tag but package.json says $pkg: bump package.json in a PR, merge it, then tag that commit"
+            exit 1
+          fi
+          {
+            echo "version=$version"
+            if [[ "$version" == *-* ]]; then echo "prerelease=true"; else echo "prerelease=false"; fi
+            # GHCR names are lower-case.
+            echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ordinate"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Each platform loaded on its own (--load takes one), started, checked.
+      # The push step below rebuilds from this builder's cache.
+      - name: Build each platform, boot it, hold it under 600 MB
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            docker buildx build --platform "linux/$arch" --load -t "ordinate:verify-$arch" -f deploy/Dockerfile .
+            docker run -d --name "boot-$arch" --platform "linux/$arch" --network host \
+              -e PORT=18080 -e AUTH_MODE=header -e TRUSTED_PROXY_CIDRS=127.0.0.1/32 \
+              -e DATABASE_URL=postgres://postgres:release-smoke@127.0.0.1:5432/postgres \
+              -e ORDINATE_MASTER_KEY="$(openssl rand -base64 32)" \
+              "ordinate:verify-$arch"
+            ready=""
+            for _ in $(seq 1 90); do
+              body=$(curl -fsS http://127.0.0.1:18080/readyz 2>/dev/null || true)
+              if [ -n "$body" ] && jq -e '.ok and .checks.duckdb and .checks.postgres' <<<"$body" >/dev/null; then ready=1; break; fi
+              sleep 2
+            done
+            echo "$arch /readyz: ${body:-no answer}"
+            echo "$arch process.arch: $(docker exec "boot-$arch" node -p process.arch || true)"
+            if [ -z "$ready" ]; then docker logs "boot-$arch" | tail -50; exit 1; fi
+            docker rm -f "boot-$arch" >/dev/null
+            # Measured after the run: an image store that keeps a foreign-arch
+            # image packed reports its compressed size until it is unpacked.
+            size=$(docker image inspect "ordinate:verify-$arch" --format '{{.Size}}')
+            echo "$arch image size: $((size / 1000000)) MB"
+            test "$size" -lt 600000000
+          done
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Labels and annotations: org.opencontainers.image.source (links the
+      # package to this repository), .revision (the tagged commit), .version,
+      # .created, .title, .licenses.
+      - name: Tags, labels, annotations
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+        with:
+          images: ${{ steps.version.outputs.image }}
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ steps.version.outputs.prerelease == 'false' }}
+
+      - name: Push both platforms
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+
+      - name: Published
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+          VERSION: ${{ steps.version.outputs.version }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: docker buildx imagetools inspect "$IMAGE:$VERSION@$DIGEST"
+
+  release:
+    name: Helm chart → GitHub Release
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.image.outputs.version }}
+      IMAGE: ${{ needs.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.3.0
+
+      - name: Package the chart at the tag's version
+        run: |
+          set -euo pipefail
+          helm lint --strict deploy/helm/ordinate
+          helm package deploy/helm/ordinate --version "$VERSION" --app-version "$VERSION" --destination dist
+          helm show chart "dist/ordinate-$VERSION.tgz"
+          # The packaged chart must deploy the image the job above pushed —
+          # values.yaml names the repository, appVersion the tag.
+          rendered=$(helm template ordinate "dist/ordinate-$VERSION.tgz" | grep -m1 -E '^ +image: ' | awk '{print $2}' | tr -d '"')
+          echo "chart default image: $rendered"
+          test "$rendered" = "$IMAGE:$VERSION" || { echo "::error::chart deploys $rendered, but $IMAGE:$VERSION was pushed (image.repository in values.yaml)"; exit 1; }
+
+      - name: Create the Release (or add to it) and attach the chart
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.image.outputs.prerelease }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          chart="dist/ordinate-$VERSION.tgz"
+          notes="**Server image:** \`$IMAGE:$VERSION\` (linux/amd64, linux/arm64), digest \`$DIGEST\`.
+          **Helm chart:** \`ordinate-$VERSION.tgz\` below — \`helm install ordinate ordinate-$VERSION.tgz -f my-values.yaml\`.
+          Operator docs: [docs/server](https://github.com/$GH_REPO/tree/$TAG/docs/server)."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$chart" --clobber
+          else
+            flags=(--verify-tag --generate-notes --notes "$notes")
+            if [ "$PRERELEASE" = true ]; then flags+=(--prerelease --latest=false); fi
+            # build.yml may have created it in the meantime: then add to it.
+            gh release create "$TAG" "$chart" "${flags[@]}" || gh release upload "$TAG" "$chart" --clobber
+          fi
+          gh release view "$TAG" --json url,assets --jq '.url, (.assets[].name)'
