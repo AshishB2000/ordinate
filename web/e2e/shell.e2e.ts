@@ -43,7 +43,9 @@ e2e('every nav item is reachable and lands on its route', async (s) => {
   // Client-side, by clicking — then the same routes as full page loads (the server's index.html fallback).
   for (const item of [...NAV.slice(1), NAV[0]!]) {
     await nav.getByRole('link', { name: item.label, exact: true }).click();
-    await page.waitForURL((u) => u.pathname === item.to);
+    // An area may settle on its project-scoped path (/data → /data/<projectId>);
+    // waiting for the bare path raced that redirect.
+    await page.waitForURL((u) => u.pathname === item.to || (item.to !== '/' && u.pathname.startsWith(item.to + '/')));
     // The router keeps the old page up until the new lazy chunk has loaded.
     await page.getByRole('heading', { level: 1, name: item.label, exact: true }).waitFor();
     await settled(page);
