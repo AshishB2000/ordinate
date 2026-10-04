@@ -885,3 +885,43 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
 - **Open:** `calendar:today` reads a process-wide calendar (the `config.ts` per-org limitation noted for
   P5); the org backup zip is built in memory under the 60 s RPC timeout; restored projects visible to org
   admins only until shared; dropped desktop-only settings (hotkey, launch at login, permissions, local CLI).
+
+## 2026-10-04 — Orchestrator resume: chain-merge drops, flaky checks
+
+- **Found on develop (a91fce6):** the four "Merge branch 'develop' into web/t2.x-chain" merges (#223–#226)
+  took develop's side of `web/src/app/routes.tsx` and this log — develop lost the Visuals, Prepare,
+  Pipelines, Analytics and About routes (22 lines) and the T2.7/T2.6/T2.10/T2.14 entries (83 lines).
+  Every other file matched the gated chain tip `bdeeb95`; both files restored from it (#227).
+- **Leftover local `web/*` branches:** a line-by-line check of every added line against develop — all present
+  in a later form except the routes/log above. Nothing else carried over.
+- **Three flaky checks, each failing on develop's own tree:** `test-automationTools` (search-index timer inside
+  the creators' before/after window, 2 of 3 → stubbed `scheduleIndex` as two other suites do, 10 of 10);
+  `auth.e2e` (mock IdP page without an icon → Chromium's `/favicon.ico` 404 is a console error, 2 of 2 → empty
+  `data:` icon, 2 of 2); `shell.e2e` nav (waited for exactly `/data`, which redirects to `/data/<projectId>`,
+  2 of 3 → item path or sub-path, 5 of 5). No assertion loosened.
+- **Under load (4 agents, load average ~55):** single DB suites (`dockServer`, `tokens-db`, `jobs-pods`,
+  `connections-server`) fail once in a full parallel run and pass alone — the shared-DB contention already
+  recorded under T2.4. Gate rule unchanged: a failure counts unless it passes on an isolated re-run.
+- **CI:** GitHub Actions starts jobs again (#227's 8 checks ran) — merges go back to waiting for green CI. Its first
+  run failed at T5.2's "Start MinIO": `minio/minio` is gone from Docker Hub → `chainguard/minio` (#228).
+- **Blocked:** `docker`, `helm`, `kind` are not installed on this machine (T7.1/T7.2 "Done when").
+
+## 2026-10-04 — T1.2 Pivot, cohort and funnel grids
+
+- **`web/src/charts/grids/`:** `GridViz` picks the pivot / cohort / event-funnel view for those three chart ids;
+  each is a semantic `<table>` (every `<th>` scoped: `col`, `colgroup` for merged headers, `row` in the body;
+  named tables; labelled, focusable scroll regions). Pivot sort re-asks the server (one `visual:data`), subtotal
+  rows collapse, > 200 rows window like the desktop; cohort table ↔ retention curve; CSV re-asks the server.
+- **Server does the math:** the desktop cohort header summed the sizes in the browser — `CohortGrid.members` now
+  comes from `foldCohort` (shared by the JS and resident paths); `test-cohort` +2, differential unchanged.
+- **Parity (Done-when):** the sample dashboard has no pivot/cohort card, so parity is on `/dev/charts` over the
+  sample dataset. `grids.test.tsx` runs the real desktop `pivotRender`/`cohortRender` in jsdom against the port
+  over the same server replies — 9 encodings, 700+ cells compared by tag, text, spans, kind, colour, indent,
+  hover text; negative controls (drop a subtotal class, change funnel rounding) fail. Desktop-vs-port shots in
+  both themes compared by eye. A11y: header scope/name asserted in Vitest and again in Chromium (`grids.e2e`).
+- **Measured:** `/dev/charts` 8/5/5 RPCs per load; grids chunk ≈ 9.7 KB gzip JS + 2.2 KB CSS, lazy; initial JS
+  177.4 KB gzip. Gates: `npm test` 277/277 without DB, with DB 276 + `connections-server` passing alone; Vitest
+  547/547; e2e 42/42; lint 0.
+- **Open:** the Visuals builder (`ChartStage.tsx`) still says "not in the browser yet" for these ids — T2.11
+  wires `GridViz` there; pivot "Copy as table"/"Export CSV" belong to the dashboard card menu (T2.8/T2.9); the
+  sample yields a single quarterly cohort (same on the desktop).

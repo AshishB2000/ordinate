@@ -150,7 +150,7 @@ row of the plan's dependency graph.
 - Export to PNG (`canvas.toDataURL`) helper for later report/dashboard export.
 - **Done when:** `/dev/charts` renders all 39 from the API; differential test passes; e2e screenshots both themes.
 
-### [ ] T1.2 Pivot, cohort and funnel grids ∥
+### [x] T1.2 Pivot, cohort and funnel grids ∥
 - **Branch** `web/t1.2-grids` · **Depends** T0.8 · **Scope** `web/src/charts/grids/`
 - **Legacy:** `pivotRender`, `cohortRender`, funnel table bits in `renderResult`.
 - Render `PivotGrid` / `data.cohort` / `data.eventFunnel` from the server as semantic `<table>`s.
