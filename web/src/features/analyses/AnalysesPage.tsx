@@ -4,8 +4,8 @@
 // mostly pictures: each card previews its first sheet's first one or two
 // visuals, drawn by the shared chart engine from the server's figures.
 
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
 import { useDatasets } from '../../api/datasets';
@@ -18,7 +18,11 @@ import { Menu } from '../../ui/Menu';
 import { Skeleton } from '../../ui/Skeleton';
 import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
-import { openDockWith } from '../assistant/dockState';
+import { useKeyStatus } from '../assistant/api';
+import { openDockWith, setDockOpen } from '../assistant/dockState';
+import { useTags, type TagIndex } from '../data/api';
+import { LineageDrawer } from '../data/LineageDrawer';
+import { TagChips, TagFilterBar, tagsOf, useActiveTag } from '../data/tags';
 import { ProjectGate } from '../import/ProjectGate';
 import { toastMovedToTrash } from '../projects/trashToast';
 import { failure, useGallery, type GalleryItem } from './api';
@@ -57,7 +61,17 @@ function Preview({ projectId, item }: { projectId: string; item: GalleryItem }) 
   );
 }
 
-function Card({ projectId, item, onRename, onDelete }: { projectId: string; item: GalleryItem; onRename: () => void; onDelete: () => void }) {
+/** A dashboard's catalog ref (src/app/catalog.ts: the record kind is `analysis`). */
+const refOf = (item: GalleryItem) => `analysis:${item.id}`;
+
+function Card({ projectId, item, tags, onRename, onDelete, onLineage }: {
+  projectId: string;
+  item: GalleryItem;
+  tags: TagIndex | undefined;
+  onRename: () => void;
+  onDelete: () => void;
+  onLineage: () => void;
+}) {
   const navigate = useNavigate();
   const open = `/analyses/${projectId}/${item.id}`;
   const sheets = `${item.sheetCount} ${item.sheetCount === 1 ? 'sheet' : 'sheets'}`;
@@ -69,6 +83,7 @@ function Card({ projectId, item, onRename, onDelete }: { projectId: string; item
         <span className={s.meta}>
           {sheets} · Updated {ago(item.updatedAt)}
         </span>
+        <TagChips tags={tagsOf(tags, refOf(item))} />
       </Link>
       <span className={s.menu}>
         <Menu
@@ -79,6 +94,7 @@ function Card({ projectId, item, onRename, onDelete }: { projectId: string; item
             { label: 'Open', icon: 'layout-dashboard', onSelect: () => void navigate(open) },
             { label: 'Rename', icon: 'pencil', onSelect: onRename },
             { label: 'History', icon: 'history', onSelect: () => void navigate(`/versions/${projectId}/dashboard/${item.id}`) },
+            { label: 'Lineage', icon: 'lineage', onSelect: onLineage },
             { kind: 'separator' },
             { label: 'Delete', icon: 'trash', danger: true, onSelect: onDelete },
           ]}
@@ -91,8 +107,26 @@ function Card({ projectId, item, onRename, onDelete }: { projectId: string; item
 function Gallery({ projectId }: { projectId: string }) {
   const q = useGallery(projectId);
   const datasets = useDatasets(projectId);
+  const tags = useTags(projectId);
+  const [tag, setTag] = useActiveTag();
+  const key = useKeyStatus();
   const client = useQueryClient();
-  const [wizard, setWizard] = useState(false);
+  const [params, setParams] = useSearchParams();
+  // `?new=1[&dataset=<id>]` opens the wizard — the palette's "New dashboard" and a dataset page's (anCreateWizard).
+  const [wizard, setWizard] = useState<{ datasetId?: string } | null>(() => (params.get('new') ? { datasetId: params.get('dataset') ?? undefined } : null));
+  useEffect(() => {
+    if (!params.get('new')) return;
+    setParams(
+      (p) => {
+        const n = new URLSearchParams(p);
+        n.delete('new');
+        n.delete('dataset');
+        return n;
+      },
+      { replace: true },
+    );
+  }, [params, setParams]);
+  const [lineage, setLineage] = useState<GalleryItem | null>(null);
   const [drafting, setDrafting] = useState(false);
   const [renaming, setRenaming] = useState<GalleryItem | null>(null);
   const [name, setName] = useState('');
@@ -123,16 +157,19 @@ function Gallery({ projectId }: { projectId: string }) {
   };
 
   const count = q.data?.length ?? 0;
+  // The Assistant's doors are shut, and say why, until a model is connected (execMenu.ts gateAssistantDoors).
+  const aiReady = !!key.data?.isReady;
+  const aiWhy = key.isPending ? 'Checking whether a model is connected…' : 'The Assistant isn\u2019t set up yet — connect a model in the Assistant.';
   const actions = (
     <div className={s.actions}>
       <Link className={buttonClass('ghost')} to={`/data/metrics?project=${projectId}`}>
         <Icon name="target" />
         <span>Metrics</span>
       </Link>
-      <Button icon="sparkles" onClick={() => setDrafting(true)}>
+      <Button icon="sparkles" onClick={() => setDrafting(true)} disabled={!aiReady} title={aiReady ? undefined : aiWhy}>
         Draft with the Assistant
       </Button>
-      <Button variant="primary" icon="plus" onClick={() => setWizard(true)}>
+      <Button variant="primary" icon="plus" onClick={() => setWizard({})}>
         Create dashboard
       </Button>
     </div>
@@ -161,10 +198,17 @@ function Gallery({ projectId }: { projectId: string }) {
         title="No dashboards yet"
         actions={
           <>
-            <Button variant="primary" size="lg" onClick={() => setWizard(true)}>
+            <Button variant="primary" size="lg" onClick={() => setWizard({})}>
               Create dashboard
             </Button>
-            <Button variant="ghost" size="lg" icon="sparkles" onClick={() => openDockWith('Build me a dashboard from my data')}>
+            <Button
+              variant="ghost"
+              size="lg"
+              icon="sparkles"
+              disabled={!aiReady}
+              title={aiReady ? undefined : aiWhy}
+              onClick={() => openDockWith('Build me a dashboard from my data')}
+            >
               Draft with the Assistant
             </Button>
           </>
@@ -174,7 +218,20 @@ function Gallery({ projectId }: { projectId: string }) {
         let the Assistant draft the sheets, charts and calculated fields — you review all of it before anything is created.
       </EmptyState>
     );
-    if (sets.length) {
+    if (key.isSuccess && !aiReady) {
+      body = (
+        <>
+          {body}
+          <p className={s.aiHint}>
+            The Assistant isn’t set up yet — connect a model in the Assistant to draft dashboards. Everything else works without one.{' '}
+            <Button variant="ghost" size="sm" icon="sparkles" onClick={() => setDockOpen(true)}>
+              Open the Assistant
+            </Button>
+          </p>
+        </>
+      );
+    }
+    if (sets.length && aiReady) {
       body = (
         <>
           {body}
@@ -192,13 +249,21 @@ function Gallery({ projectId }: { projectId: string }) {
       );
     }
   } else {
+    // The tag filter bar (catalogUi.ts ctAfterPaint): the tags the cards carry, one pressed, kept in `?tag=`.
+    const tagged = (item: GalleryItem) => tagsOf(tags.data, refOf(item)).map((t) => t.name);
+    const present = [...new Set(q.data.flatMap(tagged))];
+    const shown = tag ? q.data.filter((item) => tagged(item).includes(tag)) : q.data;
     body = (
+      <>
+      <TagFilterBar present={present} index={tags.data} active={tag} onPick={setTag} empty={shown.length === 0} />
       <ul className={s.grid} aria-label="Dashboards">
-        {q.data.map((item) => (
+        {shown.map((item) => (
           <Card
             key={item.id}
             projectId={projectId}
             item={item}
+            tags={tags.data}
+            onLineage={() => setLineage(item)}
             onRename={() => {
               setName(item.name);
               setRenaming(item);
@@ -207,6 +272,7 @@ function Gallery({ projectId }: { projectId: string }) {
           />
         ))}
       </ul>
+      </>
     );
   }
 
@@ -217,7 +283,8 @@ function Gallery({ projectId }: { projectId: string }) {
         {actions}
       </div>
       {body}
-      {wizard && <NewWizard projectId={projectId} onClose={() => setWizard(false)} />}
+      {wizard && <NewWizard projectId={projectId} datasetId={wizard.datasetId} initialStep={wizard.datasetId ? 2 : 1} onClose={() => setWizard(null)} />}
+      {lineage && <LineageDrawer projectId={projectId} type="dashboard" id={lineage.id} name={lineage.name || 'Untitled dashboard'} onClose={() => setLineage(null)} />}
       {drafting && <DraftFlow projectId={projectId} onClose={() => setDrafting(false)} />}
       <Dialog
         open={renaming !== null}

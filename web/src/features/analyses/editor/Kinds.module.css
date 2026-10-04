@@ -1,0 +1,156 @@
+/* Statistics, image and navigation cards (statsTile.ts .sw-tile, authoring.css
+   .img-card / .nav-card). Tokens only — both themes follow. */
+
+.missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-8);
+  height: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+  text-align: center;
+}
+
+/* ── statistics ── */
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  height: 100%;
+  min-height: 0;
+}
+.statsSub {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.statsChart {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.statsTable {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.statsTable table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-12);
+}
+.statsTable th,
+.statsTable td {
+  padding: var(--sp-4) var(--sp-8);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+.statsTable thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  color: var(--muted);
+  font-weight: 600;
+}
+.statsTable tbody th {
+  font-weight: 500;
+  color: var(--text-strong);
+}
+.statsTable .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.statsSentence {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--text);
+}
+
+/* ── image ── */
+.img {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 6px;
+}
+.img img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.fit_contain img {
+  object-fit: contain;
+}
+.fit_cover img {
+  object-fit: cover;
+}
+.fit_fill img {
+  object-fit: fill;
+}
+
+/* ── navigation ── */
+.nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  height: 100%;
+}
+.navBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--ctl-sm);
+  padding: 0 var(--sp-12);
+  font: 500 var(--t-13) / 1 var(--font-ui);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.navBtn:hover:not(:disabled) {
+  border-color: var(--border-2);
+  background: var(--surface-2);
+}
+.navBtn:disabled,
+.navTab:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.navBtn:focus-visible,
+.navTab:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.navBtn.navOn {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.navTabs {
+  gap: 0;
+  align-items: stretch;
+}
+.navTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--sp-16);
+  font: 500 var(--t-13) / 1 var(--font-ui);
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.navTab:hover:not(:disabled) {
+  color: var(--text);
+}
+.navTab.navOn {
+  color: var(--text-strong);
+  border-bottom-color: var(--accent);
+}

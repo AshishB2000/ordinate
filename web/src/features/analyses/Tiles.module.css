@@ -27,3 +27,7 @@
   font-size: var(--t-11);
   color: var(--warn);
 }
+/* Click-to-filter is on: a mark is a control (dashFiltersUi.ts .is-crossfilter). */
+.crossFilter canvas {
+  cursor: pointer;
+}

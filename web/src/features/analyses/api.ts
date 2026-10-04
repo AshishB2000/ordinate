@@ -92,14 +92,16 @@ export interface GalleryItem {
   sheetCount: number;
   updatedAt: string;
   previews: VisualDef[];
+  sheets: { id: string; name: string }[];
 }
 
 /** `analysis:gallery` — every dashboard with its first sheet's first two visuals. */
+export const galleryQuery = (projectId: string) => ({
+  queryKey: ['analysis:gallery', projectId],
+  queryFn: async () => (await rpc('analysis:gallery', { projectId })) as GalleryItem[],
+});
 export function useGallery(projectId: string) {
-  return useQuery({
-    queryKey: ['analysis:gallery', projectId],
-    queryFn: async () => (await rpc('analysis:gallery', { projectId })) as GalleryItem[],
-  });
+  return useQuery(galleryQuery(projectId));
 }
 
 export type OpenReply = { ok: true; analysis: Analysis; visuals: VisualDef[] } | { ok: false; error: string };
@@ -132,6 +134,20 @@ export interface CompareReply {
   direction?: 'up_good' | 'down_good';
 }
 export type VisualTile = { ok: true; data: ChartDataShape & Record<string, unknown>; warnings: string[]; paramErrors?: string[] } | { ok: false; error: string };
+/** A statistics card's answer (src/ipc/stats.ts computeStatsTile): every cell a string the server wrote. */
+export type StatsTile =
+  | {
+      ok: true;
+      view: 'table' | 'chart';
+      tile: {
+        title: string;
+        subtitle: string;
+        sentence: string;
+        table: { head: string[]; rows: string[][] };
+        chart: { chartType: string; data: ChartDataShape & Record<string, unknown> };
+      };
+    }
+  | { ok: false; error: string };
 export type MetricTile =
   | { ok: true; value: number | null; display?: string; name?: string; paramErrors?: string[]; compare?: CompareReply }
   | { ok: false; error: string };
@@ -169,7 +185,7 @@ function loadTile(projectId: string, params: ParamPayload, req: TileRequest): Pr
 }
 
 /** One tile's answer, computed by the server; batched with the sheet's other tiles. */
-export function useTile<T extends VisualTile | MetricTile>(projectId: string, params: ParamPayload, req: TileRequest | undefined) {
+export function useTile<T extends VisualTile | MetricTile | StatsTile>(projectId: string, params: ParamPayload, req: TileRequest | undefined) {
   return useQuery({
     queryKey: ['analysis:tile', projectId, params, req],
     queryFn: req === undefined ? skipToken : async () => (await loadTile(projectId, params, req)) as T,

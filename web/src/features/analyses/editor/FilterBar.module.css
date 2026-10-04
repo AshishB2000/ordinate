@@ -124,3 +124,34 @@
   font-size: var(--t-12);
   color: var(--muted);
 }
+
+/* A phone: one "Filters (N)" button opens the chips in a sheet (layouts.css ly-fb--sheet). */
+.sheetBar {
+  justify-content: flex-start;
+}
+.sheetOn {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.badge {
+  margin-left: var(--sp-4);
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--t-11);
+  font-weight: 600;
+}
+.retry {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.retry:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}

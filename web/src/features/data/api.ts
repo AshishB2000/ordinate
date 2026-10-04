@@ -221,8 +221,9 @@ export const useColumnDocs = (projectId: string, datasetId: string) =>
   useRead(['catalog:columns', projectId, datasetId], async () =>
     ((await rpc('catalog:columns', { projectId, datasetId })) as { columns: Record<string, ColumnDoc> }).columns);
 
-export const useLineage = (projectId: string, id: string, on = true) =>
-  useRead(['lineage:get', projectId, id], on ? async () => (await rpc('lineage:get', { projectId, type: 'dataset', id })) as Lineage | null : null);
+export type LineageType = RpcInput<'lineage:get'>['type'];
+export const useLineage = (projectId: string, id: string, on = true, type: LineageType = 'dataset') =>
+  useRead(['lineage:get', projectId, type, id], on ? async () => (await rpc('lineage:get', { projectId, type, id })) as Lineage | null : null);
 
 export const useRelationships = (projectId: string) =>
   useRead(['relationship:list', projectId], async () =>

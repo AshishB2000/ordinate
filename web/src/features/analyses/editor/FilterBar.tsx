@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { Button, IconButton } from '../../../ui/Button';
+import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Menu } from '../../../ui/Menu';
 import { Icon } from '../../../ui/icons/Icon';
 import type { Card, Parameter } from '../api';
@@ -137,33 +138,71 @@ function Chip({ card }: { card: Card }) {
 
 export function FilterBar() {
   const ed = useEditor();
+  const [sheetOpen, setSheetOpen] = useState(false);
   const chips = barControls(ed.cards);
   if (!chips.length) return null;
-  const anyActive = chips.some((c) =>
+  const isOn = (c: Card) =>
     c.control?.kind === 'parameter'
       ? JSON.stringify(ed.paramValue(c.control.paramId ?? '')) !== JSON.stringify(ed.doc.parameters.find((p) => p.id === c.control?.paramId)?.value)
-      : controlActive(c, ed.controlValue(c.id)),
+      : controlActive(c, ed.controlValue(c.id));
+  const on = chips.filter(isOn).length;
+  const clearAll = () => {
+    for (const c of chips) {
+      if (c.control?.kind === 'parameter') {
+        const p = ed.doc.parameters.find((x) => x.id === c.control?.paramId);
+        if (p) ed.setParam(p.id, p.value);
+      } else ed.setControl(c.id, undefined);
+    }
+  };
+  const list = (
+    <div className={s.chips}>
+      {chips.map((c) => (
+        <Chip key={c.id} card={c} />
+      ))}
+    </div>
   );
-  return (
-    <div className={s.bar} role="group" aria-label="Filters">
-      <div className={s.chips}>
-        {chips.map((c) => (
-          <Chip key={c.id} card={c} />
-        ))}
-      </div>
-      {anyActive && (
+  // On a phone the chips fold into one "Filters (N)" button and a sheet (layoutFilters.ts).
+  if (ed.size === 'phone') {
+    const n = chips.length;
+    return (
+      <div className={`${s.bar} ${s.sheetBar}`} role="group" aria-label="Filters">
         <Button
           size="sm"
-          variant="ghost"
-          onClick={() => {
-            for (const c of chips) {
-              if (c.control?.kind === 'parameter') {
-                const p = ed.doc.parameters.find((x) => x.id === c.control?.paramId);
-                if (p) ed.setParam(p.id, p.value);
-              } else ed.setControl(c.id, undefined);
-            }
-          }}
+          icon="filter"
+          className={on ? s.sheetOn : undefined}
+          aria-haspopup="dialog"
+          aria-label={`Filters: ${n} ${n === 1 ? 'control' : 'controls'}, ${on} active`}
+          onClick={() => setSheetOpen(true)}
         >
+          Filters ({n}){on > 0 && <span className={s.badge}>{on} on</span>}
+        </Button>
+        <Dialog
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          size="sm"
+          title="Filters"
+          description={`${n} on this page · ${on ? `narrowing the figures (${on})` : 'showing everything'}`}
+          footer={
+            <>
+              <Button variant="ghost" disabled={!on} onClick={clearAll}>
+                Clear all
+              </Button>
+              <DialogClose asChild>
+                <Button variant="primary">Done</Button>
+              </DialogClose>
+            </>
+          }
+        >
+          {list}
+        </Dialog>
+      </div>
+    );
+  }
+  return (
+    <div className={s.bar} role="group" aria-label="Filters">
+      {list}
+      {on > 0 && (
+        <Button size="sm" variant="ghost" onClick={clearAll}>
           Clear all
         </Button>
       )}

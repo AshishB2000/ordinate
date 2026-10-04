@@ -8,6 +8,7 @@ import { rpc } from '../../../api/client';
 import { useDatasets } from '../../../api/datasets';
 import { Button } from '../../../ui/Button';
 import { Select } from '../../../ui/Select';
+import { Skeleton } from '../../../ui/Skeleton';
 import { EmptyState } from '../../../ui/States';
 import { toast } from '../../../ui/Toast';
 import { failure, type Card, type OpenReply } from '../api';
@@ -69,6 +70,12 @@ export function EmptySheet() {
       >
         Add cards from the bar above, or start from a layout built from one of your datasets.
       </EmptyState>
+      {sets.isPending && <Skeleton className={s.starterSk} />}
+      {sets.isError && (
+        <p className={s.starterNote} role="alert">
+          The layouts built from your data are unavailable: the datasets could not be listed.
+        </p>
+      )}
       {!!sets.data?.length && (
         <div className={s.starters}>
           {sets.data.length > 1 && (

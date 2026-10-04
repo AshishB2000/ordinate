@@ -14,6 +14,8 @@ import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Menu } from '../../../ui/Menu';
 import { SkeletonTable } from '../../../ui/Skeleton';
 import { toast } from '../../../ui/Toast';
+import { useTags } from '../../data/api';
+import { TagChips, TagFilterBar, tagsOf, useActiveTag } from '../../data/tags';
 import { ProjectGate } from '../../import/ProjectGate';
 import { toastMovedToTrash } from '../../projects/trashToast';
 import { failure } from '../api';
@@ -42,6 +44,8 @@ function useTable(projectId: string) {
 
 function Metrics({ projectId }: { projectId: string }) {
   const q = useTable(projectId);
+  const tags = useTags(projectId);
+  const [tag, setTag] = useActiveTag();
   const client = useQueryClient();
   const [editing, setEditing] = useState<MetricDraft | null>(null);
   const [deleting, setDeleting] = useState<MetricSummary | null>(null);
@@ -122,7 +126,13 @@ function Metrics({ projectId }: { projectId: string }) {
     );
   } else {
     const rows = q.data.rows;
+    // Catalog tags on each row and the tag filter bar over the list (catalogUi.ts ctDecorate / ctAfterPaint).
+    const tagged = (m: MetricSummary) => tagsOf(tags.data, `metric:${m.id}`);
+    const present = [...new Set(q.data.metrics.flatMap((m) => tagged(m).map((t) => t.name)))];
+    const shown = tag ? q.data.metrics.filter((m) => tagged(m).some((t) => t.name === tag)) : q.data.metrics;
     body = (
+      <>
+      <TagFilterBar present={present} index={tags.data} active={tag} onPick={setTag} empty={shown.length === 0} />
       <div className={s.tableWrap}>
         <table className={s.table}>
           <thead>
@@ -142,7 +152,7 @@ function Metrics({ projectId }: { projectId: string }) {
             </tr>
           </thead>
           <tbody>
-            {q.data.metrics.map((m) => {
+            {shown.map((m) => {
               const row = rows[m.id];
               return (
                 <tr key={m.id}>
@@ -150,6 +160,7 @@ function Metrics({ projectId }: { projectId: string }) {
                     <button type="button" className={s.name} title={m.description || undefined} onClick={() => void open(m)}>
                       {m.name}
                     </button>
+                    <TagChips tags={tagged(m)} />
                   </td>
                   <td className={s.dim}>{m.datasetName ?? '(missing dataset)'}</td>
                   <td className={s.def} title={m.definitionText}>
@@ -180,6 +191,7 @@ function Metrics({ projectId }: { projectId: string }) {
           </tbody>
         </table>
       </div>
+      </>
     );
   }
 

@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { formatNumber } from '../../../../../src/app/format.ts';
 import { rpc } from '../../../api/client';
 import { Button } from '../../../ui/Button';
 import { Checkbox } from '../../../ui/Choice';
@@ -30,10 +31,13 @@ function Dropdown({ projectId, control, value, onChange }: { projectId: string; 
     <select
       className={s.select}
       aria-label={control.label || control.column}
+      aria-busy={q.isPending || undefined}
+      aria-invalid={q.isError || undefined}
+      title={q.isError ? `The values could not be loaded: ${q.error.message}` : undefined}
       value={cur}
       onChange={(e) => onChange(e.target.value ? { value: e.target.value } : undefined)}
     >
-      <option value="">All</option>
+      <option value="">{q.isPending ? 'All (loading values…)' : q.isError ? 'All (values unavailable)' : 'All'}</option>
       {cur && !q.data?.values.some((v) => str(v) === cur) && <option value={cur}>{cur}</option>}
       {(q.data?.values ?? []).map((v) => (
         <option key={str(v)} value={str(v)}>
@@ -61,7 +65,17 @@ function Multi({ projectId, control, value, onChange }: { projectId: string; con
     >
       <div className={s.multi}>
         <input className={s.search} type="search" placeholder="Search values" aria-label="Search values" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <div className={s.multiList}>
+        <div className={s.multiList} aria-busy={q.isPending || undefined}>
+          {q.isPending && <p className={s.more}>Loading values…</p>}
+          {q.isError && (
+            <p className={s.more} role="alert">
+              The values could not be loaded.{' '}
+              <button type="button" className={s.retry} onClick={() => void q.refetch()}>
+                Try again
+              </button>
+            </p>
+          )}
+          {q.isSuccess && q.data.values.length === 0 && <p className={s.more}>{search.trim() ? `No value matches “${search.trim()}”.` : 'This column has no values.'}</p>}
           {(q.data?.values ?? []).map((raw) => {
             const v = str(raw);
             return (
@@ -73,7 +87,7 @@ function Multi({ projectId, control, value, onChange }: { projectId: string; con
               />
             );
           })}
-          {q.data && q.data.total > q.data.values.length && <p className={s.more}>Showing the first {q.data.values.length} of {q.data.total.toLocaleString()} — search to narrow.</p>}
+          {q.data && q.data.total > q.data.values.length && <p className={s.more}>Showing the first {q.data.values.length} of {formatNumber(q.data.total)} — search to narrow.</p>}
         </div>
         {picked.length > 0 && (
           <Button size="sm" variant="ghost" onClick={() => set([])}>

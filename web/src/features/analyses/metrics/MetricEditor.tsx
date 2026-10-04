@@ -5,61 +5,33 @@
 // prefill: "Save as metric…" on a KPI hands one in. A duplicate name is
 // refused by the server and said in the dialog, the work still in the boxes.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { rpc } from '../../../api/client';
 import { useDatasetColumns, useDatasets } from '../../../api/datasets';
-import { Button, IconButton, buttonClass } from '../../../ui/Button';
+import { Button, buttonClass } from '../../../ui/Button';
 import { Checkbox } from '../../../ui/Choice';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Input, Textarea } from '../../../ui/Field';
 import { Select } from '../../../ui/Select';
 import { Tab, TabList, Tabs } from '../../../ui/Tabs';
 import { Icon } from '../../../ui/icons/Icon';
-import { AGG_LABEL, failure, type Agg, type Step } from '../api';
+import { useTags } from '../../data/api';
+import { RecordDetails } from '../../data/Details';
+import { LineageDrawer } from '../../data/LineageDrawer';
+import { TagChips, tagsOf } from '../../data/tags';
+import type { FilterStep } from '../../visuals/api';
+import { FilterRows } from '../../visuals/filters/FilterRows';
+import { liveFilters } from '../../visuals/filters/filterText';
+import { AGG_LABEL, failure, type Agg } from '../api';
 import { isFormula, useMetricList, type Metric, type MetricFormat } from './api';
 import s from './Metrics.module.css';
 
 const AGGS: Agg[] = ['sum', 'avg', 'count', 'min', 'max'];
-const OPS = ['=', '!=', '>', '>=', '<', '<=', 'contains', 'is_empty', 'not_empty'];
 /** Long enough that typing a formula is not a query per keystroke (ME_PREVIEW_MS). */
 const PREVIEW_MS = 300;
 
 export type MetricDraft = Partial<Omit<Metric, 'definition'>> & { definition?: Metric['definition'] };
-
-function filterText(st: Step): string {
-  const v = Array.isArray(st.values) ? st.values.join(', ') : st.value == null ? '' : String(st.value);
-  return `${String(st.column ?? '')} ${String(st.op ?? '')} ${v}`.trim();
-}
-
-/** "+ Filter": column, operator, value — a row predicate applied before the aggregation. */
-function AddFilter({ columns, onAdd }: { columns: { name: string }[]; onAdd: (st: Step) => void }) {
-  const [col, setCol] = useState<string | null>(null);
-  const [op, setOp] = useState('=');
-  const [value, setValue] = useState('');
-  const column = col ?? columns[0]?.name ?? null;
-  const unary = op === 'is_empty' || op === 'not_empty';
-  return (
-    <div className={s.addFilter}>
-      <Select size="sm" aria-label="Filter column" value={column} options={columns.map((c) => ({ value: c.name, label: c.name }))} onValueChange={setCol} />
-      <Select size="sm" aria-label="Operator" value={op} options={OPS.map((o) => ({ value: o, label: o.replace('_', ' ') }))} onValueChange={setOp} />
-      {!unary && <Input size="sm" aria-label="Filter value" value={value} onChange={(e) => setValue(e.target.value)} />}
-      <Button
-        size="sm"
-        disabled={!column || (!unary && !value.trim())}
-        onClick={() => {
-          if (!column) return;
-          const n = Number(value);
-          const typed = value.trim() !== '' && Number.isFinite(n) && op !== 'contains' ? n : value;
-          onAdd({ type: 'filter', column, op, ...(unary ? {} : { value: typed }) });
-          setValue('');
-        }}
-      >
-        Add filter
-      </Button>
-    </div>
-  );
-}
 
 export function MetricEditor({ projectId, existing, onSaved, onClose }: { projectId: string; existing?: MetricDraft; onSaved: (m: Metric) => void; onClose: () => void }) {
   const editingId = existing?.id ?? '';
@@ -75,7 +47,11 @@ export function MetricEditor({ projectId, existing, onSaved, onClose }: { projec
   const col = column && cols.data?.columns.some((c) => c.name === column) ? column : (cols.data?.columns[0]?.name ?? null);
   const [agg, setAgg] = useState<Agg>(def && !isFormula(def) ? def.aggregation : 'sum');
   const [formula, setFormula] = useState(def && isFormula(def) ? def.formula : '');
-  const [filters, setFilters] = useState<Step[]>(existing?.filters ?? []);
+  // The builder's filter rows and typed dialog (filterDialog.ts): values, conditions, ranges, periods — never a guessed type.
+  const [filters, setFilters] = useState<FilterStep[]>((existing?.filters ?? []) as FilterStep[]);
+  const formulaRef = useRef<HTMLTextAreaElement>(null);
+  const [lineage, setLineage] = useState(false);
+  const tags = useTags(projectId);
   const fmt0 = existing?.format;
   const [format, setFormat] = useState<MetricFormat>({
     kind: fmt0?.kind ?? 'number',
@@ -86,30 +62,49 @@ export function MetricEditor({ projectId, existing, onSaved, onClose }: { projec
   });
   const [description, setDescription] = useState(existing?.description ?? '');
   const [direction, setDirection] = useState<string>(existing?.direction ?? '');
-  const [preview, setPreview] = useState<{ display: string; text: string } | null>(null);
+  const [preview, setPreview] = useState<{ display: string; text: string; error?: string } | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
   const definition = mode === 'formula' ? { formula } : col ? { column: col, aggregation: agg } : null;
-  const key = JSON.stringify([ds, definition, filters, format]);
+  const live = liveFilters(filters);
+  const key = JSON.stringify([ds, definition, live, format]);
   useEffect(() => {
-    const [d, dfn, flt, f] = JSON.parse(key) as [string | null, Metric['definition'] | null, Step[], MetricFormat];
+    const [d, dfn, flt, f] = JSON.parse(key) as [string | null, Metric['definition'] | null, FilterStep[], MetricFormat];
     if (!d || !dfn) return setPreview(null);
-    let live = true;
+    let on = true;
+    setPreviewing(true);
     const t = setTimeout(() => {
-      rpc('metric:preview', { projectId, datasetId: d, definition: dfn, filters: flt, format: f }).then(
-        (r) => {
-          const res = r as { ok: boolean; display?: string; definitionText?: string };
-          if (live) setPreview(res.ok ? { display: res.display || '—', text: res.definitionText || '' } : { display: '—', text: '' });
-        },
-        () => live && setPreview({ display: '—', text: '' }),
-      );
+      rpc('metric:preview', { projectId, datasetId: d, definition: dfn, filters: flt, format: f })
+        .then(
+          (r) => {
+            const res = r as { ok: boolean; display?: string; definitionText?: string; error?: string };
+            // A refusal keeps the server's reason (a formula naming an unknown metric) instead of a bare dash.
+            if (on) setPreview(res.ok ? { display: res.display || '—', text: res.definitionText || '' } : { display: '—', text: '', error: res.error || 'This definition cannot be computed.' });
+          },
+          (err: unknown) => on && setPreview({ display: '—', text: '', error: failure(err, 'The preview could not be computed.') }),
+        )
+        .finally(() => on && setPreviewing(false));
     }, PREVIEW_MS);
     return () => {
-      live = false;
+      on = false;
       clearTimeout(t);
     };
   }, [key, projectId]);
+
+  /** Put `[name]` at the caret (metricEditor.ts meInsertRef), then give the box its focus back. */
+  const insertRef = (name: string) => {
+    const el = formulaRef.current;
+    const at = el ? el.selectionStart : formula.length;
+    const end = el ? el.selectionEnd : formula.length;
+    const text = `[${name}]`;
+    setFormula(formula.slice(0, at) + text + formula.slice(end));
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(at + text.length, at + text.length);
+    });
+  };
 
   const save = async () => {
     setError('');
@@ -118,7 +113,7 @@ export function MetricEditor({ projectId, existing, onSaved, onClose }: { projec
     const fields = {
       name: name.trim(),
       definition,
-      filters,
+      filters: live,
       format,
       description,
       direction: direction as '' | 'up_good' | 'down_good',
@@ -150,10 +145,15 @@ export function MetricEditor({ projectId, existing, onSaved, onClose }: { projec
       footer={
         <>
           {editingId && (
-            <Link className={buttonClass('ghost', 'sm', s.history)} to={`/versions/${projectId}/metric/${editingId}`}>
-              <Icon name="history" />
-              <span>History</span>
-            </Link>
+            <>
+              <Link className={buttonClass('ghost', 'sm', s.history)} to={`/versions/${projectId}/metric/${editingId}`}>
+                <Icon name="history" />
+                <span>History</span>
+              </Link>
+              <Button variant="ghost" size="sm" icon="lineage" onClick={() => setLineage(true)}>
+                Lineage
+              </Button>
+            </>
           )}
           <DialogClose asChild>
             <Button variant="ghost">Cancel</Button>
@@ -169,8 +169,18 @@ export function MetricEditor({ projectId, existing, onSaved, onClose }: { projec
           <Input label="Name" placeholder="Revenue" hint="Formulas reference a metric by this name." value={name} onChange={(e) => setName(e.target.value)} autoFocus maxLength={200} />
           <Select
             label="Dataset"
-            disabled={!!editingId}
+            disabled={!!editingId || sets.isPending}
+            placeholder={sets.isPending ? 'Loading…' : 'Choose a dataset'}
             hint={editingId ? 'A metric cannot change dataset — duplicate it instead.' : undefined}
+            error={
+              sets.isError
+                ? `The datasets could not be listed: ${sets.error.message}`
+                : sets.isSuccess && !sets.data.length
+                  ? 'This project has no datasets yet — import one first.'
+                  : editingId && sets.isSuccess && !sets.data.some((d) => d.id === ds)
+                    ? 'This metric’s dataset is no longer in the project.'
+                    : undefined
+            }
             value={ds}
             options={(sets.data ?? []).map((d) => ({ value: d.id, label: d.name || 'Untitled dataset' }))}
             onValueChange={(v) => {
@@ -187,7 +197,15 @@ export function MetricEditor({ projectId, existing, onSaved, onClose }: { projec
           </Tabs>
           {mode === 'simple' ? (
             <>
-              <Select label="Column" value={col} options={columns.map((c) => ({ value: c.name, label: `${c.name} (${c.type})` }))} onValueChange={setColumn} />
+              <Select
+                label="Column"
+                value={col}
+                disabled={!ds || cols.isPending}
+                placeholder={ds && cols.isPending ? 'Loading…' : 'Choose a column'}
+                error={cols.isError ? `The columns could not be read: ${cols.error.message}` : undefined}
+                options={columns.map((c) => ({ value: c.name, label: `${c.name} (${c.type})` }))}
+                onValueChange={setColumn}
+              />
               <div className={s.aggs} role="radiogroup" aria-label="Aggregation">
                 {AGGS.map((a) => (
                   <button key={a} type="button" role="radio" aria-checked={a === agg} className={a === agg ? `${s.agg} ${s.on}` : s.agg} onClick={() => setAgg(a)}>
@@ -199,6 +217,7 @@ export function MetricEditor({ projectId, existing, onSaved, onClose }: { projec
           ) : (
             <>
               <Textarea
+                ref={formulaRef}
                 label="Formula"
                 rows={3}
                 spellCheck={false}
@@ -210,7 +229,7 @@ export function MetricEditor({ projectId, existing, onSaved, onClose }: { projec
               {refs.length > 0 && (
                 <div className={s.refs}>
                   {refs.map((m) => (
-                    <button key={m.id} type="button" className={s.ref} title={m.definitionText} onClick={() => setFormula((f) => `${f}[${m.name}]`)}>
+                    <button key={m.id} type="button" className={s.ref} title={m.definitionText} onClick={() => insertRef(m.name)}>
                       {m.name}
                     </button>
                   ))}
@@ -219,20 +238,18 @@ export function MetricEditor({ projectId, existing, onSaved, onClose }: { projec
             </>
           )}
           <div className={s.group}>
-            <span className={s.groupLabel}>Filters</span>
-            <span className={s.groupHint}>Applied before the aggregation — part of what the metric means.</span>
-            {filters.length > 0 && (
-              <div className={s.chips}>
-                {filters.map((f, i) => (
-                  <span key={i} className={s.chip}>
-                    {filterText(f)}
-                    <IconButton icon="x" size="sm" label={`Remove filter ${filterText(f)}`} onClick={() => setFilters((fs) => fs.filter((_, j) => j !== i))} />
-                  </span>
-                ))}
-              </div>
-            )}
-            <AddFilter columns={columns} onAdd={(st) => setFilters((fs) => [...fs, st])} />
+            {ds && <FilterRows projectId={projectId} datasetId={ds} cols={columns} filters={filters} onChange={setFilters} />}
+            <span className={s.filterHint}>Filters apply before the aggregation — they are part of what the metric means.</span>
           </div>
+          {editingId && (
+            <div className={s.group}>
+              <span className={s.groupLabel}>Tags & owner</span>
+              <div className={s.tagsRow}>
+                {tagsOf(tags.data, `metric:${editingId}`).length ? <TagChips tags={tagsOf(tags.data, `metric:${editingId}`)} max={6} /> : <span className={s.groupHint}>No tags yet</span>}
+                <RecordDetails projectId={projectId} kind="metric" id={editingId} name={name || 'Metric'} trigger={<Button size="sm" icon="info">Edit</Button>} />
+              </div>
+            </div>
+          )}
           <div className={s.group}>
             <span className={s.groupLabel}>Format</span>
             <div className={s.format}>
@@ -269,9 +286,13 @@ export function MetricEditor({ projectId, existing, onSaved, onClose }: { projec
         </div>
         <aside className={s.preview} aria-live="polite" aria-label="Preview">
           <span className={s.previewH}>Preview</span>
-          <span className={s.previewValue}>{preview ? preview.display : '—'}</span>
-          <span className={s.previewText}>{preview?.text}</span>
+          <span className={s.previewValue} aria-busy={previewing || undefined}>
+            {previewing && !preview ? '…' : preview ? preview.display : '—'}
+          </span>
+          {preview?.error ? <span className={s.previewError}>{preview.error}</span> : <span className={s.previewText}>{preview?.text}</span>}
+          {previewing && preview && <span className={s.previewText}>Updating…</span>}
         </aside>
+        {lineage && editingId && <LineageDrawer projectId={projectId} type="metric" id={editingId} name={name || 'Metric'} onClose={() => setLineage(false)} />}
       </div>
       {error && (
         <p className={s.error} role="alert">

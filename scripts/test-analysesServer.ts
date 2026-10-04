@@ -12,6 +12,10 @@
 //                        (an array) reach the chart's filters
 //     metric:table       value / series / usage equal the single handlers'
 //     metric:values      equal metric:value
+//     publish            BY VALUE: a built copy keeps its values after the
+//                        dashboard and its visual change; no publish channel
+//     asset:*            an image upload → project asset → data: URL; script
+//                        SVGs and non-images refused
 //     CRUD               create → update (whole-array replace) → rename →
 //                        delete to Trash → restore; 400 / 403 at the edge
 //   Part 2 (DATABASE_URL): header sign-in on a scratch database. Every new
@@ -117,7 +121,13 @@ function client(base: string, headers: Record<string, string> = {}) {
     const text = await res.text();
     return { status: res.status, body: res.status === 200 ? wire.decode(text) : text };
   };
-  return { call };
+  const upload = async (bytes: Buffer, name: string) => {
+    const form = new FormData();
+    form.append('file', new Blob([new Uint8Array(bytes)]), name);
+    const res = await fetch(`${base}/api/files`, { method: 'POST', body: form, headers: withCsrf(headers) });
+    return ((await res.json()) as { fileToken: string }).fileToken;
+  };
+  return { call, upload };
 }
 
 async function listen(app: FastifyInstance): Promise<string> {
@@ -138,7 +148,7 @@ function same(a: unknown, b: unknown): boolean {
 async function partOne(): Promise<void> {
   const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA, ORDINATE_ENV: 'dev' }));
   const base = await listen(app);
-  const { call } = client(base);
+  const { call, upload } = client(base);
   const dev: Identity = { user: { email: 'dev@local', role: 'admin' }, org: { id: 'default' } };
   /** The single handler, called as the RPC layer would — the reference for every batch. */
   const direct = (channel: string, payload: unknown) =>
@@ -159,6 +169,8 @@ async function partOne(): Promise<void> {
       board.previews.every((p: any, i: number) => same(p.encoding, want[i]?.encoding) && same(p.filters, want[i]?.filters) && p.chartType === want[i]?.chartType && p.datasetId === s.ds), // any: a reply row
       JSON.stringify(board.previews[1]));
     ok('gallery: sheetCount from the record; an empty dashboard has no previews', board.sheetCount === 2 && emptyRow.previews.length === 0);
+    ok('gallery: each dashboard\'s sheets (id, name) for a navigation target, nothing more',
+      JSON.stringify(board.sheets.map((p: { name: string }) => p.name)) === '["Overview","Second"]' && board.sheets.every((p: object) => Object.keys(p).join() === 'id,name'));
 
     // ── analysis:open ─────────────────────────────────────────────────────
     const op = await call('analysis:open', { projectId: pid, id: s.aid });
@@ -205,6 +217,12 @@ async function partOne(): Promise<void> {
       projectId: pid, card: { metricId: s.rev, datasetId: s.ds, column: 'amount', aggregation: 'sum' }, filters: items[6].filters, compare: { mode: 'previous_period' }, params,
     });
     ok('tiles: a compare IS metric:compare\'s reply', same(t.body[6].compare, cmp) && typeof cmp.delta === 'number', JSON.stringify(t.body[6].compare));
+    const spec = { kind: 'groups', datasetId: s.ds, outcome: 'amount', group: 'region' };
+    const narrow = [{ type: 'filter', column: 'amount', op: '>', value: 50 }];
+    const [st] = (await call('analysis:tiles', { projectId: pid, items: [{ kind: 'stats', spec, filters: narrow }] })).body;
+    const stDirect = await direct('stats:tile', { projectId: pid, spec, filters: narrow });
+    ok('tiles: a statistics card IS stats:tile\'s reply under the sheet\'s filters', st && st.ok && same(st, stDirect), JSON.stringify(st).slice(0, 200));
+    ok('tiles: a statistics spec without a dataset is a 400', (await call('analysis:tiles', { projectId: pid, items: [{ kind: 'stats', spec: { kind: 'groups' } }] })).status === 400);
     ok('tiles: an unknown kind is a 400 naming the path', (await call('analysis:tiles', { projectId: pid, items: [{ kind: 'map' }] })).status === 400);
     ok('tiles: an empty batch is a 400', (await call('analysis:tiles', { projectId: pid, items: [] })).status === 400);
 
@@ -261,8 +279,21 @@ async function partOne(): Promise<void> {
     const again = JSON.stringify(await build());
     ok('publish: only a re-publish carries the edits', again.includes('"heading":"Changed"') && !again.includes('"heading":"Hello"') && !again.includes('"chartType":"bar"'), again.slice(0, 300));
 
+    // ── An image card's picture: upload → project asset → data: URL ────────
+    const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000020000000108020000007b40e8dd0000000f49444154789c63504d7e2db0b3110008a302be3e2b6cf00000000049454e44ae426082', 'hex');
+    const imported = await call('asset:importImage', { projectId: pid, fileToken: await upload(png, 'logo.png') });
+    ok('asset:importImage: a PNG becomes a project asset with its aspect (2×1)', imported.body.ok && imported.body.asset.ext === 'png' && imported.body.asset.aspect === 2, JSON.stringify(imported.body));
+    const read = await call('asset:read', { projectId: pid, id: imported.body.asset?.id, ext: 'png' });
+    ok('asset:read: the same bytes back as a data: URL', read.body.ok && read.body.dataUrl === `data:image/png;base64,${png.toString('base64')}`);
+    ok('asset:importImage: an unknown token is refused with a reason', (await call('asset:importImage', { projectId: pid, fileToken: 'a'.repeat(43) })).body.ok === false);
+    const svg = await call('asset:importImage', { projectId: pid, fileToken: await upload(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'), 'x.svg') });
+    ok('asset:importImage: an SVG with script is refused', svg.body.ok === false && /script/.test(svg.body.error), JSON.stringify(svg.body));
+    ok('asset:importImage: a text file is not an image', (await call('asset:importImage', { projectId: pid, fileToken: await upload(Buffer.from('hello'), 'a.png') })).body.ok === false);
+    ok('asset:read: a missing asset is a refusal, a bad ext a 400',
+      (await call('asset:read', { projectId: pid, id: crypto.randomUUID(), ext: 'png' })).body.ok === false && (await call('asset:read', { projectId: pid, id: crypto.randomUUID(), ext: 'gif' })).status === 400);
+
     // Metric CRUD.
-    const ms =await call('metric:save', { projectId: pid, input: { name: 'Orders', datasetId: s.ds, definition: { column: 'amount', aggregation: 'count' } } });
+    const ms = await call('metric:save', { projectId: pid, input: { name: 'Orders', datasetId: s.ds, definition: { column: 'amount', aggregation: 'count' } } });
     ok('metric:save: ok', ms.body.ok && ms.body.metric.name === 'Orders', JSON.stringify(ms.body));
     const dup = await call('metric:save', { projectId: pid, input: { name: 'orders', datasetId: s.ds, definition: { column: 'amount', aggregation: 'sum' } } });
     ok('metric:save: a duplicate name is refused with a reason', dup.body.ok === false && /already exists/.test(dup.body.error));
@@ -326,6 +357,8 @@ async function partTwo(adminUrl: string): Promise<void> {
       ['metric:table', () => ({ projectId: pid }), 'read'],
       ['metric:values', () => ({ projectId: pid, ids: [s.rev] }), 'read'],
       ['metric:preview', () => ({ projectId: pid, datasetId: s.ds, definition: { column: 'amount', aggregation: 'sum' } }), 'read'],
+      ['asset:read', () => ({ projectId: pid, id: s.ds, ext: 'png' }), 'read'],
+      ['asset:importImage', () => ({ projectId: pid, fileToken: 'a'.repeat(43) }), 'write'],
       ['analysis:create', () => ({ projectId: pid, name: 'New' }), 'write'],
       ['analysis:update', () => ({ projectId: pid, id: s.aid, name: 'Board' }), 'write'],
       ['analysis:rename', () => ({ projectId: pid, id: s.aid, name: 'Board' }), 'write'],

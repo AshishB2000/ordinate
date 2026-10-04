@@ -15,6 +15,8 @@ import { Canvas } from './Canvas';
 import { EditorCtx, type EditorApi, type Pane, type SaveState } from './context';
 import { allControls, fromAnalysis, initial, reduce, sheetOf, type Doc } from './doc';
 import { controlSteps, paramPayload } from './filters';
+import type { FilterStep } from '../../visuals/api';
+import { liveFilters } from '../../visuals/filters/filterText';
 import { pickSize, type Size } from './geometry';
 import { Head } from './Head';
 import { Rail } from './Rail';
@@ -85,7 +87,11 @@ export function Editor({ projectId, analysis, visuals: initialVisuals }: { proje
   const doc = history.doc;
   const save = useAutosave(projectId, analysis.id, doc, history.version);
 
-  const [sheet, setSheetRaw] = useState(0);
+  // `?sheet=<id>`: a navigation card's page target opens on that sheet.
+  const [sheet, setSheetRaw] = useState(() => {
+    const want = new URLSearchParams(window.location.search).get('sheet');
+    return Math.max(0, analysis.sheets.findIndex((p) => p.id === want));
+  });
   const [selected, setSelected] = useState<string | null>(null);
   const [multi, setMulti] = useState<Set<string>>(() => new Set());
   const [pane, setPaneRaw] = useState<Pane>(storedPane);
@@ -137,7 +143,8 @@ export function Editor({ projectId, analysis, visuals: initialVisuals }: { proje
   const params = useMemo(() => paramPayload(doc.parameters, paramValue), [doc.parameters, paramValue]);
   const filters = useMemo(() => {
     const steps = allControls(doc).flatMap((c) => (c.control ? controlSteps(c.control, controls.get(c.id)) : []));
-    return mergeFilters(doc.filters, steps);
+    // A filter row still being set up (no operator yet) filters nothing (filterText.ts liveFilters).
+    return mergeFilters(liveFilters(doc.filters as FilterStep[]), steps);
   }, [doc, controls]);
 
   const api: EditorApi = {

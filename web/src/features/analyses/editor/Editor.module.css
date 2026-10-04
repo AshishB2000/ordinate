@@ -347,3 +347,11 @@
   grid-column: span 3;
   grid-row: span 2;
 }
+.dsKind {
+  padding: 0 4px;
+  border: 1px solid var(--border-2);
+  border-radius: 3px;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}

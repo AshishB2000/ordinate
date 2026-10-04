@@ -12,6 +12,8 @@ import { Button } from '../../../ui/Button';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Input } from '../../../ui/Field';
 import { Select } from '../../../ui/Select';
+import { SkeletonRows } from '../../../ui/Skeleton';
+import { ErrorState } from '../../../ui/States';
 import { AGG_LABEL, useTile, type Agg, type Card, type MetricTile } from '../api';
 import { formatBadge, isFormula, useMetricList, useMetricValues, type MetricSummary } from '../metrics/api';
 import { useEditor } from './context';
@@ -53,22 +55,38 @@ function Picker({ onPick, onCustom }: { onPick: (m: MetricSummary) => void; onCu
   return (
     <div className={s.picker}>
       <Input icon="search" type="search" aria-label="Search metrics" placeholder="Search metrics" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
-      <div className={s.mpkRows} role="list">
+      {/* ↑ ↓ Home End walk the rows (metricPicker.ts openMiniMenu's roving focus). */}
+      <div
+        className={s.mpkRows}
+        role="list"
+        aria-label="Metrics"
+        onKeyDown={(e) => {
+          const rows = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('button')];
+          const i = rows.indexOf(document.activeElement as HTMLButtonElement);
+          const to = e.key === 'ArrowDown' ? i + 1 : e.key === 'ArrowUp' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? rows.length - 1 : null;
+          if (to === null || !rows.length) return;
+          e.preventDefault();
+          rows[Math.max(0, Math.min(rows.length - 1, to))]?.focus();
+        }}
+      >
         {list.isPending ? (
-          <p className={s.empty}>Loading…</p>
+          <SkeletonRows rows={4} label="Loading metrics" />
         ) : list.isError ? (
-          <p className={s.empty}>{list.error.message}</p>
+          <ErrorState compact heading={3} title="The metrics could not be listed" message={list.error.message} onRetry={() => void list.refetch()} />
         ) : shown.length === 0 ? (
-          <p className={s.empty}>
-            {(list.data ?? []).length ? 'No metric matches that.' : 'No metrics in this project yet. Data → Metrics defines one.'}
-          </p>
+          <p className={s.empty}>{(list.data ?? []).length ? 'No metric matches that.' : 'No metrics in this project yet — define one with Manage metrics below, or use Custom….'}</p>
         ) : (
           shown.map((m) => (
-            <button key={m.id} type="button" role="listitem" className={s.mpkRow} title={m.definitionText} onClick={() => onPick(m)}>
-              <span className={s.mpkName}>{m.name}</span>
-              <span className={s.badge}>{formatBadge(m.format)}</span>
-              <span className={s.mpkValue}>{values.data?.get(m.id) ?? '…'}</span>
-            </button>
+            <div key={m.id} role="listitem">
+              <button type="button" className={s.mpkRow} title={m.definitionText} onClick={() => onPick(m)}>
+                <span className={s.mpkName}>{m.name}</span>
+                <span className={s.badge}>{formatBadge(m.format)}</span>
+                {/* A failed batch says so per row, never "…" forever. */}
+                <span className={s.mpkValue} title={values.isError ? 'The figures could not be computed.' : undefined}>
+                  {values.isError ? '—' : (values.data?.get(m.id) ?? '…')}
+                </span>
+              </button>
+            </div>
           ))
         )}
       </div>
@@ -108,6 +126,9 @@ function CustomForm({ onDraft }: { onDraft: (m: NonNullable<Card['metric']> | nu
       <Select
         label="Dataset"
         value={ds}
+        disabled={sets.isPending}
+        placeholder={sets.isPending ? 'Loading…' : 'Choose a dataset'}
+        error={sets.isError ? `The datasets could not be listed: ${sets.error.message}` : sets.isSuccess && !sets.data.length ? 'This project has no datasets yet.' : undefined}
         options={(sets.data ?? []).map((d) => ({ value: d.id, label: d.name || 'Untitled dataset' }))}
         onValueChange={(v) => {
           setDatasetId(v);
@@ -117,6 +138,9 @@ function CustomForm({ onDraft }: { onDraft: (m: NonNullable<Card['metric']> | nu
       <Select
         label="Column"
         value={col}
+        disabled={!ds || cols.isPending}
+        placeholder={ds && cols.isPending ? 'Loading…' : 'Choose a column'}
+        error={cols.isError ? `The columns could not be read: ${cols.error.message}` : undefined}
         options={(cols.data?.columns ?? []).map((c) => ({ value: c.name, label: `${c.name} (${c.type})` }))}
         onValueChange={setColumn}
       />

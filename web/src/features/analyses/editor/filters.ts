@@ -54,3 +54,19 @@ export function substitute(text: string, params: ParamPayload): string {
     return typeof v === 'number' ? OrdFormat.formatNumber(v, { maxDecimals: 6 }) : String(v);
   });
 }
+
+/**
+ * Click-to-filter (dashFiltersUi.ts toggleCrossFilterSteps): the clicked value
+ * becomes the sheet's one `=` filter on that column, or clicking it again takes
+ * it away. A mirror of src/analysis/dashboardFilters.ts `toggleCrossFilter`,
+ * differential-tested against it (filters.test.ts).
+ */
+export function toggleCrossFilter(filters: readonly Step[], column: string, value: unknown): Step[] {
+  const list = (Array.isArray(filters) ? filters : []).filter((s) => s && s.type === 'filter');
+  if (!column) return list.slice();
+  const v = value == null ? '' : String(value as string);
+  const same = (s: Step) => s.column === column && s.op === '=';
+  const already = list.some((s) => same(s) && String((s.value ?? '') as string) === v);
+  const rest = list.filter((s) => !same(s));
+  return already ? rest : [...rest, { type: 'filter', column, op: '=', value: v }];
+}

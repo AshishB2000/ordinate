@@ -14,7 +14,7 @@ import { SkeletonRows } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { setDockOpen } from '../assistant/dockState';
-import { failure, type BuildReply, type DraftReply, type PlanPreview, type PreviewVisual } from './api';
+import { failure, type Analysis, type BuildReply, type DraftReply, type PlanPreview, type PreviewVisual } from './api';
 import { DrawnVisual, vizLabel } from './VisualTile';
 import s from './Draft.module.css';
 
@@ -48,7 +48,7 @@ export function PreviewCard({ v, projectId }: { v: PreviewVisual; projectId: str
     <div className={s.visual}>
       <div className={s.visualHead}>
         <span className={s.visualTitle}>{name}</span>
-        <span className={s.type}>{vizLabel(type)}</span>
+        {v.chartType && <span className={s.type}>{vizLabel(v.chartType)}</span>}
       </div>
       {v.data ? (
         <div className={s.viz}>
@@ -113,7 +113,12 @@ export async function buildDraft(projectId: string, draft: PlanPreview, preferre
     if (draft.plan) {
       const r = (await rpc('analysis:buildPlan', { projectId, plan: name ? { ...draft.plan, name } : draft.plan })) as BuildReply;
       if (!r.ok) throw new Error(r.error);
-      id = r.analysis.id;
+      id = (r.analysis as Analysis | undefined)?.id; // a reply is data: guard the shape, not the type
+      // Built, but the reply named no dashboard: say where to look rather than claim a failure (anBuildDraft).
+      if (!id) {
+        toast('The dashboard was built but not opened — find it in the list.');
+        return null;
+      }
     } else {
       // The older reply: a sheet array, created as it stands.
       const r = (await rpc('analysis:create', { projectId, name: name || draft.name || 'Assistant dashboard', sheets: draft.sheets })) as { id?: string; ok?: boolean; error?: string };
@@ -135,12 +140,13 @@ export async function buildDraft(projectId: string, draft: PlanPreview, preferre
 export function DraftFlow({ projectId, draft: given, preferredName, onClose }: { projectId: string; draft?: PlanPreview; preferredName?: string; onClose: () => void }) {
   const [reply, setReply] = useState<DraftReply | null>(given ?? null);
   const [failed, setFailed] = useState('');
+  const [attempt, setAttempt] = useState(0);
   const [building, setBuilding] = useState(false);
   const navigate = useNavigate();
   const client = useQueryClient();
 
   useEffect(() => {
-    if (given) return;
+    if (given && attempt === 0) return;
     let live = true;
     rpc('analysis:draft', { projectId }).then(
       (r) => live && setReply(r as DraftReply),
@@ -149,7 +155,13 @@ export function DraftFlow({ projectId, draft: given, preferredName, onClose }: {
     return () => {
       live = false;
     };
-  }, [given, projectId]);
+  }, [given, projectId, attempt]);
+  // Ask again after a failure (the one-shot draft, with no intent — as the first ask).
+  const retry = () => {
+    setFailed('');
+    setReply(null);
+    setAttempt((n) => n + 1);
+  };
 
   const create = async () => {
     if (!reply || !reply.ok) return;
@@ -165,7 +177,7 @@ export function DraftFlow({ projectId, draft: given, preferredName, onClose }: {
 
   let body;
   let ready = false;
-  if (failed) body = <ErrorState compact heading={3} title="Could not draft a dashboard" message={failed} />;
+  if (failed) body = <ErrorState compact heading={3} title="Could not draft a dashboard" message={failed} onRetry={retry} />;
   else if (!reply) body = <SkeletonRows rows={6} label="The Assistant is drafting a dashboard" />;
   else if (!reply.ok && reply.notReady) {
     body = (
@@ -189,7 +201,7 @@ export function DraftFlow({ projectId, draft: given, preferredName, onClose }: {
         Drafting needs a model. Everything else — blank sheets, layouts and templates — works without one.
       </EmptyState>
     );
-  } else if (!reply.ok) body = <ErrorState compact heading={3} title="Could not draft a dashboard" message={reply.error || 'Try again.'} />;
+  } else if (!reply.ok) body = <ErrorState compact heading={3} title="Could not draft a dashboard" message={reply.error || 'Try again.'} onRetry={retry} />;
   else {
     ready = true;
     body = <Review draft={reply} projectId={projectId} />;
@@ -207,7 +219,7 @@ export function DraftFlow({ projectId, draft: given, preferredName, onClose }: {
             <Button variant="ghost">{ready ? 'Discard' : 'Close'}</Button>
           </DialogClose>
           {ready && (
-            <Button variant="primary" loading={building} onClick={() => void create()}>
+            <Button variant="primary" loading={building} autoFocus onClick={() => void create()}>
               Create dashboard
             </Button>
           )}

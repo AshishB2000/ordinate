@@ -45,7 +45,12 @@ export const metrics = {
   // The dataset is immutable once saved: a re-target is a new metric.
   'metric:update': rpc({
     access: 'write',
-    input: z.strictObject({ projectId: Uuid, id: Uuid, patch: z.strictObject({ ...Fields, name: Fields.name.optional(), datasetId: Uuid.optional(), definition: Definition.optional() }) }),
+    input: z.strictObject({
+      projectId: Uuid,
+      id: Uuid,
+      // No datasetId: the store would ignore it, so the contract refuses it.
+      patch: z.strictObject({ name: Fields.name.optional(), definition: Definition.optional(), filters: Fields.filters, format: Fields.format, description: Fields.description, direction: Fields.direction }),
+    }),
     project: byProjectId,
   }),
   'metric:duplicate': rpc({ access: 'write', input: ById, project: byProjectId }),

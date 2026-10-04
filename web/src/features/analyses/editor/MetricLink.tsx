@@ -35,6 +35,7 @@ export function MetricLink({ card }: { card: Card }) {
   };
   const saved = (metric: Metric) => {
     void client.invalidateQueries({ queryKey: ['metric:list', ed.projectId] });
+    void client.invalidateQueries({ queryKey: ['metric:table', ed.projectId] });
     void client.invalidateQueries({ queryKey: ['analysis:tile'] });
     if (m.metricId) return;
     // Linking the card is what makes this a promote.
@@ -50,7 +51,13 @@ export function MetricLink({ card }: { card: Card }) {
     <>
       {m.metricId ? (
         <p className={s.note}>
-          {linked ? `Shows the saved metric “${linked.name}”: ${linked.definitionText}.` : list.isPending ? 'Reading the metric…' : 'Its saved metric was deleted — the card shows its own column’s figure.'}
+          {linked
+            ? `Shows the saved metric “${linked.name}”: ${linked.definitionText}.`
+            : list.isPending
+              ? 'Reading the metric…'
+              : list.isError
+                ? 'The saved metrics could not be read, so this card’s metric cannot be shown here.'
+                : 'Its saved metric was deleted — the card shows its own column’s figure.'}
         </p>
       ) : (
         <p className={s.note}>Computed from a column — not a saved metric.</p>

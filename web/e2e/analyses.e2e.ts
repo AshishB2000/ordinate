@@ -31,7 +31,7 @@ async function saved(page: Page): Promise<void> {
   await page.getByRole('status').filter({ hasText: 'Saved' }).waitFor();
 }
 
-e2e('dashboards: list → wizard → blank sheet → text, KPI, parameter → keyboard move → saved → phone layout', async ({ page, server }) => {
+e2e('dashboards: list → wizard → blank sheet → text, KPI, parameter → keyboard move → saved → phone layout', async ({ page, server, rpc }) => {
   const pid = server.sample.projectId;
   await page.goto(`/analyses?project=${pid}`);
   await settled(page);
@@ -41,6 +41,8 @@ e2e('dashboards: list → wizard → blank sheet → text, KPI, parameter → ke
   // The previews are the first sheet's charts, drawn from the server's figures.
   await page.waitForFunction(() => document.querySelectorAll('ul[aria-label="Dashboards"] canvas').length >= 1);
   await screens(page, 'analyses-list');
+  // Measured: RPCs for the list's load, then for the wizard (steps 1–2, no URL change).
+  const listRpcs = rpc.loads.at(-1)?.rpcs ?? 0;
 
   // ── The wizard ─────────────────────────────────────────────────────────
   await page.getByRole('button', { name: 'Create dashboard' }).click();
@@ -53,7 +55,8 @@ e2e('dashboards: list → wizard → blank sheet → text, KPI, parameter → ke
   await wiz.getByRole('radiogroup', { name: 'Templates' }).getByRole('radio').first().waitFor();
   // No model on this server: the AI card is not a choice, and says why.
   assert.equal(await wiz.getByRole('radio', { name: /Let the Assistant design it/ }).isDisabled(), true);
-  await wiz.getByText('No model is connected.').waitFor();
+  await wiz.getByText(/No model is connected\./).waitFor();
+  console.log(`rpc: list load ${listRpcs} · wizard (open → Start from) ${(rpc.loads.at(-1)?.rpcs ?? 0) - listRpcs}`);
   await screensInPlace(page, 'analyses-wizard-start');
   await wiz.getByRole('radio', { name: /Blank sheet/ }).click();
   await wiz.getByRole('button', { name: 'Create dashboard' }).click();
@@ -106,6 +109,13 @@ e2e('dashboards: list → wizard → blank sheet → text, KPI, parameter → ke
   // ── The phone layout: hide a card, find it in the tray, show it again ─
   await page.getByRole('button', { name: /^Phone layout/ }).click();
   await page.getByText('Phone preview · 390px.').waitFor();
+  // On a phone the chips fold into "Filters (N)" and a sheet (layoutFilters.ts).
+  await page.getByRole('button', { name: 'Filters: 1 control, 0 active' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Filters' });
+  await sheet.getByText('1 on this page · showing everything').waitFor();
+  await screensInPlace(page, 'analyses-phone-filters');
+  await sheet.getByRole('button', { name: 'Done' }).click();
+  await sheet.waitFor({ state: 'detached' });
   await page.getByRole('button', { name: 'Notes card actions' }).click();
   await page.getByRole('menuitem', { name: 'Hide on phone' }).click();
   const tray = page.getByRole('region', { name: 'Cards hidden on phone' });
@@ -147,6 +157,7 @@ e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, 
   // Every chart card drew (canvases), and the map card is a MapLibre map.
   await page.waitForFunction(() => document.querySelectorAll('[data-card-id] canvas').length >= 2);
   await settled(page);
+  console.log(`rpc: canvas load (sample dashboard, client-side open) ${rpc.loads.at(-1)?.rpcs ?? 0}`);
   await screens(page, 'analyses-editor');
 
   // A dropdown control on region: the KPI is recomputed by the server under it.
@@ -171,6 +182,14 @@ e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, 
   await props.getByRole('link', { name: 'Edit in the Visuals builder' }).waitFor();
   await screensInPlace(page, 'analyses-properties');
 
+  // The chart's figures as an accessible table, and back (tileActions.ts "View as table").
+  await page.getByRole('button', { name: 'Revenue by month card actions' }).click();
+  await page.getByRole('menuitem', { name: 'View as table' }).click();
+  await page.getByRole('group', { name: 'Revenue by month card' }).getByRole('table').waitFor();
+  await page.getByRole('button', { name: 'Revenue by month card actions' }).click();
+  await page.getByRole('menuitem', { name: 'View as chart' }).click();
+  await page.getByRole('group', { name: 'Revenue by month card' }).locator('canvas').waitFor();
+
   // Undo takes the control away again (an ordinary edit).
   await page.getByRole('button', { name: 'Undo Add control' }).click();
   await revenue.getByText('$5.2M').waitFor();
@@ -179,13 +198,69 @@ e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, 
   console.log('rpc per load:', rpc.loads.map((l) => `${new URL(l.url).pathname} ${l.rpcs}`).join(' · '));
 });
 
-e2e('draft with the Assistant, no model: the dialog says how to connect one', async ({ page, server }) => {
+e2e('draft with the Assistant, no model: the door is shut and says why', async ({ page, server }) => {
   await page.goto(`/analyses?project=${server.sample.projectId}`);
   await settled(page);
-  await page.getByRole('button', { name: 'Draft with the Assistant' }).click();
-  const dlg = page.getByRole('dialog', { name: 'Assistant draft — review before creating' });
-  await dlg.getByRole('heading', { name: 'Connect a model to draft' }).waitFor();
-  await dlg.getByRole('button', { name: 'Close' }).first().click();
+  const draft = page.getByRole('button', { name: 'Draft with the Assistant' });
+  await page.waitForFunction(() => {
+    const b = [...document.querySelectorAll('button')].find((x) => x.textContent?.includes('Draft with the Assistant'));
+    return !!b && b.disabled && /isn’t set up yet/.test(b.title);
+  });
+  assert.equal(await draft.isDisabled(), true);
+});
+
+/** One RPC from the page, as the web client sends it (session cookie + CSRF header). */
+async function call(page: Page, channel: string, payload: unknown): Promise<any> { // any: each channel's own reply
+  return page.evaluate(
+    async ([ch, body]) => {
+      const m = /(?:^|;\s*)(?:__Host-)?ordinate_csrf=([A-Za-z0-9_-]{43})/.exec(document.cookie);
+      const res = await fetch(`/api/rpc/${ch}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(m ? { 'X-CSRF-Token': m[1] } : {}) }, body: JSON.stringify({ args: [body] }) });
+      return res.json();
+    },
+    [channel, payload] as const,
+  );
+}
+
+/** A 2×1 PNG (the server reads its aspect from the header). */
+const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000020000000108020000007b40e8dd0000000f49444154789c63504d7e2db0b3110008a302be3e2b6cf00000000049454e44ae426082', 'hex');
+
+e2e('card kinds: a statistics card recomputed by the server, an uploaded image, a navigation strip', async ({ page, server }) => {
+  const pid = server.sample.projectId;
+  await page.goto(`/analyses?project=${pid}`);
+  await settled(page);
+  const datasets = (await call(page, 'dataset:list', { projectId: pid })) as { id: string; name: string }[];
+  const ds = datasets.find((d) => d.name === 'Retail orders')?.id as string;
+  const made = await call(page, 'analysis:create', { projectId: pid, name: 'Kinds' });
+  const added = await call(page, 'stats:addToDashboard', { projectId: pid, analysisId: made.id, spec: { kind: 'groups', datasetId: ds, outcome: 'revenue', group: 'region' }, view: 'table' });
+  assert.equal(added.ok, true, JSON.stringify(added));
+  await page.goto(`/analyses/${pid}/${made.id}`);
+  await settled(page);
+
+  // Statistics: the table cells are the server's strings (stats:tile through analysis:tiles).
+  const stats = page.getByRole('group', { name: 'revenue by region card' });
+  await stats.getByRole('table').waitFor();
+  await stats.getByRole('rowheader', { name: 'East', exact: true }).waitFor();
+
+  // An image: picked, uploaded (T0.4), copied into the project, drawn from a data: URL.
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('menuitem', { name: 'Image…' }).click();
+  await (await chooser).setFiles({ name: 'logo.png', mimeType: 'image/png', buffer: PNG });
+  const image = page.getByRole('group', { name: 'Image card' });
+  await image.locator('img[src^="data:image/png;base64,"]').waitFor();
+  await page.getByRole('complementary', { name: 'Properties' }).getByLabel('Alt text').fill('Company logo');
+  await page.getByRole('group', { name: 'Company logo card' }).locator('img[alt="Company logo"]').waitFor();
+
+  // A navigation strip: buttons to the project's other dashboards.
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Navigation' }).click();
+  const nav = page.getByRole('group', { name: 'Navigation card' });
+  await nav.getByRole('button', { name: 'Retail overview' }).waitFor();
+  await page.getByRole('complementary', { name: 'Properties' }).getByText('Button 1').waitFor();
+  await saved(page);
+  await screens(page, 'analyses-kinds');
+  await nav.getByRole('button', { name: 'Retail overview' }).click();
+  await page.getByRole('heading', { level: 1, name: 'Retail overview' }).waitFor();
 });
 
 e2e('metrics: the table from the server, a new metric with a live preview and a filter, delete to Trash', async ({ page, server }) => {
@@ -208,14 +283,17 @@ e2e('metrics: the table from the server, a new metric with a live preview and a 
   await dlg.getByRole('combobox', { name: 'Column', exact: true }).click();
   await page.getByRole('option', { name: 'revenue (number)' }).click();
   await dlg.getByRole('radio', { name: 'Count' }).click();
+  // The builder's filter rows and typed dialog: a number column is a range, typed on its declared type by the server.
+  await dlg.getByRole('button', { name: 'Add filter' }).click();
   await dlg.getByRole('combobox', { name: 'Filter column' }).click();
   await page.getByRole('option', { name: 'revenue', exact: true }).click();
-  await dlg.getByRole('combobox', { name: 'Operator' }).click();
-  await page.getByRole('option', { name: '>', exact: true }).click();
-  await dlg.getByLabel('Filter value').fill('1000');
-  await dlg.getByRole('button', { name: 'Add filter' }).click();
+  await dlg.getByRole('button', { name: 'Edit the filter on revenue' }).click();
+  const fdlg = page.getByRole('dialog', { name: 'Filter: revenue' });
+  await fdlg.getByLabel('Minimum').fill('1000');
+  await fdlg.getByRole('button', { name: 'Apply' }).click();
+  await fdlg.waitFor({ state: 'detached' });
   const preview = dlg.getByRole('complementary', { name: 'Preview' });
-  await preview.getByText(/revenue > 1000/).waitFor(); // the server's own words for the definition
+  await preview.getByText(/where revenue/).waitFor(); // the server's own words for the definition, with the filter
   const figure = (await preview.getByText(/^[\d,.]+[KM]?$/).first().textContent()) ?? '';
   assert.match(figure, /^\d/, `a figure computed by the server, got ${figure}`);
   await screensInPlace(page, 'metrics-editor');

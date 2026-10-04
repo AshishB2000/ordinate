@@ -78,6 +78,32 @@
 .inGroup {
   box-shadow: var(--shadow-sm);
 }
+/* A container's padding setting, drawn on its children (layoutKinds.ts in-pad--*). */
+.pad_none {
+  margin: 0;
+}
+.pad_sm {
+  margin: 2px;
+}
+.pad_md {
+  margin: 6px;
+}
+.pad_lg {
+  margin: 12px;
+}
+/* A small size's reorder drop marker: before / after, down or across (layouts.css ly-drop-*). */
+.dropBefore {
+  box-shadow: inset 0 3px 0 0 var(--accent);
+}
+.dropAfter {
+  box-shadow: inset 0 -3px 0 0 var(--accent);
+}
+.dropBefore.dropX {
+  box-shadow: inset 3px 0 0 0 var(--accent);
+}
+.dropAfter.dropX {
+  box-shadow: inset -3px 0 0 0 var(--accent);
+}
 .handle {
   position: absolute;
   z-index: 2;
@@ -138,6 +164,10 @@
 }
 .allHidden {
   grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-8);
   margin: 0;
   padding: var(--sp-24);
   color: var(--muted);
@@ -160,6 +190,17 @@
   gap: var(--sp-8);
   flex-wrap: wrap;
   justify-content: center;
+}
+.starterSk {
+  width: 240px;
+  height: var(--ctl-sm);
+  margin: 0 auto;
+}
+.starterNote {
+  margin: 0;
+  text-align: center;
+  font-size: var(--t-12);
+  color: var(--muted);
 }
 
 /* ── arrange bar ── */

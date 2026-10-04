@@ -4,6 +4,11 @@
 // addParameterControl), and the layout kinds (layoutKinds.ts).
 
 import { useState } from 'react';
+import { rpc, upload } from '../../../api/client';
+import { toast } from '../../../ui/Toast';
+import { useQueryClient } from '@tanstack/react-query';
+import { failure, galleryQuery } from '../api';
+import { lockedRows, type ImageSpec } from './KindCards';
 import { Button } from '../../../ui/Button';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Input, Textarea } from '../../../ui/Field';
@@ -77,6 +82,61 @@ export function useAddKind() {
       ed.edit(`Add ${kind}`, (d) => addGroup(d.sheets[ed.sheet].cards, kind, around, id));
       ed.setMulti(new Set());
     }
+    ed.select(id);
+  };
+}
+
+/**
+ * Add an image (layoutKinds.ts handleAddImage): the picked file goes up as a
+ * T0.4 upload and the server copies it into the project's assets — PNG, JPG or
+ * script-free SVG up to 5 MB; a 4-wide card whose height keeps the aspect.
+ */
+export function useAddImage() {
+  const ed = useEditor();
+  return () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const up = await upload(file, file.name);
+        const r = (await rpc('asset:importImage', { projectId: ed.projectId, fileToken: up.fileToken })) as
+          | { ok: true; asset: { id: string; ext: ImageSpec['ext']; aspect?: number } }
+          | { ok: false; error: string };
+        if (!r.ok) throw new Error(r.error);
+        const id = uuid();
+        const image: ImageSpec = { assetId: r.asset.id, ext: r.asset.ext, fit: 'contain', alt: '', lockAspect: true, ...(r.asset.aspect ? { aspect: r.asset.aspect } : {}) };
+        ed.edit('Add image', (d) => {
+          const sh = d.sheets[ed.sheet];
+          sh.cards.push({ id, type: 'image', layout: { ...findSlot(sh.cards, 4, 4), w: 4, h: lockedRows(4, image.aspect, 4) }, image });
+        });
+        ed.select(id);
+      } catch (err) {
+        toast(failure(err, 'That image could not be added.'), { kind: 'error' });
+      }
+    };
+    input.click();
+  };
+}
+
+/** Add a navigation strip (navCard.ts handleAddNav): buttons to up to four other dashboards, or this one's sheets. */
+export function useAddNav() {
+  const ed = useEditor();
+  const client = useQueryClient();
+  return async () => {
+    // The project's dashboards, read when asked for (not on every canvas load).
+    const gallery = await client.fetchQuery(galleryQuery(ed.projectId)).catch(() => []);
+    const others = gallery.filter((a) => a.id !== ed.analysisId).slice(0, 4);
+    const items = others.length
+      ? others.map((a) => ({ id: uuid(), label: (a.name || 'Open').slice(0, 60), icon: 'layout-dashboard', target: { analysisId: a.id } }))
+      : ed.doc.sheets.map((p) => ({ id: uuid(), label: (p.name || 'Open').slice(0, 60), target: { analysisId: ed.analysisId, page: p.id } }));
+    const id = uuid();
+    ed.edit('Add navigation', (d) => {
+      const sh = d.sheets[ed.sheet];
+      sh.cards.push({ id, type: 'nav', layout: { ...findSlot(sh.cards, 12, 1), w: 12, h: 1 }, nav: { style: 'buttons', items: items.slice(0, 12) } });
+    });
     ed.select(id);
   };
 }

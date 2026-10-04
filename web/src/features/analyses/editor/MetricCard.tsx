@@ -4,10 +4,12 @@
 // the delta against another period, coloured by whether up is good news.
 // Both are computed by the server on every render and never stored.
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import * as OrdFormat from '../../../../../src/app/format.ts';
 import { fmtWith } from '../../../charts/format';
+import { Drawer } from '../../../ui/Dialog';
 import { Skeleton } from '../../../ui/Skeleton';
+import { DriversView } from '../../analytics/drivers/DriversView';
 import { Icon } from '../../../ui/icons/Icon';
 import { AGG_LABEL, useTile, type Card, type MetricTile } from '../api';
 import { useEditor } from './context';
@@ -39,6 +41,7 @@ export function MetricBody({ card }: { card: Card }) {
     [m, ed.filters],
   );
   const q = useTile<MetricTile>(ed.projectId, ed.params, req);
+  const [why, setWhy] = useState(false);
   if (q.isPending) {
     return (
       <div className={s.metric} aria-busy="true">
@@ -54,6 +57,11 @@ export function MetricBody({ card }: { card: Card }) {
         <span className={s.missing}>
           <Icon name="alert" size={12} /> {q.isError ? q.error.message : t && !t.ok ? t.error : 'Source removed'}
         </span>
+        {q.isError && (
+          <button type="button" className={s.why} onClick={() => void q.refetch()}>
+            Try again
+          </button>
+        )}
       </div>
     );
   }
@@ -82,7 +90,15 @@ export function MetricBody({ card }: { card: Card }) {
             <span className={s.tnum}>{c.deltaDisplay || fmtWith(Math.abs(c.delta), m.format || 'auto')}</span>
             {typeof c.pct === 'number' && Number.isFinite(c.pct) && <span className={s.tnum}>({kpiPct(c.pct)})</span>}
           </div>
-          <div className={s.vs}>{c.label}</div>
+          <div className={s.vsRow}>
+            <span className={s.vs} title={c.label}>
+              {c.label}
+            </span>
+            {/* "Why?" (driversEntry.ts drvMountKpiWhy): the change broken down by what drove it, asked of the server. */}
+            <button type="button" className={s.why} aria-label="Why did this change?" title="Break the change down by what drove it" onClick={() => setWhy(true)}>
+              Why?
+            </button>
+          </div>
         </>
       );
     }
@@ -90,9 +106,24 @@ export function MetricBody({ card }: { card: Card }) {
   return (
     <div className={s.metric}>
       <div className={s.value}>{text}</div>
-      {!delta && <div className={s.metricLabel}>{label}</div>}
+      {/* The label goes when the delta line is there and the head already says it (kpiCompare.ts). */}
+      {!(delta && label === metricLabel(m)) && <div className={s.metricLabel}>{label}</div>}
       {delta}
       {t.paramErrors && t.paramErrors.length > 0 && <p className={s.paramErr}>{t.paramErrors[0]}</p>}
+      {why && m.compare && (
+        <Drawer open wide onOpenChange={(o) => !o && setWhy(false)} title={`Why did ${label} change?`} description="What drove the change against the comparison period">
+          <DriversView
+            projectId={ed.projectId}
+            request={{
+              datasetId: m.datasetId,
+              metric: { ...(m.metricId ? { metricId: m.metricId } : {}), column: m.column, aggregation: m.aggregation, ...(m.label ? { label: m.label } : {}) },
+              filters: ed.filters,
+              compare: m.compare,
+              path: [],
+            }}
+          />
+        </Drawer>
+      )}
     </div>
   );
 }

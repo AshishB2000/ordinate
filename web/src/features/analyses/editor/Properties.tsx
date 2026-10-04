@@ -20,7 +20,9 @@ import { useEditor } from './context';
 import { KIND_LABEL } from './ControlDialog';
 import type { Doc } from './doc';
 import { removeTab } from './geometry';
+import { ImageProps, InteractionProps, NavProps, StatsProps } from './KindProps';
 import { KpiCompare } from './KpiProps';
+import { toast } from '../../../ui/Toast';
 import { MetricLink } from './MetricLink';
 import s from './Properties.module.css';
 
@@ -54,6 +56,8 @@ function ControlProps({ card }: { card: Card }) {
   const sets = useDatasets(ed.projectId);
   const cols = useDatasetColumns(ed.projectId, control.datasetId || undefined);
   const live = ed.controlValue(card.id);
+  // A date range lists the date columns first (authoringProps.ts anFillColumns).
+  const colList = [...(cols.data?.columns ?? [])].sort((a, b) => (control.kind === 'date_range' ? Number(b.type === 'date') - Number(a.type === 'date') : 0));
   if (control.kind === 'parameter') {
     return <p className={s.note}>A parameter chip. Edit the parameter from its chip’s ⋯ menu above the sheet; the label is below.</p>;
   }
@@ -63,12 +67,16 @@ function ControlProps({ card }: { card: Card }) {
       <Select
         label="Dataset"
         value={control.datasetId}
+        disabled={sets.isPending}
+        placeholder={sets.isPending ? 'Loading…' : 'Select…'}
+        error={sets.isError ? 'The datasets could not be listed.' : undefined}
         options={(sets.data ?? []).map((d) => ({ value: d.id, label: d.name || 'Untitled dataset' }))}
         onValueChange={(v) => {
-          // A new dataset invalidates the live value and the stored default.
+          // A new dataset invalidates the live value, the stored default — and the column, which is the old dataset's.
           set('Change control dataset', (c) => {
             if (!c.control) return;
             c.control.datasetId = v;
+            c.control.column = '';
             delete c.control.default;
           });
           ed.setControl(card.id, undefined);
@@ -77,7 +85,10 @@ function ControlProps({ card }: { card: Card }) {
       <Select
         label="Column"
         value={control.column}
-        options={(cols.data?.columns ?? []).map((c) => ({ value: c.name, label: `${c.name} (${c.type})` }))}
+        disabled={cols.isPending}
+        placeholder={cols.isPending ? 'Loading…' : 'Choose a column'}
+        error={cols.isError ? 'The columns could not be read.' : !control.column ? 'Choose a column for this control.' : undefined}
+        options={colList.map((c) => ({ value: c.name, label: `${c.name} (${c.type})` }))}
         onValueChange={(v) => {
           set('Change control column', (c) => {
             if (!c.control) return;
@@ -178,6 +189,7 @@ function CardProps({ card }: { card: Card }) {
       sh.cards = removeCards(sh.cards, [card.id]);
     });
     ed.select(null);
+    toast('Card removed', { action: { label: 'Undo', onClick: ed.undo } });
   };
   return (
     <div className={s.props}>
@@ -193,7 +205,7 @@ function CardProps({ card }: { card: Card }) {
                 <Icon name="pencil" />
                 <span>Edit in the Visuals builder</span>
               </Link>
-              <p className={s.note}>Fields, chart type, format, interactions and tile actions are the visual’s own and are edited in the Visuals builder.</p>
+              <p className={s.note}>Fields, chart type and format are the visual’s own and are edited in the Visuals builder.</p>
             </>
           ) : (
             <p className={s.note}>The visual this card showed was deleted. Remove the card, or add another visual.</p>
@@ -202,7 +214,8 @@ function CardProps({ card }: { card: Card }) {
           <>
             <Input label="Label" value={card.metric.label ?? ''} placeholder={card.metric.column} onChange={(e) => set('Edit KPI label', (c) => void (c.metric && (c.metric.label = e.target.value)), true)} />
             <MetricLink card={card} />
-            <KpiCompare key={card.id} card={card} />
+            {/* Re-keyed on the stored compare, so an undo shows what the card really asks for. */}
+            <KpiCompare key={`${card.id}:${JSON.stringify(card.metric.compare ?? null)}`} card={card} />
           </>
         )}
         {card.type === 'text' && (
@@ -229,12 +242,21 @@ function CardProps({ card }: { card: Card }) {
           />
         )}
         {(card.type === 'container' || card.type === 'tabs') && <GroupProps card={card} />}
-        {['nav', 'image', 'stats', 'summary'].includes(card.type) && <p className={s.note}>This card kind is edited where the dashboard is viewed.</p>}
+        {card.type === 'image' && !!card.image && <ImageProps card={card} set={set} />}
+        {card.type === 'nav' && <NavProps card={card} set={set} />}
+        {card.type === 'stats' && <StatsProps card={card} />}
+        {card.type === 'summary' && <p className={s.note}>A summary card’s sentences are written by the app where the dashboard is viewed.</p>}
       </section>
+      {def && (
+        <section className={s.section} aria-label="Interactions">
+          <h3 className={s.h}>Interactions</h3>
+          <InteractionProps def={def} />
+        </section>
+      )}
       {card.type !== 'control' && (
         <section className={s.section} aria-label="Layout">
           <h3 className={s.h}>Layout</h3>
-          <p className={s.note}>Drag the card to move it, or drag its right/bottom edge to resize. With the card focused, arrow keys move it and shift+arrows resize it.</p>
+          <p className={s.note}>Drag the card to move it, or drag its right/bottom edge to resize. With the card focused, arrow keys move it, shift+arrows resize it, and shift+Enter adds it to a multi-selection to align or group.</p>
         </section>
       )}
       {def && (

@@ -136,6 +136,10 @@ function Header({ projectId, id, name, rowCount, columnCount }: { projectId: str
           <Link className={buttonClass('primary', 'sm')} to={`/visuals?project=${projectId}&datasetId=${id}`}>
             New visual
           </Link>
+          {/* The dashboard wizard on this dataset, at "Start from" (T2.8; dsExplorer's "New dashboard"). */}
+          <Link className={buttonClass('secondary', 'sm')} to={`/analyses?project=${projectId}&new=1&dataset=${id}`}>
+            New dashboard
+          </Link>
           <RecordDetails projectId={projectId} kind="dataset" id={id} name={name} trigger={<Button size="sm" icon="info">Details</Button>} />
           <Menu
             align="end"

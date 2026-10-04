@@ -83,7 +83,6 @@ export function ParamDialog({
 }) {
   const [f, setF] = useState<Fields>(() => fieldsOf(existing));
   const [label, setLabel] = useState(existingLabel ?? '');
-  const sameKind = existing && existing.kind === f.kind;
   const r = buildParam(f, (n) => others.some((o) => o.toLowerCase() === n.toLowerCase()));
   const set = (patch: Partial<Fields>) => setF((x) => ({ ...x, ...patch }));
   const ref = f.name.trim() || 'name';
@@ -116,6 +115,13 @@ export function ParamDialog({
           e.preventDefault();
           submit();
         }}
+        // Enter in any one-line box saves (paramDialog.ts) — the buttons sit outside the form, in the footer.
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey && e.target instanceof HTMLInputElement) {
+            e.preventDefault();
+            submit();
+          }
+        }}
       >
         <Input label="Name" placeholder="threshold" spellCheck={false} value={f.name} onChange={(e) => set({ name: e.target.value })} autoFocus maxLength={40} />
         <div className={s.refs}>
@@ -134,7 +140,8 @@ export function ParamDialog({
               role="radio"
               aria-checked={k.kind === f.kind}
               className={k.kind === f.kind ? `${s.kind} ${s.on}` : s.kind}
-              onClick={() => set({ kind: k.kind, ...(sameKind || k.kind === existing?.kind ? {} : { value: k.kind === 'number' ? '1000' : '' }) })}
+              // A new type starts from its own fields: the record's saved ones for its own type, else the defaults (paramDialog.ts).
+              onClick={() => k.kind !== f.kind && setF((x) => ({ ...(k.kind === existing?.kind ? fieldsOf(existing) : { ...fieldsOf(undefined), value: k.kind === 'number' ? '1000' : '' }), name: x.name, kind: k.kind }))}
             >
               <span className={s.kindLabel}>{k.label}</span>
               <span className={s.kindHint}>{k.hint}</span>

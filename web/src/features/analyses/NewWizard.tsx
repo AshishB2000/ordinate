@@ -5,7 +5,7 @@
 // at step 2. With no model, the AI card is disabled and says why; everything
 // else still works.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
@@ -14,6 +14,7 @@ import { shortTime } from '../../app/when';
 import { Button, buttonClass } from '../../ui/Button';
 import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Input, Textarea } from '../../ui/Field';
+import { ErrorState } from '../../ui/States';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
@@ -40,7 +41,12 @@ const EXAMPLES = [
 
 const fmtCount = new Intl.NumberFormat();
 
-export function NewWizard({ projectId, datasetId: preset, onClose }: { projectId: string; datasetId?: string; onClose: () => void }) {
+/**
+ * `datasetId` preselects the data (a dataset page's "New dashboard"); with
+ * `initialStep` 2 the wizard opens on "Start from" — only when that dataset is
+ * really in the project (anCreateWizard's `{ step: 2 }`).
+ */
+export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClose }: { projectId: string; datasetId?: string; initialStep?: 1 | 2; onClose: () => void }) {
   const sets = useDatasets(projectId);
   const key = useKeyStatus();
   const aiReady = !!key.data?.isReady;
@@ -52,7 +58,10 @@ export function NewWizard({ projectId, datasetId: preset, onClose }: { projectId
   const [picked, setPicked] = useState<string | null>(null);
   const selectedId = picked ?? initial?.id ?? null;
   const selected = list.find((d) => d.id === selectedId);
-  const [step, setStep] = useState(1);
+  const [stepState, setStep] = useState<number>(initialStep);
+  // Step 2 needs a chosen dataset: a preset that is not in the project falls back to step 1.
+  const step = stepState > 1 && !selectedId ? 1 : stepState;
+  const intentRef = useRef<HTMLTextAreaElement>(null);
   const [search, setSearch] = useState('');
   const [name, setName] = useState('');
   const [nameTouched, setNameTouched] = useState(false);
@@ -206,7 +215,7 @@ export function NewWizard({ projectId, datasetId: preset, onClose }: { projectId
               Skip — blank sheet
             </Button>
           )}
-          <Button variant="primary" onClick={() => void next()} loading={busy} disabled={step === 1 && !selectedId}>
+          <Button variant="primary" onClick={() => void next()} loading={busy} disabled={(step === 1 && !selectedId) || (step === 2 && start === 'template' && !template)}>
             {nextLabel}
           </Button>
         </>
@@ -229,7 +238,7 @@ export function NewWizard({ projectId, datasetId: preset, onClose }: { projectId
       {step === 1 && (
         <div className={s.pane}>
           <div className={s.bar}>
-            <Input icon="search" type="search" placeholder="Search datasets by name" aria-label="Search datasets by name" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input icon="search" type="search" autoFocus placeholder="Search datasets by name" aria-label="Search datasets by name" value={search} onChange={(e) => setSearch(e.target.value)} />
             {/* One import path: leave the wizard for the ordinary one. */}
             <Link className={buttonClass('secondary')} to={`/data/import?project=${projectId}`} onClick={onClose}>
               Create dataset
@@ -237,6 +246,8 @@ export function NewWizard({ projectId, datasetId: preset, onClose }: { projectId
           </div>
           {sets.isPending ? (
             <SkeletonRows rows={4} label="Loading datasets" />
+          ) : sets.isError ? (
+            <ErrorState compact heading={3} title="Datasets could not be loaded" message={sets.error.message} onRetry={() => void sets.refetch()} />
           ) : list.length === 0 ? (
             <p className={s.none}>This project has no datasets yet. Create one first — a dashboard is built on data.</p>
           ) : (
@@ -293,11 +304,13 @@ export function NewWizard({ projectId, datasetId: preset, onClose }: { projectId
             <span className={s.groupP}>A complete dashboard, mapped to your columns.</span>
           </div>
           {templates.isPending ? (
-            <p className={s.none}>Reading your columns…</p>
+            <SkeletonRows rows={2} label="Reading your columns" />
           ) : templates.data && !templates.data.ok ? (
             <p className={s.none}>{templates.data.error || 'Templates are unavailable for this dataset.'}</p>
           ) : templates.isError ? (
-            <p className={s.none}>Templates are unavailable for this dataset.</p>
+            <ErrorState compact heading={3} title="Templates are unavailable for this dataset" message={templates.error.message} onRetry={() => void templates.refetch()} />
+          ) : subjects.length === 0 ? (
+            <p className={s.none}>No template fits this dataset's columns. Start from a layout below.</p>
           ) : (
             <TemplateGallery
               templates={subjects}
@@ -343,8 +356,12 @@ export function NewWizard({ projectId, datasetId: preset, onClose }: { projectId
               );
             })}
           </div>
-          {!aiReady && key.isSuccess && (
-            <p className={s.note}>No model is connected. Drafting is unavailable, but everything else works without one — pick any of the other three.</p>
+          {key.isPending ? (
+            <p className={s.note}>Checking whether a model is connected…</p>
+          ) : key.isError ? (
+            <p className={s.note}>Could not check for a model, so drafting is unavailable for now. Everything else works — pick any of the other three.</p>
+          ) : (
+            !aiReady && <p className={s.note}>No model is connected. Drafting is unavailable, but everything else works without one — pick any of the other three.</p>
           )}
         </div>
       )}
@@ -371,6 +388,7 @@ export function NewWizard({ projectId, datasetId: preset, onClose }: { projectId
             and you review the whole draft before anything is created.
           </p>
           <Textarea
+            ref={intentRef}
             aria-label="Describe the dashboard"
             rows={4}
             autoFocus
@@ -381,7 +399,10 @@ export function NewWizard({ projectId, datasetId: preset, onClose }: { projectId
           />
           <div className={s.chips}>
             {EXAMPLES.map((ex) => (
-              <button key={ex} type="button" className={s.chip} onClick={() => setIntent(ex)}>
+              <button key={ex} type="button" className={s.chip} onClick={() => {
+                  setIntent(ex);
+                  intentRef.current?.focus();
+                }}>
                 {ex}
               </button>
             ))}

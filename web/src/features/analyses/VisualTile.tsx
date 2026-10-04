@@ -3,7 +3,7 @@
 // (web/src/charts, web/src/charts/maps); this file only picks which, and owns
 // the tile's loading / error states. It computes nothing.
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { Chart, type ChartHandle } from '../../charts/Chart';
 import { DataTable } from '../../charts/DataTable';
 import { MapThumb } from '../../charts/maps/MapThumb';
@@ -14,6 +14,7 @@ import { VIZ_LABELS, VIZ_RENDERER, type VizId } from '../../charts/vizLabels';
 import { SkeletonBlock } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { Icon, type IconName } from '../../ui/icons/Icon';
+import { markAt } from '../visuals/drill/mark';
 import { useTile, type ParamPayload, type Step, type VisualDef, type VisualTile } from './api';
 import s from './Tiles.module.css';
 
@@ -72,6 +73,7 @@ export function DrawnVisual({
   label,
   projectId,
   thumb,
+  onChart,
 }: {
   type: string;
   data: ChartDataShape & Record<string, unknown>;
@@ -79,6 +81,7 @@ export function DrawnVisual({
   label: string;
   projectId: string;
   thumb?: boolean;
+  onChart?: (chart: ChartHandle | null) => void;
 }) {
   const renderer = VIZ_RENDERER[type as VizId];
   const merged = useMemo(() => (thumb ? { ...overrides, ...THUMB } : overrides), [thumb, overrides]);
@@ -93,7 +96,7 @@ export function DrawnVisual({
   }
   if (renderer === 'map') return <MapView data={data as unknown as MapData} chartType={type} label={label} projectId={projectId} />;
   if (renderer === 'table') return <DataTable data={data} label={label} />;
-  return <Chart type={type} data={data} overrides={merged} label={label} onChart={thumb ? trimThumb : undefined} />;
+  return <Chart type={type} data={data} overrides={merged} label={label} onChart={thumb ? trimThumb : onChart} />;
 }
 
 /** A visual card's body: its definition, the sheet's filters and parameters → the server's answer → the drawing. */
@@ -103,13 +106,20 @@ export function VisualTileBody({
   filters,
   params,
   thumb,
+  asTable,
+  onMark,
 }: {
   projectId: string;
   def: VisualDef;
   filters: readonly Step[];
   params: ParamPayload;
   thumb?: boolean;
+  /** The figures as an accessible table instead of the chart (tileActions.ts "View as table"). */
+  asTable?: boolean;
+  /** Click-to-filter (dashFiltersUi.ts wireCrossFilter): the clicked mark's category. */
+  onMark?: (category: string | number) => void;
 }) {
+  const chart = useRef<ChartHandle | null>(null);
   const req = useMemo(
     () => ({
       kind: 'visual' as const,
@@ -134,9 +144,20 @@ export function VisualTileBody({
     }
     return <ErrorState compact heading={3} title="No data for this chart" message={message} onRetry={() => void q.refetch()} />;
   }
+  const click = onMark
+    ? (e: React.MouseEvent) => {
+        // A click on empty canvas, a map or a table is not a filter (no Chart.js mark).
+        const m = markAt(chart.current, e.nativeEvent);
+        if (m) onMark(m.category);
+      }
+    : undefined;
   return (
-    <div className={s.drawn}>
-      <DrawnVisual type={def.chartType} data={q.data.data} overrides={def.overrides} label={label} projectId={projectId} thumb={thumb} />
+    <div className={onMark ? `${s.drawn} ${s.crossFilter}` : s.drawn} onClick={click}>
+      {asTable && !def.chartType.startsWith('map_') ? (
+        <DataTable data={q.data.data} label={label} />
+      ) : (
+        <DrawnVisual type={def.chartType} data={q.data.data} overrides={def.overrides} label={label} projectId={projectId} thumb={thumb} onChart={(c) => (chart.current = c)} />
+      )}
       {!thumb && q.data.paramErrors && q.data.paramErrors.length > 0 && <p className={s.paramErr}>{q.data.paramErrors[0]}</p>}
     </div>
   );

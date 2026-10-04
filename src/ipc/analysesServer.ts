@@ -16,6 +16,8 @@ import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
 import type { MetricSummary } from '../analysis/metrics';
 import { metricUsage } from '../analysis/metricUsage';
+import { importImage, readImageDataUrl } from '../app/projectAssets';
+import { FileTokenError, resolveUpload } from '../server/files';
 
 /** What a card needs of a Visual to draw it — the record minus its bookkeeping. */
 function visualDef(v: visuals.Visual) {
@@ -60,7 +62,9 @@ export function register(): void {
         if (v) previews.push(visualDef(v));
         if (previews.length >= PREVIEW_MAX) break;
       }
-      out.push({ id: s.id, name: s.name, sheetCount: s.sheetCount, updatedAt: s.updatedAt, previews });
+      // The sheets' ids and names: a navigation card's target picker (actionEditor.ts aeTargetFields).
+      const sheets = a ? a.sheets.map((p) => ({ id: p.id, name: p.name })) : [];
+      out.push({ id: s.id, name: s.name, sheetCount: s.sheetCount, updatedAt: s.updatedAt, previews, sheets });
     }
     return out;
   });
@@ -85,6 +89,8 @@ export function register(): void {
           projectId, datasetId: it.datasetId, encoding: it.encoding, filters: it.filters, params, analytics: it.analytics,
         });
       }
+      // A statistics card (statsTile.ts): the spec recomputed under the sheet's filters by stats:tile.
+      if (it.kind === 'stats') return call(e, 'stats:tile', { projectId, spec: it.spec, filters: it.filters, params });
       // A KPI that names a saved metric shows THE METRIC (its formula, its
       // format); one whose metric is gone falls back to its own stored
       // column and aggregation — dashFiltersUi.ts renderMetricCard's order.
@@ -113,13 +119,38 @@ export function register(): void {
       return res;
     })));
 
+  // An image card's picture (layoutKinds.ts): the upload (T0.4) copied into the
+  // project by content — PNG / JPG / script-free SVG, 5 MB — the desktop's
+  // `asset:pickImage` without its native dialog. The browser names a token, never a path.
+  ipcMain.handle('asset:importImage', async (_e, { projectId, fileToken }: any = {}) => {
+    let up;
+    try {
+      up = resolveUpload(fileToken);
+    } catch (err) {
+      if (err instanceof FileTokenError) return { ok: false, error: 'That upload has expired. Choose the image again.' };
+      throw err;
+    }
+    try {
+      const res = await importImage(projectId, up.path);
+      return 'error' in res ? { ok: false, error: res.error } : { ok: true, asset: res };
+    } finally {
+      up.done();
+    }
+  });
+  // ponytail: assets live on the pod's DATA_DIR like the workspace logo; a
+  // multi-pod deployment on S3 needs them moved beside the Parquet (T5.2).
+  ipcMain.handle('asset:read', async (_e, { projectId, id, ext }: any = {}) => {
+    const dataUrl = await readImageDataUrl(projectId, id, ext);
+    return dataUrl ? { ok: true, dataUrl } : { ok: false, error: 'That image is missing from the project.' };
+  });
+
   ipcMain.handle('metric:table', async (e, { projectId }: any = {}) => {
     const listed = await call(e, 'metric:list', { projectId });
     if (!listed || listed.ok === false) return listed;
     const rows: Record<string, unknown> = {};
-    for (const m of listed.metrics as MetricSummary[]) {
-      const value = await call(e, 'metric:value', { projectId, id: m.id });
-      const series = await call(e, 'metric:series', { projectId, id: m.id });
+    // Every metric at once (the desktop streamed rows in; one reply must not wait on them in turn).
+    await Promise.all((listed.metrics as MetricSummary[]).map(async (m) => {
+      const [value, series] = await Promise.all([call(e, 'metric:value', { projectId, id: m.id }), call(e, 'metric:series', { projectId, id: m.id })]);
       let usage: unknown = null;
       try {
         usage = await metricUsage(projectId, m.id);
@@ -131,7 +162,7 @@ export function register(): void {
         series: series && series.ok !== false && series.series ? series.series.values : null,
         usage,
       };
-    }
+    }));
     return { ok: true, metrics: listed.metrics, rows };
   });
 

@@ -109,6 +109,9 @@ export function ControlDialog({
             <Select
               label="Dataset"
               value={ds}
+              disabled={sets.isPending}
+              placeholder={sets.isPending ? 'Loading…' : 'Select…'}
+              error={sets.isError ? `The datasets could not be listed: ${sets.error.message}` : undefined}
               options={(sets.data ?? []).map((d) => ({ value: d.id, label: d.name || 'Untitled dataset' }))}
               onValueChange={(v) => {
                 setDatasetId(v);
@@ -119,6 +122,9 @@ export function ControlDialog({
             <Select
               label="Column"
               value={col}
+              disabled={!ds || cols.isPending}
+              placeholder={ds && cols.isPending ? 'Loading…' : 'Select…'}
+              error={cols.isError ? `The columns could not be read: ${cols.error.message}` : undefined}
               options={ordered.map((c) => ({ value: c.name, label: `${c.name} (${c.type})` }))}
               onValueChange={(v) => {
                 setColumn(v);

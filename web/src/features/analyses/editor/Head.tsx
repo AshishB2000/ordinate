@@ -11,7 +11,8 @@ import { Input } from '../../../ui/Field';
 import { Menu } from '../../../ui/Menu';
 import { toast } from '../../../ui/Toast';
 import { Icon } from '../../../ui/icons/Icon';
-import { useAddKind } from './AddDialogs';
+import { LineageDrawer } from '../../data/LineageDrawer';
+import { useAddImage, useAddKind, useAddNav } from './AddDialogs';
 import { useEditor } from './context';
 import { nextSheetName, uuid } from './doc';
 import { SizeSwitch } from './SizeNote';
@@ -137,7 +138,10 @@ export function Head() {
   const ed = useEditor();
   const navigate = useNavigate();
   const addKind = useAddKind();
+  const addImage = useAddImage();
+  const addNav = useAddNav();
   const [renaming, setRenaming] = useState(false);
+  const [lineage, setLineage] = useState(false);
   const { past, future } = ed.history;
   const back = `/analyses?project=${ed.projectId}`;
   // Publishing lives with the dashboard viewer (T2.9): write what is on screen now, then go there.
@@ -168,6 +172,7 @@ export function Head() {
           trigger={<IconButton icon="more-horizontal" size="sm" label="More dashboard actions" />}
           items={[
             { label: 'History', icon: 'history', onSelect: () => void navigate(`/versions/${ed.projectId}/dashboard/${ed.analysisId}`) },
+            { label: 'Lineage', icon: 'lineage', onSelect: () => setLineage(true) },
             { label: 'Publish…', icon: 'external-link', onSelect: publish },
           ]}
         />
@@ -205,6 +210,8 @@ export function Head() {
               </Button>
             }
             items={[
+              { label: 'Image…', icon: 'camera', onSelect: addImage },
+              { label: 'Navigation', icon: 'arrow-right', onSelect: () => void addNav() },
               { label: 'Divider', icon: 'minus', onSelect: () => addKind('divider') },
               { label: 'Container', icon: 'layout-dashboard', onSelect: () => addKind('container') },
               { label: 'Tabs', icon: 'columns', onSelect: () => addKind('tabs') },
@@ -212,6 +219,7 @@ export function Head() {
           />
         </div>
       </div>
+      {lineage && <LineageDrawer projectId={ed.projectId} type="dashboard" id={ed.analysisId} name={ed.doc.name} onClose={() => setLineage(false)} />}
       {renaming && <NameDialog title="Rename dashboard" initial={ed.doc.name} onClose={() => setRenaming(false)} onSave={(v) => ed.edit('Rename dashboard', (d) => void (d.name = v))} />}
     </header>
   );

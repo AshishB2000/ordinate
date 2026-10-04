@@ -10,7 +10,7 @@
 // handler never trusts its payload. The zod shapes bound size and type only.
 
 import { z } from 'zod';
-import { byProjectId, rpc, Steps, Uuid } from './contract';
+import { byProjectId, FileToken, rpc, Steps, Uuid } from './contract';
 
 const Name = z.string().max(200);
 /** A sheet array: `sanitizePages` whitelists every card by type. */
@@ -50,6 +50,12 @@ const Tile = z.discriminatedUnion('kind', [
     aggregation: Aggregation,
     metricId: Uuid.optional(),
     compare: Compare.optional(),
+    filters: Steps.optional(),
+  }),
+  // A statistics card: its spec (sanitizeStatsSpec owns every field), recomputed by stats:tile.
+  z.strictObject({
+    kind: z.literal('stats'),
+    spec: z.looseObject({ kind: z.enum(['correlation', 'regression', 'groups', 'distribution']), datasetId: Uuid }),
     filters: Steps.optional(),
   }),
 ]);
@@ -152,4 +158,9 @@ export const analyses = {
     input: z.strictObject({ projectId: Uuid, params: ParamPayload.optional(), items: z.array(Tile).min(1).max(100) }),
     project: byProjectId,
   }),
+  // An image card's picture: an upload (T0.4) copied into the project's assets
+  // (the desktop's asset:pickImage, minus its native dialog), and read back as
+  // a data: URL for the <img> (hub CSP: img-src data:). Ids are generated UUIDs.
+  'asset:importImage': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, fileToken: FileToken }), project: byProjectId }),
+  'asset:read': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, id: Uuid, ext: z.enum(['png', 'jpg', 'svg']) }), project: byProjectId }),
 } as const;

@@ -168,3 +168,17 @@
   width: 40%;
   height: 10px;
 }
+
+/* No model: the empty state says why the Assistant's doors are shut, and where to connect one. */
+.aiHint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  margin: calc(-1 * var(--sp-12)) auto 0;
+  max-width: 560px;
+  color: var(--muted);
+  font-size: var(--t-13);
+  text-align: center;
+}

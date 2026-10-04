@@ -6,6 +6,7 @@
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useDatasets } from '../../api/datasets';
 import { buttonClass } from '../../ui/Button';
+import { Icon } from '../../ui/icons/Icon';
 import { Tab, TabList, TabPanel, Tabs } from '../../ui/Tabs';
 import { CapturesTab } from './CapturesTab';
 import { CatalogTab } from './CatalogTab';
@@ -51,6 +52,11 @@ export default function DataSection() {
           <p className={s.sub}>{SUB[tab]}</p>
         </div>
         <div className={s.headTools}>
+          {/* The project's metrics (T2.8): the desktop's Metrics tab under Data, on its own route. */}
+          <Link className={buttonClass('ghost')} to={`/data/metrics?project=${projectId}`}>
+            <Icon name="target" />
+            <span>Metrics</span>
+          </Link>
           {tab === 'datasets' && !empty && (
             <>
               <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
