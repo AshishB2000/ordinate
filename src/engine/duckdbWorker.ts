@@ -109,7 +109,7 @@ const sab = init.payload as GrowableSAB;
 let view = new Uint8Array(sab);
 let connection: DuckDBConnection | null = null;
 // The async call DuckDB is running now — what an interrupt for its id stops.
-let running: { from: Sender; id: number } | null = null;
+let running: { from: Sender; id: number; stopping?: NodeJS.Timeout } | null = null;
 
 function finish(signal: number, bytes: number): void {
   Atomics.store(ctl, LEN, bytes);
@@ -199,7 +199,8 @@ async function handleAsync(msg: CallMessage, id: number, from: Sender): Promise<
   // thread is parked in `Atomics.wait` — the message lands in the port's queue
   // and is delivered when the main thread next reaches its event loop.
   const reply = (m: AsyncReply): void => from.post(m);
-  running = { from, id };
+  const me: NonNullable<typeof running> = { from, id };
+  running = me;
   try {
     if (!connection) throw new Error('DuckDB connection is not open');
     if (msg.kind === 'exec') {
@@ -217,6 +218,7 @@ async function handleAsync(msg: CallMessage, id: number, from: Sender): Promise<
     const message = err instanceof Error ? err.message : String(err);
     reply({ id, ok: false, code: 'query', message, micros: elapsedMicros(t0) });
   } finally {
+    clearInterval(me.stopping);
     running = null;
   }
 }
@@ -232,8 +234,22 @@ async function handleAsync(msg: CallMessage, id: number, from: Sender): Promise<
  * `closeWorker` in src/engine/duckdb.ts).
  */
 function interrupt(from: Sender, id: number): void {
-  if (running && running.from === from && running.id === id) connection?.interrupt();
+  if (running && running.from === from && running.id === id) stopRunning();
   else if (id > from.lastStarted) from.skip.add(id);
+}
+
+/**
+ * Interrupt the running call, and KEEP interrupting it until it settles. DuckDB
+ * drops an interrupt that arrives while nothing is executing (it clears the flag
+ * when a query begins), and one call is several native steps — extract, prepare,
+ * run, each queued on libuv's pool — so a single interrupt that fell between
+ * them was lost and the statement ran to completion (scripts/test-duckdbPool.ts
+ * pins it). Re-sent every 10 ms, the first one after execution begins lands.
+ */
+function stopRunning(): void {
+  if (!running || running.stopping) return;
+  connection?.interrupt();
+  running.stopping = setInterval(() => connection?.interrupt(), 10);
 }
 
 function elapsedMicros(t0: bigint): number {
@@ -291,7 +307,7 @@ function attach(port: MessagePort): void {
   // was running and skip what it queued.
   port.on('close', () => {
     from.closed = true;
-    if (running && running.from === from) connection?.interrupt();
+    if (running && running.from === from) stopRunning();
   });
 }
 

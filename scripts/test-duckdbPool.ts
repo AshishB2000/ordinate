@@ -30,6 +30,7 @@ const { Worker }: typeof import('worker_threads') = require('worker_threads');
 
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const poolMod: typeof import('../src/engine/duckdbPool') = require('../src/engine/duckdbPool');
+const { DuckClient }: typeof import('../src/engine/duckdbClient') = require('../src/engine/duckdbClient');
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
 const computePool: typeof import('../src/engine/computePool') = require('../src/engine/computePool');
@@ -212,6 +213,25 @@ async function main(): Promise<void> {
   t0 = Date.now();
   await inOrg('a', () => q('SELECT 1 AS x'));
   ok(`a terminated compute thread's query is interrupted: the org answers in ${Date.now() - t0} ms`, Date.now() - t0 < 1000);
+
+  // Regression: an interrupt that reached the worker before the statement was
+  // EXECUTING (here: posted in the same tick as the call, so it lands while the
+  // worker is still preparing it) was dropped — DuckDB clears its interrupt flag
+  // when a query begins — and the scan ran to completion. The worker's own reply
+  // to the call says which happened; no clock is involved.
+  const early = inOrg('a', async () => pool.lease('a'));
+  const el = await early;
+  const reply = new Promise<{ ok: boolean; message?: string }>((r) => el.port.once('message', r));
+  const earlyClient = new DuckClient(el.port, 60_000);
+  const stopEarly = new AbortController();
+  const earlyCall = codeOf(earlyClient.call('query', LONG, [], stopEarly.signal));
+  stopEarly.abort();
+  el.port.ref(); // the client let go of the port when the call settled; the reply is still awaited
+  ok('an interrupt landing before the statement executes rejects the caller at once', (await earlyCall) === 'cancelled');
+  const r = await reply;
+  ok('…and the worker stopped it rather than running the scan to completion', !r.ok && /Interrupt|cancelled before it started/i.test(r.message ?? ''), JSON.stringify(r).slice(0, 160));
+  el.port.close();
+  el.release();
 
   // ── 5. Limits ───────────────────────────────────────────────────────────────
   // Lifecycle only: a 60 s query limit (a 600 ms one fails a `SELECT 1` under load) and, here, idleMs 60 s
