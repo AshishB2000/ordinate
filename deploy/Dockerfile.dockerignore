@@ -1,0 +1,16 @@
+# BuildKit reads this for deploy/Dockerfile (context: the repository root).
+**/node_modules
+.git
+.github
+.claude
+.agents
+.tsbuildinfo
+.duckdb-extensions
+dist
+data
+docs
+native
+web/dist
+web/e2e/__screens__
+deploy/.env
+**/.DS_Store

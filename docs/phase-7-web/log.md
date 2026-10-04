@@ -995,3 +995,30 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   594/594; e2e 50/50; lint 0. Screens in both themes reviewed.
 - **Logged, not built (per spec):** scheduled server-side reports. **Follow-ups:** "Create report…" in the
   T2.8 dashboard menu; pivot/cohort tiles in printed reports (now possible through T1.2's `GridViz`).
+
+## 2026-10-04 — T7.1 Docker image and Compose
+
+- **Image** (`deploy/Dockerfile`, multi-stage on `node:24-slim`): **589 MB** (cap 600; CI fails above it).
+  Runs as `node`; `HEALTHCHECK` on `/readyz`; DuckDB `httpfs` + `aws` baked into
+  `/opt/ordinate/duckdb-extensions` with autoinstall off. GeoJSON fetched at build and checked non-empty
+  (177 / 52 / 3,221 features). Runtime deps pruned of desktop-only packages (maplibre-gl, pdfmake, pptxgenjs,
+  Chart.js plugins, oracledb thick binaries, the musl DuckDB binding); a build-time `registerHandlers()` +
+  driver require guard fails the build on over-pruning (negative control: dropping `sizeLayout.js` fails it).
+- **No runtime download, proven:** a container on an `--internal` network (DNS `EAI_AGAIN`, direct IP
+  `ENETUNREACH`) loads httpfs/aws from the baked dir, reads and writes S3 on MinIO; with an empty extension
+  dir it refuses ("not found … Install it first") and never turns healthy.
+- **Compose** (`deploy/docker-compose.yml`, `.env.example`): ordinate + postgres:17 + MinIO + one-shot bucket
+  init; header-mode sign-in (oauth2-proxy shape), app port on `127.0.0.1` only, secrets only from `.env`.
+  Clean `up --wait` 15 s (54 s with a cold image build); restart 6 s; down/up with volumes 13 s; data and the
+  dashboard survive both. A forged `X-Forwarded-Email` from an untrusted peer gets `user: null` / 403.
+- **`/metrics`** (`src/server/metrics.ts`, no dependency): RPC counts/latency per channel, job counts,
+  compute-pool queue depth, `residentTrace` outcomes per op — only on `METRICS_PORT`; the app port 404s it
+  for every Accept header. `test-promMetrics` 39 ok, exposition validator with 6 negative controls.
+- **Done when** (`web/e2e/compose.e2e.ts` against the stack, all UI): sign in → new project → import CSV →
+  chart → that chart as a card on a dashboard (T2.8 canvas) → reopened, card draws. 22.8 s, zero console
+  errors; RPCs per load ≤ 15. Screens `compose-*-{light,dark}.png` reviewed. New CI job `docker` runs it.
+- **Gates (agent, orchestrator's gates script, on faaca54):** `npm test` 282/282 without DB, with DB, and CI
+  env; Vitest 594/594; e2e 49 + `connections` passing alone (known load flake); lint 0.
+- **Open:** the `docker` CI job's first run is also the first amd64 build; publish to a read-only dashboard
+  waits for T2.9; `chainguard/minio:latest` unpinned; ~11 MB image headroom; header mode trusts any local
+  peer on the published port (documented, never bind `0.0.0.0`).

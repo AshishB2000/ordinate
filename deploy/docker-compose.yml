@@ -1,0 +1,119 @@
+# Ordinate for one team: the server, Postgres (users, records, jobs, secrets)
+# and MinIO (Parquet tables, S3 API). One command, from deploy/:
+#
+#   cp .env.example .env     # then set ORDINATE_MASTER_KEY, the passwords and the admin email
+#   docker compose up -d --build
+#
+# Sign-in is AUTH_MODE=header: Ordinate trusts X-Forwarded-Email from the proxy
+# in front of it (oauth2-proxy with your IdP — plan M2). The app port is
+# published on 127.0.0.1 only, so the one thing that can reach it — and assert
+# an identity — is a process on this host: run oauth2-proxy here with
+# --upstream=http://127.0.0.1:${ORDINATE_PORT}. To sign in with OIDC directly
+# instead, see "Switching to OIDC" in .env.example.
+#
+# Postgres and MinIO publish no host ports: only Ordinate talks to them, on
+# the compose network. Data lives in three named volumes; `docker compose down`
+# keeps them, `docker compose down -v` deletes everything.
+
+name: ordinate
+
+x-minio-creds: &minio-creds
+  MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+  MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ordinate
+      POSTGRES_DB: ordinate
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "ordinate", "-d", "ordinate"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    # minio/minio is gone from Docker Hub; Chainguard's build is public (amd64 + arm64).
+    # It runs as uid 65532; its /data is world-writable, so the volume mounted there is too.
+    image: chainguard/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data"]
+    environment:
+      <<: *minio-creds
+      # `mc ready local` below reads the alias from here.
+      MC_HOST_local: http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@127.0.0.1:9000
+    volumes:
+      - minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Makes the bucket once (idempotent), with the mc client the MinIO image ships.
+  minio-init:
+    image: chainguard/minio:latest
+    entrypoint: ["mc", "mb", "--ignore-existing", "local/${S3_BUCKET:-ordinate}"]
+    environment:
+      MC_HOST_local: http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@minio:9000
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
+  ordinate:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: ${ORDINATE_IMAGE:-ordinate:local}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      ORDINATE_ENV: prod
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgres://ordinate:${POSTGRES_PASSWORD}@postgres:5432/ordinate
+      ORDINATE_MASTER_KEY: ${ORDINATE_MASTER_KEY:?set ORDINATE_MASTER_KEY in .env (openssl rand -base64 32)}
+      # Parquet tables on MinIO through DuckDB httpfs; the extensions are baked into the image.
+      STORAGE_URL: s3://${S3_BUCKET:-ordinate}
+      S3_ENDPOINT: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      # Sign-in (see the header above and .env.example).
+      AUTH_MODE: ${AUTH_MODE:-header}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-172.30.80.1/32}
+      ORDINATE_ADMIN_EMAIL: ${ORDINATE_ADMIN_EMAIL:?set ORDINATE_ADMIN_EMAIL in .env}
+      ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URL: ${OIDC_REDIRECT_URL:-}
+      # Prometheus on its own port, not published: scrape it from the compose network (ordinate:9464).
+      METRICS_PORT: "9464"
+    ports:
+      - "${ORDINATE_BIND:-127.0.0.1}:${ORDINATE_PORT:-8080}:8080"
+    volumes:
+      - data:/data
+
+networks:
+  default:
+    # A fixed subnet so TRUSTED_PROXY_CIDRS can name its gateway: connections
+    # through the published port arrive from 172.30.80.1. Change both if it
+    # collides with a network you already have.
+    ipam:
+      config:
+        - subnet: ${ORDINATE_SUBNET:-172.30.80.0/24}
+
+volumes:
+  postgres:
+  minio:
+  # Per-org temp files, uploads in flight and the local cache of S3 tables.
+  data:

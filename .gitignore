@@ -1134,3 +1134,7 @@ scripts/**/*.js
 /src/api/trash.js
 /src/api/versions.js
 /scripts/test-projects-server.js
+
+# web/t7.1-docker
+/src/server/metrics.js
+/deploy/.env

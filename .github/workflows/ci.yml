@@ -208,3 +208,61 @@ jobs:
     steps:
       - name: Every shard passed
         run: test "${{ needs.smoke.result }}" = success
+
+  # The server image and the Compose stack (Phase 7, T7.1): build
+  # deploy/Dockerfile, hold it under 600 MB, start deploy/docker-compose.yml
+  # from a clean state (fresh volumes, generated secrets), then drive it with
+  # web/e2e/compose.e2e.ts — sign in (header mode, as oauth2-proxy would) →
+  # import a CSV → chart → dashboard, failing on any console error.
+  docker:
+    name: docker (image, compose, e2e)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Build the image
+        run: docker build -f deploy/Dockerfile -t ordinate:local .
+      - name: Image ≤ 600 MB
+        run: |
+          size=$(docker image inspect ordinate:local --format '{{.Size}}')
+          echo "image size: $((size / 1000000)) MB"
+          test "$size" -lt 600000000
+      - name: Start the stack (clean volumes, generated secrets)
+        working-directory: deploy
+        run: |
+          cp .env.example .env
+          sed -i \
+            -e "s|^ORDINATE_MASTER_KEY=$|ORDINATE_MASTER_KEY=$(openssl rand -base64 32)|" \
+            -e "s|^POSTGRES_PASSWORD=$|POSTGRES_PASSWORD=$(openssl rand -hex 16)|" \
+            -e "s|^MINIO_ROOT_PASSWORD=$|MINIO_ROOT_PASSWORD=$(openssl rand -hex 16)|" \
+            -e "s|^ORDINATE_ADMIN_EMAIL=.*|ORDINATE_ADMIN_EMAIL=admin@ci.test|" .env
+          docker compose down -v
+          docker compose up -d --wait
+      - name: /metrics is never on the app port
+        run: test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/metrics)" = 404
+      # The spec needs only the `playwright` library from the root tree.
+      - run: npm ci --ignore-scripts
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: e2e against the stack
+        run: node --test --test-reporter=spec web/e2e/compose.e2e.ts
+        env:
+          E2E_COMPOSE_URL: http://127.0.0.1:8080
+          E2E_COMPOSE_EMAIL: admin@ci.test
+      - name: Stack logs
+        if: failure()
+        working-directory: deploy
+        run: docker compose logs --no-color | tail -300
+      - name: Upload the compose screenshots
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-screens
+          path: web/e2e/__screens__/compose-*.png
+          if-no-files-found: warn
+          retention-days: 7

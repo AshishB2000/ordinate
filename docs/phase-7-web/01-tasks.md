@@ -434,7 +434,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
 
 ## P7 — Packaging and deployment
 
-### [ ] T7.1 Docker image and Compose
+### [x] T7.1 Docker image and Compose
 - **Branch** `web/t7.1-docker` · **Depends** T5.4
 - `deploy/Dockerfile`: multi-stage on `node:24-slim`; build TS + web; fetch GeoJSON **and install
   DuckDB `httpfs` into a baked `extension_directory` at build time** (the container never downloads
