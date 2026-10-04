@@ -862,3 +862,26 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   alone (shared-DB contention); Vitest 491/491; e2e 40/40 (DB), 36 + 2 skip; lint 0; 191 contracts.
 - **Open:** dock context for analytics routes not wired (needs `dockState.ts` route match);
   `drivers:explainAlert`/`scenario:card` uncontracted until T2.9; three analytics CSS modules ~600 lines.
+
+## 2026-10-04 — T2.14 Settings, themes, privacy, command palette
+
+- **My settings** `/settings` (You: account, theme, shortcuts; Privacy: the project's share policy) and
+  **Organization** tabs in Admin (Workspace: formats, calendar with the server's "Today is…" preview,
+  branding, Assistant rules, refresh/alert switches; Themes editor; Backups). Formats/accent write through
+  `formats:set`/`branding:set` and refresh the `prefs:get` cache. One shared theme preference (`theme.ts`).
+- **Backups:** admin download (zip of every project bundle + `backup.json`) and restore over T0.4 tokens;
+  restore needs `confirm: 'restore'` (400 without), refuses a tampered/partial/junk file whole, restores
+  each project as a NEW project "… (restored <date>)" — nothing is overwritten. Audited incl. refused
+  attempts. Role matrix 19 channels, denied calls never reach a handler.
+- **Command palette** ⌘K / Ctrl+K and the top-bar Search box: one registry (`useCommands` per page,
+  duplicate ids refused), fuzzy + recency, `>` commands, `/` records (`recent:list`, `search:query`, current
+  project), `?` shortcuts sheet. **About** `/about`: version, links, 386 bundled packages' licences from a
+  build-time `licenses.json` (Vite plugin, no dependency; 62 KB gzip, fetched only on About).
+- **Registered once, unguarded:** `settingsServer`, `themes`, `privacy`, `search`, `periods`.
+- **Measured:** RPCs /settings 3, Admin ≤ 6, About ≤ 5; initial JS 177 KB gzip (was 168: palette + settings
+  shell); theme model differential test vs the server's over 410 cases.
+- **Chain gates (on T2.10):** `npm test` 277/277 with and without DB; Vitest 516/516; e2e 41/41 (DB),
+  37 + 2 skip; lint 0; 213 contracts, 0 unresolved.
+- **Open:** `calendar:today` reads a process-wide calendar (the `config.ts` per-org limitation noted for
+  P5); the org backup zip is built in memory under the 60 s RPC timeout; restored projects visible to org
+  admins only until shared; dropped desktop-only settings (hotkey, launch at login, permissions, local CLI).
