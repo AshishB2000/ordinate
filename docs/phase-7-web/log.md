@@ -1022,3 +1022,31 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
 - **Open:** the `docker` CI job's first run is also the first amd64 build; publish to a read-only dashboard
   waits for T2.9; `chainguard/minio:latest` unpinned; ~11 MB image headroom; header mode trusts any local
   peer on the published port (documented, never bind `0.0.0.0`).
+
+## 2026-10-04 — T6.4 User regex off the request thread
+
+- **What moved:** on the server, every user regex a request can reach — regex split/replace, keyword rules,
+  quality `regex` rules, input-table rule checks, "show failing rows" — runs in `src/engine/regexWorker.ts`
+  via `regexPool.ts` (stdlib `worker_threads`): one message per batch of DISTINCT texts (≤ 20,000 texts /
+  4M chars), **2 s deadline per call**, thread terminated and lazily replaced on overrun, ≤ 4 calls in
+  flight, one warm idle thread. The worker's answers feed the existing synchronous folds, so ordinary output
+  is byte-identical; a server-side sync fold that meets a user regex without those answers refuses rather than
+  runs it (covers the loose `filters` lists from T2.8/T2.13). Desktop unchanged. Formula `regexp_*` (no `u`
+  flag) runs on V8's linear engine on the server. Swept: story Markdown `/\s+$/` (28 s on 100k spaces) →
+  `trimEnd()`, 2 ms.
+- **Measured** (`test-regexDeadline`, 34 ok): six hostile calls at once (`(\w+)+!`, `(a|a)+!`, `\w+…\w+!` over a
+  40-char cell, through replace/split/keyword/quality) all return the translated timeout with rows untouched —
+  four at ~2.0 s, two at ~4.0 s behind the 4-thread cap; max event-loop delay 6.6–28.8 ms; a 5 ms ticker kept
+  firing. Negative controls: the old inline fold still running at 4,000 ms; worker or linear engine disabled →
+  suite killed at 60 s. Ordinary-step cost, 100k rows, median of 9 (desktop inline → server): replace
+  38.8 → 47.2 ms, split 58.9 → 93.0, keyword 33.3 → 51.8, formula `regexp_replace` 37.9 → 106.3, quality
+  rule 3.7 → 23.9; ≤ 1.1 ms at 1k rows — no cost model, the server always uses the worker.
+- **Threat model:** R1 → MITIGATED with these numbers (§6), §4.6 row added. Residual: the four threads can be
+  kept busy 2 s at a time (bounded queueing, not a pod stall).
+- **Gates (orchestrator, on b8f5417):** `npm test` 282/282 without DB, with DB, and CI env; Vitest 594/594;
+  e2e 50/50; lint 0; initial JS 178.87 KB. Rebased onto T7.1 (`.gitignore`: both blocks kept), then
+  build, lint, `regexDeadline`, `promMetrics`, `server-boot`, `file-size` re-run green.
+- **Open:** story `INLINE_RE` link alternative scans to end of line from every `[` (50k `[` ≈ 2.9 s/match;
+  shared with the desktop parser, a behaviour change — kept in R1); `notebook/exportMd.ts` still trims with
+  `/\s+$/`; the keyword job on large text has no warm-up on the server (progress bar skips that phase);
+  `test-publishSite` can flake when its random privacy token contains "000" (follow-up task suggested).
