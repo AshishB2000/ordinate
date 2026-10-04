@@ -61,6 +61,8 @@ const VizDataInput = z.strictObject({
   // T2.7: the answer is about to LEAVE the app (Copy data) — the project's
   // Share policy shapes it first (app/sharePolicy.ts).
   share: z.literal('export').optional(),
+  // T2.11: "As of" — every dataset read as it was at this time (src/data/asOf.ts; view state, never saved).
+  asOf: z.string().max(40).optional(),
 });
 
 /** What a visual IS, as `visual:save` stores it; `visual:update` takes any part of it. */

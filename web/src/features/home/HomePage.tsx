@@ -20,6 +20,7 @@ import { GetStarted, GetStartedPill } from './GetStarted';
 import { displayName, greeting, plural, suggestPrompts } from './homeText';
 import { RecentColumn } from './RecentColumn';
 import { SideColumn } from './SideColumn';
+import { WhatStandsOut } from '../analytics/insights/WhatStandsOut';
 import s from './HomePage.module.css';
 
 function homeProject(list: Project[] | undefined): Project | undefined {
@@ -90,6 +91,8 @@ export default function HomePage() {
       </header>
       <AskBar prompts={prompts} onAsk={openDockWith} />
       <GetStarted />
+      {/* What the app FOUND in the project's data (T2.11); renders nothing when nothing stands out. */}
+      <WhatStandsOut projectId={project?.id} />
       <div className={s.cols}>
         <RecentColumn projectId={project?.id} recent={recent} />
         <SideColumn project={project} projectsFailed={projects.isError} retryProjects={() => void projects.refetch()} />

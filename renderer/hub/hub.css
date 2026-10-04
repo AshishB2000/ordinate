@@ -14980,6 +14980,8 @@ select.ws-modal-input { height: 38px; }
 .pivot-sort:hover { color: var(--text-strong); }
 .pivot-sort.is-sorted { color: var(--text-strong); }
 .pivot-arrow { font-size: 10px; line-height: 1; }
+.pivot-sort-corner { min-height: 24px; min-width: 56px; font-size: var(--t-11); font-weight: 600; letter-spacing: var(--tr-label); text-transform: uppercase; color: var(--muted); }
+.pivot-sort-corner:hover, .pivot-sort-corner.is-sorted { color: var(--text-strong); }
 
 /* Body. */
 .pivot-row > th,

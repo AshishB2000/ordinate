@@ -98,6 +98,7 @@ export function PivotTable({ grid, label, onSort, fill }: PivotTableProps) {
                     {interactive ? (
                       <SortButton
                         label=""
+                        text={t('common.label')}
                         dir={sort && sort.by === 'label' ? sort.dir : null}
                         onClick={() => onSort({ by: 'label', dir: sort && sort.by === 'label' && sort.dir === 'asc' ? 'desc' : 'asc' })}
                       />
@@ -214,18 +215,23 @@ export function PivotTable({ grid, label, onSort, fill }: PivotTableProps) {
   );
 }
 
-function SortButton({ label, dir, onClick }: { label: string; dir: 'asc' | 'desc' | null; onClick: () => void }) {
+/**
+ * A sortable header. `label` names it for assistive tech ('' = the row labels);
+ * `text` is what shows when that differs — the corner's "Label", so the row-label
+ * sort has a visible hit area (the desktop's corner button was empty, zero-size).
+ */
+function SortButton({ label, text, dir, onClick }: { label: string; text?: string; dir: 'asc' | 'desc' | null; onClick: () => void }) {
   return (
     <button
       type="button"
-      className={[s.sort, dir && s.sorted].filter(Boolean).join(' ')}
+      className={[s.sort, dir && s.sorted, text && s.cornerSort].filter(Boolean).join(' ')}
       aria-label={t('pivotRender.sort_by', {
         p0: label || 'label',
         p1: dir === 'asc' ? t('pivotRender.ascending') : dir === 'desc' ? t('pivotRender.descending') : '',
       })}
       onClick={onClick}
     >
-      {label}
+      {text ?? label}
       <span className={s.arrow} aria-hidden="true">
         {dir === 'asc' ? '↑' : dir === 'desc' ? '↓' : ''}
       </span>

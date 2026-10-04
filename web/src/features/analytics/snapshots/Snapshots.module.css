@@ -1,0 +1,313 @@
+/* Snapshots (snapshots.css): the tab's head, the kept-versions table, the
+   compare panel with its tally chips and change tables, and the builder's
+   "As of" picker. Tokens only — both themes follow. */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  padding: var(--sp-16) 0;
+}
+.head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-16);
+  flex-wrap: wrap;
+}
+.h {
+  margin: 0;
+  font-size: var(--t-15);
+  font-weight: 600;
+  letter-spacing: var(--tr-tight);
+  color: var(--text-strong);
+}
+.sub {
+  margin: var(--sp-4) 0 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.keep {
+  width: 180px;
+}
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-16);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-lg);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--text);
+}
+.notice > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+.notice strong {
+  font-weight: 600;
+}
+.dialogNote {
+  margin: 0;
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+
+/* ── The kept-versions table ── */
+.tableWrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-13);
+}
+.table th,
+.table td {
+  padding: var(--sp-8) var(--sp-16);
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.table thead th {
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: var(--surface-2);
+}
+.table tbody tr:last-child th,
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.table tbody th {
+  font-weight: 500;
+}
+.current {
+  background: var(--accent-soft);
+}
+.open {
+  background: var(--surface-2);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.when {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+.tag {
+  margin-left: var(--sp-8);
+  padding: 1px var(--sp-8);
+  font-size: var(--t-11);
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--surface);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-full);
+}
+.ago {
+  margin-left: var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--muted);
+  font-weight: 400;
+}
+.num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+.muted {
+  color: var(--muted);
+}
+.up {
+  color: var(--ok);
+  font-variant-numeric: tabular-nums;
+}
+.down {
+  color: var(--error);
+  font-variant-numeric: tabular-nums;
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--sp-8);
+}
+
+/* ── The compare panel ── */
+.diff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.diffHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  flex-wrap: wrap;
+}
+.diffH {
+  margin: 0;
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.diffTools {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-8);
+}
+.keyPick {
+  width: 220px;
+}
+.out {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.sum {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+.chip {
+  padding: var(--sp-4) var(--sp-12);
+  font-size: var(--t-12);
+  border-radius: var(--r-full);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.chip b {
+  font-variant-numeric: tabular-nums;
+}
+.chip_added {
+  color: var(--ok);
+  background: var(--ok-soft);
+  border-color: transparent;
+}
+.chip_removed {
+  color: var(--error);
+  background: var(--error-soft);
+  border-color: transparent;
+}
+.chip_changed {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: transparent;
+}
+.chip_same {
+  color: var(--muted);
+}
+.note {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.same {
+  margin: 0;
+  padding: var(--sp-16);
+  font-size: var(--t-13);
+  color: var(--text);
+  background: var(--surface-2);
+  border-radius: var(--r-md);
+}
+.sec {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.secH {
+  margin: 0;
+  font-size: var(--t-12);
+  font-weight: 700;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.scroll {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-12);
+}
+.grid th,
+.grid td {
+  padding: var(--sp-4) var(--sp-12);
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.grid thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-2);
+  font-weight: 600;
+  color: var(--text);
+}
+.key {
+  font-weight: 600;
+  vertical-align: top;
+  background: var(--surface);
+}
+.before {
+  color: var(--error);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--error) 50%, transparent);
+}
+.after {
+  color: var(--ok);
+}
+.null {
+  font-style: italic;
+  color: var(--text-faint);
+}
+.more {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+
+/* ── The builder's "As of" picker ── */
+.asOf {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-width: 200px;
+}
+.asOfLabel {
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.asOfOn .asOfLabel {
+  color: var(--warn);
+}
+.asOf > div {
+  flex: 1;
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

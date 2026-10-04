@@ -402,4 +402,8 @@ export function registerHandlers(): void {
   for (const mod of ['../ipc/reports', '../ipc/stories', '../ipc/scorecards', '../ipc/reportsServer']) {
     (require(mod) as { register: () => void }).register();
   }
+
+  // Analytics workbenches B (T2.11): insights, event annotations, data snapshots, SQL over the project's datasets.
+  for (const mod of ['../ipc/insights', '../ipc/events', '../ipc/sqlQuery']) (require(mod) as { register: () => void }).register();
+  (require('../ipc/snapshots') as typeof import('../ipc/snapshots')).register({ headless: true });
 }

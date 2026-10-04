@@ -258,7 +258,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   `scenarioList`, `scenarioCard`, `scenarioCompare`, `scenarioDrivers`, `segments`, `segmentsRfm`,
   `segmentsView`.
 
-### [ ] T2.11 Analytics workbenches B — pivot, cohort, snapshots, events, insights, SQL
+### [x] T2.11 Analytics workbenches B — pivot, cohort, snapshots, events, insights, SQL
 - **Branch** `web/t2.11-analytics-b` · **Legacy:** `pivotBuilder`, `cohortBuilder`, `snapshots`,
   `snapshotAsOf`, `snapshotDiffView`, `eventsPage`, `eventsEditor`, `insights`, `queryTab`,
   `queryEditor`, `queryParams`.

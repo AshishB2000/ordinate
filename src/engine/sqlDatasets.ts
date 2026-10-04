@@ -31,7 +31,8 @@
 //
 // ── Defence in depth ─────────────────────────────────────────────────────────
 //   1. the engine lock (`hardenEngine` → mosaic.hardenConnection) is awaited
-//      before any user SQL runs, and a failed lock refuses to run at all;
+//      before any user SQL runs, and a failed lock refuses to run at all — on
+//      the server, the org worker's own lock (duckdbPool), set before it answers;
 //   2. one statement (`mosaic.statementCount`), and it must start like a read;
 //   3. `readOnlyError` refuses file-reading table functions, a string (or a
 //      path-shaped quoted name) in table position — DuckDB's replacement scan
@@ -213,10 +214,15 @@ async function compile(projectId: unknown, sql: unknown, params: unknown, views:
   // first for a second reason: its execAsync starts the worker without
   // blocking, so residentSource's synchronous isAvailable() probe never parks
   // the main thread (the ordering mosaic.ts documents).
-  await hardenEngine();
-  const lock = hardeningState();
-  if (!lock.ok) {
-    return { error: `SQL is off for this session: the query engine could not be locked to Ordinate's data${lock.error ? ` (${lock.error})` : ''}.` };
+  // On the server every statement runs in the caller's org worker, which locked
+  // itself to the org's directory before it answered (src/engine/duckdbPool.ts);
+  // a process-wide SET there would be refused as a locked setting (T2.11).
+  if (!duck.routed()) {
+    await hardenEngine();
+    const lock = hardeningState();
+    if (!lock.ok) {
+      return { error: `SQL is off for this session: the query engine could not be locked to Ordinate's data${lock.error ? ` (${lock.error})` : ''}.` };
+    }
   }
 
   const cat = await projectCatalog(projectId);
@@ -257,6 +263,26 @@ async function compile(projectId: unknown, sql: unknown, params: unknown, views:
     deps,
     used: [...new Set([...boundViews.flatMap((v) => v.used), ...bound.used])],
   };
+}
+
+/**
+ * The datasets a statement reads, resolved HERE from the gated text — what a
+ * `sql` origin's `deps` must be. A browser's list is never trusted (T2.11): a
+ * save re-derives it, so a forged list cannot reach lineage. Runs nothing.
+ */
+export async function sqlDeps(projectId: unknown, sql: unknown, params: unknown): Promise<{ deps: string[] } | { error: string }> {
+  if (!isValidId(projectId)) return { error: 'Invalid project id' };
+  if (typeof sql !== 'string' || !sql.trim()) return { error: 'Write a query first.' };
+  const bound = bindSqlParams(sql, params);
+  if ('error' in bound) return bound;
+  const cat = await projectCatalog(projectId);
+  const known = new Set<string>();
+  for (const e of cat) {
+    if (e.alias) known.add(foldKey(e.alias));
+    known.add(e.slug);
+  }
+  const guard = readOnlyError(bound.sql, known);
+  return guard ? { error: guard } : { deps: extractDeps(bound.sql, cat) };
 }
 
 async function describe(c: Compiled): Promise<DescribedColumn[]> {

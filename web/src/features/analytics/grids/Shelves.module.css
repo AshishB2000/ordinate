@@ -1,0 +1,160 @@
+/* The grid shelves in the builder's rail (hub.css .pivot-build / .eb-build):
+   a shelf head with its +, then ordered chips; the totals checks, the sort
+   line, the per-value formatting rows; the engine's segmented controls and
+   step list. Tokens only — both themes follow. */
+
+.shelfHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+}
+.empty {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  font-size: var(--t-12);
+  color: var(--text-dim);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-md);
+}
+.chips {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chip {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: var(--ctl-md);
+  padding: 2px 2px 2px var(--sp-8);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: grab;
+}
+.chip:active {
+  cursor: grabbing;
+}
+.drop {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-line);
+}
+.chipName {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.grain {
+  flex: 0 0 108px;
+}
+.stepN {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-11);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+/* A checkbox's own label reads as a choice, not as a section head (the rail styles every
+   label as one: Builder.module.css `.encoding label`). */
+.checks label,
+.checkRow label {
+  font-size: var(--t-13);
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+}
+.sortRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-height: var(--ctl-sm);
+}
+.sortText {
+  font-size: var(--t-13);
+  color: var(--text);
+}
+.condRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-8);
+}
+.condName {
+  font-size: var(--t-12);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.condPick {
+  min-width: 0;
+}
+.threshold {
+  grid-column: 2;
+}
+
+/* ── Engine shelves ── */
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  align-self: flex-start;
+}
+.segBtn {
+  height: 26px;
+  padding: 0 var(--sp-12);
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.segBtn:hover:not(:disabled) {
+  color: var(--text);
+}
+.segBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.segBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.segOn {
+  color: var(--text-strong);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.window {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: var(--sp-8);
+}

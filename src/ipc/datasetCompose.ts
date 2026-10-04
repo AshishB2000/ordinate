@@ -14,6 +14,7 @@ import * as history from '../app/history';
 import { serverDataDir } from '../server/context';
 import { runQualityChecks } from '../analysis/qualityRun';
 import * as importStage from '../data/importStage';
+import { sqlDeps } from '../engine/sqlDatasets';
 import * as jobs from '../app/jobs';
 import { detectSensitive } from '../data/sensitivity';
 import { scanDataset } from '../app/privacyStore';
@@ -214,7 +215,14 @@ export async function composeSave(
     // a renderer-sent crop path is a renderer-sent filesystem path.
     const captureLink = await resolveCaptureLink(projectId, origin);
     // An unlinked capture origin (another project's, or gone) is not stored either.
-    const keptOrigin = origin && origin.kind === 'capture' && !captureLink ? undefined : origin;
+    let keptOrigin = origin && origin.kind === 'capture' && !captureLink ? undefined : origin;
+    // A `sql` origin's datasets come from the gated statement, never the caller's list (T2.11):
+    // the deps are lineage, and a statement the gate refuses is not stored at all.
+    if (keptOrigin && keptOrigin.kind === 'sql') {
+      const d = await sqlDeps(projectId, keptOrigin.sql, keptOrigin.params);
+      if ('error' in d) return { ok: false, error: d.error };
+      keptOrigin = { ...keptOrigin, deps: d.deps };
+    }
 
     // No joins: an ordinary save. Same rows, same origin, same speed as before.
     if (!list.length) {

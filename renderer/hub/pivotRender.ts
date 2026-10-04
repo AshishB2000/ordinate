@@ -315,7 +315,7 @@ function pivotHead(grid: PivotGridShape, opts: PivotViewOpts, interactive: boole
         corner.appendChild(pivotSortButton('', sort && sort.by === 'label' ? sort.dir : null, () => {
           const dir = sort && sort.by === 'label' && sort.dir === 'asc' ? 'desc' : 'asc';
           if (opts.onSort) opts.onSort({ by: 'label', dir });
-        }));
+        }, t('common.label')));
       }
       tr.appendChild(corner);
     }
@@ -369,11 +369,13 @@ function samePrefix(a: string[], b: string[], level: number): boolean {
 }
 
 /** A header label that is also the sort control. The arrow says which way. */
-function pivotSortButton(label: string, dir: 'asc' | 'desc' | null, onClick: () => void): HTMLButtonElement {
+// `text`: what shows when it differs from the accessible `label` — the corner's
+// "Label", so the row-label sort has a visible hit area (it was an empty button).
+function pivotSortButton(label: string, dir: 'asc' | 'desc' | null, onClick: () => void, text?: string): HTMLButtonElement {
   const b = document.createElement('button');
   b.type = 'button';
-  b.className = 'pivot-sort' + (dir ? ' is-sorted' : '');
-  b.appendChild(document.createTextNode(label));
+  b.className = 'pivot-sort' + (dir ? ' is-sorted' : '') + (text ? ' pivot-sort-corner' : '');
+  b.appendChild(document.createTextNode(text ?? label));
   const arrow = document.createElement('span');
   arrow.className = 'pivot-arrow';
   arrow.textContent = dir === 'asc' ? '↑' : dir === 'desc' ? '↓' : '';

@@ -163,14 +163,26 @@ describe('the builder', () => {
     });
   });
 
-  it('says a pivot is not in the browser yet, and keeps the saved type', async () => {
-    serve(
+  it('draws a saved pivot through the grid, on its own shelves, and keeps the saved type (T2.11)', async () => {
+    const grid = {
+      rowHeaders: [['East'], ['North']], colHeaders: [['Sum of amount']], cells: [[3], [4]], rowTotals: null, colTotals: null, grand: null,
+      rowKinds: ['leaf', 'leaf'], valueNames: ['Sum of amount'], valueCount: 1, showAs: ['value'], formats: [''], conditional: [], sort: null,
+      rowGroupCount: 2, colGroupCount: 1, truncated: false,
+    };
+    const calls = serve(
       base({
         'visual:get': { body: { ...summary({ chartType: 'pivot' }), encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'sum' }], pivot: { rows: [{ column: 'region' }], values: [] } }, overrides: {}, filters: [] } },
+        'visual:preview': { body: { ...TABLE_REPLY, data: { ...TABLE_REPLY.data, pivot: grid } } },
       }),
     );
     renderApp(`/visuals/${PID}/${VID}`);
-    expect(await screen.findByRole('heading', { name: 'Pivot table isn’t in the browser yet' })).toBeTruthy();
+    // The pivot's shelves replace Category / Measures: Rows holds region, Values was filled with the first measure.
+    expect(await screen.findByRole('group', { name: 'Rows' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove Sum of amount' })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Category (dimension)' })).toBeNull();
+    await waitFor(() => expect(calls.some((c) => c.channel === 'visual:preview' && JSON.stringify(c.payload).includes('"pivot"'))).toBe(true));
+    // The grid is the server's: a semantic table with the reply's own cells.
+    expect(await screen.findByRole('rowheader', { name: 'North' })).toBeTruthy();
     expect(screen.getByRole('radio', { name: /Pivot table/ }).getAttribute('aria-checked')).toBe('true');
   });
 

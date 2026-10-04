@@ -111,6 +111,20 @@
   font-size: 10px;
   line-height: 1;
 }
+/* The corner's row-label sort: a visible word, the head's own type, a real hit area. */
+.cornerSort {
+  min-height: 24px;
+  min-width: 56px;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cornerSort:hover,
+.cornerSort.sorted {
+  color: var(--text-strong);
+}
 
 .row > th,
 .row > td {

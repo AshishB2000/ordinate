@@ -13,7 +13,6 @@ import { useKeyStatus } from '../assistant/api';
 import { AnalyticsPane } from './analytics/AnalyticsPane';
 import type { RelatedCol } from './api';
 import { useBuilder, type Initial } from './builderState';
-import { GRID_TYPES } from './eligibility';
 import { EncodingForm } from './EncodingForm';
 import { FacetShelf, type Facet } from './facets/FacetShelf';
 import { FilterRows } from './filters/FilterRows';
@@ -21,6 +20,10 @@ import { fitEncoding, type Column } from './model';
 import { NameDialog } from './NameDialog';
 import { NewVisualDialog } from './NewVisualDialog';
 import { Stage } from './Stage';
+import { AsOfPicker } from '../analytics/snapshots/AsOfPicker';
+import { EngineShelves } from '../analytics/grids/EngineShelves';
+import { engineKind, engineNeeds, pivotEncoding, type Pivot } from '../analytics/grids/gridEncoding';
+import { PivotShelves } from '../analytics/grids/PivotShelves';
 import s from './Builder.module.css';
 
 export type { Initial };
@@ -39,9 +42,17 @@ export function Editor({ projectId, datasets, columns, related, initial }: {
   const [suggesting, setSuggesting] = useState(false);
   const { visualId, datasetId } = b;
 
+  // Which shelves the rail shows: the encoding's own block says (./builderState switches it with the type).
+  const pivot = b.enc.pivot as Pivot | undefined;
+  const engine = b.enc.cohort ? 'cohort' : b.enc.eventFunnel ? 'event_funnel' : '';
   const trySave = () => {
-    if (GRID_TYPES.has(b.current) && !b.eff.pivot && !b.eff.cohort && !b.eff.eventFunnel) {
-      toast(`${b.current === 'pivot' ? 'Pivot tables' : 'This grid'} can’t be built in the browser yet — pick another chart type to save.`, { kind: 'error' });
+    const needs = engineKind(b.current) ? engineNeeds(engineKind(b.current) as 'cohort' | 'event_funnel', b.eff) : '';
+    if (needs) {
+      toast(needs, { kind: 'error' });
+      return;
+    }
+    if (b.current === 'pivot' && (!pivot?.rows.length || !pivot.values.length)) {
+      toast('Pick a row dimension and at least one value to build a pivot.', { kind: 'error' });
       return;
     }
     if (!b.complete) {
@@ -50,7 +61,6 @@ export function Editor({ projectId, datasets, columns, related, initial }: {
     }
     setNaming(true);
   };
-  const engine = b.current === 'cohort' || b.current === 'event_funnel'; // a cohort / funnel is already its own grid
   const warnings = b.reply?.warnings ?? [];
 
   return (
@@ -70,6 +80,7 @@ export function Editor({ projectId, datasets, columns, related, initial }: {
             // Another dataset starts a fresh build — the open visual and its styling stay as saved.
             onValueChange={(id) => void navigate(`/visuals/${projectId}/new?dataset=${encodeURIComponent(id)}`)}
           />
+          <AsOfPicker projectId={projectId} datasetIds={[datasetId]} value={b.asOf} onChange={b.setAsOf} />
           <Button
             size="sm"
             icon="sparkles"
@@ -101,7 +112,13 @@ export function Editor({ projectId, datasets, columns, related, initial }: {
 
       <div className={s.body}>
         <aside className={s.rail} aria-label="Encoding">
-          <EncodingForm projectId={projectId} cols={columns} related={related} encoding={b.enc} info={b.reply?.category} onChange={b.setEnc} />
+          {pivot ? (
+            <PivotShelves projectId={projectId} cols={columns} pivot={pivot} onChange={(p) => b.setEnc(pivotEncoding(p, b.enc.facet))} />
+          ) : engine ? (
+            <EngineShelves kind={engine} projectId={projectId} datasetId={datasetId} cols={columns} encoding={b.enc} onChange={b.setEnc} />
+          ) : (
+            <EncodingForm projectId={projectId} cols={columns} related={related} encoding={b.enc} info={b.reply?.category} onChange={b.setEnc} />
+          )}
           {!engine && (
             <FacetShelf
               cols={columns}

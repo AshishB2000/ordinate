@@ -134,6 +134,12 @@ export function eventWhen(e: ProjectEvent): string {
   return rangeLabel({ from: e.date, to: e.end || e.date });
 }
 
+/** How many days an event covers, both ends included — 1 for a one-day event. */
+export function eventDays(e: ProjectEvent): number {
+  const s = eventSpan(e);
+  return s ? s.to - s.from + 1 : 1;
+}
+
 /**
  * A PERIOD KEY as the insights and alerts write it — a year, a quarter
  * ('2024-Q4'), a year-month ('2024-11') or one raw date cell — → its days.

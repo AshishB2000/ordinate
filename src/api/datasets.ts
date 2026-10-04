@@ -156,8 +156,20 @@ export const datasets = {
       base: TableRef,
       joins: z.array(Join).max(20),
       steps: Steps,
-      sourceKind: z.enum(['csv', 'json', 'xlsx', 'parquet', 'paste', 'capture']).optional(),
-      origin: z.strictObject({ kind: z.literal('capture'), captureId: z.string().regex(/^[0-9a-zA-Z_-]{1,64}$/) }).optional(),
+      sourceKind: z.enum(['csv', 'json', 'xlsx', 'parquet', 'paste', 'capture', 'sql']).optional(),
+      origin: z
+        .union([
+          z.strictObject({ kind: z.literal('capture'), captureId: z.string().regex(/^[0-9a-zA-Z_-]{1,64}$/) }),
+          // T2.11: SQL over the project's datasets, as sql:prepareSave returned it. Refresh re-runs it
+          // through the same read-only gate and engine lock; sanitizeOrigin owns every field.
+          z.strictObject({
+            kind: z.literal('sql'),
+            sql: z.string().max(20_000),
+            deps: z.array(Uuid).max(200),
+            params: z.array(z.looseObject({ name: z.string().max(40) })).max(32).optional(),
+          }),
+        ])
+        .optional(),
       retype: z.array(TypedColumn).max(1_000).optional(),
     }),
     project: byProjectId,

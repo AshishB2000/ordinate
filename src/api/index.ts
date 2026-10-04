@@ -28,6 +28,8 @@ import { prepare } from './prepare';
 import { settings } from './settings';
 import { reports } from './reports';
 
+import { analyticsB } from './analyticsB';
+
 export const contracts = {
   ...projects,
   ...datasets,
@@ -55,6 +57,8 @@ export const contracts = {
   ...analyses,
   ...metrics,
   ...reports,
+
+  ...analyticsB,
 } as const;
 
 export type Channel = keyof typeof contracts;

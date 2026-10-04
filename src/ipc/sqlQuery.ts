@@ -11,12 +11,14 @@
 //   sql:explain      validate: the columns and types it WOULD return, no rows
 //   sql:prepareSave  the whole result at the dataset cap, plus the `sql` origin
 //                    that re-runs it — handed to the ordinary composer save
+//   sql:datasetQuery a SQL dataset's own statement ("View query", server only)
 
 import { ipcMain } from './bus';
 import { isValidId } from '../app/ids';
 import { viewColumns } from '../engine/datasetView';
 import * as sqlDatasets from '../engine/sqlDatasets';
 import * as importStage from '../data/importStage';
+import * as datasets from '../data/datasets';
 import * as jobs from '../app/jobs';
 
 export async function schemaFor(projectId: unknown) {
@@ -37,7 +39,18 @@ export async function schemaFor(projectId: unknown) {
   };
 }
 
+/** "View query": a SQL dataset's statement and parameters — origin kind `sql` only (nothing outside the project). */
+export async function datasetQuery(projectId: unknown, datasetId: unknown) {
+  if (!isValidId(projectId) || !isValidId(datasetId)) return { ok: false, error: 'Invalid id' };
+  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  const o = meta && meta.origin;
+  if (!o || o.kind !== 'sql') return { ok: false, error: 'This dataset was not made by a query.' };
+  return { ok: true, sql: o.sql, params: o.params ?? [] };
+}
+
 export function register(): void {
+  ipcMain.handle('sql:datasetQuery', async (_e, { projectId, datasetId }: any = {}) => datasetQuery(projectId, datasetId));
+
   ipcMain.handle('sql:schema', async (_e, { projectId }: any = {}) => {
     try {
       return await schemaFor(projectId);
