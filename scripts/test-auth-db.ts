@@ -52,6 +52,7 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
   await admin.connect();
   await admin.query(`CREATE DATABASE ${dbName}`);
   const pool = new Pool({ connectionString: scratch.toString(), max: 2 });
+  pool.on('error', () => undefined); // an idle client cut by the DROP DATABASE … WITH (FORCE) teardown
   const apps: FastifyInstance[] = [];
   let mock: MockOidc | null = null;
   try {

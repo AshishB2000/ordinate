@@ -236,6 +236,7 @@ const listen = async (app: import('fastify').FastifyInstance): Promise<string> =
   await root.connect();
   await root.query(`CREATE DATABASE ${dbName}`);
   const pool = new Pool({ connectionString: scratch.toString(), max: 2 });
+  pool.on('error', () => undefined); // an idle client cut by the DROP DATABASE … WITH (FORCE) teardown
   try {
     const app = appMod.buildApp(envMod.parseEnv({
       LOG_LEVEL: 'trace', DATA_DIR: DATA, DATABASE_URL: scratch.toString(), ORDINATE_MASTER_KEY: MASTER, AUTH_MODE: 'header',

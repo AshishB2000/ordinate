@@ -193,6 +193,7 @@ function run(args: string[], env: Record<string, string>): Promise<{ code: numbe
   await admin.connect();
   await admin.query(`CREATE DATABASE ${dbName}`);
   const pool = new Pool({ connectionString: scratch, max: 4 });
+  pool.on('error', () => undefined); // an idle client cut by the DROP DATABASE … WITH (FORCE) teardown
   const childOut: string[] = [];
   try {
     await mig.migrate(pool);
