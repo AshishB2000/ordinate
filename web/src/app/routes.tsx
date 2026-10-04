@@ -62,10 +62,14 @@ export const pages: RouteObject[] = [
   page('/pipelines', () => import('../features/prepare/PipelinesPage')),
   page('/pipelines/:projectId', () => import('../features/prepare/PipelinesPage')),
 
-  // Analytics workbenches A (T2.10): the doors and the dataset workbenches.
+  // Analytics workbenches A (T2.10): the doors, the three dataset workbenches, and scenarios.
   page('/analytics', () => import('../features/analytics/AnalyticsPage')),
   page('/analytics/:projectId/:datasetId/stats', () => import('../features/analytics/stats/StatsPage')),
   page('/analytics/:projectId/:datasetId/drivers', () => import('../features/analytics/drivers/DriversPage')),
+  page('/analytics/:projectId/:datasetId/segments', () => import('../features/analytics/segments/SegmentsPage')),
+  page('/analytics/scenarios/:projectId', () => import('../features/analytics/scenarios/ScenariosPage')),
+  page('/analytics/scenarios/:projectId/compare', () => import('../features/analytics/scenarios/ScenarioComparePage')),
+  page('/analytics/scenarios/:projectId/:scenarioId', () => import('../features/analytics/scenarios/ScenarioPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.
