@@ -143,6 +143,7 @@ const tmpDir = (tag: string): string => fs.mkdtempSync(path.join(os.tmpdir(), `o
   await admin.connect();
   await admin.query(`CREATE DATABASE ${dbName}`);
   const pool = new Pool({ connectionString: scratch.toString(), max: 2 });
+  pool.on('error', () => undefined); // an idle client cut by the DROP DATABASE … WITH (FORCE) teardown
   const runs: Run[] = [];
   try {
     const data = tmpDir('pods');

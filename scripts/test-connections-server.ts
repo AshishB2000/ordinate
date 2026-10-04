@@ -198,6 +198,7 @@ async function listen(env: Record<string, string>): Promise<{ base: string; clos
   await root.query(`CREATE DATABASE ${appDb}`);
   await root.query(`CREATE DATABASE ${srcDb}`);
   const pool = new Pool({ connectionString: at(appDb), max: 2 });
+  pool.on('error', () => undefined); // an idle client cut by the DROP DATABASE … WITH (FORCE) teardown
   try {
     const src = new Client({ connectionString: at(srcDb) });
     await src.connect();

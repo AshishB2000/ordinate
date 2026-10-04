@@ -57,6 +57,7 @@ const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-admin-db-'));
   await admin.connect();
   await admin.query(`CREATE DATABASE ${dbName}`);
   const pool = new Pool({ connectionString: scratch.toString(), max: 2 });
+  pool.on('error', () => undefined); // an idle client cut by the DROP DATABASE … WITH (FORCE) teardown
   const apps: FastifyInstance[] = [];
   try {
     context.enterServerMode(DATA);

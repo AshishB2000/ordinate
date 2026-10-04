@@ -271,10 +271,13 @@ export async function saasSection(s: Smoke, fx: Fixture): Promise<void> {
     fs.appendFileSync(path.join(folder, 'sales.csv'), 'South,40\n');
     const grew = await until(win, async () => ((await datasetNamed(app, fx.projectId, 'Watched sales')) || {}).rowCount === 4, 30_000);
     ok('saas: changing the file brings its new row in', grew);
-    const watchJob = await win.evaluate(async () => {
+    // The second refresh writes its row before its job is marked done: wait for the job, as every check here waits.
+    const doneWatchJobs = () => win.evaluate(async () => {
       const snap = await (window as any).hubPlatform.listJobs();
       return (snap.recent || []).filter((j: any) => j.kind === 'refresh' && j.label === 'Refresh Watched sales' && j.state === 'done').length;
     });
+    await until(win, async () => (await doneWatchJobs()) >= 2, 30_000);
+    const watchJob = await doneWatchJobs();
     ok('saas: each watched refresh ran as a refresh job', watchJob >= 2, watchJob);
 
     // ── The rail's toggle turns it off ───────────────────────────────────────
