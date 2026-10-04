@@ -11,7 +11,9 @@
 // URL — never a path — so a renderer can show it, a report can embed it and
 // an export can carry it, all without file access.
 
-import { dialog } from 'electron';
+// Electron's `dialog` loads inside the logo picker only: the server loads this
+// module for `prefs:get` (the web shell's formats and accent).
+const dialog = (): typeof import('electron').dialog => (require('electron') as typeof import('electron')).dialog;
 import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import * as fs from 'fs';
@@ -57,7 +59,7 @@ export function register(): void {
       properties: ['openFile' as const],
       filters: [{ name: 'Logo (PNG or SVG)', extensions: ['png', 'svg'] }],
     };
-    const res = hub ? await dialog.showOpenDialog(hub, opts) : await dialog.showOpenDialog(opts);
+    const res = hub ? await dialog().showOpenDialog(hub, opts) : await dialog().showOpenDialog(opts);
     if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true };
     let buf: Buffer;
     try {

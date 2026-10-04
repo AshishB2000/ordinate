@@ -1,7 +1,7 @@
 import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import type { BrowserWindow, OpenDialogOptions, WebContents } from 'electron';
-import { windowOf } from '../server/context';
+import { serverDataDir, windowOf } from '../server/context';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as config from '../app/config';
@@ -118,6 +118,10 @@ export function backUpNow(scheduled = false): Promise<RunOutcome> {
  * still happens.
  */
 export async function safetyBackup(reason: 'before-import' | 'before-restore', projectId?: string): Promise<void> {
+  // Server: backups are the operator's (Postgres and the volume or bucket —
+  // plan §8), and there is no "active project"; a zip under the org's
+  // userData nobody can reach would only cost disk.
+  if (serverDataDir() !== null) return;
   try {
     const id = projectId || (await captureProjectId());
     const project = id ? await projects.getProject(id) : null;

@@ -34,6 +34,7 @@ import * as projects from './projects';
 import { projectDir, projectsBase, isValidId } from './recordKinds';
 import { bundleThemesEntry, importBundleThemes } from './themeStore';
 import * as recordFs from './recordFs';
+import { serverDataDir } from '../server/context';
 import { bundleTemplatesEntry, importBundleTemplates } from './userTemplateStore'; // r7:templates
 
 export const BUNDLE_FORMAT = 'ordinate-project';
@@ -333,6 +334,13 @@ export interface BundleProgress {
   checkCancelled?: () => void;
 }
 
+/** The version stamped into a manifest: Electron's on the desktop, package.json's on the server (no Electron there). */
+function appVersion(): string {
+  if (serverDataDir() !== null) return (require('../../package.json') as { version: string }).version;
+  const { app } = require('electron') as typeof import('electron');
+  return app.getVersion ? app.getVersion() : '';
+}
+
 export async function exportProject(
   projectId: string,
   opts: BundleProgress = {},
@@ -360,12 +368,10 @@ export async function exportProject(
   if (alerts) {
     try { counts.alerts = (JSON.parse(alerts.data.toString('utf8')).rules || []).length; } catch (_) { counts.alerts = 0; }
   }
-  // Lazy: the server's Home graph loads this module without Electron.
-  const { app } = require('electron') as typeof import('electron');
   const manifest: BundleManifest = {
     format: BUNDLE_FORMAT,
     formatVersion: BUNDLE_VERSION,
-    appVersion: app.getVersion ? app.getVersion() : '',
+    appVersion: appVersion(),
     exportedAt: new Date().toISOString(),
     project: { name: project.name },
     counts,

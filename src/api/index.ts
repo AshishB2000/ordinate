@@ -13,6 +13,9 @@ import { maps } from './maps';
 import { connections } from './connections';
 import { assistant } from './assistant';
 
+import { trash } from './trash';
+import { versions } from './versions';
+
 export const contracts = {
   ...projects,
   ...datasets,
@@ -24,6 +27,9 @@ export const contracts = {
   ...maps,
   ...connections,
   ...assistant,
+
+  ...trash,
+  ...versions,
 } as const;
 
 export type Channel = keyof typeof contracts;

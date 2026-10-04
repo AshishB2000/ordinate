@@ -21,7 +21,7 @@ import { toast } from '../../ui/Toast';
 import { ask, newThread, useHistory, useKeyStatus, PROVIDER_LABEL, type ActivityStep, type SuggestedAction, type Turn } from './api';
 import { Connect } from './Connect';
 import { AiPill, ModelChip, ThreadMenu, TOGGLE_ID } from './DockParts';
-import { pickDockProject, setDockOpen, useDockContext, useDockProject } from './dockState';
+import { pickDockProject, setDockOpen, takePendingQuestion, useDockContext, useDockProject, usePendingQuestion } from './dockState';
 import { PlanCard, type PlanAction } from './PlanCard';
 import { starterPrompts } from './prompts';
 import { Transcript, type Pending } from './Transcript';
@@ -103,6 +103,20 @@ export default function DockPanel() {
       offKey();
     };
   }, [qc]);
+
+  // A question handed over from Home's ask bar: asked once the dock knows it can
+  // (project, model, thread loaded), else left in the composer; focus moves in either way.
+  const handed = usePendingQuestion();
+  const decided = !!status.data && !project.loading && !(pid && history.isPending);
+  const asker = useRef({ send, usable });
+  asker.current = { send, usable }; // the current render's, read once per handed question
+  useEffect(() => {
+    if (!handed || !decided) return;
+    const q = takePendingQuestion();
+    if (asker.current.usable) void asker.current.send(q);
+    else setText(q);
+    (input.current && !input.current.disabled ? input.current : panel.current)?.focus();
+  }, [handed, decided]);
 
   // Keep the newest turn in view.
   useEffect(() => {

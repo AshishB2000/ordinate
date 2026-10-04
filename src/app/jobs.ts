@@ -36,7 +36,7 @@
 import * as fs from 'fs';
 import { randomUUID } from 'crypto';
 import { AsyncLocalStorage } from 'async_hooks';
-import { requestClient } from '../server/context';
+import { ctx, requestClient, serverDataDir } from '../server/context';
 
 export type JobKind =
   | 'import' | 'refresh' | 'export' | 'report' | 'bundle' | 'sql-save' | 'quality'
@@ -70,6 +70,8 @@ export interface Job {
   silent?: boolean;
   /** Server only: the browser tab that submitted it — its events go to that tab's stream alone (src/server/sse.ts). */
   client?: number;
+  /** Server only: who submitted it (`org\nemail`). Only they list, cancel or clear it (src/ipc/jobs.ts). */
+  owner?: string;
 }
 
 export interface JobContext {
@@ -155,6 +157,35 @@ export function snapshot(): JobsSnapshot {
   return { active, recent: recent.map((j) => ({ ...j })) };
 }
 
+/** Server: who the current request is (`org\nemail`), or undefined (desktop, no request). */
+export function requestOwner(): string | undefined {
+  if (serverDataDir() === null) return undefined;
+  try {
+    const c = ctx();
+    return `${c.org.id}\n${c.user.email}`;
+  } catch (_) {
+    return undefined; // a scheduler tick outside any request
+  }
+}
+
+/**
+ * A job as a browser tab may see it: no server file path (a tab gets a
+ * download token, never a path), no stream number, no owner.
+ */
+export function publicJob(j: Job): Job {
+  const { client: _c, owner: _o, result, ...rest } = j;
+  const out: Job = { ...rest };
+  if (result?.message) out.result = { message: result.message };
+  return out;
+}
+
+/** Server: `owner`'s jobs only, each as a tab may see it. */
+export function snapshotFor(owner: string): JobsSnapshot {
+  const s = snapshot();
+  const mine = (list: Job[]) => list.filter((j) => j.owner === owner).map(publicJob);
+  return { active: mine(s.active), recent: mine(s.recent) };
+}
+
 export function get(id: string): Job | null {
   const e = running.get(id) || queue.find((q) => q.job.id === id);
   if (e) return { ...e.job };
@@ -186,6 +217,8 @@ export function submit<T>(spec: JobSpec<T>): { id: string; done: Promise<T> } {
   if (spec.silent) job.silent = true;
   const client = requestClient();
   if (client) job.client = client.id;
+  const owner = requestOwner();
+  if (owner) job.owner = owner;
   let resolve!: (v: unknown) => void;
   let reject!: (e: unknown) => void;
   const done = new Promise<T>((res, rej) => {
@@ -246,9 +279,9 @@ export function current(): JobContext | null {
   return running_ctx.getStore() || null;
 }
 
-/** Drop finished jobs from the recent list (the popover's "Clear"). */
-export function clearRecent(): void {
-  recent = [];
+/** Drop finished jobs from the recent list (the popover's "Clear") — on the server, only `owner`'s. */
+export function clearRecent(owner?: string): void {
+  recent = owner === undefined ? [] : recent.filter((j) => j.owner !== owner);
   persist();
   emit();
 }

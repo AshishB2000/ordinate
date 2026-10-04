@@ -1,4 +1,3 @@
-import { shell } from 'electron';
 import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import { senderOf } from '../server/context';
@@ -6,7 +5,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as jobs from '../app/jobs';
 import * as hubs from '../windows/hubRegistry';
-import { notifyJob } from '../app/notify';
+
+// Electron (`shell`, and notify.ts's `Notification`) loads inside the desktop
+// paths only: the server loads this module for its three contracted channels.
+const shell = (): typeof import('electron').shell => (require('electron') as typeof import('electron')).shell;
 
 // Jobs IPC — the Jobs popover's list, Cancel, Reveal and Clear, the push that
 // keeps every hub window's popover live, and the notification when a job
@@ -77,8 +79,8 @@ export function register(deps: { hubFocused: () => boolean; focusHub: () => void
     const title = job.state === 'error' ? 'Job failed' : (KIND_TITLE[job.kind] || 'Job finished');
     const body = job.state === 'error' ? `${job.label} — ${job.error || 'failed'}` : job.label;
     const out = job.result && job.result.path;
-    notifyJob(title, body, () => {
-      if (out && fs.existsSync(out)) shell.showItemInFolder(out);
+    (require('../app/notify') as typeof import('../app/notify')).notifyJob(title, body, () => {
+      if (out && fs.existsSync(out)) shell().showItemInFolder(out);
       else deps.focusHub();
     });
   });
@@ -150,7 +152,25 @@ export function register(deps: { hubFocused: () => boolean; focusHub: () => void
     const p = job && job.result && job.result.path;
     if (!p) return { ok: false, error: 'This job has no file to show.' };
     if (!fs.existsSync(p)) return { ok: false, error: 'The file is no longer there.' };
-    shell.showItemInFolder(p);
+    shell().showItemInFolder(p);
+    return { ok: true };
+  });
+}
+
+/**
+ * The server's Jobs channels (src/server/app.ts). A tab sees, cancels and
+ * clears only its own user's jobs — the queue is shared by every org on the
+ * pod — each as `jobs.publicJob` (no server path). No Reveal: there is no file
+ * manager to open; an export's file reaches a tab as a download (T0.4).
+ */
+export function registerServer(): void {
+  const owner = (): string => jobs.requestOwner() ?? '\u0000'; // outside a request: matches no job
+  ipcMain.handle('jobs:list', () => jobs.snapshotFor(owner()));
+  ipcMain.handle('jobs:cancel', (_e, { id }: { id: string }) => ({
+    ok: jobs.get(id)?.owner === owner() && jobs.cancel(id),
+  }));
+  ipcMain.handle('jobs:clear', () => {
+    jobs.clearRecent(owner());
     return { ok: true };
   });
 }

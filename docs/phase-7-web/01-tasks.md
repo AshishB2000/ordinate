@@ -185,14 +185,14 @@ Each task: read every legacy file listed, write the parity checklist into the PR
 every channel the screen uses, convert any `dialog` call it hits to the T0.4 file flows, one e2e
 spec + screenshots. Feature code lives in `web/src/features/<area>/`.
 
-### [ ] T2.1 Home and app chrome
+### [x] T2.1 Home and app chrome
 - **Branch** `web/t2.1-home` · **Legacy:** `homePage`, `homeAsk`, `homeData`, `getStarted`,
   `navCard`, `workspace`, `hub`, `hubMenus` (→ in-app menus), `hubNotify` (→ Toast), `jobsPanel`,
   `coachMarks`, `brand`, `emptyState`, `skeleton`.
 - Drop: `tabNav`, `tabStrip`, `tabModel`, `tabSplit`, `tabKinds` (routes replace tabs),
   `hubHotkey`, `hubCapture`, `lazyScript`.
 
-### [ ] T2.2 Projects, trash, versions
+### [x] T2.2 Projects, trash, versions
 - **Branch** `web/t2.2-projects` · **Legacy:** `projects`, `projectSwitcher`, `trashPage`,
   `versionsPanel`. Drop `projectSync` (sync folder is desktop-only).
 

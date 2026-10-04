@@ -1,5 +1,6 @@
 // Project sharing (T3.3): the handlers behind `project:access` (who holds
-// which role) and `project:share` (grant, change, remove). The route has
+// which role) and `project:share` (grant, change, remove); T2.2 adds
+// `projects:roles` (the caller's own) and `project:shareTargets` (whom to add). The route has
 // already checked the caller — read on the project for the list, project
 // admin for a change — so these only check that the grantee is a user or
 // team of the caller's org. The owner team's grant is not changed here
@@ -9,6 +10,7 @@
 import type { Pool } from 'pg';
 import { ctx } from '../context';
 import { registry } from '../rpc';
+import { rolesOf } from './index';
 
 type Role = 'viewer' | 'editor' | 'admin';
 type Member = { userId: string } | { teamId: string };
@@ -22,13 +24,54 @@ export interface Grant {
   readonly owner: boolean;
 }
 
-/** Registers the two channels; `pool()` is read per call (null → the server has no Postgres). */
+/** Who a project admin may share with: the org's enabled users and its teams. */
+export interface ShareTargets {
+  readonly users: readonly { id: string; email: string }[];
+  readonly teams: readonly { id: string; name: string }[];
+}
+
+// ponytail: one pool per process, like app.ts's — set by register().
+let poolOf: () => Pool | null = () => null;
+
+/**
+ * A deleted project's grants (projects:delete, src/ipc/projects.ts). Ids are
+ * never reused, so a left-over row would only be dead weight in every
+ * `readable()` set — but a project that is gone should leave no access behind.
+ */
+export async function dropGrants(projectId: string): Promise<void> {
+  const p = poolOf();
+  if (p) await p.query('DELETE FROM project_grants WHERE org_id = $1 AND project_id = $2', [ctx().org.id, projectId]);
+}
+
+/** Registers the channels; `pool()` is read per call (null → the server has no Postgres). */
 export function register(pool: () => Pool | null): void {
+  poolOf = pool;
   const db = (): Pool => {
     const p = pool();
     if (!p) throw new Error('sharing needs Postgres (DATABASE_URL)');
     return p;
   };
+
+  // The caller's own role on each project they can open, in one query. Works
+  // without Postgres: there the only caller is the dev admin, admin on all.
+  registry.handle('projects:roles', async () =>
+    rolesOf(pool(), ctx(), async () => {
+      const projects = require('../../app/projects') as typeof import('../../app/projects');
+      return (await projects.listProjects()).map((p) => p.id);
+    }),
+  );
+
+  registry.handle('project:shareTargets', async (): Promise<ShareTargets> => {
+    const org = ctx().org.id;
+    const [users, teams] = await Promise.all([
+      db().query<{ id: string; email: string }>(
+        'SELECT id::text, email FROM users WHERE org_id = $1 AND disabled_at IS NULL ORDER BY email',
+        [org],
+      ),
+      db().query<{ id: string; name: string }>('SELECT id::text, name FROM teams WHERE org_id = $1 ORDER BY name', [org]),
+    ]);
+    return { users: users.rows, teams: teams.rows };
+  });
 
   registry.handle('project:access', async (_e, { projectId }: { projectId: string }): Promise<Grant[]> => {
     const r = await db().query<Grant>(

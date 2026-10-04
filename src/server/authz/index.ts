@@ -83,6 +83,33 @@ export async function authorize(contract: Contract, input: unknown, who: Identit
 }
 
 /**
+ * The caller's effective role on every project they hold one on, by the rule
+ * above — what a screen asks so it offers only the actions the server would
+ * allow (`projects:roles`). Never an authorization decision itself. An org
+ * admin's is `admin` on all of `orgProjects`.
+ */
+export async function rolesOf(pool: Pool | null, who: Identity, orgProjects: () => Promise<string[]>): Promise<Record<string, 'viewer' | 'editor' | 'admin'>> {
+  const out: Record<string, 'viewer' | 'editor' | 'admin'> = {};
+  if (who.user.role === 'admin') {
+    for (const id of await orgProjects()) out[id] = 'admin';
+    return out;
+  }
+  if (!pool) return out;
+  const r = await pool.query<{ project_id: string; role: 'viewer' | 'editor' | 'admin' }>(
+    `SELECT g.project_id::text,
+            (ARRAY['viewer', 'editor', 'admin'])[max(CASE g.role WHEN 'admin' THEN 3 WHEN 'editor' THEN 2 WHEN 'viewer' THEN 1 END)] AS role
+       FROM users u
+       JOIN project_grants g ON g.org_id = u.org_id
+        AND (g.user_id = u.id OR g.team_id IN (SELECT team_id FROM team_members WHERE user_id = u.id))
+      WHERE u.org_id = $1 AND u.email = $2 AND u.disabled_at IS NULL
+      GROUP BY g.project_id`,
+    [who.org.id, who.user.email],
+  );
+  for (const row of r.rows) out[row.project_id] = row.role;
+  return out;
+}
+
+/**
  * `canRead(projectId)` for the caller — what an org-level list is trimmed by.
  * Org admins read every project of their org; anyone else, the projects they
  * hold any grant on (directly or through a team).

@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { useDatasets, type DatasetSummary } from '../../api/datasets';
-import { useProjects } from '../../api/projects';
+import { useCurrentProject } from '../../features/projects/current';
 import { useVizData } from '../../api/visuals';
 import { EmptyState, ErrorState, Page, SkeletonRows } from '../../app/blocks';
 import { Button } from '../../ui/Button';
@@ -60,7 +60,7 @@ function Tile({ id, projectId, datasetId }: { id: VizId; projectId: string; data
       </header>
       {renderer && NOTE[renderer] && <p className={s.note}>{NOTE[renderer]}</p>}
       <div className={s.body}>
-        {q.isPending ? (
+        {q.status === 'pending' ? (
           <SkeletonBlock label={`Loading ${label}`} />
         ) : q.isError ? (
           <ErrorState compact heading={3} title="No data for this chart" message={q.error.message} onRetry={() => void q.refetch()} />
@@ -101,14 +101,15 @@ function ForProject({ projectId }: { projectId: string }) {
 }
 
 export default function ChartsGallery() {
-  const q = useProjects();
-  const project = q.data?.[0];
+  // The current project (the shell's, T2.2): no second project list per load.
+  const q = useCurrentProject();
+  const project = q.project;
   return (
     <Page title="Charts" sub={`All ${VIZ_IDS.length} chart types, computed by the server over the sample dataset and drawn by the chart engine.`}>
-      {q.isPending ? (
+      {q.status === 'pending' ? (
         <SkeletonRows label="Loading projects" rows={3} />
-      ) : q.isError ? (
-        <ErrorState title="Projects could not be loaded" message={q.error.message} onRetry={() => void q.refetch()} />
+      ) : q.status === 'error' ? (
+        <ErrorState title="Projects could not be loaded" message={q.error?.message ?? ''} onRetry={q.refetch} />
       ) : !project ? (
         <EmptyState icon="folder" title="No project to draw from">
           The gallery needs the sample project, which a new server seeds on first start.

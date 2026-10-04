@@ -19,15 +19,17 @@ export interface PopoverProps {
   onOpenChange?: (open: boolean) => void;
   align?: 'start' | 'center' | 'end';
   side?: 'top' | 'right' | 'bottom' | 'left';
+  /** Replaces the panel's own size and padding (a list that runs edge to edge). */
+  className?: string;
 }
 
-export function Popover({ trigger, children, title, heading, open, onOpenChange, align = 'start', side = 'bottom' }: PopoverProps) {
+export function Popover({ trigger, children, title, heading, open, onOpenChange, align = 'start', side = 'bottom', className }: PopoverProps) {
   return (
     <P.Root open={open} onOpenChange={onOpenChange}>
       <P.Trigger asChild>{trigger}</P.Trigger>
       <P.Portal>
         <P.Content
-          className={`${f.surface} ${s.popover}`}
+          className={`${f.surface} ${className ?? s.popover}`}
           align={align}
           side={side}
           sideOffset={6}

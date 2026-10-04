@@ -13,12 +13,27 @@ import { IconButton } from '../ui/Button';
 import { Menu, type MenuEntry } from '../ui/Menu';
 import { PageSkeleton } from '../ui/Skeleton';
 import { toast, Toaster } from '../ui/Toast';
+import { ProjectProvider } from '../features/projects/current';
+import { ProjectSwitcher } from '../features/projects/ProjectSwitcher';
+import { JobsButton } from './JobsButton';
 import { NAV, type NavItem } from './nav';
 import { Dock, DockToggle } from '../features/assistant/DockParts';
+import { useWorkspacePrefs } from './prefs';
 import { THEME_PREFS, useThemePref, type ThemePref } from './theme';
 import s from './Shell.module.css';
 
 const THEME_LABEL: Record<ThemePref, string> = { system: 'System', light: 'Light', dark: 'Dark' };
+
+// hubMenus.ts HELP_LINKS — opened in a new tab, never inside the app.
+const REPO = 'https://github.com/AshishB2000/screenchart';
+const openLink = (url: string) => () => void window.open(url, '_blank', 'noopener,noreferrer');
+const HELP_ITEMS: MenuEntry[] = [
+  { kind: 'separator' },
+  { kind: 'heading', label: 'Help' },
+  { label: 'Help and feedback', icon: 'message-square', onSelect: openLink(`${REPO}/issues/new/choose`) },
+  { label: "What's new", icon: 'sparkles', onSelect: openLink(`${REPO}/releases`) },
+  { label: 'Source on GitHub', icon: 'external-link', onSelect: openLink(REPO) },
+];
 
 function NavEntry({ item }: { item: NavItem }) {
   return (
@@ -102,6 +117,7 @@ function UserMenu() {
         { kind: 'separator' },
         { label: 'Settings', icon: 'settings', onSelect: () => void navigate('/settings') },
         { label: 'API tokens', icon: 'terminal', onSelect: () => void navigate('/tokens') },
+        ...HELP_ITEMS,
         ...signOutItems,
       ]}
     />
@@ -109,6 +125,7 @@ function UserMenu() {
 }
 
 export function Shell() {
+  useWorkspacePrefs();
   const me = useMe();
   // Admin is for org admins (the server refuses its channels to anyone else):
   // hidden once the role is known to be another; the page explains itself too.
@@ -121,56 +138,48 @@ export function Shell() {
   // the server already sends a signed-out first visit to /sign-in.
   if (me.data && me.data.user === null) return <Navigate to={signInPath(here.pathname + here.search)} replace />;
   return (
-    <div className={s.win}>
-      <a className={s.skip} href="#main">
-        Skip to content
-      </a>
-      <header className={s.topbar}>
-        <div className={s.side}>
-          <button
-            type="button"
-            className={s.project}
-            aria-disabled="true"
-            aria-label="Switch project (coming soon)"
-            title="Project switching is coming soon"
-          >
-            <span className={s.projectAvatar}>
-              <Icon name="folder" />
-            </span>
-            <span className={s.projectName}>All projects</span>
-            <Icon name="chevron-down" />
-          </button>
-        </div>
-        <div className={s.search} role="search">
-          <Icon name="search" />
-          <input className={s.searchInput} type="search" placeholder="Search" aria-label="Search" />
-        </div>
-        <div className={`${s.side} ${s.right}`}>
-          <DockToggle />
-          <UserMenu />
-        </div>
-      </header>
-      <div className={s.body}>
-        <nav className={s.rail} aria-label="Sections">
-          <div className={s.nav}>
-            {main.map((n) => (
-              <NavEntry key={n.to} item={n} />
-            ))}
+    <ProjectProvider>
+      <div className={s.win}>
+        <a className={s.skip} href="#main">
+          Skip to content
+        </a>
+        <header className={s.topbar}>
+          <div className={s.side}>
+            <ProjectSwitcher />
           </div>
-          <div className={s.bottom}>
-            {bottom.map((n) => (
-              <NavEntry key={n.to} item={n} />
-            ))}
+          <div className={s.search} role="search">
+            <Icon name="search" />
+            <input className={s.searchInput} type="search" placeholder="Search" aria-label="Search" />
           </div>
-        </nav>
-        <main id="main" className={s.stage} tabIndex={-1}>
-          <Suspense fallback={<PageSkeleton />}>
-            <Outlet />
-          </Suspense>
-        </main>
-        <Dock />
+          <div className={`${s.side} ${s.right}`}>
+            <JobsButton />
+            <span className={s.divider} aria-hidden="true" />
+            <DockToggle />
+            <UserMenu />
+          </div>
+        </header>
+        <div className={s.body}>
+          <nav className={s.rail} aria-label="Sections">
+            <div className={s.nav}>
+              {main.map((n) => (
+                <NavEntry key={n.to} item={n} />
+              ))}
+            </div>
+            <div className={s.bottom}>
+              {bottom.map((n) => (
+                <NavEntry key={n.to} item={n} />
+              ))}
+            </div>
+          </nav>
+          <main id="main" className={s.stage} tabIndex={-1}>
+            <Suspense fallback={<PageSkeleton />}>
+              <Outlet />
+            </Suspense>
+          </main>
+          <Dock />
+        </div>
+        <Toaster />
       </div>
-      <Toaster />
-    </div>
+    </ProjectProvider>
   );
 }

@@ -51,6 +51,15 @@ const Encoding = z.looseObject({
   geo: Geo.optional(),
 });
 
+const VizDataInput = z.strictObject({
+  projectId: Uuid,
+  datasetId: Uuid,
+  encoding: Encoding,
+  filters: Filters.optional(),
+  params: z.record(z.string().max(200), z.unknown()).optional(),
+  analytics: z.array(z.looseObject({})).max(50).optional(),
+});
+
 export const visuals = {
   // preload: invoke('visual:data', { projectId, datasetId, encoding, filters }) — the
   // `{labels, series}` a chart draws (T1.1). The dataset is read from the
@@ -58,16 +67,13 @@ export const visuals = {
   // nothing. Filters are transform `filter` steps, re-sanitized by the
   // handler. `params` / `share` / `analytics` / `asOf` / `currency` join with
   // the screens that send them.
-  'visual:data': rpc({
+  'visual:data': rpc({ access: 'read', input: VizDataInput, project: byProjectId }),
+  // Server only (T2.1): up to 50 `visual:data` requests of one project in one
+  // call, answered in order — what a page of charts sends instead of one RPC
+  // per tile (web/src/api/visuals.ts batches them; plan §9's budget).
+  'visual:dataBatch': rpc({
     access: 'read',
-    input: z.strictObject({
-      projectId: Uuid,
-      datasetId: Uuid,
-      encoding: Encoding,
-      filters: Filters.optional(),
-      params: z.record(z.string().max(200), z.unknown()).optional(),
-      analytics: z.array(z.looseObject({})).max(50).optional(),
-    }),
+    input: z.strictObject({ projectId: Uuid, items: z.array(VizDataInput.omit({ projectId: true })).min(1).max(50) }),
     project: byProjectId,
   }),
 } as const;

@@ -20,7 +20,6 @@
 
 import * as scheduler from '../../app/refreshScheduler';
 import * as config from '../../app/config';
-import * as trash from '../../app/trash';
 import * as pipelineRunner from '../../app/pipelineRunner';
 import * as alertStore from '../../analysis/alertStore';
 import { ctx } from '../context';
@@ -48,10 +47,10 @@ export function wireSchedules(): void {
   scheduler.onTickAlerts((batches) => {
     for (const b of batches) publish(org(), 'alerts:fired', b);
   });
-  // ponytail: ipc/pipelines and ipc/trash add these same hooks when registered;
-  // they are not registered on the server yet — drop these two when they are.
+  // ponytail: ipc/pipelines adds this same hook when registered; it is not
+  // registered on the server yet — drop this when it is. (ipc/trash is, since
+  // T2.2: its own afterTick hook runs the 30-day Trash purge.)
   scheduler.afterTick(() => { void pipelineRunner.tick().catch(() => undefined); });
-  scheduler.afterTick(() => { void trash.purgeExpired().catch(() => 0); });
 
   defineJob('tick', {
     everyMs: TICK_EVERY_MS,
