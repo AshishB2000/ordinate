@@ -60,7 +60,7 @@ const ALLOWED: Record<string, number> = {
   'scripts/test-connectorsHttp.ts': 881,
   'src/ai/analyze.ts': 883,
   'src/engine/anomaliesResident.ts': 870,
-  'src/connectors/http.ts': 1036,
+  'src/connectors/http.ts': 1035,
   'src/connectors/local.ts': 778,
   'src/cli/localCliRun.ts': 822,
 };

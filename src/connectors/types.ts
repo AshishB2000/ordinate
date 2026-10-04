@@ -21,6 +21,7 @@
 //      warehouse is how a local-first app becomes someone's surprise bill.
 
 import type { ColumnType } from '../data/parse';
+import type { PinnedHost } from './ssrf';
 
 /** One input on the connection form. Rendered generically by the renderer. */
 export interface ConnectorField {
@@ -111,6 +112,12 @@ export interface ConnectorContext {
   rowLimit: number;
   /** Hard cap on wall-clock for one operation. The connector applies it. */
   timeoutMs: number;
+  /**
+   * Server only (T6.1): the `host` field resolved, checked and pinned by
+   * connectionRun. A DB driver connects to `pinned.address` (TLS still names
+   * `pinned.host`), so DNS answering differently at connect time changes nothing.
+   */
+  pinned?: PinnedHost;
 }
 
 export interface ConnectorDef {

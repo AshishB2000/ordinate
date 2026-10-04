@@ -145,6 +145,9 @@ async function listen(env: Record<string, string>): Promise<{ base: string; clos
   const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-t25-srv-'));
   context.enterServerMode(DATA);
   appMod.registerHandlers();
+  // The source Postgres is on localhost, which the SSRF guard refuses on a server
+  // (T6.1); an operator opens an internal database the same way.
+  process.env.SSRF_ALLOW = '127.0.0.1/32,::1/128';
 
   ok('server: capabilities().localFiles is false', registry.capabilities().localFiles === false);
   ok('server: no local-file source in the catalog, listConnectors or getConnector',

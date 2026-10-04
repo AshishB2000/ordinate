@@ -750,3 +750,31 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   (connections-server, secrets — shared-DB contention); Vitest 379/379; e2e 27/27 (DB), 23 + 2 skip (no DB);
   lint 0; file sizes pass. Agent: Electron import/composer/capture/dock smokes pass.
 - **Open:** desktop-only `src/ipc/providers.ts` still calls `net.fetch` (not on the server path).
+
+## 2026-10-04 — T6.1 SSRF guard
+
+- **`src/connectors/ssrf.ts`:** `checkHost` canonicalizes with the WHATWG URL parser (decimal/octal/hex
+  IPv4 mean the same on every OS), refuses non-bare hosts, resolves with `lookup({all:true})` and refuses if
+  ANY answer is refused; `pinnedLookup` connects to exactly the checked address; `safeFetch` = http(s)
+  only, no URL credentials, check + pin, `agent:false`, ≤5 redirects each re-checked, credential headers
+  dropped cross-origin. Refused: loopback, link-local (incl. metadata), unspecified, RFC 1918, CGNAT,
+  ULA/site-local, IPv4-in-IPv6 forms, reserved/documentation, multicast/broadcast. IPv4 and IPv6 lists
+  kept separate (a shared `BlockList` matches IPv4 against `::/96` and refused every public address).
+- **Wired:** `connectionRun.ts` four dispatches (pg host = pin, TLS servername = typed name; mysql2
+  `stream`; tedious `connector`; Oracle Easy Connect pinned, ADB connect strings checked not pinned),
+  `http.ts` (7 engines incl. Trino nextUri), `url.ts` (+ `datasetRefresh`), `saasHttp.ts`, the AI
+  gateway `baseUrl` via `providerFetch`. Server mode only; the desktop still reaches localhost.
+- **Allowlist:** `SSRF_ALLOW` CIDR list, validated at boot (per server, not per org — moving it to
+  `org_settings` is a one-column follow-up).
+- **Done-when:** `test-ssrf` — 49/49 hostile URLs refused before any socket (target 30+), 20 raw DB-host
+  spellings, redirects to metadata/loopback/private/file/gopher, DNS rebinding on a hop, redirect cap,
+  cross-origin credential drop; 0 DB sockets opened; allowlisted loopback works for 4 drivers + HTTP with
+  exactly 1 lookup (pinned). Negative controls: no guard 97 FAIL, no pin 2, first-hop-only 7, DB pin 4.
+- **Measured:** `checkHost` on an IP 7.3 µs; refusing `localhost` 0.074 ms; `safeFetch` 0.215 ms vs
+  `fetch` 0.130 ms on loopback (new socket per request so checked == connected).
+- **Integration:** T2.4's import suite and captures e2e use a loopback stub model → `SSRF_ALLOW` set
+  there, like dock/connections. Chain gates (on develop 9893149): `npm test` 271/271 with and without DB;
+  Vitest 379/379; e2e 27/27 (DB), 23 + 2 skip; lint 0.
+- **For T6.3:** an allowlist entry also allows its IPv4-mapped IPv6 form; `SSRF_ALLOW=0.0.0.0/0` turns the
+  guard off; SQL Server named-instance UDP 1434 lookup is unpinned (`ponytail:`); no Content-Encoding
+  decoding in `safeFetch` (never sends Accept-Encoding).

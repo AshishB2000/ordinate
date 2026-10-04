@@ -21,6 +21,7 @@ import type {
   ConnectorTables,
 } from './types';
 import { safeError } from './types';
+import { guardOn, safeFetch } from './ssrf';
 
 const MAX_BYTES = 100 * 1024 * 1024; // the 100MB ceiling the URL source has always used
 
@@ -60,7 +61,8 @@ async function fetchJsonRows(ctx: ConnectorContext): Promise<ConnectorRows | Con
     const headers: Record<string, string> = { accept: 'application/json' };
     if (token) headers['authorization'] = `Bearer ${token}`;
 
-    const resp = await fetch(parsed.toString(), { method: 'GET', headers, signal: controller.signal });
+    // On the server the host is checked and pinned, and every redirect hop re-checked (ssrf.ts).
+    const resp = await (guardOn() ? safeFetch : fetch)(parsed.toString(), { method: 'GET', headers, signal: controller.signal });
     if (!resp.ok) return { ok: false, error: `Request failed (HTTP ${resp.status})` };
     if (!resp.body) return { ok: false, error: 'Empty response' };
 

@@ -1,14 +1,13 @@
 // The one HTTP door to a model provider (analyze.ts, analyzeStream.ts,
 // models.ts). The desktop uses Electron's `net.fetch` — the system proxy and
-// certificate store, as before. A server has no Electron: Node's own fetch.
-//
-// ponytail: on the server the base URL is an org admin's setting (byok:saveProvider
-// is admin-only), so it is not run through an SSRF guard yet — T6.1's safeFetch
-// takes over this call when it lands.
+// certificate store, as before. A server has no Electron, and a gateway's base
+// URL there is typed by an org admin, so the call goes through the SSRF guard's
+// safeFetch (src/connectors/ssrf.ts): host checked and pinned, every redirect
+// re-checked.
 
-import { serverDataDir } from '../server/context';
+import { guardOn, safeFetch } from '../connectors/ssrf';
 
 export function providerFetch(url: string, init: RequestInit): Promise<Response> {
-  if (serverDataDir() !== null) return fetch(url, init);
+  if (guardOn()) return safeFetch(url, init);
   return (require('electron') as typeof import('electron')).net.fetch(url, init);
 }

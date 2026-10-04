@@ -45,6 +45,7 @@
 //     and expose `information_schema.tables`. Both are handled by falling back,
 //     never by assuming.
 
+import { isIP } from 'net';
 import { Client, types as pgTypes } from 'pg';
 import type {
   ConnectorColumn,
@@ -369,14 +370,18 @@ function buildFields(v: PgVariant): ConnectorField[] {
 function clientConfig(v: PgVariant, ctx: ConnectorContext): ConstructorParameters<typeof Client>[0] {
   const useSsl = asBool(ctx.values.ssl);
   const insecure = asBool(ctx.values.sslInsecure);
+  // Server (T6.1): connect to the address the SSRF guard checked; TLS still
+  // verifies the typed name (pg only sets servername itself for a non-IP host).
+  const pin = ctx.pinned;
+  const servername = pin && isIP(pin.host) === 0 ? { servername: pin.host } : {};
   return {
-    host: asString(ctx.values.host),
+    host: pin ? pin.address : asString(ctx.values.host),
     port: asPort(ctx.values.port, v.port),
     database: asString(ctx.values.database),
     user: asString(ctx.values.user),
     password: ctx.secrets.password || '',
     // Verification ON unless the user explicitly opted out. See header note 1.
-    ssl: useSsl ? { rejectUnauthorized: !insecure } : undefined,
+    ssl: useSsl ? { rejectUnauthorized: !insecure, ...servername } : undefined,
     connectionTimeoutMillis: ctx.timeoutMs,
     // JS-side backstop ONLY. It makes the call RETURN; it does not stop the
     // server working (or billing). The server-side bound is set in applyGuards.

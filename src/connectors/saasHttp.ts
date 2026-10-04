@@ -25,11 +25,14 @@ import { MAX_BYTES } from './http';
 import { safeError } from './types';
 import type { ConnectorContext, ConnectorError } from './types';
 import * as jobs from '../app/jobs';
+import { guardOn, safeFetch } from './ssrf';
 
 // ── the fetch seam ───────────────────────────────────────────────────────────
 
 export type FetchImpl = (url: string, init: RequestInit) => Promise<Response>;
-const nativeFetch: FetchImpl = (url, init) => fetch(url, init);
+// On the server each hop's host is also resolved, checked and pinned (ssrf.ts) —
+// a declared SaaS host is public, but its DNS answer is not ours to trust.
+const nativeFetch: FetchImpl = (url, init) => (guardOn() ? safeFetch : fetch)(url, init);
 let fetchImpl: FetchImpl = nativeFetch;
 
 /** Route every SaaS request through `f`; null restores the real fetch. Tests only. */

@@ -393,7 +393,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
 
 ## P6 — Security
 
-### [ ] T6.1 SSRF guard
+### [x] T6.1 SSRF guard
 - **Branch** `web/t6.1-ssrf` · **Depends** P5
 - One `safeFetch` / `checkHost` used by every connector that opens a socket from user input
   (`http.ts` 7 sources, `url.ts`, SaaS, and the DB drivers' host field): resolve DNS, then refuse

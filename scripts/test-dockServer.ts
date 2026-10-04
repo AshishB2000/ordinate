@@ -196,6 +196,9 @@ const listen = async (app: import('fastify').FastifyInstance): Promise<string> =
 
   context.enterServerMode(DATA);
   appMod.registerHandlers();
+  // The stub provider is on loopback, which the SSRF guard refuses on a server (T6.1);
+  // an operator opens an internal gateway the same way.
+  process.env.SSRF_ALLOW = '127.0.0.1/32,::1/128';
 
   // ── 1. No database: keys are refused, nothing is written ──────────────────
   const noDb = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'info', DATA_DIR: DATA, ORDINATE_MASTER_KEY: MASTER }), logSink());

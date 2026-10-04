@@ -57,17 +57,8 @@
 
 import * as http from 'http';
 import * as https from 'https';
-import {
-  ConnectorColumn,
-  ConnectorContext,
-  ConnectorDef,
-  ConnectorError,
-  ConnectorField,
-  ConnectorRows,
-  ConnectorTable,
-  ConnectorTables,
-  safeError,
-} from './types';
+import { ConnectorColumn, ConnectorContext, ConnectorDef, ConnectorError, ConnectorField, ConnectorRows, ConnectorTable, ConnectorTables, safeError } from './types';
+import { checkHost, guardOn, pinnedLookup, type PinnedHost } from './ssrf';
 
 /** Response byte ceiling — the same constant connectionRun.ts's urlRun uses. */
 export const MAX_BYTES = 100 * 1024 * 1024;
@@ -95,8 +86,15 @@ export interface HttpResult {
 }
 
 /** One bounded HTTP request. Exported so the self-check can drive the transport
- *  directly against a stub server (byte cap, timeout, socket destruction). */
-export function httpRequest(opts: HttpRequestOptions): Promise<HttpResult> {
+ *  directly against a stub server (byte cap, timeout, socket destruction). On the
+ *  server every request (Trino's nextUri pages too) is checked and pinned (ssrf.ts);
+ *  no redirect is ever followed. */
+export async function httpRequest(opts: HttpRequestOptions): Promise<HttpResult> {
+  const pin = guardOn() ? await checkHost(opts.url.hostname) : null;
+  return send(opts, pin);
+}
+
+function send(opts: HttpRequestOptions, pin: PinnedHost | null): Promise<HttpResult> {
   const maxBytes = opts.maxBytes === undefined ? MAX_BYTES : opts.maxBytes;
   return new Promise<HttpResult>((resolve, reject) => {
     let settled = false;
@@ -117,6 +115,7 @@ export function httpRequest(opts: HttpRequestOptions): Promise<HttpResult> {
       req = mod.request(opts.url, {
         method: opts.method,
         headers: { 'user-agent': 'Ordinate', ...(opts.headers || {}) },
+        ...(pin ? { lookup: pinnedLookup(pin), agent: false } : {}), // agent:false: a pooled socket is not keyed by the pin
       });
     } catch (e) {
       reject(e instanceof Error ? e : new Error(String(e)));
