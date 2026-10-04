@@ -1,0 +1,45 @@
+/* A printed page is always a WHITE page, whatever the app's theme — so a chart
+   or map drawn for a file reads its colours off this box, which re-declares the
+   light tokens (theme.css :root) the engines read off their canvas. Without it a
+   dark-mode app pastes dark chart rectangles onto a white PDF page (the bug the
+   desktop's smoke-export exists to catch). Brand overrides still apply. */
+
+.light {
+  --chart-1: var(--brand-chart-1, #2563eb);
+  --chart-2: var(--brand-chart-2, #0e7490);
+  --chart-3: var(--brand-chart-3, #14b8a6);
+  --chart-4: var(--brand-chart-4, #6366f1);
+  --chart-5: var(--brand-chart-5, #64748b);
+  --chart-6: var(--brand-chart-6, #b45309);
+  --chart-7: var(--brand-chart-7, #be185d);
+  --chart-8: var(--brand-chart-8, #4d7c0f);
+  --bg: #f7f7f8;
+  --surface: #ffffff;
+  --surface-2: #f3f4f6;
+  --surface-3: #eaecf0;
+  --surface-float: #ffffff;
+  --inset: #f2f4f7;
+  --text: #18181b;
+  --text-strong: #0f1117;
+  --muted: #6b7280;
+  --text-dim: #8a909c;
+  --text-faint: #aeb4bf;
+  --border: #e5e7eb;
+  --border-2: #d6dae1;
+  --accent: var(--brand-accent, #2563eb);
+  --accent-soft: var(--brand-accent-soft, rgba(37, 99, 235, 0.08));
+  --accent-line: var(--brand-accent-line, rgba(37, 99, 235, 0.22));
+  --error: #e11d48;
+  --ok: #059669;
+  --warn: #c77d11;
+  color: #18181b;
+  background: #ffffff;
+}
+
+/* The off-screen box a map draws into before it is read back as a picture. */
+.mapHost {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  pointer-events: none;
+}

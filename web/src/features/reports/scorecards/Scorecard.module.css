@@ -1,0 +1,428 @@
+/* An open scorecard (hub.css .sc-*): a header, the period stepper with the
+   status summary, a dense table of rows grouped with roll-ups, and the
+   metric's detail on the right. Tokens only, so both themes follow. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  padding: var(--sp-8) var(--sp-24);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.nameH {
+  flex: 0 1 420px;
+  min-width: 120px;
+  margin: 0;
+  font-size: inherit;
+}
+.nameInput {
+  width: 100%;
+  height: var(--ctl-md);
+  padding: 0 var(--sp-8);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: var(--t-15);
+  font-weight: 600;
+}
+.nameInput:hover {
+  border-color: var(--border);
+}
+.nameInput:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+}
+.headActions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--sp-8);
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-16);
+  flex-wrap: wrap;
+  padding: var(--sp-12) var(--sp-24);
+}
+.periodPick {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.periodLabel {
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  text-align: center;
+  line-height: var(--lh-snug);
+}
+.periodLabel strong {
+  font-size: var(--t-15);
+  color: var(--text-strong);
+}
+.periodLabel span {
+  font-size: var(--t-12);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.summary {
+  display: flex;
+  gap: var(--sp-16);
+  flex-wrap: wrap;
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.summaryItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.summaryItem strong {
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.hasDetail .body {
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+}
+.main {
+  overflow: auto;
+  padding: 0 var(--sp-24) var(--sp-32);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.loading {
+  opacity: 0.6;
+}
+
+/* ── the table ── */
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  font-size: var(--t-13);
+}
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: left;
+  white-space: nowrap;
+}
+.row td,
+.row th {
+  padding: var(--sp-8) var(--sp-12);
+  border-bottom: 1px solid var(--border-hairline, var(--border));
+  vertical-align: middle;
+  text-align: left;
+  font-weight: 400;
+}
+.row {
+  cursor: pointer;
+}
+.row:hover {
+  background: var(--surface-2);
+}
+.row:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.selected,
+.selected:hover {
+  background: var(--accent-soft);
+}
+.rowMissing {
+  cursor: default;
+  color: var(--muted);
+}
+.cStatus {
+  width: 28px;
+}
+.cName {
+  min-width: 180px;
+}
+.metricName {
+  display: block;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+.note {
+  font-size: var(--t-11);
+  color: var(--text-dim);
+}
+.cNum {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cAtt {
+  min-width: 140px;
+}
+.att {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.meter {
+  position: relative;
+  width: 80px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-3);
+}
+.meterFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  background: var(--text-faint);
+}
+.meter_good .meterFill {
+  background: var(--ok);
+}
+.meter_warn .meterFill {
+  background: var(--warn);
+}
+.meter_off .meterFill {
+  background: var(--error);
+}
+.meterTarget {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: 66.6%;
+  width: 2px;
+  background: var(--text-strong);
+  opacity: 0.5;
+}
+.attPct {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.cChange {
+  white-space: nowrap;
+}
+.change {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.tone_good {
+  color: var(--ok);
+}
+.tone_bad {
+  color: var(--error);
+}
+.tone_flat,
+.tone_neutral {
+  color: var(--muted);
+}
+.cSpark {
+  color: var(--text-faint);
+}
+.spark_good {
+  color: var(--ok);
+}
+.spark_warn {
+  color: var(--warn);
+}
+.spark_off {
+  color: var(--error);
+}
+.cOwner {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.cActivity {
+  white-space: nowrap;
+}
+.activity {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.groupRow th {
+  padding: var(--sp-12) var(--sp-12) var(--sp-8);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.groupName {
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+  margin-right: var(--sp-16);
+}
+.groupRoll {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  font-size: var(--t-12);
+  font-weight: 400;
+  color: var(--muted);
+}
+.groupMeter {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.groupMeter span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--ok);
+}
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex: 0 0 auto;
+}
+.good {
+  background: var(--ok);
+}
+.warn {
+  background: var(--warn);
+}
+.off {
+  background: var(--error);
+}
+.none {
+  background: var(--text-faint);
+}
+
+/* ── detail ── */
+.detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+}
+.detailHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  padding: var(--sp-12) var(--sp-16);
+  border-bottom: 1px solid var(--border);
+}
+.detailTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin: 0;
+  font-size: var(--t-15);
+  color: var(--text-strong);
+}
+.detailBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+  overflow-y: auto;
+}
+.figs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-8);
+}
+.fig {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.figLead {
+  grid-column: 1 / -1;
+}
+.figLabel {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.figValue {
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.figLead .figValue {
+  font-size: var(--t-28);
+}
+.fig_good .figValue {
+  color: var(--ok);
+}
+.fig_warn .figValue {
+  color: var(--warn);
+}
+.fig_off .figValue {
+  color: var(--error);
+}
+.def {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.sub {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.detailChart {
+  position: relative;
+  height: 220px;
+}
+.detailBars {
+  position: relative;
+}
+.forecast {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

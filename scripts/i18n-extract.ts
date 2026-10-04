@@ -410,6 +410,7 @@ export const MAIN_FILES = [
   'src/analysis/insights.ts',
   'src/analysis/alerts.ts',
   'src/analysis/reportSpec.ts',
+  'src/analysis/reportPages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

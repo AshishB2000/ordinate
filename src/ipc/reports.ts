@@ -1,4 +1,3 @@
-import { dialog, shell } from 'electron';
 import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import * as fs from 'fs';
@@ -8,7 +7,7 @@ import * as analysis from '../analysis/analysis';
 import * as projects from '../app/projects';
 import { tileCaption } from '../analysis/captions';
 import type { CaptionInput } from '../analysis/captions';
-import { notifyFile } from '../app/notify';
+import { serverDataDir } from '../server/context';
 import { noteWrittenPath } from './jobs';
 import { displayNames } from '../app/catalog';
 import * as versions from '../app/versions';
@@ -48,6 +47,25 @@ function decode(base64: unknown): Buffer | null {
 
 const EXTS: ReadonlySet<string> = new Set(['pdf', 'pptx', 'docx']);
 
+// Electron is required where it is used, never at load: on the server (T2.13)
+// this file registers the record's CRUD and the caption, and the folder
+// picker, the reveal, the save panel and the scheduled write — the four that
+// touch a local path — are left uncontracted (404 over HTTP).
+const electron = (): typeof import('electron') => require('electron') as typeof import('electron');
+
+/**
+ * What a reply may say about a report. On the server a record imported from a
+ * desktop install can still carry `lastFile` and a schedule `folder` — absolute
+ * paths on someone's machine — and neither means anything to a browser.
+ */
+export function publicReport<T extends { lastFile?: string; schedule?: reportSpec.ReportSchedule }>(r: T): T {
+  if (!serverDataDir() || !r) return r;
+  const out = { ...r };
+  delete out.lastFile;
+  if (out.schedule) out.schedule = { ...out.schedule, folder: '' };
+  return out;
+}
+
 /**
  * The scheduled write itself — the IPC below, and a pipeline's report step
  * (src/app/pipelineRunner.ts), which builds the bytes the CLI's way.
@@ -70,17 +88,19 @@ export async function writeScheduledReport(pid: string, rid: string, buf: Buffer
   // Stamp with the SAME clock the filename used. Stamping with Date.now()
   // instead would let a faked-clock run reschedule itself against real time.
   await reportSpec.updateReport(pid, rid, { lastRunAt: when.toISOString(), lastFile: dest });
-  const notified = notifyFile(`Report ready — ${path.basename(dest)}`, dest);
+  const notified = (require('../app/notify') as typeof import('../app/notify')).notifyFile(`Report ready — ${path.basename(dest)}`, dest);
   noteWrittenPath(dest); // a renderer job may name it for the Jobs popover's Reveal
   return { ok: true, dest, notified };
 }
 
 export function register() {
   ipcMain.handle('reports:list', async (_e, { projectId }: any = {}) =>
-    reportSpec.listReports(String(projectId || '')));
+    (await reportSpec.listReports(String(projectId || ''))).map(publicReport));
 
-  ipcMain.handle('reports:get', async (_e, { projectId, id }: any = {}) =>
-    reportSpec.getReport(String(projectId || ''), String(id || '')));
+  ipcMain.handle('reports:get', async (_e, { projectId, id }: any = {}) => {
+    const r = await reportSpec.getReport(String(projectId || ''), String(id || ''));
+    return r ? publicReport(r) : r;
+  });
 
   /**
    * Create a report for a dashboard, pre-filled from the dashboard's own shape.
@@ -103,14 +123,14 @@ export function register() {
       cover: { title: a.name, logo: true },
     });
     if (report) await versions.record(pid, 'report', report);
-    return report ? { ok: true, report } : { ok: false, error: 'Could not create the report.' };
+    return report ? { ok: true, report: publicReport(report) } : { ok: false, error: 'Could not create the report.' };
   });
 
   ipcMain.handle('reports:update', async (_e, { projectId, id, patch }: any = {}) => {
     const before = await reportSpec.getReport(String(projectId || ''), String(id || ''));
     const r = await reportSpec.updateReport(String(projectId || ''), String(id || ''), patch || {});
     if (r) await versions.record(String(projectId), 'report', r, { before });
-    return r ? { ok: true, report: r } : { ok: false, error: 'Report not found.' };
+    return r ? { ok: true, report: publicReport(r) } : { ok: false, error: 'Report not found.' };
   });
 
   ipcMain.handle('reports:delete', async (_e, { projectId, id }: any = {}) =>
@@ -127,7 +147,7 @@ export function register() {
       pages: src.pages, cover: src.cover, paper: src.paper,
       includeFilters: src.includeFilters, narrative: src.narrative, discussion: src.discussion,
     });
-    return copy ? { ok: true, report: copy } : { ok: false, error: 'Could not duplicate.' };
+    return copy ? { ok: true, report: publicReport(copy) } : { ok: false, error: 'Could not duplicate.' };
   });
 
   /**
@@ -149,7 +169,7 @@ export function register() {
    *  Picking grants access to that directory; the app never writes to a user
    *  folder it was not handed this way. */
   ipcMain.handle('reports:pickFolder', async () => {
-    const { canceled, filePaths } = await dialog.showOpenDialog({
+    const { canceled, filePaths } = await electron().dialog.showOpenDialog({
       title: 'Choose a folder for scheduled reports',
       defaultPath: appPaths.documents(),
       properties: ['openDirectory', 'createDirectory'],
@@ -208,7 +228,7 @@ export function register() {
     const r = await reportSpec.getReport(String(projectId || ''), String(id || ''));
     if (!r || !r.lastFile) return { ok: false, error: 'Nothing generated yet.' };
     if (!fs.existsSync(r.lastFile)) return { ok: false, error: 'That file has moved or been deleted.' };
-    shell.showItemInFolder(r.lastFile);
+    electron().shell.showItemInFolder(r.lastFile);
     return { ok: true };
   });
 
@@ -223,7 +243,7 @@ export function register() {
     const e = EXTS.has(String(ext)) ? String(ext) : report.format;
     const buf = decode(base64);
     if (!buf) return { ok: false, error: 'Nothing to save.' };
-    const { filePath, canceled } = await dialog.showSaveDialog({
+    const { filePath, canceled } = await electron().dialog.showSaveDialog({
       title: 'Save report',
       defaultPath: path.join(appPaths.downloads(), reportSpec.reportFilename(report.name, e)),
       filters: [{ name: e.toUpperCase(), extensions: [e] }],

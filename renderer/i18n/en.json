@@ -3594,6 +3594,7 @@
   "reportList.never_generated": "Never generated",
   "reportList.no_schedule": "No schedule",
   "reportList.what_ifs_over_your_metrics_move": "What-ifs over your metrics — move a price, a region's volume or a discount, and see every figure follow.",
+  "reportPages.this_table_prints_once_pivot_and": "This table prints once pivot and cohort tables reach the browser.",
   "reportRender.select_a_page_to_preview_it": "Select a page to preview it.",
   "reportRender.this_tile_could_not_be_drawn": "This tile could not be drawn.",
   "reportRender.this_tile_is_no_longer_on": "This tile is no longer on the dashboard.",

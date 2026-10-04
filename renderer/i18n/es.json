@@ -3597,6 +3597,7 @@
   "reportList.never_generated": "Nunca generado",
   "reportList.no_schedule": "Sin programación",
   "reportList.what_ifs_over_your_metrics_move": "Hipótesis sobre tus métricas: mueve un precio, el volumen de una región o un descuento, y verás cómo se ajusta cada cifra.",
+  "reportPages.this_table_prints_once_pivot_and": null,
   "reportRender.select_a_page_to_preview_it": "Selecciona una página para previsualizarla.",
   "reportRender.this_tile_could_not_be_drawn": "No se pudo dibujar este mosaico.",
   "reportRender.this_tile_is_no_longer_on": "Este mosaico ya no está en el panel.",

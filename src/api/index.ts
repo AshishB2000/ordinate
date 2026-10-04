@@ -26,6 +26,7 @@ import { trash } from './trash';
 import { versions } from './versions';
 import { prepare } from './prepare';
 import { settings } from './settings';
+import { reports } from './reports';
 
 export const contracts = {
   ...projects,
@@ -53,6 +54,7 @@ export const contracts = {
   ...settings,
   ...analyses,
   ...metrics,
+  ...reports,
 } as const;
 
 export type Channel = keyof typeof contracts;

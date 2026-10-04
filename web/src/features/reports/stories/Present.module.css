@@ -1,0 +1,55 @@
+/* Present mode (hub.css .st-present-*): the story a page at a time, full window. */
+
+/* Present mode */
+.present {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  outline: none;
+}
+.presentPage {
+  flex: 1;
+  overflow-y: auto;
+  width: min(1000px, 100%);
+  margin: 0 auto;
+  padding: 6vh var(--sp-32) var(--sp-32);
+}
+.presentH {
+  margin: 0 0 var(--sp-24);
+  font-size: 36px;
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tighter);
+  color: var(--text-strong);
+}
+.presentCaption {
+  margin: var(--sp-8) 0 0;
+  color: var(--muted);
+  font-style: italic;
+}
+.presentBar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-12);
+  padding: var(--sp-12);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.presentCount {
+  min-width: 64px;
+  text-align: center;
+  font-size: var(--t-13);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
