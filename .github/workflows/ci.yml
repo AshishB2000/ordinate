@@ -53,13 +53,17 @@ jobs:
       # S3 storage (Phase 7, T5.2): MinIO for scripts/test-storageS3.ts and the
       # S3 pass of test-serverModeResident (both skip without STORAGE_URL=s3://).
       # A step rather than a `services:` entry because a service container cannot
-      # be given MinIO's `server /data` command. The suites create their bucket.
+      # be given MinIO's `server` command. The suites create their bucket.
+      # minio/minio is gone from Docker Hub (pull access denied); Chainguard's
+      # build is public and multi-arch. It runs as uid 65532 with no /data, so
+      # the data dir lives under /tmp. The loop fails the step if it never starts.
       - name: Start MinIO
         run: |
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            minio/minio:latest server /data
-          for i in $(seq 1 30); do curl -fs http://localhost:9000/minio/health/live && break; sleep 1; done
+            chainguard/minio:latest server /tmp/minio-data
+          for i in $(seq 1 30); do curl -fs http://localhost:9000/minio/health/live && exit 0; sleep 1; done
+          docker logs minio; exit 1
       # DuckDB reads S3 through httpfs + aws; the server only LOADs them, so
       # they are installed once here (the Docker image bakes them in, T7.1).
       - name: Install DuckDB extensions (httpfs, aws)
