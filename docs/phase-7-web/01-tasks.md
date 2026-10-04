@@ -230,7 +230,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   `chartAnnotations` (editor side).
 - This is the largest port; split into two PRs if it passes ~3,000 lines (builder, then format/filter panels).
 
-### [ ] T2.8 Analyses and authoring
+### [x] T2.8 Analyses and authoring
 - **Branch** `web/t2.8-analyses` · **Legacy:** `analyses`, `anList`, `anNew`, `anNewTemplates`,
   `anDraft`, `authoring`, `authoringPanes`, `authoringProps`, `authoringRail`, `authoringSelect`,
   `layoutEdit`, `layoutFilters`, `layoutKinds`, `layoutSizes`, `sizeLayout`, `gridArrange`,

@@ -955,3 +955,24 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   bundle import can inflate to 4 GB in memory; lows/info in §6.
 - **Gates (orchestrator, on T1.2):** `npm test` 278/278 without DB, with DB 278 (`secrets`, `geoAgg` once
   each under load, both pass alone); Vitest 516/516; e2e 41/41; lint 0; file sizes pass.
+
+## 2026-10-04 — T2.8 Analyses and authoring
+
+- **Built:** `/analyses` (live previews, rename, history, Trash with Undo, catalog tags, Lineage, designed
+  empty/error/loading states), the three-step create wizard (datasets, templates with column mapping and a
+  server-computed KPI preview, layouts, the Assistant; `?new=1&dataset=`), the reviewed AI draft, and the
+  authoring workbench at `/analyses/:projectId/:analysisId` — sheets, chart/map/KPI/text/divider/container/tab/
+  statistics/image/navigation cards, filter controls and parameters (`paramDialog`), drag/resize with snap and
+  keyboard, multi-select align/distribute/group, tablet/phone layouts, Properties, undo/redo, 600 ms autosave.
+  `/data/metrics`: metric list, editor (simple/formula, typed filter dialog), save-as-metric from a KPI card.
+- **Server:** contracts for every channel the screens call (239 total) plus batch reads that answer a screen
+  in one call through the registered handlers (`analysis:gallery`, `analysis:open`, `analysis:tiles`,
+  `metric:table`, `metric:values`); `test-analysesServer` compares each with the single handler (`Object.is`),
+  runs a viewer/editor/org-admin matrix on Postgres, and proves publish copies **by value**. Sheet geometry is
+  a port of `cardModel`/`sizeLayout` with a differential Vitest against the legacy modules.
+- **Measured:** RPCs per load — list 8, wizard 3, canvas 2; initial JS 177.86 KB gzip (limit 300). Gates
+  (orchestrator, on the T2.13 tip that contains it): `npm test` 281/281 without and with DB; CI env (postgres
+  password auth + MinIO) 280 + `backups` passing alone 3/3; Vitest 594/594; e2e 50/50; lint 0. Screens in both
+  themes reviewed.
+- **Open:** "Create report…" in the dashboard menu lands with T2.13's follow-up; pivot "Copy as table" /
+  "Export CSV" belong to the T2.9 card menu.
