@@ -22,6 +22,7 @@ import { RecentColumn } from './RecentColumn';
 import { SideColumn } from './SideColumn';
 import { WhatStandsOut } from '../analytics/insights/WhatStandsOut';
 import s from './HomePage.module.css';
+import { RecentComments } from '../dashboards/RecentComments';
 
 function homeProject(list: Project[] | undefined): Project | undefined {
   return list?.find((p) => !p.archivedAt) ?? list?.[0];
@@ -93,6 +94,7 @@ export default function HomePage() {
       <GetStarted />
       {/* What the app FOUND in the project's data (T2.11); renders nothing when nothing stands out. */}
       <WhatStandsOut projectId={project?.id} />
+      {project && ov.data && <RecentComments projectId={project.id} comments={ov.data.comments} />}
       <div className={s.cols}>
         <RecentColumn projectId={project?.id} recent={recent} />
         <SideColumn project={project} projectsFailed={projects.isError} retryProjects={() => void projects.refetch()} />

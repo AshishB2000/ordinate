@@ -27,6 +27,7 @@ import { TagChips, tagsOf } from './tags';
 import { InsightsTab } from '../analytics/insights/InsightsTab';
 import { SnapshotsTab } from '../analytics/snapshots/SnapshotsTab';
 import s from './Data.module.css';
+import { CommentDoor } from '../dashboards/CommentsPanel';
 
 const TABS = ['data', 'quality', 'columns', 'insights', 'snapshots'] as const;
 type TabId = (typeof TABS)[number];
@@ -150,6 +151,7 @@ function Header({ projectId, id, name, rowCount, columnCount }: { projectId: str
           <Link className={buttonClass('secondary', 'sm')} to={`/analyses?project=${projectId}&new=1&dataset=${id}`}>
             New dashboard
           </Link>
+          <CommentDoor projectId={projectId} kind="dataset" id={id} />
           <RecordDetails projectId={projectId} kind="dataset" id={id} name={name} trigger={<Button size="sm" icon="info">Details</Button>} />
           <Menu
             align="end"

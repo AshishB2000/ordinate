@@ -82,11 +82,11 @@ export function register(): void {
     return { ok: true, analysis: a, visuals: defs };
   });
 
-  ipcMain.handle('analysis:tiles', async (e, { projectId, params, items }: any = {}) =>
+  ipcMain.handle('analysis:tiles', async (e, { projectId, params, asOf, currency, items }: any = {}) =>
     Promise.all((Array.isArray(items) ? items : []).map(async (it: any) => { // any: contract-checked item
       if (it.kind === 'visual') {
         return call(e, 'visual:data', {
-          projectId, datasetId: it.datasetId, encoding: it.encoding, filters: it.filters, params, analytics: it.analytics,
+          projectId, datasetId: it.datasetId, encoding: it.encoding, filters: it.filters, params, analytics: it.analytics, asOf, currency,
         });
       }
       // A statistics card (statsTile.ts): the spec recomputed under the sheet's filters by stats:tile.
@@ -96,24 +96,25 @@ export function register(): void {
       // column and aggregation — dashFiltersUi.ts renderMetricCard's order.
       let res: any = null; // any: one of two handlers' replies
       if (it.metricId) {
-        const r = await call(e, 'metric:value', { projectId, id: it.metricId, filters: it.filters, params });
+        const r = await call(e, 'metric:value', { projectId, id: it.metricId, filters: it.filters, params, asOf, currency });
         if (r && r.ok !== false) {
-          res = { ok: true, value: r.value, display: r.display, name: r.name, ...(r.paramErrors ? { paramErrors: r.paramErrors } : {}) };
+          res = { ok: true, value: r.value, display: r.display, name: r.name, ...(r.paramErrors ? { paramErrors: r.paramErrors } : {}), ...(r.asOfMissing ? { asOfMissing: true } : {}) };
         }
       }
       if (!res) {
         if (!it.column) return { ok: false, error: 'The metric this card showed was deleted.' };
         const r = await call(e, 'dashboard:metric', {
-          projectId, datasetId: it.datasetId, column: it.column, aggregation: it.aggregation, filters: it.filters, params,
+          projectId, datasetId: it.datasetId, column: it.column, aggregation: it.aggregation, filters: it.filters, params, asOf, currency,
         });
         if (!r || r.ok === false) return { ok: false, error: (r && r.error) || 'The metric could not be computed.' };
-        res = { ok: true, value: r.value, ...(r.paramErrors ? { paramErrors: r.paramErrors } : {}) };
+        res = { ok: true, value: r.value, ...(r.paramErrors ? { paramErrors: r.paramErrors } : {}), ...(r.fx ? { fx: r.fx } : {}), ...(r.asOfMissing ? { asOfMissing: true } : {}) };
       }
-      if (it.compare) {
+      // Under "As of" a delta would compare a past figure with today's periods (kpiCompare.ts): none.
+      if (it.compare && !asOf) {
         res.compare = await call(e, 'metric:compare', {
           projectId,
           card: { metricId: it.metricId, datasetId: it.datasetId, column: it.column, aggregation: it.aggregation },
-          filters: it.filters, compare: it.compare, params,
+          filters: it.filters, compare: it.compare, params, currency,
         });
       }
       return res;

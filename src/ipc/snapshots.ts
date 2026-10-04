@@ -85,6 +85,35 @@ function ids(v: unknown): string[] {
   return Array.isArray(v) ? [...new Set(v.filter((x) => isValidId(x)))].slice(0, MAX_PICKER_IDS) as string[] : [];
 }
 
+/**
+ * Every snapshot time of these datasets (and the datasets these metrics read),
+ * newest first, with the datasets each covers — the "As of" picker's list.
+ * Exported for the server's dashboard As-of picker (src/ipc/dashboardsServer.ts).
+ */
+export async function snapshotStamps(projectId: string, datasetIds: unknown, metricIds: unknown): Promise<any> { // any: { ok, items } | a refusal
+  try {
+    const want = new Set(ids(datasetIds));
+    for (const mid of ids(metricIds)) {
+      const m = await metrics.getMetric(projectId, mid);
+      if (m) want.add(m.datasetId);
+    }
+    const byAt = new Map<string, { at: string; datasets: string[] }>();
+    for (const id of want) {
+      const meta = await datasets.getDatasetMeta(projectId, id);
+      if (!meta) continue;
+      for (const s of await snapshots.list(projectId, id)) {
+        const e = byAt.get(s.at) || { at: s.at, datasets: [] };
+        e.datasets.push(meta.name);
+        byAt.set(s.at, e);
+      }
+    }
+    const items = [...byAt.values()].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+    return { ok: true, items };
+  } catch (err: any) {
+    return fail(err?.message || 'Could not list the snapshot times');
+  }
+}
+
 export function register(deps: BuildDeps): void {
   void deps; // no timers or watchers here — a headless run registers the same reads
 
@@ -141,29 +170,7 @@ export function register(deps: BuildDeps): void {
     }
   });
 
-  ipcMain.handle('snapshots:stamps', async (_e, { projectId, datasetIds, metricIds }: any = {}) => {
-    try {
-      const want = new Set(ids(datasetIds));
-      for (const mid of ids(metricIds)) {
-        const m = await metrics.getMetric(projectId, mid);
-        if (m) want.add(m.datasetId);
-      }
-      const byAt = new Map<string, { at: string; datasets: string[] }>();
-      for (const id of want) {
-        const meta = await datasets.getDatasetMeta(projectId, id);
-        if (!meta) continue;
-        for (const s of await snapshots.list(projectId, id)) {
-          const e = byAt.get(s.at) || { at: s.at, datasets: [] };
-          e.datasets.push(meta.name);
-          byAt.set(s.at, e);
-        }
-      }
-      const items = [...byAt.values()].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
-      return { ok: true, items };
-    } catch (err: any) {
-      return fail(err?.message || 'Could not list the snapshot times');
-    }
-  });
+  ipcMain.handle('snapshots:stamps', async (_e, { projectId, datasetIds, metricIds }: any = {}) => snapshotStamps(projectId, datasetIds, metricIds));
 
   ipcMain.handle('snapshots:metricHistory', async (_e, { projectId, metricId }: any = {}) => {
     try {

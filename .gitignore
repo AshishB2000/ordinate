@@ -1147,3 +1147,4 @@ scripts/**/*.js
 /src/data/regexOffThread.js
 /src/server/mode.js
 /scripts/test-regexDeadline.js
+/src/publish/site/*.js

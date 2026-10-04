@@ -36,6 +36,7 @@ import { projectDir } from './recordKinds';
 import * as model from './commentModel';
 import type { Comment } from './commentModel';
 import * as recordFs from './recordFs';
+import { ctx, serverDataDir } from '../server/context';
 
 const FILE = 'comments.json';
 
@@ -51,14 +52,21 @@ function osUser(): string {
   }
 }
 
-/** The name written on this machine's comments: Settings' display name, else the OS user. */
+/**
+ * The name written on a comment. On the server: the SIGNED-IN user (ctx().user
+ * — never a name the browser sent, and never the org-wide display name or the
+ * pod's OS user, which every member would share). On the desktop: Settings'
+ * display name, else the OS user.
+ */
 export function author(): string {
+  if (serverDataDir() !== null) return ctx().user.email;
   return model.resolveAuthor(config.get().displayName, osUser());
 }
 
-/** Yours to edit or delete: written under your current name, or under your OS
- *  user name before you set a display name. */
+/** Yours to edit or delete: written under your current name, or (desktop) under
+ *  your OS user name before you set a display name. */
 export function isMine(name: string): boolean {
+  if (serverDataDir() !== null) return !!name && name === ctx().user.email;
   return name === author() || (!!name && name === osUser());
 }
 

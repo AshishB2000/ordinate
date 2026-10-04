@@ -17,6 +17,8 @@ import { useEditor } from './context';
 import { nextSheetName, uuid } from './doc';
 import { SizeSwitch } from './SizeNote';
 import s from './Editor.module.css';
+import { StyleDialog, ViewControls, exportHtml } from '../../dashboards/DashboardChrome';
+import { addSummary } from '../../dashboards/SummaryBody';
 
 function NameDialog({ title, initial, onSave, onClose }: { title: string; initial: string; onSave: (v: string) => void; onClose: () => void }) {
   const [v, setV] = useState(initial);
@@ -142,6 +144,7 @@ export function Head() {
   const addNav = useAddNav();
   const [renaming, setRenaming] = useState(false);
   const [lineage, setLineage] = useState(false);
+  const [styling, setStyling] = useState(false);
   const { past, future } = ed.history;
   const back = `/analyses?project=${ed.projectId}`;
   // Publishing lives with the dashboard viewer (T2.9): write what is on screen now, then go there.
@@ -165,7 +168,12 @@ export function Head() {
         <span className={s.grow} />
         <IconButton icon="undo" size="sm" label={past.length ? `Undo ${past[past.length - 1].label}` : 'Nothing to undo'} disabled={!past.length} onClick={ed.undo} />
         <IconButton icon="redo" size="sm" label={future.length ? `Redo ${future[0].label}` : 'Nothing to redo'} disabled={!future.length} onClick={ed.redo} />
+        <ViewControls />
         <SizeSwitch />
+        <IconButton icon="message-square" size="sm" label="Comments on this dashboard" onClick={() => ed.view.openComments('all')} />
+        <Button size="sm" icon="monitor" onClick={() => ed.view.setPresenting(true)}>
+          Present
+        </Button>
         <Menu
           label="More dashboard actions"
           align="end"
@@ -173,6 +181,9 @@ export function Head() {
           items={[
             { label: 'History', icon: 'history', onSelect: () => void navigate(`/versions/${ed.projectId}/dashboard/${ed.analysisId}`) },
             { label: 'Lineage', icon: 'lineage', onSelect: () => setLineage(true) },
+            { label: 'Style…', icon: 'sliders', onSelect: () => setStyling(true) },
+            { label: 'Export HTML', icon: 'download', onSelect: () => void exportHtml(ed) },
+            { label: 'Print or save as PDF', icon: 'file-text', onSelect: () => window.print() },
             { label: 'Publish…', icon: 'external-link', onSelect: publish },
           ]}
         />
@@ -215,10 +226,12 @@ export function Head() {
               { label: 'Divider', icon: 'minus', onSelect: () => addKind('divider') },
               { label: 'Container', icon: 'layout-dashboard', onSelect: () => addKind('container') },
               { label: 'Tabs', icon: 'columns', onSelect: () => addKind('tabs') },
+              { label: 'Summary', icon: 'sparkles', onSelect: () => addSummary(ed) },
             ]}
           />
         </div>
       </div>
+      {styling && <StyleDialog onClose={() => setStyling(false)} />}
       {lineage && <LineageDrawer projectId={ed.projectId} type="dashboard" id={ed.analysisId} name={ed.doc.name} onClose={() => setLineage(false)} />}
       {renaming && <NameDialog title="Rename dashboard" initial={ed.doc.name} onClose={() => setRenaming(false)} onSave={(v) => ed.edit('Rename dashboard', (d) => void (d.name = v))} />}
     </header>

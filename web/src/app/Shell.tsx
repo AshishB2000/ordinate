@@ -16,6 +16,7 @@ import { toast, Toaster } from '../ui/Toast';
 import { ProjectProvider } from '../features/projects/current';
 import { ProjectSwitcher } from '../features/projects/ProjectSwitcher';
 import { JobsButton } from './JobsButton';
+import { AlertsBell } from '../features/dashboards/AlertsBell';
 import { NAV, type NavItem } from './nav';
 import { Dock, DockToggle } from '../features/assistant/DockParts';
 import { useWorkspacePrefs } from './prefs';
@@ -154,6 +155,7 @@ export function Shell() {
             <input className={s.searchInput} type="search" placeholder="Search" aria-label="Search" aria-haspopup="dialog" readOnly onClick={openPalette} onKeyDown={(e) => (e.key === 'Enter' || e.key.length === 1) && openPalette(e)} />
           </div>
           <div className={`${s.side} ${s.right}`}>
+            <AlertsBell />
             <JobsButton />
             <span className={s.divider} aria-hidden="true" />
             <DockToggle />

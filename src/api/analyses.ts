@@ -155,7 +155,14 @@ export const analyses = {
   // `visual:data` contract's record shape cannot carry).
   'analysis:tiles': rpc({
     access: 'read',
-    input: z.strictObject({ projectId: Uuid, params: ParamPayload.optional(), items: z.array(Tile).min(1).max(100) }),
+    // `asOf` (T2.9): the sheet read as of a snapshot time; `currency`: the dashboard's own (fx).
+    input: z.strictObject({
+      projectId: Uuid,
+      params: ParamPayload.optional(),
+      asOf: z.string().max(40).optional(),
+      currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+      items: z.array(Tile).min(1).max(100),
+    }),
     project: byProjectId,
   }),
   // An image card's picture: an upload (T0.4) copied into the project's assets

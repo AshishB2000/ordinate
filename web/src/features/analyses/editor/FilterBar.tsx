@@ -16,6 +16,7 @@ import { ParamWidget, ControlWidget } from './ControlWidget';
 import { controlActive } from './filters';
 import { allControls } from './doc';
 import s from './FilterBar.module.css';
+import { ResetControls } from '../../dashboards/ControlsExtras';
 
 /** The sheet's control cards in the order their author built them (a sorted COPY). */
 export function barControls(cards: readonly Card[]): Card[] {
@@ -206,6 +207,7 @@ export function FilterBar() {
           Clear all
         </Button>
       )}
+      <ResetControls />
     </div>
   );
 }

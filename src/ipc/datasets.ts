@@ -267,6 +267,9 @@ export async function afterRefresh(projectId: string, id: string): Promise<void>
     console.error('[alerts] not evaluated:', err instanceof Error ? err.message : String(err));
   }
   await runQualityChecks(projectId, id);
+  // A site published with "Re-publish after data refreshes" that reads this
+  // dataset is rebuilt at its link (server; T2.9). Scheduled, never awaited.
+  (require('../publish/hosted') as typeof import('../publish/hosted')).scheduleRepublish(projectId, id);
   // SQL datasets built on this one re-run. Not awaited: never rejects, and
   // the refresh the user asked for is done.
   void refreshDependents(projectId, id);

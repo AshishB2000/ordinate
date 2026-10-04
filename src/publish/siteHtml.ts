@@ -4,7 +4,7 @@
 // A page is: the dashboard's style tokens (dashboardExport.styleBlock — the
 // same tokens an HTML export carries) plus the site's layout CSS; the app's
 // own scripts, inlined in order — Chart.js, the formatter, the geo matcher,
-// the published renderer (renderer/publish/publishCore.js + publishClient.js);
+// the published renderer (./site/publishCore.js + publishClient.js);
 // and the page's data as a NON-EXECUTED JSON block, sanitized by
 // ./sanitize.ts. Nothing else.
 //
@@ -120,7 +120,7 @@ const PAGE_PAD_X = 40;
 
 /**
  * The three layouts, switched by CSS alone. Every tile carries all three cells
- * as custom properties (renderer/publish/publishClient.ts); a breakpoint only
+ * as custom properties (./site/publishClient.ts); a breakpoint only
  * changes which pair `grid-column` / `grid-row` read and how many tracks the
  * grid has. The thresholds are the hub's own — sizeLayout.BREAKPOINTS, which
  * measure the DASHBOARD's width — moved out by the page padding, since a media

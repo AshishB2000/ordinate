@@ -15,7 +15,7 @@
 //   anything else (Parquet, images, salt.key)   → the real file, per-org disk.
 //
 // A record path is a `.json` file (or its `.json.<x>.tmp` / `.json.corrupt`
-// companions) under userData/projects, userData/history, userData/templates,
+// companions) under userData/projects, userData/history, userData/templates, userData/published,
 // or userData/themes.json. Its row key is (org, path relative to userData).
 // Not records: config.json, jobs.json and the other per-org settings files
 // (config holds secrets — T5.3's store), and the modules that never touch a
@@ -61,7 +61,7 @@ export function useRecordDb(pool: Pool | null): void {
 // Same rule as src/app/paths.ts: the org id becomes a path segment there and a
 // SQL literal here, so no quote, dot or separator can ever be in it.
 const ORG_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
-const ROOTS = new Set(['projects', 'history', 'templates']);
+const ROOTS = new Set(['projects', 'history', 'templates', 'published']);
 const JSON_NAME = /\.json(\.|$)/;
 
 /** Is `rel` ('/'-separated, relative to userData) a record — a row when the DB is on? */

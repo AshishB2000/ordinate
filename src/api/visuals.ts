@@ -56,7 +56,10 @@ const VizDataInput = z.strictObject({
   datasetId: Uuid,
   encoding: Encoding,
   filters: Filters.optional(),
-  params: z.record(z.string().max(200), z.unknown()).optional(),
+  // A dashboard's live parameter values (T2.9): what `paramValues` reads —
+  // `[{ name, kind, value, min?, max? }]`, re-sanitized there. (A record could
+  // not carry them, so a pivot's Copy / Export CSV left them out.)
+  params: z.array(z.looseObject({ name: z.string().max(40), kind: z.string().max(16) })).max(50).optional(),
   analytics: z.array(z.looseObject({})).max(50).optional(),
   // T2.7: the answer is about to LEAVE the app (Copy data) — the project's
   // Share policy shapes it first (app/sharePolicy.ts).

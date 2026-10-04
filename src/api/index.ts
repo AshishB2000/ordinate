@@ -21,6 +21,7 @@ import { relationships } from './relationships';
 import { analytics } from './analytics';
 import { analyses } from './analyses';
 import { metrics } from './metrics';
+import { dashboards } from './dashboards';
 
 import { trash } from './trash';
 import { versions } from './versions';
@@ -59,6 +60,7 @@ export const contracts = {
   ...reports,
 
   ...analyticsB,
+  ...dashboards,
 } as const;
 
 export type Channel = keyof typeof contracts;

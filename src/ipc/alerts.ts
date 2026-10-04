@@ -28,9 +28,9 @@ import * as copilot from '../ai/copilot';
 import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
 import { askCopilot } from '../ai/analyze';
-import { notifyAlert } from '../app/notify';
 import { buildFacts, guardAnswer } from './copilot';
 import * as hubs from '../windows/hubRegistry';
+import { serverDataDir } from '../server/context';
 
 export interface AlertDeps {
   /** Bring the window forward when the user clicks the OS notification. */
@@ -61,7 +61,16 @@ function pushToHub(projectId: string, events: AlertEvent[]): void {
  */
 export async function deliver(projectId: string, events: AlertEvent[]): Promise<number> {
   if (!Array.isArray(events) || events.length === 0) return 0;
+  // The server (T2.9): no OS notification and no window — every tab of the org
+  // gets the push its bell repaints from, exactly what the tick job sends.
+  if (serverDataDir() !== null) {
+    // Only to members who may read the project (T6.3): an alert carries its figures.
+    (require('../server/jobs/schedules') as typeof import('../server/jobs/schedules')).pushToReaders(projectId, 'alerts:fired', { projectId, events });
+    return 0;
+  }
   pushToHub(projectId, events);
+  // Lazy: notify.ts imports Electron, which a server never loads (this module is registered there).
+  const { notifyAlert } = require('../app/notify') as typeof import('../app/notify');
   const onClick = () => { try { if (deps) deps.focusHub(); } catch (_) { /* best effort */ } };
 
   const file = await store.load(projectId);

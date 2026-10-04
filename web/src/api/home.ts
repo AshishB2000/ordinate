@@ -25,6 +25,18 @@ export interface HomeOverview {
   visuals: { id: string; name: string; chartType: string }[];
   /** T2.11: "What stands out" — insights with a chart, each with its sparkline's figures (src/ipc/insights.ts standsOut). */
   standsOut: Array<{ id: string; spark: { labels: unknown[]; series: unknown[] } | null } & Record<string, unknown>>;
+  /** Home's "Recent comments" (T2.9): the open threads, newest activity first. */
+  comments: { open: number; recent: RecentComment[] };
+}
+
+export interface RecentComment {
+  id: string;
+  author: string;
+  snippet: string;
+  at: string;
+  replies: number;
+  target: { kind: 'analysis' | 'card' | 'visual' | 'dataset' | 'story'; id: string };
+  on: { name: string; analysisId?: string } | null;
 }
 
 export type StepId = 'import' | 'visual' | 'dashboard' | 'assistant';
@@ -84,6 +96,7 @@ export function useOverview(projectId: string | undefined) {
         datasets: list(o.datasets),
         visuals: list(o.visuals),
         standsOut: list(o.standsOut),
+        comments: { open: n(obj(o.comments).open), recent: list(obj(o.comments).recent) },
       };
     },
   });

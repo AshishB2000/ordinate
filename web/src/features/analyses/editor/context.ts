@@ -8,6 +8,7 @@ import type { Card, ControlValue, ParamPayload, Step, VisualDef } from '../api';
 import type { Doc, History } from './doc';
 import type { Size } from './geometry';
 import type { Adding } from './AddDialogs';
+import type { Viewer } from '../../dashboards/useViewer';
 
 export type Pane = 'data' | 'visuals' | 'filters' | 'props' | null;
 export type SaveState = 'saved' | 'saving' | 'error';
@@ -55,6 +56,8 @@ export interface EditorApi {
   setGroupTab(groupId: string, tabId: string): void;
   folded: ReadonlySet<string>;
   toggleFold(groupId: string): void;
+  /** The reader's state (T2.9): selection, narrowing, As of, currency, Present, comments. */
+  view: Viewer;
 }
 
 export const EditorCtx = createContext<EditorApi | null>(null);

@@ -25,6 +25,7 @@ import { historyNew, historyPush, historyRedo, historyUndo, redoLabel, undoLabel
 import { Present } from './Present';
 import { StoryBlockRow } from './StoryBlock';
 import s from './Story.module.css';
+import { CommentDoor } from '../../dashboards/CommentsPanel';
 
 type Snap = { name: string; blocks: StoryBlock[] };
 type Pending = { kind: 'visual' | 'metric' | 'metrics_row'; place: (b: StoryBlock) => void } | { kind: 'pin'; blockId: string; datasetId: string } | null;
@@ -206,6 +207,7 @@ function Editor({ projectId, story, focusEnd }: { projectId: string; story: Stor
           <Button variant="primary" icon="download" onClick={() => void doExport()}>
             Export PDF
           </Button>
+          <CommentDoor projectId={projectId} kind="story" id={story.id} />
           <Menu label="Story options" align="end" trigger={<IconButton icon="more-horizontal" label="Story options" />} items={[{ label: 'Delete story', icon: 'trash', danger: true, onSelect: () => setConfirmDelete(true) }]} />
         </div>
       </header>

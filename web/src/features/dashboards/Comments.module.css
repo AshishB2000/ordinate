@@ -1,0 +1,248 @@
+/* Comments (T2.9, hub.css .cmt-*): the panel, threads, the card door. Tokens only. */
+
+/* ── Comments ──────────────────────────────────────────────────────── */
+.threads {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-12);
+}
+.thread {
+  padding: var(--sp-12);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.resolved {
+  background: var(--surface-2);
+  opacity: 0.85;
+}
+.threadHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-full);
+  color: #fff;
+  font-size: var(--t-11);
+  font-weight: 700;
+  flex: none;
+}
+.author {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: var(--t-12);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.when {
+  color: var(--text-dim);
+  font-size: var(--t-11);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.badge {
+  font-size: var(--t-11);
+  padding: 1px 6px;
+  border-radius: var(--r-full);
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-weight: 600;
+}
+.pin {
+  margin-top: var(--sp-4);
+  font-size: var(--t-11);
+  color: var(--accent);
+}
+.onTarget {
+  all: unset;
+  cursor: pointer;
+  margin-top: var(--sp-4);
+  font-size: var(--t-11);
+  color: var(--accent);
+}
+.onTarget:hover {
+  text-decoration: underline;
+}
+.cmtBody {
+  margin: var(--sp-8) 0 0 30px;
+}
+.reply {
+  margin: var(--sp-8) 0 0 30px;
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--border);
+}
+.threadActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  margin: var(--sp-8) 0 0 26px;
+}
+.replyForm {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-8);
+  margin: var(--sp-8) 0 0 30px;
+}
+.replyForm > :first-child {
+  flex: 1 1 auto;
+}
+.composer {
+  display: grid;
+  gap: var(--sp-8);
+  width: 100%;
+}
+.composerRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-8);
+}
+.cmtFilter {
+  display: inline-flex;
+  margin-bottom: var(--sp-12);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.seg {
+  border: 0;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-12);
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.seg + .seg {
+  border-left: 1px solid var(--border-2);
+}
+.segOn {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.segCount {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+
+/* The card head door: the open-thread count (commentDoors.ts cmtCardButton). */
+.cmtBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-11);
+  cursor: pointer;
+}
+
+.cmtBtn:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+}
+
+.cmtCount {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.cmtBtn:hover {
+  background: var(--surface-2);
+  color: var(--text-strong);
+}
+.cmtOn {
+  color: var(--accent);
+}
+.pinChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  justify-self: start;
+  padding: 2px 2px 2px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-12);
+}
+
+/* ── Home: "Recent comments" (hub.css .cmt-home-*) ─────────────────── */
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  margin: 0 0 var(--sp-24);
+}
+.homeH {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-8);
+  margin: 0;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.homeCount {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.homeRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--sp-12);
+}
+.homeCard {
+  display: grid;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+  text-align: left;
+  font: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+.homeCard:hover {
+  border-color: var(--accent-line);
+}
+.homeCard:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+}
+.homeTop {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.homeSnippet {
+  color: var(--text);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.homeOn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  color: var(--muted);
+  font-size: var(--t-11);
+}
+.homeReplies {
+  margin-left: auto;
+}

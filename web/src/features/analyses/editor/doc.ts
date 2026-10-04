@@ -11,6 +11,8 @@ export interface Doc {
   sheets: Sheet[];
   filters: Step[];
   parameters: Parameter[];
+  /** The dashboard's look (T2.9 Style): saved with the record, undoable like any edit. */
+  style: Record<string, unknown>;
 }
 
 export interface History {
@@ -28,7 +30,7 @@ export const COALESCE_MS = 1000;
 const MAX_STEPS = 100;
 
 export function fromAnalysis(a: Analysis): Doc {
-  return { name: a.name, sheets: a.sheets, filters: a.filters ?? [], parameters: a.parameters ?? [] };
+  return { name: a.name, sheets: a.sheets, filters: a.filters ?? [], parameters: a.parameters ?? [], style: a.style ?? {} };
 }
 
 export const initial = (doc: Doc): History => ({ doc, past: [], future: [], last: null, version: 0 });

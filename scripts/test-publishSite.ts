@@ -3,7 +3,7 @@
 //      clamped, http(s) and SVG images refused, enums closed;
 //   2. a page's CSP pins exactly its own inline scripts and stylesheet, and the
 //      page references nothing outside itself;
-//   3. the client renderer's pure core (renderer/publish/publishCore.js) under
+//   3. the client renderer's pure core (src/publish/site/publishCore.js) under
 //      a bare vm context — jsdom-free: combo lookup, single-mode picks, chart
 //      configs, projections;
 //   4. a REAL publish of a seeded project into a temp folder: the files, the
@@ -276,7 +276,8 @@ async function main(): Promise<void> {
   ok('policy: a sensitive category is published as tokens, never its values',
     shownLabels.length === 5 && shownLabels.every((l) => !rawSkus.includes(l)), shownLabels.join(','));
   ok('policy: …and the caption names tokens, not the raw values',
-    !rawSkus.some((v) => String(mcard.payloads[mcard.variants[0]].caption).includes(v)), mcard.payloads[mcard.variants[0]].caption);
+    // The tokens themselves (#<12 hex>) are random and can contain "000" — read the caption around them.
+    !rawSkus.some((v) => String(mcard.payloads[mcard.variants[0]].caption).replace(/#[0-9a-f]{12}/g, '#token').includes(v)), mcard.payloads[mcard.variants[0]].caption);
   const salt = await privacy.getSalt(proj.id);
   const siteText = fs.readdirSync(out).map((f) => fs.readFileSync(path.join(out, f), 'utf8')).join('\n');
   ok('policy: the project salt never reaches a published file', !!salt && !siteText.includes(String(salt)));

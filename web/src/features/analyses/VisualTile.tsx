@@ -15,6 +15,7 @@ import { SkeletonBlock } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { Icon, type IconName } from '../../ui/icons/Icon';
 import { markAt } from '../visuals/drill/mark';
+import { GRID_IDS, GridViz, type GridData } from '../../charts/grids/GridViz';
 import { useTile, type ParamPayload, type Step, type VisualDef, type VisualTile } from './api';
 import s from './Tiles.module.css';
 
@@ -74,6 +75,7 @@ export function DrawnVisual({
   projectId,
   thumb,
   onChart,
+  onMapMark,
 }: {
   type: string;
   data: ChartDataShape & Record<string, unknown>;
@@ -82,6 +84,8 @@ export function DrawnVisual({
   projectId: string;
   thumb?: boolean;
   onChart?: (chart: ChartHandle | null) => void;
+  /** A click on a map region or point (T2.9: the dashboard's selection or tile actions). */
+  onMapMark?: (column: string | undefined, category: string) => void;
 }) {
   const renderer = VIZ_RENDERER[type as VizId];
   const merged = useMemo(() => (thumb ? { ...overrides, ...THUMB } : overrides), [thumb, overrides]);
@@ -94,7 +98,18 @@ export function DrawnVisual({
       </span>
     );
   }
-  if (renderer === 'map') return <MapView data={data as unknown as MapData} chartType={type} label={label} projectId={projectId} />;
+  // Pivot / cohort / event funnel: T1.2's tables over the server's grid (never recomputed here).
+  if (GRID_IDS.has(type)) {
+    if (thumb) {
+      return (
+        <span className={s.glyph} aria-hidden="true">
+          <Icon name={vizGlyph(type)} size={24} />
+        </span>
+      );
+    }
+    return <GridViz type={type} data={data as GridData} label={label} fill />;
+  }
+  if (renderer === 'map') return <MapView data={data as unknown as MapData} chartType={type} label={label} projectId={projectId} onMarkClick={onMapMark} />;
   if (renderer === 'table') return <DataTable data={data} label={label} />;
   return <Chart type={type} data={data} overrides={merged} label={label} onChart={thumb ? trimThumb : onChart} />;
 }
@@ -108,6 +123,9 @@ export function VisualTileBody({
   thumb,
   asTable,
   onMark,
+  onHover,
+  onPinAt,
+  onMapMark,
 }: {
   projectId: string;
   def: VisualDef;
@@ -117,7 +135,12 @@ export function VisualTileBody({
   /** The figures as an accessible table instead of the chart (tileActions.ts "View as table"). */
   asTable?: boolean;
   /** Click-to-filter (dashFiltersUi.ts wireCrossFilter): the clicked mark's category. */
-  onMark?: (category: string | number) => void;
+  onMark?: (category: string | number, series?: string) => void;
+  /** A tile's tooltip_visual (T2.9): the hovered mark's category, or null off a mark. */
+  onHover?: (category: string | number | null, e: React.MouseEvent) => void;
+  /** ⌘/Ctrl-click on a mark (T2.9, commentDoors.ts cmtOnChartClick): a comment pinned to that point. */
+  onPinAt?: (category: string | number, series?: string) => void;
+  onMapMark?: (column: string | undefined, category: string) => void;
 }) {
   const chart = useRef<ChartHandle | null>(null);
   const req = useMemo(
@@ -144,19 +167,27 @@ export function VisualTileBody({
     }
     return <ErrorState compact heading={3} title="No data for this chart" message={message} onRetry={() => void q.refetch()} />;
   }
-  const click = onMark
-    ? (e: React.MouseEvent) => {
-        // A click on empty canvas, a map or a table is not a filter (no Chart.js mark).
-        const m = markAt(chart.current, e.nativeEvent);
-        if (m) onMark(m.category);
-      }
-    : undefined;
+  const click =
+    onMark || onPinAt
+      ? (e: React.MouseEvent) => {
+          // A click on empty canvas, a map or a table is not a filter (no Chart.js mark).
+          const m = markAt(chart.current, e.nativeEvent);
+          if (!m) return;
+          if (onPinAt && (e.metaKey || e.ctrlKey)) return onPinAt(m.category, m.series);
+          onMark?.(m.category, m.series);
+        }
+      : undefined;
   return (
-    <div className={onMark ? `${s.drawn} ${s.crossFilter}` : s.drawn} onClick={click}>
+    <div
+      className={onMark ? `${s.drawn} ${s.crossFilter}` : s.drawn}
+      onClick={click}
+      onMouseMove={onHover ? (e) => onHover(markAt(chart.current, e.nativeEvent)?.category ?? null, e) : undefined}
+      onMouseLeave={onHover ? (e) => onHover(null, e) : undefined}
+    >
       {asTable && !def.chartType.startsWith('map_') ? (
         <DataTable data={q.data.data} label={label} />
       ) : (
-        <DrawnVisual type={def.chartType} data={q.data.data} overrides={def.overrides} label={label} projectId={projectId} thumb={thumb} onChart={(c) => (chart.current = c)} />
+        <DrawnVisual type={def.chartType} data={q.data.data} overrides={def.overrides} label={label} projectId={projectId} thumb={thumb} onChart={(c) => (chart.current = c)} onMapMark={thumb ? undefined : onMapMark} />
       )}
       {!thumb && q.data.paramErrors && q.data.paramErrors.length > 0 && <p className={s.paramErr}>{q.data.paramErrors[0]}</p>}
     </div>

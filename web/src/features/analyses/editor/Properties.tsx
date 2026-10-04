@@ -245,7 +245,7 @@ function CardProps({ card }: { card: Card }) {
         {card.type === 'image' && !!card.image && <ImageProps card={card} set={set} />}
         {card.type === 'nav' && <NavProps card={card} set={set} />}
         {card.type === 'stats' && <StatsProps card={card} />}
-        {card.type === 'summary' && <p className={s.note}>A summary card’s sentences are written by the app where the dashboard is viewed.</p>}
+        {card.type === 'summary' && <p className={s.note}>Three to five sentences the app writes about this dashboard’s own tiles, under the filters on screen. A sentence about a tile jumps to it.</p>}
       </section>
       {def && (
         <section className={s.section} aria-label="Interactions">
