@@ -51,7 +51,9 @@ export async function stepPreview(projectId: string, datasetId: string, index: n
     const stats = lookupStats(input, step, ctx);
     if (stats) res.lookup = { ...stats, ratePct: pct(stats.matched, stats.total) };
   } else if (step.type === 'parse_date') {
-    res.parseDate = parseDatePreview(input, step);
+    const pd = parseDatePreview(input, step);
+    // `filled`: the values it tried — the "of N" the preview prints, so a browser never adds two counts.
+    res.parseDate = { ...pd, filled: pd.parsed + pd.failed };
   } else if (step.type === 'union' && ctx.tables[step.datasetId]) {
     const other = ctx.tables[step.datasetId];
     const plan = unionPlan(input.columns, other.columns, step.mapping);
@@ -78,8 +80,30 @@ export async function stepCounts(projectId: string, datasetId: string): Promise<
   return { ok: true, stepCounts: out.stepCounts || [] };
 }
 
+/**
+ * The Prepare page's opening state (server only, T2.6): the prepared columns,
+ * the steps, the rows into and out of each, the row count — and nothing about
+ * the rows themselves or where they came from (the grid pages the stored table).
+ */
+export async function prepareState(projectId: string, datasetId: string): Promise<unknown> {
+  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  if (!meta) return null;
+  const counts = (await stepCounts(projectId, datasetId)) as { ok: boolean; stepCounts?: unknown };
+  return {
+    id: meta.id,
+    name: meta.name,
+    rowCount: meta.rowCount,
+    columns: meta.columns,
+    steps: meta.steps || [],
+    stepCounts: counts.ok ? counts.stepCounts : null,
+    updatedAt: meta.updatedAt,
+  };
+}
+
 // ponytail: IPC payloads are untrusted JSON envelopes (typed any, as in datasets.ts); every field is coerced before use.
 export function register(): void {
+  ipcMain.handle('prepare:get', async (_e, { projectId, datasetId }: any = {}) =>
+    prepareState(String(projectId || ''), String(datasetId || '')));
   ipcMain.handle('prepare:stepPreview', async (_e, { projectId, datasetId, index, step }: any = {}) => {
     try {
       return await stepPreview(String(projectId || ''), String(datasetId || ''), Number(index), step);

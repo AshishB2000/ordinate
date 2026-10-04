@@ -215,7 +215,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
 - Remove the 3 local-folder sources from the registry in server mode (`capabilities()`), keep URL.
 - Secret fields are write-only in the UI: show "set" / "replace", never the value.
 
-### [ ] T2.6 Prepare and pipelines
+### [x] T2.6 Prepare and pipelines
 - **Branch** `web/t2.6-prepare` · **Legacy:** `prepare`, `prepareClean`, `prepareCombine`,
   `prepareForms`, `prepareGeo`, `prepareMask`, `prepareReshape`, `formulaEditor`, `calcMenu`,
   `textSteps`, `textProfile`, `textPreviews`, `pipelinesPage`, `pipelinesDetail`, `pipelinesGraph`.

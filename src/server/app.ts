@@ -376,4 +376,8 @@ export function registerHandlers(): void {
   // The Visuals screen (T2.7): the builder's sampled preview, the gallery's thumbnails, the drill
   // panel and period picker, and the project colour map that Format → Colours edits.
   for (const mod of ['../ipc/vizSample', '../ipc/visualsServer', '../ipc/format']) (require(mod) as { register: () => void }).register();
+
+  // Prepare and pipelines (T2.6). Pipelines' cron rides the server's own tick job (./jobs/schedules.ts), so headless here.
+  for (const mod of ['../ipc/preparePower', '../ipc/text', '../ipc/formula']) (require(mod) as { register: () => void }).register();
+  (require('../ipc/pipelines') as typeof import('../ipc/pipelines')).register({ headless: true });
 }

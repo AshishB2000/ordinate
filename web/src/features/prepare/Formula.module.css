@@ -1,0 +1,311 @@
+/* The formula editor — hub.css "fx-" (formulaEditor.ts). A fixed-height body
+   (the function list is 82 entries; a body sized to its content outgrew the
+   window), both columns scroll inside it. */
+
+.note {
+  margin: 0 0 var(--sp-12);
+  font-size: var(--t-12);
+  color: var(--text-strong);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  padding: var(--sp-8);
+}
+.body {
+  display: flex;
+  gap: var(--sp-12);
+  height: min(460px, 58vh);
+}
+.side {
+  width: 220px;
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-height: 0;
+}
+.sideList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
+}
+.group {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: var(--sp-8) var(--sp-4) var(--sp-4);
+}
+.item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  padding: var(--sp-4);
+  font-size: var(--t-12);
+  color: var(--text);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+.item:hover {
+  background: var(--accent-soft);
+}
+.item:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.itemCol {
+  color: var(--accent);
+}
+.itemFn {
+  font-family: var(--font-mono);
+  color: var(--text-strong);
+}
+.fnRow {
+  display: contents;
+}
+.sideEmpty {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+  padding: var(--sp-8) var(--sp-4);
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.nameRow > :first-child {
+  flex: 1;
+}
+.badge {
+  font-size: var(--t-11);
+  font-weight: 600;
+  padding: 3px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  white-space: nowrap;
+}
+.badge_logical {
+  background: var(--ok-soft);
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+/* THE MIRROR AND THE TEXTAREA SHARE ONE RULE ON PURPOSE: every property that
+   moves a character must be identical, or the colours slide off the text. */
+.wrap {
+  position: relative;
+}
+.input,
+.hl {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 84px;
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font-family: var(--font-mono);
+  font-size: var(--t-13);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  tab-size: 2;
+}
+.hl {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--surface-1);
+  color: var(--text);
+}
+.input {
+  position: relative;
+  display: block;
+  resize: vertical;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+  outline: none;
+}
+.input:focus {
+  border-color: var(--accent-line);
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.input::selection {
+  background: var(--accent-soft);
+}
+.t_col {
+  color: var(--accent);
+}
+.t_param {
+  color: var(--ok);
+  font-weight: 600;
+}
+.t_fn {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+.t_str {
+  color: var(--muted);
+}
+.t_num {
+  color: var(--text);
+}
+.t_lod {
+  color: var(--chart-5);
+  font-weight: 600;
+}
+.tErr {
+  text-decoration: underline wavy var(--error);
+  text-underline-offset: 3px;
+  background: var(--error-soft);
+  border-radius: 2px;
+}
+
+.pop {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-float);
+  box-shadow: var(--shadow-lg);
+  max-height: 200px;
+  overflow-y: auto;
+}
+.popItem {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: baseline;
+  padding: var(--sp-4) var(--sp-8);
+  cursor: pointer;
+}
+.popItem:hover {
+  background: var(--surface-2);
+}
+.popOn {
+  background: var(--accent-soft);
+}
+.popLabel {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+.popSub {
+  font-size: var(--t-11);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msgs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.err {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--error);
+}
+
+.preview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--t-12);
+}
+.table th,
+.table td {
+  border-bottom: 1px solid var(--border);
+  padding: var(--sp-4) var(--sp-8);
+  text-align: left;
+  white-space: nowrap;
+}
+/* The user's own column names — never uppercased. */
+.table th {
+  position: sticky;
+  top: 0;
+  font-size: var(--t-11);
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-float);
+}
+.table th.num,
+.table td.num {
+  text-align: right;
+}
+.table td.num {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+}
+.table th.res {
+  color: var(--accent);
+}
+.table td.res {
+  background: var(--accent-soft);
+  color: var(--text-strong);
+  font-weight: 600;
+}
+.lodCol {
+  color: var(--chart-5);
+}
+.lodCell {
+  color: var(--text-dim);
+}
+.lodNote {
+  margin: var(--sp-8) 0 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+
+.hint {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.saveWrap {
+  display: inline-flex;
+}
+
+@media (max-width: 720px) {
+  .body {
+    flex-direction: column;
+    height: auto;
+  }
+  .side {
+    width: auto;
+    flex: none;
+    max-height: 180px;
+  }
+}

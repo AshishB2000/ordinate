@@ -168,7 +168,12 @@ async function main(): Promise<void> {
   ok('a rename re-runs the checks', renamed.ok && afterRename?.latest?.at !== at0);
   ok('a rule on a vanished column is passed:false with an error, not a crash',
     broken?.passed === false && /"order_date" no longer exists/.test(broken?.error || ''), JSON.stringify(broken));
-  ok('…and it counts toward the red dot', (await datasets.listDatasets(P)).find((d) => d.id === O)?.qualityFailing === 2);
+  // T2.6: the rename no longer breaks the filter that reads `order_date` (src/data/columnEdit.ts makes
+  // it a rename_column step after it), so the filter still drops A4/A5 — and with them C9, the one
+  // row the references rule failed on. The broken rule is the only failing one.
+  ok('…the filter that reads the renamed column still filters (3 rows)', (await datasets.getDatasetMeta(P, O))?.rowCount === 3);
+  ok('…and it counts toward the red dot', (await datasets.listDatasets(P)).find((d) => d.id === O)?.qualityFailing === 1,
+    JSON.stringify(afterRename?.latest?.results.map((r) => [r.ruleId === NN ? 'NN' : r.ruleId.slice(0, 4), r.passed])));
 
   // ── 4. Alerts optional: absent, then the real module ──────────────────────
   const bare = (await datasets.saveDataset(P, { name: 'Bare', sourceKind: 'csv', columns: [T('x')], rows: [['a'], ['b']] }))!;

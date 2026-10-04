@@ -53,6 +53,7 @@ import { filledPcts } from '../data/profileView';
 export function headerOf(ds: { id: string; name: string; rowCount: number; columns: ParsedColumn[] }) {
   return { id: ds.id, name: ds.name, rowCount: ds.rowCount, columns: ds.columns.map((c) => ({ name: c.name, type: c.type })) };
 }
+import { forClient } from './stepReply';
 
 // Datasets (file-based data sources) IPC — pick+parse/paste/save/list/get/delete.
 // All are ipcMain.handle (request/response). Native open dialog runs in MAIN;
@@ -576,7 +577,7 @@ export function register() {
       const steps = await currentSteps(projectId, datasetId);
       if (!steps) return { ok: false, error: 'Dataset not found' };
       steps.push(step); // sanitized inside updateSteps (a bad step is dropped)
-      return await commitSteps(projectId, datasetId, steps);
+      return forClient(await commitSteps(projectId, datasetId, steps));
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to add the step' };
     }
@@ -590,7 +591,7 @@ export function register() {
         return { ok: false, error: 'Step index out of range' };
       }
       steps[index] = step;
-      return await commitSteps(projectId, datasetId, steps);
+      return forClient(await commitSteps(projectId, datasetId, steps));
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to update the step' };
     }
@@ -604,7 +605,7 @@ export function register() {
         return { ok: false, error: 'Step index out of range' };
       }
       steps.splice(index, 1);
-      return await commitSteps(projectId, datasetId, steps);
+      return forClient(await commitSteps(projectId, datasetId, steps));
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to remove the step' };
     }
@@ -626,7 +627,7 @@ export function register() {
         seen.add(i);
       }
       const reordered = order.map((i: number) => steps[i]);
-      return await commitSteps(projectId, datasetId, reordered);
+      return forClient(await commitSteps(projectId, datasetId, reordered));
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to reorder the steps' };
     }
@@ -638,7 +639,7 @@ export function register() {
       // the whole (untrusted) array — updateSteps sanitizes it.
       const ds = await datasets.getDataset(projectId, datasetId);
       if (!ds) return { ok: false, error: 'Dataset not found' };
-      return await commitSteps(projectId, datasetId, steps);
+      return forClient(await commitSteps(projectId, datasetId, steps));
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to set the steps' };
     }
