@@ -55,6 +55,8 @@ export interface CohortGrid {
   /** Oldest first. */
   cohorts: string[];
   sizes: number[];
+  /** Members across the cohorts shown (the sum of `sizes`) — the browser prints it, never adds it. */
+  members: number;
   /** `cells[cohort][k]` — a percentage or a per-member value; null past the data. */
   cells: (number | null)[][];
   /** Size-weighted, over the cohorts that have reached k. */
@@ -169,7 +171,7 @@ export function cohortNeeds(cols: ParsedColumn[], enc: CohortEncoding | undefine
 function emptyGrid(enc: CohortEncoding | undefined, needs: string): CohortGrid {
   const e = enc || sanitizeCohort({}) as CohortEncoding;
   return {
-    grain: e.grain, show: e.show, curve: e.curve, cohorts: [], sizes: [], cells: [], average: [],
+    grain: e.grain, show: e.show, curve: e.curve, cohorts: [], sizes: [], members: 0, cells: [], average: [],
     periods: 0, periodNoun: NOUN[e.grain], excluded: 0, valueName: '', truncated: false, needs,
   };
 }
@@ -299,6 +301,7 @@ export function foldCohort(enc: CohortEncoding, g: CohortGroups, cal: CalendarPr
     }
     out.cohorts.push(cohortLabel(c, enc.grain, cal));
     out.sizes.push(size);
+    out.members += size;
     out.cells.push(row);
   }
   out.average = num.map((n, k) => (den[k] > 0 ? (enc.show === 'value' ? n / den[k] : (n / den[k]) * 100) : null));

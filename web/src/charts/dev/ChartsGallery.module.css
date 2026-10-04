@@ -39,3 +39,15 @@
   height: 260px;
   min-width: 0;
 }
+.wide {
+  grid-column: 1 / -1;
+}
+.wide .body {
+  height: 520px;
+}
+.section {
+  margin: var(--sp-24) 0 var(--sp-12);
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}

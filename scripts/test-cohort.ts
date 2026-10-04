@@ -93,6 +93,7 @@ function testRetention(): void {
   const g = grid(rows, enc());
   ok('two cohorts, sized by their MEMBERS', g.cohorts.join() === '2024-01,2024-02' && g.sizes.join() === '4,1',
      JSON.stringify(g));
+  ok('members: the server sums the sizes, so the browser never has to', g.members === 5);
   ok('k = 0 is 100% by definition', g.cells[0][0] === 100 && g.cells[1][0] === 100);
   ok('Jan cohort: 1 of 4 back in Feb → 25% (denominator is the cohort, not the period)', g.cells[0][1] === 25);
   ok('Jan cohort: b skipped Feb and still counts in Mar → 50%', g.cells[0][2] === 50);
@@ -253,6 +254,7 @@ async function testSample(): Promise<void> {
   const g = cohort.buildCohort(f.columns, f.rows, e, [], MON).grid;
   ok('sample: every state is in exactly one cohort', g.sizes.reduce((a, b) => a + b, 0)
      === new Set(f.rows.map((r) => r[parsed.columns.findIndex((c) => c.name === 'state')])).size);
+  ok('sample: members is the sum of the sizes shown', g.members === g.sizes.reduce((a, b) => a + b, 0) && g.members > 0);
 }
 
 async function main(): Promise<void> {

@@ -31,7 +31,7 @@ export interface ChartHandle {
 type Status = 'loading' | 'ready' | 'empty' | 'error';
 
 /** The document's effective theme (<html data-theme>), live — chart colours are read from it at build time. */
-function useDocumentTheme(): string | undefined {
+export function useDocumentTheme(): string | undefined {
   const [theme, setTheme] = useState(() => document.documentElement.dataset.theme);
   useEffect(() => {
     const el = document.documentElement;

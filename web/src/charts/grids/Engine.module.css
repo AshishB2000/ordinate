@@ -1,0 +1,312 @@
+/* The cohort and event-funnel visuals — renderer/hub/cohort.css, rule for
+   rule. Tokens only; the heatmap shades are the one thing set from TS (mixed
+   from --surface and --accent, text picked there for AA contrast). */
+
+/* ── shared chrome ── */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-height: 0;
+  width: 100%;
+}
+.fill {
+  height: 100%;
+}
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+.meta {
+  font-size: var(--t-12);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.tools {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.segBtn {
+  padding: var(--sp-4) var(--sp-8);
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.segBtn:hover {
+  color: var(--text-strong);
+}
+.segBtn[aria-pressed='true'] {
+  color: var(--text-strong);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line, var(--border));
+}
+.segBtn:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.note {
+  margin: 0;
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+
+/* ── the cohort table ── */
+.body {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+.scroll {
+  overflow: auto;
+  max-height: clamp(300px, 58vh, 640px);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+}
+.scroll:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.fill .scroll {
+  max-height: none;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.table {
+  border-collapse: separate; /* `collapse` drops the borders of sticky cells */
+  border-spacing: 0;
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+  min-width: 100%;
+}
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 28px;
+  padding: 0 var(--sp-8);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text);
+  text-align: right;
+  white-space: nowrap;
+}
+.table .label,
+.table .size {
+  position: sticky;
+  z-index: 1;
+  background: var(--surface-1);
+  white-space: nowrap;
+}
+.table .label {
+  left: 0;
+  min-width: 104px;
+  text-align: left;
+  font-weight: 500;
+  color: var(--text);
+}
+.table .size {
+  left: 104px;
+  text-align: right;
+  color: var(--muted);
+  border-right: 1px solid var(--border);
+}
+.table thead .corner {
+  z-index: 3;
+  background: var(--surface-2);
+  color: var(--text);
+}
+.table thead .label {
+  text-align: left;
+  color: var(--text);
+  font-weight: 600;
+}
+.row > th,
+.row > td,
+.avg > th,
+.avg > td {
+  height: 30px;
+  padding: 0 var(--sp-8);
+  border-bottom: 1px solid var(--surface);
+}
+.cell {
+  min-width: 64px;
+  text-align: right;
+  color: var(--text);
+  border-left: 1px solid var(--surface);
+}
+.blank {
+  background: transparent;
+}
+.base {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.avg > th,
+.avg > td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.avg > th {
+  z-index: 3;
+}
+.table .avg .size {
+  color: var(--text-strong);
+}
+.curve {
+  height: clamp(280px, 44vh, 460px);
+}
+.fill .curve {
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ── the event funnel ── */
+.efScroll {
+  overflow: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.step {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.9fr) minmax(120px, 2fr) minmax(200px, 1.4fr);
+  align-items: center;
+  gap: var(--sp-12);
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--surface-1);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+}
+.name {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-width: 0;
+}
+.idx {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  font-size: var(--t-11);
+  font-weight: 700;
+  color: var(--text-strong);
+  background: var(--accent-soft);
+  border-radius: var(--r-full);
+}
+.stepLabel {
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.track {
+  height: 14px;
+  background: var(--surface-3);
+  border-radius: var(--r-full);
+  overflow: hidden;
+}
+.bar {
+  height: 100%;
+  min-width: 2px;
+  background: var(--accent);
+  border-radius: var(--r-full);
+}
+.figs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-4) var(--sp-12);
+  font-variant-numeric: tabular-nums;
+}
+.count {
+  font-size: var(--t-15);
+  font-weight: 700;
+  color: var(--text-strong);
+}
+.rate {
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.breakdown {
+  margin-top: var(--sp-16);
+}
+.bdTitle {
+  margin: 0 0 var(--sp-8);
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.bdTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+.bdTable th,
+.bdTable td {
+  height: 28px;
+  padding: 0 var(--sp-8);
+  text-align: right;
+  border-bottom: 1px solid var(--border-hairline);
+  white-space: nowrap;
+}
+.bdTable thead th {
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+}
+.bdTable .bdLabel {
+  text-align: left;
+  color: var(--text);
+  font-weight: 500;
+}
+.bdCount {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+.bdPct {
+  margin-left: var(--sp-8);
+  color: var(--muted);
+}

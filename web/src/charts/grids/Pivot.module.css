@@ -1,0 +1,205 @@
+/* The pivot table — hub.css "The pivot table (pivotRender.js)", rule for rule:
+   13px tabular figures on a 32px row, an 11px uppercase muted header, sticky
+   header / row-head column / grand total, and NO zebra (the hierarchy is the
+   structure). Every colour is a theme token. `--pivot-row-h` is set from
+   PivotTable.tsx (ROW_H), the one number the virtual window also uses. */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.note {
+  flex: none;
+  margin: 0;
+  padding: var(--sp-4) var(--sp-8);
+  font-size: var(--t-11);
+  color: var(--muted);
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  max-height: clamp(300px, 58vh, 640px);
+}
+.scroll:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+/* Inside a sized card the card's height wins (hub.css .dash-card .pivot-scroll). */
+.fill .scroll {
+  max-height: none;
+}
+
+.table {
+  border-collapse: separate; /* `collapse` drops the borders of sticky cells */
+  border-spacing: 0;
+  width: 100%;
+  font-size: var(--t-13);
+  font-variant-numeric: tabular-nums;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 28px;
+  padding: 0 var(--sp-8);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.corner,
+.rowHead {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  text-align: left;
+  border-right: 1px solid var(--border);
+  background: var(--surface-1);
+}
+.table thead .corner {
+  z-index: 3;
+  background: var(--surface-2);
+  text-align: left;
+}
+
+.totalHead {
+  border-left: 1px solid var(--border);
+}
+
+.sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  justify-content: flex-end;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.corner .sort {
+  justify-content: flex-start;
+}
+.sort:hover,
+.sorted {
+  color: var(--text-strong);
+}
+.sort:focus-visible,
+.collapse:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+  border-radius: var(--r-sm);
+}
+.arrow {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.row > th,
+.row > td {
+  height: var(--pivot-row-h);
+  padding: 0 var(--sp-8);
+  border-bottom: 1px solid var(--border-hairline);
+  white-space: nowrap;
+}
+
+.cell {
+  text-align: right;
+  color: var(--text);
+}
+
+.rowHead {
+  font-weight: 400;
+  color: var(--text);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row:hover > th,
+.row:hover > td {
+  background: var(--surface-1);
+}
+
+.subtotal > th,
+.subtotal > td {
+  background: var(--surface-1);
+  font-weight: 500;
+  color: var(--text-strong);
+}
+
+.grand > th,
+.grand > td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.grand > th {
+  z-index: 3;
+}
+
+.totalCell {
+  border-left: 1px solid var(--border);
+}
+
+.collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.caret {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+  transition: transform 120ms ease;
+}
+.closed {
+  transform: rotate(-90deg);
+}
+
+.above {
+  color: var(--ok);
+}
+.below {
+  color: var(--error);
+}
+.spacer > td {
+  padding: 0;
+  border: 0;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
