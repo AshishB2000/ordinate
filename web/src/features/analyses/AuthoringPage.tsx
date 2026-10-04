@@ -48,7 +48,7 @@ export default function AuthoringPage() {
   useEffect(() => () => client.removeQueries({ queryKey: ['analysis:open', projectId, analysisId] }), [client, projectId, analysisId]);
   const back = (
     <Link className={buttonClass('primary')} to={`/analyses?project=${projectId}`}>
-      Back to dashboards
+      Back to Analyses
     </Link>
   );
 

@@ -211,7 +211,7 @@ function Gallery({ projectId }: { projectId: string }) {
   }
 
   return (
-    <Page title="Dashboards" sub="Sheets of charts, metrics and text over your datasets.">
+    <Page title="Analyses" sub="The dashboards you author: sheets of charts, metrics and text over your datasets.">
       <div className={s.head}>
         {count > 0 ? <span className={s.count}>{count === 1 ? '1 dashboard' : `${count} dashboards`}</span> : <span />}
         {actions}
@@ -250,7 +250,7 @@ function Gallery({ projectId }: { projectId: string }) {
 
 export default function AnalysesPage() {
   return (
-    <ProjectGate title="Dashboards" why="Dashboards belong to a project.">
+    <ProjectGate title="Analyses" why="Dashboards belong to a project.">
       {(projectId) => <Gallery key={projectId} projectId={projectId} />}
     </ProjectGate>
   );

@@ -194,7 +194,8 @@ export function Canvas() {
     ];
   };
 
-  const tiles = cards.filter((c) => c.type !== 'control' && cell.has(c.id));
+  // A folded container's cards and an inactive tab's are not drawn (small sizes: resolve already left them out).
+  const tiles = cards.filter((c) => c.type !== 'control' && cell.has(c.id) && !viewHidden.has(c.id));
   const frame = !!ed.pinned && small;
   const gridStyle = { '--cols': String(placed.cols) } as CSSProperties;
 

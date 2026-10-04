@@ -118,9 +118,25 @@ e2e('dashboards: list → wizard → blank sheet → text, KPI, parameter → ke
   await page.getByText('Derived', { exact: true }).waitFor();
   await page.getByRole('button', { name: /^Desktop layout/ }).click();
   await saved(page);
+
+  // ── ⇧-select two cards, put them in a container, fold it ──────────────
+  // The keyboard moved Notes onto the KPI's rows: click the part of it the KPI does not cover.
+  await page.getByRole('group', { name: 'Revenue card' }).click({ position: { x: 40, y: 50 } });
+  await page.getByRole('group', { name: 'Notes card' }).click({ position: { x: 700, y: 50 }, modifiers: ['Shift'] });
+  const arrange = page.getByRole('toolbar', { name: 'Arrange selected cards' });
+  await arrange.getByText('2 cards selected').waitFor();
+  await arrange.getByRole('button', { name: 'Container' }).click();
+  const box = page.getByRole('group', { name: 'Container card' });
+  await box.waitFor();
+  await page.getByRole('complementary', { name: 'Properties' }).getByLabel('Readers can collapse it').waitFor();
+  await box.getByRole('button', { name: 'Collapse Container' }).click();
+  await page.getByRole('group', { name: 'Notes card' }).waitFor({ state: 'detached' });
+  await box.getByRole('button', { name: 'Expand Container' }).click();
+  await page.getByRole('group', { name: 'Notes card' }).waitFor();
+  await saved(page);
 });
 
-e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, Properties, undo', async ({ page, server }) => {
+e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, Properties, undo', async ({ page, server, rpc }) => {
   const pid = server.sample.projectId;
   await page.goto(`/analyses?project=${pid}`);
   await settled(page);
@@ -159,6 +175,8 @@ e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, 
   await page.getByRole('button', { name: 'Undo Add control' }).click();
   await revenue.getByText('$5.2M').waitFor();
   await saved(page);
+  // Measured, not asserted beyond the fixture's budget: RPCs per page load.
+  console.log('rpc per load:', rpc.loads.map((l) => `${new URL(l.url).pathname} ${l.rpcs}`).join(' · '));
 });
 
 e2e('draft with the Assistant, no model: the dialog says how to connect one', async ({ page, server }) => {

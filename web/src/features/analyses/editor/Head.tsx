@@ -150,7 +150,7 @@ export function Head() {
       <div className={s.headRow}>
         <Link className={buttonClass('ghost', 'sm')} to={back}>
           <Icon name="chevron-left" />
-          <span>Dashboards</span>
+          <span>Analyses</span>
         </Link>
         <h1 className={s.nameH}>
           <button type="button" className={s.name} title="Click to rename" onClick={() => setRenaming(true)}>
