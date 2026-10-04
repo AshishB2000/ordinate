@@ -70,6 +70,9 @@ export const pages: RouteObject[] = [
   page('/analytics/scenarios/:projectId', () => import('../features/analytics/scenarios/ScenariosPage')),
   page('/analytics/scenarios/:projectId/compare', () => import('../features/analytics/scenarios/ScenarioComparePage')),
   page('/analytics/scenarios/:projectId/:scenarioId', () => import('../features/analytics/scenarios/ScenarioPage')),
+
+  // About (T2.14): version, links, the licences of every bundled package.
+  page('/about', () => import('../features/settings/AboutPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

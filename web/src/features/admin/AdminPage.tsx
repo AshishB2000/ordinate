@@ -2,6 +2,11 @@
 // the audit log and org settings, one tab each (the tab is in the URL, so a
 // link opens it). The server refuses every admin channel to anyone below org
 // admin; this page only says so instead of showing five failed loads.
+//
+// T2.14 adds the ORGANIZATION settings the desktop kept in its Settings panel
+// — the workspace's formats, branding and Assistant rules, dashboard themes,
+// and backups. Those live in the org's config, not in Postgres, so a server
+// without accounts (dev) still shows them; the account tabs need Postgres.
 
 import { useSearchParams } from 'react-router';
 import { Page } from '../../app/blocks';
@@ -15,15 +20,19 @@ import { SettingsTab } from './SettingsTab';
 import { TeamsTab } from './TeamsTab';
 import { UsersTab } from './UsersTab';
 import { NoAccounts } from './NoAccounts';
+import { WorkspaceTab } from '../settings/WorkspaceTab';
+import { ThemesTab } from '../settings/ThemesTab';
+import { BackupsTab } from '../settings/BackupsTab';
+import { Icon } from '../../ui/icons/Icon';
+import s from './Admin.module.css';
 
-const TABS = ['people', 'teams', 'projects', 'audit', 'settings'] as const;
-type TabId = (typeof TABS)[number];
+const ACCOUNT_TABS = ['people', 'teams', 'projects', 'audit', 'settings'] as const;
+const ORG_TABS = ['workspace', 'themes', 'backups'] as const;
+type TabId = (typeof ACCOUNT_TABS)[number] | (typeof ORG_TABS)[number];
 
 export default function AdminPage() {
   const me = useMe();
   const [params, setParams] = useSearchParams();
-  const asked = params.get('tab');
-  const tab: TabId = (TABS as readonly string[]).includes(asked ?? '') ? (asked as TabId) : 'people';
 
   if (me.isPending) return <PageSkeleton />;
   if (me.isError) {
@@ -33,8 +42,9 @@ export default function AdminPage() {
       </Page>
     );
   }
-  if (me.data.accounts === false) return <NoAccounts title="Admin" />;
-  if (me.data.user?.role !== 'admin') {
+  const accounts = me.data.accounts !== false;
+  // Without accounts every request is the dev admin (src/server/context.ts); with them, the role decides.
+  if (accounts && me.data.user?.role !== 'admin') {
     return (
       <Page title="Admin">
         <EmptyState icon="shield" title="Only organization admins can open Admin">
@@ -43,40 +53,90 @@ export default function AdminPage() {
       </Page>
     );
   }
+  if (!accounts && me.data.user?.role !== 'admin') return <NoAccounts title="Admin" />;
+  const tabs: readonly TabId[] = accounts ? [...ACCOUNT_TABS, ...ORG_TABS] : ORG_TABS;
+  const first = tabs[0];
+  const asked = params.get('tab');
+  const tab: TabId = (tabs as readonly string[]).includes(asked ?? '') ? (asked as TabId) : first;
   return (
-    <Page title="Admin" sub="Who can sign in, the teams they belong to, who owns each project, and what happened.">
-      <Tabs value={tab} onValueChange={(v) => setParams(v === 'people' ? {} : { tab: v }, { replace: true })}>
+    <Page
+      title="Admin"
+      sub={
+        accounts
+          ? 'Who can sign in, the teams they belong to, who owns each project, what happened — and the organization’s own settings.'
+          : 'The organization’s own settings: formats, branding, dashboard themes and backups.'
+      }
+    >
+      {!accounts && (
+        <div className={s.notice} role="note">
+          <Icon name="database" />
+          <div>
+            <h2 className={s.noticeTitle}>This server keeps no accounts</h2>
+            <p className={s.lead}>
+              Members, teams, project ownership and the audit log are stored in Postgres, and this server runs without one. Set DATABASE_URL and sign-in (AUTH_MODE) to
+              manage them here. The organization settings below work either way.
+            </p>
+          </div>
+        </div>
+      )}
+      <Tabs value={tab} onValueChange={(v) => setParams(v === first ? {} : { tab: v }, { replace: true })}>
         <TabList label="Admin">
-          <Tab value="people" icon="user">
-            People
+          {accounts && (
+            <>
+              <Tab value="people" icon="user">
+                People
+              </Tab>
+              <Tab value="teams" icon="layers">
+                Teams
+              </Tab>
+              <Tab value="projects" icon="folder">
+                Projects
+              </Tab>
+              <Tab value="audit" icon="history">
+                Audit log
+              </Tab>
+              <Tab value="settings" icon="settings">
+                Settings
+              </Tab>
+            </>
+          )}
+          <Tab value="workspace" icon="sliders">
+            Workspace
           </Tab>
-          <Tab value="teams" icon="layers">
-            Teams
+          <Tab value="themes" icon="layout-dashboard">
+            Themes
           </Tab>
-          <Tab value="projects" icon="folder">
-            Projects
-          </Tab>
-          <Tab value="audit" icon="history">
-            Audit log
-          </Tab>
-          <Tab value="settings" icon="settings">
-            Settings
+          <Tab value="backups" icon="hard-drive">
+            Backups
           </Tab>
         </TabList>
-        <TabPanel value="people">
-          <UsersTab me={me.data.user.email} />
+        {accounts && (
+          <>
+            <TabPanel value="people">
+              <UsersTab me={me.data.user?.email ?? ''} />
+            </TabPanel>
+            <TabPanel value="teams">
+              <TeamsTab />
+            </TabPanel>
+            <TabPanel value="projects">
+              <ProjectsTab />
+            </TabPanel>
+            <TabPanel value="audit">
+              <AuditTab />
+            </TabPanel>
+            <TabPanel value="settings">
+              <SettingsTab />
+            </TabPanel>
+          </>
+        )}
+        <TabPanel value="workspace">
+          <WorkspaceTab />
         </TabPanel>
-        <TabPanel value="teams">
-          <TeamsTab />
+        <TabPanel value="themes">
+          <ThemesTab />
         </TabPanel>
-        <TabPanel value="projects">
-          <ProjectsTab />
-        </TabPanel>
-        <TabPanel value="audit">
-          <AuditTab />
-        </TabPanel>
-        <TabPanel value="settings">
-          <SettingsTab />
+        <TabPanel value="backups">
+          <BackupsTab />
         </TabPanel>
       </Tabs>
     </Page>

@@ -208,3 +208,20 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* A server without accounts (T2.14): one quiet line above the org tabs, not an empty page. */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.noticeTitle {
+  color: var(--text-strong);
+  font-size: var(--t-13);
+  font-weight: 600;
+}

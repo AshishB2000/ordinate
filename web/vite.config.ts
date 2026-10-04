@@ -1,4 +1,25 @@
 import { defineConfig } from 'vitest/config';
+import type { Plugin } from 'vite';
+import { appLicences } from './scripts/licenses.ts';
+
+// The About page's licences (T2.14): every production dependency the app
+// ships, read from node_modules at build time and written beside index.html.
+// The dev server answers the same file from memory.
+function licences(): Plugin {
+  const json = () => JSON.stringify(appLicences(import.meta.dirname));
+  return {
+    name: 'ordinate-licences',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'licenses.json', source: json() });
+    },
+    configureServer(server) {
+      server.middlewares.use('/licenses.json', (_req, res) => {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(json());
+      });
+    },
+  };
+}
 
 // The CSP is a response HEADER set by the server (src/server/headers.ts,
 // APP_CSP) — the one place it is written, frame-ancestors included. The build
@@ -7,6 +28,7 @@ import { defineConfig } from 'vitest/config';
 // violation is a test failure. The dev server (HMR injects <style>) has none.
 
 export default defineConfig({
+  plugins: [licences()],
   oxc: { jsx: { runtime: 'automatic' } },
   server: {
     // `npm run server` listens on :8080 (src/server/env.ts default).

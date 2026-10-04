@@ -1,0 +1,207 @@
+/* The command palette (palette.css `.cp-*`): a wide box near the top of the
+   window, the input on its own row, grouped results, a key-hint foot. The
+   shortcuts sheet shares the key caps and its list rows. */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.35);
+}
+.palette {
+  position: fixed;
+  top: 12vh;
+  left: 50%;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  width: min(640px, calc(100vw - var(--sp-32)));
+  max-height: min(560px, 76vh);
+  overflow: hidden;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-xl);
+  background: var(--surface-float);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  transform: translateX(-50%);
+}
+.palette[data-state='open'] {
+  animation: drop var(--dur-panel) var(--ease-out);
+}
+@keyframes drop {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px);
+  }
+}
+.palette:focus {
+  outline: none;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: 0 var(--sp-16);
+  border-bottom: 1px solid var(--border-hairline);
+  color: var(--muted);
+}
+.input {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  border: 0;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: var(--t-15);
+}
+.input:focus {
+  outline: none;
+}
+.input::placeholder {
+  color: var(--text-faint);
+}
+.spin {
+  display: inline-flex;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.results {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-4) var(--sp-8) var(--sp-8);
+}
+.heading {
+  padding: var(--sp-12) var(--sp-8) var(--sp-4);
+  color: var(--muted);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  min-height: 36px;
+  padding: 0 var(--sp-8);
+  border-radius: var(--r-md);
+  color: var(--text);
+  cursor: pointer;
+}
+.row > svg {
+  flex: none;
+  color: var(--muted);
+}
+.on {
+  background: var(--accent-soft);
+  color: var(--text-strong);
+}
+.on > svg {
+  color: var(--accent);
+}
+.title {
+  flex: none;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sub {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: var(--t-12);
+}
+.caps {
+  display: inline-flex;
+  flex: none;
+  margin-left: auto;
+}
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-32) var(--sp-16);
+  text-align: center;
+  color: var(--muted);
+}
+.empty strong {
+  color: var(--text-strong);
+  font-weight: 500;
+}
+.note {
+  padding: var(--sp-8);
+  color: var(--error);
+  font-size: var(--t-12);
+}
+.foot {
+  display: flex;
+  gap: var(--sp-16);
+  padding: var(--sp-8) var(--sp-16);
+  border-top: 1px solid var(--border-hairline);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: var(--t-12);
+}
+.foot b {
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+.foot .caps {
+  margin-left: 0;
+}
+
+/* ── The shortcuts list ────────────────────────────────────────────── */
+.sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.sheetHead {
+  margin-bottom: var(--sp-4);
+  color: var(--muted);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+}
+.sheetList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+.sheetRow dd {
+  margin: 0;
+}
+.sheetRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-16);
+  min-height: 34px;
+  border-top: 1px solid var(--border-hairline);
+}
+.sheetRow:first-child {
+  border-top: 0;
+}
+.sheetRow dt {
+  color: var(--text);
+}

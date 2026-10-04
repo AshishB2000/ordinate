@@ -1,0 +1,105 @@
+/* About (hub.css `.about-*`): the mark and version, three link cards in a row,
+   then the licence list — one dense row per package, its text on demand. */
+
+.hero {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-16);
+}
+.mark {
+  border-radius: var(--r-lg);
+}
+.heroText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.name {
+  color: var(--text-strong);
+  font-size: var(--t-20);
+  font-weight: 600;
+  letter-spacing: var(--tr-tighter);
+}
+.links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--sp-12);
+  max-width: 980px;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  margin-bottom: var(--sp-12);
+}
+.search {
+  width: 300px;
+}
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+}
+.pkg {
+  border-top: 1px solid var(--border-hairline);
+}
+.pkg:first-child {
+  border-top: 0;
+}
+.pkg summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  min-height: 36px;
+  padding: 0 var(--sp-12);
+  cursor: pointer;
+  list-style: none;
+}
+.pkg summary::-webkit-details-marker {
+  display: none;
+}
+.pkg summary:hover {
+  background: var(--surface-2);
+}
+.pkg summary:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.pkgName {
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+}
+.pkgVersion {
+  color: var(--text-dim);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+.src {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  color: var(--accent);
+  font-size: var(--t-12);
+  text-decoration: none;
+}
+.src:hover {
+  text-decoration: underline;
+}
+.text {
+  max-height: 280px;
+  margin: 0 var(--sp-12) var(--sp-12);
+  padding: var(--sp-12);
+  overflow: auto;
+  border-radius: var(--r-sm);
+  background: var(--inset);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--t-11);
+  white-space: pre-wrap;
+}
