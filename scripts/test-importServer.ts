@@ -97,6 +97,9 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
 
   context.enterServerMode(DATA);
   appMod.registerHandlers();
+  // The stub model is on loopback, which the SSRF guard refuses on a server (T6.1);
+  // an operator opens an internal gateway the same way.
+  process.env.SSRF_ALLOW = '127.0.0.1/32,::1/128';
   const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'info', DATA_DIR: DATA }), logSink, (h) =>
     typeof h['x-test-org'] === 'string' ? as(h['x-test-org'], typeof h['x-test-user'] === 'string' ? h['x-test-user'] : undefined) : null);
   await app.listen({ port: 0, host: '127.0.0.1' });
