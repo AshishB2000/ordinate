@@ -175,7 +175,7 @@ async function main(): Promise<void> {
   // listDatasets summary carries the crop path (thumbnail without a full load).
   const list = await datasets.listDatasets(proj.id);
   const summ = list.find((d) => d.id === dsId);
-  ok('listDatasets summary carries the capture crop path', !!summ && summ.capture?.cropPath === '/tmp/history/entry-1/crop.png');
+  ok('listDatasets summary carries the capture crop path', !!summ && !!summ.capture && 'cropPath' in summ.capture && summ.capture.cropPath === '/tmp/history/entry-1/crop.png');
   ok('listDatasets summary carries sourceKind "capture"', !!summ && summ.sourceKind === 'capture');
 
   // REPLACE: swap rows + newest screenshot link wins.

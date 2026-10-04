@@ -1,0 +1,451 @@
+/* Import, the composer, captures and input tables — hub.css "the dataset
+   composer" (.dc-*), the import dialog's kind tiles (.dc-kind-tile), the
+   capture cards (.viz-card / .cap-card*), the capture steps and error card
+   (.cv-step / .cve-*) and input.css (.it-*). Tokens only: both themes follow. */
+
+/* ── Import: sources on the left, the chosen source's panel on the right ── */
+.importer {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: var(--sp-24);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .importer {
+    grid-template-columns: 1fr;
+  }
+}
+.sourceList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.tile {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  padding: var(--sp-12);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tile:hover {
+  border-color: var(--accent-line);
+}
+.tile:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.tileOn {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.tileIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  color: var(--accent);
+}
+.tileText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.tileLabel {
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.tileHint {
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.pane {
+  min-width: 0;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+}
+.paneStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.paneActions {
+  display: flex;
+  justify-content: flex-end;
+}
+.paste textarea,
+textarea.paste {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  min-height: 280px;
+}
+
+/* A drop target: a dashed card with the button that does the same thing. */
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-8);
+  min-height: 360px;
+  padding: var(--sp-48) var(--sp-32);
+  text-align: center;
+  background: var(--surface);
+  border: 1.5px dashed var(--border-2);
+  border-radius: var(--r-lg);
+}
+.dropOver {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.dropIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: var(--sp-4);
+  border-radius: var(--r-full);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  color: var(--accent);
+}
+.dropTitle {
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.dropHint {
+  max-width: 56ch;
+  margin-bottom: var(--sp-8);
+  color: var(--muted);
+}
+
+/* A workbook's sheet picker, before the composer. */
+.sheets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.sheetBar {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--sp-12);
+}
+.sheetNote {
+  flex: 1 1 auto;
+  padding-bottom: 6px;
+  color: var(--muted);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Screenshot: the model reading, and what it says when it cannot ─────── */
+.steps {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-32);
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.step {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  color: var(--muted);
+}
+.step[data-status='active'] {
+  color: var(--text-strong);
+  font-weight: 500;
+}
+.step[data-status='done'] {
+  color: var(--text);
+}
+.stepIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-full);
+  border: 1.5px solid var(--border-2);
+  color: var(--surface);
+}
+.step[data-status='active'] .stepIcon {
+  border-color: var(--accent);
+  animation: pulse 1.2s var(--ease) infinite;
+}
+.step[data-status='done'] .stepIcon {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+@keyframes pulse {
+  50% {
+    box-shadow: 0 0 0 4px var(--accent-soft);
+  }
+}
+.failure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-48) var(--sp-32);
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.failureIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--r-full);
+  background: var(--error-soft);
+  color: var(--error);
+}
+.failureWarn .failureIcon {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.failureTitle {
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.failureMsg {
+  max-width: 56ch;
+  color: var(--text);
+}
+.failureDetail {
+  max-width: 100%;
+  padding: 2px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--t-11);
+  overflow-wrap: anywhere;
+}
+.failureActions {
+  display: flex;
+  gap: var(--sp-8);
+  margin-top: var(--sp-8);
+}
+
+/* Shared by the composer, the sheet picker and input tables. */
+.count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.hint {
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.gridHost {
+  display: flex;
+  flex-direction: column;
+  height: clamp(320px, calc(100vh - 330px), 1100px);
+  min-height: 320px;
+}
+
+/* ── Define columns ─────────────────────────────────────────────────────── */
+.colsForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.templates {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-8);
+}
+.template {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--sp-8);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.template:hover {
+  border-color: var(--accent);
+}
+.template:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.templateOn {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.templateLabel {
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.templateHint {
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.colsTable {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.colsHead,
+.colRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) 120px 110px minmax(0, 1.4fr) 32px;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.colsHead {
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+}
+.addCol {
+  align-self: flex-start;
+}
+.colsWarn {
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--text-strong);
+  font-size: var(--t-12);
+}
+.colsErr {
+  color: var(--error);
+  font-weight: 500;
+}
+
+/* ── Input tables ───────────────────────────────────────────────────────── */
+.inputHost {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-width: 0;
+}
+.inputBar {
+  flex-wrap: wrap;
+}
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--t-12);
+  color: var(--text);
+  white-space: nowrap;
+}
+.statusOk {
+  color: var(--muted);
+}
+.statusOk svg {
+  color: var(--ok);
+}
+.statusError {
+  color: var(--text-strong);
+  white-space: normal;
+}
+.statusError svg {
+  color: var(--error);
+}
+.linkBtn {
+  padding: 0;
+  margin-left: var(--sp-4);
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.attn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--sp-8);
+  border: 1px solid var(--error);
+  border-radius: var(--r-full);
+  background: var(--error-soft);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 600;
+  cursor: pointer;
+}
+.attn svg {
+  color: var(--error);
+}
+.attnWarn {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+.attnWarn svg {
+  color: var(--warn);
+}
+.attn:focus-visible,
+.linkBtn:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.inputNotes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-8) var(--sp-12);
+  font-size: var(--t-12);
+  background: var(--warn-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.inputGrid {
+  display: flex;
+  flex-direction: column;
+  height: clamp(320px, calc(100vh - 300px), 1400px);
+}
+.inputFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-16);
+}
+.keysHint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4) var(--sp-16);
+  color: var(--muted);
+  font-size: var(--t-12);
+}

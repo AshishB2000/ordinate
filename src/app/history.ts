@@ -73,6 +73,8 @@ export interface ThreadSummary {
   cropPath: string | null;
   datasetId: string | null;
   copilotThreadId: string | null;
+  /** A small data-URL preview (server uploads only — the browser cannot read cropPath). */
+  thumb: string | null;
 }
 
 // Read every thread.json, skipping corrupt/missing files gracefully.
@@ -150,6 +152,7 @@ export async function loadAllSummaries(projectId?: string): Promise<ThreadSummar
       cropPath: data.cropPath || null,
       datasetId: data.datasetId || null,
       copilotThreadId: data.copilotThreadId || null,
+      thumb: typeof data.thumb === 'string' ? data.thumb : null,
     });
   }
   summaries.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());

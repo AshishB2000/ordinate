@@ -244,7 +244,14 @@ export async function commitSteps(projectId: string, datasetId: string, steps: u
  * swallowed by the evaluator and can never fail the refresh.
  */
 export async function afterRefresh(projectId: string, id: string): Promise<void> {
-  await require('./alerts').evaluateAndDeliver(projectId, id);
+  // The alert evaluator still loads Electron (desktop notifications) — on the
+  // server that require throws until alerts are ported (T2.9). The data is
+  // already written: an unavailable evaluator must not fail the save.
+  try {
+    await require('./alerts').evaluateAndDeliver(projectId, id);
+  } catch (err) {
+    console.error('[alerts] not evaluated:', err instanceof Error ? err.message : String(err));
+  }
   await runQualityChecks(projectId, id);
   // SQL datasets built on this one re-run. Not awaited: never rejects, and
   // the refresh the user asked for is done.
@@ -268,6 +275,9 @@ export function register() {
       // A staged import (./datasetImport.ts) saves the rows main already holds;
       // the renderer only ever had the display slice.
       const stagedTable = importStage.get(stagedId);
+      // A named staged table that is gone (expired, saved, or not the caller's —
+      // importStage is per org + user) is refused, never saved from the slice.
+      if (stagedId !== undefined && stagedId !== null && !stagedTable) return { ok: false, error: importStage.GONE };
       const capped: any[] = stagedTable ? stagedTable.rows.slice(0, MAX_ROWS) : Array.isArray(rows) ? rows.slice(0, MAX_ROWS) : [];
       const saved = await datasets.saveDataset(projectId, {
         name,
@@ -284,7 +294,10 @@ export function register() {
     }
   });
 
-  ipcMain.handle('dataset:list', async (_e, { projectId }: any = {}) => datasets.listDatasets(projectId));
+  // On the server a capture summary carries `hasImage`, never its crop path (datasetSummary.ts).
+  ipcMain.handle('dataset:list', async (_e, { projectId }: any = {}) => {
+    return datasets.listDatasets(projectId);
+  });
 
   ipcMain.handle('dataset:get', async (_e, { projectId, id }: any = {}) => datasets.getDataset(projectId, id));
 

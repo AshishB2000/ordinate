@@ -201,7 +201,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   `dsProfile`, `dsLineage`, `lineagePanel`, `dataSearch`, `catalogPage`, `catalogDetails`,
   `catalogUi`, `dsRules`, `dsRuleEditor`, `relationshipsPage`, `relationshipDialog`.
 
-### [ ] T2.4 Import, composer, captures, input tables
+### [x] T2.4 Import, composer, captures, input tables
 - **Branch** `web/t2.4-import` · **Legacy:** `dsImport`, `composer`, `composerGrid`,
   `captureDataset`, `captureList`, `captureStatus`, `inputPage`, `inputGrid`, `inputColumns`,
   `inputKeys`, `inputBind`.

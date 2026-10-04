@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { useMemo, useState } from 'react';
-import { DataGrid, type CellEdit, type GridColumn } from './DataGrid';
+import { DataGrid, type CellEdit, type GridColumn, type GridRange } from './DataGrid';
 import type { Cell, FetchPage } from './pageCache';
 
 // jsdom has no layout: give every box a client size so the virtualizers draw.
@@ -157,5 +157,46 @@ describe('DataGrid', () => {
     expect(grid().getAttribute('aria-rowcount')).toBe('41'); // the old count while the new source loads
     expect(await screen.findByText('Ada')).toBeTruthy();
     expect(screen.queryByText('r0')).toBeNull();
+  });
+
+  it('with a selection: Shift+arrows and Shift+click grow a range from the anchor; the caller can move it', async () => {
+    const seen: GridRange[] = [];
+    function Harness({ jump }: { jump?: GridRange }) {
+      const [sel, setSel] = useState<GridRange>({ r0: 0, c0: 0, r1: 0, c1: 0 });
+      const src = useMemo(() => rowsSource(30), []);
+      return (
+        <>
+          <button onClick={() => jump && setSel(jump)}>jump</button>
+          <DataGrid columns={COLUMNS} source={src} label="Orders" selection={sel} onSelectionChange={(r) => (seen.push(r), setSel(r))} />
+        </>
+      );
+    }
+    render(<Harness jump={{ r0: 5, c0: 2, r1: 5, c1: 2 }} />);
+    await screen.findByText('r0');
+    key('ArrowDown', { shiftKey: true });
+    key('ArrowRight', { shiftKey: true });
+    expect(seen.at(-1)).toEqual({ r0: 0, c0: 0, r1: 1, c1: 1 });
+    expect(grid().querySelectorAll('[aria-selected="true"]').length).toBe(4);
+    fireEvent.mouseDown(within(grid()).getByText('r3'), { shiftKey: true });
+    expect(seen.at(-1)).toEqual({ r0: 0, c0: 0, r1: 3, c1: 1 });
+    key('ArrowUp'); // no Shift: a single cell again
+    expect(seen.at(-1)).toEqual({ r0: 2, c0: 1, r1: 2, c1: 1 });
+    fireEvent.click(screen.getByText('jump'));
+    expect(activeId()).toMatch(/-r5c2$/);
+  });
+
+  it('draws a server flag as an invalid cell with its reason, and a header can open a menu', async () => {
+    const onHeader = vi.fn();
+    const flag = (r: number, c: number) => (r === 1 && c === 0 ? { tone: 'bad' as const, text: 'Not a number' } : undefined);
+    render(<DataGrid columns={COLUMNS} source={rowsSource(5)} label="Orders" cellFlag={flag} onHeaderActivate={onHeader} />);
+    await screen.findByText('r0');
+    const bad = grid().querySelectorAll('[aria-invalid="true"]');
+    expect(bad.length).toBe(1);
+    expect(bad[0]?.getAttribute('title')).toBe('Not a number');
+    fireEvent.click(screen.getAllByRole('columnheader')[1]!);
+    expect(onHeader).toHaveBeenLastCalledWith(1, expect.any(HTMLElement));
+    key('ArrowUp'); // to the header row
+    key('Enter');
+    expect(onHeader).toHaveBeenLastCalledWith(0, expect.any(HTMLElement));
   });
 });

@@ -5,6 +5,7 @@
 //   input:validate     the grid's live check of the rows it is showing — no write
 //   input:save         the batches made since the last save (save on blur)
 //   input:setColumns   Edit columns — rename, retype, required, lookup, add, remove
+//   input:lookups      the other datasets' columns, for the lookup pickers
 //
 // Every payload is untrusted: ids are UUID-checked in the store, definitions go
 // through columns.checkColumns, and every batch is replayed over the STORED
@@ -17,6 +18,7 @@
 
 import { ipcMain } from './bus';
 import * as store from '../data/inputTable/store';
+import * as datasets from '../data/datasets';
 import { afterRefresh } from './datasets';
 
 // ponytail: IPC payloads are JSON envelopes; every field is re-checked in the store
@@ -43,6 +45,22 @@ export function register(): void {
       const res = await store.saveInputBatches(pid, id, p.batches);
       if (res.ok) await afterRefresh(pid, id);
       return res;
+    }));
+
+  // The define-columns dialog's lookup pickers: every OTHER dataset of the
+  // project with its typed columns, in one call (the desktop asked dataset:meta
+  // once per dataset — a request per dataset over HTTP). Names and types only.
+  ipcMain.handle('input:lookups', (_e, p: Payload = {}) =>
+    guard(async () => {
+      const pid = String(p.projectId || '');
+      const out: { id: string; name: string; columns: { name: string; type: string }[] }[] = [];
+      for (const d of await datasets.listDatasets(pid)) {
+        if (d.id === p.id) continue;
+        const meta = await datasets.getDatasetMeta(pid, d.id);
+        const columns = (meta?.columns ?? []).map((c) => ({ name: c.name, type: c.type }));
+        if (columns.length) out.push({ id: d.id, name: d.name, columns });
+      }
+      return { ok: true as const, datasets: out };
     }));
 
   ipcMain.handle('input:setColumns', (_e, p: Payload = {}) =>

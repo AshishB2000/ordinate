@@ -37,7 +37,7 @@ import * as copilot from './copilot';
 import { buildPlanRecords } from '../analysis/planBuild';
 import { DASHBOARD_STYLE_PRESETS } from '../analysis/dashboards';
 import type { DashboardStylePreset } from '../analysis/dashboards';
-import { sourceKindForPath } from '../data/fileImport';
+import { sourceKindForPath, storedKind } from '../data/fileImport';
 import { serverDataDir } from '../server/context';
 import { resolveUpload } from '../server/files';
 import { runQualityChecks } from '../analysis/qualityRun';
@@ -129,7 +129,7 @@ async function runImport(run: PlanRun, step: Extract<PlanStep, { kind: 'import' 
   const filePath = picked.path;
   const name = step.name || path.basename(picked.name, path.extname(picked.name));
   const saved = await datasets.saveDataset(pid, {
-    name, sourceKind: kind, columns: parsed.columns, rows: parsed.rows,
+    name, sourceKind: storedKind(kind), columns: parsed.columns, rows: parsed.rows,
     // The server's upload was a temp file, deleted above: nothing to refresh from.
     ...(serverDataDir() !== null ? {} : { origin: { kind: 'file' as const, path: filePath } }),
   });

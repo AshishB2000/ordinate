@@ -2,6 +2,9 @@ import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import * as captureDataset from '../data/captureDataset';
 import * as history from '../app/history';
+import * as captureUpload from '../app/captureUpload';
+import { modelStatus } from '../ai/byok';
+import { resolveUpload, type Upload } from '../server/files';
 import type { ParsedColumn } from '../data/parse';
 
 // Capture → dataset IPC — turns a capture's `extractedTable` into a saved,
@@ -64,13 +67,51 @@ export function register(deps: CaptureDeps = {}) {
   // The renderer's review-and-correct modal opens on this: it turns the capture's
   // object-keyed extractedTable into a rectangular, strictly-typed draft (same
   // finalize path as every file parser) that the user then edits before saving.
-  ipcMain.handle('captureDataset:draft', async (_e, { extractedTable }: any = {}) => {
+  //
+  // On the server there is no capture loop: the payload is an UPLOADED
+  // screenshot `{ projectId, fileToken, thumb? }` — analyzed here, stored as a
+  // capture, drafted (src/app/captureUpload.ts) — or a stored capture to draft
+  // again `{ projectId, captureId }` (the Captures tab's "Save as dataset").
+  ipcMain.handle('captureDataset:draft', async (_e, payload: any = {}) => {
+    const { extractedTable, projectId, fileToken, captureId } = payload || {};
+    if (fileToken !== undefined) {
+      let upload: Upload | null = null;
+      try {
+        upload = resolveUpload(fileToken);
+        return await captureUpload.captureFromUpload(String(projectId), upload.path, payload.thumb);
+      } catch (err: any) {
+        return { ok: false, errorType: 'unknown', message: err?.message || 'Could not read that screenshot' };
+      } finally {
+        upload?.done();
+      }
+    }
+    if (captureId !== undefined) {
+      const thread = await captureUpload.loadOwn(String(projectId), String(captureId)).catch(() => null);
+      return thread ? captureUpload.draftOf(thread) : { ok: false, errorType: 'gone', message: 'That capture no longer exists.' };
+    }
     try {
       const draft = captureDataset.buildDraft(extractedTable);
       return { ok: true, columns: draft.columns, rows: draft.rows, warnings: draft.warnings };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not read the extracted table' };
     }
+  });
+
+  // ── The Captures tab, on the server ─────────────────────────────────────────
+  // What a model is available to read a screenshot (the not-ready state); one
+  // project's captures, WITHOUT the crop's server path (a browser cannot read
+  // it — the list carries the upload's own thumbnail instead); and delete.
+  // The desktop reads the same records through history:list / history:delete.
+  ipcMain.handle('captureDataset:status', () => modelStatus());
+  ipcMain.handle('captureDataset:list', async (_e, { projectId }: any = {}) =>
+    (await history.loadAllSummaries(String(projectId))).map(({ cropPath, copilotThreadId: _c, ...rest }) => ({
+      ...rest,
+      hasImage: !!cropPath,
+    })));
+  ipcMain.handle('captureDataset:delete', async (_e, { projectId, captureId }: any = {}) => {
+    const thread = await captureUpload.loadOwn(String(projectId), String(captureId)).catch(() => null);
+    if (!thread) return { ok: false, error: 'That capture no longer exists.' };
+    return { ok: await history.deleteThread(thread.id) };
   });
 
   // ── Confirmed save (create / replace / append) ────────────────────────────────

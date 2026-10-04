@@ -45,6 +45,10 @@ export const pages: RouteObject[] = [
 
   page('/trash', () => import('../features/projects/TrashPage')),
   page('/versions/:projectId/:type/:id', () => import('../features/projects/VersionsPage')),
+  // Import, composer, captures, input tables (T2.4), in the current project.
+  page('/data/import', () => import('../features/import/ImportPage')),
+  page('/data/captures', () => import('../features/import/CapturesPage')),
+  page('/data/input/:projectId/:datasetId', () => import('../features/import/InputTablePage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

@@ -58,7 +58,7 @@ const ALLOWED: Record<string, number> = {
   // 3,387 lines; the assertion count went UP, 323 -> 341.
   'scripts/smoke-app.ts': 337,
   'scripts/test-connectorsHttp.ts': 881,
-  'src/ai/analyze.ts': 911,
+  'src/ai/analyze.ts': 883,
   'src/engine/anomaliesResident.ts': 870,
   'src/connectors/http.ts': 1036,
   'src/connectors/local.ts': 778,

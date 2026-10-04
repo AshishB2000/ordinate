@@ -13,10 +13,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { rpc } from '../../api/client';
+import { rpc, upload } from '../../api/client';
 import { Button } from '../../ui/Button';
 import { Icon, ICON_NAMES, type IconName } from '../../ui/icons/Icon';
-import { uploadFile } from './upload';
 import { EditControls, EditFields, type Step } from './PlanEdit';
 import s from './Plan.module.css';
 
@@ -176,7 +175,7 @@ export function PlanCard({ projectId, threadId, action, onDone, onLogged }: {
     setNote(`Uploading ${file.name}…`);
     let token: string;
     try {
-      token = (await uploadFile(file)).fileToken;
+      token = (await upload(file, file.name)).fileToken;
     } catch (err) {
       setBusy(false);
       return setNote(err instanceof Error ? err.message : 'The file could not be uploaded.');

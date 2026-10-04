@@ -28,6 +28,8 @@ const MAX_ROWS = 1_000_000;
 const PREVIEW_PARENT_ROWS = 50_000;
 /** Rows returned to the renderer per preview page. */
 const PREVIEW_PAGE_ROWS = 100;
+/** The most rows one windowed preview call returns (the DataGrid asks for 500). */
+export const PREVIEW_MAX_LIMIT = 500;
 
 /**
  * The composer's renames/retypes/drops are ORDINARY prepare steps, committed
@@ -67,6 +69,10 @@ async function resolveRef(projectId: string, ref: TableRef, sample: number | nul
   // A staged file import (./datasetImport.ts): the full table is already in
   // main; the renderer only holds its display slice and this id.
   const stagedTable = inline ? importStage.get(inline.stagedId) : null;
+  // A staged ref whose table is gone — expired, saved, or another org's or
+  // user's (importStage is per owner) — fails the chain. Falling through to the
+  // inline rows would preview, or save, the 2,000-row display slice.
+  if (inline && inline.stagedId != null && !stagedTable) return null;
   if (stagedTable) {
     const truncated = sample !== null && stagedTable.rows.length > sample;
     return {
@@ -96,7 +102,10 @@ async function resolveRef(projectId: string, ref: TableRef, sample: number | nul
 async function resolveChain(projectId: string, base: TableRef, joins: any[], sample: number | null) {
   const list = Array.isArray(joins) ? joins : [];
   const baseRes = await resolveRef(projectId, base || {}, sample);
-  if (!baseRes) return { error: 'The base table could not be loaded.' } as const;
+  if (!baseRes) {
+    const gone = base && (base.inline as { stagedId?: unknown } | undefined)?.stagedId != null;
+    return { error: gone ? importStage.GONE : 'The base table could not be loaded.' } as const;
+  }
   const parts: Resolved[] = [baseRes];
   for (let i = 0; i < list.length; i += 1) {
     const r = await resolveRef(projectId, list[i] || {}, sample);
@@ -115,7 +124,8 @@ async function resolveChain(projectId: string, base: TableRef, joins: any[], sam
 
 // Fold the chain over a SAMPLE of each parent and return one page of the result.
 // Debounced by the renderer; cheap by construction.
-async function composePreview({ projectId, base, joins, page }: any = {}) {
+// `offset` + `limit` (the web DataGrid's blocks, ≤ PREVIEW_MAX_LIMIT) replace `page` when given.
+async function composePreview({ projectId, base, joins, page, offset: at, limit }: any = {}) {
   try {
     const r = await resolveChain(projectId, base, joins, PREVIEW_PARENT_ROWS);
     if ('error' in r) return { ok: false, error: r.error };
@@ -126,11 +136,13 @@ async function composePreview({ projectId, base, joins, page }: any = {}) {
     if (r.parts.some((p) => p.truncated)) {
       warnings.push(`Preview — computed from the first ${PREVIEW_PARENT_ROWS.toLocaleString()} rows per table`);
     }
-    const offset = Math.max(0, Number(page) || 0) * PREVIEW_PAGE_ROWS;
+    const windowed = Number.isInteger(at) && Number.isInteger(limit);
+    const offset = windowed ? Math.max(0, at) : Math.max(0, Number(page) || 0) * PREVIEW_PAGE_ROWS;
+    const size = windowed ? Math.max(0, Math.min(PREVIEW_MAX_LIMIT, limit)) : PREVIEW_PAGE_ROWS;
     return {
       ok: true,
       columns: res.columns,
-      rows: res.rows.slice(offset, offset + PREVIEW_PAGE_ROWS),
+      rows: res.rows.slice(offset, offset + size),
       total: res.rowCount,
       pageRows: PREVIEW_PAGE_ROWS,
       sampled: r.parts.some((p) => p.truncated),
@@ -153,11 +165,16 @@ async function composePreview({ projectId, base, joins, page }: any = {}) {
  * null for every other origin, which is every other caller unchanged.
  */
 async function resolveCaptureLink(
+  projectId: string,
   origin: any,
 ): Promise<{ entryId: string | null; cropPath: string | null } | null> {
   if (!origin || origin.kind !== 'capture' || !origin.captureId) return null;
   const thread = await history.loadThread(origin.captureId).catch(() => null);
-  return { entryId: String(origin.captureId), cropPath: (thread && thread.cropPath) || null };
+  // A capture is a project record: a dataset links only to one of its own
+  // project's captures (the caller's role was checked on THIS project, not on
+  // the capture's). Another project's — or no such capture — links nothing.
+  if (!thread || (thread.projectId && thread.projectId !== projectId)) return null;
+  return { entryId: String(origin.captureId), cropPath: thread.cropPath || null };
 }
 
 /**
@@ -191,7 +208,9 @@ export async function composeSave(
     // Paste and Import) carries `origin: { kind:'capture', captureId }`. The
     // screenshot LINK is resolved here, from main's own history record, because
     // a renderer-sent crop path is a renderer-sent filesystem path.
-    const captureLink = await resolveCaptureLink(origin);
+    const captureLink = await resolveCaptureLink(projectId, origin);
+    // An unlinked capture origin (another project's, or gone) is not stored either.
+    const keptOrigin = origin && origin.kind === 'capture' && !captureLink ? undefined : origin;
 
     // No joins: an ordinary save. Same rows, same origin, same speed as before.
     if (!list.length) {
@@ -200,7 +219,7 @@ export async function composeSave(
         sourceKind: sourceKind || (r.baseRes.id ? 'combined' : 'csv'),
         columns: r.baseRes.table.columns,
         rows: r.baseRes.table.rows.slice(0, MAX_ROWS),
-        origin,
+        origin: keptOrigin,
         capture: captureLink ?? undefined,
       }, writing);
       if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
@@ -227,7 +246,7 @@ export async function composeSave(
         sourceKind: sourceKind || 'csv',
         columns: r.baseRes.table.columns,
         rows: r.baseRes.table.rows.slice(0, MAX_ROWS),
-        origin,
+        origin: keptOrigin,
       });
       if (!savedBase) return { ok: false, error: 'Invalid project, or the project no longer exists' };
       importStage.drop(base && base.inline && base.inline.stagedId);

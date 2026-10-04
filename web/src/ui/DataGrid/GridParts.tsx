@@ -17,6 +17,12 @@ export interface GridColumn {
   type: ColumnType;
 }
 
+/** A cell the server flagged: `bad` fails a check, `warn` is a warning; `text` says why. */
+export interface CellFlag {
+  tone: 'bad' | 'warn';
+  text: string;
+}
+
 const TYPE_WORD: Record<ColumnType, string> = { text: 'Text', number: 'Number', date: 'Date' };
 
 /** The column's type as an icon and a word, so it never rests on colour alone. */
@@ -51,12 +57,15 @@ export function HeaderCell({
   column,
   active,
   onResize,
+  onActivate,
 }: {
   grid: string;
   col: VirtualItem;
   column: GridColumn;
   active: boolean;
   onResize: (index: number, width: number) => void;
+  /** A header with a menu: a click opens it (the resize handle excepted). */
+  onActivate?: (index: number, anchor: HTMLElement) => void;
 }) {
   const drag = useRef<{ x: number; w: number } | null>(null);
   const down = (e: PointerEvent<HTMLSpanElement>) => {
@@ -77,17 +86,21 @@ export function HeaderCell({
       id={cellId(grid, -1, col.index)}
       aria-colindex={col.index + 1}
       aria-description="Shift+Left or Shift+Right resizes the column"
-      className={active ? `${s.th} ${s.active}` : s.th}
+      className={[s.th, active && s.active, onActivate && s.thMenu].filter(Boolean).join(' ')}
       style={{ transform: `translateX(${col.start}px)`, width: col.size }}
       data-row={-1}
       data-col={col.index}
+      aria-haspopup={onActivate ? 'dialog' : undefined}
+      onClick={onActivate ? (e) => onActivate(col.index, e.currentTarget) : undefined}
     >
       <span className={s.thName} title={column.name}>
         {column.name}
       </span>
       <TypeBadge type={column.type} />
+      {onActivate && <Icon name="chevron-down" size={12} />}
       <span
         className={s.resize}
+        onClick={(e) => e.stopPropagation()}
         aria-hidden="true"
         onPointerDown={down}
         onPointerMove={moveTo}
@@ -114,6 +127,12 @@ export interface RowProps {
   onEditKey: (e: KeyboardEvent<HTMLInputElement>) => void;
   onEditChange: (value: string) => void;
   onEditBlur: () => void;
+  /** Columns of a multi-cell selection on this row (-1 when the row is outside it). */
+  selFrom?: number;
+  selTo?: number;
+  flag?: (row: number, col: number) => CellFlag | undefined;
+  /** The editor's <datalist> id, while this row's cell is being edited. */
+  list?: string;
 }
 
 export const Row = memo(function Row(p: RowProps) {
@@ -129,13 +148,18 @@ export const Row = memo(function Row(p: RowProps) {
         const v = p.cells?.[c.index];
         const num = typeof v === 'number' || (p.columns[c.index]?.type === 'number' && v != null);
         const active = c.index === p.activeCol;
+        const inSel = p.selFrom !== undefined && p.selFrom >= 0 && c.index >= p.selFrom && c.index <= (p.selTo ?? -1);
+        const flag = p.cells ? p.flag?.(p.index, c.index) : undefined;
         return (
           <div
             key={c.key}
             role="gridcell"
             id={cellId(p.grid, p.index, c.index)}
             aria-colindex={c.index + 1}
-            className={[s.td, num && s.num, active && s.active].filter(Boolean).join(' ')}
+            aria-selected={inSel || undefined}
+            aria-invalid={flag ? true : undefined}
+            title={flag?.text}
+            className={[s.td, num && s.num, inSel && s.inSel, active && s.active, flag && (flag.tone === 'bad' ? s.bad : s.warn)].filter(Boolean).join(' ')}
             style={{ transform: `translateX(${c.start}px)`, width: c.size }}
             data-row={p.index}
             data-col={c.index}
@@ -145,6 +169,7 @@ export const Row = memo(function Row(p: RowProps) {
                 className={s.editor}
                 aria-label={`Edit ${p.columns[c.index]?.name ?? ''}, row ${p.index + 1}`}
                 value={p.editing}
+                list={p.list}
                 autoFocus
                 onChange={(e) => p.onEditChange(e.target.value)}
                 onKeyDown={p.onEditKey}

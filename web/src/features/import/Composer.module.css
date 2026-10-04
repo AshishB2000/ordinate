@@ -1,0 +1,305 @@
+/* The composer (hub.css "the dataset composer", .dc-*): its head, the sources
+   panel, the chain canvas with its join badges, and the preview's notes. Tokens
+   only: both themes follow. Split from Import.module.css (file-size rule). */
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.composerHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding-bottom: var(--sp-12);
+  border-bottom: 1px solid var(--border-hairline);
+}
+.nameInput {
+  flex: 0 1 320px;
+  min-width: 0;
+  height: var(--ctl-md);
+  padding: 0 var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: var(--t-13);
+}
+.nameInput:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.composerBody {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--sp-12) var(--sp-16);
+}
+.sources {
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  min-width: 0;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  padding-right: var(--sp-12);
+  border-right: 1px solid var(--border-hairline);
+}
+.srcGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.srcLabel {
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+}
+.srcList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.src {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: grab;
+}
+.src:hover {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.src:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.srcUsed {
+  opacity: 0.6;
+  cursor: default;
+}
+.srcName {
+  font-size: var(--t-13);
+  color: var(--text-strong);
+}
+.srcMeta,
+.srcEmpty {
+  font-size: var(--t-12);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The canvas — a horizontal chain, never free 2-D placement. */
+.canvas {
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  min-height: 96px;
+  padding: var(--sp-12) var(--sp-16);
+  border-radius: var(--r-lg);
+  background-color: var(--surface-2);
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+.canvasOver {
+  outline: 2px dashed var(--accent);
+  outline-offset: -4px;
+}
+.canvasEmpty {
+  color: var(--muted);
+}
+.chip {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 140px;
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.chipName {
+  font-size: var(--t-13);
+  font-weight: 500;
+  color: var(--text-strong);
+}
+.chipMeta {
+  font-size: var(--t-11);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.chipKind {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 1px var(--sp-4);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-11);
+  text-transform: uppercase;
+}
+.chipX {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  opacity: 0;
+}
+.chip:hover .chipX,
+.chipX:focus-visible {
+  opacity: 1;
+}
+.linkWrap {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.link {
+  display: flex;
+  align-items: center;
+}
+.link::before,
+.link::after {
+  content: '';
+  width: 18px;
+  height: 1px;
+  background: var(--border-2);
+}
+.badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--accent);
+  cursor: pointer;
+}
+.badge:hover {
+  border-color: var(--accent);
+}
+.badge:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.badgeWarn {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.modes {
+  display: flex;
+  gap: var(--sp-4);
+}
+.mode {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 72px;
+  padding: var(--sp-8) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-11);
+  cursor: pointer;
+}
+.mode:hover {
+  border-color: var(--accent);
+}
+.mode:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.modeOn {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.popNote {
+  max-width: 300px;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.popWarn {
+  font-size: var(--t-12);
+  color: var(--text-strong);
+}
+.keys {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-8);
+  min-width: 300px;
+}
+.keyEq {
+  color: var(--muted);
+}
+
+/* The preview: notes, the dropped-columns strip, the grid. */
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-width: 0;
+}
+.warnings {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  list-style: none;
+}
+.warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  padding: var(--sp-4) var(--sp-8);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--text-strong);
+  font-size: var(--t-12);
+}
+.warning svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--warn);
+}
+.dropped {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.droppedLabel {
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+}
+

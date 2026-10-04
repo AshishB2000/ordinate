@@ -730,3 +730,23 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
 - **Chain gates (T2.1+T2.2 on develop):** `npm test` 269/269 with and without DB; Vitest 372/372;
   e2e 17 + 2 skip (no DB), 21/21 (DB; one connections timeout once in a full run, passed alone and on
   rerun); lint 0; 91 contracts, 0 unresolved; file sizes pass.
+
+## 2026-10-04 — T2.4 Import, composer, captures, input tables
+
+- **Screens:** import (upload → staged → composer), the composer (joins, preview, save through the
+  ordinary `composeSave`), captures (list tab + page; a capture becomes a dataset through
+  `captureDataset:draft` → composer with editable preview cells), input tables. Uses
+  `useCurrentProject()`; one upload helper (`upload()` in `web/src/api/client.ts`, 413 worded with the cap).
+- **AI reconciled with T2.12:** one fetch seam (`providerFetch`), one key source (`byokCredentials`, the
+  org's secrets store), one allow-list check (`execConfig.providerAllowed` inside `resolveByok`, used by
+  every model call incl. captures). `test-importServer`: allow-list `['openai']` with a gateway connected →
+  `not_allowed`, draft refused, mock model 0 calls.
+- **Security:** staged imports bound to org + user; a capture summary carries `hasImage`, never its crop
+  path, on the server — stripped in `datasetSummary.summarize` itself so recent/search/catalog and every
+  other `listDatasets` caller get it (negative control: 2 checks fail without it).
+- **Measured:** RPCs per load — composer 19, screenshot→composer 12, Captures tab 4–6; initial JS
+  167 KB gzip; 104 contracts, 0 unresolved.
+- **Chain gates (on develop f0a0637):** `npm test` 270/270 without DB, with DB 268 + 2 passing alone
+  (connections-server, secrets — shared-DB contention); Vitest 379/379; e2e 27/27 (DB), 23 + 2 skip (no DB);
+  lint 0; file sizes pass. Agent: Electron import/composer/capture/dock smokes pass.
+- **Open:** desktop-only `src/ipc/providers.ts` still calls `net.fetch` (not on the server path).

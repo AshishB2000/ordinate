@@ -24,7 +24,8 @@
 import * as datasets from './datasets';
 import type { Dataset, DatasetOrigin } from './datasets';
 import * as combine from './combine';
-import { parseFile, sourceKindForPath } from './fileImport';
+import { sourceKindForPath } from './fileImport';
+import { parseAnyFile } from './parquetImport';
 import { runConnection } from '../connectors/connectionRun';
 import { refreshConnectionInto } from '../ipc/connections';
 import { refreshIncremental } from './incrementalRefresh';
@@ -211,7 +212,7 @@ async function refreshFromFile(
 
   let parsed;
   try {
-    parsed = await parseFile(origin.path, kind, origin.sheetName);
+    parsed = await parseAnyFile(origin.path, kind, origin.sheetName);
   } catch (err: any) {
     // A moved/renamed/deleted file and a permissions failure are the two normal
     // ways this breaks, and both deserve the path rather than an errno.

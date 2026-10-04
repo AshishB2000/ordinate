@@ -20,7 +20,8 @@ import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
 import * as sqlDatasets from '../engine/sqlDatasets';
 import { viewColumns } from '../engine/datasetView';
-import { parseFile, sourceKindForPath } from '../data/fileImport';
+import { sourceKindForPath, storedKind } from '../data/fileImport';
+import { parseAnyFile } from '../data/parquetImport';
 import { refreshDataset } from '../data/datasetRefresh';
 import { refreshDependents } from '../data/datasetDependents';
 import { runQualityChecks } from '../analysis/qualityRun';
@@ -127,11 +128,11 @@ export async function datasetsImport(ctx: Ctx, file: string, name: string): Prom
     async (progress) => {
       progress(0.1, 'Reading the file');
       ctx.progress(`Reading ${path.basename(abs)}…`);
-      const parsed = await parseFile(abs, kind);
+      const parsed = await parseAnyFile(abs, kind);
       progress(0.6, `Saving ${parsed.rowCount.toLocaleString('en-US')} rows`);
       ctx.progress(`Saving ${parsed.rowCount.toLocaleString('en-US')} rows…`);
       const saved = await datasets.saveDataset(ctx.projectId, {
-        name: dsName, sourceKind: kind, columns: parsed.columns, rows: parsed.rows,
+        name: dsName, sourceKind: storedKind(kind), columns: parsed.columns, rows: parsed.rows,
         origin: { kind: 'file', path: abs },
       });
       if (!saved) throw new AutomationError('runtime', 'Could not save the dataset.');

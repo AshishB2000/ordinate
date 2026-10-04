@@ -8,6 +8,7 @@
 import type { AutoRefresh, Dataset, DatasetOrigin } from './datasets';
 import { qualityFailingCount } from '../analysis/qualityRules';
 import { stepRefIds } from './stepTypes';
+import { serverDataDir } from '../server/context';
 
 export interface DatasetSummary {
   id: string;
@@ -17,8 +18,10 @@ export interface DatasetSummary {
   columnCount: number;
   updatedAt: string;
   // Week 13 — just the crop path (not the full capture object) so the saved-list
-  // can render a capture thumbnail + badge without a full dataset load.
-  capture?: { cropPath: string | null };
+  // can render a capture thumbnail + badge without a full dataset load. On the
+  // server it is only `hasImage`: a browser can do nothing with a server path
+  // and must never learn one, whichever channel hands it a summary.
+  capture?: { cropPath: string | null } | { hasImage: boolean };
   // Freshness for the saved list, WITHOUT a full dataset load: enough of the
   // origin to decide "is this refreshable" and to name the source, never the
   // path, the URL or the SQL. `lastRefreshError` is the REASON a red dot shows,
@@ -65,7 +68,7 @@ export function summarize(ds: Dataset): DatasetSummary {
     columnCount: ds.columns.length,
     updatedAt: ds.updatedAt,
   };
-  if (ds.capture) summary.capture = { cropPath: ds.capture.cropPath };
+  if (ds.capture) summary.capture = serverDataDir() === null ? { cropPath: ds.capture.cropPath } : { hasImage: !!ds.capture.cropPath };
   // 'capture' is deliberately withheld: `originKind` is what the list and
   // the explorer read to offer "↻ Refresh", and a screenshot has nothing to
   // re-fetch. The origin itself stays on the full record (the capture page
