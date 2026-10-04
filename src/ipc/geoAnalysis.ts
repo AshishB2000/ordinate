@@ -22,6 +22,7 @@ import { resolvePlace } from '../analysis/places';
 import { BUNDLED_BOUNDARIES, checkSpatialJoin, spatialStats } from '../analysis/geo/spatialJoin';
 import { inputAt } from './preparePower';
 import { commitSteps } from './datasets';
+import { forClient } from './stepReply';
 
 async function preview(projectId: string, datasetId: string, index: number, raw: unknown): Promise<unknown> {
   const step = checkSpatialJoin((raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>);
@@ -29,7 +30,10 @@ async function preview(projectId: string, datasetId: string, index: number, raw:
   const at = await inputAt(projectId, datasetId, index, step);
   if (!at) return { ok: false, error: 'Dataset not found' };
   const stats = spatialStats(at.input, step, at.ctx);
-  return typeof stats === 'string' ? { ok: false, error: stats } : { ok: true, stats };
+  if (typeof stats === 'string') return { ok: false, error: stats };
+  // The meter's share (one decimal) and the "outside every region" count, so a browser only prints them.
+  const pct = stats.total ? Math.round((stats.matched / stats.total) * 1000) / 10 : 0;
+  return { ok: true, stats: { ...stats, pct, outside: stats.total - stats.matched - stats.noCoords } };
 }
 
 async function save(projectId: string, datasetId: string, index: number, raw: unknown): Promise<unknown> {
@@ -91,7 +95,7 @@ export function register(): void {
 
   ipcMain.handle('geo:saveSpatialStep', async (_e, { projectId, datasetId, index, step }: any = {}) => {
     try {
-      return await save(String(projectId || ''), String(datasetId || ''), Number(index), step);
+      return forClient(await save(String(projectId || ''), String(datasetId || ''), Number(index), step));
     } catch (err: any) { // ponytail: any thrown value, reported by its message only
       return { ok: false, error: err?.message || 'Could not assign the regions' };
     }

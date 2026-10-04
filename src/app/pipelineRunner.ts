@@ -28,6 +28,9 @@ import * as reportSpec from '../analysis/reportSpec';
 import { getStoredConfig } from '../publish/publish';
 import type { AlertEvent } from '../analysis/alerts';
 import * as hubs from '../windows/hubRegistry';
+import { ctx, orgKey, serverDataDir } from '../server/context';
+import { publish } from '../server/sse';
+import { maskKeys } from './pipelineIds';
 import * as jobs from './jobs';
 import * as store from './pipelineStore';
 import { downstream, runGraph } from './pipelines';
@@ -39,11 +42,16 @@ import { nextCronRun } from './pipelineCron';
 const live = new Map<string, Map<string, 'queued' | 'running'>>();
 
 export function liveState(projectId: string): Record<string, string> {
-  return Object.fromEntries(live.get(projectId) || []);
+  return Object.fromEntries(live.get(orgKey(projectId)) || []);
 }
 
 function changed(projectId: string): void {
-  try { hubs.broadcast('pipelines:changed', { projectId, live: liveState(projectId) }); } catch (_) { /* a window closing mid-send */ }
+  const payload = { projectId, live: liveState(projectId) };
+  try {
+    // The server's tabs of this org get it over SSE (T2.6); the desktop's windows over IPC.
+    if (serverDataDir() !== null) publish({ org: ctx().org.id }, 'pipelines:changed', { projectId, live: maskKeys(payload.live) });
+    else hubs.broadcast('pipelines:changed', payload);
+  } catch (_) { /* a window closing mid-send */ }
 }
 
 async function asJob<T>(spec: { kind: jobs.JobKind; label: string; projectId: string; datasetId?: string }, run: () => Promise<T>): Promise<T> {
@@ -159,9 +167,11 @@ export async function runFrom(
   projectId: string, start: string[], trigger: 'manual' | 'schedule',
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
 ): Promise<RunReply> {
-  if (live.has(projectId)) return { ok: false, error: 'This pipeline is already running.' };
+  // Keyed per org: on a server a project id repeats across orgs after an import.
+  const key = orgKey(projectId);
+  if (live.has(key)) return { ok: false, error: 'This pipeline is already running.' };
   const state = new Map<string, 'queued' | 'running'>();
-  live.set(projectId, state);
+  live.set(key, state);
   try {
     const g = await loadGraph(projectId);
     if ('error' in g) return { ok: false, error: g.error };
@@ -203,7 +213,7 @@ export async function runFrom(
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : 'The pipeline could not run.' };
   } finally {
-    live.delete(projectId);
+    live.delete(key);
     changed(projectId);
   }
 }
@@ -214,7 +224,7 @@ export async function tick(now = Date.now()): Promise<void> {
   try { list = await require('./projects').listProjects(); } catch (_) { return; }
   for (const p of list) {
     const s = (await store.load(p.id)).schedule;
-    if (!s || s.paused || live.has(p.id)) continue;
+    if (!s || s.paused || live.has(orgKey(p.id))) continue;
     const next = nextCronRun(s.cron, s.tz, Date.parse(s.lastRunAt || s.since));
     if (next === null || next > now) continue;
     // Stamp FIRST, win or lose — the scheduler's rule: a failing pipeline waits

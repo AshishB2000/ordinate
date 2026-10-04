@@ -138,7 +138,16 @@ async function main(): Promise<void> {
       const res = await profileH({}, { projectId: proj.id, datasetId: ds.id, column: 'review' });
       const want = tp.profileText(tp.textSampleOf(ds.columns, rows, 'review', tp.TEXT_SAMPLE_CAP) as string[]);
       ok('text:profile answers with the profile', !!(res && res.ok && res.profile), JSON.stringify(res).slice(0, 200));
-      ok('text:profile === profileText(JS sample) — every figure', JSON.stringify(res.profile) === JSON.stringify(want));
+      // T2.6: the reply also carries each bar's share and length and the mood, so a browser divides nothing.
+      // Worked out here a second way, from the reference profile.
+      const bars = (list: Array<{ term: string; count: number }>) => {
+        const total = list.reduce((a, t) => a + t.count, 0);
+        const max = Math.max(0, ...list.map((t) => t.count));
+        return list.map((t) => ({ ...t, pct: total ? Math.round((100 * t.count) / total) : 0, barPct: max ? Math.max(t.count ? 2 : 0, Math.round((100 * t.count) / max)) : 0 }));
+      };
+      const mood = !want.sentiment ? {} : { mood: want.sentiment.mean >= 0.05 ? 'positive' : want.sentiment.mean <= -0.05 ? 'negative' : 'neutral' };
+      const wantFull = { ...want, topTerms: bars(want.topTerms), topBigrams: bars(want.topBigrams), ...mood };
+      ok('text:profile === profileText(JS sample) — every figure', JSON.stringify(res.profile) === JSON.stringify(wantFull), JSON.stringify(res.profile).slice(0, 300));
       ok('text:profile never hydrated the table', hydrated === 0, `getDataset called ${hydrated}x`);
       ok('long reviews are eligible, English, with terms and a sentiment spread',
         res.profile.eligible && res.profile.lang === 'en' && res.profile.topTerms.length > 0 && res.profile.sentiment
@@ -161,7 +170,7 @@ async function main(): Promise<void> {
     const pv = await previewH({}, { projectId: proj.id, datasetId: ds.id, index: -1,
       step: { type: 'keyword_rules', column: 'review', rules: [{ pattern: 'delivery', category: 'Delivery', match: 'word' }], otherwise: 'Other' } });
     ok('text:preview counts rows per category, rule order first, the default last',
-      pv.ok && JSON.stringify(pv.categories) === JSON.stringify([{ category: 'Delivery', count: 20, isDefault: false }, { category: 'Other', count: 40, isDefault: true }]),
+      pv.ok && JSON.stringify(pv.categories) === JSON.stringify([{ category: 'Delivery', count: 20, isDefault: false, pct: 33, barPct: 50 }, { category: 'Other', count: 40, isDefault: true, pct: 67, barPct: 100 }]),
       JSON.stringify(pv.categories));
     const bad = await previewH({}, { projectId: proj.id, datasetId: ds.id, index: -1, step: { type: 'text_terms', column: 'review', lang: 'klingon' } });
     ok('text:preview refuses a malformed step with its reason', bad.ok === false && /language/.test(bad.error));

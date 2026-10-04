@@ -23,6 +23,7 @@ import { WARM_MIN_ROWS, dropWarm, warmTextStep } from '../data/stepsText';
 import { loadStepRefs } from '../data/stepRefs';
 import { saltForSteps } from '../app/privacyStore';
 import { commitSteps } from './datasets';
+import { forClient } from './stepReply';
 import { textSampleResident } from '../engine/textSampleResident';
 import { TEXT_SAMPLE_CAP, profileText, textSampleOf } from '../analysis/text/textProfile';
 import { isTextLang } from '../analysis/text/tokenize';
@@ -52,7 +53,18 @@ export async function textProfile(projectId: string, datasetId: string, column: 
     values = textSampleOf(ds.columns, ds.rows, column, TEXT_SAMPLE_CAP);
   }
   if (!values) return { ok: true, profile: null };
-  return { ok: true, profile: profileText(values, isTextLang(lang) ? lang : undefined) };
+  const p = profileText(values, isTextLang(lang) ? lang : undefined);
+  // The bars, and the sentiment's word (VADER's ±0.05), decided here with the figures.
+  const mean = p.sentiment ? p.sentiment.mean : 0;
+  return {
+    ok: true,
+    profile: {
+      ...p,
+      topTerms: withShares(p.topTerms),
+      topBigrams: withShares(p.topBigrams),
+      ...(p.sentiment ? { mood: mean >= 0.05 ? 'positive' : mean <= -0.05 ? 'negative' : 'neutral' } : {}),
+    },
+  };
 }
 
 // ── the step's input (what the fold would hand it) ───────────────────────────
@@ -139,7 +151,26 @@ function categorySummary(rows: Cell[][], ci: number, step: Extract<TextStep, { t
   for (const rule of step.rules) if (!order.includes(rule.category)) order.push(rule.category);
   const other = step.otherwise === undefined || step.otherwise === null ? '' : step.otherwise;
   if (!order.includes(other)) order.push(other);
-  return order.map((category) => ({ category, count: counts.get(category) || 0, isDefault: category === other }));
+  return withShares(order.map((category) => ({ category, count: counts.get(category) || 0, isDefault: category === other })));
+}
+
+/**
+ * Each row's share of the total (whole percent, `pct`) and its bar against the
+ * largest (`barPct`, at least 2 when it has any) — the figures a preview prints
+ * and draws, so a browser never divides one count by another.
+ */
+export function withShares<T extends { count: number }>(rows: T[]): Array<T & { pct: number; barPct: number }> {
+  let total = 0;
+  let max = 0;
+  for (const r of rows) {
+    total += r.count;
+    if (r.count > max) max = r.count;
+  }
+  return rows.map((r) => ({
+    ...r,
+    pct: total ? Math.round((r.count / total) * 100) : 0,
+    barPct: max > 0 ? Math.max(r.count ? 2 : 0, Math.round((r.count / max) * 100)) : 0,
+  }));
 }
 
 // ── text:commitStep ──────────────────────────────────────────────────────────
@@ -209,7 +240,7 @@ export function register(): void {
   });
   ipcMain.handle('text:commitStep', async (_e, { projectId, datasetId, index, step }: any = {}) => {
     try {
-      return await commitTextStep(String(projectId || ''), String(datasetId || ''), Number(index), step);
+      return forClient(await commitTextStep(String(projectId || ''), String(datasetId || ''), Number(index), step));
     } catch (err: any) { // ponytail: any thrown value, reported by its message only
       return { ok: false, error: err?.message || 'Could not save the step' };
     }

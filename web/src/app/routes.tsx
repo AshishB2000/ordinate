@@ -55,6 +55,9 @@ export const pages: RouteObject[] = [
   page('/visuals/:projectId', () => import('../features/visuals/VisualsPage')),
   page('/visuals/:projectId/new', () => import('../features/visuals/BuilderPage')),
   page('/visuals/:projectId/:visualId', () => import('../features/visuals/BuilderPage')),
+
+  // Prepare (T2.6): a dataset's reversible step pipeline beside its prepared rows.
+  page('/data/:projectId/:datasetId/prepare', () => import('../features/prepare/PreparePage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

@@ -128,6 +128,11 @@ function Header({ projectId, id, name, rowCount, columnCount }: { projectId: str
           {list.data && <LineageLine projectId={projectId} id={id} list={list.data} />}
         </div>
         <div className={s.dsActions}>
+          {/* The reversible step pipeline (T2.6): its own page, the rows beside the steps. */}
+          <Link className={buttonClass('secondary', 'sm')} to={`/data/${projectId}/${id}/prepare`}>
+            <Icon name="sliders" />
+            <span>Prepare</span>
+          </Link>
           <Link className={buttonClass('primary', 'sm')} to={`/visuals?project=${projectId}&datasetId=${id}`}>
             New visual
           </Link>

@@ -18,6 +18,8 @@ import { isValidId } from '../app/ids';
 import * as store from '../app/pipelineStore';
 import * as runner from '../app/pipelineRunner';
 import { loadView } from '../app/pipelineView';
+import { tally, withSummary } from '../app/pipelineSummary';
+import { maskKeys, maskOutcomes, maskView, unmaskNodeId } from '../app/pipelineIds';
 import { sanitizePolicy } from '../app/pipelines';
 import { describeCron, isValidTimeZone, nextCronRun, parseCron } from '../app/pipelineCron';
 
@@ -41,7 +43,8 @@ export function register(deps: { headless?: boolean }): void {
     try {
       if (!isValidId(projectId)) return { ok: false, error: 'Unknown project.' };
       const view = await loadView(projectId);
-      return { ...view, live: runner.liveState(projectId) };
+      if (!view.ok) return view; // a loop names the records, never an origin
+      return { ...maskView(withSummary(view)), live: maskKeys(runner.liveState(projectId)) };
     } catch (err) {
       return fail(err, 'Could not read the pipeline.');
     }
@@ -51,8 +54,10 @@ export function register(deps: { headless?: boolean }): void {
   ipcMain.handle('pipelines:run', async (_e, { projectId, nodeId }: any = {}) => {
     try {
       if (!isValidId(projectId)) return { ok: false, error: 'Unknown project.' };
-      if (nodeId !== undefined && nodeId !== null && !store.isNodeId(nodeId)) return { ok: false, error: 'Unknown step.' };
-      return await runner.runFrom(projectId, nodeId ? [nodeId] : [], 'manual');
+      const real = nodeId === undefined || nodeId === null ? null : await unmaskNodeId(projectId, String(nodeId));
+      if (nodeId !== undefined && nodeId !== null && !store.isNodeId(real)) return { ok: false, error: 'Unknown step.' };
+      const r = await runner.runFrom(projectId, real ? [real] : [], 'manual');
+      return r.ok ? { ...r, outcomes: maskOutcomes(r.outcomes), ...tally(r.outcomes) } : r;
     } catch (err) {
       return fail(err, 'The pipeline could not run.');
     }
@@ -93,8 +98,9 @@ export function register(deps: { headless?: boolean }): void {
     }
   });
 
-  ipcMain.handle('pipelines:setPaused', async (_e, { projectId, nodeId, paused }: any = {}) => {
+  ipcMain.handle('pipelines:setPaused', async (_e, { projectId, nodeId: asSent, paused }: any = {}) => {
     try {
+      const nodeId = isValidId(projectId) ? await unmaskNodeId(projectId, String(asSent ?? '')) : null;
       if (!isValidId(projectId) || !store.isNodeId(nodeId)) return { ok: false, error: 'Unknown step.' };
       const s = await store.update(projectId, (st) => {
         st.paused = st.paused.filter((x) => x !== nodeId);
