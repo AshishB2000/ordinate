@@ -1105,3 +1105,33 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   change needs `kubectl rollout restart`; with NetworkPolicy on, every connector host and the IdP must be
   allowlisted; `DUCKDB_THREADS` defaults to node cores, not the CPU limit (documented); `chainguard/minio:latest`
   unpinned.
+
+## 2026-10-04 — T2.9 Dashboards, sharing, alerts, comments
+
+- **Publish to a URL:** `/p/<publishId>/`, built by the existing engine (`buildPages`, Share policy `publish`,
+  `sanitizePage` over `dashboardExport.sanitizeBundle`), stored as org records (`published` record root, so in
+  Postgres when configured); `src/server/published.ts` sends the page's own pinned CSP as the header +
+  `frame-ancestors 'none'`. Access: org members by default (another org's member gets the same 404 as a made-up
+  id; signed-out → sign-in); "anyone with the link" only while the org setting `public_links` is on (off by
+  default, read per request, off closes the link at once). Optional re-publish after a refresh (15 s debounce
+  per project, same link, brand ramp kept). `renderer/publish/` → `src/publish/site/` (CSP and whitelist
+  unchanged; `geoMatch.js` is still read from `renderer/hub` — T8.1 moves it).
+- **Comments** carry the real author (`ctx().user`); a client `author` is a 400; only the author edits/deletes.
+  Doors on dashboard cards, visuals, datasets, stories; Home "Recent comments" rides in `home:overview`; pins on
+  dashboard tiles. `alerts:fired` and `comments:changed` go to project readers only (T6.3 F5 kept).
+- **Ported:** Present, Style (presets, density, accent ramp), As of, dashboard currency, Alert me / inbox /
+  rules, summary card, Markdown text cards with `{{tokens}}` (differential vs `markdown.js`), tile actions
+  (navigate/url/filter_target/tooltip; differential vs `cardModel.js`), selection strip, map-click selection,
+  drill to rows, alert "Why" (`drivers:explainAlert`) and "Explain" (the dock), reset controls and the
+  Category/Period quick filters, pivot Copy/CSV through `visual:data share:'export'` WITH the sheet's
+  parameters (export = on-screen grid under a non-default parameter; negative control differs). Dropped, with
+  reasons in the parity list: PNG export (Print/PDF covers it), folder share/reveal, per-dashboard logo upload,
+  builder chart pins, cosmetic Present extras, coach tour, saved views, other screens' "Alert me" doors.
+- **Review round:** the first report dropped items owned by T2.9's own legacy files (`dashControls`,
+  `commentDoors`) or with stale reasons; sent back, all seven closed.
+- **Measured:** RPCs per load — dashboard 7, runtime flow 24 (budget 25 — one more call fails it), comments 18,
+  `/dashboards` 4; initial JS 188.41 KB gzip; 295 contracts. Gates (orchestrator, on 82e6c76 after rebasing over
+  T2.11/T7.2 — five keep-both conflicts in `src/api/index.ts`, `recent.ts`, `app.ts`, `web/src/api/home.ts`,
+  `HomePage.tsx`): `npm test` 285/285 without DB and CI env, with DB 284 + `jobs-pods` passing alone; Vitest
+  626/626; e2e all but `connections.e2e`, which flakes 1 in 2–4 runs alone ON DEVELOP TOO (waits for "Returns 2
+  columns") — pre-existing, tracked as a follow-up. Screens reviewed in both themes.
