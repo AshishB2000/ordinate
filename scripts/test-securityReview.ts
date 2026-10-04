@@ -205,6 +205,7 @@ async function dbPart(adminUrl: string): Promise<void> {
   await admin.connect();
   await admin.query(`CREATE DATABASE ${dbName}`);
   const pool = new Pool({ connectionString: scratch.toString(), max: 2 });
+  pool.on('error', () => undefined); // an idle client cut by the DROP DATABASE … WITH (FORCE) teardown
   try {
     // ── F3: the Postgres connector against a real server ─────────────────────
     const pg = (require('../src/connectors/postgres') as typeof import('../src/connectors/postgres')).CONNECTORS.find((c) => c.id === 'postgres');
