@@ -6,6 +6,7 @@
 import type { TableData } from './transforms';
 import type { PipelineContext, PowerStep } from './stepTypes';
 import type { PowerResult } from './stepsReshape';
+import type { RegexMemo } from './regexMemo';
 import { applyPivot, applySplit, applyUnpivot, skipped } from './stepsReshape';
 import { applyDedupeKey, applyParseDate, applyReplace } from './stepsClean';
 import { applyLookup, applyUnion } from './stepsCombine';
@@ -17,10 +18,11 @@ export type { PipelineContext, PowerStep, StepCount } from './stepTypes';
 export { sanitizePowerStep } from './stepsSanitize';
 export { conditionalAsCalc } from './stepsClean';
 
-export function applyPowerStep(t: TableData, step: PowerStep, ctx?: PipelineContext): PowerResult {
+/** `memo`: the regex worker's answers for a regex split / replace (./regexMemo.ts). */
+export function applyPowerStep(t: TableData, step: PowerStep, ctx?: PipelineContext, memo?: RegexMemo): PowerResult {
   switch (step.type) {
     case 'split_column':
-      return applySplit(t, step);
+      return applySplit(t, step, memo);
     case 'unpivot':
       return applyUnpivot(t, step);
     case 'pivot':
@@ -30,7 +32,7 @@ export function applyPowerStep(t: TableData, step: PowerStep, ctx?: PipelineCont
     case 'dedupe_key':
       return applyDedupeKey(t, step);
     case 'replace_values':
-      return applyReplace(t, step);
+      return applyReplace(t, step, memo);
     case 'union':
       return applyUnion(t, step, ctx);
     case 'lookup_join':

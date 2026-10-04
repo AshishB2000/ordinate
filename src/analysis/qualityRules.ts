@@ -67,6 +67,8 @@ import { colIndex, isEmptyCell } from '../data/transforms';
 import { isCanonicalDateCell, parseDateCell } from './categoryKey';
 import { isValidId } from '../app/ids';
 import { REGEX_PRESETS, checkPattern, jsRegex } from './qualityRegex';
+import type { RegexMemo } from '../data/regexMemo';
+import { inlineRegexRefused, regexRefusedWarning } from '../data/regexMemo';
 
 export type RuleKind = 'not_null' | 'unique' | 'range' | 'regex' | 'in_set' | 'row_count' | 'references';
 export const RULE_KINDS: readonly RuleKind[] = ['not_null', 'unique', 'range', 'regex', 'in_set', 'row_count', 'references'];
@@ -401,12 +403,15 @@ export function numberSet(values: string[] | undefined): number[] {
 /**
  * "Does this row fail the rule?", built over the WHOLE table (`unique` needs
  * every row to judge one). Not defined for row_count, which has no failing rows.
+ * `memo` (a `regex` rule): each cell text → does it match, from the regex
+ * worker — required on the server (src/data/regexMemo.ts).
  */
 export function failingPredicateJs(
   rule: QualityRule,
   columns: ParsedColumn[],
   rows: Cell[][],
   ref?: RefTable | null,
+  memo?: RegexMemo,
 ): { test: (row: Cell[]) => boolean } | { error: string } {
   const r = resolveRule(rule, columns, ref);
   if (!r.ok) return { error: r.error };
@@ -438,8 +443,10 @@ export function failingPredicateJs(
         },
       };
     case 'regex': {
+      if (!memo && inlineRegexRefused(rows.length)) return { error: regexRefusedWarning() };
       const re = jsRegex(rule.args.pattern ?? '');
-      return { test: (row) => { const c = at(row); return !isEmptyCell(c) && !re.test(String(c)); } };
+      const matches = memo ? (x: string) => memo.get(x) === true : (x: string) => re.test(x);
+      return { test: (row) => { const c = at(row); return !isEmptyCell(c) && !matches(String(c)); } };
     }
     case 'in_set': {
       const set = new Set<string | number>(isNum ? numberSet(rule.args.values) : rule.args.values || []);
@@ -471,9 +478,10 @@ export function evaluateRuleJs(
   columns: ParsedColumn[],
   rows: Cell[][],
   ref?: RefTable | null,
+  memo?: RegexMemo,
 ): RuleResult {
   if (rule.kind === 'row_count') return rowCountResult(rule, rows.length);
-  const p = failingPredicateJs(rule, columns, rows, ref);
+  const p = failingPredicateJs(rule, columns, rows, ref, memo);
   if ('error' in p) return { ruleId: rule.id, passed: false, failing: 0, sample: [], error: p.error };
   let failing = 0;
   const sample: Cell[][] = [];

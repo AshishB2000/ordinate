@@ -36,7 +36,9 @@ import { applyBatch, cleanCell } from './edits';
 import type { Cell } from './edits';
 import { MAX_INPUT_ROWS, checkColumns, sanitizeColumns, withOverlay } from './columns';
 import type { InputColumn } from './columns';
-import { checkTable, normalizeRows } from './validate';
+import { checkTable, coerceInput, normalizeRows } from './validate';
+import { applyPipelineAsync, ruleMemos } from '../regexOffThread';
+import { regexWorkerOnly } from '../regexMemo';
 import type { CheckContext, Checked, Issue } from './validate';
 import { refTableFor } from './lookup';
 
@@ -116,7 +118,7 @@ function rowsOf(raw: unknown, width: number): Cell[][] | null {
   });
 }
 
-async function contextFor(projectId: string, columns: InputColumn[], rules: QualityRule[]): Promise<CheckContext> {
+async function contextFor(projectId: string, columns: InputColumn[], rules: QualityRule[], rows: Cell[][]): Promise<CheckContext> {
   const ctx: CheckContext = { lookups: new Map(), lookupNames: new Map(), rules, refs: new Map() };
   for (let c = 0; c < columns.length; c++) {
     const l = columns[c].lookup;
@@ -130,6 +132,11 @@ async function contextFor(projectId: string, columns: InputColumn[], rules: Qual
   for (const r of rules) {
     const id = r.kind === 'references' ? r.args.datasetId : undefined;
     if (id && !ctx.refs.has(id)) ctx.refs.set(id, await refTableFor(projectId, id, r.args.column || ''));
+  }
+  // Server: a regex rule's pattern runs in the regex worker, over the cells as checkTable stores them.
+  if (regexWorkerOnly() && rules.some((r) => r.kind === 'regex')) {
+    const stored = rows.map((row) => columns.map((col, c) => coerceInput(Array.isArray(row) ? row[c] ?? null : null, col.type).value));
+    ctx.regexMemos = await ruleMemos(rules, columns, stored);
   }
   return ctx;
 }
@@ -183,7 +190,7 @@ async function writeBase(
   rows: Cell[][],
   steps?: TransformStep[],
 ): Promise<{ dataset: Dataset; checked: Checked; ctx: CheckContext }> {
-  const ctx = await contextFor(projectId, columns, existing.quality ? existing.quality.rules : []);
+  const ctx = await contextFor(projectId, columns, existing.quality ? existing.quality.rules : [], rows);
   const checked = checkTable(columns, rows, ctx);
   const nextSteps = steps ?? existing.steps ?? [];
   const now = new Date().toISOString();
@@ -191,7 +198,7 @@ async function writeBase(
   if (existing.source !== undefined || nextSteps.length) {
     const source = { columns, rows: checked.stored };
     const salt = await saltForSteps(projectId, nextSteps);
-    const output = transforms.applyPipeline(source, nextSteps, { salt, ...(await loadStepRefs(projectId, existing.id, nextSteps)) });
+    const output = await applyPipelineAsync(source, nextSteps, { salt, ...(await loadStepRefs(projectId, existing.id, nextSteps)) });
     updated = {
       ...existing, schemaVersion: 2, source, steps: nextSteps, columns: output.columns, rows: output.rows,
       rowCount: output.rowCount, stepCounts: output.stepCounts, updatedAt: now,
@@ -232,7 +239,7 @@ export async function loadInputTable(projectId: string, id: string): Promise<Tab
   const ds = await inputDataset(projectId, id);
   if ('ok' in ds) return ds;
   const base = baseOf(ds);
-  const ctx = await contextFor(projectId, base.columns, ds.quality ? ds.quality.rules : []);
+  const ctx = await contextFor(projectId, base.columns, ds.quality ? ds.quality.rules : [], base.rows);
   return viewOf(ds, checkTable(base.columns, base.rows, ctx), ctx);
 }
 
@@ -246,7 +253,7 @@ export async function validateInput(projectId: string, id: string, rawRows: unkn
   const columns = sanitizeColumns(meta.sourceColumns ?? meta.columns);
   const rows = rowsOf(rawRows, columns.length);
   if (!rows) return fail(`An input table holds up to ${MAX_INPUT_ROWS.toLocaleString('en-US')} rows`);
-  const ctx = await contextFor(projectId, columns, meta.quality ? meta.quality.rules : []);
+  const ctx = await contextFor(projectId, columns, meta.quality ? meta.quality.rules : [], rows);
   return { ok: true, ...summaryOf(checkTable(columns, rows, ctx)) };
 }
 

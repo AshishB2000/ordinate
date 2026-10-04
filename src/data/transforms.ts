@@ -31,6 +31,7 @@ import { applySegmentStep, sanitizeSegmentStep } from './stepsSegment';
 import type { TextStep } from './textStepTypes';
 import { TEXT_STEP_TYPES, sanitizeTextStep } from './textStepTypes';
 import { applyTextStep } from './stepsText';
+import type { RegexMemo } from './regexMemo';
 import { RADIUS_OP, sanitizeRadius, withinKm } from '../analysis/geo/radius';
 import type { RadiusSpec } from '../analysis/geo/radius';
 
@@ -221,7 +222,7 @@ function cloneTable(t: TableData): TableData {
   };
 }
 
-interface StepResult {
+export interface StepResult {
   table: TableData;
   warnings: string[];
 }
@@ -248,14 +249,7 @@ export function applyPipeline(source: TableData, steps: TransformStep[], ctx: Pi
   const stepCounts: StepCount[] = [];
 
   for (const step of list) {
-    let result: StepResult;
-    try {
-      result = dispatch(table, step, ctx);
-    } catch (e) {
-      // Defense in depth: no step should throw, but if one does, skip it.
-      const msg = e instanceof Error ? e.message : 'unknown error';
-      result = skip(table, `Step "${step && step.type}" skipped: ${msg}`);
-    }
+    const result = foldStep(table, step, ctx);
     stepCounts.push({ before: table.rows.length, after: result.table.rows.length });
     table = result.table;
     for (const w of result.warnings) warnings.push(w);
@@ -264,7 +258,18 @@ export function applyPipeline(source: TableData, steps: TransformStep[], ctx: Pi
   return { columns: table.columns, rows: table.rows, rowCount: table.rows.length, warnings, stepCounts };
 }
 
-function dispatch(t: TableData, step: TransformStep, ctx: PipelineCtx): StepResult {
+/** One step of the fold (never throws). `memo`: the regex worker's answers (./regexOffThread.ts). */
+export function foldStep(t: TableData, step: TransformStep, ctx: PipelineCtx, memo?: RegexMemo): StepResult {
+  try {
+    return dispatch(t, step, ctx, memo);
+  } catch (e) {
+    // Defense in depth: no step should throw, but if one does, skip it.
+    const msg = e instanceof Error ? e.message : 'unknown error';
+    return skip(t, `Step "${step && step.type}" skipped: ${msg}`);
+  }
+}
+
+function dispatch(t: TableData, step: TransformStep, ctx: PipelineCtx, memo?: RegexMemo): StepResult {
   switch (step.type) {
     case 'calculated_field':
       return stepCalculatedField(t, step);
@@ -289,7 +294,7 @@ function dispatch(t: TableData, step: TransformStep, ctx: PipelineCtx): StepResu
     case 'split_column': case 'unpivot': case 'pivot': case 'parse_date': case 'dedupe_key':
     case 'replace_values': case 'union': case 'lookup_join': case 'window':
     case 'spatial_join':
-      return applyPowerStep(t, step, powerCtx(ctx));
+      return applyPowerStep(t, step, powerCtx(ctx), memo);
     case 'conditional_column': {
       const calc = conditionalAsCalc(t.columns, step);
       return typeof calc === 'string' ? skip(t, calc) : stepCalculatedField(t, calc);
@@ -297,7 +302,7 @@ function dispatch(t: TableData, step: TransformStep, ctx: PipelineCtx): StepResu
     case 'segment':
       return applySegmentStep(t, step);
     case 'text_terms': case 'text_sentiment': case 'keyword_rules':
-      return applyTextStep(t, step);
+      return applyTextStep(t, step, memo);
     default:
       return skip(t, `Unknown step type "${(step as { type?: string }).type}" skipped`);
   }

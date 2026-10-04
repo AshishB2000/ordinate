@@ -1138,3 +1138,12 @@ scripts/**/*.js
 # web/t7.1-docker
 /src/server/metrics.js
 /deploy/.env
+
+# web/t6.4-regex-deadline: emitted siblings
+/src/engine/regexWorker.js
+/src/engine/regexPool.js
+/src/data/regexMemo.js
+/src/data/regexMessages.js
+/src/data/regexOffThread.js
+/src/server/mode.js
+/scripts/test-regexDeadline.js

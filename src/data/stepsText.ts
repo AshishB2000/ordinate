@@ -31,6 +31,8 @@ import type { GroupCounts } from '../analysis/text/tfidf';
 import { documentFrequency, rankGroup, tfidfScores } from '../analysis/text/tfidf';
 import { compoundScore, vaderVersion } from '../analysis/text/vader';
 import { categorize, compileRules } from '../analysis/text/keywordRules';
+import type { RegexMemo } from './regexMemo';
+import { inlineRegexRefused, regexRefusedWarning } from './regexMemo';
 
 /** Per-row work over rows [from, to), then the table. `finish` reads `t` only for its existing cells. */
 export interface TextRunner {
@@ -39,14 +41,14 @@ export interface TextRunner {
   finish(t: TableData): PowerResult;
 }
 
-function runnerFor(t: TableData, step: TextStep): TextRunner | PowerResult {
+function runnerFor(t: TableData, step: TextStep, memo?: RegexMemo): TextRunner | PowerResult {
   switch (step.type) {
     case 'text_terms':
       return termsRunner(t, step);
     case 'text_sentiment':
       return sentimentRunner(t, step);
     case 'keyword_rules':
-      return keywordRunner(t, step);
+      return keywordRunner(t, step, memo);
     default:
       return skipped(t, `Unknown step type "${(step as { type: string }).type}" skipped`);
   }
@@ -54,10 +56,11 @@ function runnerFor(t: TableData, step: TextStep): TextRunner | PowerResult {
 
 const isResult = (r: TextRunner | PowerResult): r is PowerResult => 'table' in r;
 
-export function applyTextStep(t: TableData, step: TextStep): PowerResult {
+/** `memo`: each text's category from the regex worker, for keyword rules with a regex (./regexMemo.ts). */
+export function applyTextStep(t: TableData, step: TextStep, memo?: RegexMemo): PowerResult {
   const warm = takeWarm(t, step);
   if (warm) return warm.finish(t);
-  const r = runnerFor(t, step);
+  const r = runnerFor(t, step, memo);
   if (isResult(r)) return r;
   r.run(0, r.rows);
   return r.finish(t);
@@ -108,6 +111,8 @@ export async function warmTextStep(
   t: TableData, step: TextStep, progress: (p: number) => void, cancelled: () => boolean,
 ): Promise<string | null> {
   warmRunners.clear(); // one warm step at a time: a new warm-up supersedes any other
+  // On the server a keyword step with a regex refuses here (no memo) and the
+  // fold computes it through the regex worker instead (./regexMemo.ts).
   const r = runnerFor(t, step);
   if (isResult(r)) return null; // it will skip in the fold too, instantly
   for (let from = 0; from < r.rows; from += CHUNK) {
@@ -155,21 +160,28 @@ function sentimentRunner(t: TableData, s: TextSentimentStep): TextRunner | Power
 
 // ── keyword_rules ────────────────────────────────────────────────────────────
 
-function keywordRunner(t: TableData, s: KeywordRulesStep): TextRunner | PowerResult {
+/** A keyword step with a `regex` rule runs a user pattern (on the server: in the regex worker). */
+export function hasRegexRule(s: KeywordRulesStep): boolean {
+  return (s.rules || []).some((r) => r && r.match === 'regex');
+}
+
+function keywordRunner(t: TableData, s: KeywordRulesStep, memo?: RegexMemo): TextRunner | PowerResult {
   const ci = colIndex(t.columns, s.column);
   if (ci < 0) return skipped(t, `Tag with rules skipped: unknown column "${s.column}"`);
   const name = categoryColumnName(s);
   if (colIndex(t.columns, name) >= 0) return skipped(t, `Tag with rules skipped: column "${name}" already exists`);
   const compiled = compileRules(s.rules || []);
   if (!compiled.tests.length) return skipped(t, 'Tag with rules skipped: no usable rules');
+  if (!memo && hasRegexRule(s) && inlineRegexRefused(t.rows.length)) return skipped(t, regexRefusedWarning());
   const otherwise = s.otherwise === undefined ? null : s.otherwise;
   const values: Array<string | null> = new Array(t.rows.length).fill(otherwise);
+  const tag = memo ? (x: string) => memo.get(x) as string | null : (x: string) => categorize(x, compiled, otherwise);
   return {
     rows: t.rows.length,
     run(from, to) {
       for (let i = from; i < to; i += 1) {
         const cell = t.rows[i][ci] ?? null;
-        values[i] = isEmptyCell(cell) ? otherwise : categorize(cellToString(cell), compiled, otherwise);
+        values[i] = isEmptyCell(cell) ? otherwise : tag(cellToString(cell));
       }
     },
     finish(input) {

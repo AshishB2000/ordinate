@@ -15,7 +15,7 @@ import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import * as jobs from '../app/jobs';
 import * as trace from '../engine/residentTrace';
-import { applyPipeline } from '../data/transforms';
+import { applyPipelineAsync } from '../data/regexOffThread';
 import type { Cell, TableData, TransformStep } from '../data/transforms';
 import { checkTextStep, sentimentColumnName, categoryColumnName } from '../data/textStepTypes';
 import type { TextStep } from '../data/textStepTypes';
@@ -82,7 +82,7 @@ async function stepInput(projectId: string, datasetId: string, index: number, ex
   // a union/lookup reads — so the warm key matches the fold's input exactly.
   const ctx = { salt: await saltForSteps(projectId, prefix), ...(await loadStepRefs(projectId, datasetId, [...prefix, extra])) };
   // ponytail: the prefix is folded in full per call, as prepare:stepPreview does; the resident path could serve it
-  const input = prefix.length ? applyPipeline(source, prefix, ctx) : source;
+  const input = prefix.length ? await applyPipelineAsync(source, prefix, ctx) : source;
   const next = steps.slice();
   if (at < steps.length) next[at] = extra;
   else next.push(extra);
@@ -100,7 +100,7 @@ export async function textPreview(projectId: string, datasetId: string, index: n
   if (!at) return { ok: false, error: 'Dataset not found' };
   const total = at.input.rows.length;
   const sample: TableData = total > PREVIEW_ROWS ? { columns: at.input.columns, rows: at.input.rows.slice(0, PREVIEW_ROWS) } : at.input;
-  const out = applyPipeline(sample, [step]);
+  const out = await applyPipelineAsync(sample, [step]);
   const res: Record<string, unknown> = {
     ok: true, before: sample.rows.length, after: out.rowCount, warnings: out.warnings,
     sampled: total > PREVIEW_ROWS, total, sampleRows: sample.rows.length,

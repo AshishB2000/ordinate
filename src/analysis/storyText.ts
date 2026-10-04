@@ -86,7 +86,7 @@ export function mdParse(src: string): MdNode[] {
     list = null;
   };
   for (const raw of String(src || '').split('\n')) {
-    const line = raw.replace(/\s+$/, '');
+    const line = raw.trimEnd(); // not /\s+$/: quadratic on a long run of spaces (T6.4: 100k spaces + x = 28 s); same character set
     let m: RegExpExecArray | null;
     if (!line.trim()) {
       flushPara();
@@ -170,7 +170,7 @@ export function storyPages<B extends StoryBlockLike>(blocks: readonly B[]): Stor
       buf = [];
     };
     for (const line of String(b.text || '').split('\n')) {
-      const m = HEADING_RE.exec(line.replace(/\s+$/, ''));
+      const m = HEADING_RE.exec(line.trimEnd());
       if (m && m[1].length <= 2 && m[2].trim()) {
         flush();
         cur = open(mdPlain(m[2]).trim(), m[1].length);

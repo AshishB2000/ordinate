@@ -7,7 +7,7 @@
 
 import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
-import { applyPipeline } from '../data/transforms';
+import { applyPipelineAsync } from '../data/regexOffThread';
 import type { TableData, TransformStep } from '../data/transforms';
 import type { PipelineContext } from '../data/stepTypes';
 import { loadStepRefs } from '../data/stepRefs';
@@ -26,7 +26,7 @@ export async function inputAt(projectId: string, datasetId: string, index: numbe
   const prefix = Number.isInteger(index) && index >= 0 && index < steps.length ? steps.slice(0, index) : steps;
   const ctx = await loadStepRefs(projectId, datasetId, [...prefix, extra]);
   // ponytail: a full fold per preview; the resident path could serve the prefix if a big dataset makes this slow
-  const input = prefix.length ? applyPipeline(source, prefix, ctx) : source;
+  const input = prefix.length ? await applyPipelineAsync(source, prefix, ctx) : source;
   return { input: { columns: input.columns, rows: input.rows }, ctx };
 }
 
@@ -45,7 +45,7 @@ export async function stepPreview(projectId: string, datasetId: string, index: n
   const at = await inputAt(projectId, datasetId, index, step);
   if (!at) return { ok: false, error: 'Dataset not found' };
   const { input, ctx } = at;
-  const out = applyPipeline(input, [step], ctx);
+  const out = await applyPipelineAsync(input, [step], ctx);
   const res: Record<string, unknown> = { ok: true, before: input.rows.length, after: out.rowCount, warnings: out.warnings };
   if (step.type === 'lookup_join') {
     const stats = lookupStats(input, step, ctx);
@@ -76,7 +76,7 @@ export async function stepCounts(projectId: string, datasetId: string): Promise<
   const ds = await datasets.getDataset(projectId, datasetId);
   if (!ds) return { ok: false, error: 'Dataset not found' };
   const source: TableData = ds.source ?? { columns: ds.columns, rows: ds.rows };
-  const out = applyPipeline(source, steps, await loadStepRefs(projectId, datasetId, steps));
+  const out = await applyPipelineAsync(source, steps, await loadStepRefs(projectId, datasetId, steps));
   return { ok: true, stepCounts: out.stepCounts || [] };
 }
 

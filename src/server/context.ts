@@ -15,6 +15,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { BrowserWindow, WebContents } from 'electron';
 import { EnvError, type ServerEnv } from './env';
+import { markServerMode } from './mode';
 
 /** The caller's browser tab (server) or window (desktop) — what `event.sender` was. */
 export interface Client {
@@ -73,6 +74,7 @@ let dataDir: string | null = null;
 /** Marks this process as the server, storing per-org data under `dir`. Once, at boot. */
 export function enterServerMode(dir: string): void {
   dataDir = dir;
+  markServerMode();
 }
 
 /** DATA_DIR when this process is the server; null under the desktop app. */

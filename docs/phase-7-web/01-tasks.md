@@ -415,7 +415,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   `SECURITY.md` with disclosure process. `npm audit --omit=dev` gate in CI (high = fail).
   Run `/security-review` over the branch history and fix or file every finding.
 
-### [ ] T6.4 User regex off the request thread
+### [x] T6.4 User regex off the request thread
 - **Branch** `web/t6.4-regex-deadline` · **Depends** T6.3 · **Scope** `src/data/`, `src/analysis/`, `src/engine/`, `scripts/`
 - Added 2026-10-04 from T6.3's open risk R1 (threat-model §6), by the user's decision. A user regex
   (prepare/text steps through `regexSubset`/`checkRegex`, quality rules, keyword rules) runs in V8 on the

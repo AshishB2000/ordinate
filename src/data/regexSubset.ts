@@ -159,6 +159,26 @@ export function jsRegex(js: string, ignoreCase: boolean): RegExp {
   return new RegExp(js, ignoreCase ? 'giu' : 'gu');
 }
 
+// The two per-text functions a replace / split step runs. The fold and the
+// regex worker (src/engine/regexWorker.ts) both build them HERE, so the worker's
+// answer is the fold's answer by construction. Both expect checked patterns.
+
+/** A regex replace step's rules, applied in order. A replacer FUNCTION keeps `$&` / `$1` literal. */
+export function regexReplacer(rules: ReadonlyArray<{ from: string; to: string }>, ignoreCase: boolean): (text: string) => string {
+  const res = rules.map((r) => {
+    const chk = checkRegex(r.from);
+    return chk.ok ? jsRegex(chk.js, ignoreCase) : null;
+  });
+  return (text) => rules.reduce((acc, r, k) => acc.replace(res[k] as RegExp, () => r.to), text);
+}
+
+/** A regex split step's parts. */
+export function regexSplitter(pattern: string, ignoreCase: boolean): (text: string) => string[] {
+  const chk = checkRegex(pattern);
+  const re = chk.ok ? jsRegex(chk.js, ignoreCase) : null;
+  return (text) => text.split(re as RegExp);
+}
+
 /** The RE2 source for a checked pattern, with ignore-case as RE2's inline flag. */
 export function re2Source(re2: string, ignoreCase: boolean): string {
   return ignoreCase ? '(?i)' + re2 : re2;
