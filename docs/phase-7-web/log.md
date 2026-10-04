@@ -696,3 +696,37 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
 - **Open:** a gateway provider's `baseUrl` is not SSRF-guarded (T6.1 `safeFetch`); plan runs live in one
   pod's memory (sticky sessions; `ponytail:`); proposal cards needing other screens (T2.6–T2.9, T2.13)
   deferred — the server already returns the suggested action.
+
+## 2026-10-04 — T2.1 Home and app chrome
+
+- **Home:** greeting with server counts (`home:overview`), Get-started card (`onboarding:status/set`),
+  Starred and Recent (filter, scope, Show all), Your data / Saved visuals column. The ask bar hands its
+  question to the real dock (`features/assistant/dockState.ts` `openDockWith` / `takePendingQuestion`):
+  asked at once when the dock is ready, otherwise left in its composer with focus inside the dock.
+- **Chrome:** top bar = Jobs button + divider + Assistant toggle + account menu (Help links). Jobs popover
+  over `/api/events`; ONE EventSource client (`web/src/api/events.ts`, backoff reconnect, `onReconnect`;
+  `onServerEvent`/`connectEvents` aliases for the dock). The T2.1 placeholder dock is deleted.
+- **Server:** stars are per user (`starredBy`); jobs carry their owner and a tab lists/cancels/clears only
+  its user's jobs, never seeing a result path (`jobs.publicJob`, also on SSE pushes); `visual:dataBatch`
+  answers a page of charts in one call (kept `/dev/charts` inside its 25-RPC budget).
+- **Measured:** initial JS 161 KB gzip; `test-home` 39; Home = 2 RPCs per load.
+
+## 2026-10-04 — T2.2 Projects, trash, versions
+
+- **Convention for every later screen:** call `useCurrentProject()` (`web/src/features/projects/current.tsx`):
+  `?project=` → this browser's last choice → most recently opened readable project. A page whose URL
+  names a project calls `useAdoptProject(id)` so the switcher agrees. Record screens use `trashToast.ts`
+  ("Moved to Trash · Undo") and link History to `/versions/:projectId/:type/:id`.
+- **Switcher:** rename, share (grants: person/team, role), export (download token), archive/restore,
+  delete (type the name), new, import (upload token; importer becomes admin). Actions shown by role.
+- **Access:** read `projects:overview/open/export(audited)/roles`, `trash:list`, `versions:list/get`;
+  write `projects:rename/import`, `trash:restore`, `versions:restore`; admin `projects:archive/delete`,
+  `trash:purge/empty`, `project:shareTargets`. Purge was anyone on the desktop — now project admin.
+  `test-projects-server` role matrix (4 roles × 13 channels), denied calls never reach a handler.
+- **Server:** deleting a project drops its grants; desktop safety backup skipped; duplicate Trash-purge
+  hook removed from `jobs/schedules.ts`.
+- **Open:** `projects:open` stamps a shared (not per-user) "last opened"; sync-folder features dropped;
+  version previews of dashboards/visuals are facts + layout sketch until T2.7/T2.9.
+- **Chain gates (T2.1+T2.2 on develop):** `npm test` 269/269 with and without DB; Vitest 372/372;
+  e2e 17 + 2 skip (no DB), 21/21 (DB; one connections timeout once in a full run, passed alone and on
+  rerun); lint 0; 91 contracts, 0 unresolved; file sizes pass.
