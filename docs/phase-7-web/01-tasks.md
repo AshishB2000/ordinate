@@ -452,7 +452,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   **recommended** NetworkPolicy (egress allowlist) off by default. `values.yaml` documented.
 - CI: `helm lint` + install into `kind` with Postgres and MinIO, then the e2e smoke against it.
 
-### [ ] T7.3 Releases and operator docs
+### [x] T7.3 Releases and operator docs
 - **Branch** `web/t7.3-release` · **Depends** T7.2
 - Tag `v*` → build multi-arch image (amd64, arm64) → push to GHCR → attach Helm chart.
 - `docs/server/`: quick start (Compose), EKS, ECS (task definition example), GKE/AKS notes,
