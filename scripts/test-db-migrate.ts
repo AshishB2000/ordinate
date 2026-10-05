@@ -28,7 +28,6 @@ const CANARY_DECODED = 'pw-L3akCanary/x';
 
 function childEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   const e: NodeJS.ProcessEnv = { ...process.env, ...extra };
-  delete e.ELECTRON_RUN_AS_NODE;
   return e;
 }
 

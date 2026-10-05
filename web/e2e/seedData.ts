@@ -6,19 +6,10 @@
 //
 //   node web/e2e/seedData.ts <dataDir> <projectId> <canary>   (after npm run build:ts)
 
-import Module, { createRequire } from 'node:module';
+import { createRequire } from 'node:module';
 
 const [dataDir, projectId, canary] = process.argv.slice(2);
 if (!dataDir || !projectId || !canary) throw new Error('usage: node web/e2e/seedData.ts <dataDir> <projectId> <canary>');
-
-// As seed.ts: the server has no Electron, so neither does its fixture.
-type Resolve = (request: string, ...rest: unknown[]) => string;
-const M = Module as unknown as { _resolveFilename: Resolve };
-const resolve = M._resolveFilename;
-M._resolveFilename = function (this: unknown, request: string, ...rest: unknown[]): string {
-  if (request === 'electron' || request.startsWith('electron/')) throw new Error('electron is not available on the server');
-  return resolve.call(this, request, ...rest);
-};
 
 type Identity = object;
 type Column = { name: string; type: 'text' | 'number' | 'date' };

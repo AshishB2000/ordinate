@@ -8,8 +8,9 @@
 //   src/**/*.ts         every `process.env.NAME` / `process.env['NAME']`, plus
 //                       the names behind the two dynamic reads listed in
 //                       DYNAMIC (a new dynamic read fails this suite until it
-//                       is listed). src/cli/ is skipped: local CLI execution is
-//                       desktop-only, never loaded on a server (src/app/execConfig.ts).
+//                       is listed). NOT_SERVER names the reads a server never
+//                       reaches (src/app/paths.ts reads ORDINATE_LOCAL_DIR only
+//                       outside server mode, for plain-Node self-checks).
 //
 // The documented set is every table row of configuration.md whose first cell
 // is a back-ticked UPPER_CASE name. Variables read by libraries rather than by
@@ -40,6 +41,11 @@ const DYNAMIC: Readonly<Record<string, readonly string[]>> = {
   'src/server/secrets/rotate.ts': ['ORDINATE_MASTER_KEY_OLD', 'ORDINATE_MASTER_KEY_NEW'],
 };
 
+/** Read only outside server mode, so not server configuration: file → names. */
+const NOT_SERVER: Readonly<Record<string, readonly string[]>> = {
+  'src/app/paths.ts': ['ORDINATE_LOCAL_DIR'],
+};
+
 /** Read by libraries (DuckDB's AWS credential chain, Node), documented outside the tables. */
 const LIBRARY = new Set([
   'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AWS_ROLE_ARN', 'AWS_WEB_IDENTITY_TOKEN_FILE',
@@ -50,7 +56,7 @@ function srcFiles(dir: string, out: string[] = []): string[] {
   for (const e of fs.readdirSync(path.join(REPO, dir), { withFileTypes: true })) {
     const rel = `${dir}/${e.name}`;
     if (e.isDirectory()) {
-      if (rel !== 'src/cli') srcFiles(rel, out);
+      srcFiles(rel, out);
     } else if (e.name.endsWith('.ts') && !e.name.endsWith('.d.ts')) out.push(rel);
   }
   return out;
@@ -79,7 +85,7 @@ function audit(envTs: string, files: ReadonlyMap<string, string>, doc: string): 
 
   const read = new Set(fromEnvTs);
   for (const [file, text] of files) {
-    for (const m of text.matchAll(/process\.env\.([A-Z][A-Z0-9_]*)\b/g)) read.add(m[1]);
+    for (const m of text.matchAll(/process\.env\.([A-Z][A-Z0-9_]*)\b/g)) if (!NOT_SERVER[file]?.includes(m[1])) read.add(m[1]);
     for (const m of text.matchAll(/process\.env\[['"]([A-Z][A-Z0-9_]*)['"]\]/g)) read.add(m[1]);
     if (/process\.env\[(?!['"])/.test(text)) {
       const names = DYNAMIC[file];

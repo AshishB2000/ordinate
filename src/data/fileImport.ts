@@ -64,7 +64,7 @@ export async function parseFile(
   }
   if (kind === 'xlsx') return parseXlsx(filePath, sheetName);
   // Parquet is read by DuckDB in the main process (./parquetImport.ts), never here: this module
-  // also runs in the compute worker, whose import graph must stay free of Electron and DuckDB.
+  // also runs in the compute worker, whose import graph must stay free of DuckDB.
   if (kind === 'parquet') throw new Error('Parquet files are read through parquetImport.parseAnyFile');
   const text = await fs.promises.readFile(filePath, 'utf8');
   return kind === 'json' ? parseJson(text) : parseCsv(text, kind === 'tsv' ? '\t' : ',');

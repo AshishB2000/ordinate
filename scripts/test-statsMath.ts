@@ -1,5 +1,5 @@
 // Self-check for the workbench's special functions and distributions
-// (src/analysis/stats/special.ts, distributions.ts) — pure, no Electron.
+// (src/analysis/stats/special.ts, distributions.ts) — pure.
 //
 // Three kinds of reference, and nothing invented:
 //   1. PUBLISHED values — the normal quantiles every table prints, R's qt()

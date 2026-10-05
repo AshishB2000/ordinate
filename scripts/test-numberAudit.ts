@@ -13,8 +13,8 @@
 //      makes the ledger maintainable: a new facts line that prints a number
 //      fails here rather than in front of a user.
 //
-// The electron stub is test-copilot.ts's, verbatim in intent: copilot.ts pulls in
-// app.getPath at module load, and nothing here touches disk beyond that.
+// userData is a temp dir, as in test-copilot.ts: copilot.ts resolves paths at
+// module load, and nothing here touches disk beyond that.
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount, finish } from './selfcheck';
@@ -22,14 +22,9 @@ import { ok, failureCount, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-numberaudit-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: (_name: string) => tmpUserData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources under test.
 const audit: typeof import('../src/ai/numberAudit') = require('../src/ai/numberAudit');

@@ -1,5 +1,5 @@
 // Incremental refresh — the settings, the cursor arithmetic and the JS
-// REFERENCE merge. MAIN PROCESS, pure: no fs, no DuckDB, no Electron.
+// REFERENCE merge. MAIN PROCESS, pure: no fs, no DuckDB.
 //
 // A connection (or folder) dataset can refresh by fetching only the rows past a
 // stored HIGH-WATER MARK on a cursor column (a monotonic timestamp or id), minus

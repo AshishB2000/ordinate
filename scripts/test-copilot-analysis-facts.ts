@@ -5,8 +5,7 @@
 //      "what's on sheet 2" is answerable from the FACTS alone;
 //   2. a card pointing at a MISSING dataset yields null → "n/a" and still
 //      returns usable FACTS — it must not throw.
-// Like test-copilot.ts we stub the 'electron' module (via Module._load) to point
-// userData at a fresh temp dir, then run the REAL modules against real disk.
+// Like test-copilot.ts we point userData (ORDINATE_LOCAL_DIR) at a fresh temp dir, then run the REAL modules against real disk.
 // No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -15,17 +14,10 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // ponytail: Node's private _load hook, untyped
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-anfacts-'));
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  // ipcMain is only destructured by ipc/copilot.ts (register() is never called
-  // here), so app.getPath is the entire surface this graph actually touches.
-  if (request === 'electron') return { app: { getPath: (_name: string) => tmpUserData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources under test.
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
@@ -33,7 +25,6 @@ const datasets: typeof import('../src/data/datasets') = require('../src/data/dat
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
 const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
-
 
 // A UUID-shaped id that no dataset file will ever answer to — case 2's "missing".
 const GHOST_DATASET_ID = '00000000-0000-4000-8000-0000000000ff';
@@ -142,7 +133,6 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' analysis-facts check(s) FAILED'); process.exit(1); }
     console.log('\nAll analysis-facts checks passed.');
   })

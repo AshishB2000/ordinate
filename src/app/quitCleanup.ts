@@ -10,8 +10,7 @@
 // that made it. A quit that raced one of those left a handle alive — and a smoke
 // that cannot close its app hangs CI for six hours instead of failing.
 //
-// Loads under plain node: electron is imported for nothing, the windows are
-// passed in, so scripts/test-quitCleanup.ts drives it with fakes.
+// Imports nothing; the windows are passed in, so scripts/test-quitCleanup.ts drives it with fakes.
 
 type Timer = ReturnType<typeof setTimeout>;
 interface Win { isDestroyed(): boolean; destroy(): void }
@@ -37,7 +36,7 @@ export function onQuit(fn: () => void): void {
 export function runQuit(windows: Win[]): { timers: number; hooks: number; windows: number; failed: number } {
   let failed = 0;
   const cleared = timers.size;
-  // clearInterval and clearTimeout share one id space in node and electron.
+  // clearInterval and clearTimeout share one id space in node.
   for (const t of timers) clearInterval(t);
   timers.clear();
   const ran = hooks.length;

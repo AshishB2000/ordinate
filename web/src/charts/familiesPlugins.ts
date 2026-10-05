@@ -1,5 +1,5 @@
 // What the waterfall, bullet, calendar heatmap and Pareto families draw BY
-// HAND on the canvas (renderer/hub/chartFamiliesPlugins.ts) — waterfall
+// HAND on the canvas (the desktop's chartFamiliesPlugins.ts) — waterfall
 // connectors and step labels, bullet bands and target ticks, the Pareto 80%
 // marker, the calendar's month/weekday labels and colour legend. Every hook
 // reads the state familiesExtra's dataset builder left on `opts`, and runs in

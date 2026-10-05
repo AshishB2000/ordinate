@@ -3,8 +3,8 @@
 // (datasetFacts/visualFacts/projectFacts emit the app-computed numbers, the
 // "app-computed" guard line, correct provenance, and fabricate NO figures). Also
 // exercises the askCopilot not_ready path (no model configured → soft error, no
-// network call). Like test-datasets.ts, we stub the 'electron' module (via
-// Module._load) to point userData at a fresh temp dir, then run the REAL modules
+// network call). Like test-datasets.ts, we point userData
+// (ORDINATE_LOCAL_DIR) at a fresh temp dir, then run the REAL modules
 // against real disk. No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -13,20 +13,10 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-copilot-'));
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    // Enough surface for the whole analyze module graph to load: app.getPath is
-    // the only member touched at runtime here; net/nativeImage/ipcMain are only
-    // destructured (never called on the not_ready path).
-    return { app: { getPath: (_name: string) => tmpUserData } };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources under test.
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
@@ -34,7 +24,6 @@ const projects: typeof import('../src/app/projects') = require('../src/app/proje
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
 const datasetStats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');
-
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ZERO_UUID = '00000000-0000-0000-0000-000000000000';
@@ -232,7 +221,6 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' copilot check(s) FAILED'); process.exit(1); }
     console.log('\nAll copilot checks passed.');
   })

@@ -1,5 +1,5 @@
 // Metric-level formulas — MAIN PROCESS, PURE logic.
-// No Electron, no fs, no DOM. Node-testable by a plain `node` self-check.
+// No fs, no DOM. Node-testable by a plain `node` self-check.
 //
 // A metric formula is an expression over OTHER METRICS and over AGGREGATIONS of
 // this dataset's columns:

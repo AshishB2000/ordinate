@@ -6,7 +6,7 @@
 // definition — a second copy of the converter table would drift silently, and
 // the type mapping is the part callers actually depend on.
 //
-// Pure: no worker_threads, no child_process, no SharedArrayBuffer, no Electron.
+// Pure: no worker_threads, no child_process, no SharedArrayBuffer.
 
 import type { DuckDBConnection, DuckDBResultReader } from '@duckdb/node-api';
 

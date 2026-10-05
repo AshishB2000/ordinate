@@ -1,4 +1,4 @@
-// A pipeline's cron-like schedule — PURE, no Electron, no clock.
+// A pipeline's cron-like schedule — PURE, no clock.
 //
 // Five fields, the classic shape: minute hour day-of-month month day-of-week.
 // Each is `*`, a number, a range `a-b`, a step `*/n` or `a-b/n`, or a comma

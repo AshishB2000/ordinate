@@ -18,16 +18,11 @@ import { golden } from './golden';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
-// visuals.ts / dashboards.ts read `app` from electron at module load; nothing
-// here touches disk through it.
+// visuals.ts / dashboards.ts resolve userData at module load; nothing here
+// touches disk through it.
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-tablecalc-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: () => tmpUserData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources under test.
 const tc: typeof import('../src/analysis/tableCalc') = require('../src/analysis/tableCalc');

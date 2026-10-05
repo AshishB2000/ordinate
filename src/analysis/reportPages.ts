@@ -1,5 +1,5 @@
 // A report's (or a story's) PAGES, resolved on the server — the web port of the
-// desktop's renderer/hub/reportRender.ts buildReportPages, reportScorecard.ts,
+// desktop's the desktop's reportRender.ts buildReportPages, reportScorecard.ts,
 // reportDiscussion.ts and storyPresent.ts stReportPages (T2.13).
 //
 // One description of a page — a title, a picture, a caption, a KPI table, some
@@ -106,7 +106,7 @@ export interface PageDeps {
 /** Pivot / cohort / funnel tiles are tables, not canvases: their grids reach the browser with T1.2. */
 const GRID_TYPES = new Set(['pivot', 'cohort', 'event_funnel']);
 const STATUS_KEY: Record<string, string> = { good: 'common.on_track', warn: 'common.at_risk', off: 'common.off_track', none: 'common.no_target' };
-const AGG: Record<string, string> = { sum: t('common.sum'), avg: 'Average', count: t('common.count'), min: t('common.min'), max: t('common.max') };
+const AGG: Record<string, string> = { sum: t('common.sum'), avg: t('reportPages.average'), count: t('common.count'), min: t('common.min'), max: t('common.max') };
 
 function statusWord(s: string): string {
   return STATUS_KEY[s] ? t(STATUS_KEY[s]) : '';

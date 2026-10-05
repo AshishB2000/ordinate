@@ -1,7 +1,7 @@
 // The Pipelines page's figures (T2.6) — the counts the head strip prints and the
 // row change a run's log names, computed with the view instead of in a browser
 // (plan §6.4: the browser formats, it never counts). The desktop renderer
-// counted these itself (renderer/hub/pipelinesPage.ts pqHead); the rules here
+// counted these itself (the desktop's pipelinesPage.ts pqHead); the rules here
 // are that code's, moved.
 
 import type { NodeOutcome } from './pipelines';

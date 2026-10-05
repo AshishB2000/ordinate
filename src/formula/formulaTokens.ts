@@ -1,5 +1,5 @@
 // The formula TOKENIZER, and the error type the whole formula pipeline throws.
-// MAIN PROCESS, PURE logic — no Electron, no fs, no DOM.
+// MAIN PROCESS, PURE logic — no fs, no DOM.
 //
 // An expression is DATA, never code: there is deliberately no `eval` and no
 // `new Function` here or in either sibling module.

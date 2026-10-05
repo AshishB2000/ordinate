@@ -1,4 +1,4 @@
-// The ANSWER spec — MAIN PROCESS, PURE: no fs, no Electron, no model.
+// The ANSWER spec — MAIN PROCESS, PURE: no fs, no model.
 //
 // When a question in the dock or Home's ask bar is answerable from data
 // ("revenue by region last quarter", "top 5 products by profit"), the model's
@@ -83,8 +83,8 @@ const MAX_FILTERS = 8;
  * asked for), not a pivot (a different encoding), not scatter/bubble/histogram/
  * boxplot/candlestick/sankey/gauge (each reads its series as something other
  * than values per category). Spelled out rather than imported because the
- * app's full list lives in analysisPlan.ts, which pulls in electron — and this
- * file must stay pure; scripts/test-answerSpec.ts asserts it is a subset.
+ * app's full list lives in analysisPlan.ts, which pulls in fs and the stores — and
+ * this file must stay pure; scripts/test-answerSpec.ts asserts it is a subset.
  */
 export const ANSWER_CHART_TYPES: ReadonlySet<string> = new Set([
   'column', 'bar', 'clustered_column', 'clustered_bar', 'stacked_column', 'stacked_bar',

@@ -1,4 +1,4 @@
-// The `backups` block of config.json — MAIN ONLY. Electron-free, so config.ts
+// The `backups` block of config.json — MAIN ONLY. dependency-free, so config.ts
 // can import it without a cycle and a plain-node test can run it.
 //
 // `folder` is only ever set by main from a native folder picker (see

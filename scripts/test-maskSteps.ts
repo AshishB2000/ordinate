@@ -20,14 +20,9 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-mask-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: (_name: string) => tmpUserData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the modules under test.
 const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
@@ -181,7 +176,6 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' mask check(s) FAILED'); process.exit(1); }
     console.log('\nAll mask-step checks passed.');
     process.exit(0);

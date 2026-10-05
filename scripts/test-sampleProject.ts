@@ -16,29 +16,15 @@ import { golden } from './golden';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
-const REPO = path.resolve(__dirname, '..');
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-sample-'));
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const ipcHandlers: Map<string, (e: unknown, payload: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
 
 // The stub goes in BEFORE the first require of anything that reads app paths:
 // visuals.ts and analysis.ts memoize their projects base on first use, so a late
 // stub writes into the developer's real userData.
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      // getAppPath is the repo root, exactly as it is in dev — that is how the
-      // seeder finds the committed CSV.
-      app: { getPath: (_name: string) => tmpUserData, getAppPath: () => REPO },
-      net: {},
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const sample: typeof import('../src/app/sampleProject') = require('../src/app/sampleProject');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');

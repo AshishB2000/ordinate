@@ -1,6 +1,6 @@
 // Self-check for file upload/download (src/server/files.ts) and the one import
 // converted to it (dataset:pickAndParse in src/ipc/datasetImport.ts), over REAL
-// HTTP in server mode with Electron forbidden:
+// HTTP in server mode:
 //
 //   upload a CSV (multipart) → import it over RPC with the token → the dataset
 //   exists with the right rows → the token is dead and its file gone; tokens are
@@ -20,13 +20,6 @@ const path: typeof import('path') = require('path');
 const http: typeof import('http') = require('http');
 const net: typeof import('net') = require('net');
 const { Writable }: typeof import('stream') = require('stream');
-const Module: any = require('module'); // any: the loader hook has no public type
-
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') throw new Error('electron is not available in server mode');
-  return origLoad.apply(this, [request, ...rest]);
-};
 
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');

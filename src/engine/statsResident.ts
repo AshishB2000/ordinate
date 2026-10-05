@@ -37,7 +37,7 @@
 //      count is 0, while `mostCommon` must be PRESENT AND NULL. SQL returns NULL
 //      for both, so the adapter — not the SQL — decides: the numeric keys are
 //      only ever assigned inside `if (count > 0)`, and `mostCommon` is always
-//      assigned. `renderer/hub/datasets.ts` tests `typeof sum.min === 'number'`,
+//      assigned. the desktop's `datasets.ts` tests `typeof sum.min === 'number'`,
 //      so a stray `min: null` would render identically and ship silently; the
 //      test suite compares KEY SETS, not just values, for exactly this reason.
 //

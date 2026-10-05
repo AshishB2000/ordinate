@@ -1,8 +1,8 @@
-// One column's median — MAIN PROCESS, PURE logic. No Electron, no DOM, no fs.
+// One column's median — MAIN PROCESS, PURE logic. No DOM, no fs.
 //
 // WHY THIS FILE IS SO SMALL, AND WHY IT EXISTS AT ALL.
 //
-// The column-profile panel (renderer/hub/dsProfile.ts) shows type, distinct,
+// The column-profile panel (the desktop's dsProfile.ts) shows type, distinct,
 // empty, min/median/max, a histogram, top values and a by-month bar. Every one
 // of those EXCEPT the median is already computed by something shipped:
 //

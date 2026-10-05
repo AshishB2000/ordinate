@@ -22,21 +22,9 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
-const REPO = path.resolve(__dirname, '..');
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-bundle-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData, getAppPath: () => REPO, getVersion: () => '9.9.9' },
-      ipcMain: { handle: () => {} }, net: {}, dialog: {}, shell: {},
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the real modules.
 const sample: typeof import('../src/app/sampleProject') = require('../src/app/sampleProject');
@@ -92,7 +80,7 @@ async function main(): Promise<void> {
   const names = bundle.readZip(out.bytes).map((e) => e.name);
   ok('the manifest is the first entry', names[0] === 'manifest.json');
   ok('…naming the format, the app version and the project',
-    out.manifest.format === 'ordinate-project' && out.manifest.appVersion === '9.9.9' && out.manifest.project.name === 'My project');
+    out.manifest.format === 'ordinate-project' && out.manifest.appVersion === require('../package.json').version && out.manifest.project.name === 'My project');
   ok('…and counting every record kind',
     out.manifest.counts.datasets === 1 && out.manifest.counts.parquet === 2 && out.manifest.counts.visuals === 3
     && out.manifest.counts.dashboards === 1 && out.manifest.counts.metrics === 6 && out.manifest.counts.alerts === 1

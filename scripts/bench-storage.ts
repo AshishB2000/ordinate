@@ -17,12 +17,6 @@ import * as path from 'path';
 
 const RUNS = Number(process.argv[2]) || 11;
 const ROWS = 1_000_000;
-const Module = require('module') as { _load: (req: string, ...rest: unknown[]) => unknown };
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: unknown[]): unknown {
-  if (request === 'electron') return { app: { getPath: () => { throw new Error('server mode'); } } };
-  return origLoad.apply(this, [request, ...rest]);
-};
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
 const storage: typeof import('../src/engine/storage') = require('../src/engine/storage');

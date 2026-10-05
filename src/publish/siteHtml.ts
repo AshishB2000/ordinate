@@ -1,4 +1,4 @@
-// One published page as an HTML string — PURE (no fs, no Electron), so the
+// One published page as an HTML string — PURE (no fs), so the
 // whole assembly is node-testable.
 //
 // A page is: the dashboard's style tokens (dashboardExport.styleBlock — the

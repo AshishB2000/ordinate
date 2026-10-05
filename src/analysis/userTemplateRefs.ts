@@ -1,5 +1,5 @@
 // REFERENCES inside a user template — how a captured dashboard says "the Date
-// role" instead of "order_date". MAIN PROCESS, PURE: no fs, no Electron.
+// role" instead of "order_date". MAIN PROCESS, PURE: no fs.
 //
 // ONE representation per context, and only these three:
 //

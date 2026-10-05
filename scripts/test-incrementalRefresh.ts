@@ -1,13 +1,18 @@
-// Incremental refresh, end to end, on a REAL CSV-folder connection: real files
-// on disk, the real csv-folder connector (DuckDB reading them, with the cursor
-// predicate pushed into its SQL), the real merge, the real dataset store.
-// Nothing is mocked except 'electron', which points userData at a temp dir.
+// Incremental refresh, end to end, on a REAL URL connection: the real url
+// connector (JSON over https; only the network is faked — a fetch that answers
+// from the documents below), the real merge, the real dataset store, userData
+// in a temp dir. A URL source cannot push the cursor predicate down, so the
+// rows past the mark are picked out after the fetch.
+//
+// (Until T8.1 this ran on the desktop's CSV-folder connector, with the
+// predicate pushed into its SQL, plus a check that an untouched folder file is
+// not re-read; the local-file connectors and their file stamps went with the
+// desktop app.)
 //
 //   1. watermark persistence — the first run is full and sets the mark from the
-//      data; it is on disk, and the next run asks only for rows past it
+//      data; it is on disk, and the next run keeps only rows past it
 //   2. upsert by key against the JS reference, through a Prepare step (the
 //      merge runs on the immutable source copy, and the step is re-applied)
-//   3. a folder file nobody touched is not re-read
 //   4. append with a lookback: the overlap is deduped, hand-written counts
 //   5. the 7th run is full, and "Full refresh now" is honoured once
 //   6. recovery after an interrupted run — a throw mid-merge leaves the table,
@@ -20,15 +25,19 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-incr-ud-'));
-const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-incr-src-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: (_n: string) => tmpUserData }, ipcMain: {}, dialog: {} };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
+
+// The source documents, by URL, and the fetch the url connector reaches them
+// through (outside server mode it calls the platform fetch, src/connectors/url.ts).
+const docs = new Map<string, string>();
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (input: string | URL | Request) => {
+  const body = docs.get(String(input));
+  return body === undefined ? new Response('not found', { status: 404 }) : new Response(body, { status: 200, headers: { 'content-type': 'application/json' } });
+}) as typeof fetch;
+const urlFor = (table: string): string => `https://source.test/${table}.json`;
 
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
@@ -40,10 +49,14 @@ const inc: typeof import('../src/data/incremental') = require('../src/data/incre
 const duck: any = require('../src/engine/duckdb');
 type Cell = import('../src/data/incremental').Cell;
 
+/** Publish a table at its URL — written as CSV here for legibility, served as JSON rows (numbers as numbers). */
 const csv = (name: string, text: string): void => {
-  fs.writeFileSync(path.join(folder, name), text, 'utf8');
+  const [head, ...lines] = text.trim().split('\n');
+  const cols = head.split(',');
+  const rows = lines.map((l) => Object.fromEntries(l.split(',').map((v, i) => [cols[i], /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v])));
+  docs.set(urlFor(name.replace(/\.csv$/, '')), JSON.stringify(rows));
 };
-const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 25)); // mtime moves past lastRunAt
+const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 25)); // lastRunAt moves on
 const same = (a: Cell[][], b: Cell[][]): boolean =>
   a.length === b.length && a.every((r, i) => r.length === b[i].length && r.every((v, j) => Object.is(v, b[i][j])));
 
@@ -51,17 +64,15 @@ async function main(): Promise<void> {
   await projects.init();
   const proj = await projects.createProject('Incremental');
   const pid = proj.id;
-  const conn = await connections.saveConnection(pid, { name: 'Folder', connectorId: 'csv-folder', values: { path: folder } });
-  ok('a csv-folder connection is saved', !!conn);
-  if (!conn) return;
-
-  // A dataset the way the workbench imports one: this connection, this table.
+  // A dataset the way the workbench imports one: a connection to the table's URL.
   async function importTable(table: string, text: string): Promise<string> {
     csv(`${table}.csv`, text);
+    const conn = await connections.saveConnection(pid, { name: table, connectorId: 'url', values: { url: urlFor(table) } });
+    ok(`a url connection is saved (${table})`, !!conn);
     const p = parse.parseCsv(text);
     const ds = await datasets.saveDataset(pid, {
       name: table, sourceKind: 'csv', columns: p.columns, rows: p.rows,
-      origin: { kind: 'connection', connId: conn!.id, table },
+      origin: { kind: 'connection', connId: conn!.id },
     } as any);
     return ds!.id;
   }
@@ -92,7 +103,7 @@ async function main(): Promise<void> {
   const next = 'id,updated,amount\n1,100,10\n2,103,25\n3,102,30\n4,104,40\n';
   csv('orders.csv', next);
   e = await run(orders);
-  ok('2. the second run is incremental, filtered at the read', e.mode === 'incremental' && e.how === 'files' && !e.note, JSON.stringify(e));
+  ok('2. the second run is incremental, filtered after the fetch', e.mode === 'incremental' && e.how === 'after' && !e.note, JSON.stringify(e));
   ok('2. fetched = rows with cursor >= 102 (3), inserted 1, updated 1 (an identical re-read is not)',
     e.fetched === 3 && e.inserted === 1 && e.updated === 1, JSON.stringify(e));
   ok('2. the mark advanced to 104 and persisted', e.highWater === 104 && (await settings(orders)).highWater === 104);
@@ -108,20 +119,6 @@ async function main(): Promise<void> {
     JSON.stringify(after.rows) === JSON.stringify([[2, 103, 25], [3, 102, 30], [4, 104, 40]]));
   ok('2. the source copy was published as a new file (atomic rename), not edited in place',
     fs.statSync(record.sourceParquetPath(pid, orders)).ino !== srcInode);
-
-  // ── 3. Nothing touched → nothing read ────────────────────────────────────
-  e = await run(orders);
-  ok('3. an untouched folder file is not re-read', e.how === 'unchanged' && e.fetched === 0 && e.highWater === 104, JSON.stringify(e));
-  // A file delivered with an OLD mtime (a sync client, rsync -t, unzip) is
-  // still new data: rewritten (same bytes here, so nothing else moves) and
-  // back-dated to 2001, it is read again.
-  const ordersFile = path.join(folder, 'orders.csv');
-  fs.writeFileSync(ordersFile, fs.readFileSync(ordersFile));
-  fs.utimesSync(ordersFile, new Date('2001-01-01'), new Date('2001-01-01'));
-  e = await run(orders);
-  ok('3. a rewritten file with an old mtime IS re-read', e.how !== 'unchanged' && e.fetched > 0 && e.inserted === 0 && e.updated === 0, JSON.stringify(e));
-  e = await run(orders);
-  ok('3. …and is "unchanged" again on the run after', e.how === 'unchanged', JSON.stringify(e));
 
   // ── 4. Append with a lookback ────────────────────────────────────────────
   const events = await importTable('events', 'at,kind\n2024-01-01,a\n2024-01-02,b\n2024-01-03,c\n');
@@ -139,10 +136,9 @@ async function main(): Promise<void> {
     JSON.stringify(ev.rows) === JSON.stringify([['2024-01-01', 'a'], ['2024-01-02', 'b'], ['2024-01-03', 'c'], ['2024-01-02', 'late'], ['2024-01-04', 'd']]));
 
   // ── 5. The 7th run, and "Full refresh now" ───────────────────────────────
-  // orders: full, then 4 incremental runs so far (2 in §2–3, 2 more in §3's
-  // back-dated file check). Two more incremental runs…
-  ok('5. four incremental runs since the full one', (await settings(orders)).runsSinceFull === 4, (await settings(orders)).runsSinceFull);
-  for (let i = 0; i < 2; i++) e = await run(orders);
+  // orders: full, then one incremental run so far (§2). Five more…
+  ok('5. one incremental run since the full one', (await settings(orders)).runsSinceFull === 1, (await settings(orders)).runsSinceFull);
+  for (let i = 0; i < 5; i++) e = await run(orders);
   ok('5. runs 2–7 are incremental (6 in a row)', e.mode === 'incremental' && (await settings(orders)).runsSinceFull === 6);
   e = await run(orders);
   ok('5. the 7th run after a full one is full again', e.mode === 'full' && /7th/.test(e.note || ''), JSON.stringify(e));
@@ -194,7 +190,7 @@ async function main(): Promise<void> {
 main()
   .catch((err) => ok('threw', false, err && err.stack))
   .finally(() => {
-    for (const d of [tmpUserData, folder]) fs.rmSync(d, { recursive: true, force: true });
-    Module._load = origLoad;
+    fs.rmSync(tmpUserData, { recursive: true, force: true });
+    globalThis.fetch = realFetch;
     finish();
   });

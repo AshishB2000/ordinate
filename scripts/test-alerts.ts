@@ -31,7 +31,7 @@ export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
 
 // ponytail: compiled siblings, required (not imported) so this file does not
-// pull Electron in through the module graph. alerts.ts and metricValue.ts are
+// pull a store in through the module graph. alerts.ts and metricValue.ts are
 // both pure; alertStore.ts (which touches disk) is deliberately NOT loaded here.
 const alerts: typeof import('../src/analysis/alerts') = require('../src/analysis/alerts');
 const metricValue: typeof import('../src/analysis/metricValue') = require('../src/analysis/metricValue');

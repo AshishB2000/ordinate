@@ -1,7 +1,7 @@
 // Self-check for the Trash — src/app/trash.ts over src/app/trashStore.ts, and
 // the alert rule's round trip through alertStore.deleteRule / restoreRule.
 //
-// Real modules, real disk (Electron stubbed so userData is a temp dir). The
+// Real modules, real disk (userData in a temp dir). The
 // properties that fail silently get the attention:
 //
 //   1. A DELETE IS A MOVE: the record leaves every lister at once, and a
@@ -21,20 +21,9 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-trash-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData, getAppPath: () => path.resolve(__dirname, '..') },
-      ipcMain: { handle: () => {} }, dialog: {}, shell: {}, net: {},
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the real modules.
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');

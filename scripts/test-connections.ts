@@ -1,6 +1,6 @@
 // Self-check for src/connections.ts (connection metadata store) + the connection
-// secret store in src/config.ts. Like test-datasets.ts, we stub the 'electron'
-// module (via Module._load) to point userData at a fresh temp dir, then exercise
+// secret store in src/config.ts. Like test-datasets.ts, we point userData
+// (ORDINATE_LOCAL_DIR) at a fresh temp dir, then exercise
 // the REAL connections + projects + config modules against real disk. No
 // framework. This is a PURE store round-trip — it does NOT open a pg socket or
 // hit the network (connectionRun is exercised at runtime, not here).
@@ -11,23 +11,15 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-connections-'));
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return { app: { getPath: (_name: string) => tmpUserData } };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources.
 const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const configSecrets: typeof import('../src/app/configSecrets') = require('../src/app/configSecrets');
-
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SECRET_PW = 'sup3r-s3cret-pw';
@@ -172,7 +164,6 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' connections check(s) FAILED'); process.exit(1); }
     console.log('\nAll connections checks passed.');
   })

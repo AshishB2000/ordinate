@@ -1,7 +1,7 @@
 // Self-check for the connector registry (src/connectors/index.ts) and its wiring
 // into the connection store (src/connections.ts) and dispatch
-// (src/connectionRun.ts). Like test-connections.ts, we stub the 'electron' module
-// (via Module._load) to point userData at a fresh temp dir, then exercise the
+// (src/connectionRun.ts). Like test-connections.ts, we point userData
+// (ORDINATE_LOCAL_DIR) at a fresh temp dir, then exercise the
 // REAL modules against real disk. No framework, no network, no database socket.
 //
 // What this is guarding:
@@ -20,17 +20,10 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-connectors-'));
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return { app: { getPath: (_name: string) => tmpUserData } };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources.
 const registry: typeof import('../src/connectors') = require('../src/connectors');
@@ -38,7 +31,6 @@ const types: typeof import('../src/connectors/types') = require('../src/connecto
 const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
 const connectionRun: typeof import('../src/connectors/connectionRun') = require('../src/connectors/connectionRun');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
-
 
 const CATEGORIES = new Set(['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS']);
 const FAMILIES = new Set(['postgres', 'mysql', 'mssql', 'oracle', 'http', 'duckdb', 'saas']);
@@ -159,12 +151,12 @@ async function main(): Promise<void> {
   // silently hide a schema tree that works.
   const badBrowsable = catalog.filter((e: any) => typeof e.browsable !== 'boolean').map((e: any) => e.id);
   ok('every catalog entry reports `browsable` as a boolean', badBrowsable.length === 0, badBrowsable.join(', '));
-  // The five SQL families implement describeTable; HTTP engines and URL do not,
+  // The four SQL families implement describeTable; HTTP engines and URL do not,
   // and that ASYMMETRY is the whole point of the flag — if it ever reads all-true
   // or all-false, something has stopped being derived from the registry.
   const browsableIds = catalog.filter((e: any) => e.browsable).map((e: any) => e.id);
   ok('the SQL families are browsable',
-    ['postgres', 'mysql', 'sqlserver', 'oracle', 'duckdb-file'].every((id) => browsableIds.includes(id)),
+    ['postgres', 'mysql', 'sqlserver', 'oracle'].every((id) => browsableIds.includes(id)),
     browsableIds.join(', '));
   ok('…and the HTTP engines and the URL source are not',
     ['clickhouse', 'trino', 'elasticsearch', 'url'].every((id) => !browsableIds.includes(id)),
@@ -374,7 +366,6 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' connector check(s) FAILED'); process.exit(1); }
     console.log('\nAll connector checks passed.');
   })

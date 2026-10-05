@@ -1,5 +1,5 @@
 // KEY DRIVERS — why a figure changed between two periods. MAIN PROCESS, PURE:
-// no Electron, no fs, no DuckDB, no model. Figures in, figures out.
+// no fs, no DuckDB, no model. Figures in, figures out.
 //
 // The inputs are app-computed per-member aggregates (src/engine/driversResident
 // on the stored Parquet, or src/analysis/driversJs over hydrated rows — the

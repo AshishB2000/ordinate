@@ -1,5 +1,5 @@
 // USER TEMPLATES — a dashboard turned into a template, captured. MAIN PROCESS,
-// PURE: records in, a template out. No fs, no Electron, no model.
+// PURE: records in, a template out. No fs, no model.
 //
 // A user template is the dashboard's STRUCTURE with every column it names
 // replaced by a ROLE (userTemplateRefs.ts): sheets and cards with their layouts

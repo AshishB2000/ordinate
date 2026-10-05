@@ -17,7 +17,6 @@ import { ipcMain } from './bus';
 import { serverDataDir } from '../server/context';
 import * as comments from '../app/comments';
 import * as config from '../app/config';
-import * as hubs from '../windows/hubRegistry';
 import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
 import * as datasets from '../data/datasets';
@@ -74,9 +73,9 @@ async function answer(projectId: string, res: comments.Result): Promise<unknown>
 }
 
 export function register(): void {
-  // Every open window (desktop), or every tab of the org (server, T2.9) — the panel re-reads.
+  // Every tab of the org (server, T2.9) — the panel re-reads. Outside server mode, no one to tell.
   const changed = (projectId: string): void => {
-    if (serverDataDir() === null) return hubs.broadcast('comments:changed', { projectId });
+    if (serverDataDir() === null) return;
     // Members who may read the project only (T6.3), as alerts and refreshes go.
     (require('../server/jobs/schedules') as typeof import('../server/jobs/schedules')).pushToReaders(projectId, 'comments:changed', { projectId });
   };

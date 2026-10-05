@@ -10,7 +10,7 @@
 // whitespace, '007' vs '7' as keys, multiset rows, reordered and renamed
 // columns, a leading BOM, a 0-column table, a page cap — then a seeded fuzz.
 //
-// The last section drives the SHIPPED `snapshots:diff` handler (electron
+// The last section drives the SHIPPED `snapshots:diff` handler (userData
 // stubbed) with a spy on datasets.getDataset: the diff must never hydrate.
 //
 //   npm run build:ts && node scripts/test-snapshotDiff.js
@@ -21,25 +21,15 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 type Cell = import('../src/data/transforms').Cell;
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-snapdiff-'));
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const handlers: Map<string, IpcHandler> = require('../src/server/rpc').handlers;
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData, getVersion: () => '0.0.0-test', getAppPath: () => path.resolve(__dirname, '..') },
-      dialog: {}, net: {}, nativeImage: {}, shell: {}, safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
 const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
@@ -235,7 +225,6 @@ void main()
   .catch((err) => { ok('unexpected error', false, err && err.stack); })
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* best effort */ }
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' snapshot-diff check(s) FAILED'); process.exit(1); }
     console.log('\nAll snapshot-diff checks passed.');
     process.exit(0); // the DuckDB worker keeps the loop alive otherwise

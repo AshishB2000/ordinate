@@ -1,4 +1,4 @@
-// Table calculations — PURE, MAIN PROCESS, no Electron / fs / DOM.
+// Table calculations — PURE, MAIN PROCESS, no fs / DOM.
 //
 // "Calculate as" on a measure: running total, percent of total, difference and
 // percent difference from the previous cell, rank (dense or competition),
@@ -358,7 +358,7 @@ export function withTableCalcs<R extends { ok: boolean }>(reply: R, enc: CalcEnc
 
 // ── Display: "24.1% of total · 1.25M" ────────────────────────────────────────
 //
-// Mirrored in renderer/hub/calcMenu.ts (`tcCalcParts`) for tooltips, both built
+// Mirrored in the desktop's calcMenu.ts (`tcCalcParts`) for tooltips, both built
 // on src/app/format — scripts/test-tableCalc.ts runs the two side by side.
 
 const SUFFIX: Record<TableCalcKind, string> = {

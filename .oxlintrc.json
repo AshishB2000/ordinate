@@ -46,7 +46,7 @@
       }
     },
     {
-      "files": ["renderer/**", "src/publish/site/**"],
+      "files": ["src/publish/site/**"],
       "rules": {
         "typescript/no-floating-promises": "off",
         "typescript/no-misused-promises": "off",
@@ -68,8 +68,6 @@
     "**/node_modules/**",
     ".claude/worktrees/**",
     "dist/**",
-    "renderer/hub/vendor/**",
-    "renderer/hub/svelte/bundle.js",
     "assets/geo/*.js",
     "geo/**",
     "web/dist/**"

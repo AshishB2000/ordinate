@@ -21,13 +21,6 @@ import { withCsrf } from './csrfPair';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: the loader hook has no public type
-
-const resolve = Module._resolveFilename;
-Module._resolveFilename = function (request: string, ...rest: unknown[]): string {
-  if (request === 'electron' || request.startsWith('electron/')) throw new Error('electron is not available on the server');
-  return resolve.call(this, request, ...rest);
-};
 
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');

@@ -3,7 +3,7 @@
 // four controls listed in that file's header: the engine lock comes first and
 // the subquery wrapper last, and neither depends on this lexer being right.
 
-import { statementCount } from '../ipc/mosaic';
+import { statementCount } from './sqlHarden';
 import { foldKey } from './datasetView';
 import { lexSql } from './sqlLex';
 
@@ -17,7 +17,7 @@ const FIRST_WORDS: ReadonlySet<string> = new Set(['select', 'with', 'from', 'val
 // is the same thing spelled as a serialized statement (T6.3).
 const FILE_FUNC_RE =
   /^(read_\w+|\w+_scan|glob|sniff_csv|parquet_\w+|query|query_table|iceberg_\w+|delta_\w+|st_read\w*|duckdb_\w+|pragma_\w+|which_secret|current_setting|getenv|json_execute_serialized_sql)$/i;
-/** `mosaic.viewNameFor` — a view over ANY project's dataset, in the shared catalog. */
+/** `sqlHarden.viewNameFor` — a view over ANY project's dataset, in the shared catalog. */
 const MOSAIC_VIEW_RE = /^ds_[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12}$/i;
 /** A quoted name DuckDB's replacement scan would open as a file. */
 const PATHISH_RE = /[\\/~]|\.[A-Za-z0-9]{1,8}$/;

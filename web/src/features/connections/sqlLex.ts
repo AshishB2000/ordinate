@@ -1,5 +1,5 @@
 // The workbench editor's COSMETIC lexer, completions and identifier quoting —
-// pure, ported from renderer/hub/connEditor.ts / connWorkbench.ts.
+// pure, ported from the desktop's connEditor.ts / connWorkbench.ts.
 //
 // No verdict here: six dialects, the statement is the user's own, and only the
 // SERVER (`connection:explain`) says whether it is valid. This colours five
@@ -139,7 +139,7 @@ export function quoteIdent(family: string, name: string): string {
  * A `schema.table` name, each part quoted. The desktop quoted the whole string
  * as ONE identifier (`"sales.orders"`), which Postgres reads as a table literally
  * named `sales.orders` — a deliberate fix here. DuckDB-family names are already
- * one identifier with the schema folded in (src/connectors/local.ts).
+ * one identifier with the schema folded in.
  */
 export function quoteQualified(family: string, name: string): string {
   return family === 'duckdb' ? quoteIdent(family, name) : name.split('.').map((p) => quoteIdent(family, p)).join('.');

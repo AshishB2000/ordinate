@@ -6,7 +6,7 @@
 //
 // ── Why this file exists ─────────────────────────────────────────────────────
 // `parse.ts` caps every import at 50,000 rows. That cap is not about parsing —
-// it is about the Explore grid. `renderer/hub/datasets.ts` does `expRows =
+// it is about the Explore grid. the desktop's `datasets.ts` does `expRows =
 // ds.rows` (:361) and holds the whole table in renderer memory, then COPIES it
 // again on every keystroke and every header click (`explorerDisplayRows`, :502).
 // So the whole table is materialised into `Cell[][]` in main, structured-cloned
@@ -219,7 +219,7 @@ export async function readPage(src: PageSource, req: PageRequest): Promise<PageR
  * THE REFERENCE IMPLEMENTATION, and the fallback the IPC handler uses for a v2
  * (rows-inline) record.
  *
- * A verbatim transcription of `renderer/hub/datasets.ts`'s
+ * A verbatim transcription of the desktop's `datasets.ts`'s
  * `explorerDisplayRows()` (search + sort over an index-preserving copy) and
  * `sortCompare()`, followed by the slice the grid would have taken. It is
  * exported so there is exactly ONE definition of "what the Explore grid shows",
@@ -264,7 +264,7 @@ export function pageRowsJs(columns: ParsedColumn[], rows: Cell[][], req: PageReq
 }
 
 /**
- * `renderer/hub/datasets.ts:484` verbatim. Empties sort last regardless of
+ * `the desktop's datasets.ts:484` verbatim. Empties sort last regardless of
  * direction; numbers numeric, text/date lexical via `localeCompare`.
  */
 function sortCompare(a: Cell, b: Cell, type: ColumnType, dir: number): number {
@@ -743,7 +743,7 @@ export async function readDistinctPage(
 
 /**
  * THE REFERENCE IMPLEMENTATION — a verbatim transcription of the loop that used
- * to live in `renderer/hub/dashboards.ts`'s `distinctColumnOptions`, and the
+ * to live in the desktop's `dashboards.ts`'s `distinctColumnOptions`, and the
  * fallback for a v2 (rows-inline) record. Pure.
  */
 export function distinctValuesJs(

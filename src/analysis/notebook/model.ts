@@ -8,7 +8,7 @@
 //             previous cell's result as a calculated column (src/formula — no eval)
 //   chart     an ordinary Visuals builder spec (chartType + VizEncoding) over
 //             any earlier SQL or formula cell, computed by vizData.buildVizData
-//   markdown  the text-card subset (renderer/hub/markdown.ts)
+//   markdown  the text-card subset (the desktop's markdown.ts)
 //   param     a named, typed value later cells read as `[[name]]`
 //
 // `sanitizeCells` runs on every load AND every save, like storyModel's

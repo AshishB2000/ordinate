@@ -1,14 +1,13 @@
-// Self-check for src/anomalies.ts — the PURE anomaly detector. No Electron, no fs:
+// Self-check for src/anomalies.ts — the PURE anomaly detector. No fs:
 // detectAnomalies / buildAnomaliesFacts operate on plain columns/rows, so this runs
 // under plain `node`. No framework — the shared ok(label, cond) harness the sibling
-// test scripts use. (It DOES import datasetStats, which is Electron-free too.)
+// test scripts use. (It DOES import datasetStats, which is dependency-free too.)
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
 
 const { detectAnomalies, buildAnomaliesFacts } = require('../src/analysis/anomalies') as typeof import('../src/analysis/anomalies');
 import type { Anomaly, AnomalyKind } from '../src/analysis/anomalies';
-
 
 type Col = { name: string; type: 'text' | 'number' | 'date' };
 type Cell = string | number | null;

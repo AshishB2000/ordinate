@@ -79,7 +79,7 @@ export function safeColor(hex: string): string {
 // and connector marks are ~41 KB of path data; depending on the package shipped
 // 25 MB into the bundle to get them. simple-icons is now a devDependency and
 // `npm run build:icons` bakes assets/provider-icons.json — the same
-// committed-build-artifact pattern as renderer/hub/vendor/. The generator fails
+// committed-build-artifact pattern as the desktop's vendor/. The generator fails
 // loudly when an upstream export disappears, so a missing icon is a build error
 // rather than a badge that silently replaces a logo.
 const ICON_ASSET = path.join(__dirname, '..', '..', 'assets', 'provider-icons.json');

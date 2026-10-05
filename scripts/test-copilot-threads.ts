@@ -7,8 +7,8 @@
 // function (a v1 object in, v2 threads out — no disk, so the migration contract is
 // asserted directly), then the same contract is re-asserted through real files on
 // disk, because a migration that only works in memory is not a migration. Style
-// follows test-copilot.ts / test-datasetsMigration.ts: stub 'electron' via
-// Module._load so userData points at a temp dir, run the REAL module, no framework.
+// follows test-copilot.ts / test-datasetsMigration.ts: point userData
+// (ORDINATE_LOCAL_DIR) at a temp dir, run the REAL module, no framework.
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
@@ -16,20 +16,14 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-copilot-threads-'));
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: (_n: string) => tmpUserData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources under test.
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
-
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -272,7 +266,6 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
-    Module._load = origLoad;
     console.log('');
     if (failureCount()) { console.error(failureCount() + ' copilot thread check(s) FAILED'); process.exit(1); }
     console.log('All copilot thread checks passed.');

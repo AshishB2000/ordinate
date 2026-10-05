@@ -1,5 +1,5 @@
 // Dashboards, sharing, alerts, comments over the server's RPC (T2.9) — real
-// HTTP, server mode, no Electron.
+// HTTP, server mode.
 //
 //   Part 1 (always, no DB): two orgs through an identify override.
 //     publish to a URL  publish:run → /p/<id>/ for a member: the page the
@@ -34,13 +34,6 @@ import type { FastifyInstance } from 'fastify';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: the loader hook has no public type
-
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') throw new Error('electron is not available in server mode');
-  return origLoad.apply(this, [request, ...rest]);
-};
 
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');

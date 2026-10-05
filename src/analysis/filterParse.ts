@@ -1,5 +1,5 @@
 // TYPED FILTERS — "west technology last quarter" → filter chips. PURE: no
-// Electron, fs, DOM or clock, and NO MODEL. The same text and catalog always
+// fs, DOM or clock, and NO MODEL. The same text and catalog always
 // give the same chips, in the same order.
 //
 // The catalog is the open dashboard's own data (src/ipc/filterParse.ts builds

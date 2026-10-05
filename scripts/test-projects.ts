@@ -1,6 +1,6 @@
 // Self-check for src/projects.ts disk persistence (create/list/get/rename/delete).
-// projects.ts requires Electron's `app.getPath('userData')`, so we stub the
-// 'electron' module (via Module._load) to point userData at a fresh temp dir,
+// projects.ts resolves userData through src/app/paths.ts, so we point it
+// (ORDINATE_LOCAL_DIR) at a fresh temp dir,
 // then exercise the REAL projects module against real disk. No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -9,24 +9,16 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 // Fresh temp userData dir for this run.
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-projects-'));
 
-// Stub 'electron' so projects.ts resolves userData under our temp dir. Must be
-// installed BEFORE requiring the compiled projects module.
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return { app: { getPath: (_name: string) => tmpUserData } };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+// Point userData at our temp dir. Must be set BEFORE requiring the compiled
+// projects module.
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: the compiled sibling of ../src/projects.ts.
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
-
 
 async function main(): Promise<void> {
   // init() creates userData/projects.
@@ -110,7 +102,6 @@ main()
   .then(() => {
     // Cleanup temp dir.
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' projects check(s) FAILED'); process.exit(1); }
     console.log('\nAll projects checks passed.');
   })

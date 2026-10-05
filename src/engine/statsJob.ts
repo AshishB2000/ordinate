@@ -1,6 +1,6 @@
 // The statistics workbench's resident run — the body of the compute worker's
 // 'stats' op (./computeWorker.ts) and of the inline path in src/ipc/stats.ts.
-// Electron-free, like everything the worker imports: plain paths and records
+// dependency-free, like everything the worker imports: plain paths and records
 // in, a structured-cloneable result out; null means "the resident read
 // declined", and the caller hydrates and runs the JS reference instead.
 

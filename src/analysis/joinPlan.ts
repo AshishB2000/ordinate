@@ -1,5 +1,5 @@
 // Which datasets a visual may reach, and the ONE join chain that reaches them.
-// PURE — no Electron, no fs, no SQL. MAIN PROCESS.
+// PURE — no fs, no SQL. MAIN PROCESS.
 //
 // The rule that makes a cross-dataset measure safe: every hop walks a
 // relationship FROM its many side TO its one side (or across a one-to-one), so

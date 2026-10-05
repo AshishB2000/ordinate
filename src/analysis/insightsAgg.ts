@@ -19,7 +19,7 @@
 //   · SUM over no finite value is `null`, never 0.
 //   · Only a column DECLARED `number` is summed. `'007'` is text and stays text.
 //
-// MAIN PROCESS. No Electron, no DOM, no fs.
+// MAIN PROCESS. No DOM, no fs.
 
 import type { ParsedColumn } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';

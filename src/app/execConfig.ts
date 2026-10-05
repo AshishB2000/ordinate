@@ -23,16 +23,15 @@ import {
 import { serverDataDir } from '../server/context';
 
 // SERVER MODE (T2.12). Two rules, both enforced here so no caller can forget:
-//   1. Models are API-key providers only. A pod never runs a local CLI: src/cli
-//      is required lazily, by desktop-only branches, so the server never even
-//      loads it (scripts/test-dockServer.ts and test-server-boot assert it).
+//   1. Models are API-key providers only. Local CLI models were the desktop
+//      app's (deleted at T8.1); a stored local-CLI block from an
+//      imported desktop config is data, never run.
 //   2. An API key never reaches config.json. It goes to the encrypted secrets
 //      store (src/server/aiKeys.ts → T5.3), and config.json keeps only the
 //      provider's `keyStored` flag. With no store, saving a key is refused.
 const onServer = (): boolean => serverDataDir() !== null;
 export const serverMode = onServer;
-// Lazy: the server never loads src/cli, the desktop never loads the key store.
-const localCli = (): typeof import('../cli/localCli') => require('../cli/localCli') as typeof import('../cli/localCli');
+// Lazy: a plain-Node self-check never loads the key store.
 const aiKeys = (): typeof import('../server/aiKeys') => require('../server/aiKeys') as typeof import('../server/aiKeys');
 
 // ── Per-provider key / model helpers ────────────────────────────────────────
@@ -258,51 +257,11 @@ export function setByokActiveProvider(prov: string): { ok: boolean; error?: stri
 
 // ── Local CLI detection state ───────────────────────────────────────────────
 
-// Persist a detection scan (full results, incl. internal resolvedPath) + timestamp.
-export function saveLocalCliDetection(results: unknown): { ok: boolean } {
-  const cfg = get();
-  cfg.localCli.lastDetection = {
-    at: new Date().toISOString(),
-    results: Array.isArray(results) ? results : [],
-  };
-  persist(cfg);
-  return { ok: true };
-}
-
-// Set the selected Local CLI (must be a known registry id, or null to clear).
-export function setLocalCliActive(id: string | null): { ok: boolean } {
-  if (onServer()) return { ok: false }; // no local CLIs on a server
-  const valid = id === null || localCli().REGISTRY.some((e: { id: string }) => e.id === id);
-  if (!valid) return { ok: false };
-  const cfg = get();
-  cfg.localCli.activeId = id;
-  persist(cfg);
-  return { ok: true };
-}
-
 // Internal-only: the full stored detection result for one id (incl. resolvedPath).
 export function getLocalCliResult(id: string): CliDetectionResult | null {
   const det = get().localCli.lastDetection;
   const results = (det && det.results) || [];
   return results.find(r => r && r.id === id) || null;
-}
-
-// Persist the chosen model for a Local CLI (must be a known registry id).
-// Empty/non-string clears it (CLI default).
-export function setLocalCliModel(id: string, model: unknown): { ok: boolean } {
-  if (onServer() || !localCli().REGISTRY.some((e: { id: string }) => e.id === id)) return { ok: false };
-  const cfg = get();
-  const m = typeof model === 'string' ? model.trim() : '';
-  if (m) cfg.localCli.models[id] = m;
-  else delete cfg.localCli.models[id];
-  persist(cfg);
-  return { ok: true };
-}
-
-// The selected model for a Local CLI, or '' when none (use the CLI default).
-export function getLocalCliModel(id: string): string {
-  const models = get().localCli.models || {};
-  return models[id] || '';
 }
 
 // Model-list cache (last good live list per provider/CLI key).
@@ -318,17 +277,9 @@ export function getModelCache(key: string): { at: string; models: any[] } | null
   return c[key] || null;
 }
 
-// Renderer-safe view: activeId + merged registry/detection list, NO resolvedPath.
+// The public view's localCli block: always empty — no local CLI runs here.
 export function publicLocalCli() {
-  if (onServer()) return { activeId: null, detectedAt: null, models: {}, clis: [] };
-  const cfg = get();
-  const det = cfg.localCli.lastDetection;
-  return {
-    activeId: cfg.localCli.activeId || null,
-    detectedAt: (det && det.at) || null,
-    models: { ...(cfg.localCli.models || {}) },
-    clis: localCli().toPublic(det && (det.results as any)), // ponytail: disk JSON rows; toPublic tolerates junk
-  };
+  return { activeId: null, detectedAt: null, models: {}, clis: [] };
 }
 
 // Renderer-safe byok view: per-provider hasKey + baseUrl/maxTokens/model, NO keys.

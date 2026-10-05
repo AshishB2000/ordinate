@@ -19,15 +19,10 @@ const crypto: typeof import('crypto') = require('crypto');
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // ponytail: the electron stub pattern of test-datasets.ts
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-power-steps-'));
 process.on('exit', () => { try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) { /* temp */ } });
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: (_name: string) => tmpUserData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
 const { applyPipeline, sanitizeSteps } = transforms;

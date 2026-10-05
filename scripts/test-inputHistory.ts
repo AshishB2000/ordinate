@@ -1,7 +1,7 @@
 // Self-check for input tables' HISTORY: one batch is one undo step in the grid
 // and one version on disk, and undo/redo round-trip exactly — through the real
-// store, the real Parquet and the real version history (electron stubbed so
-// userData is a temp dir, as in test-snapshots.ts).
+// store, the real Parquet and the real version history (userData is a temp
+// dir, as in test-snapshots.ts).
 //
 // The grid's side is played by edits.ts itself (the module the hub loads), so
 // what is tested is the actual hand-off: batches made and undone in the grid,
@@ -15,23 +15,12 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 type Cell = import('../src/data/inputTable/edits').Cell;
 type Batch = import('../src/data/inputTable/edits').Batch;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-inputhist-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData, getVersion: () => '0.0.0-test', getAppPath: () => path.resolve(__dirname, '..') },
-      ipcMain: { handle: () => {}, on: () => {} },
-      dialog: {}, net: {}, nativeImage: {}, shell: {}, safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');

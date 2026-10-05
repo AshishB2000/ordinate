@@ -1,7 +1,6 @@
 // Self-check for src/analysis/analysis.ts (the AUTHORING container).
 //
-// Stub the 'electron' module via Module._load so userData points at a fresh
-// temp dir, then exercise the REAL analysis + projects modules against real
+// Point userData (ORDINATE_LOCAL_DIR) at a fresh temp dir, then exercise the REAL analysis + projects modules against real
 // disk. No framework.
 //
 // Two properties get more attention than the CRUD, because they are the ones
@@ -24,26 +23,15 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-analysis-'));
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData },
-      net: {},
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the real modules.
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const dashboards: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
-
 
 const MISSING_UUID = '00000000-0000-0000-0000-000000000000';
 const VISUAL_ID = '22222222-2222-4222-8222-222222222222';
@@ -287,7 +275,6 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' analysis check(s) FAILED'); process.exit(1); }
     console.log('\nAll analysis checks passed.');
   })

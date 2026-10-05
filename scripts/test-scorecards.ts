@@ -21,21 +21,9 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-scorecards-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_n: string) => tmp, getVersion: () => '0.0.0-test', getAppPath: () => path.resolve(__dirname, '..') },
-      ipcMain: { handle: () => {}, on: () => {} },
-      net: {}, nativeImage: {}, shell: {}, dialog: {}, BrowserWindow: { getAllWindows: () => [] },
-      Notification: function () { return { show: () => {} }; },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmp;
 
 const model: typeof import('../src/analysis/scorecardModel') = require('../src/analysis/scorecardModel');
 const store: typeof import('../src/analysis/scorecards') = require('../src/analysis/scorecards');

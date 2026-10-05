@@ -176,7 +176,7 @@ export const VALUE_MODES: ReadonlyArray<[ValueMode, string]> = [
 
 /**
  * Which marks get a permanent value label: keys "series:index". The maps pass
- * one series. Ported from renderer/hub/chartValueLabels.ts (the chart port,
+ * one series. Ported from the desktop's chartValueLabels.ts (the chart port,
  * T1.1, owns the shared copy; dedupe when both land).
  */
 export function valueLabelKeys(mode: string, values: ReadonlyArray<ReadonlyArray<unknown>>): Set<string> {

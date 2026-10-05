@@ -31,13 +31,6 @@ import * as path from 'path';
 import { isDeepStrictEqual } from 'util';
 import { Client, Pool } from 'pg';
 
-const Module = require('module') as { _load: (req: string, ...rest: unknown[]) => unknown };
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: unknown[]): unknown {
-  if (request === 'electron') return { app: { getVersion: () => '0.0.0-test', getPath: () => { throw new Error('server mode: no Electron paths'); } } };
-  return origLoad.apply(this, [request, ...rest]);
-};
-
 const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const mig: typeof import('../src/server/db/migrate') = require('../src/server/db/migrate');

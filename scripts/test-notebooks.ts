@@ -3,7 +3,7 @@
 // Self-check for notebooks (src/analysis/notebook/): view naming, the
 // dependency graph and staleness, cache keys, the Markdown export and the
 // record's whitelist — asserted directly — then a REAL run over REAL Parquet
-// under the real engine lock ('electron' stubbed only to point userData at a
+// under the real engine lock (userData in a
 // temp dir, as test-sqlDatasets.ts does):
 //
 //   · a SQL cell reads another cell's view and a [[parameter]];
@@ -23,16 +23,9 @@ import { ok, failureCount, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-nb-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return { app: { getPath: (_name: string) => tmpUserData }, ipcMain: {}, dialog: {} };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources under test.
 const graph: typeof import('../src/analysis/notebook/graph') = require('../src/analysis/notebook/graph');
@@ -342,7 +335,6 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     duck.shutdown();
-    Module._load = origLoad;
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
     if (failureCount()) console.error('\n' + failureCount() + ' notebook check(s) FAILED');
     else console.log('\nAll notebook checks passed.');

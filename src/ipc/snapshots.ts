@@ -26,7 +26,6 @@ import * as metrics from '../analysis/metrics';
 import { resolveMetric } from './metrics';
 import { afterRefresh } from './datasets';
 import { isValidId } from '../app/ids';
-import type { BuildDeps } from './build';
 
 /** How many datasets / metrics one picker may ask about — a page, not a project dump. */
 const MAX_PICKER_IDS = 50;
@@ -114,7 +113,7 @@ export async function snapshotStamps(projectId: string, datasetIds: unknown, met
   }
 }
 
-export function register(deps: BuildDeps): void {
+export function register(deps: { headless?: boolean }): void {
   void deps; // no timers or watchers here — a headless run registers the same reads
 
   ipcMain.handle('snapshots:list', async (_e, { projectId, datasetId }: any = {}) => {

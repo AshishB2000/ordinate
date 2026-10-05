@@ -1,8 +1,7 @@
 // Self-check for authorization WITHOUT Postgres (T3.3): every contract is
 // resolvable (scripts/check-contracts.ts), the decision rules (org roles,
 // resolvers, unknown → deny), audit target extraction never picking up a
-// value, and the route refusing before the handler — server mode, no
-// Electron. The role × channel × project matrix against a real Postgres is
+// value, and the route refusing before the handler — server mode. The role × channel × project matrix against a real Postgres is
 // scripts/test-authz-db.ts.
 //
 //   npm run build:ts && node scripts/test-authz.js
@@ -15,13 +14,6 @@ import { z } from 'zod';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: the loader hook has no public type
-
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') throw new Error('electron is not available in server mode');
-  return origLoad.apply(this, [request, ...rest]);
-};
 
 const check: typeof import('./check-contracts') = require('./check-contracts');
 const api: typeof import('../src/api/index') = require('../src/api/index');

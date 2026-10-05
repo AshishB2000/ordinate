@@ -27,7 +27,7 @@
 // the LISTEN connection is down is not replayed. The connection is re-opened
 // after RECONNECT_MS; a tab re-reads state over RPC when it matters.
 //
-// Must load without Electron (scripts/test-server-boot.ts).
+// Must load in a plain Node process (scripts/test-server-boot.ts).
 
 import { randomUUID } from 'crypto';
 import { Client, type Notification, type Pool } from 'pg';

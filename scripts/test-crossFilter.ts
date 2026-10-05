@@ -3,7 +3,7 @@
 // get? Tested here rather than only through a chart click, because a click test
 // proves the WIRING and says nothing about the step it produces.
 //
-// No Electron, no fs, no framework — same shape as test-dashboardFilters.ts.
+// No fs, no framework — same shape as test-dashboardFilters.ts.
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
@@ -12,7 +12,6 @@ import { ok, failureCount } from './selfcheck';
 const { toggleCrossFilter, mergeDashboardFilters }: typeof import('../src/analysis/dashboardFilters') =
   require('../src/analysis/dashboardFilters');
 type FilterStep = import('../src/data/transforms').FilterStep;
-
 
 const F = (column: string, value: string): FilterStep =>
   ({ type: 'filter', column, op: '=', value } as FilterStep);

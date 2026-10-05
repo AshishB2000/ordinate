@@ -36,7 +36,7 @@
 // THE HOOK for later schedules (S3 GC, T5.2): `defineJob('s3:gc', { everyMs, run })`
 // before startRunner — nothing else changes.
 //
-// Must load without Electron (scripts/test-server-boot.ts).
+// Must load in a plain Node process (scripts/test-server-boot.ts).
 
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';

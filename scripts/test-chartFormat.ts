@@ -22,14 +22,9 @@ const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const vm: typeof import('vm') = require('vm');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-chartformat-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: () => tmpUserData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const cf: typeof import('../src/analysis/chartFormat') = require('../src/analysis/chartFormat');
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');

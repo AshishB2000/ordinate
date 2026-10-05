@@ -19,7 +19,7 @@
 //     a `-0` can never pass as `0`.
 //
 // The last section drives the SHIPPED `dataset:stats` / `dataset:explain`
-// handlers for real (electron stubbed, `register()` called) and spies on
+// handlers for real (`register()` called) and spies on
 // `datasets.getDataset`, so "the resident path was taken" is asserted as "the
 // table was never hydrated" rather than assumed.
 //
@@ -31,7 +31,6 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 type Cell = import('../src/data/transforms').Cell;
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
@@ -41,22 +40,10 @@ type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-stats-resident-'));
 
-// ── The electron stub (test-datasets.ts pattern, plus handler capture) ───────
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// ── userData in a temp dir (test-datasets.ts pattern, plus handler capture) ────────────────────
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const handlers: Map<string, IpcHandler> = require('../src/server/rpc').handlers;
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData, getVersion: () => '0.0.0-test' },
-      dialog: {},
-      net: {},
-      nativeImage: {},
-      shell: {},
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
 const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
@@ -69,7 +56,6 @@ const datasetsIpc: typeof import('../src/ipc/datasets') = require('../src/ipc/da
 datasetsIpc.register();
 const statsHandler = handlers.get('dataset:stats');
 const explainHandler = handlers.get('dataset:explain');
-
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-stats-fixtures-'));
 let fileSeq = 0;
@@ -576,7 +562,6 @@ void main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* best effort */ }
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best effort */ }
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' stats-resident check(s) FAILED'); process.exit(1); }
     console.log('\nAll stats-resident checks passed.');
     process.exit(0); // the DuckDB worker keeps the loop alive otherwise

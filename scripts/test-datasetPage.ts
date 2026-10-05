@@ -8,7 +8,7 @@
 // against a hand-written expectation: a fixture is written with
 // `parquetStore.writeTable`, read back with `parquetStore.readTable`, and the
 // resident page is compared to `pageRowsJs` — the verbatim transcription of
-// `renderer/hub/datasets.ts`'s `explorerDisplayRows` + `sortCompare` — over
+// the desktop's `datasets.ts`'s `explorerDisplayRows` + `sortCompare` — over
 // those exact rows. A hand-written expectation can agree with a bug in both
 // implementations; an equivalence assertion cannot.
 //

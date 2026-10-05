@@ -196,7 +196,7 @@ export function formatCompact(v: number | null | undefined): string {
 }
 
 // The renderer's DISPLAY currency when a project or an open dashboard converts
-// money to a target other than the workspace's (renderer/hub/fxUi.ts sets it).
+// money to a target other than the workspace's (the desktop's fxUi.ts sets it).
 // Main never sets it — it serves several projects at once — and passes the
 // target to `formatMetric` explicitly instead.
 let currencyOverride = '';

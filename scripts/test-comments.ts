@@ -16,7 +16,7 @@
 //   6. BUNDLE      comments.json travels, and its target ids follow the remap.
 //   7. FACTS       a comment's words and figures never reach buildFacts.
 //
-// The 'electron' module is stubbed (Module._load) so userData can be switched
+// ORDINATE_LOCAL_DIR is re-pointed so userData can be switched
 // between two "machines" inside one process: config.load() re-reads the
 // config of whichever one is current.
 //
@@ -29,25 +29,13 @@ const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const { randomUUID }: typeof import('crypto') = require('crypto');
-const Module: any = require('module'); // ponytail: Node's private _load hook, untyped
 
-const REPO = path.resolve(__dirname, '..');
 const tmp = (tag: string): string => fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-comments-' + tag + '-'));
 const MACHINE_A = tmp('a');
 const MACHINE_B = tmp('b');
 let userData = MACHINE_A;
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => userData, getAppPath: () => REPO, getVersion: () => '9.9.9' },
-      ipcMain: { handle: () => {} }, net: {}, dialog: {}, shell: {},
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = userData;
 
 // ponytail: compiled siblings of the modules under test.
 const model: typeof import('../src/app/commentModel') = require('../src/app/commentModel');
@@ -68,6 +56,7 @@ const J = (x: unknown): string => JSON.stringify(x);
 
 function use(dir: string): void {
   userData = dir;
+  process.env.ORDINATE_LOCAL_DIR = userData;
   config.load();
 }
 
@@ -365,7 +354,6 @@ async function main(): Promise<void> {
 
 main()
   .then(() => {
-    Module._load = origLoad;
     for (const d of [MACHINE_A, MACHINE_B]) {
       try { fs.rmSync(d, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
     }

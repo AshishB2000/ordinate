@@ -1,14 +1,8 @@
 // Self-check for the web server skeleton (src/server/): config validation, the
-// two probes, log redaction, and — the reason this file exists — that the
-// server BOOTS WITHOUT ELECTRON.
-//
-// The desktop app's main process can import 'electron' anywhere; the server
-// cannot, because a pod has no Electron. Nothing in the type system stops a
-// handler module from importing it, so this suite spawns the real entry point
-// (`node src/server/main.js`) with a preload that makes `require('electron')`
-// fail loudly, and hits /healthz. An Electron import anywhere in the server's
-// graph — including lazily, in the DuckDB worker, or under a try/catch — fails
-// here. A negative control proves the preload actually blocks.
+// two probes, log redaction, and that the real entry point (`node
+// src/server/main.js`) boots, answers /healthz and /readyz, serves an RPC and
+// shuts down cleanly. (Until the T8.1 cutover it also proved the server never
+// loaded the desktop runtime or src/cli; both are gone from the repository.)
 //
 //   npm run build:ts && node scripts/test-server-boot.js
 
@@ -25,9 +19,6 @@ const envMod: typeof import('../src/server/env') = require('../src/server/env');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');
 
 const MAIN = path.join(__dirname, '..', 'src', 'server', 'main.js');
-const MARK = 'ELECTRON-REQUIRED-IN-SERVER';
-// T2.12: a pod never runs a local CLI, so src/cli must not even load.
-const CLI_MARK = 'SRC-CLI-LOADED-IN-SERVER';
 
 function envFails(label: string, src: Record<string, string>, needle: string): void {
   try {
@@ -39,10 +30,9 @@ function envFails(label: string, src: Record<string, string>, needle: string): v
   }
 }
 
-/** A child env with no Electron on NODE_PATH and no run-as-node switch. */
+/** The child's env: this process's, plus `extra`. */
 function childEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   const e: NodeJS.ProcessEnv = { ...process.env, ...extra };
-  delete e.ELECTRON_RUN_AS_NODE;
   // The caller's DATABASE_URL (CI sets one for the DB suites) is not this
   // suite's: it would migrate that shared database, and in prod it trips the
   // master-key check before the sign-in check this suite asserts. The DB boot
@@ -51,10 +41,6 @@ function childEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   // Same for an S3 STORAGE_URL (it requires a DATABASE_URL); test-storageS3 and
   // test-jobs-pods cover the S3 boot path.
   delete e.STORAGE_URL;
-  e.NODE_PATH = (process.env.NODE_PATH ?? '')
-    .split(path.delimiter)
-    .filter((p) => p && !/electron/i.test(p))
-    .join(path.delimiter);
   return e;
 }
 
@@ -119,27 +105,10 @@ function childEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   ok('logs: request headers are logged with secrets censored', hdr?.headers.authorization === '[redacted]' && hdr?.headers.cookie === '[redacted]' && typeof hdr?.headers.host === 'string', JSON.stringify(hdr));
   ok('logs: non-secret fields survive', all.includes('db.internal'));
 
-  // ── Boot without Electron ─────────────────────────────────────────────────
+  // ── Boot ──────────────────────────────────────────────────────────────────
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-server-boot-'));
-  const hook = path.join(tmp, 'no-electron.js');
-  fs.writeFileSync(hook, `const M = require('module');
-const orig = M._resolveFilename;
-M._resolveFilename = function (req, ...rest) {
-  if (req === 'electron' || req.startsWith('electron/')) {
-    process.stderr.write(${JSON.stringify(MARK + '\n')});
-    throw new Error('electron is not installed (server boot test)');
-  }
-  const file = orig.call(this, req, ...rest);
-  if (/[\\/]src[\\/]cli[\\/]/.test(file)) process.stderr.write(${JSON.stringify(CLI_MARK + '\n')} + file + ${JSON.stringify('\n')});
-  return file;
-};
-`);
-
-  const control = spawnSync(process.execPath, ['-r', hook, '-e', "require('electron')"], { env: childEnv({}), encoding: 'utf8' });
-  ok('control: the preload really blocks require("electron")', control.status !== 0 && control.stderr.includes(MARK), control.stderr);
-
   const t0 = process.hrtime.bigint();
-  const child = spawn(process.execPath, ['-r', hook, MAIN], {
+  const child = spawn(process.execPath, [MAIN], {
     env: childEnv({ PORT: '0', DATA_DIR: tmp, ORDINATE_ENV: 'dev', LOG_LEVEL: 'info' }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -167,9 +136,9 @@ M._resolveFilename = function (req, ...rest) {
     const hz = await fetch(base + '/healthz');
     ok('boot: GET /healthz is 200', hz.status === 200, hz.status);
     const rz = await fetch(base + '/readyz');
-    ok('boot: GET /readyz is 200 (DuckDB up, no Electron)', rz.status === 200, await rz.text());
-    // main.ts registered the Home handlers: their whole graph loaded without
-    // Electron, and dev auth ran this as org `default` under DATA_DIR.
+    ok('boot: GET /readyz is 200 (DuckDB up)', rz.status === 200, await rz.text());
+    // main.ts registered the Home handlers, and dev auth ran this as org
+    // `default` under DATA_DIR.
     const pl = await fetch(base + '/api/rpc/projects:list', { method: 'POST', headers: withCsrf({ 'content-type': 'application/json' }), body: '{"args":[]}' });
     const plBody = await pl.text();
     ok('boot: POST /api/rpc/projects:list is 200 with a list', pl.status === 200 && Array.isArray(JSON.parse(plBody)), plBody);
@@ -179,10 +148,6 @@ M._resolveFilename = function (req, ...rest) {
   } else {
     child.kill('SIGKILL');
   }
-  ok('boot: nothing in the server graph asked for electron', !stderr.includes(MARK), stderr);
-  ok('boot: nothing in the server graph loaded src/cli (no local CLI execution on a server)', !stderr.includes(CLI_MARK), stderr);
-  const cliControl = spawnSync(process.execPath, ['-r', hook, '-e', "require('./src/cli/localCli')"], { cwd: path.join(__dirname, '..'), env: childEnv({}), encoding: 'utf8' });
-  ok('control: the preload really sees a src/cli load', cliControl.stderr.includes(CLI_MARK), cliControl.stderr);
 
   // ── Bad config stops startup with one line ────────────────────────────────
   const bad = spawnSync(process.execPath, [MAIN], { env: childEnv({ ORDINATE_ENV: 'staging', PORT: '0' }), encoding: 'utf8', timeout: 20_000 });

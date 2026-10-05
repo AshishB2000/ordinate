@@ -1,4 +1,4 @@
-// The data table behind a result (renderer/hub/chartTable.ts) — the `table`
+// The data table behind a result (the desktop's chartTable.ts) — the `table`
 // chart id is a <table>, not a canvas. This is its model: each series' colour
 // slot (DataTable.tsx paints the swatch with that --chart-N token in CSS, so it
 // matches the series' colour in every chart and follows the theme by itself)

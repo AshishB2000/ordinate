@@ -258,9 +258,8 @@ export async function commitSteps(projectId: string, datasetId: string, steps: u
  * swallowed by the evaluator and can never fail the refresh.
  */
 export async function afterRefresh(projectId: string, id: string): Promise<void> {
-  // The alert evaluator still loads Electron (desktop notifications) — on the
-  // server that require throws until alerts are ported (T2.9). The data is
-  // already written: an unavailable evaluator must not fail the save.
+  // The data is already written: a failing alert evaluator must not fail the
+  // save.
   try {
     await require('./alerts').evaluateAndDeliver(projectId, id);
   } catch (err) {

@@ -1,6 +1,6 @@
 // WHICH MAP a chart id is, and which map a reply's geo draws — one answer for
 // every surface (builder, analysis pane, export, thumbnails). PURE; ported
-// from renderer/hub/mapKinds.ts. Hexbin and flow replies carry `geo.hex` /
+// from the desktop's mapKinds.ts. Hexbin and flow replies carry `geo.hex` /
 // `geo.flow`, which only their own map can draw.
 
 import type { MapGeo } from './types';

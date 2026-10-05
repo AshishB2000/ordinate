@@ -15,24 +15,12 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type FilterStep = import('../src/data/transforms').FilterStep;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-fxrouting-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData, getVersion: () => '0.0.0-test' },
-      ipcMain: { handle: () => {}, on: () => {} },
-      net: {}, nativeImage: {}, shell: {},
-      Notification: function () { return { show: () => {} }; },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');

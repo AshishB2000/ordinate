@@ -1,11 +1,9 @@
 // Self-check for the capture readiness gate + BYOK-mode adoption.
-// config.js requires Electron (safeStorage), so it can't run under plain node —
-// these mirror the pure decision logic in src/config.js (executionReady and
+// These mirror the pure decision logic in src/config.js (executionReady and
 // adoptByokModeIfLocalUnready). KEEP IN SYNC with those two functions.
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
-
 
 const RUNNABLE_LOCAL = ['claude', 'antigravity', 'codex', 'grok', 'opencode', 'cursor'];
 
@@ -42,7 +40,6 @@ function adoptByokModeIfLocalUnready(cfg: any, prov: string): boolean {
   cfg.executionMode = 'byok';
   return true;
 }
-
 
 // THE BUG: BYOK connected + tested, but mode still local → gate ignores BYOK.
 const bug = {

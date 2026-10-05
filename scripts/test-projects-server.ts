@@ -1,5 +1,5 @@
 // Projects, Trash and version history over the server's RPC (T2.2), over real
-// HTTP, server mode, no Electron.
+// HTTP, server mode.
 //
 //   Part 1 (always): dev sign-in, records as files. The switcher's overview
 //   and "opened" stamp, rename, the Trash (restore, delete for good, empty),
@@ -25,13 +25,6 @@ import type { FastifyInstance } from 'fastify';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: the loader hook has no public type
-
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') throw new Error('electron is not available in server mode');
-  return origLoad.apply(this, [request, ...rest]);
-};
 
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');
@@ -167,7 +160,7 @@ async function partOne(): Promise<void> {
     const file = await download(exp.body.downloadToken);
     ok('export: the download is the bundle, named after the project', file.status === 200 && /Bundle me\.ordinate/.test(file.disposition ?? ''), file.disposition);
     const manifest = JSON.parse(bundle.readZip(file.bytes).find((e) => e.name === 'manifest.json')!.data.toString('utf8'));
-    ok('export: the manifest carries package.json\'s version (no Electron on the server)', manifest.appVersion === require('../package.json').version && manifest.counts.datasets === 1 && manifest.counts.visuals === 2, JSON.stringify(manifest));
+    ok('export: the manifest carries package.json\'s version', manifest.appVersion === require('../package.json').version && manifest.counts.datasets === 1 && manifest.counts.visuals === 2, JSON.stringify(manifest));
     await new Promise((r) => setTimeout(r, 50));
     ok('export: the temp file is deleted once sent', fs.readdirSync(tmp).every((n: string) => !n.startsWith('export-')), fs.readdirSync(tmp).join());
     ok('export: the download token is single-use', (await download(exp.body.downloadToken)).status === 404);

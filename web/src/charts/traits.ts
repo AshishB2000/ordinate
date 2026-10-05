@@ -1,5 +1,5 @@
 // Chart-type traits — what a chart id IS, decided by lookup, not by branching
-// (renderer/hub/chartTraits.ts): which ids can be period-filtered, which become
+// (the desktop's chartTraits.ts): which ids can be period-filtered, which become
 // small multiples when grouped, which draw one dataset per series, which print
 // their own values, which get a legend. A vocabulary; no Chart.js, no canvas.
 

@@ -1,38 +1,22 @@
-// Boundaries IPC: import a GeoJSON file into the project (through the native
-// picker this handler opens itself), list the project's sets, read one.
-// Electron loads inside the import handler only: the server registers this
-// module for `boundary:get` (a custom choropleth's shapes) and has no dialog.
+// Boundaries IPC: import an uploaded GeoJSON file into the project, list the
+// project's sets, read one (a custom choropleth's shapes).
 
 import { ipcMain } from './bus';
-import { serverDataDir, windowOf } from '../server/context';
 import { resolveUpload } from '../server/files';
 import { getBoundary, importBoundaryFile, listBoundaries } from '../app/projectBoundaries';
 
 export function register(): void {
-  ipcMain.handle('boundary:import', async (e, { projectId, fileToken }: any = {}) => {
+  ipcMain.handle('boundary:import', async (_e, { projectId, fileToken }: any = {}) => {
     try {
-      // Server: the file was uploaded first (POST /api/files) and arrives as a
+      // The file was uploaded first (POST /api/files) and arrives as a
       // single-use token; the client's filename is display text only.
-      if (serverDataDir() !== null) {
-        const upload = resolveUpload(fileToken);
-        try {
-          const res = await importBoundaryFile(projectId, upload.path);
-          return 'error' in res ? { ok: false, error: res.error } : { ok: true, boundary: res };
-        } finally {
-          upload.done();
-        }
+      const upload = resolveUpload(fileToken);
+      try {
+        const res = await importBoundaryFile(projectId, upload.path);
+        return 'error' in res ? { ok: false, error: res.error } : { ok: true, boundary: res };
+      } finally {
+        upload.done();
       }
-      const { dialog } = require('electron') as typeof import('electron');
-      const win = windowOf(e);
-      const opts = {
-        title: 'Import boundaries',
-        properties: ['openFile' as const],
-        filters: [{ name: 'GeoJSON', extensions: ['geojson', 'json'] }],
-      };
-      const pick = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
-      if (pick.canceled || !pick.filePaths.length) return { ok: false, canceled: true };
-      const res = await importBoundaryFile(projectId, pick.filePaths[0]);
-      return 'error' in res ? { ok: false, error: res.error } : { ok: true, boundary: res };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not import those boundaries.' };
     }

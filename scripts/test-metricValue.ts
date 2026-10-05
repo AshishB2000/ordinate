@@ -1,4 +1,4 @@
-// Self-check for src/metricValue.ts — the PURE metric helper. No Electron, no fs:
+// Self-check for src/metricValue.ts — the PURE metric helper. No fs:
 // computeMetric operates on plain columns/rows, so this runs under plain `node`.
 // No framework — the shared ok(label, cond) harness the sibling test scripts use.
 
@@ -6,7 +6,6 @@ export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
 
 const { computeMetric } = require('../src/analysis/metricValue') as typeof import('../src/analysis/metricValue');
-
 
 type Col = { name: string; type: 'text' | 'number' | 'date' };
 type Cell = string | number | null;

@@ -1,5 +1,5 @@
 // Self-check for src/transforms.ts — the PURE reversible transform pipeline. No
-// Electron/fs stub needed (the module imports only src/parse + src/formula, both
+// fs stub needed (the module imports only src/parse + src/formula, both
 // pure). Mirrors test-datasetStats.ts style: ok() counter, no framework.
 
 export {}; // module scope — sibling test scripts share top-level names

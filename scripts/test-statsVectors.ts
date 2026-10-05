@@ -8,7 +8,7 @@
 //      label, a text column is never read as a number), empty = null / '' /
 //      whitespace (NBSP and tab included), file order, dashboard filters.
 //   2. The analyses run on either vector set agree exactly.
-//   3. The SHIPPED handlers (electron stubbed, register() called): stats:run
+//   3. The SHIPPED handlers (register() called): stats:run
 //      answers without hydrating the table (datasets.getDataset spied), and
 //      agrees with the reference; stats:saveFormula adds predicted_<target> as a
 //      calculated field whose values ARE the model's fitted values; stats:tile
@@ -24,7 +24,6 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 type Cell = import('../src/data/transforms').Cell;
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
@@ -33,18 +32,9 @@ type VectorNeed = import('../src/analysis/stats/spec').VectorNeed;
 type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-statsvec-'));
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const handlers: Map<string, IpcHandler> = require('../src/server/rpc').handlers;
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData, getVersion: () => '0.0.0-test' },
-      dialog: {}, net: {}, nativeImage: {}, shell: {}, BrowserWindow: { getAllWindows: () => [] },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 process.env.ORDINATE_COMPUTE_INLINE = '1'; // no worker threads in a unit test
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
@@ -258,7 +248,6 @@ void main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* best effort */ }
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best effort */ }
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' stats-vector check(s) FAILED'); process.exit(1); }
     console.log('\nAll stats-vector checks passed.');
     process.exit(0); // the DuckDB worker keeps the loop alive otherwise

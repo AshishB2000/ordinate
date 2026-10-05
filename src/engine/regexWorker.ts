@@ -9,7 +9,7 @@
 // It imports nothing but the pure leaf modules that BUILD the per-text
 // functions the folds run (regexSubset, keywordRules, qualityRegex), so its
 // answer is the fold's answer by construction, and it starts in milliseconds
-// (no DuckDB, no catalog, no Electron).
+// (no DuckDB, no catalog).
 //
 // Protocol: in { spec, texts } → out { results } | { error }.
 

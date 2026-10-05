@@ -1,4 +1,4 @@
-// The chart-type glyphs (renderer/hub/renderResult.ts VIZ_ICONS): one mark per
+// The chart-type glyphs (the desktop's renderResult.ts VIZ_ICONS): one mark per
 // chart id, 16px at stroke 1.5 like the UI icon set. A chart TAXONOMY, not UI
 // actions, so they live with the Visuals screen rather than in ui/icons.
 // Generated from the legacy strings by a one-off script; edit by hand now.

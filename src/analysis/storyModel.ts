@@ -1,4 +1,4 @@
-// The STORY record's shape — MAIN PROCESS, PURE: no fs, no Electron.
+// The STORY record's shape — MAIN PROCESS, PURE: no fs.
 //
 // A story is a single scrolling document: an ordered list of blocks, some of
 // which are prose and some of which are LIVE references to the project's own

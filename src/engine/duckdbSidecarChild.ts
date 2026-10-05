@@ -1,5 +1,5 @@
 // The DuckDB sidecar CHILD. Owns the connection; speaks newline-delimited JSON
-// on stdin/stdout. Never imports Electron, never touches the filesystem beyond
+// on stdin/stdout. Never touches the filesystem beyond
 // the database file.
 //
 // WHY A PROCESS RATHER THAN THE WORKER THREAD IN src/duckdbWorker.ts

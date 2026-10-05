@@ -1,7 +1,7 @@
 // Self-check for the maps' server half (T1.3): the bundled boundary GeoJSON
 // under /api/geo (src/server/geo.ts) — hashed immutable URLs, gzip, no path
 // ever reaching the filesystem, sign-in required — and the map data channels
-// (src/api/maps.ts) over REAL HTTP in server mode with Electron forbidden:
+// (src/api/maps.ts) over REAL HTTP in server mode:
 // region, bubble, point, hexbin and flow replies from `visual:data`, the
 // radius control's `geo:resolvePlace`, and inputs the contracts refuse.
 //
@@ -15,13 +15,6 @@ const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const zlib: typeof import('zlib') = require('zlib');
-const Module: any = require('module'); // any: the loader hook has no public type
-
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') throw new Error('electron is not available in server mode');
-  return origLoad.apply(this, [request, ...rest]);
-};
 
 const { fastify }: typeof import('fastify') = require('fastify');
 const geo: typeof import('../src/server/geo') = require('../src/server/geo');

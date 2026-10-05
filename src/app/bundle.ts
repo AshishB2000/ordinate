@@ -34,7 +34,6 @@ import * as projects from './projects';
 import { projectDir, projectsBase, isValidId } from './recordKinds';
 import { bundleThemesEntry, importBundleThemes } from './themeStore';
 import * as recordFs from './recordFs';
-import { serverDataDir } from '../server/context';
 import { bundleTemplatesEntry, importBundleTemplates } from './userTemplateStore'; // r7:templates
 
 export const BUNDLE_FORMAT = 'ordinate-project';
@@ -335,11 +334,9 @@ export interface BundleProgress {
   checkCancelled?: () => void;
 }
 
-/** The version stamped into a manifest: Electron's on the desktop, package.json's on the server (no Electron there). */
+/** The version stamped into a manifest: package.json's. */
 function appVersion(): string {
-  if (serverDataDir() !== null) return (require('../../package.json') as { version: string }).version;
-  const { app } = require('electron') as typeof import('electron');
-  return app.getVersion ? app.getVersion() : '';
+  return (require('../../package.json') as { version: string }).version;
 }
 
 export async function exportProject(

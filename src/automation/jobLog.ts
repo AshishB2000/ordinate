@@ -4,7 +4,7 @@
 // The headless process appends each finished job as one JSON line
 // (headless.ts); the GUI tails the file (src/ipc/automation.ts) and hands each
 // new line to `jobs.recordExternal`, which shape-checks it like the jobs file.
-// Pure fs, so the round trip is tested without Electron.
+// Pure fs, so the round trip is tested directly.
 //
 // ponytail: append-only, ~300 bytes a job, never rotated — the GUI starts
 // reading at the END of the file, so its size never costs a boot. Rotate if a

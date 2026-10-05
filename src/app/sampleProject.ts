@@ -72,9 +72,8 @@ const SAMPLE_NOTE_TEXT =
   + 'first launch. Nothing here is real — remove it whenever you like; your project stays.';
 
 /** The bundled CSV, resolved from this file (src/app/ → the app root): the repo
- *  root in dev and on the server, app.asar when packaged — the directory
- *  `app.getAppPath()` named, and Electron patches fs to read inside asar. Not
- *  through Electron, so the server can seed the sample (T0.8's e2e does). */
+ *  root in dev, /app in the image. The server seeds the sample from it (T0.8's
+ *  e2e does). */
 export function sampleCsvPath(): string {
   return path.join(__dirname, '..', '..', 'assets', 'samples', 'retail-orders.csv');
 }

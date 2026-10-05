@@ -1,5 +1,5 @@
 // Safe expression evaluator — MAIN PROCESS, PURE logic.
-// No Electron, no fs, no DOM. Its ONLY job: turn a small expression string into a
+// No fs, no DOM. Its ONLY job: turn a small expression string into a
 // compiled function that maps a row ({colName: value}) to a scalar. Used by
 // src/transforms.ts for `calculated_field` steps.
 //

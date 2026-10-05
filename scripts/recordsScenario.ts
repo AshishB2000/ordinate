@@ -17,14 +17,6 @@ import { Pool } from 'pg';
 const [backend, dataDir, dbUrl] = process.argv.slice(2);
 const ORG = 'diff';
 
-// Electron is only reached lazily (bundle export's app.getVersion); never on the server path.
-const Module = require('module') as { _load: (req: string, ...rest: unknown[]) => unknown };
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: unknown[]): unknown {
-  if (request === 'electron') return { app: { getVersion: () => '0.0.0-test', getPath: () => { throw new Error('server mode: no Electron paths'); } } };
-  return origLoad.apply(this, [request, ...rest]);
-};
-
 // ── Deterministic ids and time ─────────────────────────────────────────────
 let uuidN = 0;
 // The real module object (an `import *` is a getter-only copy), which every store's compiled `crypto_1.randomUUID()` reads.

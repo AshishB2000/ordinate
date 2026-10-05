@@ -1,5 +1,5 @@
 // Self-check for the Visuals screen's server channels (T2.7) — REAL HTTP,
-// server mode, no Electron:
+// server mode:
 //
 //   visual:list/get/save/update/duplicate/delete   the store's own answers, in
 //                   its order (favourites first); a write is validated at the
@@ -24,13 +24,6 @@ import { withCsrf } from './csrfPair';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: Module._load's own signature
-
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') throw new Error('electron is not available in server mode');
-  return origLoad.apply(this, [request, ...rest]);
-};
 
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');

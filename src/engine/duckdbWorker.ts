@@ -1,6 +1,6 @@
 // DuckDB worker thread — serves BOTH bridges in src/duckdb.ts from one
 // connection. Runs in a worker_threads Worker; owns the only DuckDB connection.
-// Never imports Electron and never touches the filesystem beyond the database
+// Never touches the filesystem beyond the database
 // path it is handed.
 //
 // On the server (T4.3) one of these runs PER ORG (src/engine/duckdbPool.ts):

@@ -22,8 +22,8 @@
 //      SQL over the connection's saved selection. That function is what makes
 //      (1) and (2) mean anything at runtime.
 //
-// Like test-dataset-origin.ts, the 'electron' module is stubbed (via
-// Module._load) to point userData at a fresh temp dir, then the REAL modules run
+// Like test-dataset-origin.ts, userData (ORDINATE_LOCAL_DIR)
+// points at a fresh temp dir, then the REAL modules run
 // against real disk. No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -32,21 +32,9 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-connorigin-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData },
-      // connections.ts only needs `app`; the IPC module it shares a folder with
-      // registers handlers at import time, so ipcMain is stubbed to a no-op.
-      ipcMain: { handle: () => {}, on: () => {} },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources under test.
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
@@ -64,12 +52,12 @@ async function main(): Promise<void> {
   const project = await projects.createProject('Origin round trip');
   const projectId = project!.id;
 
-  // A real connection record, through the real store — `duckdb-file` because it
-  // is the one connector in the registry that needs no server to EXIST.
+  // A real connection record, through the real store — `url` because saving one
+  // needs no server to EXIST.
   const conn = await connections.saveConnection(projectId, {
     name: 'Warehouse',
-    connectorId: 'duckdb-file',
-    values: { path: path.join(tmpUserData, 'warehouse.duckdb') },
+    connectorId: 'url',
+    values: { url: 'https://warehouse.test/orders.json' },
   });
   ok('a connection saves through the real store', !!conn && !!conn.id, json(conn));
   if (!conn) return;

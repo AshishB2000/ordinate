@@ -1,4 +1,4 @@
-// Chart colour (renderer/hub/chartPalette.ts) — the base palette, the
+// Chart colour (the desktop's chartPalette.ts) — the base palette, the
 // theme-token reader, the pure functions that derive a palette from one swatch,
 // the workspace accent's token set, and the value ramps. Hex in, hex out; only
 // getCSSVar touches the DOM, which is how every chart picks up the active theme

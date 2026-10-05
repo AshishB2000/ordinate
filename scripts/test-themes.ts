@@ -22,14 +22,9 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-themes-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: () => tmp } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmp;
 
 // ponytail: compiled siblings of the real modules.
 const tm = require('../src/analysis/themeModel') as any;

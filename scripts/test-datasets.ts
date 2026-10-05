@@ -1,6 +1,6 @@
 // Self-check for src/datasets.ts disk persistence (save/list/get/delete) plus
-// the dual-UUID traversal guard. Like test-projects.ts, we stub the 'electron'
-// module (via Module._load) to point userData at a fresh temp dir, then exercise
+// the dual-UUID traversal guard. Like test-projects.ts, we point userData
+// (ORDINATE_LOCAL_DIR) at a fresh temp dir, then exercise
 // the REAL datasets + projects modules against real disk. No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -10,26 +10,18 @@ const assert: typeof import('assert') = require('assert');
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 void assert; // parity with test-projects.ts (asserts done via ok())
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-datasets-'));
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return { app: { getPath: (_name: string) => tmpUserData } };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of ../src/datasets.ts + ../src/projects.ts.
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
 const combine: typeof import('../src/data/combine') = require('../src/data/combine');
-
 
 async function main(): Promise<void> {
   await projects.init();
@@ -305,7 +297,6 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' datasets check(s) FAILED'); process.exit(1); }
     console.log('\nAll datasets checks passed.');
   })

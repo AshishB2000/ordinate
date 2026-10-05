@@ -120,7 +120,7 @@
   --menu-pad: 6px;     /* a menu's own padding around its rows */
 
   /* Dashboard grid geometry. These are tokens and not literals in hub.css
-     because renderer/hub/dashboards.ts READS THEM BACK with getComputedStyle to
+     because the desktop's dashboards.ts READS THEM BACK with getComputedStyle to
      do its drag/resize hit-testing: the gap and row height were duplicated as
      DASH_GAP_PX / DASH_ROW_PX in the TypeScript, so a density preset that
      changed only the painted grid would leave every drop target computed

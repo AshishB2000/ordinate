@@ -36,7 +36,7 @@ ok('validate: "none" is none', sa.validateAction({ kind: 'none', intent: 'x' }).
 
 // This list is deliberately WRITTEN OUT rather than imported. suggestedAction.ts
 // keeps its own copy of the four names (a runtime import of dashboards.ts would
-// drag electron and fs into a pure parser), and tsc pins that copy to
+// drag fs and the stores into a pure parser), and tsc pins that copy to
 // DashboardStylePreset via an exhaustive Record. Spelling them a third time here
 // means a silent rename has to survive three independent edits to go unnoticed.
 const PRESETS = ['clean', 'executive', 'dense', 'dark'];
@@ -171,7 +171,7 @@ for (const tail of ['', ' not json at all', ' {', ' {"kind":', ' {"kind":"dashbo
 // ── splitAction: the SHAPE, with or without the marker ──────────────────────
 // The four cases behind the leaked-action-line bug. The first two are what the
 // user actually saw: a local CLI's JSON-envelope hunter had already eaten the
-// prose (src/cli/localCliRun.ts extractEnvelope, fixed with `prose: true`), so
+// prose (the desktop's local-CLI extractEnvelope, fixed with `prose: true`), so
 // the whole reply WAS the action line — and with only a marker search, an
 // unmarked one is prose. Never an empty bubble, and never a brace.
 

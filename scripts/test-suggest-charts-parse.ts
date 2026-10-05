@@ -1,9 +1,9 @@
 // Self-check for analyze.suggestCharts — the OPTIONAL multi-chart suggestion.
 //
-// Driven END TO END rather than against a private parse helper: the model call
-// is stubbed at the ONE seam analyze uses (localCliRun.runLocalCli), config is
-// pointed at the local-CLI branch, and every other line of suggestCharts is the
-// real one. That is what lets this file assert on the prompt AND the parse AND
+// Driven END TO END rather than against a private parse helper: the provider is
+// resolved by a stubbed byok.resolveByok (an Anthropic key), the HTTP call is
+// stubbed at the ONE door analyze uses (providerFetch), and every other line of
+// suggestCharts — the request it builds, the reply it extracts — is the real one. That is what lets this file assert on the prompt AND the parse AND
 // the count cap in the same run, and what makes it fail if any of them moves.
 //
 // What is being defended:
@@ -21,44 +21,32 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-suggest-'));
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    // analyze's module graph only touches app.getPath at load; net is
-    // destructured but never called on the stubbed local-CLI branch.
-    return { app: { getPath: (_name: string) => tmpUserData } };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources under test.
 const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
-const config: any = require('../src/app/config');
 const execConfig: any = require('../src/app/execConfig');
-const localCliRun: any = require('../src/cli/localCliRun');
+const byok: any = require('../src/ai/byok');
+const providerFetch: any = require('../src/ai/providerFetch');
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
-
 
 // ── The stubbed model ───────────────────────────────────────────────────────
 // analyze reaches the provider through exactly two module-level bindings, both
 // resolved at CALL time, so replacing them here replaces the network and
-// nothing else. `lastCall` records what the real code would have sent.
+// nothing else. `lastCall` records what the real code sent, read back off the
+// Anthropic request body it built.
 let cannedReply = '';
 let lastCall: { system: string; messages: Array<{ role: string; text: string }> } | null = null;
 
 execConfig.executionReady = () => true;
-config.get = () => ({ executionMode: 'local', localCli: { activeId: 'claude' } });
-localCliRun.runLocalCli = async (
-  _cliId: string,
-  systemPrompt: string,
-  messages: Array<{ role: string; text: string }>,
-) => {
-  lastCall = { system: systemPrompt, messages };
-  return { rawText: cannedReply };
+byok.resolveByok = async () => ({ provider: 'anthropic', apiKey: 'sk-test', baseUrl: 'https://api.anthropic.test', model: 'claude-test', maxTokens: 1024 });
+providerFetch.providerFetch = async (_url: string, init: { body: string }) => {
+  const body = JSON.parse(init.body) as { system: string; messages: Array<{ role: string; content: Array<{ type: string; text?: string }> }> };
+  lastCall = { system: body.system, messages: body.messages.map((m) => ({ role: m.role, text: m.content.filter((c) => c.type === 'text').map((c) => c.text).join('') })) };
+  return new Response(JSON.stringify({ content: [{ type: 'text', text: cannedReply }], stop_reason: 'end_turn' }), { status: 200, headers: { 'content-type': 'application/json' } });
 };
 
 const SUMMARY = 'Dataset: "Sales" (3 rows, 2 columns).\nColumns:\n- region (text): 3 distinct, 3 non-empty\n- revenue (number): 3 numeric values, 3 non-empty';

@@ -1,5 +1,5 @@
 // Per-column summaries + dataset quality issues — MAIN PROCESS, PURE logic.
-// No Electron, no DOM, no fs: every function here operates on the already-loaded
+// No DOM, no fs: every function here operates on the already-loaded
 // dataset columns/rows handed in by the IPC layer, so it is node-testable by a
 // plain `node` self-check (scripts/test-datasetStats.ts).
 //

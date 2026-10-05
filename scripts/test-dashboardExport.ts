@@ -3,14 +3,13 @@
 // round-trips as inlined data, the supplied Chart.js UMD is inlined, the HTML shell is
 // valid, and (the load-bearing invariant) it references NO http(s) URL and leaks NO
 // secret: a sentinel placed in NON-whitelisted fields is stripped by sanitizeBundle,
-// while legit app-computed labels/values survive. No Electron, no fs, no framework.
+// while legit app-computed labels/values survive. No fs, no framework.
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
 
 // ponytail: compiled sibling of the real pure module (built by pretest).
 const { buildSelfContainedHtml, sanitizeBundle }: typeof import('../src/analysis/dashboardExport') = require('../src/analysis/dashboardExport');
-
 
 // A recognizable, definitely-not-a-real-URL fake Chart.js UMD so the test never reads
 // the 200 KB real file (and so the whole document is guaranteed http-free).

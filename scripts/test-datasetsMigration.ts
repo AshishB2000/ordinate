@@ -1,7 +1,7 @@
 // Phase 2 gate: an existing (v2, rows-inline) project must open correctly after
 // migration, and a v3 record must round-trip through Parquet byte-for-byte.
 //
-// Style follows test-datasets.ts: stub 'electron' so userData points at a temp
+// Style follows test-datasets.ts: point userData (ORDINATE_LOCAL_DIR) at a temp
 // dir, then exercise the REAL modules against real disk. Planting a legacy file
 // on disk and asserting the upgrade is the house pattern (test-visuals.ts:167).
 
@@ -11,21 +11,15 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-migrate-'));
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: (_n: string) => tmpUserData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
-
 
 const UUID = '11111111-2222-4333-8444-555555555555';
 

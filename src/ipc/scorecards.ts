@@ -395,7 +395,7 @@ export async function scorecardDetail(projectId: string, sc: Scorecard, metricId
 /**
  * A computed, self-contained snapshot — every figure already formatted — for a
  * page that prints a scorecard without re-reading the stores: a report's
- * scorecard page (renderer/hub/reportScorecard.ts, through `scorecard:snapshot`).
+ * scorecard page (the desktop's reportScorecard.ts, through `scorecard:snapshot`).
  * A published site builds its own from computeScorecard (src/publish/scorecardData.ts).
  */
 export async function scorecardSnapshot(projectId: string, id: string, offset = 0): Promise<ScoreResult | null> {

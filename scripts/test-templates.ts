@@ -3,7 +3,7 @@
 //
 // Everything here is pure — a PlanDataset literal in, a plan out, through the
 // REAL `validatePlan` the Assistant's envelope goes through. No project on
-// disk, no Electron, no model. The one thing that touches the filesystem is the
+// disk, no model. The one thing that touches the filesystem is the
 // geo resolver, which reads the two SHIPPED boundary assets; that is the point
 // of it, and the same assets scripts/test-geoLevels.ts loads.
 //

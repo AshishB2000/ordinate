@@ -1,6 +1,5 @@
 // The MCP protocol layer — JSON-RPC 2.0 over the command registry. Pure: no
-// Electron, no I/O. The stdio transport (headless.ts) and the HTTP transport
-// (httpTransport.ts) both hand each parsed message here and write back what
+// I/O. The HTTP transports (httpTransport.ts, and serverMcp.ts on the server) hand each parsed message here and write back what
 // it returns (null = a notification, nothing to send).
 //
 // Implemented by hand, deliberately — it is five methods: initialize,

@@ -43,7 +43,6 @@ const WORLD = loadWindowAsset('world-countries.js', '__GEO_WORLD__');
 const STATES = loadWindowAsset('us-states.js', '__GEO_US_STATES__');
 const COUNTIES = require('../assets/geo/us-counties.json') as { features: any[] };
 
-
 // Feature-property lookups against the real assets.
 function worldProps(name: string) {
   const f = WORLD.features.find(x => x.properties.name === name);

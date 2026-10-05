@@ -1,4 +1,4 @@
-// The radius control's pure half — renderer/hub/geoRadius.ts: "within 25 km of
+// The radius control's pure half — the desktop's geoRadius.ts: "within 25 km of
 // Austin, TX" as a sentence and as the one `within_km` filter step the server
 // compiles (src/analysis/geo/radius.ts). The chip, popover and add/edit dialog
 // are dashboard UI and port with the dashboards (T2.x); the editor they share

@@ -12,12 +12,7 @@
 export {};
 import { ok, finish } from './selfcheck';
 
-const Module: any = require('module');
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: () => require('os').tmpdir() }, ipcMain: { handle: () => {} } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = require('os').tmpdir();
 
 const P: typeof import('../src/analysis/params') = require('../src/analysis/params');
 const { applyPipeline, sanitizeSteps }: typeof import('../src/data/transforms') = require('../src/data/transforms');

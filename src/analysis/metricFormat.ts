@@ -1,5 +1,5 @@
 // A metric AS TEXT — MAIN PROCESS, PURE logic.
-// No Electron, no fs, no DOM: a number and a MetricFormat in, a string out; a
+// No fs, no DOM: a number and a MetricFormat in, a string out; a
 // definition in, a sentence out. Node-testable by a plain `node` self-check.
 //
 // Two jobs that are one job: everything a reader SEES about a metric that is
@@ -40,7 +40,7 @@ const AGG_WORDS: Record<string, string> = {
   max: 'maximum',
 };
 
-// Main's own op vocabulary. `renderer/hub/dashFiltersUi.ts` has a similar list
+// Main's own op vocabulary. the desktop's `dashFiltersUi.ts` has a similar list
 // for the filter-bar CHIP, and the two are deliberately not shared: main cannot
 // import a classic renderer <script>, and these words are a sentence fragment
 // ("excluding region = West") where the chip's are a label.

@@ -1,7 +1,7 @@
 // Self-check for src/visuals.ts disk persistence (save/list/get/update/delete)
 // plus the dual-UUID traversal guard and the save-time dataset existence check.
-// Like test-datasets.ts, we stub the 'electron' module (via Module._load) to point
-// userData at a fresh temp dir, then exercise the REAL visuals + datasets +
+// Like test-datasets.ts, we point userData (ORDINATE_LOCAL_DIR) at a
+// fresh temp dir, then exercise the REAL visuals + datasets +
 // projects modules against real disk. No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -10,23 +10,15 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-visuals-'));
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return { app: { getPath: (_name: string) => tmpUserData } };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the real modules.
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
-
 
 const MISSING_UUID = '00000000-0000-0000-0000-000000000000';
 
@@ -291,7 +283,6 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' visuals check(s) FAILED'); process.exit(1); }
     console.log('\nAll visuals checks passed.');
   })

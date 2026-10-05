@@ -25,14 +25,6 @@ import { withCsrf } from './csrfPair';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: the loader hook has no public type
-
-Module._load = (function (orig: any) { // any: Module._load's own signature
-  return function (this: unknown, request: string, ...rest: unknown[]): unknown {
-    if (request === 'electron') throw new Error('electron is not available in server mode');
-    return orig.apply(this, [request, ...rest]);
-  };
-})(Module._load);
 
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-dataviews-'));
 const CANARY = 'k3y-CANARY-7f19-never-shown';

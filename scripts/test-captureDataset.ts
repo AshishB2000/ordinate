@@ -1,7 +1,6 @@
 // Self-check for the Week 13 capture → dataset bridge (src/captureDataset.ts,
 // PURE) plus the datasets.ts screenshot-link + replace/append persistence. Like
-// test-datasets.ts, the 'electron' module is stubbed (via Module._load) so
-// userData points at a fresh temp dir, then the REAL datasets + projects modules
+// test-datasets.ts, userData (ORDINATE_LOCAL_DIR) points at a fresh temp dir, then the REAL datasets + projects modules
 // run against real disk. The pure bridge needs no stub. No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -10,23 +9,15 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-capds-'));
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return { app: { getPath: (_name: string) => tmpUserData } };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings.
 const cd: typeof import('../src/data/captureDataset') = require('../src/data/captureDataset');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
-
 
 // A realistic extractedTable (object-keyed rows, columns with id/label/model-type).
 function sampleExtraction(): any {
@@ -232,7 +223,6 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' captureDataset check(s) FAILED'); process.exit(1); }
     console.log('\nAll captureDataset checks passed.');
   })

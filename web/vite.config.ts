@@ -38,7 +38,7 @@ export default defineConfig({
     // (its directory: a `?raw` id only passes the check as a child path).
     // …and the app's formatter and message formatter, which the chart engine shares (no runtime imports).
     // …and the story Markdown parser the server's report pages share (T2.13).
-    fs: { allow: ['.', '../src/server/wire.ts', '../renderer/hub', '../src/app/format.ts', '../src/app/i18nCore.ts', '../src/analysis/storyText.ts'] },
+    fs: { allow: ['.', '../src/server/wire.ts', '../src/app/format.ts', '../src/app/i18nCore.ts', '../src/analysis/storyText.ts'] },
   },
   build: {
     // The latest two releases of each supported browser, as of 2026-10

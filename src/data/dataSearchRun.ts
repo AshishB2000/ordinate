@@ -2,7 +2,7 @@
 
 // Search inside the data — ONE SEARCH across a project (or every project):
 // which datasets, which columns may be read, cancellation, and the merged,
-// ranked hits ⌘K paints. MAIN PROCESS ONLY. Electron-free apart from what
+// ranked hits ⌘K paints. MAIN PROCESS ONLY. dependency-free apart from what
 // datasets.ts already pulls in, so it is callable from a test or the CLI.
 //
 // CANCELLATION is by generation: every search takes the next number, and a

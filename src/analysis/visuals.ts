@@ -350,7 +350,7 @@ export function sanitizeChartType(raw: unknown): string {
  * The chart types the AI suggestion prompt is allowed to name.
  *
  * MAIN needs its own copy: the renderer's `ALL_CHART_TYPE_IDS` lives in
- * `renderer/hub/renderResult.ts`, a classic global-scope <script> that cannot be
+ * the desktop's `renderResult.ts`, a classic global-scope <script> that cannot be
  * imported here. Two lists can drift, and the drift is SILENT — the model
  * proposes a type the renderer cannot draw and the user gets an empty option. So
  * `scripts/test-visual-chart-ids.ts` parses `ALL_CHART_TYPE_IDS` straight out of

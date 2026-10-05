@@ -1,7 +1,7 @@
-// The server's stand-in for Electron's `ipcMain`: a registry that STORES the
+// The server's stand-in for the desktop app's `ipcMain`: a registry that STORES the
 // handlers every src/ipc/*.ts registers, so `POST /api/rpc/:channel` can call
 // them. Only the three members the handler files use exist (`handle`, `on`,
-// `removeHandler`); src/ipc/bus.ts hands this out when not under Electron.
+// `removeHandler`); src/ipc/bus.ts hands this out.
 //
 // Storing a handler does not expose it: the route also needs a contract in
 // src/api/ (no contract → 404). `on` listeners are kept but no route reaches
@@ -16,7 +16,7 @@ const listeners = new Map<string, Handler[]>();
 
 export const registry = {
   handle(channel: string, fn: Handler): void {
-    // Electron throws on a second handler; so does this, or two modules could
+    // A second handler throws, or two modules could
     // silently fight over one channel and the last require would win.
     if (handlerMap.has(channel)) throw new Error(`Attempted to register a second handler for '${channel}'`);
     handlerMap.set(channel, fn);

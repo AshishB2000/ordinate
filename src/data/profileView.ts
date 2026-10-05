@@ -1,6 +1,6 @@
 // What a column profile and the Quality tab's completeness table SHOW, as
 // figures — MAIN PROCESS, pure. Every percentage and bar length the desktop
-// renderer works out for itself in renderer/hub/dsProfile.ts is computed here
+// renderer works out for itself in the desktop's dsProfile.ts is computed here
 // instead, so the browser only formats (plan §6.4: React never rounds a figure).
 //
 // The rules are dsProfile.ts's, restated: filled % rounds to a whole percent;

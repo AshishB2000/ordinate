@@ -1,4 +1,4 @@
-// Event funnels — PURE, MAIN PROCESS, no Electron / fs / DOM.
+// Event funnels — PURE, MAIN PROCESS, no fs / DOM.
 //
 // STRICT ORDER. An entity enters at its FIRST step-1 event (t1). Step k's time
 // is the EARLIEST event named step k strictly after step k−1's matched time,

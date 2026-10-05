@@ -21,23 +21,11 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
-const REPO = path.resolve(__dirname, '..');
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-lineage-'));
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const ipcHandlers: Map<string, (e: unknown, payload: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData, getAppPath: () => REPO },
-      net: {}, dialog: {}, shell: {},
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the real modules.
 const sample: typeof import('../src/app/sampleProject') = require('../src/app/sampleProject');

@@ -1,6 +1,6 @@
 // The numbers a chart prints ON ITSELF — the text of a value label, where it
 // sits, whether a round slice can hold it, and which points get one
-// (renderer/hub/chartValueLabels.ts, its pure half). The plugins that draw them
+// (the desktop's chartValueLabels.ts, its pure half). The plugins that draw them
 // are valueLabels.ts and familiesPlugins.ts.
 
 import { fmtVal, fmtWith } from './format';

@@ -22,8 +22,7 @@
 //     into the shareable project folder is the worst outcome this family has,
 //   • that the client is closed on every path, including the failing ones.
 //
-// The `pg` module is replaced (via Module._load, the same trick
-// test-connections.ts uses for 'electron') with a recording fake, so the REAL
+// The `pg` module is replaced (via Module._load) with a recording fake, so the REAL
 // connector runs its REAL code path and we read back exactly what it sent.
 //
 //   npx tsc … && node scripts/test-connectorsPostgres.js
@@ -94,7 +93,6 @@ const mod: { CONNECTORS: ConnectorDef[] } = require('../src/connectors/postgres'
 const CONNECTORS = mod.CONNECTORS;
 
 // ── Harness ──────────────────────────────────────────────────────────────────
-
 
 const PASSWORD = 'sup3r-s3cret-pw';
 

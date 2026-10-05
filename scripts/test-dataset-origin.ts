@@ -5,8 +5,8 @@
 // a file read or a fetch at a target the user never chose. Every rejection below
 // is a case where the record is on disk and looks plausible.
 //
-// Like test-datasets.ts, the 'electron' module is stubbed (via Module._load) to
-// point userData at a fresh temp dir, then the REAL modules run against real
+// Like test-datasets.ts, userData (ORDINATE_LOCAL_DIR) points at
+// a fresh temp dir, then the REAL modules run against real
 // disk. No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -15,19 +15,13 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-origin-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: (_name: string) => tmpUserData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources under test.
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
-
 
 const UUID_A = '11111111-1111-4111-8111-111111111111';
 const UUID_B = '22222222-2222-4222-8222-222222222222';
@@ -183,7 +177,6 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' origin check(s) FAILED'); process.exit(1); }
     console.log('\nAll dataset-origin checks passed.');
   })

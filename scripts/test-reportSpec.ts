@@ -1,7 +1,7 @@
 // Self-check for src/analysis/reportSpec.ts — the Report record.
 //
-// Same shape as test-analysis.ts: stub 'electron' through Module._load so
-// userData points at a throwaway dir, then exercise the REAL modules against
+// Same shape as test-analysis.ts: point userData
+// (ORDINATE_LOCAL_DIR) at a throwaway dir, then exercise the REAL modules against
 // real disk.
 //
 // The three properties worth the attention, because they are the ones the whole
@@ -27,15 +27,10 @@ import { ok, failureCount, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-reportspec-'));
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: (_n: string) => tmpUserData }, net: {} };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the real modules.
 const spec: typeof import('../src/analysis/reportSpec') = require('../src/analysis/reportSpec');

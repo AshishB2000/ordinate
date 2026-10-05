@@ -1,6 +1,6 @@
 // Self-check for src/datasetStats.ts — the PURE per-column summaries + quality
-// issue detection. No Electron stub needed (the module imports nothing from
-// electron/fs/DOM). Mirrors test-datasets.ts style: ok() helper, no framework.
+// issue detection. No stub needed (the module imports nothing from
+// fs/DOM). Mirrors test-datasets.ts style: ok() helper, no framework.
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
@@ -8,7 +8,6 @@ import { ok, failureCount } from './selfcheck';
 // ponytail: compiled sibling of ../src/datasetStats.ts.
 const stats: typeof import('../src/data/datasetStats') = require('../src/data/datasetStats');
 const { computeColumnSummary, findQualityIssues } = stats;
-
 
 function approx(a: number, b: number): boolean {
   return Math.abs(a - b) < 1e-9;

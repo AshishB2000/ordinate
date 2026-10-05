@@ -83,7 +83,7 @@ export interface Connection {
 // The renderer-facing view. A Connection carries no secret, but the view is
 // rebuilt key-by-key so a stray future field can never leak.
 //
-// The flat legacy fields are DERIVED, not stored: renderer/hub/connections.js
+// The flat legacy fields are DERIVED, not stored: the desktop's connections.js
 // still reads c.kind / c.host / c.url to label a row, and this file's job is not
 // to break it. They are a read-only mirror of `values` — writing them changes
 // nothing.
@@ -405,8 +405,7 @@ export function publicConnection(c: Connection): PublicConnection {
 
 // ── Change notifications ─────────────────────────────────────────────────────
 // Every write — create, update, delete — is announced, so something that
-// mirrors a connection's settings (the folder watcher, src/connectors/
-// folderWatch.ts) follows the record instead of polling it. A listener that
+// mirrors a connection's settings follows the record instead of polling it. A listener that
 // throws is skipped; it can never fail the write that already happened.
 type ChangeListener = (projectId: string, id: string, conn: Connection | null) => void;
 const changeListeners = new Set<ChangeListener>();

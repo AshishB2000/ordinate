@@ -27,11 +27,9 @@ ARG NODE_IMAGE=node:24-slim
 # ── build ────────────────────────────────────────────────────────────────────
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS build
 WORKDIR /app
-# Electron is a devDependency (the desktop app until T8.1): never fetch its binary.
-ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 COPY package.json package-lock.json ./
 COPY web/package.json web/package-lock.json web/
-# --ignore-scripts: postinstall would build the desktop (Svelte) and fetch geo; both are done explicitly below.
+# --ignore-scripts: postinstall would build and fetch geo; both are done explicitly below.
 RUN npm ci --ignore-scripts --no-audit --no-fund && npm --prefix web ci --ignore-scripts --no-audit --no-fund
 COPY . .
 RUN npm run build:ts && npm --prefix web run build
@@ -40,7 +38,7 @@ RUN npm run build:ts && npm --prefix web run build
 RUN node scripts/download-geo.js \
  && node -e "const fs=require('fs'),{geoJsonText}=require('./src/server/geo');for(const f of ['world-countries.js','us-states.js','us-counties.json']){const n=JSON.parse(geoJsonText(f,fs.readFileSync('assets/geo/'+f,'utf8'))).features.length;console.log(f,n,'features');if(!n)process.exit(1)}"
 # The runtime runs the emitted .js; the .ts beside it ships nowhere.
-RUN find src renderer -name '*.ts' -delete
+RUN find src -name '*.ts' -delete
 
 # ── production node_modules ──────────────────────────────────────────────────
 FROM ${NODE_IMAGE} AS deps
@@ -49,22 +47,17 @@ WORKDIR /app
 # binutils: `strip` for libduckdb.so below (this stage only; the runtime never sees it).
 RUN apt-get update && apt-get install -y --no-install-recommends binutils && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
-# --omit=dev drops Electron, electron-builder, Svelte, Playwright, TypeScript.
-# Then the prod dependencies only the DESKTOP renderer loads (renderer/hub's
-# <script src="../../node_modules/…"> and lazyScript): the web app bundles its
-# own Chart.js plugins and MapLibre (web/), and the server never requires these.
-# chart.js stays — src/publish inlines it into published sites.
+# --omit=dev drops Playwright, TypeScript and the lint tools. chart.js is the
+# one browser library left in the server's dependencies — src/publish inlines it
+# into published sites; the web app bundles its own (web/).
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
- && npm uninstall --omit=dev --no-save --ignore-scripts --no-audit --no-fund \
-      maplibre-gl pdfmake pptxgenjs \
-      chartjs-chart-financial chartjs-chart-matrix chartjs-chart-sankey chartjs-chart-treemap @sgratzl/chartjs-chart-boxplot \
  # oracledb runs in thin mode only (CLAUDE.md: never initOracleClient) — its thick-mode binaries are dead weight.
  # npm does not filter optional packages by libc: node:24-slim is glibc, so DuckDB's musl build never loads.
  && rm -rf node_modules/oracledb/build node_modules/@duckdb/node-bindings-linux-*-musl \
  # Nothing executes these at run time: source maps, type declarations, TS sources,
  # docs, and exceljs's browser bundles (its Node entry is lib/). ~120 MB.
  && find node_modules -type f \( -name '*.map' -o -name '*.ts' -o -name '*.mts' -o -name '*.cts' -o -name '*.md' \) -delete \
- && rm -rf node_modules/exceljs/dist node_modules/docx/dist/index.iife.js node_modules/docx/dist/index.umd.cjs \
+ && rm -rf node_modules/exceljs/dist \
  # DuckDB ships libduckdb.so with its symbol table (63 → 54 MB stripped); dynamic symbols stay.
  && strip --strip-unneeded node_modules/@duckdb/node-bindings-linux-*/libduckdb.so \
  && npm cache clean --force
@@ -101,9 +94,9 @@ COPY --from=build /app/web/dist web/dist
 COPY --from=deps /app/duckdb-extensions /opt/ordinate/duckdb-extensions
 # Fails the build if the server's module graph needs a file not copied above
 # (every RPC handler module loads here, as at boot) or a pruned package no longer
-# loads (connector drivers, exporters — oracledb without its thick binaries), then: non-root — the base
+# loads (connector drivers, the xlsx reader — oracledb without its thick binaries), then: non-root — the base
 # image's `node` user (uid 1000) owns only the data volume.
-RUN node -e "require('./src/server/app').registerHandlers(); for (const m of ['oracledb', 'tedious', 'mysql2', 'pg', 'exceljs', 'docx', 'chart.js']) require(m)" \
+RUN node -e "require('./src/server/app').registerHandlers(); for (const m of ['oracledb', 'tedious', 'mysql2', 'pg', 'exceljs', 'chart.js']) require(m)" \
  && mkdir -p /data && chown node:node /data
 USER node
 VOLUME ["/data"]

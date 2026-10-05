@@ -7,7 +7,7 @@
 // The pure parts (names, dependency extraction, parameter binding, the
 // read-only gate) are asserted directly. Everything else runs a REAL query over
 // REAL Parquet written by the ordinary save path, under the real engine lock —
-// 'electron' is stubbed only to point userData at a temp dir, exactly as
+// userData is a temp dir (ORDINATE_LOCAL_DIR), exactly as
 // test-dataset-refresh.ts does. The headline check is a DIFFERENTIAL: a
 // GROUP BY + sum written by a user must equal residentQuery.aggregateResident
 // over the same file, compared with Object.is.
@@ -20,16 +20,9 @@ import { ok, failureCount, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-sql-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return { app: { getPath: (_name: string) => tmpUserData }, ipcMain: {}, dialog: {} };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources under test.
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
@@ -373,7 +366,6 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     duck.shutdown();
-    Module._load = origLoad;
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
     if (failureCount()) console.error('\n' + failureCount() + ' sqlDatasets check(s) FAILED');
     else console.log('\nAll sqlDatasets checks passed.');

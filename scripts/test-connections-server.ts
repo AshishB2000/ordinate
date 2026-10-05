@@ -8,8 +8,8 @@
 // in any RPC reply. And it IS used: the Postgres connector receives it on every
 // run. A server WITHOUT the store refuses the secret and writes nothing.
 //
-// Also: the three local-file sources are gone from the registry on the server
-// (and present on the desktop); a secret is replaced only after a test passes;
+// Also: the desktop's three local-file sources are gone from the registry (they
+// went with the desktop app, T8.1); a secret is replaced only after a test passes;
 // one project cannot delete another project's connection secret; every channel
 // the web screen calls has a contract and a handler.
 //
@@ -39,19 +39,9 @@ for (const s of [process.stdout, process.stderr]) {
   };
 }
 
-// The desktop half runs first against a stubbed Electron; then Electron is
-// made unloadable, as on a server.
+// The local (no-switch) half runs first; then the process enters server mode.
 const desktopUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-t25-desk-'));
-let electronOk = true;
-const Module = require('module') as { _load: (req: string, ...rest: unknown[]) => unknown };
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: unknown[]): unknown {
-  if (request === 'electron') {
-    if (!electronOk) throw new Error('electron is not available in server mode');
-    return { app: { getPath: () => desktopUserData } };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = desktopUserData;
 
 const registry: typeof import('../src/connectors/index') = require('../src/connectors/index');
 const configSecrets: typeof import('../src/app/configSecrets') = require('../src/app/configSecrets');
@@ -131,8 +121,8 @@ async function listen(env: Record<string, string>): Promise<{ base: string; clos
   ok('grep: an unrelated string is clean', !leaks('nothing ' + randomBytes(24).toString('base64')));
 
   // ── Desktop: every source, and secrets in config.json as before ───────────
-  ok('desktop: capabilities().localFiles', registry.capabilities().localFiles === true);
-  ok('desktop: the three local-file sources are offered', LOCAL.every((id) => registry.getConnector(id) !== null && registry.connectorCatalog().some((c) => c.id === id)));
+  ok('local: the desktop\'s three local-file sources are not in the registry',
+    LOCAL.every((id) => registry.getConnector(id) === null && !registry.connectorCatalog().some((c) => c.id === id) && !registry.listConnectors().some((d) => d.id === id)));
   const deskId = randomUUID();
   await configSecrets.saveConnectionSecrets(deskId, { password: 'desk-pw' });
   ok('desktop: saveConnectionSecrets still writes config.json (unchanged)', configSecrets.getConnectionSecret(deskId).password === 'desk-pw'
@@ -141,7 +131,6 @@ async function listen(env: Record<string, string>): Promise<{ base: string; clos
   ok('desktop: dropConnectionSecrets removes it', !configSecrets.getConnectionSecret(deskId).password);
 
   // ── Server mode ───────────────────────────────────────────────────────────
-  electronOk = false;
   const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-t25-srv-'));
   context.enterServerMode(DATA);
   appMod.registerHandlers();
@@ -149,7 +138,6 @@ async function listen(env: Record<string, string>): Promise<{ base: string; clos
   // (T6.1); an operator opens an internal database the same way.
   process.env.SSRF_ALLOW = '127.0.0.1/32,::1/128';
 
-  ok('server: capabilities().localFiles is false', registry.capabilities().localFiles === false);
   ok('server: no local-file source in the catalog, listConnectors or getConnector',
     LOCAL.every((id) => registry.getConnector(id) === null && !registry.connectorCatalog().some((c) => c.id === id) && !registry.listConnectors().some((d) => d.id === id)));
   ok('server: URL stays', registry.getConnector('url') !== null && registry.connectorCatalog().some((c) => c.id === 'url'));

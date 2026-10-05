@@ -78,7 +78,7 @@ export function wireSchedules(pool: Pool, devAuth: boolean): void {
     // A published site that reads it, opted in, is rebuilt at its link (T2.9; the desktop's job hook).
     if (o.ok) scheduleRepublish(o.projectId, o.datasetId);
   });
-  // ipc/alerts' evaluateOnly, which cannot load here (its delivery imports Electron).
+  // The store's evaluator directly: ipc/alerts' delivery is the RPC layer's.
   scheduler.onEvaluateAlerts(async (projectId, datasetId) => {
     await alertStore.syncWatchRules(projectId);
     return alertStore.evaluateProject(projectId, datasetId);

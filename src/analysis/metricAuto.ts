@@ -1,5 +1,5 @@
 // The metrics a project gets for free — MAIN PROCESS, PURE logic.
-// Columns in, metric INPUTS out. No Electron, no fs, no model: node-testable by
+// Columns in, metric INPUTS out. No fs, no model: node-testable by
 // a plain `node` self-check.
 //
 // A Metrics page that opens empty asks the user to do the naming work before it

@@ -1,6 +1,6 @@
 // buildChart — resolve the chart id, read the theme off the canvas, and
 // assemble the ONE Chart.js config the family modules fill in
-// (renderer/hub/chartRender.ts). Pure: it returns the config instead of
+// (the desktop's chartRender.ts). Pure: it returns the config instead of
 // constructing Chart.js, so the <Chart> component owns the instance and
 // legacy.test.ts can compare this config with the desktop's, id by id.
 //

@@ -1,5 +1,5 @@
 // A chart as a PNG — for report, deck and dashboard export (T2.13), the
-// desktop's captureChartPNG (renderer/hub/reportExport.ts). A chart canvas is
+// desktop's captureChartPNG (the desktop's reportExport.ts). A chart canvas is
 // transparent, so the picture is composited onto an OPAQUE background: the
 // theme surface, read off the element the chart was drawn in (an export frame
 // can have its own), else white.

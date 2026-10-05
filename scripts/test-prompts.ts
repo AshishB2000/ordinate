@@ -22,16 +22,11 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 // prompts.ts pulls in analysis/visuals for the chart whitelist, which touches
 // app.getPath at load — the same one-seam stub the sibling suites use.
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-prompts-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: (_n: string) => tmpUserData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const prompts: typeof import('../src/ai/prompts') = require('../src/ai/prompts');
 const formulaEval: typeof import('../src/formula/formulaEval') = require('../src/formula/formulaEval');

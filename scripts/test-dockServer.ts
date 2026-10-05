@@ -1,9 +1,9 @@
 // The Assistant dock on the server (T2.12), over real HTTP against a stub
 // model provider on loopback — no real network call is ever made.
 //
-//   1. Local CLI execution never happens on a server: this process blocks
-//      Electron and records every module that resolves into src/cli; after the
-//      whole flow below (readiness, connect, test, ask, models) none has.
+//   1. Local CLI execution never happens on a server: the public config lists
+//      no local CLI and the local-CLI channels have no contract. (src/cli itself
+//      went with the desktop app at T8.1.)
 //   2. API keys go through the encrypted secrets store (T5.3), never
 //      config.json. A canary key is saved through the real RPC, reaches the stub
 //      provider (it really was used), and is absent — in plain, URL-encoded,
@@ -35,7 +35,6 @@ import { Writable } from 'stream';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: the loader hook has no public type
 
 // ── Every byte this process prints ──────────────────────────────────────────
 let printed = '';
@@ -46,16 +45,6 @@ for (const s of [process.stdout, process.stderr]) {
     return orig(chunk, ...rest);
   };
 }
-
-// ── No Electron, and a record of anything that loads src/cli ────────────────
-const cliLoads: string[] = [];
-const resolve = Module._resolveFilename;
-Module._resolveFilename = function (request: string, ...rest: unknown[]): string {
-  if (request === 'electron' || request.startsWith('electron/')) throw new Error('electron is not available on the server');
-  const file: string = resolve.call(this, request, ...rest);
-  if (/[\\/]src[\\/]cli[\\/]/.test(file)) cliLoads.push(file);
-  return file;
-};
 
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');
@@ -223,7 +212,6 @@ const listen = async (app: import('fastify').FastifyInstance): Promise<string> =
   const adminUrl = process.env.DATABASE_URL;
   if (!adminUrl) {
     console.log('skip dock DB checks: DATABASE_URL is unset (set it to a Postgres this suite may CREATE DATABASE on)');
-    ok('src/cli never loaded on the server', cliLoads.length === 0, cliLoads.join());
     provider.close();
     finish();
     return;
@@ -335,7 +323,6 @@ const listen = async (app: import('fastify').FastifyInstance): Promise<string> =
     provider.close();
     fs.rmSync(DATA, { recursive: true, force: true });
   }
-  ok('src/cli never loaded on the server (asked, connected, tested, listed models)', cliLoads.length === 0, cliLoads.join());
   finish();
 })().catch((err: unknown) => {
   console.error(err);

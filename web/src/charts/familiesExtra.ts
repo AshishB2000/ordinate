@@ -1,5 +1,5 @@
 // Five chart families — waterfall, bullet, calendar heatmap, radar, Pareto
-// (renderer/hub/chartFamiliesExtra.ts): their Chart.js datasets, axes, tooltip
+// (the desktop's chartFamiliesExtra.ts): their Chart.js datasets, axes, tooltip
 // callbacks and the few chart options they need. What they DRAW by hand is
 // familiesPlugins.ts. build.ts asks isExtraFamily() first and hands over.
 // Every figure comes from shapes.ts and is left on `opts` (_wf, _pareto,

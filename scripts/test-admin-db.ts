@@ -2,7 +2,7 @@
 //
 // Two orgs (acme, beta), each its own server process-in-a-process (header
 // sign-in from a trusted 127.0.0.1 peer, one shared database and DATA_DIR,
-// server mode, no Electron). For EVERY admin channel: an org viewer and an org
+// server mode). For EVERY admin channel: an org viewer and an org
 // editor get 403 and the handler never runs; the org admin gets 200; the OTHER
 // org's admin, handed this org's ids, changes nothing here. Then each admin
 // action for real — invite, role, disable, teams, ownership transfer, audit
@@ -23,13 +23,6 @@ import type { FastifyInstance } from 'fastify';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: the loader hook has no public type
-
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') throw new Error('electron is not available in server mode');
-  return origLoad.apply(this, [request, ...rest]);
-};
 
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');

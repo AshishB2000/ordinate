@@ -5,7 +5,7 @@
 // returns whatever the test wants would assert nothing about that. Only the two
 // network-ish seams are replaced (connectionRun.runConnection and
 // ipc/connections.refreshConnectionInto), because neither should dial out from a
-// unit test. 'electron' is stubbed to point userData at a temp dir, as in
+// unit test. userData (ORDINATE_LOCAL_DIR) is a temp dir, as in
 // test-datasets.ts, so datasets/projects/transforms are all the real modules.
 //
 // The invariant this file exists to defend: A FAILED REFRESH NEVER DESTROYS
@@ -17,19 +17,10 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-refresh-'));
 const tmpFiles = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-refresh-src-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    // ipcMain/dialog are destructured by the ipc modules but only touched inside
-    // their register(), which nothing here calls.
-    return { app: { getPath: (_name: string) => tmpUserData }, ipcMain: {}, dialog: {} };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources under test.
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
@@ -37,7 +28,6 @@ const projects: typeof import('../src/app/projects') = require('../src/app/proje
 const refresh: typeof import('../src/data/datasetRefresh') = require('../src/data/datasetRefresh');
 const connectionRun: any = require('../src/connectors/connectionRun');
 const ipcConnections: any = require('../src/ipc/connections');
-
 
 function writeCsv(name: string, text: string): string {
   const p = path.join(tmpFiles, name);
@@ -244,7 +234,6 @@ main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
     try { fs.rmSync(tmpFiles, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' refresh check(s) FAILED'); process.exit(1); }
     console.log('\nAll dataset-refresh checks passed.');
   })

@@ -26,10 +26,9 @@ export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
 
 // ponytail: compiled sibling of ../src/refreshScheduler.ts. Required (not
-// imported) so this file does not pull Electron in through the module graph.
+// imported) so this file does not pull a store in through the module graph.
 const sched: typeof import('../src/app/refreshScheduler') = require('../src/app/refreshScheduler');
 const { dueDatasets } = sched;
-
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;

@@ -20,21 +20,9 @@ import { withCsrf } from './csrfPair';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: the loader hook has no public type
 
-const REPO = path.resolve(__dirname, '..');
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-dspage-rpc-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') {
-    return {
-      app: { getPath: () => tmpUserData, getAppPath: () => REPO, getVersion: () => '0.0.0-test' },
-      net: {}, dialog: {}, shell: {}, nativeImage: {},
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const appMod: typeof import('../src/server/app') = require('../src/server/app');
 const envMod: typeof import('../src/server/env') = require('../src/server/env');

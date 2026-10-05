@@ -22,14 +22,9 @@ const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const http: typeof import('http') = require('http');
-const Module: any = require('module'); // ponytail: Node's loader hook is untyped
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-automation-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: () => tmp, getAppPath: () => tmp, getVersion: () => '9.9.9' }, ipcMain: { handle: () => {} } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmp;
 
 const argvMod: typeof import('../src/automation/argv') = require('../src/automation/argv');
 const cli: typeof import('../src/automation/cli') = require('../src/automation/cli');
@@ -50,7 +45,7 @@ const throwsCode = (fn: () => unknown, code: string): boolean => {
 // ── 1. Parsing ───────────────────────────────────────────────────────────────
 {
   const hm = argvMod.headlessMode;
-  ok('headless: --cli anywhere before --', hm(['/bin/electron', '.', '--cli', 'projects', 'list']) === 'cli');
+  ok('headless: --cli anywhere before --', hm(['/usr/bin/node', '.', '--cli', 'projects', 'list']) === 'cli');
   ok('headless: --mcp', hm(['/Applications/X.app/Contents/MacOS/X', '--mcp']) === 'mcp');
   ok('headless: the first mode wins (a later --mcp is an argument)', hm(['x', '--cli', 'query', '--mcp']) === 'cli');
   ok('headless: a plain launch is the GUI', hm(['x', '.']) === null && hm(['x', '--', '--cli']) === null);

@@ -1,5 +1,5 @@
 // Dataset paint: the bar and area gradients and the prior-period overlay's
-// muted ink (renderer/hub/chartDatasets.ts). Gradients return SCRIPTABLE
+// muted ink (the desktop's chartDatasets.ts). Gradients return SCRIPTABLE
 // options — Chart.js calls them back with a live chart, so each re-reads
 // ctx.chart rather than closing over a chart area that does not exist yet.
 

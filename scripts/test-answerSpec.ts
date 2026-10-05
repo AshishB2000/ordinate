@@ -19,14 +19,9 @@ import { ok, finish } from './selfcheck';
 
 const path: typeof import('path') = require('path');
 const os: typeof import('os') = require('os');
-const Module: any = require('module');
 
-// analysisPlan.ts (for the chart vocabulary drift guard below) pulls in electron.
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: () => path.join(os.tmpdir(), 'ordinate-answerspec') }, ipcMain: { handle: () => {} } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+// analysisPlan.ts (for the chart vocabulary drift guard below) reads app paths.
+process.env.ORDINATE_LOCAL_DIR = path.join(os.tmpdir(), 'ordinate-answerspec');
 
 const A: typeof import('../src/ai/answerSpec') = require('../src/ai/answerSpec');
 const sa: typeof import('../src/ai/suggestedAction') = require('../src/ai/suggestedAction');

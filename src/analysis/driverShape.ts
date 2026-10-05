@@ -1,5 +1,5 @@
 // How a metric's number splits across the members of a dimension — MAIN
-// PROCESS, PURE. No Electron, no fs, no DuckDB.
+// PROCESS, PURE. No fs, no DuckDB.
 //
 // Key drivers ("why did Revenue fall?") can only decompose a number whose
 // pieces ADD UP. This file reads a metric's definition and says which of two

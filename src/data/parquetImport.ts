@@ -1,6 +1,6 @@
 // Parquet → ParseResult, and the one entry point that reads ANY importable
 // file — MAIN PROCESS / SERVER only. Split from ./fileImport.ts, which the
-// compute worker also loads (its graph must not reach Electron or DuckDB).
+// compute worker also loads (its graph must not reach DuckDB).
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -21,7 +21,7 @@ export function parseAnyFile(filePath: string, kind: FileSourceKind, sheetName?:
 /**
  * A Parquet file as a ParseResult, through DuckDB (async — the server forbids
  * a sync call on its main thread). DuckDB's connection is locked to userData
- * on the desktop (src/connectors/local.ts §1) and to the org's own directory
+ * on the desktop and to the org's own directory
  * on the server (src/engine/duckdbPool.ts), so the file is COPIED into
  * userData/drop-stage first and read there — every column cast to VARCHAR and
  * typed by the importer's own rules, in file order, capped at the row limit.

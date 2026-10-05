@@ -1,4 +1,4 @@
-// The word cloud's layout (renderer/hub/wordCloudLayout.ts) — PURE and
+// The word cloud's layout (the desktop's wordCloudLayout.ts) — PURE and
 // DOM-free, and DETERMINISTIC by construction (no Math.random):
 //   · words placed in DESCENDING weight order, ties broken by the word itself
 //     (code-unit order, no locale), so the biggest word takes the centre;

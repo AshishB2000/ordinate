@@ -529,32 +529,15 @@ async function callProvider(provider: string, systemPrompt: string, messages: Ne
 // There is no separate memory/summary AI step in the app today, so nothing consumes
 // this. When one is added, route it here: if mode === 'override', call callProvider()
 // with that BYOK provider family as the fallback; otherwise reuse dispatch() below.
-// Route one request through whichever execution mode is active.
-// Returns the shared { rawText } | { error } shape regardless of backend.
-// Local CLIs with a working run adapter. Others (retired/install-only) are not
-// routable — keep this list in sync with src/localCliRun.js.
-const RUNNABLE_LOCAL_CLIS = ['claude', 'antigravity', 'codex', 'grok', 'opencode', 'cursor'];
-
-export async function dispatch(systemPrompt: string, messages: NeutralMsg[], onDelta?: (delta: string) => void, opts?: { prose?: boolean }): Promise<CallResult> {
+// Route one request to the API-key provider that is set up (local CLI models
+// were the desktop app's, and went with it at T8.1).
+// Returns the shared { rawText } | { error } shape regardless of provider.
+export async function dispatch(systemPrompt: string, messages: NeutralMsg[], onDelta?: (delta: string) => void, _opts?: { prose?: boolean }): Promise<CallResult> {
   systemPrompt = withLanguage(systemPrompt); // Settings → Language: one line, absent in English
-  const cfg = config.get();
-  if (!execConfig.serverMode() && (cfg.executionMode || 'byok') === 'local') { // a server runs API-key providers only
-    const activeId = cfg.localCli && cfg.localCli.activeId;
-    if (!RUNNABLE_LOCAL_CLIS.includes(activeId as string)) {
-      return {
-        error: activeId
-          ? errProvider2('That app can’t run the Assistant yet — pick another in Settings → Assistant.')
-          : errProvider2('No app picked yet — choose one in Settings → Assistant.'),
-      };
-    }
-    return (require('../cli/localCliRun') as typeof import('../cli/localCliRun')).runLocalCli(activeId as string, systemPrompt, messages, opts); // onDelta unused → local CLI is reveal-on-complete (buffered)
-  }
   const creds = await resolveByok();
   if (creds.error) return { error: creds.error };
   return callProvider(creds.provider, systemPrompt, messages, creds, onDelta);
 }
-
-function errProvider2(message: string): TypedError { return { ok: false, errorType: 'provider', message }; }
 
 // Minimal real connectivity test for a provider using its SAVED credentials.
 // Returns a typed result: { ok:true, message } or a typed error object.
@@ -578,18 +561,6 @@ export async function testProvider(provider: string): Promise<TypedError | { ok:
   if (error) return error;
   if (!rawText) return errBadReply();
   return { ok: true, message: 'Connected — the provider responded.' };
-}
-
-// Minimal real connectivity test for a local CLI (Claude Code or Antigravity).
-// Runs a tiny prompt with no image through the same adapter; typed result.
-const LOCAL_CLI_NAMES: Record<string, string> = { claude: 'Claude Code', antigravity: 'Antigravity (Google)', codex: 'Codex CLI', grok: 'Grok CLI', opencode: 'OpenCode', cursor: 'Cursor Agent' };
-export async function testLocalCli(cliId: string): Promise<TypedError | { ok: true; message: string }> {
-  if (!RUNNABLE_LOCAL_CLIS.includes(cliId)) return errUnknown();
-  const messages = [{ role: 'user', text: 'Reply with the single word OK.' }];
-  const { rawText, error } = (await (require('../cli/localCliRun') as typeof import('../cli/localCliRun')).runLocalCli(cliId, 'You are a connectivity test. Reply with OK.', messages, {})) as CallResult;
-  if (error) return error;
-  if (!rawText) return errBadReply();
-  return { ok: true, message: `Connected — ${LOCAL_CLI_NAMES[cliId] || 'the CLI'} responded.` };
 }
 
 // Plain-prose one-shot through the SAME execution path (BYOK or local CLI) —

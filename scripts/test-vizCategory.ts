@@ -26,7 +26,6 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 type Cell = import('../src/data/transforms').Cell;
 type FilterStep = import('../src/data/transforms').FilterStep;
@@ -37,20 +36,7 @@ type VizDataResult = import('../src/analysis/vizData').VizDataResult;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-viz-category-'));
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData, getVersion: () => '0.0.0-test' },
-      ipcMain: { handle: () => {}, on: () => {} },
-      net: {},
-      nativeImage: {},
-      shell: {},
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');

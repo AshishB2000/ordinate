@@ -24,20 +24,13 @@ const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const crypto: typeof import('crypto') = require('crypto');
-const Module: any = require('module');
 
 type Cell = import('../src/data/transforms').Cell;
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type RefTable = import('../src/analysis/qualityRules').RefTable;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-inputlookup-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return { app: { getPath: () => tmpUserData, getVersion: () => '0.0.0-test' }, ipcMain: { handle: () => {}, on: () => {} } };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
 const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');

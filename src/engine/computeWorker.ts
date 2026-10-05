@@ -14,9 +14,9 @@
 // from `forbidSyncOnMainThread`, and is never reachable from a handler's
 // require graph (scripts/test-asyncReach.ts).
 //
-// NOTHING HERE IMPORTS ELECTRON (a worker thread has no `app`): every op takes
-// plain paths and records, and scripts/test-computeWorker.ts checks the import
-// graph stays that way.
+// NOTHING HERE REACHES src/server/context (a worker thread has no request
+// context): every op takes plain paths and records, and
+// scripts/test-computeWorker.ts checks the import graph stays that way.
 //
 // Protocol (one op in flight per worker — computePool guarantees it):
 //   in   { id, op, args }

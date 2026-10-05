@@ -1,7 +1,5 @@
-import * as appPaths from '../app/paths';
 import { ipcMain } from './bus';
 import * as fs from 'fs';
-import * as path from 'path';
 import * as visuals from '../analysis/visuals';
 import * as answerKey from '../data/answerKey';
 import * as queryCache from '../engine/queryCache';
@@ -41,7 +39,7 @@ import type { ColumnSummary } from '../data/datasetStats';
 import { suggestCharts } from '../ai/analyze';
 import * as versions from '../app/versions';
 import * as trash from '../app/trash';
-import { applyToChart, rowShaper } from '../app/sharePolicy';
+import { applyToChart } from '../app/sharePolicy';
 import { isSharePath } from '../app/privacyStore';
 import { withAsOf } from '../data/asOf';
 import { driversVizData } from './drivers';
@@ -278,9 +276,6 @@ function markStep(
 }
 
 // ── CSV export of the drilled rows ──────────────────────────────────────────
-
-/** Past this many rows the export asks first. */
-const EXPORT_WARN_ROWS = 1_000_000;
 
 /**
  * How many rows one read pulls across the bridge.
@@ -659,77 +654,6 @@ export function register() {
       };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to read the underlying rows' };
-    }
-  }));
-
-  // ── The drilled rows as a CSV file ───────────────────────────────────────
-  //
-  // Plain-text row export — NOT the spreadsheet export CLAUDE.md lists as out of
-  // scope. No xlsx, no formatting, no new dependency: RFC-4180 text, UTF-8, one
-  // header line, written with `fs`.
-  //
-  // It re-resolves the drill from the SAME arguments the panel resolved, so the
-  // file is the grid: same filters, same search, same order. A refusal here is
-  // the same refusal the panel got, and the panel disables the button on one
-  // anyway — this is the second lock, not the first.
-  ipcMain.handle('visual:rowsExport', async (_e, { projectId, datasetId, encoding, filters, mark, page, name, params, asOf }: any = {}) => withAsOf(projectId, asOf, async () => {
-    try {
-      const enc = sanitizeEncoding(encoding);
-      const flt = resolveFilterParams(visuals.sanitizeFilters(filters), paramValues(params)).steps;
-      const meta = await datasets.getDatasetMeta(projectId, datasetId);
-      if (!meta) return { ok: false, error: 'Dataset not found' };
-
-      const resolved = resolveDrill(meta.columns, enc, flt, mark);
-      if (!resolved.available) return { ok: false, error: resolved.reason };
-
-      const p = page && typeof page === 'object' ? page : {};
-      const base: PageRequest = {
-        offset: 0,
-        limit: 0, // count only — `readPage` short-circuits before reading a row
-        search: p.search,
-        sortColumn: p.sortColumn,
-        sortDir: p.sortDir,
-        filters: resolved.filters,
-      };
-      const counted = await pageFor(projectId, datasetId, base, 'drillExport');
-      if (!counted.ok) return counted;
-      // Desktop-only (native dialogs); required here so the server loads this module without Electron.
-      const { dialog } = (require('electron') as typeof import('electron'));
-      const total = counted.total;
-      if (total === 0) return { ok: false, error: 'There are no rows to export.' };
-
-      // The cap IS the filtered total — the file is the row set the panel is
-      // showing, never more. Past a million rows say so BEFORE writing: a
-      // warning that arrives after a 1M-row file has been written is not a
-      // warning. (The import cap is 1,000,000, so this is a backstop for a
-      // future raise rather than a live case today.)
-      if (total > EXPORT_WARN_ROWS) {
-        const { response } = await dialog.showMessageBox({
-          type: 'warning',
-          buttons: ['Export anyway', 'Cancel'],
-          defaultId: 1,
-          cancelId: 1,
-          message: `This will write ${total.toLocaleString()} rows.`,
-          detail: 'A file this large can take a while to write and to open.',
-        });
-        if (response !== 0) return { ok: false, canceled: true };
-      }
-
-      const safe = csvFileName(name);
-      const { filePath, canceled } = await dialog.showSaveDialog({
-        title: 'Export these rows',
-        defaultPath: path.join(appPaths.downloads(), safe),
-        filters: [{ name: 'CSV', extensions: ['csv'] }],
-      });
-      if (canceled || !filePath) return { ok: false, canceled: true };
-
-      // The rows LEAVE the app here, so the Share policy shapes them: a
-      // sensitive column is masked or dropped from the header and every row.
-      const shaper = await rowShaper(projectId, datasetId, meta.columns, 'export');
-      const written = await writeDrillCsv(filePath, projectId, datasetId, base, shaper.columns, total, shaper.row);
-      return { ok: true, dest: filePath, rows: written };
-    } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to export the rows' };
     }
   }));
 

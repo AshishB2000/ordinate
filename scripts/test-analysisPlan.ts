@@ -1,8 +1,8 @@
 // Self-check for src/analysisPlan.ts — the AI plan: facts in, envelope out,
 // validated, previewed, built.
 //
-// Style follows test-analysis.ts / test-vizRewire.ts: stub 'electron' via
-// Module._load so userData is a fresh temp dir, read the registered handlers
+// Style follows test-analysis.ts / test-vizRewire.ts: point userData
+// (ORDINATE_LOCAL_DIR) at a fresh temp dir, read the registered handlers
 // from the RPC registry, then drive the REAL modules against real disk. No
 // framework.
 //
@@ -43,24 +43,13 @@ import { golden } from './golden';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-analysisplan-'));
 
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const ipcHandlers: Map<string, (e: unknown, payload: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData },
-      net: {},
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the real modules.
 const plan: typeof import('../src/analysis/analysisPlan') = require('../src/analysis/analysisPlan');
@@ -79,7 +68,6 @@ const analysesIpc: typeof import('../src/ipc/analyses') = require('../src/ipc/an
 
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type Cell = import('../src/data/transforms').Cell;
-
 
 // ── The hydration spy ───────────────────────────────────────────────────────
 // analysisPlan.js and ipc/visuals.js both resolve `datasets.getDataset` off the

@@ -1,5 +1,5 @@
 // Self-check for src/residentTrace.ts — the fallback counter. Pure module, no
-// Electron/fs stub needed. Same house style: ok() counter, no framework,
+// fs stub needed. Same house style: ok() counter, no framework,
 // process.exit(1) on failure.
 //
 // The property under test is NOT "it counts". It is the distinction the module
@@ -13,7 +13,6 @@ import { ok, failureCount } from './selfcheck';
 
 // ponytail: compiled sibling of ../src/residentTrace.ts.
 const trace: typeof import('../src/engine/residentTrace') = require('../src/engine/residentTrace');
-
 
 // Capture console.warn so the assertions can be about what a user would see.
 const realWarn = console.warn;

@@ -1,5 +1,5 @@
 // Server push: one server-sent-events stream per browser tab — what
-// `webContents.send` was under Electron. `GET /api/events?client=<id>` opens it;
+// `webContents.send` was on the desktop app. `GET /api/events?client=<id>` opens it;
 // `ctx().client.send(channel, payload)` (and so `senderOf(e).send`) writes one
 // event to it: `event: <channel>` + `data: <payload, wire-encoded>` (./wire.ts).
 //
@@ -38,7 +38,7 @@
 // targeted publish, and jobs tagged with it reach that tab the same way.
 // Without a fan-out (desktop, a server without DATABASE_URL) none of this runs.
 //
-// Must load without Electron (scripts/test-server-boot.ts).
+// Must load in a plain Node process (scripts/test-server-boot.ts).
 
 import type { ServerResponse } from 'http';
 import type { FastifyInstance } from 'fastify';

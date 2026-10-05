@@ -6,7 +6,7 @@
 const STOPS_LIGHT = ['#d6e4f5', '#8aaedd', '#5279bb', '#3d6bc9', '#2d529e'];
 const STOPS_DARK = ['#1a3366', '#1d44b0', '#3d6bc9', '#5278cf', '#8aaedd'];
 
-/** The fallback chart palette (renderer/hub/chartPalette.ts) when a --chart-N token is unset. */
+/** The fallback chart palette (the desktop's chartPalette.ts) when a --chart-N token is unset. */
 export const CHART_PALETTE = ['#2563eb', '#0e7490', '#14b8a6', '#6366f1', '#64748b', '#b45309', '#be185d', '#4d7c0f'];
 
 /** Is a surface colour dark? ponytail: 6-digit hex only (every token is); anything else reads light. */

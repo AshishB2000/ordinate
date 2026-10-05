@@ -6,8 +6,7 @@
 // live endpoint and are called out in the connector's own comments.
 //
 // WHAT IT DOES TEST, and what makes that worth something: the `tedious` module
-// is REPLACED (via Module._load, the same trick test-connections.ts uses for
-// 'electron') with a fake driver that records the config object and the SQL it
+// is REPLACED (via Module._load) with a fake driver that records the config object and the SQL it
 // was handed, and emits a controlled number of rows. So the assertions are on
 // the real connector code end to end — the driver config it builds, the SQL it
 // caps, how many rows it keeps, whether it cancels, and what it does with an
@@ -20,7 +19,6 @@ const path: typeof import('path') = require('path');
 const fs: typeof import('fs') = require('fs');
 const { EventEmitter }: typeof import('events') = require('events');
 const Module: { _load(request: string, ...rest: unknown[]): unknown } = require('module');
-
 
 // ── the fake tedious driver ───────────────────────────────────────────────────
 

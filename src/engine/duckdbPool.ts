@@ -19,7 +19,7 @@
 // `/` (`orgs/a` must not admit `orgs/ab`); `..` and symlinks out are refused by
 // DuckDB itself (measured). The lock is per INSTANCE, so it fixes the
 // process-wide limitation the desktop's single connection has
-// (src/ipc/mosaic.ts `hardenConnection`).
+// (src/engine/sqlHarden.ts `hardenConnection`).
 //
 // ── S3 (T5.2) ────────────────────────────────────────────────────────────────
 // With STORAGE_URL=s3://…, `orgSetup()` first runs storage.workerSetup — BEFORE

@@ -33,14 +33,9 @@ for (const s of [process.stdout, process.stderr]) {
   };
 }
 
-// config.ts reads userData through Electron; point it at a temp dir.
+// config.ts reads userData from ORDINATE_LOCAL_DIR outside server mode; point it at a temp dir.
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-secrets-'));
-const Module = require('module') as { _load: (req: string, ...rest: unknown[]) => unknown };
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: unknown[]): unknown {
-  if (request === 'electron') return { app: { getPath: () => userData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = userData;
 
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
 const store: typeof import('../src/server/secrets/store') = require('../src/server/secrets/store');
@@ -97,7 +92,6 @@ async function rejects(label: string, p: Promise<unknown>, needle?: RegExp): Pro
 
 function run(args: string[], env: Record<string, string>): Promise<{ code: number | null; out: string }> {
   const e: NodeJS.ProcessEnv = { ...process.env, ...env };
-  delete e.ELECTRON_RUN_AS_NODE;
   const child = spawn(process.execPath, args, { env: e, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   child.stdout.on('data', (c: Buffer) => (out += c.toString()));

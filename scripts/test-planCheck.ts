@@ -10,17 +10,10 @@ export {};
 import { ok, finish } from './selfcheck';
 
 const os: typeof import('os') = require('os');
-const Module: any = require('module');
 
-// dashboards.ts (the style presets) pulls in visuals.ts → electron. Nothing here
-// touches a store; the stub only lets the pure validators load.
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return { app: { getPath: () => os.tmpdir() }, ipcMain: { handle: () => undefined }, net: {}, safeStorage: { isEncryptionAvailable: () => false } };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+// dashboards.ts (the style presets) pulls in visuals.ts → the path resolver.
+// Nothing here touches a store; the temp dir only lets the pure validators load.
+process.env.ORDINATE_LOCAL_DIR = os.tmpdir();
 
 const ps: typeof import('../src/ai/planSteps') = require('../src/ai/planSteps');
 const pc: typeof import('../src/ai/planCheck') = require('../src/ai/planCheck');

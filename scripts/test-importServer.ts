@@ -1,5 +1,5 @@
 // Self-check for T2.4 — import, composer, captures and input tables on the
-// SERVER, over real HTTP with Electron forbidden:
+// SERVER, over real HTTP:
 //
 //   · staged imports are bound to org + user: another org's or user's stagedId
 //     is refused by dataset:composePreview, dataset:composeSave and dataset:save
@@ -25,13 +25,6 @@ const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const http: typeof import('http') = require('http');
 const { Writable }: typeof import('stream') = require('stream');
-const Module: any = require('module'); // any: the loader hook has no public type
-
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') throw new Error('electron is not available in server mode');
-  return origLoad.apply(this, [request, ...rest]);
-};
 
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');

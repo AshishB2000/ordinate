@@ -1,5 +1,5 @@
 // Does the answer only cite figures the app computed? — MAIN PROCESS, PURE.
-// No Electron, no fs, no DOM, no model.
+// No fs, no DOM, no model.
 //
 // ── The contract this enforces ───────────────────────────────────────────────
 // "The app does the math. A model only narrates figures the app already

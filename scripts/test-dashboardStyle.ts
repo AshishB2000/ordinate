@@ -1,6 +1,6 @@
 // Self-check for the DashboardStyle vocabulary in src/analysis/dashboards.ts —
 // `sanitizeStyle`, `DEFAULT_DASHBOARD_STYLE` and the `DASHBOARD_STYLE_PRESETS`
-// table. Pure logic, no Electron, no fs, no framework.
+// table. Pure logic, no fs, no framework.
 //
 // Three properties are worth a suite of their own, because each one fails
 // SILENTLY rather than loudly:

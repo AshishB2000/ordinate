@@ -4,7 +4,7 @@
 # OS junk
 .DS_Store
 
-# Node / Electron
+# Node
 node_modules
 
 # TypeScript incremental cache — per-checkout, never shared (see tsconfig.*.json)
@@ -14,8 +14,6 @@ node_modules
 dist/
 out/
 build/*
-# …but DO track the code-signing entitlements (a source file, not build output).
-!build/entitlements.mac.plist
 
 # Local config / secrets (never commit API keys)
 .env
@@ -35,48 +33,34 @@ config.json
 # TypeScript: ALL runtime .js is compiled output of a sibling .ts source
 # (in-place emit) — sources are the .ts files, never commit emitted .js.
 src/**/*.js
-preload/**/*.js
-renderer/**/*.js
 scripts/**/*.js
-!/scripts/build-appicon.js
 # Week 2 workspace/projects data layer — emitted siblings (also covered by the
 # globs above; listed explicitly per the in-place-emit convention).
 /src/ipc/projects.js
 /scripts/test-projects.js
-/renderer/hub/projects.js
-/renderer/hub/workspace.js
 # Week 3 file-based data sources — emitted siblings.
 /src/ipc/datasets.js
 /scripts/test-parse.js
 /scripts/test-datasets.js
-/renderer/hub/datasets.js
 # Week 4 connected data sources — emitted siblings.
 /src/ipc/connections.js
 /scripts/test-connections.js
-/renderer/hub/connections.js
 # Week 5 dataset exploration — emitted siblings.
 /scripts/test-datasetStats.js
 # Week 6 data preparation — emitted siblings.
 /scripts/test-formula.js
 /scripts/test-transforms.js
-/renderer/hub/prepare.js
 # Week 7 manual visualization — emitted siblings.
 /src/ipc/visuals.js
 /scripts/test-vizData.js
 /scripts/test-visuals.js
 /scripts/test-viz-filter.js
-/renderer/hub/dashCardChrome.js
-/renderer/hub/pivotRender.js
-/renderer/hub/pivotBuilder.js
-/renderer/hub/visuals.js
 # Week 9 dashboards — emitted siblings.
 /src/ipc/dashboards.js
-/renderer/hub/dashboards.js
 /scripts/test-metricValue.js
 # Week 10 dashboard filters — emitted siblings.
 /scripts/test-dashboardFilters.js
 # Week 10 dashboard export + share — emitted siblings.
-/src/ipc/dashboardExport.js
 /scripts/test-dashboardExport.js
 # Week 11 persistent AI Copilot — emitted siblings.
 /src/ipc/copilot.js
@@ -87,15 +71,6 @@ scripts/**/*.js
 # Week 13 capture → reusable dataset — emitted siblings.
 /src/ipc/captureDataset.js
 /scripts/test-captureDataset.js
-/renderer/hub/captureDataset.js
-# Captures as project records (the Captures tab + the capture page) — emitted siblings.
-/renderer/hub/captureList.js
-/renderer/hub/captureStatus.js
-/scripts/smoke-capture.js
-# The dock's width machinery, split out under the 800-line cap.
-/renderer/hub/dockResize.js
-# The composer's preview grid, split out under the same cap.
-/renderer/hub/composerGrid.js
 # Hardening self-check — emitted sibling (also covered by scripts/**/*.js).
 /scripts/test-history.js
 # Phase 1 DuckDB synchronous bridge — emitted siblings.
@@ -128,20 +103,6 @@ scripts/**/*.js
 
 # Resident dataset stats (dataset:stats / dataset:explain off Parquet) — emitted siblings.
 /scripts/test-statsResident.js
-/scripts/smoke-app.js
-
-# The eight surfaces split out of smoke-app.ts under the 800-line cap, plus the
-# launch/fixture module they share. Emitted siblings.
-/scripts/smokeFixture.js
-/scripts/smoke-shell.js
-/scripts/smoke-analysis-create.js
-/scripts/smoke-analysis-workbench.js
-/scripts/smoke-analysis-props.js
-/scripts/smoke-dashboard-controls.js
-/scripts/smoke-draft-review.js
-/scripts/smoke-viz-builder.js
-/scripts/smoke-saved-chart-type.js
-/scripts/smoke-render-stacks.js
 
 # Server-side paged read for the Explore grid — emitted siblings.
 /scripts/test-datasetPage.js
@@ -150,67 +111,24 @@ scripts/**/*.js
 /scripts/test-anomaliesResident.js
 /scripts/test-wideTables.js
 
-# Phase 3c vendor bundle — the exceptions to "never commit .js".
-# These two are NOT tsc output and have no .ts sibling:
-#   scripts/build-vendor.js is a hand-written build tool (like download-geo.ts's
-#   role, but plain Node — it must run before any TypeScript build exists), and
-#   renderer/hub/vendor/vgplot.js is its committed output. Committing the bundle
-#   is what keeps CI and electron-builder off the 180+ MB vgplot tree.
-!/scripts/build-vendor.js
-!/renderer/hub/vendor/vgplot.js
-
 # scripts/build-icons.js — same exception, same reason: a hand-written build
 # tool with no .ts sibling. It bakes assets/provider-icons.json so simple-icons
 # can be a devDependency instead of 25 MB of runtime dependency.
 !/scripts/build-icons.js
-
-# Phase 3c Mosaic connector (mosaic:view / mosaic:query) — emitted siblings.
-/src/ipc/mosaic.js
-/scripts/test-mosaicIpc.js
-
-# Phase 3c Mosaic/vgplot renderer — emitted siblings.
-/renderer/hub/plotRender.js
-/scripts/test-plotSpec.js
-# Phase 4 MapLibre GL — emitted sibling.
-/renderer/hub/mapWorker.js
-/renderer/hub/lazyScript.js
-
-# ── Phase 5: Svelte islands (docs/phase-5/01-toolchain.md) ──────────────────
-# scripts/build-svelte.js is a hand-written build tool with no .ts sibling —
-# same exception as build-vendor.js above, and for the same reason: it must run
-# without a TypeScript build already existing.
-!/scripts/build-svelte.js
-# Its output. bundle.js is already covered by the `renderer/**/*.js` glob, but
-# listed explicitly per the in-place-emit convention — and bundle.CSS needs its
-# own entry, because until now this repo had no generated CSS and every .css
-# file was hand-written source. Regenerate both with `npm run build:svelte`.
-/renderer/hub/svelte/bundle.js
-/renderer/hub/svelte/bundle.css
-
-# Phase 5 Svelte toolchain self-check — emitted sibling.
-/scripts/test-svelteBuild.js
-
-# CSS custom-property check — emitted sibling.
-/scripts/test-cssVars.js
 
 # DuckDB sidecar (docs/phase-6 §4, option b1) — emitted siblings.
 /scripts/test-duckdbSidecar.js
 
 # Analysis (the authoring container a dashboard is published from) — emitted siblings.
 /src/ipc/analyses.js
-/renderer/hub/analyses.js
 /scripts/test-analysis.js
 
 # The AI analysis plan (facts → envelope → validation → preview → build).
 /scripts/test-analysisPlan.js
 
 # Drill-down (the rows behind a number) — emitted siblings.
-/renderer/hub/drill.js
 /scripts/test-dataset-page-filters.js
 /scripts/test-visual-rows.js
-
-# Data-section layout (list-first restructure) — emitted sibling.
-/renderer/hub/dataSection.js
 
 # Authoring depth — relationships, actions, card kinds, maps, accessibility.
 /src/analysis/relationships.js
@@ -220,29 +138,10 @@ scripts/**/*.js
 /src/engine/joinResident.js
 /src/ipc/relationships.js
 /src/ipc/vizExtras.js
-/src/ipc/authoringDepth.js
-/renderer/hub/encodingRelated.js
-/renderer/hub/relationshipsPage.js
-/renderer/hub/relationshipDialog.js
 /scripts/test-joins.js
-/renderer/hub/dashSelection.js
-/renderer/hub/tileActions.js
-/renderer/hub/actionEditor.js
-/renderer/hub/navCard.js
-/renderer/hub/cardKinds.js
 /scripts/test-tileActions.js
-/renderer/hub/markdown.js
-/renderer/hub/textCard.js
-/renderer/hub/layoutKinds.js
-/renderer/hub/gridArrange.js
 /src/app/projectAssets.js
-/src/ipc/projectAssets.js
-/scripts/test-markdown.js
 /scripts/test-cardLayout.js
-/renderer/hub/mapOverlays.js
-/renderer/hub/mapBasemap.js
-/renderer/hub/mapPoints.js
-/renderer/hub/encodingMap.js
 /src/analysis/places.js
 /src/analysis/geojsonCheck.js
 /src/analysis/mapData.js
@@ -250,95 +149,11 @@ scripts/**/*.js
 /src/ipc/projectBoundaries.js
 /scripts/build-places.js
 /scripts/test-mapPoints.js
-/renderer/hub/a11y.js
-/scripts/test-a11y.js
-/scripts/smoke-authoring.js
-
-# Command palette: the registry, its contents, the overlay, and the native menu
-# built from the same list — emitted siblings.
-/renderer/hub/commands.js
-/renderer/hub/commandDefs.js
-/renderer/hub/paletteRows.js
-/renderer/hub/palette.js
-/src/ipc/menu.js
-/scripts/test-commands.js
-/scripts/smoke-palette.js
 
 # File-size ratchet (.claude/rules/file-size.md) — emitted sibling.
 /scripts/test-file-size.js
 
-# hub.ts split by job (.claude/rules/file-size.md) — emitted siblings.
-/renderer/hub/hubHotkey.js
-/renderer/hub/hubMenus.js
-/renderer/hub/hubNotify.js
-/renderer/hub/hubCapture.js
-/renderer/hub/hubResultMenus.js
-
-# dashboards.ts split by job (.claude/rules/file-size.md) — emitted siblings.
-/renderer/hub/dashHistory.js
-/renderer/hub/dashStyle.js
-/renderer/hub/dashGrid.js
-/renderer/hub/dashAdd.js
-/renderer/hub/dashAddControl.js
-/renderer/hub/dashControls.js
-/renderer/hub/dashControlBar.js
-/renderer/hub/dashFiltersUi.js
-/renderer/hub/dashAi.js
-/renderer/hub/dashShare.js
-/renderer/hub/reportRender.js
-/renderer/hub/reportWriters.js
-/renderer/hub/reportBuilder.js
-/renderer/hub/reportList.js
-
-# authoring.ts split by job (.claude/rules/file-size.md) — emitted siblings.
-/renderer/hub/authoringRail.js
-/renderer/hub/authoringSelect.js
-/renderer/hub/authoringPanes.js
-/renderer/hub/authoringProps.js
-
-# datasets.ts split by job (.claude/rules/file-size.md) — emitted siblings.
-/renderer/hub/dsImport.js
-/renderer/hub/dsList.js
-/renderer/hub/dsExplorer.js
-/renderer/hub/dsGrid.js
-# Data-quality rules (dsRuleEditor + dsRules) — emitted siblings.
-/renderer/hub/dsRuleEditor.js
-/renderer/hub/dsRules.js
-
-# visuals.ts split by job (.claude/rules/file-size.md) — emitted siblings.
-/renderer/hub/vizGallery.js
-/renderer/hub/vizNew.js
-/renderer/hub/vizBuilder.js
-# vizThumbs.ts is NEW (gallery thumbnails), not part of that split — same emit rule.
-# mapThumb.ts is its map arm (static canvas mini-map, no MapLibre).
-/renderer/hub/vizThumbs.js
-/renderer/hub/mapThumb.js
-
-# analyses.ts split by job (.claude/rules/file-size.md) — emitted siblings.
-/renderer/hub/anList.js
-/renderer/hub/anNew.js
-/renderer/hub/anNewTemplates.js
-/renderer/hub/anDraft.js
-
-# chartRender.ts split by job (.claude/rules/file-size.md) — emitted siblings.
-/renderer/hub/chartTypeSpec.js
-/renderer/hub/chartValueLabels.js
-/renderer/hub/chartDatasets.js
-/renderer/hub/chartScales.js
-/scripts/test-chartSpec.js
-
-# connections.ts split by job (.claude/rules/file-size.md) — emitted siblings.
-/renderer/hub/connNew.js
-/renderer/hub/connRun.js
-/renderer/hub/connWorkbench.js
-/renderer/hub/connDetails.js
-/renderer/hub/connEditor.js
-
 # SQL over the project's own datasets (Data → Query) — emitted siblings.
-/renderer/hub/queryEditor.js
-/renderer/hub/queryParams.js
-/renderer/hub/queryTab.js
-/renderer/hub/dsLineage.js
 /src/engine/sqlLex.js
 /src/engine/sqlNames.js
 /src/engine/sqlGate.js
@@ -351,7 +166,6 @@ scripts/**/*.js
 # The connection workbench's main-process side — emitted siblings.
 /src/connectors/duckdbDirs.js
 /scripts/test-connOrigin.js
-/scripts/smoke-connections.js
 
 # formula.ts split into tokenizer / evaluator / parser — emitted siblings.
 
@@ -360,60 +174,23 @@ scripts/**/*.js
 
 # Composer engine + IPC, and the two modules split out under the 800-line cap.
 /src/ipc/datasetCompose.js
-/renderer/hub/composer.js
-/scripts/smoke-composer.js
 
 # Scheduled refresh + anomaly watch — emitted siblings.
 /scripts/test-refreshScheduler.js
 /scripts/test-anomalyWatch.js
 /src/ipc/search.js
 
-# Home surface — greeting + ask bar (homeAsk) and the "Your data" + saved-visuals
-# column (homeData), split from homePage.ts to the mockup. Emitted siblings.
-/renderer/hub/homeAsk.js
-/renderer/hub/homeData.js
-
-# Shared AI transcript/streaming primitives (askCore). Emitted sibling.
-/renderer/hub/askCore.js
-
-# The AI dock. Emitted sibling.
-/renderer/hub/dock.js
-
 # Dock proposals (Task 3) — split out of dock.ts, see file-size.md. Emitted
 # siblings.
-/renderer/hub/dockPropose.js
-/renderer/hub/dockHero.js
 /scripts/test-dockReversibility.js
-
-# Ask activity chips (feat/ask-activity). Emitted sibling.
-/renderer/hub/askActivity.js
-
-# Dock smoke (Task 4). Emitted sibling.
-/scripts/smoke-dock.js
-/scripts/smoke-dockHero.js
-/scripts/smoke-topbar.js
-/scripts/smoke-assistant.js
-
-# Ask actions smoke (feat/ask-actions). Emitted sibling.
-/scripts/smoke-ask-actions.js
-
-# Connect-shortcut smoke. Emitted sibling.
-/scripts/smoke-connect.js
 
 # Assistant builds dashboards from a conversation — emitted siblings.
 /src/ai/suggestedAction.js
 /scripts/test-suggestedAction.js
-/scripts/smoke-dashboard-proposal.js
-/scripts/smoke-dashboards.js
-/scripts/smoke-dashboard-styles.js
 
 # Assistant EDITS an existing dashboard — the delta validator. Emitted siblings.
 /src/analysis/dashboardDelta.js
 /scripts/test-dashboardDelta.js
-
-# Conversational editing of an open dashboard — emitted siblings.
-/renderer/hub/dockEdit.js
-/scripts/smoke-dashboard-edit.js
 
 # Prompts without a parser of their own, split out of analyze.ts. Emitted siblings.
 /src/ai/prompts.js
@@ -426,45 +203,19 @@ scripts/**/*.js
 /src/analysis/insights.js
 /src/analysis/insightsAgg.js
 /src/ipc/insights.js
-/renderer/hub/insights.js
 /scripts/test-insights.js
-/scripts/smoke-insights.js
-
-# Design foundations — the icon sprite and its gate. Emitted siblings.
-/renderer/hub/icons.js
-/scripts/test-noGlyphIcons.js
-
-# Design screenshot harness — emitted sibling.
-/scripts/shoot-design.js
-
-# Tooltip behaviour behind the `.tip` class — emitted sibling.
-/renderer/hub/tooltip.js
-
-# Design motion + states — the shared empty state and loading skeletons.
-# Emitted siblings.
-/renderer/hub/emptyState.js
-/renderer/hub/skeleton.js
 
 # Reports (the Report record, the builder, the three writers) — emitted siblings.
 /src/ipc/reports.js
 /scripts/test-captions.js
 /scripts/test-reportSpec.js
-/scripts/smoke-reports.js
 
 # Workflow depth — answer cards, Explain, follow-up chips. Emitted siblings.
 /src/ai/answerSpec.js
 /src/ai/answerFacts.js
 /src/ipc/answers.js
-/renderer/hub/answerCard.js
 /scripts/test-answerSpec.js
 /scripts/test-answerFacts.js
-/renderer/hub/storyText.js
-/renderer/hub/storyList.js
-/renderer/hub/storyPage.js
-/renderer/hub/storyBlocks.js
-/renderer/hub/storyPickers.js
-/renderer/hub/storyPresent.js
-/renderer/hub/storyPropose.js
 /src/analysis/storyModel.js
 /src/analysis/stories.js
 /src/ipc/stories.js
@@ -474,44 +225,15 @@ scripts/**/*.js
 /src/app/catalog.js
 /src/app/catalogIndex.js
 /src/ipc/catalog.js
-/renderer/hub/catalogUi.js
-/renderer/hub/catalogDetails.js
-/renderer/hub/catalogPage.js
 /scripts/test-catalog.js
-/scripts/wfCatalog.js
 # Waterfall / bullet / calendar / radar / Pareto — emitted siblings.
-/renderer/hub/chartShapes.js
-/renderer/hub/chartFamiliesExtra.js
-/renderer/hub/chartFamiliesPlugins.js
 /src/analysis/chartFigures.js
-/scripts/test-chartShapes.js
-/scripts/wfCharts.js
-# Tabs and windows — the tab set, its kinds, the strip, split view, the window
-# registry and "Open in new window". Emitted siblings.
-/renderer/hub/tabModel.js
-/renderer/hub/tabKinds.js
-/renderer/hub/tabNav.js
-/renderer/hub/tabSplit.js
-/renderer/hub/tabStrip.js
-/src/windows/hubRegistry.js
-/src/ipc/windows.js
-/scripts/test-tabModel.js
-/scripts/test-hubRegistry.js
-/scripts/wfTabs.js
-# Workflow depth — the one end-to-end smoke and its sections. Emitted siblings.
-/scripts/smoke-workflow.js
-/scripts/wfStub.js
-/scripts/wfAnswers.js
-/scripts/wfStories.js
 # Date intelligence (relative periods, KPI compare, period overlay) — emitted siblings.
 /src/analysis/dateIntel.js
 /src/analysis/periodScope.js
 /src/engine/periodSql.js
 /src/ipc/periods.js
 /src/ipc/visualsOverlay.js
-/src/app/refreshWiring.js
-/renderer/hub/periodPicker.js
-/renderer/hub/kpiCompare.js
 /scripts/test-dateIntel.js
 /scripts/test-periodResident.js
 /scripts/test-periodLabels.js
@@ -519,8 +241,6 @@ scripts/**/*.js
 # Dashboard parameters — emitted siblings.
 /src/analysis/params.js
 /src/data/paramReplay.js
-/renderer/hub/dashParams.js
-/renderer/hub/paramDialog.js
 /scripts/test-params.js
 /scripts/test-paramsParity.js
 # Workspace maturity — version history (emitted siblings; also covered above).
@@ -528,57 +248,39 @@ scripts/**/*.js
 /src/app/versions.js
 /src/analysis/recordDiff.js
 /src/ipc/versions.js
-/renderer/hub/sidePanel.js
-/renderer/hub/versionsPanel.js
 /scripts/test-recordDiff.js
 /scripts/test-versionHistory.js
-/scripts/smoke-workspace.js
 # Workspace maturity — Trash (emitted siblings).
 /src/app/trashStore.js
 /src/app/trash.js
 /src/ipc/trash.js
-/renderer/hub/trashPage.js
 /scripts/test-trash.js
 # Workspace maturity — Lineage (emitted siblings).
 /src/analysis/lineage.js
 /src/ipc/lineage.js
-/renderer/hub/lineagePanel.js
 /scripts/test-lineage.js
 # Workspace maturity — Projects and bundles (emitted siblings).
 /src/app/bundle.js
-/renderer/hub/projectSwitcher.js
 /scripts/test-bundle.js
 # Workspace maturity — first-run guidance (emitted siblings).
 /src/app/onboarding.js
 /src/ipc/onboarding.js
-/renderer/hub/getStarted.js
-/renderer/hub/coachMarks.js
 /scripts/test-onboarding.js
 
 # Platform depth — jobs and the answer cache (emitted siblings).
 /src/app/jobs.js
 /src/ipc/jobs.js
-/src/ipc/platform.js
 /src/engine/queryCache.js
-/preload/hubPlatformPreload.js
-/renderer/hub/jobsPanel.js
 /src/engine/computeWorker.js
 /src/engine/computePool.js
 /src/data/answerKey.js
 /src/data/importStage.js
 /src/data/refreshJob.js
 /src/ipc/datasetImport.js
-/renderer/hub/dsVirtual.js
 /src/analysis/sampling.js
 /src/engine/sampleResident.js
 /src/ipc/vizSample.js
 /src/ipc/vizSampleData.js
-
-# Platform depth — publish to folder (emitted siblings).
-/src/publish/*.js
-/renderer/hub/publishDialog.js
-/renderer/publish/*.js
-/src/ipc/publish.js
 
 # Platform depth — privacy and sensitivity (emitted siblings).
 /src/data/sensitivity.js
@@ -587,45 +289,20 @@ scripts/**/*.js
 /src/app/sharePolicy.js
 /src/ai/datasetPrompt.js
 /src/ipc/privacy.js
-/preload/hubPrivacyPreload.js
-/renderer/hub/privacyShare.js
-/renderer/hub/privacyReview.js
-/renderer/hub/prepareMask.js
-/renderer/hub/privacySettings.js
-
-# Platform depth — automation: CLI and MCP (emitted siblings).
-/src/automation/*.js
-/src/ipc/automation.js
-/preload/hubAutomationPreload.js
-/renderer/hub/settingsAutomation.js
-/renderer/hub/automationReport.js
 
 # Platform depth — backups and sync (emitted siblings).
 /src/app/backupSettings.js
 /src/app/backups.js
-/src/app/syncFolder.js
-/src/app/syncLock.js
 /src/ipc/backups.js
-/src/ipc/syncFolder.js
-/preload/hubBackupPreload.js
-/renderer/hub/settingsBackups.js
-/renderer/hub/projectSync.js
 # Analysis power — the Analytics pane (emitted siblings).
 /src/analysis/analytics.js
 /src/analysis/forecast.js
 /src/ipc/visualsAnalytics.js
-/renderer/hub/chartAnnotations.js
-/renderer/hub/analyticsPane.js
-/renderer/hub/analyticsEditors.js
 /scripts/test-analytics.js
 # Table calculations — emitted siblings.
 /src/analysis/tableCalc.js
 /src/analysis/pivotCalc.js
-/src/ipc/tableCalcKpi.js
-/preload/hubPowerPreload.js
-/renderer/hub/calcMenu.js
 /scripts/test-tableCalc.js
-/scripts/pwTableCalc.js
 # Prepare power steps (emitted siblings; also covered by the globs above).
 /src/data/stepTypes.js
 /src/data/regexSubset.js
@@ -642,86 +319,46 @@ scripts/**/*.js
 /src/engine/sqlGenCombine.js
 /src/engine/pipelinePower.js
 /src/ipc/preparePower.js
-/renderer/hub/prepareForms.js
-/renderer/hub/prepareReshape.js
-/renderer/hub/prepareClean.js
-/renderer/hub/prepareCombine.js
 /scripts/test-powerSteps.js
 /scripts/test-powerStepsDuck.js
-/scripts/pwPrepare.js
 # Comments and annotations (and the sync folder they travel through) — emitted siblings.
 /src/app/commentModel.js
 /src/app/comments.js
-/src/app/syncFolder.js
 /src/ipc/comments.js
-/renderer/hub/commentStore.js
-/renderer/hub/commentPanel.js
-/renderer/hub/commentDoors.js
-/renderer/hub/reportDiscussion.js
-/renderer/hub/settingsCollab.js
 /scripts/test-comments.js
-/scripts/pwComments.js
 # Analysis power — Scorecards (emitted siblings).
 /src/analysis/scorecardModel.js
 /src/analysis/scorecards.js
 /src/ipc/scorecards.js
 /src/ai/scorecardFacts.js
-/renderer/hub/scorecardList.js
-/renderer/hub/scorecardPage.js
-/renderer/hub/scorecardDetail.js
-/renderer/hub/scorecardEditor.js
-/renderer/hub/reportScorecard.js
 /scripts/test-scorecards.js
 
-# Build depth (emitted siblings), one block per feature.
-/src/ipc/build.js
-/scripts/smoke-build.js
 # build:plan
 /src/ai/planSteps.js
 /src/ai/planCheck.js
 /src/ai/planRun.js
 /src/ai/planExec.js
 /src/ipc/plan.js
-/preload/hubPlanPreload.js
-/renderer/hub/planCard.js
-/renderer/hub/planEdit.js
 /scripts/test-planCheck.js
 /scripts/test-planRun.js
-/scripts/bdPlan.js
 
 # build:format
 /src/analysis/colorMap.js
 /src/analysis/chartFormat.js
 /src/ipc/format.js
-/preload/hubFormatPreload.js
-/renderer/hub/fmtColors.js
-/renderer/hub/fmtApply.js
-/renderer/hub/formatPanel.js
-/renderer/hub/fmtSort.js
-/renderer/hub/fmtColorsUi.js
-/renderer/hub/fmtProfile.js
 /scripts/test-colorMap.js
 /scripts/test-chartFormat.js
-/scripts/bdFormat.js
 
 # build:theme
-/renderer/hub/themeApply.js
-/renderer/hub/themeSettings.js
-/renderer/hub/themeEditor.js
 /src/analysis/themeTokens.js
 /src/app/themeStore.js
 /src/ipc/themes.js
-/preload/hubThemesPreload.js
 
 # build:saas
 /src/connectors/saas.js
 /src/connectors/saasApis.js
 /src/connectors/saasHttp.js
 /src/connectors/saasMap.js
-/src/connectors/folderWatch.js
-/src/ipc/saas.js
-/preload/hubSaasPreload.js
-/renderer/hub/saas.js
 
 # build:snapshots
 /src/data/snapshotNames.js
@@ -731,10 +368,6 @@ scripts/**/*.js
 /src/data/asOf.js
 /src/engine/snapshotDiff.js
 /src/ipc/snapshots.js
-/preload/hubSnapshotsPreload.js
-/renderer/hub/snapshots.js
-/renderer/hub/snapshotDiffView.js
-/renderer/hub/snapshotAsOf.js
 
 # Analysis engines — Key drivers (emitted siblings).
 /src/analysis/driverShape.js
@@ -744,12 +377,8 @@ scripts/**/*.js
 /src/engine/driversResident.js
 /src/ipc/drivers.js
 /src/ai/driversFacts.js
-/preload/hubDriversPreload.js
-/renderer/hub/driversPanel.js
-/renderer/hub/driversEntry.js
 /scripts/test-drivers.js
 /scripts/test-driversResident.js
-/scripts/aeDrivers.js
 /src/engine/distinctAll.js
 
 # Analysis engines — Scenarios (emitted siblings).
@@ -760,14 +389,7 @@ scripts/**/*.js
 /src/engine/scenarioResident.js
 /src/ipc/scenarios.js
 /src/ai/scenarioFacts.js
-/preload/hubScenariosPreload.js
-/renderer/hub/scenarioList.js
-/renderer/hub/scenarioPage.js
-/renderer/hub/scenarioDrivers.js
-/renderer/hub/scenarioCompare.js
-/renderer/hub/scenarioCard.js
 /scripts/test-scenarios.js
-/scripts/aeScenarios.js
 
 # Analysis engines — Segmentation (emitted siblings).
 /src/analysis/segmentMath.js
@@ -777,14 +399,9 @@ scripts/**/*.js
 /src/engine/sqlGenSegment.js
 /src/engine/segmentResident.js
 /src/ipc/segments.js
-/preload/hubSegmentsPreload.js
-/renderer/hub/segments.js
-/renderer/hub/segmentsView.js
-/renderer/hub/segmentsRfm.js
 /scripts/test-segments.js
 /scripts/test-segmentsDuck.js
 /scripts/test-rfm.js
-/scripts/aeSegments.js
 
 # Analysis engines — Cohort and funnel (emitted siblings).
 /src/analysis/cohortData.js
@@ -793,92 +410,41 @@ scripts/**/*.js
 /src/engine/cohortResident.js
 /src/engine/funnelResident.js
 /src/ipc/visualsEngines.js
-/renderer/hub/cohortRender.js
-/renderer/hub/cohortBuilder.js
 /scripts/test-cohort.js
 /scripts/test-funnelEvents.js
 /scripts/test-engineIpc.js
-/scripts/aeCohorts.js
 
 # Analysis engines — Typed filters (emitted siblings).
 /src/analysis/filterParse.js
 /src/analysis/filterDates.js
 /src/analysis/filterCatalog.js
 /src/ipc/filterParse.js
-/preload/hubFiltersPreload.js
-/renderer/hub/filterType.js
-/renderer/hub/filterTypeApply.js
 /scripts/test-filterParse.js
-/scripts/aeFilters.js
-/scripts/smoke-engines.js
-
-# r6 (depth round 6)
-/src/ipc/round6.js
-
-# r6:layouts
-/renderer/hub/layoutSizes.js
-/renderer/hub/layoutEdit.js
-/renderer/hub/layoutFilters.js
 
 # r6:stats
-/src/analysis/stats/*.js
 /src/engine/statsVectors.js
 /src/engine/statsJob.js
 /src/ipc/stats.js
 /src/ai/statsFacts.js
-/preload/hubStatsPreload.js
-/renderer/hub/statsPanel.js
-/renderer/hub/statsControls.js
-/renderer/hub/statsCharts.js
-/renderer/hub/statsViews.js
-/renderer/hub/statsViewsGroups.js
-/renderer/hub/statsTile.js
 
 # r6:text
-/src/analysis/text/*.js
 /src/data/textStepTypes.js
 /src/data/stepsText.js
 /src/engine/textSampleResident.js
 /src/ipc/text.js
-/preload/hubTextPreload.js
-/renderer/hub/wordCloudLayout.js
-/renderer/hub/wordCloudRender.js
-/renderer/hub/textSteps.js
-/renderer/hub/textPreviews.js
-/renderer/hub/textProfile.js
 
 # r6:geo
-/src/analysis/geo/*.js
 /src/engine/geoSql.js
 /src/engine/geoResident.js
 /src/data/spatialRefs.js
 /src/ipc/geoViz.js
 /src/ipc/geoAnalysis.js
-/preload/hubGeoPreload.js
-/renderer/hub/mapKinds.js
-/renderer/hub/mapHexbin.js
-/renderer/hub/mapFlow.js
-/renderer/hub/mapGeoThumb.js
-/renderer/hub/geoRadius.js
-/renderer/hub/prepareGeo.js
 
 # r6:input
-/src/data/inputTable/*.js
 /src/engine/lookupResident.js
 /src/ipc/input.js
-/preload/hubInputPreload.js
-/renderer/hub/inputBind.js
-/renderer/hub/inputGrid.js
-/renderer/hub/inputKeys.js
-/renderer/hub/inputPage.js
-/renderer/hub/inputColumns.js
-
-# r8 (round 8)
-/src/ipc/round8.js
 
 # r8:facets
-/renderer/hub/facetGrid.js
-/renderer/hub/facetShelf.js
 /src/analysis/facets.js
 /src/analysis/facetCaption.js
 /src/engine/facetResident.js
@@ -891,96 +457,51 @@ scripts/**/*.js
 /src/app/pipelineView.js
 /src/app/pipelineRunner.js
 /src/ipc/pipelines.js
-/preload/hubPipelinesPreload.js
-/renderer/hub/pipelinesPage.js
-/renderer/hub/pipelinesGraph.js
-/renderer/hub/pipelinesDetail.js
 
 # r8:events
-/renderer/hub/chartEvents.js
-/renderer/hub/eventsPage.js
-/renderer/hub/eventsEditor.js
-/preload/hubEventsPreload.js
 /src/analysis/events.js
 /src/analysis/eventStore.js
 /src/analysis/holidays.js
 /src/ipc/events.js
-/scripts/r8Events.js
 /scripts/test-events.js
 /scripts/test-eventsHolidays.js
 
 # r8:summary
 /src/analysis/summaryCard.js
 /src/ipc/summary.js
-/preload/hubSummaryPreload.js
-/renderer/hub/summaryCard.js
 
 # r8:search
 /src/data/dataSearch.js
 /src/data/dataSearchRun.js
 /src/engine/dataSearchResident.js
 /src/ipc/dataSearch.js
-/preload/hubSearchPreload.js
-/renderer/hub/dataSearch.js
 /scripts/test-dataSearch.js
 /scripts/test-dataSearchResident.js
 /scripts/bench-dataSearch.js
-/scripts/r8Search.js
 
 # r10:views
 /src/analysis/savedViews.js
-/src/app/deepLink.js
-/src/ipc/views.js
-/preload/hubViewsPreload.js
-/renderer/hub/savedViews.js
 /scripts/test-savedViews.js
-/scripts/r10Views.js
 # Retail and fiscal calendars (round 10) — emitted siblings.
 /src/analysis/civilDays.js
 /src/analysis/retailCalendar.js
 /src/engine/weekCalSql.js
-/renderer/hub/settingsCalendar.js
 /scripts/test-retailCalendar.js
-/scripts/r10Calendars.js
 
 # r10:incremental
 /src/data/incremental.js
 /src/data/incrementalRefresh.js
 /src/engine/incrementalDuck.js
 /src/connectors/incrementalSql.js
-/src/ipc/incremental.js
-/preload/hubIncrementalPreload.js
-/renderer/hub/incremental.js
 /scripts/test-incrementalMerge.js
 /scripts/test-incrementalRefresh.js
-/scripts/r10Incremental.js
 
 # r10:dragdrop
 /src/data/sniff.js
-/src/app/dropImport.js
-/src/app/dragOut.js
-/src/ipc/dragDrop.js
-/preload/hubDropPreload.js
-/renderer/hub/dndIn.js
-/renderer/hub/dndOut.js
-/scripts/r10DragDrop.js
 /scripts/test-sniff.js
-/scripts/test-dragOut.js
-# Quit cleanup + smoke runner hardening. Emitted siblings.
+# Quit cleanup. Emitted siblings.
 /src/app/quitCleanup.js
 /scripts/test-quitCleanup.js
-# r7:notebooks
-/src/analysis/notebook/*.js
-/src/ipc/notebooks.js
-/src/ipc/round7.js
-/preload/hubNotebooksPreload.js
-/renderer/hub/nbList.js
-/renderer/hub/nbPage.js
-/renderer/hub/nbColumn.js
-/renderer/hub/nbEditor.js
-/renderer/hub/nbCells.js
-/renderer/hub/nbRun.js
-/renderer/hub/nbActions.js
 
 # r7:lod
 /src/formula/lod.js
@@ -988,32 +509,17 @@ scripts/**/*.js
 /src/analysis/lodQuery.js
 /src/engine/lodResident.js
 /src/ipc/lodData.js
-/renderer/hub/lodUi.js
 
 # r7:templates
-/src/ipc/userTemplates.js
 /src/analysis/userTemplate.js
 /src/analysis/userTemplateRefs.js
 /src/analysis/userTemplateApply.js
 /src/analysis/userTemplateFile.js
 /src/app/userTemplateStore.js
-/preload/hubTemplatesPreload.js
-/renderer/hub/userTemplateSave.js
-/renderer/hub/userTemplateGallery.js
-
-# r7:motion
-/renderer/hub/motionPlan.js
-/renderer/hub/motion.js
-/renderer/hub/kpiTicker.js
-/renderer/hub/linkedHover.js
 
 # r7:i18n
 /src/app/i18nCore.js
 /src/app/i18n.js
-/src/ipc/i18n.js
-/preload/hubLanguagePreload.js
-/renderer/hub/i18n.js
-/renderer/hub/settingsLanguage.js
 /scripts/i18nLex.js
 /scripts/i18nDetect.js
 /scripts/i18n-extract.js
@@ -1069,13 +575,11 @@ scripts/**/*.js
 /web/e2e/__screens__/
 
 # web/t3.2-auth
-/src/server/auth/*.js
 /scripts/mockOidc.js
 /scripts/test-auth.js
 /scripts/test-auth-db.js
 
 # web/t3.3-authz
-/src/server/authz/*.js
 /scripts/check-contracts.js
 /scripts/test-authz.js
 /scripts/test-authz-db.js
@@ -1143,7 +647,6 @@ scripts/**/*.js
 /src/data/regexOffThread.js
 /src/server/mode.js
 /scripts/test-regexDeadline.js
-/src/publish/site/*.js
 /scripts/test-serverDocs.js
 
 # web/t8.1-cutover: modules moved out of the desktop tree — emitted siblings

@@ -1,4 +1,4 @@
-// Alert RULES and EVENTS — MAIN PROCESS, PURE logic. No Electron, no fs, no DOM,
+// Alert RULES and EVENTS — MAIN PROCESS, PURE logic. No fs, no DOM,
 // so scripts/test-alerts.ts can drive every decision here under bare `node`.
 //
 // WHAT THIS MODULE IS FOR. Three pieces already existed and never met: a dataset

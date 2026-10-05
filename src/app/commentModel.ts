@@ -1,6 +1,6 @@
 // Comments and annotations — the PURE half: the shape, its sanitizer, the
 // state transitions and the two-machine merge. MAIN PROCESS, and bare `node`
-// for scripts/test-comments.ts: nothing here touches disk, a clock or Electron.
+// for scripts/test-comments.ts: nothing here touches disk or a clock.
 // ./comments.ts is the half that does (the alerts.ts / alertStore.ts split).
 //
 // THE RECORD. A comment is a thread on ONE target — an analysis (dashboard), a

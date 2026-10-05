@@ -4,9 +4,8 @@
 //
 // The chosen language is `language` in config.json. Main uses it for the text
 // IT writes — captions, insight and alert sentences, report text — and for one
-// line in the Assistant's system prompt. The renderer gets the whole catalog at
-// boot, synchronously (src/ipc/i18n.ts → preload/hubLanguagePreload.ts), because
-// renderer scripts build labels at load time.
+// line in the Assistant's system prompt. The desktop's renderer got the whole
+// catalog at boot; it went at the T8.1 cutover.
 //
 // Figures never pass through a translation: callers format numbers with
 // format.ts first and hand t() the finished string.
