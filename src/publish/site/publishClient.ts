@@ -9,7 +9,7 @@
 // external URL anywhere in the page.
 
 declare const Chart: any; // the app's own Chart.js UMD, inlined before this script
-declare function matchGeoItem(items: any[], props: any): any; // renderer/hub/geoMatch.js, inlined
+declare function matchGeoItem(items: any[], props: any): any; // src/analysis/geoMatch.js, inlined
 
 const pcCharts: any[] = [];
 

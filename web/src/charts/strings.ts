@@ -1,5 +1,5 @@
 // The words the chart engine prints, in English, under the desktop catalog's
-// own keys (renderer/i18n/en.json) and through its own ICU formatter
+// own keys (src/i18n/en.json) and through its own ICU formatter
 // (src/app/i18nCore.ts, no runtime imports) — so a plural or a select renders
 // exactly as on the desktop. strings.test.ts pins every message to en.json.
 // ponytail: English only until the web app gets its catalog; then `t` here

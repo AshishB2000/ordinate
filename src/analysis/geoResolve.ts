@@ -7,8 +7,8 @@
 // holding full state names is — so it is made from the VALUES, against the same
 // boundary assets and the same name matcher `map_choropleth` renders with.
 //
-// REUSE, not a second matcher: `normalizeName` comes from renderer/hub/geoMatch,
-// the pure join layer mapRender.ts uses, and the feature names come from the
+// REUSE, not a second matcher: `normalizeName` comes from src/analysis/geoMatch,
+// the pure join layer published maps use, and the feature names come from the
 // SHIPPED assets/geo files rather than a hand-copied list. If a boundary set
 // changes, this changes with it. (scripts/test-geoLevels.ts loads the same two
 // assets the same way, for the same reason.)
@@ -20,10 +20,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vm from 'vm';
 
-// geoMatch.js is a renderer global-script, not a TS module: it detects
+// geoMatch.js is a UMD script, not a TS module: it detects
 // module.exports and exports there for exactly this kind of caller (and for
 // scripts/test-geoLevels.ts, which has required it since Phase 0). Loose types.
-const { normalizeName } = require('../../renderer/hub/geoMatch') as {
+const { normalizeName } = require('./geoMatch') as {
   normalizeName: (n: string | null | undefined) => string;
 };
 

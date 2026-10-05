@@ -7,10 +7,10 @@ import { describe, expect, it } from 'vitest';
 import { CHART_STRINGS, t } from './strings';
 
 // Vitest runs from web/; the catalog is the desktop's.
-const EN = JSON.parse(readFileSync(path.resolve(process.cwd(), '..', 'renderer', 'i18n', 'en.json'), 'utf8')) as Record<string, string>;
+const EN = JSON.parse(readFileSync(path.resolve(process.cwd(), '..', 'src', 'i18n', 'en.json'), 'utf8')) as Record<string, string>;
 
 describe('chart strings', () => {
-  it('match renderer/i18n/en.json', () => {
+  it('match src/i18n/en.json', () => {
     for (const [key, msg] of Object.entries(CHART_STRINGS)) expect(msg, key).toBe(EN[key]);
   });
 

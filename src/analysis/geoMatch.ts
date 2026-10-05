@@ -1,7 +1,7 @@
-// Pure geo name-matching helpers, shared by the renderer (loaded as a <script>
-// that attaches to window) and the Node self-check (scripts/test-geo-match.js,
-// which require()s this file). No DOM and no map-library dependencies — keep it
-// pure. That is what let the Leaflet → MapLibre port (Phase 4) leave it untouched.
+// Pure geo name-matching helpers, shared by the published site (inlined as a
+// classic <script> that attaches to the page's globals, src/publish/publish.ts
+// readAssets) and Node (src/analysis/geoResolve.ts and the self-checks
+// require() this file). No DOM and no map-library dependencies — keep it pure.
 (function (global: any) {
 
   // Normalize a place name for matching: lowercase, drop parentheticals and admin
@@ -42,8 +42,8 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;            // Node (self-check)
   } else {
-    global.normalizeName = normalizeName;  // Browser (hub.js uses these globals)
+    global.normalizeName = normalizeName;  // Browser (the published site uses these globals)
     global.matchGeoItem = matchGeoItem;
   }
 
-})(typeof window !== 'undefined' ? window : globalThis);
+})(globalThis);

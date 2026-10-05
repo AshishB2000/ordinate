@@ -1,6 +1,6 @@
 // T2.9's pure pieces, DIFFERENTIAL where the desktop has the original:
 //   the Markdown subset   mdParse / mdTokens / safeHref == renderer/hub/markdown.js
-//   tile actions          carrySteps / actionUrl == renderer/hub/cardModel.js
+//   tile actions          carrySteps / actionUrl == src/analysis/cardModel.js
 //   pivot copy / CSV      the legacy pivotToRows shape over a server-shaped grid
 //   Present               the fitted row height and its 28 px floor
 // plus the rendered Markdown: never HTML, unsafe links dropped, tokens filled.
@@ -24,7 +24,7 @@ const ROOT = path.resolve(process.cwd(), '..');
 const require = createRequire(path.join(ROOT, 'package.json'));
 // any: the desktop's classic scripts, loaded through their CommonJS branch
 const legacyMd: any = require(path.join(ROOT, 'renderer', 'hub', 'markdown.js'));
-const legacyCard: any = require(path.join(ROOT, 'renderer', 'hub', 'cardModel.js'));
+const legacyCard: any = require(path.join(ROOT, 'src', 'analysis', 'cardModel.js'));
 
 /** A script URL, spelled so the lint's no-script-url rule sees a test input, not a link. */
 const JS = ['java', 'script:'].join('');

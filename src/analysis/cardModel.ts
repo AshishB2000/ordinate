@@ -1,11 +1,11 @@
 // The dashboard CARD MODEL beyond the four original kinds — tile actions and
 // the Navigation card. PURE: no DOM, no IPC.
 //
-// Shared the geoMatch way: main requires it (src/analysis/dashboards.ts runs
-// `sanitizeExtras` inside `sanitizeCard`, so what the renderer may store is
-// decided in main), the renderer loads it as a <script> that attaches
-// `cardModel` to window, and scripts/test-tileActions.js requires it too. One
-// implementation of carry, URL building and validation, not three.
+// The server requires it (src/analysis/dashboards.ts runs `sanitizeExtras`
+// inside `sanitizeCard`, so what a client may store is decided here), the web
+// editor's port is differential-tested against it, and
+// scripts/test-tileActions.js requires it too. One implementation of carry, URL
+// building and validation.
 (function (global: any) {
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const isId = (x: unknown): x is string => typeof x === 'string' && UUID_RE.test(x);
@@ -486,4 +486,4 @@
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else global.cardModel = api;
-})(typeof window !== 'undefined' ? window : globalThis);
+})(globalThis);

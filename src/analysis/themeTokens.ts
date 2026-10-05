@@ -1,7 +1,7 @@
 // Main's TYPED handle on the workspace theme model.
 //
-// The implementation is renderer/hub/themeModel.ts — a pure UMD module the hub
-// loads as a <script> and main requires, the cardModel/geoMatch arrangement —
+// The implementation is src/analysis/themeModel.ts — a pure UMD module (the
+// cardModel/geoMatch arrangement) that the web Settings port is tested against —
 // so the token list, the validator and the contrast rule the editor shows are
 // the very ones that clamp what reaches disk and an exported file. This module
 // only gives main the types; it adds no logic of its own.
@@ -43,4 +43,4 @@ interface ThemeModel {
   isId(x: unknown): x is string;
 }
 
-export const themeModel = require('../../renderer/hub/themeModel') as ThemeModel;
+export const themeModel = require('./themeModel') as ThemeModel;

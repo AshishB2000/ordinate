@@ -1,7 +1,6 @@
 // POINT MAPS, the pure half: which columns are latitude and longitude, and the
-// app's own grid clustering. Shared the geoMatch way — main detects columns
-// with it (src/analysis/mapData.ts), the renderer clusters with it on every
-// zoom (mapPoints.ts), and scripts/test-mapPoints.js requires it.
+// app's own grid clustering. The server detects columns with it
+// (src/analysis/mapData.ts), and scripts/test-mapPoints.js requires it.
 (function (global: any) {
   /** Clustering starts above this many points; at or below it every point draws. */
   const CLUSTER_MIN = 2000;
@@ -105,4 +104,4 @@
   const api = { CLUSTER_MIN, axisOf, detectLatLon, gridCluster };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else global.geoCluster = api;
-})(typeof window !== 'undefined' ? window : globalThis);
+})(globalThis);

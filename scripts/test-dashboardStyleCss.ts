@@ -274,11 +274,11 @@ if (grid) {
 
 // A workspace theme (Settings → Appearance → Themes) may override exactly the
 // tokens the preset blocks declare, validated against ONE list exported from
-// renderer/hub/themeModel.ts. Set equality in both directions: a token added
+// src/analysis/themeModel.ts. Set equality in both directions: a token added
 // to a preset block and not to the list is a colour no theme can set; one in
 // the list and in no block is a name a theme sets and nothing reads.
 {
-  const themeModel = require('../renderer/hub/themeModel') as { AXIS_TOKENS: string[] };
+  const themeModel = require('../src/analysis/themeModel') as { AXIS_TOKENS: string[] };
   const declared = new Set<string>(themeUnion);
   for (const name of DENSITIES) (propsOf(section, '.dash-density--' + name) ?? new Set<string>()).forEach((n) => declared.add(n));
   const list = new Set(themeModel.AXIS_TOKENS);

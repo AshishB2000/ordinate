@@ -1,6 +1,6 @@
 // Sheet geometry, PURE: placing, snapping, aligning and grouping cards on the
-// fixed 12-column grid (legacy renderer/hub/cardModel.ts geometry + dashGrid
-// `dashFindSlot`), and the layouts for every size (renderer/hub/sizeLayout.ts:
+// fixed 12-column grid (legacy src/analysis/cardModel.ts geometry + dashGrid
+// `dashFindSlot`), and the layouts for every size (src/analysis/sizeLayout.ts:
 // tablet and phone derived from desktop until edited). The legacy modules are
 // still what the SERVER sanitizes with (src/analysis/dashboards.ts requires
 // them); geometry.test.ts runs both on the same inputs and compares with

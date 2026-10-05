@@ -15,8 +15,8 @@ import type { VizEncoding } from './visuals';
 import { matchPlaces } from './places';
 import type { PlaceLevel } from './places';
 
-// ponytail: geoCluster.js is a renderer UMD script shared with main (the geoMatch pattern)
-const geoCluster = require('../../renderer/hub/geoCluster') as {
+// ponytail: geoCluster.js is a UMD script (the geoMatch pattern)
+const geoCluster = require('./geoCluster') as {
   detectLatLon: (cols: { name: string; type: string }[], sample?: (name: string) => unknown[]) => { lat: string; lon: string } | null;
 };
 

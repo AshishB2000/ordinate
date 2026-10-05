@@ -77,7 +77,7 @@ ok('generated app PNG is 1024×1024',
   JSON.stringify(pngSize(path.join(iconDir, 'icon.png'))) ===
     JSON.stringify({ width: 1024, height: 1024 }));
 ok('Screenchart source PNG is bundled at 1024×1024',
-  JSON.stringify(pngSize(path.join(ROOT, 'renderer', 'hub', 'assets', 'connectors', 'screenchart.png'))) ===
+  JSON.stringify(pngSize(path.join(ROOT, 'assets', 'connectors', 'screenchart.png'))) ===
     JSON.stringify({ width: 1024, height: 1024 }));
 ok('Home Screenshot uses the bundled Screenchart image',
   /'home-capture':\s*\{\s*src:\s*'assets\/connectors\/screenchart\.png'/.test(connectionsSource));

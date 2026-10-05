@@ -1,5 +1,5 @@
 // The words the grids print, under the desktop catalog's own keys
-// (renderer/i18n/en.json) and through its ICU formatter — the arrangement of
+// (src/i18n/en.json) and through its ICU formatter — the arrangement of
 // ../strings.ts. grids.test.tsx pins every message to en.json.
 // ponytail: English only until the web app gets its catalog (as ../strings.ts).
 

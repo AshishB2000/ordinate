@@ -28,7 +28,7 @@ import { rendererFiles, MAIN_FILES, tagHtml, referencedKeys } from './i18n-extra
 import { createTranslator, formatMessage, messagesOf, parseMessage, pluralCategory, pseudoText } from '../src/app/i18nCore';
 
 const REPO = path.resolve(__dirname, '..');
-const DIR = path.join(REPO, 'renderer', 'i18n');
+const DIR = path.join(REPO, 'src', 'i18n');
 const HUB = path.join(REPO, 'renderer', 'hub');
 const LOCALES = ['es', 'de', 'fr', 'ja'];
 

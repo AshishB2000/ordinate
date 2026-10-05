@@ -92,15 +92,10 @@ ENV NODE_ENV=production \
 WORKDIR /app
 COPY --from=deps /app/node_modules node_modules
 COPY --from=build /app/package.json ./
-# The server's compiled modules (+ the .sql migrations beside them), the few
-# desktop-renderer files it still reads (until T8.1 moves them): five shared
-# modules, the i18n catalogs, connector/agent logos and the published-site
-# renderer; then assets (samples, geo) and the built web app.
+# The server's compiled modules (+ the .sql migrations, the i18n catalogs and
+# the published-site renderer beside them), then assets (samples, geo,
+# connector/agent logos) and the built web app.
 COPY --from=build /app/src src
-COPY --from=build /app/renderer/i18n renderer/i18n
-COPY --from=build /app/renderer/hub/assets/connectors renderer/hub/assets/connectors
-COPY --from=build /app/renderer/hub/assets/agents renderer/hub/assets/agents
-COPY --from=build ["/app/renderer/hub/geoMatch.js", "/app/renderer/hub/geoCluster.js", "/app/renderer/hub/themeModel.js", "/app/renderer/hub/cardModel.js", "/app/renderer/hub/sizeLayout.js", "renderer/hub/"]
 COPY --from=build /app/assets assets
 COPY --from=build /app/web/dist web/dist
 COPY --from=deps /app/duckdb-extensions /opt/ordinate/duckdb-extensions

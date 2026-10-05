@@ -1,4 +1,4 @@
-// INTERFACE LANGUAGES — main's half. The catalogs are renderer/i18n/<code>.json
+// INTERFACE LANGUAGES — main's half. The catalogs are src/i18n/<code>.json
 // (en is built by scripts/i18n-extract.ts; es/de/fr/ja are drafts marked
 // `"_status": "draft"`); the formatter is i18nCore.ts, shared with the renderer.
 //
@@ -17,7 +17,7 @@ import type { Catalog, Params, Translator } from './i18nCore';
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
 
-const DIR = path.join(__dirname, '..', '..', 'renderer', 'i18n');
+const DIR = path.join(__dirname, '..', 'i18n');
 
 export interface LanguageInfo {
   code: string;

@@ -225,7 +225,6 @@ scripts/**/*.js
 /renderer/hub/relationshipsPage.js
 /renderer/hub/relationshipDialog.js
 /scripts/test-joins.js
-/renderer/hub/cardModel.js
 /renderer/hub/dashSelection.js
 /renderer/hub/tileActions.js
 /renderer/hub/actionEditor.js
@@ -240,7 +239,6 @@ scripts/**/*.js
 /src/ipc/projectAssets.js
 /scripts/test-markdown.js
 /scripts/test-cardLayout.js
-/renderer/hub/geoCluster.js
 /renderer/hub/mapOverlays.js
 /renderer/hub/mapBasemap.js
 /renderer/hub/mapPoints.js
@@ -707,7 +705,6 @@ scripts/**/*.js
 /scripts/bdFormat.js
 
 # build:theme
-/renderer/hub/themeModel.js
 /renderer/hub/themeApply.js
 /renderer/hub/themeSettings.js
 /renderer/hub/themeEditor.js
@@ -819,7 +816,6 @@ scripts/**/*.js
 /src/ipc/round6.js
 
 # r6:layouts
-/renderer/hub/sizeLayout.js
 /renderer/hub/layoutSizes.js
 /renderer/hub/layoutEdit.js
 /renderer/hub/layoutFilters.js
@@ -1149,3 +1145,10 @@ scripts/**/*.js
 /scripts/test-regexDeadline.js
 /src/publish/site/*.js
 /scripts/test-serverDocs.js
+
+# web/t8.1-cutover: modules moved out of the desktop tree — emitted siblings
+/src/analysis/cardModel.js
+/src/analysis/geoCluster.js
+/src/analysis/geoMatch.js
+/src/analysis/sizeLayout.js
+/src/analysis/themeModel.js

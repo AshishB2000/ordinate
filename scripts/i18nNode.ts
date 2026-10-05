@@ -4,7 +4,7 @@
 
 import { createTranslator, messagesOf } from '../src/app/i18nCore';
 
-const en = messagesOf(require('../renderer/i18n/en.json'));
+const en = messagesOf(require('../src/i18n/en.json'));
 
 export const englishT = createTranslator({ locale: 'en', messages: {}, fallback: en });
 

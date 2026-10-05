@@ -100,7 +100,7 @@ export const providerLogos = (() => {
   return out;
 })();
 
-const CONNECTOR_DIR = path.join(__dirname, '..', '..', 'renderer', 'hub', 'assets', 'connectors');
+const CONNECTOR_DIR = path.join(__dirname, '..', '..', 'assets', 'connectors');
 
 export const connectorLogos = (() => {
   const out: Record<string, BrandGlyph | BrandImage> = {};
@@ -129,10 +129,10 @@ export const connectorLogos = (() => {
 
 // Full-color agent logos that don't fit the single-path simple-icons model
 // (e.g. Antigravity's gradient mark). Drop a file named <agentId>.svg (preferred)
-// or <agentId>.png into renderer/hub/assets/agents/ and it's auto-discovered:
+// or <agentId>.png into assets/agents/ and it's auto-discovered:
 // MAIN reads it and ships a data-URI the renderer renders as an <img> (CSP allows
 // img-src data:). When no file exists, the renderer falls back to the styled badge.
-const AGENT_DIR = path.join(__dirname, '..', '..', 'renderer', 'hub', 'assets', 'agents');
+const AGENT_DIR = path.join(__dirname, '..', '..', 'assets', 'agents');
 
 export const agentLogos = (() => {
   const out: Record<string, string> = {};

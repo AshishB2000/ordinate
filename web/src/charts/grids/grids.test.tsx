@@ -388,8 +388,8 @@ describe('behaviour', () => {
 });
 
 describe('grid strings', () => {
-  it('match renderer/i18n/en.json', () => {
-    const EN = JSON.parse(readFileSync(path.join(ROOT, 'renderer', 'i18n', 'en.json'), 'utf8')) as Record<string, string>;
+  it('match src/i18n/en.json', () => {
+    const EN = JSON.parse(readFileSync(path.join(ROOT, 'src', 'i18n', 'en.json'), 'utf8')) as Record<string, string>;
     for (const [key, msg] of Object.entries(GRID_STRINGS)) expect(msg, key).toBe(EN[key]);
   });
 });

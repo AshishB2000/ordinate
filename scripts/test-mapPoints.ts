@@ -8,8 +8,8 @@ import { checkBoundaries } from '../src/analysis/geojsonCheck';
 import { matchPlace, matchPlaces, normPlace, zip3Of, loadPlaces } from '../src/analysis/places';
 import { decorateGeoReply, pointItems } from '../src/analysis/mapData';
 
-// ponytail: geoCluster.js is a renderer UMD script, not a TS module (see test-geo-match.ts)
-const gc = require('../renderer/hub/geoCluster') as any;
+// ponytail: geoCluster.js is a UMD script, not a TS module (see test-geo-match.ts)
+const gc = require('../src/analysis/geoCluster') as any;
 
 // ── Lat/long detection: name AND range ───────────────────────────────────────
 {

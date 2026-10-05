@@ -18,7 +18,7 @@ export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 
 // ponytail: both are renderer global-scripts, not typed TS modules — loose types.
-Object.assign(globalThis, require('../renderer/hub/geoMatch'));
+Object.assign(globalThis, require('../src/analysis/geoMatch'));
 const { mapThumbProject, mapThumbFills } = require('../renderer/hub/mapThumb') as {
   mapThumbProject: (
     bbox: [number, number, number, number], width: number, height: number, pad: number,

@@ -1,4 +1,4 @@
-// Place-name matching — renderer/hub/geoMatch.ts as an ES module. PURE. The
+// Place-name matching — src/analysis/geoMatch.ts as an ES module. PURE. The
 // server side keeps the desktop file (main requires it); geo.test.ts holds the
 // two equal.
 

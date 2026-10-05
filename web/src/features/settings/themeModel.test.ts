@@ -1,5 +1,5 @@
 // Differential: the browser's theme model against the one the server validates
-// every save with (renderer/hub/themeModel.ts, as emitted by the root
+// every save with (src/analysis/themeModel.ts, as emitted by the root
 // `npm run build:ts`) — the same token list, sanitizer, CSS and contrast rule,
 // compared with Object.is over the built-ins and a deterministic fuzz.
 
@@ -12,7 +12,7 @@ import { BUILTINS } from './themeBuiltins';
 const ROOT = path.resolve(process.cwd(), '..');
 const require = createRequire(path.join(ROOT, 'package.json'));
 // any: the legacy UMD module has no types on this side
-const legacy = require(path.join(ROOT, 'renderer', 'hub', 'themeModel.js')) as any;
+const legacy = require(path.join(ROOT, 'src', 'analysis', 'themeModel.js')) as any;
 
 /** A small deterministic PRNG, so a failure names a reproducible case. */
 function rng(seed: number) {

@@ -8,11 +8,11 @@
 // them; an edit stores only that size, as `page.layouts[size]`, so a record
 // without `layouts` — every record written before this — means "both derived".
 //
-// Shared the cardModel way: main requires it (dashboards.sanitizePage whitelists
-// `layouts` with `sanitizeLayouts`; publish lays tiles out with `publishCells`),
-// the hub loads it as a <script> that attaches `sizeLayout` to window, and
-// scripts/test-sizeLayouts.js requires it. The derivation exists ONCE — the hub
-// editor, the hub viewer, Publish and the tests all call `resolve` below.
+// The server requires it (dashboards.sanitizePage whitelists `layouts` with
+// `sanitizeLayouts`; publish lays tiles out with `publishCells`), the web
+// editor's port is differential-tested against it, and
+// scripts/test-sizeLayouts.js requires it. Publish and the tests call
+// `resolve` below.
 //
 // THE DERIVATION. Tiles (every card but a control, which is a filter-bar chip)
 // are read top to bottom, left to right: desktop (y, x). A container or tabs
@@ -297,4 +297,4 @@
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else global.sizeLayout = api;
-})(typeof window !== 'undefined' ? window : globalThis);
+})(globalThis);

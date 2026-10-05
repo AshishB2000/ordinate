@@ -64,7 +64,7 @@ const LIGHT: Record<string, string> = {
 };
 const DARK: Record<string, string> = { ...LIGHT, '--surface': '#1c1c20', '--surface-3': '#303038', '--accent': '#3b82f6' };
 let vars = LIGHT;
-const en = JSON.parse(readFileSync(at('renderer/i18n/en.json'), 'utf8')) as Record<string, string>;
+const en = JSON.parse(readFileSync(at('src/i18n/en.json'), 'utf8')) as Record<string, string>;
 const t = (key: string, params: Record<string, unknown> = {}) =>
   (en[key] ?? key).replace(/\{(\w+)(?:, plural, one \{(\w+)\} other \{(\w+)\})?\}/g, (_m, k: string, one?: string, many?: string) =>
     one ? (params[k] === 1 ? one : (many as string)) : String(params[k] ?? ''));

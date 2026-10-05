@@ -1,5 +1,5 @@
 // DIFFERENTIAL: this port of the sheet geometry against the legacy pure
-// modules the server still sanitizes with (renderer/hub/cardModel.ts and
+// modules the server still sanitizes with (src/analysis/cardModel.ts and
 // sizeLayout.ts, as `npm run build:ts` emits them), on the same seeded random
 // sheets — every result deep-equal with Object.is at the leaves
 // (node:assert deepStrictEqual). Plus findSlot against dashGrid's rule.
@@ -14,8 +14,8 @@ import * as g from './geometry';
 const ROOT = path.resolve(process.cwd(), '..');
 const require = createRequire(path.join(ROOT, 'package.json'));
 // any: the legacy modules are untyped CommonJS
-const legacyCards: any = require(path.join(ROOT, 'renderer', 'hub', 'cardModel.js'));
-const legacySizes: any = require(path.join(ROOT, 'renderer', 'hub', 'sizeLayout.js'));
+const legacyCards: any = require(path.join(ROOT, 'src', 'analysis', 'cardModel.js'));
+const legacySizes: any = require(path.join(ROOT, 'src', 'analysis', 'sizeLayout.js'));
 
 /** mulberry32: the same sheets on every run. */
 function rng(seed: number) {

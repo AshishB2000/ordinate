@@ -6,11 +6,11 @@
 // preset classes (.dash-theme--* / .dash-density--* / .dash-accent--*) declare —
 // inline properties beat class rules, so a theme wins without a cascade fight.
 //
-// Shared the cardModel way: main requires it (src/app/themeStore.ts validates
-// every write with it, src/analysis/dashboardExport.ts whitelists an exported
-// theme with it), the renderer loads it as a <script> that attaches `themeModel`
-// to window, and scripts/test-themes.js requires it. One token list, one
-// validator, one contrast rule, one resolution order — not three.
+// The server requires it (src/app/themeStore.ts validates every write with it,
+// src/analysis/dashboardExport.ts whitelists an exported theme with it), the web
+// Settings port is differential-tested against it, and scripts/test-themes.js
+// requires it. One token list, one validator, one contrast rule, one
+// resolution order.
 (function (global: any) {
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const isId = (x: unknown): x is string => typeof x === 'string' && UUID_RE.test(x);
@@ -231,4 +231,4 @@
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else global.themeModel = api;
-})(typeof window !== 'undefined' ? window : globalThis);
+})(globalThis);

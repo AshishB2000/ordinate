@@ -1,5 +1,5 @@
 // Workspace dashboard THEMES in the browser — the presentation half of
-// renderer/hub/themeModel.ts (token list, fonts, CSS for a token map, the
+// src/analysis/themeModel.ts (token list, fonts, CSS for a token map, the
 // contrast warnings) plus themeEditor.ts's derivations (a base colour or the
 // accent re-derives its family). The server validates every save with the
 // original model (src/app/themeStore.ts); a differential test holds this copy

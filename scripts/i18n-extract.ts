@@ -11,7 +11,7 @@
 //   - in index.html, tags the element `data-i18n="key"` (text) or
 //     `data-i18n-<attr>="key"` (title, placeholder, aria-label, alt), wrapping
 //     a bare text node beside other markup in a <span data-i18n>;
-//   - writes renderer/i18n/en.json: every key still referenced, plus the new ones;
+//   - writes src/i18n/en.json: every key still referenced, plus the new ones;
 //   - syncs the drafts (es.json, …): a new key arrives as `null` (shown in
 //     English, on purpose, until someone translates it), a dead key goes.
 //
@@ -35,7 +35,7 @@ const path: typeof import('path') = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const HUB = path.join(ROOT, 'renderer', 'hub');
-const OUT = path.join(ROOT, 'renderer', 'i18n', 'en.json');
+const OUT = path.join(ROOT, 'src', 'i18n', 'en.json');
 
 /** Files that never call t(): the binder itself, and pure UMD modules node tests require. */
 export function rendererFiles(): string[] {
