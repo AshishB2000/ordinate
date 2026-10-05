@@ -3,8 +3,9 @@ name: Lint
 # Two jobs with deliberately different weight:
 #
 #   lint      BLOCKING. `npm run lint` — oxlint with type-aware rules, over the
-#             main world and the renderer. The tree is at zero findings; a new
-#             one fails the PR. This is the gate.
+#             server (src, scripts), the published site's classic scripts
+#             (src/publish/site, tsconfig.site.json) and the web app. The tree
+#             is at zero findings; a new one fails the PR. This is the gate.
 #
 #   prettier  ADVISORY (continue-on-error). 238 files are not Prettier-formatted
 #             and normalising them would be a whole-tree diff that buries real
