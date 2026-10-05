@@ -62,8 +62,8 @@ config:
   LOG_LEVEL: info
   # More knobs, all optional (defaults in src/server/env.ts): ORDINATE_ORG,
   # MAX_UPLOAD_MB, STORAGE_CACHE_MB, STORAGE_GC_GRACE_MINUTES, DUCKDB_MAX_WORKERS,
-  # DUCKDB_MEMORY_LIMIT, DUCKDB_THREADS (set it to the CPU limit: Node counts the
-  # node's cores), DUCKDB_QUERY_TIMEOUT_SECONDS, DUCKDB_IDLE_SECONDS,
+  # DUCKDB_MEMORY_LIMIT, DUCKDB_THREADS (defaults to the CPU limit, rounded down;
+  # every node core when no limit is set), DUCKDB_QUERY_TIMEOUT_SECONDS, DUCKDB_IDLE_SECONDS,
   # SESSION_IDLE_MINUTES, SESSION_ABSOLUTE_HOURS, RATE_LIMIT_*_PER_MINUTE,
   # MAX_RPC_BODY_KB, RPC_TIMEOUT_SECONDS, SSRF_ALLOW.
 
