@@ -1197,3 +1197,28 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   refuse with a "desktop app gone" message (they never ran in server mode). `test-i18n` treats a key as used
   only if referenced in `src/`, the server catalog or the web tables — a dynamically built key elsewhere would
   be pruned by the next extract.
+
+## 2026-10-05 — T8.2 Docs and rules (Phase 7 complete)
+
+- **`CLAUDE.md`** rewritten for the web app (248 lines; was 239): RPC contracts and wire codec, `ctx()`/
+  `orgKey()`, auth modes and API tokens, SSE over LISTEN/NOTIFY, jobs, file tokens (sticky sessions),
+  publish, migrations and `recordFs`, secrets, the per-org DuckDB pool, `forbidSyncOnMainThread`, the regex
+  worker, `sqlGate`, the web stack, header CSP / CSRF / Host, the 300 KB cap, deploy and CI. Kept in substance:
+  the app does the math, the resident layer's rules and divergences, connector rules (38 sources, counted
+  from the registry), path hardening, i18n, file size, git, out of scope (a hosted web version is now IN
+  scope). Dropped: everything Electron/window/preload/Mosaic/Svelte/smoke/userData-specific.
+- **Also:** `README.md` and `QUICKSTART.md` (web quick start → Compose → Helm, linked to `docs/server/`),
+  `CHANGELOG.md` (Unreleased: the cutover), `assets/icons/README.md`, `.claude/rules/file-size.md`,
+  `docs/README.md` (index; desktop-era phases marked history), `docs/automation.md` regenerated — HTTP MCP at
+  `/api/mcp` is the live surface and the stdio CLI is documented as having no entry point since T8.1
+  (string-only change in `src/automation/docs.ts`, which `test-automation` pins to the generated file).
+- **`docs/phase-7-web/99-retro.md`:** task → PR table, what was built, key numbers, incidents and root
+  causes, F1–F8 and R1, what is open, lessons — every number cited to this log, a PR or a command.
+- **Gates (agent, gates script):** `npm test` 254/254 without DB, with DB and CI env; Vitest 691/691; e2e 62 +
+  compose skipped; lint 0; 312 contracts, 0 unresolved. Orchestrator: every path and npm script CLAUDE.md
+  names exists; build, lint, `automation`, `serverDocs`, `i18n`, `file-size` green.
+- **Open (not Phase 7 tasks):** `AGENTS.md` and `PRIVACY.md` still describe the desktop app; `package.json`
+  keeps the desktop `description` / `author` / `homepage`; `CHANGELOG.md` already names a desktop 0.1.0 while
+  `release.yml` requires the tag to equal `package.json`'s 0.1.0 (no `v*` tag exists yet) — decide the
+  first server version before tagging; unreferenced desktop screenshots in `assets/images/`; the automation
+  CLI decision; the rare CI DuckDB abort at suite exit.
