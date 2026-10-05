@@ -16,6 +16,7 @@ import { DataGrid } from '../../../ui/DataGrid/DataGrid';
 import { Icon } from '../../../ui/icons/Icon';
 import { SkeletonTable } from '../../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../../ui/States';
+import { useCaret } from '../../../ui/useCaret';
 import { Composer, type ComposerStart } from '../../import/Composer';
 import { useAdoptProject } from '../../projects/current';
 import { explainSql, prepareSave, runSql, useDatasetQuery, useSchema, type RunResult } from './api';
@@ -61,6 +62,7 @@ function Workbench({ projectId }: { projectId: string }) {
   const schema = useSchema(projectId);
   const viewed = useDatasetQuery(projectId, params.get('dataset'));
   const input = useRef<HTMLTextAreaElement>(null);
+  const place = useCaret(input);
   const [sql, setSql] = useState('');
   const [state, setState] = useState<ReadonlyMap<string, ParamEntry>>(new Map());
   const [result, setResult] = useState<Result>({ kind: 'idle' });
@@ -137,10 +139,7 @@ function Workbench({ projectId }: { projectId: string }) {
     const at = el?.selectionStart ?? sql.length;
     const next = insertAt(sql, at, el?.selectionEnd ?? at, text);
     edit(next.value);
-    requestAnimationFrame(() => {
-      el?.focus();
-      el?.setSelectionRange(next.caret, next.caret);
-    });
+    place(next.caret);
   };
 
   async function save() {

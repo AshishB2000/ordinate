@@ -11,6 +11,7 @@ import { useRef, useState, type KeyboardEvent } from 'react';
 import { Button } from '../../ui/Button';
 import { Kbd } from '../../ui/Kbd';
 import { Select } from '../../ui/Select';
+import { useCaret } from '../../ui/useCaret';
 import { completions, highlight, quoteQualified, wordBefore, type Completion } from './sqlLex';
 import s from './Workbench.module.css';
 
@@ -49,6 +50,7 @@ export function SqlEditor({
 }) {
   const input = useRef<HTMLTextAreaElement>(null);
   const mirror = useRef<HTMLPreElement>(null);
+  const place = useCaret(input);
   const [items, setItems] = useState<Completion[]>([]);
   const [active, setActive] = useState(0);
   const [from, setFrom] = useState(-1);
@@ -74,10 +76,7 @@ export function SqlEditor({
     onSql(next);
     setItems([]);
     const at = from + insert.length;
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(at, at);
-    });
+    place(at);
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -112,7 +111,7 @@ export function SqlEditor({
       const el = e.currentTarget;
       const at = el.selectionStart ?? 0;
       onSql(el.value.slice(0, at) + '  ' + el.value.slice(el.selectionEnd ?? at));
-      requestAnimationFrame(() => el.setSelectionRange(at + 2, at + 2));
+      place(at + 2);
     }
     escaped.current = false;
   }

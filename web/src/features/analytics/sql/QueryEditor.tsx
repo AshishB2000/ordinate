@@ -13,6 +13,7 @@ import { Button } from '../../../ui/Button';
 import { Input } from '../../../ui/Field';
 import { Kbd } from '../../../ui/Kbd';
 import { Select } from '../../../ui/Select';
+import { useCaret } from '../../../ui/useCaret';
 import { highlight } from '../../connections/sqlLex';
 import { completions, scan, type Completion, type ParamEntry, type ParamKind, type SchemaDataset } from './sqlText';
 import w from '../../connections/Workbench.module.css';
@@ -52,6 +53,7 @@ export function QueryEditor({
   onSave: () => void;
 }) {
   const mirror = useRef<HTMLPreElement>(null);
+  const place = useCaret(input);
   const [items, setItems] = useState<Completion[]>([]);
   const [active, setActive] = useState(0);
   const [from, setFrom] = useState(-1);
@@ -80,10 +82,7 @@ export function QueryEditor({
     onSql(el.value.slice(0, from) + item.insert + el.value.slice(caret));
     setItems([]);
     const at = from + item.insert.length;
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(at, at);
-    });
+    place(at);
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -114,7 +113,7 @@ export function QueryEditor({
       const el = e.currentTarget;
       const at = el.selectionStart ?? 0;
       onSql(el.value.slice(0, at) + '  ' + el.value.slice(el.selectionEnd ?? at));
-      requestAnimationFrame(() => el.setSelectionRange(at + 2, at + 2));
+      place(at + 2);
     }
     if (e.key !== 'Shift') escaped.current = false;
   }
