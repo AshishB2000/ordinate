@@ -21,6 +21,8 @@ import { childrenOf, clampInt, COLS, FRAME_WIDTH, isGroup, materialize, MAX_H, m
 import { lockedRows, type ImageSpec } from './KindCards';
 import { HiddenTray, SizeNote } from './SizeNote';
 import s from './Canvas.module.css';
+import { useCardRuntime } from '../../dashboards/CardRuntime';
+import { SelectionStrip } from '../../dashboards/tileActions';
 
 /** Desktop: move / resize. A small size: drag the head to reorder, the bottom edge to change height (layoutEdit.ts). */
 type Mode = GestureMode | 'reorder' | 'height';
@@ -57,6 +59,7 @@ export function Canvas() {
     });
   // Where a small-size reorder would drop: before or after this card, across (same row) or down.
   const [drop, setDrop] = useState<{ id: string; target: string; after: boolean; across: boolean } | null>(null);
+  const runtime = useCardRuntime(ed, gridRef);
   const page = ed.doc.sheets[ed.sheet];
   const cards = page.cards;
   const small = ed.size !== 'desktop';
@@ -127,7 +130,7 @@ export function Canvas() {
   };
 
   const begin = (e: React.PointerEvent, card: Card, mode: Mode) => {
-    if (e.button !== 0 || e.shiftKey) return;
+    if (e.button !== 0 || e.shiftKey || ed.view.presenting) return;
     if ((e.target as HTMLElement).closest('button, a, input, select, textarea, [role="tab"]')) return;
     const grid = gridRef.current;
     if (!grid) return;
@@ -248,6 +251,8 @@ export function Canvas() {
       def && !def.chartType.startsWith('map_') && def.chartType !== 'table'
         ? [{ label: tables.has(card.id) ? 'View as chart' : 'View as table', icon: tables.has(card.id) ? 'chart-bar' : 'table', onSelect: () => toggleTable(card.id) }]
         : [];
+    view.push(...runtime.menu(card, def));
+    if (ed.view.presenting) return view;
     if (small) {
       const name = SIZE_LABEL[ed.size].toLowerCase();
       return [
@@ -278,13 +283,18 @@ export function Canvas() {
   const byId = new Map(cards.map((c) => [c.id, c]));
   const tiles = placed.items.map((it) => byId.get(it.id) as Card).filter((c) => c && c.type !== 'control' && !viewHidden.has(c.id));
   const frame = !!ed.pinned && small;
-  const gridStyle = { '--cols': String(placed.cols) } as CSSProperties;
+  const gridStyle = { '--cols': String(placed.cols), ...runtime.gridVars(placed.items) } as CSSProperties;
 
   return (
     <div className={s.canvas} onClick={(e) => e.target === e.currentTarget && ed.select(null)}>
       <FilterBar />
-      <SizeNote />
-      <ArrangeBar />
+      <SelectionStrip ed={ed} />
+      {!ed.view.presenting && (
+        <>
+          <SizeNote />
+          <ArrangeBar />
+        </>
+      )}
       {tiles.length === 0 && placed.hidden.length === 0 ? (
         <EmptySheet />
       ) : (
@@ -372,7 +382,8 @@ export function Canvas() {
           </div>
         </div>
       )}
-      {small && <HiddenTray hidden={placed.hidden} onShow={(id) => hide(id, false)} />}
+      {small && !ed.view.presenting && <HiddenTray hidden={placed.hidden} onShow={(id) => hide(id, false)} />}
+      {runtime.overlays}
     </div>
   );
 }

@@ -33,6 +33,7 @@ import { uploadCapMb } from './admin/org';
 import { registerMcpRoute } from '../automation/serverMcp';
 import { registerGeoRoutes } from './geo';
 import { registerRequestMetrics } from './metrics';
+import { registerPublishedRoutes } from './published';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Pool } from 'pg';
@@ -206,7 +207,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   app.addHook('onRequest', (req, reply, done) => {
     const path = req.url.split('?')[0];
     const api = path.startsWith('/api/');
-    if (api ? req.routeOptions.url?.startsWith('/api/auth/') : !isPageNavigation(req.method, path, req.headers.accept)) return done();
+    // A published site (/p/…, ./published.ts) decides its own access: members, or anyone when public.
+    if (api ? req.routeOptions.url?.startsWith('/api/auth/') : !isPageNavigation(req.method, path, req.headers.accept) || path.startsWith('/p/')) return done();
     Promise.resolve(identify(req.headers, req.socket.remoteAddress)).then(
       (who) => {
         if (!who && !api) return void reply.redirect(path === '/' ? '/sign-in' : `/sign-in?next=${encodeURIComponent(req.url)}`);
@@ -335,6 +337,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // The maps' bundled boundary GeoJSON (./geo.ts) — org-independent, immutable by content hash.
   registerGeoRoutes(app);
 
+  // Published dashboards at /p/<publishId>/ (T2.9): signed-in members of the org, or anyone when the site is public.
+  registerPublishedRoutes(app, identify, () => pool);
+
   app.addHook('onClose', async () => shutdown());
 
   // The web app, when it has been built (`npm --prefix web run build`). In dev
@@ -406,4 +411,8 @@ export function registerHandlers(): void {
   // Analytics workbenches B (T2.11): insights, event annotations, data snapshots, SQL over the project's datasets.
   for (const mod of ['../ipc/insights', '../ipc/events', '../ipc/sqlQuery']) (require(mod) as { register: () => void }).register();
   (require('../ipc/snapshots') as typeof import('../ipc/snapshots')).register({ headless: true });
+  // Dashboards, sharing, alerts, comments (T2.9): publish to a URL, export, the summary card, the As-of picker.
+  (require('../ipc/publishServer') as typeof import('../ipc/publishServer')).register(() => dbPool);
+  for (const mod of ['../ipc/comments', '../ipc/summary', '../ipc/dashboardsServer', '../ipc/fx']) (require(mod) as { register: () => void }).register();
+  (require('../ipc/alerts') as typeof import('../ipc/alerts')).register({ focusHub: () => undefined });
 }

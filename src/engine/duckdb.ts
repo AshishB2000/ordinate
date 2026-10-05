@@ -390,6 +390,9 @@ export function shutdown(): void {
   if (w) closeWorker(w, busy);
 }
 
+/** The bridge's worker while a call is in flight — exiting around it aborts (closeWorker); selfcheck.finish waits. */
+export const busyWorker = (): Worker | null => (inFlight.size > 0 ? worker : null);
+
 /**
  * Stop a worker. `terminate()` when it is idle; ASK IT TO EXIT when a call may
  * still be running.

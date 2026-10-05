@@ -201,8 +201,8 @@ export function readAssets(): SiteAssets {
     chartJs: read('node_modules', 'chart.js', 'dist', 'chart.umd.min.js'),
     formatJs: read('src', 'app', 'format.js'),
     geoMatchJs: read('renderer', 'hub', 'geoMatch.js'),
-    coreJs: read('renderer', 'publish', 'publishCore.js'),
-    clientJs: read('renderer', 'publish', 'publishClient.js'),
+    coreJs: read('src', 'publish', 'site', 'publishCore.js'),
+    clientJs: read('src', 'publish', 'site', 'publishClient.js'),
   };
 }
 
@@ -302,7 +302,7 @@ async function siteHeader(config: PublishConfig): Promise<{ title: string; logo?
 }
 
 /** Build every page in memory. Throws over the limit, before anything is written. */
-async function buildPages(config: PublishConfig, ctx: PublishProgress, outgoing?: Outgoing): Promise<{ pages: BuiltPage[]; index: string; combos: number }> {
+export async function buildPages(config: PublishConfig, ctx: PublishProgress, outgoing?: Outgoing): Promise<{ pages: BuiltPage[]; index: string; combos: number }> {
   const assets = readAssets();
   const head = await siteHeader(config);
   const taken = new Set<string>();

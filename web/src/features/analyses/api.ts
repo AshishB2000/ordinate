@@ -2,7 +2,9 @@
 // replies (src/ipc/analyses.ts, analysesServer.ts, templates.ts, metrics.ts),
 // narrowed by hand as in web/src/api/projects.ts — contracts carry inputs only.
 
+import { useContext } from 'react';
 import { skipToken, useQuery } from '@tanstack/react-query';
+import { EditorCtx } from './editor/context';
 import { rpc, RpcError, type RpcInput } from '../../api/client';
 import type { ChartDataShape } from '../../charts/types';
 
@@ -149,7 +151,7 @@ export type StatsTile =
     }
   | { ok: false; error: string };
 export type MetricTile =
-  | { ok: true; value: number | null; display?: string; name?: string; paramErrors?: string[]; compare?: CompareReply }
+  | { ok: true; value: number | null; display?: string; name?: string; paramErrors?: string[]; compare?: CompareReply; fx?: { target: string } }
   | { ok: false; error: string };
 
 // A sheet is one round trip: the tiles asked for in the same tick go out as ONE
@@ -157,7 +159,9 @@ export type MetricTile =
 // edit refetches only the tiles whose request changed.
 const BATCH = 100;
 type Waiting = { req: TileRequest; resolve: (r: unknown) => void; reject: (e: unknown) => void };
-const waiting = new Map<string, { params: ParamPayload; list: Waiting[] }>();
+/** The reader's As of and the dashboard's currency (T2.9) — one batch per scope, like per parameters. */
+type Scope = { asOf?: string; currency?: string };
+const waiting = new Map<string, { params: ParamPayload; scope: Scope; list: Waiting[] }>();
 
 function flush(key: string, projectId: string): void {
   const entry = waiting.get(key);
@@ -165,19 +169,19 @@ function flush(key: string, projectId: string): void {
   if (!entry) return;
   for (let i = 0; i < entry.list.length; i += BATCH) {
     const part = entry.list.slice(i, i + BATCH);
-    rpc('analysis:tiles', { projectId, params: entry.params, items: part.map((w) => w.req) }).then(
+    rpc('analysis:tiles', { projectId, params: entry.params, ...entry.scope, items: part.map((w) => w.req) }).then(
       (out) => part.forEach((w, j) => w.resolve(Array.isArray(out) && out[j] ? out[j] : { ok: false, error: 'No answer for this tile.' })),
       (err: unknown) => part.forEach((w) => w.reject(err)),
     );
   }
 }
 
-function loadTile(projectId: string, params: ParamPayload, req: TileRequest): Promise<unknown> {
-  const key = projectId + '\u0000' + JSON.stringify(params);
+function loadTile(projectId: string, params: ParamPayload, scope: Scope, req: TileRequest): Promise<unknown> {
+  const key = projectId + '\u0000' + JSON.stringify(params) + '\u0000' + JSON.stringify(scope);
   return new Promise((resolve, reject) => {
     let entry = waiting.get(key);
     if (!entry) {
-      waiting.set(key, (entry = { params, list: [] }));
+      waiting.set(key, (entry = { params, scope, list: [] }));
       setTimeout(() => flush(key, projectId), 0);
     }
     entry.list.push({ req, resolve, reject });
@@ -186,9 +190,12 @@ function loadTile(projectId: string, params: ParamPayload, req: TileRequest): Pr
 
 /** One tile's answer, computed by the server; batched with the sheet's other tiles. */
 export function useTile<T extends VisualTile | MetricTile | StatsTile>(projectId: string, params: ParamPayload, req: TileRequest | undefined) {
+  // Inside an open dashboard, the reader's As of and the dashboard's currency apply to every tile.
+  const view = useContext(EditorCtx)?.view;
+  const scope: Scope = { ...(view?.asOf ? { asOf: view.asOf } : {}), ...(view?.currency ? { currency: view.currency } : {}) };
   return useQuery({
-    queryKey: ['analysis:tile', projectId, params, req],
-    queryFn: req === undefined ? skipToken : async () => (await loadTile(projectId, params, req)) as T,
+    queryKey: ['analysis:tile', projectId, params, scope, req],
+    queryFn: req === undefined ? skipToken : async () => (await loadTile(projectId, params, scope, req)) as T,
     retry: (count, err) => count < 2 && err instanceof RpcError && (err.status === 0 || err.status >= 500),
     // Keep the last figure on screen while the next computes (kpiTicker's hold).
     placeholderData: (prev) => prev,

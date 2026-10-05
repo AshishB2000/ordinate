@@ -9,7 +9,7 @@ import { IconButton, buttonClass } from '../../../ui/Button';
 import { Menu, type MenuEntry } from '../../../ui/Menu';
 import { Icon } from '../../../ui/icons/Icon';
 import type { Card } from '../api';
-import { VisualTileBody, vizLabel } from '../VisualTile';
+import { vizLabel } from '../VisualTile';
 import { builderFor } from './AddVisual';
 import { useEditor } from './context';
 import { activeTab, childrenOf } from './geometry';
@@ -18,6 +18,10 @@ import { ImageBody, NavBody, StatsBody, statsTitle, type ImageSpec, type StatsSp
 import { MetricBody, metricLabel } from './MetricCard';
 import { toggleCrossFilter } from './filters';
 import s from './Cards.module.css';
+import { TextBody } from '../../dashboards/Markdown';
+import { SummaryBody } from '../../dashboards/SummaryBody';
+import { CommentButton } from '../../dashboards/CommentsPanel';
+import { VisualCard, WatchedBell } from '../../dashboards/CardRuntime';
 
 const KIND_TITLE: Record<string, string> = {
   nav: 'Navigation',
@@ -61,22 +65,16 @@ function Body({ card, asTable }: { card: Card; asTable: boolean }) {
     // Click-to-filter (overrides.crossFilter, off by default): the clicked value becomes a DASHBOARD filter.
     const column = def.overrides?.crossFilter === true ? def.encoding.category : '';
     const onMark = column ? (v: string | number) => ed.edit('Cross-filter', (d) => void (d.filters = toggleCrossFilter(d.filters, column, v))) : undefined;
-    return <VisualTileBody projectId={ed.projectId} def={def} filters={ed.filters} params={ed.params} asTable={asTable} onMark={onMark} />;
+    // A tile's own actions (T2.9) outrank cross-filter, as on the desktop; a narrowing reads here too.
+    return <VisualCard ed={ed} card={card} def={def} asTable={asTable} onMark={onMark} />;
   }
   if (card.type === 'stats') return <StatsBody card={card} />;
   if (card.type === 'image') return <ImageBody card={card} />;
   if (card.type === 'nav') return <NavBody card={card} />;
   if (card.type === 'metric') return card.metric ? <MetricBody card={card} /> : <Missing>No metric</Missing>;
-  if (card.type === 'text') {
-    const text = substitute(card.text ?? '', ed.params);
-    return (
-      <div className={s.text}>
-        {text.split(/\n{2,}/).map((para, i) => (
-          <p key={i}>{para}</p>
-        ))}
-      </div>
-    );
-  }
+  // Markdown with {{tokens}} — a parameter, else a saved metric's figure (textCard.ts, T2.9).
+  if (card.type === 'text') return <TextBody projectId={ed.projectId} text={card.text ?? ''} params={ed.params} filters={ed.filters} />;
+  if (card.type === 'summary') return <SummaryBody ed={ed} cardId={card.id} />;
   if (card.type === 'divider') return card.divider?.style === 'spacer' ? null : <hr className={s.divider} />;
   if (card.type === 'container' || card.type === 'tabs') {
     const tab = card.type === 'tabs' ? activeTab(card, ed.groupTab.get(card.id)) : undefined;
@@ -84,11 +82,11 @@ function Body({ card, asTable }: { card: Card; asTable: boolean }) {
     if (kids.length) return null;
     return <p className={s.groupEmpty}>{tab ? 'Drag cards into this tab.' : 'Drag cards in here — they move with it.'}</p>;
   }
-  // A summary card's sentences are the dashboard viewer's (summaryCard.ts, T2.9): the record keeps it; the sheet says so.
+  // A card kind this build does not draw: the record keeps it; the sheet says so.
   return (
     <div className={s.placeholder}>
       <Icon name="layout-dashboard" size={16} />
-      <span>{KIND_TITLE[card.type] ?? card.type} card — its sentences are written where the dashboard is viewed.</span>
+      <span>{KIND_TITLE[card.type] ?? card.type} card — not shown here.</span>
     </div>
   );
 }
@@ -199,7 +197,11 @@ export function CardView({
           />
         )}
         <Title card={card} title={title} />
+        {/* Present: a reading view, no card controls (dashShare.ts). */}
+        {!ed.view.presenting && (
         <span className={s.ctrls} onPointerDown={(e) => e.stopPropagation()}>
+          {card.type === 'metric' && <WatchedBell ed={ed} card={card} />}
+          {card.type !== 'control' && card.type !== 'divider' && <CommentButton ed={ed} card={card} />}
           {onHide && <IconButton icon="eye-off" size="sm" label={`${onHide.label}: ${title}`} onClick={onHide.run} />}
           {visualId && (
             <Link className={buttonClass('ghost', 'sm', s.edit)} to={builderFor(ed.projectId, visualId)} title="Edit this visual in the Visuals builder">
@@ -218,6 +220,7 @@ export function CardView({
           />
           <Menu label={`${title} card actions`} align="end" trigger={<IconButton icon="more-horizontal" size="sm" label={`${title} card actions`} />} items={menu} />
         </span>
+        )}
       </div>
       {!folded && (
         <div className={s.body} id={card.type === 'tabs' ? `panel-${card.id}` : undefined} role={card.type === 'tabs' ? 'tabpanel' : undefined}

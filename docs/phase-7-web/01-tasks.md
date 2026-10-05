@@ -238,7 +238,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
   `metricsPage`, `paramDialog`.
 - Publish still copies **by value** into a dashboard (spec: `docs/analysis/00-model.md`).
 
-### [ ] T2.9 Dashboards, sharing, alerts, comments
+### [x] T2.9 Dashboards, sharing, alerts, comments
 - **Branch** `web/t2.9-dashboards` · **Legacy:** `dashboards`, `dashGrid`, `dashAdd`,
   `dashAddControl`, `dashCardChrome`, `dashControlBar`, `dashControls`, `dashFiltersUi`,
   `dashHistory`, `dashParams`, `dashSelection`, `dashShare`, `dashStyle`, `dashAi`, `summaryCard`,

@@ -18,7 +18,9 @@
     // Per-checkout cache — see tsconfig.base.json for why it is not in node_modules.
     "tsBuildInfoFile": ".tsbuildinfo/renderer.tsbuildinfo"
   },
-  "include": ["renderer/**/*.ts"],
+  // The published site's renderer (src/publish/site/, T2.9) is a classic script of the
+  // same kind — inlined into every published page — so it compiles here, not in main.
+  "include": ["renderer/**/*.ts", "src/publish/site/**/*.ts"],
   // Phase 5: the Svelte island sources are MODULES, bundled by esbuild
   // (scripts/build-svelte.js), not classic scripts emitted in place. Compiling
   // them here would emit stray sibling .js files, and their `import` statements

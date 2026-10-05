@@ -14,6 +14,7 @@
 // "all projects" — the display name changed.
 
 import { ipcMain } from './bus';
+import { serverDataDir } from '../server/context';
 import * as comments from '../app/comments';
 import * as config from '../app/config';
 import * as hubs from '../windows/hubRegistry';
@@ -35,7 +36,7 @@ function cardTitle(card: Card, visualNames: Map<string, string>): string {
 }
 
 /** Names for exactly the kinds these comments point at — no scan for a kind nobody commented on. */
-async function targetNames(projectId: string, list: Comment[]): Promise<Record<string, TargetInfo>> {
+export async function targetNames(projectId: string, list: Comment[]): Promise<Record<string, TargetInfo>> {
   const kinds = new Set(list.map((c) => c.target.kind));
   const out: Record<string, TargetInfo> = {};
   const visualNames = new Map<string, string>();
@@ -73,7 +74,12 @@ async function answer(projectId: string, res: comments.Result): Promise<unknown>
 }
 
 export function register(): void {
-  const changed = (projectId: string): void => hubs.broadcast('comments:changed', { projectId });
+  // Every open window (desktop), or every tab of the org (server, T2.9) — the panel re-reads.
+  const changed = (projectId: string): void => {
+    if (serverDataDir() === null) return hubs.broadcast('comments:changed', { projectId });
+    // Members who may read the project only (T6.3), as alerts and refreshes go.
+    (require('../server/jobs/schedules') as typeof import('../server/jobs/schedules')).pushToReaders(projectId, 'comments:changed', { projectId });
+  };
   const pid = (v: unknown): string => String(v || '');
   const id = (v: unknown): string => String(v || '').toLowerCase();
 

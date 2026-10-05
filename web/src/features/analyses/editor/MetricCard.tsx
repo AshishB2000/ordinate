@@ -65,7 +65,9 @@ export function MetricBody({ card }: { card: Card }) {
       </div>
     );
   }
-  const text = t.display ?? (typeof t.value === 'number' ? fmtWith(t.value, m.format || 'auto') : '—');
+  // Converted money (a dashboard currency, fx) reads in that currency unless the card chose a format (fxUi.ts fxOverrides).
+  const money = t.fx && (!m.format || m.format === 'auto');
+  const text = t.display ?? (typeof t.value === 'number' ? (money ? OrdFormat.formatMetric(t.value, { kind: 'currency', decimals: 1, compact: true }, t.fx?.target) : fmtWith(t.value, m.format || 'auto')) : '—');
   const label = metricLabel(m, t.name);
   const c = t.compare;
   let delta = null;

@@ -21,6 +21,8 @@ import { pickSize, type Size } from './geometry';
 import { Head } from './Head';
 import { Rail } from './Rail';
 import s from './Editor.module.css';
+import { useViewer } from '../../dashboards/useViewer';
+import { DashboardChrome, styleClass, useStyleVars } from '../../dashboards/DashboardChrome';
 
 /** The autosave debounce (dashboards.ts): a drag fires several edits; one write. */
 const SAVE_MS = 600;
@@ -47,7 +49,7 @@ function useAutosave(projectId: string, id: string, doc: Doc, version: number): 
     pending.current = null;
     const d = latest.current;
     setState('saving');
-    rpc('analysis:update', { projectId, id, name: d.name, sheets: d.sheets, filters: d.filters, parameters: d.parameters }).then(
+    rpc('analysis:update', { projectId, id, name: d.name, sheets: d.sheets, filters: d.filters, parameters: d.parameters, style: d.style }).then(
       (r) => {
         const ok = !!(r && (r as { ok?: boolean }).ok);
         setState(ok ? 'saved' : 'error');
@@ -86,10 +88,12 @@ export function Editor({ projectId, analysis, visuals: initialVisuals }: { proje
   const [history, dispatch] = useReducer(reduce, analysis, (a) => initial(fromAnalysis(a)));
   const doc = history.doc;
   const save = useAutosave(projectId, analysis.id, doc, history.version);
+  const view = useViewer(projectId, analysis.id);
+  const styleVars = useStyleVars(doc.style);
 
   // `?sheet=<id>`: a navigation card's page target opens on that sheet.
   const [sheet, setSheetRaw] = useState(() => {
-    const want = new URLSearchParams(window.location.search).get('sheet');
+    const want = view.arrivedSheet ?? new URLSearchParams(window.location.search).get('sheet');
     return Math.max(0, analysis.sheets.findIndex((p) => p.id === want));
   });
   const [selected, setSelected] = useState<string | null>(null);
@@ -144,8 +148,9 @@ export function Editor({ projectId, analysis, visuals: initialVisuals }: { proje
   const filters = useMemo(() => {
     const steps = allControls(doc).flatMap((c) => (c.control ? controlSteps(c.control, controls.get(c.id)) : []));
     // A filter row still being set up (no operator yet) filters nothing (filterText.ts liveFilters).
-    return mergeFilters(liveFilters(doc.filters as FilterStep[]), steps);
-  }, [doc, controls]);
+    // The reader's selection (a navigation's carry, a map click) joins after the controls (dashboards.ts effectiveFilters).
+    return mergeFilters(liveFilters(doc.filters as FilterStep[]), [...steps, ...view.selection]);
+  }, [doc, controls, view.selection]);
 
   const api: EditorApi = {
     projectId,
@@ -198,6 +203,7 @@ export function Editor({ projectId, analysis, visuals: initialVisuals }: { proje
         else next.add(g);
         return next;
       }),
+    view,
   };
 
   // ⌘Z / ⇧⌘Z (Ctrl on Windows/Linux) — never while typing in a field.
@@ -224,10 +230,11 @@ export function Editor({ projectId, analysis, visuals: initialVisuals }: { proje
 
   return (
     <EditorCtx.Provider value={api}>
-      <div className={s.editor}>
-        <Head />
+      <div className={`${s.editor} ${styleClass(doc.style, view.presenting)}`} style={styleVars} data-print-root="">
+        <DashboardChrome />
+        {!view.presenting && <Head />}
         <div className={s.bench}>
-          <Rail />
+          {!view.presenting && <Rail />}
           <SheetHost onWidth={setWidth}>
             <Canvas />
           </SheetHost>

@@ -46,7 +46,7 @@
       }
     },
     {
-      "files": ["renderer/**"],
+      "files": ["renderer/**", "src/publish/site/**"],
       "rules": {
         "typescript/no-floating-promises": "off",
         "typescript/no-misused-promises": "off",

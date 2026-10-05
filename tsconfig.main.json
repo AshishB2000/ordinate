@@ -12,5 +12,7 @@
     // Per-checkout cache — see tsconfig.base.json for why it is not in node_modules.
     "tsBuildInfoFile": ".tsbuildinfo/main.tsbuildinfo"
   },
-  "include": ["src/**/*.ts", "preload/**/*.ts", "scripts/**/*.ts"]
+  "include": ["src/**/*.ts", "preload/**/*.ts", "scripts/**/*.ts"],
+  // The published site's renderer: classic browser scripts, compiled by tsconfig.renderer.json.
+  "exclude": ["src/publish/site/**"]
 }

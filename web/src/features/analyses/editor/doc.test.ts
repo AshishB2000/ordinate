@@ -6,7 +6,7 @@ import { buildParam } from '../ParamDialog';
 import { COALESCE_MS, initial, reduce, type Doc } from './doc';
 import { controlSteps, substitute } from './filters';
 
-const doc = (): Doc => ({ name: 'D', sheets: [{ id: 's', name: 'Sheet 1', cards: [] }], filters: [], parameters: [] });
+const doc = (): Doc => ({ name: 'D', sheets: [{ id: 's', name: 'Sheet 1', cards: [] }], filters: [], parameters: [], style: {} });
 
 describe('undo / redo', () => {
   it('each edit is a step; undo and redo walk them; a new edit drops the redo', () => {

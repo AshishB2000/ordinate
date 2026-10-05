@@ -1,0 +1,241 @@
+/* Alerts (T2.9, hub.css .al-* / alertsInbox): the bell, the inbox, the rules page, Alert me. Tokens only. */
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+.when {
+  color: var(--text-dim);
+  font-size: var(--t-11);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.grow {
+  flex: 1 1 auto;
+}
+.note {
+  margin: var(--sp-8) 0 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+}
+
+/* ── Alerts ────────────────────────────────────────────────────────── */
+.bell {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--ctl-md);
+  height: var(--ctl-md);
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.bell:hover {
+  background: var(--surface-2);
+  color: var(--text-strong);
+}
+.bell:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+}
+.bell:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.bellBadge {
+  position: absolute;
+  top: 2px;
+  right: 1px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: var(--r-full);
+  background: var(--error);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+}
+.inbox {
+  width: 380px;
+  max-width: calc(100vw - 24px);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: min(560px, 80vh);
+}
+.inboxHead,
+.inboxFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-8) var(--sp-12);
+}
+.inboxHead {
+  border-bottom: 1px solid var(--border);
+}
+.inboxFoot {
+  border-top: 1px solid var(--border);
+}
+.inboxTitle {
+  font-weight: 650;
+  color: var(--text-strong);
+}
+.inboxBody {
+  overflow: auto;
+  padding: var(--sp-8);
+  flex: 1 1 auto;
+}
+.events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-4);
+}
+.event {
+  padding: var(--sp-8);
+  border-radius: var(--r-md);
+}
+.event:hover {
+  background: var(--surface-2);
+}
+.unseen {
+  background: var(--accent-soft);
+}
+.eventHead {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: baseline;
+}
+.eventName {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: var(--t-12);
+}
+.eventMain {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: center;
+}
+.eventMsg {
+  margin: 2px 0;
+  font-size: var(--t-12);
+  color: var(--text);
+  flex: 1 1 auto;
+}
+.spark {
+  flex: none;
+}
+.spark polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.eventActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-12);
+  margin-top: 2px;
+}
+.linkBtn {
+  all: unset;
+  cursor: pointer;
+  color: var(--accent);
+  font-size: var(--t-11);
+  font-weight: 600;
+}
+.linkBtn:hover {
+  text-decoration: underline;
+}
+.linkBtn:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+}
+.rules {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--sp-12);
+  font-size: var(--t-12);
+}
+.rules th,
+.rules td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+.rules th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: var(--t-11);
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+}
+.ruleName {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.quiet {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+}
+.switchCell {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+}
+.alSummary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--sp-12);
+  margin-bottom: var(--sp-12);
+  background: var(--surface-2);
+  border-radius: var(--r-lg);
+}
+.alLabel {
+  color: var(--muted);
+  font-weight: 600;
+}
+.alValue {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-20);
+  font-weight: 700;
+  color: var(--text-strong);
+}
+.alRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-12);
+  margin-top: var(--sp-12);
+}
+.alTest {
+  margin: var(--sp-12) 0 0;
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  font-size: var(--t-12);
+}
+.alTestFire {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.alTestBad {
+  background: var(--error-soft);
+  color: var(--error);
+}
+

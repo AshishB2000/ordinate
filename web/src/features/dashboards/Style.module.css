@@ -1,0 +1,281 @@
+/* A dashboard's Style (legacy dashStyle.ts, hub.css "DASHBOARD STYLE"): each
+   preset REDEFINES the global tokens on the editor's subtree, so every card,
+   chart and control below follows without a rule of its own. Generated from the
+   hub.css blocks verbatim (same token sets, same values); the accent axis comes
+   LAST so it beats a theme's own accent at equal specificity. `auto` declares
+   nothing: the sheet follows the app's theme. */
+
+
+.theme_clean {
+  --bg: #f7f7f8;
+  --surface: #ffffff;
+  --surface-2: #f3f4f6;
+  --surface-3: #eaecf0;
+  --inset: #f2f4f7;
+  --surface-1: #ffffff;
+  --surface-float: #ffffff;
+  --border-hairline: rgba(24, 24, 27, 0.08);
+  --focus-ring: rgba(37, 99, 235, 0.4);
+
+  --text: #18181b;
+  --text-strong: #0f1117;
+  --muted: #6b7280;
+  --text-dim: #8a909c;
+  --text-faint: #aeb4bf;
+
+  --border: #e5e7eb;
+  --border-2: #d6dae1;
+  --border-3: #bfc5cf;
+
+  --accent: #2563eb;
+  --accent-2: #1d4fd0;
+  --accent-soft: rgba(37, 99, 235, 0.08);
+  --accent-line: rgba(37, 99, 235, 0.22);
+  --accent-ink: #ffffff;
+
+  --chart-1: #2563eb;
+  --chart-2: #0e7490;
+  --chart-3: #14b8a6;
+  --chart-4: #6366f1;
+  --chart-5: #64748b;
+  --chart-6: #b45309;
+  --chart-7: #be185d;
+  --chart-8: #4d7c0f;
+  --chart-accent: #2563eb;
+
+  --error: #e11d48;
+  --error-soft: rgba(225, 29, 72, 0.09);
+  --ok: #059669;
+  --ok-soft: rgba(5, 150, 105, 0.1);
+  --warn: #c77d11;
+  --warn-soft: rgba(199, 125, 17, 0.12);
+
+  --titlebar: #fafbfc;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 10px 28px -12px rgba(15, 23, 42, 0.18);
+  --shadow-lg: 0 30px 70px -24px rgba(15, 23, 42, 0.28);
+  --font-numeric: var(--font-ui);
+  color-scheme: light;
+}
+
+.theme_executive {
+  --bg: #f6f4f1;
+  --surface: #fffefc;
+  --surface-2: #f2f0ec;
+  --surface-3: #e8e5df;
+  --inset: #f1efeb;
+  --surface-1: #fffefc;
+  --surface-float: #fffefc;
+  --border-hairline: rgba(35, 33, 30, 0.08);
+  --focus-ring: rgba(71, 85, 105, 0.4);
+
+  --text: #23211e;
+  --text-strong: #14120f;
+  --muted: #6d6862;
+  --text-dim: #8b857d;
+  --text-faint: #b0aaa2;
+
+  --border: #e4e0d9;
+  --border-2: #d5d0c7;
+  --border-3: #bfb9ae;
+
+  --accent: #475569;
+  --accent-2: #334155;
+  --accent-soft: rgba(71, 85, 105, 0.08);
+  --accent-line: rgba(71, 85, 105, 0.22);
+  --accent-ink: #ffffff;
+
+  --chart-1: #475569;
+  --chart-2: #64748b;
+  --chart-3: #0f766e;
+  --chart-4: #7e8ba3;
+  --chart-5: #a1a8b5;
+  --chart-6: #8b6f47;
+  --chart-7: #6b5b95;
+  --chart-8: #5f7f6f;
+  --chart-accent: #475569;
+
+  --error: #b3123c;
+  --error-soft: rgba(179, 18, 60, 0.09);
+  --ok: #0f7a53;
+  --ok-soft: rgba(15, 122, 83, 0.1);
+  --warn: #a8710f;
+  --warn-soft: rgba(168, 113, 15, 0.12);
+
+  --titlebar: #faf9f7;
+  --shadow-sm: 0 1px 2px rgba(60, 50, 35, 0.07);
+  --shadow-md: 0 10px 28px -12px rgba(60, 50, 35, 0.2);
+  --shadow-lg: 0 30px 70px -24px rgba(60, 50, 35, 0.3);
+  /* The one system serif stack available: no web font may be added (local-first,
+     no remote fetch), and the repo has no serif stack anywhere else. ui-serif is
+     the platform's own, the rest is the fallback chain for platforms without it. */
+  --font-numeric: ui-serif, Georgia, "Times New Roman", serif;
+  color-scheme: light;
+}
+
+.theme_dark {
+  --bg: #18181b;
+  --surface: #232327;
+  --surface-2: #2a2a30;
+  --surface-3: #313139;
+  --inset: #1d1d21;
+  --surface-1: #232327;
+  --surface-float: #2a2a30;
+  --border-hairline: rgba(255, 255, 255, 0.1);
+  --focus-ring: rgba(59, 130, 246, 0.4);
+
+  --text: #ececee;
+  --text-strong: #ffffff;
+  --muted: #9ca3af;
+  --text-dim: #6b7280;
+  --text-faint: #52525b;
+
+  --border: #2e2e33;
+  --border-2: #3a3a42;
+  --border-3: #4a4a55;
+
+  --accent: #3b82f6;
+  --accent-2: #2f6fe0;
+  --accent-soft: rgba(59, 130, 246, 0.16);
+  --accent-line: rgba(59, 130, 246, 0.32);
+  --accent-ink: #ffffff;
+
+  --chart-1: #3b82f6;
+  --chart-2: #22d3ee;
+  --chart-3: #2dd4bf;
+  --chart-4: #818cf8;
+  --chart-5: #94a3b8;
+  --chart-6: #fbbf24;
+  --chart-7: #f472b6;
+  --chart-8: #a3e635;
+  --chart-accent: #3b82f6;
+
+  --error: #f87171;
+  --error-soft: rgba(248, 113, 113, 0.13);
+  --ok: #34d399;
+  --ok-soft: rgba(52, 211, 153, 0.13);
+  --warn: #f5b53d;
+  --warn-soft: rgba(245, 181, 61, 0.14);
+
+  --titlebar: #1d1d21;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 28px 64px -20px rgba(0, 0, 0, 0.65);
+  --font-numeric: var(--font-ui);
+  color-scheme: dark;
+}
+
+.density_comfortable {
+  --dash-gap: 12px;
+  --dash-row: 48px;
+}
+
+.density_compact {
+  --dash-gap: 8px;
+  --dash-row: 36px;
+}
+
+.accent_blue {
+  --accent: var(--brand-accent, #2563eb);
+  --accent-2: var(--brand-accent-2, #1d4fd0);
+  --accent-soft: var(--brand-accent-soft, rgba(37, 99, 235, 0.08));
+  --accent-line: var(--brand-accent-line, rgba(37, 99, 235, 0.22));
+  --chart-accent: var(--brand-accent, #2563eb);
+  --chart-1: var(--brand-chart-1, #2563eb);
+  --chart-2: var(--brand-chart-2, #0e7490);
+  --chart-3: var(--brand-chart-3, #14b8a6);
+  --chart-4: var(--brand-chart-4, #6366f1);
+  --chart-5: var(--brand-chart-5, #64748b);
+  --chart-6: var(--brand-chart-6, #b45309);
+  --chart-7: var(--brand-chart-7, #be185d);
+  --chart-8: var(--brand-chart-8, #4d7c0f);
+}
+
+.accent_teal {
+  --accent: #0d9488;
+  --accent-2: #0f766e;
+  --accent-soft: rgba(13, 148, 136, 0.09);
+  --accent-line: rgba(13, 148, 136, 0.24);
+  --chart-accent: #0d9488;
+  --chart-1: #0d9488;
+  --chart-2: #0e7490;
+  --chart-3: #2563eb;
+  --chart-4: #4f46e5;
+  --chart-5: #64748b;
+  --chart-6: #b45309;
+  --chart-7: #be185d;
+  --chart-8: #4d7c0f;
+}
+
+.accent_slate {
+  --accent: #475569;
+  --accent-2: #334155;
+  --accent-soft: rgba(71, 85, 105, 0.08);
+  --accent-line: rgba(71, 85, 105, 0.22);
+  --chart-accent: #475569;
+  --chart-1: #475569;
+  --chart-2: #64748b;
+  --chart-3: #0f766e;
+  --chart-4: #7e8ba3;
+  --chart-5: #a1a8b5;
+  --chart-6: #8b6f47;
+  --chart-7: #6b5b95;
+  --chart-8: #5f7f6f;
+}
+
+.theme_dark.accent_blue {
+  --accent: var(--brand-dk-accent, #3b82f6);
+  --accent-2: var(--brand-dk-accent-2, #2f6fe0);
+  --accent-soft: var(--brand-dk-accent-soft, rgba(59, 130, 246, 0.16));
+  --accent-line: var(--brand-dk-accent-line, rgba(59, 130, 246, 0.32));
+  --chart-accent: var(--brand-dk-accent, #3b82f6);
+  --chart-1: var(--brand-dk-chart-1, #3b82f6);
+  --chart-2: var(--brand-dk-chart-2, #22d3ee);
+  --chart-3: var(--brand-dk-chart-3, #2dd4bf);
+  --chart-4: var(--brand-dk-chart-4, #818cf8);
+  --chart-5: var(--brand-dk-chart-5, #94a3b8);
+  --chart-6: var(--brand-dk-chart-6, #fbbf24);
+  --chart-7: var(--brand-dk-chart-7, #f472b6);
+  --chart-8: var(--brand-dk-chart-8, #a3e635);
+}
+
+.theme_dark.accent_teal {
+  --accent: #2dd4bf;
+  --accent-2: #14b8a6;
+  --accent-soft: rgba(45, 212, 191, 0.16);
+  --accent-line: rgba(45, 212, 191, 0.32);
+  --chart-accent: #2dd4bf;
+  --chart-1: #2dd4bf;
+  --chart-2: #22d3ee;
+  --chart-3: #60a5fa;
+  --chart-4: #818cf8;
+  --chart-5: #94a3b8;
+  --chart-6: #fbbf24;
+  --chart-7: #f472b6;
+  --chart-8: #a3e635;
+}
+
+.theme_dark.accent_slate {
+  --accent: #94a3b8;
+  --accent-2: #b6c2d1;
+  --accent-soft: rgba(148, 163, 184, 0.16);
+  --accent-line: rgba(148, 163, 184, 0.32);
+  --chart-accent: #94a3b8;
+  --chart-1: #94a3b8;
+  --chart-2: #cbd5e1;
+  --chart-3: #5eead4;
+  --chart-4: #a5b4fc;
+  --chart-5: #78859a;
+  --chart-6: #b5a07a;
+  --chart-7: #b8a9d9;
+  --chart-8: #9fc5a8;
+}
+
+.theme_executive [data-card-id] {
+  border-radius: 14px;
+  box-shadow: var(--shadow-md);
+}
+.theme_executive [data-kind='metric'] [class*='value'] {
+  font-size: 34px;
+  font-family: var(--font-numeric);
+}

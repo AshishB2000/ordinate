@@ -55,3 +55,19 @@ input {
     scroll-behavior: auto !important;
   }
 }
+
+/* Print or save as PDF (T2.9, a dashboard's ⋯ menu): only the marked root prints — the shell does not. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  [data-print-root],
+  [data-print-root] * {
+    visibility: visible;
+  }
+  [data-print-root] {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+  }
+}

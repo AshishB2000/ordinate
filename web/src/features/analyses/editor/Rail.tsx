@@ -21,6 +21,7 @@ import { builderFor, builderNew, useAddVisualCard } from './AddVisual';
 import { useEditor, type Pane } from './context';
 import { Properties } from './Properties';
 import s from './Editor.module.css';
+import { QuickFilters } from '../../dashboards/ControlsExtras';
 
 const PANES: { id: NonNullable<Pane>; label: string; icon: IconName }[] = [
   { id: 'data', label: 'Data', icon: 'database' },
@@ -171,6 +172,7 @@ function FiltersPane() {
           onChange={(next) => ed.edit('Edit dashboard filters', (d) => void (d.filters = next))}
         />
       )}
+      <QuickFilters datasetId={dsId} cols={cols.data?.columns ?? []} />
       {steps.length > 0 && (
         <button type="button" className={buttonClass('ghost', 'sm')} onClick={() => ed.edit('Clear dashboard filters', (d) => void (d.filters = []))}>
           Clear all filters

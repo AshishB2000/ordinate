@@ -1,0 +1,392 @@
+/* The dashboard viewer's pieces (T2.9): text and summary cards, the
+   selection strip, tooltip visuals, Style, Present (hub.css .dash-*, .md-*,
+   .sum-*, .dash-sel-*). Comments and alerts have their own modules. Tokens only. */
+
+.grow {
+  flex: 1 1 auto;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+.note {
+  margin: var(--sp-8) 0 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+}
+
+/* ── Markdown (text cards, comment bodies) ─────────────────────────── */
+.md {
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--text);
+  overflow: auto;
+  height: 100%;
+}
+.md > :first-child {
+  margin-top: 0;
+}
+.md p,
+.md ul,
+.md ol,
+.md pre {
+  margin: 0 0 var(--sp-8);
+}
+.md ul,
+.md ol {
+  padding-left: 20px;
+}
+.md code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--surface-2);
+  border-radius: var(--r-sm);
+  padding: 1px 4px;
+}
+.md pre {
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--sp-8);
+  overflow: auto;
+}
+.md pre code {
+  background: none;
+  padding: 0;
+}
+.md a {
+  color: var(--accent);
+}
+.mdH {
+  margin: var(--sp-8) 0 var(--sp-4);
+  color: var(--text-strong);
+  font-weight: 650;
+  line-height: var(--lh-snug);
+}
+h3.mdH {
+  font-size: var(--t-15);
+}
+h4.mdH,
+h5.mdH {
+  font-size: var(--t-13);
+}
+.token {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.tokenMissing {
+  color: var(--error);
+  text-decoration: underline dotted;
+}
+.mdEmpty {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--t-12);
+  font-style: italic;
+}
+
+/* ── The Summary card ──────────────────────────────────────────────── */
+.summary {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.sentences {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  align-content: start;
+  gap: var(--sp-8);
+  overflow: auto;
+  flex: 1 1 auto;
+}
+.sentence {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: flex-start;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--text);
+}
+.sentence > svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--accent);
+}
+.sentence.good > svg {
+  color: var(--ok);
+}
+.sentence.bad > svg {
+  color: var(--error);
+}
+.sentenceBtn {
+  all: unset;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.sentenceBtn:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+}
+.sentenceBtn:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+}
+.prose {
+  margin: 0;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  flex: 1 1 auto;
+  overflow: auto;
+}
+.summaryFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  justify-content: space-between;
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--border);
+  margin-top: var(--sp-8);
+}
+.stamp {
+  color: var(--text-dim);
+  font-size: var(--t-11);
+}
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-line);
+  }
+  50% {
+    box-shadow: 0 0 0 6px var(--accent-soft);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.pulse {
+  animation: pulse 0.8s var(--ease-out) 2;
+}
+
+/* ── The watched KPI's bell ─────────────────────────────────────────── */
+.watched {
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+  padding: 0 3px;
+}
+.fired {
+  color: var(--accent);
+}
+
+/* ── The selection strip ───────────────────────────────────────────── */
+.selStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  margin-bottom: var(--sp-8);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-lg);
+}
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding-right: var(--sp-8);
+  border-right: 1px solid var(--accent-line);
+}
+.crumbFrom {
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.selLabel {
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: 26px;
+  padding: 0 2px 0 var(--sp-8);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+  font-size: var(--t-12);
+  color: var(--text-strong);
+}
+.chipNarrow {
+  border-style: dashed;
+}
+
+/* ── tooltip_visual ────────────────────────────────────────────────── */
+.tip {
+  position: fixed;
+  z-index: 50;
+  width: 272px;
+  padding: var(--sp-8);
+  background: var(--surface-float);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+}
+.tipHead {
+  font-weight: 650;
+  color: var(--text-strong);
+  font-size: var(--t-12);
+}
+.tipSub,
+.tipNote {
+  color: var(--muted);
+  font-size: var(--t-11);
+  margin: 2px 0 var(--sp-4);
+}
+.tipChart {
+  position: relative;
+  height: 140px;
+}
+
+/* ── Style ─────────────────────────────────────────────────────────── */
+.presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-8);
+  margin-bottom: var(--sp-16);
+}
+.preset {
+  display: grid;
+  gap: 2px;
+  padding: var(--sp-8);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.preset:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+}
+.presetOn {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.mini {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 14px 22px;
+  gap: 3px;
+  padding: 4px;
+  margin-bottom: 4px;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+}
+.mini > span {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.mini > span:first-child {
+  grid-column: 1 / -1;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.presetName {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: var(--t-12);
+}
+.presetHint {
+  color: var(--muted);
+  font-size: var(--t-11);
+}
+.styleRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-12);
+  margin-bottom: var(--sp-12);
+}
+.accentField {
+  border: 0;
+  margin: 0 0 var(--sp-12);
+  padding: 0;
+}
+.legend {
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text-strong);
+  margin-bottom: var(--sp-8);
+}
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-8);
+}
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-full);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--border-2);
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+.swatchNone {
+  background: linear-gradient(135deg, var(--surface) 45%, var(--border-3) 46%, var(--border-3) 54%, var(--surface) 55%);
+}
+.swatchOn {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.swatch:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+}
+.asOfOn {
+  box-shadow: 0 0 0 1px var(--accent);
+  border-radius: var(--r-md);
+}
+
+/* ── Present ───────────────────────────────────────────────────────── */
+.presenting {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--bg);
+}
+.presentBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  padding: var(--sp-8) var(--sp-16);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.presentName {
+  font-size: var(--t-15);
+  font-weight: 650;
+  color: var(--text-strong);
+}
+
+/* ── Quick filters (Category… / Period…) ───────────────────────────── */
+.quickRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}

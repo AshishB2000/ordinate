@@ -203,7 +203,7 @@ export function InteractionProps({ def }: { def: VisualDef }) {
             : 'Give this visual a category first.'}
       </p>
       <Checkbox label="Show tooltips" checked={ov.showTooltips !== false} disabled={busy} onCheckedChange={(v) => void write({ showTooltips: v })} />
-      <p className={s.note}>Both are the visual’s own settings: they change it everywhere it is used. Tile actions saved on this card run where the dashboard is viewed.</p>
+      <p className={s.note}>Both are the visual’s own settings: they change it everywhere it is used. Tile actions saved on this card run on a click or from its ⋯ menu.</p>
     </>
   );
 }

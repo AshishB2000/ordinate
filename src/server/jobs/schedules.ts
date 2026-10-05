@@ -31,11 +31,13 @@ import { readerEmails } from '../authz/index';
 import { ctx } from '../context';
 import { publish } from '../sse';
 import { defineJob } from './runner';
+import { scheduleRepublish } from '../../publish/hosted';
 
 /** The desktop tick's interval (refreshScheduler TICK_MS). */
 export const TICK_EVERY_MS = 60_000;
 
 let wired = false;
+let readersVia: { pool: Pool; devAuth: boolean } | null = null;
 
 /**
  * Pushes `channel` to the tabs of every member who may read `projectId`. Under
@@ -49,18 +51,33 @@ export async function toReaders(pool: Pool, everyone: boolean, projectId: string
 }
 
 /**
+ * `toReaders` for a handler outside the tick (an "evaluate now", a comment
+ * written — T2.9). Without Postgres there are no grants and the one identity is
+ * the dev admin, so the org's tabs are the readers.
+ */
+export function pushToReaders(projectId: string, channel: string, payload: unknown): void {
+  if (!readersVia) return publish({ org: ctx().org.id }, channel, payload);
+  void toReaders(readersVia.pool, readersVia.devAuth, projectId, channel, payload).catch(() => undefined);
+}
+
+/**
  * Hooks the tick's callbacks to server delivery and declares the `tick` job.
  * Once per process. `devAuth`: AUTH_MODE=dev (see `toReaders`).
  */
 export function wireSchedules(pool: Pool, devAuth: boolean): void {
   if (wired) return;
   wired = true;
+  readersVia = { pool, devAuth };
   const push = (projectId: string, channel: string, payload: unknown): void => {
     void toReaders(pool, devAuth, projectId, channel, payload).catch(() => undefined);
   };
 
   scheduler.setEnabledCheck(() => config.get().autoRefresh !== false);
-  scheduler.onRefreshed((o) => push(o.projectId, 'hub:dataset-refreshed', o.error === undefined ? o : { ...o, error: redactOriginText(o.error) }));
+  scheduler.onRefreshed((o) => {
+    push(o.projectId, 'hub:dataset-refreshed', o.error === undefined ? o : { ...o, error: redactOriginText(o.error) });
+    // A published site that reads it, opted in, is rebuilt at its link (T2.9; the desktop's job hook).
+    if (o.ok) scheduleRepublish(o.projectId, o.datasetId);
+  });
   // ipc/alerts' evaluateOnly, which cannot load here (its delivery imports Electron).
   scheduler.onEvaluateAlerts(async (projectId, datasetId) => {
     await alertStore.syncWatchRules(projectId);
