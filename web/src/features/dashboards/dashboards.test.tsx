@@ -1,5 +1,6 @@
 // T2.9's pure pieces, DIFFERENTIAL where the desktop has the original:
-//   the Markdown subset   mdParse / mdTokens / safeHref == renderer/hub/markdown.js
+//   the Markdown subset   mdParse / mdTokens / safeHref == the desktop's markdown.js
+//                         (recorded at the T8.1 cutover: __golden__/markdown.json)
 //   tile actions          carrySteps / actionUrl == src/analysis/cardModel.js
 //   pivot copy / CSV      the legacy pivotToRows shape over a server-shaped grid
 //   Present               the fitted row height and its 28 px floor
@@ -19,11 +20,11 @@ import { actionUrl, carrySteps, type TileAction } from './tileActions';
 import { upsertFilter } from './ControlsExtras';
 import { brandsFor } from './PublishDialog';
 import { brandTokens } from '../../charts/palette';
+import { golden } from '../../test-golden';
 
 const ROOT = path.resolve(process.cwd(), '..');
 const require = createRequire(path.join(ROOT, 'package.json'));
-// any: the desktop's classic scripts, loaded through their CommonJS branch
-const legacyMd: any = require(path.join(ROOT, 'renderer', 'hub', 'markdown.js'));
+// any: the server's UMD module, loaded through its CommonJS branch
 const legacyCard: any = require(path.join(ROOT, 'src', 'analysis', 'cardModel.js'));
 
 /** A script URL, spelled so the lint's no-script-url rule sees a test input, not a link. */
@@ -47,18 +48,27 @@ const SOURCES = [
   'Line\r\nwindows\r\n\r\nnext',
 ];
 
+const MD = golden<{ parse: Array<[string, unknown]>; tokens: Array<[string, unknown]>; hrefs: Array<[string, string]>; italicX: unknown }>(
+  'src/features/dashboards/__golden__/markdown.json',
+);
+
 describe('Markdown subset — differential against the desktop parser', () => {
+  it('the fixture was recorded over exactly these sources', () => {
+    deepStrictEqual(MD.parse.map(([src]) => src), SOURCES);
+    deepStrictEqual(MD.tokens.map(([src]) => src), SOURCES);
+  });
   it('parses every source to the same tree', () => {
-    for (const src of SOURCES) deepStrictEqual(mdParse(src), legacyMd.mdParse(src), src);
+    for (const [src, want] of MD.parse) deepStrictEqual(mdParse(src), want, src);
   });
   it('lists the same tokens', () => {
-    for (const src of SOURCES) deepStrictEqual(mdTokens(src), legacyMd.mdTokens(src), src);
+    for (const [src, want] of MD.tokens) deepStrictEqual(mdTokens(src), want, src);
   });
   it('keeps exactly the same links', () => {
-    for (const u of ['https://a.b/c', 'http://x', `${JS}alert(1)`, 'https://', ' https://a.b ', 'data:text/html,x', 'HTTPS://A.B']) equal(safeHref(u), legacyMd.safeHref(u), u);
+    deepStrictEqual(MD.hrefs.map(([u]) => u), ['https://a.b/c', 'http://x', `${JS}alert(1)`, 'https://', ' https://a.b ', 'data:text/html,x', 'HTTPS://A.B']);
+    for (const [u, want] of MD.hrefs) equal(safeHref(u), want, u);
   });
   it('a broken port would be caught (negative control)', () => {
-    notDeepStrictEqual(mdParse('**x**'), legacyMd.mdParse('*x*'));
+    notDeepStrictEqual(mdParse('**x**'), MD.italicX);
   });
 });
 

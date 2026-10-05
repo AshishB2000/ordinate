@@ -1,22 +1,15 @@
 // DIFFERENTIAL: Format depth (./fmtApply) against the desktop's fmtApply.js +
-// fmtColors.js. The same data and the same Format overrides — axis ranges,
+// fmtColors.js, as recorded at the T8.1 cutover (__golden__/fmt.json). The
+// same data and the same Format overrides — axis ranges,
 // log scales, tick density, hidden axes, a right axis and its measures, series
 // colours, value palettes, colour-by-category, and the PROJECT's colour map for
 // a category and a split — must build the same Chart.js config, id by id.
-// Needs `npm run build:ts` at the repo root.
 
 import { deepStrictEqual } from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import path from 'node:path';
-import vm from 'node:vm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { buildChart } from './build';
 import type { Cx } from './types';
-
-const ROOT = path.resolve(process.cwd(), '..');
-const HUB = path.join(ROOT, 'renderer', 'hub');
-const require = createRequire(path.join(ROOT, 'package.json'));
+import { golden } from '../test-golden';
 
 const THEME: Record<string, string> = {
   '--chart-1': '#2563eb', '--chart-2': '#0e7490', '--chart-3': '#14b8a6', '--chart-4': '#6366f1',
@@ -26,53 +19,6 @@ const THEME: Record<string, string> = {
 };
 const computedStyle = () => ({ getPropertyValue: (name: string) => THEME[name] || '' });
 const canvasStub = () => ({ parentElement: { clientWidth: 640, clientHeight: 320 } }) as unknown as HTMLCanvasElement;
-
-const SCRIPTS = [
-  'chartTraits.js', 'chartPalette.js', 'chartTypeSpec.js', 'chartShapes.js',
-  'chartFamiliesExtra.js', 'chartFamiliesPlugins.js', 'chartValueLabels.js',
-  'chartAnnotations.js', 'chartEvents.js', 'chartDatasets.js', 'chartScales.js',
-  'chartRender.js', 'calcMenu.js', 'fmtApply.js',
-];
-
-function slice(file: string, from: string, to: string): string {
-  const src = readFileSync(path.join(HUB, file), 'utf8');
-  const a = src.indexOf(from);
-  const b = src.indexOf(to, a);
-  if (a < 0 || b < 0) throw new Error(`${file}: markers not found`);
-  return src.slice(a, b);
-}
-
-interface Legacy {
-  buildChart(canvas: unknown, data: unknown, type: string, overrides: unknown): unknown;
-  fmtAdoptColorMap(p: unknown): void;
-  recorded: Cx[];
-}
-
-function loadLegacy(): Legacy {
-  const recorded: Cx[] = [];
-  function Chart(this: Cx, _c: unknown, config: unknown) {
-    recorded.push(config);
-  }
-  const sandbox: Record<string, unknown> = {
-    console,
-    Chart: Object.assign(Chart, { register: () => {}, defaults: {} }),
-    OrdFormat: require(path.join(ROOT, 'src/app/format.js')),
-    t: (require(path.join(ROOT, 'scripts/i18nNode.js')) as { englishT: unknown }).englishT,
-    matchMedia: () => ({ matches: false }),
-    getComputedStyle: computedStyle,
-    document: { documentElement: {} },
-    currentProjectId: 'p',
-    hubFormat: { assignColors: () => Promise.resolve(null), getColorMap: () => Promise.resolve({}) },
-    // fmtColors.js binds the shared colour rule through cjsShim's `module`.
-    module: { exports: require(path.join(ROOT, 'src/analysis/colorMap.js')) },
-  };
-  sandbox.window = sandbox;
-  vm.createContext(sandbox);
-  const formatters = slice('hub.js', 'function _fmtVal(', '// ── Readiness banner');
-  const source = [formatters, readFileSync(path.join(HUB, 'fmtColors.js'), 'utf8'), ...SCRIPTS.map((f) => readFileSync(path.join(HUB, f), 'utf8'))].join('\n;\n');
-  const api = vm.runInContext(`${source}\n;({ buildChart, fmtAdoptColorMap });`, sandbox) as Legacy;
-  return Object.assign(api, { recorded });
-}
 
 function norm(v: unknown, depth = 0): unknown {
   if (depth > 40) throw new Error('too deep');
@@ -103,24 +49,22 @@ const SETS: Record<string, Record<string, unknown>> = {
   diverging: { measurePalettes: { 'sum of profit': 'diverging' } },
 };
 
-let legacy: Legacy;
-beforeAll(() => {
-  legacy = loadLegacy();
-  vi.stubGlobal('getComputedStyle', computedStyle);
-});
+const G = golden<Record<string, unknown>>('src/charts/__golden__/fmt.json');
+beforeAll(() => vi.stubGlobal('getComputedStyle', computedStyle));
 afterAll(() => vi.unstubAllGlobals());
 
 function agree(type: string, data: unknown, overrides: Record<string, unknown>, portOverrides = overrides): void {
-  legacy.recorded.length = 0;
-  const old = legacy.buildChart(canvasStub(), structuredClone(data), type, structuredClone(overrides));
+  const key = type + ' ' + JSON.stringify(overrides) + ' ' + JSON.stringify(data);
+  expect(key in G, `recorded: ${key}`).toBe(true);
+  const want = G[key];
   const built = buildChart(canvasStub(), structuredClone(data) as never, type, portOverrides);
-  if (old === null) {
+  if (want === null) {
     expect(built).toBeNull();
     return;
   }
   expect(built && built.kind).toBe('chartjs');
   if (!built || built.kind !== 'chartjs') return;
-  deepStrictEqual(norm(built.config), norm(legacy.recorded[0]));
+  deepStrictEqual(norm(built.config), want);
 }
 
 describe('Format depth builds the desktop config', () => {
@@ -132,7 +76,6 @@ describe('Format depth builds the desktop config', () => {
   }
 
   it('the project colour map: a category and a split column, as main deals them', () => {
-    legacy.fmtAdoptColorMap({ id: 'p', colorMap: MAP });
     for (const type of ['pie', 'donut', 'treemap', 'funnel', 'column']) {
       agree(type, ONE, { colorByCategory: true, _colorScope: { projectId: 'p', category: 'region', series: '' } },
         { colorByCategory: true, _colorScope: { category: 'region', series: '', map: MAP } });
@@ -143,8 +86,16 @@ describe('Format depth builds the desktop config', () => {
     }
   });
 
-  it('a log axis over a zero or a negative is drawn linear (both sides)', () => {
+  it('a log axis over a zero or a negative is drawn linear', () => {
     const built = buildChart(canvasStub(), structuredClone(DATA) as never, 'column', { axes: { y: { log: true } } });
     expect(built && built.kind === 'chartjs' && (built.config.options as Cx).scales.y.type).not.toBe('logarithmic');
+  });
+});
+
+describe('the golden comparison', () => {
+  it('a broken port would be caught (negative control)', () => {
+    const built = buildChart(canvasStub(), structuredClone(DATA) as never, 'column', {});
+    const want = G['bar ' + JSON.stringify(SETS.axes) + ' ' + JSON.stringify(DATA)];
+    expect(() => deepStrictEqual(norm(built && built.kind === 'chartjs' ? built.config : null), want)).toThrow();
   });
 });

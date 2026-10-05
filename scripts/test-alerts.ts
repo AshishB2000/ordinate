@@ -325,16 +325,17 @@ ok('a disabled rule never fires however far it crosses',
 //
 // THE CHECK THAT MATTERS MOST TO A READER. The alert is about a KPI card, and a
 // banner reading "5.19M" under a card reading "5.2M" is two numbers. There used
-// to be a hand-kept copy of the renderer's _fmtVal here; both sides now call
-// src/app/format.ts, so this pins that they still do, and what it prints.
+// to be a hand-kept copy of the card's formatter here; both sides now call
+// src/app/format.ts (the card's is the web chart engine's fmtVal), so this
+// pins that they still do, and what it prints.
 
 {
   const { formatCompact } = require('../src/app/format') as typeof import('../src/app/format');
   const fs: typeof import('fs') = require('fs');
   const path: typeof import('path') = require('path');
-  const hubSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'hub', 'hub.ts'), 'utf8');
-  const fmtVal = hubSrc.slice(hubSrc.indexOf('function _fmtVal('), hubSrc.indexOf('\n}', hubSrc.indexOf('function _fmtVal(')));
-  ok('the renderer\'s _fmtVal is OrdFormat.formatCompact', /return OrdFormat\.formatCompact\(v\);/.test(fmtVal), fmtVal);
+  const webSrc = fs.readFileSync(path.join(__dirname, '..', 'web', 'src', 'charts', 'format.ts'), 'utf8');
+  const fmtVal = webSrc.slice(webSrc.indexOf('function fmtVal('), webSrc.indexOf('\n}', webSrc.indexOf('function fmtVal(')));
+  ok('the web chart engine\'s fmtVal is OrdFormat.formatCompact', /return OrdFormat\.formatCompact\(v\);/.test(fmtVal), fmtVal);
   const cases = [
     0, 1, 7, 999, 1000, 1500, 9999, 10_000, 999_999, 1_000_000,
     5_194_598.73, 6_000_000, 999_999_999, 1_000_000_000, 4.5e9,

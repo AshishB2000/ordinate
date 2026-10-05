@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import hubIcons from '../../../../renderer/hub/icons.ts?raw';
 import { ICON_NAMES, Icon } from './Icon';
 import { ICON_PATHS } from './paths';
+import { golden } from '../../test-golden';
 
 describe('Icon', () => {
   it('is decorative by default, in the house frame', () => {
@@ -22,14 +22,11 @@ describe('Icon', () => {
     expect(screen.getByRole('img', { name: 'Warning' }).getAttribute('width')).toBe('20');
   });
 
-  // The generated set must match the desktop's hand-authored one exactly.
-  // Same reading as web/scripts/gen-icons.mjs; rerun it if this fails.
-  it('paths.ts is in sync with renderer/hub/icons.ts', () => {
-    const block = /^const ICONS[^{]*\{([\s\S]*?)^\};/m.exec(hubIcons)![1].replace(/\/\*[\s\S]*?\*\//g, '');
-    const source = Object.fromEntries(
-      [...block.matchAll(/^\s*'?([\w-]+)'?:\s*'([^']*)',?\s*$/gm)].map((m) => [m[1], m[2]]),
-    );
-    expect(ICON_PATHS).toEqual(source);
+  // paths.ts was generated from the desktop's hand-authored set (its icons.ts),
+  // recorded at the T8.1 cutover as __golden__/icons.json. paths.ts is now the
+  // source: an icon changed on purpose changes that fixture with it.
+  it('paths.ts is the desktop icon set, glyph for glyph', () => {
+    expect(ICON_PATHS).toEqual(golden('src/ui/icons/__golden__/icons.json'));
     expect(ICON_NAMES.length).toBeGreaterThanOrEqual(92);
   });
 

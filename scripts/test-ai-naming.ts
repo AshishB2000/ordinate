@@ -1,16 +1,17 @@
 // The Assistant has ONE name, and the "no model configured" sentence has ONE
-// wording — in both worlds.
+// wording.
 //
-// The main process and the renderer cannot share a module (one is CommonJS
-// under Electron's main, the other a classic global-scope <script>), so the
-// sentence is declared twice: execConfig.AI_NOT_CONFIGURED and execMenu.ts's
-// `const AI_NOT_CONFIGURED`. Two declarations of one string is exactly the
-// shape that drifts, so this asserts they are byte-identical — and that the
-// old spellings the sweep replaced ("Copilot", "Execution settings", "AI
-// draft", "Start with AI") have not come back into anything a user reads.
+// The desktop app declared the sentence twice — execConfig.AI_NOT_CONFIGURED
+// and its classic-script execMenu.ts's `const AI_NOT_CONFIGURED` — and this
+// asserted they were byte-identical. The desktop copy went with the desktop app
+// (T8.1); its text is the golden fixture scripts/fixtures/golden/declaredTwice.json.
+// This also asserts the old spellings the sweep replaced ("Copilot",
+// "Execution settings", "AI draft", "Start with AI") have not come back into
+// anything the server writes for a user.
 
 export {};
 import { ok, failureCount } from './selfcheck';
+import { golden } from './golden';
 
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
@@ -24,21 +25,14 @@ const MAIN = execConfig.AI_NOT_CONFIGURED;
 ok('the main process exports the not-configured sentence',
   MAIN === 'The Assistant isn’t set up yet.', String(MAIN));
 
-const execMenu = read('renderer/hub/execMenu.ts');
-const m = /^const AI_NOT_CONFIGURED = '([^']*)';$/m.exec(execMenu);
-ok("execMenu.ts declares the renderer's copy", Boolean(m));
-ok('…and the two copies are byte-identical', Boolean(m) && m![1] === MAIN,
-  `renderer=${m ? m[1] : '(none)'}`);
+const desktop = golden<{ aiNotConfigured: string | null }>('declaredTwice').aiNotConfigured;
+ok("the desktop's copy was recorded", typeof desktop === 'string' && desktop.length > 0);
+ok('…and the two copies are byte-identical', desktop === MAIN, `desktop=${desktop}`);
 
 // ── No surface reads the sentence a second way ──────────────────────────────
 // Every file that has to say it now interpolates the constant; a fresh literal
 // is how the six near-copies happened the first time.
-const SURFACES = [
-  'renderer/hub/dock.ts', 'renderer/hub/prepare.ts', 'renderer/hub/dsExplorer.ts',
-  'renderer/hub/dashAdd.ts', 'renderer/hub/vizNew.ts', 'renderer/hub/anDraft.ts',
-  'renderer/hub/anNew.ts', 'renderer/hub/authoringPanes.ts', 'src/ai/analyze.ts',
-  'src/ai/prompts.ts',
-];
+const SURFACES = ['src/ai/analyze.ts', 'src/ai/prompts.ts'];
 for (const f of SURFACES) {
   const src = read(f);
   ok(`${f} does not re-spell the not-set-up sentence`,
@@ -52,7 +46,6 @@ for (const f of SURFACES) {
 // string. What is checked is the code and the markup a user actually reads.
 const stripTs = (s: string): string =>
   s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
-const stripHtml = (s: string): string => s.replace(/<!--[\s\S]*?-->/g, '');
 
 const RETIRED: Array<[RegExp, string]> = [
   [/\bCopilot\b/, 'Copilot — the feature is the Assistant'],
@@ -79,12 +72,7 @@ const RETIRED: Array<[RegExp, string]> = [
 // window.hub.* IPC names and CSS/DOM ids keep their historical spelling on
 // purpose (renaming them moves persisted state), so only quoted UI strings and
 // markup text are searched.
-const UI_FILES = [
-  ...fs.readdirSync(path.join(REPO, 'renderer/hub'))
-      .filter((f) => f.endsWith('.ts') && !f.endsWith('.d.ts'))
-      .map((f) => 'renderer/hub/' + f),
-  'src/ai/analyze.ts', 'src/ai/prompts.ts', 'src/analysis/analysisPlan.ts',
-];
+const UI_FILES = ['src/ai/analyze.ts', 'src/ai/prompts.ts', 'src/analysis/analysisPlan.ts'];
 for (const [re, label] of RETIRED) {
   const hits: string[] = [];
   for (const f of UI_FILES) {
@@ -94,12 +82,6 @@ for (const [re, label] of RETIRED) {
     }
   }
   ok(`no user-facing ${label}`, hits.length === 0, hits.join(' | '));
-}
-
-const html = stripHtml(read('renderer/hub/index.html'));
-for (const [re, label] of RETIRED) {
-  const hits = html.split('\n').filter((l) => re.test(l));
-  ok(`index.html has no ${label}`, hits.length === 0, hits.join(' | ').slice(0, 160));
 }
 
 if (failureCount()) {

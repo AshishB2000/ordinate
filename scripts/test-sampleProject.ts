@@ -11,6 +11,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
+import { golden } from './golden';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -173,15 +174,14 @@ async function main(): Promise<void> {
     execConfig.publicConfig().starred.includes('analysis:' + anList[0].id),
     JSON.stringify(execConfig.publicConfig().starred));
 
-  // ── The renderer's copy of the dataset name ──────────────────────────────
-  // homeAsk.ts swaps in sample-specific ask chips by matching this name, and the
-  // renderer is a classic <script> that cannot import from main. Two spellings
-  // of one string is the shape that drifts, so they are pinned together.
-  const homeAsk = fs.readFileSync(path.join(REPO, 'renderer', 'hub', 'homeAsk.ts'), 'utf8');
-  const m = /^const HA_SAMPLE_DATASET = '([^']*)';$/m.exec(homeAsk);
-  ok('homeAsk.ts declares the sample dataset name', Boolean(m));
-  ok('…identical to sampleProject.ts\'s', Boolean(m) && m![1] === sample.SAMPLE_DATASET_NAME,
-    `renderer=${m ? m[1] : '(none)'} main=${sample.SAMPLE_DATASET_NAME}`);
+  // ── The desktop's copy of the dataset name ───────────────────────────────
+  // The desktop's homeAsk.ts swapped in sample-specific ask chips by matching
+  // this name; its copy went with the desktop app (T8.1) and is the golden
+  // fixture scripts/fixtures/golden/declaredTwice.json.
+  const desktopName = golden<{ sampleDatasetName: string | null }>('declaredTwice').sampleDatasetName;
+  ok('the desktop\'s sample dataset name was recorded', typeof desktopName === 'string' && desktopName.length > 0);
+  ok('…identical to sampleProject.ts\'s', desktopName === sample.SAMPLE_DATASET_NAME,
+    `desktop=${desktopName} main=${sample.SAMPLE_DATASET_NAME}`);
 
   // ── Seeding twice is a no-op ─────────────────────────────────────────────
   // The flag records that seeding HAPPENED, not that the sample still exists —

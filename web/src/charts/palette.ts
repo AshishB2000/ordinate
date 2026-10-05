@@ -138,7 +138,7 @@ function brandRgba(hex: string, a: number): string {
 
 /** The surfaces the ramp must read on — theme.css --surface in each theme, and the dark sheet. */
 const BRAND_LIGHT_SURFACE = '#ffffff';
-const BRAND_DARK_SURFACES = ['#1c1c20', '#232327'];
+export const BRAND_DARK_SURFACES = ['#1c1c20', '#232327'];
 
 /**
  * One accent → `{ light, dark }` token maps, every contrast floor met. Null

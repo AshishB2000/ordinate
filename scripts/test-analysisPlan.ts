@@ -30,19 +30,19 @@
 //      its output must be byte-identical to what the preview showed.
 //
 // Plus one drift guard the module cannot state about itself: CHART_TYPE_IDS is
-// compared against the REAL renderer list by vm-executing renderResult.js, the
-// way scripts/test-plotSpec.ts does.
+// compared against the desktop renderer's list (renderResult.js, vm-executed),
+// recorded as the golden fixture scripts/fixtures/golden/chartIds.json when the
+// desktop app went (T8.1).
 //
 //   npm run build:ts && node scripts/test-analysisPlan.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
-import { withT } from './i18nNode';
+import { golden } from './golden';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const vm: typeof import('vm') = require('vm');
 const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-analysisplan-'));
@@ -161,14 +161,10 @@ async function setup(): Promise<void> {
 
 // ── §1 CHART_TYPE_IDS is the REAL list ──────────────────────────────────────
 function checkChartVocabulary(): void {
-  const code = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'hub', 'renderResult.js'), 'utf8');
-  const sandbox: Record<string, any> = { console };
-  sandbox.globalThis = sandbox;
-  sandbox.window = sandbox;
-  sandbox.document = undefined;
-  sandbox.localStorage = undefined;
-  vm.createContext(withT(sandbox));
-  const got = vm.runInContext(code + '\n;({ALL_CHART_TYPE_IDS, VIZ_LABELS});', sandbox);
+  // The desktop renderResult.js's ALL_CHART_TYPE_IDS and VIZ_LABELS, recorded
+  // before the desktop app went (T8.1): scripts/fixtures/golden/chartIds.json.
+  const G = golden<{ allChartTypeIds: string[]; vizLabels: Record<string, string> }>('chartIds');
+  const got = { ALL_CHART_TYPE_IDS: G.allChartTypeIds, VIZ_LABELS: G.vizLabels };
   const real: string[] = got.ALL_CHART_TYPE_IDS.concat(['table', 'map_bubble', 'map_choropleth']);
   ok('the chart vocabulary under test is the real one', real.length === 37, `${real.length} types`);
   ok('CHART_TYPE_IDS has exactly the renderer\'s types', plan.CHART_TYPE_IDS.size === real.length,
