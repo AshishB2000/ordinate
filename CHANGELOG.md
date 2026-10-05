@@ -9,6 +9,41 @@ All notable changes to Ordinate are documented here. Format based on
 
 ## [Unreleased]
 
+### Breaking — Ordinate is now a self-hosted web app (Phase 7)
+
+The Electron desktop app is gone. Ordinate is a server a company runs in its own infrastructure,
+and people use it in a browser. The plan, every measurement and the retro are in
+[`docs/phase-7-web/`](docs/phase-7-web/); operator docs are in [`docs/server/`](docs/server/).
+
+- **Server:** Node 24 and Fastify 5 (`npm run server`). Every endpoint is an RPC channel with a zod
+  contract and a role check: a channel with no contract does not exist. Push is server-sent events.
+- **Web app:** the whole UI was rewritten in React 19 with Vite. The desktop screens were ported
+  with a parity checklist (each dropped control named, with its reason), from Home through Data, Prepare, Pipelines, Visuals, Analytics, Analyses,
+  Dashboards, Reports, Settings and Admin. A command palette replaces the native menus.
+- **Sign-in and roles:** OIDC (Okta, Entra ID, Google, Keycloak, Auth0) or a trusted sign-in proxy
+  in header mode. Orgs, teams, per-project roles (viewer, editor, admin), sharing, an audit log,
+  personal API tokens and an admin console.
+- **Storage:** metadata in Postgres (row-level security per org); Parquet tables on a volume or on S3
+  through DuckDB `httpfs`; connection passwords and AI keys under envelope encryption with
+  `ORDINATE_MASTER_KEY`. `npm run import-desktop` brings a desktop install's projects across.
+- **Engine:** one locked DuckDB worker per org, no blocking call on the request thread, user regex in
+  a worker with a 2 s deadline, jobs and events shared across pods through Postgres.
+- **Security:** SSRF guard on every connector, CSRF protection, a strict CSP header, rate limits,
+  request timeouts, a written threat model and `SECURITY.md`. Eight review findings (F1–F8) were
+  fixed with regression tests.
+- **Publishing:** a dashboard publishes to `/p/<id>`, visible to org members, or to anyone with the
+  link if an admin turns public links on.
+- **Automation:** the MCP endpoint `POST /api/mcp`, signed in with an API token. The desktop's
+  `--cli` and stdio MCP have no entry point any more.
+- **Packaging:** one container image for amd64 and arm64 (under 600 MB, downloads nothing at run
+  time), a Docker Compose stack, a Helm chart and a tag-driven release workflow. `/metrics` serves
+  Prometheus on its own port.
+
+**Removed with the desktop app:** the screenshot hotkey and overlay (a screenshot is now uploaded),
+local CLI model execution, the local-folder connectors (DuckDB file, Parquet folder, CSV folder),
+folder watch, the sync folder, OS menus and notifications, the Mosaic renderer, the Svelte spike and
+the desktop installers.
+
 ### Added
 - **The app is no longer empty on first launch.** A bundled sample project — 5,000 rows of generated
   retail orders across two years, five regions and twenty-five US states — arrives with a dashboard
