@@ -1148,3 +1148,4 @@ scripts/**/*.js
 /src/server/mode.js
 /scripts/test-regexDeadline.js
 /src/publish/site/*.js
+/scripts/test-serverDocs.js

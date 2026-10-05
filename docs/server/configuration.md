@@ -1,0 +1,135 @@
+# Configuration reference
+
+Every environment variable the Ordinate server reads. The server reads its configuration once at
+startup and validates it there (`src/server/env.ts`). A bad value stops the process with one line
+that names the variable, for example `ordinate: AUTH_MODE must be one of dev|oidc|header, got "sso"`.
+It does not crash later. The Helm chart's migration Job reads the same environment, so a typo stops
+`helm upgrade` before any pod rolls.
+
+Columns:
+
+- **Default** is the code's default. The image (`deploy/Dockerfile`) sets five of them itself:
+  `ORDINATE_ENV=prod`, `PORT=8080`, `DATA_DIR=/data`,
+  `DUCKDB_EXTENSION_DIR=/opt/ordinate/duckdb-extensions` and `NODE_ENV=production`.
+- **Required when** gives the condition under which startup refuses to go on without the variable.
+- **Secret** set to *yes* means the value goes in a Secret: a Kubernetes Secret (the chart's
+  `existingSecret`, which the chart refuses to take in `config`), an ECS `secrets` entry, or the
+  Compose `.env`. Never put a secret in values, a task definition's `environment` block, or a log.
+
+`scripts/test-serverDocs.ts` (part of `npm test`) fails when a variable the code reads is missing
+from these tables, or when a table names one that no code reads.
+
+## Process and listeners
+
+| Variable | Purpose | Default | Required when | Secret |
+|---|---|---|---|---|
+| `ORDINATE_ENV` | `dev` or `prod`. `prod` refuses `AUTH_MODE=dev`, requires `DATA_DIR`, uses `__Host-` Secure cookies, accepts only `https://` OIDC URLs, and listens on `0.0.0.0` (dev listens on `127.0.0.1` only). | `dev` (the image sets `prod`) | always `prod` in a deployment | no |
+| `PORT` | The app port: the web app, `/api/*`, `/healthz`, `/readyz`. `0` lets the OS pick one. | `8080` | — | no |
+| `METRICS_PORT` | Port for `GET /metrics` (Prometheus text format) on its own listener, so the ingress that routes `PORT` can never expose it. It must differ from `PORT`. | unset: no metrics listener (the chart and Compose set `9464`) | — | no |
+| `LOG_LEVEL` | pino level: `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`. Logs are JSON on stdout. | `info` | — | no |
+
+## Storage
+
+| Variable | Purpose | Default | Required when | Secret |
+|---|---|---|---|---|
+| `DATA_DIR` | Absolute directory for per-org temp files, uploads in flight and the local cache of S3 tables. Without S3 the Parquet tables live here too, and so do the records when there is no `DATABASE_URL`. | `./data` (the image sets `/data`) | `ORDINATE_ENV=prod`, unless `STORAGE_URL=file://…` names the directory | no |
+| `STORAGE_URL` | Where Parquet tables live. Unset or `file:///abs/dir` (the same directory as `DATA_DIR`) keeps them on disk. `s3://bucket/optional/prefix` stores them as immutable, versioned objects read through DuckDB `httpfs`. | unset: on `DATA_DIR` | more than one replica without a ReadWriteMany volume (operational, not checked) | no |
+| `S3_REGION` | Region of the bucket. Read only when `STORAGE_URL` is `s3://`. | `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `us-east-1` | — | no |
+| `AWS_REGION` | Fallback for `S3_REGION`. EKS (IRSA) and ECS usually inject it. | unset | — | no |
+| `AWS_DEFAULT_REGION` | Second fallback for `S3_REGION`. | unset | — | no |
+| `S3_ENDPOINT` | `http(s)://host[:port]` of an S3-compatible store (MinIO, Ceph, R2). When it is set, requests use path-style URLs; `http://` turns TLS off. | unset: AWS S3 | — | no |
+| `STORAGE_CACHE_MB` | Per-pod LRU cache of S3 Parquet on `DATA_DIR`. `0` turns it off. Keep the volume larger than this value. | `2048` | — | no |
+| `STORAGE_GC_GRACE_MINUTES` | A table version that no record names is deleted from the bucket this long after it was first seen unreferenced. The `storage:gc` job runs every 15 min per org. | `60` | — | no |
+| `DUCKDB_EXTENSION_DIR` | Absolute directory holding DuckDB's `httpfs` and `aws` extensions. The server only LOADs them and never downloads at run time. Read only when `STORAGE_URL` is `s3://`. | DuckDB's default (the image sets `/opt/ordinate/duckdb-extensions`, baked at build) | — | no |
+
+## Metadata database and secrets
+
+| Variable | Purpose | Default | Required when | Secret |
+|---|---|---|---|---|
+| `DATABASE_URL` | Postgres URL (`postgres://` or `postgresql://`) for users, sessions, roles, records, jobs, audit and secrets. Without it the server runs single-user dev only. TLS options go in the query string, see [TLS to Postgres](#tls-to-postgres). The value never appears in an error or a log. | unset: no Postgres, records stay as JSON under `DATA_DIR` | `AUTH_MODE` is `oidc` or `header`, or `STORAGE_URL` is `s3://` | yes |
+| `ORDINATE_MASTER_KEY` | 32 random bytes, written as base64 (44 chars) or hex (64 chars), made with `openssl rand -base64 32`. It wraps each org's data key, and those keys encrypt every stored connection password and AI provider key (AES-256-GCM). Without it, saving such a secret is refused. Losing it loses those secrets. | unset: no secrets store | `ORDINATE_ENV=prod` and `DATABASE_URL` is set | yes |
+| `ORDINATE_MASTER_KEY_OLD` | Rotation only: the current key, read by `node src/server/secrets/rotate.js` (`npm run secrets:rotate`). The server never reads it. | unset | running the rotation command | yes |
+| `ORDINATE_MASTER_KEY_NEW` | Rotation only: the replacement key, read by the same command. | unset | running the rotation command | yes |
+
+## Sign-in
+
+| Variable | Purpose | Default | Required when | Secret |
+|---|---|---|---|---|
+| `AUTH_MODE` | `oidc`: Ordinate signs people in with your IdP. `header`: it trusts `X-Forwarded-Email` from a proxy in `TRUSTED_PROXY_CIDRS` (oauth2-proxy). `dev`: everyone is an admin, and it is refused when `ORDINATE_ENV=prod`. See [sso.md](sso.md). | `dev` | always `oidc` or `header` in a deployment | no |
+| `ORDINATE_ORG` | The org every sign-in joins (one org per deployment). Lower-case letters, digits and `-`, up to 63 characters. | `default` | — | no |
+| `ORDINATE_ADMIN_EMAIL` | Made (or kept) org admin at every sign-in. This is the first admin and the way back in. Every other new user joins as a viewer. | unset | — (without it nobody can grant roles) | no |
+| `ALLOWED_EMAIL_DOMAINS` | Comma-separated email domains that may sign in, for example `example.com,example.org`. | unset: any domain the IdP or proxy lets through | — | no |
+| `SESSION_IDLE_MINUTES` | A session with no request for this long is signed out. | `480` (8 h) | — | no |
+| `SESSION_ABSOLUTE_HOURS` | A session ends this long after sign-in, however active. | `168` (7 days) | — | no |
+| `OIDC_ISSUER` | The IdP's issuer URL, exactly as the `issuer` field of its discovery document. Ordinate fetches `<issuer>/.well-known/openid-configuration` at the first sign-in and retries if that fails. Must be `https://` in prod. | unset | `AUTH_MODE=oidc` | no |
+| `OIDC_CLIENT_ID` | The client (application) ID registered at the IdP. | unset | `AUTH_MODE=oidc` | no |
+| `OIDC_CLIENT_SECRET` | That client's secret. Sent to the token endpoint as `client_secret_post`. | unset | `AUTH_MODE=oidc` | yes |
+| `OIDC_REDIRECT_URL` | This server's callback, `https://<your host>/api/auth/callback`, registered at the IdP character for character. Must be `https://` in prod. | unset | `AUTH_MODE=oidc` | no |
+| `TRUSTED_PROXY_CIDRS` | Comma-separated IPv4/IPv6 CIDRs of the proxies directly in front of the pod. In every mode, their `X-Forwarded-For` names the client for rate limits. In `header` mode they are also the only peers whose `X-Forwarded-Email` is believed. The check uses the TCP peer address, never a header. Keep it as narrow as the proxy. | unset | `AUTH_MODE=header` | no |
+
+## Limits and egress
+
+| Variable | Purpose | Default | Required when | Secret |
+|---|---|---|---|---|
+| `MAX_UPLOAD_MB` | Largest file `POST /api/files` accepts, in MB. Uploads stream to disk and are cut at the cap without buffering. | `200` | — | no |
+| `MAX_RPC_BODY_KB` | Cap on every JSON request body, in KB. Larger bodies get 413. | `1024` | — | no |
+| `RPC_TIMEOUT_SECONDS` | A call running longer gets 504, and its DuckDB queries are interrupted. | `60` | — | no |
+| `RATE_LIMIT_LOGIN_PER_MINUTE` | Sign-in starts plus IdP callbacks, per client IP. | `60` | — | no |
+| `RATE_LIMIT_RPC_PER_MINUTE` | RPC and `/api/mcp` calls per signed-in user, across all their tabs and tokens. | `1200` | — | no |
+| `RATE_LIMIT_RPC_IP_PER_MINUTE` | RPC and `/api/mcp` calls per client IP. | `3000` | — | no |
+| `SSRF_ALLOW` | Comma-separated CIDRs that connectors, URL sources and AI gateways may reach even though they are private, loopback or link-local. Everything else in those ranges, including cloud metadata, is refused before a socket opens. List your internal database subnets here. `0.0.0.0/0` turns the guard off. | unset: no private range allowed | a connector reads a database inside your VPC | no |
+
+## DuckDB
+
+Each org gets its own DuckDB worker, locked to that org's directory and S3 prefix before it answers.
+
+| Variable | Purpose | Default | Required when | Secret |
+|---|---|---|---|---|
+| `DUCKDB_MAX_WORKERS` | Org workers alive at once in one pod. Past this, the least recently used idle worker is closed. | `8` | — | no |
+| `DUCKDB_MEMORY_LIMIT` | DuckDB `memory_limit` per worker, for example `512MiB` or `2GB`. | 80% of the container's memory limit (the machine's memory if there is none) ÷ `DUCKDB_MAX_WORKERS`, at least `64MiB` | — | no |
+| `DUCKDB_THREADS` | DuckDB `threads` per worker. | `os.availableParallelism()`: the container's CPU limit rounded down, minimum 1 (measured: `--cpus=2` gives 2, `1.5` gives 1, `0.5` gives 1), or every node core when there is no limit | no CPU limit is set (operational) | no |
+| `DUCKDB_QUERY_TIMEOUT_SECONDS` | A single query running longer is interrupted. | `60` | — | no |
+| `DUCKDB_IDLE_SECONDS` | A worker unused this long is closed and its memory returned. | `300` | — | no |
+
+## Development and tests only
+
+Do not set these in a deployment. They are listed because server code reads them.
+
+| Variable | Purpose | Default | Required when | Secret |
+|---|---|---|---|---|
+| `ORDINATE_COMPUTE_INLINE` | `1` runs compute-pool work on the main thread. Self-checks use it. On a server it stalls every request while a query runs. | unset | never | no |
+| `ORDINATE_DUCKDB_PIPELINE` | `1` lets an unforced prepare pipeline run on DuckDB. Since T4.2 no shipped code path calls it unforced, so it has no effect on the server. | unset | never | no |
+| `ORDINATE_TODAY` | Pins "today" (`YYYY-MM-DD`) for relative-date filters. Smoke tests use it. | unset: the server's local date | never | no |
+| `ORDINATE_SAAS_FIXTURE_BASE` | Points SaaS connectors at a loopback fixture server (`http://127.0.0.1:<port>` only) for tests. | unset | never | no |
+
+## Read by libraries, not by Ordinate
+
+These never appear in Ordinate's code. They are listed here, outside the tables, because they decide
+how the pod authenticates to S3 and trusts Postgres.
+
+- **AWS credential chain.** Both DuckDB's S3 secret (`PROVIDER credential_chain`, in every org
+  worker) and the server's few direct S3 calls (`src/engine/s3.ts`) resolve credentials through
+  DuckDB's `aws` extension, which follows the AWS SDK's default chain. That chain covers environment keys `AWS_ACCESS_KEY_ID` /
+  `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`, shared config (`AWS_PROFILE`), web identity
+  (`AWS_ROLE_ARN` + `AWS_WEB_IDENTITY_TOKEN_FILE`, which EKS IRSA injects), the ECS task role
+  (`AWS_CONTAINER_CREDENTIALS_RELATIVE_URI`, which ECS injects), and the instance profile. Use static
+  keys only for an S3-compatible store with no pod identity (MinIO), and put them in the Secret.
+  IRSA and the ECS task role were not tested against real AWS for this release. MinIO with static
+  keys was (T5.2, T7.1, T7.3).
+- **`NODE_EXTRA_CA_CERTS`**: a PEM bundle Node adds to its trusted roots. You need it for
+  `sslmode=verify-full` to a Postgres whose certificate comes from a private CA, such as Amazon RDS.
+- `NODE_ENV`: the image sets `production`. Ordinate's code never reads it.
+
+## TLS to Postgres
+
+`DATABASE_URL` takes the `pg` driver's query-string options (`pg-connection-string` 2.14 in this
+release):
+
+| `sslmode=` | What happens |
+|---|---|
+| unset or `disable` | Plaintext. Use it only on a network you trust end to end, such as Compose's private network. |
+| `verify-full` (also `require`, `prefer` and `verify-ca`, which this driver treats as `verify-full` and warns about) | TLS, with the server certificate checked against Node's trusted roots. A public CA works as is. A private CA (Amazon RDS, Azure, Cloud SQL server certs) needs `NODE_EXTRA_CA_CERTS`, or `sslrootcert=/path/ca.pem` in the URL, pointing at a file inside the container. |
+| `no-verify` | TLS without checking the certificate. Traffic is encrypted, but a host that can intercept it inside your network can impersonate the database. |
+
+The chart and the image mount no CA file today. To verify a private CA, build a derived image, as
+described in [eks.md](eks.md#rds), or accept `sslmode=no-verify` as a deliberate choice.

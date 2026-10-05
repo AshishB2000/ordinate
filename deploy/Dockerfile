@@ -3,19 +3,29 @@
 #
 #   docker build -f deploy/Dockerfile -t ordinate .
 #
-# Three stages: `build` compiles the server (tsc) and the web app (Vite),
-# fetches the map GeoJSON and installs DuckDB's httpfs + aws extensions into a
-# baked directory; `deps` installs production node_modules only; the runtime
-# stage copies what the server reads at run time and nothing else. The
+# Three stages: `build` compiles the server (tsc) and the web app (Vite) and
+# fetches the map GeoJSON; `deps` installs production node_modules and DuckDB's
+# httpfs + aws extensions into a baked directory; the runtime stage copies what
+# the server reads at run time and nothing else. The
 # container never downloads anything at run time: the server only LOADs the
 # extensions (autoinstall off, src/engine/storage.ts) from DUCKDB_EXTENSION_DIR.
 # Secrets (ORDINATE_MASTER_KEY, DATABASE_URL, S3 keys, OIDC secret) come from
 # the environment at run time — none is baked.
+#
+# Multi-arch (T7.3, .github/workflows/release.yml):
+#
+#   docker buildx build --platform linux/amd64,linux/arm64 -f deploy/Dockerfile .
+#
+# `build` runs on the BUILDER's platform: its output (JS, the web bundle, GeoJSON)
+# is the same on every arch, and tsc + Vite under QEMU are the slow, fragile
+# part of an emulated build. Everything native — the DuckDB binding npm picks by
+# cpu, the extensions DuckDB picks by its own platform — is installed in `deps`,
+# which runs on the TARGET platform, and checked there against TARGETARCH.
 
 ARG NODE_IMAGE=node:24-slim
 
 # ── build ────────────────────────────────────────────────────────────────────
-FROM ${NODE_IMAGE} AS build
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS build
 WORKDIR /app
 # Electron is a devDependency (the desktop app until T8.1): never fetch its binary.
 ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
@@ -29,13 +39,12 @@ RUN npm run build:ts && npm --prefix web run build
 # than ship download-geo's empty placeholder (its fallback when a fetch fails).
 RUN node scripts/download-geo.js \
  && node -e "const fs=require('fs'),{geoJsonText}=require('./src/server/geo');for(const f of ['world-countries.js','us-states.js','us-counties.json']){const n=JSON.parse(geoJsonText(f,fs.readFileSync('assets/geo/'+f,'utf8'))).features.length;console.log(f,n,'features');if(!n)process.exit(1)}"
-# httpfs + aws for this image's platform (DuckDB verifies their signatures).
-RUN node scripts/duckdb-extensions.js /app/duckdb-extensions
 # The runtime runs the emitted .js; the .ts beside it ships nowhere.
 RUN find src renderer -name '*.ts' -delete
 
 # ── production node_modules ──────────────────────────────────────────────────
 FROM ${NODE_IMAGE} AS deps
+ARG TARGETARCH
 WORKDIR /app
 # binutils: `strip` for libduckdb.so below (this stage only; the runtime never sees it).
 RUN apt-get update && apt-get install -y --no-install-recommends binutils && rm -rf /var/lib/apt/lists/*
@@ -59,6 +68,19 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
  # DuckDB ships libduckdb.so with its symbol table (63 → 54 MB stripped); dynamic symbols stay.
  && strip --strip-unneeded node_modules/@duckdb/node-bindings-linux-*/libduckdb.so \
  && npm cache clean --force
+# httpfs + aws for this stage's (the target's) platform; DuckDB verifies their signatures.
+COPY --from=build /app/scripts/duckdb-extensions.js scripts/
+RUN node scripts/duckdb-extensions.js /app/duckdb-extensions
+# Every native file must be TARGETARCH's: exactly one DuckDB binding package,
+# one extension platform directory, and each file's ELF e_machine (byte 18:
+# 3e x86-64, b7 aarch64). A wrong-arch file would load nowhere but fail only
+# at the first query — this fails the build instead.
+RUN case "$TARGETARCH" in amd64) npm=x64 elf=3e ;; arm64) npm=arm64 elf=b7 ;; *) echo "unsupported TARGETARCH '$TARGETARCH'"; exit 1 ;; esac \
+ && test "$(ls -d node_modules/@duckdb/node-bindings-linux-*)" = "node_modules/@duckdb/node-bindings-linux-$npm" \
+ && test "$(ls -d /app/duckdb-extensions/*/*)" = "$(ls -d /app/duckdb-extensions/*/linux_$TARGETARCH)" \
+ && for f in node_modules/@duckdb/node-bindings-linux-$npm/libduckdb.so /app/duckdb-extensions/*/linux_$TARGETARCH/httpfs.duckdb_extension /app/duckdb-extensions/*/linux_$TARGETARCH/aws.duckdb_extension; do \
+      m=$(od -An -tx1 -j18 -N1 "$f" | tr -d ' '); echo "$f: e_machine $m"; test "$m" = "$elf" || { echo "wrong arch: $f is $m, want $elf for $TARGETARCH"; exit 1; }; \
+    done
 
 # ── runtime ──────────────────────────────────────────────────────────────────
 FROM ${NODE_IMAGE}
@@ -81,7 +103,7 @@ COPY --from=build /app/renderer/hub/assets/agents renderer/hub/assets/agents
 COPY --from=build ["/app/renderer/hub/geoMatch.js", "/app/renderer/hub/geoCluster.js", "/app/renderer/hub/themeModel.js", "/app/renderer/hub/cardModel.js", "/app/renderer/hub/sizeLayout.js", "renderer/hub/"]
 COPY --from=build /app/assets assets
 COPY --from=build /app/web/dist web/dist
-COPY --from=build /app/duckdb-extensions /opt/ordinate/duckdb-extensions
+COPY --from=deps /app/duckdb-extensions /opt/ordinate/duckdb-extensions
 # Fails the build if the server's module graph needs a file not copied above
 # (every RPC handler module loads here, as at boot) or a pruned package no longer
 # loads (connector drivers, exporters — oracledb without its thick binaries), then: non-root — the base

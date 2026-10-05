@@ -1135,3 +1135,33 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   `HomePage.tsx`): `npm test` 285/285 without DB and CI env, with DB 284 + `jobs-pods` passing alone; Vitest
   626/626; e2e all but `connections.e2e`, which flakes 1 in 2–4 runs alone ON DEVELOP TOO (waits for "Returns 2
   columns") — pre-existing, tracked as a follow-up. Screens reviewed in both themes.
+
+## 2026-10-04 — T7.3 Releases and operator docs
+
+- **`release.yml`** (tag `v*`): tag must be semver and equal `package.json`'s version; builds `deploy/Dockerfile`
+  for amd64 and arm64 (buildx + QEMU), boots EACH against Postgres until `/readyz` reports duckdb + postgres,
+  holds each under 600 MB, and only then pushes `ghcr.io/<owner>/ordinate:<version>` (+ `latest` for a
+  non-pre-release) with OCI labels/annotations; then packages the chart at that version, checks its default
+  image is the one pushed, and creates (or adds to — `build.yml` also publishes on `v*`) the GitHub Release.
+  `permissions: {}` at the top, least privilege per job, every action SHA-pinned, one run per tag. **Never
+  run** — nothing was tagged, released or pushed; cutting v0.1.0 is the user's action.
+- **Multi-arch Dockerfile:** the build stage runs on `$BUILDPLATFORM` (tsc/Vite never under QEMU); the DuckDB
+  binding and httpfs/aws are installed per target and checked by ELF machine byte (3e amd64 / b7 arm64);
+  negative control (forced wrong arch) fails the build. Local: amd64 583 MB, arm64 589 MB (compressed
+  136 / 133 MB); amd64 under emulation healthy in 17 s and passes compose.e2e (17.8 s).
+- **`docs/server/`:** quick start (run verbatim from a clean state: 38 s), EKS (values passed lint + server
+  dry-run on kind), ECS task definition, GKE/AKS notes, configuration (every env var — `test-serverDocs`
+  fails on a missing or invented var, 6 sabotage controls), SSO per IdP + oauth2-proxy, backup/restore (run
+  verbatim: same 7 records / 1 object / 1 user after `down -v` + restore), upgrade (kind: additive migration
+  applied by the hook in 16 s; `helm rollback` 13 s, hook not re-run, e2e passes), sizing (measured numbers,
+  estimates labelled). Findings recorded in the docs: `pg_dump` under forced RLS silently dumps 0 rows unless
+  the role has BYPASSRLS; a private-CA Postgres needs `NODE_EXTRA_CA_CERTS` in a derived image or
+  `sslmode=no-verify`; `os.availableParallelism()` follows the container CPU limit (values.yaml comment
+  corrected).
+- **Gates (orchestrator, on 66123ad over develop 3a9e271):** `npm test` 287/287 without DB, with DB and CI env;
+  Vitest 626/626; e2e 62 + compose skipped (connections passes with #241); lint 0; native image rebuilt
+  (589 MB, publish assets load).
+- **Open:** more than one replica needs sticky sessions (per-pod upload tokens, threat model R8) — documented
+  for ALB/nginx/GKE, untested; never run against real IRSA / ECS / ALB / RDS / GCS / AKS / IdPs, nor the
+  release workflow itself; `DUCKDB_MAX_WORKERS=2` advice derived from code, not load-tested; immutable
+  releases would block the create-or-upload fallback.
