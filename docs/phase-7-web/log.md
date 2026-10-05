@@ -1165,3 +1165,35 @@ Append-only. One entry per task: date, task id, what was measured, what was deci
   for ALB/nginx/GKE, untested; never run against real IRSA / ECS / ALB / RDS / GCS / AKS / IdPs, nor the
   release workflow itself; `DUCKDB_MAX_WORKERS=2` advice derived from code, not load-tested; immutable
   releases would block the create-or-upload fallback.
+
+## 2026-10-05 — T8.1 Delete the desktop app (user-approved)
+
+- **Deleted:** Electron + electron-builder, `preload/`, `renderer/`, `src/windows/`, `src/main.ts`, the desktop
+  branch of `src/ipc/bus.ts` (now just the RPC registry), desktop-only IPC, `src/cli/`, local connectors, folder
+  watch, sync folder, OS capture, the Mosaic bundle, the Svelte spike, `dist:*`, the Electron smokes and
+  `build.yml`. `package.json` → `ordinate`, no `productName`, `npm start` runs the server. 1,079 files,
+  +5,788 / −196,790 lines; `npm install` removed 365 packages, added 0.
+- **Moved, not deleted:** `renderer/hub/{cardModel,geoCluster,geoMatch,sizeLayout,themeModel}` → `src/analysis/`;
+  `renderer/i18n` → `src/i18n` (catalogs pruned to the 223 keys `src/` and `web/` use); connector/agent icons →
+  `assets/`; Mosaic's SQL hardening → `src/engine/sqlHarden.ts`; `tsconfig.renderer.json` → `tsconfig.site.json`
+  (only `src/publish/site/**`). Outside server mode `src/app/paths.ts` resolves under `ORDINATE_LOCAL_DIR`.
+- **Tests, never weakened:** every differential against a deleted desktop module was converted to golden
+  fixtures recorded from the legacy module (`scripts/fixtures/golden/`, `web/src/**/__golden__/`, wire-encoded
+  so NaN/−0/undefined survive) — 14 script suites, 7 web suites — and desktop unit tests for still-live code
+  were ported to Vitest (8). Each conversion has a negative control (19 + 15 sabotages, all caught). Removed
+  only tests whose code is gone (renderer-only, Mosaic, Svelte, sync folder, folder watch, local connectors,
+  smokes); `test-computeWorker`'s "never requires electron" became "never reaches `src/server/context` or
+  `src/ipc`".
+- **CI:** the required check keeps its name `smoke (all shards)` and now `needs: [check, web, docker, helm,
+  audit]` — no branch-protection change; a docker or helm failure now blocks a merge. `branches:` untouched.
+  Lint covers `src`, `scripts`, `src/publish/site`, `web`, `web/e2e` with 0 findings; the renderer override is
+  gone. File-size allowlist only shrank.
+- **Gates (orchestrator, on 5caa393):** `npm test` 254/254 without DB, with DB and CI env; Vitest 691/691;
+  e2e 62 + compose skipped; lint 0. Image (Docker restarted after it quit mid-task) 582 MB, `readAssets()`
+  loads all five site assets; compose.e2e against a fresh stack passes (17.0 s, ≤ 15 RPCs/page).
+- **Open:** the automation CLI and stdio MCP (`src/automation/cli.ts`, `argv.ts`) lost their only entry point
+  (the Electron main) — HTTP MCP (`/api/mcp`) is the live automation surface; wire a node entry or delete them
+  (follow-up). PNG/PDF export and report runs via automation, and the pipeline `report`/`publish` nodes,
+  refuse with a "desktop app gone" message (they never ran in server mode). `test-i18n` treats a key as used
+  only if referenced in `src/`, the server catalog or the web tables — a dynamically built key elsewhere would
+  be pruned by the next extract.
