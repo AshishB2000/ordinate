@@ -472,7 +472,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
 - `package.json` `name` → `ordinate` (the userData-path reason for keeping "Screenchart" is gone).
 - Shrink the file-size allowlist for every deleted file.
 
-### [ ] T8.2 Docs and rules
+### [x] T8.2 Docs and rules
 - **Branch** `web/t8.2-docs` · **Depends** T8.1
 - Rewrite `CLAUDE.md` for the web architecture (keep: the app does the math, resident-layer rules,
   connector rules, path hardening, testing house style). Rewrite `README.md`. Regenerate

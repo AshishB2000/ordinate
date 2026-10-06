@@ -1,28 +1,65 @@
-# Automation — the CLI and the local MCP server
+# Automation — the MCP endpoint
 
 <!-- GENERATED from src/automation/registry.ts by `node scripts/gen-automation-docs.js`.
      Do not edit by hand: scripts/test-automation.ts fails when this file differs. -->
 
-Ordinate can be driven without its window: from a shell (`--cli`), and by tools such as Claude Code through a local
-MCP server (`--mcp` over stdio, or a loopback HTTP endpoint). All three go through ONE command
-registry, so a command means the same thing, with the same arguments and the same validation,
-wherever it is called from. Every figure is computed by the app; nothing here lets a caller write one.
+Programs (Claude Code, scripts, other agents) drive Ordinate through ONE command registry, so a
+command means the same thing, with the same arguments and the same validation, wherever it is
+called from. Every figure is computed by the server; nothing here lets a caller write one.
 
-## Command line
+On the server the live surface is the **MCP endpoint, `POST /api/mcp`**
+(src/automation/serverMcp.ts). The registry also defines a command line (`--cli`) and a stdio MCP
+transport (`--mcp`) in src/automation/cli.ts and argv.ts, but their only entry point was the
+desktop app, deleted at the server cutover (T8.1): **neither can be run today.** Wiring a Node
+entry point for them, or deleting them, is an open follow-up. Their reference is kept below because
+the registry still defines it.
+
+## MCP endpoint
+
+- **Sign-in:** a personal API token, `Authorization: Bearer ord_…`, made on the **API tokens** page
+  (`/tokens`). A browser session or cookie is not accepted (401): this door is for programs.
+- **Transport:** `POST` one JSON-RPC 2.0 message, get one JSON response back (`202` for a
+  notification). `GET` is `405`; batches are refused; bodies over 1 MB are refused. An `Origin`
+  header, when present, must be this server's own (`403` otherwise).
+- **Who runs it:** every call runs as the token's user with their CURRENT role. Projects they cannot
+  read do not exist for them (lists are trimmed, a name or id is "not found"); a tool that writes
+  records needs editor on its project and is audited as channel `mcp:<tool>`. A revoked token or a
+  disabled user is `401`.
+- **Limits:** calls spend the same per-user and per-IP budgets as the RPC API
+  (`RATE_LIMIT_RPC_PER_MINUTE`, `RATE_LIMIT_RPC_IP_PER_MINUTE`).
+- **Not offered here:** `export_dashboard` and `run_report`. They drew through the desktop app's
+  window, which no longer exists. Every other MCP tool in the table below is served.
+
+```sh
+curl -s https://<your host>/api/mcp \
+  -H "Authorization: Bearer $ORDINATE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+Methods: `initialize`, `notifications/initialized`, `ping`, `tools/list`, `tools/call`. Arguments
+that fail a tool's schema are a JSON-RPC `-32602`; a tool that runs and fails returns `isError: true`
+with the reason. Results carry the JSON as text, and as `structuredContent` when it is an object.
+
+### Security
+
+- Every tool is **read-only** except `create_visual` and `create_dashboard`, which save a visual or a
+  dashboard RECORD — never data — and are validated by the same validator the Assistant's plans go
+  through. A plan's calculated fields are refused: they would add a column to a dataset.
+- Connections are not exposed. No output ever contains config, API keys, connection passwords or
+  tokens. A dataset's origin is reported by KIND only (`file`, `url`, `sql`…) — never its path, URL,
+  query or connection id.
+- `query_sql` runs one read-only statement through the same SQL gate as the SQL workbench, in the
+  caller's org-locked DuckDB worker.
+
+## Command line (not runnable since T8.1)
+
+The registry's command-line form, kept as the reference for whichever entry point replaces it:
 
 ```sh
 <binary> --cli <command> [arguments] [options]
 <binary> --cli help                 # every command
 <binary> --cli help <command>       # one command
 ```
-
-`<binary>` was the desktop app, removed at the server cutover (T8.1). Until the server gains a
-command-line entry point, its automation surface is the MCP endpoint (`/mcp`, src/automation/serverMcp.ts).
-
-A CLI run is headless — no window, no dock icon, no schedules, no notifications — and works while
-the app is open. **The CLI is always available**: it is your own shell running the app on your own
-files, so it is not behind the Automation switch. Jobs it runs (imports, refreshes, publishes) still
-appear in the app's Jobs popover.
 
 | Option | Meaning |
 | --- | --- |
@@ -32,9 +69,6 @@ appear in the app's Jobs popover.
 | `--help` | Help for everything, or for the command it follows. |
 | `--` | Everything after it is a plain argument, even if it starts with `--`. |
 
-Values that contain spaces must be quoted — `query "SELECT region, sum(amount) FROM sales GROUP BY 1"`.
-Errors and progress lines always go to stderr, so stdout carries only the answer.
-
 | Exit code | Meaning |
 | --- | --- |
 | 0 | OK |
@@ -42,39 +76,6 @@ Errors and progress lines always go to stderr, so stdout carries only the answer
 | 2 | Usage: unknown command or option, a missing or malformed argument, an invalid spec |
 | 3 | Not found: no such project, dataset, dashboard, report, metric or file |
 | 4 | Automation is turned off (`--mcp` only) |
-
-## MCP server
-
-Off by default. Turn it on in **Settings → Automation**. Two transports:
-
-- **stdio** — the client starts the app headless and speaks newline-delimited JSON-RPC 2.0 on its
-  stdin/stdout. For Claude Code: `claude mcp add ordinate -- "<binary>" --mcp`. It refuses to start
-  (exit 4) while Automation is off, and re-checks the switch on every tool call.
-- **HTTP** — a second opt-in, served by the running app at `http://127.0.0.1:<port>/mcp` (port 7719
-  unless changed). `POST` one JSON-RPC message, get one JSON response back.
-
-Methods: `initialize`, `notifications/initialized`, `ping`, `tools/list`, `tools/call`. Arguments
-that fail a tool's schema are a JSON-RPC `-32602`; a tool that runs and fails returns `isError: true`
-with the reason. Results carry the JSON as text, and as `structuredContent` when it is an object.
-
-### Security
-
-- Every tool is **read-only** except `create_visual` and `create_dashboard`, which save a visual or a
-  dashboard RECORD — never data — are validated by the same validator the Assistant's plans go through,
-  and appear in the Jobs popover. A plan's calculated fields are refused: they would add a column to
-  a dataset.
-- Connections are not exposed. No output ever contains config, API keys, connection passwords or
-  tokens. A dataset's origin is reported by KIND only (`file`, `url`, `sql`…) — never its path, URL,
-  query or connection id.
-- HTTP listens on **127.0.0.1 only** and needs `Authorization: Bearer <token>`. The token is made when
-  the server starts, kept in memory only (never written to disk), shown once in Settings, and
-  replaced by Regenerate or by restarting the app. Requests whose `Host` is not localhost/127.0.0.1,
-  or whose `Origin` is not a loopback page, are refused (DNS-rebinding guard). Bodies over 1 MB are
-  refused.
-- Files: over MCP, `export_dashboard` and `run_report` always write a NEW file into
-  `Downloads/Ordinate` and return its path — a caller never chooses where a file is written.
-- A report containing a map cannot run headless (maps need the visible window's WebGL2); it fails
-  with a message instead of hanging.
 
 ## Commands
 

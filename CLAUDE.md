@@ -1,48 +1,93 @@
 # Ordinate
 
-A **local-first, open-source personal BI workspace.** Bring data in (files, paste, Excel, 35 SQL/HTTP
-sources, URL, or a screenshot capture) → **prepare** it with a reversible pipeline → **visualize**
-across 39 chart, map & table types → assemble **dashboards** → **share** offline. MIT, model-agnostic.
+A **self-hosted, open-source BI web app.** A company runs it in its own infrastructure (Docker
+Compose, Kubernetes via Helm, ECS); people open a URL and sign in with the company's IdP. Bring data
+in (files, paste, Excel, 38 SQL/HTTP/SaaS sources, a URL, or an uploaded screenshot) → **prepare**
+it with a reversible pipeline → **visualize** across 39 chart, map & table types → author
+**analyses**, publish **dashboards** → share them at a URL. MIT, model-agnostic.
 
 **Core principle: the app does the math.** All aggregation, stats, metrics and anomaly detection run
-in pure main-process code; a model only *extracts structure* (a table from a screenshot) or
-*narrates figures the app already computed*. It **never** writes a computed number.
+in pure server code; React only formats what the server returns — it never sums, averages or rounds
+a figure the server did not. A model only *extracts structure* (a table from a screenshot) or
+*narrates figures the app already computed*; it **never** writes a computed number. A screen that
+needs a number the API lacks gets it added on the server, with its differential test.
 
-**Naming.** Screenchart → Ordinate. Screenchart is now one *data source* (screenshot capture), not
-the product. `package.json` keeps `name`/`productName: "Screenchart"` — changing them moves
-Electron's `userData` and orphans existing config, history and projects, so that is a migration, not
-a rename. The built macOS bundle is still `Screenchart.app`, which is why the permission panel and
-notification text still say Screenchart: they name rows in macOS System Settings.
-
-**History lives in `docs/`, not here.** Phases 0–3c (DuckDB), 4 (MapLibre), 5 (Svelte), 6 (Tauri,
-costed and CLOSED) each have a `docs/phase-*/` write-up with the measurements behind every decision.
-Re-litigate with numbers, not opinion.
+**History lives in `docs/`, not here** (index: `docs/README.md`). Phase 7 — the move to the web —
+is `docs/phase-7-web/`: plan, task log with every measurement, threat model, retro. Older
+`docs/phase-*/` write-ups are desktop-era history. Re-litigate with numbers, not opinion. Operator
+docs: `docs/server/`.
 
 ## Architecture
 
-- **Storage is Parquet.** A dataset record is metadata-only JSON; the table lives in a sibling
-  `<id>.parquet`, plus `<id>.source.parquet` for the immutable prepare source. 500k rows ≈ 0.3 MB.
-  Row cap **1,000,000**. Per-project directories under `userData/projects/<id>/` — a project moved
-  to a synced folder (iCloud/Dropbox) is a SYMLINK there (a junction on Windows) guarded by a
-  `lock.json`, so every path builder keeps working; a directory walk must follow links.
-- **DuckDB** (`@duckdb/node-api`, prebuilt N-API, no `electron-rebuild`) behind a **synchronous**
-  bridge in `src/engine/duckdb.ts`: DuckDB runs in a worker and the main thread blocks on `Atomics.wait`
-  over a growable `SharedArrayBuffer`. `queryAsync`/`execAsync` exist on the same connection for
-  interactive callers — **a blocking call freezes all windows, the menu bar and the hotkey.**
-  All columns are stored VARCHAR with Ordinate's own `ColumnType` in the JSON record; a typed column
-  would let the sniffer turn `007` into `7`.
-- **A sidecar (`duckdbSidecar.ts` + `duckdbSidecarChild.ts`) is BUILT but NOT adopted.** It proves
-  the sync API survives a process boundary. It is **not** a speedup. Adopting it is a new decision.
+Stateless pods (`src/server/main.ts`, port 8080) behind the operator's ingress, serving the React
+SPA (`web/dist`) and the API from one origin. Metadata in Postgres; Parquet on `DATA_DIR` or
+`s3://` through DuckDB `httpfs`, under `orgs/<org>/<project>/`.
+
+- **RPC** is `POST /api/rpc/<channel>` (Fastify 5), body wire-encoded by `src/server/wire.ts` (tags
+  NaN, ±Inf, -0, undefined, holes, BigInt, Date, Map, Set, Uint8Array — plain JSON silently changes
+  figures). **No contract, no channel:** a handler (`src/ipc/*.ts`, registered on `src/ipc/bus.ts`)
+  is reachable only if `src/api/` has its contract with a real zod input and the narrowest `access`
+  (`read|write|admin`), scoped by `project: (input) => id` or `org: true` (neither or both fails
+  `tsc`). No contract → 404; denied → 403 before the handler runs.
+  `node scripts/check-contracts.js` (in `npm test`) must list 0 unresolved. `src/api/index.ts`,
+  `web/src/app/routes.tsx` and `web/src/app/nav.ts` are **append-only**.
+- **Request context** is `AsyncLocalStorage` (`src/server/context.ts`): `ctx()` carries user, org,
+  request id, client and an abort signal fired when the client hangs up; outside a request it throws.
+  **Every in-memory cache is keyed with `orgKey()`** — record ids repeat across orgs after an import;
+  T0.3 and T5.1 found 21 caches leaking across orgs.
+- **Auth** (`src/server/auth/`, `AUTH_MODE`): `oidc` (code + PKCE, `openid-client`), `header`
+  (`X-Forwarded-Email` believed only from a TCP peer in `TRUSTED_PROXY_CIDRS`), `dev` (everyone
+  admin; refused when `ORDINATE_ENV=prod`). Personal API tokens (`ord_…`, sha256-stored) for the RPC
+  API and `/api/mcp`. Roles, grants and audit: `src/server/authz/`.
+- **Push** is SSE, `GET /api/events?client=<uuid>`, bound to org + user; across pods over Postgres
+  `LISTEN/NOTIFY` (`src/server/jobs/bus.ts`). Jobs are a Postgres table claimed with `FOR UPDATE
+  SKIP LOCKED` under a lease (`src/server/jobs/`).
+- **Files**: `POST /api/files` → `fileToken`; exports → `downloadToken` for `GET /api/files/<token>`.
+  Tokens are per pod and single-use — **more than one replica needs sticky sessions** (R8).
+- **Publish**: `/p/<publishId>/` (`src/server/published.ts`, pages from `src/publish/`), org members
+  only unless the org turns on `public_links`. `dashboardExport.sanitizeBundle` is a **security
+  control**: whitelist to labels/numbers/strings/`data:image` only.
+- **Postgres** via `pg`: numbered plain `.sql` in `src/server/db/migrations/`, applied in one
+  transaction under an advisory lock; an edited applied file or an out-of-order number refuses
+  startup. **Migrations must be additive** (`helm rollback` does not undo them). Records go through
+  `src/app/recordFs.ts`: a JSON file without `DATABASE_URL`, a `records` row (RLS forced) with it.
+- **Secrets**: envelope encryption under `ORDINATE_MASTER_KEY` (`src/server/secrets/`), a data key
+  per org. Connection passwords and AI keys go through it, never `config.json`; no DB or key → saving
+  a secret is refused. Browser-safe views are `publicConfig()`/`publicByok()`
+  (`src/app/execConfig.ts`): has-key flags only.
+- **Storage**: a dataset = metadata record + `<id>.parquet` + `<id>.source.parquet` (immutable
+  prepare source); row cap **1,000,000**; columns stored VARCHAR with Ordinate's own `ColumnType` in
+  the record (a typed column turns `007` into `7`). On S3 the record upsert is the atomic switch.
+
+### DuckDB on the server
+
+- **One locked worker per org** (`src/engine/duckdbPool.ts`, wired by `routeByOrg()` in
+  `src/server/main.ts`): `memory_limit`, `threads`, `temp_directory` in the org, `allowed_directories`
+  = the org root (+ its S3 prefix), then `enable_external_access=false`, `lock_configuration=true`.
+  LRU past `DUCKDB_MAX_WORKERS`, idle eviction, per-query timeout; the request's abort signal
+  interrupts. Close a worker through its own queue — **never `terminate()`** (aborts the process
+  mid native call). Compute-pool threads borrow the caller's org worker, never run their own DuckDB.
+- **Never block the event loop.** `src/engine/duckdb.ts` keeps a synchronous `query()`/`exec()`
+  (Atomics.wait) for workers and self-checks, but `src/server/main.ts` calls
+  `forbidSyncOnMainThread()` and `scripts/test-asyncReach.ts` proves nothing reachable from
+  `src/server/*` or `src/ipc/*` calls it. Request paths use `queryAsync`/`execAsync`.
+- **User regex never runs on the request thread**: `src/engine/regexPool.ts`/`regexWorker.ts`, 2 s
+  deadline per call, thread replaced on overrun; a sync fold that meets a user regex without the
+  worker's answers refuses rather than runs it.
+- **User SQL**: one read-only statement through `src/engine/sqlGate.ts` (a deny-list lexer — the
+  project boundary inside an org, threat model R2); the org lock is the org boundary.
+- Built, not adopted: `duckdbSidecar.ts`; `sqlGen`/`pipelineDuck` (no server path runs them).
 
 ### The resident-query layer
 
 `residentQuery` (metrics + aggregated charts), `statsResident`, `anomaliesResident`, `datasetPage`,
-`parquetStore`, `datasetView` all query the stored Parquet **in place** — no table is materialised
-to answer a question. Each returns `null` on any failure and the caller falls back to the pure-JS
-original. **The JS implementations are the reference**, so changing one means changing or
-re-verifying the other; every module is paired with a *differential* test comparing the two with
-`Object.is`. A broken fast path is not wrong, only ~600× slower, so `src/engine/residentTrace.ts` also
-records `resident`/`skipped`/`failed` per call site and warns once per op on `failed`.
+`parquetStore`, `datasetView` and the other `src/engine/*Resident.ts` query the stored Parquet **in
+place** — no table is materialised to answer a question. Each returns `null` on any failure and the
+caller falls back to the pure-JS original. **The JS implementations are the reference**, so changing
+one means changing or re-verifying the other; every module is paired with a *differential* test
+comparing the two with `Object.is`. A broken fast path is not wrong, only ~600× slower, so
+`src/engine/residentTrace.ts` records `resident`/`skipped`/`failed` per call site (exported on
+`/metrics`) and warns once per op on `failed`.
 
 Non-negotiable in this layer:
 
@@ -62,178 +107,142 @@ Non-negotiable in this layer:
 Known divergences, pinned by tests: parallel float summation differs from a JS left-fold by ~1e-13
 and quantile interpolation by ~1e-15 (neither reaches a rendered figure, but `mean` enters AI
 prompts unrounded); a leading U+FEFF is lost on every string the bridge returns (upstream
-`@duckdb/node-api` bug, worked around in `parquetStore` only).
+`@duckdb/node-api` bug, worked around in `parquetStore` and the readers that grep for `FEFF`).
 
 ### Workspace
 
-- **Sources** — `src/data/parse.ts` centralises parsing (strict `isFiniteNumber`, so `007`, zips and
-  >15-digit ids stay text). **`src/connectors/` is a REGISTRY of 35 read-only sources — one
-  connector is one entry, never a union type**; wire-compatible sources share a driver
-  (`postgres.ts` 11, `mysql.ts` 8, `http.ts` 7, `mssql.ts` 3, `oracle.ts` 2 **thin mode only, never
-  `initOracleClient`**, `local.ts` 3, `url.ts` 1). **Three rules: read-only, secrets never leave
-  main, EVERY query bounded server-side** — the old central `LIMIT` wrapper is gone because it broke
-  five of six dialects.
-- **Captures are PROJECT RECORDS, not a second app.** A capture had its own shell — its own
-  sidebar, search, settings gear, conversation thread and follow-up box, in a section the workspace
-  nav could not reach. All of it is deleted. A capture entry carries a `projectId` (`history.ts`;
-  pre-project entries were adopted into the newest project by a one-pass, idempotent migration), its
-  LIST is a tab under Data, its PAGE is a `.ws-panel` using the dataset page's own header, and its
-  narration is the first assistant turn of an ordinary **dock** conversation, seeded in main. It
-  becomes a dataset through the ORDINARY path — `captureDataset:draft` → the composer → `composeSave`
-  with `sourceKind: 'capture'` and `origin: { kind:'capture', captureId }` — so a capture is a
-  SOURCE, not a second kind of import. The composer's preview cells are editable for this one source
-  kind, because they are a model's reading of an image; every other source's cells are ground truth.
-  `origin.capture` is the one origin that is deliberately NOT re-fetchable, and `listDatasets`
-  withholds it from `originKind` so no "↻ Refresh" is offered for a screenshot.
-- **Prepare** — `transforms.ts` folds ordered steps over an immutable copy, so removing a step
-  recomputes from source. Unknown step is skipped with a warning, never throws. `formula.ts` is a
-  hand-written tokenizer + parser + tree-walker — **no `eval`, no `new Function`, ever.**
-  `sqlGen`/`pipelineDuck` compile the same steps to SQL but are **off by default**
-  (`ORDINATE_DUCKDB_PIPELINE=1`): loading the rows costs 100× the query.
-- **Visuals / dashboards** — `vizData.buildVizData` is a pure bridge to the `{labels, series}` that
-  `chartRender`/`mapRender` already consume. Chart ids live in `renderResult.ts` (`VIZ_LABELS` = 39).
-  One of them, `pivot`, is a **`<table>`, not a canvas**: `pivotData`/`pivotResident` compute a
-  `PivotGrid` BESIDE the ordinary `{labels, series}`, and its **subtotals are recomputed from the
-  source, never folded from the cells above them** — so `avg` and `count` subtotals are right.
-  `cohort` and `event_funnel` follow the same arrangement (`cohortData`/`funnelEvents` JS reference,
-  `cohortResident`/`funnelResident` window-function fast paths, one shared fold each): the grid rides
-  on `data.cohort` / `data.eventFunnel`, and `{labels, series}` is the retention curve / step counts.
-  Dashboard metric numbers are computed on the fly, never stored. `dashboardExport.sanitizeBundle`
-  is a **security control**: whitelist to labels/numbers/strings/`data:image` only.
-- **Analyses** — the QuickSight-style split (analysis = mutable authoring surface, dashboard =
-  published read-only snapshot, copied **by value** on publish). Spec: `docs/analysis/00-model.md`.
-- **AI (all optional, `not_ready` without a model)** — copilot, suggest steps/calc-field/chart,
-  draft layout, summaries, and *explaining* anomalies. `src/analysis/anomalies.ts` is a pure detector; the
-  model only puts app-found figures into words.
+- **Sources** — `src/data/parse.ts` centralises parsing (strict `isFiniteNumber`, so `007`, zips
+  and >15-digit ids stay text). **`src/connectors/` is a REGISTRY of 38 read-only sources — one
+  connector is one entry, never a union type**; wire-compatible sources share a driver (`postgres.ts`
+  11, `mysql.ts` 8, `http.ts` 7, `saas.ts` 6, `mssql.ts` 3, `oracle.ts` 2 **thin mode only, never
+  `initOracleClient`**, `url.ts` 1). **Rules: read-only; secrets never leave the server (replies
+  carry `secretSet` flags); EVERY query bounded server-side** (user SQL on its own line inside the
+  dialect's wrapper — a trailing comment once dropped the cap, F3/F3b); **every socket goes through
+  the SSRF guard** (`src/connectors/ssrf.ts`: check every resolved address, pin to it, re-check each
+  redirect; private ranges only via `SSRF_ALLOW`).
+- **No dataset origin reaches a browser** — no file path, keyed URL or SQL text; replies carry
+  `{kind, label, refreshable}` (`dataset:source`). The server keeps no `file` origin (F1).
+- **Captures are a SOURCE**: upload a screenshot → `captureDataset:draft` → composer (preview cells
+  editable — a model's reading of an image) → `composeSave`; the one origin that is not re-fetchable.
+- **Prepare** — `src/data/transforms.ts` folds ordered steps over an immutable copy, so removing a
+  step recomputes from source; an unknown step is skipped with a warning. `src/formula/` is a
+  hand-written tokenizer + parser + tree-walker — **no `eval`, no `new Function`, ever** (lint-enforced).
+- **Visuals** — `buildVizData` (`src/analysis/vizData.ts`) is the pure bridge to `{labels, series}`;
+  ids in `web/src/charts/vizLabels.ts` (`VIZ_LABELS` = 39). Pivot/cohort/event funnel are `<table>`
+  grids computed BESIDE it; **pivot subtotals are recomputed from the source, never folded from the
+  cells above**. Dashboard metric numbers are computed on the fly, never stored.
+- **Analyses** — analysis = mutable authoring surface, dashboard = published read-only snapshot,
+  copied **by value** on publish. Spec: `docs/analysis/00-model.md`.
+- **AI (optional, `not_ready` without a model)** — API-key providers only, keys per org in the
+  secrets store, calls via `src/ai/providerFetch.ts` (SSRF-guarded), org allow-list checked each call.
+  `src/analysis/anomalies.ts` is a pure detector; the model only puts app-found figures into words.
+- **Automation** — live surface: HTTP MCP, `POST /api/mcp` (`src/automation/serverMcp.ts`, bearer
+  token, runs as its user). The CLI (`cli.ts`, `argv.ts`) has no entry point since T8.1.
 
-### Windows, renderer, IPC
+### Web app (`web/`)
 
-**Two windows: hub and overlay.** Settings/About/Permission are inline full-window panels in the
-hub, not `BrowserWindow`s. Renderer files are **global-scope classic scripts** — no import/export;
-shared globals are declared in `renderer/hub/globals.d.ts`.
+Vite + React 19 + TS `strict`, React Router 7, TanStack Query 5, Radix primitives styled by us, CSS
+Modules over `web/src/theme.css` tokens. `web/src/api/client.ts` imports `src/api` **types only**, so
+a renamed channel fails `tsc` in both halves. Every list, panel and chart has a designed empty,
+loading (skeleton) and error state, in both themes.
 
-IPC: `invoke`/`handle` for request-response, `send`/`on` for fire-and-forget. **New handlers go in
-the matching `src/ipc/*.ts` `register(deps)`, never in `src/main.js`.** Renderers reach main only via
-`contextBridge` (`contextIsolation: true`, `nodeIntegration: false`).
-
-**Config** (`src/config.js`, main only, v2): `publicConfig()`/`publicByok()` are the only
-renderer-safe views and strip every raw key and secret. `executionReady()` gates capture.
-
-### Charts and maps
-
-- **Chart.js 4** is the default stack. **Mosaic/vgplot is built but DARK** (`localStorage
-  'scMosaic'`): queries are already ~12 ms, so Chart.js was never the bottleneck — do not default it
-  without a measured reason. **Never render `vg.table()`**: its per-instance CSS violates
-  `style-src` on every update.
-- **MapLibre GL 4.7.1**, pinned to v4 for its UMD and `-csp` builds (v6 is ESM-only and needs a
-  bundler this repo does not have). **No `glyphs` and no `sprite` URL** — either adds a network host.
-  Without glyphs there is no symbol layer, so value labels are DOM `Marker`s: `canvas.toDataURL()`
-  drops them and export must composite via `capturePage`. Maps need **WebGL2** and must render in
-  the visible hub window, never the offscreen report window.
-- **Svelte 5 is a TOOLCHAIN SPIKE**, default off (`localStorage 'scSvelte'`). Feasibility, not
-  benefit — porting a real panel is a new decision.
+- **Charts**: Chart.js 4 used directly (`web/src/charts/`); core and plugins load on first use, as do
+  pdfmake / pptxgenjs / docx. **Maps**: MapLibre GL **4.7.1, pinned exactly**, the `-csp` build with
+  a same-origin worker. **No `glyphs` and no `sprite` URL** — either adds a network host — so value
+  labels are DOM markers. OSM tiles are the one declared external fetch (`MAP_TILE_ORIGINS`).
+- **CSP is a header** (`src/server/headers.ts`: `APP_CSP` outside `/api/`, deny-all under it) —
+  `script-src 'self'`, no inline script or style. CSRF (`src/server/csrf.ts`) compares Origin with
+  Host, so the ingress and the Vite dev proxy must preserve Host.
+- **Initial JS ≤ 300 KB gzip** (`npm --prefix web run size`, CI-enforced); each area is a lazy chunk.
 
 ## Conventions
 
-- **TypeScript, incremental, in-place sibling emit.** New files are `.ts`; materially touching an old
-  `.js` means converting it. `npm run build:ts` (tsc, **no bundler**) emits the sibling `.js`, which
-  gets an explicit `.gitignore` entry; require paths and `<script src>` never change.
-- **`strict` is on in the MAIN world only.** `tsconfig.site.json` sets `"strict": false`
-  deliberately, so the DOM-heavy legacy layer compiles without hundreds of casts. That is why the
-  renderer carries 146 lint findings disabled in a named `.oxlintrc.json` override rather than
-  pretended away — they unlock when strict comes back. No `any` without a comment.
-- **Lint is a real gate.** `npm run lint` = oxlint, type-aware, zero findings, blocking in CI. Not
-  `typescript-eslint`, which refuses TS 7. Prettier stays advisory.
-- **File size is a real limit** (500 soft / 800 hard, CI-enforced): @.claude/rules/file-size.md
-- **Hub CSP is strict** (`default-src 'none'; style-src 'self'; script-src 'self'`): **no inline
-  `style=` in hub HTML** — use `hub.css` classes. `element.style.x` from JS is fine.
-- **Every user-visible string goes through the catalog.** `t('key', { params })` in renderer TS (and
-  in main's sentence files — captions, insights, alerts, reports), `data-i18n*` in `index.html`.
-  Write the English literal, then run `node scripts/i18n-extract.js`: it rewrites the literal,
-  regenerates `src/i18n/en.json` and adds the key to the es/de/fr/ja drafts as `null`. Never
-  hand-edit `en.json`; after a rebase, take develop's file and rerun the script. `test-i18n` fails on
-  a hard-coded string, a missing key or a dropped `{param}`. Figures are formatted (`format.ts`)
-  BEFORE they reach `t()`; `// i18n-skip` marks a string that must stay English. A local named `t`
-  shadows the global — the script renames it where it must.
-- **Heavy vendor bundles load on FIRST USE** (`lazyScript.ts`): pdfmake, pptxgenjs, docx, MapLibre.
-  **`async = false` is load-bearing** — two groups are order-dependent and dynamic scripts default
-  to async.
-- **Local CLI execution is shell-free:** `execFile`/`spawn` with an **args array, never
-  `shell: true`**. No user, model or config string ever becomes a command.
-- **Keys are plaintext in `userData/config.json`** (gitignored) but **never logged or sent to a
-  renderer**. Renderers get `hasKey`/status only. Renderer key validation is format-only, no network.
-- **Detect and run CLIs, NEVER install** (no npm/brew/curl). No telemetry, no surprise network calls.
-  OSM tiles are the one declared external fetch, only when a map is shown.
-- **Path hardening:** every record id is a generated UUID validated by `UUID_RE` before it touches a
-  path; writes are atomic (temp sibling then rename); corrupt files are skipped, never fatal.
+- **TypeScript, in-place sibling emit.** New files are `.ts`; `npm run build:ts` (tsc; Vite is only
+  for `web/`) emits the gitignored sibling `.js`. `strict` everywhere except `tsconfig.site.json`
+  (`src/publish/site/**`, a named `.oxlintrc.json` override). No `any` without a comment.
+- **Lint is a real gate.** `npm run lint` = oxlint, type-aware, over `src`, `scripts`, `web/src`,
+  `web/e2e` — zero findings, blocking in CI. Not `typescript-eslint` (refuses TS 7). Prettier advisory.
+- **File size is a real limit** (500 soft / 800 hard, CI-enforced, `web/` too): @.claude/rules/file-size.md
+- **Server sentences go through the catalog** (`t('key', { params })` in `MAIN_FILES`,
+  `scripts/i18n-extract.ts`). Write the English literal, then `node scripts/i18n-extract.js` (after
+  build:ts) regenerates `src/i18n/en.json` and adds `null` drafts to es/de/fr/ja. Never hand-edit
+  `en.json`; after a rebase take develop's and rerun. `test-i18n` fails on a hard-coded string, a
+  missing/unused key or a dropped `{param}`. Format figures BEFORE `t()`. The React UI is English-only.
+- **Path hardening:** every record id is a UUID checked by `UUID_RE` before it touches a path; every
+  org id matches `ORG_RE` (`src/app/paths.ts`) before `DATA_DIR/orgs/<org>/` is built; GeoJSON is
+  served by exact name from a whitelist; writes are atomic (temp then rename — one upsert in
+  Postgres); corrupt records are skipped, never fatal.
+- **Secrets are never logged or sent to a browser** (`REDACT_PATHS` in `src/server/app.ts`,
+  `scrubbed()`, `safeError`). A new secret field gets a canary test: plant it, grep every output.
+- **No local CLI, no run-time install.** The server spawns nothing built from a user, model or config
+  string (any child process: args array, **never `shell: true`**); the image bakes DuckDB's
+  `httpfs`/`aws` and the GeoJSON. No telemetry, no surprise network calls.
 
-## File placement
+## Deploy
 
-`src/main.ts` → app/IPC wiring/windows (the Electron entry point; `package.json` `main` is
-`src/main.js`). `src/` groups the main process by import-graph cluster — `src/engine/` (DuckDB
-bridge, worker/sidecar, resident fast paths), `src/data/` (parse, datasets, transforms),
-`src/formula/` (tokenizer/parser/evaluator), `src/analysis/` (analyses, dashboards, visuals,
-anomalies), `src/ai/` (analyze, copilot, models), `src/cli/` (local CLI detection + run),
-`src/app/` (config, projects, history, icons, capture, notifications, jobs), `src/connectors/` (the 35-source registry
-plus the connection store), `src/publish/` (Publish to folder: the site's data, whitelist and pages;
-`src/publish/site/` is the published site's own renderer, inlined into every page), `src/automation/`
-(`--cli` / `--mcp`: one command registry behind the CLI and the local MCP server; `docs/automation.md`
-is generated from it). `src/ipc/` → one file per area. `src/windows/` → BrowserWindow
-factories. `renderer/{hub,overlay}/` → windows.
-`renderer/theme.css` → shared CSS vars. `preload/` → one contextBridge per window.
-`scripts/` → build + `test-*.js` self-checks. `assets/`, `geo/` → icons + GeoJSON.
+`deploy/Dockerfile` (non-root, amd64 + arm64, **≤ 600 MB**, CI-enforced); `deploy/docker-compose.yml`
+(+ Postgres, MinIO; app port on `127.0.0.1` only); `deploy/helm/ordinate` (migration hook Job,
+metrics Service never on the Ingress, secrets only via `existingSecret`). `/metrics` only on
+`METRICS_PORT`. `release.yml` (image + chart on a `v*` tag) has never run — releasing is the user's
+call. Every env var is in `docs/server/configuration.md`; `test-serverDocs` enforces it.
 
 ## Testing
 
-- **Self-check files**, pure logic, no framework: `npm test` is `node --test "scripts/test-*.js"`,
-  so **adding a suite needs no wiring** — which is also why no count is written here: it would rot.
-  Every suite reports every run, in parallel, through the shared `scripts/selfcheck.ts`
-  (`ok`/`failureCount`/`finish`) — never a per-file `ok` copy.
+- **Self-check files**, no framework: `npm test` is `node --test "scripts/test-*.js"`, so **adding a
+  suite needs no wiring** (and no count is written here). Suites report through `scripts/selfcheck.ts`
+  (`ok`/`failureCount`/`finish`). Gate runs: no `DATABASE_URL`, with one, and the CI env (password
+  Postgres + MinIO). A scratch-DB pg Pool needs an `'error'` listener (57P01 at teardown).
 - **Differential tests are the house style.** Two implementations means asserting they agree with
-  `Object.is`, not against hand-written values. Several also spy on `datasets.getDataset` to prove
-  the table was never hydrated, so a fast path that stops firing fails loudly instead of passing
-  green and inert.
-- **`npm run smoke` is the only check that runs the real app.** It drives Electron via Playwright,
-  saves a 1M-row dataset, opens it from the rendered UI, and **fails on any renderer console
-  error** — which is what catches a CSP violation. Note the first paint is a splash screen: a
-  screenshot taken there passes every size and DOM check while proving nothing.
-- **CI** (`.github/workflows/`) runs type-check + tests + smoke, and `lint.yml` blocking, on every
-  PR to `develop`. Smokes run as **four parallel shards** (`run-smokes --shard i/4`, balanced by
-  `scripts/smoke-durations.json` — refresh it from the `durations:` line a run prints); "smoke (all
-  shards)" is the required check. **No smoke can hang the chain:** each is killed by name after 10
-  minutes, and every smoke closes its app through `closeApp` (a 15 s race) — anything the app spawns
-  (on Linux a file reveal is `xdg-open`, which can start a browser) inherits Playwright's pipes and
-  would otherwise block `app.close()` forever. A new smoke goes in `SMOKES` AND the durations file.
+  `Object.is`, not against hand-written values; several spy on `datasets.getDataset` to prove the
+  table was never hydrated. Where the reference was deleted (the desktop renderer) the test compares
+  against **golden fixtures** recorded from it (`scripts/fixtures/golden/`, `web/src/**/__golden__/`,
+  wire-encoded) — never re-record one to make a test pass. Every guard ships a **negative control**.
+- **Web**: Vitest + Testing Library next to the component. **One Playwright e2e per screen** in
+  `web/e2e/` (`e2e()` in `web/e2e/fixtures.ts`, against the built server): it **fails on any console
+  error, page error or CSP violation**, holds an **RPC budget** (`rpcBudget`, default 25 per page
+  load — batch an endpoint before raising it), and writes light + dark screenshots to
+  `web/e2e/__screens__/` — look at them. `E2E_CHROMIUM` overrides the browser.
+- **CI** (`ci.yml`, every PR to `develop`): jobs `check`, `web`, `audit` (`scripts/audit-gate.ts`),
+  `docker`, `helm`, plus `lint.yml`. The required check **`smoke (all shards)`** aggregates check,
+  web, docker, helm and audit. `e2e-nightly.yml` runs Firefox and WebKit.
 
 ```bash
-npm start          # run the app
-npm run smoke      # launch the REAL app and drive it
-npm test           # every test suite, parallel
-npm run lint       # oxlint — BLOCKING, zero findings
-npm run dist:mac   # / dist:win — installers
-npm run build:appicon   # regenerate icon.png/.icns/.ico from assets/icons/ordinate.svg
+npm run server        # build:ts, then the server on 127.0.0.1:8080 (dev auth, ./data); serves web/dist
+npm run dev:web       # Vite dev server, /api proxied to 127.0.0.1:8080
+npm run build:web     # web/dist (tsc + vite build)
+npm test              # every self-check suite, parallel
+npm run test:web      # Vitest
+npm --prefix web run e2e    # Playwright e2e against the built server
+npm --prefix web run size   # initial JS ≤ 300 KB gzip
+npm run lint          # oxlint — BLOCKING, zero findings
+npm run loadtest      # 20 virtual users × 5 iterations over real HTTP, 1M rows
+npm run secrets:rotate      # re-wrap org data keys (ORDINATE_MASTER_KEY_OLD / _NEW)
+npm run import-desktop -- <userData> [--org id]   # one-time import of a desktop install
+node scripts/gen-automation-docs.js   # regenerate docs/automation.md (after build:ts)
 ```
 
-`renderer/hub/vendor/vgplot.js` + `plot.css` are **committed build artifacts** (`npm run
-build:vendor`), which is what keeps CI and electron-builder from needing the 181 MB Mosaic tree.
-`postinstall` fetches map GeoJSON. `prestart`/`pretest`/`predist:*` compile automatically.
+`npm start` is the same server entry point. `postinstall` builds and fetches map GeoJSON;
+`prestart`/`pretest` compile automatically.
 
 ## Git
 
-- **Every change gets its own worktree off `develop`** (`git worktree add -b feat/x ../ordinate-x
-  origin/develop`), then PR → **CI green** → merge → remove the worktree → `git pull` on `develop`.
-  Never commit to `develop` directly; a plain `checkout` in this shared clone moves the tree under
-  other running sessions, which has already cost work here.
-- A PR showing **no checks at all** is not a passing PR — that is what a stale branch filter in
-  `ci.yml`/`lint.yml` looks like, and it has now happened twice. Renaming the trunk means editing
-  both `branches:` lists in the same commit.
+- **Every change gets its own worktree off `develop`** (`git worktree add -b feat/x
+  .claude/worktrees/x origin/develop`), then PR → **CI green** → merge → remove the worktree →
+  `git pull` on `develop`. Never commit to `develop` directly; a plain `checkout` in this shared
+  clone moves the tree under other running sessions, which has already cost work here.
+- **Resolve conflicts keeping both sides and re-check the merged tree.** Phase 7 lost routes and log
+  entries to one-sided merges (#193, #227) and fixes to commits pushed after a merge (#235).
+- A PR showing **no checks at all** is not passing — a stale branch filter in `ci.yml`/`lint.yml` or a
+  merge conflict; read `mergeStateStatus`. Renaming the trunk means editing both `branches:` lists in
+  the same commit. Checks failing in seconds with no steps is GitHub billing, not code.
 - **Never** add a `Co-Authored-By` or any AI co-author trailer to a commit message.
 
 ## Out of scope (don't build unprompted)
 
 deck.gl (`@loaders.gl` fetches workers from unpkg.com); Apache Arrow (not achievable with the
-current binding); the Tauri shell (costed and closed — `docs/phase-6/`); making Mosaic the default;
-`vg.table()` and `@uwdata/mosaic-inputs`; installing CLIs for the user; a hosted web version; a
-marketing site; spreadsheet export; a memory/summarization step (`memoryModel` exists, nothing
-consumes it). **Ask before adding a runtime dependency** — prefer stdlib, native platform features,
-or something already installed.
+current binding); any desktop shell (Electron is deleted; Tauri was costed and closed —
+`docs/phase-6/`); MapLibre v5/v6 without re-checking its CSP worker; Next.js/SSR, Redux, Tailwind,
+MUI/Ant (rejected in `docs/phase-7-web/00-plan.md` §2); a marketing site; spreadsheet export; a
+memory/summarization step (`memoryModel` exists, nothing consumes it). A hosted web version is IN
+scope — it is the product. **Ask before adding a runtime dependency** — prefer stdlib, native
+platform features, or something already installed.
