@@ -1,5 +1,5 @@
 // How a chart's CATEGORY dimension is bucketed — MAIN PROCESS, PURE. No
-// Electron, no fs, no DOM, no DuckDB.
+// fs, no DOM, no DuckDB.
 //
 // A Category on a high-cardinality column draws thousands of unreadable marks.
 // Three fixes: a number column bins into 10 equal-width buckets, a date column

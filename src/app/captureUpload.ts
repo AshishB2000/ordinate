@@ -1,6 +1,6 @@
 // A screenshot UPLOADED to the server becomes a capture — the server's form of
-// the desktop's capture loop (src/main.ts ingestCapture), which grabbed pixels
-// off a screen the server does not have. SERVER (and desktop-safe: no Electron).
+// the desktop's capture loop (its ingestCapture), which grabbed pixels
+// off a screen the server does not have. SERVER.
 //
 //   upload (POST /api/files) → the model reads the image HERE, on the server,
 //   through the org's own API-key provider (src/ai/byok.ts: allowed providers,

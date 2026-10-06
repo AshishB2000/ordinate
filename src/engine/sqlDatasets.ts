@@ -30,10 +30,10 @@
 // never a plausible wrong total — and `007` stays `007`.
 //
 // ── Defence in depth ─────────────────────────────────────────────────────────
-//   1. the engine lock (`hardenEngine` → mosaic.hardenConnection) is awaited
+//   1. the engine lock (`hardenEngine` → sqlHarden.hardenConnection) is awaited
 //      before any user SQL runs, and a failed lock refuses to run at all — on
 //      the server, the org worker's own lock (duckdbPool), set before it answers;
-//   2. one statement (`mosaic.statementCount`), and it must start like a read;
+//   2. one statement (`sqlHarden.statementCount`), and it must start like a read;
 //   3. `readOnlyError` refuses file-reading table functions, a string (or a
 //      path-shaped quoted name) in table position — DuckDB's replacement scan
 //      reads `FROM 'x.csv'` as a file — and the Mosaic catalog views;
@@ -50,7 +50,7 @@ import type { DatasetOrigin } from '../data/datasetOrigin';
 import { isValidId } from '../app/ids';
 import { ROW_LIMIT, SAMPLE_ROWS } from '../connectors/connectionRun';
 import { hardenEngine } from '../connectors/duckdbDirs';
-import { hardeningState } from '../ipc/mosaic';
+import { hardeningState } from './sqlHarden';
 import * as duck from './duckdb';
 import { viewSelectSql, quoteIdent, foldKey } from './datasetView';
 import { lexSql } from './sqlLex';
@@ -213,7 +213,7 @@ async function compile(projectId: unknown, sql: unknown, params: unknown, views:
   // The lock BEFORE anything the user wrote reaches the engine — and it goes
   // first for a second reason: its execAsync starts the worker without
   // blocking, so residentSource's synchronous isAvailable() probe never parks
-  // the main thread (the ordering mosaic.ts documents).
+  // the main thread.
   // On the server every statement runs in the caller's org worker, which locked
   // itself to the org's directory before it answered (src/engine/duckdbPool.ts);
   // a process-wide SET there would be refused as a locked setting (T2.11).

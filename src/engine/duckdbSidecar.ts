@@ -161,12 +161,11 @@ function ensureStarted(): boolean {
 }
 
 function start(): void {
-  // `process.execPath` under Electron is the app binary; ELECTRON_RUN_AS_NODE
-  // makes it behave as plain Node. No extra binary ships for this.
+  // `process.execPath` is Node itself. No extra binary ships for this.
   const childScript = path.join(__dirname, 'duckdbSidecarChild.js');
   const c = spawn(process.execPath, [childScript, opts.dbPath], {
     stdio: ['pipe', 'pipe', 'inherit'],
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    env: process.env,
   });
   if (!c.stdin || !c.stdout) {
     try {

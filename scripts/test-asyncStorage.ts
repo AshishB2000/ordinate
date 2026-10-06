@@ -10,14 +10,9 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: Node's internal loader hook
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-async-storage-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') return { app: { getPath: () => tmpUserData, getVersion: () => '0.0.0' } };
-  return origLoad.call(this, request, ...rest);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const parquetStore: typeof import('../src/engine/parquetStore') = require('../src/engine/parquetStore');
 const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');

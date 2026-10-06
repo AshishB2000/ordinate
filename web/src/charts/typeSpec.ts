@@ -1,4 +1,4 @@
-// What Chart.js draws for an Ordinate chart id (renderer/hub/chartTypeSpec.ts):
+// What Chart.js draws for an Ordinate chart id (the desktop's chartTypeSpec.ts):
 // the id → Chart.js type + option flags + the boolean traits every family
 // block branches on, decided once, before any data is touched. `opts` is
 // mutable on purpose: the dataset builders write per-family state onto it

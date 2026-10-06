@@ -1,4 +1,4 @@
-// The Chart.js dataset objects for one chart (renderer/hub/chartDatasets.ts) —
+// The Chart.js dataset objects for one chart (the desktop's chartDatasets.ts) —
 // the per-family block that turns {labels, series} into whatever shape that
 // family's controller wants: a treemap `tree`, matrix {x,y,v} cells, sankey
 // {from,to,flow} flows, candlestick {x,o,h,l,c} bars, a funnel's transparent

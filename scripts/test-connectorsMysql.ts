@@ -27,7 +27,6 @@ const connTypes: typeof import('../src/connectors/types') = require('../src/conn
 
 type Ctx = import('../src/connectors/types').ConnectorContext;
 
-
 function ctx(over: Partial<Ctx> = {}): Ctx {
   return {
     values: { host: 'db.example.com', database: 'analytics', user: 'reader', ...(over.values || {}) },

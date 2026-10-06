@@ -1,4 +1,4 @@
-/* The AI dock — renderer/hub/hub.css "AI dock" (.dk-*), "Transcript bubbles"
+/* The AI dock — the desktop's hub.css "AI dock" (.dk-*), "Transcript bubbles"
    (.xp-*) and "Ask activity", ported. A flex sibling of the routed page, so an
    open dock PUSHES the page over; below 1100px it overlays with a scrim. */
 

@@ -1,4 +1,4 @@
-// Self-check for workspace THEMES — renderer/hub/themeModel.ts (the pure model
+// Self-check for workspace THEMES — src/analysis/themeModel.ts (the pure model
 // main and the hub share), src/app/themeStore.ts (the store and its bundle
 // hooks), and the theme's path through dashboards.sanitizeStyle and the
 // dashboard export's whitelist.
@@ -22,17 +22,12 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-themes-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: () => tmp } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmp;
 
 // ponytail: compiled siblings of the real modules.
-const tm = require('../renderer/hub/themeModel') as any;
+const tm = require('../src/analysis/themeModel') as any;
 const store: typeof import('../src/app/themeStore') = require('../src/app/themeStore');
 const { sanitizeStyle }: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
 const { sanitizeBundle, buildSelfContainedHtml }: typeof import('../src/analysis/dashboardExport') = require('../src/analysis/dashboardExport');

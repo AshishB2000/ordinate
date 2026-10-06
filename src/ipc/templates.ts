@@ -10,7 +10,7 @@ import * as userTemplates from '../app/userTemplateStore'; // r7:templates
 
 // TEMPLATES IPC — the gallery's two channels. NOT an AI path: both work with no
 // model configured, because a template is app code reading app-computed column
-// summaries. Registered from src/main.ts beside `analyses`.
+// summaries. Registered from src/server/app.ts beside `analyses`.
 //
 //   template:list  Every template, with the column mapping it would use on the
 //                  chosen dataset and, for the ones that cannot map their

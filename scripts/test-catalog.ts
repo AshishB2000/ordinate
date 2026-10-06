@@ -1,8 +1,8 @@
 // Self-check for the catalog — src/app/catalog.ts (the store) and
 // src/app/catalogIndex.ts (the cross-record reads).
 //
-// Same harness as test-reportSpec.ts: stub 'electron' through Module._load so
-// userData is a throwaway dir, then run the REAL modules against real disk.
+// Same harness as test-reportSpec.ts: point userData
+// (ORDINATE_LOCAL_DIR) at a throwaway dir, then run the REAL modules against real disk.
 //
 // What is pinned, and why each one matters:
 //   1. TAG NORMALISATION — '#Sales Q3' and 'sales-q3' must be one tag, or a
@@ -25,14 +25,9 @@ import { ok, failureCount, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-catalog-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: (_n: string) => tmpUserData }, net: {} };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
 const index: typeof import('../src/app/catalogIndex') = require('../src/app/catalogIndex');

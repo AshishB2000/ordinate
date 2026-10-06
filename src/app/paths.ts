@@ -1,10 +1,12 @@
-// Where the app keeps its files. Every former `app.getPath(...)` call goes
-// through here, so the desktop and the server can disagree about the answer:
+// Where the app keeps its files. Every path the app reads or writes is built
+// from one of these four:
 //
-//   desktop  Electron's own folders.
 //   server   DATA_DIR/orgs/<orgId>/{userData,downloads,temp,documents}, the org
 //            taken from the current request (src/server/context.ts). Each
 //            directory is created on first use.
+//   local    outside server mode (plain-Node self-checks, benchmarks, one-off
+//            scripts): the single directory ORDINATE_LOCAL_DIR names, for all
+//            four. Unset, a path is an error rather than a guess.
 //
 // Never cache a result in a module variable: on the server it differs per
 // request, and a cached path is another org's data.
@@ -23,8 +25,11 @@ const made = new Set<string>();
 
 function resolve(kind: Kind): string {
   const root = serverDataDir();
-  // Lazy: the server never loads Electron.
-  if (root === null) return (require('electron') as typeof import('electron')).app.getPath(kind);
+  if (root === null) {
+    const local = process.env.ORDINATE_LOCAL_DIR;
+    if (!local) throw new Error(`no ${kind} folder: not in server mode, and ORDINATE_LOCAL_DIR is not set`);
+    return local;
+  }
   const org = ctx().org.id;
   if (!ORG_RE.test(org)) throw new Error('invalid org id');
   const dir = path.join(root, 'orgs', org, kind);

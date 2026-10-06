@@ -1,4 +1,4 @@
-// Pipelines IPC — the Data page's Pipelines tab (renderer/hub/pipelinesPage.ts).
+// Pipelines IPC — the Data page's Pipelines tab (the desktop's pipelinesPage.ts).
 //
 // Every handler turns a throw into `{ ok:false, error }`. Nothing here decides
 // what a node IS (src/app/pipelines.ts) or how it runs (src/app/pipelineRunner);

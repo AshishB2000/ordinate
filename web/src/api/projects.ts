@@ -4,7 +4,7 @@ import { rpc } from './client';
 /**
  * What `projects:list` returns per project — the fields the web reads, mirrored
  * from src/app/projects.ts `Project`. Contracts carry inputs only, and that
- * module's import graph (Electron, fs) cannot be type-checked in the browser
+ * module's import graph (fs, DuckDB) cannot be type-checked in the browser
  * world, so the result is narrowed here by hand.
  */
 export interface Project {

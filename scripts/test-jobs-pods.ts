@@ -63,7 +63,6 @@ interface Pod { child: ChildProcess; pid: number; out: () => string; base: Promi
 
 function startPod(env: Record<string, string>): Pod {
   const e: NodeJS.ProcessEnv = { ...process.env, ...env, PORT: '0', ORDINATE_ENV: 'dev', LOG_LEVEL: 'info' };
-  delete e.ELECTRON_RUN_AS_NODE;
   const child = spawn(process.execPath, ['-r', PRELOAD, MAIN], { env: e, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   const exited = new Promise<number | null>((resolve) => child.on('exit', (code) => resolve(code)));

@@ -1,4 +1,4 @@
-// Publish to folder, end to end in plain node (electron stubbed):
+// Publish to folder, end to end in plain node (userData in a temp dir):
 //   1. the sanitizer covers every new field — unknown keys dropped, numbers
 //      clamped, http(s) and SVG images refused, enums closed;
 //   2. a page's CSP pins exactly its own inline scripts and stylesheet, and the
@@ -21,21 +21,9 @@ const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const vm: typeof import('vm') = require('vm');
 const crypto: typeof import('crypto') = require('crypto');
-const Module: any = require('module'); // any: Node's internal loader hook
 
-const REPO = path.resolve(__dirname, '..');
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-publish-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') {
-    return {
-      app: { getPath: () => tmpUserData, getAppPath: () => REPO, getVersion: () => '9.9.9' },
-      ipcMain: { handle: () => {}, on: () => {} }, net: {}, dialog: {}, shell: {}, BrowserWindow: {},
-      Notification: { isSupported: () => false }, safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');

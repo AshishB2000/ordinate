@@ -1,5 +1,5 @@
 // Reversible transform pipeline — MAIN PROCESS, PURE logic.
-// No Electron, no fs, no DOM: `applyPipeline` folds an ordered list of steps over
+// No fs, no DOM: `applyPipeline` folds an ordered list of steps over
 // an immutable `source` table and returns the derived output, so it is
 // node-testable by a plain `node` self-check (scripts/test-transforms.ts).
 //

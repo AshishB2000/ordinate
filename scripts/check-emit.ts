@@ -5,9 +5,9 @@
  * WHY THIS EXISTS. `tsc --incremental` trusts its `.tsbuildinfo` and never
  * stats the output files. If the buildinfo says a source is already emitted,
  * tsc exits 0 and writes nothing — whether or not the `.js` is actually there.
- * That is a silent failure: `prestart`, `pretest`, `predist:*` and `smoke` all
- * go through `build:ts`, so the app, the suites and a packaged installer can
- * every one of them run stale renderer code while CI (cold cache) stays green.
+ * That is a silent failure: `prestart`, `pretest` and the image build all go
+ * through `build:ts`, so the server, the suites and an image can every one of
+ * them run stale code while CI (cold cache) stays green.
  *
  * It has happened twice. Phase 5 logged it as blocker B1
  * (docs/phase-5/04-csp-and-testing.md) when a worktree's `node_modules` was a
@@ -26,21 +26,17 @@ import * as path from 'node:path';
 
 /**
  * Directories whose every `.ts` emits a sibling `.js` in place — the `include`
- * globs of tsconfig.main.json (`src`, `preload`, `scripts`) and
- * tsconfig.renderer.json (`renderer`). Keep in sync with those two files.
+ * globs of tsconfig.main.json (`src`, `scripts`; tsconfig.site.json's
+ * `src/publish/site` is inside `src`). Keep in sync with those files.
  */
-const ROOTS = ['src', 'preload', 'scripts', 'renderer'];
+const ROOTS = ['src', 'scripts'];
 
-/**
- * `renderer/hub/svelte` is EXCLUDED from tsconfig.renderer.json: esbuild
- * bundles those modules, nothing is emitted beside them.
- */
-const SKIP = new Set(['node_modules', '.git', path.join('renderer', 'hub', 'svelte')]);
+const SKIP = new Set(['node_modules', '.git']);
 
 /** The per-checkout incremental cache the tsconfigs point at. */
 const BUILDINFO_DIR = '.tsbuildinfo';
 
-const CONFIGS = ['tsconfig.main.json', 'tsconfig.renderer.json'];
+const CONFIGS = ['tsconfig.main.json', 'tsconfig.site.json'];
 
 export interface StaleEmit {
   ts: string;
@@ -131,7 +127,7 @@ function main(): void {
     healed
       ? '\nA clean rebuild did not fix it, so the incremental cache is not the cause.\n' +
           'Most likely a source outside the include globs of tsconfig.main.json /\n' +
-          'tsconfig.renderer.json, or an emit that failed silently.\n'
+          'tsconfig.site.json, or an emit that failed silently.\n'
       : `\nRun \`npm run build\` — it clears ${BUILDINFO_DIR}/ and rebuilds once on its own.\n` +
           `By hand: rm -rf ${BUILDINFO_DIR} && npm run build\n`,
   );

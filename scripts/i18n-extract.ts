@@ -3,20 +3,21 @@
 //   npm run build:ts && node scripts/i18n-extract.js           # rewrite + regenerate en.json
 //   node scripts/i18n-extract.js --dry                          # report only
 //
-// Walks every renderer/hub/*.ts and renderer/hub/index.html, finds each
-// user-visible string (scripts/i18nDetect.ts decides which), and:
+// Walks the server's sentence files (MAIN_FILES: captions, insights, alerts,
+// report pages, regex messages), finds each user-visible string
+// (scripts/i18nDetect.ts decides which), and:
 //
-//   - in TypeScript, replaces it with `t('file.slug', { …params })` — the same
-//     English value, so behaviour is unchanged in `en`;
-//   - in index.html, tags the element `data-i18n="key"` (text) or
-//     `data-i18n-<attr>="key"` (title, placeholder, aria-label, alt), wrapping
-//     a bare text node beside other markup in a <span data-i18n>;
-//   - writes renderer/i18n/en.json: every key still referenced, plus the new ones;
+//   - replaces it with `t('file.slug', { …params })` — the same English value,
+//     so behaviour is unchanged in `en`;
+//   - writes src/i18n/en.json: every key still referenced — by those files, by
+//     the rest of the server (serverKeys), or by the web chart engine's string
+//     tables (WEB_TABLES, which print the catalog's English under its own
+//     keys) — plus the new ones;
 //   - syncs the drafts (es.json, …): a new key arrives as `null` (shown in
 //     English, on purpose, until someone translates it), a dead key goes.
 //
 // RE-RUNNABLE BY DESIGN. Already-translated calls are skipped, so after a
-// rebase the answer to a conflicted renderer file is: take develop's version
+// rebase the answer to a conflicted sentence file is: take develop's version
 // and run this again — it extracts exactly what is new, keeps every existing
 // key, and drops keys nothing references any more.
 //
@@ -34,15 +35,42 @@ const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const HUB = path.join(ROOT, 'renderer', 'hub');
-const OUT = path.join(ROOT, 'renderer', 'i18n', 'en.json');
+const OUT = path.join(ROOT, 'src', 'i18n', 'en.json');
 
-/** Files that never call t(): the binder itself, and pure UMD modules node tests require. */
-export function rendererFiles(): string[] {
-  return fs.readdirSync(HUB)
-    .filter((f) => f.endsWith('.ts') && !f.endsWith('.d.ts') && f !== 'i18n.ts')
-    .filter((f) => !/typeof module !== 'undefined'|typeof exports !== 'undefined'/.test(fs.readFileSync(path.join(HUB, f), 'utf8')))
-    .sort();
+/**
+ * The web chart engine's string tables: `'key': 'English'` entries under the
+ * catalog's own keys (web/src/charts/strings.ts says why). Every key they name
+ * stays in the catalog.
+ */
+export const WEB_TABLES = ['web/src/charts/strings.ts', 'web/src/charts/grids/strings.ts'];
+
+/**
+ * The keys the SERVER uses beyond the sentence files' own `t('…')` calls: a
+ * `t('…')` anywhere under src/ (reportsServer's narration prompt), and a
+ * quoted catalog key in a lookup table (reportPages' STATUS_KEY, read through
+ * `t(STATUS_KEY[s])`). Only names already in `catalog` count, so a string that
+ * merely looks like a key keeps nothing it should not.
+ */
+export function serverKeys(catalog: Record<string, unknown>): Set<string> {
+  const keys = new Set<string>();
+  const walk = (dir: string): void => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { if (e.name !== 'i18n') walk(p); continue; }
+      if (!e.name.endsWith('.ts') || e.name.endsWith('.d.ts')) continue;
+      for (const m of fs.readFileSync(p, 'utf8').matchAll(/'([\w-]+\.[\w.-]+)'/g)) if (m[1] in catalog) keys.add(m[1]);
+    }
+  };
+  walk(path.join(ROOT, 'src'));
+  return keys;
+}
+
+export function webTableKeys(): Set<string> {
+  const keys = new Set<string>();
+  for (const f of WEB_TABLES) {
+    for (const m of fs.readFileSync(path.join(ROOT, f), 'utf8').matchAll(/^\s*'([\w.-]+)':/gm)) keys.add(m[1]);
+  }
+  return keys;
 }
 
 // ── ICU text ────────────────────────────────────────────────────────────
@@ -302,99 +330,9 @@ function insideBrace(all: Tok[], i: number): boolean {
   return false;
 }
 
-// ── index.html ──────────────────────────────────────────────────────────
-
-const HTML_ATTRS = ['title', 'placeholder', 'aria-label', 'alt'];
-const HTML_SKIP_TAGS = new Set(['script', 'style', 'svg', 'path', 'code', 'pre', 'kbd']);
-
-function htmlDecode(s: string): string {
-  return s.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, '\'').replace(/&#(\d+);/g, (_m, d: string) => String.fromCodePoint(+d))
-    .replace(/&#x([0-9a-f]+);/gi, (_m, h: string) => String.fromCodePoint(parseInt(h, 16))).replace(/&amp;/g, '&');
-}
-
-/**
- * Tag index.html. A text node is the element's whole content → `data-i18n` on
- * the element; text beside other children → wrapped in `<span data-i18n>`.
- */
-export function tagHtml(html: string, keyFor: (text: string, attr: string) => string): string {
-  // Tokenize into tags and text, keeping a stack of open elements.
-  // LOSSLESS: every character lands in exactly one node (`<!DOCTYPE …>` and a
-  // stray `<` included) — checked below, because a regex that skips a character
-  // drops it from the output, and a lost `<` of the doctype is quirks mode.
-  const re = /<!--[\s\S]*?-->|<![^>]*>|<\/?([a-zA-Z][\w-]*)((?:\s+[^\s=>/]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?)*)\s*(\/?)>|[^<]+|</g;
-  type Node = { kind: 'open' | 'close' | 'text' | 'other'; raw: string; tag?: string; attrs?: string; self?: boolean };
-  const nodes: Node[] = [];
-  let mt: RegExpExecArray | null;
-  while ((mt = re.exec(html))) {
-    const raw = mt[0];
-    if (raw.startsWith('<!') || raw === '<') nodes.push({ kind: 'other', raw });
-    else if (raw.startsWith('</')) nodes.push({ kind: 'close', raw, tag: (mt[1] || '').toLowerCase() });
-    else if (raw.startsWith('<')) nodes.push({ kind: 'open', raw, tag: (mt[1] || '').toLowerCase(), attrs: mt[2] || '', self: !!mt[3] || /^(br|hr|img|input|meta|link|source|wbr|col|area|base)$/i.test(mt[1] || '') });
-    else nodes.push({ kind: 'text', raw });
-  }
-  if (nodes.map((n) => n.raw).join('') !== html) throw new Error('tagHtml: the tokenizer lost characters');
-  const body = nodes.findIndex((n) => n.kind === 'open' && n.tag === 'body');
-  const out: string[] = [];
-  const stack: { i: number; tag: string; skip: boolean }[] = [];
-  const childCount = new Map<number, number>(); // open index → element children
-  // First pass: count element children and non-empty text children per open tag.
-  const texts = new Map<number, number>();
-  {
-    const st: number[] = [];
-    nodes.forEach((n, i) => {
-      if (n.kind === 'open') { if (st.length) childCount.set(st[st.length - 1], (childCount.get(st[st.length - 1]) || 0) + 1); if (!n.self) st.push(i); }
-      else if (n.kind === 'close') st.pop();
-      else if (n.kind === 'text' && n.raw.trim() && st.length) texts.set(st[st.length - 1], (texts.get(st[st.length - 1]) || 0) + 1);
-    });
-  }
-  const attrRewrite = (n: Node, i: number): string => {
-    if (i < body || !n.attrs) return n.raw;
-    let raw = n.raw;
-    for (const a of HTML_ATTRS) {
-      if (new RegExp(`\\sdata-i18n-${a}=`).test(raw)) continue;
-      const am = new RegExp(`\\s${a}="([^"]*)"`).exec(raw);
-      if (!am) continue;
-      const v = htmlDecode(am[1]).trim();
-      if (!/\p{L}{2}/u.test(v)) continue;
-      raw = raw.replace(/(\s*\/?>)$/, ` data-i18n-${a}="${keyFor(v, a)}"$1`);
-    }
-    return raw;
-  };
-  for (let i = 0; i < nodes.length; i++) {
-    const n = nodes[i];
-    const top = stack[stack.length - 1];
-    if (n.kind === 'open') {
-      let raw = attrRewrite(n, i);
-      const skip = (top && top.skip) || HTML_SKIP_TAGS.has(n.tag || '') || /\sdata-i18n-skip\b/.test(raw) || /\stranslate="no"/.test(raw);
-      // whole-content text → tag the element itself
-      if (i > body && !skip && !n.self && !childCount.get(i) && (texts.get(i) || 0) === 1 && !/\sdata-i18n=/.test(raw)) {
-        const txt = nodes[i + 1];
-        const v = txt && txt.kind === 'text' ? htmlDecode(txt.raw).replace(/\s+/g, ' ').trim() : '';
-        if (v && /\p{L}{2}/u.test(v)) raw = raw.replace(/(\s*\/?>)$/, ` data-i18n="${keyFor(v, '')}"$1`);
-      }
-      out.push(raw);
-      if (!n.self) stack.push({ i, tag: n.tag || '', skip });
-      continue;
-    }
-    if (n.kind === 'close') { stack.pop(); out.push(n.raw); continue; }
-    if (n.kind === 'text' && top && !top.skip && i > body && childCount.get(top.i)) {
-      const v = htmlDecode(n.raw).replace(/\s+/g, ' ').trim();
-      if (v && /\p{L}{2}/u.test(v)) {
-        const lead = /^\s*/.exec(n.raw)![0];
-        const trail = /\s*$/.exec(n.raw)![0];
-        out.push(`${lead}<span data-i18n="${keyFor(v, '')}">${n.raw.trim()}</span>${trail}`);
-        continue;
-      }
-    }
-    out.push(n.raw);
-  }
-  return out.join('');
-}
-
 // ── main ────────────────────────────────────────────────────────────────
 
-/** Every `t('key'…)` / `data-i18n*="key"` reference already in the tree. */
+/** Every `t('key'…)` / `data-i18n*="key"` reference in these sources. */
 export function referencedKeys(srcs: string[]): Set<string> {
   const keys = new Set<string>();
   for (const s of srcs) {
@@ -419,19 +357,14 @@ const MAIN_IMPORT = "import { t } from '../app/i18n';";
 function main(): void {
   const dry = process.argv.includes('--dry');
   const old: Record<string, string> = fs.existsSync(OUT) ? JSON.parse(fs.readFileSync(OUT, 'utf8')) : {};
-  const units = [
-    ...rendererFiles().map((f) => ({ file: path.join(HUB, f), base: f.replace(/\.ts$/, ''), main: false })),
-    ...MAIN_FILES.map((f) => ({ file: path.join(ROOT, f), base: path.basename(f, '.ts'), main: true })),
-  ];
+  const units = MAIN_FILES.map((f) => ({ file: path.join(ROOT, f), base: path.basename(f, '.ts'), main: true }));
   const srcs = new Map(units.map((u) => [u.file, fs.readFileSync(u.file, 'utf8')]));
   const dataValues = new Set<string>();
   for (const s of srcs.values()) collectDataValues(s, dataValues);
 
-  // Keep every key still referenced (a rerun after rebase).
-  const htmlPath = path.join(HUB, 'index.html');
-  const html0 = fs.readFileSync(htmlPath, 'utf8');
+  // Keep every key still referenced (a rerun after rebase), the web tables' included.
   const cat: Record<string, string> = {};
-  for (const k of referencedKeys([...srcs.values(), html0])) if (k in old) cat[k] = old[k];
+  for (const k of new Set([...referencedKeys([...srcs.values()]), ...serverKeys(old), ...webTableKeys()])) if (k in old) cat[k] = old[k];
 
   // Pass 1: every message and the files it appears in.
   const found = units.map((u) => {
@@ -439,12 +372,9 @@ function main(): void {
     const sites = detect(src, { dataValues });
     return { u, src, sites, built: sites.map((site) => buildMessage(site, src)) };
   });
-  const htmlTexts: string[] = [];
-  tagHtml(html0, (text) => { htmlTexts.push(icuEscape(text)); return 'x'; });
   const users = new Map<string, Set<string>>(); // message → bases using it
   const use = (msg: string, base: string): void => { const s = users.get(msg) || new Set<string>(); s.add(base); users.set(msg, s); };
   for (const f of found) for (const b of f.built) use(b.message, f.u.base);
-  for (const m of htmlTexts) use(m, 'html');
 
   // ONE key per distinct English message, app-wide: the same words must read the
   // same everywhere, and some code compares a label made in one file with one
@@ -488,9 +418,6 @@ function main(): void {
     next = un;
     if (!dry && next !== f.src) fs.writeFileSync(f.u.file, next);
   }
-
-  const html = tagHtml(html0, (text) => keyFor('html', icuEscape(text)));
-  if (!dry && html !== html0) fs.writeFileSync(htmlPath, html);
 
   const sorted: Record<string, string> = {};
   for (const k of Object.keys(cat).sort()) sorted[k] = cat[k];

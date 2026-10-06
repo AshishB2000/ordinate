@@ -2,7 +2,7 @@
 // imports. Used by sqlDatasets.ts to find which datasets a query names and to
 // refuse the constructs that read files.
 //
-// It models the same quoting forms `ipc/mosaic.ts`'s `statementCount` does,
+// It models the same quoting forms `sqlHarden.ts`'s `statementCount` does,
 // each measured there against this DuckDB build: `'…'` with `''` doubling,
 // `E'…'` with backslash escapes, `"…"` with `""` doubling, `$tag$…$tag$`, `--`
 // line comments and NESTING `/* */` comments. That is not tidiness — the guards

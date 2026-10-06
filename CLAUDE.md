@@ -138,7 +138,7 @@ renderer-safe views and strip every raw key and secret. `executionReady()` gates
 - **TypeScript, incremental, in-place sibling emit.** New files are `.ts`; materially touching an old
   `.js` means converting it. `npm run build:ts` (tsc, **no bundler**) emits the sibling `.js`, which
   gets an explicit `.gitignore` entry; require paths and `<script src>` never change.
-- **`strict` is on in the MAIN world only.** `tsconfig.renderer.json` sets `"strict": false`
+- **`strict` is on in the MAIN world only.** `tsconfig.site.json` sets `"strict": false`
   deliberately, so the DOM-heavy legacy layer compiles without hundreds of casts. That is why the
   renderer carries 146 lint findings disabled in a named `.oxlintrc.json` override rather than
   pretended away — they unlock when strict comes back. No `any` without a comment.
@@ -150,7 +150,7 @@ renderer-safe views and strip every raw key and secret. `executionReady()` gates
 - **Every user-visible string goes through the catalog.** `t('key', { params })` in renderer TS (and
   in main's sentence files — captions, insights, alerts, reports), `data-i18n*` in `index.html`.
   Write the English literal, then run `node scripts/i18n-extract.js`: it rewrites the literal,
-  regenerates `renderer/i18n/en.json` and adds the key to the es/de/fr/ja drafts as `null`. Never
+  regenerates `src/i18n/en.json` and adds the key to the es/de/fr/ja drafts as `null`. Never
   hand-edit `en.json`; after a rebase, take develop's file and rerun the script. `test-i18n` fails on
   a hard-coded string, a missing key or a dropped `{param}`. Figures are formatted (`format.ts`)
   BEFORE they reach `t()`; `// i18n-skip` marks a string that must stay English. A local named `t`

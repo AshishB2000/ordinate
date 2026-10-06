@@ -1,9 +1,8 @@
 // WHICH FOLDERS DuckDB MAY READ — MAIN PROCESS ONLY.
 //
-// Split out of src/connectors/local.ts (.claude/rules/file-size.md). That file's
-// job is "three local-file connectors"; this one's is "the persisted
-// allow-list, and applying it before the engine is locked". They are separate
-// jobs that happen to be used together, and only one of them is about SQL.
+// Split out of the desktop's local-file connectors (.claude/rules/file-size.md),
+// which went at the T8.1 cutover; this file's job is "the persisted allow-list,
+// and applying it before the engine is locked".
 //
 // The whole subtlety lives in WHEN the lock is applied. DuckDB's
 // `allowed_directories` can only be set BEFORE `enable_external_access=false`,
@@ -24,7 +23,7 @@ import * as appPaths from '../app/paths';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { hardenConnection } from '../ipc/mosaic';
+import { hardenConnection } from '../engine/sqlHarden';
 
 /** How many picked folders stay in the allow-list registry, newest first. */
 const MAX_REGISTERED_DIRS = 32;
@@ -34,7 +33,7 @@ function userDataDir(): string | null {
     const d = appPaths.userData();
     return typeof d === 'string' && d ? d : null;
   } catch {
-    return null; // no Electron (a unit test, or a stripped harness) — skip hardening
+    return null; // no userData (a unit test, or a stripped harness) — skip hardening
   }
 }
 
@@ -126,7 +125,7 @@ export function noteDir(dir: string): void {
  * after the first call: `hardenConnection` memoises, so this is a
  * resolved-promise await plus one small file read.
  *
- * Never throws. If hardening fails or Electron is absent the engine simply stays
+ * Never throws. If hardening fails or userData is unresolvable the engine simply stays
  * as it is, which is the un-hardened, fully working state.
  */
 export async function prepareEngine(dir: string): Promise<void> {

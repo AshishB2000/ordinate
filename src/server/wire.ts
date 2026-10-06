@@ -1,6 +1,6 @@
 // The RPC wire codec: tagged JSON that carries what JSON drops.
 //
-// Under Electron a handler's reply reached the renderer by STRUCTURED CLONE, so
+// On the desktop app a handler's reply reached the window by STRUCTURED CLONE, so
 // a NaN stayed NaN and a Map stayed a Map. Plain JSON would turn NaN into null —
 // a figure silently wrong, the one thing the app must never do. This codec makes
 // `decode(encode(x))` equal `structuredClone(x)` (scripts/test-wire.ts proves it
@@ -16,8 +16,8 @@
 // A PLAIN object that has its own "$" key is escaped as {"$":"O","v":{…}}, whose
 // `v` keys are taken literally — so no payload can forge a tag.
 //
-// Buffer decodes as a Uint8Array, because that is what structuredClone (and
-// Electron IPC) give for a Buffer. Shared references are copied, not shared,
+// Buffer decodes as a Uint8Array, because that is what structuredClone gives
+// for a Buffer. Shared references are copied, not shared,
 // and a cycle throws: JSON has no references. Values structuredClone would
 // silently reshape or JSON would silently mangle (other typed arrays,
 // ArrayBuffer, RegExp, Error, functions, symbols) THROW — loud, never wrong.

@@ -1,11 +1,12 @@
 // Self-check for the Share policy — src/app/sharePolicy.ts, src/app/privacyStore.ts
-// and the IPC that carries them — driven through the REAL handlers with the
-// native dialogs stubbed, against a real project on disk:
+// and the IPC that carries them — driven through the REAL handlers, every file
+// an export offers read back from its download token, against a real project
+// on disk:
 //
 //   1. The policy file: defaults to mask, sanitised on every read.
 //   2. The salt: created on first use, 0600, stable, never for a missing project.
 //   3. Every export path, under each of mask / drop / include:
-//        rows      `visual:rowsExport` (the drill CSV)
+//        rows      `visual:rowsDownload` (the drill CSV)
 //        charts    `visual:data` with `share` (dashboard/report/story exports)
 //        bundles   `projects:export` → a masked bundle that still IMPORTS
 //        publish   applyToChart / applyToTable / policySummary (the API the
@@ -24,12 +25,10 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
-const REPO = path.resolve(__dirname, '..');
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-share-'));
 const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-share-out-'));
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const handlers: Map<string, (...a: any[]) => any> = require('../src/server/rpc').handlers;
 let savePath = '';
 
@@ -43,22 +42,7 @@ for (const k of ['log', 'error', 'warn', 'info'] as const) {
   };
 }
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (name: string) => (name === 'downloads' ? outDir : tmpUserData), getAppPath: () => REPO, getVersion: () => '9.9.9' },
-      dialog: {
-        showSaveDialog: async () => ({ canceled: false, filePath: savePath }),
-        showMessageBox: async () => ({ response: 0 }),
-        showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
-      },
-      shell: {}, net: {}, nativeImage: {}, BrowserWindow: {}, Notification: {}, clipboard: {},
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the real modules.
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
@@ -72,6 +56,13 @@ const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/
 const mask: typeof import('../src/data/maskSteps') = require('../src/data/maskSteps');
 const { refreshDataset }: typeof import('../src/data/datasetRefresh') = require('../src/data/datasetRefresh');
 require('../src/ipc/visuals').register();
+require('../src/ipc/visualsServer').register();
+const files: typeof import('../src/server/files') = require('../src/server/files');
+/** A file a handler offered as a download, copied to `savePath` — what the browser would save. */
+function keep(r: { downloadToken?: string } | null): void {
+  const p = r && r.downloadToken ? files.downloadPathForTest(r.downloadToken) : null;
+  if (p) fs.copyFileSync(p, savePath);
+}
 require('../src/ipc/privacy').register();
 require('../src/ipc/projects').register({});
 
@@ -153,7 +144,8 @@ async function main(): Promise<void> {
   // ── 3a. Rows: the drill CSV ───────────────────────────────────────────────
   const drill = { projectId: pid, datasetId: did, encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] }, filters: [], mark: null, page: {} };
   savePath = path.join(outDir, 'mask.csv');
-  let r = await call('visual:rowsExport', drill);
+  let r = await call('visual:rowsDownload', drill);
+  keep(r);
   let csv = csvRows(savePath);
   ok('rows/mask: the export ran', r.ok === true && r.rows === 4, JSON.stringify(r));
   ok('rows/mask: header keeps the columns', csv[0].join(',') === 'name,email,card,region,amount');
@@ -162,12 +154,12 @@ async function main(): Promise<void> {
   ok('rows/mask: other columns untouched', csv[1][3] === 'North' && csv[1][4] === '10' && csv[1][0] === 'Grace Hopper');
   await store.setPolicy(pid, { export: 'drop' });
   savePath = path.join(outDir, 'drop.csv');
-  await call('visual:rowsExport', drill);
+  keep(await call('visual:rowsDownload', drill));
   csv = csvRows(savePath);
   ok('rows/drop: the sensitive columns are gone from header and rows', csv[0].join(',') === 'name,region,amount' && csv.every((row) => row.length === 3), csv[0].join(','));
   await store.setPolicy(pid, { export: 'include' });
   savePath = path.join(outDir, 'include.csv');
-  await call('visual:rowsExport', drill);
+  keep(await call('visual:rowsDownload', drill));
   ok('rows/include: raw values pass through', fs.readFileSync(savePath, 'utf8').includes('grace@example.com'));
   await store.setPolicy(pid, { export: 'mask' });
 
@@ -246,6 +238,7 @@ async function main(): Promise<void> {
   ok('fixture: a raw export carries the source Parquet and a dataset version', rawNames.includes(`datasets/${did}.source.parquet`) && rawNames.some((n) => n.startsWith(`history/dataset/${did}/`)));
   savePath = path.join(outDir, 'project.ordinate');
   const exp = await call('projects:export', { id: pid });
+  keep(exp);
   ok('bundle/mask: the export ran', exp.ok === true, JSON.stringify(exp));
   const bytes = fs.readFileSync(savePath);
   const entries = bundle.readZip(bytes);
@@ -280,13 +273,13 @@ async function main(): Promise<void> {
   }
   await store.setPolicy(pid, { bundle: 'drop' });
   savePath = path.join(outDir, 'project-drop.ordinate');
-  await call('projects:export', { id: pid });
+  keep(await call('projects:export', { id: pid }));
   const dropRec = JSON.parse(bundle.readZip(fs.readFileSync(savePath)).find((e) => e.name === `datasets/${did}.json`)!.data.toString('utf8'));
   ok('bundle/drop: the column is dropped from the record', !dropRec.columns.some((c: any) => c.name === 'card'));
   ok('bundle/drop: the dropped bundle imports too', (await bundle.importBundle(fs.readFileSync(savePath))).ok === true);
   await store.setPolicy(pid, { bundle: 'include' });
   savePath = path.join(outDir, 'project-include.ordinate');
-  await call('projects:export', { id: pid });
+  keep(await call('projects:export', { id: pid }));
   const inclNames = bundle.readZip(fs.readFileSync(savePath)).map((e) => e.name);
   ok('bundle/include: the source Parquet travels unchanged', inclNames.includes(`datasets/${did}.source.parquet`));
   await store.setPolicy(pid, { bundle: 'mask' });
@@ -333,7 +326,6 @@ async function main(): Promise<void> {
 
 main()
   .then(() => {
-    Module._load = origLoad;
     for (const d of [tmpUserData, outDir]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (_) {} }
     if (failureCount()) { console.error('\n' + failureCount() + ' share-policy check(s) FAILED'); process.exit(1); }
     console.log('\nAll share-policy checks passed.');

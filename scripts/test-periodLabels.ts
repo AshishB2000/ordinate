@@ -1,55 +1,30 @@
 'use strict';
 
-// Parity: renderer/hub/periodPicker.ts `periodLabel` names every period exactly
-// as src/analysis/dateIntel.ts `describePeriod` does.
+// Parity: src/analysis/dateIntel.ts `describePeriod` names every period exactly
+// as the desktop's `periodLabel` (periodPicker.ts) did.
 //
-// The renderer keeps its own copy because a chip's text is needed
-// synchronously and a classic <script> cannot import a CommonJS module (see
-// periodPicker.ts's header). A copy is only safe if something fails when the
-// two drift — this is that something. The renderer file runs in a vm, the
-// way scripts/test-chartMonthLabels.ts runs chartRender.js.
+// The desktop kept its own copy because a chip's text was needed synchronously
+// and a classic <script> could not import a CommonJS module. That copy went
+// with the desktop app (T8.1); its answers for every preset under four
+// calendars are the golden fixture scripts/fixtures/golden/periodLabels.json
+// (scripts/golden.ts), compared with the same strict equality as before.
 //
 //   npm run build:ts && node scripts/test-periodLabels.js
 
-import * as fs from 'fs';
-import * as path from 'path';
-import * as vm from 'vm';
-import { describePeriod, PERIOD_PRESETS, N_PRESETS } from '../src/analysis/dateIntel';
+import { describePeriod, PERIOD_PRESETS } from '../src/analysis/dateIntel';
 import type { CalendarPrefs, PeriodSpec } from '../src/analysis/dateIntel';
+import { golden } from './golden';
 
 import { ok, finish } from './selfcheck';
-import { withT } from './i18nNode';
 
-const code = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'hub', 'periodPicker.js'), 'utf8');
-// The one formatter, as the renderer binds it (formatBind.ts).
-const ctx = vm.createContext(withT({ OrdFormat: require('../src/app/format') }));
-vm.runInContext(code, ctx);
+const G = golden<{ cases: Array<[string, CalendarPrefs, PeriodSpec, string]> }>('periodLabels');
 
-const specs: PeriodSpec[] = [];
-for (const p of PERIOD_PRESETS) {
-  if (p === 'custom') specs.push({ preset: p, from: '2024-01-01', to: '2024-03-31' }, { preset: p, from: '2024-01-01' }, { preset: p, to: '2024-03-31' });
-  else if (N_PRESETS.has(p)) specs.push({ preset: p, n: 1 }, { preset: p, n: 12 });
-  else specs.push({ preset: p });
+// Every preset the server offers was recorded, under each calendar.
+const recorded = new Set(G.cases.map((c) => c[2].preset));
+ok('the fixture covers every preset', PERIOD_PRESETS.every((p) => recorded.has(p)), PERIOD_PRESETS.filter((p) => !recorded.has(p)).join(','));
+for (const [name, cal, spec, legacy] of G.cases) {
+  const main = describePeriod(spec, cal);
+  ok(`${name} ${spec.preset}${spec.n ? '(' + spec.n + ')' : ''}: "${main}"`, legacy === main, `the desktop said "${legacy}"`);
 }
-
-const cals: Array<[string, CalendarPrefs]> = [
-  ['fy1', { weekStart: 1, fiscalYearStart: 1 }],
-  ['fy7', { weekStart: 1, fiscalYearStart: 7 }],
-  ['454', { weekStart: 1, fiscalYearStart: 1, calendarType: '454', yearEnd: 'nearest' }],
-  ['iso', { weekStart: 1, fiscalYearStart: 7, calendarType: 'iso', yearEnd: 'nearest' }],
-];
-for (const [name, cal] of cals) {
-  for (const spec of specs) {
-    const main = describePeriod(spec, cal);
-    const renderer = vm.runInContext(`wsFormats = ${JSON.stringify(cal)}; periodLabel(${JSON.stringify(spec)})`, ctx);
-    ok(`${name} ${spec.preset}${spec.n ? '(' + spec.n + ')' : ''}: "${main}"`, renderer === main, `renderer said "${renderer}"`);
-  }
-}
-
-// The closed chip's text for the three shapes a date control holds.
-vm.runInContext(`wsFormats = { weekStart: 1, fiscalYearStart: 7 }`, ctx);
-ok('chip: a preset shows its name', vm.runInContext(`periodValueText({ preset: 'this_year' })`, ctx) === 'This fiscal year');
-ok('chip: nothing picked reads "All dates"', vm.runInContext(`periodValueText({})`, ctx) === 'All dates');
-ok('chip: fixed dates show as a range', /–/.test(vm.runInContext(`periodValueText({ from: '2024-01-01', to: '2024-03-31' })`, ctx)));
 
 finish();

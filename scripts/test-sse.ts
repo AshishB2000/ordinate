@@ -1,5 +1,5 @@
-// Self-check for server push (src/server/sse.ts) — REAL HTTP, server mode, no
-// Electron. Three tabs hold event streams: A and B for one org-a user, C for
+// Self-check for server push (src/server/sse.ts) — REAL HTTP, server mode.
+// Three tabs hold event streams: A and B for one org-a user, C for
 // org-b. A starts a real job over RPC (`quality:run`, a compute-worker job) and
 // must receive its progress and completion, wire-decoded; B (another tab) and
 // C (another org) must receive nothing. Then: hijack attempts on A's client id,
@@ -17,13 +17,6 @@ const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const http: typeof import('http') = require('http');
 const { randomUUID }: typeof import('crypto') = require('crypto');
-const Module: any = require('module'); // any: the loader hook has no public type
-
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') throw new Error('electron is not available in server mode');
-  return origLoad.apply(this, [request, ...rest]);
-};
 
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');

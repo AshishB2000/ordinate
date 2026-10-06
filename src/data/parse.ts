@@ -1,5 +1,5 @@
 // File parsing + per-column type detection — MAIN PROCESS, pure logic.
-// No Electron import, no fs of arbitrary paths: every parser here operates on
+// No fs of arbitrary paths: every parser here operates on
 // strings/values handed in by the IPC layer. Messy input returns `warnings`
 // instead of throwing.
 //
@@ -8,7 +8,7 @@
 // text|number|date column classification.
 //
 // NOT here: xlsx. That is the next phase (read-only via exceljs in the
-// datasets/ipc layer); parse.ts stays Electron- and exceljs-free so it can be
+// datasets/ipc layer); parse.ts stays exceljs-free so it can be
 // unit-tested by a plain `node` self-check.
 
 // ── Pinned output shape ──────────────────────────────────────────────────────
@@ -105,7 +105,7 @@ export function detectColumnType(cells: string[]): ColumnType {
 // Shared table finalizer, exported for the xlsx reader (src/parseXlsx.ts) so a
 // sheet's header + string-cell body runs through the exact same ragged-fix,
 // per-column type detection, and coercion as CSV/JSON. Keeps parse.ts itself
-// exceljs- and Electron-free (unit-testable under plain node).
+// exceljs-free (unit-testable under plain node).
 export function finalizeTable(header: string[], body: string[][]): ParseResult {
   return finalize(header, body);
 }

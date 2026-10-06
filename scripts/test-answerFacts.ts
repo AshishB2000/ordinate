@@ -7,7 +7,7 @@
 //   2. THE LEDGER REJECTS A NUMBER ABSENT FROM THE FACTS: a narration citing the
 //      card's figures (raw, compact or as a share) passes; one inventing a
 //      growth rate or a total fails, token by token.
-//   3. END TO END through the real handlers (electron stubbed via Module._load,
+//   3. END TO END through the real handlers (userData in a temp dir,
 //      the model stubbed at analyze.askCopilot): a dock ask whose action is an
 //      `answer` stores the SPEC on the turn and a guarded narration; the card's
 //      values equal buildVizData's aggregate exactly (Object.is); Explain works
@@ -22,22 +22,11 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-answers-'));
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const handlers: Map<string, (e: unknown, payload: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: () => tmpUserData },
-      net: {},
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const F: typeof import('../src/ai/answerFacts') = require('../src/ai/answerFacts');
 const audit: typeof import('../src/ai/numberAudit') = require('../src/ai/numberAudit');

@@ -3,8 +3,8 @@
 // src/data/asOf.ts (reading the past through the ordinary dataset reads) and
 // src/data/snapshotRestore.ts (restore through the refresh path).
 //
-// Real modules, real disk, REAL refreshes of a real CSV (electron stubbed so
-// userData is a temp dir, as in test-dataset-refresh.ts). What fails silently
+// Real modules, real disk, REAL refreshes of a real CSV (userData is a temp
+// dir, as in test-dataset-refresh.ts). What fails silently
 // gets the attention: a stray or foreign file touched by a prune, a failed
 // refresh that still keeps a "snapshot" of current data, an as-of answer
 // served from the latest answer's cache entry, a past row written back as the
@@ -18,21 +18,10 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-snapshots-'));
 const tmpFiles = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-snapshots-src-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData, getVersion: () => '0.0.0-test', getAppPath: () => path.resolve(__dirname, '..') },
-      ipcMain: { handle: () => {}, on: () => {} },
-      dialog: {}, net: {}, nativeImage: {}, shell: {}, safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
 const names: typeof import('../src/data/snapshotNames') = require('../src/data/snapshotNames');
@@ -267,7 +256,6 @@ void main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* best effort */ }
     try { fs.rmSync(tmpFiles, { recursive: true, force: true }); } catch { /* best effort */ }
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' snapshot check(s) FAILED'); process.exit(1); }
     console.log('\nAll snapshot checks passed.');
     process.exit(0); // the DuckDB worker keeps the loop alive otherwise

@@ -8,8 +8,8 @@ import { ok, failureCount, finish } from './selfcheck';
 import { sanitizeCards } from '../src/analysis/dashboards';
 import { sniffImage, unsafeSvg, imageSize } from '../src/app/projectAssets';
 
-// ponytail: cardModel.js is a renderer UMD script, not a TS module (see test-geo-match.ts)
-const cm = require('../renderer/hub/cardModel') as any;
+// ponytail: cardModel.js is a UMD script, not a TS module (see test-geo-match.ts)
+const cm = require('../src/analysis/cardModel') as any;
 
 const ID = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const L = (x: number, y: number, w: number, h: number): any => ({ x, y, w, h });

@@ -1,4 +1,4 @@
-// DASHBOARD PARAMETERS — the one resolver. MAIN PROCESS, PURE: no Electron, no
+// DASHBOARD PARAMETERS — the one resolver. MAIN PROCESS, PURE: no
 // fs, no DuckDB. Node-testable by a plain self-check.
 //
 // A parameter is a named value on a dashboard — "threshold = 2000", "region =

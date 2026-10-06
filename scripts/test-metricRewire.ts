@@ -17,8 +17,8 @@
 //      hydrated" rather than assumed. A fixture above the row threshold and one
 //      below it therefore exercise different code and must still agree.
 //
-// The handler is invoked for real: `electron` is stubbed (as test-datasets.ts
-// does for userData), `register()` stores the callbacks in the RPC registry,
+// The handler is invoked for real: userData is a temp dir (as in
+// test-datasets.ts), `register()` stores the callbacks in the RPC registry,
 // and the stored `dashboard:metric` callback is what every assertion
 // runs. No logic is copied out of the shipped file.
 //
@@ -30,7 +30,6 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 type Cell = import('../src/data/transforms').Cell;
 type FilterStep = import('../src/data/transforms').FilterStep;
@@ -40,26 +39,15 @@ type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-metric-rewire-'));
 
-// ── The electron stub ────────────────────────────────────────────────────────
+// ── userData in a temp dir ────────────────────────────────────────────────────
 // `app.getPath` points every store at a throwaway userData dir (test-datasets.ts
 // pattern); the real handlers are read from the RPC registry and invoked.
 // The rest are inert placeholders for modules that merely destructure them at
 // require time (analyze → net, localCliRun → nativeImage).
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const handlers: Map<string, IpcHandler> = require('../src/server/rpc').handlers;
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData, getVersion: () => '0.0.0-test' },
-      net: {},
-      nativeImage: {},
-      shell: {},
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
@@ -74,7 +62,6 @@ const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copi
 
 dashboardsIpc.register();
 const metricHandler = handlers.get('dashboard:metric');
-
 
 function fmt(v: number | null): string {
   return v === null ? 'null' : String(v);
@@ -427,7 +414,6 @@ void main()
   .catch((err) => { ok('unexpected error', false, err); })
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* best effort */ }
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' metric-rewire check(s) FAILED'); process.exit(1); }
     console.log('\nAll metric-rewire checks passed.');
     process.exit(0); // the DuckDB worker keeps the loop alive otherwise

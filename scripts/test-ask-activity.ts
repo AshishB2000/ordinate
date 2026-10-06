@@ -15,8 +15,7 @@
 //   3. NO emitted step contains a data VALUE — not a cell, not a metric total.
 //      Counts of columns/rows/issues/metrics are facts and are allowed; a value
 //      like the app-computed sum (600) is not, and must never leak into a chip.
-// Like test-copilot.ts we stub 'electron' (via Module._load) to point userData at
-// a fresh temp dir, then run the REAL modules against real disk. No framework.
+// Like test-copilot.ts we point userData (ORDINATE_LOCAL_DIR) at a fresh temp dir, then run the REAL modules against real disk. No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
@@ -24,15 +23,10 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // ponytail: Node's private _load hook, untyped
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-askact-'));
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: (_name: string) => tmpUserData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources under test.
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
@@ -43,7 +37,6 @@ const datasetStats: typeof import('../src/data/datasetStats') = require('../src/
 const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 
 type Step = import('../src/ipc/copilot').ActivityStep;
-
 
 // The cell values planted in the fixture. NONE of them may appear in ANY step —
 // that is the whole point of the feature (the model narrates values; the chips
@@ -169,7 +162,6 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) { /* temp dir */ }
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' ask-activity check(s) FAILED'); process.exit(1); }
     console.log('\nAll ask-activity checks passed.');
   })

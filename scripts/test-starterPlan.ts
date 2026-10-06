@@ -7,7 +7,7 @@
 // — a heuristic that picks a text column for a `sum` is exactly the mistake a
 // model makes, and it must be caught by the same gate.
 //
-// Pure: columns and app-computed summaries in, a plan out. No Electron, no disk.
+// Pure: columns and app-computed summaries in, a plan out. No disk.
 
 export {};
 import { ok, failureCount } from './selfcheck';

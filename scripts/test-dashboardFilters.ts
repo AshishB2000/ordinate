@@ -3,7 +3,7 @@
 // card's own filters, changes the aggregated totals of BOTH a visual card
 // (src/vizData.buildVizData) and a metric card (src/metricValue.computeMetric) via the
 // SAME tested pure pipeline — 100% app-computed, and a leading-zero id stays a string
-// (never coerced to a number). No Electron, no fs, no framework: all pure modules.
+// (never coerced to a number). No fs, no framework: all pure modules.
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
@@ -17,7 +17,6 @@ type FilterStep = import('../src/data/transforms').FilterStep;
 type Cell = import('../src/data/transforms').Cell;
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type ControlValue = import('../src/analysis/dashboards').ControlValue;
-
 
 // A tiny dataset. `code` is a leading-zero id STORED AS TEXT — it must stay a string
 // throughout filtering (the strict-number rule: "007" never becomes 7).
@@ -217,7 +216,7 @@ ok('sum(sales) over the leading-zero-filtered subset is the one row (100)',
 // ── effective-filter composition: dashboard filters, then controls, then a
 // card's own filters ───────────────────────────────────────────────────────
 //
-// renderer/hub/dashboards.ts's effectiveFilters() and renderer/hub/dashGrid.ts's
+// the desktop's dashboards.ts's effectiveFilters() and the desktop's dashGrid.ts's
 // `mergeDashFilters(effectiveFilters(), visual.filters)` are hand-kept, classic-
 // script MIRRORS of mergeDashboardFilters/controlSteps above — they cannot be
 // node-tested directly (no import/export, no harness for a renderer global-scope

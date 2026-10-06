@@ -27,7 +27,6 @@ const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const { spawn }: typeof import('child_process') = require('child_process');
 const { monitorEventLoopDelay }: typeof import('perf_hooks') = require('perf_hooks');
-const Module: any = require('module'); // any: Node's private loader hook
 
 type Cell = import('../src/data/transforms').Cell;
 type TableData = import('../src/data/transforms').TableData;
@@ -35,11 +34,7 @@ type TransformStep = import('../src/data/transforms').TransformStep;
 type QualityRule = import('../src/analysis/qualityRules').QualityRule;
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-regex-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: forwarding the loader's own arguments
-  if (request === 'electron') return { app: { getPath: () => tmp, getVersion: () => '0.0.0-test' }, ipcMain: { handle: () => {}, on: () => {} } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmp;
 
 const T: typeof import('../src/data/transforms') = require('../src/data/transforms');
 const Q: typeof import('../src/analysis/qualityRules') = require('../src/analysis/qualityRules');

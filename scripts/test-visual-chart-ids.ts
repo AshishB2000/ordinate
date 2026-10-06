@@ -1,39 +1,28 @@
-// Self-check: MAIN's SUGGESTABLE_CHART_TYPES cannot name a chart the RENDERER
-// cannot draw.
+// Self-check: MAIN's SUGGESTABLE_CHART_TYPES cannot name a chart nothing can
+// draw.
 //
-// The two lists are unavoidably separate. `ALL_CHART_TYPE_IDS` lives in
-// renderer/hub/renderResult.ts, a classic global-scope <script> with no exports,
-// so src/visuals.ts cannot import it and keeps its own copy for the AI prompt.
-// Separate lists drift, and the drift is SILENT: the model proposes a type
-// nothing can render and the user gets an empty option with no error anywhere.
+// The list the desktop drew from was `ALL_CHART_TYPE_IDS` in its renderResult.ts,
+// a classic global-scope <script> src/analysis/visuals.ts could not import, so
+// visuals.ts keeps its own copy for the AI prompt. Separate lists drift, and the
+// drift is SILENT: the model proposes a type nothing can render and the user
+// gets an empty option with no error anywhere.
 //
-// So this test reads the renderer file as TEXT and parses the literal out of it.
-// Deliberately not `require()` — importing a classic script would need a DOM and
-// a global scope it does not have here. A regex over the source is the cheap
-// thing that fails the moment either list changes without the other.
+// The desktop list went with the desktop app (T8.1). The literal as this test
+// parsed it is the golden fixture scripts/fixtures/golden/chartIds.json
+// (`parsedIds`, scripts/golden.ts); web/src/charts/legacy.test.ts pins the web
+// engine's ids to the same desktop set.
 
-import * as fs from 'fs';
-import * as path from 'path';
 import { SUGGESTABLE_CHART_TYPES } from '../src/analysis/visuals';
+import { golden } from './golden';
 
 import { ok, failureCount } from './selfcheck';
 
-// Parse `const ALL_CHART_TYPE_IDS = [ 'a', 'b', … ];` out of the renderer source.
-function parseRendererIds(src: string): string[] | null {
-  const m = /const\s+ALL_CHART_TYPE_IDS\s*=\s*\[([\s\S]*?)\]/.exec(src);
-  if (!m) return null;
-  const ids = m[1].match(/'([a-z_]+)'/g);
-  return ids ? ids.map((s) => s.slice(1, -1)) : null;
-}
-
 function main(): void {
-  const file = path.join(__dirname, '..', 'renderer', 'hub', 'renderResult.ts');
-  const src = fs.readFileSync(file, 'utf8');
-  const rendererIds = parseRendererIds(src);
+  const rendererIds = golden<{ parsedIds: string[] }>('chartIds').parsedIds;
 
-  ok('ALL_CHART_TYPE_IDS was found in renderer/hub/renderResult.ts',
+  ok('ALL_CHART_TYPE_IDS was recorded from the desktop renderResult.ts',
      Array.isArray(rendererIds) && rendererIds.length > 0,
-     rendererIds ? `${rendererIds.length} ids` : 'NOT FOUND — did the literal move or get renamed?');
+     rendererIds ? `${rendererIds.length} ids` : 'NOT FOUND');
   if (!rendererIds) {
     process.exit(1);
   }

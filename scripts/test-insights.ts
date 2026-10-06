@@ -21,7 +21,6 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 type Cell = import('../src/data/transforms').Cell;
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
@@ -30,19 +29,10 @@ type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-insights-ud-'));
 
-// ── The electron stub (test-anomaliesResident.ts pattern) ───────────────────
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// ── userData in a temp dir (test-anomaliesResident.ts pattern) ─────────────────────────────────
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const handlers: Map<string, IpcHandler> = require('../src/server/rpc').handlers;
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_n: string) => tmpUserData, getVersion: () => '0.0.0-test' },
-      dialog: {}, net: {}, nativeImage: {}, shell: {},
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const insights: typeof import('../src/analysis/insights') = require('../src/analysis/insights');
@@ -519,7 +509,6 @@ void main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* best effort */ }
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best effort */ }
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' insights check(s) FAILED'); process.exit(1); }
     console.log('\nAll insights checks passed.');
     process.exit(0); // the DuckDB worker keeps the loop alive otherwise

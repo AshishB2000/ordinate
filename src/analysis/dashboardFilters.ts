@@ -1,4 +1,4 @@
-// Dashboard filter merge — MAIN-PROCESS-safe, PURE logic (no Electron / fs / DOM),
+// Dashboard filter merge — MAIN-PROCESS-safe, PURE logic (no fs / DOM),
 // so it is node-testable by a plain `node` self-check (scripts/test-dashboardFilters.ts)
 // AND declarable as a typed global for the renderer.
 //

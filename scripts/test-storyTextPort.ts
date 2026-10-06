@@ -1,17 +1,18 @@
 // DIFFERENTIAL: src/analysis/storyText.ts (the server's and the browser's copy,
-// T2.13) against renderer/hub/storyText.js (the desktop's, which
-// scripts/test-storyText.ts pins to exact behaviour). One corpus, every export,
-// Object.is at every leaf — so the outline the web page draws, the pages present
-// mode flips through and the pages the export prints are the desktop's.
+// T2.13) against the desktop's storyText.js. One corpus, every export, Object.is
+// at every leaf — so the outline the web page draws, the pages present mode
+// flips through and the pages the export prints are the desktop's.
+//
+// The desktop file went with the desktop app (T8.1); its answers over this
+// corpus are the golden fixture scripts/fixtures/golden/storyText.json
+// (scripts/golden.ts), the corpus included.
 //
 //   npm run build:ts && node scripts/test-storyTextPort.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { golden } from './golden';
 import * as port from '../src/analysis/storyText';
-
-// any: the legacy module is an untyped IIFE export
-const legacy = require('../renderer/hub/storyText.js') as Record<string, (x: any) => unknown>;
 
 function same(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
@@ -22,56 +23,39 @@ function same(a: unknown, b: unknown): boolean {
   return ka.join() === kb.join() && ka.every((k) => same((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
 }
 
-const TEXTS = [
-  '',
-  '\n\n  \n',
-  'Revenue **rose** in *Q3*, see `order_date` and [the docs](https://example.com).',
-  '[x](javascript:alert(1))',
-  '<img src=x onerror=alert(1)>',
-  '2 * 3 = 6 and **unclosed',
-  'an _aside_ and __double__ and ***triple***',
-  '# Title\n\nFirst line\nsecond line\n\n- a\n- b\n1. one\n2. two\n> quoted\n### Small',
-  '#### deep\n#sales tag\n##  spaced  heading  ',
-  'Intro before any heading\n## Section one\nBody of one\n\n## Section two\n- x\n* y\n3) three',
-  '# One\n### stays inside\ntext\n# Two',
-  'trailing spaces   \n\t\n> q1\n> q2\nplain',
-];
+// any: block shapes as recorded (the port's StoryBlock type is wider than the corpus)
+type Blocks = any[];
+const G = golden<{
+  texts: Array<{ text: string; inline: unknown[]; parse: unknown; plain: unknown }>;
+  stories: Array<{ blocks: Blocks; outline: unknown; pages: unknown[] }>;
+}>('storyText');
 
+ok('the fixture holds the corpus (12 texts, 5 stories)', G.texts.length === 12 && G.stories.length === 5);
 let inlineOk = true;
 let parseOk = true;
 let plainOk = true;
-for (const t of TEXTS) {
-  for (const line of t.split('\n')) if (!same(port.mdInline(line), legacy.mdInline(line))) inlineOk = false;
-  if (!same(port.mdParse(t), legacy.mdParse(t))) parseOk = false;
-  if (!same(port.mdPlain(t), legacy.mdPlain(t))) plainOk = false;
+for (const t of G.texts) {
+  t.text.split('\n').forEach((line, i) => { if (!same(port.mdInline(line), t.inline[i])) inlineOk = false; });
+  if (!same(port.mdParse(t.text), t.parse)) parseOk = false;
+  if (!same(port.mdPlain(t.text), t.plain)) plainOk = false;
 }
 ok('mdInline: every line of the corpus tokenizes identically', inlineOk);
 ok('mdParse: every text parses to identical nodes', parseOk);
 ok('mdPlain: identical plain words', plainOk);
 
-const STORIES = [
-  [],
-  [{ id: 'a', kind: 'text', text: '' }],
-  [{ id: 'a', kind: 'visual', visualId: 'v' }, { id: 'b', kind: 'text', text: 'Hello' }],
-  TEXTS.map((text, i) => ({ id: 't' + i, kind: 'text', text })),
-  [
-    { id: 'h', kind: 'text', text: '# Revenue\nIt grew.\n## By region\nWest leads.' },
-    { id: 'v', kind: 'visual', visualId: 'v1' },
-    { id: 'm', kind: 'metrics_row', metricIds: ['m1'] },
-    { id: 'c', kind: 'callout', tone: 'info', text: '# not a page break' },
-    { id: 'd', kind: 'divider' },
-    { id: 'z', kind: 'text', text: '### small\nstill section two\n# Close\n' },
-  ],
-];
 let outlineOk = true;
 let pagesOk = true;
-for (const blocks of STORIES) {
-  if (!same(port.storyOutline(blocks), legacy.storyOutline(blocks))) outlineOk = false;
-  if (!same(port.storyPages(blocks), legacy.storyPages(blocks))) pagesOk = false;
+for (const s of G.stories) {
+  if (!same(port.storyOutline(s.blocks), s.outline)) outlineOk = false;
+  if (!same(port.storyPages(s.blocks), s.pages)) pagesOk = false;
 }
 ok('storyOutline: identical outlines', outlineOk);
 ok('storyPages: identical page cuts (headings, levels, items, split text)', pagesOk);
-ok('storyPages: a page per # / ## heading, the intro its own page', port.storyPages(STORIES[3]).length === (legacy.storyPages(STORIES[3]) as unknown[]).length && port.storyPages(STORIES[4]).length === 3);
+ok('storyPages: a page per # / ## heading, the intro its own page',
+  port.storyPages(G.stories[3].blocks).length === G.stories[3].pages.length && port.storyPages(G.stories[4].blocks).length === 3);
+
+// Negative control: the comparison sees a difference when there is one.
+ok('a changed text does not compare equal (negative control)', !same(port.mdParse('**x**'), G.texts[2].parse));
 
 // plainParagraphs is storyPresent.ts's stPlainParagraphs, pinned by value here (it lived in a DOM script).
 ok('plainParagraphs: lists become bullet / numbered lines, headings their words',

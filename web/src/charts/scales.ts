@@ -1,4 +1,4 @@
-// A chart's axes (renderer/hub/chartScales.ts) — the two axis makers, the
+// A chart's axes (the desktop's chartScales.ts) — the two axis makers, the
 // per-family axis set, and the two overrides that reach into it afterwards
 // (start-at-zero, axis titles). Every `scales` key any chart gets is written
 // here. Reads the per-family state datasets.ts left on `opts`, so it runs

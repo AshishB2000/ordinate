@@ -1,4 +1,4 @@
-// Pivot grids — PURE, MAIN PROCESS, no Electron / fs / DOM.
+// Pivot grids — PURE, MAIN PROCESS, no fs / DOM.
 //
 // A pivot is the one visual whose SHAPE is a table rather than a plot, so it
 // needs a second output next to `{labels, series}`: a `PivotGrid` of row

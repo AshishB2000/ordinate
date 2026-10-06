@@ -1,6 +1,5 @@
-// One icon. The geometry is generated (paths.ts, from renderer/hub/icons.ts);
-// this only stamps the house frame around it. 16px everywhere, 20 in the
-// section rail — there is no other size (icons.ts explains why).
+// One icon. The geometry lives in paths.ts; this only stamps the house frame
+// around it. 16px everywhere, 20 in the section rail — there is no other size.
 //
 // Decorative by default (aria-hidden): the control around it carries the name.
 // Pass `label` only for an icon that stands alone as content.

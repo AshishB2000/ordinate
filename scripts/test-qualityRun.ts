@@ -1,5 +1,5 @@
 // Self-check for data-quality ORCHESTRATION — src/analysis/qualityRun.ts and
-// src/ipc/quality.ts over the real dataset store (electron stubbed).
+// src/ipc/quality.ts over the real dataset store.
 //
 // What is pinned here, and why each would break quietly:
 //   1. RESULTS ARE METADATA. A run writes latest + history onto the record and
@@ -24,27 +24,15 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 type Cell = import('../src/data/transforms').Cell;
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-quality-run-'));
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const handlers: Map<string, IpcHandler> = require('../src/server/rpc').handlers;
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    class Notification { static isSupported(): boolean { return false; } show(): void {} on(): void {} }
-    return {
-      app: { getPath: () => tmpUserData, getVersion: () => '0.0.0-test', isPackaged: false },
-      Notification, dialog: {}, net: {}, nativeImage: {}, shell: {}, BrowserWindow: class {},
-      nativeTheme: { on: () => {} }, safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
@@ -207,7 +195,6 @@ void main()
   .catch((err) => { ok('unexpected error', false, err && err.stack); })
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* best effort */ }
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' quality-run check(s) FAILED'); process.exit(1); }
     console.log('\nAll quality-run checks passed.');
     process.exit(0); // the DuckDB worker keeps the loop alive otherwise

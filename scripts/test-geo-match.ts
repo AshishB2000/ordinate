@@ -8,9 +8,9 @@ export {}; // module scope — sibling test scripts share top-level names
 // TS requires the call target itself to carry a declared type (TS2775).
 const assert: typeof import('assert') = require('assert');
 
-// ponytail: geoMatch.js is a renderer global-script (not a TS module) and the
+// ponytail: geoMatch.js is a UMD script (not a TS module) and the
 // county asset is postinstall-fetched JSON — require both with loose types.
-const { matchGeoItem } = require('../renderer/hub/geoMatch') as {
+const { matchGeoItem } = require('../src/analysis/geoMatch') as {
   matchGeoItem: (items: any[], props: any) => any;
 };
 

@@ -1,9 +1,7 @@
 {
-  // Main-process world: main.ts (once converted), src/ modules, preload
-  // bridges, scripts/. NodeNext resolves + emits CommonJS here (package.json
-  // has no "type": "module"), Node types, no DOM. Electron's own electron.d.ts
-  // provides the 'electron' module types (no @types/electron). No outDir: each
-  // .ts emits its sibling .js in place.
+  // The server world: src/ modules and scripts/. NodeNext resolves + emits
+  // CommonJS here (package.json has no "type": "module"), Node types, no DOM.
+  // No outDir: each .ts emits its sibling .js in place.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "module": "NodeNext",
@@ -12,7 +10,7 @@
     // Per-checkout cache — see tsconfig.base.json for why it is not in node_modules.
     "tsBuildInfoFile": ".tsbuildinfo/main.tsbuildinfo"
   },
-  "include": ["src/**/*.ts", "preload/**/*.ts", "scripts/**/*.ts"],
-  // The published site's renderer: classic browser scripts, compiled by tsconfig.renderer.json.
+  "include": ["src/**/*.ts", "scripts/**/*.ts"],
+  // The published site's renderer: classic browser scripts, compiled by tsconfig.site.json.
   "exclude": ["src/publish/site/**"]
 }

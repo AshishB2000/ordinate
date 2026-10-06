@@ -25,35 +25,16 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 type Cell = import('../src/data/transforms').Cell;
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type Anomaly = import('../src/analysis/anomalies').Anomaly;
 type AnomalyOptions = import('../src/analysis/anomalies').AnomalyOptions;
-type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-anom-resident-'));
 
-// ── The electron stub (test-datasets.ts pattern, plus handler capture) ───────
-const handlers = new Map<string, IpcHandler>();
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData, getVersion: () => '0.0.0-test' },
-      ipcMain: {
-        handle: (channel: string, fn: IpcHandler) => { handlers.set(channel, fn); },
-        on: () => {},
-      },
-      dialog: {},
-      net: {},
-      nativeImage: {},
-      shell: {},
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+// ── userData in a temp dir (test-datasets.ts pattern, plus handler capture) ────────────────────
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
 const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
@@ -61,7 +42,6 @@ const anomalies: typeof import('../src/analysis/anomalies') = require('../src/an
 const anomaliesResident: typeof import('../src/engine/anomaliesResident') = require('../src/engine/anomaliesResident');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
-
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-anom-fixtures-'));
 let fileSeq = 0;
@@ -721,7 +701,6 @@ void main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* best effort */ }
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best effort */ }
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' anomalies-resident check(s) FAILED'); process.exit(1); }
     console.log('\nAll anomalies-resident checks passed.');
     process.exit(0); // the DuckDB worker keeps the loop alive otherwise

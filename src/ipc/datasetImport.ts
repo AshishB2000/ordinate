@@ -20,14 +20,6 @@ import { resolveUpload, type Upload } from '../server/files';
 // and the renderer receives a display slice plus a `stagedId`: the composer's
 // preview and Save resolve that id here, so the rows never cross IPC at all.
 
-// Paths main handed out from the native open dialog. The re-parse (sheet-switch)
-// branch of dataset:pickAndParse accepts a renderer-supplied filePath ONLY if it
-// is in this set — otherwise a compromised/injected renderer could pass any
-// absolute path (e.g. userData/config.json) and read back its contents, exfil-
-// trating stored API keys / connection secrets. Bounds the read to files the
-// user explicitly picked this session.
-const pickedPaths = new Set<string>();
-
 /** Parse one picked file as a job; resolves with the parse, rejects on error or cancel. */
 export function parseAsJob(
   filePath: string,
@@ -49,49 +41,18 @@ export function parseAsJob(
 }
 
 export function register(): void {
-  // Open the native file picker (or, when given { filePath } from a prior pick,
-  // skip the dialog and re-parse that file with a chosen sheetName). Returns the
-  // parsed preview WITHOUT saving.
-  // ponytail: dual behavior (dialog vs re-parse) keeps sheet switching stateless
-  // — the renderer passes back the filePath it already received, no re-picking.
-  //
-  // On the server there is neither: the file was uploaded through POST
-  // /api/files and arrives as { fileToken } (src/server/files.ts). The token is
-  // single use and its file is deleted after the parse, so a sheet switch there
-  // uploads again; the server's temp path never goes back to the browser.
-  ipcMain.handle('dataset:pickAndParse', async (_e, { sheetName, filePath, fileToken }: any = {}) => {
+  // Parse an uploaded file WITHOUT saving: it arrives through POST /api/files as
+  // { fileToken } (src/server/files.ts). The token is single use and its file is
+  // deleted after the parse, so a sheet switch uploads again; the server's temp
+  // path never goes back to the browser.
+  ipcMain.handle('dataset:pickAndParse', async (_e, { sheetName, fileToken }: any = {}) => {
     let upload: Upload | null = null;
     try {
-      let chosenPath: string;
-      if (serverDataDir() !== null) {
-        upload = resolveUpload(fileToken);
-        chosenPath = upload.path;
-      } else if (typeof filePath === 'string' && filePath) {
-        // Re-parse an already-picked file (e.g. sheet switch). Only honor a path
-        // main previously returned from the dialog — never an arbitrary path.
-        if (!pickedPaths.has(filePath)) return { ok: false, error: 'File was not picked in this session' };
-        chosenPath = filePath;
-      } else {
-        // Lazy: the server loads this module without Electron (native dialogs are desktop-only).
-        const { canceled, filePaths } = await (require('electron') as typeof import('electron')).dialog.showOpenDialog({
-          title: 'Import data file',
-          properties: ['openFile'],
-          filters: [
-            { name: 'Data files', extensions: ['csv', 'tsv', 'json', 'xlsx', 'parquet'] },
-            { name: 'CSV', extensions: ['csv'] },
-            { name: 'TSV', extensions: ['tsv'] },
-            { name: 'JSON', extensions: ['json'] },
-            { name: 'Excel', extensions: ['xlsx'] },
-            { name: 'Parquet', extensions: ['parquet'] },
-          ],
-        });
-        if (canceled || !filePaths?.length) return { ok: true, canceled: true };
-        chosenPath = filePaths[0];
-        pickedPaths.add(chosenPath); // allow later sheet-switch re-parses of this file
-      }
+      upload = resolveUpload(fileToken);
+      const chosenPath = upload.path;
 
       // An upload's own path is `upload-<hex>`: its kind comes from the client's name.
-      const fileName = upload ? upload.name : path.basename(chosenPath);
+      const fileName = upload.name;
       const ext = path.extname(fileName).toLowerCase();
       const kind = sourceKindFor(ext);
       if (!kind) return { ok: false, error: `Unsupported file type: ${ext || '(none)'}` };
@@ -99,7 +60,6 @@ export function register(): void {
       const parsed = await parseAsJob(chosenPath, kind, typeof sheetName === 'string' ? sheetName : undefined, fileName);
       return {
         ok: true,
-        ...(upload ? {} : { filePath: chosenPath }),
         fileName,
         sourceKind: storedKind(kind),
         preview: importStage.previewOf(parsed, importStage.put(parsed)),

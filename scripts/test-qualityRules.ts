@@ -24,20 +24,13 @@ const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const crypto: typeof import('crypto') = require('crypto');
-const Module: any = require('module');
 
 type Cell = import('../src/data/transforms').Cell;
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type RuleResult = import('../src/analysis/qualityRules').RuleResult;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-quality-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return { app: { getPath: () => tmpUserData, getVersion: () => '0.0.0-test' }, ipcMain: { handle: () => {}, on: () => {} } };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const pqSync: typeof import('../src/engine/parquetStoreSync') = require('../src/engine/parquetStoreSync');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
@@ -288,7 +281,6 @@ void main()
   .catch((err) => { ok('unexpected error', false, err && err.stack); })
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* best effort */ }
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' quality-rule check(s) FAILED'); process.exit(1); }
     console.log('\nAll quality-rule checks passed.');
     process.exit(0); // the DuckDB worker keeps the loop alive otherwise

@@ -18,14 +18,9 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: node's internal loader, stubbed for electron
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-geoagg-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') return { app: { getPath: () => tmpUserData, getAppPath: () => process.cwd() }, ipcMain: { handle: () => {} } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');

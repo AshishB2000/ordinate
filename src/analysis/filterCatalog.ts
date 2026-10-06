@@ -1,5 +1,5 @@
 // TYPED FILTERS — what a dashboard can be filtered BY, read off its datasets.
-// MAIN PROCESS, no Electron: the IPC (src/ipc/filterParse.ts) feeds it, the
+// MAIN PROCESS: the IPC (src/ipc/filterParse.ts) feeds it, the
 // self-check (scripts/test-filterParse.ts) drives it directly.
 //
 // One dataset → its text columns with their distinct values (first-seen order,

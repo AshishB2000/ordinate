@@ -1,5 +1,5 @@
 // Self-check for the analytics workbenches' server channels (T2.10) — REAL
-// HTTP, server mode, no Electron, on the bundled sample project:
+// HTTP, server mode, on the bundled sample project:
 //
 //   stats:*        run / pair / saveFormula / addToDashboard; the derived
 //                  `figures` and pair `line` equal the arithmetic the desktop
@@ -25,13 +25,6 @@ import type { FastifyInstance } from 'fastify';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: the loader hook has no public type
-
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') throw new Error('electron is not available in server mode');
-  return origLoad.apply(this, [request, ...rest]);
-};
 
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');

@@ -17,14 +17,9 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-wide-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: (_n: string) => tmpUserData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
@@ -33,7 +28,6 @@ const statsResident: typeof import('../src/engine/statsResident') = require('../
 const datasetPage: typeof import('../src/engine/datasetPage') = require('../src/engine/datasetPage');
 const residentQuery: typeof import('../src/engine/residentQuery') = require('../src/engine/residentQuery');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
-
 
 // Mixed types, a leading-zero id column, and enough distinct values that the
 // stats/dominant-category paths actually have work to do.

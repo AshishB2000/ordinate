@@ -8,19 +8,10 @@
 
 import { ipcMain } from './bus';
 import * as store from '../app/themeStore';
-import * as hubs from '../windows/hubRegistry';
 
 export function register(): void {
-  const push = async (): Promise<void> => {
-    hubs.broadcast('themes:changed', await store.listThemes());
-  };
-  const after = async <T>(res: T): Promise<T> => {
-    await push();
-    return res;
-  };
-
   ipcMain.handle('themes:list', () => store.listThemes());
-  ipcMain.handle('themes:save', async (_e, theme: unknown) => after(await store.saveTheme(theme)));
-  ipcMain.handle('themes:delete', async (_e, id: unknown) => after(await store.deleteTheme(id)));
-  ipcMain.handle('themes:setDefault', async (_e, id: unknown) => after(await store.setDefaultTheme(id)));
+  ipcMain.handle('themes:save', async (_e, theme: unknown) => store.saveTheme(theme));
+  ipcMain.handle('themes:delete', async (_e, id: unknown) => store.deleteTheme(id));
+  ipcMain.handle('themes:setDefault', async (_e, id: unknown) => store.setDefaultTheme(id));
 }

@@ -1,5 +1,5 @@
 // Data snapshots — the names on disk, retention and the as-of rule. PURE: no fs
-// and no electron, so trashStore (which may import no record store) and the
+//, so trashStore (which may import no record store) and the
 // tests can both use it.
 //
 //   <id>.<stamp>.parquet          the derived table as it was

@@ -1,4 +1,4 @@
-// Every chart id Ordinate draws and its display name (renderer/hub/
+// Every chart id Ordinate draws and its display name (the desktop's
 // renderResult.ts `VIZ_LABELS`): 39 ids. Most are Chart.js charts drawn by
 // <Chart>; the rest have a renderer of their own, named in VIZ_RENDERER.
 

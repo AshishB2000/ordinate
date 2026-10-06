@@ -26,8 +26,6 @@
 // the table write and the mark write replays the same rows next time, and both
 // merge modes are idempotent on a replay (incremental.ts header).
 
-import * as fs from 'fs';
-import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as datasets from './datasets';
 import type { Dataset, DatasetOrigin } from './datasets';
@@ -38,7 +36,6 @@ import type { FetchHow, IncrementalLogEntry, IncrementalSettings } from './incre
 import type { ParsedColumn } from './parse';
 import * as connections from '../connectors/connections';
 import { getConnector } from '../connectors';
-import { WATCHABLE } from '../connectors/folderWatch';
 import { pushdownSql } from '../connectors/incrementalSql';
 import * as incrementalDuck from '../engine/incrementalDuck';
 import * as parquetStore from '../engine/parquetStore';
@@ -62,8 +59,9 @@ export async function refreshIncremental(
   incrementalDuck.cleanupTemps(datasetsDir(projectId), id); // whatever a crashed run left
   const startedAt = new Date().toISOString();
   const columns = meta.sourceColumns ?? meta.columns;
-  // Taken BEFORE the read, so a file written during it is read again next time.
-  const stamp = await folderStamp(projectId, origin);
+  // A folder table's file stamp (IncrementalSettings.fileStamp) went with the
+  // local folder connectors (T8.1): every source is read.
+  const stamp: string | null = null;
   let reason = fullReason(s, columns, meta.resident && (await parquetStore.isSupportedAsync()));
   if (!reason) {
     const step = await runIncremental(projectId, id, origin, Boolean(meta.sourceColumns), s, columns, startedAt, warnings, stamp);
@@ -71,19 +69,6 @@ export async function refreshIncremental(
     reason = step.reason;
   }
   return runFull(projectId, id, origin, s, reason, startedAt, warnings, stamp);
-}
-
-/** A folder table's file stamp (see IncrementalSettings.fileStamp), or null for any other source. */
-async function folderStamp(projectId: string, origin: ConnOrigin): Promise<string | null> {
-  const conn = await connections.getConnection(projectId, origin.connId);
-  const ext = conn ? WATCHABLE[conn.connectorId] : undefined;
-  if (!conn || !ext) return null;
-  const selection = selectionForDataset(origin) ?? { table: conn.table, query: conn.query };
-  if (!selection.table || selection.query) return null;
-  const dir = typeof conn.values.path === 'string' ? path.resolve(conn.values.path) : '';
-  const file = path.join(dir, ...selection.table.split('/')) + ext;
-  const st = dir && file.startsWith(dir + path.sep) ? await fs.promises.stat(file).catch(() => null) : null;
-  return st ? `${st.size}:${st.mtimeMs}:${st.ctimeMs}` : null;
 }
 
 /** Why this run must be full, or null when an incremental one can be trusted. */
@@ -120,7 +105,6 @@ async function runIncremental(
   const type = columns[cIdx].type as 'number' | 'date';
   const hwKey = inc.cursorKey(s.highWater, type) as number;
   const lower = inc.lowerBound(hwKey, s.lookback, type);
-  const ext = WATCHABLE[conn.connectorId];
 
   // A folder table whose file is exactly as the last run saw it is not read.
   if (stamp && s.fileStamp === stamp) {
@@ -130,7 +114,7 @@ async function runIncremental(
   }
 
   const pushed = pushdownSql(def.family, selection, s.cursorColumn, type, lower);
-  let how: FetchHow = pushed ? (ext ? 'files' : 'server') : 'after';
+  let how: FetchHow = pushed ? 'server' : 'after';
   let note: string | undefined;
   let res = pushed ? await runSavedText(projectId, conn.id, { query: pushed }) : null;
   if (!res || !res.ok) {

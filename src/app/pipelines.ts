@@ -1,5 +1,5 @@
 // Pipelines — every scheduled or dependent thing in a project as ONE DAG, and
-// the rule for running it. PURE: no Electron, no disk, no clock.
+// the rule for running it. PURE: no disk, no clock.
 //
 // THE GRAPH IS LINEAGE'S. src/analysis/lineage.ts already draws every reference
 // the records carry (a dataset's origin and steps, a visual's dataset, a

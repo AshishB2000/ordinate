@@ -340,7 +340,7 @@ async function writeNdjsonAsync(
   }
 }
 
-// String.prototype.toWellFormed is ES2024 (Node 20+/Electron 42); the manual
+// String.prototype.toWellFormed is ES2024 (Node 20+); the manual
 // replacement keeps this working if the lib target ever lags the runtime.
 function wellFormed(s: string): string {
   const anyStr = s as unknown as { toWellFormed?: () => string };

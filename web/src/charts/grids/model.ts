@@ -1,7 +1,7 @@
 // Pure layout and formatting for the three grids (no React): the shapes the
 // server sends, how each figure prints, the pivot's merged header rows, the
 // colour positions a ramp needs, and the CSV rows an export writes. Ported from
-// renderer/hub/pivotRender.ts and cohortRender.ts.
+// the desktop's pivotRender.ts and cohortRender.ts.
 //
 // THE SERVER DOES THE MATH. Every printed figure is the server's, formatted
 // here and nothing else. The only arithmetic is a 0..1 POSITION for a cell's

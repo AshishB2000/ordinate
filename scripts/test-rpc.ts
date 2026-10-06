@@ -6,9 +6,9 @@
 // compared byte for byte with the wire encoding of the SAME handler called
 // directly, so the route can neither drop nor reshape a figure.
 //
-// Electron is stubbed (house pattern): this suite runs the route in DESKTOP
-// mode, where src/app/paths.ts asks Electron. Server mode — per-org paths, no
-// Electron at all — is scripts/test-server-context.ts.
+// This suite runs the route in LOCAL mode, where src/app/paths.ts resolves
+// every path under ORDINATE_LOCAL_DIR. Server mode — per-org paths — is
+// scripts/test-server-context.ts.
 //
 //   npm run build:ts && node scripts/test-rpc.js
 
@@ -19,21 +19,9 @@ import { withCsrf } from './csrfPair';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: the loader hook has no public type
 
-const REPO = path.resolve(__dirname, '..');
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-rpc-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') {
-    return {
-      app: { getPath: () => tmpUserData, getAppPath: () => REPO, getVersion: () => '0.0.0-test' },
-      net: {}, dialog: {}, shell: {}, nativeImage: {},
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const appMod: typeof import('../src/server/app') = require('../src/server/app');
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
@@ -46,14 +34,14 @@ const PID = '1b4e28ba-2fa1-11d2-883f-0016d3cca427';
 
 (async () => {
   // ── Registry and bus ──────────────────────────────────────────────────────
-  ok('bus: outside Electron, ipcMain IS the RPC registry', (bus.ipcMain as unknown) === rpc.registry);
+  ok('bus: ipcMain IS the RPC registry', (bus.ipcMain as unknown) === rpc.registry);
   const ipcLoaded = (): boolean => Object.keys(require.cache).some((k) => /[\\/]src[\\/]ipc[\\/]projects\.js$/.test(k));
   ok('loading app.js loads no handler module', !ipcLoaded());
 
   rpc.registry.handle('test:echo', async (_e, p) => p);
   let dup = false;
   try { rpc.registry.handle('test:echo', async () => 1); } catch { dup = true; }
-  ok('registry: a second handler for one channel throws, as Electron does', dup);
+  ok('registry: a second handler for one channel throws', dup);
   rpc.registry.removeHandler('test:echo');
   ok('registry: removeHandler removes', !rpc.handlers.has('test:echo'));
 

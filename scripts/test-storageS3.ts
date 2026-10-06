@@ -28,15 +28,10 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: the loader hook has no public type
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-s3-'));
 const DATA = path.join(TMP, 'data');
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') return { app: { getPath: () => TMP, getVersion: () => '0.0.0-test' }, BrowserWindow: { getAllWindows: () => [] } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = TMP;
 
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
 const s3Test: typeof import('./s3TestEnv') = require('./s3TestEnv');

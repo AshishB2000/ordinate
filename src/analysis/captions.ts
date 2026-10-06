@@ -36,7 +36,7 @@ import { t } from '../app/i18n';
 
 // ── the app's compact number format ──────────────────────────────────────────
 //
-// A DELIBERATE SECOND COPY of renderer/hub/hub.ts's `_fmtVal`, and the only one
+// A DELIBERATE SECOND COPY of the desktop's hub.ts's `_fmtVal`, and the only one
 // in this codebase. It cannot be shared: `_fmtVal` is a top-level function in a
 // classic <script> with no module boundary to import across, and a caption is
 // composed in MAIN. The copy is pinned by a parity assertion in

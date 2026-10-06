@@ -29,14 +29,7 @@ const DATA = path.join(TMP, 'data');
 fs.mkdirSync(DESKTOP);
 fs.mkdirSync(DATA);
 
-const Module = require('module') as { _load: (req: string, ...rest: unknown[]) => unknown };
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: unknown[]): unknown {
-  if (request === 'electron') {
-    return { app: { getPath: () => DESKTOP, getAppPath: () => REPO, getVersion: () => '0.0.0-test' }, net: {}, safeStorage: { isEncryptionAvailable: () => false } };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = DESKTOP;
 
 const ORG = 'acme';
 

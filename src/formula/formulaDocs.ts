@@ -1,4 +1,4 @@
-// What each formula function IS — MAIN PROCESS, PURE data. No Electron, no fs,
+// What each formula function IS — MAIN PROCESS, PURE data. No fs,
 // no DOM, and deliberately no reference to the implementations themselves: this
 // is a catalog the formula editor's function list reads, not a second copy of
 // the evaluator.

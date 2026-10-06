@@ -1,8 +1,7 @@
 // Settings (T2.14) — the SERVER forms of the desktop handlers that cannot load
 // on a server, plus the org backup. MAIN (server) only: registered by
-// src/server/app.ts registerHandlers(); the desktop keeps src/ipc/providers.ts
-// (rules / auto-refresh / notifications beside its key handling, which needs
-// Electron's net) and src/ipc/backups.ts (a folder on this machine, a schedule).
+// src/server/app.ts registerHandlers(); the desktop's src/ipc/providers.ts and
+// its backup schedule went with the desktop app at the T8.1 cutover.
 //
 // Backups on the server are DOWNLOAD and RESTORE, an org admin's:
 //

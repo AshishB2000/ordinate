@@ -5,19 +5,16 @@
 //
 // Server mode is an explicit switch, not a guess: `enterServerMode(dataDir)`
 // is called once by src/server/main.ts (and by tests that want server
-// behaviour). Nothing can infer it — plain-Node unit tests run without
-// Electron too, against a stubbed `require('electron')`. Until the switch is
-// set the process is the desktop app (or a test of it): `ctx()` returns the
-// fixed DESKTOP context and src/app/paths.ts asks Electron.
-//
-// Must load without Electron (scripts/test-server-boot.ts).
+// behaviour). Until the switch is set the process is a plain-Node self-check or
+// script: `ctx()` returns the fixed DESKTOP context (the single-user context a
+// desktop install's records were written under) and src/app/paths.ts reads
+// ORDINATE_LOCAL_DIR.
 
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { BrowserWindow, WebContents } from 'electron';
 import { EnvError, type ServerEnv } from './env';
 import { markServerMode } from './mode';
 
-/** The caller's browser tab (server) or window (desktop) — what `event.sender` was. */
+/** The caller's browser tab — what an IPC `event.sender` was. */
 export interface Client {
   // A number, like a WebContents id: each browser tab's event stream gets one (./sse.ts), never reused.
   readonly id: number;
@@ -131,18 +128,9 @@ export function identityFor(cfg: ServerEnv): (headers: Headers) => Identity {
 }
 
 /**
- * Who sent this IPC/RPC call: the window's WebContents under the desktop app,
- * `ctx().client` on the server (whose event carries no sender).
+ * Who sent this RPC call: `ctx().client` on the server (whose event carries no
+ * sender); outside server mode, the `sender` a self-check put on the event.
  */
-export function senderOf(e: { sender: Client }): Client {
-  return dataDir === null ? e.sender : ctx().client;
-}
-
-/**
- * The window a native dialog should be parented to. The server has no windows
- * (its dialogs become T0.4's upload/download flows), so: null there.
- */
-export function windowOf(e: { sender: WebContents }): BrowserWindow | null {
-  if (dataDir !== null) return null;
-  return (require('electron') as typeof import('electron')).BrowserWindow.fromWebContents(e.sender);
+export function senderOf(e: unknown): Client {
+  return dataDir === null ? (e as { sender: Client }).sender : ctx().client;
 }

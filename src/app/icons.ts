@@ -79,7 +79,7 @@ export function safeColor(hex: string): string {
 // and connector marks are ~41 KB of path data; depending on the package shipped
 // 25 MB into the bundle to get them. simple-icons is now a devDependency and
 // `npm run build:icons` bakes assets/provider-icons.json — the same
-// committed-build-artifact pattern as renderer/hub/vendor/. The generator fails
+// committed-build-artifact pattern as the desktop's vendor/. The generator fails
 // loudly when an upstream export disappears, so a missing icon is a build error
 // rather than a badge that silently replaces a logo.
 const ICON_ASSET = path.join(__dirname, '..', '..', 'assets', 'provider-icons.json');
@@ -100,7 +100,7 @@ export const providerLogos = (() => {
   return out;
 })();
 
-const CONNECTOR_DIR = path.join(__dirname, '..', '..', 'renderer', 'hub', 'assets', 'connectors');
+const CONNECTOR_DIR = path.join(__dirname, '..', '..', 'assets', 'connectors');
 
 export const connectorLogos = (() => {
   const out: Record<string, BrandGlyph | BrandImage> = {};
@@ -129,10 +129,10 @@ export const connectorLogos = (() => {
 
 // Full-color agent logos that don't fit the single-path simple-icons model
 // (e.g. Antigravity's gradient mark). Drop a file named <agentId>.svg (preferred)
-// or <agentId>.png into renderer/hub/assets/agents/ and it's auto-discovered:
+// or <agentId>.png into assets/agents/ and it's auto-discovered:
 // MAIN reads it and ships a data-URI the renderer renders as an <img> (CSP allows
 // img-src data:). When no file exists, the renderer falls back to the styled badge.
-const AGENT_DIR = path.join(__dirname, '..', '..', 'renderer', 'hub', 'assets', 'agents');
+const AGENT_DIR = path.join(__dirname, '..', '..', 'assets', 'agents');
 
 export const agentLogos = (() => {
   const out: Record<string, string> = {};

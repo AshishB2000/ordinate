@@ -1,6 +1,6 @@
 // The Copilot chat prompt, and the ONE structured field its answer carries.
 //
-// MAIN PROCESS ONLY. Pure: no fs, no net, no electron — everything here is a
+// MAIN PROCESS ONLY. Pure: no fs, no net — everything here is a
 // string in, a value out, which is what lets scripts/test-suggestedAction.ts
 // drive it directly.
 //
@@ -43,7 +43,7 @@
 //     there or not, on its own line, anywhere in the tail.
 //  2. Something upstream eats the prose around it. A local CLI adapter used to
 //     run every reply — prose ones included — through its JSON-envelope hunter
-//     (src/cli/localCliRun.ts extractEnvelope), which found the action line's
+//     (the desktop's local-CLI extractEnvelope), which found the action line's
 //     `{…}` first and returned THAT as the whole reply. Fixed at the source with
 //     `prose: true`; this file is the second line of defence, not the first.
 //
@@ -118,9 +118,9 @@ export const EMPTY_ANSWER = 'Ask me about your data — e.g. \'revenue by region
 //
 // `import type` is erased at compile time, so this file keeps the purity its
 // header claims. A runtime import would not: dashboards.ts pulls in visuals.ts,
-// which pulls in `electron`, `fs`, projects and datasets — every plain-node test
-// that requires dashboards.ts has to stub `electron` through `Module._load`
-// first, and forcing that on a string-in/value-out parser (and on the test that
+// which pulls in `fs`, projects and datasets — every plain-node test that
+// requires dashboards.ts has to point userData at a temp dir first, and forcing
+// that on a string-in/value-out parser (and on the test that
 // drives it) to reach four string literals is a bad trade.
 //
 // The Record below is the drift guard that makes the duplication safe in BOTH

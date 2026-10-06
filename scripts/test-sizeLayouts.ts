@@ -1,4 +1,4 @@
-// Self-check for layouts for every size (renderer/hub/sizeLayout.ts — the ONE
+// Self-check for layouts for every size (src/analysis/sizeLayout.ts — the ONE
 // derivation the hub editor, the hub viewer and Publish all call).
 //
 //   1. THE BREAKPOINT CHOICE — phone below 600px of dashboard width, tablet
@@ -23,25 +23,12 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: Node's internal loader hook
 
-const REPO = path.resolve(__dirname, '..');
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-sizes-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') {
-    return {
-      app: { getPath: () => tmpUserData, getAppPath: () => REPO },
-      ipcMain: { handle: () => {}, on: () => {} },
-      net: {},
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
-// ponytail: sizeLayout.js is a renderer UMD script, not a TS module (see test-cardLayout.ts)
-const sl = require('../renderer/hub/sizeLayout') as any;
+// ponytail: sizeLayout.js is a UMD script, not a TS module (see test-cardLayout.ts)
+const sl = require('../src/analysis/sizeLayout') as any;
 const sample: typeof import('../src/app/sampleProject') = require('../src/app/sampleProject');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');

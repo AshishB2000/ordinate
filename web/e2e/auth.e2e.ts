@@ -83,7 +83,6 @@ const env: NodeJS.ProcessEnv = {
   OIDC_REDIRECT_URL: `${base}/api/auth/callback`,
   ORDINATE_ADMIN_EMAIL: ADMIN,
 };
-delete env.ELECTRON_RUN_AS_NODE;
 const server = spawn(process.execPath, [path.join(ROOT, 'src', 'server', 'main.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
 let serverOut = '';
 const listening = new Promise<boolean>((resolve) => {

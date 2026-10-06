@@ -23,7 +23,6 @@ const { execFileSync } = require('child_process') as typeof import('child_proces
 type SqlColumn = import('../src/engine/sqlGen').SqlColumn;
 type TransformStep = import('../src/data/transforms').TransformStep;
 
-
 // city:text, sku:text, units:number, price:number — the test-transforms fixture.
 const COLS: SqlColumn[] = [
   { physical: 'c0', name: 'city', type: 'text' },

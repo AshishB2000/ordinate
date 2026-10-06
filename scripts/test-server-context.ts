@@ -1,9 +1,8 @@
 // Self-check for the request context (src/server/context.ts) and per-org paths
-// (src/app/paths.ts) — the Home handlers run in SERVER MODE, with no Electron.
+// (src/app/paths.ts) — the Home handlers run in SERVER MODE.
 //
-// `require('electron')` throws for this whole process, so every path below is
-// proven to resolve without it. The suite checks the desktop defaults first,
-// then switches the process into server mode and drives the REAL Home handlers
+// The suite checks the local (no-switch) defaults first, then switches the
+// process into server mode and drives the REAL Home handlers
 // over HTTP for two orgs — CONCURRENTLY, with each request parked until the
 // other has entered its own context, so AsyncLocalStorage isolation is what is
 // actually exercised, not request order.
@@ -17,17 +16,6 @@ import { withCsrf } from './csrfPair';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: the loader hook has no public type
-
-let electronAsked = 0;
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') {
-    electronAsked++;
-    throw new Error('electron is not available in server mode');
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
 
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');
@@ -48,7 +36,13 @@ function throws(fn: () => unknown): boolean {
   ok('desktop: ctx() is the fixed desktop context', context.ctx().org.id === 'desktop' && context.ctx().requestId === 'desktop');
   const wc = { id: 7, send() {}, isDestroyed: () => false, once: () => undefined };
   ok('desktop: senderOf(e) is e.sender, untouched', context.senderOf({ sender: wc }) === wc);
-  ok('desktop: paths ask Electron (which this suite forbids)', throws(() => appPaths.userData()) && electronAsked === 1);
+  delete process.env.ORDINATE_LOCAL_DIR;
+  ok('local: with no ORDINATE_LOCAL_DIR a path is an error, never a guess', throws(() => appPaths.userData()));
+  const localDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-ctx-local-'));
+  process.env.ORDINATE_LOCAL_DIR = localDir;
+  ok('local: every kind is ORDINATE_LOCAL_DIR', [appPaths.userData(), appPaths.downloads(), appPaths.temp(), appPaths.documents()].every((p) => p === localDir));
+  delete process.env.ORDINATE_LOCAL_DIR;
+  fs.rmSync(localDir, { recursive: true, force: true });
 
   // ── Dev auth / prod refusal ───────────────────────────────────────────────
   const dev = context.identityFor(envMod.parseEnv({ ORDINATE_ENV: 'dev' }))({});
@@ -60,7 +54,7 @@ function throws(fn: () => unknown): boolean {
   // ── Server mode ───────────────────────────────────────────────────────────
   context.enterServerMode(DATA);
   appMod.registerHandlers();
-  ok('server: the Home handlers registered with no Electron', ['projects:list', 'dataset:list', 'recent:list'].every((c) => rpc.handlers.has(c)));
+  ok('server: the Home handlers registered', ['projects:list', 'dataset:list', 'recent:list'].every((c) => rpc.handlers.has(c)));
   ok('server: ctx() outside a request throws', throws(() => context.ctx()));
   ok('server: a path outside a request throws, never falls back', throws(() => appPaths.userData()));
 
@@ -76,7 +70,6 @@ function throws(fn: () => unknown): boolean {
     c.send('x', 1); // the T0.5 stub: a no-op that must not throw
     return c !== wc && c === context.ctx().client;
   }));
-  ok('server: windowOf(e) is null (no windows)', context.runInContext(as('acme'), 'r', () => context.windowOf({ sender: wc as never })) === null);
 
   // ── Over HTTP, dev auth: everything lands in orgs/default ─────────────────
   const devApp = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA }));
@@ -155,7 +148,6 @@ function throws(fn: () => unknown): boolean {
   ok('the project is on disk under orgs/org-a only',
     fs.existsSync(path.join(DATA, 'orgs', 'org-a', 'userData', 'projects', pid))
       && !fs.existsSync(path.join(DATA, 'orgs', 'org-b', 'userData', 'projects', pid)));
-  ok('nothing in server mode asked for Electron', electronAsked === 1, electronAsked);
 
   await app.close();
 })()

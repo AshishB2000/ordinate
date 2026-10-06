@@ -7,17 +7,14 @@
 // this file exists so the renderer has doors into them.
 //
 // The one thing this file DOES own is delivery: `deliver()` is the single place
-// that turns fired events into an OS notification and a push to the hub, and it
-// is what both the scheduler's tick and a manual "evaluate now" call. One place,
-// because "individual or digest" is a per-project choice and two copies of that
-// branch would eventually disagree.
+// that turns fired events into the push each signed-in tab's bell repaints
+// from, and it is what both the server's tick and a manual "evaluate now" call.
 //
-// THE EXPLAIN PATH IS THE ONLY MODEL CALL, it is opt-in
-// (`notifications.alertExplain`), and NOTHING WAITS FOR IT: the notification has
-// already gone out and the event is already on disk before `explainEvent` is
-// even called. It narrates figures the app computed — `buildFacts` builds the
-// block, `guardAnswer` audits the reply against that ledger — exactly like every
-// other narration in this app.
+// THE EXPLAIN PATH IS THE ONLY MODEL CALL, and it is asked for (`alerts:explain`):
+// the event is already on disk before `explainEvent` is called. It narrates
+// figures the app computed — `buildFacts` builds the block, `guardAnswer`
+// audits the reply against that ledger — exactly like every other narration in
+// this app.
 
 import { ipcMain } from './bus';
 
@@ -25,69 +22,26 @@ import * as store from '../analysis/alertStore';
 import * as alerts from '../analysis/alerts';
 import type { AlertEvent } from '../analysis/alerts';
 import * as copilot from '../ai/copilot';
-import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
 import { askCopilot } from '../ai/analyze';
 import { buildFacts, guardAnswer } from './copilot';
-import * as hubs from '../windows/hubRegistry';
 import { serverDataDir } from '../server/context';
-
-export interface AlertDeps {
-  /** Bring the window forward when the user clicks the OS notification. */
-  focusHub: () => void;
-}
-
-let deps: AlertDeps | null = null;
 
 // ── Delivery ─────────────────────────────────────────────────────────────────
 
-/** Push the unread count (and the events) to every hub window — each has a
- *  bell. Fire-and-forget. */
-function pushToHub(projectId: string, events: AlertEvent[]): void {
-  try {
-    hubs.broadcast('alerts:fired', { projectId, events });
-  } catch (_) { /* window gone mid-send */ }
-}
-
 /**
- * Everything one evaluation produced, delivered once.
- *
- * DIGEST IS PER PROJECT and batches a whole tick into one notification; the
- * individual path sends one per event. Either way the body comes from
- * ./analysis/alerts.ts, so the figures in the banner are the app's own.
- *
- * Returns how many OS notifications were shown — the smoke asserts on it, and a
- * caller that wants to know whether the user was actually told can read it.
+ * Everything one evaluation produced, delivered once: every tab of the org gets
+ * the push its bell repaints from, exactly what the tick job sends — only to
+ * members who may read the project (T6.3), since an alert carries its figures.
+ * Outside server mode (a plain-Node test) there is no one to tell. Returns how
+ * many OS notifications were shown, which the server never does: 0.
  */
 export async function deliver(projectId: string, events: AlertEvent[]): Promise<number> {
   if (!Array.isArray(events) || events.length === 0) return 0;
-  // The server (T2.9): no OS notification and no window — every tab of the org
-  // gets the push its bell repaints from, exactly what the tick job sends.
   if (serverDataDir() !== null) {
-    // Only to members who may read the project (T6.3): an alert carries its figures.
     (require('../server/jobs/schedules') as typeof import('../server/jobs/schedules')).pushToReaders(projectId, 'alerts:fired', { projectId, events });
-    return 0;
   }
-  pushToHub(projectId, events);
-  // Lazy: notify.ts imports Electron, which a server never loads (this module is registered there).
-  const { notifyAlert } = require('../app/notify') as typeof import('../app/notify');
-  const onClick = () => { try { if (deps) deps.focusHub(); } catch (_) { /* best effort */ } };
-
-  const file = await store.load(projectId);
-  let shown = 0;
-  if (file.digest) {
-    if (notifyAlert(events, onClick)) shown += 1;
-  } else {
-    for (const e of events) if (notifyAlert([e], onClick)) shown += 1;
-  }
-
-  // AFTER the notification, never before it: an explanation is a model call and
-  // a model call is slow, unreliable and optional. The user has already been
-  // told by this point, and a failure here loses an explanation, not an alert.
-  if ((config.get().notifications || {}).alertExplain) {
-    for (const e of events) void explainEvent(projectId, e);
-  }
-  return shown;
+  return 0;
 }
 
 /**
@@ -151,33 +105,9 @@ export async function explainEvent(projectId: string, event: AlertEvent): Promis
   }
 }
 
-// ── The scheduler hooks ──────────────────────────────────────────────────────
-
-/**
- * Join alerts to the unattended refresh tick.
- *
- * Wired HERE rather than in main.ts because both halves are this module's rules,
- * not the entry point's: evaluate on FRESH data (so a rule never reports
- * yesterday's number as today's), and deliver ONCE at the end of the tick (so
- * the per-project digest option has a batching point to exist at).
- *
- * The scheduler is passed in rather than imported to keep the dependency one-way
- * — it knows nothing about alerts beyond the two callbacks it was handed.
- */
-export function wireScheduler(scheduler: {
-  onEvaluateAlerts: (fn: (projectId: string, datasetId: string) => Promise<AlertEvent[]>) => void;
-  onTickAlerts: (fn: (batches: { projectId: string; events: AlertEvent[] }[]) => void) => void;
-}): void {
-  scheduler.onEvaluateAlerts((projectId, datasetId) => evaluateOnly(projectId, datasetId));
-  scheduler.onTickAlerts((batches) => {
-    for (const b of batches) void deliver(b.projectId, b.events);
-  });
-}
-
 // ── Channels ─────────────────────────────────────────────────────────────────
 
-export function register(d: AlertDeps): void {
-  deps = d;
+export function register(): void {
 
   // The inbox and the rules page read the same payload: one file, two surfaces.
   // `unseen` is derived here rather than counted in the renderer so the bell and

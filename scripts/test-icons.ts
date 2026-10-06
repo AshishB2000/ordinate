@@ -13,7 +13,6 @@ const ROOT = path.join(__dirname, '..');
 const iconDir = path.join(ROOT, 'assets', 'icons');
 const ordinateSvg = fs.readFileSync(path.join(iconDir, 'ordinate.svg'), 'utf8');
 const markSvg = fs.readFileSync(path.join(iconDir, 'mark.svg'), 'utf8');
-const connectionsSource = fs.readFileSync(path.join(ROOT, 'renderer', 'hub', 'connections.ts'), 'utf8');
 
 function pngSize(file: string): { width: number; height: number } | null {
   if (!fs.existsSync(file)) return null;
@@ -39,10 +38,11 @@ ok('mapped PostgreSQL resolves to a bundled path',
 ok('Amazon Redshift resolves to the supplied local PNG',
   typeof logos['amazon-redshift']?.src === 'string' &&
   logos['amazon-redshift'].src.startsWith('data:image/png;base64,'));
-ok('catalog exposes exactly 41 unique connector ids',
-  catalogIds.length === 41 && new Set(catalogIds).size === 41,
+// 41 until the desktop's three local-file sources went with it (T8.1).
+ok('catalog exposes exactly 38 unique connector ids',
+  catalogIds.length === 38 && new Set(catalogIds).size === 38,
   JSON.stringify(catalogIds));
-ok('all 41 catalog connectors resolve to real marks',
+ok('all 38 catalog connectors resolve to real marks',
   missing.length === 0,
   JSON.stringify(missing));
 ok('connector logos are structured-clone safe', (() => {
@@ -77,12 +77,8 @@ ok('generated app PNG is 1024×1024',
   JSON.stringify(pngSize(path.join(iconDir, 'icon.png'))) ===
     JSON.stringify({ width: 1024, height: 1024 }));
 ok('Screenchart source PNG is bundled at 1024×1024',
-  JSON.stringify(pngSize(path.join(ROOT, 'renderer', 'hub', 'assets', 'connectors', 'screenchart.png'))) ===
+  JSON.stringify(pngSize(path.join(ROOT, 'assets', 'connectors', 'screenchart.png'))) ===
     JSON.stringify({ width: 1024, height: 1024 }));
-ok('Home Screenshot uses the bundled Screenchart image',
-  /'home-capture':\s*\{\s*src:\s*'assets\/connectors\/screenchart\.png'/.test(connectionsSource));
-ok('app-icon generator is tracked as source',
-  fs.existsSync(path.join(ROOT, 'scripts', 'build-appicon.js')));
 
 fs.rmSync(process.env.SCREENCHART_USER_DATA, { recursive: true, force: true });
 if (failureCount()) process.exit(1);

@@ -7,7 +7,7 @@
 // ParseResult the Datasets → Visuals pipeline already consumes. Adding a source
 // does not touch this file.
 //
-// It holds NO secrets and touches NO Electron config — the IPC layer resolves the
+// It holds NO secrets and touches NO config — the IPC layer resolves the
 // password / token and passes it in. No fs. Every function returns a
 // discriminated {ok:true,...} | {ok:false,error}, and EVERY error path goes
 // through safeError(), so a driver string carrying a DSN or a password is

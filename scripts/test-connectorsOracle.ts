@@ -21,7 +21,6 @@ const path: typeof import('path') = require('path');
 const fs: typeof import('fs') = require('fs');
 const Module: { _load(request: string, ...rest: unknown[]): unknown } = require('module');
 
-
 // ── the assertion that matters most, made against the REAL driver ─────────────
 // Done BEFORE the fake is installed: Thin mode is why this connector can ship
 // at all (no Oracle Instant Client on the user's machine). If this ever flips,

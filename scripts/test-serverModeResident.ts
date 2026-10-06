@@ -28,7 +28,6 @@ import { ok, ok as okBase, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 const { Worker }: typeof import('worker_threads') = require('worker_threads');
 
 type Cell = import('../src/data/transforms').Cell;
@@ -39,22 +38,9 @@ type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 // pool's own threads are exempt and would hide a sync call.
 process.env.ORDINATE_COMPUTE_INLINE = '1';
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-server-mode-'));
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const handlers: ReadonlyMap<string, IpcHandler> = require('../src/server/rpc').handlers;
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData, getVersion: () => '0.0.0-test' },
-      net: {},
-      nativeImage: {},
-      shell: {},
-      dialog: {},
-      BrowserWindow: { getAllWindows: () => [] },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const poolMod: typeof import('../src/engine/duckdbPool') = require('../src/engine/duckdbPool');

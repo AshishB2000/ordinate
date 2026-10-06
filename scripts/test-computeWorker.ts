@@ -2,7 +2,8 @@
 // their CPU and DuckDB work OFF the main thread.
 //
 // Proves, in order:
-//   1. nothing the worker loads requires electron (a worker thread has no `app`);
+//   1. nothing the worker loads reaches src/server/context or a handler module
+//      (a worker thread has no request context);
 //   2. the main thread keeps turning while an op burns CPU in the worker;
 //   3. progress arrives, and Cancel terminates the op (and only that op);
 //   4. DIFFERENTIAL: the worker's insights and quality answers are identical
@@ -40,11 +41,11 @@ function graph(file: string, seen = new Set<string>()): Set<string> {
 }
 
 void (async () => {
-  // ── 1. No electron anywhere under the worker ──────────────────────────────
+  // ── 1. No request context anywhere under the worker ───────────────────────
   const files = [...graph(path.join(ROOT, 'src', 'engine', 'computeWorker.js'))];
-  const electron = files.filter((f) => /require\(["']electron["']\)/.test(fs.readFileSync(f, 'utf8')));
-  ok('worker import graph never requires electron', electron.length === 0,
-    electron.map((f) => path.relative(ROOT, f)).join(', '));
+  const reached = files.filter((f) => /[\\/]src[\\/](server[\\/]context|ipc[\\/][^\\/]+)\.js$/.test(f));
+  ok('worker import graph never reaches server/context or src/ipc', files.length > 5 && reached.length === 0,
+    reached.map((f) => path.relative(ROOT, f)).join(', '));
 
   // ── 2. Off the main thread ────────────────────────────────────────────────
   let ticks = 0;

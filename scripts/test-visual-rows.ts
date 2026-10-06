@@ -21,37 +21,17 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-drill-'));
 
-// ── The electron stub ────────────────────────────────────────────────────────
-// Point userData at a temp dir; the real, shipped handler (from the RPC
-// registry) is invoked rather than a copy of its logic.
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// userData is a temp dir; the real, shipped handler (from the RPC registry,
+// src/ipc/bus.ts) is invoked rather than a copy of its logic.
 const handlers: Map<string, (e: unknown, arg: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
 
-// The save panel is stubbed rather than shown: `saveTo` is where the next
-// export lands, and `null` stands for the user cancelling.
-let saveTo: string | null = null;
-let messageBoxes = 0;
-
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData },
-      dialog: {
-        showSaveDialog: async () => (saveTo ? { canceled: false, filePath: saveTo } : { canceled: true }),
-        showMessageBox: async () => {
-          messageBoxes += 1;
-          return { response: 0 };
-        },
-      },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
+const files: typeof import('../src/server/files') = require('../src/server/files');
+/** The file an export offered as a download (null when it offered none). */
+const offered = (res: { downloadToken?: string }): string | null => (res && res.downloadToken ? files.downloadPathForTest(res.downloadToken) : null);
 
 // ponytail: compiled siblings.
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
@@ -64,7 +44,6 @@ type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type Cell = import('../src/data/transforms').Cell;
 type FilterStep = import('../src/data/transforms').FilterStep;
 type VizEncoding = import('../src/analysis/visuals').VizEncoding;
-
 
 // ── Fixture ──────────────────────────────────────────────────────────────────
 
@@ -147,6 +126,7 @@ async function main(): Promise<void> {
   stored = { columns: back.columns, rows: back.rows };
 
   ipcVisuals.register();
+  require('../src/ipc/visualsServer').register();
   const h = handlers.get('visual:rows');
   if (!h) {
     console.error('FAIL visual:rows was never registered — nothing was verified');
@@ -389,9 +369,9 @@ async function main(): Promise<void> {
   // Same filters, same search, same order, every row — not the window on screen
   // and not the unfiltered table.
   {
-    const exportRows = handlers.get('visual:rowsExport');
+    const exportRows = handlers.get('visual:rowsDownload');
     if (!exportRows) {
-      ok('visual:rowsExport was registered', false);
+      ok('visual:rowsDownload was registered', false);
     } else {
       const encoding: VizEncoding = visualsMod.sanitizeEncoding({
         category: 'region',
@@ -400,7 +380,6 @@ async function main(): Promise<void> {
       const mark = { category: 'North' };
       const shown = await drill(encoding, [], mark);
 
-      saveTo = path.join(tmpUserData, 'north.csv');
       const res = await exportRows(null, {
         projectId,
         datasetId: fixtureId,
@@ -412,7 +391,7 @@ async function main(): Promise<void> {
       });
       ok('export: ok, with the row count written', res.ok === true && res.rows === shown.total);
 
-      const text = fs.readFileSync(saveTo, 'utf8');
+      const text = fs.readFileSync(offered(res)!, 'utf8');
       const lines = text.split('\r\n').filter((l: string) => l !== '');
       ok('export: RFC-4180 CRLF line endings', text.includes('\r\n'));
       ok('export: no BOM at the head of the file', !text.startsWith('﻿'));
@@ -428,7 +407,6 @@ async function main(): Promise<void> {
       ok('export: a null cell is an empty field', !/,null,|,null$/.test(text));
 
       // The search narrows the FILE, not just the grid.
-      saveTo = path.join(tmpUserData, 'north-web.csv');
       const searched = await exportRows(null, {
         projectId,
         datasetId: fixtureId,
@@ -438,28 +416,14 @@ async function main(): Promise<void> {
         page: { search: 'Web' },
         name: 'x',
       });
-      const searchedLines = fs.readFileSync(saveTo, 'utf8').split('\r\n').filter((l: string) => l !== '');
+      const searchedLines = fs.readFileSync(offered(searched)!, 'utf8').split('\r\n').filter((l: string) => l !== '');
       ok(
         'export: the search applies to the file too',
         searched.ok === true && searchedLines.length === searched.rows + 1 && searched.rows < res.rows,
       );
       ok('export: …and every exported row matches it', searchedLines.slice(1).every((l: string) => l.includes('Web')));
 
-      // Cancelling the save panel writes nothing.
-      saveTo = null;
-      const canceled = await exportRows(null, {
-        projectId,
-        datasetId: fixtureId,
-        encoding,
-        filters: [],
-        mark,
-        page: {},
-        name: 'x',
-      });
-      ok('export: cancelling writes no file', canceled.ok === false && canceled.canceled === true);
-
       // A refused drill cannot be exported either — the same lock, twice.
-      saveTo = path.join(tmpUserData, 'never.csv');
       const refused = await exportRows(null, {
         projectId,
         datasetId: fixtureId,
@@ -471,9 +435,8 @@ async function main(): Promise<void> {
       });
       ok(
         'export: a refused drill exports nothing, with the reason',
-        refused.ok === false && typeof refused.error === 'string' && !fs.existsSync(saveTo),
+        refused.ok === false && typeof refused.error === 'string' && offered(refused) === null,
       );
-      ok('export: no size warning was shown for a small set', messageBoxes === 0);
     }
   }
 

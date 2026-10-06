@@ -20,8 +20,9 @@
 // pipeline fold, where the answer is wanted on the next line and the freeze is
 // milliseconds. It is catastrophic for INTERACTIVE, HIGH-FREQUENCY callers: a
 // Mosaic brush drag issues queries every animation frame, and every one of them
-// would freeze the whole Electron main process — all five windows, the menu bar,
-// the global hotkey (docs/phase-3 blocker B3). `queryAsync`/`execAsync` serve
+// would freeze the whole main thread — on the desktop app that was every window,
+// the menu bar and the global hotkey (docs/phase-3 blocker B3); on the server it
+// is every request. `queryAsync`/`execAsync` serve
 // those callers off the worker's `message` event instead, so the event loop
 // keeps turning. Nothing about the sync path changed; pick by caller:
 //
@@ -92,7 +93,7 @@
 //   Pinned by a test in scripts/test-duckdb.ts so it stays visible.
 //
 // Facts this design rests on (all measured in a spike, not assumed):
-//   • `Atomics.wait` IS permitted on Electron's/Node's main thread (it is only
+//   • `Atomics.wait` IS permitted on Node's main thread (it is only
 //     banned on a *browser* main thread). SharedArrayBuffer needs no flags.
 //   • `postMessage` transferables are USELESS to the SYNC path: a transferred
 //     buffer is delivered through the event loop, and a blocking call never
@@ -556,7 +557,7 @@ function spawn(): void {
   const control = new SharedArrayBuffer(16);
   ctl = new Int32Array(control);
 
-  // Growable if the runtime supports it (Node 20+/Electron); otherwise fall back
+  // Growable if the runtime supports it (Node 20+); otherwise fall back
   // to allocating the ceiling up front so the bridge still works.
   let payload: GrowableSAB;
   try {
@@ -579,7 +580,7 @@ function spawn(): void {
     workerData: { control, payload, dbPath: opts.dbPath, maxBytes: opts.maxBytes },
   });
   worker = w;
-  // Never let the worker keep the process (or an Electron quit) alive, and never
+  // Never let the worker keep the process alive, and never
   // let an 'error'/'exit' event become an uncaught exception. These handlers run
   // only when the event loop turns, i.e. never while a sync call is blocked —
   // its timeout is what actually protects a blocked caller. `updateRef()` re-refs

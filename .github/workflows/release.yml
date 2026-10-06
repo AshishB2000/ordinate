@@ -14,9 +14,6 @@ name: Release (server image + Helm chart)
 #            (so its default image is the one just pushed), then create the
 #            GitHub Release — or add to it — and attach ordinate-<version>.tgz.
 #
-# build.yml (the desktop installers) also runs on v* tags and publishes to the
-# same Release: whichever finishes first creates it, the other adds its assets.
-#
 # The tag must equal package.json's version (the server writes that version
 # into every backup's manifest). Cutting a release: docs/server/upgrade.md.
 #
@@ -205,7 +202,7 @@ jobs:
           else
             flags=(--verify-tag --generate-notes --notes "$notes")
             if [ "$PRERELEASE" = true ]; then flags+=(--prerelease --latest=false); fi
-            # build.yml may have created it in the meantime: then add to it.
+            # A rerun (or a Release made by hand meanwhile) adds to it instead.
             gh release create "$TAG" "$chart" "${flags[@]}" || gh release upload "$TAG" "$chart" --clobber
           fi
           gh release view "$TAG" --json url,assets --jq '.url, (.assets[].name)'

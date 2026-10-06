@@ -1,4 +1,4 @@
-// The Summary card's SENTENCES — MAIN PROCESS, PURE: no fs, no Electron, no model.
+// The Summary card's SENTENCES — MAIN PROCESS, PURE: no fs, no model.
 //
 // A dashboard's Summary card says, in three to five sentences, what its own
 // tiles say under the current filters: the headline KPI's movement, the largest

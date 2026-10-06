@@ -1,7 +1,7 @@
-// Command-line parsing for the headless app — PURE, no Electron.
+// Command-line parsing for the headless app — PURE.
 //
-// `headlessMode` is read at the very top of src/main.ts, before the
-// single-instance lock, so it must stay dependency-free and cheap. `parseCli`
+// `headlessMode` was read at the very top of the desktop app's entry point (removed
+// at the T8.1 cutover), so it stays dependency-free and cheap. `parseCli`
 // turns the words after `--cli` into a registry command and its arguments;
 // every malformed input is an AutomationError('usage') → exit code 2.
 

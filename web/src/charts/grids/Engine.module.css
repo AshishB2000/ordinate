@@ -1,4 +1,4 @@
-/* The cohort and event-funnel visuals — renderer/hub/cohort.css, rule for
+/* The cohort and event-funnel visuals — the desktop's cohort.css, rule for
    rule. Tokens only; the heatmap shades are the one thing set from TS (mixed
    from --surface and --accent, text picked there for AA contrast). */
 

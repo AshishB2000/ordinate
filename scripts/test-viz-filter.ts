@@ -6,7 +6,7 @@
 //   2. duplicateVisual yields an INDEPENDENT copy with a distinct id (editing the
 //      copy leaves the source untouched).
 //   3. overrides persist verbatim through save + reload from disk.
-// Like test-visuals.ts, we stub the 'electron' module so userData points at a
+// Like test-visuals.ts, we point userData (ORDINATE_LOCAL_DIR) at a
 // fresh temp dir, then exercise the REAL modules against real disk. No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -15,17 +15,10 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-vizfilter-'));
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return { app: { getPath: (_name: string) => tmpUserData } };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // Compiled siblings of the real modules.
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
@@ -35,7 +28,6 @@ const projects: typeof import('../src/app/projects') = require('../src/app/proje
 
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type Cell = import('../src/data/transforms').Cell;
-
 
 const MISSING_UUID = '00000000-0000-0000-0000-000000000000';
 
@@ -185,7 +177,6 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}
-    Module._load = origLoad;
     if (failureCount()) { console.error('\n' + failureCount() + ' viz-filter check(s) FAILED'); process.exit(1); }
     console.log('\nAll viz-filter checks passed.');
   })

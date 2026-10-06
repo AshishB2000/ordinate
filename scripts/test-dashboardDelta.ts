@@ -14,9 +14,9 @@
 //      handler holding a user's dashboard, not a try/catch.
 //
 // The validator is PURE and touches no disk, so the context is a hand-written
-// literal. `electron` is still stubbed, because requiring the module pulls
-// visuals.ts/analysisPlan.ts (for sanitizeEncoding and the closed chart-type
-// list — reused rather than re-copied) which reach `app.getPath` at load.
+// literal. userData still points at a temp dir, because requiring the module
+// pulls visuals.ts/analysisPlan.ts (for sanitizeEncoding and the closed
+// chart-type list — reused rather than re-copied), which resolve paths.
 //
 //   npm run build:ts && node scripts/test-dashboardDelta.js
 
@@ -26,21 +26,9 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-delta-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData },
-      ipcMain: { handle: () => {} },
-      net: {},
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const dd: typeof import('../src/analysis/dashboardDelta') = require('../src/analysis/dashboardDelta');
 

@@ -291,7 +291,7 @@ async function withInsightCharts(
 // to knock on; this is the door.
 //
 // The prompt lives here, next to the call, rather than in dashboardDelta.ts —
-// that module is PURE (no electron, no config) so its test can drive it
+// that module is PURE (no config) so its test can drive it
 // directly, and a prompt string would not change that but a model call would.
 
 const EDIT_DELTA_SYSTEM_PROMPT =

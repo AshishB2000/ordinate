@@ -1,9 +1,9 @@
 {
-  // Shared compiler settings for both worlds (main-process and renderer).
-  // Migration scheme: in-place sibling emit — foo.ts compiles to foo.js in the
-  // SAME directory, so require() paths, <script src> tags, CSP, and
-  // electron-builder packaging all keep working unchanged. Emitted .js files
-  // are gitignored per-file as modules convert (see .gitignore).
+  // Shared compiler settings for both worlds (the server and the published
+  // site's classic scripts). In-place sibling emit — foo.ts compiles to foo.js
+  // in the SAME directory, so require() paths and the files the server reads
+  // (src/publish/publish.ts readAssets) keep working unchanged. Emitted .js
+  // files are gitignored (see .gitignore).
   "compilerOptions": {
     "strict": true,
     "target": "ES2022",

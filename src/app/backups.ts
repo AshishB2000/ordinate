@@ -21,7 +21,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as bundle from './bundle';
 import * as projects from './projects';
-import { safeFolderName } from './syncFolder';
 import type { BackupSettings } from './backupSettings';
 
 export const SAFETY_KEEP = 5;
@@ -68,6 +67,13 @@ export function nextDue(s: BackupSettings, now: Date): Date | null {
   if (!period) return null;
   const last = s.lastRunAt ? Date.parse(s.lastRunAt) : NaN;
   return !Number.isFinite(last) || isDue(s, now) ? now : new Date(last + period);
+}
+
+/** A folder name every file system takes. */
+function safeFolderName(name: string): string {
+  const s = String(name || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim()
+    .replace(/[. ]+$/, '').slice(0, 80);
+  return s || 'Project';
 }
 
 export function folderName(p: { id: string; name: string }): string {

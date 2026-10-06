@@ -19,10 +19,10 @@
 //
 // A config that breaks a rule loses THAT setting, not the whole visual. What
 // can only be known from the data — a log axis over a measure with a zero or a
-// negative in it — is refused at render time (renderer/hub/fmtApply.ts), where
+// negative in it — is refused at render time (the desktop's fmtApply.ts), where
 // the numbers are.
 //
-// Pure and main-safe: no fs, no Electron, only `import type`.
+// Pure and main-safe: no fs, only `import type`.
 
 import type { ColorToken } from './colorMap';
 

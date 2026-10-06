@@ -94,29 +94,17 @@ async function kpiOf(projectId: string, metricId: string): Promise<{ name: strin
   return r && r.ok ? { name: r.name, display: r.display } : null;
 }
 
-/** The file an import step reads: the desktop's native picker, or the server's upload (single use). */
-async function pickImportFile(run: PlanRun, step: Extract<PlanStep, { kind: 'import' }>): Promise<{ path: string; name: string; done(): void } | null> {
-  if (serverDataDir() !== null) {
-    const token = run.fileToken;
-    run.fileToken = undefined;
-    return token ? resolveUpload(token) : null;
-  }
-  const { dialog, BrowserWindow } = require('electron') as typeof import('electron'); // desktop only
-  const opts: Electron.OpenDialogOptions = {
-    title: step.file ? `Pick ${step.file} to import` : 'Pick the file to import',
-    defaultPath: step.file || undefined,
-    properties: ['openFile'],
-    filters: [{ name: 'Data files', extensions: ['csv', 'json', 'xlsx'] }],
-  };
-  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
-  const picked = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
-  return picked.canceled || !picked.filePaths.length ? null : { path: picked.filePaths[0], name: path.basename(picked.filePaths[0]), done() {} };
+/** The file an import step reads: the upload the run was handed (single use). */
+function pickImportFile(run: PlanRun): { path: string; name: string; done(): void } | null {
+  const token = run.fileToken;
+  run.fileToken = undefined;
+  return token ? resolveUpload(token) : null;
 }
 
 async function runImport(run: PlanRun, step: Extract<PlanStep, { kind: 'import' }>): Promise<StepOutcome> {
   const pid = run.projectId;
-  const picked = await pickImportFile(run, step);
-  if (!picked) return { ok: false, error: serverDataDir() !== null ? 'Choose the file to import, then run the step.' : 'No file was picked.' };
+  const picked = pickImportFile(run);
+  if (!picked) return { ok: false, error: 'Choose the file to import, then run the step.' };
   // An upload's own path is `upload-<hex>`: its kind and name come from the client's file name.
   const kind = sourceKindForPath(picked.name);
   let parsed: Awaited<ReturnType<typeof parseAsJob>>;

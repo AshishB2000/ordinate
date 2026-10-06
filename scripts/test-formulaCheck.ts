@@ -1,6 +1,6 @@
 // Self-check for the formula editor's answer service: the SHIPPED
 // `formula:check` handler (src/ipc/formula.ts), driven against a REAL saved
-// dataset with electron stubbed — the test-columnProfile.ts pattern.
+// dataset under a temp userData — the test-columnProfile.ts pattern.
 //
 // It drives the handler rather than the helpers underneath it because every
 // claim this file makes is a claim the EDITOR relies on, and the editor only
@@ -35,28 +35,15 @@ import { ok, failureCount } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-formula-'));
 
-// ── The electron stub (test-columnProfile.ts pattern, plus handler capture) ──
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// ── userData in a temp dir (test-columnProfile.ts pattern, plus handler capture) ───────────────
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const handlers: Map<string, IpcHandler> = require('../src/server/rpc').handlers;
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData, getVersion: () => '0.0.0-test' },
-      dialog: {},
-      net: {},
-      nativeImage: {},
-      shell: {},
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the REAL modules (built by pretest).
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
@@ -249,7 +236,6 @@ async function main(): Promise<void> {
 main()
   .catch((err) => { ok('suite ran without throwing', false, err && err.stack); })
   .finally(() => {
-    Module._load = origLoad;
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch { /* best effort */ }
     process.exit(failureCount() ? 1 : 0);
   });

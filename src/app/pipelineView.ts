@@ -11,7 +11,6 @@
 import { buildGraph } from '../analysis/lineage';
 import { loadInput } from '../ipc/lineage';
 import * as connections from '../connectors/connections';
-import { watchTarget } from '../connectors/folderWatch';
 import { getStoredConfig } from '../publish/publish';
 import { stepRefIds } from '../data/stepTypes';
 import { qualityFailingCount } from '../analysis/qualityRules';
@@ -94,9 +93,7 @@ export async function loadGraph(projectId: string): Promise<{ graph: PipelineGra
 function scheduleFor(n: PipelineNode, input: Rec, now: number): { schedule: NodeSchedule; next: number | null; stamp: { at: string; status: string } | null } {
   const id = n.ref ? n.ref.id : '';
   if (n.kind === 'source') {
-    const c = (input.conns as Rec[]).find((x) => x.id === id);
-    const watched = c ? Boolean(watchTarget(c as connections.Connection)) : false;
-    return { schedule: { text: watched ? 'Watching the folder' : 'Read by its datasets', edit: null }, next: null, stamp: null };
+    return { schedule: { text: 'Read by its datasets', edit: null }, next: null, stamp: null };
   }
   if (n.kind === 'dataset') {
     const d = (input.datasets as Rec[]).find((x) => x.id === id) || {};

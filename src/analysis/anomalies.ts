@@ -1,5 +1,5 @@
 // Anomaly detection over an already-loaded dataset — MAIN PROCESS, PURE logic.
-// No Electron, no DOM, no fs: every function here operates on the columns/rows
+// No DOM, no fs: every function here operates on the columns/rows
 // handed in by the IPC layer, so it is node-testable by a plain `node` self-check
 // (scripts/test-anomalies.ts). Mirrors src/datasetStats.ts header + style.
 //

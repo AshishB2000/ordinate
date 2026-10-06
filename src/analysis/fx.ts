@@ -1,5 +1,5 @@
 // Multi-currency — THE JS REFERENCE for converting money columns to a target
-// currency at each row's date. PURE: no fs, no Electron, no DuckDB. The resident
+// currency at each row's date. PURE: no fs, no DuckDB. The resident
 // twin is src/engine/fxResident.ts (an ASOF join over the stored Parquet), held
 // to `Object.is` agreement with this file by scripts/test-fxResident.ts.
 //

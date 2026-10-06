@@ -1,4 +1,4 @@
-// Saved views — named reader states on a dashboard. PURE: no electron, no fs,
+// Saved views — named reader states on a dashboard. PURE: no fs,
 // so scripts/test-savedViews.ts drives it under bare node.
 //
 // A VIEW is what a reader did to a dashboard, not what an author built: the

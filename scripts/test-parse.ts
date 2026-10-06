@@ -1,12 +1,11 @@
 // Self-check for src/parse.ts — RFC-4180 CSV, JSON, paste auto-detect, and
-// column type detection. Pure logic (parse.ts imports no Electron), so we just
+// column type detection. Pure logic, so we just
 // require the compiled sibling and assert against real return values. No framework.
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
 
 const parse: typeof import('../src/data/parse') = require('../src/data/parse');
-
 
 // ── RFC-4180 CSV: quoted commas, "" escapes, embedded newline ────────────────
 {

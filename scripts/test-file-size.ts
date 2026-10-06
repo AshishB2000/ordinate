@@ -27,9 +27,8 @@
 // sibling `.ts` (in-place emit, see tsconfig.base.json), so a `.js` next to a
 // `.ts` of the same name is skipped — otherwise every file would be counted
 // twice and `npm test` would fail differently before and after a build. A `.js`
-// with NO `.ts` sibling is a hand-written source (scripts/build-vendor.js and
-// friends) and does count. Committed vendor bundles and generated Svelte output
-// are not sources at all.
+// with NO `.ts` sibling is a hand-written source (scripts/build-icons.js) and
+// does count. The web app's Vite output is not a source at all.
 //
 //   npm run build:ts && node scripts/test-file-size.js
 
@@ -49,33 +48,19 @@ const CAP = 800;
  * number) is the point; adding one is the failure this file exists to prevent.
  */
 const ALLOWED: Record<string, number> = {
-  // WAS 3,725 lines — by a wide margin the largest entry on this list, and the
-  // file every other smoke file existed to avoid growing (smoke-sample,
-  // smoke-dock, smoke-dockHero, smoke-composer and smoke-section-hero each open
-  // with a comment saying they are separate files BECAUSE this one could not
-  // take another line). Split by surface into eight siblings, all of which land
-  // under the cap and therefore get NO entry here. The ratchet tightened by
-  // 3,387 lines; the assertion count went UP, 323 -> 341.
-  'scripts/smoke-app.ts': 337,
-  'scripts/test-connectorsHttp.ts': 881,
-  'src/ai/analyze.ts': 883,
+  'scripts/test-connectorsHttp.ts': 880,
+  'src/ai/analyze.ts': 854,
   'src/engine/anomaliesResident.ts': 870,
   'src/connectors/http.ts': 1035,
-  'src/connectors/local.ts': 778,
-  'src/cli/localCliRun.ts': 822,
 };
 
 // Roots to walk. `scripts` is included for the hand-written build tools that
 // have no `.ts` sibling as much as for the test sources themselves.
-const ROOTS = ['src', 'renderer', 'preload', 'scripts', 'web'];
+const ROOTS = ['src', 'scripts', 'web'];
 
-// Not sources: dependencies, the committed vgplot bundle (build output of
-// scripts/build-vendor.js), the esbuild-generated Svelte island bundle, and
-// the web app's Vite output.
+// Not sources: dependencies and the web app's Vite output.
 const SKIP_DIRS = new Set(['node_modules']);
 const SKIP_PATHS = new Set([
-  'renderer/hub/vendor',
-  'renderer/hub/svelte/bundle.js',
   'web/dist',
 ]);
 

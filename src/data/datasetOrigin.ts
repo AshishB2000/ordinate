@@ -1,5 +1,5 @@
 // WHERE a dataset's rows came from, and the whitelist that decides whether to
-// believe it. MAIN PROCESS, pure — no fs, no Electron.
+// believe it. MAIN PROCESS, pure — no fs.
 //
 // Split out of datasets.ts when the composer's `composed` chain pushed that file
 // past the 800-line cap (.claude/rules/file-size.md). It was already a separate

@@ -1,4 +1,4 @@
-// The word cloud chart — `word_cloud` (renderer/hub/wordCloudRender.ts), drawn
+// The word cloud chart — `word_cloud` (the desktop's wordCloudRender.ts), drawn
 // on the SAME canvas every chart gets: build.ts hands it over when the type
 // spec says isWordCloud, so every surface and export path draws it with no
 // branch of its own. One word per category, sized by the FIRST measure

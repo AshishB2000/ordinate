@@ -1,5 +1,5 @@
 // Insights — things the app FOUND in a dataset, each with a number it computed
-// and a chart it can draw. MAIN PROCESS. No Electron, no DOM, no fs.
+// and a chart it can draw. MAIN PROCESS. No DOM, no fs.
 //
 // THE APP DOES THE MATH. Every figure below is computed here or by
 // `residentQuery.aggregateResident`; a model never contributes one and never

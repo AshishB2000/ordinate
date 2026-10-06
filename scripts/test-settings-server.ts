@@ -1,5 +1,4 @@
-// Settings over the server's RPC (T2.14), over real HTTP, server mode, no
-// Electron.
+// Settings over the server's RPC (T2.14), over real HTTP, server mode.
 //
 //   Part 1 (always): dev sign-in (an org admin), config and records as files.
 //   Workspace formats and branding (prefs:get reads back what was set; strict
@@ -27,13 +26,6 @@ import type { FastifyInstance } from 'fastify';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: the loader hook has no public type
-
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') throw new Error('electron is not available in server mode');
-  return origLoad.apply(this, [request, ...rest]);
-};
 
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');

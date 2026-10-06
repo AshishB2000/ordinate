@@ -1,4 +1,4 @@
-// Which chart types a reply can draw, best first — renderer/hub/renderResult.ts
+// Which chart types a reply can draw, best first — the desktop's renderResult.ts
 // (SHAPE_CHARTS, eligibleChartTypes, chartCanRender, countNumericSeries, the
 // picker's needs text), ported as pure functions. CODE decides the chips from
 // the server's `recommendedShape` and the reply's real structure. Counting the

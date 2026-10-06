@@ -5,7 +5,7 @@
 // reports/stories) import the SAME file and cannot disagree about where a page
 // starts.
 //
-// A port of renderer/hub/storyText.ts as an ES module; scripts/
+// A port of the desktop's storyText.ts as an ES module; scripts/
 // test-storyTextPort.ts runs both over one corpus and compares with Object.is.
 // The legacy copy goes with the renderer at cutover (T8.1).
 //

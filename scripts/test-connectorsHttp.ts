@@ -30,7 +30,6 @@ type Def = import('../src/connectors/types').ConnectorDef;
 type Rows = import('../src/connectors/types').ConnectorRows;
 type Err = import('../src/connectors/types').ConnectorError;
 
-
 // ── stub server ──────────────────────────────────────────────────────────────
 
 interface LoggedReq {

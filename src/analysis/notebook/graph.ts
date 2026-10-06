@@ -1,5 +1,5 @@
 // NOTEBOOKS — view names, the dependency graph, staleness and cache keys.
-// MAIN PROCESS, PURE: no fs, no Electron, no engine call. scripts/test-notebooks.ts
+// MAIN PROCESS, PURE: no fs, no engine call. scripts/test-notebooks.ts
 // asserts every rule here directly.
 //
 // ── VIEW NAMES ───────────────────────────────────────────────────────────────

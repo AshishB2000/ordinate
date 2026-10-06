@@ -1,7 +1,7 @@
 // The Assistant's PLAN action — its step vocabulary, the shape whitelist a
 // model's plan goes through, and the prompt fragment that describes it.
 //
-// MAIN PROCESS ONLY, and PURE: no fs, no electron, no transforms — this file is
+// MAIN PROCESS ONLY, and PURE: no fs, no transforms — this file is
 // required by src/ai/suggestedAction.ts, whose own purity lets its test drive
 // it in plain node. What a step MEANS (does the dataset exist, does the formula
 // compile, is the chart drawable) is decided by src/ai/planCheck.ts with the
@@ -122,7 +122,7 @@ export function sanitizePlanSteps(raw: unknown): { steps: PlanStep[]; dropped: n
   return { steps, dropped: dropped + Math.max(0, raw.length - MAX_PLAN_STEPS) };
 }
 
-/** The icon each kind shows on the card (renderer/hub/icons.ts names). */
+/** The icon each kind shows on the card (the desktop's icons.ts names). */
 export const STEP_ICONS: Record<PlanStepKind, string> = {
   import: 'upload', step: 'filter', calc: 'function', metric: 'gauge',
   chart: 'chart-bar', dashboard: 'layout-dashboard', style: 'sliders', alert: 'bell',

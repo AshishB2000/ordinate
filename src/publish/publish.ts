@@ -200,7 +200,7 @@ export function readAssets(): SiteAssets {
   return {
     chartJs: read('node_modules', 'chart.js', 'dist', 'chart.umd.min.js'),
     formatJs: read('src', 'app', 'format.js'),
-    geoMatchJs: read('renderer', 'hub', 'geoMatch.js'),
+    geoMatchJs: read('src', 'analysis', 'geoMatch.js'),
     coreJs: read('src', 'publish', 'site', 'publishCore.js'),
     clientJs: read('src', 'publish', 'site', 'publishClient.js'),
   };

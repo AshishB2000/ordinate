@@ -1,14 +1,17 @@
-// Self-check for renderer/hub/storyText.ts — the story's Markdown subset, the
+// Self-check for src/analysis/storyText.ts — the story's Markdown subset, the
 // OUTLINE built from its headings, and the PAGE MAPPING present mode and the
-// PDF export share. `require()`d straight from the emitted renderer file (its
-// IIFE exports under Node, like geoMatch.js), so this is the code the page runs.
+// PDF export share. The server's report pages and the web story editor both
+// import this module, so this is the code the page runs. (These checks pinned
+// the desktop's storyText.js until the T8.1 cutover; test-storyTextPort.ts
+// holds this module to that file's recorded answers.)
 //
 //   npm run build:ts && node scripts/test-storyText.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 
-const S = require('../renderer/hub/storyText.js') as {
+// any: the checks below index loosely into tokens, nodes and pages
+const S = require('../src/analysis/storyText') as {
   mdInline: (s: string) => Array<{ t: string; text: string; href?: string }>;
   mdParse: (s: string) => any[];
   mdPlain: (s: string) => string;

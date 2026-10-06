@@ -1,9 +1,9 @@
-// Background jobs — MAIN PROCESS, and deliberately Electron-free.
+// Background jobs — MAIN PROCESS, and deliberately dependency-free.
 //
 // Every long operation (import, refresh, export, report, bundle, SQL save,
 // quality run, insights recompute, publish, backup) runs as a JOB: it has an
 // id, a kind, a label, a progress in 0–1, it may be cancellable, and it ends
-// in a result or an error. The Jobs popover (renderer/hub/jobsPanel.ts) paints
+// in a result or an error. The Jobs popover (the desktop's jobsPanel.ts) paints
 // exactly this record; src/ipc/jobs.ts is the only file that knows about
 // windows, notifications and the userData path.
 //

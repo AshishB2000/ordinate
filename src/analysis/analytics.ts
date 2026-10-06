@@ -5,8 +5,8 @@
 // over a chart. Every figure those overlays show — the average a reference line
 // sits at, a trend's slope and R², a forecast and its 80% interval — is
 // computed HERE, from the chart's own aggregated `{labels, series}`, and never
-// by a model and never in the renderer. The renderer (renderer/hub/
-// chartAnnotations.ts) only draws the resolved result.
+// by a model and never in the renderer. The client (web/src/charts/
+// annotations.ts) only draws the resolved result.
 //
 // A saved visual stores DEFINITIONS (`Visual.analytics: Overlay[]`); the figures
 // are re-resolved on every `visual:data` (src/ipc/visualsAnalytics.ts), exactly
@@ -223,7 +223,7 @@ export function sanitizeOverlays(raw: unknown): Overlay[] {
 // ── which chart types draw which overlays ────────────────────────────────────
 //
 // MAIN's copy of the renderer's `ChartTypeSpec.overlayKinds`
-// (renderer/hub/chartTypeSpec.ts). Captions and the Assistant's facts must only
+// (the desktop's chartTypeSpec.ts). Captions and the Assistant's facts must only
 // talk about overlays the picture actually shows, and main cannot import a
 // classic renderer script — so scripts/test-analytics.ts runs chartTypeSpec.js
 // in a vm and asserts the two agree for every chart id. Drift fails a test.

@@ -1,8 +1,8 @@
 // Self-check for src/analysisPlan.ts — the AI plan: facts in, envelope out,
 // validated, previewed, built.
 //
-// Style follows test-analysis.ts / test-vizRewire.ts: stub 'electron' via
-// Module._load so userData is a fresh temp dir, read the registered handlers
+// Style follows test-analysis.ts / test-vizRewire.ts: point userData
+// (ORDINATE_LOCAL_DIR) at a fresh temp dir, read the registered handlers
 // from the RPC registry, then drive the REAL modules against real disk. No
 // framework.
 //
@@ -30,37 +30,26 @@
 //      its output must be byte-identical to what the preview showed.
 //
 // Plus one drift guard the module cannot state about itself: CHART_TYPE_IDS is
-// compared against the REAL renderer list by vm-executing renderResult.js, the
-// way scripts/test-plotSpec.ts does.
+// compared against the desktop renderer's list (renderResult.js, vm-executed),
+// recorded as the golden fixture scripts/fixtures/golden/chartIds.json when the
+// desktop app went (T8.1).
 //
 //   npm run build:ts && node scripts/test-analysisPlan.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
-import { withT } from './i18nNode';
+import { golden } from './golden';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const vm: typeof import('vm') = require('vm');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-analysisplan-'));
 
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const ipcHandlers: Map<string, (e: unknown, payload: unknown) => Promise<any>> = require('../src/server/rpc').handlers;
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_name: string) => tmpUserData },
-      net: {},
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the real modules.
 const plan: typeof import('../src/analysis/analysisPlan') = require('../src/analysis/analysisPlan');
@@ -79,7 +68,6 @@ const analysesIpc: typeof import('../src/ipc/analyses') = require('../src/ipc/an
 
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type Cell = import('../src/data/transforms').Cell;
-
 
 // ── The hydration spy ───────────────────────────────────────────────────────
 // analysisPlan.js and ipc/visuals.js both resolve `datasets.getDataset` off the
@@ -161,14 +149,10 @@ async function setup(): Promise<void> {
 
 // ── §1 CHART_TYPE_IDS is the REAL list ──────────────────────────────────────
 function checkChartVocabulary(): void {
-  const code = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'hub', 'renderResult.js'), 'utf8');
-  const sandbox: Record<string, any> = { console };
-  sandbox.globalThis = sandbox;
-  sandbox.window = sandbox;
-  sandbox.document = undefined;
-  sandbox.localStorage = undefined;
-  vm.createContext(withT(sandbox));
-  const got = vm.runInContext(code + '\n;({ALL_CHART_TYPE_IDS, VIZ_LABELS});', sandbox);
+  // The desktop renderResult.js's ALL_CHART_TYPE_IDS and VIZ_LABELS, recorded
+  // before the desktop app went (T8.1): scripts/fixtures/golden/chartIds.json.
+  const G = golden<{ allChartTypeIds: string[]; vizLabels: Record<string, string> }>('chartIds');
+  const got = { ALL_CHART_TYPE_IDS: G.allChartTypeIds, VIZ_LABELS: G.vizLabels };
   const real: string[] = got.ALL_CHART_TYPE_IDS.concat(['table', 'map_bubble', 'map_choropleth']);
   ok('the chart vocabulary under test is the real one', real.length === 37, `${real.length} types`);
   ok('CHART_TYPE_IDS has exactly the renderer\'s types', plan.CHART_TYPE_IDS.size === real.length,

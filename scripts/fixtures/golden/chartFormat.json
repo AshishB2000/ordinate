@@ -1,0 +1,1 @@
+{"dualAxisTypes":["combo","line","line_markers","area","column","clustered_column"],"measureNames":[[{"values":[{"column":"revenue","aggregation":"sum"},{"column":"price","aggregation":"avg"}]},["sum of revenue","avg of price"]],[{"values":[{"column":"n","aggregation":"count"},{"column":"p","aggregation":"none"}]},["n","sum of p","p"]],[{"values":[]},[]]]}

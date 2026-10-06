@@ -29,7 +29,6 @@ import { ok, failureCount } from './selfcheck';
 const watch: typeof import('../src/analysis/anomalyWatch') = require('../src/analysis/anomalyWatch');
 const { anomalyKey, diffAnomalies, sanitizeAnomalyKeys, watchMessage, MAX_KEYS } = watch;
 
-
 function anom(kind: string, column?: string, detail = 'x', severity: 'info' | 'warn' = 'warn'): any {
   return { kind, column, severity, detail, facts: {} };
 }

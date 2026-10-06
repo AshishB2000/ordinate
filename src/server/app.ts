@@ -1,10 +1,9 @@
 // The Fastify app factory. Builds routes and the logger; never listens —
 // `main.ts` does that, and tests drive the app through `inject()`.
 //
-// This module and everything it imports must load WITHOUT Electron: the server
-// runs in a plain Node pod. scripts/test-server-boot.ts spawns the server with
-// `require('electron')` made to fail, so an Electron import anywhere in this
-// graph breaks the build's tests, not a deploy.
+// The server runs in a plain Node pod; scripts/test-server-boot.ts spawns it the
+// same way, so a module in this graph that cannot load there breaks the build's
+// tests, not a deploy.
 
 import { fastify, type FastifyInstance, type FastifyRequest } from 'fastify';
 import { probe, shutdown } from '../engine/duckdb';
@@ -352,7 +351,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
 /**
  * Registers the handler modules whose channels have contracts. main.ts calls
  * it at boot, so scripts/test-server-boot.ts proves their whole import graph
- * loads without Electron. The requires are lazy so loading app.ts never loads
+ * loads in a plain Node process. The requires are lazy so loading app.ts never loads
  * a handler module.
  */
 export function registerHandlers(): void {
@@ -414,5 +413,5 @@ export function registerHandlers(): void {
   // Dashboards, sharing, alerts, comments (T2.9): publish to a URL, export, the summary card, the As-of picker.
   (require('../ipc/publishServer') as typeof import('../ipc/publishServer')).register(() => dbPool);
   for (const mod of ['../ipc/comments', '../ipc/summary', '../ipc/dashboardsServer', '../ipc/fx']) (require(mod) as { register: () => void }).register();
-  (require('../ipc/alerts') as typeof import('../ipc/alerts')).register({ focusHub: () => undefined });
+  (require('../ipc/alerts') as typeof import('../ipc/alerts')).register();
 }

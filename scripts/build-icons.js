@@ -8,8 +8,7 @@
 // index files — to deliver about 41 KB of data.
 //
 // So simple-icons is now a devDependency and this generator bakes all 28 provider-plus-connector entries
-// into a committed JSON asset, exactly like scripts/build-vendor.js does for the
-// vgplot bundle. Same rule as that script: it EXITS NON-ZERO if an expected icon
+// into a committed JSON asset. It EXITS NON-ZERO if an expected icon
 // has vanished, so a simple-icons upgrade breaks the build loudly instead of
 // silently downgrading a provider or connector to a styled badge at runtime.
 //

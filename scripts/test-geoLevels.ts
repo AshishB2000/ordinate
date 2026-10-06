@@ -1,4 +1,4 @@
-// Self-check for the geo-join layer (renderer/hub/geoMatch.ts) across all five
+// Self-check for the geo-join layer (src/analysis/geoMatch.ts) across all five
 // choropleth levels named in src/analyze.ts GEO_LEVELS: country, us_state,
 // us_county, us_city, us_zip.  (`point` needs no name join — it carries lat/lng.)
 //
@@ -21,9 +21,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vm from 'vm';
 
-// ponytail: geoMatch.js is a renderer global-script (not a TS module) and the
+// ponytail: geoMatch.js is a UMD script (not a TS module) and the
 // boundary sets are postinstall-fetched build output — require both with loose types.
-const { normalizeName, matchGeoItem } = require('../renderer/hub/geoMatch') as {
+const { normalizeName, matchGeoItem } = require('../src/analysis/geoMatch') as {
   normalizeName: (n: string | null | undefined) => string;
   matchGeoItem: (items: any[], featProps: any) => any;
 };
@@ -42,7 +42,6 @@ function loadWindowAsset(file: string, varName: string): { features: any[] } {
 const WORLD = loadWindowAsset('world-countries.js', '__GEO_WORLD__');
 const STATES = loadWindowAsset('us-states.js', '__GEO_US_STATES__');
 const COUNTIES = require('../assets/geo/us-counties.json') as { features: any[] };
-
 
 // Feature-property lookups against the real assets.
 function worldProps(name: string) {
@@ -67,7 +66,7 @@ function countyProps(name: string, kind: string, state: string) {
 // for L.latLng / map / a DOM node from inside geoMatch, the join stops being
 // portable and this suite stops being runnable under plain node. Assert on the
 // source, the same way test-formula asserts formula.ts contains no `eval`.
-const GEOMATCH_SRC = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'hub', 'geoMatch.ts'), 'utf8');
+const GEOMATCH_SRC = fs.readFileSync(path.join(__dirname, '..', 'src', 'analysis', 'geoMatch.ts'), 'utf8');
 // Comments are stripped first: the file's own header prose says "No DOM or
 // Leaflet dependencies", which a naive source grep would flag as a hit.
 const GEOMATCH_CODE = GEOMATCH_SRC.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');

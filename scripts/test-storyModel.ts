@@ -15,16 +15,9 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-stories-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return { app: { getPath: () => tmpUserData }, ipcMain: { handle: () => {} }, net: {}, safeStorage: { isEncryptionAvailable: () => false } };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const M: typeof import('../src/analysis/storyModel') = require('../src/analysis/storyModel');
 const stories: typeof import('../src/analysis/stories') = require('../src/analysis/stories');

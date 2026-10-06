@@ -1,21 +1,21 @@
 // DIFFERENTIAL: the map port against the desktop's own code (house style —
 // two implementations must agree with Object.is, not with hand-written values).
 //
-// The legacy renderer scripts (renderer/hub/map*.js, geo*.js — classic
-// global-scope scripts, emitted by `npm run build:ts`) are evaluated in one vm
-// context with the few hub globals they call stubbed. Each map kind is then
-// DRAWN twice onto a recording fake MapLibre map — once by the legacy draw
-// function, once by the port's draw.ts — from REAL server replies (the
-// compiled src/analysis modules over the bundled sample and the geo fixture),
-// and every source FeatureCollection, value-label / cluster marker and camera
-// fit must match. Pure helpers are compared over their whole input ranges.
+// The desktop's map scripts (map*.js, geo*.js) drew each map kind onto a
+// recording fake MapLibre map from REAL server replies (the src/analysis modules
+// over the bundled sample and the geo fixture); at the T8.1 cutover, when they
+// went, every source FeatureCollection, value-label / cluster marker, camera fit
+// and pure-helper answer they produced — and the replies they were given — were
+// recorded, per test and in order, into __golden__/geo.json. The port now draws
+// the same replies and must match those recordings. The name matcher and the
+// point clusterer are still the server's own (src/analysis/geoMatch.ts,
+// geoCluster.ts), so those two are compared live, over their whole input ranges.
 
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import vm from 'node:vm';
-import { beforeAll, describe, expect, it } from 'vitest';
-import { formatCompact } from '../../../../src/app/format.ts';
+import { describe, expect, it } from 'vitest';
+import { goldenSequence, golden } from '../../test-golden';
 import { CHART_PALETTE, choroplethColor, flowWidth, isDarkHex } from './colors';
 import { drawMap, type MapTheme, type Overlay } from './draw';
 import { valueLabelKeys } from './features';
@@ -25,7 +25,7 @@ import { matchGeoItem, normalizeName } from './geoMatch';
 import { geoChartTypeFor, geoMapFits, geoNeedsText, isMapChartType, withGeoChartType } from './mapKinds';
 import type { MapLibre, MlMap } from './maplibre';
 import { mapThumbFills, mapThumbProject } from './thumb';
-import type { FeatureCollection, MapData, MapGeo } from './types';
+import type { FeatureCollection, MapData } from './types';
 
 // Vitest serves this file as /@fs/<absolute path>: strip that to reach the repo root on disk.
 // (Vite rewrites the two-argument `new URL(rel, import.meta.url)` form, so the path is built by hand.)
@@ -58,17 +58,32 @@ function same(a: unknown, b: unknown, path = '$'): string | null {
 }
 const agree = (port: unknown, legacy: unknown) => expect(same(port, legacy)).toBeNull();
 
-// ── The legacy scripts, in one context ──────────────────────────────────────
+// ── The recorded desktop side ───────────────────────────────────────────────
+const GOLDEN = 'src/charts/maps/__golden__/geo.json';
+const seq = goldenSequence(GOLDEN, 'cases');
+const G = golden<{ finals: Record<string, Record<string, unknown[]>>; inputs: Record<string, unknown> }>(GOLDEN);
+// Recorded under the recorder's describe names ("record: …").
+const testKey = () => 'record: ' + expect.getState().currentTestName!;
+/** The next thing the desktop answered in this test. */
+const desktop = (): unknown => {
+  return seq.next(testKey());
+};
+const eq = (port: unknown) => expect(port).toBe(desktop());
+const eqDeep = (port: unknown) => expect(port).toEqual(desktop());
+const agreeG = (port: unknown) => agree(port, desktop());
+/** A map's sources at this step: the recorded lengths of each source's history, over the test's last snapshot. */
+const agreeSources = (port: unknown) => {
+  const e = desktop() as { sourcesLens: Record<string, number> };
+  const last = G.finals[testKey()]!;
+  agree(port, Object.fromEntries(Object.entries(e.sourcesLens).map(([id, n]) => [id, last[id]!.slice(0, n)])));
+};
+
+// ── Themes and the MapLibre stand-ins ──────────────────────────────────────
 const LIGHT: Record<string, string> = {
   '--accent': '#2563eb', '--surface': '#ffffff', '--surface-3': '#eaecf0', '--border-2': '#d6dae1', '--border': '#e4e7ec', '--text-faint': '#aeb4bf',
 };
 const DARK: Record<string, string> = { ...LIGHT, '--surface': '#1c1c20', '--surface-3': '#303038', '--accent': '#3b82f6' };
 let vars = LIGHT;
-const en = JSON.parse(readFileSync(at('renderer/i18n/en.json'), 'utf8')) as Record<string, string>;
-const t = (key: string, params: Record<string, unknown> = {}) =>
-  (en[key] ?? key).replace(/\{(\w+)(?:, plural, one \{(\w+)\} other \{(\w+)\})?\}/g, (_m, k: string, one?: string, many?: string) =>
-    one ? (params[k] === 1 ? one : (many as string)) : String(params[k] ?? ''));
-
 class Popup {
   setLngLat() { return this; }
   setHTML() { return this; }
@@ -87,60 +102,26 @@ class Marker {
 }
 const ml = { Popup, Marker } as unknown as MapLibre;
 
-let L: Record<string, (...a: never[]) => unknown>;
-let picked: ((mode: string) => void) | null = null;
-beforeAll(() => {
-  const ctx = vm.createContext({
-    document, CustomEvent, setTimeout, clearTimeout, console,
-    getCSSVar: (name: string) => vars[name] ?? '',
-    t, icon: () => document.createElement('span'), iconOnly: () => {}, openMiniMenu: () => {},
-    openValuesMenu: (_b: unknown, _m: string, onPick: (m: string) => void) => { picked = onPick; },
-    _fmtVal: (v: number | null) => (v == null ? '' : formatCompact(v)),
-    CHART_PALETTE, mapInstances: new Map(), maplibregl: ml,
-  });
-  vm.runInContext('var window = this;', ctx);
-  for (const f of ['geoMatch', 'geoCluster', 'chartValueLabels', 'mapKinds', 'mapRender', 'mapOverlays', 'mapPoints', 'mapHexbin', 'mapFlow', 'mapThumb']) {
-    vm.runInContext(readFileSync(at(`renderer/hub/${f}.js`), 'utf8'), ctx, { filename: `${f}.js` });
-  }
-  L = vm.runInContext(`({ normalizeName, matchGeoItem, geoCluster, valueLabelKeys, isMapChartType, geoChartTypeFor, geoMapFits,
-    geoNeedsText, withGeoChartType, getChoroplethColor, buildPeriodGeo, _geoBBox, abbrevFor, fillCentroidsFromBoundaries,
-    _renderBubbleMap, _renderChoroplethMap, renderPointMap, renderHexbinMap, renderFlowMap, flowWidth, mapThumbProject, mapThumbFills })`, ctx);
-});
-
 // ── Real server replies ─────────────────────────────────────────────────────
 type Columns = Array<{ name: string; type: string }>;
-const vizData = require(at('src/analysis/vizData.js')) as { buildVizData(c: Columns, r: unknown[][], e: object, f: unknown[]): { data: MapData } };
-const mapData = require(at('src/analysis/mapData.js')) as { pointItems(c: Columns, r: unknown[][], e: object): { items: MapGeo['items'] } };
-const geoAgg = require(at('src/analysis/geo/geoAgg.js')) as Record<string, (...a: unknown[]) => unknown>;
 const fixture = (require(at('scripts/geoFixture.js')) as { geoFixture(): { columns: Columns; rows: unknown[][] } }).geoFixture();
+// The name matcher and clusterer the server still runs — the live side of the first two cases.
+// any: UMD modules without types on this side
+const SG = require(at('src/analysis/geoMatch.js')) as any;
+const SC = require(at('src/analysis/geoCluster.js')) as any;
 const states = (() => {
   const src = readFileSync(at('assets/geo/us-states.js'), 'utf8');
   return JSON.parse(src.replace(/^[\s\S]*?=\s*/, '').replace(/;\s*$/, '')) as FeatureCollection;
 })();
-const sample = (() => {
-  const [head, ...lines] = readFileSync(at('assets/samples/retail-orders.csv'), 'utf8').trim().split('\n');
-  const names = head.split(',');
-  const num = new Set(['units', 'unit_price', 'discount', 'revenue', 'profit', 'ship_days']);
-  return {
-    columns: names.map((name) => ({ name, type: num.has(name) ? 'number' : 'text' })),
-    rows: lines.map((l) => l.split(',').map((v, i) => (num.has(names[i]) ? Number(v) : v))),
-  };
-})();
-const viz = (encoding: object): MapData => vizData.buildVizData(sample.columns, sample.rows, encoding, []).data;
+const input = <T,>(k: string): T => {
+  if (!(k in G.inputs)) throw new Error('no recorded reply for ' + k);
+  return structuredClone(G.inputs[k]) as T;
+};
+const viz = (encoding: object): MapData => input('viz ' + JSON.stringify(encoding));
 const byState = (measure: string, series?: string) => viz({ category: 'state', ...(series ? { series } : {}), values: [{ column: measure, aggregation: 'sum' }], geo: { level: 'us_state' } });
-const measure = { column: 'weight_kg', aggregation: 'sum' };
-const hexData = (): MapData => {
-  const spec = { lat: 'lat', lng: 'lon', measure: { agg: 'sum', column: 'weight_kg', label: 'Sum of weight_kg' } };
-  return { labels: [], series: [], geo: geoAgg.shapeHexbin(geoAgg.hexGroupsJs(fixture.columns, fixture.rows, spec, []), spec.measure) as MapGeo };
-};
-const flowData = (): MapData => {
-  const spec = { lat: 'wh_lat', lng: 'wh_lon', lat2: 'city_lat', lng2: 'city_lon', from: 'warehouse', to: 'city', measure: { agg: 'sum', column: 'weight_kg', label: 'Sum of weight_kg' } };
-  return { labels: [], series: [], geo: geoAgg.shapeFlows(geoAgg.flowGroupsJs(fixture.columns, fixture.rows, spec, []), spec.measure) as MapGeo };
-};
-const pointData = (): MapData => ({
-  labels: [], series: [], markColumn: 'city',
-  geo: { level: 'point', points: true, items: mapData.pointItems(fixture.columns, fixture.rows, { category: 'city', values: [measure], geo: { level: 'point', lat: 'lat', lon: 'lon', color: 'carrier' } }).items, colorColumn: 'carrier', skipped: 0 },
-});
+const hexData = (): MapData => input('hex');
+const flowData = (): MapData => input('flow');
+const pointData = (): MapData => input('point');
 
 // ── A recording fake MapLibre map ───────────────────────────────────────────
 function fakeMap(zoom = 3) {
@@ -179,33 +160,31 @@ function port(data: MapData, type: string, features: FeatureCollection | null, z
   const drawn = drawMap({ ml, map: f.map as unknown as MlMap, data, type, features: features ? features.features : null, theme: theme(vars), emit: (p) => void patches.push(p) });
   return { ...f, drawn, overlay: () => Object.assign({}, drawn.overlay, ...patches) as Overlay };
 }
-const legacyMap = (zoom = 3) => ({ ...fakeMap(zoom), wrap: document.createElement('div') });
-const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ── Pure helpers ────────────────────────────────────────────────────────────
 describe('pure helpers equal the desktop', () => {
   it('normalizeName and matchGeoItem over every state shape', () => {
     const names = ['Roanoke City', 'St. Louis County', 'Prince of Wales-Hyder Census Area', 'United States of America', '  New   York (state) ', '', 'James City'];
-    for (const n of names) expect(normalizeName(n)).toBe(L.normalizeName(n as never));
+    for (const n of names) expect(normalizeName(n)).toBe(SG.normalizeName(n));
     const items = byState('profit').geo!.items;
-    for (const f of states.features) agree(matchGeoItem(items, f.properties), L.matchGeoItem(items as never, f.properties as never));
+    for (const f of states.features) agree(matchGeoItem(items, f.properties), SG.matchGeoItem(items, f.properties));
     // Counties (state + county-vs-city kind disambiguate) and countries (iso2, long official names).
     const counties = JSON.parse(readFileSync(at('assets/geo/us-counties.json'), 'utf8')) as FeatureCollection;
     const cItems = counties.features.filter((_, i) => i % 9 === 0).map((f, i) => ({ name: `${String(f.properties.name)}${i % 3 ? ' County' : ''}`, state: String(f.properties.state), kind: i % 4 ? undefined : String(f.properties.kind), value: i }));
-    for (const f of counties.features) agree(matchGeoItem(cItems, f.properties), L.matchGeoItem(cItems as never, f.properties as never));
+    for (const f of counties.features) agree(matchGeoItem(cItems, f.properties), SG.matchGeoItem(cItems, f.properties));
     const world = JSON.parse(readFileSync(at('assets/geo/world-countries.js'), 'utf8').replace(/^[\s\S]*?=\s*/, '').replace(/;\s*$/, '')) as FeatureCollection;
     const wItems = ['United States of America', 'Russian Federation', 'UK', 'de', 'Congo', 'Korea', 'Niger', 'Guinea', 'Sudan'].map((name, value) => ({ name, value }));
-    for (const f of world.features) agree(matchGeoItem(wItems, f.properties), L.matchGeoItem(wItems as never, f.properties as never));
-    for (const f of counties.features.slice(0, 400)) expect(normalizeName(String(f.properties.name) + ' Parish')).toBe(L.normalizeName((String(f.properties.name) + ' Parish') as never));
+    for (const f of world.features) agree(matchGeoItem(wItems, f.properties), SG.matchGeoItem(wItems, f.properties));
+    for (const f of counties.features.slice(0, 400)) expect(normalizeName(String(f.properties.name) + ' Parish')).toBe(SG.normalizeName(String(f.properties.name) + ' Parish'));
     // Pinned divergence from the truth, kept for parity: "virginia" ⊂ "west virginia".
     expect(matchGeoItem(items, { name: 'West Virginia' })?.name).toBe('Virginia');
   });
 
   it('geoCluster: axis detection and grid clusters at every zoom', () => {
-    for (const n of ['lat', 'Latitude', 'pickup_lat', 'lngDeg', 'LONGITUDE', 'long', 'wh_lon', 'flat']) expect(axisOf(n)).toBe((L.geoCluster as never as { axisOf(n: string): unknown }).axisOf(n));
+    for (const n of ['lat', 'Latitude', 'pickup_lat', 'lngDeg', 'LONGITUDE', 'long', 'wh_lon', 'flat']) expect(axisOf(n)).toBe(SC.axisOf(n));
     const sampler = (name: string) => fixture.rows.map((r) => r[fixture.columns.findIndex((c) => c.name === name)]);
-    const lc = L.geoCluster as never as { detectLatLon: typeof detectLatLon; gridCluster: typeof gridCluster };
+    const lc = SC as { detectLatLon: typeof detectLatLon; gridCluster: typeof gridCluster };
     agree(detectLatLon(fixture.columns, sampler), lc.detectLatLon(fixture.columns, sampler));
     const pts = pointData().geo!.items as Array<{ lat: number; lng: number; value: number }>;
     for (let z = 0; z <= 12; z++) agree(gridCluster(pts, z), lc.gridCluster(pts, z));
@@ -215,51 +194,47 @@ describe('pure helpers equal the desktop', () => {
   it('mapKinds, in the desktop English', () => {
     const geos = [null, byState('profit').geo, hexData().geo, flowData().geo];
     for (const type of ['map_bubble', 'map_choropleth', 'map_hexbin', 'map_flow', 'column']) {
-      expect(isMapChartType(type)).toBe(L.isMapChartType(type as never));
-      for (const has of [true, false]) expect(geoNeedsText(type, has)).toBe(L.geoNeedsText(type as never, has as never));
-      for (const g of geos) expect(geoMapFits(type, g)).toBe(L.geoMapFits(type as never, g as never));
+      eq(isMapChartType(type));
+      for (const has of [true, false]) eq(geoNeedsText(type, has));
+      for (const g of geos) eq(geoMapFits(type, g));
     }
     for (const g of geos) {
-      expect(geoChartTypeFor(g)).toBe(L.geoChartTypeFor(g as never));
-      agree(withGeoChartType(['column', 'bar'], g), L.withGeoChartType(['column', 'bar'] as never, g as never));
+      eq(geoChartTypeFor(g));
+      agreeG(withGeoChartType(['column', 'bar'], g));
     }
   });
 
   it('the colour ramp, both themes, and the flow width scale', () => {
     for (const v of [LIGHT, DARK]) {
       vars = v;
-      for (let i = -5; i <= 105; i++) expect(choroplethColor(i / 100, isDarkHex(v['--surface']))).toBe(L.getChoroplethColor((i / 100) as never));
+      for (let i = -5; i <= 105; i++) eq(choroplethColor(i / 100, isDarkHex(v['--surface'])));
     }
     vars = LIGHT;
-    for (const v of [null, -1, 0, 0.5, 3, 18.8e3, 1e9]) for (const max of [0, 1, 18.8e3]) expect(flowWidth(v, max)).toBe(L.flowWidth(v as never, max as never));
+    for (const v of [null, -1, 0, 0.5, 3, 18.8e3, 1e9]) for (const max of [0, 1, 18.8e3]) eq(flowWidth(v, max));
   });
 
   it('bboxes, abbreviations, centroids and per-period values', () => {
     const items = byState('profit').geo!.items;
     for (const f of states.features) {
-      agree(geoBBox(f.geometry), L._geoBBox(f.geometry as never));
-      for (const level of ['us_state', 'country', 'us_county']) expect(abbrevFor({ name: String(f.properties.name) }, f.properties, level)).toBe(L.abbrevFor({ name: f.properties.name } as never, f.properties as never, level as never));
+      agreeG(geoBBox(f.geometry));
+      for (const level of ['us_state', 'country', 'us_county']) eq(abbrevFor({ name: String(f.properties.name) }, f.properties, level));
     }
-    const legacy = clone(items);
-    L.fillCentroidsFromBoundaries(legacy as never, states as never);
-    agree(withCentroids(items, states.features), legacy);
+    agreeG(withCentroids(items, states.features));
     expect(items.every((i) => i.lat === undefined)).toBe(true); // the reply is never mutated
     const ts = byState('profit', 'category');
     expect(ts.dataShape).toBe('time_series');
     const p = buildPeriodGeo(ts.labels, ts.series, ts.geo!.items);
-    const lp = L.buildPeriodGeo(ts.labels as never, ts.series as never, ts.geo!.items as never) as typeof p;
-    agree([p.periods, p.minVal, p.maxVal], [lp.periods, lp.minVal, lp.maxVal]);
-    for (let i = 0; i < p.periods.length; i++) agree(p.itemsForPeriod(i), lp.itemsForPeriod(i));
+    agreeG([p.periods, p.minVal, p.maxVal]);
+    for (let i = 0; i < p.periods.length; i++) agreeG(p.itemsForPeriod(i));
   });
 
   it('value-label picks and thumbnail projection / fills', () => {
     const rows = [[3, null, 9, -1, 9], [], ['x', 2]];
-    for (const mode of ['off', 'all', 'maxmin', 'max', 'min', '']) agree([...valueLabelKeys(mode, rows)], [...(L.valueLabelKeys(mode as never, rows as never) as Set<string>)]);
+    for (const mode of ['off', 'all', 'maxmin', 'max', 'min', '']) agreeG([...valueLabelKeys(mode, rows)]);
     const proj = mapThumbProject([-125, 24, -66, 50], 160, 96, 2);
-    const lproj = L.mapThumbProject([-125, 24, -66, 50] as never, 160 as never, 96 as never, 2 as never) as typeof proj;
-    for (const [x, y] of [[-125, 24], [-95, 39], [-66, 50]]) agree(proj(x, y), lproj(x, y));
+    for (const [x, y] of [[-125, 24], [-95, 39], [-66, 50]]) agreeG(proj(x, y));
     const items = byState('profit').geo!.items;
-    agree(mapThumbFills(states.features, items, '', (k) => `c${k}`), L.mapThumbFills(states.features as never, items as never, '' as never, ((k: number) => `c${k}`) as never));
+    agreeG(mapThumbFills(states.features, items, '', (k) => `c${k}`));
   });
 });
 
@@ -271,86 +246,71 @@ describe('every map kind draws the same marks as the desktop', () => {
     it(`region map (${name}): fills, Max & min labels, camera — then Values → All`, () => {
       vars = v;
       const data = byState('profit');
-      const a = legacyMap();
-      const matched = L._renderChoroplethMap(a.map as never, a.wrap as never, data.geo as never, states as never, null as never, data as never);
       const b = port(data, 'map_choropleth', states);
-      agree(b.sources, a.sources);
-      agree(b.live(), a.live());
-      agree(b.camera, a.camera);
-      expect(b.drawn.overlay.stats.matched).toBe(String(matched));
-      (a.wrap.querySelector('.cv-values-btn') as HTMLButtonElement).click();
-      picked!('all');
+      agreeSources(b.sources);
+      agreeG(b.live());
+      agreeG(b.camera);
+      eq(b.drawn.overlay.stats.matched);
       b.drawn.setValueMode!('all');
-      agree(b.live(), a.live());
+      agreeG(b.live());
       vars = LIGHT;
     });
   }
 
   it('region map stepping through periods (a time-series reply)', () => {
     const data = byState('profit', 'category');
-    const a = legacyMap();
-    L._renderChoroplethMap(a.map as never, a.wrap as never, data.geo as never, states as never, L.buildPeriodGeo(data.labels as never, data.series as never, data.geo!.items as never) as never, data as never);
     const b = port(data, 'map_choropleth', states);
-    const select = a.wrap.querySelector('select') as HTMLSelectElement;
     for (const idx of [0, 1, 2]) {
-      select.value = String(idx);
-      select.dispatchEvent(new Event('change'));
       b.drawn.setPeriod!(idx);
-      agree(b.sources, a.sources);
-      agree(b.live(), a.live());
+      agreeSources(b.sources);
+      agreeG(b.live());
     }
   });
 
   it('bubble map at region centroids', () => {
     const data = byState('revenue');
-    const a = legacyMap();
-    const items = clone(data.geo!.items);
-    L.fillCentroidsFromBoundaries(items as never, states as never);
-    L._renderBubbleMap(a.map as never, a.wrap as never, { ...data.geo, items } as never, null as never, data as never);
     const b = port(data, 'map_bubble', states);
-    agree(b.sources, a.sources);
-    agree(b.live(), a.live());
-    agree(b.camera, a.camera);
+    agreeSources(b.sources);
+    agreeG(b.live());
+    agreeG(b.camera);
   });
 
   it('point map: clusters and singles, re-clustered on zoom', () => {
     const data = pointData();
-    const a = legacyMap();
-    L.renderPointMap(a.map as never, a.wrap as never, a.wrap as never, data.geo as never, data as never);
     const b = port(data, 'map_bubble', null);
     for (const z of [3, 6, 9, 14]) {
-      a.zoomTo(z);
       b.zoomTo(z);
-      agree(b.sources, a.sources);
-      agree(b.live(), a.live());
+      agreeSources(b.sources);
+      agreeG(b.live());
     }
-    agree(b.camera, a.camera);
-    expect(b.drawn.overlay.colorLegend?.rows).toEqual([...a.wrap.querySelectorAll('.cv-map-legend--colors .cv-map-legend-row')].map((r) => [r.textContent, r.querySelector('circle')?.getAttribute('fill')]));
+    agreeG(b.camera);
+    eqDeep(b.drawn.overlay.colorLegend?.rows);
   });
 
   it('hexbin map: the level for each zoom', async () => {
     const data = hexData();
-    const a = legacyMap();
-    L.renderHexbinMap(a.map as never, a.wrap as never, data.geo as never, data as never);
     const b = port(data, 'map_hexbin', null);
-    agree(b.sources, a.sources);
+    agreeSources(b.sources);
     for (const z of [1, 5, 8, 12]) {
-      a.zoomTo(z);
       b.zoomTo(z);
-      await sleep(150); // both debounce the level swap by 120 ms
-      agree(b.sources, a.sources);
-      expect(b.overlay().notes?.info).toBe(a.wrap.querySelector('.geo-map-note')?.textContent);
+      await sleep(150); // the level swap is debounced by 120 ms (as the desktop's was)
+      agreeSources(b.sources);
+      eq(b.overlay().notes?.info);
     }
-    agree(b.camera, a.camera);
+    agreeG(b.camera);
   });
 
   it('flow map: routes heaviest-last and their ends', () => {
     const data = flowData();
-    const a = legacyMap();
-    L.renderFlowMap(a.map as never, a.wrap as never, data.geo as never, data as never);
     const b = port(data, 'map_flow', null);
-    agree(b.sources, a.sources);
-    agree(b.camera, a.camera);
-    expect(b.drawn.overlay.notes?.info).toBe(a.wrap.querySelector('.geo-map-note')?.textContent);
+    agreeSources(b.sources);
+    agreeG(b.camera);
+    eq(b.drawn.overlay.notes?.info);
+  });
+});
+
+describe('the golden comparison', () => {
+  it('every recorded desktop answer was compared', () => {
+    expect(seq.rest()).toEqual([]);
   });
 });

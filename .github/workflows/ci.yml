@@ -1,8 +1,9 @@
 name: CI build check
 
-# Fast per-push sanity gate: install deps, type-check + compile the TypeScript
-# tree, run the node self-checks. Catches a broken commit immediately. The
-# heavy installer build lives in build.yml (tags only) — this stays light.
+# Per-push gate: install deps, type-check + compile the TypeScript tree, run the
+# node self-checks, build and test the web app, build the image and drive it
+# under Compose and on kind, and audit the runtime dependencies. Releases are
+# release.yml (tags only).
 #
 # Watches `develop`, which is this repo's DEFAULT branch. This list has now gone
 # stale TWICE, and both times the symptom was silence rather than a red check:
@@ -10,9 +11,10 @@ name: CI build check
 # to `develop`. Each time, every pull request merged without CI having run.
 # Renaming the trunk means editing this list in the same commit.
 #
-# Node 24 matches what Electron 42 bundles, so the self-checks exercise the same
-# runtime the app ships on. The DuckDB native binding is a prebuilt N-API module
-# and resolves per-platform from npm, so no rebuild step is needed here.
+# Node 24 is the server image's runtime (deploy/Dockerfile), so the self-checks
+# exercise the same runtime the server ships on. The DuckDB native binding is a
+# prebuilt N-API module and resolves per-platform from npm, so no rebuild step
+# is needed here.
 
 on:
   push:
@@ -140,75 +142,6 @@ jobs:
       - name: Server and web app dependencies
         run: node scripts/audit-gate.ts . web
 
-  # Four shards in parallel, balanced by scripts/smoke-durations.json — the
-  # serial chain had grown past 40 minutes. Each smoke is killed by name after 10
-  # minutes (scripts/run-smokes.ts) and the job after 60, so a hung app can
-  # never again hold a runner for six hours. The console-error rule is inside
-  # every smoke, unchanged.
-  smoke:
-    name: smoke (shard ${{ matrix.shard }}/4)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-      - run: npm ci
-      # Electron needs the same shared libraries Chromium does (libnss3, libgbm,
-      # libasound2, …). Playwright ships the exact list, so borrow it rather than
-      # hand-maintaining an apt-get line that rots with each ubuntu image bump.
-      - name: Install Electron's system libraries
-        run: npx playwright install-deps chromium
-      # No display on a CI runner, and Electron will not start without one.
-      - name: Run the smoke test under a virtual display
-        run: npm run build && xvfb-run -a node scripts/run-smokes.js --shard ${{ matrix.shard }}/4
-        env:
-          SMOKE_ARTIFACT_DIR: ${{ runner.temp }}
-      # Upload the screenshot ALWAYS — on a failure it is the only way to see
-      # what the app actually looked like when it broke.
-      #
-      # continue-on-error, because this step must never decide whether the BUILD
-      # passed. When the account's artifact storage quota is full the upload
-      # fails with "Artifact storage quota has been hit", and without this the
-      # whole smoke job goes red immediately after printing "All app smoke checks
-      # passed." — a green test reported as a failure. That is worse than having
-      # no artifact: it trains everyone to ignore a red smoke job, which is the
-      # one job that catches a CSP violation or a blank render.
-      # ALL the smoke screenshots, not just the final window: smoke-app writes
-      # ~23 per-scenario diagnostic shots into SMOKE_ARTIFACT_DIR, and on a red
-      # run those are what say WHICH scenario broke.
-      - name: Upload the smoke screenshots
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-screenshots-${{ matrix.shard }}
-          path: ${{ runner.temp }}/*.png
-          if-no-files-found: warn
-          # The default is 90 days. A ~400 KB screenshot per PR run, kept for
-          # three months, is what filled the quota in the first place; nobody has
-          # ever wanted last quarter's smoke screenshot.
-          retention-days: 7
-
-  # THE required check. Branch protection names one context, not four, so a
-  # shard that is renamed or added cannot silently drop out of the gate: this
-  # job fails unless every shard succeeded (a skipped or cancelled shard fails
-  # it too).
-  smoke-all:
-    name: smoke (all shards)
-    runs-on: ubuntu-latest
-    needs: smoke
-    if: always()
-    steps:
-      - name: Every shard passed
-        run: test "${{ needs.smoke.result }}" = success
-
   # The server image and the Compose stack (Phase 7, T7.1): build
   # deploy/Dockerfile, hold it under 600 MB, start deploy/docker-compose.yml
   # from a clean state (fresh volumes, generated secrets), then drive it with
@@ -309,3 +242,20 @@ jobs:
           path: web/e2e/__screens__/compose-*.png
           if-no-files-found: warn
           retention-days: 7
+
+  # THE required check. Branch protection names one context, `smoke (all
+  # shards)` — the name it kept from when it gathered the desktop app's smoke
+  # shards (removed at the T8.1 cutover) — so the name stays, and the job now
+  # gates on every job a pull request must pass: it fails unless each one
+  # succeeded (a skipped or cancelled job fails it too).
+  smoke-all:
+    name: smoke (all shards)
+    runs-on: ubuntu-latest
+    needs: [check, web, docker, helm, audit]
+    if: always()
+    steps:
+      - name: Every gating job passed
+        run: |
+          for r in "${{ needs.check.result }}" "${{ needs.web.result }}" "${{ needs.docker.result }}" "${{ needs.helm.result }}" "${{ needs.audit.result }}"; do
+            test "$r" = success
+          done

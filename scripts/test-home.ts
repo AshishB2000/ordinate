@@ -1,5 +1,5 @@
 // Self-check for Home's and the chrome's server channels (T2.1) — REAL HTTP,
-// server mode, no Electron:
+// server mode:
 //
 //   home:overview   counts and lists equal the stores' own (differential), and
 //                   only the picked fields leave (no origin, no crop path)
@@ -20,13 +20,6 @@ const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const http: typeof import('http') = require('http');
-const Module: any = require('module'); // any: the loader hook has no public type
-
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') throw new Error('electron is not available in server mode');
-  return origLoad.apply(this, [request, ...rest]);
-};
 
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');

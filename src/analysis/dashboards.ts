@@ -47,14 +47,14 @@ import { sanitizeRadiusValue } from './geo/radius';
 import type { RadiusValue } from './geo/radius';
 
 // Tile actions and the card kinds beyond these four live in one PURE module
-// the renderer loads too (renderer/hub/cardModel.ts, the geoMatch pattern), so
-// what a card may store is decided here by the same code the editor runs.
-const cardModel = require('../../renderer/hub/cardModel') as {
+// (src/analysis/cardModel.ts, which the web editor's port is tested against),
+// so what a card may store is decided here.
+const cardModel = require('./cardModel') as {
   EXTRA_TYPES: string[];
   sanitizeExtras: (o: Record<string, unknown>, card: Card) => boolean;
 };
 
-/** One tile on an EDITED tablet or phone layout (renderer/hub/sizeLayout.ts). */
+/** One tile on an EDITED tablet or phone layout (src/analysis/sizeLayout.ts). */
 export interface SizeItem { id: string; hidden?: true; h?: number }
 export interface SizeLayout { items: SizeItem[] }
 /** Only the sizes someone EDITED; a missing size is derived from desktop. */
@@ -63,7 +63,7 @@ export interface SizeCell { x: number; y: number; w: number; h: number }
 
 // Layouts for every size, the same way: one pure module the hub loads too, so
 // the whitelist below and the derivation the editor draws are the same code.
-export const sizeLayout = require('../../renderer/hub/sizeLayout') as {
+export const sizeLayout = require('./sizeLayout') as {
   SMALL_SIZES: Array<'tablet' | 'phone'>;
   BREAKPOINTS: { phone: number; tablet: number };
   COLS: Record<'desktop' | 'tablet' | 'phone', number>;
@@ -201,7 +201,7 @@ export interface Card {
   action?: CardAction; // type 'text'
   metric?: CardMetric; // type 'metric'
   control?: CardControl; // type 'control'
-  /** Click / menu / hover behaviours of a visual tile (renderer/hub/cardModel.ts). */
+  /** Click / menu / hover behaviours of a visual tile (src/analysis/cardModel.ts). */
   // ponytail: shapes owned and sanitized by cardModel; typed loosely across the require
   actions?: any[]; // type 'visual'
   nav?: any; // type 'nav'

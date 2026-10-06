@@ -1,4 +1,4 @@
-// The shapes the chart engine passes around. Ported from renderer/hub's
+// The shapes the chart engine passes around. Ported from the desktop hub's
 // chartRender.ts (ChartSeriesShape, ChartDataShape, ChartCtx) and calcMenu.ts
 // (TcCalc); the pipeline they describe is build.ts.
 

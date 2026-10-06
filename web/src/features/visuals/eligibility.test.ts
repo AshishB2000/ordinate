@@ -1,39 +1,15 @@
-// Differential: the chip rules here and the desktop's (renderer/hub/
-// renderResult.js + mapKinds.js, as the root build emits them) give the SAME
-// answer on every shape × series × label count, and for every pooled type on
-// a spread of replies. Needs `npm run build:ts` at the repo root.
+// Differential: the chip rules here and the desktop's (its renderResult.js +
+// mapKinds.js) give the SAME answer on every shape × series × label count, and
+// for every pooled type on a spread of replies. The desktop scripts went at the
+// T8.1 cutover; their answers over these inputs are __golden__/eligibility.json.
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
+import { golden } from '../../test-golden';
 import { chartCanRender, countNumericSeries, eligibleChartTypes, PICKER_POOL } from './eligibility';
 
-const HUB = path.join(path.resolve(process.cwd(), '..'), 'renderer', 'hub');
-
-function slice(file: string, from: string, to: string): string {
-  const src = readFileSync(path.join(HUB, file), 'utf8');
-  const a = src.indexOf(from);
-  const b = src.indexOf(to, a);
-  if (a < 0 || b < 0) throw new Error(`${file}: markers not found — has it changed shape?`);
-  return src.slice(a, b);
-}
-
-interface Legacy {
-  eligibleChartTypes(shape: string, s: number, l: number): string[];
-  chartCanRender(type: string, data: unknown, hasGeo: boolean): boolean;
-  countNumericSeries(data: unknown): number;
-}
-
-const legacy = (() => {
-  const sandbox: Record<string, unknown> = { console, t: (k: string) => k };
-  vm.createContext(sandbox);
-  const src = [
-    readFileSync(path.join(HUB, 'mapKinds.js'), 'utf8'),
-    slice('renderResult.js', 'const SHAPE_CHARTS', '// Shared chart-type picker'),
-  ].join('\n;\n');
-  return vm.runInContext(`${src}\n;({ eligibleChartTypes, chartCanRender, countNumericSeries });`, sandbox) as Legacy;
-})();
+const G = golden<{ eligible: Record<string, string[]>; canRender: Record<string, boolean>; numeric: Record<string, number>; textOnly: number }>(
+  'src/features/visuals/__golden__/eligibility.json',
+);
 
 const SHAPES = ['time_series', 'part_to_whole', 'categorical', 'single_metric', 'matrix', 'unstructured', 'nonsense'];
 
@@ -48,8 +24,9 @@ describe('chart eligibility matches the desktop', () => {
     let n = 0;
     for (const shape of SHAPES)
       for (let s = 0; s <= 7; s++)
-        for (let l = 0; l <= 10; l++, n++) expect(eligibleChartTypes(shape, s, l), `${shape} ${s}×${l}`).toEqual(legacy.eligibleChartTypes(shape, s, l));
+        for (let l = 0; l <= 10; l++, n++) expect(eligibleChartTypes(shape, s, l), `${shape} ${s}×${l}`).toEqual(G.eligible[`${shape} ${s}×${l}`]);
     expect(n).toBe(SHAPES.length * 8 * 11);
+    expect(Object.keys(G.eligible)).toHaveLength(n);
   });
 
   it('chartCanRender and countNumericSeries: every pooled type on a spread of replies', () => {
@@ -58,18 +35,25 @@ describe('chart eligibility matches the desktop', () => {
     for (const geo of geos)
       for (const [s, l] of [[0, 0], [1, 1], [1, 2], [2, 3], [3, 7], [6, 12], [1, 30]] as const) {
         const data = reply(s, l, geo);
-        expect(countNumericSeries(data)).toBe(legacy.countNumericSeries(data));
+        expect(countNumericSeries(data)).toBe(G.numeric[`${s}×${l} ${JSON.stringify(geo)}`]);
         for (const type of PICKER_POOL) {
-          expect(chartCanRender(type, data as never, !!geo), `${type} ${s}×${l} ${JSON.stringify(geo)}`).toBe(legacy.chartCanRender(type, data, !!geo));
+          const key = `${type} ${s}×${l} ${JSON.stringify(geo)}`;
+          expect(key in G.canRender, `recorded: ${key}`).toBe(true);
+          expect(chartCanRender(type, data as never, !!geo), key).toBe(G.canRender[key]);
           n++;
         }
       }
     expect(n).toBeGreaterThan(1000);
+    expect(Object.keys(G.canRender)).toHaveLength(n);
   });
 
   it('a series of only text and nulls is not a numeric series', () => {
     const data = { labels: ['a'], series: [{ values: ['x', null] }, { values: [1] }] };
     expect(countNumericSeries(data)).toBe(1);
-    expect(legacy.countNumericSeries(data)).toBe(1);
+    expect(G.textOnly).toBe(1);
+  });
+
+  it('a broken port would be caught (negative control)', () => {
+    expect(eligibleChartTypes('categorical', 1, 3)).not.toEqual(G.eligible['time_series 3×10']);
   });
 });

@@ -1,10 +1,10 @@
 // The grids against the desktop and against the a11y bar.
 //
-//   parity   the desktop renderers (renderer/hub/pivotRender.js and
-//            cohortRender.js, as the root `npm run build:ts` emits them) and
-//            this port draw the SAME server replies — the sample dataset
+//   parity   the desktop renderers (its pivotRender.js and cohortRender.js)
+//            and this port draw the SAME server replies — the sample dataset
 //            through the server's own parseFile + buildVizData — and must
-//            produce the same tables: every cell's tag, text, spans, kind
+//            produce the same tables. The desktop side, replies included, was
+//            recorded at the T8.1 cutover (__golden__/grids.json): every cell's tag, text, spans, kind
 //            (subtotal / grand / total / base / blank / above / below) and
 //            inline paint, plus the same surrounding text. One deliberate
 //            difference: the port adds `scope` (the desktop pivot had none).
@@ -15,11 +15,10 @@
 //            sum of the sizes (a reply whose members disagree proves it).
 
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
-import vm from 'node:vm';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { golden } from '../../test-golden';
 import { SAMPLE_ENCODINGS } from '../sampleEncodings';
 import type { Cx } from '../types';
 import E from './Engine.module.css';
@@ -29,50 +28,10 @@ import P from './Pivot.module.css';
 import { GRID_STRINGS, t } from './strings';
 
 const ROOT = path.resolve(process.cwd(), '..');
-const HUB = path.join(ROOT, 'renderer', 'hub');
-const require = createRequire(path.join(ROOT, 'package.json'));
 
 // The tokens both sides read (the cohort ramp mixes --surface → --accent).
 const THEME: Record<string, string> = { '--surface': '#ffffff', '--accent': '#2563eb', '--text': '#374151', '--text-strong': '#0f1117' };
 vi.mock('../palette', () => ({ getCSSVar: (name: string) => THEME[name] ?? '' }));
-
-// ── The desktop side ─────────────────────────────────────────────────────────
-
-interface Legacy {
-  renderPivotTable(el: HTMLElement, grid: unknown, opts?: unknown): void;
-  renderEngineViz(el: HTMLElement, data: unknown, type: string, source?: unknown): void;
-}
-
-function slice(file: string, from: string, to: string): string {
-  const src = readFileSync(path.join(HUB, file), 'utf8');
-  const a = src.indexOf(from);
-  const b = src.indexOf(to, a);
-  if (a < 0 || b < 0) throw new Error(`${file}: markers not found — has it changed shape?`);
-  return src.slice(a, b);
-}
-
-function loadLegacy(): Legacy {
-  const sandbox: Record<string, unknown> = {
-    console,
-    document,
-    requestAnimationFrame: (f: () => void) => setTimeout(f, 0),
-    OrdFormat: require(path.join(ROOT, 'src/app/format.js')),
-    t: (require(path.join(ROOT, 'scripts/i18nNode.js')) as { englishT: unknown }).englishT,
-    getCSSVar: (name: string) => THEME[name] ?? '',
-    icon: () => document.createElementNS('http://www.w3.org/2000/svg', 'svg'),
-    VIZ_ICONS: {},
-    chartInstances: new Map(),
-  };
-  sandbox.window = sandbox;
-  vm.createContext(sandbox);
-  const source = [
-    slice('hub.js', 'function _fmtVal(', '// ── Readiness banner'),
-    readFileSync(path.join(HUB, 'calcMenu.js'), 'utf8'),
-    readFileSync(path.join(HUB, 'pivotRender.js'), 'utf8'),
-    readFileSync(path.join(HUB, 'cohortRender.js'), 'utf8'),
-  ].join('\n;\n');
-  return vm.runInContext(`${source}\n;({ renderPivotTable, renderEngineViz });`, sandbox, { filename: 'legacy-grids.js' }) as Legacy;
-}
 
 // ── The data: what `visual:data` answers ─────────────────────────────────────
 
@@ -134,20 +93,9 @@ const CASES: Record<string, { type: string; encoding: Cx }> = {
   'cohort / needs a column': { type: 'cohort', encoding: { category: 'order_date', values: [m('revenue')], cohort: { entity: '', date: 'order_date', grain: 'month', show: 'retention', curve: false } } },
 };
 
-const DATA: Record<string, GridData> = {};
-let legacy: Legacy;
-
-beforeAll(async () => {
-  const { parseFile } = require(path.join(ROOT, 'src/data/fileImport.js'));
-  const { buildVizData } = require(path.join(ROOT, 'src/analysis/vizData.js'));
-  const { sanitizeEncoding } = require(path.join(ROOT, 'src/analysis/visuals.js'));
-  const parsed = await parseFile(path.join(ROOT, 'assets/samples/retail-orders.csv'), 'csv');
-  for (const [name, c] of Object.entries(CASES)) {
-    const r = buildVizData(parsed.columns, parsed.rows, sanitizeEncoding(c.encoding), []);
-    DATA[name] = r.data;
-  }
-  legacy = loadLegacy();
-});
+type Drawn = { tables: ReturnType<typeof tables>; text: string; funnel: ReturnType<typeof funnelSteps> };
+const G = golden<{ data: Record<string, GridData>; drawn: Record<string, Drawn> }>('src/charts/grids/__golden__/grids.json');
+const DATA: Record<string, GridData> = G.data;
 
 // ── Normalising both sides into plain data ───────────────────────────────────
 
@@ -188,24 +136,11 @@ function tables(root: HTMLElement, legacySide: boolean) {
             backgroundColor: cell.style.backgroundColor,
             color: cell.style.color,
             paddingLeft: cell.style.paddingLeft,
-            title: legacySide && cell.classList.contains('pivot-cell') ? legacyTip(cell) : cell.title,
+            title: cell.title,
           };
         }),
       })),
   );
-}
-
-/**
- * The desktop pivot's hover tooltip, as the lines it shows — the port's
- * `title`. Its "N% of total" line is a share the desktop worked out in the
- * renderer; the port drops it (the server does the math), so it is left out.
- */
-function legacyTip(td: HTMLElement): string {
-  td.dispatchEvent(new MouseEvent('mouseenter'));
-  const tip = document.querySelector('.pivot-tip');
-  const lines = tip ? [...tip.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent ?? '') : [];
-  td.dispatchEvent(new MouseEvent('mouseleave'));
-  return lines.filter((l) => !/% of total$/.test(l)).join('\n');
 }
 
 function funnelSteps(root: HTMLElement) {
@@ -214,14 +149,6 @@ function funnelSteps(root: HTMLElement) {
     text: text(li),
     width: (li.querySelector('[aria-hidden="true"] > div') as HTMLElement | null)?.style.width,
   }));
-}
-
-function drawLegacy(type: string, data: GridData, interactive: boolean): HTMLElement {
-  const host = document.createElement('div');
-
-  if (type === 'pivot') legacy.renderPivotTable(host, data.pivot, interactive ? { onSort: () => {} } : {});
-  else legacy.renderEngineViz(host, data, type, null);
-  return host;
 }
 
 function drawPort(type: string, data: GridData, interactive: boolean): HTMLElement {
@@ -236,20 +163,19 @@ describe('parity with the desktop renderers, on the server’s replies', () => {
     for (const interactive of c.type === 'pivot' ? [true, false] : [true]) {
       it(`${name}${c.type === 'pivot' ? (interactive ? ' (sortable)' : ' (read-only)') : ''}`, () => {
         const data = DATA[name]!;
-        const old = drawLegacy(c.type, data, interactive);
+        const old = G.drawn[`${name}|${interactive}`]!;
+        expect(old, 'recorded').toBeTruthy();
         const port = drawPort(c.type, data, interactive);
-        const a = tables(old, true);
         const b = tables(port, false);
-        expect(b).toEqual(a);
-        if (c.type !== 'cohort' || !name.includes('needs')) expect(text(port)).toBe(text(old));
-        if (c.type === 'event_funnel') expect(funnelSteps(port)).toEqual(funnelSteps(old));
-        old.remove();
+        expect(b).toEqual(old.tables);
+        if (c.type !== 'cohort' || !name.includes('needs')) expect(text(port)).toBe(old.text);
+        if (c.type === 'event_funnel') expect(funnelSteps(port)).toEqual(old.funnel);
       });
     }
   }
 
   it('really compared something', () => {
-    const shapes = Object.entries(CASES).map(([name, c]) => tables(drawLegacy(c.type, DATA[name]!, true), true));
+    const shapes = Object.keys(CASES).map((name) => G.drawn[`${name}|true`]!.tables);
     const cells = shapes.flat(2).reduce((n, row) => n + row.cells.length, 0);
     expect(cells).toBeGreaterThan(700);
     // The hierarchy case has subtotal rows, the calc case merged headers, the cohort shaded cells.
@@ -263,7 +189,7 @@ describe('parity with the desktop renderers, on the server’s replies', () => {
 
   it('a broken port would fail: a dropped subtotal class is seen', () => {
     const name = 'pivot / hierarchy, two values, scale + bars';
-    const a = tables(drawLegacy('pivot', DATA[name]!, true), true);
+    const a = G.drawn[`${name}|true`]!.tables;
     const b = tables(drawPort('pivot', DATA[name]!, true), false);
     b[0]!.find((r) => r.kind === 'is-subtotal')!.kind = '';
     expect(b).not.toEqual(a);
@@ -388,8 +314,8 @@ describe('behaviour', () => {
 });
 
 describe('grid strings', () => {
-  it('match renderer/i18n/en.json', () => {
-    const EN = JSON.parse(readFileSync(path.join(ROOT, 'renderer', 'i18n', 'en.json'), 'utf8')) as Record<string, string>;
+  it('match src/i18n/en.json', () => {
+    const EN = JSON.parse(readFileSync(path.join(ROOT, 'src', 'i18n', 'en.json'), 'utf8')) as Record<string, string>;
     for (const [key, msg] of Object.entries(GRID_STRINGS)) expect(msg, key).toBe(EN[key]);
   });
 });

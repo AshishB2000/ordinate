@@ -1,5 +1,5 @@
 // The ONE number a dashboard metric card displays — MAIN PROCESS, PURE logic.
-// No Electron, no DOM, no fs: it operates on the already-loaded dataset
+// No DOM, no fs: it operates on the already-loaded dataset
 // columns/rows handed in by the IPC layer, so it is node-testable by a plain
 // `node` self-check (scripts/test-metricValue.ts).
 //

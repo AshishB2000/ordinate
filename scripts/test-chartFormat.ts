@@ -1,7 +1,8 @@
 // Formatting depth: the config rules main clamps (src/analysis/chartFormat.ts),
-// the visual sanitizer that calls them, what buildChart then DRAWS from a
-// config (renderer/hub/fmtApply.ts in a vm, the chart harness's way), and the
-// value palettes' contrast in both themes (renderer/hub/chartPalette.ts).
+// the visual sanitizer that calls them, the offline export's colours, and
+// main's lists against the desktop Format panel's recorded copies. (What a
+// config DRAWS and the value palettes' contrast are the web chart engine's:
+// web/src/charts/fmt.test.ts and palette.test.ts.)
 //
 //   · log scale: min <= 0, max <= 0 and a 100% chart are refused; a log axis
 //     over data with a zero or a negative in it is drawn linear;
@@ -9,37 +10,28 @@
 //     measures, never a series split, and at least one measure stays left;
 //   · the sanitizer clamps a bad config on save, on update, and when the chart
 //     type changes under a config that was valid;
-//   · sequential and diverging ramps hold 3:1 on the light surface and on both
-//     dark ones, for the accent swatches and hostile seeds.
 //
 //   npm run build:ts && node scripts/test-chartFormat.js
 
 export {};
 import { ok, failureCount, finish } from './selfcheck';
 import { withT } from './i18nNode';
+import { golden } from './golden';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const vm: typeof import('vm') = require('vm');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-chartformat-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: () => tmpUserData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const cf: typeof import('../src/analysis/chartFormat') = require('../src/analysis/chartFormat');
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const dashboards: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
-const branding: typeof import('../src/app/branding') = require('../src/app/branding');
 
-const REPO = path.resolve(__dirname, '..');
-const HUB = path.join(REPO, 'renderer', 'hub');
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 const TWO = { values: [{ column: 'revenue', aggregation: 'sum' }, { column: 'price', aggregation: 'avg' }] };
@@ -196,186 +188,22 @@ async function storage(): Promise<void> {
   ok('…and the stored file reads back clamped', !!read && same(read.overrides.axes, { y: { min: 0 } }));
 }
 
-// ── What buildChart draws from a config (the renderer pass) ───────────────
-const CHART_UMD = path.join(REPO, 'node_modules', 'chart.js', 'dist', 'chart.umd.js');
-const SCRIPTS = [
-  'chartTraits.js', 'chartPalette.js', 'chartTypeSpec.js', 'chartShapes.js', 'chartFamiliesExtra.js', 'chartFamiliesPlugins.js',
-  'chartValueLabels.js', 'chartAnnotations.js', 'chartDatasets.js', 'chartScales.js', 'chartRender.js', 'calcMenu.js', 'chartTable.js',
-];
-const THEME: Record<string, string> = {
-  '--chart-1': '#2563eb', '--chart-2': '#0e7490', '--chart-3': '#14b8a6', '--chart-4': '#6366f1',
-  '--chart-5': '#64748b', '--chart-6': '#b45309', '--chart-7': '#be185d', '--chart-8': '#4d7c0f',
-  '--muted': '#6b7280', '--border': '#e5e7eb', '--surface': '#ffffff', '--text-strong': '#111827',
-  '--font-ui': 'Inter, sans-serif', '--accent': '#2563eb', '--ok': '#16a34a', '--error': '#dc2626',
-};
-const recorded: any[] = [];
-const persisted: any[] = [];
-const sandbox: Record<string, any> = { console };
-sandbox.globalThis = sandbox;
-sandbox.window = sandbox;
-sandbox.matchMedia = () => ({ matches: false });
-sandbox.document = { documentElement: {}, createElement: () => ({ style: {}, getContext: () => null }) };
-sandbox.requestAnimationFrame = (f: Function) => f;
-sandbox.cancelAnimationFrame = () => {};
-sandbox.getComputedStyle = () => ({ getPropertyValue: (n: string) => THEME[n] || '' });
-sandbox.hubFormat = {
-  getColorMap: () => Promise.resolve({}),
-  assignColors: (pid: string, column: string, values: unknown[]) => { persisted.push({ pid, column, values }); return new Promise(() => {}); },
-};
-vm.createContext(withT(sandbox));
-vm.runInContext(fs.readFileSync(CHART_UMD, 'utf8'), sandbox, { filename: 'chart.umd.js' });
-const RealChart = sandbox.Chart;
-function Rec(this: any, _c: unknown, config: any) { recorded.push(config); this.config = config; }
-(Rec as any).defaults = RealChart.defaults;
-(Rec as any).overrides = RealChart.overrides;
-(Rec as any).register = () => {};
-sandbox.Chart = Rec;
-const PRELUDE = `
-function _fmtVal(v) { return v == null ? '' : String(v); }
-function fmtWith(v, mode) { return mode + ':' + v; }
-function histogramBins(values) { return { labels: values.map(String), counts: values.map(function(){return 1;}) }; }
-var currentProjectId = 'p1';
-`;
-const hub = (files: string[]) => files.map((f) => '\n// ==== ' + f + ' ====\n' + fs.readFileSync(path.join(HUB, f), 'utf8')).join('\n');
-// The shared colour rule loads the way index.html loads it: the CommonJS shim,
-// then src/analysis/colorMap.js, then fmtColors.js binding it — AFTER the chart
-// scripts, since chartShapes.js exports itself wherever `module` exists.
-const src = PRELUDE + hub(SCRIPTS)
-  + '\nwindow.module = { exports: {} }; window.exports = window.module.exports;\n'
-  + fs.readFileSync(path.join(REPO, 'src', 'analysis', 'colorMap.js'), 'utf8')
-  + hub(['fmtColors.js', 'fmtApply.js', 'formatPanel.js']);
-const api: any = vm.runInContext(src + `
-;({ buildChart, fmtAdoptColorMap, fmtWithScope, fmtMeasureNames, FMT_DUAL_AXIS_TYPES, fmtExportSlots,
-    valueRamp, rampColor, brandContrast, BRAND_DARK_SURFACES, getMap: function () { return fmtColorMap; } });`,
-sandbox, { filename: 'format-family.js' });
-
-function draw(type: string, data: any, overrides: any): any {
-  recorded.length = 0;
-  api.buildChart({}, JSON.parse(JSON.stringify(data)), type, overrides);
-  return recorded[0];
-}
-const DATA2 = { labels: ['East', 'West', 'North'], series: [{ name: 'sum of revenue', values: [100, 1000, 10] }, { name: 'avg of price', values: [2, 3, 4] }] };
-const DATA1 = { labels: ['East', 'West', 'North'], series: [{ name: 'sum of revenue', values: [100, 1000, 10] }] };
-
+// ── The desktop's copies of main's lists ───────────────────────────────────
+// The desktop's Format panel (fmtApply.js / formatPanel.js) kept its own copies
+// of these two; they were recorded when the desktop app went (T8.1) —
+// scripts/fixtures/golden/chartFormat.json — and main is held to them. What a
+// config DRAWS is the web chart engine's (web/src/charts/fmt.test.ts, against the
+// desktop's recorded configs); the value-palette contrast checks moved with the
+// palette to web/src/charts/palette.test.ts.
 {
-  const c = draw('column', DATA1, { yAxisLabel: 'Revenue', axes: { y: { log: true, ticks: 'few', format: 'currency' } }, legendPosition: 'bottom' });
-  ok('log scale draws a logarithmic y axis', c.options.scales.y.type === 'logarithmic', c.options.scales.y.type);
-  ok('…with its title, tick density and number format',
-    c.options.scales.y.title.text === 'Revenue' && c.options.scales.y.ticks.maxTicksLimit === 4
-      && c.options.scales.y.ticks.callback(5) === 'currency:5');
-  ok('legend position is what was asked', c.options.plugins.legend.position === 'bottom');
-  const neg = draw('column', { labels: ['a', 'b'], series: [{ name: 's', values: [5, -2] }] }, { axes: { y: { log: true } } });
-  ok('a log axis over a negative value is drawn linear', neg.options.scales.y.type !== 'logarithmic');
-  const zeroMin = draw('column', DATA1, { yZero: true, axes: { y: { log: true } } });
-  ok('start-at-zero does not survive onto a log axis', zeroMin.options.scales.y.type === 'logarithmic' && zeroMin.options.scales.y.min === undefined);
-  const r = draw('column', DATA1, { axes: { y: { min: 5, max: 2000 }, x: { hide: true, ticks: 'many' } } });
-  ok('min / max reach the value axis', r.options.scales.y.min === 5 && r.options.scales.y.max === 2000);
-  ok('hide and tick density reach the category axis', r.options.scales.x.display === false && r.options.scales.x.ticks.maxTicksLimit === 16);
-  const h = draw('bar', DATA1, { axes: { x: { min: 1 } } });
-  ok('on a horizontal bar the VALUE axis is x', h.options.scales.x.min === 1 && h.options.scales.y.min === undefined);
-}
-{
-  const c = draw('line', DATA2, { y2Series: ['avg of price'], y2AxisLabel: 'Price', axes: { y2: { log: true } } });
-  const byLabel = (n: string) => c.data.datasets.find((d: any) => d.label === n);
-  ok('dual axis: the assigned measure draws on the right', byLabel('avg of price').yAxisID === 'y1' && byLabel('sum of revenue').yAxisID === 'y');
-  ok('…on a right axis with its own title and scale',
-    !!c.options.scales.y1 && c.options.scales.y1.position === 'right' && c.options.scales.y1.title.text === 'Price'
-      && c.options.scales.y1.type === 'logarithmic');
-  const combo = draw('combo', DATA2, {});
-  ok('a combo with no assignment keeps its lines on the right', combo.data.datasets[1].yAxisID === 'y1' && !!combo.options.scales.y1);
-  const left = draw('combo', DATA2, { y2Series: [] });
-  ok('an empty assignment puts everything on the left', left.data.datasets.every((d: any) => d.yAxisID !== 'y1') && !left.options.scales.y1);
-  const pie = draw('pie', DATA1, { y2Series: ['sum of revenue'] });
-  ok('a pie ignores a dual axis it cannot have', !pie.options.scales.y1);
-}
-{
-  const labels = (sort: string, order?: string[]) => draw('column', DATA1, { sort, sortOrder: order }).data.labels.join();
-  ok('sort by label A → Z', labels('label_asc') === 'East,North,West');
-  ok('sort by label Z → A', labels('label_desc') === 'West,North,East');
-  ok('custom order: the listed labels first, the rest after in their own order',
-    labels('custom', ['North', 'Nowhere']) === 'North,East,West', labels('custom', ['North', 'Nowhere']));
-  ok('a sort never changes a figure', draw('column', DATA1, { sort: 'label_asc' }).data.datasets[0].data.join() === '100,10,1000');
-}
-{
-  const labelled = draw('column', DATA1, { valueMode: 'all', labelFormat: 'percent', labelPosition: 'inside' });
-  ok('data labels still draw through the valueLabels plugin', labelled.plugins.some((p: any) => p.id === 'valueLabels'));
-}
-
-// Project colours: two charts over one column, dealt from the renderer cache.
-{
-  api.fmtAdoptColorMap({ id: 'p1', colorMap: { region: { West: 'chart-5' } } });
-  const scope = { projectId: 'p1', encoding: { category: 'region', values: [] } };
-  const donut = draw('donut', DATA1, api.fmtWithScope({}, scope));
-  const pie = draw('pie', { labels: ['North', 'West', 'East'], series: [{ name: 'n', values: [3, 2, 1] }] },
-    api.fmtWithScope({ sort: 'desc' }, scope));
-  const col = (cfg: any, label: string) => cfg.data.datasets[0].backgroundColor[cfg.data.labels.indexOf(label)];
-  ok('a stored value keeps its slot (West = chart-5)', col(donut, 'West') === THEME['--chart-5'], col(donut, 'West'));
-  ok('new values are dealt the lowest free slots', col(donut, 'East') === THEME['--chart-1'] && col(donut, 'North') === THEME['--chart-2']);
-  ok('a second chart, other order, paints every value the same',
-    ['East', 'West', 'North'].every((l) => col(pie, l) === col(donut, l)), JSON.stringify([pie.data.labels, pie.data.datasets[0].backgroundColor]));
-  ok('only the deal that changed the map was persisted', persisted.length === 1 && persisted[0].column === 'region');
-  const unscoped = draw('pie', DATA1, {});
-  ok('a chart with no dataset keeps its own palette walk', unscoped.data.datasets[0].backgroundColor[0] === THEME['--chart-1']);
-  const bars = draw('column', DATA1, api.fmtWithScope({ colorByCategory: true }, scope));
-  ok('"Colour bars by category" paints each bar from the map', typeof bars.data.datasets[0].backgroundColor === 'function');
-  const split = draw('line', DATA2, api.fmtWithScope({}, { projectId: 'p1', encoding: { category: 'region', series: 'segment', values: [] } }));
-  ok('split series are dealt from their column\'s map', split.data.datasets[0].borderColor === THEME['--chart-1']
-    && Object.keys(api.getMap().segment || {}).length === 2);
-  const own = draw('line', DATA2, { seriesColors: { 'avg of price': 'chart-7' } });
-  ok('a measure series takes the visual\'s own colour', own.data.datasets[1].borderColor === THEME['--chart-7']);
-  const exp = api.fmtExportSlots('pie', { encoding: { category: 'region' }, overrides: {} }, DATA1);
-  ok('an export carries the same colours as ramp slots', same(exp.slots, [0, 4, 1]), JSON.stringify(exp));
-  const vp = draw('column', DATA1, { measurePalettes: { 'sum of revenue': 'sequential' } });
-  const bg = vp.data.datasets[0].backgroundColor;
-  ok('a value palette colours each bar by its value', Array.isArray(bg) && bg[1] !== bg[2], JSON.stringify(bg));
-}
-
-// The renderer's copies of main's lists, pinned together.
-ok('the renderer offers a dual axis on exactly main\'s kinds',
-  same([...api.FMT_DUAL_AXIS_TYPES].sort(), [...cf.DUAL_AXIS_TYPES].sort()));
-for (const enc of [TWO, { values: [{ column: 'n', aggregation: 'count' }, { column: 'p', aggregation: 'none' }] }, { values: [] }]) {
-  ok(`renderer and main name measures alike (${JSON.stringify(enc.values.map((x: any) => x.aggregation))})`,
-    same(api.fmtMeasureNames(enc), cf.measureNames(enc as any)));
-}
-
-// ── Value palettes: contrast in both themes ────────────────────────────────
-// WCAG contrast written out here, independently of the code under test.
-function lum(hex: string): number {
-  const n = parseInt(hex.slice(1), 16);
-  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => {
-    const s = c / 255;
-    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
-  });
-  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
-}
-function contrast(a: string, b: string): number {
-  const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
-  return (x + 0.05) / (y + 0.05);
-}
-const DARK: string[] = api.BRAND_DARK_SURFACES;
-const SEEDS = [...branding.ACCENT_SWATCHES, '#ffff00', '#ffffff', '#000000', '#00ff00', '#808080', '#1a1a1a', '#ff00ff', '#7fffd4'];
-for (const seed of SEEDS) {
-  const fails: string[] = [];
-  for (const kind of ['sequential', 'diverging']) {
-    const light: string[] = api.valueRamp(kind, seed, '#ffffff');
-    const dark: string[] = api.valueRamp(kind, seed, '#1c1c20');
-    if (light.length !== 7 || dark.length !== 7) fails.push(kind + ' length');
-    light.forEach((c, i) => { if (contrast(c, '#ffffff') < 3) fails.push(`light ${kind}[${i}] ${c}`); });
-    dark.forEach((c, i) => DARK.forEach((s) => { if (contrast(c, s) < 3) fails.push(`dark ${kind}[${i}] ${c} on ${s}`); }));
-    if (new Set(light).size < 4) fails.push('light ' + kind + ' has too few distinct steps');
+  const G = golden<{ dualAxisTypes: string[]; measureNames: Array<[{ values: Array<{ column: string; aggregation: string }> }, string[]]> }>('chartFormat');
+  ok('the desktop offered a dual axis on exactly main\'s kinds',
+    same([...G.dualAxisTypes].sort(), [...cf.DUAL_AXIS_TYPES].sort()));
+  ok('the fixture holds the three encodings', G.measureNames.length === 3);
+  for (const [enc, names] of G.measureNames) {
+    ok(`the desktop and main name measures alike (${JSON.stringify(enc.values.map((x) => x.aggregation))})`,
+      same(names, cf.measureNames(enc as any)));
   }
-  ok(`${seed}: sequential and diverging steps all read at 3:1 in light AND dark`, fails.length === 0, fails.join('; '));
-}
-{
-  const seq: string[] = api.valueRamp('sequential', '#2563eb', '#ffffff');
-  const rising = seq.every((c, i) => i === 0 || contrast(c, '#ffffff') >= contrast(seq[i - 1], '#ffffff') - 1e-9);
-  ok('a sequential ramp strengthens from the surface outward', rising);
-  const div: string[] = api.valueRamp('diverging', '#2563eb', '#ffffff');
-  ok('the diverging ramp maps below-zero, zero and above-zero to its ends and centre',
-    api.rampColor(div, 'diverging', -10, -10, 10) === div[0] && api.rampColor(div, 'diverging', 0, -10, 10) === div[3]
-      && api.rampColor(div, 'diverging', 10, -10, 10) === div[6]);
-  ok('the sequential ramp maps min and max to its ends',
-    api.rampColor(seq, 'sequential', 1, 1, 9) === seq[0] && api.rampColor(seq, 'sequential', 9, 1, 9) === seq[6]);
 }
 
 storage().then(() => {

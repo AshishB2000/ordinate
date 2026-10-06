@@ -26,7 +26,6 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 type Cell = import('../src/data/transforms').Cell;
 type FilterStep = import('../src/data/transforms').FilterStep;
@@ -34,19 +33,9 @@ type ParsedColumn = import('../src/data/parse').ParsedColumn;
 type IpcHandler = (event: unknown, payload?: unknown) => Promise<any>;
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-scenarios-'));
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const handlers: Map<string, IpcHandler> = require('../src/server/rpc').handlers;
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_n: string) => tmp, getVersion: () => '0.0.0-test', getAppPath: () => path.resolve(__dirname, '..') },
-      net: {}, nativeImage: {}, shell: {}, dialog: {}, BrowserWindow: { getAllWindows: () => [] },
-      Notification: function () { return { show: () => {} }; },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmp;
 
 const model: typeof import('../src/analysis/scenarioModel') = require('../src/analysis/scenarioModel');
 const store: typeof import('../src/analysis/scenarios') = require('../src/analysis/scenarios');

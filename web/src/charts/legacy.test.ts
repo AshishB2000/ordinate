@@ -1,15 +1,14 @@
-// THE DIFFERENTIAL TEST for the chart engine: the desktop's builders
-// (renderer/hub/chart*.ts, as emitted by the root `npm run build:ts`) and this
-// port, run on the SAME data, must produce the same Chart.js config — for all
-// 39 chart ids, under three override sets.
+// THE DIFFERENTIAL TEST for the chart engine: the desktop's builders (its
+// chart*.ts classic scripts) and this port, run on the SAME data, must produce
+// the same Chart.js config — for all 39 chart ids, under three override sets.
 //
 //   data       the sample dataset (assets/samples/retail-orders.csv) through
 //              the server's own parseFile + buildVizData — what `visual:data`
 //              answers for each id's encoding (sampleEncodings.ts)
-//   legacy     the classic scripts executed in a `vm` context with a minimal
-//              DOM stub and a recording stand-in for `new Chart()` (the
-//              scripts/test-chartSpec.ts harness), hub.js's own formatter
-//              functions, the real app formatter and the English catalog
+//   legacy     what the desktop's scripts built from that data (with hub.js's
+//              own formatters, the real app formatter and the English catalog),
+//              recorded with the data at the T8.1 cutover, when they went:
+//              __golden__/legacy.json
 //   port       buildChart() from ./build, on the same canvas stub and tokens
 //
 // Compared after normalising both sides into plain data: functions by
@@ -20,25 +19,15 @@
 // candle — see datasets.ts).
 //
 // Plus: the data table, the word cloud's input and layout, and VIZ_LABELS.
-// Needs `npm run build:ts` at the repo root (postinstall runs it).
 
 import { deepStrictEqual, notDeepStrictEqual } from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import path from 'node:path';
-import vm from 'node:vm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { golden } from '../test-golden';
 import { buildChart } from './build';
-import { SAMPLE_ENCODINGS } from './sampleEncodings';
 import { tableModel } from './table';
 import type { ChartDataShape, Cx } from './types';
 import { VIZ_IDS, VIZ_LABELS } from './vizLabels';
 import { wordCloudLayout } from './wordCloudLayout';
-
-// Vitest runs from web/ (its config root); the repo is its parent.
-const ROOT = path.resolve(process.cwd(), '..');
-const HUB = path.join(ROOT, 'renderer', 'hub');
-const require = createRequire(path.join(ROOT, 'package.json'));
 
 // Light-theme tokens — the same on every run and both sides.
 const THEME: Record<string, string> = {
@@ -68,73 +57,6 @@ const OVERRIDES: Record<string, Record<string, unknown>> = {
   },
 };
 
-// ── The legacy side ──────────────────────────────────────────────────────────
-
-const CHART_SCRIPTS = [
-  'chartTraits.js', 'chartPalette.js', 'chartTypeSpec.js', 'chartShapes.js',
-  'chartFamiliesExtra.js', 'chartFamiliesPlugins.js', 'chartValueLabels.js',
-  'chartAnnotations.js', 'chartEvents.js', 'chartDatasets.js', 'chartScales.js',
-  'chartRender.js', 'calcMenu.js', 'chartTable.js',
-];
-
-/** A slice of an emitted legacy file between two markers, or a loud failure. */
-function slice(file: string, from: string, to: string): string {
-  const src = readFileSync(path.join(HUB, file), 'utf8');
-  const a = src.indexOf(from);
-  const b = src.indexOf(to, a);
-  if (a < 0 || b < 0) throw new Error(`${file}: markers not found — has it changed shape?`);
-  return src.slice(a, b);
-}
-
-interface Legacy {
-  buildChart(canvas: unknown, data: unknown, type: string, overrides: unknown): unknown;
-  buildDataTable(table: unknown, data: unknown): void;
-  VIZ_LABELS: Record<string, string>;
-  recorded: Cx[];
-  wordClouds: Cx[];
-}
-
-function loadLegacy(): Legacy {
-  const recorded: Cx[] = [];
-  const wordClouds: Cx[] = [];
-  function Chart(this: Cx, _canvas: unknown, config: unknown) {
-    recorded.push(config);
-    this.config = config;
-  }
-  const sandbox: Record<string, unknown> = {
-    console,
-    Chart: Object.assign(Chart, { register: () => {}, defaults: {} }),
-    OrdFormat: require(path.join(ROOT, 'src/app/format.js')),
-    t: (require(path.join(ROOT, 'scripts/i18nNode.js')) as { englishT: unknown }).englishT,
-    matchMedia: () => ({ matches: false }),
-    getComputedStyle: computedStyle,
-    document: { documentElement: {}, createElement: el },
-    // wordCloudRender.js draws on a real canvas; record what buildChart hands it instead.
-    buildWordCloud: (_c: unknown, labels: unknown, series: unknown, overrides: unknown, theme: unknown) => {
-      wordClouds.push({ labels, series, overrides, theme });
-      return { wordCloud: true };
-    },
-  };
-  sandbox.window = sandbox;
-  vm.createContext(sandbox);
-  // hub.js's formatters, taken from hub.js itself (it cannot load whole: it is the app).
-  const hubFormatters = slice('hub.js', 'function _fmtVal(', '// ── Readiness banner');
-  const vizLabels = slice('renderResult.js', 'const VIZ_LABELS = {', '\n// Small monochrome glyph');
-  const source = [hubFormatters, ...CHART_SCRIPTS.map((f) => readFileSync(path.join(HUB, f), 'utf8')), vizLabels].join('\n;\n');
-  const api = vm.runInContext(`${source}\n;({ buildChart, buildDataTable, VIZ_LABELS });`, sandbox, { filename: 'legacy-charts.js' }) as Legacy;
-  return Object.assign(api, { recorded, wordClouds });
-}
-
-/** Just enough DOM for chartTable.js: elements with children, text and a style. */
-function el(tag: string): Cx {
-  return {
-    tag, children: [] as Cx[], style: {}, textContent: '', className: '',
-    appendChild(c: Cx) { this.children.push(c); return c; },
-    append(...xs: Cx[]) { for (const x of xs) this.children.push(typeof x === 'string' ? { tag: '#text', textContent: x } : x); },
-    set innerHTML(_v: string) { this.children = []; },
-  };
-}
-
 // ── Normalising ──────────────────────────────────────────────────────────────
 
 /** Desktop globals that are module exports here under a name without the global-scope underscore. */
@@ -156,52 +78,22 @@ function norm(v: unknown, depth = 0): unknown {
   return out;
 }
 
-// ── The data: what the server answers for each id ────────────────────────────
+// ── The recorded desktop side, and the data it was given ─────────────────────
 
-const DATA = new Map<string, ChartDataShape>();
-const CATEGORY = new Map<string, unknown>();
-let legacy: Legacy;
-let decorate: (id: string) => ChartDataShape;
+const G = golden<{
+  data: Record<string, ChartDataShape>;
+  configs: Record<string, null | { wordCloud: Cx } | { config: Cx; count: number }>;
+  decorated: Record<string, ChartDataShape>;
+  overlays: Record<string, Cx>;
+  dataTable: { labelHeader: string; series: Array<{ name: string; color: string }>; rows: Array<{ label: string; cells: string[] }> };
+  wordCloud: { words: Array<{ text: string; weight: number }>; layout: Cx };
+  vizLabels: Cx;
+}>('src/charts/__golden__/legacy.json');
+const DATA = new Map<string, ChartDataShape>(Object.entries(G.data));
 
-beforeAll(async () => {
-  const { parseFile } = require(path.join(ROOT, 'src/data/fileImport.js'));
-  const { buildVizData } = require(path.join(ROOT, 'src/analysis/vizData.js'));
-  const { sanitizeEncoding } = require(path.join(ROOT, 'src/analysis/visuals.js'));
-  const parsed = await parseFile(path.join(ROOT, 'assets/samples/retail-orders.csv'), 'csv');
-  for (const id of VIZ_IDS) {
-    const r = buildVizData(parsed.columns, parsed.rows, sanitizeEncoding(SAMPLE_ENCODINGS[id]), []);
-    DATA.set(id, r.data);
-    CATEGORY.set(id, r.category);
-  }
-  // The Analytics pane's overlays and the project's events, resolved by the
-  // server's own pure functions — what `visual:data` attaches as
-  // data.analytics / data.events.
-  const { sanitizeOverlays, resolveOverlays } = require(path.join(ROOT, 'src/analysis/analytics.js'));
-  const { sanitizeEvent, eventsOnAxis } = require(path.join(ROOT, 'src/analysis/events.js'));
-  decorate = (id) => {
-    const data = copy(DATA.get(id)!);
-    const labels = data.labels ?? [];
-    const overlays = sanitizeOverlays([
-      { id: 'r1', kind: 'reference' },
-      { id: 't1', kind: 'target', value: { type: 'constant', value: 250000 } },
-      { id: 'b1', kind: 'band', sd: 1 },
-      { id: 'tr', kind: 'trend' },
-      { id: 'ma', kind: 'moving_average', window: 3 },
-      { id: 'fc', kind: 'forecast', horizon: 3 },
-      { id: 'an', kind: 'annotation', at: String(labels[3]), text: 'Price change' },
-      { id: 'hl', kind: 'highlight', rule: 'top', n: 2 },
-    ]);
-    data.analytics = resolveOverlays(data, overlays, { category: CATEGORY.get(id) });
-    const events = [
-      { id: '0b6f3b9e-2c1a-4f7e-9a51-3d2c1b0a9e8f', date: '2023-03-15', title: 'Spring sale', kind: 'campaign' },
-      { id: '7d1e2f3a-4b5c-4d6e-8f70-9a1b2c3d4e5f', date: '2023-11-24', end: '2023-12-31', title: 'Holidays', kind: 'holiday' },
-    ].map(sanitizeEvent);
-    data.events = eventsOnAxis(events, labels, 'month');
-    return data;
-  };
-  legacy = loadLegacy();
+beforeAll(() => {
   vi.stubGlobal('getComputedStyle', computedStyle);
-}, 60_000);
+});
 
 afterAll(() => {
   vi.unstubAllGlobals();
@@ -213,15 +105,15 @@ describe('the port builds the desktop config, id by id', () => {
   it('has the 39 chart ids, every one with sample data', () => {
     expect(VIZ_IDS).toHaveLength(39);
     for (const id of VIZ_IDS) expect((DATA.get(id)?.labels ?? []).length, id).toBeGreaterThan(0);
+    expect(Object.keys(G.configs)).toHaveLength(39 * Object.keys(OVERRIDES).length);
   });
 
   for (const variant of Object.keys(OVERRIDES)) {
     for (const id of VIZ_IDS) {
       it(`${id} / ${variant}`, () => {
         const data = DATA.get(id)!;
-        legacy.recorded.length = 0;
-        legacy.wordClouds.length = 0;
-        const old = legacy.buildChart(canvasStub(), copy(data), id, copy(OVERRIDES[variant]));
+        const old = G.configs[`${id} / ${variant}`];
+        expect(old, 'recorded').not.toBeUndefined();
         const built = buildChart(canvasStub(), copy(data), id, copy(OVERRIDES[variant]));
         if (old === null) {
           expect(built).toBeNull();
@@ -229,13 +121,13 @@ describe('the port builds the desktop config, id by id', () => {
         }
         expect(built, 'the port drew nothing where the desktop drew').not.toBeNull();
         if (built!.kind === 'wordCloud') {
-          expect(legacy.wordClouds).toHaveLength(1);
+          expect('wordCloud' in old!).toBe(true);
           const { labels, series, overrides, theme } = built!;
-          deepStrictEqual(norm({ labels, series, overrides, theme }), norm(legacy.wordClouds[0]));
+          deepStrictEqual(norm({ labels, series, overrides, theme }), (old as { wordCloud: Cx }).wordCloud);
           return;
         }
-        expect(legacy.recorded).toHaveLength(1);
-        const want = norm(legacy.recorded[0]) as Cx;
+        expect((old as { count: number }).count).toBe(1);
+        const want = copy((old as { config: Cx }).config);
         const got = norm(built!.config) as Cx;
         if (id === 'candlestick') {
           // The one divergence: x is the label index, not its text.
@@ -255,18 +147,16 @@ describe('the port builds the desktop config, id by id', () => {
   for (const id of ['line', 'column', 'combo', 'bar', 'histogram', 'scatter', 'candlestick'] as const) {
     for (const variant of ['default', 'custom'] as const) {
       it(`${id} / ${variant} with overlays, pins and events`, () => {
-        const data = decorate(id);
+        const data = copy(G.decorated[id]!);
         expect((data.analytics ?? []).length).toBe(8);
         const overrides = {
           ...OVERRIDES[variant],
           commentPins: [{ n: 1, id: 'p1', label: String(data.labels![1]) }],
           commentPinTarget: { kind: 'visual', id: 'v1' },
         };
-        legacy.recorded.length = 0;
-        legacy.buildChart(canvasStub(), copy(data), id, copy(overrides));
         const built = buildChart(canvasStub(), copy(data), id, copy(overrides));
         expect(built?.kind).toBe('chartjs');
-        const want = norm(legacy.recorded[0]) as Cx;
+        const want = copy(G.overlays[`${id} / ${variant}`]) as Cx;
         const got = norm(built!.kind === 'chartjs' ? built!.config : null) as Cx;
         if (id === 'candlestick') for (const [i, p] of (want.data.datasets[0].data as Cx[]).entries()) p.x = i;
         const ids = (got.plugins as Cx[]).map((p) => p.id);
@@ -276,7 +166,7 @@ describe('the port builds the desktop config, id by id', () => {
     }
   }
   it('events reach the plugin where the axis is a date', () => {
-    const built = buildChart(canvasStub(), decorate('line'), 'line', {});
+    const built = buildChart(canvasStub(), copy(G.decorated.line!), 'line', {});
     const ev = built?.kind === 'chartjs' ? built.config.plugins.find((p: Cx) => p.id === 'ordEvents') : null;
     expect(ev?.events).toHaveLength(2);
   });
@@ -286,41 +176,35 @@ describe('the port builds the desktop config, id by id', () => {
     const b = buildChart(canvasStub(), copy(DATA.get('line')!), 'line', {});
     notDeepStrictEqual(norm(a), norm(b));
   });
+
+  it('a broken port would be caught (negative control)', () => {
+    const built = buildChart(canvasStub(), copy(DATA.get('column')!), 'column', copy(OVERRIDES.custom));
+    const want = (G.configs['column / default'] as { config: Cx }).config;
+    expect(() => deepStrictEqual(norm(built!.kind === 'chartjs' ? built!.config : null), want)).toThrow();
+  });
 });
 
 describe('the rest of the engine matches the desktop', () => {
   it('the data table: header, swatch colours and every cell', () => {
     const data = DATA.get('table')!;
-    const table = el('table');
-    legacy.buildDataTable(table, copy(data));
-    const text = (n: Cx) => String(n.textContent ?? '');
-    const [thead, tbody] = table.children;
-    const [labelTh, ...seriesTh] = thead.children[0].children;
     const m = tableModel(copy(data));
-    expect(m.labelHeader).toBe(text(labelTh));
-    deepStrictEqual(
-      m.series.map((c) => ({ name: c.name, color: THEME[`--chart-${c.slot + 1}`] })),
-      seriesTh.map((th: Cx) => ({ name: text(th.children[1]), color: th.children[0].style.background })),
-    );
-    deepStrictEqual(
-      m.rows,
-      tbody.children.map((tr: Cx) => ({ label: text(tr.children[0]), cells: tr.children.slice(1).map(text) })),
-    );
+    expect(m.labelHeader).toBe(G.dataTable.labelHeader);
+    deepStrictEqual(m.series.map((c) => ({ name: c.name, color: THEME[`--chart-${c.slot + 1}`] })), G.dataTable.series);
+    deepStrictEqual(m.rows, G.dataTable.rows);
     expect(m.rows.length).toBeGreaterThan(0);
   });
 
   it('the word cloud layout: every word in the same place', () => {
-    const { wordCloudLayout: legacyLayout } = require(path.join(HUB, 'wordCloudLayout.js')) as { wordCloudLayout: typeof wordCloudLayout };
     const data = DATA.get('word_cloud')!;
     const words = (data.labels ?? []).map((l: Cx, i: number) => ({ text: String(l), weight: data.series![0]!.values[i] }));
+    deepStrictEqual(words, G.wordCloud.words);
     const opts = { width: 600, height: 300, minSize: 11, maxSize: 56, measure: (s: string, px: number) => s.length * px * 0.55, padding: 2 };
     const got = wordCloudLayout(copy(words), opts);
     expect(got.placed.length).toBeGreaterThan(5);
-    deepStrictEqual(norm(got), norm(legacyLayout(copy(words), opts)));
+    deepStrictEqual(norm(got), G.wordCloud.layout);
   });
 
   it('VIZ_LABELS: the same 39 ids and names', () => {
-    deepStrictEqual(norm(VIZ_LABELS), norm(legacy.VIZ_LABELS));
+    deepStrictEqual(norm(VIZ_LABELS), G.vizLabels);
   });
 });
-

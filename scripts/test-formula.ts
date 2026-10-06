@@ -1,4 +1,4 @@
-// Self-check for src/formula.ts — the SAFE expression evaluator. No Electron/fs
+// Self-check for src/formula.ts — the SAFE expression evaluator. No fs
 // stub needed (the module is pure). Mirrors test-datasetStats.ts style: ok()
 // counter, no framework, process.exit(1) on failure.
 
@@ -9,7 +9,6 @@ import { ok, failureCount } from './selfcheck';
 const formula: typeof import('../src/formula/formula') = require('../src/formula/formula');
 const { compile } = formula;
 import type { FValue } from '../src/formula/formula';
-
 
 function approx(a: unknown, b: number): boolean {
   return typeof a === 'number' && Math.abs(a - b) < 1e-9;

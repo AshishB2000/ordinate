@@ -104,7 +104,7 @@ export function LayoutDemo() {
 
 export function IconsDemo() {
   return (
-    <Section id="icons" title={`Icon · ${ICON_NAMES.length}`} note="Generated from renderer/hub/icons.ts by web/scripts/gen-icons.mjs. 16px; 20 in the rail.">
+    <Section id="icons" title={`Icon · ${ICON_NAMES.length}`} note="Geometry in web/src/ui/icons/paths.ts. 16px; 20 in the rail.">
       <ul className={g.icons}>
         {ICON_NAMES.map((n) => (
           <li key={n} className={g.icon}>

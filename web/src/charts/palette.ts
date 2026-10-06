@@ -1,4 +1,4 @@
-// Chart colour (renderer/hub/chartPalette.ts) — the base palette, the
+// Chart colour (the desktop's chartPalette.ts) — the base palette, the
 // theme-token reader, the pure functions that derive a palette from one swatch,
 // the workspace accent's token set, and the value ramps. Hex in, hex out; only
 // getCSSVar touches the DOM, which is how every chart picks up the active theme
@@ -138,7 +138,7 @@ function brandRgba(hex: string, a: number): string {
 
 /** The surfaces the ramp must read on — theme.css --surface in each theme, and the dark sheet. */
 const BRAND_LIGHT_SURFACE = '#ffffff';
-const BRAND_DARK_SURFACES = ['#1c1c20', '#232327'];
+export const BRAND_DARK_SURFACES = ['#1c1c20', '#232327'];
 
 /**
  * One accent → `{ light, dark }` token maps, every contrast floor met. Null

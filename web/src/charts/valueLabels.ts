@@ -1,5 +1,5 @@
 // The inline Chart.js plugins that put the app's own figures on a chart
-// (renderer/hub/chartValueLabels.ts, its drawing half): gauge centre, funnel
+// (the desktop's chartValueLabels.ts, its drawing half): gauge centre, funnel
 // stage labels, value labels, round-slice labels, heatmap cell labels. All run
 // in afterDatasetsDraw (gauge in afterDraw), reading per-family state the
 // dataset builders left on `opts`.

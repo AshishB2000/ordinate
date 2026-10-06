@@ -16,7 +16,6 @@ const fsd = require('fs') as typeof import('fs');
 const osd = require('os') as typeof import('os');
 const pathd = require('path') as typeof import('path');
 
-
 // Assert that `fn` throws a DuckDBError carrying the expected code.
 function throwsWith(label: string, code: string, fn: () => unknown): void {
   try {

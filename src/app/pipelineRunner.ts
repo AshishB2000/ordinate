@@ -24,10 +24,7 @@ import { refreshAsJob } from '../data/refreshJob';
 import { recomputeSteps } from '../data/datasetDependents';
 import { stepRefIds } from '../data/stepTypes';
 import { qualityFailingCount } from '../analysis/qualityRules';
-import * as reportSpec from '../analysis/reportSpec';
-import { getStoredConfig } from '../publish/publish';
 import type { AlertEvent } from '../analysis/alerts';
-import * as hubs from '../windows/hubRegistry';
 import { ctx, orgKey, serverDataDir } from '../server/context';
 import { publish } from '../server/sse';
 import { maskKeys } from './pipelineIds';
@@ -48,10 +45,9 @@ export function liveState(projectId: string): Record<string, string> {
 function changed(projectId: string): void {
   const payload = { projectId, live: liveState(projectId) };
   try {
-    // The server's tabs of this org get it over SSE (T2.6); the desktop's windows over IPC.
+    // The server's tabs of this org get it over SSE (T2.6).
     if (serverDataDir() !== null) publish({ org: ctx().org.id }, 'pipelines:changed', { projectId, live: maskKeys(payload.live) });
-    else hubs.broadcast('pipelines:changed', payload);
-  } catch (_) { /* a window closing mid-send */ }
+  } catch (_) { /* a tab gone mid-send */ }
 }
 
 async function asJob<T>(spec: { kind: jobs.JobKind; label: string; projectId: string; datasetId?: string }, run: () => Promise<T>): Promise<T> {
@@ -105,26 +101,12 @@ export async function execNode(projectId: string, node: PipelineNode): Promise<E
         () => require('../ipc/alerts').evaluateAndDeliver(projectId, rule.datasetId));
       return { ok: true, note: fired.some((e) => e.ruleId === id) ? 'Fired.' : 'Checked — it did not fire.' };
     }
-    case 'report': {
-      const report = await reportSpec.getReport(projectId, id);
-      if (!report) return { ok: false, error: 'The report is gone.', retryable: false };
-      if (!report.schedule || !report.schedule.folder) {
-        return { ok: false, retryable: false, error: 'Choose a folder in this report’s schedule first — a pipeline run writes the file there.' };
-      }
-      return asJob({ kind: 'report', label: 'Report · ' + report.name, projectId }, async () => {
-        const res = await require('../automation/reportRunner').runReport(projectId, id, { headless: false });
-        const w = await require('../ipc/reports').writeScheduledReport(projectId, id, res.bytes, new Date());
-        if (!w.ok) throw new Error(w.error);
-        const warnings = res.skippedMaps ? [`${plural(res.skippedMaps, 'map')} left out — maps need the visible window.`] : [];
-        return { ok: true, warnings, note: 'Wrote ' + String(w.dest).split(/[\\/]/).pop() } as ExecResult;
-      });
-    }
-    case 'publish': {
-      const cfg = await getStoredConfig(projectId);
-      if (!cfg) return { ok: false, retryable: false, error: 'This project has not been published yet.' };
-      const r = await require('../ipc/publish').submitPublish(cfg, 'Re-publish').done;
-      return { ok: true, note: `${plural(r.files.length, 'file')} written.` };
-    }
+    // A report and a publish-to-folder step were drawn and written by the desktop
+    // app (a hidden window, a folder on that machine); both went with it (T8.1).
+    case 'report':
+      return { ok: false, retryable: false, error: 'Scheduled report files were written by the desktop app, which is gone — generate the report from its page.' };
+    case 'publish':
+      return { ok: false, retryable: false, error: 'Publishing to a folder was the desktop app’s, which is gone — publish the dashboard to a link instead.' };
   }
   return { ok: false, error: 'Unknown step.' };
 }

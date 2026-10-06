@@ -1,5 +1,5 @@
 // The pure data shapes behind five chart families — waterfall, bullet, calendar
-// heatmap, radar and Pareto (renderer/hub/chartShapes.ts). `{labels, series}`
+// heatmap, radar and Pareto (the desktop's chartShapes.ts). `{labels, series}`
 // in, the numbers each family draws out: running totals, cumulative
 // percentages, week/weekday cells, per-axis normalised values, bullet bands.
 // DOM-free. src/analysis/captions.ts restates the waterfall ends and the Pareto

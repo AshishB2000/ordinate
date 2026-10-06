@@ -462,7 +462,7 @@ spec + screenshots. Feature code lives in `web/src/features/<area>/`.
 
 ## P8 — Cutover
 
-### [ ] T8.1 Delete the desktop app
+### [x] T8.1 Delete the desktop app
 - **Branch** `web/t8.1-cutover` · **Depends** all of P2, P7
 - Remove Electron, electron-builder, `preload/`, `renderer/`, `src/windows/`, `src/main.ts`,
   `src/ipc/bus.ts` desktop branch, desktop-only IPC files (`windows`, `menu`, `shell`, `platform`,

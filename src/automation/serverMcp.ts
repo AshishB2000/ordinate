@@ -16,8 +16,8 @@
 // do not exist for them (a list is trimmed, a name or id is "not found"), and
 // a command that writes records needs editor on its project — the same rule
 // (src/server/authz/) every RPC contract goes through. Write calls are audited
-// as channel `mcp:<tool>`. Two tools are desktop-only (they render through an
-// Electron window) and are not offered here.
+// as channel `mcp:<tool>`. Two tools rendered through the desktop app's window
+// (removed at the T8.1 cutover) and are not offered here.
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
@@ -31,7 +31,7 @@ import { MAX_BODY } from './httpTransport';
 import { createHandler, RPC, rpcError } from './mcp';
 import * as registry from './registry';
 
-/** Tools that draw through an Electron BrowserWindow (PDF/PNG capture, the report renderer). */
+/** Tools that drew through the desktop app's window (PDF/PNG capture, the report renderer). */
 const DESKTOP_ONLY = new Set(['export_dashboard', 'run_report']);
 export const SERVER_COMMANDS: readonly registry.Command[] = registry.COMMANDS.filter((c) => c.tool && !DESKTOP_ONLY.has(c.tool));
 

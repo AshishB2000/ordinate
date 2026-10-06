@@ -16,8 +16,8 @@ wherever it is called from. Every figure is computed by the app; nothing here le
 <binary> --cli help <command>       # one command
 ```
 
-`<binary>` is the app itself: on macOS `/Applications/Screenchart.app/Contents/MacOS/Screenchart`, in
-development `npx electron . --cli …`. Settings → Automation shows the exact line for this install.
+`<binary>` was the desktop app, removed at the server cutover (T8.1). Until the server gains a
+command-line entry point, its automation surface is the MCP endpoint (`/mcp`, src/automation/serverMcp.ts).
 
 A CLI run is headless — no window, no dock icon, no schedules, no notifications — and works while
 the app is open. **The CLI is always available**: it is your own shell running the app on your own

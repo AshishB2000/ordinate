@@ -1,4 +1,4 @@
-// Map geometry and labelling — the pure helpers of renderer/hub/mapRender.ts:
+// Map geometry and labelling — the pure helpers of the desktop's mapRender.ts:
 // bounding boxes (MapLibre has no getBounds for a GeoJSON geometry), region
 // abbreviations, the per-period values of a time-series map, and bubble homes
 // at region centroids. PURE; geo.test.ts runs each against the desktop's.

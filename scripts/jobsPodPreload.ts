@@ -2,7 +2,6 @@
 // src/server/main.js`. NOT a suite (no `test-` prefix): it turns a real server
 // process into an observable pod, without one line of test code in src/:
 //
-//   • Electron is blocked, as in test-server-boot;
 //   • dev auth reads the caller from x-test-org / x-test-user, so streams can be
 //     bound to different orgs and users;
 //   • a short poll and lease (JOBS_TEST_POLL_MS / JOBS_TEST_LEASE_MS);
@@ -14,13 +13,6 @@
 
 export {}; // module scope — sibling scripts share top-level names
 import * as fs from 'fs';
-
-const Module: any = require('module'); // any: the loader hook has no public type
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') throw new Error('electron is not available in server mode');
-  return origLoad.apply(this, [request, ...rest]);
-};
 
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const runner: typeof import('../src/server/jobs/runner') = require('../src/server/jobs/runner');

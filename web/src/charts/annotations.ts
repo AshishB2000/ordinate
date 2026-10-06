@@ -1,5 +1,5 @@
 // The Analytics pane's overlays and the comment pins, drawn onto a Chart.js
-// chart (renderer/hub/chartAnnotations.ts) — a hand-written inline plugin.
+// chart (the desktop's chartAnnotations.ts) — a hand-written inline plugin.
 // NOTHING HERE COMPUTES A FIGURE: every value it draws arrives resolved from
 // the server on `data.analytics` (src/analysis/analytics.ts via `visual:data`);
 // this file turns values into pixels through the chart's own scales.

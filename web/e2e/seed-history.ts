@@ -2,23 +2,15 @@
 // saved versions of one visual (its name edited once), and two other visuals
 // in the Trash — no screen that edits or deletes a record is ported yet, so
 // this goes through the same stores those screens' handlers call. Run as its
-// own process (DuckDB keeps the runner alive), Electron unloadable, against a
+// own process (DuckDB keeps the runner alive), against a
 // server's DATA_DIR while it runs: records are files in dev mode.
 //
 //   node web/e2e/seed-history.ts <dataDir> <projectId>     (needs `npm run build:ts`)
 
-import Module, { createRequire } from 'node:module';
+import { createRequire } from 'node:module';
 
 const [dataDir, projectId] = process.argv.slice(2);
 if (!dataDir || !projectId) throw new Error('usage: node web/e2e/seed-history.ts <dataDir> <projectId>');
-
-type Resolve = (request: string, ...rest: unknown[]) => string;
-const M = Module as unknown as { _resolveFilename: Resolve };
-const resolve = M._resolveFilename;
-M._resolveFilename = function (this: unknown, request: string, ...rest: unknown[]): string {
-  if (request === 'electron' || request.startsWith('electron/')) throw new Error('electron is not available on the server');
-  return resolve.call(this, request, ...rest);
-};
 
 // The compiled main world, by the shapes used here only (see seed.ts).
 type Identity = object;

@@ -1,4 +1,4 @@
-// LOD expressions at QUERY time — MAIN PROCESS, PURE logic (no Electron, fs, DOM).
+// LOD expressions at QUERY time — MAIN PROCESS, PURE logic (no fs, DOM).
 //
 // A calculated field with an LOD is computed when the pipeline runs, at no
 // visual's dimensions and before any dashboard exists. That stored column is

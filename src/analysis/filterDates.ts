@@ -1,4 +1,4 @@
-// TYPED FILTERS — the date half of the grammar. PURE (no Electron / fs / DOM,
+// TYPED FILTERS — the date half of the grammar. PURE (no fs / DOM,
 // and no clock: `today` is always passed in).
 //
 // "last quarter", "since March", "Q3 2023", "before 2024" → a PeriodSpec, the

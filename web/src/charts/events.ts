@@ -1,4 +1,4 @@
-// The project's EVENTS on a chart's date axis (renderer/hub/chartEvents.ts) —
+// The project's EVENTS on a chart's date axis (the desktop's chartEvents.ts) —
 // a marker for a single date, a shaded band for a range, an icon per kind and
 // the title on hover. NOTHING HERE MATCHES A DATE: the server placed every
 // event on `data.events` (src/analysis/events.ts via `visual:data`) as label

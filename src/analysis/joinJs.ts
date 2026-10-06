@@ -1,5 +1,5 @@
 // The JS REFERENCE for a joined visual, metric and relationship check. PURE —
-// no Electron, no fs, no SQL. `engine/joinResident.ts` is its SQL twin, and
+// no fs, no SQL. `engine/joinResident.ts` is its SQL twin, and
 // scripts/test-joins.ts holds the two to `Object.is` agreement.
 //
 // Three rules, identical on both sides:

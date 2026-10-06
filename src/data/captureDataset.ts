@@ -1,5 +1,5 @@
 // Capture → dataset bridge — PURE logic, MAIN PROCESS.
-// Imports only ./parse (no Electron, no fs), exactly like parse.ts, so it is
+// Imports only ./parse (no fs), exactly like parse.ts, so it is
 // unit-testable under plain `node`. Its whole job is to resolve the mismatch
 // between the capture pipeline's `extractedTable` (columns carry id/label/role +
 // a MODEL type hint; rows are OBJECTS keyed by column id) and a Dataset (columns

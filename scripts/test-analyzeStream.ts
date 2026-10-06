@@ -19,21 +19,15 @@ import { ok, failureCount } from './selfcheck';
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const fs: typeof import('fs') = require('fs');
-const Module: any = require('module');
 
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'screenchart-stream-'));
 
 // Same stub the other analyze-graph tests use: enough surface for the module
 // graph to load. Nothing here calls net/app — the parsers under test are pure.
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: (_n: string) => tmpUserData }, net: {} };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
 const stream: typeof import('../src/ai/analyzeStream') = require('../src/ai/analyzeStream');
-
 
 // The answer every fixture reconstructs — split across two deltas so a broken
 // accumulator that keeps only the last frame is caught.
@@ -143,7 +137,6 @@ for (const c of CASES) {
     Object.is(split.text, whole.text) && Object.is(split.text, ANSWER));
 }
 
-Module._load = origLoad;
 try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) { /* best effort */ }
 
 console.log('');

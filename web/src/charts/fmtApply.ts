@@ -1,4 +1,4 @@
-// Formatting depth, applied to ONE Chart.js config (renderer/hub/fmtApply.ts +
+// Formatting depth, applied to ONE Chart.js config (the desktop's fmtApply.ts +
 // the drawing half of fmtColors.ts) — the pass buildChart runs around the
 // family modules:
 //

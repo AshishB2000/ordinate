@@ -15,7 +15,7 @@
 // ordinary copy-paste slip, because each example is required to actually call
 // the function it illustrates.
 //
-// Pure logic — no Electron, no fs, no dataset. The examples reference invented
+// Pure logic — no fs, no dataset. The examples reference invented
 // column names on purpose: an unknown column is a runtime null in this
 // language, never a compile error, so they stay valid against any data.
 //

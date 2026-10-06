@@ -57,7 +57,7 @@ import { computeColumnSummariesResident } from '../engine/statsResident';
 // ── The CLOSED chart-type vocabulary ───────────────────────────────────────
 //
 // A model WILL invent chart types ("sunburst", "marimekko", "chord"). This set
-// is `renderer/hub/renderResult.ts`'s ALL_CHART_TYPE_IDS ∪ {table, map_bubble,
+// is the desktop's `renderResult.ts`'s ALL_CHART_TYPE_IDS ∪ {table, map_bubble,
 // map_choropleth} — the 36 types the app can actually draw. It is restated here
 // because a renderer script has no exports and main cannot require it;
 // scripts/test-analysisPlan.ts vm-executes the REAL renderResult.js and asserts

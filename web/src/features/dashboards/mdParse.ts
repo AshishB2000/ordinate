@@ -1,4 +1,4 @@
-// The text card's Markdown subset (mdParse.ts — Markdown.tsx renders it) — a port of renderer/hub/markdown.ts's PURE
+// The text card's Markdown subset (mdParse.ts — Markdown.tsx renders it) — a port of the desktop's markdown.ts's PURE
 // half (mdParse / mdTokens / safeHref), kept line for line so a card reads the
 // same on the web as on the desktop (markdown.test.ts runs the desktop's
 // compiled parser over the same sources and compares the trees).

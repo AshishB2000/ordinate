@@ -1,4 +1,4 @@
-// Filter steps as words (renderer/hub/filterValues.ts): which operators read a
+// Filter steps as words (the desktop's filterValues.ts): which operators read a
 // list or nothing at all (mirrors src/filterOps.ts), every operator's label,
 // and one step as the short phrase a filter row shows. Nothing here coerces a
 // value: the list goes to the server as typed, and the server applies the same

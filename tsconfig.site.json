@@ -1,0 +1,21 @@
+{
+  // The published site's renderer (src/publish/site/, T2.9): classic global-scope
+  // <script>s inlined into every page Publish writes (src/publish/siteHtml.ts).
+  // DOM lib, NO Node types, and the files must stay import/export-free so they
+  // remain scripts, not modules. No outDir: each .ts emits its sibling .js.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+    // A classic-script layer, incrementally typed: noImplicitAny and
+    // strictNullChecks are relaxed HERE ONLY so the DOM-heavy page code compiles
+    // without hundreds of noise casts. The main world (tsconfig.main.json) stays
+    // fully strict.
+    "strict": false,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    // Per-checkout cache — see tsconfig.base.json for why it is not in node_modules.
+    "tsBuildInfoFile": ".tsbuildinfo/site.tsbuildinfo"
+  },
+  "include": ["src/publish/site/**/*.ts"]
+}

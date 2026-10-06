@@ -1,4 +1,4 @@
-// Static mini-maps for gallery cards — renderer/hub/mapThumb.ts and
+// Static mini-maps for gallery cards — the desktop's mapThumb.ts and
 // mapGeoThumb.ts: the boundary polygons (or the server's hexagons and arcs)
 // projected onto a plain 2D canvas. No MapLibre, no WebGL, no tiles: a shape,
 // not a map — so it draws anywhere a 2D context does.

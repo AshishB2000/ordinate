@@ -131,25 +131,16 @@ ok('a sanitized map round-trips through JSON unchanged',
   same(cm.sanitizeColorMap(JSON.parse(JSON.stringify(clean))), clean));
 
 // ── Through main: the project record and the format IPC ─────────────────────
-// The real projects.ts and ipc/format.ts over a temp userData, with Electron
-// stubbed the way scripts/test-visuals.ts does; the handlers land in the RPC
+// The real projects.ts and ipc/format.ts over a temp userData, set the way
+// scripts/test-visuals.ts does; the handlers land in the RPC
 // registry, so each channel is called exactly as the renderer's invoke is.
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-colormap-'));
-// Handlers land in the RPC registry (src/ipc/bus.ts outside Electron), not the stub.
+// Handlers land in the RPC registry (src/ipc/bus.ts).
 const handlers: Map<string, (e: unknown, arg: any) => Promise<any>> = require('../src/server/rpc').handlers;
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: () => tmpUserData },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 require('../src/ipc/format').register();
 const call = (name: string, arg: any) => handlers.get('format:colors:' + name)!(null, arg);

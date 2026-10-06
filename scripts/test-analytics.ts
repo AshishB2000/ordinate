@@ -10,8 +10,8 @@
 //   3. forecasts — linear, seasonal naive, Holt-Winters, season detection,
 //      the future axis, interior gaps
 //   4. resolution — every kind end to end, metrics, warnings
-//   5. parity — main's OVERLAY_ACCEPT against the renderer's chartTypeSpec.js,
-//      run in a vm, for every chart id
+//   5. parity — main's OVERLAY_ACCEPT against the desktop's chartTypeSpec.js,
+//      recorded per chart id (scripts/fixtures/golden/chartIds.json)
 //   6. narration — the caption clauses and the facts ledger (every printed
 //      figure is in the ledger — the number audit passes on it)
 //
@@ -28,9 +28,7 @@ import { tileCaption } from '../src/analysis/captions';
 import { visualFacts } from '../src/ai/copilotFacts';
 import { auditNumbers } from '../src/ai/numberAudit';
 
-const fs: typeof import('fs') = require('fs');
-const path: typeof import('path') = require('path');
-const vm: typeof import('vm') = require('vm');
+import { golden } from './golden';
 
 const close = (a: number | null | undefined, b: number, eps = 1e-9): boolean =>
   typeof a === 'number' && Math.abs(a - b) <= eps;
@@ -238,18 +236,14 @@ const dateCat = { kind: 'date' as const, grain: 'month' as const };
   ok('resolve: bad data never throws', resolveOverlays(null, sanitizeOverlays([{ id: 'z', kind: 'trend' }]))[0].warning !== undefined);
 }
 
-// ── 5. parity with the renderer's chartTypeSpec ──────────────────────────────
+// ── 5. parity with the desktop's chartTypeSpec (golden) ─────────────────────
 
 {
-  const root = path.resolve(__dirname, '..');
-  const specSrc = fs.readFileSync(path.join(root, 'renderer', 'hub', 'chartTypeSpec.js'), 'utf8');
-  const sandbox: Record<string, unknown> = {};
-  vm.createContext(sandbox);
-  vm.runInContext(specSrc + '\n;this.resolveChartType = resolveChartType;', sandbox);
-  const resolve = sandbox.resolveChartType as (t: string) => { overlayKinds: string[] };
-  const rr = fs.readFileSync(path.join(root, 'renderer', 'hub', 'renderResult.ts'), 'utf8');
-  const idsMatch = /const\s+ALL_CHART_TYPE_IDS\s*=\s*\[([\s\S]*?)\]/.exec(rr);
-  const ids = idsMatch ? (idsMatch[1].match(/'([a-z_]+)'/g) || []).map((q) => q.slice(1, -1)) : [];
+  // The desktop's chartTypeSpec.js resolveChartType(id).overlayKinds for every id
+  // its renderResult.ts listed, recorded when the desktop app went (T8.1).
+  const G = golden<{ parsedIds: string[]; overlayKinds: Record<string, string[]> }>('chartIds');
+  const resolve = (t: string): { overlayKinds: string[] } => ({ overlayKinds: G.overlayKinds[t] });
+  const ids = G.parsedIds;
   ok('parity: ALL_CHART_TYPE_IDS parsed', ids.length >= 29, String(ids.length));
   const drift = ids.filter((id) => JSON.stringify(resolve(id).overlayKinds) !== JSON.stringify(OVERLAY_ACCEPT[id] || []));
   ok('parity: main\'s OVERLAY_ACCEPT matches chartTypeSpec.overlayKinds for every chart id', drift.length === 0, drift.join(','));

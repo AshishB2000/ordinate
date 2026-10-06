@@ -1,7 +1,6 @@
 import { ipcMain } from './bus';
 import * as trash from '../app/trash';
 import * as scheduler from '../app/refreshScheduler';
-import * as hubs from '../windows/hubRegistry';
 
 // Trash IPC — list, restore, delete for good, empty. The deletes that PUT
 // things here are the record types' own `*:delete` handlers, each of which now
@@ -11,9 +10,6 @@ import * as hubs from '../windows/hubRegistry';
 // badge follows deletes made anywhere — a ⋯ menu, the sample note's Remove
 // button, a purge on the scheduler's tick.
 export function register(): void {
-  // Every hub window carries the badge.
-  trash.onChange((projectId) => hubs.broadcast('trash:changed', { projectId }));
-
   // The purge rides the refresh scheduler's tick, which fires every minute
   // whether or not auto-refresh is on — so "30 days" holds for everyone.
   scheduler.afterTick(() => { void trash.purgeExpired().catch(() => 0); });

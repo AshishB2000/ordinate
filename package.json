@@ -1,37 +1,25 @@
 {
-  "name": "screenchart",
+  "name": "ordinate",
   "version": "0.1.0",
   "description": "Screenshot a chart or table, press a hotkey, get a plain-English explanation or an auto-drawn chart.",
-  "main": "src/main.js",
+  "main": "src/server/main.js",
   "author": "Screenchart",
   "homepage": "https://screenshot.app",
   "scripts": {
-    "build:ts": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node scripts/check-emit.js --heal",
-    "build:svelte": "npm run typecheck:svelte && node scripts/build-svelte.js",
-    "typecheck:svelte": "tsc -p tsconfig.svelte.json",
-    "build": "npm run build:ts && npm run build:svelte",
-    "build:vendor": "node scripts/build-vendor.js",
+    "build:ts": "tsc -p tsconfig.main.json && tsc -p tsconfig.site.json && node scripts/check-emit.js --heal",
+    "build": "npm run build:ts",
     "prestart": "npm run build",
-    "start": "node scripts/start.js",
+    "start": "node src/server/main.js",
     "postinstall": "npm run build && node scripts/download-geo.js",
     "pretest": "npm run build",
     "test": "node --test --test-reporter=spec \"scripts/test-*.js\"",
     "test:coverage": "node --test --experimental-test-coverage \"scripts/test-*.js\"",
-    "lint": "oxlint --type-aware --tsconfig=tsconfig.main.json src scripts preload && oxlint --type-aware --tsconfig=tsconfig.renderer.json renderer && oxlint --type-aware --tsconfig=web/tsconfig.json web/src web/public web/vite.config.ts && oxlint --type-aware --tsconfig=web/tsconfig.e2e.json web/e2e web/scripts/bundle-size.ts",
+    "lint": "oxlint --type-aware --tsconfig=tsconfig.main.json src scripts && oxlint --type-aware --tsconfig=tsconfig.site.json src/publish/site && oxlint --type-aware --tsconfig=web/tsconfig.json web/src web/public web/vite.config.ts && oxlint --type-aware --tsconfig=web/tsconfig.e2e.json web/e2e web/scripts/bundle-size.ts",
     "icons:verify": "node scripts/verify-icons.js",
-    "predist:mac": "npm run build && npm i --force --no-save --no-audit --no-fund @duckdb/node-bindings-darwin-x64@1.5.5-r.3",
-    "dist:mac": "electron-builder --mac --publish never",
-    "predist:mac:unsigned": "npm run build && npm i --force --no-save --no-audit --no-fund @duckdb/node-bindings-darwin-x64@1.5.5-r.3",
-    "dist:mac:unsigned": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish never",
-    "predist:win": "npm run build",
-    "dist:win": "electron-builder --win --publish never",
     "bench:pipeline": "npm run build:ts && node scripts/bench-pipeline.js",
     "bench:prepare": "npm run build:ts && node scripts/bench-prepare.js",
     "bench:resident": "npm run build:ts && node scripts/bench-resident.js",
-    "smoke": "npm run build && node scripts/run-smokes.js",
-    "shoot:design": "npm run build:ts && node scripts/shoot-design.js",
     "build:icons": "node scripts/build-icons.js",
-    "build:appicon": "electron scripts/build-appicon.js",
     "server": "npm run build:ts && node src/server/main.js",
     "dev:web": "npm --prefix web run dev",
     "build:web": "npm --prefix web run build",
@@ -44,15 +32,10 @@
   "devDependencies": {
     "@types/node": "^26.1.1",
     "@types/pg": "^8.20.0",
-    "cross-env": "^10.1.0",
-    "electron": "^42.4.0",
-    "electron-builder": "^26.0.12",
-    "esbuild": "^0.25.12",
     "oxlint": "^1.77.0",
     "oxlint-tsgolint": "^7.0.2001",
     "playwright": "^1.62.1",
     "simple-icons": "^16.23.0",
-    "svelte": "^5.56.8",
     "typescript": "^7.0.2"
   },
   "dependencies": {
@@ -61,127 +44,14 @@
     "@fastify/multipart": "^10.1.2",
     "@fastify/rate-limit": "^11.2.0",
     "@fastify/static": "^10.1.5",
-    "@sgratzl/chartjs-chart-boxplot": "^4.4.5",
     "chart.js": "^4.5.1",
-    "chartjs-chart-financial": "^0.2.1",
-    "chartjs-chart-matrix": "^3.0.4",
-    "chartjs-chart-sankey": "^0.14.3",
-    "chartjs-chart-treemap": "^3.1.0",
-    "docx": "^9.7.1",
     "exceljs": "^4.4.0",
     "fastify": "^5.12.5",
-    "maplibre-gl": "^4.7.1",
     "mysql2": "^3.23.2",
     "openid-client": "^6.8.8",
     "oracledb": "^7.0.1",
-    "pdfmake": "^0.3.11",
     "pg": "^8.22.0",
-    "pptxgenjs": "^4.0.1",
     "tedious": "^20.0.0",
     "zod": "^4.6.5"
-  },
-  "build": {
-    "appId": "app.screenshot.desktop",
-    "productName": "Screenchart",
-    "copyright": "Screenchart",
-    "protocols": [
-      {
-        "name": "Ordinate link",
-        "schemes": [
-          "ordinate"
-        ]
-      }
-    ],
-    "directories": {
-      "output": "dist",
-      "buildResources": "assets/icons"
-    },
-    "files": [
-      "**/*",
-      "!.github/**",
-      "!.claude/**",
-      "!dist/**",
-      "!docs/**",
-      "!scripts/**",
-      "!native/**",
-      "!assets/icons/**",
-      "!**/*.md",
-      "!**/node_modules/oracledb/build/**",
-      "!**/*.map",
-      "!**/*.ts",
-      "!**/*.svelte",
-      "!tsconfig*.json",
-      "!.tsbuildinfo/**"
-    ],
-    "asar": true,
-    "afterPack": "./scripts/afterPack.js",
-    "afterSign": "./scripts/afterSign.js",
-    "mac": {
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        }
-      ],
-      "category": "public.app-category.productivity",
-      "icon": "assets/icons/icon.icns",
-      "minimumSystemVersion": "11.0",
-      "identity": null,
-      "hardenedRuntime": true,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
-      "gatekeeperAssess": false,
-      "darkModeSupport": true,
-      "extendInfo": {
-        "NSScreenCaptureUsageDescription": "Screenchart reads the area of your screen you select to analyze it."
-      },
-      "x64ArchFiles": "**/node-bindings-darwin-*/duckdb.node"
-    },
-    "dmg": {
-      "title": "Screenchart",
-      "window": {
-        "width": 540,
-        "height": 380
-      },
-      "contents": [
-        {
-          "x": 150,
-          "y": 200,
-          "type": "file"
-        },
-        {
-          "x": 390,
-          "y": 200,
-          "type": "link",
-          "path": "/Applications"
-        }
-      ]
-    },
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "assets/icons/icon.ico"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "artifactName": "${productName}-${version}-Setup.${ext}"
-    }
   }
 }

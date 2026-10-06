@@ -31,7 +31,6 @@ import { FIDELITY_CASES } from './number-fidelity-cases';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
 const LIVE = process.env.ORDINATE_LIVE_MODEL === '1';
 
@@ -62,11 +61,7 @@ if (LIVE) {
   }
 }
 
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: (_name: string) => tmpUserData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources under test.
 const { auditNumbers }: typeof import('../src/ai/numberAudit') = require('../src/ai/numberAudit');

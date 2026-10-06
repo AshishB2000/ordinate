@@ -3,7 +3,7 @@
 // Self-check for table calculations: src/analysis/tableCalc.ts (the kernel and
 // the chart grid), src/analysis/pivotCalc.ts (the pivot grid, and its subtotal
 // rule), the sanitizers that store a calc, the caption and facts that print
-// one, and the renderer's display mirror (renderer/hub/calcMenu.ts).
+// one, and the desktop's display mirror (calcMenu.ts, recorded as a golden fixture).
 //
 // Every expected figure is hand-checkable — the arithmetic is in the comment
 // beside it — and compared with `Object.is` against the SAME expression, so a
@@ -13,22 +13,16 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
-import { withT } from './i18nNode';
+import { golden } from './golden';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const vm: typeof import('vm') = require('vm');
-const Module: any = require('module');
 
-// visuals.ts / dashboards.ts read `app` from electron at module load; nothing
-// here touches disk through it.
+// visuals.ts / dashboards.ts resolve userData at module load; nothing here
+// touches disk through it.
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-tablecalc-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') return { app: { getPath: () => tmpUserData } };
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the .ts sources under test.
 const tc: typeof import('../src/analysis/tableCalc') = require('../src/analysis/tableCalc');
@@ -322,7 +316,7 @@ function testRoundTrip(): void {
   ok('KPI card: the metric keeps its calc through sanitizeCard', card?.metric?.calc?.kind === 'pct_of_total', JSON.stringify(card));
 }
 
-// ── 7. Display, the renderer's mirror, the caption and the facts ─────────────
+// ── 7. Display, the desktop's mirror, the caption and the facts ──────────────
 
 function testDisplay(): void {
   format.setFormatPrefs({ locale: 'en-US' });
@@ -335,28 +329,19 @@ function testDisplay(): void {
   ok('label: a negative percent difference', tc.calcLabel('pct_diff', -0.125) === '-12.5% vs previous');
   ok('label: a null figure is a dash', tc.calcLabel('running_total', null, 5) === '— running total · 5');
 
-  // The renderer's mirror, run in a sandbox on the same shared formatter.
-  const src = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'hub', 'calcMenu.js'), 'utf8');
-  const ctx = vm.createContext(withT({ OrdFormat: format, window: {}, document: {} }));
-  const mirror = vm.runInContext(src + '\n;({ tcCalcLabel, tcCalcParts });', ctx) as {
-    tcCalcLabel: (k: string, v: unknown, r?: unknown) => string;
-    tcCalcParts: (k: string, v: unknown, r?: unknown) => { value: string; suffix: string; raw: string };
-  };
-  const values = [0, 0.241, -0.5, 1, 3, 112.44, 1234567, -2500, null, NaN];
+  // The desktop's mirror (calcMenu.js), recorded on the same shared formatter
+  // when the desktop app went (T8.1): scripts/fixtures/golden/tableCalc.json.
+  const G = golden<{ cases: Array<[string, number | null, number | null, string, string]> }>('tableCalc');
+  const kinds = new Set(G.cases.map((c) => c[0]));
+  ok('the fixture covers every table calculation', tc.TABLE_CALC_KINDS.every((k) => kinds.has(k)) && G.cases.length === tc.TABLE_CALC_KINDS.length * 10 * 4);
   let mismatches = 0;
   const first: string[] = [];
-  for (const kind of tc.TABLE_CALC_KINDS) {
-    for (const v of values) {
-      for (const raw of [null, 0, 1_250_000, -42]) {
-        const a = tc.calcLabel(kind, v, raw);
-        const b = mirror.tcCalcLabel(kind, v, raw);
-        const pa = JSON.stringify(tc.calcParts(kind, v, raw));
-        const pb = JSON.stringify(mirror.tcCalcParts(kind, v, raw));
-        if (a !== b || pa !== pb) { mismatches += 1; if (first.length < 3) first.push(`${kind}(${v},${raw}): ${a} | ${b}`); }
-      }
-    }
+  for (const [kind, v, raw, b, pb] of G.cases) {
+    const a = tc.calcLabel(kind as never, v, raw);
+    const pa = JSON.stringify(tc.calcParts(kind as never, v, raw));
+    if (a !== b || pa !== pb) { mismatches += 1; if (first.length < 3) first.push(`${kind}(${v},${raw}): ${a} | ${b}`); }
   }
-  ok(`parity: the renderer's tcCalcLabel matches calcLabel on ${tc.TABLE_CALC_KINDS.length * values.length * 4} cases`, mismatches === 0, first.join('; '));
+  ok(`parity: the desktop's tcCalcLabel matches calcLabel on ${G.cases.length} cases`, mismatches === 0, first.join('; '));
 
   // Captions say both figures.
   const bar = { labels: ['Technology', 'Furniture'], series: [{ name: 'sum of revenue', values: [0.6, 0.4], raw: [600, 400], calc: { kind: 'pct_of_total' as const, along: 'across' as const } }] };

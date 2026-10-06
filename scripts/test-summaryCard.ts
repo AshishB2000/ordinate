@@ -20,22 +20,9 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module');
 
-const REPO = path.resolve(__dirname, '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-summary-'));
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (_n: string) => tmp, getAppPath: () => REPO, getVersion: () => '0.0.0-test' },
-      ipcMain: { handle: () => {}, on: () => {} }, net: {}, nativeImage: {}, shell: {}, dialog: {},
-      BrowserWindow: { getAllWindows: () => [] }, Notification: function () { return { show: () => {} }; },
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmp;
 
 const S: typeof import('../src/analysis/summaryCard') = require('../src/analysis/summaryCard');
 const sample: typeof import('../src/app/sampleProject') = require('../src/app/sampleProject');

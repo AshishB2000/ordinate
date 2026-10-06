@@ -26,22 +26,11 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // ponytail: Node's loader hook is untyped
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-automation-tools-'));
-const downloads = path.join(tmp, 'downloads');
-const REPO = path.resolve(__dirname, '..');
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any {
-  if (request === 'electron') {
-    return {
-      app: { getPath: (n: string) => (n === 'downloads' ? downloads : tmp), getAppPath: () => REPO, getVersion: () => '9.9.9' },
-      ipcMain: { handle: () => {} }, net: {}, dialog: {}, shell: {}, session: {}, BrowserWindow: function () {},
-      safeStorage: { isEncryptionAvailable: () => false }, Notification: { isSupported: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+// Outside server mode every app folder is ORDINATE_LOCAL_DIR (src/app/paths.ts), downloads included.
+const downloads = tmp;
+process.env.ORDINATE_LOCAL_DIR = tmp;
 
 // ponytail: compiled siblings of the real modules.
 const sample: typeof import('../src/app/sampleProject') = require('../src/app/sampleProject');

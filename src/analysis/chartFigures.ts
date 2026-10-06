@@ -1,6 +1,6 @@
 // The figures a waterfall and a Pareto chart DRAW, computed in MAIN — PURE.
 //
-// A deliberate second copy of renderer/hub/chartShapes.ts's waterfallSteps and
+// A deliberate second copy of the desktop's chartShapes.ts's waterfallSteps and
 // paretoShape arithmetic: a caption is written in main (captions.ts), and main
 // cannot load a renderer script. scripts/test-captions.ts runs both copies over
 // the same fixtures and holds them to Object.is — a caption naming a different

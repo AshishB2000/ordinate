@@ -8,7 +8,7 @@
 // on every call (src/datasets.ts's updateSteps does exactly this — recompute
 // from `existing.source`, never mutate it). So the dock's "append one step,
 // remove it to undo" story reduces to a pure property of applyPipeline that
-// needs no Electron/fs stub to test. Mirrors test-transforms.ts's style: ok()
+// needs no fs stub to test. Mirrors test-transforms.ts's style: ok()
 // counter, no framework.
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -18,7 +18,6 @@ import { ok, failureCount } from './selfcheck';
 const transforms: typeof import('../src/data/transforms') = require('../src/data/transforms');
 const { applyPipeline } = transforms;
 import type { TableData, TransformStep, Cell } from '../src/data/transforms';
-
 
 // A fixed, immutable source — exactly what the app stores once a dataset has
 // steps (src/datasets.ts's `existing.source`, frozen the first time steps

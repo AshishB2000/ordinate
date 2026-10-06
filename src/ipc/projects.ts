@@ -5,40 +5,27 @@ import { ipcMain } from './bus';
 import * as appPaths from '../app/paths';
 import { serverDataDir } from '../server/context';
 import { FileTokenError, offerDownload, resolveUpload, type Upload } from '../server/files';
-import type { BrowserWindow } from 'electron';
 import * as projects from '../app/projects';
 import * as bundle from '../app/bundle';
 import * as jobs from '../app/jobs';
 import * as sharePolicy from '../app/sharePolicy';
 import * as config from '../app/config';
 import { projectDir } from '../app/recordKinds';
-import { syncedTarget } from '../app/syncFolder';
 import { safetyBackup } from './backups';
 import * as recordFs from '../app/recordFs';
 
 // Projects (workspace shell) IPC — list/create/rename/archive/open, the
 // switcher's overview, and the .ordinate bundle's export and import.
 //
-// `onActive` is the ONE hook: main needs to know which project the user is in
-// so a capture fired from the global hotkey (no renderer to ask — the hub may be
-// closed) lands in the right project. Opening and creating are the only two ways
-// a project becomes the active one, and both go through here.
+// `onActive` is told which project was opened or created — the only two ways
+// a project becomes the active one.
 //
-// Export and import go through the NATIVE dialogs, and the path never comes
-// from the renderer: a renderer that could name a path to write a bundle to, or
-// to read one from, could name any path. On the server they are the T0.4 file
-// flows instead: an export answers with a download token, an import takes an
-// upload's file token — still never a path.
-export function register({ onActive, getHubWindow }: {
-  onActive?: (id: string) => void;
-  getHubWindow?: () => BrowserWindow | null;
-} = {}) {
+// Export and import are the T0.4 file flows, and the path never comes from a
+// client: an export answers with a download token, an import takes an upload's
+// file token.
+export function register({ onActive }: { onActive?: (id: string) => void } = {}) {
   const active = (id: unknown): void => {
     if (typeof onActive === 'function' && typeof id === 'string' && id) onActive(id);
-  };
-  const parent = (): BrowserWindow | undefined => {
-    const w = getHubWindow ? getHubWindow() : null;
-    return w && !w.isDestroyed() ? w : undefined;
   };
 
   ipcMain.handle('projects:list', async () => projects.listProjects());
@@ -106,7 +93,6 @@ export function register({ onActive, getHubWindow }: {
       // just the user's project again.
       sample: !!sample && sample.projectId === p.id
         && (await recordFs.exists(path.join(projectDir(p.id), 'datasets', sample.datasetId + '.json'))),
-      syncedTo: syncedTarget(p.id), // the real folder of a project in a sync folder, else null
     })));
   });
 
@@ -114,27 +100,10 @@ export function register({ onActive, getHubWindow }: {
     const project = await projects.getProject(id);
     if (!project) return { ok: false, error: 'That project is gone.' };
     const safe = project.name.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'Project';
-    // Server: no save dialog. The bundle is written to the org's temp() and
-    // handed to the browser as a download token (src/server/files.ts), which
-    // deletes the file once sent; the path never leaves the server.
-    const server = serverDataDir() !== null;
-    let filePath: string | undefined;
-    if (server) {
-      filePath = path.join(appPaths.temp(), `export-${randomUUID()}.ordinate`);
-    } else {
-      const opts = {
-        title: 'Export project',
-        defaultPath: safe + '.ordinate',
-        filters: [{ name: 'Ordinate project', extensions: ['ordinate'] }],
-      };
-      const win = parent();
-      // Lazy: the server loads this module without Electron (native dialogs are desktop-only).
-      const { dialog } = (require('electron') as typeof import('electron'));
-      const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
-      if (r.canceled || !r.filePath) return { ok: false, canceled: true };
-      filePath = r.filePath;
-    }
-    const target = filePath;
+    // The bundle is written to the org's temp() and handed to the browser as a
+    // download token (src/server/files.ts), which deletes the file once sent;
+    // the path never leaves the server.
+    const target = path.join(appPaths.temp(), `export-${randomUUID()}.ordinate`);
     // A job (src/app/jobs.ts): the zip is deflated off the main thread, the
     // popover shows progress, and Cancel stops it between files. The handler
     // still answers its renderer with the same envelope as before.
@@ -157,55 +126,40 @@ export function register({ onActive, getHubWindow }: {
         await recordFs.rename(tmp, target);
         return { path: target, counts: out.manifest.counts };
       },
-      // A job's result reaches the tab over SSE: on the server, no path in it.
-      resultOf: (r) => (server ? undefined : { path: r.path }),
+      // A job's result reaches the tab over SSE: no path in it.
+      resultOf: () => undefined,
     });
     try {
       const r = await job.done;
-      if (server) return { ok: true, counts: r.counts, ...offerDownload(r.path, safe + '.ordinate') };
-      return { ok: true, path: r.path, counts: r.counts };
+      return { ok: true, counts: r.counts, ...offerDownload(r.path, safe + '.ordinate') };
     } catch (err: any) {
-      if (server) await fs.promises.rm(target, { force: true }).catch(() => undefined);
+      await fs.promises.rm(target, { force: true }).catch(() => undefined);
       if (err instanceof jobs.JobCancelled) return { ok: false, canceled: true };
       return { ok: false, error: err?.message || 'Export failed.' };
     }
   });
 
   ipcMain.handle('projects:import', async (_e, { fileToken }: any = {}) => {
-    // Server: the bundle was uploaded through POST /api/files; the token
-    // resolves to the org's own temp copy, deleted once read.
-    if (serverDataDir() !== null) {
-      let upload: Upload;
-      try {
-        upload = resolveUpload(fileToken);
-      } catch (err) {
-        if (err instanceof FileTokenError) return { ok: false, error: 'That upload has expired. Choose the file again.' };
-        throw err;
-      }
-      try {
-        return await importBundleFile(upload.path, active);
-      } finally {
-        upload.done();
-      }
+    // The bundle was uploaded through POST /api/files; the token resolves to
+    // the org's own temp copy, deleted once read.
+    let upload: Upload;
+    try {
+      upload = resolveUpload(fileToken);
+    } catch (err) {
+      if (err instanceof FileTokenError) return { ok: false, error: 'That upload has expired. Choose the file again.' };
+      throw err;
     }
-    const opts = {
-      title: 'Import project',
-      properties: ['openFile' as const],
-      filters: [{ name: 'Ordinate project', extensions: ['ordinate'] }],
-    };
-    const win = parent();
-    const { dialog } = (require('electron') as typeof import('electron'));
-    const { canceled, filePaths } = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
-    if (canceled || !filePaths || !filePaths[0]) return { ok: false, canceled: true };
-    return importBundleFile(filePaths[0], active);
+    try {
+      return await importBundleFile(upload.path, active);
+    } finally {
+      upload.done();
+    }
   });
 }
 
 /**
  * Import one `.ordinate` file as a new project, as a job, and make it active.
- * Shared by the Import dialog above and a bundle dropped on the window
- * (src/app/dropImport.ts). The path is main's own: from the native dialog, or
- * from a real dropped File in the preload.
+ * The path is the server's own: an upload's temp copy.
  */
 export async function importBundleFile(file: string, active: (id: unknown) => void): Promise<any> {
   await safetyBackup('before-import'); // a copy of the active project first (src/ipc/backups.ts)

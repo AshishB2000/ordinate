@@ -1,6 +1,6 @@
 // XLSX reader — MAIN PROCESS, read-only.
 //
-// Kept separate from parse.ts so parse.ts stays exceljs- and Electron-free (a
+// Kept separate from parse.ts so parse.ts stays exceljs-free (a
 // plain-node self-check can require it directly). This module reads ONE sheet
 // of a user-picked .xlsx into string cells, then hands header + body to
 // parse.ts's shared finalizeTable so xlsx type-detection/coercion is identical

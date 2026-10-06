@@ -1,5 +1,5 @@
 // MCP over loopback HTTP — `POST /mcp`, one JSON-RPC message in, one out.
-// Node's own http module; no Electron, so scripts/test-automation.ts runs the
+// Node's own http module, so scripts/test-automation.ts runs the
 // REAL server on an ephemeral port.
 //
 // Gates, in order — every one is a refusal before a byte of the body is read:

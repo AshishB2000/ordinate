@@ -1,4 +1,4 @@
-// Self-contained dashboard export — MAIN-PROCESS-safe, PURE logic (no Electron / fs /
+// Self-contained dashboard export — MAIN-PROCESS-safe, PURE logic (no fs /
 // DOM), so it is node-testable by a plain `node` self-check
 // (scripts/test-dashboardExport.ts).
 //
@@ -35,9 +35,8 @@
 // for `sanitizeStyle` rather than copying its three enums here, for the same
 // reason dashboards.ts itself takes a value import of visuals.ts — duplicating a
 // whitelist is how whitelists drift. It stays node-testable: dashboards.ts pulls
-// no fs/DOM work at load (its `electron` import is never touched at module
-// scope), so scripts/test-dashboardExport.ts still runs under bare `node` with
-// no Electron stub.
+// no fs/DOM work at load, so scripts/test-dashboardExport.ts still runs under
+// bare `node` with no setup.
 import { sanitizeStyle } from './dashboards';
 import { sanitizeFormatPrefs } from '../app/format';
 import type { DashboardStyle } from './dashboards';
@@ -74,7 +73,7 @@ export interface ExportCard {
   title?: string;
   data?: ExportChartData;
   /**
-   * The project's colours (renderer/hub/fmtApply.ts), as RAMP SLOTS 0–7 that
+   * The project's colours (the desktop's fmtApply.ts), as RAMP SLOTS 0–7 that
    * the file's own ramp draws: `slots` per label for a chart that colours by
    * category (a pie's slices), `seriesSlots` per series. Integers only — a
    * slot indexes PALETTE, so no caller text ever reaches a style.
@@ -337,7 +336,7 @@ export function embedJson(obj: unknown): string {
 // ── Style → literal tokens ────────────────────────────────────────────────────
 //
 // The tokens are TRANSCRIBED from the `.dash-theme--*` / `.dash-density--*` /
-// `.dash-accent--*` blocks in renderer/hub/hub.css, not read from them: a
+// `.dash-accent--*` blocks in the desktop's hub.css, not read from them: a
 // standalone file has no access to the app's stylesheet, which is the same
 // reason this module hardcoded the light theme before styles existed (and the
 // same discipline as reportExport.buildReportHtml). The selector NAMES are kept

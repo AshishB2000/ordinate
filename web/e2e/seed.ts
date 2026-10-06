@@ -8,26 +8,16 @@
 // Plus a "Shipments" dataset with coordinates for the maps (scripts/geoFixture.ts —
 // the sample itself has none). Run as its own
 // process by server.ts — the seed loads DuckDB, which would otherwise keep the
-// test runner alive — and with Electron made unloadable, so the e2e also
-// proves the sample seeds on a server that has no Electron at all.
+// test runner alive.
 //
 //   node web/e2e/seed.ts <dataDir> [--large]     (needs `npm run build:ts` first)
 
-import Module, { createRequire } from 'node:module';
+import { createRequire } from 'node:module';
 
 const dataDir = process.argv[2];
 if (!dataDir) throw new Error('usage: node web/e2e/seed.ts <dataDir> [--large]');
 const large = process.argv.includes('--large');
 const LARGE_ROWS = 1_000_000;
-
-// The repo's own server-boot test uses the same trick: resolving 'electron' throws.
-type Resolve = (request: string, ...rest: unknown[]) => string;
-const M = Module as unknown as { _resolveFilename: Resolve };
-const resolve = M._resolveFilename;
-M._resolveFilename = function (this: unknown, request: string, ...rest: unknown[]): string {
-  if (request === 'electron' || request.startsWith('electron/')) throw new Error('electron is not available on the server');
-  return resolve.call(this, request, ...rest);
-};
 
 // The compiled main world, by the shapes used here only: `typeof import()` of
 // these would type-check the whole server graph under this harness's tsconfig.

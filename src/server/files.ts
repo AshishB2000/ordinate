@@ -17,9 +17,8 @@
 // The client's filename is display text only: it never becomes a path. The
 // file on disk is `upload-<random hex>` in the org's temp directory.
 //
-// Must load without Electron, and without @fastify/multipart until the routes
-// are registered — the desktop app imports `resolveUpload` through
-// src/ipc/datasetImport.ts.
+// Must load without @fastify/multipart until the routes are registered —
+// src/ipc/datasetImport.ts imports `resolveUpload`.
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -246,4 +245,10 @@ export function registerFileRoutes(app: FastifyInstance, ceilingMb: number, capM
 export function resetForTest(clock?: () => number): void {
   entries.clear();
   now = clock ?? (() => Date.now());
+}
+
+/** Where a download token's file is, without spending the token — for a self-check that reads what a handler offered. */
+export function downloadPathForTest(token: string): string | null {
+  const e = entries.get(token);
+  return e && e.kind === 'download' ? e.path : null;
 }

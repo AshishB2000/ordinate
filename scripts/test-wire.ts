@@ -1,6 +1,6 @@
 // Differential self-check for src/server/wire.ts, the RPC wire codec.
 //
-// Under Electron a handler's reply crossed IPC by structured clone; over HTTP it
+// On the desktop app a handler's reply crossed IPC by structured clone; over HTTP it
 // crosses as wire.ts's tagged JSON. The reference is therefore
 // `structuredClone(x)`, and every assertion is `same(structuredClone(x),
 // decode(encode(x)))` — never a hand-written expectation. `same` walks both
@@ -19,23 +19,11 @@ import { ok, finish } from './selfcheck';
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
-const Module: any = require('module'); // any: the loader hook has no public type
 
-const REPO = path.resolve(__dirname, '..');
 const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-wire-'));
 // The stub goes in before anything reads app paths (house pattern, see
 // test-sampleProject.ts). Handlers land in the RPC registry, not the stub.
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') {
-    return {
-      app: { getPath: () => tmpUserData, getAppPath: () => REPO, getVersion: () => '0.0.0-test' },
-      net: {}, dialog: {}, shell: {}, nativeImage: {},
-      safeStorage: { isEncryptionAvailable: () => false },
-    };
-  }
-  return origLoad.apply(this, [request, ...rest]);
-};
+process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 const wire: typeof import('../src/server/wire') = require('../src/server/wire');
 // any: IPC replies are untyped JSON-ish trees; `same` inspects them structurally.
@@ -124,7 +112,7 @@ ok('walker: Date by time', diff(new Date(5), new Date(6)) !== null && diff(new D
 
 // ── Buffer: what structured clone gives, and what we give ────────────────────
 // structuredClone(Buffer) is a plain Uint8Array (Buffer's prototype does not
-// survive the clone — Electron IPC behaves the same), so that is the contract.
+// survive the clone), so that is the contract.
 ok('reference: structuredClone(Buffer) is a plain Uint8Array',
   Object.getPrototypeOf(structuredClone(Buffer.from('hi'))) === Uint8Array.prototype);
 ok('codec: a Buffer decodes as a plain Uint8Array',

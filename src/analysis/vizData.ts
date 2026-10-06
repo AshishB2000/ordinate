@@ -1,4 +1,4 @@
-// PURE visualization bridge — MAIN PROCESS, no Electron / fs / DOM.
+// PURE visualization bridge — MAIN PROCESS, no fs / DOM.
 // buildVizData turns a user encoding (a dimension + one or more measures, an
 // optional split, an optional geo level) over a dataset's columns/rows into the
 // EXACT `{labels, series}` (+ optional `geo`) object the existing renderers

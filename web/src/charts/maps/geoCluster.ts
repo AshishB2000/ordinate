@@ -1,4 +1,4 @@
-// Point maps, the pure half — renderer/hub/geoCluster.ts as an ES module:
+// Point maps, the pure half — src/analysis/geoCluster.ts as an ES module:
 // which columns are latitude and longitude, and the grid clustering the point
 // map reruns on every zoom. The server keeps the desktop file for detection
 // (src/analysis/mapData.ts); geo.test.ts holds the two equal.

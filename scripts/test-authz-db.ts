@@ -2,7 +2,7 @@
 //
 // Two orgs (acme, beta), each its own server process-in-a-process (header
 // sign-in from a trusted 127.0.0.1 peer, one shared database and DATA_DIR,
-// server mode, no Electron). Every caller × channel × project cell goes
+// server mode). Every caller × channel × project cell goes
 // through POST /api/rpc/<channel>; the expected table is asserted in FULL and
 // printed. Every real handler is wrapped in a spy: a denied call must never
 // reach it, an allowed one must, exactly once. Then: list trimming, the
@@ -24,13 +24,6 @@ const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const { randomUUID }: typeof import('crypto') = require('crypto');
-const Module: any = require('module'); // any: the loader hook has no public type
-
-const origLoad = Module._load;
-Module._load = function (request: string, ...rest: any[]): any { // any: Module._load's own signature
-  if (request === 'electron') throw new Error('electron is not available in server mode');
-  return origLoad.apply(this, [request, ...rest]);
-};
 
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');

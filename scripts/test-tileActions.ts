@@ -1,13 +1,13 @@
 // Self-check for tile actions and the Navigation card — the pure model in
-// renderer/hub/cardModel.ts, and that main's sanitizeCard keeps what it should.
+// src/analysis/cardModel.ts, and that main's sanitizeCard keeps what it should.
 //
 //   npm run build:ts && node scripts/test-tileActions.js
 
 import { ok, failureCount, finish } from './selfcheck';
 import { sanitizeCard } from '../src/analysis/dashboards';
 
-// ponytail: cardModel.js is a renderer UMD script, not a TS module (see test-geo-match.ts)
-const cm = require('../renderer/hub/cardModel') as any;
+// ponytail: cardModel.js is a UMD script, not a TS module (see test-geo-match.ts)
+const cm = require('../src/analysis/cardModel') as any;
 
 const ID = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 

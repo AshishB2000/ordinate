@@ -16,6 +16,7 @@ export {}; // module scope — sibling scripts share top-level names
 import { ok, failureCount, finish } from './selfcheck';
 import { tileCaption, captionFamily, compact } from '../src/analysis/captions';
 import { waterfallFigures, paretoFigures } from '../src/analysis/chartFigures';
+import { golden } from './golden';
 
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
@@ -278,15 +279,15 @@ ok('pivot: and a pivot with no grid at all does too',
 
 ok('captionFamily knows the pivot family', captionFamily('pivot') === 'pivot');
 
-// ONE formatter: captions.compact and the renderer's _fmtVal both call
+// ONE formatter: captions.compact and the web chart engine's fmtVal both call
 // src/app/format.ts's formatCompact, so a caption and its card print one number.
 {
   const { formatCompact } = require('../src/app/format') as typeof import('../src/app/format');
   const REPO = path.resolve(__dirname, '..');
-  const hubSrc = fs.readFileSync(path.join(REPO, 'renderer/hub/hub.ts'), 'utf8');
-  const at = hubSrc.indexOf('function _fmtVal(');
-  ok('the renderer\'s _fmtVal is OrdFormat.formatCompact',
-    /return OrdFormat\.formatCompact\(v\);/.test(hubSrc.slice(at, hubSrc.indexOf('\n}', at))));
+  const webSrc = fs.readFileSync(path.join(REPO, 'web/src/charts/format.ts'), 'utf8');
+  const at = webSrc.indexOf('function fmtVal(');
+  ok('the web chart engine\'s fmtVal is OrdFormat.formatCompact',
+    at >= 0 && /return OrdFormat\.formatCompact\(v\);/.test(webSrc.slice(at, webSrc.indexOf('\n}', at))));
   const cases = [0, 12.25, 999, 1500, 999_999, 5_194_598.73, 4.5e9, -1500];
   ok('compact() is formatCompact', cases.every((v) => compact(v) === formatCompact(v)),
     JSON.stringify(cases.map((v) => [compact(v), formatCompact(v)])));
@@ -388,13 +389,19 @@ ok('the five newer ids map to their own families', [
  * DIFFERENTIAL: the caption's figures against the chart's.
  *
  * A caption is written in MAIN (src/analysis/chartFigures.ts) about a picture
- * the RENDERER drew from renderer/hub/chartShapes.js — two implementations of
- * one piece of arithmetic, so the house rule applies: run both over the same
- * fixtures and require Object.is on every figure the sentence states.
+ * the desktop drew from its chartShapes.js — two implementations of one piece
+ * of arithmetic, so the house rule applies: run both over the same fixtures and
+ * require Object.is on every figure the sentence states. The desktop's answers
+ * were recorded when it went (T8.1): scripts/fixtures/golden/captions.json. The
+ * web chart engine is pinned to the same desktop shapes by
+ * web/src/charts/legacy.test.ts.
  */
-const shapes = require('../renderer/hub/chartShapes') as {
-  waterfallSteps: (labels: any[], series: any[], totals?: string[] | null) => { from: number; to: number; kind: string[] };
-  paretoShape: (labels: any[], values: any[]) => { count80: number; labels: any[] };
+type Steps = { from: number; to: number; kind: string[] };
+type Pareto = { count80: number; labels: any[] };
+const G = golden<{ waterfall: Record<string, Steps>; pareto: Record<string, Pareto> }>('captions');
+const shapes = {
+  waterfallSteps: (name: string): Steps => G.waterfall[name],
+  paretoShape: (name: string): Pareto => G.pareto[name],
 };
 const WF: Array<{ name: string; data: any; totals?: string[] }> = [
   { name: 'plain steps', data: { labels: ['a', 'b', 'c'], series: s1('v', [0.1, 0.2, 0.3]) } },
@@ -405,9 +412,10 @@ const WF: Array<{ name: string; data: any; totals?: string[] }> = [
     { name: 'p', values: [0.1, 0.7, 99, null] }, { name: 'q', values: [0.3, null, 1, 0.2] }] } },
   { name: 'empty', data: { labels: [], series: s1('v', []) } },
 ];
+ok('the waterfall fixture holds exactly these cases', JSON.stringify(WF.map((f) => f.name)) === JSON.stringify(Object.keys(G.waterfall)));
 for (const f of WF) {
   const main = waterfallFigures(f.data, f.totals);
-  const drawn = shapes.waterfallSteps(f.data.labels, f.data.series, f.totals);
+  const drawn = shapes.waterfallSteps(f.name);
   const steps = drawn.kind.filter((k) => k === 'up' || k === 'down').length;
   ok(`differential waterfall (${f.name}): same start, end and step count`,
      Object.is(main.from, drawn.from) && Object.is(main.to, drawn.to) && main.steps.length === steps,
@@ -422,9 +430,10 @@ const PARETO: Array<{ name: string; data: any }> = [
   { name: 'long tail', data: { labels: Array.from({ length: 40 }, (_, i) => 'c' + i),
                                series: s1('v', Array.from({ length: 40 }, (_, i) => 1 / (i + 1))) } },
 ];
+ok('the Pareto fixture holds exactly these cases', JSON.stringify(PARETO.map((f) => f.name)) === JSON.stringify(Object.keys(G.pareto)));
 for (const f of PARETO) {
   const main = paretoFigures(f.data);
-  const drawn = shapes.paretoShape(f.data.labels, f.data.series[0].values);
+  const drawn = shapes.paretoShape(f.name);
   ok(`differential pareto (${f.name}): same 80% count and the same leader`,
      Object.is(main.count80, drawn.count80) && (drawn.labels.length === 0 || main.top === String(drawn.labels[0])),
      JSON.stringify({ main, drawn: [drawn.count80, drawn.labels[0]] }));

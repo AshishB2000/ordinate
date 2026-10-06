@@ -1,4 +1,4 @@
-// Cohort retention — PURE, MAIN PROCESS, no Electron / fs / DOM.
+// Cohort retention — PURE, MAIN PROCESS, no fs / DOM.
 //
 // An entity's COHORT is the week / month / quarter of its FIRST event. Period
 // index k is the whole number of periods between that cohort period and an

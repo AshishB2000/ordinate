@@ -1,4 +1,4 @@
-// Self-check for src/vizData.ts — the PURE visualization bridge. No Electron / fs
+// Self-check for src/vizData.ts — the PURE visualization bridge. No fs
 // stub needed (buildVizData is pure). Verifies aggregation correctness (sum/avg/
 // count/min/max by category, all app-computed), the emitted shape has exactly the
 // fields buildChart needs, a leading-zero category stays intact, non-numeric cells
@@ -13,7 +13,6 @@ type ParsedColumn = import('../src/data/parse').ParsedColumn;
 // ponytail: compiled sibling of ../src/vizData.ts.
 const vizData: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
 const { buildVizData } = vizData;
-
 
 const cols: ParsedColumn[] = [
   { name: 'city', type: 'text' },
