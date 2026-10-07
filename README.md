@@ -65,12 +65,20 @@ cd ordinate
 npm install                # also compiles the server and fetches map boundaries
 npm --prefix web install
 npm run build:web          # the React app, served by the server from web/dist
-npm run server             # http://127.0.0.1:8080, signed in as dev@local (admin), data in ./data
+docker run -d --name ordinate-pg -e POSTGRES_PASSWORD=ordinate -p 127.0.0.1:5432:5432 postgres:17
+DATABASE_URL=postgres://postgres:ordinate@127.0.0.1:5432/postgres npm run server
 ```
 
+Open `http://127.0.0.1:8080`. Ordinate starts with **password sign-in**: the terminal prints a
+one-time setup code (`First-run setup code: …`), and the sign-in page asks for it to create your
+admin account. Add other people in Admin → People with a temporary password. Password sign-in is
+for trying Ordinate out. Switch to single sign-on before real use
+([docs/server/sso.md](docs/server/sso.md)).
+
 For hot reload, keep `npm run server` running and start `npm run dev:web` in a second terminal.
-Vite serves the app on `http://localhost:5173` and proxies `/api` to the server. Dev mode needs no
-Postgres: records are JSON files under `./data`. Dev sign-in is refused in production.
+Vite serves the app on `http://localhost:5173` and proxies `/api` to the server. (`AUTH_MODE=dev`,
+which signs every request in as an admin with no Postgres, is for Ordinate's automated tests only.
+It is never the default, and production refuses it.)
 
 ### Run it for a team: Docker Compose
 
@@ -78,12 +86,12 @@ Postgres: records are JSON files under `./data`. Dev sign-in is refused in produ
 
 ```bash
 cd deploy
-cp .env.example .env       # then add ORDINATE_MASTER_KEY, the two passwords and ORDINATE_ADMIN_EMAIL
+cp .env.example .env       # then add ORDINATE_MASTER_KEY and the two passwords
 docker compose up -d --build
-curl -s http://127.0.0.1:8080/readyz
+docker compose logs ordinate | grep "setup code"   # then open http://127.0.0.1:8080 and enter it
 ```
 
-The full walk-through, including generating the secrets and putting a sign-in proxy in front, is
+The full walk-through, including generating the secrets and switching to single sign-on, is
 [docs/server/quick-start.md](docs/server/quick-start.md). **Back up `ORDINATE_MASTER_KEY`.** Every
 stored connection password and AI key is encrypted under it.
 

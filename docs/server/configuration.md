@@ -2,7 +2,7 @@
 
 Every environment variable the Ordinate server reads. The server reads its configuration once at
 startup and validates it there (`src/server/env.ts`). A bad value stops the process with one line
-that names the variable, for example `ordinate: AUTH_MODE must be one of dev|oidc|header, got "sso"`.
+that names the variable, for example `ordinate: AUTH_MODE must be one of password|oidc|header|dev, got "sso"`.
 It does not crash later. The Helm chart's migration Job reads the same environment, so a typo stops
 `helm upgrade` before any pod rolls.
 
@@ -46,7 +46,7 @@ from these tables, or when a table names one that no code reads.
 
 | Variable | Purpose | Default | Required when | Secret |
 |---|---|---|---|---|
-| `DATABASE_URL` | Postgres URL (`postgres://` or `postgresql://`) for users, sessions, roles, records, jobs, audit and secrets. Without it the server runs single-user dev only. TLS options go in the query string, see [TLS to Postgres](#tls-to-postgres). The value never appears in an error or a log. | unset: no Postgres, records stay as JSON under `DATA_DIR` | `AUTH_MODE` is `oidc` or `header`, or `STORAGE_URL` is `s3://` | yes |
+| `DATABASE_URL` | Postgres URL (`postgres://` or `postgresql://`) for users, passwords, sessions, roles, records, jobs, audit and secrets. Without it only `AUTH_MODE=dev` starts (Ordinate's automated tests). TLS options go in the query string, see [TLS to Postgres](#tls-to-postgres). The value never appears in an error or a log. | unset: no Postgres, records stay as JSON under `DATA_DIR` | `AUTH_MODE` is `password` (the default), `oidc` or `header`, or `STORAGE_URL` is `s3://` | yes |
 | `ORDINATE_MASTER_KEY` | 32 random bytes, written as base64 (44 chars) or hex (64 chars), made with `openssl rand -base64 32`. It wraps each org's data key, and those keys encrypt every stored connection password and AI provider key (AES-256-GCM). Without it, saving such a secret is refused. Losing it loses those secrets. | unset: no secrets store | `ORDINATE_ENV=prod` and `DATABASE_URL` is set | yes |
 | `ORDINATE_MASTER_KEY_OLD` | Rotation only: the current key, read by `node src/server/secrets/rotate.js` (`npm run secrets:rotate`). The server never reads it. | unset | running the rotation command | yes |
 | `ORDINATE_MASTER_KEY_NEW` | Rotation only: the replacement key, read by the same command. | unset | running the rotation command | yes |
@@ -55,9 +55,9 @@ from these tables, or when a table names one that no code reads.
 
 | Variable | Purpose | Default | Required when | Secret |
 |---|---|---|---|---|
-| `AUTH_MODE` | `oidc`: Ordinate signs people in with your IdP. `header`: it trusts `X-Forwarded-Email` from a proxy in `TRUSTED_PROXY_CIDRS` (oauth2-proxy). `dev`: everyone is an admin, and it is refused when `ORDINATE_ENV=prod`. See [sso.md](sso.md). | `dev` | always `oidc` or `header` in a deployment | no |
+| `AUTH_MODE` | `password`: Ordinate's own email + password accounts, for trying Ordinate out. At the first start the server logs a one-time setup code that creates the first admin; the server warns at every start that this mode is not for real use. `oidc`: Ordinate signs people in with your IdP. `header`: it trusts `X-Forwarded-Email` from a proxy in `TRUSTED_PROXY_CIDRS` (oauth2-proxy). `dev`: every request is an admin, with no Postgres; only when set explicitly, for Ordinate's automated tests, and refused when `ORDINATE_ENV=prod`. See [sso.md](sso.md). | `password` | always `oidc` or `header` in a real deployment | no |
 | `ORDINATE_ORG` | The org every sign-in joins (one org per deployment). Lower-case letters, digits and `-`, up to 63 characters. | `default` | — | no |
-| `ORDINATE_ADMIN_EMAIL` | Made (or kept) org admin at every sign-in. This is the first admin and the way back in. Every other new user joins as a viewer. | unset | — (without it nobody can grant roles) | no |
+| `ORDINATE_ADMIN_EMAIL` | Made (or kept) org admin at every sign-in. Under SSO this is the first admin and the way back in; every other new user joins as a viewer. Under `password` the setup code makes the first admin, and this address, if it has an account, is made admin again when it signs in. | unset | — (under SSO, without it nobody can grant roles) | no |
 | `ALLOWED_EMAIL_DOMAINS` | Comma-separated email domains that may sign in, for example `example.com,example.org`. | unset: any domain the IdP or proxy lets through | — | no |
 | `SESSION_IDLE_MINUTES` | A session with no request for this long is signed out. | `480` (8 h) | — | no |
 | `SESSION_ABSOLUTE_HOURS` | A session ends this long after sign-in, however active. | `168` (7 days) | — | no |

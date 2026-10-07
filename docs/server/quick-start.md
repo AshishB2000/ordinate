@@ -22,8 +22,8 @@ EOF
 ```
 
 `.env.example` leaves those three empty. The heredoc appends generated values, and for a repeated
-key Compose uses the last line. Next, open `.env` and set `ORDINATE_ADMIN_EMAIL` to your own address.
-That account becomes org admin at every sign-in. Everyone else joins as a viewer.
+key Compose uses the last line. Nothing else is needed to try it: the stack starts with password
+sign-in, and you create the admin account in the browser (step 3).
 
 **Keep a copy of `ORDINATE_MASTER_KEY`.** Every stored connection password and AI key is encrypted
 under it. Without it they cannot be read, even from a good database backup.
@@ -58,9 +58,36 @@ build on the same machine.
 
 ## 3. Sign in
 
-The stack starts in `AUTH_MODE=header`. Ordinate trusts the `X-Forwarded-Email` header from
-whatever connects through the published port. In practice that is a sign-in proxy you run on this
-host, in front of `127.0.0.1:8080`. To check that the server sees an identity:
+The stack starts with `AUTH_MODE=password`: Ordinate's own accounts, for trying it out. At its
+first start the server prints a one-time setup code:
+
+```bash
+docker compose logs ordinate | grep "setup code"
+```
+
+Open `http://127.0.0.1:8080` on this machine. The sign-in page shows **Create the admin account**:
+enter the code, your email and a password. You land in Ordinate as the org admin. Add everyone
+else in **Admin → People → Add person** with a temporary password, which they replace at their
+first sign-in. The code lasts 24 hours, and `docker compose restart ordinate` prints a new one.
+
+Over plain `http` the sign-in cookies (`Secure`, since the stack runs `ORDINATE_ENV=prod`) are only
+accepted from `127.0.0.1`. To sign in from other machines, put TLS in front. The server logs a
+warning at every start that password sign-in is not for real use. Before real use, switch to single
+sign-on. Pick one:
+
+- **OIDC directly** (recommended). Set `AUTH_MODE=oidc`, the four `OIDC_*` values and
+  `ORDINATE_ADMIN_EMAIL` in `.env`, and put a TLS proxy in front: prod cookies are `Secure`, and
+  the redirect URL must be `https://`. See [sso.md](sso.md).
+- **oauth2-proxy in front** (header mode). Set `AUTH_MODE=header` and `ORDINATE_ADMIN_EMAIL`, run
+  oauth2-proxy on this host with your IdP, upstream `http://127.0.0.1:8080`, and terminate TLS in
+  front of it. The flags are in `.env.example` and
+  [sso.md](sso.md#header-mode-behind-oauth2-proxy).
+
+People keep their roles when they move over: accounts are matched by email. See
+[sso.md](sso.md#password-sign-in-for-trying-ordinate-out).
+
+In header mode, Ordinate trusts the `X-Forwarded-Email` header from whatever connects through the
+published port. To check that the server sees an identity:
 
 ```bash
 curl -s -H 'X-Forwarded-Email: admin@example.com' http://127.0.0.1:8080/api/auth/me
@@ -69,14 +96,6 @@ curl -s -H 'X-Forwarded-Email: admin@example.com' http://127.0.0.1:8080/api/auth
 That command should print `"role":"admin"` for the address in `ORDINATE_ADMIN_EMAIL`. Anyone who
 can reach the port can claim any address the same way. That is why the port is bound to
 `127.0.0.1`. **Never set `ORDINATE_BIND=0.0.0.0` in header mode.**
-
-For people to sign in, pick one:
-
-- **oauth2-proxy in front** (header mode, the default). Run it on this host with your IdP, upstream
-  `http://127.0.0.1:8080`, and terminate TLS in front of it. The flags are in `.env.example` and
-  [sso.md](sso.md#header-mode-behind-oauth2-proxy).
-- **OIDC directly**. Set `AUTH_MODE=oidc` and the four `OIDC_*` values in `.env`, and put a TLS proxy
-  in front: prod cookies are `Secure`, and the redirect URL must be `https://`. See [sso.md](sso.md).
 
 After changing `.env`, apply it with:
 
@@ -100,8 +119,13 @@ docker compose up -d
 - **`Pool overlaps with other one on this host`.** Another network already uses `172.30.80.0/24`.
   Set `ORDINATE_SUBNET` to a free `/24`, and set `TRUSTED_PROXY_CIDRS` to that subnet's `.1`.
   Change both together. Connections through the published port arrive from that gateway address,
-  so a mismatch leaves every request signed out.
+  so in header mode a mismatch leaves every request signed out.
 - **Port 8080 is taken.** Set `ORDINATE_PORT` in `.env`.
+- **No setup code in the log.** An admin with a password already exists (setup is done), or the
+  code is older than 24 hours: `docker compose restart ordinate` prints a fresh one while no admin
+  has a password.
+- **Signed in, then straight back to the sign-in page.** The browser refused the `Secure` cookies
+  over plain `http`. Open `http://127.0.0.1:8080` on the Docker host itself, or put TLS in front.
 - **The `ordinate` container restarts in a loop.** `docker compose logs ordinate` shows one line
   starting `ordinate:` that names the bad variable, for example
   `ordinate: ORDINATE_MASTER_KEY must be 32 bytes written as base64 (44 chars) or hex (64 chars) (value not shown)`.

@@ -41,7 +41,8 @@ existingSecret: ""
 # refuses those names here, and refuses every secret name listed above.
 config:
   # oidc (sign-in with your IdP) | header (trust X-Forwarded-Email from a proxy
-  # such as oauth2-proxy in TRUSTED_PROXY_CIDRS).
+  # such as oauth2-proxy in TRUSTED_PROXY_CIDRS). The server's own default,
+  # password (Ordinate's own accounts), is for trying Ordinate out, not for a cluster.
   AUTH_MODE: oidc
   OIDC_ISSUER: ""          # https://idp.example.com/realms/acme
   OIDC_CLIENT_ID: ""
