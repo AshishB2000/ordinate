@@ -46,11 +46,11 @@ function childEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
 
 (async () => {
   // ── Config ────────────────────────────────────────────────────────────────
-  const d = envMod.parseEnv({});
+  const d = envMod.parseEnv({ AUTH_MODE: 'dev' });
   ok('env: defaults are port 8080, dev, info', d.port === 8080 && d.env === 'dev' && d.logLevel === 'info', JSON.stringify(d));
   ok('env: DATA_DIR defaults to an absolute ./data', path.isAbsolute(d.dataDir) && path.basename(d.dataDir) === 'data', d.dataDir);
   ok('env: the config object is frozen', Object.isFrozen(d));
-  const p = envMod.parseEnv({ PORT: '0', ORDINATE_ENV: 'prod', DATA_DIR: '/srv/ordinate', LOG_LEVEL: 'warn' });
+  const p = envMod.parseEnv({ AUTH_MODE: 'dev', PORT: '0', ORDINATE_ENV: 'prod', DATA_DIR: '/srv/ordinate', LOG_LEVEL: 'warn' });
   ok('env: explicit values are taken', p.port === 0 && p.env === 'prod' && p.dataDir === path.resolve('/srv/ordinate') && p.logLevel === 'warn', JSON.stringify(p));
   envFails('PORT=abc', { PORT: 'abc' }, 'PORT');
   envFails('PORT=70000', { PORT: '70000' }, 'PORT');
@@ -68,7 +68,7 @@ function childEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
       cb();
     },
   });
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'info' }), sink);
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'info' }), sink);
   // A real request's real headers through the real logger — nothing logs
   // headers yet, but the first handler that does must not leak them.
   app.addHook('onRequest', async (req) => {
@@ -109,7 +109,7 @@ function childEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-server-boot-'));
   const t0 = process.hrtime.bigint();
   const child = spawn(process.execPath, [MAIN], {
-    env: childEnv({ PORT: '0', DATA_DIR: tmp, ORDINATE_ENV: 'dev', LOG_LEVEL: 'info' }),
+    env: childEnv({ PORT: '0', DATA_DIR: tmp, ORDINATE_ENV: 'dev', AUTH_MODE: 'dev', LOG_LEVEL: 'info' }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stdout = '';
@@ -162,9 +162,17 @@ function childEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   // ── prod with no sign-in configured refuses to start ──────────────────────
   // DATABASE_URL blanked: with it inherited (CI, a DB run), prod's
   // ORDINATE_MASTER_KEY check (T5.3) refuses first and this never reaches sign-in.
-  const prod = spawnSync(process.execPath, [MAIN], { env: childEnv({ ORDINATE_ENV: 'prod', DATA_DIR: tmp, PORT: '0', DATABASE_URL: '' }), encoding: 'utf8', timeout: 20_000 });
+  // AUTH_MODE unset is password sign-in (never dev), which keeps its accounts in Postgres.
+  const prodEnv = childEnv({ ORDINATE_ENV: 'prod', DATA_DIR: tmp, PORT: '0', DATABASE_URL: '' });
+  delete prodEnv.AUTH_MODE;
+  const prod = spawnSync(process.execPath, [MAIN], { env: prodEnv, encoding: 'utf8', timeout: 20_000 });
   const prodOurs = prod.stderr.split('\n').filter((l) => l.startsWith('ordinate: '));
-  ok('prod without auth: exits non-zero with one line naming sign-in', prod.status !== 0 && prod.status !== null && prodOurs.length === 1 && prodOurs[0].includes('sign-in'), prod.stderr);
+  ok('prod without auth: exits non-zero with one line naming AUTH_MODE=password and DATABASE_URL',
+    prod.status !== 0 && prod.status !== null && prodOurs.length === 1 && prodOurs[0].includes('AUTH_MODE=password') && prodOurs[0].includes('DATABASE_URL'), prod.stderr);
+  // …and dev sign-in, asked for, is refused in prod.
+  const prodDev = spawnSync(process.execPath, [MAIN], { env: childEnv({ ORDINATE_ENV: 'prod', DATA_DIR: tmp, PORT: '0', DATABASE_URL: '', AUTH_MODE: 'dev' }), encoding: 'utf8', timeout: 20_000 });
+  const devOurs = prodDev.stderr.split('\n').filter((l) => l.startsWith('ordinate: '));
+  ok('prod with AUTH_MODE=dev: exits non-zero with one line naming sign-in', prodDev.status !== 0 && prodDev.status !== null && devOurs.length === 1 && devOurs[0].includes('sign-in'), prodDev.stderr);
 
   fs.rmSync(tmp, { recursive: true, force: true });
 })()

@@ -116,7 +116,7 @@ const ROWS: Cell[][] = Array.from({ length: 600 }, (_, i) => [
   const { projectId: P } = seed;
   duck.forbidSyncOnMainThread();
 
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, () => ADMIN);
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, () => ADMIN);
   const bodies: string[] = [];
   const post = async (channel: string, payload: unknown) => {
     const r = await app.inject({

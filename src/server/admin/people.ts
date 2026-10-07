@@ -16,6 +16,8 @@ export interface UserRow {
   readonly role: Role;
   /** Invited and never signed in. */
   readonly pending: boolean;
+  /** Holds a temporary password an admin set (password sign-in): changed at their next sign-in. */
+  readonly mustChangePassword: boolean;
   readonly disabled: boolean;
   readonly createdAt: string;
   readonly lastLoginAt: string | null;
@@ -47,7 +49,8 @@ export function register(pool: () => Pool | null, allowedDomains: () => readonly
 
   registry.handle('admin:users', async (): Promise<UserRow[]> => {
     const r = await db().query<UserRow>(
-      `SELECT u.id, u.email, u.role, u.last_login_at IS NULL AS pending, u.disabled_at IS NOT NULL AS disabled,
+      `SELECT u.id, u.email, u.role, u.last_login_at IS NULL AS pending, u.must_change_password AS "mustChangePassword",
+              u.disabled_at IS NOT NULL AS disabled,
               ${iso('u.created_at', 'createdAt')}, ${iso('u.last_login_at', 'lastLoginAt')},
               (SELECT count(*)::int FROM team_members m WHERE m.user_id = u.id) AS teams
          FROM users u WHERE u.org_id = $1 ORDER BY u.email`,

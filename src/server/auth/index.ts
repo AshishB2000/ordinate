@@ -1,10 +1,12 @@
 // Sign-in (T3.2): picks the AUTH_MODE, registers /api/auth/*, and returns the
 // `Identify` app.ts runs on every other /api/ request — what feeds ctx().
 //
-//   dev     everyone is dev@local, admin (context.ts; refused in prod)
+//   password browser session cookie → `sessions` row → user; ./password.ts
+//           signs in with Ordinate's own email + password (the default mode)
 //   oidc    browser session cookie → `sessions` row → user (./oidc.ts signs in)
 //   header  X-Forwarded-Email from a proxy (oauth2-proxy), believed ONLY when
 //           the TCP peer is inside TRUSTED_PROXY_CIDRS
+//   dev     everyone is dev@local, admin (context.ts; explicit only, refused in prod)
 //   bearer  with Postgres, in every mode: `Authorization: Bearer ord_…` is a
 //           personal API token (./tokens.ts). A request that carries one is
 //           decided by it alone — a bad token is a 401, never a fall-through
@@ -22,6 +24,8 @@ import { proxyList, type AuthEnv, type ServerEnv } from '../env';
 import { audit, type AuditAction } from '../authz/audit';
 import { cookieNames, cookieOpts, safeNext } from './cookies';
 import { registerOidc } from './oidc';
+import { registerPassword } from './password';
+import { setupOpen } from './passwordStore';
 import { hasBearer, tokenIdentity } from './tokens';
 import { endAllSessions, endSession, ensureOrg, member, normalEmail, provision, sessionIdentity } from './store';
 
@@ -89,25 +93,30 @@ export function registerAuth(app: FastifyInstance, cfg: ServerEnv, pool: Pool | 
 
   const who = (req: FastifyRequest) => identify(req.headers, req.socket.remoteAddress);
 
+  const sessions = auth.mode === 'oidc' || auth.mode === 'password';
+
   // The shell asks this on load. 200 with `user: null` when signed out — a 401
   // here would be a console error on every visit to the sign-in page.
   app.get('/api/auth/me', async (req) => {
     const id = await who(req);
     return {
-      user: id ? { email: id.user.email, role: id.user.role } : null,
+      user: id ? { email: id.user.email, role: id.user.role, mustChangePassword: id.mustChangePassword === true } : null,
       org: id ? id.org.id : null,
       mode: auth.mode,
       // Only a session can be ended here; header mode signs out at the proxy.
-      canSignOut: auth.mode === 'oidc',
+      canSignOut: sessions,
       // Members, teams and API tokens live in Postgres: without it there is nothing to administer (T3.4).
       accounts: pool !== null,
+      // Password mode before its first admin: the sign-in page shows "Create admin account" (./password.ts).
+      setup: !id && auth.mode === 'password' && pool !== null ? await setupOpen(pool, auth.org) : false,
     };
   });
 
   if (pool && auth.mode === 'oidc') registerOidc(app, cfg, pool, names);
   else {
-    // dev and header have no sign-in step of ours: the server (dev) or the
-    // proxy (header) already knows who you are.
+    if (pool && auth.mode === 'password') registerPassword(app, cfg, pool, names);
+    // No redirect-based sign-in step: the server (dev) or the proxy (header)
+    // already knows who you are, and password mode signs in on /sign-in itself.
     app.get<{ Querystring: { next?: string } }>('/api/auth/login', async (req, reply) => reply.redirect(safeNext(req.query.next)));
   }
 
@@ -120,8 +129,8 @@ export function registerAuth(app: FastifyInstance, cfg: ServerEnv, pool: Pool | 
   app.post('/api/auth/logout', async (req, reply) => {
     const id = req.cookies[names.session];
     if (id && pool) {
-      // Who it was, before the session is gone — oidc only (the cookie is the identity).
-      const was = auth.mode === 'oidc' ? await sessionIdentity(pool, auth, id) : null;
+      // Who it was, before the session is gone — session modes only (the cookie is the identity).
+      const was = sessions ? await sessionIdentity(pool, auth, id) : null;
       await endSession(pool, id);
       if (was) await trail(req, was.org.id, was.user.email, 'logout');
     }

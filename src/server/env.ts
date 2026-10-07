@@ -93,8 +93,13 @@ export interface DuckEnv {
   readonly idleMs: number;
 }
 
-/** dev: everyone is the dev admin (refused in prod). oidc: SSO sign-in. header: trust a proxy's X-Forwarded-Email. */
-export type AuthMode = 'dev' | 'oidc' | 'header';
+/**
+ * password: Ordinate's own email + password accounts (the default — for trying
+ * Ordinate out; a warning at startup says to move to SSO). oidc: SSO sign-in.
+ * header: trust a proxy's X-Forwarded-Email. dev: every request is the dev
+ * admin — only when set explicitly, for Ordinate's automated tests; refused in prod.
+ */
+export type AuthMode = 'password' | 'oidc' | 'header' | 'dev';
 
 export interface OidcEnv {
   readonly issuer: string;
@@ -120,7 +125,7 @@ export interface AuthEnv {
   readonly trustedProxies: readonly string[];
 }
 
-const AUTH_MODES: readonly AuthMode[] = ['dev', 'oidc', 'header'];
+const AUTH_MODES: readonly AuthMode[] = ['password', 'oidc', 'header', 'dev'];
 
 /** Org ids become directory names (src/app/paths.ts applies the same rule). */
 const ORG_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
@@ -383,8 +388,9 @@ const csv = (raw: string | undefined): string[] =>
   (raw ?? '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
 
 function parseAuth(src: Readonly<Record<string, string | undefined>>, env: OrdinateEnv, databaseUrl: string | null): AuthEnv {
-  const mode = oneOf('AUTH_MODE', src.AUTH_MODE, AUTH_MODES, 'dev');
+  const mode = oneOf('AUTH_MODE', src.AUTH_MODE, AUTH_MODES, 'password');
   // dev + prod is refused by identityFor (context.ts) — the one gate main.ts runs.
+  // dev is never the default: a server nobody configured asks for a password.
 
   const org = src.ORDINATE_ORG || 'default';
   if (!ORG_RE.test(org)) throw new EnvError(`ORDINATE_ORG must match ${ORG_RE.source}, got ${JSON.stringify(org)}`);
@@ -401,6 +407,11 @@ function parseAuth(src: Readonly<Record<string, string | undefined>>, env: Ordin
   const sessionAbsoluteMs = positiveInt('SESSION_ABSOLUTE_HOURS', src.SESSION_ABSOLUTE_HOURS, ABSOLUTE_HOURS) * 3_600_000;
 
   // Users, sessions and roles live in Postgres; only dev sign-in works without it.
+  if (mode === 'password' && databaseUrl === null) {
+    throw new EnvError(
+      `DATABASE_URL is required when AUTH_MODE=password${src.AUTH_MODE ? '' : ' (the default)'}: accounts and sessions live in Postgres. See the README's Quick start`,
+    );
+  }
   if (mode !== 'dev' && databaseUrl === null) throw new EnvError(`DATABASE_URL is required when AUTH_MODE=${mode}`);
 
   let oidc: OidcEnv | null = null;

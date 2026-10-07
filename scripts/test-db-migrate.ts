@@ -79,13 +79,13 @@ const tmpDir = (tag: string): string => fs.mkdtempSync(path.join(os.tmpdir(), `o
 
 (async () => {
   // ── DATABASE_URL validation ───────────────────────────────────────────────
-  ok('env: DATABASE_URL unset → null', envMod.parseEnv({}).databaseUrl === null);
+  ok('env: DATABASE_URL unset → null', envMod.parseEnv({ AUTH_MODE: 'dev' }).databaseUrl === null);
   const good = `postgres://u:${CANARY}@db.internal:5432/ordinate`;
-  ok('env: a postgres:// URL is kept as given', envMod.parseEnv({ DATABASE_URL: good }).databaseUrl === good);
-  ok('env: postgresql:// is accepted', envMod.parseEnv({ DATABASE_URL: 'postgresql://h/db' }).databaseUrl === 'postgresql://h/db');
+  ok('env: a postgres:// URL is kept as given', envMod.parseEnv({ AUTH_MODE: 'dev', DATABASE_URL: good }).databaseUrl === good);
+  ok('env: postgresql:// is accepted', envMod.parseEnv({ AUTH_MODE: 'dev', DATABASE_URL: 'postgresql://h/db' }).databaseUrl === 'postgresql://h/db');
   for (const bad of [`mysql://u:${CANARY}@h/db`, `u:${CANARY}@h/db`, `http://u:${CANARY}@h`]) {
     try {
-      envMod.parseEnv({ DATABASE_URL: bad });
+      envMod.parseEnv({ AUTH_MODE: 'dev', DATABASE_URL: bad });
       ok(`env: ${bad.split(':')[0]}… is rejected`, false);
     } catch (err) {
       const e = err as Error;

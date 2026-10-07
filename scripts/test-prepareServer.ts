@@ -35,7 +35,7 @@ type Any = any; // any: each channel's own reply shape, read field by field belo
 (async () => {
   context.enterServerMode(DATA);
   appMod.registerHandlers();
-  const env = envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA });
+  const env = envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA });
   const app = appMod.buildApp(env);
   const dev = context.identityFor(env)({} as never);
   if (!dev) throw new Error('no dev identity');

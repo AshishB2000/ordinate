@@ -109,7 +109,7 @@ function same(a: unknown, b: unknown): boolean {
 }
 
 async function partOne(): Promise<void> {
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA, ORDINATE_ENV: 'dev' }));
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, ORDINATE_ENV: 'dev' }));
   const base = await listen(app);
   const { call } = client(base);
   const dev: Identity = { user: { email: 'dev@local', role: 'admin' }, org: { id: 'default' } };

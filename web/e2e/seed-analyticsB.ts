@@ -31,7 +31,7 @@ const datasets = require('../../src/data/datasets.js') as {
   markRefresh(projectId: string, id: string, status: 'ok', error: null): Promise<boolean>;
 };
 
-const cfg = envMod.parseEnv({ ORDINATE_ENV: 'dev', DATA_DIR: dataDir });
+const cfg = envMod.parseEnv({ AUTH_MODE: 'dev', ORDINATE_ENV: 'dev', DATA_DIR: dataDir });
 context.enterServerMode(cfg.dataDir);
 const dev = context.identityFor(cfg)({});
 if (!dev) throw new Error('dev auth returned no identity');

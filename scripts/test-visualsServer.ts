@@ -46,7 +46,7 @@ function same(a: unknown, b: unknown): boolean {
 (async () => {
   context.enterServerMode(DATA);
   appMod.registerHandlers();
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) =>
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) =>
     typeof h['x-test-org'] === 'string' ? who(h['x-test-org']) : null);
   await app.listen({ port: 0, host: '127.0.0.1' });
   const base = `http://127.0.0.1:${(app.server.address() as import('net').AddressInfo).port}`;

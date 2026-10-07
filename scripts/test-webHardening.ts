@@ -89,20 +89,20 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
     !fs.readFileSync(path.join(__dirname, '..', 'web', 'vite.config.ts'), 'utf8').includes('http-equiv'));
 
   // ── env ───────────────────────────────────────────────────────────────────
-  const d = envMod.parseEnv({}).limits;
+  const d = envMod.parseEnv({ AUTH_MODE: 'dev' }).limits;
   ok('env: defaults — login 60/min/IP, RPC 1200/min/user and 3000/min/IP, JSON 1 MiB, RPC 60 s',
     d.loginPerMinute === 60 && d.rpcUserPerMinute === 1200 && d.rpcIpPerMinute === 3000 && d.jsonBodyBytes === 1024 * 1024 && d.rpcTimeoutMs === 60_000, JSON.stringify(d));
   for (const name of ['RATE_LIMIT_LOGIN_PER_MINUTE', 'RATE_LIMIT_RPC_PER_MINUTE', 'RATE_LIMIT_RPC_IP_PER_MINUTE', 'MAX_RPC_BODY_KB', 'RPC_TIMEOUT_SECONDS']) {
     let msg = '';
-    try { envMod.parseEnv({ [name]: '0' }); } catch (err) { msg = (err as Error).message; }
+    try { envMod.parseEnv({ AUTH_MODE: 'dev', [name]: '0' }); } catch (err) { msg = (err as Error).message; }
     ok(`env: ${name}=0 is refused, naming the variable`, msg.startsWith(name), msg);
   }
-  ok('env: TRUSTED_PROXY_CIDRS is read outside header mode too (rate-limit client IP)', envMod.parseEnv({ TRUSTED_PROXY_CIDRS: '10.0.0.0/8' }).auth.trustedProxies[0] === '10.0.0.0/8');
+  ok('env: TRUSTED_PROXY_CIDRS is read outside header mode too (rate-limit client IP)', envMod.parseEnv({ AUTH_MODE: 'dev', TRUSTED_PROXY_CIDRS: '10.0.0.0/8' }).auth.trustedProxies[0] === '10.0.0.0/8');
 
   // ── The real app, dev sign-in, server mode ────────────────────────────────
   context.enterServerMode(DATA);
   appMod.registerHandlers();
-  const cfg = envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA, RPC_TIMEOUT_SECONDS: '1', MAX_RPC_BODY_KB: '4' });
+  const cfg = envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, RPC_TIMEOUT_SECONDS: '1', MAX_RPC_BODY_KB: '4' });
   const app = appMod.buildApp(cfg);
   // The built web app when present, else a stand-in dist (CI's test job does not build web/).
   let asset = '/assets/index-t62.js';
@@ -226,7 +226,7 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
     await bare.close();
 
     // ── Prod: HSTS and the __Host- cookie ─────────────────────────────────────
-    const prod = appMod.buildApp(envMod.parseEnv({ ORDINATE_ENV: 'prod', DATA_DIR: DATA, LOG_LEVEL: 'silent' }), undefined,
+    const prod = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', ORDINATE_ENV: 'prod', DATA_DIR: DATA, LOG_LEVEL: 'silent' }), undefined,
       () => ({ user: { email: 'p@test', role: 'admin' }, org: { id: 'default' } }));
     await prod.ready();
     const pme = await prod.inject({ url: '/api/auth/me', headers: { host: HOST } });
@@ -268,7 +268,7 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
 
   // ── 3. Rate limits ─────────────────────────────────────────────────────────
   // RPC per user and per IP, on the real app (identity from a test header).
-  const rl = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA, RATE_LIMIT_RPC_PER_MINUTE: '3', RATE_LIMIT_RPC_IP_PER_MINUTE: '6', RATE_LIMIT_LOGIN_PER_MINUTE: '3' }),
+  const rl = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, RATE_LIMIT_RPC_PER_MINUTE: '3', RATE_LIMIT_RPC_IP_PER_MINUTE: '6', RATE_LIMIT_LOGIN_PER_MINUTE: '3' }),
     undefined, (h) => ({ user: { email: String(h['x-test-user'] ?? 'u1'), role: 'admin' }, org: { id: 'default' }, ...(h['x-test-token'] ? { via: 'token' as const } : {}) }));
   await rl.ready();
   const call = (user: string, ip: string) =>

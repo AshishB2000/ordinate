@@ -108,6 +108,9 @@ const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-admin-db-'));
       'admin:invite': { email: 'matrix@acme.test', role: 'viewer' },
       'admin:setRole': { userId: dave, role: 'viewer' },
       'admin:setDisabled': { userId: dave, disabled: false },
+      // Password sign-in only: under header sign-in an admin's call answers ok:false 'mode' (test-password-db covers them for real).
+      'admin:addUser': { email: 'matrix-pw@acme.test', role: 'viewer', password: 'matrix-temporary-1' },
+      'admin:resetPassword': { userId: dave, password: 'matrix-temporary-1' },
       'admin:teams': undefined,
       'admin:createTeam': { name: 'Matrix' },
       'admin:renameTeam': { teamId: team0, name: 'Finance' },

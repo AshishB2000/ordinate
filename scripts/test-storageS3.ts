@@ -42,7 +42,8 @@ const who = (org: string): Identity => ({ user: { email: `u@${org}`, role: 'admi
 
 function envError(vars: Record<string, string>): string {
   try {
-    envMod.parseEnv(vars);
+    // AUTH_MODE=dev: the default (password sign-in) would refuse a missing DATABASE_URL before the storage rules run.
+    envMod.parseEnv({ AUTH_MODE: 'dev', ...vars });
     return 'ACCEPTED';
   } catch (err) {
     return err instanceof envMod.EnvError ? err.message : 'wrong error';
@@ -50,14 +51,14 @@ function envError(vars: Record<string, string>): string {
 }
 
 function envChecks(): void {
-  const d = envMod.parseEnv({}).storage;
+  const d = envMod.parseEnv({ AUTH_MODE: 'dev' }).storage;
   ok('env: default — DATA_DIR storage, 2,048 MB cache, 60 min grace', d.s3 === null && d.cacheBytes === 2048 * 2 ** 20 && d.gcGraceMs === 3_600_000, JSON.stringify(d));
   const db = { DATABASE_URL: 'postgres://u@h/db' };
-  const s = envMod.parseEnv({ ...db, STORAGE_URL: 's3://my-bucket/a/b', S3_ENDPOINT: 'http://localhost:9000', STORAGE_CACHE_MB: '0', AWS_REGION: 'eu-west-1' }).storage;
+  const s = envMod.parseEnv({ AUTH_MODE: 'dev', ...db, STORAGE_URL: 's3://my-bucket/a/b', S3_ENDPOINT: 'http://localhost:9000', STORAGE_CACHE_MB: '0', AWS_REGION: 'eu-west-1' }).storage;
   ok('env: s3://bucket/prefix + a MinIO endpoint', JSON.stringify(s.s3) === JSON.stringify({ bucket: 'my-bucket', prefix: 'a/b', region: 'eu-west-1', endpoint: 'localhost:9000', useSsl: false, extensionDir: null }) && s.cacheBytes === 0, JSON.stringify(s));
-  ok('env: plain AWS — no endpoint, TLS, us-east-1', JSON.stringify(envMod.parseEnv({ ...db, STORAGE_URL: 's3://b-1' }).storage.s3) ===
+  ok('env: plain AWS — no endpoint, TLS, us-east-1', JSON.stringify(envMod.parseEnv({ AUTH_MODE: 'dev', ...db, STORAGE_URL: 's3://b-1' }).storage.s3) ===
     JSON.stringify({ bucket: 'b-1', prefix: '', region: 'us-east-1', endpoint: null, useSsl: true, extensionDir: null }));
-  ok('env: STORAGE_URL=file:///x is DATA_DIR', envMod.parseEnv({ STORAGE_URL: 'file:///srv/ordinate' }).dataDir === path.resolve('/srv/ordinate'));
+  ok('env: STORAGE_URL=file:///x is DATA_DIR', envMod.parseEnv({ AUTH_MODE: 'dev', STORAGE_URL: 'file:///srv/ordinate' }).dataDir === path.resolve('/srv/ordinate'));
   ok('env: …and satisfies prod\'s DATA_DIR rule', envMod.parseEnv({ ORDINATE_ENV: 'prod', AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: '10.0.0.0/8', ...db,
     ORDINATE_MASTER_KEY: 'a'.repeat(64), STORAGE_URL: 'file:///data' }).dataDir === path.resolve('/data'));
   for (const [label, vars, name] of [
@@ -67,6 +68,7 @@ function envChecks(): void {
     ['a query string', { ...db, STORAGE_URL: 's3://bucket/p?x=1' }, 'STORAGE_URL'],
     ['another scheme', { STORAGE_URL: 'gs://bucket/p' }, 'STORAGE_URL'],
     ['file:// and DATA_DIR disagreeing', { STORAGE_URL: 'file:///a', DATA_DIR: '/b' }, 'STORAGE_URL'],
+    // AUTH_MODE=dev: the default (password) would refuse a missing DATABASE_URL first.
     ['s3 without DATABASE_URL', { STORAGE_URL: 's3://bucket' }, 'DATABASE_URL'],
     ['an endpoint with a path', { ...db, STORAGE_URL: 's3://bucket', S3_ENDPOINT: 'http://h:9000/x' }, 'S3_ENDPOINT'],
     ['an endpoint with credentials', { ...db, STORAGE_URL: 's3://bucket', S3_ENDPOINT: 'http://k:s@h:9000' }, 'S3_ENDPOINT'],
@@ -241,7 +243,7 @@ async function minio(t: import('./s3TestEnv').S3Test): Promise<void> {
   const appMod: typeof import('../src/server/app') = require('../src/server/app');
   const db = new URL(process.env.DATABASE_URL!);
   db.pathname = (await t.pool.query('SELECT current_database() AS d')).rows[0].d;
-  const app = appMod.buildApp(envMod.parseEnv({ ...process.env, DATABASE_URL: db.toString(), DATA_DIR: DATA, LOG_LEVEL: 'silent' }));
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', ...process.env, DATABASE_URL: db.toString(), DATA_DIR: DATA, LOG_LEVEL: 'silent' }));
   await app.ready();
   let rows: unknown[] = [];
   for (let i = 0; i < 50 && rows.length === 0; i++) {

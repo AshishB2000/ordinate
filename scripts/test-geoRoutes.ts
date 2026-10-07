@@ -98,7 +98,7 @@ const SAMPLE_CSV = path.join(__dirname, '..', 'assets', 'samples', 'retail-order
   context.enterServerMode(DATA);
   appMod.registerHandlers();
   const who = (org: string): import('../src/server/context').Identity => ({ user: { email: `${org}@test`, role: 'admin' }, org: { id: org } });
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) =>
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) =>
     typeof h['x-test-org'] === 'string' ? who(h['x-test-org']) : null);
   await app.listen({ port: 0, host: '127.0.0.1' });
   const { port } = app.server.address() as import('net').AddressInfo;

@@ -79,7 +79,7 @@ async function seedSample(as: Identity): Promise<{ pid: string; ds: string; parq
 const SELECT = 'select region, sum(revenue) as revenue from retail_orders group by 1 order by 2 desc';
 
 async function partOne(): Promise<void> {
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) =>
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) =>
     typeof h['x-test-org'] === 'string' ? who(h['x-test-org']) : null);
   const base = await listen(app);
   const call = client(base, { 'x-test-org': 'org-a' });

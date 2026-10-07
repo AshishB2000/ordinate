@@ -117,7 +117,7 @@ const EVE: Identity = { user: { email: 'eve@other.test', role: 'admin' }, org: {
 const WHO: Record<string, Identity> = { alice: ALICE, bob: BOB, eve: EVE };
 
 async function partOne(): Promise<void> {
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA, ORDINATE_ENV: 'dev' }), undefined, (h) => WHO[String(h['x-who'] ?? '')] ?? null);
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, ORDINATE_ENV: 'dev' }), undefined, (h) => WHO[String(h['x-who'] ?? '')] ?? null);
   const base = await listen(app);
   const alice = client(base, { 'x-who': 'alice' });
   const bob = client(base, { 'x-who': 'bob' });
