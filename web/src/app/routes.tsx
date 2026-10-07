@@ -89,6 +89,7 @@ export const pages: RouteObject[] = [
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.
 const SignInPage = lazy(() => import('../features/auth/SignInPage'));
+const ChangePasswordPage = lazy(() => import('../features/auth/ChangePasswordPage'));
 
 /** The whole tree: the shell, every page inside it, and the 404 for anything else. */
 export function appRoutes(children: RouteObject[] = pages): RouteObject[] {
@@ -104,6 +105,16 @@ export function appRoutes(children: RouteObject[] = pages): RouteObject[] {
       element: (
         <Suspense fallback={null}>
           <SignInPage />
+        </Suspense>
+      ),
+      errorElement: <RouteError />,
+    },
+    // Password sign-in: choose your own password (a temporary one must be replaced first).
+    {
+      path: '/change-password',
+      element: (
+        <Suspense fallback={null}>
+          <ChangePasswordPage />
         </Suspense>
       ),
       errorElement: <RouteError />,

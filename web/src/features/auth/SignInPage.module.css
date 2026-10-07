@@ -221,3 +221,56 @@
     padding: var(--sp-48) var(--sp-16);
   }
 }
+
+/* ── password sign-in (PasswordForms.tsx) ── */
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.code input {
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.cmd {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  padding: 1px var(--sp-4);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-12);
+}
+.skelTitle {
+  height: 32px;
+  width: 70%;
+}
+.skelLine {
+  height: 16px;
+  width: 90%;
+}
+.skelButton {
+  height: 44px;
+  width: 100%;
+}
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+}
+.linkButton:hover {
+  text-decoration: underline;
+}
+.actions a {
+  color: var(--accent);
+}

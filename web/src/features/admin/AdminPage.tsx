@@ -113,7 +113,7 @@ export default function AdminPage() {
         {accounts && (
           <>
             <TabPanel value="people">
-              <UsersTab me={me.data.user?.email ?? ''} />
+              <UsersTab me={me.data.user?.email ?? ''} passwords={me.data.mode === 'password'} />
             </TabPanel>
             <TabPanel value="teams">
               <TeamsTab />

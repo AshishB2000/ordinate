@@ -19,6 +19,7 @@ const ACTIONS = [
   { value: 'login', label: 'Sign-ins' },
   { value: 'logout', label: 'Sign-outs' },
   { value: 'logout_everywhere', label: 'Sign-outs everywhere' },
+  { value: 'password_change', label: 'Password changes' },
 ];
 const OUTCOMES = [
   { value: '', label: 'Any outcome' },
@@ -28,7 +29,12 @@ const OUTCOMES = [
 ];
 const TONE: Record<AuditRow['outcome'], BadgeTone> = { ok: 'ok', denied: 'warn', error: 'error' };
 const OUTCOME_LABEL: Record<AuditRow['outcome'], string> = { ok: 'OK', denied: 'Denied', error: 'Failed' };
-const EVENT: Record<string, string> = { login: 'Signed in', logout: 'Signed out', logout_everywhere: 'Signed out everywhere' };
+const EVENT: Record<string, string> = {
+  login: 'Signed in',
+  logout: 'Signed out',
+  logout_everywhere: 'Signed out everywhere',
+  password_change: 'Changed password',
+};
 
 /** A `<input type="date">` day as the ISO instant its LOCAL midnight is, `days` later. */
 function dayStart(value: string, days = 0): string | undefined {
