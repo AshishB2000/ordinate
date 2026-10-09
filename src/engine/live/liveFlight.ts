@@ -1,25 +1,15 @@
 // One warehouse call per live question, however many ask — MAIN PROCESS ONLY.
 // docs/live-data/00-plan.md L2.3. Split out of ./liveQuery.ts (which asks the
 // questions) when L2.4's lookup would have taken that file past 500 lines.
+// The statement itself goes through ./liveWarehouse (L2.7, the one door), whose
+// `LiveCallError` a hang-up rejects with.
 //
 // A "flight" is one warehouse call shared by every concurrent asker of the
 // same question, always — even at cache age 0. It is cancelled only when EVERY
 // asker has hung up: one closed tab must not fail the tile another viewer is
 // waiting on. An asker that hangs up stops waiting at once.
 
-export type CallKind = 'failed' | 'timeout' | 'cancelled' | 'tooLarge' | 'daily';
-
-/** One warehouse statement did not answer. `detail` is for the server log only. */
-export class LiveCallError extends Error {
-  readonly kind: CallKind;
-  readonly detail: string;
-  constructor(kind: CallKind, detail = '') {
-    super(`live ${kind}`);
-    this.name = 'LiveCallError';
-    this.kind = kind;
-    this.detail = detail;
-  }
-}
+import { LiveCallError } from './liveWarehouse';
 
 // ── Flights: one warehouse call per question, however many ask ──────────────
 
@@ -90,21 +80,4 @@ export function fly<T>(key: string, signal: AbortSignal | undefined, start: (sha
 /** Test hook: flights in the air (the suite checks none is left behind). */
 export function flightsInAir(): number {
   return flights.size;
-}
-
-// ── Waiting on a call that runs on ───────────────────────────────────────────
-
-export const ABORTED = Symbol('aborted');
-
-/** `p`, or ABORTED as soon as `signal` fires — the caller stops waiting; `p` runs on. */
-export function untilAbort<T>(p: Promise<T>, signal: AbortSignal): Promise<T | typeof ABORTED> {
-  if (signal.aborted) return Promise.resolve(ABORTED);
-  return new Promise((resolve, reject) => {
-    const onAbort = (): void => resolve(ABORTED);
-    signal.addEventListener('abort', onAbort, { once: true });
-    void p.then(
-      (v) => { signal.removeEventListener('abort', onAbort); resolve(v); },
-      (e: unknown) => { signal.removeEventListener('abort', onAbort); reject(e); },
-    );
-  });
 }

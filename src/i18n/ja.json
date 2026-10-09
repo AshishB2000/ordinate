@@ -211,6 +211,7 @@
   "liveQueryMessages.this_dataset_is_not_live_so": null,
   "liveQueryMessages.this_dataset_no_longer_exists": null,
   "liveQueryMessages.this_figure_would_be_converted_to": null,
+  "liveQueryMessages.this_organization_has_used_today_s": null,
   "liveRefusals.a_cohort_chart_cannot_be_drawn": "ライブデータセットからはまだコホートチャートを描画できません。使用するにはデータセットのコピーを作成してください。",
   "liveRefusals.a_contains_filter_cannot_run_on": "ライブデータセットの数値列「{column}」には「含む」フィルターを使用できません。代わりに値と比較してください。",
   "liveRefusals.a_date_axis_keeps_time_order": "日付軸は時系列の順序を保つため、ランク付けや上位N件への絞り込みはできません。",

@@ -2,10 +2,11 @@
 
 This page is for the team that connects Ordinate to a cloud warehouse. It covers what each warehouse
 needs on its side (a read-only identity) and on yours (network egress). The plan behind it is
-[docs/live-data/00-plan.md](../live-data/00-plan.md). It also covers the [refresh URL](#refresh-url)
-that dbt or Airflow calls when new data has landed, the [schema sync](#schema-sync) a Live
-dataset runs, and [fresh on ask](#fresh-on-ask) for the copies of operational databases. Sections
-for cost limits and cache ages are added by the tasks that build them.
+[docs/live-data/00-plan.md](../live-data/00-plan.md). It also covers
+[what a live query can cost and how it is bounded](#what-a-live-query-can-cost-and-how-it-is-bounded),
+the [refresh URL](#refresh-url) that dbt or Airflow calls when new data has landed, the
+[schema sync](#schema-sync) a Live dataset runs, and [fresh on ask](#fresh-on-ask) for the copies of
+operational databases. A section on choosing a Live cache age is added by the task that builds it.
 
 ## Snowflake
 
@@ -256,6 +257,62 @@ With incremental refresh on, Ordinate asks BigQuery only for rows at or past the
 literal, which BigQuery reads as the column's own type (`DATE`, `DATETIME` or `TIMESTAMP`), so a
 partitioned table scans only the partitions it needs. It is a day wider than needed on purpose; the
 exact cut is made in Ordinate.
+
+## What a live query can cost and how it is bounded
+
+A Live dataset asks its warehouse instead of a copy. Every chart, KPI tile or answer that is not in
+the cache becomes a warehouse statement, and warehouses bill for statements: BigQuery by the bytes a
+query reads, Snowflake by the time its warehouse runs. Ordinate bounds that cost by default. Every
+limit below is on without any configuration.
+
+| Bound | What it does | Setting ([configuration.md](configuration.md)) |
+|---|---|---|
+| The cache | A question asked again within the dataset's cache age (5 minutes unless the dataset says otherwise) is answered from the cache and sends nothing. Identical questions asked at the same moment share one statement. | the dataset's cache age |
+| Timeout | One statement may run this long. Past it, Ordinate cancels it in the warehouse. | `LIVE_QUERY_TIMEOUT_MS` (60 s) |
+| Cancel on hang-up | When every viewer waiting on a statement has closed the tab, Ordinate cancels the statement in the warehouse (Snowflake) or cancels the job (BigQuery). | — |
+| Bytes billed (BigQuery) | Every query carries `maximumBytesBilled`. BigQuery refuses a query over it before it runs, at no charge. | `LIVE_MAX_BYTES_BILLED` (10 GiB), and the connection's own field |
+| Concurrency | At most this many statements per org run at once in each pod. The rest wait. One whose viewer leaves while it waits is never sent. | `LIVE_MAX_CONCURRENT` (4) |
+| Daily limit | Statements per org per UTC day, counted across every pod. See below. | `LIVE_DAILY_QUERY_LIMIT` (10,000; `0` = no limit) |
+| Public pages | On a published `/p/` page a Live figure is at least this old, whatever the dataset's cache age, so a public link cannot be used to run up the bill. | `LIVE_MIN_CACHE_AGE_PUBLIC_SEC` (60 s) |
+| Refresh URLs | On a Live dataset a [refresh URL](#refresh-url) resets the cache and fetches nothing. One call per URL per interval, across pods, so a leaked URL costs at most one cache reset a minute. | `REFRESH_HOOK_MIN_INTERVAL_SEC` (60 s) |
+
+A published page is built when it is published (or re-published), as the person who publishes it,
+and opening it sends nothing to the warehouse. The public floor holds for any Live figure a `/p/`
+request reads, so it stays true if pages ever compute a figure when they are opened.
+
+### The daily limit
+
+- **What counts.** Every statement Ordinate sends to a warehouse for a Live dataset counts once: a
+  chart's, a KPI's, an answer's, the small `MAX()` that a relative date filter such as "last
+  quarter" asks for, and a [schema sync](#schema-sync)'s sample and probe (BigQuery's free dry run
+  before a sample is not a statement and counts nothing). A figure served from the cache counts
+  nothing. A statement counts when it is
+  sent, whether it then answers, fails or is cancelled, since each of those can be billed.
+- **Shared by every pod.** With Postgres, the count is kept in the table `live_usage`, one row per
+  org, UTC day and connection. Checking the limit and counting the statement are one step, under a
+  lock per org and day, so pods racing at the limit let exactly the limit through. Without
+  `DATABASE_URL` each server keeps its own count, in memory, from when it started.
+- **Past the limit**, until 00:00 UTC: a figure that was cached before is shown from the cache,
+  labelled **Stale · as of …**. A figure that was never cached says that the organization has used
+  today's live queries. Nothing is shown as empty or as zero.
+- **Admins are told once.** The first refused question of the day sends the org's admins a notice in
+  the app, on whatever page they have open, and writes one line to the server log:
+  `[live] org <org> reached LIVE_DAILY_QUERY_LIMIT (<n> warehouse queries) on <day> UTC: …`.
+  Further refusals that day are counted but not announced.
+- **Admin → Live usage** shows, for the last 30 days, the queries and bytes billed per day and
+  connection, the refusals, and today's count against the limit.
+
+To allow more, raise `LIVE_DAILY_QUERY_LIMIT` and restart the pods. The new limit applies at once,
+also to the current day. To cut queries instead, lengthen the busiest datasets' cache age.
+
+### Bytes
+
+Admin → Live usage shows the bytes the warehouse itself reports billing, never an estimate. For
+BigQuery that is `totalBytesBilled` from the query's reply, or `totalBytesProcessed` when the reply
+does not carry it (a job that finished through `getQueryResults`). Snowflake bills by warehouse
+time, and its SQL API reports no byte figure for a statement, so a Snowflake connection's bytes read
+**Not reported**. Read its cost from `QUERY_HISTORY` instead (see [What Ordinate sends](#what-ordinate-sends)):
+Live statements carry the query tag `ordinate:<org>:live`.
 
 ## Testing against a real account
 

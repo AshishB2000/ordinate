@@ -24,7 +24,9 @@
 // The spy: `fake.calls` records every runBound (statement, parameters, signal,
 // the context's bounds); `fake.hook` may hold, fail or slow a call, as a real
 // warehouse would. On abort it answers "Cancelled", as a connector that
-// cancelled the warehouse statement does.
+// cancelled the warehouse statement does. `fake.billedBytes`, when set, is the
+// byte figure every answer reports billing (as BigQuery does; L2.7's usage
+// count) — `fake.bytes` is the priced variant's dry-run estimate (L2.5).
 
 import type { ConnectorContext, ConnectorDef, ConnectorError, ConnectorRows, LiveParam } from '../src/connectors/types';
 import type { ParsedColumn } from '../src/data/parse';
@@ -74,7 +76,9 @@ export const fake: {
   bytes: number | ConnectorError;
   /** The catalog's row estimate `describeTable` answers, as BigQuery's and Snowflake's do (L2.5's sample percent). */
   rowEstimate: number | undefined;
-} = { calls: [], hook: null, estimates: [], bytes: 0, rowEstimate: undefined };
+  /** When set, the bytes every answer reports BILLING (as BigQuery's reply does; L2.7's usage count). Null: none reported. */
+  billedBytes: number | null;
+} = { calls: [], hook: null, estimates: [], bytes: 0, rowEstimate: undefined, billedBytes: null };
 
 const CANCELLED: ConnectorError = { ok: false, error: 'Cancelled' };
 const TABLE_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -117,7 +121,10 @@ async function runBound(ctx: ConnectorContext, sql: string, params: LiveParam[])
     if (ctx.signal?.aborted) return CANCELLED;
     await ensureFixture(ctx.values);
     const rows = await raceAbort(duck.queryAsync(sql, params.map(toDuck)), ctx.signal);
-    return rows === null ? CANCELLED : shaped(rows, ctx.rowLimit);
+    if (rows === null) return CANCELLED;
+    const out = shaped(rows, ctx.rowLimit);
+    if (fake.billedBytes !== null) out.bytes = fake.billedBytes;
+    return out;
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   } finally {
@@ -186,13 +193,14 @@ export function registerLiveFake(): void {
   registered = true;
 }
 
-/** Forget the calls and the hook between cases. */
+/** Forget the calls, the hook and the byte figure between cases. */
 export function resetFake(): void {
   fake.calls.length = 0;
   fake.hook = null;
   fake.estimates.length = 0;
   fake.bytes = 0;
   fake.rowEstimate = undefined;
+  fake.billedBytes = null;
 }
 
 /**

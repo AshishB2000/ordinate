@@ -211,6 +211,7 @@
   "liveQueryMessages.this_dataset_is_not_live_so": null,
   "liveQueryMessages.this_dataset_no_longer_exists": null,
   "liveQueryMessages.this_figure_would_be_converted_to": null,
+  "liveQueryMessages.this_organization_has_used_today_s": null,
   "liveRefusals.a_cohort_chart_cannot_be_drawn": "Ein Kohortendiagramm kann noch nicht aus einem Live-Datensatz erstellt werden. Erstellen Sie eine Kopie des Datensatzes, um eines zu verwenden.",
   "liveRefusals.a_contains_filter_cannot_run_on": "Ein „enthält“-Filter kann nicht auf die Zahlenspalte „{column}“ eines Live-Datensatzes angewendet werden. Vergleichen Sie sie stattdessen mit einem Wert.",
   "liveRefusals.a_date_axis_keeps_time_order": "Eine Datumsachse behält die zeitliche Reihenfolge bei und kann daher weder sortiert noch auf die Top N gekürzt werden.",

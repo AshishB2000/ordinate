@@ -120,6 +120,7 @@ const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-admin-db-'));
       'admin:audit': {},
       'admin:settings': undefined,
       'admin:saveSettings': { publicLinks: false, aiProviders: [...adminApi.AI_PROVIDERS], uploadCapMb: null },
+      'admin:liveUsage': undefined,
     };
     ok('matrix: a payload for every admin channel', channels.every((c) => c in payloads) && Object.keys(payloads).length === channels.length);
     let unexpectedAllows = 0;
@@ -259,7 +260,7 @@ const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-admin-db-'));
     const writes = channels.filter((c) => !lists.includes(c));
     ok(`audit: every admin WRITE (${writes.length}) left an ok row`, writes.every((c) => okChannels.has(c)), writes.filter((c) => !okChannels.has(c)).join());
     ok(`audit: the ${lists.length} lists the screens load leave no ok row (so reading the log does not grow it)`,
-      lists.length === 5 && lists.every((c) => !okChannels.has(c)), lists.join());
+      lists.length === 6 && lists.every((c) => !okChannels.has(c)), lists.join());
     const deniedChannels = new Set(trail.filter((r) => r.outcome === 'denied').map((r) => r.channel));
     ok('audit: a REFUSED call is a row on every admin channel, lists included', channels.every((c) => deniedChannels.has(c)));
     ok('audit: the transfer row names the project and the team', (await q(`SELECT 1 FROM audit_log WHERE channel = 'admin:transferOwner' AND outcome = 'ok' AND $1 = ANY(target_ids) AND $2 = ANY(target_ids)`, [project, ops])).length >= 1);

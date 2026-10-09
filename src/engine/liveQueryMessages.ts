@@ -47,3 +47,8 @@ export function liveAsOfRefused(): string {
 export function liveFxRefused(): string {
   return t('liveQueryMessages.this_figure_would_be_converted_to');
 }
+
+/** LIVE_DAILY_QUERY_LIMIT is used up for today and nothing was cached (L2.7). `limit` is formatted. */
+export function liveDailyLimit(limit: string): string {
+  return t('liveQueryMessages.this_organization_has_used_today_s', { limit });
+}

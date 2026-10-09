@@ -43,6 +43,13 @@ export interface RequestContext extends Identity {
   readonly client: Client;
   /** Aborts when the caller goes away before its reply is sent; its DuckDB queries are interrupted (src/engine/duckdbPool.ts). */
   readonly signal?: AbortSignal;
+  /**
+   * A published page's request (`/p/…`, ./published.ts), member or anonymous:
+   * a Live figure read under it is at least LIVE_MIN_CACHE_AGE_PUBLIC_SEC old
+   * (src/engine/live/liveBudget.ts cacheAgeFloorSec), so a public link cannot
+   * run up the warehouse bill (live data L2.7, R-L2).
+   */
+  readonly published?: true;
 }
 
 export type Headers = Readonly<Record<string, string | string[] | undefined>>;
@@ -105,6 +112,16 @@ export function orgKey(key: string): string {
 /** Runs `fn` as a request with this identity (app.ts's hook; tests), pushing to `client`'s stream. */
 export function runInContext<T>(identity: Identity, requestId: string, fn: () => T, client: Client = NO_CLIENT, signal?: AbortSignal): T {
   return als.run({ ...identity, requestId, client, signal }, fn);
+}
+
+/** Runs `fn` as a published page's request (./published.ts): `isPublishedRequest()` holds below it. No tab to push to. */
+export function runAsPublished<T>(identity: Identity, requestId: string, fn: () => T): T {
+  return als.run({ ...identity, requestId, client: NO_CLIENT, published: true }, fn);
+}
+
+/** True inside a published page's request (`/p/…`); false in every other request, and outside one. */
+export function isPublishedRequest(): boolean {
+  return als.getStore()?.published === true;
 }
 
 /**

@@ -378,6 +378,21 @@ function sameChart(label: string, ext: Reply, live: Reply): void {
   ok('…because metric:series refuses a Live metric, typed (the route tags it live_dataset) — NEGATIVE CONTROL: the extract\'s answers', H.liveDataset.isLiveRefusalReply(liveSeries)
     && extSeries.ok === true && Array.isArray(extSeries.series?.values), show([liveSeries, extSeries]).slice(0, 300));
 
+  // L2.7's daily limit, met at each door: a typed refusal (never an empty figure) — or the last answer, stale.
+  queryCache.clear();
+  const warm = (await post('visual:data', { projectId: P, datasetId: L, encoding: ENC_REGION })).value;
+  H.budget.setDailyCheckForTest(() => ({ ok: false, message: H.msg.liveDailyLimit('4') }));
+  queryCache.clear();
+  const dChart = (await post('visual:data', { projectId: P, datasetId: L, encoding: ENC_REGION })).value;
+  const dKpi = (await post('dashboard:metric', { projectId: P, datasetId: L, column: 'amt', aggregation: 'sum' })).value;
+  const dAnswer = (await post('answer:card', { projectId: P, spec: { datasetId: L, category: 'cat', measures: [M('amt', 'sum')], filters: [{ column: 'region', op: '=', value: 'north' }], chartType: 'bar', title: 'q' } })).value;
+  const daily = (r: Reply, said: string): boolean => r.ok === false && r.code === 'live_refused' && r[said] === H.msg.liveDailyLimit('4');
+  ok('the daily limit reached: the chart, the KPI and the answer (its case-fix lookup first) are refused typed, in the catalog\'s sentence',
+    daily(dChart, 'error') && dChart.reason === 'dailyLimit' && daily(dKpi, 'error') && dKpi.reason === 'dailyLimit' && daily(dAnswer, 'reason'), show([dChart, dKpi, dAnswer]).slice(0, 400));
+  H.budget.setDailyCheckForTest(null);
+  const again = (await post('visual:data', { projectId: P, datasetId: L, encoding: ENC_REGION })).value;
+  ok('NEGATIVE CONTROL: the limit lifted, the same chart answers — the figure it drew before', again.ok === true && warm.ok === true && show(again.data) === show(warm.data));
+
   // A LiveFigureError no handler caught: the route types it as it does LiveDatasetError.
   const realMetric = rpc.handlers.get('dashboard:metric')!;
   const swap = async (fn: () => never): Promise<{ status: number; body: string; value: Reply }> => {

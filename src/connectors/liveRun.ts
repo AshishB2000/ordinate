@@ -24,7 +24,7 @@
 import type { ConnectorDef, ConnectorError, ConnectorRows, LiveParam } from './types';
 import { safeError } from './types';
 import { guardHost } from './connectionRun';
-import { maxBytesBilled } from '../server/env';
+import { maxBytesBilled } from '../server/liveEnv';
 
 /**
  * The row cap of a Live statement. Its rows are GROUPS (at most 51 categories
@@ -68,7 +68,10 @@ export async function runLiveBound(
     if (!res.ok) return { ok: false, error: safeError(res.error, ctx.secrets) };
     const rows = Array.isArray(res.rows) ? res.rows : [];
     // Trust, then verify — as fetchRows does: a connector that ignored the cap is clipped AND reported.
-    return { ok: true, columns: res.columns || [], rows: rows.slice(0, LIVE_ROW_LIMIT), truncated: res.truncated === true || rows.length > LIVE_ROW_LIMIT };
+    const out: ConnectorRows = { ok: true, columns: res.columns || [], rows: rows.slice(0, LIVE_ROW_LIMIT), truncated: res.truncated === true || rows.length > LIVE_ROW_LIMIT };
+    // The warehouse's own byte figure, for the usage count (L2.7) — a whole, non-negative number or nothing.
+    if (typeof res.bytes === 'number' && Number.isSafeInteger(res.bytes) && res.bytes >= 0) out.bytes = res.bytes;
+    return out;
   } catch (err: unknown) {
     return { ok: false, error: safeError(err, ctx.secrets) };
   }
