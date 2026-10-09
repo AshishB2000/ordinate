@@ -48,6 +48,8 @@ describe('identifier quoting per dialect', () => {
     expect(quoteQualified('postgres', 'sales.orders')).toBe('"sales"."orders"');
     expect(quoteQualified('mysql', 'db.t')).toBe('`db`.`t`');
     expect(quoteQualified('duckdb', 'reporting.t')).toBe('"reporting.t"');
+    expect(quoteQualified('bigquery', 'sales.orders')).toBe('`sales`.`orders`');
+    expect(quoteIdent('bigquery', 'a`b\\c')).toBe('`a\\`b\\\\c`');
   });
   it('reduces a source type to a glyph shape', () => {
     expect([typeKind('bigint'), typeKind('NUMERIC(10,2)'), typeKind('timestamp with time zone'), typeKind('varchar')]).toEqual(['number', 'number', 'date', 'text']);

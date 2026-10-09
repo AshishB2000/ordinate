@@ -22,6 +22,8 @@ import { tally, withSummary } from '../app/pipelineSummary';
 import { maskKeys, maskOutcomes, maskView, unmaskNodeId } from '../app/pipelineIds';
 import { sanitizePolicy } from '../app/pipelines';
 import { describeCron, isValidTimeZone, nextCronRun, parseCron } from '../app/pipelineCron';
+import { isAutoRefreshEvery, needsIncremental } from '../data/refreshCadence';
+import { fastCadenceNeedsIncremental } from '../data/refreshMessages';
 
 const fail = (err: unknown, fallback: string): { ok: false; error: string } =>
   ({ ok: false, error: err instanceof Error && err.message ? err.message : fallback });
@@ -119,7 +121,11 @@ export function register(deps: { headless?: boolean }): void {
       const [kind, id] = String(nodeId).split(':');
       if (kind === 'dataset') {
         const ev = every === 'off' || every === null ? null : every;
-        if (ev !== null && !['hourly', 'daily', 'weekly'].includes(ev)) return { ok: false, error: 'Unknown interval.' };
+        if (ev !== null && !isAutoRefreshEvery(ev)) return { ok: false, error: 'Unknown interval.' };
+        // Every 5 or 15 minutes only with incremental refresh on (setAutoRefresh refuses it too, wordlessly).
+        if (needsIncremental(ev) && (await datasets.getDatasetMeta(projectId, id))?.incremental?.enabled !== true) {
+          return { ok: false, error: fastCadenceNeedsIncremental() };
+        }
         const r = await datasets.setAutoRefresh(projectId, id, { every: ev });
         return r === false ? { ok: false, error: 'This dataset has nothing to re-fetch.' } : { ok: true };
       }

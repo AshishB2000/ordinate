@@ -132,7 +132,7 @@ async function viaIpc(
   column: string,
   aggregation: string,
   filters?: unknown,
-): Promise<{ ok: boolean; value?: number | null; error?: string }> {
+): Promise<{ ok: boolean; value?: number | null; error?: string; asOf?: { at: string; mode: string } }> {
   return (metricHandler as IpcHandler)(null, {
     projectId: f.projectId,
     datasetId: f.id,
@@ -218,8 +218,11 @@ async function main(): Promise<void> {
   // ── 1. Contract: response shape is unchanged ───────────────────────────────
   {
     const good = await viaIpc(small, 'sales', 'sum');
-    ok('contract: success is { ok:true, value } and nothing else',
-      good.ok === true && 'value' in good && Object.keys(good).sort().join(',') === 'ok,value');
+    // `asOf` (docs/live-data L0.2): every KPI reply says how fresh its figure is —
+    // the dataset's time (never refreshed: when its rows were saved), set by the server.
+    ok('contract: success is { ok:true, value, asOf } and nothing else',
+      good.ok === true && 'value' in good && Object.keys(good).sort().join(',') === 'asOf,ok,value'
+        && good.asOf?.mode === 'extract' && good.asOf.at === new Date(smallRec.createdAt).toISOString(), JSON.stringify(good));
 
     const missing = await viaIpc({ ...small, id: '00000000-0000-4000-8000-000000000000' }, 'sales', 'sum');
     ok('contract: unknown dataset → { ok:false, error }',

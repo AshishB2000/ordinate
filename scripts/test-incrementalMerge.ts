@@ -86,6 +86,16 @@ ok('oracle: quoted exact-case column, no AS on the alias',
 ok('duckdb: a text cell is TRY_CAST and an uncastable one passes to JS',
   sqlGen.pushdownSql('duckdb', { table: 'sales' }, 'n', 'number', 2.5)
   === 'select * from "sales" where (TRY_CAST("n" AS DOUBLE) IS NULL OR TRY_CAST("n" AS DOUBLE) >= 2.5)');
+ok('bigquery: one backtick path, and a day literal the column coerces (DATE, DATETIME or TIMESTAMP alike)',
+  sqlGen.pushdownSql('bigquery', { table: 'sales.orders' }, 'updated_at', 'date', day)
+  === "select * from `sales.orders` where `updated_at` >= '2024-05-01'");
+ok('bigquery: project.dataset.table, a column escaped with backslashes',
+  sqlGen.pushdownSql('bigquery', { table: 'acme-analytics.sales.orders' }, 'we`ird\\col', 'number', 41)
+  === 'select * from `acme-analytics.sales.orders` where `we\\`ird\\\\col` >= 41');
+ok('bigquery: a query is wrapped with an alias',
+  sqlGen.pushdownSql('bigquery', { query: 'select * from sales.orders;' }, 'id', 'number', 7)
+  === 'select * from ( select * from sales.orders ) ord_inc where `id` >= 7');
+ok('bigquery: an unsafe table name is not pushed', sqlGen.pushdownSql('bigquery', { table: 'sales.orders`; drop table x' }, 'id', 'number', 1) === null);
 ok('http / saas / url families are never pushed',
   ['http', 'saas', 'url'].every((f) => sqlGen.pushdownSql(f, { table: 't' }, 'id', 'number', 1) === null));
 ok('an unsafe table name is not pushed', sqlGen.pushdownSql('postgres', { table: 'x; drop table y' }, 'id', 'number', 1) === null);

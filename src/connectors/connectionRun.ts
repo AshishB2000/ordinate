@@ -15,6 +15,7 @@
 
 import { coerceValue, finalizeTable, ParseResult } from '../data/parse';
 import { getConnector } from './index';
+import { estimateLabel, quotedTablePath } from './bigqueryShape';
 import { safeError } from './types';
 import { checkHost, guardOn } from './ssrf';
 import type {
@@ -43,7 +44,7 @@ export interface RunBounds {
 
 type RunOk = { ok: true; result: ParseResult; truncated: boolean };
 type RunErr = { ok: false; error: string };
-type TablesOk = { ok: true; tables: { schema?: string; name: string }[] };
+type TablesOk = { ok: true; tables: { schema?: string; name: string }[]; warnings?: string[] };
 
 /** Build the per-call context. Bounds are clamped to the module defaults — a
  *  caller may ask for LESS, never more, so no call site can quietly uncap. */
@@ -99,7 +100,9 @@ const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_$]*$/;
 
 // Per-family identifier quoting + row-limit syntax. Only the five families this
 // app ships are listed; anything else gets ANSI double quotes and LIMIT, which is
-// what Postgres, DuckDB, ClickHouse, Trino and Presto all accept.
+// what Postgres, DuckDB, ClickHouse, Trino and Presto all accept — and Snowflake,
+// whose listTables names `SCHEMA.TABLE`, or `DB.SCHEMA.TABLE` when the connection
+// has no database (quoted part by part, so the stored case is matched exactly).
 interface Dialect {
   quote: (part: string) => string;
   limit: (sql: string, n: number) => string;
@@ -138,6 +141,11 @@ export function buildTableSql(family: string, table: string, rowLimit: number): 
  *  whitelist. Exported for incremental refresh, which adds a WHERE to it. */
 export function quotedTable(family: string, table: string): string | null {
   const name = String(table || '').trim();
+  // BigQuery names a table `dataset.table` or `project.dataset.table`, and a
+  // project id has dashes (a legacy domain-scoped one a dot and a colon), which
+  // IDENT_RE refuses. Its own validator holds every part to a charset with no
+  // backtick, backslash or newline, so the whole path is one backtick identifier.
+  if (family === 'bigquery') return quotedTablePath(name);
   const parts = name.split('.');
   if (parts.length === 0 || parts.length > 3 || parts.some((p) => !IDENT_RE.test(p))) return null;
   const dialect = DIALECTS[family] || ANSI;
@@ -243,7 +251,9 @@ export async function listTables(
       schema: typeof t?.schema === 'string' ? t.schema : undefined,
       name: String(t?.name ?? ''),
     }));
-    return { ok: true, tables };
+    // A test's warnings travel beside the tables, redacted like an error would be.
+    const warnings = (Array.isArray(res.warnings) ? res.warnings : []).filter((w) => typeof w === 'string' && w).map((w) => safeError(w, ctx.secrets));
+    return warnings.length ? { ok: true, tables, warnings } : { ok: true, tables };
   } catch (err: unknown) {
     return { ok: false, error: safeError(err, ctx.secrets) };
   }
@@ -321,7 +331,7 @@ export async function testConnection(
   secrets: Record<string, string>,
   selection?: { table?: string; query?: string },
   bounds?: RunBounds,
-): Promise<{ ok: true; tables: { schema?: string; name: string }[] } | RunErr> {
+): Promise<TablesOk | RunErr> {
   const def = resolve(connectorId);
   if (!def) return { ok: false, error: unknownConnector(connectorId) };
 
@@ -448,6 +458,35 @@ export async function explainSql(
         ...(c?.columnType === 'text' || c?.columnType === 'number' || c?.columnType === 'date' ? { columnType: c.columnType } : {}),
       })),
     };
+  } catch (err: unknown) {
+    return { ok: false, error: safeError(err, ctx.secrets) };
+  }
+}
+
+/**
+ * What a statement would read, priced BEFORE it runs: the connector's free dry
+ * run (`live.estimate`, BigQuery's totalBytesProcessed), with the editor's
+ * "~1.2 GB" label formatted here, server side. `null` — not an error — when the
+ * connector cannot estimate; the catalog's `estimates` flag says so up front.
+ */
+export async function estimateSql(
+  connectorId: unknown,
+  values: Record<string, unknown>,
+  secrets: Record<string, string>,
+  sql: string,
+): Promise<{ ok: true; bytes: number; label: string } | RunErr | null> {
+  const def = resolve(connectorId);
+  if (!def) return { ok: false, error: unknownConnector(connectorId) };
+  if (typeof def.live?.estimate !== 'function') return null;
+  const statement = typeof sql === 'string' ? sql.trim().replace(/;\s*$/, '') : '';
+  if (!statement) return { ok: false, error: 'No query to estimate' };
+  const ctx = buildContext(values, secrets, { rowLimit: 1 });
+  const refused = await guardHost(def, ctx);
+  if (refused) return { ok: false, error: refused };
+  try {
+    const res = await def.live.estimate(ctx, statement, []);
+    if (!res.ok) return { ok: false, error: safeError(res.error, ctx.secrets) };
+    return { ok: true, bytes: res.bytes, label: estimateLabel(res.bytes) };
   } catch (err: unknown) {
     return { ok: false, error: safeError(err, ctx.secrets) };
   }

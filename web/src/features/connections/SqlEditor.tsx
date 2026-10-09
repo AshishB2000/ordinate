@@ -35,6 +35,7 @@ export function SqlEditor({
   onRun,
   onExplain,
   onSave,
+  estimate = null,
 }: {
   sql: string;
   onSql: (sql: string) => void;
@@ -47,6 +48,8 @@ export function SqlEditor({
   onRun: () => void;
   onExplain: () => void;
   onSave: () => void;
+  /** What the statement would read, by Run — only for a source that prices one (BigQuery). */
+  estimate?: { text: string; title: string; muted?: boolean } | null;
 }) {
   const input = useRef<HTMLTextAreaElement>(null);
   const mirror = useRef<HTMLPreElement>(null);
@@ -178,6 +181,11 @@ export function SqlEditor({
         <Button size="sm" variant="primary" icon="play" loading={busy === 'run'} onClick={onRun}>
           Run
         </Button>
+        {estimate && (
+          <span className={estimate.muted ? `${s.estimate} ${s.estimateMuted}` : s.estimate} title={estimate.title} role="status" aria-label={`Estimate: ${estimate.text}`}>
+            {estimate.text}
+          </span>
+        )}
         <Button size="sm" icon="circle-check" loading={busy === 'explain'} onClick={onExplain}>
           Explain
         </Button>

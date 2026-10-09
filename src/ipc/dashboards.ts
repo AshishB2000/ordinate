@@ -15,6 +15,7 @@ import { paramValues, resolveFilterParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import { paramTable } from '../data/paramReplay';
 import { withAsOf } from '../data/asOf';
+import { stampAsOf } from '../data/figureAsOf';
 import { fxCardMetric, fxContext, fxScope } from './fxQuery';
 import type { FxInfo } from '../analysis/fx';
 
@@ -253,7 +254,9 @@ export function register() {
       const res = await computeCardMetric(projectId, datasetId, spec, bound.steps, values);
       if (!res.ok) return { ok: false, error: 'Dataset not found' };
       const fx = res.fx ? { fx: res.fx } : {};
-      return bound.errors.length ? { ok: true, value: res.value, paramErrors: bound.errors, ...fx } : { ok: true, value: res.value, ...fx };
+      // Dated (L0.2, data/figureAsOf) inside the as-of scope: a snapshot view says the snapshot's time.
+      return await stampAsOf(bound.errors.length ? { ok: true, value: res.value, paramErrors: bound.errors, ...fx } : { ok: true, value: res.value, ...fx },
+        projectId, [datasetId]);
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the metric' };
     }

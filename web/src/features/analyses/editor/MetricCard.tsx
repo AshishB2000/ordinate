@@ -13,6 +13,7 @@ import { DriversView } from '../../analytics/drivers/DriversView';
 import { Icon } from '../../../ui/icons/Icon';
 import { AGG_LABEL, useTile, type Card, type MetricTile } from '../api';
 import { useEditor } from './context';
+import { useTileAsOf } from './tileAsOf';
 import s from './Cards.module.css';
 
 /** "+18.2%" / "−4.1%" — one decimal under 10%, none above, a real minus sign (kpiPct). */
@@ -41,6 +42,7 @@ export function MetricBody({ card }: { card: Card }) {
     [m, ed.filters],
   );
   const q = useTile<MetricTile>(ed.projectId, ed.params, req);
+  useTileAsOf(q.data?.ok ? q.data.asOf : undefined);
   const [why, setWhy] = useState(false);
   if (q.isPending) {
     return (

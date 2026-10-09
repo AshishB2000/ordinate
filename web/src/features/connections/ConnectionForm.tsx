@@ -1,10 +1,12 @@
 // Step 2 — the chosen source's form, rendered from its declared fields (legacy
 // connNew.ts connRenderFields / connCollectValues / handleConnTestAndSave).
 //
-// A SECRET field is write-only: a password input, never prefilled, its value
-// kept apart from the rest and sent once, inside testAndSave. "Change source"
-// keeps the non-secret answers (the parent holds them per connector id); the
-// secrets are simply dropped.
+// A SECRET field is write-only: a password input — or, for a multi-line one (a
+// PEM private key), the masked SecretTextarea — never prefilled, its value kept
+// apart from the rest and sent once, inside testAndSave. "Change source" keeps
+// the non-secret answers (the parent holds them per connector id); the secrets
+// are simply dropped. A test that passes with a warning (an administrator role)
+// hands the warning on with the saved connection.
 
 import { useRef, useState, type FormEvent } from 'react';
 import { Button } from '../../ui/Button';
@@ -13,6 +15,7 @@ import { Input, Textarea } from '../../ui/Field';
 import { Select } from '../../ui/Select';
 import { testAndSave, type CatalogField, type Connection, type Connector, type Logo } from './api';
 import { ConnLogo } from './ConnLogo';
+import { SecretTextarea } from './SecretText';
 import s from './Connections.module.css';
 
 export type Draft = Record<string, string | boolean>;
@@ -67,7 +70,7 @@ export function ConnectionForm({
   draft: Draft;
   onDraft: (d: Draft) => void;
   onBack: () => void;
-  onSaved: (c: Connection) => void;
+  onSaved: (c: Connection, warnings: string[]) => void;
 }) {
   const [name, setName] = useState('');
   const [secrets, setSecrets] = useState<Record<string, string>>({});
@@ -92,7 +95,7 @@ export function ConnectionForm({
     try {
       const saved = await testAndSave({ projectId, connectorId: def.id, name: name.trim() || undefined, values, secrets });
       setSecrets({});
-      onSaved(saved);
+      onSaved(saved.connection, saved.warnings);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not connect.');
     } finally {
@@ -108,6 +111,20 @@ export function ConnectionForm({
       onDraft({ ...draft, [f.key]: v });
       if (invalid.has(f.key)) setInvalid(new Set([...invalid].filter((k) => k !== f.key)));
     };
+    const writeOnly = f.help ? `${f.help} Write-only: it is stored encrypted and never shown again.` : 'Write-only: it is stored encrypted and never shown again.';
+    if (f.secret && f.type === 'textarea') {
+      return (
+        <SecretTextarea
+          id={id}
+          label={label}
+          placeholder={f.placeholder}
+          value={secrets[f.key] ?? ''}
+          onChange={(e) => setSecrets({ ...secrets, [f.key]: e.target.value })}
+          error={err}
+          hint={writeOnly}
+        />
+      );
+    }
     if (f.secret) {
       return (
         <Input
@@ -119,7 +136,7 @@ export function ConnectionForm({
           value={secrets[f.key] ?? ''}
           onChange={(e) => setSecrets({ ...secrets, [f.key]: e.target.value })}
           error={err}
-          hint={f.help ? `${f.help} Write-only: it is stored encrypted and never shown again.` : 'Write-only: it is stored encrypted and never shown again.'}
+          hint={writeOnly}
         />
       );
     }

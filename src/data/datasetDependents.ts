@@ -24,10 +24,14 @@
 //
 // Serial per project: two edits in quick succession queue, so an older run can
 // never finish last and leave a dependent on stale input.
+//
+// A dependent that re-ran is ANNOUNCED like any refresh (./refreshEvents,
+// L0.1): a dashboard drawn from a query over the changed dataset redraws too.
 
 import { runQualityChecks } from '../analysis/qualityRun';
 import * as datasets from './datasets';
 import { refreshDataset } from './datasetRefresh';
+import { announceRefreshed } from './refreshEvents';
 
 /** How many SQL hops downstream one change may reach. */
 const MAX_DEPTH = 8;
@@ -48,9 +52,11 @@ async function pushFrom(projectId: string, rootId: string): Promise<void> {
   const list = await datasets.listDatasets(projectId);
   const inputs = new Map<string, string[]>(); // sql dataset → the datasets it reads
   const names = new Map<string, string>();
+  const rowsBefore = new Map<string, number>();
   const stepOnly = new Set<string>(); // read another dataset in a union/lookup step, no query to re-run
   for (const d of list) {
     names.set(d.id, d.name);
+    rowsBefore.set(d.id, d.rowCount);
     const query = d.originKind === 'sql' || d.originKind === 'notebook'; // re-runs its statement
     if (query) inputs.set(d.id, d.originDeps || []);
     if (d.stepDeps && d.stepDeps.length) {
@@ -104,10 +110,15 @@ async function pushFrom(projectId: string, rootId: string): Promise<void> {
       // A step-only dependent has nothing to re-fetch: re-running its pipeline
       // (which re-reads the changed dataset) is its refresh.
       const res = stepOnly.has(id) ? await recomputeSteps(projectId, id) : await refreshDataset(projectId, id);
-      if (!res.ok) failed.add(id);
+      if (!res.ok) {
+        failed.add(id);
+        continue;
+      }
+      const after = await datasets.getDatasetMeta(projectId, id);
+      announceRefreshed({ projectId, datasetId: id, name: names.get(id) || 'dataset', rowsBefore: rowsBefore.get(id) ?? 0, rowsAfter: after ? after.rowCount : 0 });
       // Its rows changed, so its OWN quality rules run too (they would on any
       // other refresh). Delivered like a manual refresh's; never throws.
-      else await runQualityChecks(projectId, id);
+      await runQualityChecks(projectId, id);
     }
   }
 }

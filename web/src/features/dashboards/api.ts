@@ -6,6 +6,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc, type RpcInput } from '../../api/client';
 import { useServerEvent } from '../../api/events';
+import type { AsOf } from '../../ui/asOf';
 
 // ── Publish to a URL ─────────────────────────────────────────────────────
 
@@ -245,11 +246,12 @@ export function useSetDashboardCurrency(projectId: string) {
   });
 }
 
+/** The As of picker's snapshot times, and `latest`: how fresh the sheet is at "Latest" (its stalest dataset, L0.2). */
 export function useAsOfStamps(projectId: string, datasetIds: string[], metricIds: string[]) {
   return useQuery({
     queryKey: ['dashboard:asOfStamps', projectId, datasetIds, metricIds],
     enabled: datasetIds.length + metricIds.length > 0,
-    queryFn: async () => must<{ items: { at: string; datasets: string[] }[] }>(rpc('dashboard:asOfStamps', { projectId, datasetIds, metricIds }), 'Could not list snapshot times.'),
+    queryFn: async () => must<{ items: { at: string; datasets: string[] }[]; latest?: AsOf }>(rpc('dashboard:asOfStamps', { projectId, datasetIds, metricIds }), 'Could not list snapshot times.'),
   });
 }
 

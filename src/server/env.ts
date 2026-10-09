@@ -218,6 +218,8 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   const auth = parseAuth(src, env, databaseUrl);
   // SSRF_ALLOW (T6.1): internal ranges connectors may reach. Read by src/connectors/ssrf.ts; a typo stops startup here.
   proxyList(csv(src.SSRF_ALLOW), 'SSRF_ALLOW');
+  // LIVE_MAX_BYTES_BILLED (live data, L1.3): read by src/connectors/bigquery.ts at each query; a typo stops startup here.
+  maxBytesBilled(src.LIVE_MAX_BYTES_BILLED);
   const duckdb = parseDuck(src);
   const limits = Object.freeze({
     loginPerMinute: positiveInt('RATE_LIMIT_LOGIN_PER_MINUTE', src.RATE_LIMIT_LOGIN_PER_MINUTE, 60),
@@ -339,6 +341,23 @@ export function parseMasterKey(name: string, raw: string): KeyObject {
   return key;
 }
 
+
+/** LIVE_MAX_BYTES_BILLED's default: 10 GiB (docs/live-data/00-plan.md §8). */
+export const DEFAULT_MAX_BYTES_BILLED = 10_737_418_240;
+
+/**
+ * LIVE_MAX_BYTES_BILLED: the ceiling on BigQuery's `maximumBytesBilled`, in
+ * bytes, for every query a BigQuery connection runs (a connection may set it
+ * lower, never higher). Pure, so the connector re-reads the variable the same
+ * way at each query. Not positiveInt: 10 GiB has eleven digits.
+ */
+export function maxBytesBilled(raw: string | undefined): number {
+  if (raw === undefined || raw === '') return DEFAULT_MAX_BYTES_BILLED;
+  if (!/^\d{1,16}$/.test(raw) || Number(raw) === 0 || !Number.isSafeInteger(Number(raw))) {
+    throw new EnvError(`LIVE_MAX_BYTES_BILLED must be a positive whole number of bytes, for example 10737418240 (10 GiB), got ${JSON.stringify(raw)}`);
+  }
+  return Number(raw);
+}
 
 function positiveInt(name: string, raw: string | undefined, dflt: number): number {
   if (raw === undefined || raw === '') return dflt;

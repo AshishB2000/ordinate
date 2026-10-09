@@ -1,0 +1,61 @@
+{
+  "resultSetMetaData": {
+    "numRows": 3,
+    "format": "jsonv2",
+    "partitionInfo": [
+      {
+        "rowCount": 3,
+        "uncompressedSize": 1024
+      }
+    ],
+    "rowType": [
+      {
+        "name": "TABLE_SCHEMA",
+        "database": "SALES",
+        "schema": "INFORMATION_SCHEMA",
+        "table": "TABLES",
+        "nullable": true,
+        "type": "text",
+        "byteLength": null,
+        "length": 16777216,
+        "scale": null,
+        "precision": null,
+        "collation": null
+      },
+      {
+        "name": "TABLE_NAME",
+        "database": "SALES",
+        "schema": "INFORMATION_SCHEMA",
+        "table": "TABLES",
+        "nullable": true,
+        "type": "text",
+        "byteLength": null,
+        "length": 16777216,
+        "scale": null,
+        "precision": null,
+        "collation": null
+      }
+    ]
+  },
+  "data": [
+    [
+      "PUBLIC",
+      "CUSTOMERS"
+    ],
+    [
+      "PUBLIC",
+      "ORDERS"
+    ],
+    [
+      "RAW",
+      "EVENTS"
+    ]
+  ],
+  "code": "090001",
+  "statementStatusUrl": "/api/v2/statements/01b0e8a5-0002-3c8a-0000-0001234a5b6e?requestId=5f0a7b1e-6a4b-4c1d-9e7f-2a3b4c5d6e7f",
+  "requestId": "5f0a7b1e-6a4b-4c1d-9e7f-2a3b4c5d6e7f",
+  "sqlState": "00000",
+  "statementHandle": "01b0e8a5-0002-3c8a-0000-0001234a5b6e",
+  "message": "Statement executed successfully.",
+  "createdOn": 1700000000123
+}

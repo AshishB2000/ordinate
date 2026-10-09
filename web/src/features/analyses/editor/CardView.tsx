@@ -3,11 +3,13 @@
 // A visual draws through the shared engines; a KPI through the server's
 // figure; text, dividers and groups are the record's own words.
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { IconButton, buttonClass } from '../../../ui/Button';
 import { Menu, type MenuEntry } from '../../../ui/Menu';
 import { Icon } from '../../../ui/icons/Icon';
+import { AsOfCaption } from '../../../ui/AsOf';
+import type { AsOf } from '../../../ui/asOf';
 import type { Card } from '../api';
 import { vizLabel } from '../VisualTile';
 import { builderFor } from './AddVisual';
@@ -22,6 +24,7 @@ import { TextBody } from '../../dashboards/Markdown';
 import { SummaryBody } from '../../dashboards/SummaryBody';
 import { CommentButton } from '../../dashboards/CommentsPanel';
 import { VisualCard, WatchedBell } from '../../dashboards/CardRuntime';
+import { TileAsOfSlot } from './tileAsOf';
 
 const KIND_TITLE: Record<string, string> = {
   nav: 'Navigation',
@@ -159,6 +162,8 @@ export function CardView({
   const title = cardTitle(card, ed);
   const folded = card.type === 'container' && !!card.container?.collapsible && ed.folded.has(card.id);
   const visualId = card.type === 'visual' ? card.visualId : undefined;
+  // How fresh the body's figure is (L0.2): reported by the body, shown beside the title.
+  const [asOf, setAsOf] = useState<AsOf | undefined>(undefined);
   return (
     <div
       // A one-row navigation or divider card has no room for a head: it floats in the corner (authoring.css).
@@ -197,6 +202,7 @@ export function CardView({
           />
         )}
         <Title card={card} title={title} />
+        {asOf && <AsOfCaption asOf={asOf} className={s.asOf} />}
         {/* Present: a reading view, no card controls (dashShare.ts). */}
         {!ed.view.presenting && (
         <span className={s.ctrls} onPointerDown={(e) => e.stopPropagation()}>
@@ -225,7 +231,9 @@ export function CardView({
       {!folded && (
         <div className={s.body} id={card.type === 'tabs' ? `panel-${card.id}` : undefined} role={card.type === 'tabs' ? 'tabpanel' : undefined}
           aria-labelledby={card.type === 'tabs' ? `tab-${card.id}-${activeTab(card, ed.groupTab.get(card.id))}` : undefined}>
-          <Body card={card} asTable={asTable} />
+          <TileAsOfSlot.Provider value={setAsOf}>
+            <Body card={card} asTable={asTable} />
+          </TileAsOfSlot.Provider>
         </div>
       )}
       {handles}

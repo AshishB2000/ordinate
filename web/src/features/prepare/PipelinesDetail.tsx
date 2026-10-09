@@ -8,6 +8,8 @@ import { formatNumber } from '../../../../src/app/format.ts';
 import { Button, buttonClass } from '../../ui/Button';
 import { Icon, type IconName } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
+import type { AutoRefreshEvery } from '../../api/datasets';
+import { BehindBadge, cadenceOptions } from '../data/cadence';
 import type { NodeRun, PipelineNode, PipelineView } from './pipelinesApi';
 import { absTime, dur, iconFor, KIND, nextText, STATUS } from './pipelineFormat';
 import s from './Pipelines.module.css';
@@ -16,7 +18,7 @@ export interface DetailActions {
   running: boolean;
   run: (nodeId: string) => void;
   pause: (nodeId: string, paused: boolean) => void;
-  setNode: (nodeId: string, patch: { every?: 'off' | 'hourly' | 'daily' | 'weekly'; cadence?: 'off' | 'daily' | 'weekly' | 'monthly'; at?: string }) => void;
+  setNode: (nodeId: string, patch: { every?: 'off' | AutoRefreshEvery; cadence?: 'off' | 'daily' | 'weekly' | 'monthly'; at?: string }) => void;
 }
 
 /** Where a step's record opens in this app, when it has a page here yet. */
@@ -47,14 +49,20 @@ function ScheduleBox({ n, act }: { n: PipelineNode; act: DetailActions }) {
             aria-label="Refresh this dataset"
             size="sm"
             value={sch.every || 'off'}
-            onValueChange={(v) => act.setNode(n.id, { every: v as 'off' | 'hourly' | 'daily' | 'weekly' })}
-            options={[
-              { value: 'off', label: 'Manual — no refresh schedule' },
-              { value: 'hourly', label: 'Refresh hourly' },
-              { value: 'daily', label: 'Refresh daily' },
-              { value: 'weekly', label: 'Refresh weekly' },
-            ]}
+            onValueChange={(v) => act.setNode(n.id, { every: v as 'off' | AutoRefreshEvery })}
+            options={cadenceOptions(
+              [
+                { value: 'off', label: 'Manual — no refresh schedule' },
+                { value: '5min', label: 'Refresh every 5 minutes' },
+                { value: '15min', label: 'Refresh every 15 minutes' },
+                { value: 'hourly', label: 'Refresh hourly' },
+                { value: 'daily', label: 'Refresh daily' },
+                { value: 'weekly', label: 'Refresh weekly' },
+              ],
+              !!sch.incremental,
+            )}
           />
+          <BehindBadge behind={sch.behind} />
           <p className={s.note}>Saved on the dataset — the same schedule its Refresh menu sets.</p>
         </>
       ) : sch.edit === 'report' ? (

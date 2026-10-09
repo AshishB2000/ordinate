@@ -205,6 +205,21 @@ const DAY = 24 * 60 * 60;
   ok('…and its reply names the dataset by its header only', !r1.body.includes('canary_col') && !r1.body.includes(HOST_CANARY));
   const bumpExtract = await context.runInContext(ADMIN, 'bump', () => live.bumpEpoch(P, seed.fromPg));
   ok('negative control: bumpEpoch on an extract is refused (false), and writes no live block', bumpExtract === false && !('live' in rawRecord(seed.fromPg)));
+  // The scheduler's doors (L0.3/L0.4): a Live record carries no schedule even hand-edited, and a
+  // queued refresh of one is refused — only the person-facing Refresh resets its cache.
+  const raw = rawRecord(seed.live);
+  fs.writeFileSync(path.join(dsDir, `${seed.live}.json`), JSON.stringify({ ...raw, autoRefresh: { every: '5min' }, incremental: { enabled: true, cursor: 'id' } }));
+  await context.runInContext(ADMIN, 'sched', async () => {
+    const scheduler: typeof import('../src/app/refreshScheduler') = require('../src/app/refreshScheduler');
+    const refreshJob: typeof import('../src/data/refreshJob') = require('../src/data/refreshJob');
+    const summary = (await datasets.listDatasets(P)).find((d) => d.id === seed.live);
+    ok('a hand-edited schedule on a Live record is dropped on load (no autoRefresh, no incrementalOn)', !!summary && !summary.autoRefresh && !summary.incrementalOn, JSON.stringify(summary));
+    ok('…so the scheduler never lists it', !(await scheduler.scheduledMetas()).some((m) => m.id === seed.live));
+    const queued = await refreshJob.queueRefresh(P, seed.live, 'Refresh Orders live').done;
+    ok('a queued (scheduled / pipeline) refresh of a Live dataset is refused, typed', !queued.ok && queued.error === new live.LiveDatasetError('x').message, JSON.stringify(queued));
+    ok('…and leaves the record as it was', rawRecord(seed.live).live.epoch === 2 && rawRecord(seed.live).mode === 'live');
+  });
+  fs.writeFileSync(path.join(dsDir, `${seed.live}.json`), JSON.stringify(raw));
   const sched = await post('dataset:update', { projectId: P, datasetId: seed.live, autoRefresh: 'hourly' });
   ok('a refresh schedule on Live is refused (its cache age is its schedule)', sched.value?.ok === false, sched.body);
   const age = await post('dataset:setMode', { projectId: P, datasetId: seed.live, mode: 'live', maxCacheAgeSec: 0 });

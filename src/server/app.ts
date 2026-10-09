@@ -23,6 +23,7 @@ import { useRecordDb } from '../app/recordFs';
 import { useSecretStore } from '../app/configSecrets';
 import { createSecretStore } from './secrets/store';
 import { useAiKeys } from './aiKeys';
+import { useRefreshLockDb } from './jobs/refreshLock';
 import { handlers } from './rpc';
 import { maskFileToken, registerFileRoutes } from './files';
 import { clientFor, registerEvents } from './sse';
@@ -157,6 +158,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // only; recordFs ignores the pool under the desktop (T5.1). Before the
       // runner: a job's handler reads records like a request does.
       useRecordDb(pool);
+      // One refresh of a dataset at a time across pods (L0.4): an advisory lock per (org, dataset).
+      useRefreshLockDb(pool);
       // Connection passwords/tokens: the encrypted store (T5.3), never the
       // per-org config.json. Without a master key there is no store, and a
       // connection secret is refused (src/app/configSecrets.ts).
@@ -184,6 +187,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     });
     app.addHook('onClose', async () => {
       useRecordDb(null);
+      useRefreshLockDb(null);
       if (cfg.storage.s3) (require('../engine/storage') as typeof import('../engine/storage')).useStorageDb(null);
       useSecretStore(null);
       useAiKeys(null, null);

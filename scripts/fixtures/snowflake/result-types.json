@@ -1,0 +1,221 @@
+{
+  "resultSetMetaData": {
+    "numRows": 3,
+    "format": "jsonv2",
+    "partitionInfo": [
+      {
+        "rowCount": 3,
+        "uncompressedSize": 1024
+      }
+    ],
+    "rowType": [
+      {
+        "name": "ORDER_ID",
+        "database": "SALES",
+        "schema": "PUBLIC",
+        "table": "ORDERS",
+        "nullable": false,
+        "type": "fixed",
+        "byteLength": null,
+        "length": null,
+        "scale": 0,
+        "precision": 38,
+        "collation": null
+      },
+      {
+        "name": "QTY",
+        "database": "SALES",
+        "schema": "PUBLIC",
+        "table": "ORDERS",
+        "nullable": true,
+        "type": "fixed",
+        "byteLength": null,
+        "length": null,
+        "scale": 0,
+        "precision": 9,
+        "collation": null
+      },
+      {
+        "name": "AMOUNT",
+        "database": "SALES",
+        "schema": "PUBLIC",
+        "table": "ORDERS",
+        "nullable": true,
+        "type": "fixed",
+        "byteLength": null,
+        "length": null,
+        "scale": 2,
+        "precision": 12,
+        "collation": null
+      },
+      {
+        "name": "RATIO",
+        "database": "SALES",
+        "schema": "PUBLIC",
+        "table": "ORDERS",
+        "nullable": true,
+        "type": "real",
+        "byteLength": null,
+        "length": null,
+        "scale": null,
+        "precision": null,
+        "collation": null
+      },
+      {
+        "name": "NAME",
+        "database": "SALES",
+        "schema": "PUBLIC",
+        "table": "ORDERS",
+        "nullable": true,
+        "type": "text",
+        "byteLength": 16777216,
+        "length": 16777216,
+        "scale": null,
+        "precision": null,
+        "collation": null
+      },
+      {
+        "name": "ORDERED_ON",
+        "database": "SALES",
+        "schema": "PUBLIC",
+        "table": "ORDERS",
+        "nullable": true,
+        "type": "date",
+        "byteLength": null,
+        "length": null,
+        "scale": null,
+        "precision": null,
+        "collation": null
+      },
+      {
+        "name": "AT_TIME",
+        "database": "SALES",
+        "schema": "PUBLIC",
+        "table": "ORDERS",
+        "nullable": true,
+        "type": "time",
+        "byteLength": null,
+        "length": null,
+        "scale": 9,
+        "precision": 0,
+        "collation": null
+      },
+      {
+        "name": "CREATED_NTZ",
+        "database": "SALES",
+        "schema": "PUBLIC",
+        "table": "ORDERS",
+        "nullable": true,
+        "type": "timestamp_ntz",
+        "byteLength": null,
+        "length": null,
+        "scale": 9,
+        "precision": 0,
+        "collation": null
+      },
+      {
+        "name": "CREATED_LTZ",
+        "database": "SALES",
+        "schema": "PUBLIC",
+        "table": "ORDERS",
+        "nullable": true,
+        "type": "timestamp_ltz",
+        "byteLength": null,
+        "length": null,
+        "scale": 9,
+        "precision": 0,
+        "collation": null
+      },
+      {
+        "name": "CREATED_TZ",
+        "database": "SALES",
+        "schema": "PUBLIC",
+        "table": "ORDERS",
+        "nullable": true,
+        "type": "timestamp_tz",
+        "byteLength": null,
+        "length": null,
+        "scale": 9,
+        "precision": 0,
+        "collation": null
+      },
+      {
+        "name": "IS_PAID",
+        "database": "SALES",
+        "schema": "PUBLIC",
+        "table": "ORDERS",
+        "nullable": true,
+        "type": "boolean",
+        "byteLength": null,
+        "length": null,
+        "scale": null,
+        "precision": null,
+        "collation": null
+      },
+      {
+        "name": "PAYLOAD",
+        "database": "SALES",
+        "schema": "PUBLIC",
+        "table": "ORDERS",
+        "nullable": true,
+        "type": "variant",
+        "byteLength": null,
+        "length": null,
+        "scale": null,
+        "precision": null,
+        "collation": null
+      }
+    ]
+  },
+  "data": [
+    [
+      "12345678901234567890",
+      "3",
+      "1234.50",
+      "0.30000000000000004",
+      "\ufeffAcme",
+      "17982",
+      "82919.000000000",
+      "1616173619.000000000",
+      "1700000000.123456789",
+      "1616173619.000000000 1500",
+      "true",
+      "{\n  \"a\": 1,\n  \"b\": [\n    \"x y\",\n    12345678901234567890\n  ]\n}"
+    ],
+    [
+      "7",
+      "0",
+      "-4.00",
+      "NaN",
+      "007",
+      "-1",
+      "3600.500000000",
+      "-1.500000000",
+      "0.000000000",
+      "1616173619.000000000 1080",
+      "false",
+      "\"plain \\\"quoted\\\" text\""
+    ],
+    [
+      "42",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "1616173619.000000000 1440",
+      null,
+      null
+    ]
+  ],
+  "code": "090001",
+  "statementStatusUrl": "/api/v2/statements/01b0e8a5-0002-3c8a-0000-0001234a5b6e?requestId=5f0a7b1e-6a4b-4c1d-9e7f-2a3b4c5d6e7f",
+  "requestId": "5f0a7b1e-6a4b-4c1d-9e7f-2a3b4c5d6e7f",
+  "sqlState": "00000",
+  "statementHandle": "01b0e8a5-0002-3c8a-0000-0001234a5b6e",
+  "message": "Statement executed successfully.",
+  "createdOn": 1700000000123
+}

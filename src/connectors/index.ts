@@ -30,13 +30,15 @@ const FAMILY_MODULES: readonly string[] = [
   './http',     // ClickHouse, Databricks SQL, Trino, Presto, Elasticsearch, OpenSearch, Druid
   './url',      // the original URL/API JSON source
   './saas',     // Google Sheets, Airtable, Notion, Stripe, GitHub, HubSpot
+  './bigquery', // Google BigQuery (REST, a service-account key)
+  './snowflake', // Snowflake (SQL API)
 ];
 
 // Picker grouping order. Anything with an unrecognised category sorts last —
 // it is still reachable, just not ahead of the known groups.
 const CATEGORY_ORDER: readonly string[] = ['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS'];
 const KNOWN_CATEGORIES: ReadonlySet<string> = new Set(CATEGORY_ORDER);
-const FIELD_TYPES: ReadonlySet<string> = new Set(['text', 'number', 'password', 'select', 'checkbox']);
+const FIELD_TYPES: ReadonlySet<string> = new Set(['text', 'number', 'password', 'select', 'checkbox', 'textarea']);
 
 export interface RegistryDiagnostics {
   /** Modules in FAMILY_MODULES that could not be required at all. */
@@ -198,6 +200,10 @@ export interface CatalogEntry {
   /** The fixed hosts a SaaS source may contact — shown on its form. Absent
    *  when the user supplies the host. */
   hosts?: string[];
+  /** True when the source can price a statement before it runs (a free dry
+   *  run, `live.estimate` — BigQuery), so the editor shows "~1.2 GB" by Run.
+   *  A boolean on every entry, reported for the same reason as `browsable`. */
+  estimates: boolean;
   /** True when a dataset from this connector can be Live (plan D2) — the
    *  create flow offers "Live" beside "Copy the data". The flag only: the
    *  dialect and the runner never leave the server. */
@@ -243,6 +249,7 @@ export function connectorCatalog(): CatalogEntry[] {
       category: d.category,
       fields: (d.fields || []).map(catalogField),
       browsable: typeof d.describeTable === 'function',
+      estimates: typeof d.live?.estimate === 'function',
       live: isLiveCapable(d),
     };
     if (typeof d.blurb === 'string') entry.blurb = d.blurb;

@@ -17,6 +17,7 @@ import { Icon, type IconName } from '../../ui/icons/Icon';
 import { markAt } from '../visuals/drill/mark';
 import { GRID_IDS, GridViz, type GridData } from '../../charts/grids/GridViz';
 import { useTile, type ParamPayload, type Step, type VisualDef, type VisualTile } from './api';
+import { useTileAsOf } from './editor/tileAsOf';
 import s from './Tiles.module.css';
 
 /** The family glyph a chart type wears where it is not drawn (a map preview, a missing visual). */
@@ -154,6 +155,7 @@ export function VisualTileBody({
     [def, filters],
   );
   const q = useTile<VisualTile>(projectId, params, req);
+  useTileAsOf(!thumb && q.data?.ok ? q.data.asOf : undefined);
   const label = def.name || vizLabel(def.chartType);
   if (q.isPending) return <SkeletonBlock label={`Loading ${label}`} />;
   if (q.isError || !q.data.ok) {

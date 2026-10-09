@@ -4,7 +4,9 @@
 // planted API key.
 //
 //   1. The list: every dataset, the source and freshness cells, the failed
-//      refresh's reason cut to the host; search inside the data → Open filtered.
+//      refresh's reason cut to the host; a 5-minute incremental schedule that
+//      runs behind it, and the fast cadences greyed out where incremental
+//      refresh is off (L0.3); search inside the data → Open filtered.
 //   2. The dataset page: the filter banner, sort and hide from a column menu,
 //      the column profile (server figures), the lineage drawer.
 //   3. Quality: add a rule with its live preview, run the checks, show the
@@ -25,13 +27,13 @@ import { e2e, SCREENS, screens, settled, type Session } from './fixtures.ts';
 
 const CANARY = 'k3y-E2E-CANARY-91c4';
 const SEED = fileURLToPath(new URL('./seedData.ts', import.meta.url));
-let seeded: { regionsId: string; feedId: string } | undefined;
+let seeded: { regionsId: string; feedId: string; liveId: string } | undefined;
 
-function seed(s: Session): { regionsId: string; feedId: string } {
+function seed(s: Session): { regionsId: string; feedId: string; liveId: string } {
   if (seeded) return seeded;
   const r = spawnSync(process.execPath, [SEED, s.server.dataDir, s.server.sample.projectId, CANARY], { encoding: 'utf8', timeout: 60_000 });
   if (r.status !== 0) throw new Error(`seedData failed:\n${r.stderr || r.stdout}`);
-  seeded = JSON.parse(r.stdout.trim().split('\n').pop() ?? '{}') as { regionsId: string; feedId: string };
+  seeded = JSON.parse(r.stdout.trim().split('\n').pop() ?? '{}') as { regionsId: string; feedId: string; liveId: string };
   return seeded;
 }
 
@@ -97,7 +99,21 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
   const reason = await feedRow.locator('[title*="Could not fetch"]').getAttribute('title');
   assert.equal(reason, 'Could not fetch https://api.example.com: 401 Unauthorized', 'the reason is shown, cut to the host');
   assert.equal(await feedRow.getByRole('combobox', { name: 'Auto-refresh Feed' }).count(), 1, 'a refreshable dataset offers a schedule');
+  // Every 5 minutes, incrementally — and its last run took 7: the server says it is behind.
+  const liveRow = table.getByRole('row').filter({ hasText: 'Live orders' });
+  await liveRow.getByText(/^Refreshes every 5 minutes · last/).waitFor();
+  assert.equal(await liveRow.getByText('Behind schedule').count(), 1, 'a run longer than its cadence shows "Behind schedule"');
+  assert.equal(await feedRow.getByText('Behind schedule').count(), 0, 'one that never ran late does not');
   await screens(page, 'data-list');
+  // A URL dataset cannot refresh incrementally: the fast cadences are there, greyed, saying why.
+  await feedRow.getByRole('combobox', { name: 'Auto-refresh Feed' }).click();
+  const fast = page.getByRole('option', { name: /^Every 5 minutes/ });
+  assert.equal(await fast.getAttribute('aria-disabled'), 'true', 'no 5-minute schedule without incremental refresh');
+  assert.match((await fast.textContent()) ?? '', /needs incremental refresh/);
+  await page.keyboard.press('Escape');
+  await liveRow.getByRole('combobox', { name: 'Auto-refresh Live orders' }).click();
+  assert.equal(await page.getByRole('option', { name: /^Every 15 minutes$/ }).getAttribute('aria-disabled'), null, 'incremental: the fast cadences are offered');
+  await page.keyboard.press('Escape');
 
   // Search inside the data → open the dataset filtered to the value.
   await page.getByRole('searchbox', { name: /Search values/ }).fill('Furniture');

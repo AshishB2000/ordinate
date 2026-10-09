@@ -154,12 +154,23 @@ export function sanitizeLive(data: { mode?: unknown; live?: unknown; updatedAt?:
   return { maxCacheAgeSec: sanitizeMaxCacheAge(o.maxCacheAgeSec), epoch: sanitizeEpoch(o.epoch), schemaSyncedAt: synced };
 }
 
-/** Carry `mode` and `live` from a raw record onto its normalized form (datasets.normalize). Extract keeps neither key. */
-export function applyLive(target: { mode?: DatasetMode; live?: LiveSettings }, data: { mode?: unknown; live?: unknown; updatedAt?: unknown }): void {
+/**
+ * Carry `mode` and `live` from a raw record onto its normalized form
+ * (datasets.normalize). Extract keeps neither key. A Live record keeps no
+ * refresh schedule and no incremental mark either — nothing is copied, so
+ * nothing is re-fetched; its cache age is its schedule — so a hand-edited
+ * one can never put a Live dataset on the scheduler's queue (5 / 15 min or any).
+ */
+export function applyLive(
+  target: { mode?: DatasetMode; live?: LiveSettings; autoRefresh?: unknown; incremental?: unknown },
+  data: { mode?: unknown; live?: unknown; updatedAt?: unknown },
+): void {
   const live = sanitizeLive(data);
   if (!live) return;
   target.mode = 'live';
   target.live = live;
+  delete target.autoRefresh;
+  delete target.incremental;
 }
 
 /** A new Live record's block. */

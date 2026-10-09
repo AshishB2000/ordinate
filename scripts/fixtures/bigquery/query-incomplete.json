@@ -1,0 +1,7 @@
+{
+  "kind": "bigquery#queryResponse",
+  "jobReference": { "projectId": "acme-analytics", "jobId": "job_Zq3x9bQ1aBcDeFgHiJkLmNoPq", "location": "europe-west2" },
+  "jobComplete": false,
+  "jobCreationReason": { "code": "REQUESTED" },
+  "queryId": "job_Zq3x9bQ1aBcDeFgHiJkLmNoPq"
+}

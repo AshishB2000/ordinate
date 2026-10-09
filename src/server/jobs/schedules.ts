@@ -17,6 +17,10 @@
 // name, and an org member with no grant on the project must see neither. A
 // refresh error is cut like every other origin text (no URL query, no path).
 //
+// A SUCCESSFUL refresh is announced by refreshAsJob itself (data/refreshEvents,
+// L0.1) — for every door, the tick's included — so the tick's reporter pushes
+// only a FAILED one here; announcing both would send a scheduled success twice.
+//
 // Not carried over: `reports:run-due` (the desktop renderer generates reports;
 // the server has no generator until the reports port), the alert "explain"
 // model call (T2.12 routes AI keys first).
@@ -74,7 +78,7 @@ export function wireSchedules(pool: Pool, devAuth: boolean): void {
 
   scheduler.setEnabledCheck(() => config.get().autoRefresh !== false);
   scheduler.onRefreshed((o) => {
-    push(o.projectId, 'hub:dataset-refreshed', o.error === undefined ? o : { ...o, error: redactOriginText(o.error) });
+    if (!o.ok) push(o.projectId, 'hub:dataset-refreshed', { ...o, error: redactOriginText(o.error ?? 'Refresh failed.') });
     // A published site that reads it, opted in, is rebuilt at its link (T2.9; the desktop's job hook).
     if (o.ok) scheduleRepublish(o.projectId, o.datasetId);
   });

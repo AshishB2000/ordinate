@@ -31,6 +31,7 @@ import { saveLiveRecord, toExtractRecord, toLiveRecord } from '../data/liveRecor
 import * as msg from '../data/liveMessages';
 import * as queryCache from '../engine/queryCache';
 import { scanDataset } from '../app/privacyStore';
+import { announceRefreshed } from '../data/refreshEvents';
 import type { ParsedColumn } from '../data/parse';
 
 type Fail = { ok: false; error: string; code?: string };
@@ -109,6 +110,8 @@ export async function refreshLive(projectId: string, id: string) {
   const live = await bumpEpoch(projectId, id);
   if (!live) return { ok: false as const, error: 'Could not reset the cache' };
   queryCache.invalidateDataset(id, projectId);
+  // Every refresh is announced (L0.1), so an open dashboard re-asks the warehouse.
+  announceRefreshed({ projectId, datasetId: id, name: meta.name, rowsBefore: 0, rowsAfter: 0 });
   return { ok: true as const, dataset: header(meta), warnings: [] as string[], warningCount: 0, live: { epoch: live.epoch } };
 }
 

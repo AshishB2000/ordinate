@@ -42,6 +42,8 @@ import { versionRecordOf } from '../data/inputTable/store';
 import * as trash from '../app/trash';
 import type { ParsedColumn } from '../data/parse';
 import { redactOriginText } from '../data/datasetOrigin';
+import { needsIncremental } from '../data/refreshCadence';
+import { fastCadenceNeedsIncremental } from '../data/refreshMessages';
 import { serverDataDir } from '../server/context';
 import { filledPcts } from '../data/profileView';
 import { refreshLive } from './liveDatasets';
@@ -533,6 +535,10 @@ export function register() {
       // `undefined` means "not part of this patch"; `null` means "turn it off".
       if (autoRefresh !== undefined) {
         const every = autoRefresh === null || autoRefresh === 'off' ? null : String(autoRefresh);
+        // Every 5 or 15 minutes only with incremental refresh on (setAutoRefresh refuses it too, wordlessly).
+        if (needsIncremental(every) && (await datasets.getDatasetMeta(projectId, datasetId))?.incremental?.enabled !== true) {
+          return { ok: false, error: fastCadenceNeedsIncremental() };
+        }
         const res = await datasets.setAutoRefresh(projectId, datasetId, { every: every as any });
         if (res === false) return { ok: false, error: 'Could not set the schedule' };
       }

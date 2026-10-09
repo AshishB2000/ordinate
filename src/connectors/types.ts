@@ -74,6 +74,9 @@ export interface ConnectorRows {
 export interface ConnectorTables {
   ok: true;
   tables: ConnectorTable[];
+  /** User-facing notes a connection test should show beside "OK" (a Snowflake
+   *  administrator role, say). Already through the catalog (`t()`); no secret. */
+  warnings?: string[];
 }
 
 /** One column as the SOURCE's own catalog describes it. Richer than

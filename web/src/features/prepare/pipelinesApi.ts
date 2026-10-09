@@ -5,6 +5,7 @@
 
 import { skipToken, useQuery } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
+import type { AutoRefreshEvery } from '../../api/datasets';
 
 export type NodeKind = 'source' | 'dataset' | 'quality' | 'alert' | 'report' | 'publish';
 export type RunStatus = 'ok' | 'failed' | 'blocked' | 'paused';
@@ -33,7 +34,18 @@ export interface PipelineNode {
   name: string;
   sub: string;
   ref?: { type: string; id: string };
-  schedule: { text: string; edit: 'dataset' | 'report' | null; every?: string; cadence?: string; at?: string; hasFolder?: boolean };
+  schedule: {
+    text: string;
+    edit: 'dataset' | 'report' | null;
+    every?: string;
+    cadence?: string;
+    at?: string;
+    hasFolder?: boolean;
+    /** A dataset's incremental refresh is on: every 5 or 15 minutes is allowed. */
+    incremental?: boolean;
+    /** Its last scheduled refresh took longer than the interval (the server decides). */
+    behind?: boolean;
+  };
   lastRun: { at: string; status: string; durationMs?: number } | null;
   nextRunAt: string | null;
   paused: boolean;
@@ -72,7 +84,7 @@ export const setPolicy = async (projectId: string, retries: number, backoffMs: n
   (await rpc('pipelines:setPolicy', { projectId, policy: { retries, backoffMs } })) as Ok;
 export const setPaused = async (projectId: string, nodeId: string, paused: boolean) =>
   (await rpc('pipelines:setPaused', { projectId, nodeId, paused })) as Ok;
-export const setNodeSchedule = async (projectId: string, nodeId: string, patch: { every?: 'off' | 'hourly' | 'daily' | 'weekly'; cadence?: 'off' | 'daily' | 'weekly' | 'monthly'; at?: string }) =>
+export const setNodeSchedule = async (projectId: string, nodeId: string, patch: { every?: 'off' | AutoRefreshEvery; cadence?: 'off' | 'daily' | 'weekly' | 'monthly'; at?: string }) =>
   (await rpc('pipelines:setNodeSchedule', { projectId, nodeId, ...patch })) as Ok;
 
 export type RunReply = { ok: true; done: number; failed: number; blocked: number } | { ok: false; error: string };

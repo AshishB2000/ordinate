@@ -1,0 +1,7 @@
+{
+  "kind": "bigquery#queryResponse",
+  "jobReference": { "projectId": "acme-analytics", "location": "europe-west2" },
+  "totalBytesProcessed": "0",
+  "jobComplete": true,
+  "statementType": "SCRIPT"
+}

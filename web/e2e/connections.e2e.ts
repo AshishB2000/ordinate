@@ -3,6 +3,8 @@
 // Always: the picker (no local-file sources on a server, search, keyboard),
 // the generated form (required fields, a failed test shown inline), and — when
 // the server has no encrypted store — a password REFUSED with the clear error.
+// Snowflake's form (L1.1): the private key in a masked, write-only textarea,
+// and an account that is not an identifier refused before any socket opens.
 //
 // With DATABASE_URL (a Postgres this spec may CREATE DATABASE on): the server
 // runs on its own scratch database with ORDINATE_MASTER_KEY, header sign-in,
@@ -14,10 +16,11 @@
 // or the server log. Screens in both themes: web/e2e/__screens__/connections-*.png.
 
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import { after } from 'node:test';
 import pg from 'pg';
 import type { Page, Response } from 'playwright';
-import { configureServer, e2e, screens, SCREENS, settled, type Session } from './fixtures.ts';
+import { configureServer, e2e, SCREENS, screens, settled, type Session } from './fixtures.ts';
 
 const ADMIN = 'owner@acme.test';
 const CANARY = `Canary/pw+${Math.random().toString(36).slice(2)}=x y`;
@@ -64,6 +67,16 @@ if (adminUrl) {
     await root.query(`DROP DATABASE IF EXISTS ${srcDb} WITH (FORCE)`);
     await root.end();
   });
+}
+
+/** Both themes of a filled form: screens() reloads, which would empty it (secrets are never kept). */
+async function screensInPlace(page: Page, name: string): Promise<void> {
+  const prev = await page.evaluate(() => document.documentElement.dataset.theme ?? 'light');
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+    await page.screenshot({ path: path.join(SCREENS, `${name}-${theme}.png`), fullPage: true });
+  }
+  await page.evaluate((t) => (document.documentElement.dataset.theme = t), prev);
 }
 
 /** Every RPC reply body this page receives — the canary must be in none. */
@@ -156,6 +169,24 @@ e2e('connections: picker, generated form, required fields, a failed test, secret
     const list = (await (await post(s, 'connections:list', { projectId })).json()) as unknown[];
     assert.equal(list.length, 0, 'nothing was saved');
   }
+  // Snowflake: a multi-line secret, masked; the account is never a URL.
+  await page.goto(`/connections/${projectId}?source=snowflake`);
+  await page.getByRole('heading', { name: 'Snowflake', level: 2 }).waitFor();
+  const key = page.getByLabel('Private key or access token *');
+  assert.equal(await key.evaluate((el) => el.tagName), 'TEXTAREA');
+  assert.equal(await key.evaluate((el) => getComputedStyle(el).getPropertyValue('-webkit-text-security')), 'disc', 'the key is drawn as discs');
+  assert.equal(await key.getAttribute('spellcheck'), 'false');
+  await key.fill('-----BEGIN ENCRYPTED PRIVATE KEY-----\nMIIFHzBJBgkqhkiG9w0BBQ0wPDAbBgkqhkiG9w0BBQwwDgQI\nCanaryKeyLine/not+a+real+key==\n-----END ENCRYPTED PRIVATE KEY-----');
+  await page.getByLabel('Private key passphrase').fill(CANARY);
+  await page.getByLabel('Account *').fill('evil.com/');
+  await page.getByLabel('User *').fill('reader');
+  await page.getByLabel('Warehouse *').fill('COMPUTE_WH');
+  await page.getByLabel('Role *').fill('ORDINATE_READER');
+  await page.getByRole('button', { name: 'Test & Save' }).click();
+  // Without the encrypted store the secret is refused first; with it, the account is.
+  await page.getByRole('alert').filter({ hasText: adminUrl ? 'not a URL' : 'needs DATABASE_URL and ORDINATE_MASTER_KEY' }).waitFor();
+  await screensInPlace(page, 'connections-snowflake');
+  assert.equal(((await (await post(s, 'connections:list', { projectId })).json()) as unknown[]).filter((c) => (c as { connectorId: string }).connectorId === 'snowflake').length, 0, 'nothing was saved');
   await page.getByRole('button', { name: 'Change source' }).click();
   await tiles.first().waitFor();
   report(s);

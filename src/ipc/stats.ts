@@ -27,6 +27,7 @@ import * as config from '../app/config';
 import * as versions from '../app/versions';
 import { DASHBOARD_STYLE_PRESETS } from '../analysis/dashboards';
 import { pairLine, statsFigures } from '../analysis/stats/figures';
+import { stampAsOf } from '../data/figureAsOf';
 
 // Statistics workbench IPC — every figure the panel, a dashboard "stats" tile
 // and the Assistant show is computed here, by src/analysis/stats, on vectors
@@ -267,7 +268,9 @@ export function register(): void {
   // `share: 'export'` is an export asking — the share policy applies.
   ipcMain.handle('stats:tile', async (_e, { projectId, spec, filters, params, asOf, share }: any = {}) => withAsOf(projectId, asOf, async () => {
     try {
-      return await computeStatsTile(projectId, spec, tileFilters(filters, params), share === 'export' ? 'export' : undefined);
+      // Dated by its dataset (L0.2, data/figureAsOf) like every other tile, inside the as-of scope.
+      return await stampAsOf(await computeStatsTile(projectId, spec, tileFilters(filters, params), share === 'export' ? 'export' : undefined),
+        projectId, [spec && typeof spec === 'object' ? spec.datasetId : undefined]);
     } catch (err) {
       return fail(err, 'Could not compute this tile.');
     }

@@ -33,8 +33,8 @@ const connectionRun: typeof import('../src/connectors/connectionRun') = require(
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 
 const CATEGORIES = new Set(['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS']);
-const FAMILIES = new Set(['postgres', 'mysql', 'mssql', 'oracle', 'http', 'duckdb', 'saas']);
-const FIELD_TYPES = new Set(['text', 'number', 'password', 'select', 'checkbox']);
+const FAMILIES = new Set(['postgres', 'mysql', 'mssql', 'oracle', 'http', 'duckdb', 'saas', 'bigquery', 'snowflake']);
+const FIELD_TYPES = new Set(['text', 'number', 'password', 'select', 'checkbox', 'textarea']);
 const SECRET_PW = 'sup3r-s3cret-pw';
 
 async function main(): Promise<void> {
@@ -123,7 +123,10 @@ async function main(): Promise<void> {
   // implements describeTable, so the workbench knows whether to show a schema
   // tree. It is a capability flag, never a value — the same discipline as a
   // field's `secret` flag, which travels while the secret never does.
-  const CATALOG_KEYS = new Set(['id', 'label', 'family', 'category', 'blurb', 'fields', 'browsable', 'hosts', 'live']);
+  // `estimates` is the ninth: a BOOLEAN on every entry, true where the source
+  // prices a statement before it runs (a free dry run — BigQuery). `live` is the
+  // tenth: true where a dataset from it can be Live (docs/live-data L2.1).
+  const CATALOG_KEYS = new Set(['id', 'label', 'family', 'category', 'blurb', 'fields', 'browsable', 'hosts', 'estimates', 'live']);
   const FIELD_KEYS = new Set(['key', 'label', 'type', 'required', 'placeholder', 'default', 'options', 'secret', 'help']);
   let extraKeys: string[] = [];
   let functionsFound: string[] = [];
@@ -145,7 +148,11 @@ async function main(): Promise<void> {
   }
   scanForFunctions(catalog, 'catalog');
 
-  ok('connectorCatalog() exposes ONLY the nine documented keys', extraKeys.length === 0, extraKeys.join(', '));
+  ok('connectorCatalog() exposes ONLY the ten documented keys', extraKeys.length === 0, extraKeys.join(', '));
+  const badEstimates = catalog.filter((e: any) => typeof e.estimates !== 'boolean').map((e: any) => e.id);
+  ok('every catalog entry reports `estimates` as a boolean', badEstimates.length === 0, badEstimates.join(', '));
+  ok('…true only where the connector has a live estimate (BigQuery), false for the SQL families',
+    catalog.find((e) => e.id === 'bigquery')?.estimates === true && catalog.filter((e) => e.id === 'postgres' || e.id === 'url').every((e) => e.estimates === false));
   // The flag has to be a BOOLEAN on every entry: `undefined` on a browsable
   // source would read as "not browsable" in the renderer's `!== false` test and
   // silently hide a schema tree that works.
@@ -167,8 +174,8 @@ async function main(): Promise<void> {
   const badLive = catalog.filter((e: any) => typeof e.live !== 'boolean').map((e: any) => e.id);
   ok('every catalog entry reports `live` as a boolean', badLive.length === 0, badLive.join(', '));
   const liveIds = catalog.filter((e: any) => e.live).map((e: any) => e.id);
-  ok('Redshift, Databricks SQL and ClickHouse are live',
-    ['amazon-redshift', 'databricks-sql', 'clickhouse'].every((id) => liveIds.includes(id)), liveIds.join(', '));
+  ok('Snowflake, BigQuery, Redshift, Databricks SQL and ClickHouse are live (the v1 dialects, D2)',
+    ['snowflake', 'bigquery', 'amazon-redshift', 'databricks-sql', 'clickhouse'].every((id) => liveIds.includes(id)), liveIds.join(', '));
   ok('…and the OLTP and other engines are not (plan D2, D8)',
     ['postgres', 'mysql', 'sqlserver', 'oracle', 'trino', 'presto', 'druid', 'url', 'google-sheets'].every((id) => !liveIds.includes(id)),
     liveIds.join(', '));
@@ -185,8 +192,13 @@ async function main(): Promise<void> {
   // input); a value never does — there is no `value` key anywhere in the catalog.
   const catalogJson = JSON.stringify(catalog);
   ok('connectorCatalog() reports the secret flag', catalogJson.includes('"secret":true'));
+  // A select's `options` are {value, label} by design (Snowflake's sign-in
+  // picker is the first); outside them no `value` key may appear at all.
+  const withoutOptions = JSON.stringify(catalog.map((e) => ({ ...e, fields: e.fields.map(({ options: _o, ...f }) => f) })));
   ok('connectorCatalog() has no value/secrets payload',
-    !catalogJson.includes('"value"') && !catalogJson.includes('"secrets"'));
+    !withoutOptions.includes('"value"') && !catalogJson.includes('"secrets"'));
+  ok('…and select options sit only on non-secret fields, as plain strings',
+    catalog.every((e) => e.fields.every((f) => !f.options || (!f.secret && f.options.every((o) => typeof o.value === 'string' && typeof o.label === 'string' && Object.keys(o).length === 2)))));
 
   // ── safeError(): the last line before a renderer ───────────────────────────
   const withPw = types.safeError(

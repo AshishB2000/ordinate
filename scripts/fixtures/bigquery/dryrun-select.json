@@ -1,0 +1,14 @@
+{
+  "kind": "bigquery#queryResponse",
+  "schema": {
+    "fields": [
+      { "name": "region", "type": "STRING", "mode": "NULLABLE" },
+      { "name": "orders", "type": "INTEGER", "mode": "NULLABLE" }
+    ]
+  },
+  "jobReference": { "projectId": "acme-analytics", "location": "europe-west2" },
+  "totalBytesProcessed": "1288490188",
+  "jobComplete": true,
+  "cacheHit": false,
+  "statementType": "SELECT"
+}

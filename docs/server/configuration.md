@@ -79,6 +79,14 @@ from these tables, or when a table names one that no code reads.
 | `RATE_LIMIT_RPC_IP_PER_MINUTE` | RPC and `/api/mcp` calls per client IP. | `3000` | — | no |
 | `SSRF_ALLOW` | Comma-separated CIDRs that connectors, URL sources and AI gateways may reach even though they are private, loopback or link-local. Everything else in those ranges, including cloud metadata, is refused before a socket opens. List your internal database subnets here. `0.0.0.0/0` turns the guard off. | unset: no private range allowed | a connector reads a database inside your VPC | no |
 
+## Warehouses and live data
+
+Bounds on what a connection may cost in the warehouse it reads. See [live-data.md](live-data.md).
+
+| Variable | Purpose | Default | Required when | Secret |
+|---|---|---|---|---|
+| `LIVE_MAX_BYTES_BILLED` | The most a single BigQuery query may bill, in bytes. Every query a BigQuery connection runs carries BigQuery's `maximumBytesBilled` = the lower of this and the connection's own "Max bytes billed per query", so a query over it fails before it runs, at no charge. A whole number of bytes, no unit. | `10737418240` (10 GiB) | — | no |
+
 ## DuckDB
 
 Each org gets its own DuckDB worker, locked to that org's directory and S3 prefix before it answers.

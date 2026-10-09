@@ -1,0 +1,24 @@
+{
+  "kind": "bigquery#table",
+  "etag": "a1JcYxP3c3uV1b5K2Q8u4A==",
+  "id": "acme-analytics:sales.orders",
+  "tableReference": { "projectId": "acme-analytics", "datasetId": "sales", "tableId": "orders" },
+  "schema": {
+    "fields": [
+      { "name": "id", "type": "INTEGER", "mode": "REQUIRED" },
+      { "name": "region", "type": "STRING", "mode": "NULLABLE" },
+      { "name": "amount", "type": "NUMERIC", "mode": "NULLABLE" },
+      { "name": "ordered_at", "type": "TIMESTAMP", "mode": "NULLABLE" },
+      { "name": "items", "type": "RECORD", "mode": "REPEATED", "fields": [
+        { "name": "sku", "type": "STRING", "mode": "NULLABLE" },
+        { "name": "qty", "type": "INTEGER", "mode": "NULLABLE" }
+      ] }
+    ]
+  },
+  "numBytes": "18432",
+  "numRows": "240",
+  "creationTime": "1704067200000",
+  "lastModifiedTime": "1728400000000",
+  "type": "TABLE",
+  "location": "europe-west2"
+}

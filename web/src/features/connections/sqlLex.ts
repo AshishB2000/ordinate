@@ -130,6 +130,8 @@ export function completions(prefix: string, tables: readonly string[], columns: 
  */
 export function quoteIdent(family: string, name: string): string {
   if (family === 'mysql') return '`' + name.replace(/`/g, '``') + '`';
+  // BigQuery reads "x" as a STRING; its identifiers are backticked, escaped with a backslash.
+  if (family === 'bigquery') return '`' + name.replace(/[\\`]/g, (c) => '\\' + c) + '`';
   if (family === 'mssql') return '[' + name.replace(/]/g, ']]') + ']';
   if (family === 'oracle') return name;
   return '"' + name.replace(/"/g, '""') + '"';

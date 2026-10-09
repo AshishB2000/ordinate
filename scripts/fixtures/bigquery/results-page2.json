@@ -1,0 +1,19 @@
+{
+  "kind": "bigquery#getQueryResultsResponse",
+  "etag": "fXn0mE6+3Z1N7Hq2x6PsWw==",
+  "schema": {
+    "fields": [
+      { "name": "region", "type": "STRING", "mode": "NULLABLE" },
+      { "name": "orders", "type": "INTEGER", "mode": "NULLABLE" }
+    ]
+  },
+  "jobReference": { "projectId": "acme-analytics", "jobId": "job_Zq3x9bQ1aBcDeFgHiJkLmNoPq", "location": "europe-west2" },
+  "totalRows": "5",
+  "rows": [
+    { "f": [{ "v": "West" }, { "v": "59" }] },
+    { "f": [{ "v": null }, { "v": "0" }] }
+  ],
+  "totalBytesProcessed": "1288490188",
+  "jobComplete": true,
+  "cacheHit": false
+}
