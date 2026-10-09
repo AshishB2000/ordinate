@@ -82,6 +82,38 @@ export interface ApiToken {
   lastUsedAt: string | null;
 }
 
+/** Admin → Live usage (src/server/admin/liveUsage.ts): one UTC day of one connection. */
+export interface LiveUsageRow {
+  day: string;
+  connectionId: string;
+  projectId: string;
+  queries: number;
+  /** Null: the warehouse reports no byte figure (Snowflake). */
+  bytes: number | null;
+  refused: number;
+  /** Null: the connection was deleted (its count stays). */
+  connection: string | null;
+  connector: string | null;
+  project: string | null;
+  /** `bytes` as the server formatted it ("1.2 GB"). */
+  bytesLabel: string | null;
+}
+
+export interface LiveUsage {
+  /** Today, UTC: the day the limit counts. */
+  today: string;
+  /** LIVE_DAILY_QUERY_LIMIT; 0 = no limit. */
+  limit: number;
+  todayQueries: number;
+  todayRefused: number;
+  /** "12%", the server's; null without a limit. */
+  usedLabel: string | null;
+  /** No Postgres: this server's own counts, since it started. */
+  perPod: boolean;
+  days: number;
+  rows: LiveUsageRow[];
+}
+
 export type Created = { ok: true; id: string; name: string; prefix: string; createdAt: string; token: string } | { ok: false; error: string };
 
 /** A write's reply: `{ ok }`, or why not. */
@@ -112,7 +144,7 @@ const REFUSAL: Record<string, string> = {
 };
 export const refusal = (code: string | undefined): string => REFUSAL[code ?? ''] ?? 'The change was refused.';
 
-type ListChannel = 'admin:users' | 'admin:teams' | 'admin:projects' | 'admin:settings' | 'tokens:list';
+type ListChannel = 'admin:users' | 'admin:teams' | 'admin:projects' | 'admin:settings' | 'admin:liveUsage' | 'tokens:list';
 const list = <T,>(channel: ListChannel) => ({ queryKey: [channel], queryFn: async () => (await rpc(channel)) as T });
 
 export const useAdminUsers = () => useQuery(list<AdminUser[]>('admin:users'));
@@ -120,6 +152,7 @@ export const useTeams = () => useQuery(list<Team[]>('admin:teams'));
 export const useAdminProjects = () => useQuery(list<AdminProject[]>('admin:projects'));
 export const useOrgSettings = () => useQuery(list<OrgSettings>('admin:settings'));
 export const useTokens = () => useQuery(list<ApiToken[]>('tokens:list'));
+export const useLiveUsage = () => useQuery(list<LiveUsage>('admin:liveUsage'));
 
 export function useAudit(filter: AuditFilter) {
   return useQuery({

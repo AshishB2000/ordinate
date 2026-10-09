@@ -61,4 +61,6 @@ export const adminContracts = {
       uploadCapMb: z.number().int().min(1).max(999_999).nullable(),
     }),
   ),
+  // Live usage (live data L2.7): warehouse queries and bytes per day per connection, the daily limit, today's count.
+  'admin:liveUsage': adminList(z.undefined()),
 } as const;

@@ -559,3 +559,96 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
 - **Not done (scope):** a pipeline cron's dataset refresh (`pipelineRunner`, also under the tick)
   still leaves no audit row; only the dataset scheduler's refreshes are `scheduled_refresh`. `connection:refresh` and the MCP `datasets
   refresh` tool still bypass the job and the lock (noted under L0.3/L0.4).
+
+## 2026-10-09 — L2.7 Usage and budget
+
+- **Built.** Migration `0012_live_usage.sql`: `live_usage(org_id, day, connection_id, project_id,
+  queries, bytes, refused)`, key `(org_id, day, connection_id)`, forced RLS on `ordinate.org`.
+  `src/server/live/usageStore.ts` (admission, bytes, the read; Postgres, or per-pod memory keyed with
+  `orgKey()` without `DATABASE_URL`), `src/server/live/limitNotice.ts` (the once-a-day notice),
+  `src/server/admin/liveUsage.ts` (`admin:liveUsage`, contract in `src/api/admin.ts`, `adminList`),
+  `src/engine/live/liveWarehouse.ts` (the one door, below — split out of `liveQuery.ts`, which was at
+  500 lines and is now 404),
+  `src/server/liveEnv.ts` (the Live settings, split out of `env.ts`, which re-exports them; it was at
+  501 lines, now 469; `EnvError` moved to `envError.ts` so the split has no require cycle). L2.3's
+  seams in `liveBudget.ts` are filled: `checkDaily` (async now), `noteCall(ticket, bytes)`,
+  `cacheAgeFloorSec()` + `publicFloorSec()`. `RequestContext.published` with `runAsPublished` /
+  `isPublishedRequest` (`context.ts`), set by `/p/` (`published.ts`). `ConnectorRows.bytes?` — BigQuery
+  sets it from its reply (`billedBytesOf`: `totalBytesBilled`, else `totalBytesProcessed`); liveRun
+  passes it through. Web: Admin → **Live usage** tab (`LiveUsageTab.tsx`; an org tab, so it shows
+  without accounts too, saying the counts are this server's), and `liveLimitNotice.ts` in the shell (a
+  toast with "See usage"). Settings `LIVE_DAILY_QUERY_LIMIT` (10,000; 0 = none),
+  `LIVE_MIN_CACHE_AGE_PUBLIC_SEC` (60; 0 = none), both re-read per statement like L2.3's.
+- **Decided — admitting a statement IS counting it.** The plan's "checkDaily refuses, noteCall
+  upserts" would be check-then-count: N pods (× `LIVE_MAX_CONCURRENT`) at limit − 1 all pass. So the
+  check and the count are one transaction: `BEGIN; set_config('ordinate.org'); pg_advisory_xact_lock(
+  hashtextextended('live_usage:<org>:<day>'))` in one round trip, then one statement that reads the
+  org's sum (a snapshot taken after the lock) and upserts `queries + 1` or, past the limit,
+  `refused + 1`. `noteCall` adds only the bytes, when the connector settles, to the row of the day the
+  statement was admitted on. A statement counts when admitted, whatever then happens (an error or a
+  cancel can still bill). NEGATIVE CONTROL in `test-liveUsage-db`: check-then-count on two pools at
+  limit 1 lets 2 through; the store lets 1.
+- **Decided — admitted only once a slot is held.** L2.3 asked the daily seam before the concurrency
+  slot; now `acquire → checkDaily → runBound`, so a question that hangs up while queued is never
+  counted, and one whose askers all hang up while it is being counted is not sent (it stays counted:
+  the cautious side). The cost: past the limit a refusal waits for a slot like anyone else.
+- **Decided — fail closed.** A count that cannot be written (Postgres down) sends nothing: the stale
+  answer, else `live_failed`, the reason logged once. An uncounted statement is an unbounded one.
+- **Decided — one notice per org per UTC day, decided under the same lock.** `refused` is a column,
+  so "is this the day's first refusal?" is `sum(refused) = 0` read under the per-day lock — exactly
+  one across pods (tested: 13 racing refusals on two pools, one first). The notice is one log line and
+  a `live:daily-limit` push to each enabled org admin (dev sign-in / no Postgres: the org's tabs),
+  payload `{day, limit}` only. The admin page also shows the day's refusals for the rest of the day.
+- **Decided — keyed by connection** (plus `project_id`, not in the key, to name it), not the plan's
+  `(org_id, day)`: the page is per connection; the limit sums the org's rows. `bytes` is NULL until a
+  statement reports a figure, so Snowflake (whose SQL API reports no byte statistic per statement —
+  checked against the reply shape, not guessed) reads "Not reported", never "0 B".
+- **Decided — the public floor is a lookup age; the entry keeps the longest.** `queryCache` takes the
+  tighter of an entry's age and a lookup's, so an answer stored at age 0 by a signed-in viewer could
+  never serve a page. An entry now keeps `max(dataset age, LIVE_MIN_CACHE_AGE_PUBLIC_SEC)`; each asker
+  looks up with its own (`max(dataset age, the request's floor)`). NEGATIVE CONTROL: a signed-in ask
+  at age 0 still goes to the warehouse every time, a fresh public answer notwithstanding.
+- **Found — a `/p/` page sends no warehouse query today.** A published site is a snapshot built at
+  publish (CSP `default-src 'none'`: it fetches nothing), so the floor guards no live read yet. The
+  route still runs as a published request, and `test-liveUsage` drives the executor through a real
+  `GET /p/…` (site lookup stubbed) to prove the floor holds there and nowhere else. A re-publish after
+  a refresh runs as the publisher, not as a page request, and is bounded by the daily limit.
+- **The one door.** Every Live statement goes through `warehouse()` (`src/engine/live/liveWarehouse.ts`,
+  re-exported by `liveQuery.ts` with `LiveCallError` and `CallKind`): slot, daily admission,
+  `runLiveBound` (the only caller of a connector's `live.runBound`), bytes on settle. Its signature is
+  `warehouse(t: LiveTarget, query: CompiledQuery, shared: AbortSignal): Promise<LiveRows>` — rows
+  positional to `query.columns`; it throws `LiveCallError` (`cancelled`, `timeout`, `failed`,
+  `tooLarge`, or `daily` with the catalog sentence in `detail`), logged once; it caches and shares
+  nothing, and counts against `ctx()`'s org. `test-liveUsage` fails when anything else in `src/` calls
+  `runLiveBound` or `.runBound(` — **L2.4's DISTINCT and L2.5's profile/sample statements must go
+  through `warehouse()`** to be slotted, limited and counted.
+- **Measured.** One admission on Postgres (local PG 16, 4 vCPU container shared with other jobs,
+  median of 100 sequential, `test-liveUsage-db`): three runs at low load gave 1.38 / 1.44 / 1.57 ms
+  with a limit (lock + sum + upsert) and 1.50 / 1.37 / 1.45 ms without (no lock) — noise between the
+  two; two runs at load average 13 gave 4.0 ms both ways. The executor's warehouse call on the fake
+  (in-memory admission included), median of 40, after the `liveWarehouse.ts` split: 1.78 / 2.08 /
+  2.39 ms over three runs of `test-liveQuery` (L2.3 measured 2.41–2.53 ms) — no cost visible.
+- **Tests.** `test-liveUsage` (55 checks, no DB): every statement one query (KPIs, an answer and its
+  MAX()), a hit or a joined flight none; bytes summed, null when unreported; past the limit stale or a
+  typed refusal with no statement sent, never empty; 0 = none; re-read per statement; a new UTC day
+  starts over; one notice per org per day (NEGATIVE CONTROL: the 2nd and 3rd send and log nothing);
+  fail closed; a statement whose askers all hang up while it is being counted is not sent
+  (NEGATIVE CONTROL: with the asker still waiting it is); the floor inside a real `GET /p/…` and
+  nowhere else (NEGATIVE CONTROLS); the one-door static check, and `warehouse()` exported by the
+  executor (NEGATIVE CONTROL: a planted caller is found); BigQuery bytes from three reply shapes;
+  `admin:liveUsage`'s labels; env. `test-liveUsage-db` (24, Postgres): 60 racing admissions on two
+  pools = 60 (NEGATIVE CONTROL: read-then-write leaves 1), bytes exact, the limit across pods with one
+  first refusal (NEGATIVE CONTROL above), the executor on Postgres, the notice on the admin's stream
+  only and once, RLS as an ordinary role, the admin channel per org. `test-admin-db`'s matrix covers
+  the new channel (16 admin channels; 6 audited-on-denial lists). Vitest `liveUsage.test.tsx` (5); the
+  admin e2e adds Live usage empty, counted and limit-reached screens (light + dark).
+- **Found — `test-refreshLock` counted every advisory lock on the server**, not its own database's,
+  and killed the backend of whichever it saw first. With the admission's lock in `test-liveUsage-db`
+  running beside it in `npm test` (or any other suite on a shared Postgres) it failed 6 checks; both
+  probes now read `pg_locks` for the scratch database only (passes run beside `test-liveUsage-db`).
+  `test-liveUsage` no longer closes its app before exiting: closing shuts the org DuckDB workers down
+  asynchronously, and it once died with the known exit-time `Napi::Error` (retro, phase 7) after
+  every check passed, under a load average of 20.
+- **Not done (scope):** nothing routes a chart, KPI or answer to the executor yet (L2.4), so the e2e
+  seeds `live_usage` rows rather than causing them. Usage rows are kept indefinitely (one small row
+  per connection per day).

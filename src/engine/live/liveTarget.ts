@@ -35,6 +35,8 @@ export interface LiveTarget {
   datasetId: string;
   /** The asking org: its cache entries, its concurrency slots, its warehouse identity. */
   org: string;
+  /** The connection the statements go through: what the org's usage is counted against (L2.7). */
+  connectionId: string;
   live: LiveSettings;
   columns: LiveColumn[];
   dialect: LiveDialectId;
@@ -92,6 +94,7 @@ export async function liveTarget(projectId: string, datasetId: string): Promise<
       projectId,
       datasetId,
       org: ctx().org.id,
+      connectionId: conn.id,
       live: meta.live,
       columns,
       dialect,

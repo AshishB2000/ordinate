@@ -18,6 +18,7 @@ import { ProjectProvider } from '../features/projects/current';
 import { ProjectSwitcher } from '../features/projects/ProjectSwitcher';
 import { JobsButton } from './JobsButton';
 import { AlertsBell } from '../features/dashboards/AlertsBell';
+import { useLiveLimitNotice } from '../features/admin/liveLimitNotice';
 import { NAV, type NavItem } from './nav';
 import { Dock, DockToggle } from '../features/assistant/DockParts';
 import { useWorkspacePrefs } from './prefs';
@@ -133,6 +134,8 @@ export function Shell() {
   useWorkspacePrefs();
   // A refreshed dataset redraws every figure on screen that reads it (L0.1).
   useDatasetFreshness();
+  // An org admin hears when today's live warehouse queries run out (L2.7; pushed to admins only).
+  useLiveLimitNotice();
   const me = useMe();
   // Admin is for org admins (the server refuses its channels to anyone else):
   // hidden once the role is known to be another; the page explains itself too.

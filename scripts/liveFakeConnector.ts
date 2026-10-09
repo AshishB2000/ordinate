@@ -21,7 +21,8 @@
 // The spy: `fake.calls` records every runBound (statement, parameters, signal,
 // the context's bounds); `fake.hook` may hold, fail or slow a call, as a real
 // warehouse would. On abort it answers "Cancelled", as a connector that
-// cancelled the warehouse statement does.
+// cancelled the warehouse statement does. `fake.bytes`, when set, is the byte
+// figure every answer reports billing (as BigQuery does; L2.7's usage count).
 
 import type { ConnectorContext, ConnectorDef, ConnectorError, ConnectorRows, LiveParam } from '../src/connectors/types';
 import type { ParsedColumn } from '../src/data/parse';
@@ -62,7 +63,7 @@ export interface FakeCall {
 /** A test's say over one call: return a reply to answer with it, or undefined to run the statement. */
 export type FakeHook = (call: FakeCall, ctx: ConnectorContext) => Promise<ConnectorRows | ConnectorError | undefined>;
 
-export const fake: { calls: FakeCall[]; hook: FakeHook | null } = { calls: [], hook: null };
+export const fake: { calls: FakeCall[]; hook: FakeHook | null; bytes: number | null } = { calls: [], hook: null, bytes: null };
 
 const CANCELLED: ConnectorError = { ok: false, error: 'Cancelled' };
 const TABLE_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -105,7 +106,10 @@ async function runBound(ctx: ConnectorContext, sql: string, params: LiveParam[])
     if (ctx.signal?.aborted) return CANCELLED;
     await ensureFixture(ctx.values);
     const rows = await raceAbort(duck.queryAsync(sql, params.map(toDuck)), ctx.signal);
-    return rows === null ? CANCELLED : shaped(rows, ctx.rowLimit);
+    if (rows === null) return CANCELLED;
+    const out = shaped(rows, ctx.rowLimit);
+    if (fake.bytes !== null) out.bytes = fake.bytes;
+    return out;
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   } finally {
@@ -166,10 +170,11 @@ export function registerLiveFake(): void {
   registered = true;
 }
 
-/** Forget the calls and the hook between cases. */
+/** Forget the calls, the hook and the byte figure between cases. */
 export function resetFake(): void {
   fake.calls.length = 0;
   fake.hook = null;
+  fake.bytes = null;
 }
 
 /**

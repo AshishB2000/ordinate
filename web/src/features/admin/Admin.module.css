@@ -242,3 +242,59 @@
   font-size: var(--t-13);
   font-weight: 600;
 }
+
+/* ── Live usage ─────────────────────────────────────────────────────── */
+.usageFigure {
+  color: var(--muted);
+}
+.usageBig {
+  font-size: var(--t-20);
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+/* The browser's own <meter>, drawn in the theme's colours: accent, warn once today's limit was reached. */
+.usageMeter {
+  width: 100%;
+  max-width: 480px;
+  height: 8px;
+  border: none;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  overflow: hidden;
+  appearance: none;
+}
+.usageMeter::-webkit-meter-bar {
+  height: 8px;
+  border: none;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+}
+.usageMeter::-webkit-meter-optimum-value {
+  border-radius: var(--r-full);
+  background: var(--accent);
+}
+.usageMeter::-moz-meter-bar {
+  border-radius: var(--r-full);
+  background: var(--accent);
+}
+.usageMeterFull::-webkit-meter-optimum-value {
+  background: var(--warn);
+}
+.usageMeterFull::-moz-meter-bar {
+  background: var(--warn);
+}
+/* A name over its kind, in one cell (a connection over its connector). */
+.stack {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-4) 0;
+}
+/* The day's limit reached: the notice in the warning tone. */
+.noticeWarn {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+.noticeWarn > svg {
+  color: var(--warn);
+}

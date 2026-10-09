@@ -37,3 +37,8 @@ export function liveNotLive(): string {
 export function liveDatasetMissing(): string {
   return t('liveQueryMessages.this_dataset_no_longer_exists');
 }
+
+/** LIVE_DAILY_QUERY_LIMIT is used up for today and nothing was cached (L2.7). `limit` is formatted. */
+export function liveDailyLimit(limit: string): string {
+  return t('liveQueryMessages.this_organization_has_used_today_s', { limit });
+}

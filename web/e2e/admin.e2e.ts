@@ -2,10 +2,12 @@
 // trusted 127.0.0.1 peer, as oauth2-proxy would send it) against the real
 // server on its own scratch Postgres, walks the admin screens: invites a
 // person, changes their role, makes a team and hands it a project,
-// reads the audit log, then creates a personal API token, uses it on
-// /api/mcp (initialize + a tool call; without it → 401) and revokes it from
-// the UI (→ 401). A viewer gets the designed "admins only" state. Screens in
-// both themes go to web/e2e/__screens__/admin-*.png.
+// reads the audit log, opens Live usage (empty, then a month of counts on two
+// connections over the test harness's fake warehouse, then today's limit
+// reached), then creates a personal API token, uses it on /api/mcp
+// (initialize + a tool call; without it → 401) and revokes it from the UI
+// (→ 401). A viewer gets the designed "admins only" state. Screens in both
+// themes go to web/e2e/__screens__/admin-*.png.
 //
 // Needs Postgres: without DATABASE_URL this spec prints one skip line.
 
@@ -33,6 +35,9 @@ if (!adminUrl) {
       AUTH_MODE: 'header',
       TRUSTED_PROXY_CIDRS: '127.0.0.1/32',
       ORDINATE_ADMIN_EMAIL: ADMIN,
+      // Live usage: named connections over the fake warehouse, and a small limit to see reached.
+      ORDINATE_TEST_LIVE_FAKE: '1',
+      LIVE_DAILY_QUERY_LIMIT: '2000',
     },
     headers: { 'x-forwarded-email': ADMIN },
   });
@@ -106,6 +111,52 @@ if (!adminUrl) {
     await page.getByRole('tab', { name: 'Settings' }).click();
     await page.getByRole('switch', { name: 'Allow public links' }).waitFor();
     await screens(page, 'admin-settings');
+
+    // ── Live usage: empty, then counted, then today's limit reached ─────
+    await page.getByRole('tab', { name: 'Live usage' }).click();
+    await page.getByRole('heading', { name: 'No live queries in the last 30 days' }).waitFor();
+    await screens(page, 'admin-live-usage-empty');
+    const projectId = ((await made.json()) as { id: string }).id;
+    const saveConn = async (name: string) => {
+      const r = await page.request.post(`${server.base}/api/rpc/connection:testAndSave`, {
+        headers: { 'x-csrf-token': csrf },
+        data: { args: [{ projectId, connectorId: 'live-fake', name, values: { fixture: 'orders' } }] },
+      });
+      const body = (await r.json()) as { ok: boolean; connection: { id: string } };
+      assert.equal(body.ok, true, `${name} saved`);
+      return body.connection.id;
+    };
+    const orders = await saveConn('Orders warehouse');
+    const finance = await saveConn('Finance warehouse');
+    // The doors that send Live statements are routed by L2.4: the counts are seeded where every pod writes them.
+    const db = new pg.Client({ connectionString: scratch.toString() });
+    await db.connect();
+    const org = (await db.query<{ org_id: string }>('SELECT org_id FROM users WHERE email = $1', [ADMIN])).rows[0].org_id;
+    const seedDay = (ago: number, conn: string, queries: number, bytes: number | null, refused = 0) =>
+      db.query(
+        `INSERT INTO live_usage (org_id, day, connection_id, project_id, queries, bytes, refused)
+         VALUES ($1, (now() AT TIME ZONE 'UTC')::date - $2::int, $3, $4, $5, $6, $7)`,
+        [org, ago, conn, projectId, queries, bytes, refused],
+      );
+    await seedDay(0, orders, 1240, 3_650_722_201);
+    await seedDay(0, finance, 412, null);
+    await seedDay(1, orders, 1873, 5_368_709_120);
+    await seedDay(1, finance, 127, null, 0);
+    await seedDay(2, orders, 960, 2_147_483_648);
+    await seedDay(4, finance, 2000, null, 41);
+    await page.reload();
+    await settled(page);
+    await page.getByRole('cell', { name: /Orders warehouse/ }).first().waitFor();
+    assert.ok((await page.getByText('of 2,000 live warehouse queries').count()) === 1, 'today against the limit');
+    assert.ok((await page.getByRole('cell', { name: '3.4 GB' }).count()) === 1, 'bytes as the server labelled them');
+    assert.ok((await page.getByRole('cell', { name: 'Not reported' }).count()) >= 1, 'a warehouse that reports no bytes says so');
+    await screens(page, 'admin-live-usage');
+    await db.query(`UPDATE live_usage SET queries = 1588, refused = 37 WHERE connection_id = $1 AND day = (now() AT TIME ZONE 'UTC')::date`, [orders]);
+    await db.end();
+    await page.reload();
+    await settled(page);
+    await page.getByRole('heading', { name: 'Today’s limit was reached' }).waitFor();
+    await screens(page, 'admin-live-usage-limit');
 
     // ── API token: create (shown once) → use on /api/mcp → revoke ───────
     await page.goto('/tokens');

@@ -69,6 +69,13 @@ export interface ConnectorRows {
   rows: (string | number | boolean | null)[][];
   /** True when `rowLimit` clipped the result. Report it; never trim silently. */
   truncated: boolean;
+  /**
+   * The bytes the WAREHOUSE says this statement billed (live data L2.7: Admin →
+   * Live usage). Set only from the warehouse's own reply — BigQuery's
+   * `totalBytesBilled` (else `totalBytesProcessed`) — never estimated; absent
+   * where it reports none (Snowflake's SQL API, the SQL drivers).
+   */
+  bytes?: number;
 }
 
 export interface ConnectorTables {
