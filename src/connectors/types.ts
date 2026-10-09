@@ -134,8 +134,12 @@ export interface ConnectorContext {
   signal?: AbortSignal;
 }
 
-/** A warehouse SQL dialect the live compiler targets (plan D2). */
-export type LiveDialectId = 'snowflake' | 'bigquery' | 'redshift' | 'databricks' | 'clickhouse';
+/**
+ * A warehouse SQL dialect the live compiler targets (plan D2). `duckdb` is the
+ * TEST BENCH: only the test harness's fake warehouse declares it
+ * (scripts/liveFakeConnector.ts); no shipped connector may (test-liveQuery).
+ */
+export type LiveDialectId = 'snowflake' | 'bigquery' | 'redshift' | 'databricks' | 'clickhouse' | 'duckdb';
 
 /**
  * One bind parameter of a compiled live query (plan D4: values are NEVER

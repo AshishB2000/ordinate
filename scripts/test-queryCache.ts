@@ -129,5 +129,25 @@ void (async () => {
   qc.setBudgetForTest(qc.MAX_BYTES);
   ok('budget: the production budget is 64 MB', qc.MAX_BYTES === 64 * 1024 * 1024);
 
+  // ── Age (live datasets only) ──────────────────────────────────────────────
+  qc.clear();
+  let now = 1_000_000;
+  qc.setClockForTest(() => now);
+  qc.set('aged', { v: 1 }, [A], { maxAgeMs: 1000 });
+  qc.set('ageless', { v: 2 }, [A]);
+  now += 999;
+  ok('age: an entry is a hit until its age', qc.get('live', 'aged') !== undefined);
+  now += 1;
+  const missesBefore = trace.snapshot()['cache:live']?.miss ?? 0;
+  ok('age: …and a miss AT it (counted as a miss)', qc.get('live', 'aged') === undefined && trace.snapshot()['cache:live'].miss === missesBefore + 1);
+  ok('age: an expired entry is KEPT — peek returns it with when it was stored (the stale fallback)',
+    qc.stats().entries === 2 && JSON.stringify(qc.peek('aged')) === JSON.stringify({ value: { v: 1 }, storedAt: 1_000_000 }));
+  ok('age: an entry set without an age never expires (every non-live answer)', qc.get('aggregate', 'ageless') !== undefined);
+  ok('age: a lookup\'s own age applies too — the tighter wins (a dataset\'s age lowered after the fact)',
+    qc.get('live', 'ageless', { maxAgeMs: 500 }) === undefined && qc.get('live', 'ageless', { maxAgeMs: 5000 }) !== undefined);
+  qc.set('zero', { v: 3 }, [A], { maxAgeMs: 0 });
+  ok('age 0: always expired, even within the same millisecond — but kept for peek', qc.get('live', 'zero') === undefined && qc.peek('zero') !== undefined);
+  qc.setClockForTest(null);
+
   finish();
 })();

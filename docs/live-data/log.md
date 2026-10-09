@@ -419,3 +419,92 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   `ASSERT` and a script (either may be the gate's case), the scope answers, and whether a 450-step
   recursive CTE is still running ~10 s in, when the late cancel lands (chosen over a cross join,
   which the on-demand billing tier can stop on CPU first).
+
+## 2026-10-09 — L2.3 The executor and the cache
+
+- **Built.** `src/engine/live/liveQuery.ts`: `liveVizData(projectId, datasetId, encoding, filters)`,
+  `liveMetric(projectId, datasetId, spec, filters)` and `liveAnswer(projectId, spec)` — exactly what
+  `vizDataFor`, `computeCardMetric` and `computeCard` take, answering their success shapes (the chart
+  + `recommendedShape`, `warnings`, `category`; the number; the ranked and cut chart + `notes` +
+  `filterLabels`) plus `asOf {at, mode: 'live', cached?, stale?}`, or a typed `LiveFailure {ok: false,
+  code: live_refused | live_unavailable | live_failed | live_timeout | live_cancelled, error, reason?}`
+  whose `error` is a catalog sentence. Not wired into the doors (L2.4). Beside it: `liveTarget.ts`
+  (record → connection → connector, dialect, source parts; the secrets read on the first warehouse
+  call only, through the same `loadSecrets` a refresh uses), `liveBudget.ts`,
+  `src/connectors/liveRun.ts` (the live ConnectorContext: `guardHost` — now exported from
+  connectionRun — `costTag 'live'`, `maxBytes`, the timeout, the signal, `safeError`) and
+  `src/engine/liveQueryMessages.ts` (6 catalog sentences). `queryCache` gains a per-entry `maxAgeMs`
+  (and a per-lookup one; the tighter wins, so lowering a dataset's age applies at once), `peek` (any
+  age, for the stale fallback) and a clock seam; nothing but live sets an age. `residentTrace`
+  `recordLive` → `/metrics`. Settings `LIVE_QUERY_TIMEOUT_MS`, `LIVE_MAX_CONCURRENT` (env.ts, re-read
+  per query like `LIVE_MAX_BYTES_BILLED`).
+- **The test bench.** `scripts/liveFakeConnector.ts`: two defs (`live-fake`, `live-fake-net` with a
+  host field) declaring the DuckDB dialect, running the compiled statement through the async bridge in
+  the org's own worker; a spy (`fake.calls`) and a hook (hold, fail, slow). `LiveDialectId` gains
+  `'duckdb'` (and liveSchema a DuckDB type table) — declared by no shipped connector, asserted. The
+  registry gains `registerTestConnector`: resolvable by id, never in `listConnectors`/the catalog,
+  refused under `ORDINATE_ENV=prod`. For L2.6: `startServer(env, { live: true })` seeds a fake
+  connection + a Live dataset over a built-in `live_fake_orders` table (`seed.ts --live`,
+  `seedLiveFake`) and starts the server with `ORDINATE_TEST_LIVE_FAKE=1` (env.ts refuses it in prod;
+  the image ships no `scripts/`). Checked by hand against the built server: the flag registers the
+  fake, `connection:listTables` runs it in the org worker, `connectors:catalog` does not list it.
+- **Decided — one flight per question, cancelled by the LAST hang-up.** `queryCache.through` already
+  shares a computation, but it cannot carry a hang-up: under it one closed tab would cancel the
+  warehouse call every other viewer of the tile waits on. So live keeps its own in-flight map under
+  the cache key: an asker who hangs up stops waiting at once, and the shared call (its signal +
+  `LIVE_QUERY_TIMEOUT_MS` reach `runBound`) is aborted only when no asker is left; a later asker
+  starts afresh rather than joining a cancelled call. The flight's body runs in the asker's context
+  but under the SHARED signal, so anything that reads the request's signal (the DuckDB pool under the
+  fake, a connector's fallback) obeys the same rule. A joiner counts as `hit` (no call of its own).
+- **Decided — the key** is `orgKey('live' · project · dataset · epoch · schemaSyncedAt ·
+  {ir, source, dialect})`: the plan's, plus the project and the source, so an origin edit that did
+  not move `schemaSyncedAt` still cannot answer from the old statement. The period resolver's MAX()
+  is its own entry, keyed by its statement: two answers over one date column ask it once.
+  `asOf.at` is the OLDEST statement's time (a cached MAX() included).
+- **Decided — no warehouse text in a reply at all**, stronger than redacting it: a warehouse can
+  quote fragments of a defining query no redaction pass would recognise. The reply is a catalog
+  sentence ("…an admin can find the reason in the server log"); the server log gets one line per
+  failed STATEMENT (not per asker), `safeError`'d. The trace's once-per-op warning is the summary.
+- **Decided — a sixth trace outcome, `cancelled`** (the plan names five): a closed tab is not a
+  warehouse failure, and the once-per-op warning must not be spent on one. `failed` stays "a viewer
+  saw an error".
+- **Decided, smaller.** The stale fallback reads the exact key, so right after "Refresh" (epoch bump,
+  and `refreshLive` also invalidates) a failing warehouse is an error, not the pre-refresh figure.
+  Expired entries stay until the LRU's byte budget evicts them. A concurrency slot is held until the
+  connector SETTLES, not until the caller stops waiting (a cancelled statement still winding down
+  counts). A result past `LIVE_ROW_LIMIT` (100,000 groups) is a refusal (`tooManyGroups`), never part
+  of a chart. `LIVE_QUERY_TIMEOUT_MS` is not clamped to the extract's 30 s.
+- **Found by the parity check:** `computeCard`'s `filterLabels` hold EVERY filter's label in spec
+  order ("region = North" beside "d: 2024-Q4"); `evaluateLive`'s `periodLabels` are the periods only.
+  `liveAnswer` interleaves them, taking a non-period label from `specFilterSteps` itself.
+- **L2.7's seams, one each, in `liveBudget.ts`:** `checkDaily(org, datasetId)` returns ok (L2.7:
+  `live_usage` + `LIVE_DAILY_QUERY_LIMIT`). Its refusal is already handled — the stale answer, else
+  `live_refused`/`dailyLimit` with the seam's own sentence — and tested through
+  `setDailyCheckForTest`. `noteCall(org, datasetId)` is the per-call usage upsert (a no-op).
+  `cacheAgeFloorSec()` (0) is the public-page floor, already applied in the age; L2.7 has to bring
+  "this is a `/p/` request" to it — no flag carries that yet.
+- **Measured** (`test-liveQuery`, 4 vCPU container, the fake over the 1,060-row parity fixture in an
+  org's DuckDB worker; three runs): a cache hit **0.38–0.48 ms** median (n=200; it still reads the
+  dataset record and the connection record — the epoch and the dialect — but no secret), a warehouse
+  call **2.41–2.53 ms** median (n=40, one KPI statement, no network). A real warehouse adds 100 ms to
+  seconds per statement. `LIVE_QUERY_TIMEOUT_MS=150` against a held statement answered `live_timeout`
+  in 154 ms, the connector's signal fired.
+- **Tests.** `test-liveQuery` (61 checks): 6 charts, 3 KPIs and 4 answers through the executor equal
+  `evaluateLive` over the parity runner EXACTLY and the extract within 1e-13; hit inside the age / miss
+  at it (fake clock, ±1 ms); an epoch bump misses with no invalidation; age 0 always asks, 5
+  concurrent identical asks make ONE call (1 warehouse + 4 hits); one MAX() for two answers; stale on
+  error; a typed error with nothing cached (NEGATIVE CONTROL: no data, no labels); the R-L6 canary
+  (statement, defining query, host, table and secret planted in a returned and a thrown warehouse
+  error: in no reply; the secret in no log line); R-L5 with two orgs holding the same ids; refusals;
+  `/metrics`. `test-liveQueryBudget` (34): abort (the connector's signal fires, `cancelled` traced),
+  a shared call surviving one hang-up and cancelled by the last, the timeout (typed, and stale when
+  cached), `LIVE_MAX_CONCURRENT=2` (the third waits, peak 2 per org, another org not queued, a queued
+  hang-up never reaches the warehouse), the daily seam, the live context (costTag, bytes, timeout, row
+  cap), the SSRF guard (metadata address refused before `runBound`; NEGATIVE CONTROL: a public one
+  pinned), the row cap, the registry and env guards. `test-queryCache` +6 (ages, `peek`).
+- **For L2.4.** Route a Live dataset to these three BEFORE the extract's own answer cache
+  (`answerKey.keyParts`, `queryCache.through('aggregate'|'metric')`): wrapping them again would pin a
+  figure past `maxCacheAgeSec` and hide `stale`. `visual:data`'s stamp must keep the reply's live
+  `asOf` instead of writing `lastRefreshedAt`. Refuse param replay, FX, LOD and drivers before calling
+  (not in the IR). `liveAnswer`'s chart is ranked and cut already. Text-filter case fixing is still
+  the cached DISTINCT query L2.4 owns.

@@ -141,6 +141,24 @@ function loadAll(): ConnectorDef[] {
 const REGISTRY: ConnectorDef[] = loadAll();
 const BY_ID: ReadonlyMap<string, ConnectorDef> = new Map(REGISTRY.map((d) => [d.id, d]));
 
+// The test harness's connectors (the Live datasets' fake warehouse,
+// scripts/liveFakeConnector.ts): reachable by id, so a connection record can
+// name one and the executor can run it, but NEVER listed — `listConnectors`
+// and so the picker's catalog only ever show REGISTRY.
+const TEST_ONLY = new Map<string, ConnectorDef>();
+
+/**
+ * Make a test connector resolvable by id. Refused under ORDINATE_ENV=prod (the
+ * server's own gate is ORDINATE_TEST_LIVE_FAKE in env.ts), refused for a
+ * half-connector, and refused for an id a real connector already has.
+ */
+export function registerTestConnector(def: ConnectorDef): void {
+  if (process.env.ORDINATE_ENV === 'prod') throw new Error('[connectors] test connectors cannot be registered when ORDINATE_ENV=prod');
+  if (!isConnectorDef(def)) throw new Error('[connectors] not a connector definition');
+  if (BY_ID.has(def.id)) throw new Error(`[connectors] "${def.id}" is a real connector's id`);
+  TEST_ONLY.set(def.id, def);
+}
+
 /** Every connector this process offers, grouped by category in picker order. */
 export function listConnectors(): ConnectorDef[] {
   return REGISTRY;
@@ -152,7 +170,7 @@ export function listConnectors(): ConnectorDef[] {
  *  with it at T8.1, so a record naming one gets null: "Unknown connection kind"). */
 export function getConnector(id: unknown): ConnectorDef | null {
   if (typeof id !== 'string' || !id) return null;
-  return BY_ID.get(id) ?? null;
+  return BY_ID.get(id) ?? TEST_ONLY.get(id) ?? null;
 }
 
 /** True when this id is one the registry can actually run. */
