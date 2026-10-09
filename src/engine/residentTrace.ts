@@ -34,8 +34,24 @@
 // caught is systematic (every call fails, not one), so the first line carries
 // all the information the thousandth would, and flooding a user's log with
 // identical warnings is how a signal gets ignored.
+//
+// ── LIVE DATASETS (docs/live-data/00-plan.md L2.3) ───────────────────────────
+// A Live question has no JS fallback (D7), so its op `live:<dialect>` counts a
+// different set of outcomes, one per question asked:
+//
+//   'hit'        answered from the live cache (or from an identical question
+//                already in flight) — no warehouse call of its own.
+//   'warehouse'  the warehouse was asked and answered.
+//   'stale'      the warehouse failed; the last cached answer was served,
+//                labelled "Stale · as of …".
+//   'refused'    the question cannot be asked live (a typed refusal) — no call.
+//   'failed'     the warehouse failed and nothing was cached: the viewer saw an
+//                error. Warns once per op, like a resident failure.
+//   'cancelled'  the caller hung up first. Counted apart from 'failed' so a
+//                closed tab never reads as a warehouse problem.
 
 export type Outcome = 'resident' | 'skipped' | 'failed';
+export type LiveOutcome = 'hit' | 'warehouse' | 'stale' | 'refused' | 'failed' | 'cancelled';
 
 export interface OpCounts {
   resident: number;
@@ -51,6 +67,11 @@ export interface OpCounts {
    */
   hit: number;
   miss: number;
+  /** Live ops (`live:<dialect>`) only — see LIVE DATASETS above. `hit` and `failed` are shared. */
+  warehouse: number;
+  stale: number;
+  refused: number;
+  cancelled: number;
 }
 
 const counts = new Map<string, OpCounts>();
@@ -59,7 +80,7 @@ const warned = new Set<string>();
 function slot(op: string): OpCounts {
   let c = counts.get(op);
   if (!c) {
-    c = { resident: 0, skipped: 0, failed: 0, lastFailure: null, hit: 0, miss: 0 };
+    c = { resident: 0, skipped: 0, failed: 0, lastFailure: null, hit: 0, miss: 0, warehouse: 0, stale: 0, refused: 0, cancelled: 0 };
     counts.set(op, c);
   }
   return c;
@@ -83,6 +104,27 @@ export function record(op: string, outcome: Outcome, detail?: string): void {
       `JS path, which is correct but orders of magnitude slower` +
       (detail ? ` (${detail})` : '') +
       `. Further ${op} failures this session are counted, not logged.`,
+  );
+}
+
+/**
+ * Record how one Live question was answered, under `live:<dialect>`. `detail`
+ * is kept and printed only for 'failed', and like `record`'s it names the
+ * shape of the failure (the step, timeout or error), never a warehouse
+ * message, a value or a name from the user's data.
+ */
+export function recordLive(op: string, outcome: LiveOutcome, detail?: string): void {
+  const c = slot(op);
+  c[outcome] += 1;
+  if (outcome !== 'failed') return;
+
+  c.lastFailure = detail ?? null;
+  if (warned.has(op)) return;
+  warned.add(op);
+  console.warn(
+    `[live] ${op}: the warehouse did not answer and no cached answer existed, so a viewer saw an error` +
+      (detail ? ` (${detail})` : '') +
+      `. Further ${op} failures this session are counted, not logged (ordinate_resident_calls_total on /metrics).`,
   );
 }
 

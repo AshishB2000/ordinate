@@ -132,6 +132,13 @@ prompts unrounded); a leading U+FEFF is lost on every string the bridge returns 
   `maxCacheAgeSec`. There is **no JS fallback** (D7): correctness rests on the parity tests — the
   compiler's DuckDB dialect against the extract path with `Object.is` (`test-liveParity`), then real
   engines (L2.8).
+- **The executor** (`src/engine/live/liveQuery.ts`: `liveVizData`/`liveMetric`/`liveAnswer`, L2.3):
+  cache (an expired entry is kept as the stale fallback) → ONE warehouse call per question however
+  many ask, cancelled only when every asker hangs up → `liveBudget` (`LIVE_MAX_CONCURRENT`; L2.7's
+  seams) → `connectors/liveRun.ts` (SSRF guard, `costTag 'live'`, `LIVE_QUERY_TIMEOUT_MS`). A failure
+  is the stale answer (`asOf.stale`) or a typed error in a catalog sentence — warehouse text goes to
+  the log only (R-L6). `live:<dialect>` outcomes on `/metrics`. CI's warehouse is
+  `scripts/liveFakeConnector.ts` (DuckDB dialect; tests or `ORDINATE_TEST_LIVE_FAKE` only, never listed).
 
 ### Workspace
 

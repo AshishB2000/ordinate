@@ -1,0 +1,471 @@
+// The live executor — MAIN PROCESS ONLY. docs/live-data/00-plan.md L2.3 (§4, D5–D9).
+//
+//   question ─► adapt (./liveSpec) ─► cache? ─► budget ─► connector.live.runBound ─► shape (./evaluate)
+//
+// Three entry points, one per door L2.4 routes. Each takes exactly what its
+// door has today and answers what the extract twin answers, plus `asOf`
+// ({at: when the warehouse answered, mode: 'live', cached?, stale?}):
+//
+//   liveVizData(projectId, datasetId, encoding, filters)   ← vizDataFor (charts, publish, export)
+//   liveMetric(projectId, datasetId, spec, filters)        ← metricFor / computeCardMetric (KPI tiles)
+//   liveAnswer(projectId, spec)                            ← computeCard (AI answers)
+//
+// THE CACHE (D5) is queryCache with an age, one entry per question:
+//   orgKey('live' · projectId · datasetId · epoch · schemaSyncedAt · {ir, source, dialect})
+// The epoch lives in the record, so "Refresh" moves every pod's key at once;
+// `maxCacheAgeSec` is the entry's age, read at every lookup (0 = always ask).
+// The period resolver's MAX() is cached the same way under its own statement,
+// so every answer over one date column shares one.
+//
+// ONE CALL PER QUESTION. Identical questions asked together share one warehouse
+// call — a "flight" — always, even at age 0. A shared call is cancelled only
+// when EVERY asker has hung up: one closed tab must not fail the tile another
+// viewer is waiting on. An asker that hangs up stops waiting at once.
+//
+// NEVER AN EMPTY RESULT (D6, D7). Live has no JS fallback. When the warehouse
+// fails, the last answer this pod cached for the question is served however
+// old, labelled `asOf.stale`; with none, a typed error in a catalog sentence.
+// The warehouse's own words go to the server log (secrets redacted by
+// safeError), never into a reply: they can quote the SQL, a table or a host (R-L6).
+//
+// Every question is counted on residentTrace as `live:<dialect>` — hit,
+// warehouse, stale, refused, failed or cancelled — and so on /metrics.
+
+import type { AsOf } from '../../api/asOf';
+import type { AnswerSpec } from '../../ai/answerSpec';
+import { specFilterSteps } from '../../ai/answerSpec';
+import type { VizEncoding } from '../../analysis/visuals';
+import type { ChartData } from '../../analysis/vizData';
+import { recommendChartType } from '../../analysis/vizData';
+import type { CategoryInfo } from '../../analysis/categoryKey';
+import type { FilterStep } from '../../data/transforms';
+import { LIVE_ROW_LIMIT, runLiveBound } from '../../connectors/liveRun';
+import type { ConnectorError, ConnectorRows } from '../../connectors/types';
+import { safeError } from '../../connectors/types';
+import { liveQueryTimeoutMs } from '../../server/env';
+import { ctx, orgKey, runInContext } from '../../server/context';
+import * as queryCache from '../queryCache';
+import * as trace from '../residentTrace';
+import * as msg from '../liveQueryMessages';
+import * as budget from './liveBudget';
+import type { CompiledQuery } from './compile';
+import type { LiveOutcome, LiveRunner } from './evaluate';
+import { evaluateLive } from './evaluate';
+import type { AdaptOpts, LiveAdapted, LiveIR, LiveRefusal, LiveRefusalCode } from './liveSpec';
+import { fromAnswerSpec, fromMetric, fromVizEncoding, refuse } from './liveSpec';
+import type { LiveRows } from './shape';
+import type { LiveTarget, TargetProblem } from './liveTarget';
+import { liveTarget } from './liveTarget';
+
+// ── Replies ──────────────────────────────────────────────────────────────────
+
+export type LiveFailureCode = 'live_refused' | 'live_unavailable' | 'live_failed' | 'live_timeout' | 'live_cancelled';
+
+/** Why a Live question has no figure. `error` is a catalog sentence: safe for a browser. */
+export interface LiveFailure {
+  ok: false;
+  code: LiveFailureCode;
+  error: string;
+  /** For `live_refused`: the compiler's refusal code, or the executor's own. */
+  reason?: LiveRefusalCode | 'tooManyGroups' | 'dailyLimit';
+}
+
+/** `vizDataFor`'s success shape, dated. */
+export type LiveVizReply =
+  | { ok: true; data: ChartData; recommendedShape: string; warnings: string[]; category: CategoryInfo; asOf: AsOf }
+  | LiveFailure;
+
+/** `computeCardMetric`'s number, dated. */
+export type LiveMetricReply = { ok: true; value: number | null; warnings: string[]; asOf: AsOf } | LiveFailure;
+
+/**
+ * What `computeCard` builds a card from: the ranked, cut chart (do NOT rank it
+ * again), its notes (warnings + the "Other" note, as the card shows them) and
+ * the period labels ("order_date: 2024-Q4").
+ */
+export type LiveAnswerReply =
+  | { ok: true; data: ChartData; category: CategoryInfo; warnings: string[]; notes: string[]; filterLabels: string[]; asOf: AsOf }
+  | LiveFailure;
+
+type LiveOk = Extract<LiveOutcome, { ok: true }>;
+
+/** One cached answer: the shaped outcome and when the warehouse gave it (its oldest statement). */
+interface Answered {
+  outcome: LiveOk;
+  at: string;
+}
+
+type Asked = { ok: true; outcome: LiveOk; asOf: AsOf } | LiveFailure;
+
+// ── Failures ─────────────────────────────────────────────────────────────────
+
+type CallKind = 'failed' | 'timeout' | 'cancelled' | 'tooLarge' | 'daily';
+
+/** One warehouse statement did not answer. `detail` is for the server log only. */
+class LiveCallError extends Error {
+  readonly kind: CallKind;
+  readonly detail: string;
+  constructor(kind: CallKind, detail = '') {
+    super(`live ${kind}`);
+    this.name = 'LiveCallError';
+    this.kind = kind;
+    this.detail = detail;
+  }
+}
+
+function fail(code: LiveFailureCode, error: string, reason?: LiveFailure['reason']): LiveFailure {
+  return reason ? { ok: false, code, error, reason } : { ok: false, code, error };
+}
+
+const opOf = (dialect: string | undefined): string => `live:${dialect ?? 'unknown'}`;
+
+function refused(dialect: string | undefined, r: LiveRefusal): LiveFailure {
+  trace.recordLive(opOf(dialect), 'refused');
+  return fail('live_refused', r.message, r.code);
+}
+
+function unavailable(p: TargetProblem): LiveFailure {
+  if (p.kind === 'refused') return refused(p.dialect, p.refusal);
+  trace.recordLive(opOf(p.dialect), 'refused');
+  return fail('live_unavailable', p.error);
+}
+
+/** The server log's line for a warehouse failure: dataset id, step kind, the connector's (redacted) words. */
+function logFailure(t: LiveTarget, e: LiveCallError): void {
+  console.warn(`[live] ${opOf(t.dialect)} dataset ${t.datasetId}: ${e.kind}${e.detail ? ` — ${e.detail}` : ''}`);
+}
+
+// ── Flights: one warehouse call per question, however many ask ──────────────
+
+interface Flight<T> {
+  promise: Promise<T>;
+  ctl: AbortController;
+  askers: number;
+}
+
+const flights = new Map<string, Flight<unknown>>();
+
+/**
+ * Join the question in flight under `key`, or start it. Resolves with the
+ * answer (a copy for every asker but the one who started it) and whether this
+ * asker started it. When `signal` fires the asker leaves at once; when the
+ * last asker leaves, the shared call is aborted and forgotten, so the next
+ * asker starts afresh rather than joining a cancelled call.
+ */
+function fly<T>(key: string, signal: AbortSignal | undefined, start: (shared: AbortSignal) => Promise<T>): Promise<{ value: T; owner: boolean }> {
+  let found = flights.get(key) as Flight<T> | undefined;
+  const owner = !found;
+  if (!found) {
+    const ctl = new AbortController();
+    const fresh: Flight<T> = { promise: start(ctl.signal), ctl, askers: 0 };
+    flights.set(key, fresh);
+    const land = (): void => {
+      if (flights.get(key) === fresh) flights.delete(key);
+    };
+    void fresh.promise.then(land, land);
+    found = fresh;
+  }
+  const f = found;
+  f.askers += 1;
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const leave = (): void => {
+      if (done) return;
+      done = true;
+      f.askers -= 1;
+      if (f.askers === 0) {
+        if (flights.get(key) === f) flights.delete(key);
+        f.ctl.abort();
+      }
+      reject(new LiveCallError('cancelled'));
+    };
+    if (signal?.aborted) {
+      leave();
+      return;
+    }
+    signal?.addEventListener('abort', leave, { once: true });
+    void f.promise.then(
+      (value) => {
+        if (done) return;
+        done = true;
+        signal?.removeEventListener('abort', leave);
+        resolve({ value: owner ? value : structuredClone(value), owner });
+      },
+      (err: unknown) => {
+        if (done) return;
+        done = true;
+        signal?.removeEventListener('abort', leave);
+        reject(err);
+      },
+    );
+  });
+}
+
+/** Test hook: flights in the air (the suite checks none is left behind). */
+export function flightsInAir(): number {
+  return flights.size;
+}
+
+// ── One statement ────────────────────────────────────────────────────────────
+
+const ABORTED = Symbol('aborted');
+
+/** `p`, or ABORTED as soon as `signal` fires — the caller stops waiting; `p` runs on. */
+function untilAbort<T>(p: Promise<T>, signal: AbortSignal): Promise<T | typeof ABORTED> {
+  if (signal.aborted) return Promise.resolve(ABORTED);
+  return new Promise((resolve, reject) => {
+    const onAbort = (): void => resolve(ABORTED);
+    signal.addEventListener('abort', onAbort, { once: true });
+    void p.then(
+      (v) => { signal.removeEventListener('abort', onAbort); resolve(v); },
+      (e: unknown) => { signal.removeEventListener('abort', onAbort); reject(e); },
+    );
+  });
+}
+
+/** LIVE_QUERY_TIMEOUT_MS, re-read per statement (env.ts refused a bad value at startup). */
+function timeoutMs(): number {
+  try {
+    return liveQueryTimeoutMs(process.env.LIVE_QUERY_TIMEOUT_MS);
+  } catch {
+    return liveQueryTimeoutMs(undefined);
+  }
+}
+
+/**
+ * Send one compiled statement to the warehouse: the daily seam, a concurrency
+ * slot, then `runBound` under the shared signal + the timeout. The slot is held
+ * until the CONNECTOR settles — a cancelled statement still winding down in the
+ * warehouse still counts — while this caller stops waiting the moment either
+ * signal fires. Rows come back positional to `query.columns`.
+ */
+async function warehouse(t: LiveTarget, query: CompiledQuery, shared: AbortSignal): Promise<LiveRows> {
+  const daily = budget.checkDaily(t.org, t.datasetId);
+  if (!daily.ok) throw new LiveCallError('daily', daily.message);
+  let release: () => void;
+  try {
+    release = await budget.acquire(t.org, t.datasetId, shared);
+  } catch {
+    throw new LiveCallError('cancelled');
+  }
+  const ms = timeoutMs();
+  const timer = AbortSignal.timeout(ms);
+  const signal = AbortSignal.any([shared, timer]);
+  let call: Promise<ConnectorRows | ConnectorError>;
+  try {
+    const secrets = await t.secrets();
+    call = runLiveBound(t.def, t.values, secrets, query.sql, query.params, { signal, timeoutMs: ms });
+  } catch (err: unknown) {
+    release();
+    throw failed(t, 'failed', safeError(err));
+  }
+  void call.then(release, release);
+  const res = await untilAbort(call, signal);
+  if (res === ABORTED) throw failed(t, shared.aborted ? 'cancelled' : 'timeout');
+  budget.noteCall(t.org, t.datasetId);
+  if (!res.ok) throw failed(t, shared.aborted ? 'cancelled' : timer.aborted ? 'timeout' : 'failed', res.error);
+  if (res.truncated) throw new LiveCallError('tooLarge');
+  return res.rows;
+}
+
+/** A statement's failure, logged ONCE here — not once per asker of a shared question. A hang-up is not logged. */
+function failed(t: LiveTarget, kind: CallKind, detail = ''): LiveCallError {
+  const e = new LiveCallError(kind, detail);
+  if (kind !== 'cancelled') logFailure(t, e);
+  return e;
+}
+
+// ── One question ─────────────────────────────────────────────────────────────
+
+function keyOf(t: LiveTarget, spec: unknown): string {
+  return orgKey(['live', t.projectId, t.datasetId, String(t.live.epoch), t.live.schemaSyncedAt, queryCache.stableStringify(spec)].join('\u0000'));
+}
+
+/** The dataset's cache age in ms, never under the floor (L2.7's public-page seam). */
+function maxAgeOf(t: LiveTarget): number {
+  return Math.max(t.live.maxCacheAgeSec, budget.cacheAgeFloorSec()) * 1000;
+}
+
+/** The period resolver's MAX(): cached and shared under its own statement. */
+async function latest(t: LiveTarget, query: CompiledQuery, maxAgeMs: number, shared: AbortSignal, seen: (ms: number) => void): Promise<LiveRows> {
+  const key = keyOf(t, { latest: query.sql, params: query.params });
+  const hit = queryCache.get<{ rows: LiveRows; at: number }>('live', key, { maxAgeMs });
+  if (hit) {
+    seen(hit.at);
+    return hit.rows;
+  }
+  const { value } = await fly(key, shared, async (s) => {
+    const rows = await warehouse(t, query, s);
+    const v = { rows, at: queryCache.now() };
+    queryCache.set(key, v, [t.datasetId], { maxAgeMs });
+    return v;
+  });
+  seen(value.at);
+  return value.rows;
+}
+
+/** Ask the warehouse (the flight's body): every statement, then cache a real answer. */
+async function answer(t: LiveTarget, ir: LiveIR, key: string, maxAgeMs: number, shared: AbortSignal): Promise<{ outcome: LiveOutcome; at: string }> {
+  let oldest = Infinity;
+  const seen = (ms: number): void => {
+    if (ms < oldest) oldest = ms;
+  };
+  const run: LiveRunner = async (query, step) => {
+    if (step === 'latest') return latest(t, query, maxAgeMs, shared, seen);
+    const rows = await warehouse(t, query, shared);
+    seen(queryCache.now());
+    return rows;
+  };
+  let outcome: LiveOutcome;
+  try {
+    // In the asker's context but under the SHARED signal: anything below that
+    // reads the request's signal (the DuckDB pool, a connector's fallback)
+    // stops when every asker has gone, not when the first one does.
+    const c = ctx();
+    outcome = await runInContext(c, c.requestId, () => evaluateLive(ir, t.env, run), c.client, shared);
+  } catch (err: unknown) {
+    // A LiveCallError was logged where it happened; anything else is unexpected, and logged once here.
+    throw err instanceof LiveCallError ? err : failed(t, 'failed', safeError(err));
+  }
+  // A figure is as old as its oldest statement (a cached MAX() included).
+  const at = new Date(Number.isFinite(oldest) ? oldest : queryCache.now()).toISOString();
+  if (outcome.ok) queryCache.set(key, { outcome, at } satisfies Answered, [t.datasetId], { maxAgeMs });
+  return { outcome, at };
+}
+
+/** A failed ask → the stale answer, or the typed failure. Never an empty result. */
+function fallBack(t: LiveTarget, key: string, err: unknown, signal: AbortSignal | undefined): Asked {
+  const op = opOf(t.dialect);
+  const e = err instanceof LiveCallError ? err : new LiveCallError('failed', safeError(err));
+  if (e.kind === 'cancelled' || signal?.aborted) {
+    trace.recordLive(op, 'cancelled');
+    return fail('live_cancelled', msg.liveCancelled());
+  }
+  if (e.kind === 'tooLarge') {
+    trace.recordLive(op, 'refused');
+    return fail('live_refused', msg.liveTooManyGroups(LIVE_ROW_LIMIT.toLocaleString('en-US')), 'tooManyGroups');
+  }
+  const stale = queryCache.peek<Answered>(key);
+  if (stale) {
+    trace.recordLive(op, 'stale');
+    return { ok: true, outcome: stale.value.outcome, asOf: { at: stale.value.at, mode: 'live', cached: true, stale: true } };
+  }
+  if (e.kind === 'daily') {
+    trace.recordLive(op, 'refused');
+    return fail('live_refused', e.detail, 'dailyLimit');
+  }
+  trace.recordLive(op, 'failed', e.kind === 'timeout' ? 'timeout' : 'warehouse error');
+  return e.kind === 'timeout'
+    ? fail('live_timeout', msg.liveWarehouseTimeout((timeoutMs() / 1000).toLocaleString('en-US')))
+    : fail('live_failed', msg.liveWarehouseFailed());
+}
+
+/** Cache → flight → warehouse → shape, for one adapted question. */
+async function ask(t: LiveTarget, ir: LiveIR): Promise<Asked> {
+  const op = opOf(t.dialect);
+  const key = keyOf(t, { ir, source: t.source, dialect: t.dialect });
+  const maxAgeMs = maxAgeOf(t);
+  const fresh = queryCache.get<Answered>('live', key, { maxAgeMs });
+  if (fresh) {
+    trace.recordLive(op, 'hit');
+    return { ok: true, outcome: fresh.outcome, asOf: { at: fresh.at, mode: 'live', cached: true } };
+  }
+  const signal = ctx().signal;
+  let asked: { value: { outcome: LiveOutcome; at: string }; owner: boolean };
+  try {
+    asked = await fly(key, signal, (shared) => answer(t, ir, key, maxAgeMs, shared));
+  } catch (err: unknown) {
+    return fallBack(t, key, err, signal);
+  }
+  const { outcome, at } = asked.value;
+  if (!outcome.ok) return refused(t.dialect, outcome);
+  // An asker who joined a flight already in the air made no warehouse call of its own.
+  trace.recordLive(op, asked.owner ? 'warehouse' : 'hit');
+  return { ok: true, outcome, asOf: { at, mode: 'live' } };
+}
+
+/** Resolve the target, adapt, ask: the part every door shares. */
+async function run(projectId: string, datasetId: string, adapt: (t: LiveTarget) => LiveAdapted): Promise<{ asked: Asked; warnings: string[]; t: LiveTarget } | LiveFailure> {
+  const found = await liveTarget(projectId, datasetId);
+  if (!found.ok) return unavailable(found);
+  const t = found.target;
+  const a = adapt(t);
+  if (!a.ok) return refused(t.dialect, a);
+  return { asked: await ask(t, a.ir), warnings: a.warnings, t };
+}
+
+// ── The three doors ──────────────────────────────────────────────────────────
+
+/** A chart: `vizDataFor`'s question on a Live dataset. */
+export async function liveVizData(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[], opts: AdaptOpts = {}): Promise<LiveVizReply> {
+  const r = await run(projectId, datasetId, (t) => fromVizEncoding(encoding, filters, t.columns, opts));
+  if (!('asked' in r)) return r;
+  if (!r.asked.ok) return r.asked;
+  const o = r.asked.outcome;
+  if (o.kind !== 'chart') return refused(r.t.dialect, refuse('badQuery'));
+  return {
+    ok: true,
+    data: o.chart.data,
+    recommendedShape: recommendChartType(r.t.columns, encoding).shape,
+    warnings: r.warnings.concat(o.warnings),
+    category: o.chart.category,
+    asOf: r.asked.asOf,
+  };
+}
+
+/** One KPI number: `metricFor`'s question on a Live dataset. */
+export async function liveMetric(
+  projectId: string,
+  datasetId: string,
+  spec: { column: string; aggregation: string },
+  filters: FilterStep[],
+  opts: AdaptOpts = {},
+): Promise<LiveMetricReply> {
+  const r = await run(projectId, datasetId, (t) => fromMetric(spec, filters, t.columns, opts));
+  if (!('asked' in r)) return r;
+  if (!r.asked.ok) return r.asked;
+  const o = r.asked.outcome;
+  if (o.kind !== 'metric') return refused(r.t.dialect, refuse('badQuery'));
+  return { ok: true, value: o.value, warnings: r.warnings.concat(o.warnings), asOf: r.asked.asOf };
+}
+
+/** An AI answer's chart: `computeCard`'s question on a Live dataset — ranked and cut in the warehouse. */
+export async function liveAnswer(projectId: string, spec: AnswerSpec, opts: AdaptOpts = {}): Promise<LiveAnswerReply> {
+  const r = await run(projectId, spec && spec.datasetId, (t) => fromAnswerSpec(spec, t.columns, opts));
+  if (!('asked' in r)) return r;
+  if (!r.asked.ok) return r.asked;
+  const o = r.asked.outcome;
+  if (o.kind !== 'chart') return refused(r.t.dialect, refuse('badQuery'));
+  const warnings = r.warnings.concat(o.warnings);
+  const notes = o.chart.category.note ? warnings.concat(o.chart.category.note) : warnings.slice();
+  return {
+    ok: true,
+    data: o.chart.data,
+    category: o.chart.category,
+    warnings,
+    notes,
+    filterLabels: answerFilterLabels(spec, r.t.columns, o.periodLabels),
+    asOf: r.asked.asOf,
+  };
+}
+
+/**
+ * The card's filter labels in spec order, as `specFilterSteps` writes them: a
+ * period's ("order_date: 2024-Q4", resolved against the warehouse's latest
+ * date — ./evaluate's `periodLabels`, in period order) or the filter's own
+ * ("region = North", from `specFilterSteps` itself, which reads no row for one).
+ */
+function answerFilterLabels(spec: AnswerSpec, columns: LiveTarget['columns'], periodLabels: string[]): string[] {
+  const periods = periodLabels.slice();
+  const out: string[] = [];
+  for (const f of spec.filters || []) {
+    if (!columns.some((c) => c.name === f.column)) continue;
+    if ('period' in f) {
+      const l = periods.shift();
+      if (l !== undefined) out.push(l);
+    } else {
+      out.push(...specFilterSteps({ filters: [f] }, columns, []).labels);
+    }
+  }
+  return out;
+}

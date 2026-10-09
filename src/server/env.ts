@@ -41,6 +41,8 @@ export interface ServerEnv {
   readonly limits: LimitsEnv;
   /** Where Parquet tables live (T5.2, src/engine/storage.ts). */
   readonly storage: StorageEnv;
+  /** ORDINATE_TEST_LIVE_FAKE=1: register the test harness's fake warehouse at boot (./main.ts). Refused in prod. */
+  readonly testLiveFake: boolean;
 }
 
 export interface LimitsEnv {
@@ -220,6 +222,13 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   proxyList(csv(src.SSRF_ALLOW), 'SSRF_ALLOW');
   // LIVE_MAX_BYTES_BILLED (live data, L1.3): read by src/connectors/bigquery.ts at each query; a typo stops startup here.
   maxBytesBilled(src.LIVE_MAX_BYTES_BILLED);
+  // LIVE_QUERY_TIMEOUT_MS, LIVE_MAX_CONCURRENT (live data, L2.3): read by src/engine/live/ at each query, the same way.
+  liveQueryTimeoutMs(src.LIVE_QUERY_TIMEOUT_MS);
+  liveMaxConcurrent(src.LIVE_MAX_CONCURRENT);
+  const testLiveFake = oneOf('ORDINATE_TEST_LIVE_FAKE', src.ORDINATE_TEST_LIVE_FAKE, ['0', '1'], '0') === '1';
+  if (testLiveFake && env === 'prod') {
+    throw new EnvError('ORDINATE_ENV=prod refuses ORDINATE_TEST_LIVE_FAKE=1: it registers a fake warehouse for the test harness only');
+  }
   const duckdb = parseDuck(src);
   const limits = Object.freeze({
     loginPerMinute: positiveInt('RATE_LIMIT_LOGIN_PER_MINUTE', src.RATE_LIMIT_LOGIN_PER_MINUTE, 60),
@@ -229,7 +238,7 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
     rpcTimeoutMs: positiveInt('RPC_TIMEOUT_SECONDS', src.RPC_TIMEOUT_SECONDS, 60) * 1000,
   });
   const storage = parseStorage(src, databaseUrl);
-  return Object.freeze({ port, metricsPort, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits, storage });
+  return Object.freeze({ port, metricsPort, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits, storage, testLiveFake });
 }
 
 /** The directory of a file:// STORAGE_URL, null for unset or s3://. */
@@ -357,6 +366,22 @@ export function maxBytesBilled(raw: string | undefined): number {
     throw new EnvError(`LIVE_MAX_BYTES_BILLED must be a positive whole number of bytes, for example 10737418240 (10 GiB), got ${JSON.stringify(raw)}`);
   }
   return Number(raw);
+}
+
+/** LIVE_QUERY_TIMEOUT_MS (plan §8): one live warehouse statement, cancelled in the warehouse past it. Pure: re-read per query. */
+export const DEFAULT_LIVE_QUERY_TIMEOUT_MS = 60_000;
+export function liveQueryTimeoutMs(raw: string | undefined): number {
+  if (raw === undefined || raw === '') return DEFAULT_LIVE_QUERY_TIMEOUT_MS;
+  if (/^\d{3,7}$/.test(raw) && Number(raw) >= 100 && Number(raw) <= 3_600_000) return Number(raw);
+  throw new EnvError(`LIVE_QUERY_TIMEOUT_MS must be a whole number of milliseconds from 100 to 3600000, got ${JSON.stringify(raw)}`);
+}
+
+/** LIVE_MAX_CONCURRENT (plan §8): live warehouse statements in flight per org per pod; more wait. Pure: re-read per query. */
+export const DEFAULT_LIVE_MAX_CONCURRENT = 4;
+export function liveMaxConcurrent(raw: string | undefined): number {
+  if (raw === undefined || raw === '') return DEFAULT_LIVE_MAX_CONCURRENT;
+  if (/^\d{1,4}$/.test(raw) && Number(raw) >= 1 && Number(raw) <= 1000) return Number(raw);
+  throw new EnvError(`LIVE_MAX_CONCURRENT must be a whole number from 1 to 1000, got ${JSON.stringify(raw)}`);
 }
 
 function positiveInt(name: string, raw: string | undefined, dflt: number): number {

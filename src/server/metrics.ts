@@ -11,7 +11,7 @@
 //   ordinate_jobs_finished_total                         finished jobs, by kind and final state
 //   ordinate_scheduled_job_runs_total                    the Postgres-claimed runs (./jobs/runner.ts)
 //   ordinate_compute_pool_*                              compute workers and the queue waiting for one
-//   ordinate_resident_calls_total                        residentTrace outcomes per call site
+//   ordinate_resident_calls_total                        residentTrace outcomes per call site (live:<dialect> too)
 //
 // Label values are bounded: a channel without a contract is `unknown`, a route
 // is Fastify's pattern (`/api/files/:token`), never the raw URL — a token or an
@@ -25,6 +25,9 @@ import * as residentTrace from '../engine/residentTrace';
 import * as jobs from '../app/jobs';
 import { runStats } from './jobs/runner';
 import { RPC_ROUTE } from './limits';
+
+/** A Live question's outcomes (residentTrace, docs/live-data/00-plan.md L2.3). */
+const LIVE_OUTCOMES = ['hit', 'warehouse', 'stale', 'refused', 'failed', 'cancelled'] as const;
 
 /** Seconds. Interactive calls sit in the first half; the tail reaches RPC_TIMEOUT_SECONDS' default. */
 const BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60];
@@ -131,9 +134,11 @@ export function metricsText(): string {
   out.push(`ordinate_compute_pool_workers${labels({ state: 'busy' })} ${pool.busy}`);
   out.push(`ordinate_compute_pool_workers${labels({ state: 'idle' })} ${pool.workers - pool.busy}`);
 
-  family(out, 'ordinate_resident_calls_total', 'counter', 'Which path answered each resident call site: resident, skipped or failed (failed should stay 0); cache:<op> sites count hit and miss.');
+  family(out, 'ordinate_resident_calls_total', 'counter', 'Which path answered each resident call site: resident, skipped or failed (failed should stay 0); cache:<op> sites count hit and miss; live:<dialect> sites count hit, warehouse, stale, refused, failed and cancelled.');
   for (const [op, c] of Object.entries(residentTrace.snapshot())) {
-    const outcomes = op.startsWith('cache:') ? (['hit', 'miss'] as const) : (['resident', 'skipped', 'failed'] as const);
+    const outcomes = op.startsWith('cache:') ? (['hit', 'miss'] as const)
+      : op.startsWith('live:') ? LIVE_OUTCOMES
+      : (['resident', 'skipped', 'failed'] as const);
     for (const outcome of outcomes) out.push(`ordinate_resident_calls_total${labels({ op, outcome })} ${c[outcome]}`);
   }
   return out.join('\n') + '\n';

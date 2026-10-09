@@ -86,6 +86,8 @@ Bounds on what a connection may cost in the warehouse it reads. See [live-data.m
 | Variable | Purpose | Default | Required when | Secret |
 |---|---|---|---|---|
 | `LIVE_MAX_BYTES_BILLED` | The most a single BigQuery query may bill, in bytes. Every query a BigQuery connection runs carries BigQuery's `maximumBytesBilled` = the lower of this and the connection's own "Max bytes billed per query", so a query over it fails before it runs, at no charge. A whole number of bytes, no unit. | `10737418240` (10 GiB) | — | no |
+| `LIVE_QUERY_TIMEOUT_MS` | How long one warehouse statement of a Live dataset may run, in milliseconds (100 – 3600000). Past it the statement is cancelled in the warehouse, and the figure is the last cached answer, labelled stale, or an error. A viewer who closes the tab cancels it too. | `60000` | — | no |
+| `LIVE_MAX_CONCURRENT` | Live warehouse statements in flight at once, per org, in each pod (1 – 1000). More wait their turn; one that is cancelled while waiting never reaches the warehouse. N pods allow N × this. | `4` | — | no |
 
 ## DuckDB
 
@@ -109,6 +111,7 @@ Do not set these in a deployment. They are listed because server code reads them
 | `ORDINATE_DUCKDB_PIPELINE` | `1` lets an unforced prepare pipeline run on DuckDB. Since T4.2 no shipped code path calls it unforced, so it has no effect on the server. | unset | never | no |
 | `ORDINATE_TODAY` | Pins "today" (`YYYY-MM-DD`) for relative-date filters. Smoke tests use it. | unset: the server's local date | never | no |
 | `ORDINATE_SAAS_FIXTURE_BASE` | Points SaaS connectors at a loopback fixture server (`http://127.0.0.1:<port>` only) for tests. | unset | never | no |
+| `ORDINATE_TEST_LIVE_FAKE` | `1` registers the test harness's fake warehouse (DuckDB, `scripts/liveFakeConnector.ts`) so the e2e can drive a Live dataset. Never offered in the connection picker. Refused with `ORDINATE_ENV=prod`, and the image does not contain it. | unset | never | no |
 
 ## Read by libraries, not by Ordinate
 
