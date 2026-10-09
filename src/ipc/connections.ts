@@ -8,6 +8,7 @@ import { connectorCatalog, getConnector } from '../connectors';
 import type { ConnectorDef, ConnectorField } from '../connectors/types';
 import { buildSecrets, fieldsOf, isSecretField, loadSecrets, secretStatus, storeSecrets } from './connectionSecrets';
 import { composeSave } from './datasetCompose';
+import { registerEstimate } from './connectionEstimate';
 
 // Connected-data-source IPC. Every source is a ConnectorDef in src/connectors, so
 // these handlers are source-agnostic: they resolve a connectorId, shape the form
@@ -458,6 +459,8 @@ export function register(): void {
       return { ok: false, error: err?.message || 'Could not save the dataset' };
     }
   });
+
+  registerEstimate();
 
   // The picker's brand marks (src/app/icons.ts): id → glyph path or data: image.
   // The desktop preload reads them synchronously over `connector:logos`.

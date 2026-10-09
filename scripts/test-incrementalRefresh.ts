@@ -18,6 +18,8 @@
 //   6. recovery after an interrupted run — a throw mid-merge leaves the table,
 //      the source copy and the mark exactly as they were, and a leftover temp
 //      file is cleaned up by the next run
+//   8. BigQuery (L1.4): the predicate pushed to the warehouse, end to end over
+//      the real connector and a fake transport
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
@@ -185,6 +187,63 @@ async function main(): Promise<void> {
   ok('7. they ran in turn: the requested full run first, then an incremental one over its result',
     s7.log.length === logLen + 2 && s7.log[1].mode === 'full' && s7.log[0].mode === 'incremental', JSON.stringify(s7.log.slice(0, 2)));
   ok('7. …so the run count is 1 after the full reset, not bumped twice', s7.runsSinceFull === 1, s7.runsSinceFull);
+
+  // ── 8. BigQuery: the cursor predicate is pushed to the warehouse (L1.4) ────
+  // The real bigquery connector over a recorded-shape fake transport: the
+  // full run reads the table through its one-backtick path, the incremental
+  // run sends the pushed predicate (dry-run gated, inside the cap wrapper), and
+  // the exact cut is still made in JS on the stored column type.
+  {
+    const bq: typeof import('../src/connectors/bigquery') = require('../src/connectors/bigquery');
+    const fake: typeof import('./bigqueryFake') = require('./bigqueryFake');
+    const secretsIpc: typeof import('../src/ipc/connectionSecrets') = require('../src/ipc/connectionSecrets');
+    const day = (d: number): string => String(Date.UTC(2024, 0, d) / 1000); // TIMESTAMP as BigQuery sends it: epoch seconds
+    let warehouse: string[][] = [['1', day(1), '10'], ['2', day(2), '20']];
+    const f = fake.fakeTransport((c) => {
+      if (fake.isToken(c)) return { json: { access_token: 'ya29.incremental', expires_in: 3599 } };
+      if (fake.isDry(c)) return { json: { statementType: 'SELECT', totalBytesProcessed: '2048' } };
+      if (fake.isQuery(c)) {
+        return { json: {
+          schema: { fields: [{ name: 'id', type: 'INTEGER' }, { name: 'updated_at', type: 'TIMESTAMP' }, { name: 'amount', type: 'NUMERIC' }] },
+          jobReference: { projectId: fake.PROJECT, jobId: 'job_incremental', location: 'US' },
+          jobComplete: true,
+          rows: warehouse.map((r) => ({ f: r.map((v) => ({ v })) })),
+        } };
+      }
+      return { status: 404, json: { error: { code: 404, message: 'unexpected' } } };
+    });
+    bq.setTransport(f.transport);
+    try {
+      const conn = (await connections.saveConnection(pid, { name: 'warehouse', connectorId: 'bigquery', values: { project: fake.PROJECT } }))!;
+      await secretsIpc.storeSecrets(conn.id, { token: fake.makeKey().json });
+      const ds = (await datasets.saveDataset(pid, {
+        name: 'bq orders', sourceKind: 'postgres',
+        columns: [{ name: 'id', type: 'number' }, { name: 'updated_at', type: 'date' }, { name: 'amount', type: 'number' }],
+        rows: [[1, '2024-01-01T00:00:00.000Z', 10], [2, '2024-01-02T00:00:00.000Z', 20]],
+        origin: { kind: 'connection', connId: conn.id, table: 'shop.orders' },
+      } as any))!; // any: saveDataset's input, as the importers build it
+      await datasets.writeIncremental(pid, ds.id, () => ({
+        enabled: true, cursorColumn: 'updated_at', keyColumn: 'id', lookback: 0, highWater: null, runsSinceFull: 0, log: [],
+      }));
+      let b = await run(ds.id);
+      const full = f.calls.filter(fake.isQuery).pop();
+      ok('8. bigquery: the first run is full, through the table\'s backtick path in the cap wrapper',
+        b.mode === 'full' && full?.json.query === 'select * from (\nselect * from `shop.orders` limit 1000000\n) limit 1000001', full?.json.query);
+      ok('8. …and the mark is the TIMESTAMP, converted to ISO', b.highWater === '2024-01-02T00:00:00.000Z', JSON.stringify(b));
+      warehouse = [['1', day(1), '10'], ['2', day(3), '25'], ['3', day(4), '40']];
+      await tick();
+      b = await run(ds.id);
+      const pushed = f.calls.filter(fake.isQuery).pop();
+      ok('8. bigquery: the incremental run pushes the predicate to the warehouse',
+        b.mode === 'incremental' && b.how === 'server' && pushed?.json.query === "select * from (\nselect * from `shop.orders` where `updated_at` >= '2024-01-01'\n) limit 1000001", `${JSON.stringify(b)} ${pushed?.json.query}`);
+      ok('8. …dry-run first, like every statement run sends', f.calls.filter(fake.isDry).some((c) => c.json.query === pushed?.json.query));
+      ok('8. …and JS makes the exact cut: id 2 updated, id 3 inserted', b.fetched === 2 && b.updated === 1 && b.inserted === 1 && b.highWater === '2024-01-04T00:00:00.000Z', JSON.stringify(b));
+      const stored = (await datasets.getDataset(pid, ds.id))!;
+      ok('8. hand-written result', JSON.stringify(stored.rows) === JSON.stringify([[1, '2024-01-01T00:00:00.000Z', 10], [2, '2024-01-03T00:00:00.000Z', 25], [3, '2024-01-04T00:00:00.000Z', 40]]), JSON.stringify(stored.rows));
+    } finally {
+      bq.setTransport(null);
+    }
+  }
 }
 
 main()

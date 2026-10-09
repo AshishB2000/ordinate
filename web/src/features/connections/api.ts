@@ -35,6 +35,8 @@ export interface Connector {
   browsable: boolean;
   /** A SaaS source's fixed hosts. */
   hosts?: string[];
+  /** True: the source prices a statement before it runs (BigQuery's dry run) — the editor shows it by Run. */
+  estimates?: boolean;
 }
 
 export type Logo = { path: string; color: string; title: string } | { src: string; title: string };
@@ -199,6 +201,16 @@ export async function runQuery(projectId: string, connId: string, query: string)
 
 export async function explainQuery(projectId: string, connId: string, sql: string) {
   return unwrap((await rpc('connection:explain', { projectId, connId, sql })) as Reply<{ columns: ColumnDetail[] }>, 'Could not check the query').columns;
+}
+
+/** What a statement would read, from the source's free dry run: bytes and the server's "~1.2 GB" label. */
+export interface Estimate {
+  bytes: number;
+  label: string;
+}
+
+export async function estimateQuery(projectId: string, connId: string, sql: string) {
+  return unwrap((await rpc('connection:estimate', { projectId, connId, sql })) as Reply<{ estimate: Estimate | null }>, 'Could not estimate the query').estimate;
 }
 
 export async function saveQuery(projectId: string, connId: string, q: { id?: string; name?: string; sql?: string }) {

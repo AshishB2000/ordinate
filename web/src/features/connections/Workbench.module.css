@@ -318,6 +318,15 @@
 .gap {
   flex: 1 1 var(--sp-8);
 }
+.estimate {
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+.estimateMuted {
+  color: var(--muted);
+}
 .limitLabel {
   font-size: var(--t-12);
   color: var(--muted);

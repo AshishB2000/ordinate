@@ -1,0 +1,8 @@
+{
+  "kind": "bigquery#datasetList",
+  "etag": "0Yb3fV5mD0n0nYw1d3PFeQ==",
+  "datasets": [
+    { "kind": "bigquery#dataset", "id": "acme-analytics:marketing", "datasetReference": { "datasetId": "marketing", "projectId": "acme-analytics" }, "location": "europe-west2", "type": "DEFAULT" },
+    { "kind": "bigquery#dataset", "id": "acme-analytics:sales", "datasetReference": { "datasetId": "sales", "projectId": "acme-analytics" }, "location": "europe-west2", "type": "DEFAULT" }
+  ]
+}

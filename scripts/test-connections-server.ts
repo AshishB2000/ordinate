@@ -241,6 +241,8 @@ async function listen(env: Record<string, string>): Promise<{ base: string; clos
     ok('run: the row bound is applied server side (7 of 40)', bounded.body.ok && bounded.body.preview.rows.length === 7, JSON.stringify(bounded.body).slice(0, 200));
     const explain = await call(srv.base, 'connection:explain', { projectId: project, connId, sql: 'select region, amount from sales.orders' });
     ok('explain: two columns, no rows', explain.body.ok && explain.body.columns.length === 2);
+    const estimate = await call(srv.base, 'connection:estimate', { projectId: project, connId, sql: 'select region from sales.orders' });
+    ok('estimate: Postgres has no dry run to price a statement — estimate null, not an error', estimate.status === 200 && estimate.body.ok === true && estimate.body.estimate === null, JSON.stringify(estimate.body));
     const write = await call(srv.base, 'connection:run', { projectId: project, connId, tableOrQuery: { query: 'delete from sales.orders' } });
     ok('run: a write statement is refused (read-only connector)', write.body.ok === false, JSON.stringify(write.body));
     const qs = await call(srv.base, 'connection:saveQuery', { projectId: project, connId, name: 'By region', sql: 'select region, count(*) as n from sales.orders group by region order by region' });

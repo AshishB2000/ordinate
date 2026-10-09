@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": 403,
+    "message": "Access Denied: Project acme-analytics: User does not have bigquery.jobs.create permission in project acme-analytics.",
+    "errors": [{ "message": "Access Denied: Project acme-analytics: User does not have bigquery.jobs.create permission in project acme-analytics.", "domain": "global", "reason": "accessDenied" }],
+    "status": "PERMISSION_DENIED"
+  }
+}

@@ -4,7 +4,7 @@
 // A source with no catalog (HTTP engines, URL) has no tree: hiding it is the
 // honest answer, the editor still works.
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { EmptyState, ErrorState, Page, PageSkeleton } from '../../app/blocks';
@@ -13,6 +13,7 @@ import { Icon } from '../../ui/icons/Icon';
 import { toast } from '../../ui/Toast';
 import {
   describeTable,
+  estimateQuery,
   explainQuery,
   importDataset,
   qualify,
@@ -38,6 +39,17 @@ import { SqlEditor } from './SqlEditor';
 import { SavedQueries, type QueryDialog } from './SavedQueries';
 import { where } from './SavedConnections';
 import s from './Workbench.module.css';
+
+/** The editor's text once typing pauses — what the dry-run estimate is asked about. */
+const ESTIMATE_PAUSE_MS = 800;
+function useSettled(v: string, ms: number): string {
+  const [out, setOut] = useState(v);
+  useEffect(() => {
+    const t = setTimeout(() => setOut(v), ms);
+    return () => clearTimeout(t);
+  }, [v, ms]);
+  return out;
+}
 
 export default function WorkbenchPage() {
   const { projectId = '', connId = '' } = useParams();
@@ -107,6 +119,16 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
   const [limit, setLimit] = useState('100000');
   const [details, setDetails] = useState(true);
   const [dialog, setDialog] = useState<QueryDialog>(null);
+  // A source that prices a statement before it runs (BigQuery's free dry run)
+  // shows "~1.2 GB" by Run, asked once typing pauses. Others never call.
+  const typed = useSettled(sql.trim(), ESTIMATE_PAUSE_MS);
+  const estimate = useQuery({
+    queryKey: ['connection:estimate', projectId, conn.id, typed],
+    queryFn: () => estimateQuery(projectId, conn.id, typed),
+    enabled: def?.estimates === true && typed !== '',
+    staleTime: 60_000,
+    retry: false,
+  });
 
   const keyOf = useCallback((table: string) => describeKey(projectId, conn.id, table), [projectId, conn.id]);
   const describe = useCallback(
@@ -209,6 +231,15 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
     }
   }
 
+  /** By Run: the dry run's size for the text on screen — never the previous statement's while typing. */
+  function estimateView() {
+    if (def?.estimates !== true || sql.trim() === '') return null;
+    if (sql.trim() !== typed || estimate.isPending) return { text: 'Estimating…', title: 'Asking the source what this query would read', muted: true };
+    if (estimate.isError) return { text: 'No estimate', title: estimate.error.message, muted: true };
+    const label = estimate.data?.label;
+    return label ? { text: label, title: `A free dry run says this query would process about ${label.replace(/^~/, '')}.` } : null;
+  }
+
   const test: TestState = tables.isFetching ? 'testing' : tables.isError ? 'error' : tables.isSuccess ? 'ok' : conn.lastStatus;
   const testError = tables.isError ? tables.error.message : conn.lastStatus === 'error' ? conn.lastError ?? '' : '';
   const label = def?.label ?? conn.connectorId;
@@ -246,6 +277,7 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
             onRun={() => void run()}
             onExplain={() => void explain()}
             onSave={() => void saveCurrent()}
+            estimate={estimateView()}
           />
           {message && (
             <div className={s.msgRow} role={message.error ? 'alert' : 'status'}>

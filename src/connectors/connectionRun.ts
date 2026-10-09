@@ -15,6 +15,7 @@
 
 import { coerceValue, finalizeTable, ParseResult } from '../data/parse';
 import { getConnector } from './index';
+import { estimateLabel, quotedTablePath } from './bigqueryShape';
 import { safeError } from './types';
 import { checkHost, guardOn } from './ssrf';
 import type {
@@ -138,6 +139,11 @@ export function buildTableSql(family: string, table: string, rowLimit: number): 
  *  whitelist. Exported for incremental refresh, which adds a WHERE to it. */
 export function quotedTable(family: string, table: string): string | null {
   const name = String(table || '').trim();
+  // BigQuery names a table `dataset.table` or `project.dataset.table`, and a
+  // project id has dashes (a legacy domain-scoped one a dot and a colon), which
+  // IDENT_RE refuses. Its own validator holds every part to a charset with no
+  // backtick, backslash or newline, so the whole path is one backtick identifier.
+  if (family === 'bigquery') return quotedTablePath(name);
   const parts = name.split('.');
   if (parts.length === 0 || parts.length > 3 || parts.some((p) => !IDENT_RE.test(p))) return null;
   const dialect = DIALECTS[family] || ANSI;
@@ -446,6 +452,35 @@ export async function explainSql(
         type: String(c?.type ?? ''),
       })),
     };
+  } catch (err: unknown) {
+    return { ok: false, error: safeError(err, ctx.secrets) };
+  }
+}
+
+/**
+ * What a statement would read, priced BEFORE it runs: the connector's free dry
+ * run (`live.estimate`, BigQuery's totalBytesProcessed), with the editor's
+ * "~1.2 GB" label formatted here, server side. `null` — not an error — when the
+ * connector cannot estimate; the catalog's `estimates` flag says so up front.
+ */
+export async function estimateSql(
+  connectorId: unknown,
+  values: Record<string, unknown>,
+  secrets: Record<string, string>,
+  sql: string,
+): Promise<{ ok: true; bytes: number; label: string } | RunErr | null> {
+  const def = resolve(connectorId);
+  if (!def) return { ok: false, error: unknownConnector(connectorId) };
+  if (typeof def.live?.estimate !== 'function') return null;
+  const statement = typeof sql === 'string' ? sql.trim().replace(/;\s*$/, '') : '';
+  if (!statement) return { ok: false, error: 'No query to estimate' };
+  const ctx = buildContext(values, secrets, { rowLimit: 1 });
+  const refused = await guardHost(def, ctx);
+  if (refused) return { ok: false, error: refused };
+  try {
+    const res = await def.live.estimate(ctx, statement, []);
+    if (!res.ok) return { ok: false, error: safeError(res.error, ctx.secrets) };
+    return { ok: true, bytes: res.bytes, label: estimateLabel(res.bytes) };
   } catch (err: unknown) {
     return { ok: false, error: safeError(err, ctx.secrets) };
   }
