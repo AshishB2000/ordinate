@@ -226,6 +226,10 @@ export interface CatalogEntry {
    *  create flow offers "Live" beside "Copy the data". The flag only: the
    *  dialect and the runner never leave the server. */
   live: boolean;
+  /** With `live`: the checkbox field a connection must have ticked before
+   *  Live is offered for it (plan D8 — PostgreSQL's "This is a read replica or
+   *  a warehouse"). Absent: every connection of this connector may be Live. */
+  liveOptIn?: string;
 }
 
 // Rebuilt field-by-field, never spread. A ConnectorDef holds two live functions
@@ -272,13 +276,34 @@ export function connectorCatalog(): CatalogEntry[] {
     };
     if (typeof d.blurb === 'string') entry.blurb = d.blurb;
     if (Array.isArray(d.hosts)) entry.hosts = d.hosts.filter((h) => typeof h === 'string');
+    if (entry.live && typeof d.live?.optIn === 'string') entry.liveOptIn = d.live.optIn;
     return entry;
   });
 }
 
-/** Whether this connector can answer a Live dataset: a dialect and a runner, both present. */
+/**
+ * Whether this connector CAN answer a Live dataset: a dialect and a runner,
+ * both present — and, when it declares an opt-in (types.ts `ConnectorLive.optIn`),
+ * one that names a non-secret checkbox of its own form. A broken opt-in is
+ * "not Live" rather than "Live for everyone".
+ */
 export function isLiveCapable(def: ConnectorDef | null | undefined): boolean {
-  return !!def && !!def.live && typeof def.live.runBound === 'function' && typeof def.live.dialect === 'string';
+  if (!def || !def.live || typeof def.live.runBound !== 'function' || typeof def.live.dialect !== 'string') return false;
+  const optIn = def.live.optIn;
+  return optIn === undefined || (def.fields || []).some((f) => f.key === optIn && f.type === 'checkbox' && f.secret !== true);
+}
+
+/**
+ * Whether Live is offered for ONE connection (plan D8, L3.2): the connector can
+ * be Live and, when it asks for an opt-in, this connection's stored values have
+ * that checkbox ticked — strictly `true`, the coerced form a saved connection
+ * holds (`'true'`, `1` or a missing key are not a yes). The create flow,
+ * `dataset:setMode`, `dataset:source` and the executor all decide with this.
+ */
+export function isLiveOffered(def: ConnectorDef | null | undefined, values: Record<string, unknown> | null | undefined): boolean {
+  if (!isLiveCapable(def)) return false;
+  const optIn = def?.live?.optIn;
+  return optIn === undefined || (!!values && values[optIn] === true);
 }
 
 /** Field keys this connector routes to the secret store. */

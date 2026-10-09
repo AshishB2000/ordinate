@@ -4,8 +4,9 @@ This page is for the team that connects Ordinate to a cloud warehouse. It covers
 needs on its side (a read-only identity) and on yours (network egress). The plan behind it is
 [docs/live-data/00-plan.md](../live-data/00-plan.md). It also covers
 [what a live query can cost and how it is bounded](#what-a-live-query-can-cost-and-how-it-is-bounded),
-and the [refresh URL](#refresh-url) that dbt or Airflow calls when new data has landed. A section on
-choosing a cache age is added by the task that builds it.
+the [refresh URL](#refresh-url) that dbt or Airflow calls when new data has landed, the
+[schema sync](#schema-sync) a Live dataset runs, and [fresh on ask](#fresh-on-ask) for the copies of
+operational databases. A section on choosing a Live cache age is added by the task that builds it.
 
 ## Snowflake
 
@@ -282,8 +283,10 @@ request reads, so it stays true if pages ever compute a figure when they are ope
 ### The daily limit
 
 - **What counts.** Every statement Ordinate sends to a warehouse for a Live dataset counts once: a
-  chart's, a KPI's, an answer's, and the small `MAX()` that a relative date filter such as "last
-  quarter" asks for. A figure served from the cache counts nothing. A statement counts when it is
+  chart's, a KPI's, an answer's, the small `MAX()` that a relative date filter such as "last
+  quarter" asks for, and a [schema sync](#schema-sync)'s sample and probe (BigQuery's free dry run
+  before a sample is not a statement and counts nothing). A figure served from the cache counts
+  nothing. A statement counts when it is
   sent, whether it then answers, fails or is cancelled, since each of those can be billed.
 - **Shared by every pod.** With Postgres, the count is kept in the table `live_usage`, one row per
   org, UTC day and connection. Checking the limit and counting the statement are one step, under a
@@ -324,6 +327,12 @@ BigQuery it also checks the cost estimate and the dry-run gate, and records the 
 answer (below). Throughout, it checks that no key, passphrase, token or signed assertion reaches a
 result, an error or its output.
 
+Then, for each warehouse, it runs the **live-parity matrix**: charts, KPI tiles and AI answers asked
+of a Live dataset and of a copy of the same rows, which must agree figure for figure. The rows are
+held in the query itself (literals cast to the warehouse's types), so nothing is written to the
+account and the read-only role below is enough. The same matrix runs against PostgreSQL on every
+pull request and against a ClickHouse container every night.
+
 It runs only when a warehouse's variables are set. Without them it prints that it skipped and
 passes, so `npm test` stays green. Setting only some of one warehouse's variables is a failure.
 These are inputs to the test, **not server settings**: the server never reads them, so they are not
@@ -362,10 +371,11 @@ add the ones you have, for example `gh secret set SNOWFLAKE_PRIVATE_KEY < ordina
 prints no credential and no account identifier, because the log of a public repository is public.
 
 **What it costs.** Snowflake: about two minutes of the warehouse (most of it the cancel check,
-which waits for Snowflake's own 45-second hand-off before cancelling), plus the warehouse's
-auto-suspend time. BigQuery: nothing billed in the usual case. Every query it runs reads generated
-rows rather than a table; the one table it touches, the public `bigquery-public-data.samples.shakespeare`,
-is only described and dry-run, and both are free.
+which waits for Snowflake's own 45-second hand-off before cancelling), plus the parity matrix's
+roughly 500 small statements, plus the warehouse's auto-suspend time. BigQuery: nothing billed in
+the usual case. Every query it runs reads generated or literal rows rather than a table; the one
+table it touches, the public `bigquery-public-data.samples.shakespeare`, is only described and
+dry-run, and both are free.
 
 **The read-only scope answer.** Each BigQuery run records, as `spike:` lines in the log and a table
 in the run's summary: which scopes Google granted the query token (from Google's `tokeninfo`),
@@ -375,6 +385,34 @@ script), so a refusal can only come from the token's scopes. With `BIGQUERY_SCRA
 also tries `CREATE TABLE … AS SELECT 1` there, and drops the table again if Google allowed it. Either
 answer is safe, because the dry-run gate and the IAM roles hold regardless. The answer decides
 whether the gate is the only read-only guarantee or defence in depth.
+
+## Schema sync
+
+A **Live** dataset keeps no rows, so Ordinate learns about its columns from the warehouse: when it is
+created (or switched to Live), when someone with edit rights clicks **Sync schema**, and once a day.
+A sync re-reads the columns from the catalog (or a one-row run of the defining query) and then sends
+**one sampled statement** for the table, labelled `ordinate=live` like every live query:
+
+- **Its size is the app's**: at most a million (row, column) cells — 10,000 rows, fewer for a table
+  wider than 100 columns, never under 1,000 — read through the engine's own sample clause where it
+  has one (Snowflake `SAMPLE (n ROWS)`, BigQuery `TABLESAMPLE SYSTEM` sized from the table's row
+  count, Databricks `TABLESAMPLE (n ROWS)`, ClickHouse `SAMPLE` when the table has a sampling key),
+  always under a `LIMIT`. Redshift has no sample clause: the `LIMIT` bounds it.
+- **BigQuery prices it first** (a free dry run). Past `LIVE_MAX_BYTES_BILLED`, or the connection's
+  lower "Max bytes billed per query", no sample is read; the columns still sync and the figures of the
+  last sample are kept.
+- **It counts like a live question**: the daily limit, the per-org concurrency cap and
+  `LIVE_QUERY_TIMEOUT_MS` (cancelled in the warehouse) all apply. One sync per dataset runs at a
+  time across pods; a daily sync that fails is retried after an hour.
+- **At most one second try**, `LIMIT` only, when the warehouse refused the sample clause (a view,
+  say) or a BigQuery block sample came back empty.
+
+It stores, per column, how much of the sample is filled, roughly how many distinct values it holds
+and — for a text column with few distinct values — up to 20 of the most frequent ones. Those values
+fill the filter pickers and help the Assistant spell a filter right; a column marked personal or
+financial never has its values shown to a model. A column that has gone from the warehouse leaves the
+dataset, and any chart, KPI or answer that still uses it says "column missing" until it is changed or
+the column comes back.
 
 ## Refresh URL
 
@@ -474,3 +512,168 @@ checks the token on every call.
 The token is in the URL path, so Ordinate masks that path in its own request log
 (`/api/hooks/refresh/[redacted]`). Your ingress, proxy and scheduler logs may record full URLs. Keep
 those logs as private as the token, or use a scheduler that masks it, like Airflow's Variable.
+
+## Live on a PostgreSQL read replica
+
+A PostgreSQL database stays a **copy** by default: an import, refreshed on a schedule (every 5 or
+15 minutes with incremental refresh). It can also be **Live** — every chart and KPI tile asks the
+database itself — but only on a connection that says it may be asked: tick **"This is a read replica
+or a warehouse"** on the connection form, or later with the switch in the connection's details.
+Until then the save bar offers "Copy the data" only, and the server refuses a Live dataset over
+that connection (`connection:import`, `dataset:setMode`) and answers no Live question through it.
+
+### Why it is opt-in
+
+A Live question runs on **every view**, cached for the dataset's cache age (5 minutes by default, 0 =
+every time). A dashboard of ten Live tiles opened by fifty people is up to ten queries every cache
+age — aggregates that read the whole table unless a filter can use an index. On the primary database
+of an application that load lands beside its transactions. On a replica or an analytics database it
+lands where reporting belongs.
+
+### When to use it
+
+- You have a **streaming read replica** (a hot standby, or your provider's read replica endpoint:
+  RDS/Aurora PostgreSQL, Cloud SQL, AlloyDB read pools, Neon read replicas, Supabase read replicas),
+  or a PostgreSQL that exists for analytics. Point the connection's host at that endpoint.
+- The figures must be fresher than a refresh schedule allows, and the tables answer an aggregate in
+  well under `LIVE_QUERY_TIMEOUT_MS` (60 s by default).
+- Otherwise keep the copy. A 5- or 15-minute incremental refresh reads only the new rows, once, for
+  everyone.
+
+Ordinate does not check the claim. `select pg_is_in_recovery();` is `true` on a streaming replica, if
+you want to check it yourself; an analytics database that is itself a primary is also a fair "yes".
+
+### What it costs the database
+
+Per question that is not answered from the cache:
+
+- **One connection**, opened and closed for that statement: `set default_transaction_read_only to on`,
+  `set statement_timeout` (what is left of `LIVE_QUERY_TIMEOUT_MS`), `set timezone to 'UTC'`, the
+  statement, close. Measured on a local PostgreSQL 16: 8–13 ms in all, the time-zone statement about
+  0.1 ms of it; a remote replica adds its network round trips to each step.
+- **One statement**: a `GROUP BY` over the table (or your saved query) with your filters bound as
+  `$n` parameters. A text axis keeps its top 50 in the same statement.
+- **At most `LIVE_MAX_CONCURRENT` at once** (4) per org in each pod, so at most pods × 4 connections
+  from Ordinate's Live questions. Identical questions asked together share one statement.
+- **Cancelled** when the last viewer waiting on it closes the tab (`pg_cancel_backend` from a second
+  connection), and stopped by the server's `statement_timeout` in any case.
+
+### A role for it
+
+Connect as a role that can read the tables and nothing else, and cap its connections:
+
+```sql
+CREATE ROLE ordinate_live LOGIN PASSWORD '…' CONNECTION LIMIT 8;
+GRANT CONNECT ON DATABASE app TO ordinate_live;
+GRANT USAGE ON SCHEMA public TO ordinate_live;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO ordinate_live;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO ordinate_live;
+ALTER ROLE ordinate_live SET default_transaction_read_only = on;
+ALTER ROLE ordinate_live SET statement_timeout = '30s';
+```
+
+`CONNECTION LIMIT` is a hard cap the database enforces. The role's `statement_timeout` is a default:
+Ordinate sets its own on every session (from `LIVE_QUERY_TIMEOUT_MS`), which takes precedence, so
+lower that variable to tighten it; the role's value still bounds anyone else who signs in as the
+role. On a hot standby, a long query can be cancelled by replay ("conflict with recovery"); Ordinate
+then shows the last cached figure, labelled stale, or an error. `max_standby_streaming_delay` and
+`hot_standby_feedback` trade that against replication lag — your call, not Ordinate's.
+
+### Which PostgreSQL connectors
+
+PostgreSQL, Google AlloyDB, Neon, Supabase and TimescaleDB: each runs PostgreSQL's own parser,
+functions and casts, which the live compiler's SQL (the Redshift dialect: `$n` parameters, `~`,
+`BTRIM`, `DATE_TRUNC`, `TO_CHAR`) is written in. Amazon Redshift is Live without the opt-in (a
+warehouse). **CockroachDB, YugabyteDB, Materialize, QuestDB and RisingWave stay copies**: CockroachDB
+reimplements PostgreSQL's SQL (its regular expressions are RE2, not PostgreSQL's), YugabyteDB runs a
+fork of an older PostgreSQL query layer over distributed storage, and the other three speak the wire
+protocol only. None of them has been run against the compiler.
+
+### Unticking it
+
+The switch refuses while Live datasets ask the connection, and says how many. Switch each one to
+"Copy the data" on its dataset page first, then untick. Ordinate does not switch them for you: each
+switch is a full import from the database you have just said is a primary, and it changes what every
+dashboard over them shows (a live figure becomes a dated copy). A Live dataset that reappears over an
+unticked connection (restored from the Trash, say) answers nothing until the box is ticked again.
+
+### Differences from a copy to know about
+
+- **Time zone.** A Live session runs in UTC, as a copy reads a `timestamptz` (an instant, written in
+  UTC), so both put a timestamp on the same day whatever the database's `TimeZone`.
+- **Collation.** Text comparisons in filters (`<`, `>`) and the order of tied labels follow the
+  database's collation; a copy compares code points. A database created with a `C` (or `C.UTF-8`)
+  collation agrees with the copy; `en_US` and friends can order differently.
+- **Empty text.** An import turns an empty string into an empty cell, so a copy has one blank
+  category. The database keeps `''` and `NULL` apart, so the live compiler folds `''` into `NULL` in a
+  category or split key and Live shows the same one blank row (`scripts/test-liveReplica.ts`, and the
+  real-engine parity matrix, `scripts/test-liveParityPostgres.ts`).
+
+## Fresh on ask
+
+A copy of an operational table — Postgres, MySQL, SQL Server and the other sources that stay copies
+(plan D8) — is as old as its last refresh. A schedule refreshes it every N minutes whether anyone
+looks or not. **Fresh on ask** refreshes it when someone does: a chart, a KPI tile, a statistics tile
+or an AI answer that reads a copy older than the age you choose first pulls the rows added since the
+last refresh, waits a moment for them, and answers with them.
+
+### Turning it on
+
+On the dataset's page, beside the refresh schedule (and in the connection workbench's list of
+datasets): **Fresh on ask** · Off, 1 min, 5 min, 15 min or 1 h. Through the API it is
+`dataset:update` with `freshOnAsk: { maxStalenessSec }` (60 – 86,400) or `null`.
+
+It needs **incremental refresh** on the dataset — a cursor column, and the mark its first, full
+refresh sets — because a pull on ask must be cheap for the source: only the rows past the cursor. A
+dataset without incremental refresh shows the control disabled, saying so, and the server refuses it.
+Turn incremental refresh on in the dataset's **Incremental refresh** panel, beside the schedule (and
+in the workbench rail): a cursor column (a number or date that only grows), update by key or append,
+and a lookback. It is offered only for sources Ordinate can ask for "rows past the cursor" in SQL —
+Postgres, MySQL, SQL Server, Oracle, BigQuery, Snowflake and the other SQL families; an HTTP or SaaS
+source would be read whole on every run ("filtered after fetch"), so the panel says so and refuses
+it. Turning incremental refresh off turns fresh on ask off with it, and drops a 5- or 15-minute
+schedule to hourly. A Live dataset never has it: it is asked at the warehouse every time.
+
+### What an ask does
+
+1. The copy is younger than the age: nothing happens. This costs one read of the dataset's record per
+   dataset per request — a dashboard of 30 tiles over one dataset reads it once.
+2. Older: one **incremental** refresh starts — the same run a schedule makes, through the same job
+   queue, with the cursor pushed to the source where its SQL allows. Every tile of that dataset on the
+   page waits for the same run.
+3. It lands within `FRESH_ON_ASK_WAIT_MS` (5 s by default): the answer includes the new rows.
+4. It does not: the answer comes from the copy, captioned "As of 1:00 AM · refreshing…", and every open
+   tab of a reader redraws when the rows land (the same push a ↻ sends). A person who closes the tab
+   stops waiting; the refresh carries on for everyone else.
+
+After it lands, everything that follows a refresh runs: alerts, quality checks, a republish, and the
+SQL datasets built on it.
+
+### Never a full refresh
+
+Fresh on ask only ever pulls new rows. When the next refresh of the dataset must be a full one — its
+first run, every 7th run, "Full refresh now", a cursor or key column that is gone, or columns that
+changed at the source — an ask does not start it: the dataset shows **Waits for a full refresh**, and
+answers come from the copy until a scheduled refresh or **Refresh now** has run it.
+
+### What it costs the source
+
+- **At most one pull per dataset per window** — the age you chose — however many people ask, on
+  however many pods. The pull's start is stamped on the dataset record, and the stamp is claimed under
+  a short Postgres advisory lock, so exactly one pod starts a window's pull; a refresh already running
+  anywhere (a ↻, the schedule, another pod's pull) is waited for, never doubled. A source that fails is
+  tried again only when the next window opens.
+- Each pull is one bounded query: `select * from <table> where <cursor> >= <mark − lookback>`.
+- Anyone who may read the dashboard can cause a pull by opening it — that is the feature. It runs as
+  the connection's identity, like every refresh, and the person who set fresh on ask chose the window.
+- Without `DATABASE_URL` there is one process, and the same rules hold inside it.
+
+### Choosing an age
+
+The age is both the freshness promise and the rate limit. 1 minute suits a small, indexed table
+people watch during the day; 15 minutes to 1 hour suits a large one, or a source that should not be
+read often. If every view should be current, a 5-minute incremental schedule (L0.3) keeps the copy
+fresh without anyone waiting; fresh on ask then rarely has anything to pull.
+
+A dashboard viewed **as of** a past time never pulls. Publishing reads like any other ask (a stale
+copy is pulled first); the published page is then a snapshot and asks nothing.

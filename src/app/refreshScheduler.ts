@@ -49,6 +49,7 @@ import type { AlertEvent } from '../analysis/alerts';
 // notifies no one itself — its events join this tick's batch below.
 import { runQualityChecks } from '../analysis/qualityRun';
 import { track } from './quitCleanup';
+import type { LiveSyncMeta } from '../engine/live/schemaSyncJob';
 
 /** How often the tick looks for work. The shortest schedule is 5 minutes (src/data/refreshCadence.ts). */
 const TICK_MS = 60_000;
@@ -98,8 +99,12 @@ export function dueDatasets<T extends ScheduledMeta>(metas: T[], now: number): T
   return due.map((d) => d.m);
 }
 
-/** Every scheduled dataset across every project, metadata only. */
-export async function scheduledMetas(): Promise<ScheduledMeta[]> {
+/**
+ * Every scheduled dataset across every project, metadata only. A Live dataset
+ * is never refreshed (it is asked, never re-fetched): it goes to `live`
+ * instead, when given, for its daily schema sync (L2.5).
+ */
+export async function scheduledMetas(live?: LiveSyncMeta[]): Promise<ScheduledMeta[]> {
   const out: ScheduledMeta[] = [];
   let list: Array<{ id: string }> = [];
   try {
@@ -115,7 +120,11 @@ export async function scheduledMetas(): Promise<ScheduledMeta[]> {
       continue; // one unreadable project must not stop the rest
     }
     for (const s of summaries) {
-      if (!s.autoRefresh || s.mode === 'live') continue; // a Live dataset is asked, never re-fetched
+      if (s.mode === 'live') {
+        live?.push({ projectId: p.id, id: s.id, name: s.name, schemaSyncedAt: s.schemaSyncedAt, schemaSyncAttemptAt: s.schemaSyncAttemptAt });
+        continue; // a Live dataset is asked, never re-fetched
+      }
+      if (!s.autoRefresh) continue;
       out.push({ projectId: p.id, id: s.id, name: s.name, originKind: s.originKind, autoRefresh: s.autoRefresh, incremental: s.incrementalOn === true });
     }
   }
@@ -301,7 +310,11 @@ export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
   running = true;
   try {
     if (!enabled()) return outcomes;
-    const due = dueDatasets(await scheduledMetas(), now);
+    const live: LiveSyncMeta[] = [];
+    const due = dueDatasets(await scheduledMetas(live), now);
+    // Live datasets: the daily schema sync (L2.5) — queued, one per dataset, never awaited.
+    // Lazy: the sync reaches the warehouse layer, which this module has no other reason to load.
+    if (live.length) await (require('../engine/live/schemaSyncJob') as typeof import('../engine/live/schemaSyncJob')).queueDueSchemaSyncs(live, now);
     // Incremental first, every one queued now, in due order — not awaited.
     // Each reports as it lands, its alerts a batch of their own: the tick that
     // queued it is long over by then.

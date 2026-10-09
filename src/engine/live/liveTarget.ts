@@ -16,11 +16,12 @@
 
 import * as datasets from '../../data/datasets';
 import * as connections from '../../connectors/connections';
-import { getConnector, isLiveCapable } from '../../connectors';
+import { getConnector } from '../../connectors';
 import { quotedTable } from '../../connectors/connectionRun';
 import { parseTablePath } from '../../connectors/bigqueryShape';
 import type { ConnectorDef, LiveDialectId } from '../../connectors/types';
 import { loadSecrets } from '../../ipc/connectionSecrets';
+import { liveOfferRefusal } from '../../ipc/liveOptIn';
 import { isLive } from '../../data/liveDataset';
 import type { LiveSettings } from '../../data/liveDataset';
 import * as liveMsg from '../../data/liveMessages';
@@ -82,11 +83,20 @@ export async function liveTarget(projectId: string, datasetId: string): Promise<
   const conn = await connections.getConnection(projectId, origin.connId);
   if (!conn) return { ok: false, kind: 'unavailable', error: liveMsg.liveConnectionGoneMessage() };
   const def = getConnector(conn.connectorId);
-  if (!def || !def.live || !isLiveCapable(def)) return { ok: false, kind: 'unavailable', error: liveMsg.liveNotOfferedMessage() };
+  // Asked on EVERY question, not only at create: a connection that loses its
+  // read-replica opt-in (L3.2) stops being asked at once, whatever its datasets say.
+  const refusal = liveOfferRefusal(def, conn.values);
+  if (refusal || !def || !def.live) return { ok: false, kind: 'unavailable', error: refusal ?? liveMsg.liveNotOfferedMessage() };
   const dialect = def.live.dialect;
   const source = liveSourceOf(origin, def, dialect);
   if (!source) return { ok: false, kind: 'refused', refusal: refuse('badSource'), dialect };
-  const columns: LiveColumn[] = meta.columns.map((c) => ({ name: c.name, type: c.type }));
+  // The warehouse's own type names, where a schema sync recorded them (L2.5): the
+  // dialects that cannot safe-cast a typed value (Snowflake, Redshift) read them.
+  const sourceTypes = new Map((meta.live.profile?.columns ?? []).map((p) => [p.name, p.sourceType]));
+  const columns: LiveColumn[] = meta.columns.map((c) => {
+    const sourceType = sourceTypes.get(c.name);
+    return sourceType ? { name: c.name, type: c.type, sourceType } : { name: c.name, type: c.type };
+  });
   let secrets: Promise<Record<string, string>> | null = null;
   return {
     ok: true,

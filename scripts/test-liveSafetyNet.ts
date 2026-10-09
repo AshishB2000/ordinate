@@ -17,6 +17,10 @@
 // 3. A refusal carries no SQL text, no address and no dataset id.
 // 4. Negative control: the same channels on an EXTRACT dataset with the same
 //    columns answer without the refusal — the net is not a blanket 409.
+// 5. A PROFILE OPENS TWO DOORS, NO MORE (L2.5). Once a schema sync has stored
+//    a profile, the filter pickers (`dataset:distinct`) and the column panel
+//    (`dataset:profile`) answer from it — flagged as a sample's — and every
+//    other row reader above still refuses, typed. Before it, they refuse (1).
 //
 //   npm run build:ts && node scripts/test-liveSafetyNet.js
 
@@ -237,6 +241,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ['related datasets', 'relationship:related', { projectId: P, datasetId: seed.extract }],
     ['quality rules list', 'quality:list', { projectId: P, datasetId: seed.live }],
     ['snapshots list', 'snapshots:list', { projectId: P, datasetId: seed.live }],
+    ['incremental refresh settings', 'incremental:get', { projectId: P, datasetId: seed.live }],
     ['Home', 'home:overview', { projectId: P }],
     ['palette search', 'search:query', { projectId: P, query: 'Orders' }],
     ['project insights', 'insights:list', { projectId: P }],
@@ -247,6 +252,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ['SQL schema', 'sql:schema', { projectId: P }],
     ['versions', 'versions:list', { projectId: P, type: 'dataset', id: seed.live }],
     ['as-of stamps', 'dashboard:asOfStamps', { projectId: P, datasetIds: [seed.live, seed.extract], metricIds: [] }],
+    ['Live schema panel (unsynced)', 'dataset:liveSchema', { projectId: P, datasetId: seed.live }],
   ] as [string, string, unknown][]) {
     const r = await post(channel, payload);
     ok(`lists: ${label} (${channel}) answers 200`, r.status === 200 && !/live_dataset/.test(r.body), `${r.status} ${r.body.slice(0, 240)}`);
@@ -267,6 +273,41 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
   ok('…and restores it', restored.status === 200 && restored.value?.ok === true, restored.body.slice(0, 240));
   const back = await post('dataset:list', { projectId: P });
   ok('…still Live after the round trip', (back.value as unknown as { id: string; mode?: string }[]).some((x) => x.id === seed.live && x.mode === 'live'));
+
+  // ── 5. A profile opens the pickers and the column panel, nothing else ──────
+  const PROFILED = new Set(['dataset:distinct', 'dataset:profile']);
+  const synced = await context.runInContext(ADMIN, 'profile', () => liveDataset.writeSchemaSync(P, seed.live, {
+    columns: COLUMNS,
+    profile: {
+      sampledAt: new Date().toISOString(), sampleRows: 120, method: 'sample',
+      columns: [
+        { name: 'region', filled: 120, distinct: 5, values: ['r0', 'r1', 'r2', 'r3', 'r4'], counts: [24, 24, 24, 24, 24] },
+        { name: 'sales', filled: 120, distinct: 101 },
+      ],
+    },
+    missingColumns: [],
+    syncedAt: new Date().toISOString(),
+    changed: false,
+  }));
+  ok('a schema sync\'s profile lands on the Live record', synced === true);
+  const picked = await post('dataset:distinct', { projectId: P, datasetId: seed.live, column: 'region', limit: 3 });
+  ok('profiled → the filter picker answers from the sample, flagged approximate', picked.status === 200 && JSON.stringify(picked.value?.values) === '["r0","r1","r2"]'
+    && picked.value?.total === 5 && picked.value?.approximate === true && !picked.body.includes('SECRET_CANARY'), picked.body.slice(0, 240));
+  const unmeasured = await post('dataset:distinct', { projectId: P, datasetId: seed.live, column: 'customer' });
+  ok('profiled, but a column the sample never measured → still refuses, typed (never an empty list)', isRefusal(unmeasured), unmeasured.body.slice(0, 240));
+  const panel = await post('dataset:profile', { projectId: P, datasetId: seed.live, column: 'sales' });
+  const prof = panel.value?.profile as { distinct?: number; sample?: { rows?: number } } | undefined;
+  ok('profiled → the column panel answers from the sample, and says so', panel.value?.ok === true && prof?.distinct === 101 && prof.sample?.rows === 120, panel.body.slice(0, 240));
+  let stillRefused = 0;
+  let others = 0;
+  for (const [label, channel, payload] of ROW_READERS(seed.live, seed.extract, recs.live.metricId)) {
+    if (PROFILED.has(channel)) continue;
+    others++;
+    const r = await post(channel, payload);
+    if (isRefusal(r)) stillRefused++;
+    else console.error(`     profiled Live answered: ${label} ${r.status} ${r.body.slice(0, 160)}`);
+  }
+  ok(`profiled → every other row reader (${others}) still refuses, typed — a profile is not rows`, stillRefused === others && others > 30, `${stillRefused}/${others}`);
 
   // getDataset itself: throws on Live, a typed error; the metadata read does not.
   await context.runInContext(ADMIN, 'direct', async () => {

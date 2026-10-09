@@ -61,6 +61,19 @@ export function textOf(c: Ctx, col: LiveColumn): string {
 }
 
 /**
+ * A text column as a GROUP key (a text category, a text split). Every import
+ * stores '' as null (`parse.finalizeTable` → `coerceCell`: exactly '' — a
+ * whitespace-only cell stays text), so a copy has ONE blank category where a
+ * warehouse keeps '' and NULL apart. Folding '' into NULL makes them one group,
+ * labelled '' and ranked as the copy's null is. Filters need no fold: they
+ * compare a NULL as '' already (`coalesce`). Found in L3.2, fixed in L2.8.
+ */
+export function keyText(c: Ctx, col: LiveColumn): string {
+  const t = textOf(c, col);
+  return `CASE WHEN ${t} = '' THEN NULL ELSE ${t} END`;
+}
+
+/**
  * The text an extract compares this cell by. A date the warehouse holds as a
  * DATE is compared by its ISO day — the text an extract of it holds. (An
  * extract of a TIMESTAMP holds the time too; that divergence is documented in

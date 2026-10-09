@@ -192,7 +192,7 @@ function openTab(base: string, email: string): Promise<Tab> {
     await as(ACME, () => liveDataset.setMaxCacheAge(P, seeded.datasetId, 0));
     queryCache.clear();
     fakeMod.resetFake();
-    fakeMod.fake.bytes = 5_000;
+    fakeMod.fake.billedBytes = 5_000;
     process.env.LIVE_DAILY_QUERY_LIMIT = '0';
     for (let i = 0; i < 3; i++) await as(ACME, () => lq.liveMetric(P, seeded.datasetId, { column: 'amount', aggregation: 'sum' }, []));
     await sleep(100); // the byte figure is added when the connector settles, after the reply

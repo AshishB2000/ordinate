@@ -170,6 +170,23 @@ export interface ConnectorLive {
   runBound(ctx: ConnectorContext, sql: string, params: LiveParam[]): Promise<ConnectorRows | ConnectorError>;
   /** A free dry run's byte estimate, where the warehouse offers one (BigQuery). */
   estimate?(ctx: ConnectorContext, sql: string, params: LiveParam[]): Promise<{ ok: true; bytes: number } | ConnectorError>;
+  /**
+   * The key of a CHECKBOX in this connector's `fields` that must be ticked on a
+   * connection before Live is offered for it (plan D8, L3.2). Absent: every
+   * connection may be Live (a warehouse). Present: the connector CAN be Live,
+   * and each connection decides — an OLTP database (PostgreSQL) stays a copy
+   * unless the person says it is "a read replica or a warehouse", because a
+   * live question runs on every view and must not land on a primary.
+   *
+   * Data, not a function, on purpose: the catalog sends the key, so the web
+   * applies the same rule to a connection's stored values without a round trip
+   * and renders the field like any other; the server is the one that enforces
+   * it (`isLiveOffered` in ./index — the create flow, `dataset:setMode` and the
+   * executor all ask it). Still one registry entry per connector. A key that
+   * names no non-secret checkbox makes the connector not Live at all (fail
+   * closed), so a typo can never turn the guard off.
+   */
+  optIn?: string;
 }
 
 export interface ConnectorDef {

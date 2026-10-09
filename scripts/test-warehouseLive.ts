@@ -29,7 +29,10 @@
 // every result and error the connectors returned and every byte printed,
 // grepped for the keys, passphrase, PAT, and every bearer token and signed
 // assertion issued during the run. BigQuery also: the estimate, the read-only
-// gate, and the scope spike (warehouseLiveBigquery.ts).
+// gate, and the scope spike (warehouseLiveBigquery.ts). Then each warehouse
+// runs the live-parity matrix (L2.8, warehouseLiveParity.ts): the compiled
+// statements through its runBound against the extract path, over a fixture
+// held in literals — the accounts are never written.
 //
 //   npm run build:ts && node scripts/test-warehouseLive.js      (with the variables above)
 
@@ -134,8 +137,11 @@ async function main(): Promise<void> {
       summary(`- ${name}: ran in ${Math.round((Date.now() - t) / 1000)} s, ${failureCount() - n === 0 ? 'every check passed' : `**${failureCount() - n} failed**`}`);
     };
     await context.runInContext(identity, `warehouse-nightly-${nonce}`, async () => {
+      const parity = require('./warehouseLiveParity') as typeof import('./warehouseLiveParity');
       if (sf.run) await runOne('Snowflake', () => (require('./warehouseLiveSnowflake') as typeof import('./warehouseLiveSnowflake')).runSnowflake(sf.config, nonce));
+      if (sf.run) await runOne('Snowflake live parity', () => parity.runSnowflakeParity(sf.config));
       if (bq.run) await runOne('BigQuery', () => (require('./warehouseLiveBigquery') as typeof import('./warehouseLiveBigquery')).runBigquery(bq.config, nonce));
+      if (bq.run) await runOne('BigQuery live parity', () => parity.runBigqueryParity(bq.config));
     });
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });

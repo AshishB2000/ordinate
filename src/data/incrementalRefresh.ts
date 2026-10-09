@@ -29,7 +29,8 @@
 import { randomUUID } from 'crypto';
 import * as datasets from './datasets';
 import type { Dataset, DatasetOrigin } from './datasets';
-import type { RefreshResult } from './datasetRefresh';
+import type { RefreshMode, RefreshResult } from './datasetRefresh';
+import { freshOnAskSkippedFull } from './freshOnAskMessages';
 import { datasetsDir, tablePath } from './datasetRecord';
 import * as inc from './incremental';
 import type { FetchHow, IncrementalLogEntry, IncrementalSettings } from './incremental';
@@ -46,12 +47,18 @@ type Step = { done: true; result: RefreshResult } | { done: false; reason: strin
 
 const fail = (error: string): RefreshResult => ({ ok: false, error });
 
-/** Refresh incrementally when the dataset opted in; null otherwise. */
+/**
+ * Refresh incrementally when the dataset opted in; null otherwise. In
+ * 'incremental' mode (fresh on ask, L3.1) a run that would be full is SKIPPED
+ * instead — before the fetch when fullReason says so, after it when the
+ * fetched columns no longer fit — and runFull is never reached.
+ */
 export async function refreshIncremental(
   projectId: string,
   id: string,
   origin: ConnOrigin,
   warnings: string[],
+  mode: RefreshMode = 'any',
 ): Promise<RefreshResult | null> {
   const meta = await datasets.getDatasetMeta(projectId, id);
   const s = meta && meta.incremental;
@@ -63,13 +70,18 @@ export async function refreshIncremental(
   // local folder connectors (T8.1): every source is read.
   const stamp: string | null = null;
   let reason = fullReason(s, columns, meta.resident && (await parquetStore.isSupportedAsync()));
+  if (reason && mode === 'incremental') return skipFull(reason);
   if (!reason) {
     const step = await runIncremental(projectId, id, origin, Boolean(meta.sourceColumns), s, columns, startedAt, warnings, stamp);
     if (step.done) return step.result;
     reason = step.reason;
+    // Nothing was written yet: the batch was refused before the merge (and no full run follows, whatever the line says).
+    if (mode === 'incremental') return skipFull(reason.replace(/, so this run was a full refresh$/, ''));
   }
   return runFull(projectId, id, origin, s, reason, startedAt, warnings, stamp);
 }
+
+const skipFull = (reason: string): RefreshResult => ({ ok: false, error: freshOnAskSkippedFull(reason), skipped: true });
 
 /** Why this run must be full, or null when an incremental one can be trusted. */
 export function fullReason(s: IncrementalSettings, columns: ParsedColumn[], parquet: boolean): string | null {

@@ -30,8 +30,9 @@ import { sanitizeEncoding } from '../analysis/visuals';
 import * as trace from '../engine/residentTrace';
 import { listConnections } from '../connectors/connections';
 import { vizDataFor } from './visuals';
-import { getConnector, isLiveCapable } from '../connectors';
+import { getConnector, isLiveOffered } from '../connectors';
 import { isLive } from '../data/liveDataset';
+import { liveColumnProfile } from './liveProfile';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -71,13 +72,16 @@ async function figuresFor(projectId: string, datasetId: string, column: string, 
 
 /**
  * `dataset:source`'s Live half: `live` + `maxCacheAgeSec` on a Live dataset;
- * `canGoLive: true` on an extract whose connection offers Live. Absent
- * otherwise, so every other dataset's reply is the `{kind, label, refreshable}` it always was.
+ * `canGoLive: true` on an extract whose CONNECTION offers Live — its connector
+ * has a dialect and, for an OLTP source, the connection is ticked as a read
+ * replica (L3.2). Absent otherwise, so every other dataset's reply is the
+ * `{kind, label, refreshable}` it always was.
  */
-function liveView(meta: datasets.DatasetMeta, connectorOf: (connId: string) => string | undefined): { live?: true; maxCacheAgeSec?: number; canGoLive?: true } {
+function liveView(meta: datasets.DatasetMeta, connOf: (connId: string) => { connectorId: string; values: Record<string, unknown> } | undefined): { live?: true; maxCacheAgeSec?: number; canGoLive?: true } {
   if (isLive(meta) && meta.live) return { live: true, maxCacheAgeSec: meta.live.maxCacheAgeSec };
   if (meta.origin?.kind !== 'connection') return {};
-  return isLiveCapable(getConnector(connectorOf(meta.origin.connId))) ? { canGoLive: true } : {};
+  const conn = connOf(meta.origin.connId);
+  return conn && isLiveOffered(getConnector(conn.connectorId), conn.values) ? { canGoLive: true } : {};
 }
 
 export function register(): void {
@@ -88,7 +92,7 @@ export function register(): void {
     const view = sourceView(meta.sourceKind, meta.origin, (cid) => conns.find((c) => c.id === cid)?.name);
     // Live (L2.1): the mode and the cache age, and whether this one COULD be
     // Live — flags and a number, never the selection's SQL or the address.
-    return { ...view, ...liveView(meta, (cid) => conns.find((c) => c.id === cid)?.connectorId) };
+    return { ...view, ...liveView(meta, (cid) => conns.find((c) => c.id === cid)) };
   });
 
   ipcMain.handle('dataset:profile', async (_e, { projectId, datasetId, column }: Record<string, unknown> = {}) => {
@@ -99,6 +103,9 @@ export function register(): void {
       const meta = await datasets.getDatasetMeta(p, d);
       const col = meta?.columns.find((c) => c.name === name);
       if (!meta || !col) return { ok: false, error: 'That column is not in this dataset.' };
+      // A profiled Live dataset: the panel from its sample (L2.5). Unprofiled, the paths below refuse it.
+      const live = liveColumnProfile(meta, name);
+      if (live) return live;
       // The distribution through `visual:data`'s own path: count of the column
       // itself, a number column in PROFILE_BINS buckets, a date by month.
       const encoding = sanitizeEncoding({

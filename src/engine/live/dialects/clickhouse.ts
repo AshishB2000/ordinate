@@ -10,7 +10,7 @@
 
 import type { LiveParam } from '../../../connectors/types';
 import type { SqlDialect } from '../dialect';
-import { WS_REGEX_CLASS } from '../dialect';
+import { WS_REGEX_CLASS, sqlInt } from '../dialect';
 
 const TYPE: Record<LiveParam['type'], string> = {
   text: 'String', number: 'Float64', boolean: 'Bool', date: 'Date32', timestamp: "DateTime64(3, 'UTC')",
@@ -48,4 +48,7 @@ export const clickhouseDialect: SqlDialect = {
   like: (x, p) => `${x} LIKE ${p}`,
   likeEscape: '\\',
   label: (x) => x,
+  // SAMPLE needs the table's SAMPLE BY key (asked first, ../profileSql.ts); without one
+  // ClickHouse refuses it, so the LIMIT bounds the rows instead.
+  tableSample: (plan) => (plan.samplingKey ? `SAMPLE ${sqlInt(plan.rows)}` : null),
 };

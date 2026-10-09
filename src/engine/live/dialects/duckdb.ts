@@ -11,7 +11,7 @@
 
 import type { LiveParam } from '../../../connectors/types';
 import type { SqlDialect } from '../dialect';
-import { WS_REGEX_CLASS, doubleQuoted } from '../dialect';
+import { WS_REGEX_CLASS, doubleQuoted, sqlInt } from '../dialect';
 
 const TYPE: Record<LiveParam['type'], string> = {
   text: 'VARCHAR', number: 'DOUBLE', boolean: 'BOOLEAN', date: 'DATE', timestamp: 'TIMESTAMP',
@@ -45,4 +45,6 @@ export const duckdbDialect: SqlDialect = {
   // inverse — the same fix as residentCategory.bomSafe. A warehouse's HTTP
   // transport has no such loss, so the other dialects project labels as they are.
   label: (x) => `CASE WHEN starts_with(${x}, ${BOM}) THEN ${BOM} || ${x} ELSE ${x} END`,
+  // Reservoir sampling: exactly `rows` rows, or every row of a smaller table.
+  tableSample: (plan) => `USING SAMPLE ${sqlInt(plan.rows)} ROWS`,
 };

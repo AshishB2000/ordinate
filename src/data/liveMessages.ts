@@ -48,3 +48,22 @@ export function liveConnectionGoneMessage(): string {
 export function liveCacheAgeRangeMessage(): string {
   return t('liveMessages.the_cache_age_must_be_between');
 }
+
+/**
+ * Live on this connector is opt-in per connection (plan D8, L3.2) and this
+ * connection has not opted in. `label` is the checkbox's own label.
+ */
+export function liveNeedsOptInMessage(label: string): string {
+  return t('liveMessages.live_is_off_for_this_connection', { label });
+}
+
+/** Unticking the opt-in while Live datasets still ask the connection. `count` is `n`, formatted. */
+export function liveOptInInUseMessage(n: number, count: string, label: string): string {
+  if (n === 1) return t('liveMessages.one_live_dataset_asks_this_connection', { label });
+  return t('liveMessages.live_datasets_ask_this_connection_switch', { count, label });
+}
+
+/** The connection's connector has no Live opt-in to tick. */
+export function liveNoOptInMessage(): string {
+  return t('liveMessages.this_connection_has_no_read_replica');
+}

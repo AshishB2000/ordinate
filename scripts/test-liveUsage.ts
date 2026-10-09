@@ -105,7 +105,7 @@ async function counting(s: H.OrgSetup): Promise<void> {
   ok('count: a cache hit is no query', fake.calls.length === 7 && r?.queries === 7, show(r));
   ok('one door: the count equals the statements the warehouse saw', r?.queries === fake.calls.length);
 
-  fake.bytes = 1_234_567;
+  fake.billedBytes = 1_234_567;
   await H.as(ORG_A, () => H.liveDataset.setMaxCacheAge(P, D, 0));
   for (let i = 0; i < 3; i++) await H.as(ORG_A, () => lq.liveMetric(P, D, kpi('amt', 'min'), []));
   await tick();
@@ -321,7 +321,7 @@ async function publicFloor(s: H.OrgSetup): Promise<void> {
 
 async function adminReply(s: H.OrgSetup): Promise<void> {
   reset();
-  fake.bytes = 1_610_612_736; // 1.5 GiB a statement
+  fake.billedBytes = 1_610_612_736; // 1.5 GiB a statement
   await H.as(ORG_A, () => H.liveDataset.setMaxCacheAge(s.projectId, s.liveId, 0));
   for (let i = 0; i < 3; i++) await H.as(ORG_A, () => lq.liveMetric(s.projectId, s.liveId, kpi('amt'), []));
   await tick();

@@ -44,6 +44,15 @@ interface Seen {
 const NASTY = ["'; drop table orders; --", "\\'", '’ or ‘1’=‘1', '${process.exit()}', '?', '$$ select 1 $$', 'line\nbreak', '﻿bom',
   '"quoted"', '/* c */', '\\', '', 'é😀', "x' or '1'='1"];
 
+/** The connection the run signs in with — the form's values and its secrets, as a saved connection holds them. */
+export function snowflakeConnection(cfg: SnowflakeConfig): { values: Record<string, unknown>; secrets: Record<string, string> } {
+  const values: Record<string, unknown> = { account: cfg.account, user: cfg.user, auth: cfg.key ? 'keypair' : 'pat', warehouse: cfg.warehouse, role: cfg.role };
+  if (cfg.database) values.database = cfg.database;
+  if (cfg.schema) values.schema = cfg.schema;
+  const secrets: Record<string, string> = cfg.key ? { token: cfg.key, ...(cfg.passphrase ? { password: cfg.passphrase } : {}) } : { token: cfg.pat ?? '' };
+  return { values, secrets };
+}
+
 export async function runSnowflake(cfg: SnowflakeConfig, nonce: string): Promise<void> {
   const def = registry.getConnector('snowflake');
   ok('snowflake: registered, read-only, with a live capability in the snowflake dialect', !!def && def.readOnly === true && def.live?.dialect === 'snowflake');
@@ -55,10 +64,7 @@ export async function runSnowflake(cfg: SnowflakeConfig, nonce: string): Promise
   secret('Snowflake key passphrase', cfg.passphrase);
   secret('Snowflake PAT', cfg.pat);
 
-  const values: Record<string, unknown> = { account: cfg.account, user: cfg.user, auth: cfg.key ? 'keypair' : 'pat', warehouse: cfg.warehouse, role: cfg.role };
-  if (cfg.database) values.database = cfg.database;
-  if (cfg.schema) values.schema = cfg.schema;
-  const secrets: Record<string, string> = cfg.key ? { token: cfg.key, ...(cfg.passphrase ? { password: cfg.passphrase } : {}) } : { token: cfg.pat ?? '' };
+  const { values, secrets } = snowflakeConnection(cfg);
   const ctxOf = (extra: Partial<Ctx> = {}): Ctx => ({ ...connectionRun.buildContext(values, secrets, { rowLimit: 1000 }), ...extra });
   const live = def.live;
 

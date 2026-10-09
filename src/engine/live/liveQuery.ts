@@ -60,6 +60,7 @@ import { fromAnswerSpec, fromMetric, fromVizEncoding, refuse } from './liveSpec'
 import type { LiveRows } from './shape';
 import type { LiveTarget, TargetProblem } from './liveTarget';
 import { liveTarget } from './liveTarget';
+import { answerNames, encodingNames, metricNames, missingRefusal } from './liveMissing';
 import { failed, LiveCallError, opOf, timeoutMs, warehouse } from './liveWarehouse';
 
 // The one door every Live statement goes through (./liveWarehouse.ts): L2.4's
@@ -317,11 +318,14 @@ async function ask(t: LiveTarget, ir: LiveIR): Promise<Asked> {
   return { ok: true, outcome, asOf: { at, mode: 'live' } };
 }
 
-/** Resolve the target, adapt, ask: the part every door shares. */
-async function run(projectId: string, datasetId: string, adapt: (t: LiveTarget) => LiveAdapted): Promise<{ asked: Asked; warnings: string[]; t: LiveTarget } | LiveFailure> {
+/** Resolve the target, adapt, ask: the part every door shares. `names`: the columns the question reads. */
+async function run(projectId: string, datasetId: string, names: string[], adapt: (t: LiveTarget) => LiveAdapted): Promise<{ asked: Asked; warnings: string[]; t: LiveTarget } | LiveFailure> {
   const found = await liveTarget(projectId, datasetId);
   if (!found.ok) return unavailable(found);
   const t = found.target;
+  // A column the warehouse dropped (L2.5) is said as exactly that, before the adapter could skip or misname it.
+  const gone = missingRefusal(t.live.missingColumns, names);
+  if (gone) return refused(t.dialect, gone);
   const a = adapt(t);
   if (!a.ok) return refused(t.dialect, a);
   return { asked: await ask(t, a.ir), warnings: a.warnings, t };
@@ -331,7 +335,7 @@ async function run(projectId: string, datasetId: string, adapt: (t: LiveTarget) 
 
 /** A chart: `vizDataFor`'s question on a Live dataset. */
 export async function liveVizData(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[], opts: AdaptOpts = {}): Promise<LiveVizReply> {
-  const r = await run(projectId, datasetId, (t) => fromVizEncoding(encoding, filters, t.columns, opts));
+  const r = await run(projectId, datasetId, encodingNames(encoding, filters), (t) => fromVizEncoding(encoding, filters, t.columns, opts));
   if (!('asked' in r)) return r;
   if (!r.asked.ok) return r.asked;
   const o = r.asked.outcome;
@@ -354,7 +358,7 @@ export async function liveMetric(
   filters: FilterStep[],
   opts: AdaptOpts = {},
 ): Promise<LiveMetricReply> {
-  const r = await run(projectId, datasetId, (t) => fromMetric(spec, filters, t.columns, opts));
+  const r = await run(projectId, datasetId, metricNames(spec, filters), (t) => fromMetric(spec, filters, t.columns, opts));
   if (!('asked' in r)) return r;
   if (!r.asked.ok) return r.asked;
   const o = r.asked.outcome;
@@ -364,7 +368,7 @@ export async function liveMetric(
 
 /** An AI answer's chart: `computeCard`'s question on a Live dataset — ranked and cut in the warehouse. */
 export async function liveAnswer(projectId: string, spec: AnswerSpec, opts: AdaptOpts = {}): Promise<LiveAnswerReply> {
-  const r = await run(projectId, spec && spec.datasetId, (t) => fromAnswerSpec(spec, t.columns, opts));
+  const r = await run(projectId, spec && spec.datasetId, answerNames(spec), (t) => fromAnswerSpec(spec, t.columns, opts));
   if (!('asked' in r)) return r;
   if (!r.asked.ok) return r.asked;
   const o = r.asked.outcome;
@@ -401,4 +405,19 @@ function answerFilterLabels(spec: AnswerSpec, columns: LiveTarget['columns'], pe
     }
   }
   return out;
+}
+
+// ── One statement, for the schema sync ───────────────────────────────────────
+
+/**
+ * Send one compiled statement through exactly the seams a question takes — a
+ * concurrency slot, the daily limit that counts it (L2.7), the timeout, the
+ * shared signal, `costTag 'live'`, the billed bytes — without the question
+ * cache: the schema sync's profile, sample and probes (L2.5). It IS
+ * `warehouse()` (./liveWarehouse, the one door). Rows positional to
+ * `query.columns`; throws `LiveCallError` (its `kind` says why), logged once
+ * where it happened.
+ */
+export function runStatement(t: LiveTarget, query: CompiledQuery, signal: AbortSignal): Promise<LiveRows> {
+  return warehouse(t, query, signal);
 }

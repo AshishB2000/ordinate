@@ -142,6 +142,10 @@ prompts unrounded); a leading U+FEFF is lost on every string the bridge returns 
   is the stale answer (`asOf.stale`) or a typed error in a catalog sentence — warehouse text goes to
   the log only (R-L6). `live:<dialect>` outcomes on `/metrics`. CI's warehouse is
   `scripts/liveFakeConnector.ts` (DuckDB dialect; tests or `ORDINATE_TEST_LIVE_FAKE` only, never listed).
+- **An OLTP source is Live only by opt-in** (L3.2, D8): the PostgreSQL family declares `live.optIn`
+  (the "This is a read replica or a warehouse" checkbox); `isLiveOffered(def, values)` decides per
+  CONNECTION — create, `dataset:setMode`, `dataset:source` and every executor question ask it. The
+  catalog's `live` means "can be Live"; `liveOptIn` names the box. A Postgres/Redshift live session runs in UTC.
 
 ### Workspace
 

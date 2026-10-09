@@ -16,6 +16,7 @@ import {
   estimateQuery,
   explainQuery,
   importDataset,
+  liveOffered,
   qualify,
   runQuery,
   sampleTable,
@@ -311,7 +312,7 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
             onChanged={refreshLists}
             onMessage={(text, error) => setMessage({ text, error })}
           />
-          <Results state={result} saving={saving} live={def?.live === true} onSave={(n, m) => void saveAsDataset(n, m)} />
+          <Results state={result} saving={saving} live={liveOffered(def, conn)} onSave={(n, m) => void saveAsDataset(n, m)} />
         </div>
         {details && (
           <DetailsRail

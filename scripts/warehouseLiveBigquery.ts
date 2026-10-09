@@ -71,6 +71,15 @@ function whoRefused(r: { ok: boolean; error?: string }): string {
   return /insufficient authentication scopes/i.test(e) ? 'Google: insufficient authentication scopes' : `Google, at the dry run — ${e.slice(0, 200)}`;
 }
 
+/** The connection the run signs in with — the form's values and the key file, as a saved connection holds them. */
+export function bigqueryConnection(cfg: BigqueryConfig): { values: Record<string, unknown>; secrets: Record<string, string> } {
+  const values: Record<string, unknown> = {};
+  if (cfg.project) values.project = cfg.project;
+  if (cfg.dataset) values.dataset = cfg.dataset;
+  if (cfg.location) values.location = cfg.location;
+  return { values, secrets: { token: cfg.keyJson } };
+}
+
 export async function runBigquery(cfg: BigqueryConfig, nonce: string): Promise<void> {
   const def = registry.getConnector('bigquery');
   ok('bigquery: registered, read-only, with a live capability that estimates', !!def && def.readOnly === true && def.live?.dialect === 'bigquery' && typeof def.live.estimate === 'function');
@@ -83,13 +92,9 @@ export async function runBigquery(cfg: BigqueryConfig, nonce: string): Promise<v
   const project = cfg.project || key.projectId || '';
   for (const [l, v] of [['bigquery project', project], ['bigquery dataset', cfg.dataset], ['bigquery scratch dataset', cfg.scratch], ['service account', key.clientEmail]] as const) ident(l, v);
 
-  const values: Record<string, unknown> = {};
-  if (cfg.project) values.project = cfg.project;
-  if (cfg.dataset) values.dataset = cfg.dataset;
-  if (cfg.location) values.location = cfg.location;
+  const { values, secrets } = bigqueryConnection(cfg);
   const anywhere: Record<string, unknown> = { ...values };
   delete anywhere.location; // the public table lives in US; an unset location lets BigQuery follow the data
-  const secrets = { token: cfg.keyJson };
   const ctxOf = (extra: Partial<Ctx> = {}, v = values): Ctx => ({ ...connectionRun.buildContext(v, secrets, { rowLimit: 1000 }), ...extra });
   const live = def.live;
   const estimate = def.live.estimate;

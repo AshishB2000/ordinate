@@ -125,3 +125,8 @@ export function liveRowShape(): string {
 export function liveBadQuery(): string {
   return t('liveRefusals.this_question_cannot_be_asked_of');
 }
+
+/** A column the question names was in the dataset and is gone from the warehouse (a schema sync found it missing, L2.5). */
+export function liveColumnMissing(column: string): string {
+  return t('liveRefusals.is_no_longer_in_the_warehouse', { column });
+}
