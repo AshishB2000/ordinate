@@ -3,9 +3,10 @@
 //
 // IT AUTHORISES ITSELF, as /p/ does (../published.ts): the token in the path
 // is the whole credential. No session, cookie or proxy header is looked up
-// (app.ts's gate skips the route, ./routeAccess 'self'); CSRF exempts it (a
-// cross-site page holds no ambient credential here — it would need the token);
-// the sign-in limit's numbers bound it per client IP (../limits.ts).
+// (app.ts: `routeAccess` answers 'self', and its gate skips the route); CSRF
+// exempts it (a cross-site page holds no ambient credential here — it would
+// need the token); the sign-in limit's numbers bound it per client IP
+// (../limits.ts).
 //
 // What a call can do is exactly one thing: refresh the hook's dataset (or, on
 // a Live dataset, reset its cache — ./act.ts). The answers:
