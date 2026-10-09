@@ -60,7 +60,9 @@ async function abort(s: H.OrgSetup): Promise<void> {
   const a2 = new AbortController();
   const first = H.as(ORG_A, () => lq.liveMetric(P, s.liveId, kpi('qty'), []), a1.signal);
   const second = H.as(ORG_A, () => lq.liveMetric(P, s.liveId, kpi('qty'), []), a2.signal);
-  await H.until(() => fake.calls.length === 1);
+  // Both must have JOINED the one call before one hangs up: under load the second can still be on its
+  // way (record, cache) when the call starts, and the first would then be its only asker.
+  await H.until(() => fake.calls.length === 1 && lq.askersInAir()[0] === 2);
   a1.abort();
   const r1 = await first;
   ok('shared: the asker who hung up stops waiting at once', !r1.ok && r1.code === 'live_cancelled');
@@ -76,7 +78,7 @@ async function abort(s: H.OrgSetup): Promise<void> {
   const b1 = new AbortController();
   const b2 = new AbortController();
   const both = [b1, b2].map((c) => H.as(ORG_A, () => lq.liveMetric(P, s.liveId, kpi('amt', 'max'), []), c.signal));
-  await H.until(() => fake.calls.length === 1);
+  await H.until(() => fake.calls.length === 1 && lq.askersInAir()[0] === 2);
   b1.abort();
   await new Promise((r) => setTimeout(r, 20));
   ok('shared: one of two hung up — still running', fake.calls[0].signal?.aborted === false);

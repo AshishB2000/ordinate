@@ -131,7 +131,7 @@ function unavailable(p: TargetProblem): LiveFailure {
 }
 
 /** Test hook: flights in the air (the suite checks none is left behind). */
-export { flightsInAir } from './liveFlight';
+export { askersInAir, flightsInAir } from './liveFlight';
 
 // ── One question ─────────────────────────────────────────────────────────────
 

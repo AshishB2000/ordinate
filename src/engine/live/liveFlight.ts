@@ -81,3 +81,8 @@ export function fly<T>(key: string, signal: AbortSignal | undefined, start: (sha
 export function flightsInAir(): number {
   return flights.size;
 }
+
+/** Test hook: askers waiting on each flight in the air, so a suite can hang one up only once the other has joined. */
+export function askersInAir(): number[] {
+  return [...flights.values()].map((f) => f.askers);
+}
