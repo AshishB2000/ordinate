@@ -18,6 +18,7 @@ import { useLineage, useSource, useTags } from './api';
 import { ColumnsTab } from './ColumnsTab';
 import { DataTab } from './DataTab';
 import { QualityDot, SchedulePicker, useDeleteDataset, useRefresh, WatchToggle } from './DatasetList';
+import { BehindBadge } from './cadence';
 import { useAdoptProject } from '../projects/current';
 import { RecordDetails } from './Details';
 import { formatNumber, freshness, NOT_REFRESHABLE, rowsText } from './format';
@@ -108,6 +109,7 @@ function Header({ projectId, id, name, rowCount, columnCount }: { projectId: str
                 <QualityDot n={d.qualityFailing} />
                 {d.lastRefreshStatus === 'error' && <span className={s.failDot} role="img" aria-label="Last refresh failed" />}
                 {freshness(d)}
+                <BehindBadge behind={d.behindSchedule} />
               </span>
             )}
             {d && <SchedulePicker projectId={projectId} d={d} />}

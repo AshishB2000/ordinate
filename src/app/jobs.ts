@@ -35,7 +35,7 @@
 
 import * as fs from 'fs';
 import { randomUUID } from 'crypto';
-import { AsyncLocalStorage } from 'async_hooks';
+import { AsyncLocalStorage, AsyncResource } from 'async_hooks';
 import { ctx, requestClient, serverDataDir } from '../server/context';
 
 export type JobKind =
@@ -115,6 +115,8 @@ interface Entry {
   ctl: AbortController;
   resolve: (v: unknown) => void;
   reject: (e: unknown) => void;
+  /** Runs `fn` in the SUBMITTER's async context (its org and user), whoever's finish starts the job. */
+  within: (fn: () => void) => void;
 }
 
 let file: string | null = null;
@@ -227,7 +229,8 @@ export function submit<T>(spec: JobSpec<T>): { id: string; done: Promise<T> } {
   });
   // An unawaited rejection must not crash main; the state carries the outcome.
   done.catch(() => { /* reported through the job record */ });
-  queue.push({ job, spec: spec as JobSpec<unknown>, ctl: new AbortController(), resolve, reject });
+  const within = AsyncResource.bind((fn: () => void) => fn());
+  queue.push({ job, spec: spec as JobSpec<unknown>, ctl: new AbortController(), resolve, reject, within });
   persist();
   emit();
   pump();
@@ -340,7 +343,10 @@ function pump(): void {
     const i = queue.findIndex(startable);
     if (i < 0) return;
     const [e] = queue.splice(i, 1);
-    start(e);
+    // A queued job starts from ANOTHER job's settle(), inside that job's
+    // context: without this a job queued by one org ran as another (found
+    // when L0.3 began queuing scheduled refreshes).
+    e.within(() => start(e));
   }
 }
 

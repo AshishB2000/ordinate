@@ -20,16 +20,19 @@ import type { NodeRun, PipelineState } from './pipelineStore';
 import { buildPipeline, topoOrder, STAGES } from './pipelines';
 import type { PipelineGraph, PipelineNode } from './pipelines';
 import { describeCron, nextCronRun } from './pipelineCron';
+import { behindSchedule, INTERVAL_MS } from '../data/refreshCadence';
 
 // ponytail: loose record shapes — each store's own sanitizer already shaped them (as lineage.ts)
 type Rec = Record<string, any>;
 
-const EVERY_MS: Record<string, number> = { hourly: 3600_000, daily: 86_400_000, weekly: 604_800_000 };
+const EVERY_MS: Record<string, number> = INTERVAL_MS;
 const CADENCE_MS: Record<string, number> = { daily: 86_400_000, weekly: 604_800_000, monthly: 30 * 86_400_000 };
 const ORIGIN_WORD: Record<string, string> = {
   connection: 'Database', file: 'File', url: 'Web address', sql: 'SQL query', combined: 'Combined', composed: 'Combined',
 };
-const WORD: Record<string, string> = { hourly: 'Hourly', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
+const WORD: Record<string, string> = {
+  hourly: 'Hourly', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', '5min': 'Every 5 minutes', '15min': 'Every 15 minutes',
+};
 
 export interface NodeSchedule {
   /** What the card says: "Daily", "Weekly at 09:00", "After its inputs". */
@@ -40,6 +43,10 @@ export interface NodeSchedule {
   cadence?: string;
   at?: string;
   hasFolder?: boolean;
+  /** A dataset's incremental refresh is on: it may refresh every 5 or 15 minutes (src/data/refreshCadence.ts). */
+  incremental?: boolean;
+  /** Its last scheduled refresh took longer than the schedule's interval. */
+  behind?: boolean;
 }
 
 export interface NodeView extends PipelineNode {
@@ -105,10 +112,15 @@ function scheduleFor(n: PipelineNode, input: Rec, now: number): { schedule: Node
     }
     const a = d.autoRefresh;
     const off = config.get().autoRefresh === false;
-    if (!a) return { schedule: { text: derived ? 'After its inputs' : 'Manual', edit: 'dataset', every: 'off' }, next: null, stamp };
+    const incremental = d.incremental?.enabled === true;
+    if (!a) return { schedule: { text: derived ? 'After its inputs' : 'Manual', edit: 'dataset', every: 'off', incremental }, next: null, stamp };
     const last = a.lastAutoAt ? Date.parse(a.lastAutoAt) : NaN;
     const next = off ? null : Math.max(now, Number.isFinite(last) ? last + EVERY_MS[a.every] : now);
-    return { schedule: { text: WORD[a.every] + (off ? ' · off in Settings' : ''), edit: 'dataset', every: a.every }, next, stamp };
+    const behind = behindSchedule(a);
+    return {
+      schedule: { text: WORD[a.every] + (behind ? ' · behind schedule' : '') + (off ? ' · off in Settings' : ''), edit: 'dataset', every: a.every, incremental, behind },
+      next, stamp,
+    };
   }
   if (n.kind === 'quality') {
     const d = (input.datasets as Rec[]).find((x) => x.id === id) || {};

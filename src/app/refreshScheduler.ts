@@ -13,21 +13,36 @@
 //
 // Two properties the tick must hold, both about not freezing the app:
 //
-//   1. STRICTLY SERIAL. Refreshes run one after another, never in parallel, and
-//      a tick that arrives while the previous one is still working is skipped
-//      outright (`running`). Overlapping refreshes would contend on the same
-//      records and could interleave two writes to one file.
+//   1. FULL REFRESHES ARE STRICTLY SERIAL. They run one after another, never in
+//      parallel, and a tick that arrives while the previous one is still
+//      working is skipped outright (`running`). A full refresh re-fetches and
+//      rewrites up to a million rows; several at once would contend for the
+//      source, the worker and the disk.
+//      INCREMENTAL refreshes (L0.3) are QUEUED instead: every due one is handed
+//      to the jobs runner at once, most overdue first, and the tick does not
+//      wait for them — the runner starts MAX_RUNNING (3) at a time, one per
+//      dataset. A 5-minute schedule cannot wait behind a slow hourly table,
+//      and a slow incremental one holds up neither the others nor the next
+//      tick. A dataset still refreshing when it comes due again is skipped
+//      (it is not stamped, so the next tick asks again), and its run, once
+//      finished, says how late it was (`lastAutoMs` — "Behind schedule").
 //   2. ASYNC PATHS ONLY. A blocking DuckDB call freezes every window, the menu
 //      bar and the hotkey. Nothing here blocks: it reads metadata, and
 //      refreshDataset is itself async.
+//
+// ONE REFRESH AT A TIME, ANYWHERE (L0.4): a dataset whose refresh is running —
+// a job on this pod, or another pod holding its lock — is skipped, never
+// queued a second time (src/data/refreshJob.ts `refreshRunning`).
 //
 // The DUE CHECK is a pure exported function taking `now`, so it can be tested
 // directly rather than by waiting for wall-clock time to pass.
 
 import * as datasets from '../data/datasets';
-import type { AutoRefreshEvery, DatasetSummary } from '../data/datasets';
+import type { DatasetMeta, DatasetSummary } from '../data/datasets';
 import * as projects from './projects';
-import { refreshAsJob } from '../data/refreshJob';
+import { queueRefresh, refreshLabel, refreshRunning } from '../data/refreshJob';
+import type { RefreshResult } from '../data/datasetRefresh';
+import { overdueMs } from '../data/refreshCadence';
 import { refreshDependents } from '../data/datasetDependents';
 import type { AlertEvent } from '../analysis/alerts';
 // Imported, not injected like the alert hook: it decides nothing about WHEN and
@@ -35,14 +50,8 @@ import type { AlertEvent } from '../analysis/alerts';
 import { runQualityChecks } from '../analysis/qualityRun';
 import { track } from './quitCleanup';
 
-/** How often the tick looks for work. The schedules themselves are hours apart. */
+/** How often the tick looks for work. The shortest schedule is 5 minutes (src/data/refreshCadence.ts). */
 const TICK_MS = 60_000;
-
-const INTERVAL_MS: Record<AutoRefreshEvery, number> = {
-  hourly: 60 * 60 * 1000,
-  daily: 24 * 60 * 60 * 1000,
-  weekly: 7 * 24 * 60 * 60 * 1000,
-};
 
 /** One dataset the scheduler may act on, as the enumeration sees it. */
 export interface ScheduledMeta {
@@ -51,34 +60,42 @@ export interface ScheduledMeta {
   name: string;
   originKind?: DatasetSummary['originKind'];
   autoRefresh?: DatasetSummary['autoRefresh'];
+  /** Incremental refresh is on: its scheduled runs are queued as jobs, not run one by one. */
+  incremental?: boolean;
 }
 
 /**
- * Which of these are due at `now` — pure, and the whole scheduling rule.
+ * Which of these are due at `now`, MOST OVERDUE FIRST — pure, and the whole
+ * scheduling rule.
  *
  * `now` is a parameter on purpose: nothing in src/ should call Date.now() inside
  * logic a test wants to pin.
  *
- * A dataset that has NEVER run is due immediately. So is one whose `lastAutoAt`
- * is unparseable — treating a corrupt stamp as "never" makes the schedule
- * self-heal, where treating it as "just ran" would silently disable the
- * schedule forever.
+ * A dataset that has NEVER run is due immediately, and first. So is one whose
+ * `lastAutoAt` is unparseable — treating a corrupt stamp as "never" makes the
+ * schedule self-heal, where treating it as "just ran" would silently disable
+ * the schedule forever (refreshCadence.overdueMs).
+ *
+ * The order is the order the jobs runner starts them in, so when more are due
+ * than it runs at once, the one that has waited longest past its time goes
+ * first — by time, not by share of its interval: a weekly table a day late is
+ * staler than a 5-minute one ten minutes late. Ties keep input order.
  */
 export function dueDatasets<T extends ScheduledMeta>(metas: T[], now: number): T[] {
-  const out: T[] = [];
+  const due: { m: T; late: number }[] = [];
   for (const m of Array.isArray(metas) ? metas : []) {
     const auto = m && m.autoRefresh;
-    if (!auto || !INTERVAL_MS[auto.every]) continue;
+    if (!auto) continue;
     // Belt and braces: datasets.sanitizeAutoRefresh already drops a schedule
     // from a record with no origin, so this only catches a caller that built a
     // meta by hand.
     if (!m.originKind) continue;
-    if (!auto.lastAutoAt) { out.push(m); continue; }
-    const last = Date.parse(auto.lastAutoAt);
-    if (!Number.isFinite(last)) { out.push(m); continue; }
-    if (now - last >= INTERVAL_MS[auto.every]) out.push(m);
+    const late = overdueMs(auto, now);
+    if (late !== null) due.push({ m, late });
   }
-  return out;
+  // Array.prototype.sort is stable; Infinity (never run) compares by `>`, not by subtraction.
+  due.sort((a, b) => (a.late === b.late ? 0 : a.late > b.late ? -1 : 1));
+  return due.map((d) => d.m);
 }
 
 /** Every scheduled dataset across every project, metadata only. */
@@ -99,7 +116,7 @@ export async function scheduledMetas(): Promise<ScheduledMeta[]> {
     }
     for (const s of summaries) {
       if (!s.autoRefresh) continue;
-      out.push({ projectId: p.id, id: s.id, name: s.name, originKind: s.originKind, autoRefresh: s.autoRefresh });
+      out.push({ projectId: p.id, id: s.id, name: s.name, originKind: s.originKind, autoRefresh: s.autoRefresh, incremental: s.incrementalOn === true });
     }
   }
   return out;
@@ -195,9 +212,87 @@ export function setEnabledCheck(fn: () => boolean): void {
   enabled = fn;
 }
 
+/** A scheduled run's end: what it did, and the alert / quality events it raised. */
+interface Finished { outcome: AutoRefreshOutcome; events: AlertEvent[] }
+
+/**
+ * Starts one due dataset's scheduled refresh as a job. Null — and nothing
+ * stamped — when a refresh of it is already running here or on another pod:
+ * that one lands the fresh rows, and the next tick asks again. `settled`
+ * settles after everything the refresh triggers, and never rejects. (Boxed:
+ * an async function returning a bare promise would wait for it.)
+ */
+async function begin(m: ScheduledMeta, now: number): Promise<{ settled: Promise<Finished | null> } | null> {
+  if (await refreshRunning(m.projectId, m.id)) return null;
+  const label = await refreshLabel(m.projectId, m.id, true);
+  // Stamp FIRST, win or lose, and BEFORE the job can write the record. A
+  // source that is failing then waits its whole interval instead of retrying
+  // every 60 seconds; the failure itself stays visible in lastRefreshStatus,
+  // which is where the row reads it.
+  await datasets.setAutoRefresh(m.projectId, m.id, { lastAutoAt: new Date(now).toISOString() });
+  const before = await datasets.getDatasetMeta(m.projectId, m.id);
+  // A job (src/data/refreshJob): a row in the Jobs popover, and queued behind
+  // any ↻ the user clicked on the same dataset rather than racing it.
+  const job = queueRefresh(m.projectId, m.id, label);
+  return { settled: job.done.then((res) => after(m, before, res, now)).catch(() => null) };
+}
+
+/** Everything a finished scheduled refresh triggers. Null when it coalesced (another pod ran it). */
+async function after(m: ScheduledMeta, before: DatasetMeta | null, res: RefreshResult, stampedAt: number): Promise<Finished | null> {
+  if (!res.ok && res.alreadyRunning) return null;
+  // How late this run landed, from the stamp — waiting for a job slot counts:
+  // longer than the cadence is "Behind schedule" (refreshCadence.behindSchedule).
+  await datasets.setAutoRefresh(m.projectId, m.id, { lastAutoMs: Math.max(0, Date.now() - stampedAt) });
+  const meta = await datasets.getDatasetMeta(m.projectId, m.id);
+  const outcome: AutoRefreshOutcome = {
+    projectId: m.projectId,
+    datasetId: m.id,
+    name: m.name,
+    ok: res.ok,
+    rowsBefore: (before && before.rowCount) || 0,
+    rowsAfter: (meta && meta.rowCount) || 0,
+  };
+  const events: AlertEvent[] = [];
+  if (!res.ok) {
+    outcome.error = res.error || 'Refresh failed.';
+    return { outcome, events };
+  }
+  // AWAITED, unlike the IPC call sites: a dependent re-run is part of this
+  // refresh's work. Never rejects.
+  await refreshDependents(m.projectId, m.id);
+  // The alert pass runs on FRESH data, which is why it is here rather than
+  // in the reporter: a rule evaluated before the refresh landed would be
+  // reporting yesterday's number as today's.
+  if (evaluate) {
+    try {
+      const fired = await evaluate(m.projectId, m.id);
+      outcome.alertsFired = fired.length;
+      events.push(...fired);
+    } catch (_) {
+      // An evaluation that throws must not take the refresh down with it.
+    }
+  }
+  // Data-quality rules, on the same fresh data. Recorded now, DELIVERED with
+  // the batch, so the digest option covers them too. Never throws.
+  events.push(...(await runQualityChecks(m.projectId, m.id, { deliver: false })));
+  return { outcome, events };
+}
+
+function tell(outcome: AutoRefreshOutcome): void {
+  if (!report) return;
+  try { report(outcome); } catch (_) { /* a reporter must never stop the loop */ }
+}
+
+function deliver(byProject: Map<string, AlertEvent[]>): void {
+  if (!reportTick || !byProject.size) return;
+  const batches = Array.from(byProject, ([projectId, events]) => ({ projectId, events }));
+  try { reportTick(batches); } catch (_) { /* a reporter must never stop the tick */ }
+}
+
 /**
  * One pass. Exported so a test — and the real-app walk — can force it without
- * waiting a minute.
+ * waiting a minute. Returns the outcomes of the SERIAL (full) refreshes; the
+ * incremental ones it queued report through `onRefreshed` as each lands.
  */
 export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
   const outcomes: AutoRefreshOutcome[] = [];
@@ -207,54 +302,27 @@ export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
   try {
     if (!enabled()) return outcomes;
     const due = dueDatasets(await scheduledMetas(), now);
+    // Incremental first, every one queued now, in due order — not awaited.
+    // Each reports as it lands, its alerts a batch of their own: the tick that
+    // queued it is long over by then.
     for (const m of due) {
-      // Stamp FIRST, win or lose. A source that is failing then waits its whole
-      // interval instead of retrying every 60 seconds; the failure itself stays
-      // visible in lastRefreshStatus, which is where the row reads it.
-      await datasets.setAutoRefresh(m.projectId, m.id, { lastAutoAt: new Date(now).toISOString() });
-      const before = await datasets.getDatasetMeta(m.projectId, m.id);
-      // A job (src/data/refreshJob): a row in the Jobs popover, and queued behind
-      // any ↻ the user clicked on the same dataset rather than racing it.
-      const res = await refreshAsJob(m.projectId, m.id, { scheduled: true });
-      const after = await datasets.getDatasetMeta(m.projectId, m.id);
-      const outcome: AutoRefreshOutcome = {
-        projectId: m.projectId,
-        datasetId: m.id,
-        name: m.name,
-        ok: Boolean(res && res.ok),
-        rowsBefore: (before && before.rowCount) || 0,
-        rowsAfter: (after && after.rowCount) || 0,
-      };
-      if (!outcome.ok) outcome.error = (res as any).error || 'Refresh failed.';
-      // AWAITED, unlike the IPC call sites: the tick is strictly serial, and
-      // a dependent re-run is part of this refresh's work. Never rejects.
-      else await refreshDependents(m.projectId, m.id);
-      // The alert pass runs on FRESH data, which is why it is here rather than
-      // in the reporter: a rule evaluated before the refresh landed would be
-      // reporting yesterday's number as today's.
-      if (outcome.ok && evaluate) {
-        try {
-          const fired = await evaluate(m.projectId, m.id);
-          outcome.alertsFired = fired.length;
-          if (fired.length) {
-            const bucket = byProject.get(m.projectId) || [];
-            for (const e of fired) bucket.push(e);
-            byProject.set(m.projectId, bucket);
-          }
-        } catch (_) {
-          // An evaluation that throws must not take the refresh down with it.
-        }
-      }
-      // Data-quality rules, on the same fresh data. Recorded now, DELIVERED with
-      // the tick's batch, so the digest option covers them too. Never throws.
-      if (outcome.ok) {
-        const dq = await runQualityChecks(m.projectId, m.id, { deliver: false });
-        if (dq.length) byProject.set(m.projectId, (byProject.get(m.projectId) || []).concat(dq));
-      }
-      outcomes.push(outcome);
-      if (report) {
-        try { report(outcome); } catch (_) { /* a reporter must never stop the loop */ }
-      }
+      if (!m.incremental) continue;
+      const run = await begin(m, now);
+      void run?.settled.then((f) => {
+        if (!f) return;
+        tell(f.outcome);
+        if (f.events.length) deliver(new Map([[m.projectId, f.events]]));
+      });
+    }
+    // Full refreshes: one after another, each awaited with all it triggers.
+    for (const m of due) {
+      if (m.incremental) continue;
+      const run = await begin(m, now);
+      const f = run && (await run.settled);
+      if (!f) continue;
+      if (f.events.length) byProject.set(m.projectId, (byProject.get(m.projectId) || []).concat(f.events));
+      outcomes.push(f.outcome);
+      tell(f.outcome);
     }
   } catch (_) {
     // A scheduler that throws is a scheduler that stops. Swallow and try again
@@ -273,10 +341,7 @@ export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
   // AFTER the loop, and only once: this is the batching point the digest option
   // needs. Outside the try/finally on purpose — `running` is already cleared, so
   // a throwing reporter cannot wedge the scheduler.
-  if (reportTick && byProject.size) {
-    const batches = Array.from(byProject, ([projectId, events]) => ({ projectId, events }));
-    try { reportTick(batches); } catch (_) { /* a reporter must never stop the tick */ }
-  }
+  deliver(byProject);
   return outcomes;
 }
 

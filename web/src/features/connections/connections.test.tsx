@@ -153,6 +153,37 @@ describe('the workbench rail', () => {
     expect(document.body.innerHTML).not.toContain('n3w');
   });
 
+  it('words a 5- or 15-minute schedule, says "Behind schedule", and offers the fast cadences only with incremental refresh', async () => {
+    const ds = (id: string, name: string, extra: object) => ({ id, name, rowCount: 10, updatedAt: '2026-10-01T10:00:00Z', originKind: 'connection', originConnId: CID, ...extra });
+    const LIVE = ds('33333333-3333-4333-8333-333333333333', 'Live', { autoRefresh: { every: '15min' }, incrementalOn: true, behindSchedule: true });
+    const PLAIN = ds('44444444-4444-4444-8444-444444444444', 'Plain', { autoRefresh: { every: 'hourly' } });
+    const calls = serve(
+      base({
+        'connections:list': { body: [CONN] },
+        'connection:listTables': { body: { ok: true, tables: [{ schema: 'public', name: 'orders' }] } },
+        'dataset:list': { body: [LIVE, PLAIN] },
+        'dataset:update': { body: { ok: true } },
+      }),
+    );
+    renderApp(`/connections/${PID}/${CID}`);
+    const rail = await screen.findByRole('complementary', { name: 'Connection details' });
+    const live = (await within(rail).findByRole('link', { name: 'Live' })).closest('li')!;
+    expect(within(live).getByText(/^Refreshes every 15 minutes · last/)).toBeTruthy();
+    expect(within(live).getByText('Behind schedule')).toBeTruthy();
+    const plain = within(rail).getByRole('link', { name: 'Plain' }).closest('li')!;
+    expect(within(plain).queryByText('Behind schedule')).toBeNull();
+
+    fireEvent.click(within(plain).getByRole('combobox', { name: 'Auto-refresh Plain' }));
+    const greyed = (await screen.findAllByRole('option')).filter((o) => o.getAttribute('aria-disabled') === 'true').map((o) => o.textContent);
+    expect(greyed).toEqual(['Refresh every 5 minutes — needs incremental refresh', 'Refresh every 15 minutes — needs incremental refresh']);
+    fireEvent.keyDown(within(plain).getByRole('combobox', { name: 'Auto-refresh Plain' }), { key: 'Escape' });
+
+    fireEvent.click(within(live).getByRole('combobox', { name: 'Auto-refresh Live' }));
+    fireEvent.click((await screen.findAllByRole('option')).find((o) => o.textContent === 'Refresh every 5 minutes')!);
+    await waitFor(() => expect(calls.some((c) => c.channel === 'dataset:update')).toBe(true));
+    expect(calls.find((c) => c.channel === 'dataset:update')!.payload).toEqual({ projectId: PID, datasetId: LIVE.id, autoRefresh: '5min' });
+  });
+
   it('says so when the connection is gone', async () => {
     serve(base());
     renderApp(`/connections/${PID}/${CID}`);

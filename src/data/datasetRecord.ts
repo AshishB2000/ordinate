@@ -23,6 +23,7 @@ import type { DatasetQuality } from '../analysis/qualityRules';
 import type { AutoRefresh, AutoRefreshEvery } from './datasets';
 import { sanitizeIncremental } from './incremental';
 import type { IncrementalSettings } from './incremental';
+import { cadenceAllowed, needsIncremental, sanitizeRunMs } from './refreshCadence';
 import * as recordFs from '../app/recordFs';
 
 
@@ -80,17 +81,28 @@ export async function writeJsonAtomic(file: string, obj: unknown): Promise<void>
  * must be the SANITIZED origin, not the raw one: a record whose origin was just
  * dropped for being malformed has nothing to re-fetch either, and a schedule
  * left on it would be a scheduler retrying forever against nothing.
+ *
+ * `incrementalOn` likewise comes from the SANITIZED incremental block: every
+ * 5 or 15 minutes is refused without it (src/data/refreshCadence.ts), so a
+ * hand-edited record cannot make the scheduler full-refresh that often.
  */
-export function sanitizeAutoRefresh(raw: unknown, hasOrigin: boolean): AutoRefresh | undefined {
+export function sanitizeAutoRefresh(raw: unknown, hasOrigin: boolean, incrementalOn = false): AutoRefresh | undefined {
   if (!hasOrigin || !raw || typeof raw !== 'object') return undefined;
   const o = raw as Record<string, unknown>;
-  if (o.every !== 'hourly' && o.every !== 'daily' && o.every !== 'weekly') return undefined;
+  if (!cadenceAllowed(o.every, incrementalOn)) return undefined;
   const out: AutoRefresh = { every: o.every };
   if (typeof o.lastAutoAt === 'string' && o.lastAutoAt) out.lastAutoAt = o.lastAutoAt;
   if (o.watch === true) out.watch = true;
   const keys = sanitizeAnomalyKeys(o.lastAnomalyKeys);
   if (keys) out.lastAnomalyKeys = keys;
+  const ms = sanitizeRunMs(o.lastAutoMs);
+  if (ms !== undefined) out.lastAutoMs = ms;
   return out;
+}
+
+/** Is the raw record's incremental refresh on? (Sanitized: a connection origin only.) */
+function incrementalOn(raw: Record<string, unknown>): boolean {
+  return sanitizeIncremental(raw.incremental, sanitizeOrigin(raw.origin)?.kind)?.enabled === true;
 }
 
 /**
@@ -143,7 +155,7 @@ export async function markRefresh(
 export async function setAutoRefresh(
   projectId: string,
   id: string,
-  patch: { every?: AutoRefreshEvery | null; lastAutoAt?: string; watch?: boolean; lastAnomalyKeys?: string[] },
+  patch: { every?: AutoRefreshEvery | null; lastAutoAt?: string; watch?: boolean; lastAnomalyKeys?: string[]; lastAutoMs?: number },
 ): Promise<AutoRefresh | null | false> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
   const file = datasetFilePath(projectId, id);
@@ -156,9 +168,12 @@ export async function setAutoRefresh(
       return null;
     }
     if (!sanitizeOrigin(raw.origin)) return false; // nothing to re-fetch
-    const current = sanitizeAutoRefresh(raw.autoRefresh, true);
+    const fastOk = incrementalOn(raw);
+    const current = sanitizeAutoRefresh(raw.autoRefresh, true, fastOk);
     const every = patch.every ?? (current ? current.every : undefined);
-    if (every !== 'hourly' && every !== 'daily' && every !== 'weekly') return false;
+    // Every 5 or 15 minutes only with incremental refresh on: refused here as
+    // well as on the way back in. The RPC says why before it gets this far.
+    if (!cadenceAllowed(every, fastOk)) return false;
     const next: AutoRefresh = { every };
     const lastAutoAt = patch.lastAutoAt ?? (current ? current.lastAutoAt : undefined);
     if (lastAutoAt) next.lastAutoAt = lastAutoAt;
@@ -166,6 +181,9 @@ export async function setAutoRefresh(
     if (watch) next.watch = true;
     const keys = sanitizeAnomalyKeys(patch.lastAnomalyKeys ?? (current ? current.lastAnomalyKeys : undefined));
     if (keys) next.lastAnomalyKeys = keys;
+    // A new cadence starts unmeasured: "behind" judged a different interval.
+    const ms = sanitizeRunMs(patch.lastAutoMs ?? (current && current.every === every ? current.lastAutoMs : undefined));
+    if (ms !== undefined) next.lastAutoMs = ms;
     raw.autoRefresh = next;
     await writeJsonAtomic(file, raw);
     return next;
@@ -191,6 +209,14 @@ export function writeIncremental(
     const next = sanitizeIncremental(mutate(sanitizeIncremental(raw.incremental, kind)), kind);
     if (next) raw.incremental = next;
     else delete raw.incremental;
+    // Incremental refresh off under a 5- or 15-minute schedule: the schedule
+    // drops to hourly, the shortest a full refresh may run at, in this same
+    // write. Never left to the sanitizer, which would turn it off silently.
+    const auto = raw.autoRefresh as Record<string, unknown> | undefined;
+    if (!next?.enabled && auto && typeof auto === 'object' && needsIncremental(auto.every)) {
+      raw.autoRefresh = { ...auto, every: 'hourly' };
+      delete (raw.autoRefresh as Record<string, unknown>).lastAutoMs;
+    }
     return next;
   });
 }

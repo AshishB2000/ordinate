@@ -140,9 +140,12 @@ export interface AutoRefresh {
    * else that comes back off disk.
    */
   lastAnomalyKeys?: string[];
+  /** How long the last SCHEDULED run took, queued to finished (src/data/refreshCadence.ts `behindSchedule`). */
+  lastAutoMs?: number;
 }
 
-export type AutoRefreshEvery = 'hourly' | 'daily' | 'weekly';
+/** '5min' and '15min' only with incremental refresh on (src/data/refreshCadence.ts). */
+export type AutoRefreshEvery = 'hourly' | 'daily' | 'weekly' | '5min' | '15min';
 
 const SOURCE_KINDS: ReadonlySet<string> = new Set(['csv', 'json', 'paste', 'xlsx', 'postgres', 'url', 'combined', 'capture', 'sql', 'input', 'parquet', 'notebook']);
 
@@ -338,7 +341,8 @@ function normalize(data: any, projectId: string): Dataset {
   // corrupt origin reads back as "not refreshable" rather than as a file read.
   const origin = sanitizeOrigin(data.origin);
   if (origin) ds.origin = origin;
-  const auto = sanitizeAutoRefresh(data.autoRefresh, Boolean(origin));
+  const incremental = sanitizeIncremental(data.incremental, origin?.kind); // connection origins only
+  const auto = sanitizeAutoRefresh(data.autoRefresh, Boolean(origin), incremental?.enabled === true);
   if (auto) ds.autoRefresh = auto;
   if (typeof data.lastRefreshedAt === 'string' && data.lastRefreshedAt) ds.lastRefreshedAt = data.lastRefreshedAt;
   if (data.lastRefreshStatus === 'ok' || data.lastRefreshStatus === 'error') ds.lastRefreshStatus = data.lastRefreshStatus;
@@ -348,7 +352,6 @@ function normalize(data: any, projectId: string): Dataset {
   if (quality) ds.quality = quality;
   const input = kind === 'input' ? sanitizeInputBlock(data.input) : undefined;
   if (input) ds.input = input;
-  const incremental = sanitizeIncremental(data.incremental, origin?.kind); // connection origins only
   if (incremental) ds.incremental = incremental;
   return ds;
 }

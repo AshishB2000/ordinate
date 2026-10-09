@@ -9,6 +9,7 @@
 
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
+import type { AutoRefreshEvery } from '../../api/datasets';
 
 export type FieldType = 'text' | 'number' | 'password' | 'select' | 'checkbox' | 'textarea';
 
@@ -75,7 +76,11 @@ export interface ConnDataset {
   lastRefreshedAt?: string;
   lastRefreshStatus?: 'ok' | 'error';
   lastRefreshError?: string | null;
-  autoRefresh?: { every?: 'hourly' | 'daily' | 'weekly' | null };
+  autoRefresh?: { every?: AutoRefreshEvery | null };
+  /** Incremental refresh is on: it may refresh every 5 or 15 minutes. */
+  incrementalOn?: true;
+  /** The last scheduled refresh took longer than its interval (the server decides). */
+  behindSchedule?: true;
 }
 
 export interface PreviewColumn {
@@ -233,6 +238,6 @@ export async function refreshDataset(projectId: string, connId: string, datasetI
   unwrap((await rpc('connection:refresh', { projectId, connId, datasetId })) as Reply<object>, 'Could not refresh that dataset');
 }
 
-export async function setSchedule(projectId: string, datasetId: string, every: 'hourly' | 'daily' | 'weekly' | null) {
+export async function setSchedule(projectId: string, datasetId: string, every: AutoRefreshEvery | null) {
   unwrap((await rpc('dataset:update', { projectId, datasetId, autoRefresh: every })) as Reply<object>, 'Could not change the schedule');
 }

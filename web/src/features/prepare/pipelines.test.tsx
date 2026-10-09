@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderApp } from '../../test-utils';
 import { dur, relTime } from './pipelineFormat';
 import type { PipelineView } from './pipelinesApi';
@@ -107,6 +107,35 @@ describe('Pipelines', () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'Pause' }));
     await screen.findByText('7 on their own schedule');
     expect(calls.find((c) => c.channel === 'pipelines:setPaused')?.payload).toEqual({ projectId: PID, nodeId: `dataset:${DS}`, paused: true });
+  });
+
+  it('a step\'s refresh picker: the fast cadences only with incremental refresh, and "Behind schedule" from the server', async () => {
+    const step = (schedule: object) => ({ ...VIEW, nodes: [{ ...VIEW.nodes[0], schedule }] });
+    const calls = serve(base({
+      'pipelines:get': { body: step({ text: 'Every 15 minutes · behind schedule', edit: 'dataset', every: '15min', incremental: true, behind: true }) },
+      'pipelines:setNodeSchedule': { body: { ok: true } },
+    }));
+    renderApp('/pipelines');
+    fireEvent.click(await screen.findByRole('button', { name: /^Dataset: Orders\./ }));
+    const panel = await screen.findByRole('region', { name: 'Step: Orders' });
+    expect(within(panel).getByText('Behind schedule')).toBeTruthy();
+    fireEvent.click(within(panel).getByRole('combobox', { name: 'Refresh this dataset' }));
+    const opts = await screen.findAllByRole('option');
+    expect(opts.filter((o) => o.getAttribute('aria-disabled') === 'true')).toHaveLength(0);
+    fireEvent.click(opts.find((o) => o.textContent === 'Refresh every 5 minutes')!);
+    await waitFor(() => expect(calls.some((c) => c.channel === 'pipelines:setNodeSchedule')).toBe(true));
+    expect(calls.find((c) => c.channel === 'pipelines:setNodeSchedule')?.payload).toEqual({ projectId: PID, nodeId: `dataset:${DS}`, every: '5min' });
+  });
+
+  it('…without incremental refresh the fast cadences are greyed, saying why', async () => {
+    serve(base({ 'pipelines:get': { body: { ...VIEW, nodes: [{ ...VIEW.nodes[0], schedule: { text: 'Daily', edit: 'dataset', every: 'daily', incremental: false } }] } } }));
+    renderApp('/pipelines');
+    fireEvent.click(await screen.findByRole('button', { name: /^Dataset: Orders\./ }));
+    const panel = await screen.findByRole('region', { name: 'Step: Orders' });
+    expect(within(panel).queryByText('Behind schedule')).toBeNull();
+    fireEvent.click(within(panel).getByRole('combobox', { name: 'Refresh this dataset' }));
+    const greyed = (await screen.findAllByRole('option')).filter((o) => o.getAttribute('aria-disabled') === 'true').map((o) => o.textContent);
+    expect(greyed).toEqual(['Refresh every 5 minutes — needs incremental refresh', 'Refresh every 15 minutes — needs incremental refresh']);
   });
 
   it('an empty pipeline shows the six stages waiting, and where to start', async () => {

@@ -14,12 +14,17 @@ import { Button } from '../../ui/Button';
 import { Input } from '../../ui/Field';
 import { Select } from '../../ui/Select';
 import { toast } from '../../ui/Toast';
+import type { AutoRefreshEvery } from '../../api/datasets';
+import { BehindBadge, cadenceOptions } from '../data/cadence';
+import { everyWord } from '../data/format';
 import { refreshDataset, replaceSecret, setSchedule, type CatalogField, type ConnDataset, type Connection, type Connector } from './api';
 import { formatWhen } from './SavedConnections';
 import s from './Workbench.module.css';
 
 const SCHEDULE = [
   { value: 'off', label: 'Auto-refresh off' },
+  { value: '5min', label: 'Refresh every 5 minutes' },
+  { value: '15min', label: 'Refresh every 15 minutes' },
   { value: 'hourly', label: 'Refresh hourly' },
   { value: 'daily', label: 'Refresh daily' },
   { value: 'weekly', label: 'Refresh weekly' },
@@ -95,7 +100,7 @@ function DatasetRow({ d, projectId, connId, onChanged }: { d: ConnDataset; proje
   const [busy, setBusy] = useState(false);
   const every = d.autoRefresh?.every ?? null;
   const stamp = formatWhen(d.lastRefreshedAt ?? d.updatedAt);
-  const when = every ? `Refreshes ${every} · last ${stamp}` : `Data as of ${stamp}`;
+  const when = every ? `Refreshes ${everyWord(every)} · last ${stamp}` : `Data as of ${stamp}`;
   async function refresh() {
     setBusy(true);
     try {
@@ -110,7 +115,7 @@ function DatasetRow({ d, projectId, connId, onChanged }: { d: ConnDataset; proje
   }
   async function schedule(v: string) {
     try {
-      await setSchedule(projectId, d.id, v === 'off' ? null : (v as 'hourly' | 'daily' | 'weekly'));
+      await setSchedule(projectId, d.id, v === 'off' ? null : (v as AutoRefreshEvery));
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Could not change the schedule.', { kind: 'error' });
     }
@@ -131,7 +136,16 @@ function DatasetRow({ d, projectId, connId, onChanged }: { d: ConnDataset; proje
         {when} · {d.rowCount === 1 ? '1 row' : `${formatNumber(d.rowCount)} rows`}
         {failed && ` · last refresh failed: ${d.lastRefreshError || 'unknown error'}`}
       </p>
-      {d.originKind && <Select size="sm" aria-label={`Auto-refresh ${d.name}`} value={every ?? 'off'} onValueChange={(v) => void schedule(v)} options={SCHEDULE} />}
+      <BehindBadge behind={d.behindSchedule} />
+      {d.originKind && (
+        <Select
+          size="sm"
+          aria-label={`Auto-refresh ${d.name}`}
+          value={every ?? 'off'}
+          onValueChange={(v) => void schedule(v)}
+          options={cadenceOptions(SCHEDULE, !!d.incrementalOn)}
+        />
+      )}
     </li>
   );
 }
