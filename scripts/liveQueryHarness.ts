@@ -86,7 +86,8 @@ export async function setupOrg(who: Identity): Promise<OrgSetup> {
     await projects.init();
     const projectId = (await projects.createProject('Live executor')).id;
     const rows = fx.fixtureRows();
-    const extract = await datasets.saveDataset(projectId, { name: 'Fixture copy', sourceKind: 'csv', columns: fx.COLUMNS.map((c) => ({ name: c.name, type: c.type })), rows });
+    // Typed as an import types it ('' → null), as every real copy is (L2.8).
+    const extract = await datasets.saveDataset(projectId, { name: 'Fixture copy', sourceKind: 'csv', ...fx.importTyped(fx.COLUMNS, rows) });
     if (!extract) throw new Error('extract not saved');
     await fx.loadWarehouse('live_typed', fx.COLUMNS, rows);
     const { connId, liveId } = await liveOver(projectId, { table: 'live_typed' }, fx.COLUMNS);

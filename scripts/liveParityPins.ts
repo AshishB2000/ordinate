@@ -1,6 +1,9 @@
 // The NAMED divergences between a live answer and the extract's — each one a
 // test that shows it, exactly, so it can never widen unnoticed and never hide
-// inside a loosened comparison. Helper for scripts/test-liveParity.ts.
+// inside a loosened comparison. Helper for scripts/test-liveParity.ts, and run
+// again on every real engine (L2.8): each pin's twin table is loaded through
+// the engine under test, so a pin that holds on DuckDB is re-proved on Postgres,
+// ClickHouse, Snowflake and BigQuery — or fails there, naming the engine.
 //
 //   1. Ties AT the 50 cut: extract keeps the first-seen, live the smaller label.
 //   2. Ties AT a top-N cut (answers): the same rule.
@@ -21,6 +24,7 @@ import type { FilterStep } from '../src/data/transforms';
 import type { LiveIR } from '../src/engine/live/liveSpec';
 import type { CompileEnv } from '../src/engine/live/compile';
 import type { LiveOutcome } from '../src/engine/live/evaluate';
+import type { ParityEngine, Store } from './liveParityFixture';
 
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const visualsIpc: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
@@ -30,6 +34,7 @@ const vizData: typeof import('../src/analysis/vizData') = require('../src/analys
 const metricValue: typeof import('../src/analysis/metricValue') = require('../src/analysis/metricValue');
 const spec: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
 const fx: typeof import('./liveParityFixture') = require('./liveParityFixture');
+const mx: typeof import('./liveParityMatrix') = require('./liveParityMatrix');
 
 type Ok = (label: string, cond: boolean, extra?: unknown) => void;
 type Live = (ir: LiveIR, env: CompileEnv) => Promise<LiveOutcome>;
@@ -43,20 +48,18 @@ interface Ctx {
   live: Live;
   env: CompileEnv;
   stored: { columns: import('../src/data/parse').ParsedColumn[]; rows: Cell[][] };
+  /** Where the twins are loaded and the live side runs. */
+  engine: ParityEngine;
 }
 
-/** A small extract + its warehouse twin. */
-async function twin(c: Ctx, name: string, columns: import('../src/engine/live/liveSpec').LiveColumn[], rows: Cell[][], ddl: Record<string, string> = {}):
+/** A small extract (typed as an import types it) + its warehouse twin, loaded through the engine under test. */
+async function twin(c: Ctx, name: string, columns: import('../src/engine/live/liveSpec').LiveColumn[], rows: Cell[][], stores: Record<string, Store> = {}):
   Promise<{ did: string; env: CompileEnv }> {
-  const ds = await datasets.saveDataset(c.pid, { name, sourceKind: 'csv', columns: columns.map((x) => ({ name: x.name, type: x.type })), rows });
+  const ds = await datasets.saveDataset(c.pid, { name, sourceKind: 'csv', ...fx.importTyped(columns, rows) });
   if (!ds) throw new Error(`could not save ${name}`);
-  const types = columns.map((x) => ddl[x.name] ?? (x.type === 'number' ? 'DOUBLE' : x.type === 'date' ? 'DATE' : 'VARCHAR'));
-  const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
-  await duck.execAsync(`CREATE OR REPLACE TABLE "${name}" (${columns.map((x, i) => `"${x.name}" ${types[i]}`).join(', ')})`);
-  const params: Cell[] = [];
-  const tuples = rows.map((r) => `(${r.map((v, i) => { params.push(v); return `CAST($${params.length} AS ${types[i]})`; }).join(', ')})`);
-  await duck.queryAsync(`INSERT INTO "${name}" VALUES ${tuples.join(', ')}`, params);
-  return { did: ds.id, env: fx.env({ kind: 'table', parts: [name] }, columns) };
+  const stored = columns.map((x) => ({ name: x.name, store: stores[x.name] ?? (x.type === 'number' ? 'float' : x.type === 'date' ? 'date' : 'text') as Store }));
+  const source = await c.engine.load(name, stored, rows);
+  return { did: ds.id, env: fx.env(source, mx.declared(c.engine, stored, columns), c.engine.dialect) };
 }
 
 async function liveChart(c: Ctx, a: ReturnType<typeof spec.fromVizEncoding>, env: CompileEnv): Promise<{ labels: string[]; values: (number | null)[] } | null> {
@@ -67,7 +70,7 @@ async function liveChart(c: Ctx, a: ReturnType<typeof spec.fromVizEncoding>, env
 }
 
 export async function run(c: Ctx): Promise<void> {
-  const { ok } = c;
+  const ok: Ok = (label, cond, extra) => c.ok(c.engine.name === 'duckdb' ? label : `${c.engine.name}: ${label}`, cond, extra);
 
   // 1 + 2. Ties at a cut. 51 categories, one row each, seen in REVERSE label order.
   const tieRows: Cell[][] = [];
@@ -129,7 +132,7 @@ export async function run(c: Ctx): Promise<void> {
 
   // 7. A date the warehouse holds as a TIMESTAMP, the extract as its UTC ISO text.
   const tsRows: Cell[][] = [['2024-01-05T10:00:00.000Z', 1], ['2024-01-05T23:30:00.000Z', 2], ['2024-02-01T00:00:00.000Z', 4]];
-  const ts = await twin(c, 'pin_ts', [{ name: 't', type: 'date' }, { name: 'v', type: 'number' }], tsRows, { t: 'TIMESTAMP' });
+  const ts = await twin(c, 'pin_ts', [{ name: 't', type: 'date' }, { name: 'v', type: 'number' }], tsRows, { t: 'timestamp' });
   const tsEnc = { category: 't', grain: 'month' as const, values: [{ column: 'v', aggregation: 'sum' as const }] };
   const tsExt = await visualsIpc.vizDataFor(c.pid, ts.did, tsEnc, []);
   const tsLive = await liveChart(c, spec.fromVizEncoding(tsEnc, [], ts.env.columns, {}), ts.env);

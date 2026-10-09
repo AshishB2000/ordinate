@@ -27,6 +27,8 @@
 //     there, the label wins here. A NULL key sorts last.
 //   - Bucket ids, not labels, come back: an epoch day, a bin index. Every label
 //     is written by `analysis/categoryKey` in ./shape.ts, never by SQL.
+//   - A text key folds '' into NULL, as every import stores '' (./compileFilter.ts
+//     `keyText`): one blank category, never two rows labelled ''.
 //
 // Aliases are distinct at every stage (`lv_a…` aggregates, `lv_b…` re-aggregates,
 // `o_…` outputs) because ClickHouse resolves an alias before a column of the
@@ -42,7 +44,7 @@ import { dialectFor } from './dialects';
 import type { CompiledQuery } from './sqlParams';
 import { ParamSink, hasNul } from './sqlParams';
 import type { Ctx } from './compileFilter';
-import { dateOf, emptyOf, nullsLast, numberOf, predicate, textOf } from './compileFilter';
+import { dateOf, emptyOf, keyText, nullsLast, numberOf, predicate } from './compileFilter';
 
 export type { CompiledQuery } from './sqlParams';
 
@@ -252,7 +254,7 @@ export function compileGrainProbe(ir: LiveIR, env: CompileEnv): Compiled {
 function keyExpr(c: Ctx, col: LiveColumn, key: LiveKey): string | LiveRefusal {
   if (key.kind === 'text') {
     if (col.type !== 'text') return refuse('categoryType', col.name);
-    return textOf(c, col);
+    return keyText(c, col);
   }
   if (key.kind === 'bins') {
     if (col.type !== 'number') return refuse('categoryType', col.name);
@@ -319,7 +321,7 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
     if (sc.type === 'date') return refuse('dateSeries', sc.name);
     seriesText = sc.type === 'text';
     if (seriesText) {
-      s = textOf(c, sc);
+      s = keyText(c, sc);
     } else {
       // −0 and 0 are ONE series, as they are one stored value in an extract
       // (String(-0) is '0'); a warehouse may group them apart.

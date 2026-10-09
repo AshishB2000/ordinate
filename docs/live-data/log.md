@@ -857,3 +857,79 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
 - **Not done.** "Next refresh: full" and a full run's note in the log are `fullReason`'s English
   (src/data/incrementalRefresh.ts, stored on the record as the desktop did), not catalog sentences;
   translating them means a messages file for incrementalRefresh and keys, not text, in the log.
+## 2026-10-09 — L2.8 Parity on real engines
+
+- **Built.** The L2.2 matrix moved out of `test-liveParity` into `scripts/liveParityMatrix.ts`, run
+  on any `ParityEngine` (`liveParityFixture.ts`: a dialect, a loader that returns a live source,
+  a runner). `scripts/liveParityEngines.ts`: Postgres as Redshift and ClickHouse, each running every
+  statement through the REAL connector's `live.runBound` (via `liveRun.runLiveBound`, server mode,
+  the SSRF guard pinning the one address that answers). Suites: `test-liveParity` (DuckDB, every
+  `npm test`), `test-liveParityPostgres` (needs `DATABASE_URL`: CI's `check` job runs it; a scratch
+  database `ordinate_l28_<pid>_<ms>`, byte-ordered `C`, default zone UTC+14, dropped `WITH (FORCE)`),
+  `test-liveParityClickhouse` (needs `CLICKHOUSE_URL`; the new `clickhouse` job of
+  `warehouse-nightly.yml` runs it against a `clickhouse/clickhouse-server:25.8` service container).
+  Snowflake and BigQuery: `scripts/warehouseLiveParity.ts`, called by `test-warehouseLive` after each
+  warehouse's connector checks, under its secret canary (job timeout 20 → 60 min).
+- **Decided — the real accounts are never written.** Their roles are read-only, so the nightly's
+  twin is a DEFINING QUERY over literals (`scripts/liveParityLiteral.ts`): every cell a text literal
+  (backslash-escaped) or NULL, typed only by `CAST` — `FROM (VALUES …) AS v(c0, …)` on Snowflake,
+  `UNNEST(ARRAY<STRUCT<c0 STRING, …>>[…])` on BigQuery. A Live dataset over SQL is a production shape,
+  and the same twin runs on CI's Postgres (`E'…'` literals, the same escaping) every 9th case, so the
+  mechanism is proved before a warehouse sees it. Warehouse runs take every 8th chart, KPI and answer
+  case (≈500 statements each); every filter op, both negative controls and the pins always run.
+- **Fixed — `''` and NULL were two blank categories on live, one in a copy** (found by L3.2). Every
+  import stores `''` as null (`parse.coerceCell`); a warehouse groups them apart. A text GROUP key —
+  category or split — is now `CASE WHEN t = '' THEN NULL ELSE t END` (`compileFilter.keyText`, used by
+  `compile.keyExpr` and the text series), in all six dialects; filters already compared NULL as `''`.
+  The L2.2 bench missed it because it saved its extract raw; the fixture is now typed exactly as an
+  import types it (`fx.importTyped`: stringify as `connectionRun` does, then `parse.finalizeTable`),
+  and so is the L2.3 executor harness. The matrix's skip for "split + top N over `cat`" ('' twice made
+  the label set ambiguous) is gone: 120 answers, not 112. L3.2's `liveReplicaFlow` pin of the old
+  behaviour ("two blank rows on live") will now fail on merge, as a pin should — flip it to equality.
+- **Fixed — the answer's order no longer rests on the row-cap wrapper.** Every connector runs
+  `select * from (…) limit n`, and SQL does not promise a derived table's ORDER BY survives it.
+  `shape.shapeChart` now orders rows by the ranks the statement returns (`o_cr`, then `o_sr`), a
+  stable sort. Observed: Postgres kept the order in 1,899 of 1,899 chart statements, ClickHouse in
+  1,663 of 1,663 — the sort is for Snowflake, BigQuery and Redshift, which make no such promise.
+- **Fixed — the Postgres/Redshift live session runs in UTC** (`set timezone to 'UTC'` in
+  `runBound`, the same lines as L3.2, so the two merge clean). `CAST(timestamptz AS DATE)` takes the
+  day in the session's zone; Redshift defaults to UTC but a user, database or parameter group can
+  change it.
+- **Divergences, each a named pin with a test that it still exists** (`scripts/liveParityPgPins.ts`,
+  read off the run in `test-liveParityPostgres`):
+  - R1 collation — Postgres orders text by its collation (CI's `postgres:17` defaults to
+    `en_US.utf8`); Redshift and the extract compare code points. On an ICU twin `k < 'b'` keeps 2 of
+    6 where the extract keeps 4, and tied labels order differently. The matrix runs byte-ordered.
+    **Open for L3.2 / L2.9:** a Postgres read replica whose database collation is not `C` will
+    differ from its copy on text ordering filters and on the order of tied categories.
+  - R2 session zone — TIMESTAMPTZ days agree in a database defaulting to UTC+14; CONTROL: the same
+    statement in a session left at +14 puts every instant on the next day.
+  - R3 order through the wrapper — kept by Postgres (above); NEGATIVE CONTROL on the order check.
+  - R4 −0 — Postgres returned −0 in 5,853 cells (ClickHouse 2,575; DuckDB stores none); every figure
+    still matched, the shaping reports +0 (pin 8).
+  - R5 read-only — `nextval()` through `runBound` is refused by the read-only session.
+  - The eight L2.2 pins run again on every engine, through its own twins, and hold on Postgres and
+    ClickHouse unchanged.
+- **ClickHouse, run here without Docker.** ClickHouse 25.8.2.1's engine embedded (chdb 4.0.2, from
+  PyPI) behind a 60-line Python stand-in for its HTTP interface (query from the body, `param_*` as
+  query parameters; not committed — the nightly runs the real server). The whole matrix and every pin
+  agree: `match()` over UTF-8, `{p:Type}` values (a tab, a quote, a backslash and a decomposed é now
+  ride in three new filter cases), `accurateCastOrNull`, `toMonday`, MergeTree parts in any order.
+  Nothing to pin. Databricks still has golden shapes only (no engine in L2.8's scope).
+- **Found outside L2.8:** a KPI `sum` whose filter leaves no number (`amt = '007'`, `amt is_empty`)
+  is a legitimate null on the resident path, which `dashboards.metricFor` cannot tell from a failure
+  — it traces `failed` and recomputes in JS (correct, slower, and one spurious warning per run).
+- **Measured** (4 vCPU container; first runs, before four other agents loaded it): DuckDB 1,090
+  charts + 108 KPIs + 112 answers, 2,313 statements in 35 s; Postgres 16.15 the same matrix, 2,331
+  statements through `runBound` in 41 s (43 s whole suite); ClickHouse 25.8 (embedded) 2,326 statements
+  in 68 s. Largest sum/avg deviation: 1.0e-15 (DuckDB, Postgres), 3.0e-15 (ClickHouse) — inside the
+  documented 1e-13. Final runs (load average ~22): DuckDB 2,374 statements / 43 s, Postgres 2,815
+  (matrix + literal twin 417) / 185 s, ClickHouse 2,393 / 124 s.
+- **Tests.** Negative controls on every engine: a broken empty predicate, and the fold stripped from
+  the very statements (`unfoldedBlankCaught`: a `cat` chart, a split by `cat`, an answer) must each
+  disagree; on DuckDB also the extract saved raw. Mutations checked by hand in the compiled `.js`:
+  the fold removed → 35 + 4 + 29 charts, 42 filter ops and 9 answers disagree on DuckDB and on
+  Postgres, and `test-liveCompile`'s fold shape fails for all six dialects; DuckDB's empty predicate
+  without whitespace → 239 disagreements; the shaping's rank sort removed → `test-liveCompile`'s two
+  shuffled-reply checks fail. The SSRF guard is shown on (the database refused without the
+  allowance). A set but unusable `CLICKHOUSE_URL` fails; unset, the suite prints one skip line.

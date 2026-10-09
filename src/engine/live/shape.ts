@@ -210,12 +210,20 @@ export function shapeChart(
   const split = idx.has('o_s');
   const read = (r: unknown[], name: string): unknown => r[idx.get(name)!];
 
-  // Groups in statement order (the category rank), series by their own rank.
+  // Groups in RANK order, series by their own rank — read from the ranks the
+  // statement returns, never from the order the rows arrived in. Every
+  // connector wraps the statement in its row cap (`select * from (…) limit n`),
+  // and SQL does not promise that a derived table's ORDER BY survives an outer
+  // query: Postgres keeps it (measured, L2.8), Snowflake, BigQuery and Redshift
+  // make no such promise. A stable sort, so the statement's own order is kept
+  // where the ranks tie (they do not: each ends on the key).
+  const rank = (r: unknown[], name: string): number => (idx.has(name) ? toNumber(read(r, name)) ?? Infinity : 0);
+  const ordered = rows.slice().sort((a, b) => rank(a, 'o_cr') - rank(b, 'o_cr') || rank(a, 'o_sr') - rank(b, 'o_sr'));
   let groups: Group[] = [];
   const byKey = new Map<string, Group>();
   const series = new Map<string, SeriesSlot>();
   let folded = false;
-  for (const r of rows) {
+  for (const r of ordered) {
     const g = read(r, 'o_g');
     const gk = JSON.stringify(g ?? null);
     let grp = byKey.get(gk);
