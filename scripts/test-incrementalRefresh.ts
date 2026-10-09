@@ -20,6 +20,9 @@
 //      file is cleaned up by the next run
 //   8. BigQuery (L1.4): the predicate pushed to the warehouse, end to end over
 //      the real connector and a fake transport
+//   9. Snowflake (L1.4): the real connector over a fake SQL API — the cursor
+//      predicate is PUSHED into the statement ("…" quoting, '…'::timestamp_tz),
+//      inside the connector's own row cap, and only the rows past the mark come back
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
@@ -49,6 +52,10 @@ const record: typeof import('../src/data/datasetRecord') = require('../src/data/
 const parse: typeof import('../src/data/parse') = require('../src/data/parse');
 const inc: typeof import('../src/data/incremental') = require('../src/data/incremental');
 const duck: any = require('../src/engine/duckdb');
+const snowflake: typeof import('../src/connectors/snowflake') = require('../src/connectors/snowflake');
+const sqlGen: typeof import('../src/connectors/incrementalSql') = require('../src/connectors/incrementalSql');
+const configSecrets: typeof import('../src/app/configSecrets') = require('../src/app/configSecrets');
+import { FakeSnowflake, HANDLE, reply } from './snowflakeFake';
 type Cell = import('../src/data/incremental').Cell;
 
 /** Publish a table at its URL — written as CSV here for legibility, served as JSON rows (numbers as numbers). */
@@ -244,6 +251,52 @@ async function main(): Promise<void> {
       bq.setTransport(null);
     }
   }
+  // ── 9. Snowflake: the predicate pushed to the warehouse ──────────────────
+  const day = Date.UTC(2024, 4, 2, 12, 0, 0); // the literal is widened by a day
+  ok('9. snowflake: a three-part table, "…" quoting with doubling, a timestamp_tz literal',
+    sqlGen.pushdownSql('snowflake', { table: 'SALES.PUBLIC.ORDERS' }, 'UPDATED"AT', 'date', day)
+    === `select * from "SALES"."PUBLIC"."ORDERS" where "UPDATED""AT" >= '2024-05-01T12:00:00'::timestamp_tz`);
+  ok('9. snowflake: a query is wrapped with an alias',
+    sqlGen.pushdownSql('snowflake', { query: 'select * from orders;' }, 'ID', 'number', 41) === 'select * from ( select * from orders ) ord_inc where "ID" >= 41');
+  ok('9. snowflake: an unsafe table name is not pushed', sqlGen.pushdownSql('snowflake', { table: 'x; drop table y' }, 'ID', 'number', 1) === null);
+
+  const sfTable: string[][] = [['1', '100', '10.00'], ['2', '101', '20.00'], ['3', '102', '30.00']];
+  const fixed = (name: string, precision: number, scale = 0) => ({ name, type: 'fixed', precision, scale, nullable: true });
+  const sf = new FakeSnowflake();
+  sf.answer = (req, kind) => {
+    if (kind !== 'submit') return reply(200, '{}');
+    const m = /where "UPDATED" >= (\d+)/.exec(String(JSON.parse(req.body ?? '{}').statement));
+    const rows = m ? sfTable.filter((r) => Number(r[1]) >= Number(m[1])) : sfTable;
+    return reply(200, JSON.stringify({
+      resultSetMetaData: { numRows: rows.length, format: 'jsonv2', partitionInfo: [{ rowCount: rows.length }], rowType: [fixed('ID', 9), fixed('UPDATED', 9), fixed('AMOUNT', 12, 2)] },
+      data: rows, statementHandle: HANDLE,
+    }));
+  };
+  snowflake.setTransport(sf.transport);
+  const sfConn = await connections.saveConnection(pid, {
+    name: 'Warehouse', connectorId: 'snowflake', table: 'PUBLIC.ORDERS',
+    values: { account: 'myorg-myaccount', user: 'reader', auth: 'pat', warehouse: 'COMPUTE_WH', role: 'ORDINATE_READER', database: 'SALES' },
+  });
+  await configSecrets.saveConnectionSecrets(sfConn!.id, { token: 'pat-for-the-fake' });
+  const first = parse.parseCsv('ID,UPDATED,AMOUNT\n1,100,10\n2,101,20\n3,102,30\n');
+  const sfOrders = (await datasets.saveDataset(pid, {
+    name: 'sf orders', sourceKind: 'csv', columns: first.columns, rows: first.rows,
+    origin: { kind: 'connection', connId: sfConn!.id, table: 'PUBLIC.ORDERS' },
+  } as any))!.id;
+  await datasets.writeIncremental(pid, sfOrders, () => ({ enabled: true, cursorColumn: 'UPDATED', keyColumn: 'ID', lookback: 0, highWater: null, runsSinceFull: 0, log: [] }));
+  e = await run(sfOrders);
+  ok('9. the first run is full: the table SQL, quoted part by part, inside the cap',
+    e.mode === 'full' && sf.statements()[0] === 'select * from (\nselect * from "PUBLIC"."ORDERS" limit 1000000\n) limit 1000001', sf.statements()[0]);
+  await tick();
+  sfTable[1] = ['2', '103', '25.00'];
+  sfTable.push(['4', '104', '40.00']);
+  e = await run(sfOrders);
+  ok('9. the next run pushes the cursor predicate to Snowflake (how: server)',
+    e.mode === 'incremental' && e.how === 'server' && sf.statements()[1] === 'select * from (\nselect * from "PUBLIC"."ORDERS" where "UPDATED" >= 102\n) limit 1000001', JSON.stringify({ e, sql: sf.statements()[1] }));
+  ok('9. only the rows past the mark came back; one updated, one inserted', e.fetched === 3 && e.inserted === 1 && e.updated === 1 && e.highWater === 104, JSON.stringify(e));
+  ok('9. the stored table is the warehouse table',
+    JSON.stringify((await datasets.getDataset(pid, sfOrders))!.rows) === JSON.stringify([[1, 100, 10], [2, 103, 25], [3, 102, 30], [4, 104, 40]]));
+  snowflake.setTransport(null);
 }
 
 main()

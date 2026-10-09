@@ -20,8 +20,10 @@ export const formatWhen = (iso: string | null | undefined): string => (iso ? whe
 export function where(c: Connection): string {
   const v = c.values;
   const str = (k: string) => (typeof v[k] === 'string' ? (v[k] as string) : '');
-  if (str('host') && str('database')) return `${str('host')} / ${str('database')}`;
-  return str('host') || str('database') || str('path') || str('url');
+  // A warehouse named by an account identifier (Snowflake) has no host field.
+  const host = str('host') || str('account');
+  if (host && str('database')) return `${host} / ${str('database')}`;
+  return host || str('database') || str('path') || str('url');
 }
 
 export function statusLabel(c: Pick<Connection, 'lastStatus' | 'lastError'>): string {

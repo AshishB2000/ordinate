@@ -27,6 +27,7 @@ browser ──HTTPS──▶ your ingress / ALB ──▶ ordinate pods (N, stat
 | Plan capacity | [sizing.md](sizing.md): measured numbers and starting points |
 | Protect the data | [backup-restore.md](backup-restore.md): Postgres, the bucket, the master key |
 | Move between versions | [upgrade.md](upgrade.md): releases, migrations, rollbacks |
+| Connect a warehouse | [live-data.md](live-data.md): Snowflake's read-only role, key pair and network |
 
 ## What you get from a release
 

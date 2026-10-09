@@ -31,6 +31,7 @@ const FAMILY_MODULES: readonly string[] = [
   './url',      // the original URL/API JSON source
   './saas',     // Google Sheets, Airtable, Notion, Stripe, GitHub, HubSpot
   './bigquery', // Google BigQuery (REST, a service-account key)
+  './snowflake', // Snowflake (SQL API)
 ];
 
 // Picker grouping order. Anything with an unrecognised category sorts last —

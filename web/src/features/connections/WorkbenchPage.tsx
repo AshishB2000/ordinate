@@ -26,6 +26,7 @@ import {
   useProjectDatasets,
   useRefreshLists,
   useTables,
+  useTableWarnings,
   type ColumnDetail,
   type Connection,
   type Connector,
@@ -97,6 +98,7 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
   const family = def?.family ?? '';
   const [testAsked, setTestAsked] = useState(false);
   const tables = useTables(projectId, conn.id, browsable || testAsked);
+  const testWarnings = useTableWarnings(projectId, conn.id, browsable || testAsked);
   const datasets = useProjectDatasets(projectId);
   const [columns, setColumns] = useState<ReadonlyMap<string, readonly string[]>>(new Map());
   // The selected table lives in the URL (?table=), so a reload or a shared
@@ -315,6 +317,7 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
             projectId={projectId}
             test={test}
             testError={testError}
+            testWarnings={testWarnings}
             onTest={() => (browsable || testAsked ? void tables.refetch() : setTestAsked(true))}
             datasets={mine}
             onChanged={refreshLists}

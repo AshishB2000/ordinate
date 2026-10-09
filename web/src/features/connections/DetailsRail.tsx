@@ -2,8 +2,10 @@
 // record, and what has been imported from it.
 //
 // It never re-saves the connection. "Test" re-reads the table list with the
-// STORED credential. A secret field shows only whether a value is stored —
-// "Set" / "Not set" — and "Replace" takes a new value, which the server tests
+// STORED credential, and shows what the source warned about beside "OK". A
+// secret field shows only whether a value is stored — "Set" / "Not set", or
+// "Key saved" for a multi-line one — and "Replace" opens an EMPTY input (the
+// masked SecretTextarea for a multi-line secret) whose value the server tests
 // before it keeps it; the old one is never shown, and neither is the new.
 
 import { useState, type FormEvent } from 'react';
@@ -12,9 +14,11 @@ import { formatNumber } from '../../../../src/app/format.ts';
 import { Badge, type BadgeTone } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
 import { Input } from '../../ui/Field';
+import { Icon } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
 import { toast } from '../../ui/Toast';
 import { refreshDataset, replaceSecret, setSchedule, type CatalogField, type ConnDataset, type Connection, type Connector } from './api';
+import { SecretTextarea } from './SecretText';
 import { formatWhen } from './SavedConnections';
 import s from './Workbench.module.css';
 
@@ -30,6 +34,7 @@ const TONE: Record<TestState, BadgeTone> = { ok: 'ok', error: 'error', untested:
 const WORD: Record<TestState, string> = { ok: 'OK', error: 'Failed', untested: 'Untested', testing: 'Testing…' };
 
 function SecretRow({ f, set, projectId, conn, onReplaced }: { f: CatalogField; set: boolean; projectId: string; conn: Connection; onReplaced: () => void }) {
+  const multiline = f.type === 'textarea';
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
@@ -56,7 +61,7 @@ function SecretRow({ f, set, projectId, conn, onReplaced }: { f: CatalogField; s
       <dt>{f.label}</dt>
       <dd className={s.secret}>
         <Badge tone={set ? 'ok' : 'neutral'} icon={set ? 'lock' : undefined}>
-          {set ? 'Set' : 'Not set'}
+          {set ? (multiline ? 'Key saved' : 'Set') : 'Not set'}
         </Badge>
         {!open && (
           <Button size="sm" variant="ghost" onClick={() => setOpen(true)} aria-label={`Replace ${f.label}`}>
@@ -65,17 +70,29 @@ function SecretRow({ f, set, projectId, conn, onReplaced }: { f: CatalogField; s
         )}
         {open && (
           <form className={s.replace} onSubmit={(e) => void submit(e)}>
-            <Input
-              size="sm"
-              type="password"
-              label={`New ${f.label.toLowerCase()}`}
-              autoComplete="new-password"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              error={error || undefined}
-              hint="Tested before it is kept. Write-only: never shown again."
-              autoFocus
-            />
+            {multiline ? (
+              <SecretTextarea
+                label={`New ${f.label.toLowerCase()}`}
+                placeholder={f.placeholder}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                error={error || undefined}
+                hint="Tested before it is kept. Write-only: never shown again."
+                autoFocus
+              />
+            ) : (
+              <Input
+                size="sm"
+                type="password"
+                label={`New ${f.label.toLowerCase()}`}
+                autoComplete="new-password"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                error={error || undefined}
+                hint="Tested before it is kept. Write-only: never shown again."
+                autoFocus
+              />
+            )}
             <div className={s.replaceActions}>
               <Button size="sm" variant="primary" type="submit" loading={busy}>
                 Test &amp; replace
@@ -142,6 +159,7 @@ export function DetailsRail({
   projectId,
   test,
   testError,
+  testWarnings = [],
   onTest,
   datasets,
   onChanged,
@@ -151,6 +169,8 @@ export function DetailsRail({
   projectId: string;
   test: TestState;
   testError: string;
+  /** What the last passing test warned about (an administrator role). */
+  testWarnings?: readonly string[];
   onTest: () => void;
   datasets: readonly ConnDataset[];
   onChanged: () => void;
@@ -186,6 +206,13 @@ export function DetailsRail({
           {testError}
         </p>
       )}
+      {test === 'ok' &&
+        testWarnings.map((w) => (
+          <p key={w} className={s.testWarn} role="status">
+            <Icon name="alert" size={12} />
+            <span>{w}</span>
+          </p>
+        ))}
       <h2 className={s.detailsH}>Datasets from this connection</h2>
       {datasets.length === 0 ? (
         <p className={s.msg}>Nothing imported from this connection yet. Pick a table or run a query, then Save as dataset.</p>

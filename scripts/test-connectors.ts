@@ -33,7 +33,7 @@ const connectionRun: typeof import('../src/connectors/connectionRun') = require(
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
 
 const CATEGORIES = new Set(['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS']);
-const FAMILIES = new Set(['postgres', 'mysql', 'mssql', 'oracle', 'http', 'duckdb', 'saas', 'bigquery']);
+const FAMILIES = new Set(['postgres', 'mysql', 'mssql', 'oracle', 'http', 'duckdb', 'saas', 'bigquery', 'snowflake']);
 const FIELD_TYPES = new Set(['text', 'number', 'password', 'select', 'checkbox', 'textarea']);
 const SECRET_PW = 'sup3r-s3cret-pw';
 
@@ -179,8 +179,13 @@ async function main(): Promise<void> {
   // input); a value never does — there is no `value` key anywhere in the catalog.
   const catalogJson = JSON.stringify(catalog);
   ok('connectorCatalog() reports the secret flag', catalogJson.includes('"secret":true'));
+  // A select's `options` are {value, label} by design (Snowflake's sign-in
+  // picker is the first); outside them no `value` key may appear at all.
+  const withoutOptions = JSON.stringify(catalog.map((e) => ({ ...e, fields: e.fields.map(({ options: _o, ...f }) => f) })));
   ok('connectorCatalog() has no value/secrets payload',
-    !catalogJson.includes('"value"') && !catalogJson.includes('"secrets"'));
+    !withoutOptions.includes('"value"') && !catalogJson.includes('"secrets"'));
+  ok('…and select options sit only on non-secret fields, as plain strings',
+    catalog.every((e) => e.fields.every((f) => !f.options || (!f.secret && f.options.every((o) => typeof o.value === 'string' && typeof o.label === 'string' && Object.keys(o).length === 2)))));
 
   // ── safeError(): the last line before a renderer ───────────────────────────
   const withPw = types.safeError(

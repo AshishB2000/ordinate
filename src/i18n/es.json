@@ -151,6 +151,7 @@
   "common.total": "Total",
   "common.value": "Valor",
   "common.vs_previous": "frente al anterior",
+  "connectorMessages.this_connection_signs_in_with_the": null,
   "dashShare.and_more": "{p0}, y {p1} más",
   "insights.a_change_of": " — un cambio de {delta} ({p1}).",
   "insights.a_least_squares_line_through_over": "Una recta de mínimos cuadrados sobre {measure} en los últimos {n} periodos ({p2} a {p3}) {p4, select, true {sube} other {baja}} {p5}, o el {p6} de su punto de partida.",

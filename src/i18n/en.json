@@ -148,6 +148,7 @@
   "common.total": "Total",
   "common.value": "Value",
   "common.vs_previous": "vs previous",
+  "connectorMessages.this_connection_signs_in_with_the": "This connection signs in with the {role} role, which can change data and account settings. Ordinate only reads, but give it a read-only role instead.",
   "dashShare.and_more": "{p0}, and {p1} more",
   "insights.a_change_of": " — a change of {delta} ({p1}).",
   "insights.a_least_squares_line_through_over": "A least-squares line through {measure} over the last {n} periods ({p2} to {p3}) {p4, select, true {rises} other {falls}} {p5}, or {p6} of where it starts.",

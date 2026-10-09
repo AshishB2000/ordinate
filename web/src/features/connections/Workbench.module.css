@@ -495,6 +495,25 @@
   color: var(--error);
   overflow-wrap: anywhere;
 }
+.testWarn {
+  margin: 0;
+  display: flex;
+  gap: var(--sp-8);
+  align-items: flex-start;
+  padding: var(--sp-8);
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+  color: var(--text-strong);
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  border-radius: var(--r-sm);
+  overflow-wrap: anywhere;
+}
+.testWarn > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--warn);
+}
 .dsList {
   list-style: none;
   margin: 0;

@@ -151,6 +151,7 @@
   "common.total": "Total",
   "common.value": "Valeur",
   "common.vs_previous": "vs précédent",
+  "connectorMessages.this_connection_signs_in_with_the": null,
   "dashShare.and_more": "{p0}, et {p1} de plus",
   "insights.a_change_of": " — une variation de {delta} ({p1}).",
   "insights.a_least_squares_line_through_over": "Une droite des moindres carrés sur {measure} pendant les {n} dernières périodes ({p2} à {p3}) {p4, select, true {monte de} other {baisse de}} {p5}, soit {p6} de son point de départ.",
