@@ -107,6 +107,7 @@ function Load({ projectId, visualId, datasetParam }: { projectId: string; visual
     overrides: v?.overrides ?? {},
     filters: v?.filters ?? [],
     analytics: v?.analytics ?? [],
+    live: cols.data.mode === 'live',
   };
   return <Editor projectId={projectId} datasets={datasets.data} columns={columns} related={rel} initial={initial} />;
 }

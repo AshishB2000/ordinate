@@ -7,12 +7,13 @@
 
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { useDatasets } from '../../api/datasets';
 import { buttonClass } from '../../ui/Button';
 import { Input } from '../../ui/Field';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { useDataSearch } from './api';
-import { rowsText } from './format';
+import { formatNumber, rowsText } from './format';
 import s from './Data.module.css';
 
 export function DataSearch({ projectId }: { projectId: string }) {
@@ -25,6 +26,9 @@ export function DataSearch({ projectId }: { projectId: string }) {
   }, [text]);
   const q = useDataSearch(projectId, term);
   const on = term.trim().length >= 2;
+  // A Live dataset keeps its rows in the warehouse, so the search skips it (L2.6) — said, never silent.
+  const live = (useDatasets(projectId).data ?? []).filter((d) => d.mode === 'live').length;
+  const skipped = live === 0 ? '' : live === 1 ? 'One Live dataset was not searched: its rows stay in the warehouse — make a copy to search it.' : `${formatNumber(live)} Live datasets were not searched: their rows stay in the warehouse — make a copy to search one.`;
   const base = (id: string) => `/data/${projectId}/${id}`;
   return (
     <section className={s.search} aria-label="Search inside the data">
@@ -45,11 +49,12 @@ export function DataSearch({ projectId }: { projectId: string }) {
             <ErrorState compact heading={3} title="The search did not finish" message={q.error.message} onRetry={() => void q.refetch()} />
           ) : q.data.hits.length === 0 ? (
             <EmptyState compact heading={3} icon="search" title={`No value matches “${term.trim()}”`}>
-              Text columns of every dataset in this project were searched.
+              {skipped ? `Text columns of every other dataset in this project were searched. ${skipped}` : 'Text columns of every dataset in this project were searched.'}
             </EmptyState>
           ) : (
             <ul className={s.hitList}>
               {q.data.partial.length > 0 && <li className={s.muted}>Some large datasets were only partly searched.</li>}
+              {skipped && <li className={s.muted}>{skipped}</li>}
               {q.data.hits.map((h) => (
                 <li key={`${h.datasetId}:${h.column}:${h.value}`} className={s.hit}>
                   <span className={s.hitValue}>{h.value}</span>

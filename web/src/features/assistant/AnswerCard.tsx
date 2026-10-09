@@ -20,6 +20,8 @@ import { Button } from '../../ui/Button';
 import { Skeleton } from '../../ui/Skeleton';
 import { AsOfCaption } from '../../ui/AsOf';
 import type { AsOf } from '../../ui/asOf';
+import { LiveRefusal } from '../live/LiveOff';
+import { liveRefusalOf } from '../live/refusal';
 import s from './AnswerCard.module.css';
 
 interface Card {
@@ -66,6 +68,16 @@ export function AnswerCard({
     );
   }
   const card = q.data;
+  // Off for a Live dataset (L2.6): the server's reason and a copy of the dataset it asked.
+  const live = liveRefusalOf(q.isError ? q.error : card);
+  if (live !== null) {
+    return (
+      <div className={`${s.card} ${s.error}`}>
+        <div className={s.title}>{title}</div>
+        <LiveRefusal message={live} projectId={projectId} datasetId={spec.datasetId} />
+      </div>
+    );
+  }
   if (!card || !card.ok) {
     return (
       <div className={`${s.card} ${s.error}`}>

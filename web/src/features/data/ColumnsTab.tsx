@@ -9,6 +9,7 @@ import { Select } from '../../ui/Select';
 import { SkeletonTable } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { useColumnDocs, useStats, useWrite, type ColumnDoc } from './api';
+import { useLiveSchema } from './liveApi';
 import { SENSITIVITY } from './Details';
 import s from './Data.module.css';
 
@@ -37,9 +38,11 @@ function Cell({ value, placeholder, label, multiline, onSave }: { value: string;
   );
 }
 
-export function ColumnsTab({ projectId, datasetId, header }: { projectId: string; datasetId: string; header: DatasetColumns }) {
+export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: string; datasetId: string; header: DatasetColumns; live?: boolean }) {
   const docs = useColumnDocs(projectId, datasetId);
-  const stats = useStats(projectId, datasetId);
+  // An example placeholder: the most common value — on a Live dataset, the schema sync's sample (it keeps no rows to count).
+  const stats = useStats(projectId, live ? '' : datasetId, !live);
+  const schema = useLiveSchema(projectId, datasetId, !!live);
   const save = useWrite('catalog:setColumn', ['catalog:columns']);
   if (header.columns.length === 0) {
     return (
@@ -74,7 +77,7 @@ export function ColumnsTab({ projectId, datasetId, header }: { projectId: string
           <tbody>
             {header.columns.map((c, i) => {
               const d = doc(c.name);
-              const common = stats.data?.summaries[i]?.mostCommon?.value;
+              const common = live ? schema.data?.columns.find((x) => x.name === c.name)?.values[0] : stats.data?.summaries[i]?.mostCommon?.value;
               return (
                 <tr key={c.name} data-column={c.name}>
                   <td className={s.strong}>{c.name}</td>

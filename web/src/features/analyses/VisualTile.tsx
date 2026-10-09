@@ -18,6 +18,8 @@ import { markAt } from '../visuals/drill/mark';
 import { GRID_IDS, GridViz, type GridData } from '../../charts/grids/GridViz';
 import { useTile, type ParamPayload, type Step, type VisualDef, type VisualTile } from './api';
 import { useTileAsOf } from './editor/tileAsOf';
+import { LiveRefusal } from '../live/LiveOff';
+import { liveRefusalOf } from '../live/refusal';
 import s from './Tiles.module.css';
 
 /** The family glyph a chart type wears where it is not drawn (a map preview, a missing visual). */
@@ -167,6 +169,9 @@ export function VisualTileBody({
         </span>
       );
     }
+    // Off for a Live dataset (L2.6): the server's reason and a copy, not a retry that would refuse again.
+    const live = liveRefusalOf(q.isError ? q.error : q.data);
+    if (live !== null) return <LiveRefusal message={live} projectId={projectId} datasetId={def.datasetId} />;
     return <ErrorState compact heading={3} title="No data for this chart" message={message} onRetry={() => void q.refetch()} />;
   }
   const click =

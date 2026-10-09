@@ -200,8 +200,8 @@ function okOr<T extends { ok: boolean }>(r: T | Fail, what: string): T {
 const useRead = <T,>(key: readonly unknown[], fn: (() => Promise<T>) | null) =>
   useQuery({ queryKey: key, queryFn: fn ?? skipToken });
 
-export const useStats = (projectId: string, datasetId: string) =>
-  useRead(['dataset:stats', projectId, datasetId], async () =>
+export const useStats = (projectId: string, datasetId: string, on = true) =>
+  useRead(['dataset:stats', projectId, datasetId], !on ? null : async () =>
     okOr((await rpc('dataset:stats', { projectId, datasetId })) as ({ ok: true } & Stats) | Fail, 'The column statistics'));
 
 export const useSource = (projectId: string, id: string) =>

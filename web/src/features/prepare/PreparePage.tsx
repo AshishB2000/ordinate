@@ -30,11 +30,20 @@ import { STEP_TYPES, TEXT_STEPS } from './steps';
 import { SuggestedSteps, useSuggestCalc, useSuggestSteps } from './Suggest';
 import { TextProfile } from './TextProfile';
 import { useAdoptProject } from '../projects/current';
+import { LiveOffPage, useIsLive } from '../live/LiveOff';
 import s from './Prepare.module.css';
 
 export default function PreparePage() {
   const { projectId, datasetId } = useParams();
   useAdoptProject(projectId); // the URL names the project: the switcher follows it
+  // A Live dataset keeps no rows to prepare (L2.6): say so, and offer a copy — before asking prepare:get, which would refuse.
+  const live = useIsLive(projectId, datasetId);
+  if (live.pending) return <PageSkeleton />;
+  if (live.live && projectId && datasetId) return <LiveOffPage title="Prepare" projectId={projectId} datasetId={datasetId} feature="prepare" />;
+  return <PrepareRoute projectId={projectId} datasetId={datasetId} />;
+}
+
+function PrepareRoute({ projectId, datasetId }: { projectId: string | undefined; datasetId: string | undefined }) {
   const q = usePrepare(projectId, datasetId);
   if (q.isPending || !projectId || !datasetId) return <PageSkeleton />;
   if (q.isError) {

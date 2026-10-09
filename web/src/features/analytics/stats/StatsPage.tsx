@@ -186,7 +186,7 @@ function Workbench({ projectId, datasetId, ds }: { projectId: string; datasetId:
 
 export default function StatsPage() {
   return (
-    <DatasetRoute title="Statistics">
+    <DatasetRoute title="Statistics" kind="stats">
       {(projectId, datasetId, ds) => <Workbench key={datasetId} projectId={projectId} datasetId={datasetId} ds={ds} />}
     </DatasetRoute>
   );

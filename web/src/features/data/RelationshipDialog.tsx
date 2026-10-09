@@ -13,7 +13,7 @@ import { Icon } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
 import { toast } from '../../ui/Toast';
 import { call, useWrite, type Relationship, type Suggestion } from './api';
-import { pctText } from './format';
+import { formatNumber, pctText } from './format';
 import s from './Data.module.css';
 import ms from './Model.module.css';
 
@@ -23,7 +23,10 @@ const KINDS = [
   { value: 'one_to_one', label: 'One to one — each row has exactly one match' },
 ] as const;
 
-export function RelationshipDialog({ projectId, datasets, onClose }: { projectId: string; datasets: DatasetSummary[]; onClose: (savedId?: string) => void }) {
+export function RelationshipDialog({ projectId, datasets: all, onClose }: { projectId: string; datasets: DatasetSummary[]; onClose: (savedId?: string) => void }) {
+  // A Live dataset keeps its rows in the warehouse (L2.6): relating it matches rows, so it needs a copy.
+  const datasets = all.filter((d) => d.mode !== 'live');
+  const liveCount = all.length - datasets.length;
   const [fromDs, setFromDs] = useState(datasets[0]?.id ?? '');
   const [toDs, setToDs] = useState(datasets[1]?.id ?? '');
   const [fromCol, setFromCol] = useState<string | null>(null);
@@ -106,6 +109,11 @@ export function RelationshipDialog({ projectId, datasets, onClose }: { projectId
         </>
       }
     >
+      {liveCount > 0 && (
+        <p className={s.note} role="note">
+          {liveCount === 1 ? 'One Live dataset is not offered: relating it matches rows, and its rows stay in the warehouse. Make a copy of it to relate the copy.' : `${formatNumber(liveCount)} Live datasets are not offered: relating one matches rows, and their rows stay in the warehouse. Make a copy to relate it.`}
+        </p>
+      )}
       <div className={ms.relSides}>
         <div className={ms.relSide}>
           <Select label="Many side" hint="The rows that look something up" value={fromDs} options={dsOptions} onValueChange={(v) => { setFromDs(v); setFromCol(null); }} />

@@ -257,6 +257,11 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     const r = await post(channel, payload);
     ok(`lists: ${label} (${channel}) answers 200`, r.status === 200 && !/live_dataset/.test(r.body), `${r.status} ${r.body.slice(0, 240)}`);
   }
+  // The way OUT of the net (L2.6): "Make a copy" reads the warehouse, never the stored rows, so it
+  // is never the refusal — here it answers that the fixture's connection is gone (its full flow: test-liveCopy).
+  const copied = await post('dataset:copyLive', { projectId: P, datasetId: seed.live });
+  ok('the way out: Make a copy (dataset:copyLive) answers 200, never the live_dataset refusal',
+    copied.status === 200 && copied.value?.ok === false && !/live_dataset/.test(copied.body) && !copied.body.includes('SECRET_CANARY'), `${copied.status} ${copied.body.slice(0, 240)}`);
   const list = await post('dataset:list', { projectId: P });
   const row = (list.value as unknown as { id: string; mode?: string; maxCacheAgeSec?: number }[]).find((x) => x.id === seed.live);
   ok('the list names the Live dataset as Live, with its cache age', row?.mode === 'live' && row?.maxCacheAgeSec === liveDataset.DEFAULT_MAX_CACHE_AGE_SEC, JSON.stringify(row));

@@ -187,6 +187,8 @@ export interface ProfileDistinct {
   total: number;
   /** Always true: the list and the total are a sample's, not the table's. */
   approximate: true;
+  /** The sample's row count, so a picker can say "from a sample of N rows" (L2.6). */
+  sampleRows: number;
 }
 
 /**
@@ -206,7 +208,7 @@ export function profileDistinct(meta: ProfileMeta, column: string, req: { limit?
   const all = p.values ?? [];
   const hits = needle ? all.filter((v) => v.toLowerCase().includes(needle)) : all;
   const total = needle ? hits.length : Math.max(p.distinct, all.length);
-  return { values: hits.slice(0, cap), total, approximate: true };
+  return { values: hits.slice(0, cap), total, approximate: true, sampleRows: meta.live?.profile?.sampleRows ?? 0 };
 }
 
 /** A sample value matrix (one row per value position), for the sensitivity detector's `rows`. */

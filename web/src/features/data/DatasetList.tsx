@@ -20,7 +20,7 @@ import { TagChips, TagFilterBar, tagsOf, useActiveTag } from './tags';
 import s from './Data.module.css';
 
 type Outcome = { busy?: boolean; message?: string; error?: boolean };
-type RefreshReply = { ok: boolean; error?: string; warnings?: string[]; alreadyRunning?: boolean };
+type RefreshReply = { ok: boolean; error?: string; warnings?: string[]; alreadyRunning?: boolean; live?: { epoch: number } };
 
 /** The quality dot: FAIL rules failing in the latest run (a count the server made). */
 export function QualityDot({ n }: { n: number | undefined }) {
@@ -98,7 +98,8 @@ export function useRefresh(projectId: string) {
     }
     // Warnings are not a failure — the data landed, but a step no longer fits it.
     // Nor is "already being refreshed" (another server got there first).
-    const message = r.ok ? (r.warnings ?? []).join(' · ') : r.error || 'Could not refresh this dataset.';
+    // A Live dataset fetches nothing: its refresh resets the cache (L2.6), and says so.
+    const message = r.ok ? (r.live ? 'Cache reset — the next figure asks the warehouse.' : (r.warnings ?? []).join(' · ')) : r.error || 'Could not refresh this dataset.';
     setState((m) => ({ ...m, [id]: { message, error: !r.ok && !r.alreadyRunning } }));
     return r.ok || r.alreadyRunning === true;
   };
@@ -159,9 +160,12 @@ function Row({ projectId, d, outcome, onRefresh, onDelete, tags }: {
           <Link className={buttonClass('secondary', 'sm', s.hoverAction)} to={`/visuals?project=${projectId}&datasetId=${d.id}`} title="Build a chart from this dataset">
             New visual
           </Link>
-          <Link className={buttonClass('secondary', 'sm', s.hoverAction)} to={`/data/import?project=${projectId}&source=combine`} title="Combine this dataset with another">
-            Combine
-          </Link>
+          {/* Joins need the rows here: a Live dataset is combined through a copy (L2.6). */}
+          {d.mode !== 'live' && (
+            <Link className={buttonClass('secondary', 'sm', s.hoverAction)} to={`/data/import?project=${projectId}&source=combine`} title="Combine this dataset with another">
+              Combine
+            </Link>
+          )}
           <IconButton icon="trash" size="sm" label={`Move ${d.name} to the Trash`} onClick={onDelete} />
         </span>
       </td>

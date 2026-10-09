@@ -144,7 +144,7 @@ function Segments({ projectId, datasetId, ds }: { projectId: string; datasetId: 
 
 export default function SegmentsPage() {
   return (
-    <DatasetRoute title="Find segments">
+    <DatasetRoute title="Find segments" kind="segments">
       {(projectId, datasetId, ds) => <Segments key={datasetId} projectId={projectId} datasetId={datasetId} ds={ds} />}
     </DatasetRoute>
   );

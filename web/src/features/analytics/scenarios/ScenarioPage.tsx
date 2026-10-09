@@ -19,6 +19,9 @@ import { useAdoptProject } from '../../projects/current';
 import { call, useScenarioMetrics, type Scenario, type ScenarioResult, type ScenarioTargets } from '../api';
 import { DeleteScenario, duplicateScenario } from './ScenarioParts';
 import { ScenarioResults } from './ScenarioResults';
+import { LiveRefusal } from '../../live/LiveOff';
+import { LIVE_OFF } from '../../live/offFeatures';
+import { liveRefusalOf } from '../../live/refusal';
 import { ScenarioSetup, type Draft } from './ScenarioSetup';
 import f from './Scenarios.module.css';
 import s from './ScenarioEditor.module.css';
@@ -144,6 +147,11 @@ function Editor({ projectId, sc }: { projectId: string; sc: Scenario }) {
         {!res ? (
           <div className={s.results}>
             <SkeletonBlock label="Computing the scenario" />
+          </div>
+        ) : !res.ok && liveRefusalOf(res) !== null ? (
+          // A metric on a Live dataset (L2.6): the server's reason — the copy is made from the dataset's own page.
+          <div className={s.results}>
+            <LiveRefusal title={LIVE_OFF.scenarios.title} message={`${LIVE_OFF.scenarios.why} ${liveRefusalOf(res) ?? ''}`} projectId={projectId} />
           </div>
         ) : !res.ok ? (
           <div className={s.results}>

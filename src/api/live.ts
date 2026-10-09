@@ -53,4 +53,15 @@ export const live = {
     input: z.strictObject({ projectId: Uuid, datasetId: Uuid }),
     project: byProjectId,
   }),
+  // "Make a copy" (src/ipc/liveDatasets.ts, L2.6): what is off for a Live dataset
+  // (prepare, the table view, stats, pivots, snapshots…) works on a copy. The
+  // selection is imported as a NEW extract beside the Live one — the connector's
+  // own bounded run, through the SSRF guard, like any import — and the Live
+  // dataset is left as it was. The reply names the copy (id, name, rows), never
+  // the selection's SQL or the connection's address. `write`: it saves a dataset.
+  'dataset:copyLive': rpc({
+    access: 'write',
+    input: z.strictObject({ projectId: Uuid, datasetId: Uuid }),
+    project: byProjectId,
+  }),
 } as const;
