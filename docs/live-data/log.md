@@ -1251,3 +1251,22 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   warehouse call fails still reads n/a without the reason: `scorecards.ts`' `figure()` swallows it
   under `resolveMetric(...).catch(() => null)`, so showing why needs the reason threaded through the
   row — a server change left for a follow-up (the detail panel does say why).
+
+## 2026-10-09 — L2.9 Operator docs
+
+- **Built.** `docs/server/live-data.md` now opens with **Live datasets** (copy vs Live, which
+  connections offer it — Snowflake, BigQuery, Redshift, Databricks SQL, ClickHouse, and PostgreSQL
+  behind the read-replica opt-in — the switch, what is off with "Make a copy", how Live differs from a
+  copy: the parity matrix and the text-axis order, whose identity a query runs as) and **Choosing a
+  cache age** (the six choices of the L2.6 picker, Refresh now and the refresh URL as the reset, a table
+  of when to pick which, and what an age costs: at most one statement per tile per age plus one per
+  relative-date filter, however many viewers). The rest of the plan's list was written by the tasks
+  that built each piece and is linked from the page's intro: the Snowflake read-only role SQL (L1.2),
+  BigQuery IAM (L1.3), how cost is bounded (L2.7), the refresh URL with dbt and Airflow (L0.5), the
+  schema sync (L2.5), the read replica (L3.2), fresh on ask (L3.1).
+- **Checked.** Every setting the plan's §8 names is in `docs/server/configuration.md` —
+  `LIVE_QUERY_TIMEOUT_MS`, `LIVE_MAX_BYTES_BILLED`, `LIVE_DAILY_QUERY_LIMIT`, `LIVE_MAX_CONCURRENT`,
+  `LIVE_MIN_CACHE_AGE_PUBLIC_SEC`, `FRESH_ON_ASK_WAIT_MS`, `REFRESH_HOOK_MIN_INTERVAL_SEC` — and
+  `test-serverDocs` passes. The page's one stale line ("a section on choosing a Live cache age is added
+  by the task that builds it") is gone, and L3.2's "Empty text" difference now says what L2.8 settled
+  (one blank row, as the copy).

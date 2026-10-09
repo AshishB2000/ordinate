@@ -2,11 +2,72 @@
 
 This page is for the team that connects Ordinate to a cloud warehouse. It covers what each warehouse
 needs on its side (a read-only identity) and on yours (network egress). The plan behind it is
-[docs/live-data/00-plan.md](../live-data/00-plan.md). It also covers
+[docs/live-data/00-plan.md](../live-data/00-plan.md). It starts with [what a Live dataset
+is](#live-datasets) and [how to choose its cache age](#choosing-a-cache-age), and also covers
 [what a live query can cost and how it is bounded](#what-a-live-query-can-cost-and-how-it-is-bounded),
 the [refresh URL](#refresh-url) that dbt or Airflow calls when new data has landed, the
 [schema sync](#schema-sync) a Live dataset runs, and [fresh on ask](#fresh-on-ask) for the copies of
-operational databases. A section on choosing a Live cache age is added by the task that builds it.
+operational databases.
+
+## Live datasets
+
+A dataset is a **copy** by default: Ordinate imports the rows, stores them as Parquet and answers
+every question from them until the next refresh. A **Live** dataset keeps only the table's columns.
+Each chart, KPI tile, AI answer and alert asks the warehouse itself (a published dashboard asks it
+when it is published), through SQL Ordinate compiles from the question (values always travel as bind
+parameters, never as SQL text), and caches the answer for the dataset's cache age. Every figure says which it is: "As of 1:00 AM" on a
+copy, "Live · 2:05 AM" or "Live · cached 3 min ago" on a Live one, and "Stale · as of …" when the
+warehouse could not be reached and the last answer is shown instead. Nothing is ever shown as empty or
+zero because the warehouse failed.
+
+**Which connections offer it.** Snowflake, BigQuery, Amazon Redshift, Databricks SQL and ClickHouse.
+A PostgreSQL connection offers it only once it is marked as a read replica or a warehouse
+([below](#live-on-a-postgresql-read-replica)). Every other source is copied. When you add a table
+from one of these connections, the save bar asks **Copy the data** or **Live**; an existing dataset
+can switch either way with the **Live** switch on its page (a copy that goes Live deletes its stored
+rows, after a confirm; a Live dataset switched off offers to keep it Live, make a copy beside it, or
+copy the data into it).
+
+**What is off on a Live dataset.** Live answers the questions Ordinate can compile to one aggregate
+statement: charts by a category, a date grain or number bins, KPI tiles, AI answers, alerts,
+scorecards and published dashboards. The tools that read rows need a copy and are off, each saying so
+with a **Make a copy** action that imports the same table as a new dataset beside the Live one:
+browsing rows and data search, prepare steps and formulas, statistics, insights, anomalies and quality
+checks, pivot, cohort and funnel tables, key drivers, segments, scenarios and joins, snapshots, maps
+and small multiples, and "as of" or currency-converted views.
+
+**How Live differs from a copy.** The figures agree: a parity test runs the same matrix of charts,
+KPIs and answers through both paths and compares every value (`scripts/test-liveParity*.ts`: DuckDB
+and PostgreSQL in CI, ClickHouse nightly, Snowflake and BigQuery nightly when their credentials are
+configured). The order of a text axis differs: a copy keeps the order categories first appear in, a
+warehouse has no row order, so Live sorts text categories by the first measure, largest first, then by
+label. A column the warehouse drops is reported as missing on the charts that use it after the next
+[schema sync](#schema-sync), instead of failing in another way.
+
+**Whose identity.** A Live query runs as the connection's warehouse identity, exactly as a copy's
+refresh does. Who may open the dataset is decided by Ordinate's project access, not by the
+warehouse's row-level security. Querying as each viewer is not built yet.
+
+### Choosing a cache age
+
+The cache age is how old a Live figure may be before the warehouse is asked again. Set it on the
+dataset's page: **Always live**, 1 min, **5 min** (the default), 1 h, 6 h or 1 day. **Refresh now** on
+the same page, or a call to the dataset's [refresh URL](#refresh-url), empties the cache for that
+dataset on every pod, so the next view asks again whatever the age.
+
+| Choose | When |
+|---|---|
+| Always live | A small, fast table watched while it changes (an operations board), and a warehouse where a query is cheap. Every view of every tile is a statement. |
+| 1 min – 5 min | The default range: dashboards people keep open during the day. One statement per tile per age, however many people look. |
+| 1 h – 6 h | Large tables, BigQuery tables billed by bytes scanned, or data loaded a few times a day. |
+| 1 day | Data loaded nightly. Better still: a long age plus a [refresh URL](#refresh-url) called by the load job (dbt `on-run-end`, an Airflow task), so the cache empties exactly when new data lands. |
+
+What a choice costs: a dashboard of *T* Live tiles sends at most *T* statements per cache age, plus
+one per relative-date filter ("last quarter" asks the warehouse for its latest date, cached the same
+way), whether one person or a hundred are looking; identical questions asked at the same moment
+share one statement. Admin → Live usage shows the result per day and connection, and
+[the bounds below](#what-a-live-query-can-cost-and-how-it-is-bounded) cap it whatever the age. On a
+published `/p/` page a figure is never younger than `LIVE_MIN_CACHE_AGE_PUBLIC_SEC`.
 
 ## Snowflake
 
