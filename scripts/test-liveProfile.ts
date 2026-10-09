@@ -393,7 +393,13 @@ async function onPostgres(): Promise<void> {
     const got = await client.query({ text: pg.query.sql, values: pg.query.params.map((p) => p.value), rowMode: 'array' });
     const onPg = sql.shapeProfile(got.rows as unknown[][], cols);
     const onDuck = sql.shapeProfile(await H.as(ORG_A, () => fx.runDuck(duck.query)), fx.COLUMNS);
-    const asMap = (f: import('../src/engine/live/profileSql').ColumnFigures) => ({ filled: f.filled, distinct: f.distinct, values: Object.fromEntries((f.values ?? []).map((v, i) => [v, f.counts?.[i]])) });
+    // Values as a SET: entries sorted by code point, since a tie's order is the database collation's
+    // (CI's en_US puts "a_b" before "a%b"; C and DuckDB the other way) and JSON.stringify keeps insertion order.
+    const asMap = (f: import('../src/engine/live/profileSql').ColumnFigures) => ({
+      filled: f.filled,
+      distinct: f.distinct,
+      values: (f.values ?? []).map((v, i) => [v, f.counts?.[i]] as const).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+    });
     const diff = (onDuck?.columns ?? []).filter((c, i) => show(asMap(c)) !== show(onPg ? asMap(onPg.columns[i]) : null)).map((c) => c.name);
     ok('Postgres: the Redshift dialect\'s profile runs, and agrees with the DuckDB bench on every column (values as sets — tie order is collation\'s)',
       !!onPg && onPg.rows === rows.length && diff.length === 0, `${diff.join(', ')} ${show(onPg).slice(0, 300)}`);
