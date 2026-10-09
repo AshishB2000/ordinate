@@ -1,6 +1,8 @@
 // Rate limits and the RPC time limit (T6.2).
 //
 //   sign-in   GET /api/auth/login + /api/auth/callback   per client IP   RATE_LIMIT_LOGIN_PER_MINUTE (60)
+//             POST /api/auth/password/*                  (the same bucket; ./auth/password.ts also
+//                                                        locks one account after repeated wrong passwords)
 //   RPC       POST /api/rpc/<channel>                    per client IP   RATE_LIMIT_RPC_IP_PER_MINUTE (3000)
 //                                                        per user        RATE_LIMIT_RPC_PER_MINUTE (1200)
 //   MCP       POST /api/mcp                              the RPC buckets above (T6.3): a tool call
@@ -24,13 +26,14 @@ import rateLimit, { normalizeIP } from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { BlockList } from 'net';
 import { isTrustedPeer as trusted } from './auth/index';
+import { PASSWORD_ROUTES } from './auth/password';
 import { ctx } from './context';
 import type { LimitsEnv } from './env';
 
 const MINUTE = 60_000;
 export const RPC_ROUTE = '/api/rpc/:channel';
 const MCP_ROUTE = '/api/mcp';
-const SIGN_IN_ROUTES = new Set(['/api/auth/login', '/api/auth/callback']);
+const SIGN_IN_ROUTES = new Set<string>(['/api/auth/login', '/api/auth/callback', ...PASSWORD_ROUTES]);
 
 /** The address a request came from, trusting X-Forwarded-For only as far as the proxies in `proxies`. */
 export function clientIp(req: Pick<FastifyRequest, 'headers' | 'socket'>, proxies: BlockList): string {

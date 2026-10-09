@@ -45,10 +45,10 @@ function throws(fn: () => unknown): boolean {
   fs.rmSync(localDir, { recursive: true, force: true });
 
   // ── Dev auth / prod refusal ───────────────────────────────────────────────
-  const dev = context.identityFor(envMod.parseEnv({ ORDINATE_ENV: 'dev' }))({});
+  const dev = context.identityFor(envMod.parseEnv({ AUTH_MODE: 'dev', ORDINATE_ENV: 'dev' }))({});
   ok('dev auth: dev@local, org default, admin', dev?.user.email === 'dev@local' && dev.org.id === 'default' && dev.user.role === 'admin', JSON.stringify(dev));
   let prodErr: unknown = null;
-  try { context.identityFor(envMod.parseEnv({ ORDINATE_ENV: 'prod', DATA_DIR: DATA })); } catch (err) { prodErr = err; }
+  try { context.identityFor(envMod.parseEnv({ AUTH_MODE: 'dev', ORDINATE_ENV: 'prod', DATA_DIR: DATA })); } catch (err) { prodErr = err; }
   ok('prod with no auth configured: EnvError (main.ts prints it as one line and exits)', prodErr instanceof envMod.EnvError, prodErr);
 
   // ── Server mode ───────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ function throws(fn: () => unknown): boolean {
   }));
 
   // ── Over HTTP, dev auth: everything lands in orgs/default ─────────────────
-  const devApp = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA }));
+  const devApp = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA }));
   const dl = await devApp.inject({ method: 'POST', url: '/api/rpc/projects:list', headers: withCsrf({ 'content-type': 'application/json' }), payload: '{"args":[]}' });
   ok('dev: projects:list is 200 with a wire-encoded list', dl.statusCode === 200 && Array.isArray(wire.decode(dl.body)), dl.body);
   ok('dev: it ran as org default', fs.existsSync(path.join(DATA, 'orgs', 'default', 'userData')));
@@ -83,7 +83,7 @@ function throws(fn: () => unknown): boolean {
   // ── Two orgs, concurrently ────────────────────────────────────────────────
   // The org comes from a test header through the same `identify` seam real
   // auth will use (T3.2). No header → 401.
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) =>
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) =>
     typeof h['x-test-org'] === 'string' ? as(h['x-test-org']) : null);
   const ORGS = ['org-a', 'org-b'];
   const arrived = new Map(ORGS.map((o) => {

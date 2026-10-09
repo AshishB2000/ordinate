@@ -53,7 +53,7 @@ function firstDiff(a: unknown, b: unknown, at = '$'): string {
   const projectId = String((await sample.seedSampleProject()).projectId);
   const datasetId = (await datasets.listDatasets(projectId))[0].id;
 
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent' }));
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent' }));
   const post = (channel: string, payload: unknown) => app.inject({
     method: 'POST',
     url: `/api/rpc/${encodeURIComponent(channel)}`,

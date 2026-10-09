@@ -257,7 +257,7 @@ async function dbPart(adminUrl: string): Promise<void> {
   context.enterServerMode(DATA);
   appMod.registerHandlers();
   gatePart();
-  const app: FastifyInstance = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA, ORDINATE_ENV: 'dev' }));
+  const app: FastifyInstance = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, ORDINATE_ENV: 'dev' }));
   await app.listen({ port: 0, host: '127.0.0.1' });
   try {
     await serverPart(`http://127.0.0.1:${(app.server.address() as import('net').AddressInfo).port}`);

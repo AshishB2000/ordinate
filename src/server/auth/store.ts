@@ -103,20 +103,29 @@ export async function createSession(pool: Pool, auth: AuthEnv, userId: string, p
  */
 export async function sessionIdentity(pool: Pool, auth: AuthEnv, id: string): Promise<Identity | null> {
   if (!SESSION_ID_RE.test(id)) return null;
-  const r = await pool.query<{ email: string; role: Role; org_id: string }>(
+  const r = await pool.query<{ email: string; role: Role; org_id: string; must_change_password: boolean }>(
     `WITH s AS (
        UPDATE sessions SET last_seen_at = now()
         WHERE id_hash = $1 AND expires_at > now() AND last_seen_at > now() - $2 * interval '1 millisecond'
         RETURNING user_id)
-     SELECT u.email, u.role, u.org_id FROM s JOIN users u ON u.id = s.user_id WHERE u.disabled_at IS NULL`,
+     SELECT u.email, u.role, u.org_id, u.must_change_password FROM s JOIN users u ON u.id = s.user_id WHERE u.disabled_at IS NULL`,
     [hashId(id), auth.sessionIdleMs],
   );
   const row = r.rows[0];
-  return row ? { user: { email: row.email, role: row.role }, org: { id: row.org_id } } : null;
+  if (!row) return null;
+  const who: Identity = { user: { email: row.email, role: row.role }, org: { id: row.org_id } };
+  // A temporary password (an admin set it): app.ts holds every /api/ call but /api/auth/* until it is
+  // changed — under password sign-in only. After a move to SSO the flag is moot, and there is no page to clear it.
+  return auth.mode === 'password' && row.must_change_password ? { ...who, mustChangePassword: true } : who;
 }
 
 export async function endSession(pool: Pool, id: string): Promise<void> {
   if (SESSION_ID_RE.test(id)) await pool.query('DELETE FROM sessions WHERE id_hash = $1', [hashId(id)]);
+}
+
+/** Ends every session of `userId` except `keep` (a password change keeps the browser that made it). */
+export async function endOtherSessions(pool: Pool, userId: string, keep: string | undefined): Promise<void> {
+  await pool.query('DELETE FROM sessions WHERE user_id = $1 AND id_hash <> $2', [userId, keep && SESSION_ID_RE.test(keep) ? hashId(keep) : '']);
 }
 
 /** Logout everywhere: every session of this member. Returns how many ended. */

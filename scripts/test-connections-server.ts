@@ -108,7 +108,7 @@ async function call(base: string, channel: string, payload?: unknown): Promise<R
 }
 
 async function listen(env: Record<string, string>): Promise<{ base: string; close: () => Promise<void> }> {
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'trace', ...env }), logStream());
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'trace', ...env }), logStream());
   await app.listen({ port: 0, host: '127.0.0.1' });
   const port = (app.server.address() as import('net').AddressInfo).port;
   return { base: `http://127.0.0.1:${port}`, close: () => app.close() };

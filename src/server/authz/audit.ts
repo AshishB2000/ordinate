@@ -1,6 +1,7 @@
 // The audit trail (T3.3, table `audit_log` in 0006_authz.sql): sign-ins,
-// sign-outs, and every write/admin RPC (record writes, publishes, connection
-// and role changes) plus `audit: true` reads (exports).
+// sign-outs, password changes (0010_passwords.sql), and every write/admin RPC
+// (record writes, publishes, connection and role changes) plus `audit: true`
+// reads (exports).
 //
 // What a row may hold is fixed here, not by the caller: action, channel,
 // actor (email), org, outcome, request id, and ids — UUID-shaped values found
@@ -9,7 +10,7 @@
 
 import type { Pool } from 'pg';
 
-export type AuditAction = 'rpc' | 'login' | 'logout' | 'logout_everywhere';
+export type AuditAction = 'rpc' | 'login' | 'logout' | 'logout_everywhere' | 'password_change';
 export type Outcome = 'ok' | 'denied' | 'error';
 
 export interface AuditEntry {

@@ -56,7 +56,7 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
   context.enterServerMode(DATA);
   appMod.registerHandlers();
   files.resetForTest(() => clock);
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'info', DATA_DIR: DATA, MAX_UPLOAD_MB: String(MAX_MB) }), logSink, (h) =>
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'info', DATA_DIR: DATA, MAX_UPLOAD_MB: String(MAX_MB) }), logSink, (h) =>
     typeof h['x-test-org'] === 'string' ? as(h['x-test-org'], typeof h['x-test-user'] === 'string' ? h['x-test-user'] : undefined) : null);
   await app.listen({ port: 0, host: '127.0.0.1' });
   const { port } = app.server.address() as import('net').AddressInfo;

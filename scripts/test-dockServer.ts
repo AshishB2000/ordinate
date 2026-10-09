@@ -190,7 +190,7 @@ const listen = async (app: import('fastify').FastifyInstance): Promise<string> =
   process.env.SSRF_ALLOW = '127.0.0.1/32,::1/128';
 
   // ── 1. No database: keys are refused, nothing is written ──────────────────
-  const noDb = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'info', DATA_DIR: DATA, ORDINATE_MASTER_KEY: MASTER }), logSink());
+  const noDb = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'info', DATA_DIR: DATA, ORDINATE_MASTER_KEY: MASTER }), logSink());
   const noDbBase = await listen(noDb);
   const devCall = caller(noDbBase, {});
   const st0 = await devCall('key:status');

@@ -13,7 +13,7 @@ import * as storage from '../engine/storage';
 let cfg: ServerEnv;
 try {
   cfg = env();
-  // The gate on dev sign-in: refuses prod with AUTH_MODE=dev or unset.
+  // The gate on dev sign-in: refuses prod with AUTH_MODE=dev.
   if (cfg.auth.mode === 'dev') identityFor(cfg);
 } catch (err) {
   // One line, no stack: the operator needs the variable name, not a trace.

@@ -7,7 +7,7 @@
 import { Suspense } from 'react';
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { nav } from '../api/client';
-import { signInPath, signOut, signOutEverywhere, useMe, type Me } from '../features/auth/api';
+import { changePasswordPath, signInPath, signOut, signOutEverywhere, useMe, type Me } from '../features/auth/api';
 import { Icon } from '../ui/icons/Icon';
 import { IconButton } from '../ui/Button';
 import { Menu, type MenuEntry } from '../ui/Menu';
@@ -119,6 +119,7 @@ function UserMenu() {
         { kind: 'separator' },
         { label: 'Settings', icon: 'settings', onSelect: () => void navigate('/settings') },
         { label: 'API tokens', icon: 'terminal', onSelect: () => void navigate('/tokens') },
+        ...(me.data?.mode === 'password' ? [{ label: 'Change password', icon: 'lock' as const, onSelect: () => void navigate('/change-password') }] : []),
         ...HELP_ITEMS,
         { label: 'About Ordinate', icon: 'info', onSelect: () => void navigate('/about') },
         ...signOutItems,
@@ -140,6 +141,8 @@ export function Shell() {
   // Signed out while the app is open (expired, signed out in another tab):
   // the server already sends a signed-out first visit to /sign-in.
   if (me.data && me.data.user === null) return <Navigate to={signInPath(here.pathname + here.search)} replace />;
+  // A temporary password: the server already sends every navigation to /change-password; this covers the rest.
+  if (me.data?.user?.mustChangePassword) return <Navigate to={changePasswordPath(here.pathname + here.search)} replace />;
   return (
     <ProjectProvider>
       <div className={s.win}>

@@ -119,7 +119,7 @@ function importer(url: string): Promise<{ code: number; out: string }> {
     // ── The server, over RPC ────────────────────────────────────────────────
     context.enterServerMode(DATA);
     const who = { user: { email: 'a@acme', role: 'admin' as const }, org: { id: ORG } };
-    const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA, DATABASE_URL: url }), undefined, () => who);
+    const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, DATABASE_URL: url }), undefined, () => who);
     await app.ready();
     try {
       const post = async (channel: string, payload?: unknown): Promise<unknown> => {
@@ -151,7 +151,7 @@ function importer(url: string): Promise<{ code: number; out: string }> {
         const b = await count(path.join(DATA, 'orgs', ORG, 'userData', rel));
         ok(`parquet: ${path.basename(rel)} — ${b} rows, equal to the source`, a === b && a > 0, `${a} vs ${b}`);
       }
-      const other = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA, DATABASE_URL: url }), undefined, () => ({ ...who, org: { id: 'someone-else' } }));
+      const other = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, DATABASE_URL: url }), undefined, () => ({ ...who, org: { id: 'someone-else' } }));
       await other.ready();
       const res = await other.inject({ method: 'POST', url: '/api/rpc/projects:list', headers: withCsrf({ 'content-type': 'application/json' }), payload: wire.encode({ args: [] }) });
       ok('rpc: another org lists nothing of it', res.statusCode === 200 && isDeepStrictEqual(wire.decode(res.body), []), res.body);

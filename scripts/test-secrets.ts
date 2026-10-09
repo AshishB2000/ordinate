@@ -75,7 +75,7 @@ function leaks(hay: string, needles: Record<string, string[]> = NEEDLES): string
 /** Every SecretError message seen, and every structured log line the app logger wrote. */
 const errors: string[] = [];
 let appLog = '';
-const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'trace', ORDINATE_MASTER_KEY: MK_A.toString('base64') }),
+const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'trace', ORDINATE_MASTER_KEY: MK_A.toString('base64') }),
   new Writable({ write(c: Buffer, _e, cb) { appLog += c.toString(); cb(); } }));
 
 async function rejects(label: string, p: Promise<unknown>, needle?: RegExp): Promise<void> {
@@ -107,15 +107,15 @@ function run(args: string[], env: Record<string, string>): Promise<{ code: numbe
   ok('grep: an unrelated string is clean', leaks('nothing to see ' + randomBytes(32).toString('base64')).length === 0);
 
   // ── ORDINATE_MASTER_KEY validation ────────────────────────────────────────
-  const kid = (raw: string): string => store.kidOf(envMod.parseEnv({ ORDINATE_MASTER_KEY: raw }).masterKey!);
-  ok('env: unset → null', envMod.parseEnv({}).masterKey === null);
+  const kid = (raw: string): string => store.kidOf(envMod.parseEnv({ AUTH_MODE: 'dev', ORDINATE_MASTER_KEY: raw }).masterKey!);
+  ok('env: unset → null', envMod.parseEnv({ AUTH_MODE: 'dev' }).masterKey === null);
   const kids = [MK_A.toString('hex'), MK_A.toString('hex').toUpperCase(), MK_A.toString('base64'), MK_A.toString('base64url'), MK_A.toString('base64') + '\n'].map(kid);
   ok('env: hex, HEX, base64, base64url and a trailing newline all read the same key', new Set(kids).size === 1, kids.join());
   ok('env: a different key has a different fingerprint', kid(MK_B.toString('hex')) !== kids[0]);
   const badKeys = ['short', MK_A.toString('hex').slice(0, 62), randomBytes(31).toString('base64'), randomBytes(33).toString('base64'), 'g'.repeat(64), `${MK_A.toString('base64')}x`];
   for (const bad of badKeys) {
     try {
-      envMod.parseEnv({ ORDINATE_MASTER_KEY: bad });
+      envMod.parseEnv({ AUTH_MODE: 'dev', ORDINATE_MASTER_KEY: bad });
       ok(`env: a bad key (${bad.length} chars) is rejected`, false);
     } catch (err) {
       const m = (err as Error).message;
@@ -130,9 +130,9 @@ function run(args: string[], env: Record<string, string>): Promise<{ code: numbe
   } catch (err) {
     ok('env: prod + DATABASE_URL without a master key is refused', (err as Error).message.includes('ORDINATE_MASTER_KEY is required'), (err as Error).message);
   }
-  ok('env: prod without a database needs no master key', envMod.parseEnv({ ORDINATE_ENV: 'prod', DATA_DIR: '/srv/o' }).masterKey === null);
-  ok('env: dev + DATABASE_URL without a master key starts (secrets unavailable)', envMod.parseEnv({ DATABASE_URL: 'postgres://h/db' }).masterKey === null);
-  const cfg = envMod.parseEnv({ ...prodDb, ORDINATE_MASTER_KEY: MK_A.toString('hex') });
+  ok('env: prod without a database needs no master key', envMod.parseEnv({ AUTH_MODE: 'dev', ORDINATE_ENV: 'prod', DATA_DIR: '/srv/o' }).masterKey === null);
+  ok('env: dev + DATABASE_URL without a master key starts (secrets unavailable)', envMod.parseEnv({ AUTH_MODE: 'dev', DATABASE_URL: 'postgres://h/db' }).masterKey === null);
+  const cfg = envMod.parseEnv({ AUTH_MODE: 'dev', ...prodDb, ORDINATE_MASTER_KEY: MK_A.toString('hex') });
   const shown = JSON.stringify(cfg) + inspect(cfg, { showHidden: true, depth: null }) + String(cfg.masterKey);
   ok('env: the parsed config never prints the key (JSON, inspect, String)', leaks(shown).length === 0, leaks(shown).join());
   app.log.info({ cfg }, 'config object logged on purpose');

@@ -3,8 +3,9 @@
 // sample project. Needs `npm run build:ts` and `npm --prefix web run build`.
 //
 // `extraEnv` is for specs that need another mode (T3.2's auth spec sets
-// AUTH_MODE and friends); the default is dev auth, which signs every request
-// in as dev@local.
+// AUTH_MODE and friends); the default here is AUTH_MODE=dev, which signs every
+// request in as dev@local. The server's own default is password sign-in, which
+// needs Postgres; dev is set explicitly for the test harness only.
 
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
@@ -49,7 +50,7 @@ export async function startServer(extraEnv: Record<string, string> = {}, seedOpt
     cwd: REPO,
     // DATABASE_URL is NOT inherited: a spec that wants Postgres creates its own scratch database
     // and passes it in extraEnv. Inheriting it pointed every spec at one shared database.
-    env: { ...process.env, DATABASE_URL: '', PORT: '0', DATA_DIR: dataDir, ORDINATE_ENV: 'dev', LOG_LEVEL: 'info', ...extraEnv },
+    env: { ...process.env, DATABASE_URL: '', PORT: '0', DATA_DIR: dataDir, ORDINATE_ENV: 'dev', AUTH_MODE: 'dev', LOG_LEVEL: 'info', ...extraEnv },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let out = '';

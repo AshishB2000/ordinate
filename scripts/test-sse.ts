@@ -127,7 +127,7 @@ const findJob = (e: Ev, id: string): Job | undefined => {
   context.enterServerMode(DATA);
   appMod.registerHandlers();
   sse.setHeartbeatMsForTest(40);
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) =>
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) =>
     typeof h['x-test-org'] === 'string' ? who(h['x-test-org'], typeof h['x-test-user'] === 'string' ? h['x-test-user'] : 'u') : null);
   await app.listen({ port: 0, host: '127.0.0.1' });
   port = (app.server.address() as import('net').AddressInfo).port;

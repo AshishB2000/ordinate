@@ -101,7 +101,7 @@ const CANARY = 'c4nary-VALUE-never-audited';
       return ch === 'projects:list' ? [{ id: pid }, { id: ghost }] : ch === 'projects:create' ? { id: ghost, name: p } : 'ran';
     });
   }
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) =>
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) =>
     typeof h['x-role'] === 'string' ? as(h['x-role'] as Role) : null);
   const post = (role: Role, ch: string, payload?: unknown) => app.inject({
     method: 'POST', url: `/api/rpc/${ch}`, headers: withCsrf({ 'content-type': 'application/json', 'x-role': role }),

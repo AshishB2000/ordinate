@@ -51,8 +51,11 @@ function gateRefuses(label: string, src: Record<string, string>): void {
 }
 
 // ── AUTH_MODE and its variables ─────────────────────────────────────────────
-const d = envMod.parseEnv({}).auth;
-ok('env: AUTH_MODE defaults to dev, org default', d.mode === 'dev' && d.org === 'default' && d.oidc === null, JSON.stringify(d));
+const d = envMod.parseEnv({ DATABASE_URL: DB }).auth;
+ok('env: AUTH_MODE defaults to password (never dev), org default', d.mode === 'password' && d.org === 'default' && d.oidc === null, JSON.stringify(d));
+envFails('the default (password) without DATABASE_URL', {}, 'DATABASE_URL');
+envFails('AUTH_MODE=password without DATABASE_URL', { AUTH_MODE: 'password' }, 'DATABASE_URL');
+ok('env: AUTH_MODE=dev is still accepted when asked for (the test harness)', envMod.parseEnv({ AUTH_MODE: 'dev' }).auth.mode === 'dev');
 ok('env: session idle defaults to 8 h, absolute to 7 days', d.sessionIdleMs === 8 * 3_600_000 && d.sessionAbsoluteMs === 7 * 86_400_000, JSON.stringify(d));
 ok('env: the auth config is frozen', Object.isFrozen(d) && Object.isFrozen(d.allowedDomains));
 const o = envMod.parseEnv({
@@ -89,7 +92,9 @@ envFails('SESSION_ABSOLUTE_HOURS=1.5', { SESSION_ABSOLUTE_HOURS: '1.5' }, 'SESSI
 
 // ── The prod gate on dev sign-in ────────────────────────────────────────────
 gateRefuses('prod with AUTH_MODE=dev', { ORDINATE_ENV: 'prod', DATA_DIR: '/srv', AUTH_MODE: 'dev' });
-gateRefuses('prod with AUTH_MODE unset', { ORDINATE_ENV: 'prod', DATA_DIR: '/srv' });
+// Unset is password sign-in now, never dev: prod without a database cannot even parse.
+envFails('prod with AUTH_MODE unset and no DATABASE_URL', { ORDINATE_ENV: 'prod', DATA_DIR: '/srv' }, 'DATABASE_URL');
+ok('env: prod with AUTH_MODE unset is password sign-in', envMod.parseEnv({ ORDINATE_ENV: 'prod', DATA_DIR: '/srv', DATABASE_URL: DB, ...KEY }).auth.mode === 'password');
 ok('gate: dev with AUTH_MODE=dev is the dev admin', context.identityFor(envMod.parseEnv({ AUTH_MODE: 'dev' }))({}).user.email === 'dev@local');
 
 const childEnv = (extra: Record<string, string>): NodeJS.ProcessEnv => {

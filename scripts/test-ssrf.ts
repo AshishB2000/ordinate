@@ -146,9 +146,9 @@ async function main(): Promise<void> {
   ok('pinnedLookup → the checked address', one[1] === '127.0.0.1' && JSON.stringify(all[1]) === '[{"address":"127.0.0.1","family":4}]');
 
   // ── 2. env validation ──────────────────────────────────────────────────────
-  ok('SSRF_ALLOW accepts v4 and v6 CIDRs', (() => { try { envMod.parseEnv({ SSRF_ALLOW: '10.20.0.0/16, fd00::/8, 192.168.1.5' }); return true; } catch { return false; } })());
+  ok('SSRF_ALLOW accepts v4 and v6 CIDRs', (() => { try { envMod.parseEnv({ AUTH_MODE: 'dev', SSRF_ALLOW: '10.20.0.0/16, fd00::/8, 192.168.1.5' }); return true; } catch { return false; } })());
   let envErr = '';
-  try { envMod.parseEnv({ SSRF_ALLOW: '10.0.0.0/33' }); } catch (e) { envErr = (e as Error).message; }
+  try { envMod.parseEnv({ AUTH_MODE: 'dev', SSRF_ALLOW: '10.0.0.0/33' }); } catch (e) { envErr = (e as Error).message; }
   ok('a bad SSRF_ALLOW stops startup naming the variable', envErr.startsWith('SSRF_ALLOW:'), envErr);
 
   // ── 3. desktop: unchanged — localhost is the use case ──────────────────────

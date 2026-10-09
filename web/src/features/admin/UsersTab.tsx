@@ -1,7 +1,9 @@
 // Admin → Users: everyone in the org, invite by email (a pending member until
 // their first sign-in), change a role, disable or enable. The server refuses
 // demoting or disabling the last admin and disabling yourself; a refusal is a
-// toast, and the list is refetched either way.
+// toast, and the list is refetched either way. Under password sign-in, people
+// are added with a temporary password instead, and an admin can reset one
+// (./PasswordDialogs.tsx).
 
 import { useState, type FormEvent } from 'react';
 import { Badge } from '../../ui/Badge';
@@ -14,10 +16,12 @@ import { SkeletonTable } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { fmtDate, ROLES, useAdminUsers, useWrite, type AdminUser, type Role } from './api';
+import { AddPersonDialog, ResetPasswordDialog } from './PasswordDialogs';
 import s from './Admin.module.css';
 
 function Status({ u }: { u: AdminUser }) {
   if (u.disabled) return <Badge tone="error">Disabled</Badge>;
+  if (u.mustChangePassword) return <Badge tone="warn">Temporary password</Badge>;
   if (u.pending) return <Badge tone="warn">Invited</Badge>;
   return <Badge tone="ok">Active</Badge>;
 }
@@ -67,7 +71,7 @@ function InviteDialog() {
   );
 }
 
-function UserRow({ u, me }: { u: AdminUser; me: string | undefined }) {
+function UserRow({ u, me, onReset }: { u: AdminUser; me: string | undefined; onReset?: (u: AdminUser) => void }) {
   const setRole = useWrite('admin:setRole', ['admin:users']);
   const setDisabled = useWrite('admin:setDisabled', ['admin:users']);
   const self = u.email === me;
@@ -101,6 +105,7 @@ function UserRow({ u, me }: { u: AdminUser; me: string | undefined }) {
           align="end"
           trigger={<IconButton icon="more-horizontal" label={`Actions for ${u.email}`} size="sm" />}
           items={[
+            ...(onReset && !self ? [{ label: 'Reset password', icon: 'lock' as const, onSelect: () => onReset(u) }] : []),
             u.disabled
               ? { label: 'Enable', icon: 'circle-check', onSelect: () => setDisabled.mutate({ userId: u.id, disabled: false }) }
               : {
@@ -117,9 +122,11 @@ function UserRow({ u, me }: { u: AdminUser; me: string | undefined }) {
   );
 }
 
-export function UsersTab({ me }: { me: string | undefined }) {
+/** `passwords`: the server signs in with its own passwords (AUTH_MODE=password). */
+export function UsersTab({ me, passwords = false }: { me: string | undefined; passwords?: boolean }) {
   const users = useAdminUsers();
   const [find, setFind] = useState('');
+  const [resetting, setResetting] = useState<AdminUser | null>(null);
   const shown = users.data?.filter((u) => u.email.includes(find.trim().toLowerCase())) ?? [];
   let body;
   if (users.isPending) body = <SkeletonTable cols={6} rows={6} label="Loading people" />;
@@ -128,7 +135,11 @@ export function UsersTab({ me }: { me: string | undefined }) {
   } else if (shown.length === 0) {
     body = (
       <EmptyState heading={3} icon="user" title={find ? 'Nobody matches that' : 'No one here yet'}>
-        {find ? 'Try part of an email address.' : 'Invite people by email; they join when they first sign in.'}
+        {find
+          ? 'Try part of an email address.'
+          : passwords
+            ? 'Add people with a temporary password; they choose their own when they first sign in.'
+            : 'Invite people by email; they join when they first sign in.'}
       </EmptyState>
     );
   } else {
@@ -152,7 +163,7 @@ export function UsersTab({ me }: { me: string | undefined }) {
           </thead>
           <tbody>
             {shown.map((u) => (
-              <UserRow key={u.id} u={u} me={me} />
+              <UserRow key={u.id} u={u} me={me} onReset={passwords ? setResetting : undefined} />
             ))}
           </tbody>
         </table>
@@ -171,11 +182,10 @@ export function UsersTab({ me }: { me: string | undefined }) {
           value={find}
           onChange={(e) => setFind(e.target.value)}
         />
-        <div className={s.barEnd}>
-          <InviteDialog />
-        </div>
+        <div className={s.barEnd}>{passwords ? <AddPersonDialog /> : <InviteDialog />}</div>
       </div>
       {body}
+      {passwords && <ResetPasswordDialog user={resetting} onClose={() => setResetting(null)} />}
     </section>
   );
 }

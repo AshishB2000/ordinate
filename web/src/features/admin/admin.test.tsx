@@ -120,6 +120,58 @@ describe('Admin', () => {
   });
 });
 
+describe('Admin under password sign-in', () => {
+  const PW_ADMIN = { ...ADMIN, mode: 'password' };
+  const PW_USERS = [USERS[0], { ...USERS[1], mustChangePassword: true }, USERS[2]];
+
+  it('adds a person with a generated temporary password instead of inviting', async () => {
+    const calls = serve({ '/api/auth/me': { body: PW_ADMIN }, 'admin:users': { body: PW_USERS }, 'admin:addUser': { body: { ok: true, id: 'u9' } } });
+    renderApp('/admin');
+    const row = (email: string) => screen.getByText(email).closest('tr') as HTMLElement;
+    await screen.findByText('new@acme.test');
+    expect(within(row('new@acme.test')).getByText('Temporary password')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Invite people' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Add person' }));
+    fireEvent.change(await screen.findByLabelText('Email'), { target: { value: 'sam@acme.test' } });
+    const temp = (screen.getByLabelText('Temporary password') as HTMLInputElement).value;
+    expect(temp).toMatch(/^[a-km-zA-HJ-NP-Z2-9]{16}$/);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Add person' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'admin:addUser')).toBe(true));
+    expect(calls.find((c) => c.channel === 'admin:addUser')?.payload).toEqual({ email: 'sam@acme.test', role: 'viewer', password: temp });
+    expect(await screen.findByText(/Added sam@acme.test/)).toBeTruthy();
+  });
+
+  it('will not send a temporary password under 10 characters', async () => {
+    serve({ '/api/auth/me': { body: PW_ADMIN }, 'admin:users': { body: PW_USERS } });
+    renderApp('/admin');
+    fireEvent.click(await screen.findByRole('button', { name: 'Add person' }));
+    fireEvent.change(await screen.findByLabelText('Email'), { target: { value: 'sam@acme.test' } });
+    fireEvent.change(screen.getByLabelText('Temporary password'), { target: { value: 'short' } });
+    expect((within(screen.getByRole('dialog')).getByRole('button', { name: 'Add person' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("resets someone's password from their row, never your own", async () => {
+    const calls = serve({ '/api/auth/me': { body: PW_ADMIN }, 'admin:users': { body: PW_USERS }, 'admin:resetPassword': { body: { ok: true } } });
+    renderApp('/admin');
+    await screen.findByText('new@acme.test');
+    const openActions = async (email: string) => {
+      await waitFor(async () => {
+        fireEvent.keyDown(await screen.findByRole('button', { name: `Actions for ${email}` }), { key: 'Enter' });
+        expect(screen.getByRole('menu')).toBeTruthy();
+      });
+    };
+    await openActions('boss@acme.test');
+    expect(screen.queryByRole('menuitem', { name: 'Reset password' })).toBeNull();
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    await openActions('new@acme.test');
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Reset password' }));
+    const temp = (await screen.findByLabelText('Temporary password') as HTMLInputElement).value;
+    fireEvent.click(screen.getByRole('button', { name: 'Set password' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'admin:resetPassword')?.payload).toEqual({ userId: 'u2', password: temp }));
+    expect(await screen.findByText(/signed out everywhere/)).toBeTruthy();
+  });
+});
+
 describe('API tokens', () => {
   it('designs the empty state', async () => {
     serve({ '/api/auth/me': { body: VIEWER }, 'tokens:list': { body: [] } });

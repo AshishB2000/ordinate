@@ -14,6 +14,7 @@ export const AI_PROVIDERS = ['anthropic', 'openai', 'gemini', 'gateway'] as cons
 const Role = z.enum(['admin', 'editor', 'viewer']);
 const Name = z.string().trim().min(1).max(100);
 const When = z.iso.datetime({ offset: true });
+const TempPassword = z.string().max(1024);
 
 const admin = <I extends z.ZodType>(input: I) => rpc({ access: 'admin', org: true, input });
 const adminList = <I extends z.ZodType>(input: I) => rpc({ access: 'admin', org: true, audit: 'denials', input });
@@ -24,6 +25,11 @@ export const adminContracts = {
   'admin:invite': admin(z.strictObject({ email: z.email().max(320), role: Role })),
   'admin:setRole': admin(z.strictObject({ userId: Uuid, role: Role })),
   'admin:setDisabled': admin(z.strictObject({ userId: Uuid, disabled: z.boolean() })),
+  // Password sign-in only (AUTH_MODE=password): add someone with a temporary
+  // password, or reset one; either must be changed at their next sign-in.
+  // The rules (length) are the handler's, so a refusal can name which failed.
+  'admin:addUser': admin(z.strictObject({ email: z.email().max(320), role: Role, password: TempPassword })),
+  'admin:resetPassword': admin(z.strictObject({ userId: Uuid, password: TempPassword })),
   // Teams: list with members, create, rename, add / remove a member.
   'admin:teams': adminList(z.undefined()),
   'admin:createTeam': admin(z.strictObject({ name: Name })),
@@ -36,7 +42,7 @@ export const adminContracts = {
   'admin:audit': adminList(
     z.strictObject({
       actor: z.string().trim().max(320).optional(),
-      action: z.enum(['rpc', 'login', 'logout', 'logout_everywhere']).optional(),
+      action: z.enum(['rpc', 'login', 'logout', 'logout_everywhere', 'password_change']).optional(),
       channel: z.string().max(100).optional(),
       projectId: Uuid.optional(),
       from: When.optional(),

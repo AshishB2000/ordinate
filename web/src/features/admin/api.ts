@@ -14,6 +14,8 @@ export interface AdminUser {
   email: string;
   role: Role;
   pending: boolean;
+  /** Holds a temporary password an admin set (password sign-in). Absent from an older server. */
+  mustChangePassword?: boolean;
   disabled: boolean;
   createdAt: string;
   lastLoginAt: string | null;
@@ -49,7 +51,7 @@ export interface AuditRow {
 
 export interface AuditFilter {
   actor?: string;
-  action?: 'rpc' | 'login' | 'logout' | 'logout_everywhere';
+  action?: 'rpc' | 'login' | 'logout' | 'logout_everywhere' | 'password_change';
   channel?: string;
   projectId?: string;
   from?: string;
@@ -103,6 +105,10 @@ const REFUSAL: Record<string, string> = {
   cap: 'The cap cannot be above the server limit.',
   session: 'Tokens can only be created from a signed-in browser session.',
   limit: 'You have 50 active tokens. Revoke one first.',
+  'password-short': 'A password needs at least 10 characters.',
+  'password-long': 'A password can be 256 characters at most.',
+  'self-password': 'Change your own password from the account menu instead.',
+  mode: 'This server does not sign in with passwords.',
 };
 export const refusal = (code: string | undefined): string => REFUSAL[code ?? ''] ?? 'The change was refused.';
 

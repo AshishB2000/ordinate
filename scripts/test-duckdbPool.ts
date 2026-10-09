@@ -67,17 +67,17 @@ async function codeOf(p: Promise<unknown>): Promise<string> {
 }
 
 function envChecks(): void {
-  const d = envMod.parseEnv({}).duckdb;
+  const d = envMod.parseEnv({ AUTH_MODE: 'dev' }).duckdb;
   ok('env: defaults — 8 workers, 60 s timeout, 300 s idle, threads ≥ 1, memory in MiB',
     d.maxWorkers === 8 && d.queryTimeoutMs === 60_000 && d.idleMs === 300_000 && d.threads >= 1 && /^\d+MiB$/.test(d.memoryLimit), JSON.stringify(d));
-  const s = envMod.parseEnv({ DUCKDB_MAX_WORKERS: '3', DUCKDB_MEMORY_LIMIT: '2GB', DUCKDB_THREADS: '2', DUCKDB_QUERY_TIMEOUT_SECONDS: '5', DUCKDB_IDLE_SECONDS: '9' }).duckdb;
+  const s = envMod.parseEnv({ AUTH_MODE: 'dev', DUCKDB_MAX_WORKERS: '3', DUCKDB_MEMORY_LIMIT: '2GB', DUCKDB_THREADS: '2', DUCKDB_QUERY_TIMEOUT_SECONDS: '5', DUCKDB_IDLE_SECONDS: '9' }).duckdb;
   ok('env: set values are read', s.maxWorkers === 3 && s.memoryLimit === '2GB' && s.threads === 2 && s.queryTimeoutMs === 5000 && s.idleMs === 9000, JSON.stringify(s));
   for (const [name, bad] of [
     ['DUCKDB_MEMORY_LIMIT', "2GB'; SET enable_external_access=true; --"], ['DUCKDB_MEMORY_LIMIT', 'lots'], ['DUCKDB_MEMORY_LIMIT', '2GB\n'],
     ['DUCKDB_MAX_WORKERS', '0'], ['DUCKDB_THREADS', '-1'], ['DUCKDB_QUERY_TIMEOUT_SECONDS', 'abc'], ['DUCKDB_IDLE_SECONDS', '1.5'],
   ]) {
     let msg = '';
-    try { envMod.parseEnv({ [name]: bad }); } catch (err) { msg = err instanceof envMod.EnvError ? err.message : 'wrong error'; }
+    try { envMod.parseEnv({ AUTH_MODE: 'dev', [name]: bad }); } catch (err) { msg = err instanceof envMod.EnvError ? err.message : 'wrong error'; }
     ok(`env: ${name}=${JSON.stringify(bad)} is refused, naming the variable`, msg.startsWith(name), msg);
   }
 }
@@ -294,7 +294,7 @@ async function main(): Promise<void> {
   const { z }: typeof import('zod') = require('zod');
   (contracts as Record<string, unknown>)['test:slow'] = rpc({ access: 'read', org: true, input: z.undefined() });
   (require('../src/ipc/bus') as typeof import('../src/ipc/bus')).ipcMain.handle('test:slow', () => duck.queryAsync(LONG));
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA })); // dev sign-in: org `default`
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA })); // dev sign-in: org `default`
   await app.listen({ port: 0, host: '127.0.0.1' });
   const { port } = app.server.address() as import('net').AddressInfo;
   await inOrg('default', () => q('SELECT 1 AS x')); // started first: its start is not interrupt latency

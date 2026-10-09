@@ -1,13 +1,17 @@
 # Single sign-on
 
-Ordinate signs people in one of two ways (`AUTH_MODE`):
+Ordinate signs people in with single sign-on, one of two ways (`AUTH_MODE`):
 
 - **`oidc`**: Ordinate itself is the OpenID Connect client of your IdP. This is the recommended
   mode for Kubernetes and ECS.
 - **`header`**: a proxy in front of Ordinate (oauth2-proxy) signs people in, and Ordinate believes
   the proxy's `X-Forwarded-Email`.
 
-In both modes, the identity is the **email address**, lower-cased. The first time an address signs
+Until you set one, a server runs **`password`** sign-in: Ordinate's own accounts, for trying it
+out. See [Password sign-in](#password-sign-in-for-trying-ordinate-out) for how it works and how to
+move off it.
+
+In both SSO modes, the identity is the **email address**, lower-cased. The first time an address signs
 in, it joins the deployment's org (`ORDINATE_ORG`) as a **viewer**. `ORDINATE_ADMIN_EMAIL` is made
 admin at every sign-in, and admins grant roles in Admin. `ALLOWED_EMAIL_DOMAINS` refuses every other
 domain. A disabled user is refused, and their sessions are deleted. Personal API tokens
@@ -168,3 +172,52 @@ networkPolicy:
 
 This needs a CNI that enforces NetworkPolicy. The chart's NetworkPolicy was proven on kind with
 kindnet (T7.2). Prefer `oidc` mode there: it has no proxy to trust.
+
+## Password sign-in (for trying Ordinate out)
+
+`AUTH_MODE=password` is the default, so a server nobody has configured yet asks for a password
+instead of letting anyone in. It needs Postgres (`DATABASE_URL`). At every start the server logs a
+warning that this mode is for trying Ordinate out. Move to `oidc` or `header` before real use:
+password sign-in has no MFA, and leavers have to be disabled in Ordinate by hand.
+
+**First admin.** While no enabled admin has a password, each pod logs a one-time setup code at
+startup, for example `First-run setup code: K7QM-2XRA-V9TD`. Only its sha256 is stored. The sign-in
+page then shows **Create admin account**, which asks for the code, an email and a password.
+
+```bash
+docker compose logs ordinate | grep "setup code"      # Compose
+kubectl logs deploy/<release>-ordinate | grep "setup code"   # Kubernetes
+```
+
+A code works on any pod, lasts 24 hours, and stops working once the admin exists. Restart the
+server to print a fresh one. Whoever can read the server's log can create the first admin, which is
+why the log is the channel.
+
+**Everyone else.** An admin adds people in **Admin → People → Add person** with a temporary
+password (**Generate** makes a random 16-character one). The admin hands it over themselves, since
+Ordinate sends no email. At the first sign-in the person has to choose their own password: until
+then every page goes to `/change-password` and every API call except `/api/auth/*` answers 403. A
+forgotten password is the same flow, through **Reset password** in the person's row menu. A reset
+also signs them out everywhere.
+
+**What the server enforces:**
+
+| Rule | Detail |
+|---|---|
+| Storage | scrypt (N=2^15, r=8, p=1, 16-byte salt), from Node's own `crypto`. A password is never stored, logged or audited. |
+| Length | 10 to 256 characters. |
+| Wrong passwords | A wrong email and a wrong password get the same answer. After 10 wrong passwords in 15 minutes, the account is locked until the window ends (per pod). `RATE_LIMIT_LOGIN_PER_MINUTE` also covers the password routes, per client IP. |
+| Changing a password | Asks for the current one, and signs out every other session of the account. |
+| Sessions | The same session cookie as `oidc`, rotated at every sign-in, under `SESSION_IDLE_MINUTES` and `SESSION_ABSOLUTE_HOURS`. |
+| Audit | Sign-ins (`login`), password changes (`password_change`), and the admin's `admin:addUser` / `admin:resetPassword` calls. |
+
+Over plain `http`, prod's `Secure` cookies are only accepted from `127.0.0.1` and `localhost` (tested
+in Chromium). To sign in from another machine, put TLS in front, as for SSO.
+
+**Moving to SSO.** Set `AUTH_MODE=oidc` (or `header`) and its variables, then restart. Accounts are
+matched by email, so people keep their roles, teams and project grants when they first sign in
+through the IdP. The stored password hashes are no longer used. Set `ORDINATE_ADMIN_EMAIL` so an
+admin exists from the first SSO sign-in.
+
+`AUTH_MODE=dev`, which signs every request in as an admin and needs no Postgres, is only for
+Ordinate's own automated tests. It is never the default, and `ORDINATE_ENV=prod` refuses it.

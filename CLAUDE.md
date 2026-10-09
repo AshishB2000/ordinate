@@ -35,10 +35,13 @@ SPA (`web/dist`) and the API from one origin. Metadata in Postgres; Parquet on `
   request id, client and an abort signal fired when the client hangs up; outside a request it throws.
   **Every in-memory cache is keyed with `orgKey()`** — record ids repeat across orgs after an import;
   T0.3 and T5.1 found 21 caches leaking across orgs.
-- **Auth** (`src/server/auth/`, `AUTH_MODE`): `oidc` (code + PKCE, `openid-client`), `header`
-  (`X-Forwarded-Email` believed only from a TCP peer in `TRUSTED_PROXY_CIDRS`), `dev` (everyone
-  admin; refused when `ORDINATE_ENV=prod`). Personal API tokens (`ord_…`, sha256-stored) for the RPC
-  API and `/api/mcp`. Roles, grants and audit: `src/server/authz/`.
+- **Auth** (`src/server/auth/`, `AUTH_MODE`): `password` — **the default**, for trying Ordinate out
+  (own accounts, scrypt, a first-run setup code printed in the log, temporary passwords an admin
+  sets that must be changed; `password.ts`, startup warns to move to SSO), `oidc` (code + PKCE,
+  `openid-client`), `header` (`X-Forwarded-Email` believed only from a TCP peer in
+  `TRUSTED_PROXY_CIDRS`), `dev` (everyone admin, no Postgres; **explicit only**, for the test
+  harness; refused when `ORDINATE_ENV=prod`). Personal API tokens (`ord_…`, sha256-stored) for the
+  RPC API and `/api/mcp`. Roles, grants and audit: `src/server/authz/`.
 - **Push** is SSE, `GET /api/events?client=<uuid>`, bound to org + user; across pods over Postgres
   `LISTEN/NOTIFY` (`src/server/jobs/bus.ts`). Jobs are a Postgres table claimed with `FOR UPDATE
   SKIP LOCKED` under a lease (`src/server/jobs/`).
@@ -207,7 +210,8 @@ call. Every env var is in `docs/server/configuration.md`; `test-serverDocs` enfo
   web, docker, helm and audit. `e2e-nightly.yml` runs Firefox and WebKit.
 
 ```bash
-npm run server        # build:ts, then the server on 127.0.0.1:8080 (dev auth, ./data); serves web/dist
+npm run server        # build:ts, then the server on 127.0.0.1:8080 (./data); serves web/dist. Needs
+                      # DATABASE_URL (password sign-in, the default) — or AUTH_MODE=dev, as the tests set
 npm run dev:web       # Vite dev server, /api proxied to 127.0.0.1:8080
 npm run build:web     # web/dist (tsc + vite build)
 npm test              # every self-check suite, parallel

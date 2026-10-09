@@ -1,9 +1,11 @@
 // E2E (T7.1): the Docker Compose stack (deploy/docker-compose.yml) from a
 // clean state — the built image, Postgres, MinIO — driven by a real browser:
 //
-//   sign in    header mode: this browser context sends X-Forwarded-Email as
-//              oauth2-proxy would (the published port is the trusted proxy's
-//              hop); without it a page redirects to /sign-in
+//   sign in    password mode (the compose default) when E2E_COMPOSE_SETUP_CODE
+//              is set: the first-run setup form, with the code the server
+//              printed in its log, creates the admin. Otherwise header mode
+//              (the Helm job): this browser context sends X-Forwarded-Email as
+//              oauth2-proxy would. Either way a signed-out page redirects to /sign-in
 //   project    New project from the switcher (UI)
 //   import     a CSV uploaded on the import page → composer → Save (UI); its
 //              table is written to MinIO through DuckDB httpfs
@@ -19,7 +21,9 @@
 // RPC budget. Screens in both themes: web/e2e/__screens__/compose-*.png.
 //
 //   cd deploy && docker compose down -v && docker compose up -d --build --wait
-//   E2E_COMPOSE_URL=http://127.0.0.1:8080 E2E_COMPOSE_EMAIL=<ORDINATE_ADMIN_EMAIL> node --test web/e2e/compose.e2e.ts
+//   E2E_COMPOSE_URL=http://127.0.0.1:8080 E2E_COMPOSE_EMAIL=admin@example.com \
+//     E2E_COMPOSE_SETUP_CODE=$(docker compose logs ordinate | grep -o 'setup code: [A-Z0-9-]*' | head -n1 | cut -d' ' -f3) \
+//     node --test web/e2e/compose.e2e.ts
 //
 // Without E2E_COMPOSE_URL this spec prints one skip line (the ordinary e2e run has no Docker).
 
@@ -30,6 +34,9 @@ import type { Browser, Locator, Page } from 'playwright';
 
 const BASE = process.env.E2E_COMPOSE_URL;
 const EMAIL = process.env.E2E_COMPOSE_EMAIL || 'admin@example.com';
+/** Password sign-in's first-run code, from the server's log; unset = header mode. */
+const SETUP_CODE = process.env.E2E_COMPOSE_SETUP_CODE;
+const PASSWORD = 'compose-e2e-admin-password';
 
 if (!BASE) {
   void test('compose e2e', { skip: 'E2E_COMPOSE_URL is unset (start deploy/docker-compose.yml and point it at the app port)' }, () => {});
@@ -73,20 +80,30 @@ if (!BASE) {
     });
 
   void test('compose: sign in → project → import CSV → chart → dashboard', async () => {
-    // ── Signed out: no identity from the proxy → the sign-in page ──────────
+    // ── Signed out (no session, no identity from the proxy) → the sign-in page
     const anon = await browser.newContext({ baseURL: BASE, viewport: { width: 1440, height: 900 } });
     const anonPage = await anon.newPage();
     await anonPage.goto('/data');
     assert.equal(new URL(anonPage.url()).pathname, '/sign-in', 'a signed-out navigation lands on /sign-in');
     await anon.close();
 
-    // ── Signed in through the "proxy" ──────────────────────────────────────
-    const context = await browser.newContext({ baseURL: BASE, viewport: { width: 1440, height: 900 }, extraHTTPHeaders: { 'x-forwarded-email': EMAIL } });
+    // ── Signed in: the first-run setup form, or through the "proxy" ────────
+    const proxied = SETUP_CODE ? {} : { extraHTTPHeaders: { 'x-forwarded-email': EMAIL } };
+    const context = await browser.newContext({ baseURL: BASE, viewport: { width: 1440, height: 900 }, ...proxied });
     const page = await context.newPage();
     const problems = await failOnConsoleError(page);
     const rpc = rpcBudget(page);
     try {
       await page.goto('/');
+      if (SETUP_CODE) {
+        await page.getByRole('heading', { level: 1, name: 'Create the admin account' }).waitFor();
+        await page.getByLabel('Setup code').fill(SETUP_CODE);
+        await page.getByLabel('Your email').fill(EMAIL);
+        await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+        await page.getByLabel('Confirm password').fill(PASSWORD);
+        await page.getByRole('button', { name: /Create admin account/ }).click();
+        await page.getByRole('navigation', { name: 'Sections' }).waitFor();
+      }
       await settled(page);
       await page.getByRole('button', { name: 'Account and theme' }).click();
       assert.equal(await page.getByTestId('user-email').textContent(), EMAIL, 'the shell shows the signed-in admin');

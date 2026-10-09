@@ -123,8 +123,8 @@ const value = (text: string, series: string): number | null => {
   ok('esc: backslash, quote and newline are escaped', metrics.esc('a\\b"c\nd') === 'a\\\\b\\"c\\nd');
 
   // ── env ───────────────────────────────────────────────────────────────────
-  ok('env: METRICS_PORT unset → no metrics listener', envMod.parseEnv({}).metricsPort === null);
-  ok('env: METRICS_PORT=9464 → 9464', envMod.parseEnv({ METRICS_PORT: '9464' }).metricsPort === 9464);
+  ok('env: METRICS_PORT unset → no metrics listener', envMod.parseEnv({ AUTH_MODE: 'dev' }).metricsPort === null);
+  ok('env: METRICS_PORT=9464 → 9464', envMod.parseEnv({ AUTH_MODE: 'dev', METRICS_PORT: '9464' }).metricsPort === 9464);
   for (const bad of [{ PORT: '8080', METRICS_PORT: '8080' }, { METRICS_PORT: '8080' }, { METRICS_PORT: 'abc' }, { METRICS_PORT: '0' }, { METRICS_PORT: '70000' }]) {
     let refused = '';
     try {
@@ -138,7 +138,7 @@ const value = (text: string, series: string): number | null => {
   // ── Real traffic through the app ─────────────────────────────────────────
   const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-metrics-'));
   context.enterServerMode(DATA);
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) =>
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) =>
     h['x-test'] ? { user: { email: 'm@test', role: 'admin' }, org: { id: 'metrics' } } : null);
   await app.listen({ port: 0, host: '127.0.0.1' });
   const mserver = await metrics.startMetricsServer(0, '127.0.0.1');

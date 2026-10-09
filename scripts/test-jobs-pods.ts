@@ -62,7 +62,7 @@ const fmt = (xs: number[]): string => `median ${pct(xs, 50).toFixed(2)} ms, p95 
 interface Pod { child: ChildProcess; pid: number; out: () => string; base: Promise<string | null>; exited: Promise<number | null> }
 
 function startPod(env: Record<string, string>): Pod {
-  const e: NodeJS.ProcessEnv = { ...process.env, ...env, PORT: '0', ORDINATE_ENV: 'dev', LOG_LEVEL: 'info' };
+  const e: NodeJS.ProcessEnv = { ...process.env, ...env, PORT: '0', ORDINATE_ENV: 'dev', AUTH_MODE: 'dev', LOG_LEVEL: 'info' };
   const child = spawn(process.execPath, ['-r', PRELOAD, MAIN], { env: e, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   const exited = new Promise<number | null>((resolve) => child.on('exit', (code) => resolve(code)));

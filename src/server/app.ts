@@ -84,6 +84,7 @@ function routeAccess(method: string, route: string | undefined): 'read' | 'write
 }
 
 const NOT_PAGES = new Set(['/healthz', '/readyz', '/sign-in', '/metrics']);
+const CHANGE_PASSWORD = '/change-password';
 
 /** A browser opening an app route — not a file (`.js`, `.svg`), a probe or the sign-in page. */
 function isPageNavigation(method: string, path: string, accept: string | undefined): boolean {
@@ -92,7 +93,7 @@ function isPageNavigation(method: string, path: string, accept: string | undefin
 
 /**
  * `identify` replaces the AUTH_MODE's own (tests). Without it, dev mode is the
- * dev admin and oidc/header resolve through ./auth/ against Postgres.
+ * dev admin and password/oidc/header resolve through ./auth/ against Postgres.
  */
 export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, identifyOverride?: Identify): FastifyInstance {
   const app = fastify({
@@ -212,7 +213,13 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       (who) => {
         if (!who && !api) return void reply.redirect(path === '/' ? '/sign-in' : `/sign-in?next=${encodeURIComponent(req.url)}`);
         if (!who) return void reply.code(401).send({ error: 'not signed in' });
+        // A temporary password (./auth/password.ts): every page is the change-password page, and
+        // every /api/ call but /api/auth/* (exempt above) is refused, until it is changed.
+        if (who.mustChangePassword && !api && path !== CHANGE_PASSWORD) {
+          return void reply.redirect(path === '/' ? CHANGE_PASSWORD : `${CHANGE_PASSWORD}?next=${encodeURIComponent(req.url)}`);
+        }
         if (!api) return done();
+        if (who.mustChangePassword) return void reply.code(403).send({ error: 'password change required' });
         // Uploads and the event stream are checked against the org role
         // (./authz/); RPC calls are checked per contract in the route below.
         const need = routeAccess(req.method, req.routeOptions.url);
@@ -369,6 +376,7 @@ export function registerHandlers(): void {
     return appEnv;
   };
   (require('./admin/people') as typeof import('./admin/people')).register(() => dbPool, () => env().auth.allowedDomains);
+  (require('./admin/passwords') as typeof import('./admin/passwords')).register(() => dbPool, () => (appEnv ?? env()).auth.mode, () => env().auth.allowedDomains);
   (require('./admin/org') as typeof import('./admin/org')).register(() => dbPool, () => env().maxUploadMb);
   (require('./auth/tokens') as typeof import('./auth/tokens')).register(() => dbPool);
   // The Assistant dock (T2.12): conversations, answers, plans, provider keys.

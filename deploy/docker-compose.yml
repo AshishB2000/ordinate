@@ -4,12 +4,13 @@
 #   cp .env.example .env     # then set ORDINATE_MASTER_KEY, the passwords and the admin email
 #   docker compose up -d --build
 #
-# Sign-in is AUTH_MODE=header: Ordinate trusts X-Forwarded-Email from the proxy
-# in front of it (oauth2-proxy with your IdP — plan M2). The app port is
-# published on 127.0.0.1 only, so the one thing that can reach it — and assert
-# an identity — is a process on this host: run oauth2-proxy here with
-# --upstream=http://127.0.0.1:${ORDINATE_PORT}. To sign in with OIDC directly
-# instead, see "Switching to OIDC" in .env.example.
+# Sign-in starts as AUTH_MODE=password, Ordinate's own accounts, for trying it
+# out: open http://127.0.0.1:8080, enter the setup code the server printed
+#   docker compose logs ordinate | grep "setup code"
+# and create the admin account; add everyone else in Admin → People. Before
+# real use switch to single sign-on: AUTH_MODE=oidc, or AUTH_MODE=header behind
+# oauth2-proxy (see .env.example and docs/server/sso.md). The app port is
+# published on 127.0.0.1 only.
 #
 # Postgres and MinIO publish no host ports: only Ordinate talks to them, on
 # the compose network. Data lives in three named volumes; `docker compose down`
@@ -88,9 +89,9 @@ services:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       # Sign-in (see the header above and .env.example).
-      AUTH_MODE: ${AUTH_MODE:-header}
+      AUTH_MODE: ${AUTH_MODE:-password}
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-172.30.80.1/32}
-      ORDINATE_ADMIN_EMAIL: ${ORDINATE_ADMIN_EMAIL:?set ORDINATE_ADMIN_EMAIL in .env}
+      ORDINATE_ADMIN_EMAIL: ${ORDINATE_ADMIN_EMAIL:-}
       ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-}
       OIDC_ISSUER: ${OIDC_ISSUER:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}

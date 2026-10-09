@@ -76,7 +76,7 @@ async function seedLarge(projectId: string): Promise<{ datasetId: string; rows: 
   return { datasetId: ds.id, rows: LARGE_ROWS, ms: Math.round(performance.now() - t0) };
 }
 
-const cfg = envMod.parseEnv({ ORDINATE_ENV: 'dev', DATA_DIR: dataDir });
+const cfg = envMod.parseEnv({ AUTH_MODE: 'dev', ORDINATE_ENV: 'dev', DATA_DIR: dataDir });
 context.enterServerMode(cfg.dataDir);
 // The identity every dev-mode request gets, so the sample lands in that org.
 const dev = context.identityFor(cfg)({});

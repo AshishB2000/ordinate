@@ -199,6 +199,23 @@
   gap: var(--sp-16);
 }
 
+/* A temporary password and its Generate button on one line, the button level with the field. */
+.tempRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+}
+.tempRow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.tempRow > button {
+  margin-top: 22px;
+}
+.tempInput input {
+  font-family: var(--font-mono);
+}
+
 /* Named for assistive tech, not drawn (an actions column's header). */
 .srOnly {
   position: absolute;

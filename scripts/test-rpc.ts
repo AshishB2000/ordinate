@@ -56,7 +56,7 @@ const PID = '1b4e28ba-2fa1-11d2-883f-0016d3cca427';
   const projectId = String((await sample.seedSampleProject()).projectId);
   const dsId = (await datasets.listDatasets(projectId))[0].id;
 
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent' }));
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent' }));
   const post = (channel: string, body: unknown, raw = false) => app.inject({
     method: 'POST',
     url: `/api/rpc/${encodeURIComponent(channel)}`,

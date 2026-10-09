@@ -31,6 +31,11 @@ export interface Identity {
   readonly org: { readonly id: string };
   /** Set when the request signed in with a personal API token (`Authorization: Bearer`, ./auth/tokens.ts). */
   readonly via?: 'token';
+  /**
+   * Password sign-in with a temporary password (./auth/password.ts): until it
+   * is changed, app.ts refuses every /api/ request outside /api/auth/*.
+   */
+  readonly mustChangePassword?: true;
 }
 
 export interface RequestContext extends Identity {
@@ -114,14 +119,15 @@ export function requestClient(): Client | null {
 
 /**
  * Dev sign-in: everyone is the dev admin (main.ts binds loopback only for that
- * reason). This is the ONE gate for "is dev sign-in allowed here": prod
- * refuses to start with it, whether AUTH_MODE=dev was set or left unset — an
- * open prod server would make every caller an admin. AUTH_MODE=oidc|header
+ * reason). Only an explicit AUTH_MODE=dev gets here — the default is password
+ * sign-in — and it is for Ordinate's automated tests. This is the ONE gate for
+ * "is dev sign-in allowed here": prod refuses to start with it — an open prod
+ * server would make every caller an admin. AUTH_MODE=password|oidc|header
  * resolve through ./auth/ (they need Postgres), never through here.
  */
 export function identityFor(cfg: ServerEnv): (headers: Headers) => Identity {
   if (cfg.env === 'prod' && cfg.auth.mode === 'dev') {
-    throw new EnvError('ORDINATE_ENV=prod needs sign-in configured: set AUTH_MODE=oidc or AUTH_MODE=header (dev sign-in makes every caller an admin)');
+    throw new EnvError('ORDINATE_ENV=prod refuses dev sign-in (AUTH_MODE=dev makes every caller an admin): set AUTH_MODE=oidc, header or password');
   }
   if (cfg.auth.mode !== 'dev') throw new Error(`AUTH_MODE=${cfg.auth.mode} resolves through src/server/auth, not identityFor`);
   return () => DEV;

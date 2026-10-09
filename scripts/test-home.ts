@@ -56,7 +56,7 @@ const ids = (s: Snap): string[] => [...s.active, ...s.recent].map((j) => j.id);
 (async () => {
   context.enterServerMode(DATA);
   appMod.registerHandlers();
-  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) => {
+  const app = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, (h) => {
     const org = h['x-test-org'];
     const user = h['x-test-user'];
     const role = h['x-test-role'];
