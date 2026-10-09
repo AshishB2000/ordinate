@@ -16,6 +16,7 @@ import type { ParamValues } from '../analysis/params';
 import { paramTable } from '../data/paramReplay';
 import { withAsOf } from '../data/asOf';
 import { stampAsOf } from '../data/figureAsOf';
+import { ensureFresh } from '../data/freshOnAsk';
 import { fxCardMetric, fxContext, fxScope } from './fxQuery';
 import type { FxInfo } from '../analysis/fx';
 
@@ -146,6 +147,7 @@ export async function computeCardMetric(
   filters: FilterStep[] = [],
   params?: ParamValues,
 ): Promise<{ ok: boolean; value: number | null; fx?: FxInfo }> {
+  await ensureFresh(projectId, [datasetId]); // L3.1 fresh on ask: before the cache key reads the record
   // A declared money column converts to the target currency (./fxQuery); a count never does.
   const fxc = spec.aggregation !== 'count' ? await fxContext(projectId, datasetId, [spec.column], [spec.column, ...filters.map((f) => f.column)]) : null;
   const run = (): Promise<{ ok: boolean; value: number | null; fx?: FxInfo }> => fxc

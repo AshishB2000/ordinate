@@ -27,13 +27,14 @@ import { e2e, SCREENS, screens, settled, type Session } from './fixtures.ts';
 
 const CANARY = 'k3y-E2E-CANARY-91c4';
 const SEED = fileURLToPath(new URL('./seedData.ts', import.meta.url));
-let seeded: { regionsId: string; feedId: string; liveId: string } | undefined;
+type Seeded = { regionsId: string; feedId: string; liveId: string; snapshotId: string };
+let seeded: Seeded | undefined;
 
-function seed(s: Session): { regionsId: string; feedId: string; liveId: string } {
+function seed(s: Session): Seeded {
   if (seeded) return seeded;
   const r = spawnSync(process.execPath, [SEED, s.server.dataDir, s.server.sample.projectId, CANARY], { encoding: 'utf8', timeout: 60_000 });
   if (r.status !== 0) throw new Error(`seedData failed:\n${r.stderr || r.stdout}`);
-  seeded = JSON.parse(r.stdout.trim().split('\n').pop() ?? '{}') as { regionsId: string; feedId: string; liveId: string };
+  seeded = JSON.parse(r.stdout.trim().split('\n').pop() ?? '{}') as Seeded;
   return seeded;
 }
 
@@ -228,6 +229,47 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
 
   noCanary(bodies);
   void ids;
+});
+
+// Fresh on ask (L3.1) beside the schedule on the dataset page: offered where incremental refresh is
+// on, set and turned off again through dataset:update; disabled, saying why, where it is not.
+e2e('fresh on ask: set it beside the schedule, and see why it is off without incremental refresh', async (s) => {
+  const { page } = s;
+  const ids = seed(s);
+  const pid = s.server.sample.projectId;
+  const bodies = replies(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(`/data/${pid}/${ids.liveId}`);
+  await settled(page);
+  await page.getByRole('heading', { level: 1, name: 'Live orders' }).waitFor();
+  const picker = page.getByRole('combobox', { name: 'Fresh on ask for Live orders' });
+  assert.equal(await picker.isDisabled(), false, 'incremental refresh is on: fresh on ask is offered');
+  assert.equal((await picker.textContent())?.trim(), 'Fresh on ask off');
+  await picker.click();
+  const saved = page.waitForResponse((r) => r.url().endsWith('/api/rpc/dataset%3Aupdate') && r.status() === 200);
+  await page.getByRole('option', { name: 'Fresh on ask · 5 min' }).click();
+  await saved;
+  await page.waitForFunction(() => document.querySelector('[aria-label="Fresh on ask for Live orders"]')?.textContent?.includes('5 min'));
+  await screens(page, 'dataset-fresh-on-ask');
+  assert.match((await page.getByRole('combobox', { name: 'Fresh on ask for Live orders' }).textContent()) ?? '', /Fresh on ask · 5 min/, 'kept on the record: it survives the reloads');
+
+  // Without incremental refresh: there, disabled, the reason in words beside it.
+  await page.goto(`/data/${pid}/${ids.snapshotId}`);
+  await settled(page);
+  const off = page.getByRole('combobox', { name: 'Fresh on ask for Orders snapshot — needs incremental refresh' });
+  await off.waitFor();
+  assert.equal(await off.isDisabled(), true, 'no incremental refresh: fresh on ask is disabled');
+  await page.getByText('needs incremental refresh', { exact: true }).waitFor();
+  await screens(page, 'dataset-fresh-on-ask-off');
+
+  // Back to off, so the rest of the suite reads the seed as it was.
+  await page.goto(`/data/${pid}/${ids.liveId}`);
+  await settled(page);
+  await page.getByRole('combobox', { name: 'Fresh on ask for Live orders' }).click();
+  const offSaved = page.waitForResponse((r) => r.url().endsWith('/api/rpc/dataset%3Aupdate') && r.status() === 200);
+  await page.getByRole('option', { name: 'Fresh on ask off' }).click();
+  await offSaved;
+  noCanary(bodies);
 });
 
 e2e('empty states: a new project, and the import placeholder', async (s) => {

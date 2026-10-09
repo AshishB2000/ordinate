@@ -218,6 +218,9 @@ export function writeIncremental(
       raw.autoRefresh = { ...auto, every: 'hourly' };
       delete (raw.autoRefresh as Record<string, unknown>).lastAutoMs;
     }
+    // Fresh on ask (L3.1) pulls incrementally or not at all: off with it, dropped in
+    // this same write, so turning incremental back on does not silently revive it.
+    if (!next?.enabled) delete raw.freshOnAsk;
     return next;
   });
 }

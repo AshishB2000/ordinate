@@ -2,8 +2,10 @@
 // of a running e2e server's DATA_DIR through the ordinary stores, as the dev
 // user's org: a "Regions" lookup to relate Retail orders to, "Feed", a
 // dataset whose origin and stored refresh error hold a planted key — which no
-// reply the browser receives may ever carry — and "Live orders", refreshed
-// incrementally every 5 minutes, whose last run took 7 (L0.3: behind schedule).
+// reply the browser receives may ever carry — "Live orders", refreshed
+// incrementally every 5 minutes, whose last run took 7 (L0.3: behind schedule),
+// and "Orders snapshot", from a connection WITHOUT incremental refresh (L3.1:
+// fresh on ask is offered there, disabled, saying why).
 //
 //   node web/e2e/seedData.ts <dataDir> <projectId> <canary>   (after npm run build:ts)
 
@@ -57,12 +59,19 @@ const out = await context.runInContext(dev, 'e2e-data-seed', async () => {
     rows: [[1, 100], [2, 101]],
     origin: { kind: 'connection', connId: '7d1f3c2a-0b6e-4f5a-9c8d-1e2f3a4b5c6d', table: 'orders' },
   });
-  if (!regions || !feed || !live) throw new Error('the Data fixture was not saved');
+  const snapshot = await datasets.saveDataset(projectId, {
+    name: 'Orders snapshot',
+    sourceKind: 'postgres',
+    columns: [{ name: 'id', type: 'number' }, { name: 'updated', type: 'number' }],
+    rows: [[1, 100], [2, 101]],
+    origin: { kind: 'connection', connId: '7d1f3c2a-0b6e-4f5a-9c8d-1e2f3a4b5c6d', table: 'orders' },
+  });
+  if (!regions || !feed || !live || !snapshot) throw new Error('the Data fixture was not saved');
   await record.markRefresh(projectId, feed.id, 'error', `Could not fetch ${url}: 401 Unauthorized`);
   await record.markRefresh(projectId, live.id, 'ok', null);
   await datasets.writeIncremental(projectId, live.id, () => ({ enabled: true, cursorColumn: 'updated', keyColumn: 'id', lookback: 0, highWater: 101, runsSinceFull: 1, log: [] }));
   await datasets.setAutoRefresh(projectId, live.id, { every: '5min', lastAutoAt: new Date().toISOString(), lastAutoMs: 7 * 60_000 });
-  return { regionsId: regions.id, feedId: feed.id, liveId: live.id };
+  return { regionsId: regions.id, feedId: feed.id, liveId: live.id, snapshotId: snapshot.id };
 });
 process.stdout.write(`${JSON.stringify(out)}\n`);
 process.exit(0); // DuckDB's worker would hold the process open

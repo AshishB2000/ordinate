@@ -86,6 +86,7 @@ Bounds on what a connection may cost in the warehouse it reads. See [live-data.m
 | Variable | Purpose | Default | Required when | Secret |
 |---|---|---|---|---|
 | `LIVE_MAX_BYTES_BILLED` | The most a single BigQuery query may bill, in bytes. Every query a BigQuery connection runs carries BigQuery's `maximumBytesBilled` = the lower of this and the connection's own "Max bytes billed per query", so a query over it fails before it runs, at no charge. A whole number of bytes, no unit. | `10737418240` (10 GiB) | — | no |
+| `FRESH_ON_ASK_WAIT_MS` | How long a chart, KPI or answer on a stale copy with "Fresh on ask" waits for its incremental pull, in milliseconds. Landed in time: the answer has the new rows. Not yet: the answer comes from the copy marked "refreshing…", and open dashboards redraw when the rows land. `0` never waits. At most `30000`; keep it well under `RPC_TIMEOUT_SECONDS`. See [live-data.md](live-data.md#fresh-on-ask). | `5000` | — | no |
 
 ## DuckDB
 

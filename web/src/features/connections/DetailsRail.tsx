@@ -20,6 +20,7 @@ import { toast } from '../../ui/Toast';
 import type { AutoRefreshEvery } from '../../api/datasets';
 import { BehindBadge, cadenceOptions } from '../data/cadence';
 import { everyWord } from '../data/format';
+import { FreshOnAskPicker } from '../data/FreshOnAsk';
 import { refreshDataset, replaceSecret, setSchedule, type CatalogField, type ConnDataset, type Connection, type Connector } from './api';
 import { SecretTextarea } from './SecretText';
 import { formatWhen } from './SavedConnections';
@@ -165,6 +166,7 @@ function DatasetRow({ d, projectId, connId, onChanged }: { d: ConnDataset; proje
           options={cadenceOptions(SCHEDULE, !!d.incrementalOn)}
         />
       )}
+      <FreshOnAskPicker projectId={projectId} d={d} onChanged={onChanged} wide />
     </li>
   );
 }

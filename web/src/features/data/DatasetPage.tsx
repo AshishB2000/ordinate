@@ -19,6 +19,7 @@ import { ColumnsTab } from './ColumnsTab';
 import { DataTab } from './DataTab';
 import { QualityDot, SchedulePicker, useDeleteDataset, useRefresh, WatchToggle } from './DatasetList';
 import { BehindBadge } from './cadence';
+import { FreshOnAskPicker } from './FreshOnAsk';
 import { useAdoptProject } from '../projects/current';
 import { RecordDetails } from './Details';
 import { formatNumber, freshness, NOT_REFRESHABLE, rowsText } from './format';
@@ -118,6 +119,7 @@ function Header({ projectId, id, name, rowCount, columnCount, live }: { projectI
               </span>
             )}
             {d && <SchedulePicker projectId={projectId} d={d} />}
+            {d && <FreshOnAskPicker projectId={projectId} d={d} />}
             {d && <WatchToggle projectId={projectId} d={d} />}
             {lineage.data && (
               <button type="button" className={s.usedIn} onClick={() => setGraph(true)}>

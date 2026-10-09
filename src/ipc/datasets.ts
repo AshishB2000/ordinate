@@ -44,6 +44,7 @@ import type { ParsedColumn } from '../data/parse';
 import { redactOriginText } from '../data/datasetOrigin';
 import { needsIncremental } from '../data/refreshCadence';
 import { fastCadenceNeedsIncremental } from '../data/refreshMessages';
+import { setFreshOnAsk } from '../data/freshOnAskRecord';
 import { serverDataDir } from '../server/context';
 import { filledPcts } from '../data/profileView';
 import { refreshLive } from './liveDatasets';
@@ -530,8 +531,13 @@ export function register() {
   // The schedule rides on THIS channel rather than getting one of its own: it is
   // a field of the same record, and a second channel would be a second place to
   // validate a projectId and a datasetId.
-  ipcMain.handle('dataset:update', async (_e, { projectId, datasetId, columns, autoRefresh, watch }: any = {}) => {
+  ipcMain.handle('dataset:update', async (_e, { projectId, datasetId, columns, autoRefresh, watch, freshOnAsk }: any = {}) => {
     try {
+      // Fresh on ask (L3.1): only with incremental refresh on — refused with the catalog's reason.
+      if (freshOnAsk !== undefined) {
+        const res = await setFreshOnAsk(projectId, datasetId, freshOnAsk);
+        if (!res.ok) return res;
+      }
       // `undefined` means "not part of this patch"; `null` means "turn it off".
       if (autoRefresh !== undefined) {
         const every = autoRefresh === null || autoRefresh === 'off' ? null : String(autoRefresh);

@@ -87,6 +87,8 @@ export interface ConnDataset {
   behindSchedule?: true;
   /** A Live dataset keeps no rows here; its Refresh resets the cache (L2.1). */
   mode?: 'live';
+  /** Fresh on ask (L3.1): the age past which a figure pulls the new rows first. */
+  freshOnAsk?: { maxStalenessSec: number; fullDue?: true };
 }
 
 export interface PreviewColumn {

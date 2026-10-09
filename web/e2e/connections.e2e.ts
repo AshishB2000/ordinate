@@ -261,6 +261,10 @@ if (adminUrl) {
     await row.getByText(/Refreshes daily/).waitFor();
     await row.getByRole('button', { name: 'Refresh Regions now' }).click();
     await page.getByText('Refreshed “Regions”.').waitFor();
+    // Fresh on ask (L3.1) beside the schedule: disabled without incremental refresh, saying why.
+    const freshPicker = row.getByRole('combobox', { name: 'Fresh on ask for Regions — needs incremental refresh' });
+    assert.equal(await freshPicker.isDisabled(), true, 'no incremental refresh: fresh on ask is disabled');
+    await row.getByText('needs incremental refresh', { exact: true }).waitFor();
 
     // Replace the password: tested, kept, never shown.
     await rail.getByRole('button', { name: 'Replace Password' }).click();

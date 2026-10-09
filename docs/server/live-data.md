@@ -254,3 +254,68 @@ With incremental refresh on, Ordinate asks BigQuery only for rows at or past the
 literal, which BigQuery reads as the column's own type (`DATE`, `DATETIME` or `TIMESTAMP`), so a
 partitioned table scans only the partitions it needs. It is a day wider than needed on purpose; the
 exact cut is made in Ordinate.
+
+## Fresh on ask
+
+A copy of an operational table — Postgres, MySQL, SQL Server and the other sources that stay copies
+(plan D8) — is as old as its last refresh. A schedule refreshes it every N minutes whether anyone
+looks or not. **Fresh on ask** refreshes it when someone does: a chart, a KPI tile, a statistics tile
+or an AI answer that reads a copy older than the age you choose first pulls the rows added since the
+last refresh, waits a moment for them, and answers with them.
+
+### Turning it on
+
+On the dataset's page, beside the refresh schedule (and in the connection workbench's list of
+datasets): **Fresh on ask** · Off, 1 min, 5 min, 15 min or 1 h. Through the API it is
+`dataset:update` with `freshOnAsk: { maxStalenessSec }` (60 – 86,400) or `null`.
+
+It needs **incremental refresh** on the dataset — a cursor column, and the mark its first, full
+refresh sets — because a pull on ask must be cheap for the source: only the rows past the cursor. A
+dataset without incremental refresh shows the control disabled, saying so, and the server refuses it.
+Turning incremental refresh off turns fresh on ask off with it. (Incremental refresh is set on the
+dataset record; the web app has no panel for it yet.) A Live dataset never has it: it is asked at the
+warehouse every time.
+
+### What an ask does
+
+1. The copy is younger than the age: nothing happens. This costs one read of the dataset's record per
+   dataset per request — a dashboard of 30 tiles over one dataset reads it once.
+2. Older: one **incremental** refresh starts — the same run a schedule makes, through the same job
+   queue, with the cursor pushed to the source where its SQL allows. Every tile of that dataset on the
+   page waits for the same run.
+3. It lands within `FRESH_ON_ASK_WAIT_MS` (5 s by default): the answer includes the new rows.
+4. It does not: the answer comes from the copy, captioned "As of 1:00 AM · refreshing…", and every open
+   tab of a reader redraws when the rows land (the same push a ↻ sends). A person who closes the tab
+   stops waiting; the refresh carries on for everyone else.
+
+After it lands, everything that follows a refresh runs: alerts, quality checks, a republish, and the
+SQL datasets built on it.
+
+### Never a full refresh
+
+Fresh on ask only ever pulls new rows. When the next refresh of the dataset must be a full one — its
+first run, every 7th run, "Full refresh now", a cursor or key column that is gone, or columns that
+changed at the source — an ask does not start it: the dataset shows **Waits for a full refresh**, and
+answers come from the copy until a scheduled refresh or **Refresh now** has run it.
+
+### What it costs the source
+
+- **At most one pull per dataset per window** — the age you chose — however many people ask, on
+  however many pods. The pull's start is stamped on the dataset record, and the stamp is claimed under
+  a short Postgres advisory lock, so exactly one pod starts a window's pull; a refresh already running
+  anywhere (a ↻, the schedule, another pod's pull) is waited for, never doubled. A source that fails is
+  tried again only when the next window opens.
+- Each pull is one bounded query: `select * from <table> where <cursor> >= <mark − lookback>`.
+- Anyone who may read the dashboard can cause a pull by opening it — that is the feature. It runs as
+  the connection's identity, like every refresh, and the person who set fresh on ask chose the window.
+- Without `DATABASE_URL` there is one process, and the same rules hold inside it.
+
+### Choosing an age
+
+The age is both the freshness promise and the rate limit. 1 minute suits a small, indexed table
+people watch during the day; 15 minutes to 1 hour suits a large one, or a source that should not be
+read often. If every view should be current, a 5-minute incremental schedule (L0.3) keeps the copy
+fresh without anyone waiting; fresh on ask then rarely has anything to pull.
+
+A dashboard viewed **as of** a past time never pulls. Publishing reads like any other ask (a stale
+copy is pulled first); the published page is then a snapshot and asks nothing.

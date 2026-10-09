@@ -30,6 +30,8 @@ export interface DatasetSummary {
   /** A Live dataset: no stored rows (`rowCount` is 0 and means nothing) — L2.1. */
   mode?: 'live';
   maxCacheAgeSec?: number;
+  /** Fresh on ask (L3.1): pull the new rows when a figure asks a copy older than this; `fullDue` — it waits for a full refresh first. */
+  freshOnAsk?: { maxStalenessSec: number; fullDue?: true };
 }
 
 /** A refresh schedule (src/data/datasets.ts `AutoRefreshEvery`); 5 and 15 minutes need incremental refresh. */

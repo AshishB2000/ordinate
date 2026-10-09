@@ -17,10 +17,14 @@
 //
 // Inside an as-of read (./asOf.ts) the metadata IS the snapshot's, so a sheet
 // viewed "as of" a past time is dated with that time.
+//
+// A copy still being pulled by fresh on ask (L3.1) adds `refreshing: true`
+// (./freshOnAskState.ts): the figure stands, and the push redraws it.
 
 import type { AsOf } from '../api/asOf';
 import * as datasets from './datasets';
 import type { DatasetMeta } from './datasets';
+import { withPulls } from './freshOnAskState';
 
 type Stamps = Pick<DatasetMeta, 'lastRefreshedAt' | 'createdAt' | 'updatedAt' | 'sourceKind'>;
 
@@ -59,7 +63,8 @@ export function asOfFrom(metas: ReadonlyArray<Stamps | null | undefined>): AsOf 
 export async function figureAsOf(projectId: string, datasetIds: ReadonlyArray<string | undefined>): Promise<AsOf | undefined> {
   const ids = [...new Set(datasetIds.filter((d): d is string => typeof d === 'string' && d !== ''))];
   if (!ids.length) return undefined;
-  return asOfFrom(await Promise.all(ids.map((id) => datasets.getDatasetMeta(projectId, id).catch(() => null))));
+  const asOf = asOfFrom(await Promise.all(ids.map((id) => datasets.getDatasetMeta(projectId, id).catch(() => null))));
+  return asOf ? withPulls(asOf, projectId, ids) : undefined;
 }
 
 /**
