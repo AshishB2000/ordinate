@@ -89,6 +89,7 @@ Bounds on what a connection may cost in the warehouse it reads. See [live-data.m
 | `LIVE_QUERY_TIMEOUT_MS` | How long one warehouse statement of a Live dataset may run, in milliseconds (100 – 3600000). Past it the statement is cancelled in the warehouse, and the figure is the last cached answer, labelled stale, or an error. A viewer who closes the tab cancels it too. | `60000` | — | no |
 | `LIVE_MAX_CONCURRENT` | Live warehouse statements in flight at once, per org, in each pod (1 – 1000). More wait their turn; one that is cancelled while waiting never reaches the warehouse. N pods allow N × this. | `4` | — | no |
 | `REFRESH_HOOK_MIN_INTERVAL_SEC` | The least gap, in seconds, between two calls of one [refresh URL](live-data.md#refresh-url). A call inside it gets `429` with `Retry-After` and starts nothing. Kept in Postgres, so it holds across every pod. Each refresh URL has its own clock; per client IP, refresh URL calls also share a bucket the size of `RATE_LIMIT_LOGIN_PER_MINUTE`. | `60` | — | no |
+| `FRESH_ON_ASK_WAIT_MS` | How long a chart, KPI or answer on a stale copy with "Fresh on ask" waits for its incremental pull, in milliseconds. Landed in time: the answer has the new rows. Not yet: the answer comes from the copy marked "refreshing…", and open dashboards redraw when the rows land. `0` never waits. At most `30000`; keep it well under `RPC_TIMEOUT_SECONDS`. See [live-data.md](live-data.md#fresh-on-ask). | `5000` | — | no |
 
 ## DuckDB
 

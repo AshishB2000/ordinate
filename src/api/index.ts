@@ -34,6 +34,8 @@ import { live } from './live';
 
 import { refreshHooks } from './refreshHooks';
 
+import { incremental } from './incremental';
+
 export const contracts = {
   ...projects,
   ...datasets,
@@ -67,6 +69,8 @@ export const contracts = {
   ...live,
 
   ...refreshHooks,
+
+  ...incremental,
 } as const;
 
 export type Channel = keyof typeof contracts;

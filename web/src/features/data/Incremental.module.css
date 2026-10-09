@@ -1,0 +1,185 @@
+/* "Incremental refresh" (Incremental.tsx): the trigger beside the schedule, and
+   its panel — how the source is read, the settings, the run log. Tokens only,
+   so both themes follow. */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+
+.source,
+.blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-md);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+}
+.source {
+  border: 1px solid var(--border-hairline);
+  background: var(--inset);
+  color: var(--text-dim);
+}
+.source > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--accent);
+}
+.blocked {
+  border: 1px solid var(--border);
+  background: var(--warn-soft);
+  color: var(--text);
+}
+.blocked > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--warn);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.fields:disabled {
+  opacity: 0.6;
+}
+
+.lookback {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+}
+.amount {
+  width: 120px;
+}
+.unit {
+  min-width: 120px;
+  margin-top: 21px; /* level with the input under its label */
+}
+.ids {
+  margin-top: 26px;
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.hint {
+  margin: var(--sp-4) 0 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+}
+
+.next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin: 0;
+  color: var(--error);
+  font-size: var(--t-12);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-8);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.h {
+  margin: 0;
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+
+.logWrap {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-sm);
+}
+.log {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-12);
+}
+.log th {
+  position: sticky;
+  top: 0;
+  padding: var(--sp-4) var(--sp-8);
+  background: var(--surface-float);
+  color: var(--muted);
+  font-weight: 500;
+  text-align: left;
+}
+.log td {
+  padding: var(--sp-4) var(--sp-8);
+  border-top: 1px solid var(--border-hairline);
+  color: var(--text);
+  white-space: nowrap;
+}
+/* The run and why on two lines, wrapping: the column that gives way so the figures fit. */
+.log .run {
+  white-space: normal;
+}
+.run > span {
+  display: block;
+}
+.log .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.full {
+  color: var(--warn);
+  font-weight: 500;
+}
+.incr {
+  color: var(--accent);
+  font-weight: 500;
+}
+.how {
+  color: var(--muted);
+}
+.mark {
+  font-family: var(--font-mono);
+}
+
+/* The workbench rail: a quiet full-width row, like its Refresh URL. */
+.wideTrigger {
+  align-self: flex-start;
+}

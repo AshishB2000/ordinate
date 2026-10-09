@@ -43,6 +43,7 @@ import { applyToChart } from '../app/sharePolicy';
 import { isSharePath } from '../app/privacyStore';
 import { withAsOf } from '../data/asOf';
 import { stampAsOf } from '../data/figureAsOf';
+import { ensureFresh } from '../data/freshOnAsk';
 import type { AsOf } from '../api/asOf';
 import { driversVizData } from './drivers';
 import { facetVizData, isFaceted } from './visualsFacets';
@@ -424,6 +425,7 @@ export async function vizDataFor(
   filters: FilterStep[],
   opts: { maxHydrateRows?: number; params?: ParamValues; sample?: boolean } = {},
 ): Promise<VizDataReply> {
+  await ensureFresh(projectId, [datasetId]); // L3.1 fresh on ask: before the cache key reads the record
   // The answer cache (engine/queryCache): a dashboard re-open, a type switch in
   // the builder or a tab coming back asks the same question over unchanged
   // data. Only successful answers are kept; an error is recomputed every time.

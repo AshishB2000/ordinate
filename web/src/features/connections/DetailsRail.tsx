@@ -20,6 +20,8 @@ import { toast } from '../../ui/Toast';
 import type { AutoRefreshEvery } from '../../api/datasets';
 import { BehindBadge, cadenceOptions } from '../data/cadence';
 import { everyWord } from '../data/format';
+import { FreshOnAskPicker } from '../data/FreshOnAsk';
+import { IncrementalButton } from '../data/Incremental';
 import { refreshDataset, replaceSecret, setSchedule, type CatalogField, type ConnDataset, type Connection, type Connector } from './api';
 import { SecretTextarea } from './SecretText';
 import { RefreshUrlDialog } from '../data/RefreshUrl';
@@ -168,6 +170,8 @@ function DatasetRow({ d, projectId, connId, onChanged }: { d: ConnDataset; proje
           options={cadenceOptions(SCHEDULE, !!d.incrementalOn)}
         />
       )}
+      <IncrementalButton projectId={projectId} d={d} wide />
+      <FreshOnAskPicker projectId={projectId} d={d} onChanged={onChanged} wide />
       {/* For dbt / Airflow to call when new data lands (live data L0.5). */}
       {(d.originKind || live) && (
         <Button size="sm" variant="ghost" icon="link" className={s.dsHook} onClick={() => setHooks(true)} aria-label={`Refresh URL for ${d.name}`}>

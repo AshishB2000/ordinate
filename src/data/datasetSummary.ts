@@ -11,6 +11,7 @@ import { stepRefIds } from './stepTypes';
 import { redactOriginText } from './datasetOrigin';
 import { serverDataDir } from '../server/context';
 import { behindSchedule } from './refreshCadence';
+import { nextRunIsFull } from './freshOnAskRule';
 
 export interface DatasetSummary {
   id: string;
@@ -64,6 +65,10 @@ export interface DatasetSummary {
   // (L2.5): the tick finds the daily syncs that are due from the list alone.
   schemaSyncedAt?: string;
   schemaSyncAttemptAt?: string;
+  // Fresh on ask (./freshOnAskRule.ts, L3.1): the age past which a figure pulls
+  // the new rows first — never the pull's own stamp. `fullDue`: the next refresh
+  // must be a full one, so asks wait for the scheduled or manual refresh to run it.
+  freshOnAsk?: { maxStalenessSec: number; fullDue?: true };
 }
 
 /** The parent ids an origin names, in its own order. */
@@ -107,6 +112,7 @@ export function summarize(ds: Dataset): DatasetSummary {
   if (behindSchedule(ds.autoRefresh)) summary.behindSchedule = true;
   const qualityFailing = qualityFailingCount(ds.quality);
   if (qualityFailing !== undefined) summary.qualityFailing = qualityFailing;
+  if (ds.freshOnAsk) summary.freshOnAsk = { maxStalenessSec: ds.freshOnAsk.maxStalenessSec, ...(nextRunIsFull(ds.incremental) ? { fullDue: true as const } : {}) };
   if (ds.mode === 'live' && ds.live) {
     summary.mode = 'live';
     summary.maxCacheAgeSec = ds.live.maxCacheAgeSec;

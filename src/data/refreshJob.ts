@@ -26,7 +26,7 @@
 import * as jobs from '../app/jobs';
 import * as datasets from './datasets';
 import { refreshDataset, refreshInFlight } from './datasetRefresh';
-import type { RefreshResult } from './datasetRefresh';
+import type { RefreshMode, RefreshResult } from './datasetRefresh';
 import { refreshAlreadyRunning } from './refreshMessages';
 import { ctx, serverDataDir } from '../server/context';
 import { refreshLockHeld, withRefreshLock } from '../server/jobs/refreshLock';
@@ -49,7 +49,7 @@ export async function refreshLabel(projectId: string, id: string, scheduled = fa
  * running" a statement earlier cannot be overtaken by another on this pod.
  * `done` never rejects: a cancel or an error is `{ok:false}`.
  */
-export function queueRefresh(projectId: string, id: string, label: string): { id: string; done: Promise<RefreshResult> } {
+export function queueRefresh(projectId: string, id: string, label: string, mode: RefreshMode = 'any'): { id: string; done: Promise<RefreshResult> } {
   let before: { name: string; rowCount: number } | null = null; // read under the lock, for the announcement
   const job = jobs.submit<RefreshResult>({
     kind: 'refresh',
@@ -61,10 +61,11 @@ export function queueRefresh(projectId: string, id: string, label: string): { id
         const meta = await datasets.getDatasetMeta(projectId, id);
         before = meta ? { name: meta.name, rowCount: meta.rowCount } : null;
         jctx.progress(0.05, 'Fetching the source');
-        return refreshDataset(projectId, id);
+        return refreshDataset(projectId, id, undefined, mode);
       });
       if (!locked.ran) return { ok: false, error: refreshAlreadyRunning(), alreadyRunning: true };
       const r = locked.value;
+      if (!r.ok && r.skipped) return r; // incremental only, and a full run was due: nothing ran — not a failure
       if (!r.ok) throw new Error(r.error);
       return r;
     },
@@ -73,7 +74,7 @@ export function queueRefresh(projectId: string, id: string, label: string): { id
         message: `${Number(r.dataset && r.dataset.rowCount || 0).toLocaleString('en-US')} rows` +
           (r.warnings.length ? ` · ${r.warnings.length} warning${r.warnings.length === 1 ? '' : 's'}` : ''),
       }
-      : { message: r.error }, // coalesced: the job did its part by starting nothing
+      : { message: r.error }, // coalesced or skipped: the job did its part by starting nothing
   });
   const done = job.done.then(
     (res) => {
@@ -113,14 +114,16 @@ export async function refreshRunning(projectId: string, id: string): Promise<{ j
 /**
  * Start a refresh unless one of this dataset is running anywhere, and say
  * which (L0.4). The door for the refresh URL (L0.5) and fresh-on-ask (L3.1).
+ * `incrementalOnly` (fresh on ask): the job may run an incremental refresh and
+ * nothing else — one that would be full ends `skipped` (datasetRefresh RefreshMode).
  */
-export async function startRefresh(projectId: string, id: string, opts: { scheduled?: boolean } = {}): Promise<RefreshStart> {
+export async function startRefresh(projectId: string, id: string, opts: { scheduled?: boolean; incrementalOnly?: boolean } = {}): Promise<RefreshStart> {
   const label = await refreshLabel(projectId, id, opts.scheduled);
   const running = await refreshRunning(projectId, id);
   // Re-asked with no await between the answer and the submit: two callers on
   // this pod cannot both pass. Across pods the lock in the job decides.
   const here = running ?? localRefresh(projectId, id);
   if (here) return { status: 'already_running', ...here };
-  const job = queueRefresh(projectId, id, label);
+  const job = queueRefresh(projectId, id, label, opts.incrementalOnly ? 'incremental' : 'any');
   return { status: 'queued', jobId: job.id, done: job.done };
 }

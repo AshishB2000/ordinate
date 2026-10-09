@@ -369,6 +369,7 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   refusal and L0.2's `asOf`.
 - **Not done here (by plan):** executor and cache (L2.3), routing charts / KPIs / answers (L2.4 —
   until then they refuse, as the suite asserts), the full Live UI (L2.6).
+
 ## 2026-10-09 — L1.4 and L1.5 finished: counts, the real-account nightly, the canaries
 
 - **L1.4 checked, one gap filled.** Both dialects were in `incrementalSql.ts` (`snowflake`: `"…"`
@@ -739,3 +740,120 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   on real engines, check the profile statement on each (GROUPING-free, but a 500-way `UNION ALL` and
   a CASE per cell), Snowflake's fixed-size `SAMPLE (n ROWS)` cost on a large table, and BigQuery's
   TABLESAMPLE percent against its block size.
+## 2026-10-09 — L3.1 Pull the new rows before answering (fresh on ask)
+
+- **Built.** `freshOnAsk: { maxStalenessSec }` on the dataset record (60 s – 1 day; the picker offers
+  1 min · 5 min · 15 min · 1 h), allowed only with incremental refresh on and never on Live —
+  sanitized on every load (`src/data/freshOnAskRule.ts`, one line in `datasets.normalize`), refused
+  by `dataset:update` with a catalog sentence (`src/data/freshOnAskMessages.ts`, a new `MAIN_FILES`
+  entry), and dropped by `writeIncremental` in the same write that turns incremental refresh off.
+  `ensureFresh(projectId, datasetIds)` (`src/data/freshOnAsk.ts`) is one line at the top of
+  `vizDataFor`, `computeCardMetric`, `computeStatsTile` and `computeCard` — before the answer-cache
+  key reads the record, so a pull that lands in time moves `updatedAt` and the answer is recomputed.
+  `figureAsOf` (and `computeCard`'s own stamp) adds `refreshing: true` from what the request found
+  (`src/data/freshOnAskState.ts`). Web: `FreshOnAskPicker` beside the schedule on the dataset page
+  and in the workbench rail — disabled with "needs incremental refresh" in words without it, "Waits
+  for a full refresh" when the server says the next run is full (`freshOnAsk.fullDue` on the list).
+- **Never a full refresh — a mode, not a pre-check.** `startRefresh(…, { incrementalOnly })` → the
+  job → `refreshDataset(…, mode 'incremental')` → `refreshIncremental`, which returns `skipped`
+  instead of reaching `runFull` both when `fullReason` says so up front (first run, 7th run, "Full
+  refresh now", cursor/key gone, no Parquet) and when it finds out after the fetch (the columns
+  changed). A skipped run writes nothing, moves no marker and is not an error; the job ends `done`.
+  The ask also checks `fullReason` first (verdict `full`), so normally no job starts at all.
+  **Negative control** (`test-freshOnAskDoors` §4): the same dataset refreshed in the ordinary mode
+  reaches the full re-fetch spy; in the incremental mode it never does (3 cases).
+- **One check per dataset per request** — memoised on the request's own context object (a WeakMap,
+  so it dies with the request): a 6-tile `analysis:tiles` load over one stale dataset did ONE
+  metadata read and ONE pull; two such loads at the same instant, still one pull (`pulls`, this pod's
+  in-flight map, orgKey'd). One wait per request, too: a request asking several datasets one after
+  another shares one `FRESH_ON_ASK_WAIT_MS` budget (measured: two slow datasets in a row, 600 ms
+  budget → both answered "refreshing" in < 1 s).
+- **Decided — the window lives on the record, claimed under an advisory lock.** "At most one pull per
+  dataset per window" needs a time every pod reads. The record is already what every check reads
+  (and a `records` row with Postgres), so `freshOnAsk.triggeredAt` costs no extra read on the hot
+  path and no migration (and no migration number to collide with L0.5's). Its read-modify-write is
+  made a compare-and-set across pods by taking the refresh lock's primitive on a key of its own
+  (`<org>:fresh-on-ask:<id>`, never the refresh lock itself) around "re-read, still stale and
+  unclaimed? stamp". This pod also remembers its own starts (`triggered`, orgKey'd), so a stamp lost
+  to a racing whole-record write still holds the window here. Rejected: reusing `lastRefreshedAt`
+  alone — a FAILED pull never moves it, so every ask would retry a broken source; a new table — a
+  migration for one timestamp the record already has room for.
+- **Decided — the pull runs detached.** As the system in the org (like a scheduled refresh: in nobody's
+  Jobs list, for no tab), inside an `AsyncResource` captured when the module loads — so it carries no
+  request abort signal (a closed tab ends that person's wait, not the refresh everyone else waits
+  for), no as-of scope and no display currency (`afterRefresh`'s alert evaluation must not run in the
+  asker's currency). Proven by the fake source reading its own context: `jobs@system`, no signal, no
+  as-of, not the asker's EUR. After a landing, `afterRefresh` runs as after a ↻ (alerts, quality,
+  republish, the SQL datasets built on it — otherwise a dashboard over a query on the table stays
+  stale).
+- **Not pulled:** inside an as-of read; outside server mode (no request to memoise on, no job queue
+  shared with readers, no push); outside a request on the server; for a Live dataset.
+- **Measured** (this container, Node 22, local Postgres 16 as both the SOURCE and the records store,
+  `test-freshOnAskPg`; one `analysis:tiles` load = a chart + two KPIs over one dataset):
+
+  | Load (median per run; the range is over 5 runs) | Median |
+  |---|---|
+  | Dataset without fresh on ask (15 loads) | 5.4 – 7.6 ms |
+  | Fresh on ask, copy fresh (15 loads) — the added cost is one record read per dataset per request | 6.0 – 9.0 ms (+0.2 – 1.4 ms, at run-to-run noise) |
+  | Fresh on ask, copy stale: one incremental pull from Postgres (cursor pushed down, DuckDB merge, Parquet + record write, announce), waited for (7 loads, a new dataset each) | 119 – 164 ms (single loads 103 – 187 ms) |
+
+  So a stale ask costs ~110 – 160 ms over a fresh one on a small table, all of it the incremental
+  run itself. With records as files and a fake source (`test-freshOnAskDoors`): a 7-tile load
+  waiting for a 150 ms pull 354 – 398 ms; the same load fresh 15 – 16 ms. A stale ask whose pull outlasts the wait
+  answers at the budget (250 ms → < 1.2 s round trip, old figures, `refreshing`), the push arrives
+  when the rows land, and the next ask is fresh. A 10 ms timer kept ticking through a 1 s wait (≥ 50
+  ticks: the wait never blocks the event loop).
+- **Cross-pod, measured with a second Postgres session as "another pod":** holding this window's claim
+  → this pod pulls nothing; holding the refresh lock with the window stamped → this pod polls
+  `pg_locks` every 200 ms and answers fresh ~400 ms later when it is let go, or `refreshing` at the
+  budget when it is not. (Not run: two real server processes — L0.4's `test-refreshLock` covers the
+  lock between processes; the claim is the same primitive.)
+- **Not done / for the owner.** The web app still has no panel to turn incremental refresh on
+  (T8.1; L0.3 noted the same for the fast cadences), so fresh on ask is only offered on datasets
+  whose incremental refresh was set before or through the record. Every 7th incremental run is full,
+  so a dataset refreshed ONLY by fresh on ask pulls six times and then shows "Waits for a full
+  refresh" until a schedule or Refresh now runs the full one — by design (the brief: never full on
+  ask); a schedule alongside avoids it. A chart reading a RELATED dataset (a join through a
+  relationship) pulls only its own dataset, and is dated by it — as L0.2 dates it.
+
+## 2026-10-09 — Incremental refresh settings in the web app (closes the gap L0.3 and L3.1 reported)
+
+- **Built.** The desktop's `incremental:get` / `incremental:set` (deleted with T8.1), ported:
+  contracts in `src/api/incremental.ts` (`get` read, `set` write, both project-scoped), handlers in
+  `src/ipc/incremental.ts`, the logic in `src/data/incrementalSettings.ts`, sentences in
+  `src/data/incrementalMessages.ts` (a new `MAIN_FILES` entry, drafts translated). Web: an
+  "Incremental on/off" button beside the schedule on the dataset page and in the workbench rail,
+  opening a panel (`web/src/features/data/Incremental.tsx`): how the source is read, on/off, the
+  cursor (the server's number and date columns of the prepare SOURCE), update by key or append, the
+  key, the lookback (minutes / hours / days for a date cursor, ids for a number one), "Next refresh:
+  full" with the reason, and the run log (fetched / inserted / updated / mark per run).
+- **Decided — a source that cannot take the cursor predicate is refused.** HTTP engines and SaaS APIs
+  (`incrementalSql.canPush` false) would be read whole on every "incremental" run and filtered after
+  the fetch — the load the 5/15-minute cadences and fresh on ask are only allowed because incremental
+  refresh avoids. The panel says "Filtered after fetch" and why; the server refuses turning it on
+  (catalog sentence). An older record that has it on over such a source can still be turned OFF.
+- **Decided — one key column.** The merge (`incremental.mergeJs` and its DuckDB twin, differential-
+  tested) keys on one column; a composite key would change both and their tests, so the panel offers
+  one, as the desktop did.
+- **Kept from the desktop:** a new cursor column resets the mark and the run count (the next run is
+  full); the same cursor with a new lookback keeps them; off keeps the block and its log. New:
+  turning it off drops a 5/15-minute schedule to hourly and fresh on ask in the same write
+  (`writeIncremental`, L0.3 / L3.1), and Live datasets and non-connection datasets are refused even
+  "off" (they keep no block).
+- **Errors stay in the log.** A thrown error (it can carry a path) is logged; the browser gets the
+  catalog's "Could not read / save the incremental refresh settings." — never the error's text.
+- **Tests.** `test-incrementalSettings` (44 checks: the view from the source columns, on/off, every
+  refusal with its catalog sentence, the contract's 400s, the mark reset with a NEGATIVE CONTROL,
+  the five blocked kinds incl. ClickHouse "filtered after fetch" — and Live, a paste and a gone
+  connection describing no read at all, not "after the fetch" — the 5-minute cadence and fresh on
+  ask refused before and taken after (NEGATIVE CONTROL), a missing dataset and a thrown error
+  answered with the catalog's sentence and no planted path (NEGATIVE CONTROL: the log has it));
+  `test-liveSafetyNet` reads `incremental:get` on a Live dataset as a metadata path (200, no
+  `live_dataset`); Vitest `incremental.test.tsx` (11, incl. a number cursor's lookback reading back
+  as ids, not seconds — fails on the first draft, which split it into minutes); `data.e2e` opens the
+  panel of a dataset on over a connection since deleted (only "off" is possible; the run log the
+  record keeps), turns it on for another, then picks every 5 minutes and fresh on ask — the panel
+  in three states and the page, both themes; `connections.e2e` opens it from the rail.
+- **Not done.** "Next refresh: full" and a full run's note in the log are `fullReason`'s English
+  (src/data/incrementalRefresh.ts, stored on the record as the desktop did), not catalog sentences;
+  translating them means a messages file for incrementalRefresh and keys, not text, in the log.
