@@ -52,12 +52,13 @@ export const adminContracts = {
       limit: z.number().int().min(1).max(200).optional(),
     }),
   ),
-  // Org settings: public links, allowed AI providers, the per-org upload cap (≤ MAX_UPLOAD_MB).
+  // Org settings: public links, the per-org upload cap (≤ MAX_UPLOAD_MB). aiProviders is the
+  // pre-Admin → AI provider policy, kept optional for old callers; only the legacy import reads it.
   'admin:settings': adminList(z.undefined()),
   'admin:saveSettings': admin(
     z.strictObject({
       publicLinks: z.boolean(),
-      aiProviders: z.array(z.enum(AI_PROVIDERS)).max(AI_PROVIDERS.length),
+      aiProviders: z.array(z.enum(AI_PROVIDERS)).max(AI_PROVIDERS.length).optional(),
       uploadCapMb: z.number().int().min(1).max(999_999).nullable(),
     }),
   ),

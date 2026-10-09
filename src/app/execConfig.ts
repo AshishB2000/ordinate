@@ -33,6 +33,7 @@ const onServer = (): boolean => serverDataDir() !== null;
 export const serverMode = onServer;
 // Lazy: a plain-Node self-check never loads the key store.
 const aiKeys = (): typeof import('../server/aiKeys') => require('../server/aiKeys') as typeof import('../server/aiKeys');
+const aiConfig = (): typeof import('../server/aiConfig') => require('../server/aiConfig') as typeof import('../server/aiConfig');
 
 // ── Per-provider key / model helpers ────────────────────────────────────────
 
@@ -162,8 +163,14 @@ export function getByokProvider(prov: string): { provider: string } & ByokProvid
 // The byok entry WITH its key, wherever the key lives: config.json on the
 // desktop, the org's secrets store on the server. Every outbound provider call
 // (analyze.ts, models.ts) reads its key here. Main-process only.
+// With a database the endpoint and verified state are the org's, in Postgres
+// (src/server/aiConfig.ts), not this pod's config.json.
 export async function byokCredentials(prov: string): Promise<{ provider: string } & ByokProviderEntry> {
   const e = getByokProvider(prov);
+  if (aiConfig().enabled()) {
+    const c = await aiConfig().credentials(e.provider);
+    return { ...e, apiKey: c.apiKey, baseUrl: c.baseUrl, model: '', maxTokens: '', verified: c.verified, keyStored: c.apiKey !== null };
+  }
   return onServer() ? { ...e, apiKey: e.keyStored ? await aiKeys().getKey(e.provider) : null } : e;
 }
 
@@ -237,12 +244,6 @@ export function setByokVerified(prov: string, ok: unknown): { ok: boolean } {
   cfg.byok.providers[prov] = { ...cur, verified: Boolean(ok) };
   persist(cfg);
   return { ok: true };
-}
-
-// The org's provider policy (Admin → Settings): on the server a provider the org
-// does not allow is never called. The desktop has no org — every provider.
-export async function providerAllowed(prov: string): Promise<boolean> {
-  return !onServer() || (await aiKeys().allowedProviders()).includes(prov);
 }
 
 // Active requires Connected: refuse to activate a provider that hasn't verified.
@@ -320,7 +321,16 @@ export const AI_NOT_CONFIGURED = 'The Assistant isn’t set up yet.';
 // capture gate): ready when the active execution path can actually run.
 //   Local  → a runnable local CLI is selected active AND detected installed.
 //   BYOK   → a connected (key saved + validated) provider exists.
-export function executionReady(): boolean {
+// With a database the answer is the caller's, from Postgres (src/server/aiConfig.ts):
+// a model they may use is enabled on a connected provider.
+export async function executionReady(): Promise<boolean> {
+  if (aiConfig().enabled()) return (await aiConfig().memberView()).ready;
+  return podReady();
+}
+
+// executionReady from this pod's config.json alone — no database, or the
+// synchronous publicConfig() view (key:status replaces its isReady with the org's).
+function podReady(): boolean {
   const cfg = get();
   if (!onServer() && (cfg.executionMode || 'local') === 'local') {
     const id = cfg.localCli.activeId;
@@ -378,7 +388,7 @@ export function publicConfig() {
     version:        cfg.version,
     activeProvider: active,
     executionMode:  onServer() ? 'byok' : cfg.executionMode || 'byok',
-    isReady:        executionReady(), // single readiness source (Local CLI OR BYOK)
+    isReady:        podReady(), // this pod's config.json; key:status answers with the org's (executionReady)
     byok:           publicByok(), // { activeProvider, providers: { name: { hasKey, baseUrl, maxTokens, model } } }
     localCli:       publicLocalCli(), // { activeId, detectedAt, clis: [...] } — no resolvedPath
     memoryModel:    { ...(cfg.memoryModel || { mode: 'same_as_chat', provider: null, model: '' }) },

@@ -1,4 +1,4 @@
-// The server's AI provider keys and the org's provider policy (T2.12) — the
+// The server's AI provider keys (T2.12) — the
 // seam src/app/execConfig.ts and src/ai/analyze.ts reach in server mode.
 //
 // KEYS. On the desktop an API key is plaintext in config.json (the documented
@@ -8,14 +8,11 @@
 // store — no DATABASE_URL, or no ORDINATE_MASTER_KEY — there is nowhere safe to
 // keep a key, so saving one is REFUSED rather than written in the clear.
 //
-// POLICY. An org admin may narrow the providers members can use (Admin →
-// Settings, `org_settings.ai_providers`, NULL = every provider). It is read per
-// call — a change applies on every pod at once — and with no database every
-// provider is allowed.
+// POLICY is not here: the models members may use are an allow-list in
+// Postgres (./aiConfig.ts, Admin → AI).
 
 import type { KeyObject } from 'crypto';
 import type { Pool } from 'pg';
-import { AI_PROVIDERS } from '../api/admin';
 import { ctx } from './context';
 import { createSecretStore, type SecretStore } from './secrets/store';
 
@@ -26,6 +23,11 @@ let db: Pool | null = null;
 export function useAiKeys(pool: Pool | null, masterKey: KeyObject | null): void {
   db = pool;
   store = pool && masterKey ? createSecretStore(pool, masterKey) : null;
+}
+
+/** The pool AI setup lives in (./aiConfig.ts), or null with no database. */
+export function aiDb(): Pool | null {
+  return db;
 }
 
 /** Why a key cannot be stored on this server, or null when it can. */
@@ -49,12 +51,4 @@ export async function putKey(provider: string, value: string): Promise<void> {
 
 export async function deleteKey(provider: string): Promise<void> {
   if (store) await store.delete(ctx().org.id, 'ai.apiKey', provider);
-}
-
-/** The providers the caller's org allows, in AI_PROVIDERS order. */
-export async function allowedProviders(): Promise<readonly string[]> {
-  if (!db) return AI_PROVIDERS;
-  const r = await db.query<{ ai_providers: string[] | null }>('SELECT ai_providers FROM org_settings WHERE org_id = $1', [ctx().org.id]);
-  const list = r.rows[0]?.ai_providers;
-  return list ? AI_PROVIDERS.filter((p) => list.includes(p)) : AI_PROVIDERS;
 }

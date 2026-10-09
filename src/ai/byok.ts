@@ -1,43 +1,55 @@
-// Which API-key (BYOK) provider a model call runs on — MAIN PROCESS / SERVER.
+// Which API-key (BYOK) provider and model a call runs on — MAIN PROCESS / SERVER.
 //
 // Split out of ./analyze.ts (over its 800-line cap). One resolver for every
-// model call (dispatch: the dock, captures, suggestions): the ACTIVE connected
-// provider, refused when the org does not allow it (execConfig.providerAllowed,
-// Admin → Settings), its key from execConfig.byokCredentials (the org's secrets
-// store on the server, config.json on the desktop). The HTTP call itself goes
-// through ./providerFetch.ts.
+// model call (dispatch: the dock, captures, suggestions), so every feature
+// follows the same answer:
+//
+//   - with a database (src/server/aiConfig.ts): the CALLER's pick among the
+//     models the org admin enabled, else the org default — from Postgres, so
+//     every pod answers the same (docs/ai-models/00-plan.md);
+//   - without one (dev mode, the e2e harness, a plain-Node self-check): the
+//     pod's config.json — the active connected provider and its model.
+//
+// The HTTP call itself goes through ./providerFetch.ts.
 
 import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
-import { ADAPTERS, errProvider, type TypedError } from './analyze';
+import * as aiConfig from '../server/aiConfig';
+import { aiNotSetUp } from './aiMessages';
+import { errProvider, type TypedError } from './analyze';
 
 export const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
 export function errNoKey(): TypedError {
-  return { ok: false, errorType: 'auth', message: 'No API key saved — add one in Settings.' };
+  return { ok: false, errorType: 'auth', message: aiNotSetUp() };
 }
 
 /** What a capture (or any model call) can run on right now — the same checks resolveByok makes, for a not-ready state. */
-export type ModelStatus = { ready: true; provider: string } | { ready: false; reason: 'no_model' | 'not_allowed' };
+export type ModelStatus = { ready: true; provider: string; model: string } | { ready: false; reason: 'no_model' | 'no_key_store' };
 
 export async function modelStatus(): Promise<ModelStatus> {
+  if (aiConfig.enabled()) {
+    const v = await aiConfig.memberView();
+    return v.mine ? { ready: true, ...v.mine } : { ready: false, reason: v.reason ?? 'no_model' };
+  }
   const provider = execConfig.effectiveByokActive();
   if (!provider) return { ready: false, reason: 'no_model' };
-  if (!(await execConfig.providerAllowed(provider))) return { ready: false, reason: 'not_allowed' };
-  return { ready: true, provider };
+  return { ready: true, provider, model: execConfig.getByokProvider(provider).model };
 }
 
-// Resolve the active BYOK provider + credentials, or return an error.
+// Resolve the caller's provider, model + credentials, or return an error.
 export async function resolveByok(): Promise<
   | { error: TypedError }
   | { error?: undefined; provider: string; apiKey?: string | null; baseUrl?: string; model: string; maxTokens?: number | string }> {
+  if (aiConfig.enabled()) {
+    const r = await aiConfig.resolve();
+    if (!r.ok) return { error: { ok: false, errorType: 'auth', message: r.error } };
+    return { provider: r.provider, apiKey: r.apiKey, baseUrl: r.baseUrl, model: r.model };
+  }
   // Only ever run a provider that is actually Connected (verified). A stale or
   // keyless active provider resolves to null → ask the user to connect one.
   const provider = execConfig.effectiveByokActive();
   if (!provider) return { error: errNoKey() };
-  if (!(await execConfig.providerAllowed(provider))) {
-    return { error: { ok: false, errorType: 'provider', message: `Your organization does not allow ${ADAPTERS[provider]?.label || provider}. Ask an admin to connect an allowed provider.` } };
-  }
   const entry = await execConfig.byokCredentials(provider); // includes apiKey — main only
   if (provider !== 'gateway' && !entry.apiKey) return { error: errNoKey() };
   if (provider === 'gateway' && !entry.baseUrl) {

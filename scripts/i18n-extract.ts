@@ -359,6 +359,7 @@ export const MAIN_FILES = [
   'src/engine/liveProfileMessages.ts',
   'src/data/freshOnAskMessages.ts',
   'src/data/incrementalMessages.ts',
+  'src/ai/aiMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

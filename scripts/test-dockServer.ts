@@ -13,8 +13,9 @@
 //      refused, and nothing is written.
 //   3. The answer streams over SSE to the ASKING tab only: a second tab of the
 //      same user, open the whole time, receives no chunk.
-//   4. The org's "allowed AI providers" (Admin → Settings) is enforced: a
-//      provider the org does not allow is never called and the dock is not ready.
+//   4. The org's model allow-list (Admin → AI) is enforced: with no model
+//      enabled the provider is never called and the dock is not ready.
+//      (The full ai:* model is scripts/test-aiModels-db.ts.)
 //   5. Conversations are per member: another member of the project sees none of
 //      the first member's threads and cannot read one by id.
 //   6. The provider settings are org-admin only (a viewer gets 403).
@@ -289,17 +290,17 @@ const listen = async (app: import('fastify').FastifyInstance): Promise<string> =
     ok('threads: nor reads one by id', peek.body.ok === true && peek.body.turns.length === 0 && peek.body.threadId === null, JSON.stringify(peek.body));
     ok('threads: the owner still has it', (await boss('copilot:threads', { projectId: project })).body.threads.length === 1);
 
-    // ── The org's allowed providers ──────────────────────────────────────────
-    ok('policy: the admin narrows the org to OpenAI', (await boss('admin:saveSettings', { publicLinks: false, aiProviders: ['openai'], uploadCapMb: null })).body.ok === true);
+    // ── The org's model allow-list (Admin → AI) ─────────────────────────────
+    const enabled = (await boss('ai:admin')).body.models as { provider: string; model: string; label: string }[];
+    ok('allow-list: activate put the provider\'s model on the list as the default', enabled.length === 1 && enabled[0].provider === 'anthropic', JSON.stringify(enabled));
+    ok('allow-list: the admin removes every model', (await boss('ai:setModels', { models: [], defaultIndex: 0 })).body.ok === true);
     const blocked = await boss('key:status');
-    ok('policy: the dock is not ready when the active provider is not allowed', blocked.body.isReady === false && JSON.stringify(blocked.body.allowedProviders) === '["openai"]', JSON.stringify(blocked.body.allowedProviders));
+    ok('allow-list: with no model enabled the dock is not ready', blocked.body.isReady === false && (await vic('ai:status')).body.ready === false, JSON.stringify(blocked.body.allowedProviders));
     const calls = stub.calls;
     const deny = await boss('copilot:ask', { projectId: project, context: { kind: '' }, question: 'Again?' });
-    ok('policy: an ask is refused, naming the policy, and the provider is never called', deny.body.ok === false && /does not allow/.test(deny.body.error) && stub.calls === calls, JSON.stringify(deny.body));
-    ok('policy: test/save/activate refuse a disallowed provider', (await boss('byok:test', { provider: 'anthropic' })).body.errorType === 'not_allowed'
-      && (await boss('byok:saveProvider', { provider: 'anthropic', fields: { model: 'x' } })).body.ok === false && (await boss('byok:activate', { provider: 'anthropic' })).body.ok === false);
-    await boss('admin:saveSettings', { publicLinks: false, aiProviders: ['anthropic', 'openai', 'gemini', 'gateway'], uploadCapMb: null });
-    ok('policy: allowed again → ready again', (await boss('key:status')).body.isReady === true);
+    ok('allow-list: an ask is notReady and the provider is never called', deny.body.ok === false && stub.calls === calls, JSON.stringify(deny.body));
+    await boss('ai:setModels', { models: enabled.map(({ provider: p, model, label }) => ({ provider: p, model, label })), defaultIndex: 0 });
+    ok('allow-list: enabled again → ready again', (await boss('key:status')).body.isReady === true);
 
     // ── The canary is nowhere it must not be ─────────────────────────────────
     const tables = (await pool.query<{ t: string }>(`SELECT tablename AS t FROM pg_tables WHERE schemaname = 'public'`)).rows.map((r) => r.t);
@@ -307,7 +308,7 @@ const listen = async (app: import('fastify').FastifyInstance): Promise<string> =
     for (const t of tables) dump += (await pool.query<{ j: string }>(`SELECT row_to_json(x)::text AS j FROM "${t}" x`)).rows.map((r) => r.j).join('\n');
     ok(`leak: no canary in a row_to_json dump of all ${tables.length} tables`, dump.length > 0 && !leaks(dump));
     const configs = allFiles(DATA);
-    ok('leak: no canary in any file under DATA_DIR (config.json included)', configs.includes('keyStored') && !leaks(configs));
+    ok('leak: no canary in any file under DATA_DIR (config.json included)', configs.length > 0 && !leaks(configs));
     ok('leak: no canary in any RPC reply or SSE frame', wireSeen.length > 0 && !leaks(wireSeen));
     ok('leak: no canary in the app log (trace level) or anything this process printed', appLog.length > 0 && !leaks(appLog) && !leaks(printed));
 

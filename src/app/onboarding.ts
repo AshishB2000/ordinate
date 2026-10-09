@@ -85,7 +85,7 @@ export async function status(): Promise<OnboardingStatus> {
   const done = { ...state.done };
   const now = new Date().toISOString();
   const need = new Set(STEPS.filter((s) => !done[s]));
-  if (need.has('assistant') && execConfig.executionReady()) done.assistant = now;
+  if (need.has('assistant') && (await execConfig.executionReady())) done.assistant = now;
   need.delete('assistant');
   if (need.size) for (const s of await scan(need)) done[s] = now;
   if (Object.keys(done).length !== Object.keys(state.done).length) config.save({ onboarding: { ...state, done } });

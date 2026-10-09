@@ -36,6 +36,8 @@ import { refreshHooks } from './refreshHooks';
 
 import { incremental } from './incremental';
 
+import { ai } from './ai';
+
 export const contracts = {
   ...projects,
   ...datasets,
@@ -71,6 +73,8 @@ export const contracts = {
   ...refreshHooks,
 
   ...incremental,
+
+  ...ai,
 } as const;
 
 export type Channel = keyof typeof contracts;

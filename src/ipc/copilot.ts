@@ -471,7 +471,7 @@ export function register() {
       // ONLY when an askId is present AND a model is configured — so with no model
       // the ask short-circuits to not_ready and the chips stay invisible. Scoped
       // by askId so a stale ask's chips are dropped and Ask/dock never cross.
-      const emit: ActivityEmit = aid && execConfig.executionReady()
+      const emit: ActivityEmit = aid && (await execConfig.executionReady())
         ? (step) => { try { client.send('copilot:ask:activity', { askId: aid, step }); } catch (_) { /* window gone */ } }
         : NO_ACTIVITY;
       // STREAMING deltas: only BYOK models actually stream (analyzeStream.ts);

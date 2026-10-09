@@ -158,13 +158,15 @@ export function register(pool: () => Pool | null, maxUploadMb: () => number): vo
 
   registry.handle(
     'admin:saveSettings',
-    async (_e, s: { publicLinks: boolean; aiProviders: string[]; uploadCapMb: number | null }) => {
+    async (_e, s: { publicLinks: boolean; aiProviders?: string[]; uploadCapMb: number | null }) => {
       if (s.uploadCapMb !== null && s.uploadCapMb > maxUploadMb()) return { ok: false, error: 'cap' };
-      const providers = AI_PROVIDERS.filter((p) => s.aiProviders.includes(p));
+      // aiProviders is optional since Admin → AI (docs/ai-models): absent keeps the stored value.
+      const providers = s.aiProviders ? AI_PROVIDERS.filter((p) => s.aiProviders?.includes(p)) : null;
       await db().query(
         `INSERT INTO org_settings (org_id, public_links, ai_providers, upload_cap_mb, updated_at) VALUES ($1, $2, $3, $4, now())
-         ON CONFLICT (org_id) DO UPDATE SET public_links = $2, ai_providers = $3, upload_cap_mb = $4, updated_at = now()`,
-        [org(), s.publicLinks, providers.length === AI_PROVIDERS.length ? null : providers, s.uploadCapMb],
+         ON CONFLICT (org_id) DO UPDATE SET public_links = $2, ai_providers = CASE WHEN $5 THEN $3 ELSE org_settings.ai_providers END,
+           upload_cap_mb = $4, updated_at = now()`,
+        [org(), s.publicLinks, providers && providers.length < AI_PROVIDERS.length ? providers : null, s.uploadCapMb, providers !== null],
       );
       return { ok: true };
     },

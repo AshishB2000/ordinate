@@ -169,7 +169,7 @@ function checkChartVocabulary(): void {
 
 // ── §2 AI is optional ───────────────────────────────────────────────────────
 async function checkNotReady(): Promise<void> {
-  ok('no model is configured in this fixture', execConfig.executionReady() === false);
+  ok('no model is configured in this fixture', (await execConfig.executionReady()) === false);
 
   const draft = await analysesIpc.draftAnalysisPlan(projectId);
   ok('analysis:draft returns notReady with no model', draft.ok === false && draft.notReady === true,

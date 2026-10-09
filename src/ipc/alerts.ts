@@ -82,7 +82,7 @@ export async function evaluateAndDeliver(projectId: string, datasetId?: string):
  * explanation that could not be written must never disturb the event it is about.
  */
 export async function explainEvent(projectId: string, event: AlertEvent): Promise<string | null> {
-  if (!execConfig.executionReady()) return null;
+  if (!(await execConfig.executionReady())) return null;
   try {
     // The FACTS are the dataset's, app-computed, exactly as a dock ask about
     // that dataset would build them. The event's own figures ride in the
@@ -207,7 +207,7 @@ export function register(): void {
     try {
       const ev = alerts.sanitizeEvent(event);
       if (!ev) return { ok: false, error: 'No such alert.' };
-      if (!execConfig.executionReady()) return { ok: false, reason: 'not_ready' };
+      if (!(await execConfig.executionReady())) return { ok: false, reason: 'not_ready' };
       const threadId = await explainEvent(projectId, ev);
       if (!threadId) return { ok: false, error: 'Could not write an explanation.' };
       return { ok: true, threadId };

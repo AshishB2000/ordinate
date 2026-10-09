@@ -540,8 +540,8 @@ export async function dispatch(systemPrompt: string, messages: NeutralMsg[], onD
 }
 
 // Minimal real connectivity test for a provider using its SAVED credentials.
-// Returns a typed result: { ok:true, message } or a typed error object.
-export async function testProvider(provider: string): Promise<TypedError | { ok: true; message: string }> {
+// `model` (aiConfig.testModel) else the saved one. Returns { ok:true, message } or a typed error.
+export async function testProvider(provider: string, model?: string): Promise<TypedError | { ok: true; message: string }> {
   if (!ADAPTERS[provider]) return errUnknown();
   const entry = await execConfig.byokCredentials(provider);
   if (provider !== 'gateway' && !entry.apiKey) return errNoKey();
@@ -549,7 +549,7 @@ export async function testProvider(provider: string): Promise<TypedError | { ok:
     return Object.assign(errProvider(), { message: 'Set a base URL for the gateway.' });
   }
   // Gateway needs the user's own model id — no safe default for an arbitrary endpoint.
-  let model = entry.model || (config.BYOK_DEFAULTS[provider] && config.BYOK_DEFAULTS[provider].model) || '';
+  model = model || entry.model || (config.BYOK_DEFAULTS[provider] && config.BYOK_DEFAULTS[provider].model) || '';
   if (provider === 'gateway' && !model) {
     return Object.assign(errProvider(), { message: 'Enter a model id for the gateway (e.g. openai/gpt-4o-mini).' });
   }
@@ -572,7 +572,7 @@ export async function testProvider(provider: string): Promise<TypedError | { ok:
 // this returns a soft not_ready error so the renderer can show a gentle hint
 // rather than an error dialog.
 export async function explainText(userPrompt: string): Promise<{ ok: true; text: string } | TypedError> {
-  if (!execConfig.executionReady()) return notReady();
+  if (!(await execConfig.executionReady())) return notReady();
   const messages: NeutralMsg[] = [{ role: 'user', text: userPrompt }];
   const { rawText, error } = await dispatch(EXPLAIN_SYSTEM_PROMPT, messages, undefined, { prose: true });
   if (error) return error;
@@ -597,7 +597,7 @@ export async function askCopilot(
   contextFacts: string,
   question: string, onDelta?: (delta: string) => void,
 ): Promise<{ ok: true; text: string; suggestedAction: SuggestedAction } | TypedError> {
-  if (!execConfig.executionReady()) return notReady();
+  if (!(await execConfig.executionReady())) return notReady();
   const prior: NeutralMsg[] = (Array.isArray(historyTurns) ? historyTurns : [])
     .filter((t) => t && (t.role === 'user' || t.role === 'assistant') && typeof t.text === 'string')
     .map((t) => ({ role: t.role, text: t.text }));
@@ -624,7 +624,7 @@ export async function askCopilot(
 // renderer requires user confirmation before any step is applied. Returns the raw
 // parsed array on success; a soft not_ready error when no model is configured.
 export async function suggestSteps(summaryText: string): Promise<{ ok: true; steps: unknown[] } | TypedError> {
-  if (!execConfig.executionReady()) return notReady();
+  if (!(await execConfig.executionReady())) return notReady();
   const messages: NeutralMsg[] = [{ role: 'user', text: summaryText }];
   const { rawText, error } = await dispatch(SUGGEST_STEPS_SYSTEM_PROMPT, messages);
   if (error) return error;
@@ -664,7 +664,7 @@ export async function suggestCharts(
   intent: string,
   count: number,
 ): Promise<{ ok: true; options: Array<Record<string, unknown>> } | TypedError> {
-  if (!execConfig.executionReady()) return notReady();
+  if (!(await execConfig.executionReady())) return notReady();
   const n = Number.isFinite(count) && count > 0 ? Math.min(Math.floor(count), 6) : 3;
   let userText = summaryText + '\n\nPropose up to ' + n + ' charts.';
   // The user's own words are UNTRUSTED text: they go in the USER message,
@@ -720,7 +720,7 @@ function parseFirstArray(rawText: string | null | undefined): Array<Record<strin
 export async function suggestCalcField(
   summaryText: string,
 ): Promise<{ ok: true; name: unknown; expression: unknown } | TypedError> {
-  if (!execConfig.executionReady()) return notReady();
+  if (!(await execConfig.executionReady())) return notReady();
   const messages: NeutralMsg[] = [{ role: 'user', text: summaryText }];
   const { rawText, error } = await dispatch(SUGGEST_CALC_FIELD_SYSTEM_PROMPT, messages);
   if (error) return error;
@@ -751,7 +751,7 @@ export async function suggestCalcField(
 export async function draftDashboard(
   inventoryText: string,
 ): Promise<{ ok: true; structure: unknown } | TypedError> {
-  if (!execConfig.executionReady()) return notReady();
+  if (!(await execConfig.executionReady())) return notReady();
   const messages: NeutralMsg[] = [{ role: 'user', text: inventoryText }];
   const { rawText, error } = await dispatch(DRAFT_DASHBOARD_SYSTEM_PROMPT, messages);
   if (error) return error;
