@@ -58,6 +58,13 @@ const TABLES: Readonly<Record<LiveDialectId, TypeTable>> = {
       'bigdecimal', 'float64', 'float'),
     date: set('date', 'datetime', 'timestamp'),
   },
+  // DuckDB — the test bench's fake warehouse only (scripts/liveFakeConnector.ts). HUGEINT and
+  // the unsigned 64-bit types can exceed a double's exact range, so they stay text, as a 16+ digit id does.
+  duckdb: {
+    number: set('tinyint', 'smallint', 'integer', 'int', 'bigint', 'utinyint', 'usmallint', 'uinteger', 'float', 'real',
+      'double', 'decimal', 'numeric'),
+    date: set('date', 'timestamp', 'timestamp with time zone', 'timestamptz'),
+  },
 };
 
 /** `Nullable(LowCardinality(String))` → `string`; `numeric(18,2)` → `numeric`; `timestamp(3) with time zone` → `timestamp with time zone`. */

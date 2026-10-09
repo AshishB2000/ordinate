@@ -20,7 +20,7 @@
 //     after fetch.
 //
 // Values are LITERALS, not bound parameters: `ConnectorDef.run(ctx, sql)` takes
-// one statement and no binds, and widening that contract across 35 sources for
+// one statement and no binds, and widening that contract across 40 sources for
 // one number is not worth it. The literal is safe by construction — a finite
 // number printed by JS, or an ISO timestamp printed by Date — never user text.
 // Identifiers are quoted with each dialect's own doubling.

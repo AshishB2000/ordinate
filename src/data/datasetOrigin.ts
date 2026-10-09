@@ -18,7 +18,7 @@ import type { SqlParam } from '../analysis/params';
  * WHERE a dataset's rows came from, so they can be fetched again.
  *
  * Distinct from `sourceKind`, which is a display/format label and is a closed
- * union of eight values that 35 connectors already collapse onto. This says how
+ * union of eight values that 40 connectors already collapse onto. This says how
  * to RE-RUN the import, and it is the only thing that makes a dataset
  * refreshable — a record without one is a snapshot, exactly as every dataset was
  * before this existed.

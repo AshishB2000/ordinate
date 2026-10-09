@@ -2,7 +2,7 @@
 
 A **self-hosted, open-source BI web app.** A company runs it in its own infrastructure (Docker
 Compose, Kubernetes via Helm, ECS); people open a URL and sign in with the company's IdP. Bring data
-in (files, paste, Excel, 38 SQL/HTTP/SaaS sources, a URL, or an uploaded screenshot) → **prepare**
+in (files, paste, Excel, 40 SQL/HTTP/SaaS sources, a URL, or an uploaded screenshot) → **prepare**
 it with a reversible pipeline → **visualize** across 39 chart, map & table types → author
 **analyses**, publish **dashboards** → share them at a URL. MIT, model-agnostic.
 
@@ -132,18 +132,25 @@ prompts unrounded); a leading U+FEFF is lost on every string the bridge returns 
   `maxCacheAgeSec`. There is **no JS fallback** (D7): correctness rests on the parity tests — the
   compiler's DuckDB dialect against the extract path with `Object.is` (`test-liveParity`), then real
   engines (L2.8).
+- **The executor** (`src/engine/live/liveQuery.ts`: `liveVizData`/`liveMetric`/`liveAnswer`, L2.3):
+  cache (an expired entry is kept as the stale fallback) → ONE warehouse call per question however
+  many ask, cancelled only when every asker hangs up → `liveBudget` (`LIVE_MAX_CONCURRENT`; L2.7's
+  seams) → `connectors/liveRun.ts` (SSRF guard, `costTag 'live'`, `LIVE_QUERY_TIMEOUT_MS`). A failure
+  is the stale answer (`asOf.stale`) or a typed error in a catalog sentence — warehouse text goes to
+  the log only (R-L6). `live:<dialect>` outcomes on `/metrics`. CI's warehouse is
+  `scripts/liveFakeConnector.ts` (DuckDB dialect; tests or `ORDINATE_TEST_LIVE_FAKE` only, never listed).
 
 ### Workspace
 
 - **Sources** — `src/data/parse.ts` centralises parsing (strict `isFiniteNumber`, so `007`, zips
-  and >15-digit ids stay text). **`src/connectors/` is a REGISTRY of 38 read-only sources — one
+  and >15-digit ids stay text). **`src/connectors/` is a REGISTRY of 40 read-only sources — one
   connector is one entry, never a union type**; wire-compatible sources share a driver (`postgres.ts`
   11, `mysql.ts` 8, `http.ts` 7, `saas.ts` 6, `mssql.ts` 3, `oracle.ts` 2 **thin mode only, never
-  `initOracleClient`**, `url.ts` 1). **Rules: read-only; secrets never leave the server (replies
-  carry `secretSet` flags); EVERY query bounded server-side** (user SQL on its own line inside the
-  dialect's wrapper — a trailing comment once dropped the cap, F3/F3b); **every socket goes through
-  the SSRF guard** (`src/connectors/ssrf.ts`: check every resolved address, pin to it, re-check each
-  redirect; private ranges only via `SSRF_ALLOW`).
+  `initOracleClient`**, `url.ts` 1, `snowflake.ts` 1, `bigquery.ts` 1). **Rules: read-only; secrets
+  never leave the server (replies carry `secretSet` flags); EVERY query bounded server-side** (user
+  SQL on its own line inside the dialect's wrapper — a trailing comment once dropped the cap,
+  F3/F3b); **every socket goes through the SSRF guard** (`src/connectors/ssrf.ts`: check every
+  resolved address, pin to it, re-check each redirect; private ranges only via `SSRF_ALLOW`).
 - **No dataset origin reaches a browser** — no file path, keyed URL or SQL text; replies carry
   `{kind, label, refreshable}` (`dataset:source`). The server keeps no `file` origin (F1).
 - **Captures are a SOURCE**: upload a screenshot → `captureDataset:draft` → composer (preview cells
@@ -228,7 +235,9 @@ call. Every env var is in `docs/server/configuration.md`; `test-serverDocs` enfo
   `web/e2e/__screens__/` — look at them. `E2E_CHROMIUM` overrides the browser.
 - **CI** (`ci.yml`, every PR to `develop`): jobs `check`, `web`, `audit` (`scripts/audit-gate.ts`),
   `docker`, `helm`, plus `lint.yml`. The required check **`smoke (all shards)`** aggregates check,
-  web, docker, helm and audit. `e2e-nightly.yml` runs Firefox and WebKit.
+  web, docker, helm and audit. `e2e-nightly.yml` runs Firefox and WebKit. `warehouse-nightly.yml`
+  runs `scripts/test-warehouseLive.ts` against real Snowflake / BigQuery accounts from repo secrets
+  (it skips, green, without them — locally too).
 
 ```bash
 npm run server        # build:ts, then the server on 127.0.0.1:8080 (./data); serves web/dist. Needs

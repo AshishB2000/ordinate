@@ -370,6 +370,197 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
 - **Not done here (by plan):** executor and cache (L2.3), routing charts / KPIs / answers (L2.4 —
   until then they refuse, as the suite asserts), the full Live UI (L2.6).
 
+## 2026-10-09 — L1.4 and L1.5 finished: counts, the real-account nightly, the canaries
+
+- **L1.4 checked, one gap filled.** Both dialects were in `incrementalSql.ts` (`snowflake`: `"…"`
+  with doubling, `'…'::timestamp_tz` under the session's UTC; `bigquery`: one backtick path, a day
+  literal — the BigQuery log entry above says why it is not `TIMESTAMP('…')`), the dispatch's table
+  SQL quotes `` `project.dataset.table` `` (`connectionRun.quotedTable` → `quotedTablePath`), and
+  `test-incrementalRefresh` §8 and §9 push the predicate end to end through each real connector.
+  `test-incrementalMerge`'s per-dialect list had BigQuery but not Snowflake; it has both now.
+- **Counts 38 → 40:** README (the two sentences, the connector table's heading, and Snowflake and
+  Google BigQuery in its Cloud warehouses row, 7 → 9, in catalog order), CLAUDE.md (the sources
+  count, the registry count, and `snowflake.ts` 1, `bigquery.ts` 1 in the family list); the stale
+  "35" in four code comments. `test-icons` already pinned 40. Plan, phase-7 history and the
+  dated `docs/superpowers/` notes keep the counts of their day.
+- **The real-account test, `scripts/test-warehouseLive.ts`** (+ `warehouseLiveHarness.ts`,
+  `warehouseLiveSnowflake.ts`, `warehouseLiveBigquery.ts`, split by job). It runs in server mode
+  (the SSRF guard on) inside a request context, through `getConnector` and `connectionRun`, and
+  only WATCHES the real transports through their seams. Without credentials it prints one skip
+  line per warehouse and exits 0; with some but not all of one warehouse's variables it fails. The
+  log prints no secret and no account identifier (a public repo's Actions log is public): every
+  printed line and failure detail is redacted, while the canary greps the raw results and errors
+  plus every printed byte for the key, passphrase, PAT, and every JWT, access token and assertion
+  issued during the run — with a negative control in the suite. `.github/workflows/warehouse-nightly.yml`
+  runs it at 05:41 UTC and on demand, `contents: read`, not a required check.
+- **The scope spike, made answerable.** The BigQuery half records (`spike:` lines and the run's
+  step summary): the scopes the query token asked for; the scopes Google granted, read back from
+  `oauth2.googleapis.com/tokeninfo` (POST, bearer header, then form body); whether `jobs.query`
+  accepts that token; and how a WRITE is refused — through Ordinate's estimate and run (the gate,
+  or BigQuery's parser at the dry run), and sent straight to `jobs.query` with the read-only token,
+  bypassing the gate. That write is a temp-table script, which needs no IAM grant, so a refusal can
+  only be the scopes; with `BIGQUERY_SCRATCH_DATASET` it also tries the plan's `CREATE TABLE … AS
+  SELECT 1` and drops the table if it was created. A verdict line maps the outcome onto the
+  three rows of the table above. The answer is recorded, not asserted: every outcome is safe.
+- **Canaries, re-checked.** Connector level was already complete for both (results, errors,
+  requests, printed output; Snowflake also the catalog). Server level had Snowflake's
+  testAndSave / list / listTables only and no BigQuery. `test-connections-server` now drives both
+  through `connection:run`, `connection:explain`, `connection:estimate` (Snowflake: `null`;
+  BigQuery: priced), `connection:listTables`, `connection:describe`, `connectors:catalog` and
+  `connections:list`, including a warehouse whose every error echoes the bearer, the key and the
+  passphrase (each reply must carry `***` and no needle). The BigQuery key's PEM lines and id, the
+  Snowflake JWTs, and every BigQuery assertion and access token join the needles, so the existing
+  database dump, `pg_dump`, disk, reply, trace-log and output greps cover them.
+- **Not measured: no real account was available here.** The live test was exercised only against
+  in-process fakes of both APIs (a scratch harness, not committed), including its negative
+  controls: a passphrase printed mid-run and an access token returned in a row both fail the
+  canary. What the fakes cannot settle, and the first nightly will: whether a Snowflake result
+  of ~48 MB spans several partitions (asserted), the exact 422 body of a cancelled statement
+  (`000604` or "cancel" asserted), BigQuery accepting `…Z` timestamp parameters and dry-running
+  `ASSERT` and a script (either may be the gate's case), the scope answers, and whether a 450-step
+  recursive CTE is still running ~10 s in, when the late cancel lands (chosen over a cross join,
+  which the on-demand billing tier can stop on CPU first).
+
+## 2026-10-09 — L2.3 The executor and the cache
+
+- **Built.** `src/engine/live/liveQuery.ts`: `liveVizData(projectId, datasetId, encoding, filters)`,
+  `liveMetric(projectId, datasetId, spec, filters)` and `liveAnswer(projectId, spec)` — exactly what
+  `vizDataFor`, `computeCardMetric` and `computeCard` take, answering their success shapes (the chart
+  + `recommendedShape`, `warnings`, `category`; the number; the ranked and cut chart + `notes` +
+  `filterLabels`) plus `asOf {at, mode: 'live', cached?, stale?}`, or a typed `LiveFailure {ok: false,
+  code: live_refused | live_unavailable | live_failed | live_timeout | live_cancelled, error, reason?}`
+  whose `error` is a catalog sentence. Not wired into the doors (L2.4). Beside it: `liveTarget.ts`
+  (record → connection → connector, dialect, source parts; the secrets read on the first warehouse
+  call only, through the same `loadSecrets` a refresh uses), `liveBudget.ts`,
+  `src/connectors/liveRun.ts` (the live ConnectorContext: `guardHost` — now exported from
+  connectionRun — `costTag 'live'`, `maxBytes`, the timeout, the signal, `safeError`) and
+  `src/engine/liveQueryMessages.ts` (6 catalog sentences). `queryCache` gains a per-entry `maxAgeMs`
+  (and a per-lookup one; the tighter wins, so lowering a dataset's age applies at once), `peek` (any
+  age, for the stale fallback) and a clock seam; nothing but live sets an age. `residentTrace`
+  `recordLive` → `/metrics`. Settings `LIVE_QUERY_TIMEOUT_MS`, `LIVE_MAX_CONCURRENT` (env.ts, re-read
+  per query like `LIVE_MAX_BYTES_BILLED`).
+- **The test bench.** `scripts/liveFakeConnector.ts`: two defs (`live-fake`, `live-fake-net` with a
+  host field) declaring the DuckDB dialect, running the compiled statement through the async bridge in
+  the org's own worker; a spy (`fake.calls`) and a hook (hold, fail, slow). `LiveDialectId` gains
+  `'duckdb'` (and liveSchema a DuckDB type table) — declared by no shipped connector, asserted. The
+  registry gains `registerTestConnector`: resolvable by id, never in `listConnectors`/the catalog,
+  refused under `ORDINATE_ENV=prod`. For L2.6: `startServer(env, { live: true })` seeds a fake
+  connection + a Live dataset over a built-in `live_fake_orders` table (`seed.ts --live`,
+  `seedLiveFake`) and starts the server with `ORDINATE_TEST_LIVE_FAKE=1` (env.ts refuses it in prod;
+  the image ships no `scripts/`). Checked by hand against the built server: the flag registers the
+  fake, `connection:listTables` runs it in the org worker, `connectors:catalog` does not list it.
+- **Decided — one flight per question, cancelled by the LAST hang-up.** `queryCache.through` already
+  shares a computation, but it cannot carry a hang-up: under it one closed tab would cancel the
+  warehouse call every other viewer of the tile waits on. So live keeps its own in-flight map under
+  the cache key: an asker who hangs up stops waiting at once, and the shared call (its signal +
+  `LIVE_QUERY_TIMEOUT_MS` reach `runBound`) is aborted only when no asker is left; a later asker
+  starts afresh rather than joining a cancelled call. The flight's body runs in the asker's context
+  but under the SHARED signal, so anything that reads the request's signal (the DuckDB pool under the
+  fake, a connector's fallback) obeys the same rule. A joiner counts as `hit` (no call of its own).
+- **Decided — the key** is `orgKey('live' · project · dataset · epoch · schemaSyncedAt ·
+  {ir, source, dialect})`: the plan's, plus the project and the source, so an origin edit that did
+  not move `schemaSyncedAt` still cannot answer from the old statement. The period resolver's MAX()
+  is its own entry, keyed by its statement: two answers over one date column ask it once.
+  `asOf.at` is the OLDEST statement's time (a cached MAX() included).
+- **Decided — no warehouse text in a reply at all**, stronger than redacting it: a warehouse can
+  quote fragments of a defining query no redaction pass would recognise. The reply is a catalog
+  sentence ("…an admin can find the reason in the server log"); the server log gets one line per
+  failed STATEMENT (not per asker), `safeError`'d. The trace's once-per-op warning is the summary.
+- **Decided — a sixth trace outcome, `cancelled`** (the plan names five): a closed tab is not a
+  warehouse failure, and the once-per-op warning must not be spent on one. `failed` stays "a viewer
+  saw an error".
+- **Decided, smaller.** The stale fallback reads the exact key, so right after "Refresh" (epoch bump,
+  and `refreshLive` also invalidates) a failing warehouse is an error, not the pre-refresh figure.
+  Expired entries stay until the LRU's byte budget evicts them. A concurrency slot is held until the
+  connector SETTLES, not until the caller stops waiting (a cancelled statement still winding down
+  counts). A result past `LIVE_ROW_LIMIT` (100,000 groups) is a refusal (`tooManyGroups`), never part
+  of a chart. `LIVE_QUERY_TIMEOUT_MS` is not clamped to the extract's 30 s.
+- **Found by the parity check:** `computeCard`'s `filterLabels` hold EVERY filter's label in spec
+  order ("region = North" beside "d: 2024-Q4"); `evaluateLive`'s `periodLabels` are the periods only.
+  `liveAnswer` interleaves them, taking a non-period label from `specFilterSteps` itself.
+- **L2.7's seams, one each, in `liveBudget.ts`:** `checkDaily(org, datasetId)` returns ok (L2.7:
+  `live_usage` + `LIVE_DAILY_QUERY_LIMIT`). Its refusal is already handled — the stale answer, else
+  `live_refused`/`dailyLimit` with the seam's own sentence — and tested through
+  `setDailyCheckForTest`. `noteCall(org, datasetId)` is the per-call usage upsert (a no-op).
+  `cacheAgeFloorSec()` (0) is the public-page floor, already applied in the age; L2.7 has to bring
+  "this is a `/p/` request" to it — no flag carries that yet.
+- **Measured** (`test-liveQuery`, 4 vCPU container, the fake over the 1,060-row parity fixture in an
+  org's DuckDB worker; three runs): a cache hit **0.38–0.48 ms** median (n=200; it still reads the
+  dataset record and the connection record — the epoch and the dialect — but no secret), a warehouse
+  call **2.41–2.53 ms** median (n=40, one KPI statement, no network). A real warehouse adds 100 ms to
+  seconds per statement. `LIVE_QUERY_TIMEOUT_MS=150` against a held statement answered `live_timeout`
+  in 154 ms, the connector's signal fired.
+- **Tests.** `test-liveQuery` (61 checks): 6 charts, 3 KPIs and 4 answers through the executor equal
+  `evaluateLive` over the parity runner EXACTLY and the extract within 1e-13; hit inside the age / miss
+  at it (fake clock, ±1 ms); an epoch bump misses with no invalidation; age 0 always asks, 5
+  concurrent identical asks make ONE call (1 warehouse + 4 hits); one MAX() for two answers; stale on
+  error; a typed error with nothing cached (NEGATIVE CONTROL: no data, no labels); the R-L6 canary
+  (statement, defining query, host, table and secret planted in a returned and a thrown warehouse
+  error: in no reply; the secret in no log line); R-L5 with two orgs holding the same ids; refusals;
+  `/metrics`. `test-liveQueryBudget` (34): abort (the connector's signal fires, `cancelled` traced),
+  a shared call surviving one hang-up and cancelled by the last, the timeout (typed, and stale when
+  cached), `LIVE_MAX_CONCURRENT=2` (the third waits, peak 2 per org, another org not queued, a queued
+  hang-up never reaches the warehouse), the daily seam, the live context (costTag, bytes, timeout, row
+  cap), the SSRF guard (metadata address refused before `runBound`; NEGATIVE CONTROL: a public one
+  pinned), the row cap, the registry and env guards. `test-queryCache` +6 (ages, `peek`).
+- **For L2.4.** Route a Live dataset to these three BEFORE the extract's own answer cache
+  (`answerKey.keyParts`, `queryCache.through('aggregate'|'metric')`): wrapping them again would pin a
+  figure past `maxCacheAgeSec` and hide `stale`. `visual:data`'s stamp must keep the reply's live
+  `asOf` instead of writing `lastRefreshedAt`. Refuse param replay, FX, LOD and drivers before calling
+  (not in the IR). `liveAnswer`'s chart is ranked and cut already. Text-filter case fixing is still
+  the cached DISTINCT query L2.4 owns.
+
+## 2026-10-09 — L0.5 A refresh URL for dbt / Airflow
+
+- **Built.** Migration `0011_refresh_hooks.sql` (`refresh_hooks`, forced RLS, the audit CHECK
+  widened); `src/server/hooks/` — `store.ts` (token, hash, the claim, list/create/revoke under RLS),
+  `route.ts` (`POST /api/hooks/refresh/<token>`, beside the file and MCP routes), `act.ts` (THE
+  decision: refresh an extract through `startRefresh`, reset a Live dataset's cache through
+  `refreshLive`), `rpc.ts` (`refreshHook:list|create|revoke`, contracts in
+  `src/api/refreshHooks.ts`); `REFRESH_HOOK_MIN_INTERVAL_SEC`; audit actions `hook_refresh` and
+  `scheduled_refresh` (the tick's reporter in `src/server/jobs/schedules.ts` now writes one per
+  scheduled refresh that ran). Web: `RefreshUrl.tsx` (the panel), opened from the dataset page's
+  ⋯ menu and from a connection rail's dataset row; the Audit tab's two new event names.
+- **Decided — the refresh runs as the hook's CREATOR**, with their current role, re-checked on every
+  call by `dataset:refresh`'s own rule (`authorize` with that contract). A hook is a credential a
+  person minted, like a personal token, so it is never worth more than that person is now: disabled,
+  removed or demoted → 403 and a `denied` row. A scheduled refresh stays `jobs@system` (it belongs
+  to the dataset, not a person). The job lands in the creator's Jobs list; the audit actor is the
+  creator. Under `AUTH_MODE=dev` (no users rows) the creator is the dev admin, as everyone is.
+  `created_by` is therefore an email (the key every grant check uses), not a users FK.
+- **Decided — the interval IS the claim.** One `UPDATE … SET last_used_at = now() WHERE … AND
+  last_used_at <= now() - interval RETURNING …`: concurrent claims serialize on the row and the
+  loser re-checks against the winner's stamp, on the database clock. A claim that is then refused
+  (403) still spends the interval, which bounds audit rows a leaked URL can write too.
+- **Decided — RLS that works without an org.** The URL names no org, so `refresh_hooks` has a second
+  pair of policies keyed on `ordinate.hook` = the token's hash: a call sees and stamps exactly the
+  row it holds the hash of; a member's call sees its org's rows (`ordinate.org`, as `records`).
+- **Decided — revoked ≡ unknown**: same 404 body and headers, the same two SQL statements (the
+  UPDATE, then a SELECT that would find a live row's wait), no audit row for either. Measured
+  (`test-refreshHooks-db`, median of 15 calls over HTTP, loaded container): revoked 2.35 ms,
+  unknown 2.24 ms (first run 2.88 / 2.91).
+- **Decided — `cache_reset` is a third status**, not `queued`: on a Live dataset nothing is queued,
+  the bump is done when the call is answered, and a pipeline can tell the two apart.
+- **Decided — a personal API token cannot create a refresh URL** (as `tokens:create`): it would
+  outlive the token's own revocation. The list is `audit: 'denials'`; create and revoke are `rpc`
+  rows like `tokens:*` (no new create/revoke actions: the vocabulary has none for tokens either).
+- **Decided — any body, any method.** dbt Cloud and Airflow send JSON, `curl -d` a form; the route
+  has its own catch-all body parser (≤ 64 KiB, ignored), answers 405 to other methods, and matches
+  every deeper path, so neither a 415 nor Fastify's "Route … not found" log line (which no serializer
+  masks) can happen with a token in it. A pino `logMethod` hook masks `ordh_…` in every message as
+  well; the request serializer masks the path.
+- **Measured — across pods.** Two in-process apps on one database (two pools), both calling one URL
+  at the same instant: exactly one 202 and one 429 in each of 4 rounds; two real server processes:
+  the same in each of 5 rounds, and the dataset refreshed. NEGATIVE CONTROLS: a check-then-act claim
+  on two pools lets both through; two different URLs of one dataset at once both get 202.
+- **Deviation — the dbt snippet.** The plan says "dbt `on-run-end`". An `on-run-end` hook runs SQL in
+  the warehouse and cannot call a URL without warehouse-side network setup, so the panel and
+  `docs/server/live-data.md` show `dbt build && curl …` for dbt Core and a dbt Cloud "Run completed"
+  webhook instead, and say why.
+- **Not done (scope):** a pipeline cron's dataset refresh (`pipelineRunner`, also under the tick)
+  still leaves no audit row; only the dataset scheduler's refreshes are `scheduled_refresh`. `connection:refresh` and the MCP `datasets
+  refresh` tool still bypass the job and the lock (noted under L0.3/L0.4).
+
 ## 2026-10-09 — L3.1 Pull the new rows before answering (fresh on ask)
 
 - **Built.** `freshOnAsk: { maxStalenessSec }` on the dataset record (60 s – 1 day; the picker offers

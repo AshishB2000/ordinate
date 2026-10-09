@@ -1,5 +1,5 @@
 // /connections/:projectId — Connect data (legacy connections.ts + connNew.ts +
-// connRun.ts): the project's saved connections above, the 35-source picker
+// connRun.ts): the project's saved connections above, the 40-source picker
 // below, and the chosen source's form in its place. `?source=<id>` lands
 // straight on one source's form (the desktop's sidebar shortcuts), and is
 // what "Change source" clears. /connections alone shows the first project.

@@ -23,6 +23,10 @@
 //     Authorization header without a CORS preflight, which this server never
 //     answers.
 //   - /api/mcp, which accepts nothing BUT a bearer token (cookie → 401 there).
+//   - /api/hooks/refresh/<token> (live data L0.5): the token in the path is the
+//     whole credential, and the route looks up no cookie, session or header —
+//     a cross-site page riding the browser has nothing to ride without it.
+// Neither is handed a CSRF cookie either: nothing there would ever echo it.
 // Every other mode is checked, dev included: a dev server answers every
 // caller on loopback as an admin, which a page in the same browser can reach.
 
@@ -30,12 +34,13 @@ import { randomBytes, timingSafeEqual } from 'crypto';
 import fastifyCookie from '@fastify/cookie';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { hasBearer } from './auth/tokens';
+import { HOOK_ROUTE } from './hooks/store';
 
 export const CSRF_HEADER = 'x-csrf-token';
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
 /** Routes that refuse ambient credentials themselves. */
-const BEARER_ONLY = new Set(['/api/mcp']);
+const BEARER_ONLY = new Set(['/api/mcp', HOOK_ROUTE]);
 
 /** Origin header → is it this server, by host (scheme and port as the browser saw them). */
 export function sameOrigin(origin: string, host: string | undefined): boolean {
@@ -75,15 +80,16 @@ export function registerCsrf(app: FastifyInstance, o: CsrfOptions): void {
     const bearer = o.bearerDecides && hasBearer(req.headers.authorization);
     const token = cookieToken(req, o.cookie);
     const path = req.url.split('?')[0];
+    const bearerOnly = BEARER_ONLY.has(req.routeOptions.url ?? '');
     // Issue one to whatever page or API call arrives without it. Not to
     // static files: an immutable asset must not carry a Set-Cookie into a cache.
-    if (!token && !bearer && (path.startsWith('/api/') || (req.headers.accept ?? '').includes('text/html'))) {
+    if (!token && !bearer && !bearerOnly && (path.startsWith('/api/') || (req.headers.accept ?? '').includes('text/html'))) {
       reply.header(
         'set-cookie',
         fastifyCookie.serialize(o.cookie, newCsrfToken(), { path: '/', sameSite: 'lax', secure: o.secure, httpOnly: false }),
       );
     }
-    if (SAFE.has(req.method) || bearer || BEARER_ONLY.has(req.routeOptions.url ?? '')) return done();
+    if (SAFE.has(req.method) || bearer || bearerOnly) return done();
 
     const origin = req.headers.origin;
     const crossSite = origin !== undefined ? !sameOrigin(origin, req.headers.host) : req.headers['sec-fetch-site'] === 'cross-site';

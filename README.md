@@ -50,7 +50,7 @@ Connect your data, build dashboards, and let AI analyse it for you.
   Compose, Kubernetes (Helm), or ECS. Your data never leaves your infrastructure.
 - **AI built in.** Ask questions about your data in plain words, have AI explain the changes that
   stand out, and let it suggest charts, prepare steps and calculated fields.
-- **A complete BI workflow.** Connect 38 sources, clean data with a reversible pipeline, chart it
+- **A complete BI workflow.** Connect 40 sources, clean data with a reversible pipeline, chart it
   across 39 chart, map and table types, and publish dashboards your whole team can open.
 - **Built for teams.** Sign in with your company SSO, share projects by role, and keep an audit
   log of who changed what.
@@ -145,7 +145,7 @@ Step-by-step guides: [EKS](docs/server/eks.md) · [ECS](docs/server/ecs.md) ·
 
 | | |
 |---|---|
-| **📥 Bring data in** | Upload CSV, JSON or Excel, paste a table, point at a JSON URL, read a table out of a screenshot, or connect one of **38 read-only sources**. Datasets hold up to 1,000,000 rows. |
+| **📥 Bring data in** | Upload CSV, JSON or Excel, paste a table, point at a JSON URL, read a table out of a screenshot, or connect one of **40 read-only sources**. Datasets hold up to 1,000,000 rows. |
 | **🧹 Prepare** | A step-by-step pipeline you can reorder or undo: calculated fields, filters, grouping, joins, pivot and unpivot, dedupe, regex, window functions and more. Refreshes and pipelines run on a schedule. |
 | **📊 Visualize** | **39 types**: 31 charts, a pivot table, cohort and event-funnel grids, 4 maps and a table. Small multiples, drill-down, annotations, reference lines and forecasts. |
 | **🔬 Analyze** | Statistics, key drivers, what-if scenarios, segments, snapshots, events and a SQL workbench. |
@@ -153,13 +153,13 @@ Step-by-step guides: [EKS](docs/server/eks.md) · [ECS](docs/server/ecs.md) ·
 | **🛡️ Govern** | SSO sign-in, orgs, teams and per-project roles (viewer, editor, admin), an audit log, personal API tokens, an admin console, and backup and restore. |
 
 <details>
-<summary><b>All 38 connectors</b></summary>
+<summary><b>All 40 connectors</b></summary>
 <br/>
 
 | Category | Sources |
 |---|---|
 | **Databases** (14) | PostgreSQL · CockroachDB · TimescaleDB · YugabyteDB · Materialize · QuestDB · RisingWave · MySQL · MariaDB · Amazon Aurora (MySQL) · TiDB · PlanetScale · Microsoft SQL Server · Oracle Database |
-| **Cloud warehouses** (7) | Amazon Redshift · Google AlloyDB · Neon · Supabase · Azure SQL Database · Azure Synapse Analytics · Oracle Autonomous Database |
+| **Cloud warehouses** (9) | Amazon Redshift · Google AlloyDB · Neon · Supabase · Azure SQL Database · Azure Synapse Analytics · Oracle Autonomous Database · Google BigQuery · Snowflake |
 | **Query engines** (10) | SingleStore · StarRocks · Apache Doris · ClickHouse · Databricks SQL · Trino · Presto · Elasticsearch · OpenSearch · Apache Druid |
 | **Apps &amp; SaaS** (6) | Google Sheets · Airtable · Notion · Stripe · GitHub · HubSpot |
 | **Web** (1) | URL / API (JSON) |

@@ -71,11 +71,11 @@ function resolve(connectorId: unknown): ConnectorDef | null {
  * The SSRF guard for a typed host (T6.1), on the server only: the `host` field
  * is resolved and checked, and its address pinned into `ctx.pinned` for the DB
  * driver to connect to. Every source naming its server in a `host` field goes
- * through here; the URL source, the HTTP engines' transport, the SaaS transport
- * and Oracle's ADB connect string check their own hosts (ssrf.ts). A refusal
- * string, or null to go ahead.
+ * through here (a Live query too, ./liveRun.ts); the URL source, the HTTP
+ * engines' transport, the SaaS transport and Oracle's ADB connect string check
+ * their own hosts (ssrf.ts). A refusal string, or null to go ahead.
  */
-async function guardHost(def: ConnectorDef, ctx: ConnectorContext): Promise<string | null> {
+export async function guardHost(def: ConnectorDef, ctx: ConnectorContext): Promise<string | null> {
   if (!guardOn() || !(def.fields || []).some((f) => f.key === 'host')) return null;
   try {
     ctx.pinned = await checkHost(String(ctx.values.host ?? ''));

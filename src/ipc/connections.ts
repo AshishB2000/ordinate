@@ -220,7 +220,7 @@ async function importAsDataset(p: Record<string, unknown>) {
   else origin.table = table;
   if (sql && str(p.queryId)) origin.queryId = str(p.queryId);
   // The composer's own save, server side: same quality checks, same sensitivity
-  // scan as any import. sourceKind is a display label the 35 sources share.
+  // scan as any import. sourceKind is a display label the 40 sources share.
   return composeSave({
     projectId,
     name,

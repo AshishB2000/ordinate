@@ -7,6 +7,11 @@
 //                                                        per user        RATE_LIMIT_RPC_PER_MINUTE (1200)
 //   MCP       POST /api/mcp                              the RPC buckets above (T6.3): a tool call
 //                                                        runs the same handlers, so it spends the same budget
+//   hooks     /api/hooks/refresh/<token>                 per client IP   RATE_LIMIT_LOGIN_PER_MINUTE, its own
+//                                                        bucket (live data L0.5): a credential presented without
+//                                                        a session, like a sign-in. Each URL is also held to one
+//                                                        call per REFRESH_HOOK_MIN_INTERVAL_SEC in Postgres
+//                                                        (./hooks/store.ts), across pods
 //
 // Over a limit → 429 with Retry-After (seconds until the window resets). The
 // per-IP checks run before sign-in is looked up, so a flood costs no Postgres
@@ -29,6 +34,7 @@ import { isTrustedPeer as trusted } from './auth/index';
 import { PASSWORD_ROUTES } from './auth/password';
 import { ctx } from './context';
 import type { LimitsEnv } from './env';
+import { HOOK_ROUTE } from './hooks/store';
 
 const MINUTE = 60_000;
 export const RPC_ROUTE = '/api/rpc/:channel';
@@ -74,6 +80,7 @@ export function registerLimits(app: FastifyInstance, cfg: LimitsEnv, proxies: Bl
   let signIn: Limiter | null = null;
   let rpcIp: Limiter | null = null;
   let rpcUser: Limiter | null = null;
+  let hookIp: Limiter | null = null;
 
   app.addHook('onRequest', async (req, reply) => {
     const route = req.routeOptions.url ?? '';
@@ -83,6 +90,9 @@ export function registerLimits(app: FastifyInstance, cfg: LimitsEnv, proxies: Bl
     } else if (route === RPC_ROUTE || (route === MCP_ROUTE && req.method === 'POST')) {
       rpcIp ??= app.createRateLimit({ max: cfg.rpcIpPerMinute, timeWindow: MINUTE, keyGenerator: ipKey('rpc:') });
       await refused(rpcIp, req, reply);
+    } else if (route === HOOK_ROUTE) {
+      hookIp ??= app.createRateLimit({ max: cfg.loginPerMinute, timeWindow: MINUTE, keyGenerator: ipKey('hook:') });
+      await refused(hookIp, req, reply);
     }
   });
 

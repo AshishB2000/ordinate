@@ -2,8 +2,10 @@
 
 This page is for the team that connects Ordinate to a cloud warehouse. It covers what each warehouse
 needs on its side (a read-only identity) and on yours (network egress). The plan behind it is
-[docs/live-data/00-plan.md](../live-data/00-plan.md). Sections for cost limits, cache ages
-and the refresh URL are added by the tasks that build them.
+[docs/live-data/00-plan.md](../live-data/00-plan.md). It also covers the [refresh URL](#refresh-url)
+that dbt or Airflow calls when new data has landed, and [fresh on ask](#fresh-on-ask) for the
+copies of operational databases. Sections for cost limits and cache ages are added by the tasks
+that build them.
 
 ## Snowflake
 
@@ -193,9 +195,9 @@ The tree lists up to 1,000 tables, the default dataset's first.
    `https://www.googleapis.com/auth/bigquery.readonly` and
    `https://www.googleapis.com/auth/cloud-platform.read-only`. Whether Google refuses a write
    statement under these scopes has **not** been verified against a real account yet
-   ([log](../live-data/log.md)). If Google refuses the scopes themselves, every query fails with an
-   error that says *insufficient authentication scopes*; Ordinate will not ask for broader access to
-   work around it.
+   ([log](../live-data/log.md)); the real-account run below records the answer each night. If
+   Google refuses the scopes themselves, every query fails with an error that says *insufficient
+   authentication scopes*; Ordinate will not ask for broader access to work around it.
 3. **A dry run first** — every statement the workbench, an import or a refresh sends is first
    dry-run (free), and refused unless BigQuery reports it is a `SELECT`. The dry run is of the exact
    text that then runs.
@@ -254,6 +256,170 @@ With incremental refresh on, Ordinate asks BigQuery only for rows at or past the
 literal, which BigQuery reads as the column's own type (`DATE`, `DATETIME` or `TIMESTAMP`), so a
 partitioned table scans only the partitions it needs. It is a day wider than needed on purpose; the
 exact cut is made in Ordinate.
+
+## Testing against a real account
+
+The connectors' self-checks run against recorded replies. `scripts/test-warehouseLive.ts` runs the
+same code against a **real** Snowflake account and a **real** Google Cloud project, through the
+registry, over the network, with the SSRF guard on. For each warehouse it checks test connection,
+the table list, a table's columns, a query cut at the row limit (and one exactly at it, not cut),
+reading past the first result partition or page, how each type arrives (numbers, ids longer than 15
+digits, dates and timestamps as UTC, JSON), bound values against hostile literals, and that a query
+whose caller hangs up is cancelled *on the warehouse*, as the warehouse itself then reports. For
+BigQuery it also checks the cost estimate and the dry-run gate, and records the read-only scope
+answer (below). Throughout, it checks that no key, passphrase, token or signed assertion reaches a
+result, an error or its output.
+
+It runs only when a warehouse's variables are set. Without them it prints that it skipped and
+passes, so `npm test` stays green. Setting only some of one warehouse's variables is a failure.
+These are inputs to the test, **not server settings**: the server never reads them, so they are not
+in [configuration.md](configuration.md).
+
+| Variable | Required | What it is |
+|---|---|---|
+| `SNOWFLAKE_ACCOUNT` | yes | The account identifier, as in the connection form. |
+| `SNOWFLAKE_USER` | yes | A user that signs in with the key below (`ORDINATE_SVC` above). |
+| `SNOWFLAKE_PRIVATE_KEY` | this or the PAT | The PEM private key. A one-line value with `\n` escapes is accepted. |
+| `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE` | for an encrypted key | Its passphrase. |
+| `SNOWFLAKE_PAT` | this or the key | A programmatic access token, instead of the key. |
+| `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_ROLE` | yes | As in the connection form. Use the read-only role above. |
+| `SNOWFLAKE_DATABASE` | no | A database with **at least one table** the role can read. Without it, the account's first visible table is described, and the query-tag check is skipped. |
+| `SNOWFLAKE_SCHEMA` | no | The schema whose table is described first. |
+| `BIGQUERY_KEY_JSON` | yes | The service-account key file, whole. |
+| `BIGQUERY_PROJECT` | no | The billing project. Defaults to the key's own. |
+| `BIGQUERY_DATASET` | no | The default dataset, listed first. |
+| `BIGQUERY_LOCATION` | no | Where jobs run, as in the connection form. |
+| `BIGQUERY_SCRATCH_DATASET` | no | A dataset the test account may **write**, used only by the scope probe below. Leave it unset unless you want that probe; never grant write access to the account a real connection uses. |
+
+Run it locally:
+
+```bash
+npm run build:ts
+SNOWFLAKE_ACCOUNT=myorg-myaccount SNOWFLAKE_USER=ORDINATE_SVC SNOWFLAKE_WAREHOUSE=ORDINATE_WH \
+SNOWFLAKE_ROLE=ORDINATE_READER SNOWFLAKE_DATABASE=SALES SNOWFLAKE_PRIVATE_KEY="$(cat ordinate_svc.p8)" \
+SNOWFLAKE_PRIVATE_KEY_PASSPHRASE=… BIGQUERY_KEY_JSON="$(cat ordinate-key.json)" \
+node scripts/test-warehouseLive.js
+```
+
+**Nightly.** `.github/workflows/warehouse-nightly.yml` runs it every night and on demand
+(**Actions → Warehouse nightly → Run workflow**). It reads repository secrets with the same names;
+add the ones you have, for example `gh secret set SNOWFLAKE_PRIVATE_KEY < ordinate_svc.p8` and
+`gh secret set BIGQUERY_KEY_JSON < ordinate-key.json`. It is not a required check. The run's log
+prints no credential and no account identifier, because the log of a public repository is public.
+
+**What it costs.** Snowflake: about two minutes of the warehouse (most of it the cancel check,
+which waits for Snowflake's own 45-second hand-off before cancelling), plus the warehouse's
+auto-suspend time. BigQuery: nothing billed in the usual case. Every query it runs reads generated
+rows rather than a table; the one table it touches, the public `bigquery-public-data.samples.shakespeare`,
+is only described and dry-run, and both are free.
+
+**The read-only scope answer.** Each BigQuery run records, as `spike:` lines in the log and a table
+in the run's summary: which scopes Google granted the query token (from Google's `tokeninfo`),
+whether `jobs.query` accepts that token, and whether a **write** sent with it is refused by Google or
+only by Ordinate's dry-run gate. The write it sends needs no IAM grant (a temporary table in a
+script), so a refusal can only come from the token's scopes. With `BIGQUERY_SCRATCH_DATASET` set, it
+also tries `CREATE TABLE … AS SELECT 1` there, and drops the table again if Google allowed it. Either
+answer is safe, because the dry-run gate and the IAM roles hold regardless. The answer decides
+whether the gate is the only read-only guarantee or defence in depth.
+
+## Refresh URL
+
+A refresh URL lets a pipeline tell Ordinate that new data has landed. A dbt run or an Airflow DAG
+POSTs to it when it finishes, and Ordinate refreshes **one dataset** from its source. The URL can
+do nothing else. On a **Live** dataset there is nothing to fetch, so the call resets the dataset's
+cache instead, and the next chart or answer asks the warehouse again.
+
+It works for any dataset that has a source to refresh from: a connection table or query, a web
+address, SQL over other datasets, or a combined dataset. It does not work for pasted rows or a
+screenshot. It needs the server's Postgres (`DATABASE_URL`).
+
+### Making one
+
+Open the dataset, then **⋯ → Refresh URL…**. The same panel opens from **Refresh URL** under the
+dataset on its connection's details rail. Only editors of the project see the panel. Press **New
+refresh URL**. The URL is shown **once**: Ordinate keeps only its SHA-256 and its first 13
+characters (`ordh_…`), which name it in the list. Store it in your scheduler's secret store. The
+list shows who made each URL, when, and when it was last called. **Revoke** stops it at once.
+
+A call refreshes **as the person who made the URL**, with their role at the time of the call. If
+they are disabled or lose write access to the project, the URL answers `403`. Make a new one as
+someone who still has access.
+
+### What a call gets back
+
+`POST https://<your host>/api/hooks/refresh/<token>`. No body and no headers are needed. A body
+(dbt Cloud and Airflow send JSON) is read up to 64 KiB and ignored. It names nothing: the token
+alone decides the dataset.
+
+| Status | Body | Meaning |
+|---|---|---|
+| `202` | `{"status":"queued"}` | A refresh was started. It runs in the background, and every open dashboard over the dataset redraws when it lands. |
+| `202` | `{"status":"already_running"}` | A refresh of this dataset was already running, on this pod or another. Nothing new started. If it began before your load finished, call again once it has landed. |
+| `202` | `{"status":"cache_reset"}` | A Live dataset: its cache was reset. Nothing is fetched. |
+| `429` | `{"error":"too soon","retryAfter":N}` | This URL was called less than `REFRESH_HOOK_MIN_INTERVAL_SEC` (60 s by default) ago. `Retry-After` says how many seconds to wait. |
+| `403` | `{"error":"forbidden"}` | The URL's creator can no longer refresh the dataset. |
+| `404` | `{"error":"unknown refresh URL"}` | No such URL, or it was revoked. The two are the same answer on purpose. |
+| `404` | `{"error":"dataset not found"}` | The dataset was deleted or is in the Trash. |
+
+Every call that gets past the interval leaves an audit row, **Refresh URL called**, naming the URL's
+creator, the URL's id and the dataset (Admin → Audit log). Unknown and revoked tokens leave none, so
+the trail cannot be flooded with them. Scheduled refreshes are audited too, as **Scheduled
+refresh**.
+
+### curl
+
+```bash
+# --retry waits out a 429 (it honours Retry-After) and tries again.
+curl -fsS --retry 3 -X POST "$ORDINATE_REFRESH_URL"
+```
+
+### dbt
+
+dbt's `on-run-end` hooks run SQL **in the warehouse**. They cannot call a URL by themselves. So call
+the URL from the step that runs dbt, after the models are built:
+
+```bash
+dbt build && curl -fsS --retry 3 -X POST "$ORDINATE_REFRESH_URL"
+```
+
+With **dbt Cloud**, use a webhook instead: Account settings → Webhooks → Create webhook, event
+**Run completed**, endpoint = the refresh URL. Ordinate ignores the payload and dbt Cloud's
+signature header.
+
+### Airflow
+
+Use the HTTP provider's `HttpOperator` (`SimpleHttpOperator` in older versions of the provider). Make
+a connection `ordinate` whose host is your Ordinate URL, and a Variable `ordinate_refresh_token` that
+holds the part of the URL after `/api/hooks/refresh/`. Airflow masks a Variable whose name contains
+`token` in its task logs.
+
+```python
+from datetime import timedelta
+from airflow.providers.http.operators.http import HttpOperator
+
+refresh_orders = HttpOperator(
+    task_id="refresh_orders",
+    http_conn_id="ordinate",
+    endpoint="api/hooks/refresh/{{ var.value.ordinate_refresh_token }}",
+    method="POST",
+    response_check=lambda r: r.status_code == 202,
+    retries=3,
+    retry_delay=timedelta(seconds=60),  # a 429 means: called less than a minute ago
+)
+load_orders >> refresh_orders
+```
+
+### Network and sign-in in front of Ordinate
+
+The scheduler must reach Ordinate's ingress. The URL carries its own credential, so the server looks
+up no session, cookie or proxy header for it. If an authenticating proxy sits in front of Ordinate
+(`AUTH_MODE=header` behind oauth2-proxy, for example), let `POST /api/hooks/refresh/` through without
+sign-in. With oauth2-proxy that is `--skip-auth-route="POST=^/api/hooks/refresh/"`. Ordinate still
+checks the token on every call.
+
+The token is in the URL path, so Ordinate masks that path in its own request log
+(`/api/hooks/refresh/[redacted]`). Your ingress, proxy and scheduler logs may record full URLs. Keep
+those logs as private as the token, or use a scheduler that masks it, like Airflow's Variable.
 
 ## Fresh on ask
 

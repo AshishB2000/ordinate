@@ -354,6 +354,8 @@ export const MAIN_FILES = [
   'src/data/refreshMessages.ts',
   'src/engine/liveRefusals.ts',
   'src/data/liveMessages.ts',
+  'src/engine/liveQueryMessages.ts',
+  'src/data/refreshHookMessages.ts',
   'src/data/freshOnAskMessages.ts',
 ];
 

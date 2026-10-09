@@ -1,0 +1,160 @@
+/* The Refresh URL panel (RefreshUrl.tsx): the list of URLs, the one-time
+   view of a new one, and the examples. Tokens only, so both themes follow. */
+
+.lead {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+}
+
+.lead code,
+.rowMeta code {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  color: var(--text-strong);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+}
+
+.h {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: var(--sp-12);
+  row-gap: var(--sp-4);
+  padding: var(--sp-8) var(--sp-12);
+}
+
+.row + .row {
+  border-top: 1px solid var(--border-hairline);
+}
+
+.rowMain {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-width: 0;
+}
+
+.rowAction {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.prefix {
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  color: var(--text-strong);
+}
+
+.rowMeta {
+  grid-column: 1;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+  overflow-wrap: anywhere;
+}
+
+.revoked .prefix {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.fresh {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+}
+
+.freshHead {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.secret {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.secret code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  color: var(--text-strong);
+}
+
+.warn {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: flex-start;
+  margin: 0;
+  color: var(--warn);
+  font-size: var(--t-12);
+}
+
+.snippetWrap {
+  position: relative;
+  margin-top: var(--sp-8);
+}
+
+.snippet {
+  margin: 0;
+  padding: var(--sp-12);
+  padding-right: 88px;
+  background: var(--inset);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+  color: var(--text);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.copySnippet {
+  position: absolute;
+  top: var(--sp-8);
+  right: var(--sp-8);
+}

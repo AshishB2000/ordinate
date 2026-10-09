@@ -26,6 +26,8 @@ export interface Server {
     readonly projectId: string;
     readonly projectName: string;
     readonly large?: { readonly datasetId: string; readonly rows: number; readonly ms: number };
+    /** The Live dataset over the fake warehouse and its connection, when asked for. */
+    readonly live?: { readonly datasetId: string; readonly connId: string };
   };
   /** Everything the server printed — attach to a failure. */
   log(): string;
@@ -35,6 +37,8 @@ export interface Server {
 export interface SeedOptions {
   /** Also seed a 1,000,000-row dataset (seed.ts --large). */
   readonly large?: boolean;
+  /** Also seed a Live dataset over the test harness's fake warehouse (seed.ts --live), and start the server with ORDINATE_TEST_LIVE_FAKE=1. */
+  readonly live?: boolean;
 }
 
 export async function startServer(extraEnv: Record<string, string> = {}, seedOpts: SeedOptions = {}): Promise<Server> {
@@ -42,7 +46,7 @@ export async function startServer(extraEnv: Record<string, string> = {}, seedOpt
     if (!existsSync(f)) throw new Error(`${path.relative(REPO, f)} is missing: run npm run build:ts && npm --prefix web run build`);
   }
   const dataDir = mkdtempSync(path.join(os.tmpdir(), 'ordinate-e2e-'));
-  const seed = spawnSync(process.execPath, [SEED, dataDir, ...(seedOpts.large ? ['--large'] : [])], { encoding: 'utf8', timeout: 120_000 });
+  const seed = spawnSync(process.execPath, [SEED, dataDir, ...(seedOpts.large ? ['--large'] : []), ...(seedOpts.live ? ['--live'] : [])], { encoding: 'utf8', timeout: 120_000 });
   if (seed.status !== 0) throw new Error(`seeding the sample project failed:\n${seed.stderr || seed.stdout}`);
   const sample = JSON.parse(seed.stdout.trim().split('\n').pop() ?? '{}') as Server['sample'];
 
@@ -50,7 +54,10 @@ export async function startServer(extraEnv: Record<string, string> = {}, seedOpt
     cwd: REPO,
     // DATABASE_URL is NOT inherited: a spec that wants Postgres creates its own scratch database
     // and passes it in extraEnv. Inheriting it pointed every spec at one shared database.
-    env: { ...process.env, DATABASE_URL: '', PORT: '0', DATA_DIR: dataDir, ORDINATE_ENV: 'dev', AUTH_MODE: 'dev', LOG_LEVEL: 'info', ...extraEnv },
+    env: {
+      ...process.env, DATABASE_URL: '', PORT: '0', DATA_DIR: dataDir, ORDINATE_ENV: 'dev', AUTH_MODE: 'dev', LOG_LEVEL: 'info',
+      ...(seedOpts.live ? { ORDINATE_TEST_LIVE_FAKE: '1' } : {}), ...extraEnv,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let out = '';

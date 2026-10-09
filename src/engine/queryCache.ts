@@ -27,12 +27,21 @@
 // order, so "touch" is delete-then-set and the oldest entry is the first key.
 // A single answer larger than a quarter of the budget is not cached at all —
 // it would evict everything else to make room for one entry.
+//
+// ── AGE (live datasets only) ─────────────────────────────────────────────────
+// An extract's key moves when its data does, so its entries never need a
+// clock. A LIVE dataset's data moves in the warehouse, unseen, so its answers
+// (src/engine/live/liveQuery.ts) carry a `maxAgeMs`: past it, `get` misses. An
+// expired entry is NOT dropped — it is the "Stale · as of …" answer the
+// executor serves when the warehouse then fails (`peek`), and it ages out
+// through the same LRU byte budget as everything else. Nothing but live sets
+// an age; every other entry behaves exactly as before.
 
 import { createHash } from 'crypto';
 import * as trace from './residentTrace';
 import { ctx } from '../server/context';
 
-export type CacheOp = 'aggregate' | 'pivot' | 'metric' | 'insights';
+export type CacheOp = 'aggregate' | 'pivot' | 'metric' | 'insights' | 'live';
 
 export const MAX_BYTES = 64 * 1024 * 1024;
 
@@ -40,11 +49,41 @@ interface Entry {
   value: unknown;
   bytes: number;
   deps: string[];
+  /** When it was stored, on this module's clock. */
+  storedAt: number;
+  /** Past this age the entry misses (live only); absent = no age. */
+  maxAgeMs?: number;
+}
+
+/** A freshness limit for one lookup or one entry (live only). */
+export interface AgeOpts {
+  maxAgeMs?: number;
 }
 
 const entries = new Map<string, Entry>();
 let totalBytes = 0;
 let budget = MAX_BYTES;
+let clock: () => number = Date.now;
+
+/** This cache's clock, in ms — the one entry ages are measured on. */
+export function now(): number {
+  return clock();
+}
+
+/** Test hook: a fake clock (null restores Date.now). */
+export function setClockForTest(fn: (() => number) | null): void {
+  clock = fn ?? Date.now;
+}
+
+/**
+ * True when `e` is too old for this lookup: the tighter of the entry's own age
+ * and the caller's. Age 0 is always expired — "always live" never hits, even
+ * within the same millisecond.
+ */
+function expired(e: Entry, maxAgeMs: number | undefined): boolean {
+  const limit = e.maxAgeMs === undefined ? maxAgeMs : maxAgeMs === undefined ? e.maxAgeMs : Math.min(e.maxAgeMs, maxAgeMs);
+  return limit !== undefined && clock() - e.storedAt >= limit;
+}
 
 /** JSON with object keys sorted at every depth — the spec half of the key. */
 export function stableStringify(v: unknown): string {
@@ -74,10 +113,13 @@ export function cacheKey(op: CacheOp, parts: KeyParts, spec: unknown): string {
   return [ctx().org.id, op, parts.datasetId, parts.updatedAt, parts.pipelineHash, stableStringify(spec)].join('\u0000');
 }
 
-/** The cached answer, or undefined. Counts a hit or a miss under `cache:<op>`. */
-export function get<T>(op: CacheOp, key: string): T | undefined {
+/**
+ * The cached answer, or undefined. Counts a hit or a miss under `cache:<op>`.
+ * An entry past its age (or `opts.maxAgeMs`) misses but stays (see AGE).
+ */
+export function get<T>(op: CacheOp, key: string, opts: AgeOpts = {}): T | undefined {
   const e = entries.get(key);
-  if (!e) {
+  if (!e || expired(e, opts.maxAgeMs)) {
     trace.recordCache(op, 'miss');
     return undefined;
   }
@@ -91,10 +133,21 @@ export function get<T>(op: CacheOp, key: string): T | undefined {
 }
 
 /**
- * Store an answer. `deps` are the dataset ids whose write must drop it (the
- * key's own dataset is always included). Returns whether it was kept.
+ * The entry under `key` WHATEVER ITS AGE, with when it was stored — live's
+ * stale fallback. Not counted as a hit or a miss, and not a touch: serving a
+ * stale answer must not keep it from ageing out.
  */
-export function set(key: string, value: unknown, deps: string[]): boolean {
+export function peek<T>(key: string): { value: T; storedAt: number } | undefined {
+  const e = entries.get(key);
+  return e ? { value: structuredClone(e.value) as T, storedAt: e.storedAt } : undefined;
+}
+
+/**
+ * Store an answer. `deps` are the dataset ids whose write must drop it (the
+ * key's own dataset is always included). `opts.maxAgeMs` gives it an age (live
+ * only). Returns whether it was kept.
+ */
+export function set(key: string, value: unknown, deps: string[], opts: AgeOpts = {}): boolean {
   let bytes: number;
   try {
     bytes = Buffer.byteLength(JSON.stringify(value) ?? 'null', 'utf8');
@@ -107,7 +160,9 @@ export function set(key: string, value: unknown, deps: string[]): boolean {
     totalBytes -= old.bytes;
     entries.delete(key);
   }
-  entries.set(key, { value: structuredClone(value), bytes, deps: [...new Set(deps.filter(Boolean))] });
+  const entry: Entry = { value: structuredClone(value), bytes, deps: [...new Set(deps.filter(Boolean))], storedAt: clock() };
+  if (typeof opts.maxAgeMs === 'number' && opts.maxAgeMs >= 0) entry.maxAgeMs = opts.maxAgeMs;
+  entries.set(key, entry);
   totalBytes += bytes;
   while (totalBytes > budget) {
     const oldest = entries.keys().next();
