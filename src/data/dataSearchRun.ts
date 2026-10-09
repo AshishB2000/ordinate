@@ -27,6 +27,7 @@ import { isSupportedAsync } from '../engine/parquetStore';
 import { readIndex, scheduleIndex, searchDataset } from '../engine/dataSearchResident';
 import { compareMatches, excludedColumns, needleOf, searchRowsJs } from './dataSearch';
 import type { MatchRank } from './dataSearch';
+import { isLive } from './liveDataset';
 
 /** Hits returned to ⌘K — a group, not a page. */
 export const MAX_HITS = 10;
@@ -92,7 +93,7 @@ export async function runSearch(opts: RunOpts): Promise<DataSearchReply> {
     for (const summary of await datasets.listDatasets(project.id).catch(() => [])) {
       if (cancelled()) return { ...out, ok: false, cancelled: true };
       const meta = await datasets.getDatasetMeta(project.id, summary.id);
-      if (!meta) continue;
+      if (!meta || isLive(meta)) continue; // a Live dataset holds no values here to search
       const exclude = excludedColumns(exportAction, await withheldColumns(project.id, meta.id).catch(() => new Set<string>()));
       let found;
       if (meta.resident && resident) {

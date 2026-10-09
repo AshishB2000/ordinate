@@ -296,3 +296,70 @@ if (adminUrl) {
     report(s);
   });
 }
+
+if (adminUrl) {
+  // Live (docs/live-data/00-plan.md L2.1): Redshift speaks Postgres's wire, so the local
+  // Postgres stands in for the warehouse. "Add from connection" asks Copy or Live; Live
+  // keeps the schema only; the dataset page says so; the switch both ways.
+  e2e('connections: save a Live dataset, open it, copy it, switch it back to Live', async (s) => {
+    const { page } = s;
+    const projectId = await projectOf(s);
+    const u = new URL(adminUrl);
+    await page.goto(`/connections/${projectId}?source=amazon-redshift`);
+    await settled(page);
+    await page.getByLabel('Name', { exact: true }).fill('Live warehouse');
+    await page.getByLabel('Host *').fill(u.hostname);
+    await page.getByLabel('Port *').fill(u.port || '5432');
+    await page.getByLabel('Database *').fill(srcDb);
+    await page.getByLabel('User *').fill(decodeURIComponent(u.username));
+    await page.getByLabel('Password').fill(CANARY);
+    await page.getByLabel('Use TLS').uncheck(); // the local Postgres has no certificate
+    await page.getByRole('button', { name: 'Test & Save' }).click();
+    await page.getByRole('heading', { level: 1, name: 'Live warehouse' }).waitFor();
+    const connId = new URL(page.url()).pathname.split('/').pop()!;
+
+    // The table's sample, then "Live" in the save bar.
+    await page.goto(`/connections/${projectId}/${connId}?table=sales.orders`);
+    await page.getByText('240 of 240 rows · 4 columns').waitFor();
+    const how = page.getByRole('combobox', { name: 'How to save' });
+    assert.equal(await how.textContent(), 'Copy the data');
+    await how.click();
+    await page.getByRole('option', { name: 'Live' }).click();
+    await page.getByRole('textbox', { name: 'Dataset name' }).fill('Orders live');
+    await page.getByRole('button', { name: 'Save as Live dataset' }).click();
+    await page.getByText('Saved “Orders live” as a Live dataset.').waitFor();
+    const rail = page.getByRole('complementary', { name: 'Connection details' });
+    const row = rail.getByRole('listitem').filter({ hasText: 'Orders live' });
+    await row.getByText('Live · asked at the warehouse').waitFor();
+    assert.equal(await row.getByRole('combobox').count(), 0, 'no refresh schedule on a Live dataset');
+
+    // The dataset page: a Live badge, the notice in place of rows, only Data and Columns.
+    await row.getByRole('link', { name: 'Orders live' }).click();
+    await page.getByRole('heading', { name: 'Live — the rows stay in the warehouse' }).waitFor();
+    await page.getByText('Live · cached up to 5 min').waitFor();
+    assert.equal(await page.getByRole('tab', { name: /Quality/ }).count(), 0);
+    assert.equal(await page.getByRole('link', { name: 'Prepare' }).count(), 0);
+    const datasetId = new URL(page.url()).pathname.split('/').pop()!;
+    await page.getByRole('tab', { name: 'Columns' }).click();
+    await page.getByText('ordered_on').first().waitFor();
+    await page.getByRole('tab', { name: 'Data' }).click();
+    await screens(page, 'connections-live-dataset');
+
+    // Copy the data instead → an extract with its rows; then back to Live through the confirm.
+    await page.getByRole('button', { name: 'Copy the data instead' }).click();
+    await page.getByText('240 rows', { exact: false }).first().waitFor();
+    const more = page.getByRole('button', { name: 'More dataset actions' });
+    await more.click();
+    await page.getByRole('menuitem', { name: 'Switch to Live…' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Switch to Live?' });
+    await dialog.getByText('The stored copy of 240 rows is deleted.', { exact: false }).waitFor();
+    await dialog.screenshot({ path: `${SCREENS}connections-live-switch-dialog-light.png` });
+    await dialog.getByRole('button', { name: 'Delete the copy and go Live' }).click();
+    await page.getByText('“Orders live” is Live.').waitFor();
+    await page.getByRole('heading', { name: 'Live — the rows stay in the warehouse' }).waitFor();
+    const source = (await (await post(s, 'dataset:source', { projectId, id: datasetId })).json()) as Record<string, unknown>;
+    assert.equal(source.live, true);
+    assert.deepEqual(Object.keys(source).sort(), ['kind', 'label', 'live', 'maxCacheAgeSec', 'refreshable'], 'flags and a label — no SQL, no host');
+    report(s);
+  });
+}

@@ -23,6 +23,7 @@ const BQ: Connector = {
   category: 'Cloud warehouses',
   browsable: true,
   estimates: true,
+  live: true,
   hosts: ['bigquery.googleapis.com', 'oauth2.googleapis.com'],
   fields: [
     { key: 'project', label: 'Billing project', type: 'text', required: false, secret: false },

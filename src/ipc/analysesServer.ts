@@ -18,6 +18,7 @@ import type { MetricSummary } from '../analysis/metrics';
 import { metricUsage } from '../analysis/metricUsage';
 import { importImage, readImageDataUrl } from '../app/projectAssets';
 import { FileTokenError, resolveUpload } from '../server/files';
+import { isLiveRefusalReply, liveRefusal } from '../data/liveDataset';
 
 /** What a card needs of a Visual to draw it — the record minus its bookkeeping. */
 function visualDef(v: visuals.Visual) {
@@ -170,6 +171,9 @@ export function register(): void {
   ipcMain.handle('metric:values', async (e, { projectId, ids, filters, params }: any = {}) =>
     Promise.all((Array.isArray(ids) ? ids : []).map(async (id: string) => {
       const r = await call(e, 'metric:value', { projectId, id, filters, params });
-      return r && r.ok !== false ? { id, ok: true, value: r.value, display: r.display, ...(r.asOf ? { asOf: r.asOf } : {}) } : { id, ok: false };
+      // A Live metric's refusal is kept (typed, D6); any other failure stays a bare `ok:false`.
+      return r && r.ok !== false
+        ? { id, ok: true, value: r.value, display: r.display, ...(r.asOf ? { asOf: r.asOf } : {}) }
+        : { id, ok: false, ...(isLiveRefusalReply(r) ? liveRefusal() : {}) };
     })));
 }

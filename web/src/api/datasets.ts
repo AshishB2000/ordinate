@@ -27,6 +27,9 @@ export interface DatasetSummary {
   incrementalOn?: true;
   /** The last scheduled refresh took longer than its own interval (the server decides). */
   behindSchedule?: true;
+  /** A Live dataset: no stored rows (`rowCount` is 0 and means nothing) — L2.1. */
+  mode?: 'live';
+  maxCacheAgeSec?: number;
 }
 
 /** A refresh schedule (src/data/datasets.ts `AutoRefreshEvery`); 5 and 15 minutes need incremental refresh. */
@@ -46,6 +49,8 @@ export interface DatasetColumns {
   name: string;
   rowCount: number;
   columns: { name: string; type: 'text' | 'number' | 'date' }[];
+  /** A Live dataset keeps no rows here (L2.1). */
+  mode?: 'live';
 }
 
 /** A dataset's name, row count and typed columns; `null` data = no such dataset. */

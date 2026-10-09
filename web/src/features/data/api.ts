@@ -41,6 +41,11 @@ export interface SourceView {
   kind: string;
   label: string;
   refreshable: boolean;
+  /** A Live dataset, and how old a cached answer may be (L2.1). */
+  live?: true;
+  maxCacheAgeSec?: number;
+  /** An extract whose connection offers Live (absent otherwise). */
+  canGoLive?: true;
 }
 
 /** src/data/profileView.ts ColumnProfile. */

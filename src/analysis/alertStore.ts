@@ -40,6 +40,7 @@ import { distinctAllJs, distinctAllResident } from '../engine/distinctAll';
 import { periodPlan, orderPeriods } from './insightsAgg';
 import type { FilterStep } from '../data/transforms';
 import * as recordFs from '../app/recordFs';
+import { isLiveDatasetError } from '../data/liveDataset';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -328,7 +329,8 @@ async function distinctValues(projectId: string, datasetId: string, column: stri
     const ds = await datasets.getDataset(projectId, datasetId);
     if (!ds) return null;
     return distinctAllJs(ds.columns, ds.rows, column);
-  } catch (_) {
+  } catch (err) {
+    if (isLiveDatasetError(err)) throw err; // D6: "no periods" would be a silent answer for a Live dataset
     return null; // a rule that cannot read its period column simply does not fire
   }
 }
@@ -352,7 +354,8 @@ async function anomaliesFor(projectId: string, rule: AlertRule) {
     const ds = await datasets.getDataset(projectId, rule.datasetId);
     if (!ds) return [];
     return detectAnomalies(ds.columns, ds.rows, opts);
-  } catch (_) {
+  } catch (err) {
+    if (isLiveDatasetError(err)) throw err;
     return [];
   }
 }

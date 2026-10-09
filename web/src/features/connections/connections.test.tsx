@@ -20,6 +20,7 @@ const PG: Connector = {
   category: 'Databases',
   blurb: 'Read-only access to a PostgreSQL database.',
   browsable: true,
+  live: false,
   fields: [
     { key: 'host', label: 'Host', type: 'text', required: true, secret: false },
     { key: 'port', label: 'Port', type: 'number', required: true, secret: false, default: 5432 },
@@ -28,7 +29,9 @@ const PG: Connector = {
     { key: 'ssl', label: 'Use TLS', type: 'checkbox', required: false, secret: false, default: false },
   ],
 };
-const URLC: Connector = { id: 'url', label: 'URL / API (JSON)', family: 'http', category: 'Files & local', browsable: false, fields: [{ key: 'url', label: 'URL', type: 'text', required: true, secret: false }] };
+const URLC: Connector = { id: 'url', label: 'URL / API (JSON)', family: 'http', category: 'Files & local', browsable: false, live: false, fields: [{ key: 'url', label: 'URL', type: 'text', required: true, secret: false }] };
+/** A warehouse that offers Live (docs/live-data/00-plan.md L2.1). */
+const RS: Connector = { ...PG, id: 'amazon-redshift', label: 'Amazon Redshift', category: 'Cloud warehouses', live: true };
 const CONN = {
   id: CID,
   projectId: PID,
@@ -49,6 +52,7 @@ const SF: Connector = {
   family: 'snowflake',
   category: 'Cloud warehouses',
   browsable: true,
+  live: true,
   fields: [
     { key: 'account', label: 'Account', type: 'text', required: true, secret: false },
     { key: 'user', label: 'User', type: 'text', required: true, secret: false },
@@ -248,6 +252,51 @@ describe('the workbench rail', () => {
     expect(calls.find((c) => c.channel === 'connection:replaceSecret')!.payload).toEqual({ projectId: PID, connId: CID, key: 'password', value: 'n3w' });
     await waitFor(() => expect(within(rail).queryByLabelText('New password')).toBeNull());
     expect(document.body.innerHTML).not.toContain('n3w');
+  });
+
+  const SAMPLE = { ok: true, preview: { columns: [{ name: 'region', type: 'text' }], rows: [['North']], rowCount: 1 } };
+
+  it('asks "Copy the data" or "Live" when the connector offers Live, and saves Live as asked', async () => {
+    const calls = serve(
+      base({
+        'connectors:catalog': { body: [PG, URLC, RS] },
+        'connections:list': { body: [{ ...CONN, connectorId: 'amazon-redshift' }] },
+        'connection:listTables': { body: { ok: true, tables: [{ schema: 'public', name: 'orders' }] } },
+        'connection:sample': { body: SAMPLE },
+        'connection:import': { body: { ok: true, dataset: { id: 'd1', name: 'public.orders', rowCount: 0, mode: 'live' } } },
+        'dataset:list': { body: [] },
+      }),
+    );
+    renderApp(`/connections/${PID}/${CID}?table=public.orders`);
+    const how = await screen.findByRole('combobox', { name: 'How to save' });
+    expect(how.textContent).toBe('Copy the data');
+    expect(await screen.findByRole('button', { name: 'Save as dataset' })).toBeTruthy();
+    how.focus();
+    fireEvent.keyDown(how, { key: 'ArrowDown' }); // open
+    fireEvent.keyDown(how, { key: 'End' });
+    fireEvent.keyDown(how, { key: 'Enter' });
+    expect(how.textContent).toBe('Live');
+    fireEvent.click(await screen.findByRole('button', { name: 'Save as Live dataset' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'connection:import')).toBe(true));
+    expect(calls.find((c) => c.channel === 'connection:import')!.payload).toMatchObject({ table: 'public.orders', mode: 'live' });
+    expect(await screen.findByText('Saved “public.orders” as a Live dataset.')).toBeTruthy();
+  });
+
+  it('offers no Live choice where the connector has none, and saves a copy', async () => {
+    const calls = serve(
+      base({
+        'connections:list': { body: [CONN] },
+        'connection:listTables': { body: { ok: true, tables: [{ schema: 'public', name: 'orders' }] } },
+        'connection:sample': { body: SAMPLE },
+        'connection:import': { body: { ok: true, dataset: { id: 'd1', name: 'public.orders', rowCount: 1 } } },
+        'dataset:list': { body: [] },
+      }),
+    );
+    renderApp(`/connections/${PID}/${CID}?table=public.orders`);
+    fireEvent.click(await screen.findByRole('button', { name: 'Save as dataset' }));
+    expect(screen.queryByRole('combobox', { name: 'How to save' })).toBeNull();
+    await waitFor(() => expect(calls.some((c) => c.channel === 'connection:import')).toBe(true));
+    expect(calls.find((c) => c.channel === 'connection:import')!.payload).not.toHaveProperty('mode');
   });
 
   it('words a 5- or 15-minute schedule, says "Behind schedule", and offers the fast cadences only with incremental refresh', async () => {

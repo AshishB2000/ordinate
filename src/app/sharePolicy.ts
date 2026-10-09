@@ -352,6 +352,7 @@ export async function applyToBundle(projectId: string, bytes: Buffer): Promise<B
       const id = m[1];
       let record: Record<string, unknown>;
       try { record = JSON.parse(e.data.toString('utf8')); } catch (_) { continue; }
+      if (record.mode === 'live') continue; // schema only: no stored rows to mask
       const sens = await sensitiveColumns(projectId, id);
       const steps = Array.isArray(record.steps) ? record.steps : [];
       if (!sens.size && !steps.some(isMaskStep)) continue;

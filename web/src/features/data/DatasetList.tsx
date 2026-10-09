@@ -14,7 +14,7 @@ import { SkeletonRows } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { useTags, useWrite } from './api';
-import { freshness, fromControl, NOT_REFRESHABLE, rowsText, SCHEDULES, sourceLabel } from './format';
+import { freshness, fromControl, NOT_REFRESHABLE, rowsOf, SCHEDULES, sourceLabel } from './format';
 import { BehindBadge, cadenceOptions } from './cadence';
 import { TagChips, TagFilterBar, tagsOf, useActiveTag } from './tags';
 import s from './Data.module.css';
@@ -32,7 +32,7 @@ export function QualityDot({ n }: { n: number | undefined }) {
 /** The schedule picker: one control in the list and on the dataset page, one channel. */
 export function SchedulePicker({ projectId, d }: { projectId: string; d: DatasetSummary }) {
   const set = useWrite('dataset:update', ['dataset:list'], { onDone: (r) => r.ok === false && toast('Could not change the schedule.', { kind: 'error' }) });
-  if (!d.originKind) return null;
+  if (!d.originKind || d.mode === 'live') return null; // a Live dataset's cache age is its schedule
   return (
     <Select
       size="sm"
@@ -127,7 +127,7 @@ function Row({ projectId, d, outcome, onRefresh, onDelete, tags }: {
           <TagChips tags={tags} />
         </span>
       </td>
-      <td className={s.num}>{rowsText(d.rowCount)}</td>
+      <td className={s.num}>{rowsOf(d)}</td>
       <td>
         <span className={s.badge}>{sourceLabel(d.sourceKind)}</span>
       </td>

@@ -68,7 +68,9 @@ export async function datasetsList(ctx: Ctx): Promise<unknown> {
     id: d.id,
     name: d.name,
     source: d.sourceKind,
-    rows: d.rowCount,
+    // A Live dataset keeps no rows here: its count is unknown, never a zero (L2.1, D6).
+    mode: d.mode === 'live' ? 'live' : 'extract',
+    rows: d.mode === 'live' ? null : d.rowCount,
     columns: d.columnCount,
     updatedAt: d.updatedAt,
     // listDatasets already withholds a capture's origin, so this is "has a
@@ -95,7 +97,8 @@ export async function datasetsDescribe(ctx: Ctx, ref: string): Promise<unknown> 
     name: meta.name,
     source: meta.sourceKind,
     origin: meta.origin ? meta.origin.kind : null,
-    rowCount: meta.rowCount,
+    mode: meta.mode === 'live' ? 'live' : 'extract',
+    rowCount: meta.mode === 'live' ? null : meta.rowCount,
     // The slug is always a plain identifier SQL accepts; the alias (the name as
     // typed, quoted) works too when there is one.
     sqlName: cat ? cat.slug : null,

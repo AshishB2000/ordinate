@@ -30,6 +30,7 @@ import { settings } from './settings';
 import { reports } from './reports';
 
 import { analyticsB } from './analyticsB';
+import { live } from './live';
 
 import { refreshHooks } from './refreshHooks';
 
@@ -63,6 +64,7 @@ export const contracts = {
 
   ...analyticsB,
   ...dashboards,
+  ...live,
 
   ...refreshHooks,
 } as const;

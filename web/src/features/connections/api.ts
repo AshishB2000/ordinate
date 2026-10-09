@@ -38,6 +38,8 @@ export interface Connector {
   hosts?: string[];
   /** True: the source prices a statement before it runs (BigQuery's dry run) — the editor shows it by Run. */
   estimates?: boolean;
+  /** A dataset from it can be Live — asked at the warehouse each time (docs/live-data/00-plan.md D2). */
+  live: boolean;
 }
 
 export type Logo = { path: string; color: string; title: string } | { src: string; title: string };
@@ -83,6 +85,8 @@ export interface ConnDataset {
   incrementalOn?: true;
   /** The last scheduled refresh took longer than its interval (the server decides). */
   behindSchedule?: true;
+  /** A Live dataset keeps no rows here; its Refresh resets the cache (L2.1). */
+  mode?: 'live';
 }
 
 export interface PreviewColumn {
@@ -254,6 +258,9 @@ export async function replaceSecret(projectId: string, connId: string, key: stri
   return unwrap((await rpc('connection:replaceSecret', { projectId, connId, key, value })) as Reply<{ connection: Connection }>, 'Could not replace it').connection;
 }
 
+/** "Copy the data" (an import) or "Live" (the schema only; questions go to the warehouse). */
+export type SaveMode = 'extract' | 'live';
+
 export async function importDataset(input: {
   projectId: string;
   connId: string;
@@ -262,8 +269,12 @@ export async function importDataset(input: {
   sql?: string;
   queryId?: string;
   limit: number;
+  mode?: SaveMode;
 }) {
-  return unwrap((await rpc('connection:import', input)) as Reply<{ dataset: { id: string; name: string; rowCount: number } }>, 'Could not save the dataset').dataset;
+  return unwrap(
+    (await rpc('connection:import', input)) as Reply<{ dataset: { id: string; name: string; rowCount: number; mode?: 'live' } }>,
+    'Could not save the dataset',
+  ).dataset;
 }
 
 export async function refreshDataset(projectId: string, connId: string, datasetId: string) {

@@ -115,7 +115,7 @@ export async function scheduledMetas(): Promise<ScheduledMeta[]> {
       continue; // one unreadable project must not stop the rest
     }
     for (const s of summaries) {
-      if (!s.autoRefresh) continue;
+      if (!s.autoRefresh || s.mode === 'live') continue; // a Live dataset is asked, never re-fetched
       out.push({ projectId: p.id, id: s.id, name: s.name, originKind: s.originKind, autoRefresh: s.autoRefresh, incremental: s.incrementalOn === true });
     }
   }

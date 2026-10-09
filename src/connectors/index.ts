@@ -204,6 +204,10 @@ export interface CatalogEntry {
    *  run, `live.estimate` — BigQuery), so the editor shows "~1.2 GB" by Run.
    *  A boolean on every entry, reported for the same reason as `browsable`. */
   estimates: boolean;
+  /** True when a dataset from this connector can be Live (plan D2) — the
+   *  create flow offers "Live" beside "Copy the data". The flag only: the
+   *  dialect and the runner never leave the server. */
+  live: boolean;
 }
 
 // Rebuilt field-by-field, never spread. A ConnectorDef holds two live functions
@@ -246,11 +250,17 @@ export function connectorCatalog(): CatalogEntry[] {
       fields: (d.fields || []).map(catalogField),
       browsable: typeof d.describeTable === 'function',
       estimates: typeof d.live?.estimate === 'function',
+      live: isLiveCapable(d),
     };
     if (typeof d.blurb === 'string') entry.blurb = d.blurb;
     if (Array.isArray(d.hosts)) entry.hosts = d.hosts.filter((h) => typeof h === 'string');
     return entry;
   });
+}
+
+/** Whether this connector can answer a Live dataset: a dialect and a runner, both present. */
+export function isLiveCapable(def: ConnectorDef | null | undefined): boolean {
+  return !!def && !!def.live && typeof def.live.runBound === 'function' && typeof def.live.dialect === 'string';
 }
 
 /** Field keys this connector routes to the secret store. */

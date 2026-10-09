@@ -54,6 +54,8 @@ import { keepAround, removeAll as removeSnapshots } from './snapshots';
 import * as asOf from './asOf';
 import * as recordFs from '../app/recordFs';
 import { scheduleIndex, removeIndex } from '../engine/dataSearchResident'; // ⌘K's value index
+import { applyLive, isLive, isLiveDatasetError, LiveDatasetError } from './liveDataset'; // Live: schema only, getDataset refuses
+import type { DatasetMode, LiveSettings } from './liveDataset';
 export type { DatasetOrigin } from './datasetOrigin';
 export type { DatasetSummary } from './datasetSummary';
 export { sanitizeOrigin };
@@ -123,6 +125,9 @@ export interface Dataset {
   input?: InputBlock;
   /** Incremental refresh settings, mark and log (src/data/incremental.ts). Written via writeIncremental. */
   incremental?: IncrementalSettings;
+  /** Absent = 'extract'. A Live dataset is schema only and `getDataset` refuses it (./liveDataset.ts). */
+  mode?: DatasetMode;
+  live?: LiveSettings;
 }
 
 export interface AutoRefresh {
@@ -353,6 +358,7 @@ function normalize(data: any, projectId: string): Dataset {
   const input = kind === 'input' ? sanitizeInputBlock(data.input) : undefined;
   if (input) ds.input = input;
   if (incremental) ds.incremental = incremental;
+  applyLive(ds, data);
   return ds;
 }
 
@@ -479,6 +485,7 @@ export async function getDataset(projectId: string, id: string): Promise<Dataset
     const raw = await recordFs.readFile(datasetFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
     if (!isValidDataset(data)) return null;
+    if (isLive(data)) throw new LiveDatasetError(data.id); // D6: no rows here, so never zero rows
     const wasInline = Array.isArray(data.rows);
     if (!(await hydrate(projectId, data))) return null;
     const ds = normalize(data, projectId);
@@ -495,7 +502,8 @@ export async function getDataset(projectId: string, id: string): Promise<Dataset
       }
     }
     return ds;
-  } catch (_) {
+  } catch (err) {
+    if (isLiveDatasetError(err)) throw err;
     return null;
   }
 }

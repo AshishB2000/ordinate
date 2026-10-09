@@ -353,6 +353,7 @@ export const MAIN_FILES = [
   'src/connectors/connectorMessages.ts',
   'src/data/refreshMessages.ts',
   'src/engine/liveRefusals.ts',
+  'src/data/liveMessages.ts',
   'src/data/refreshHookMessages.ts',
 ];
 

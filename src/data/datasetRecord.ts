@@ -168,6 +168,7 @@ export async function setAutoRefresh(
       return null;
     }
     if (!sanitizeOrigin(raw.origin)) return false; // nothing to re-fetch
+    if (raw.mode === 'live') return false; // a Live dataset is asked each time; its cache age is its schedule
     const fastOk = incrementalOn(raw);
     const current = sanitizeAutoRefresh(raw.autoRefresh, true, fastOk);
     const every = patch.every ?? (current ? current.every : undefined);
@@ -249,8 +250,9 @@ export function writeQuality(
   });
 }
 
-/** Read the raw record, let `apply` edit it, write it back — one at a time per file. */
-function serialized<T>(file: string, apply: (raw: Record<string, unknown>) => T): Promise<T | false> {
+/** Read the raw record, let `apply` edit it, write it back — one at a time per file.
+ *  Exported for the Live record's metadata writes (./liveDataset.ts, ./liveRecord.ts). */
+export function serialized<T>(file: string, apply: (raw: Record<string, unknown>) => T): Promise<T | false> {
   const run = async (): Promise<T | false> => {
     try {
       const raw = JSON.parse(await recordFs.readFile(file, 'utf8'));

@@ -12,6 +12,7 @@ import * as answerKey from '../data/answerKey';
 import * as jobs from '../app/jobs';
 import type { ParsedColumn } from '../data/parse';
 import { attributeInsights } from '../analysis/events'; // r8:events
+import { isLive, isLiveDatasetError, requireExtract } from '../data/liveDataset';
 import { projectEvents } from '../analysis/eventStore';
 import { vizDataFor } from './visuals';
 import { sanitizeEncoding, sanitizeFilters } from '../analysis/visuals';
@@ -63,6 +64,7 @@ export async function insightsForDataset(projectId: string, datasetId: string): 
   try {
     const meta = await datasets.getDatasetMeta(projectId, datasetId);
     if (!meta) return [];
+    requireExtract(meta); // D6: a Live dataset's findings are not "none" — they are not computed yet
     const parts = await answerKey.keyParts(projectId, datasetId);
     if (!parts) return [];
     const key = queryCache.cacheKey('insights', parts, answerKey.ambient());
@@ -81,7 +83,8 @@ export async function insightsForDataset(projectId: string, datasetId: string): 
       });
       return job.done;
     }));
-  } catch (_) {
+  } catch (err) {
+    if (isLiveDatasetError(err)) throw err;
     return [];
   }
 }
@@ -138,7 +141,7 @@ export async function listInsights(projectId: string, datasetId?: string): Promi
   const dismissed = await dismissedSet(projectId);
   const ids: string[] = datasetId
     ? [datasetId]
-    : (await datasets.listDatasets(projectId)).slice(0, MAX_DATASETS).map((d) => d.id);
+    : (await datasets.listDatasets(projectId)).filter((d) => !isLive(d)).slice(0, MAX_DATASETS).map((d) => d.id); // Home skips Live
 
   const out: Insight[] = [];
   for (const id of ids) {

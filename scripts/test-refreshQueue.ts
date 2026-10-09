@@ -205,6 +205,11 @@ async function main(): Promise<void> {
   ok('3. the on-time ones still do not', list3.filter((d) => d.behindSchedule).length === 1);
 
   // ── 4. Full refreshes: serial, awaited, most overdue first ────────────────
+  // §3's `g` was stamped ten minutes back on a 5-minute cadence, so it is due
+  // again at this tick; its incremental job would fetch beside h1 whenever the
+  // machine is loaded and read as an overlap. Off its schedule, §4 sees only
+  // the full refreshes it is about.
+  await datasets.setAutoRefresh(pid, ids.get('g')!, { every: null });
   await table('h1', false);
   await table('h2', false);
   await schedule('h2', 'hourly', new Date(Date.now() - 3 * 60 * MIN).toISOString()); // 2 h past due

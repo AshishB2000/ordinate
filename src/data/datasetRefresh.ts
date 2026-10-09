@@ -34,6 +34,8 @@ import { scanDataset } from '../app/privacyStore';
 import { getNotebook } from '../analysis/notebook/store';
 import { cellTable } from '../analysis/notebook/run';
 import { orgKey, serverDataDir } from '../server/context';
+import { isLive } from './liveDataset';
+import { liveRefusedMessage } from './liveMessages';
 
 /**
  * Row ceiling for a refreshed table. Deliberately the same 1,000,000 the import
@@ -87,6 +89,9 @@ export async function refreshDataset(
   // what to do, and hydrating a million rows to find out would be absurd.
   const meta = await datasets.getDatasetMeta(projectId, id);
   if (!meta) return fail('Dataset not found');
+  // A Live dataset holds no rows to re-fetch; its refresh is an epoch bump
+  // (src/ipc/liveDatasets.ts refreshLive), done by the doors a person uses.
+  if (isLive(meta)) return fail(liveRefusedMessage());
   const origin = meta.origin;
   if (!origin) {
     return fail(`"${meta.name}" has no re-fetchable source. Re-import it to make it refreshable.`);

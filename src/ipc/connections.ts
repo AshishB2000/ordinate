@@ -199,6 +199,8 @@ async function withSecretSet(c: connections.Connection) {
 
 /** `connection:import` — what produced the preview, re-run at the import bound and saved as a dataset. */
 async function importAsDataset(p: Record<string, unknown>) {
+  // "Live" stores the selection's schema and fetches no rows (./liveDatasets.ts).
+  if (p.mode === 'live') return (require('./liveDatasets') as typeof import('./liveDatasets')).createLiveDataset(p);
   const projectId = str(p.projectId);
   const connId = str(p.connId);
   const conn = await connections.getConnection(projectId, connId);
@@ -354,6 +356,8 @@ export function register(): void {
   // Re-run a connection and overwrite its linked dataset's data. Updates the
   // connection's lastRefreshedAt/lastStatus either way.
   ipcMain.handle('connection:refresh', async (_e, { projectId, connId, datasetId }: any = {}) => {
+    const live = await (require('./liveDatasets') as typeof import('./liveDatasets')).refreshLive(projectId, datasetId);
+    if (live) return live; // a Live dataset's refresh resets its cache; nothing is fetched
     const res = await refreshConnectionInto(projectId, connId, datasetId);
     return res.ok ? { ok: true, dataset: res.dataset } : res;
   });

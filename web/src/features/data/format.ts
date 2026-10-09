@@ -12,6 +12,9 @@ export const pctText = (p: number): string => `${formatNumber(p, { maxDecimals: 
 /** "1 row" / "12,840 rows". */
 export const rowsText = (n: number): string => `${formatNumber(n)} ${n === 1 ? 'row' : 'rows'}`;
 
+/** A list's row count — a Live dataset keeps none here, so it says so instead of "0 rows". */
+export const rowsOf = (d: { rowCount: number; mode?: 'live' }): string => (d.mode === 'live' ? 'Live' : rowsText(d.rowCount));
+
 /** A figure that may be absent: the number, or an em dash (never a made-up zero). */
 export const figure = (n: number | null | undefined): string => (typeof n === 'number' ? formatNumber(n, { maxDecimals: 4 }) : '—');
 
@@ -68,7 +71,8 @@ export const everyWord = (every: string): string => EVERY_WORD[every as AutoRefr
  * "Data as of …": the last refresh, else the last update — and a schedule is
  * stated as a promise ("Refreshes daily · last 08:00"), as dsList.ts does.
  */
-export function freshness(d: Pick<DatasetSummary, 'lastRefreshedAt' | 'updatedAt' | 'autoRefresh' | 'originKind' | 'sourceKind'>): string {
+export function freshness(d: Pick<DatasetSummary, 'lastRefreshedAt' | 'updatedAt' | 'autoRefresh' | 'originKind' | 'sourceKind' | 'mode'>): string {
+  if (d.mode === 'live') return 'Live · asked at the warehouse';
   const when = stamp(d.lastRefreshedAt || d.updatedAt);
   if (d.autoRefresh?.every) return `Refreshes ${everyWord(d.autoRefresh.every)} · last ${when}`;
   if (d.originKind) return `Data as of ${when}`;

@@ -6,11 +6,14 @@ in (files, paste, Excel, 38 SQL/HTTP/SaaS sources, a URL, or an uploaded screens
 it with a reversible pipeline → **visualize** across 39 chart, map & table types → author
 **analyses**, publish **dashboards** → share them at a URL. MIT, model-agnostic.
 
-**Core principle: the app does the math.** All aggregation, stats, metrics and anomaly detection run
-in pure server code; React only formats what the server returns — it never sums, averages or rounds
-a figure the server did not. A model only *extracts structure* (a table from a screenshot) or
-*narrates figures the app already computed*; it **never** writes a computed number. A screen that
-needs a number the API lacks gets it added on the server, with its differential test.
+**Core principle: deterministic engines do the math, never a model.** For a copied (extract)
+dataset the engine is ours — pure server code and DuckDB over our Parquet; React only formats what
+the server returns — it never sums, averages or rounds a figure the server did not. For a **Live**
+dataset it is the source warehouse, running SQL the app compiled from a validated spec, and a parity
+test proves that SQL and our engine agree on the same rows. A model only *extracts structure* (a
+table from a screenshot) or *narrates figures an engine computed*; it **never** writes a computed
+number. A screen that needs a number the API lacks gets it added on the server, with its
+differential test.
 
 **History lives in `docs/`, not here** (index: `docs/README.md`). Phase 7 — the move to the web —
 is `docs/phase-7-web/`: plan, task log with every measurement, threat model, retro. Older
@@ -111,6 +114,24 @@ Known divergences, pinned by tests: parallel float summation differs from a JS l
 and quantile interpolation by ~1e-15 (neither reaches a rendered figure, but `mean` enters AI
 prompts unrounded); a leading U+FEFF is lost on every string the bridge returns (upstream
 `@duckdb/node-api` bug, worked around in `parquetStore` and the readers that grep for `FEFF`).
+
+#### Live datasets (`docs/live-data/`)
+
+- **Mode is in the record**: `Dataset.mode` (`'extract'` when absent) and `live: {maxCacheAgeSec`
+  (0 s – 30 days, default 300), `epoch, schemaSyncedAt}` — no SQL migration (`src/data/liveDataset.ts`).
+  A Live dataset is **schema only**: columns DECLARED from the warehouse catalog (`liveSchema.ts`),
+  no Parquet, no row cap. Only a connector with `ConnectorDef.live` (a dialect + `runBound`, values
+  ALWAYS bind parameters, never SQL text) offers it; the catalog sends a `live` boolean, no dialect.
+- **`getDataset` throws `LiveDatasetError` on a Live dataset** — the safety net (D6). A reader not yet
+  routed refuses loudly: RPC 409 `live_dataset`, or `{ok:false, code:'live_dataset'}` (per item in a
+  batch; the route tags a caught refusal). Never compute on zero rows: a catch that turns errors into
+  `[]`/`null` rethrows it, a metadata path never hydrates, a walk over every dataset skips Live
+  (`isLive`). `scripts/test-liveSafetyNet.ts` calls every row-reading channel — add a new one there.
+- **Compile → bind → cache** (`src/engine/live/`, L2.2–L2.4): a validated spec compiles per dialect,
+  runs through `runBound`, cached under `orgKey()` with the record's `epoch` (Refresh bumps it) and
+  `maxCacheAgeSec`. There is **no JS fallback** (D7): correctness rests on the parity tests — the
+  compiler's DuckDB dialect against the extract path with `Object.is` (`test-liveParity`), then real
+  engines (L2.8).
 
 ### Workspace
 

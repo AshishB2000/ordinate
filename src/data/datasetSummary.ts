@@ -56,6 +56,10 @@ export interface DatasetSummary {
   // The last scheduled run took longer than its own interval. Computed here,
   // on the server; the list only draws it.
   behindSchedule?: true;
+  // A Live dataset (./liveDataset.ts): no stored rows, so `rowCount` is 0 and
+  // means nothing — the list says "Live" instead. Absent on an extract.
+  mode?: 'live';
+  maxCacheAgeSec?: number;
 }
 
 /** The parent ids an origin names, in its own order. */
@@ -99,5 +103,9 @@ export function summarize(ds: Dataset): DatasetSummary {
   if (behindSchedule(ds.autoRefresh)) summary.behindSchedule = true;
   const qualityFailing = qualityFailingCount(ds.quality);
   if (qualityFailing !== undefined) summary.qualityFailing = qualityFailing;
+  if (ds.mode === 'live' && ds.live) {
+    summary.mode = 'live';
+    summary.maxCacheAgeSec = ds.live.maxCacheAgeSec;
+  }
   return summary;
 }
