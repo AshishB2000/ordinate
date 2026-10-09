@@ -74,7 +74,7 @@ from these tables, or when a table names one that no code reads.
 | `MAX_UPLOAD_MB` | Largest file `POST /api/files` accepts, in MB. Uploads stream to disk and are cut at the cap without buffering. | `200` | — | no |
 | `MAX_RPC_BODY_KB` | Cap on every JSON request body, in KB. Larger bodies get 413. | `1024` | — | no |
 | `RPC_TIMEOUT_SECONDS` | A call running longer gets 504, and its DuckDB queries are interrupted. | `60` | — | no |
-| `RATE_LIMIT_LOGIN_PER_MINUTE` | Sign-in starts plus IdP callbacks, per client IP. | `60` | — | no |
+| `RATE_LIMIT_LOGIN_PER_MINUTE` | Sign-in starts plus IdP callbacks, per client IP. Calls of [refresh URLs](live-data.md#refresh-url) get a bucket of their own of the same size. | `60` | — | no |
 | `RATE_LIMIT_RPC_PER_MINUTE` | RPC and `/api/mcp` calls per signed-in user, across all their tabs and tokens. | `1200` | — | no |
 | `RATE_LIMIT_RPC_IP_PER_MINUTE` | RPC and `/api/mcp` calls per client IP. | `3000` | — | no |
 | `SSRF_ALLOW` | Comma-separated CIDRs that connectors, URL sources and AI gateways may reach even though they are private, loopback or link-local. Everything else in those ranges, including cloud metadata, is refused before a socket opens. List your internal database subnets here. `0.0.0.0/0` turns the guard off. | unset: no private range allowed | a connector reads a database inside your VPC | no |
@@ -88,6 +88,7 @@ Bounds on what a connection may cost in the warehouse it reads. See [live-data.m
 | `LIVE_MAX_BYTES_BILLED` | The most a single BigQuery query may bill, in bytes. Every query a BigQuery connection runs carries BigQuery's `maximumBytesBilled` = the lower of this and the connection's own "Max bytes billed per query", so a query over it fails before it runs, at no charge. A whole number of bytes, no unit. | `10737418240` (10 GiB) | — | no |
 | `LIVE_QUERY_TIMEOUT_MS` | How long one warehouse statement of a Live dataset may run, in milliseconds (100 – 3600000). Past it the statement is cancelled in the warehouse, and the figure is the last cached answer, labelled stale, or an error. A viewer who closes the tab cancels it too. | `60000` | — | no |
 | `LIVE_MAX_CONCURRENT` | Live warehouse statements in flight at once, per org, in each pod (1 – 1000). More wait their turn; one that is cancelled while waiting never reaches the warehouse. N pods allow N × this. | `4` | — | no |
+| `REFRESH_HOOK_MIN_INTERVAL_SEC` | The least gap, in seconds, between two calls of one [refresh URL](live-data.md#refresh-url). A call inside it gets `429` with `Retry-After` and starts nothing. Kept in Postgres, so it holds across every pod. Each refresh URL has its own clock; per client IP, refresh URL calls also share a bucket the size of `RATE_LIMIT_LOGIN_PER_MINUTE`. | `60` | — | no |
 
 ## DuckDB
 

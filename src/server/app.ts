@@ -35,6 +35,7 @@ import { registerGeoRoutes } from './geo';
 import { registerRequestMetrics } from './metrics';
 import { registerPublishedRoutes } from './published';
 import { isLiveDatasetError, LIVE_DATASET_CODE, liveRefusalsRaised, tagLiveRefusals } from '../data/liveDataset';
+import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Pool } from 'pg';
@@ -78,8 +79,14 @@ const STORAGE_GC_EVERY_MS = 15 * 60_000;
 let dbPool: Pool | null = null;
 let appEnv: ServerEnv | null = null;
 
-/** The org role a non-RPC /api/ route needs: uploading stages data (write); the event stream is for any member. */
-function routeAccess(method: string, route: string | undefined): 'read' | 'write' | null {
+/**
+ * The org role a non-RPC /api/ route needs: uploading stages data (write); the
+ * event stream is for any member. `self`: the route authorises itself and no
+ * sign-in is looked up — a refresh URL, whose token in the path is its whole
+ * credential (./hooks/route.ts).
+ */
+function routeAccess(method: string, route: string | undefined): 'read' | 'write' | 'self' | null {
+  if (route === HOOK_ROUTE) return 'self';
   if (method === 'POST' && route === '/api/files') return 'write';
   if (route === '/api/files/:token' || route === '/api/events') return 'read';
   return null;
@@ -106,16 +113,24 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       redact: { paths: [...REDACT_PATHS], censor: '[redacted]' },
       // Fastify's own request serializer, with two cuts: the query string is
       // dropped (the OIDC callback's carries an authorization code and state,
-      // and a query is where a future token would go too), and a file token in
-      // the path (GET /api/files/<token>) is masked — the URL is a credential there.
+      // and a query is where a future token would go too), and a token in the
+      // path — a file token (GET /api/files/<token>), a refresh URL's
+      // (POST /api/hooks/refresh/<token>) — is masked: the URL is a credential there.
       serializers: {
         req: (req: FastifyRequest) => ({
           method: req.method,
-          url: maskFileToken(req.url.split('?')[0]),
+          url: maskHookUrl(maskFileToken(req.url.split('?')[0])),
           host: req.host,
           remoteAddress: req.ip,
           remotePort: req.socket?.remotePort,
         }),
+      },
+      // And in every message: Fastify writes "Route POST:<url> not found" as
+      // text, which no serializer sees — a refresh URL's token never gets there.
+      hooks: {
+        logMethod(args, method) {
+          return method.apply(this, args.map((a: unknown) => (typeof a === 'string' ? maskHookTokens(a) : a)) as typeof args);
+        },
       },
       ...(logStream ? { stream: logStream } : {}),
     },
@@ -213,7 +228,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     const path = req.url.split('?')[0];
     const api = path.startsWith('/api/');
     // A published site (/p/…, ./published.ts) decides its own access: members, or anyone when public.
-    if (api ? req.routeOptions.url?.startsWith('/api/auth/') : !isPageNavigation(req.method, path, req.headers.accept) || path.startsWith('/p/')) return done();
+    // So does a refresh URL (`self`, ./hooks/route.ts): its token is the credential.
+    const route = req.routeOptions.url;
+    if (api ? route?.startsWith('/api/auth/') || routeAccess(req.method, route) === 'self' : !isPageNavigation(req.method, path, req.headers.accept) || path.startsWith('/p/')) {
+      return done();
+    }
     Promise.resolve(identify(req.headers, req.socket.remoteAddress)).then(
       (who) => {
         if (!who && !api) return void reply.redirect(path === '/' ? '/sign-in' : `/sign-in?next=${encodeURIComponent(req.url)}`);
@@ -227,7 +246,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         if (who.mustChangePassword) return void reply.code(403).send({ error: 'password change required' });
         // Uploads and the event stream are checked against the org role
         // (./authz/); RPC calls are checked per contract in the route below.
-        const need = routeAccess(req.method, req.routeOptions.url);
+        const need = routeAccess(req.method, route);
         if (need && !orgAllows(who.user.role, need)) return void reply.code(403).send({ error: 'forbidden' });
         // Which tab's event stream a push from the handler goes to:
         // X-Ordinate-Client, honoured only when that stream is bound to this
@@ -354,6 +373,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // MCP for programs, signed in with a personal API token (T3.4).
   registerMcpRoute(app, () => pool, limits.perUser);
 
+  // Refresh URLs for dbt / Airflow (live data L0.5): one dataset, one action, the token in the path.
+  registerRefreshHookRoute(app, {
+    pool: () => pool, minIntervalSec: cfg.limits.refreshHookMinIntervalSec, devAuth: cfg.auth.mode === 'dev', dbUrl: dbUrl ?? '',
+  });
+
   // The maps' bundled boundary GeoJSON (./geo.ts) — org-independent, immutable by content hash.
   registerGeoRoutes(app);
 
@@ -393,6 +417,8 @@ export function registerHandlers(): void {
   (require('./admin/passwords') as typeof import('./admin/passwords')).register(() => dbPool, () => (appEnv ?? env()).auth.mode, () => env().auth.allowedDomains);
   (require('./admin/org') as typeof import('./admin/org')).register(() => dbPool, () => env().maxUploadMb);
   (require('./auth/tokens') as typeof import('./auth/tokens')).register(() => dbPool);
+  // Refresh URLs (live data L0.5): a project writer's, per dataset.
+  (require('./hooks/rpc') as typeof import('./hooks/rpc')).register(() => dbPool, () => env().limits.refreshHookMinIntervalSec);
   // The Assistant dock (T2.12): conversations, answers, plans, provider keys.
   for (const mod of ['../ipc/copilot', '../ipc/plan', '../ipc/providersServer']) (require(mod) as { register: () => void }).register();
   // Home and the app chrome (T2.1): first-run guidance, workspace prefs, the Jobs popover.

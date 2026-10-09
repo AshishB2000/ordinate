@@ -30,6 +30,7 @@ import { SnapshotsTab } from '../analytics/snapshots/SnapshotsTab';
 import s from './Data.module.css';
 import { CommentDoor } from '../dashboards/CommentsPanel';
 import { LiveBadge, LiveNotice, SwitchToLiveDialog } from './LiveMode';
+import { RefreshUrlDialog } from './RefreshUrl';
 
 const TABS = ['data', 'quality', 'columns', 'insights', 'snapshots'] as const;
 type TabId = (typeof TABS)[number];
@@ -83,6 +84,7 @@ function Header({ projectId, id, name, rowCount, columnCount, live }: { projectI
   const remove = useDeleteDataset(projectId, () => void navigate(`/data/${projectId}`));
   const [graph, setGraph] = useState(false);
   const [goLive, setGoLive] = useState(false);
+  const [hooks, setHooks] = useState(false);
   const d = list.data?.find((x) => x.id === id);
   const outcome = refresh.state[id];
   return (
@@ -168,6 +170,8 @@ function Header({ projectId, id, name, rowCount, columnCount, live }: { projectI
             trigger={<IconButton icon="more-horizontal" size="sm" label="More dataset actions" />}
             items={[
               { label: 'Lineage', icon: 'lineage', onSelect: () => setGraph(true) },
+              // A URL dbt or Airflow calls to refresh it (live data L0.5): only where there is a source to refresh from.
+              ...(d?.originKind || live ? [{ label: 'Refresh URL…', icon: 'link' as const, onSelect: () => setHooks(true) }] : []),
               ...(source.data?.canGoLive ? [{ label: 'Switch to Live…', icon: 'zap' as const, onSelect: () => setGoLive(true) }] : []),
               { label: 'Pipeline history', icon: 'history', onSelect: () => void navigate(`/versions/${projectId}/dataset/${id}`) },
               { kind: 'separator' },
@@ -178,6 +182,7 @@ function Header({ projectId, id, name, rowCount, columnCount, live }: { projectI
       </div>
       {graph && <LineageDrawer projectId={projectId} id={id} name={name} onClose={() => setGraph(false)} />}
       {goLive && <SwitchToLiveDialog projectId={projectId} datasetId={id} name={name} rowCount={rowCount} onClose={() => setGoLive(false)} />}
+      {hooks && <RefreshUrlDialog projectId={projectId} datasetId={id} name={name} live={live} onClose={() => setHooks(false)} />}
     </header>
   );
 }

@@ -42,7 +42,7 @@ export const adminContracts = {
   'admin:audit': adminList(
     z.strictObject({
       actor: z.string().trim().max(320).optional(),
-      action: z.enum(['rpc', 'login', 'logout', 'logout_everywhere', 'password_change']).optional(),
+      action: z.enum(['rpc', 'login', 'logout', 'logout_everywhere', 'password_change', 'hook_refresh', 'scheduled_refresh']).optional(),
       channel: z.string().max(100).optional(),
       projectId: Uuid.optional(),
       from: When.optional(),

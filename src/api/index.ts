@@ -32,6 +32,8 @@ import { reports } from './reports';
 import { analyticsB } from './analyticsB';
 import { live } from './live';
 
+import { refreshHooks } from './refreshHooks';
+
 export const contracts = {
   ...projects,
   ...datasets,
@@ -63,6 +65,8 @@ export const contracts = {
   ...analyticsB,
   ...dashboards,
   ...live,
+
+  ...refreshHooks,
 } as const;
 
 export type Channel = keyof typeof contracts;

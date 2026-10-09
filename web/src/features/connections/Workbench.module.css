@@ -537,6 +537,10 @@
 .dsError {
   border-color: var(--error);
 }
+/* "Refresh URL" (live data L0.5): a quiet link-like action under the schedule. */
+.dsHook {
+  align-self: flex-start;
+}
 .dsTop {
   display: flex;
   align-items: center;

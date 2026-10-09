@@ -261,6 +261,12 @@ if (adminUrl) {
     await row.getByText(/Refreshes daily/).waitFor();
     await row.getByRole('button', { name: 'Refresh Regions now' }).click();
     await page.getByText('Refreshed “Regions”.').waitFor();
+    // Its refresh URL panel (live data L0.5), opened from the rail (web/e2e/refreshUrl.e2e.ts walks it).
+    await row.getByRole('button', { name: 'Refresh URL for Regions' }).click();
+    const hooks = page.getByRole('dialog', { name: 'Refresh URL · Regions' });
+    await hooks.getByRole('heading', { name: 'No refresh URLs yet' }).waitFor();
+    await hooks.getByRole('button', { name: 'Done' }).click();
+    await hooks.waitFor({ state: 'detached' });
 
     // Replace the password: tested, kept, never shown.
     await rail.getByRole('button', { name: 'Replace Password' }).click();
