@@ -54,6 +54,8 @@ export interface LimitsEnv {
   readonly jsonBodyBytes: number;
   /** RPC_TIMEOUT_SECONDS: a call running longer answers 504 and its DuckDB queries are interrupted. */
   readonly rpcTimeoutMs: number;
+  /** REFRESH_HOOK_MIN_INTERVAL_SEC: the least gap between two calls of one refresh URL (live data L0.5), across pods. */
+  readonly refreshHookMinIntervalSec: number;
 }
 
 /** STORAGE_URL=s3://bucket/prefix (T5.2). No keys here: the pod's credential chain signs. */
@@ -227,6 +229,7 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
     rpcIpPerMinute: positiveInt('RATE_LIMIT_RPC_IP_PER_MINUTE', src.RATE_LIMIT_RPC_IP_PER_MINUTE, 3000),
     jsonBodyBytes: positiveInt('MAX_RPC_BODY_KB', src.MAX_RPC_BODY_KB, 1024) * 1024,
     rpcTimeoutMs: positiveInt('RPC_TIMEOUT_SECONDS', src.RPC_TIMEOUT_SECONDS, 60) * 1000,
+    refreshHookMinIntervalSec: positiveInt('REFRESH_HOOK_MIN_INTERVAL_SEC', src.REFRESH_HOOK_MIN_INTERVAL_SEC, 60),
   });
   const storage = parseStorage(src, databaseUrl);
   return Object.freeze({ port, metricsPort, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits, storage });

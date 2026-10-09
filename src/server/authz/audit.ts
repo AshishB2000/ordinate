@@ -1,7 +1,10 @@
 // The audit trail (T3.3, table `audit_log` in 0006_authz.sql): sign-ins,
 // sign-outs, password changes (0010_passwords.sql), and every write/admin RPC
 // (record writes, publishes, connection and role changes) plus `audit: true`
-// reads (exports).
+// reads (exports). Refreshes no member clicked (0011_refresh_hooks.sql): a
+// refresh URL's call (`hook_refresh`, actor = the hook's creator, ids = the
+// hook and its dataset) and a scheduled refresh (`scheduled_refresh`, actor =
+// the jobs identity, outcome = the refresh's own).
 //
 // What a row may hold is fixed here, not by the caller: action, channel,
 // actor (email), org, outcome, request id, and ids — UUID-shaped values found
@@ -10,7 +13,7 @@
 
 import type { Pool } from 'pg';
 
-export type AuditAction = 'rpc' | 'login' | 'logout' | 'logout_everywhere' | 'password_change';
+export type AuditAction = 'rpc' | 'login' | 'logout' | 'logout_everywhere' | 'password_change' | 'hook_refresh' | 'scheduled_refresh';
 export type Outcome = 'ok' | 'denied' | 'error';
 
 export interface AuditEntry {

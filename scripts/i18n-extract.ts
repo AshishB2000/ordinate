@@ -353,6 +353,7 @@ export const MAIN_FILES = [
   'src/connectors/connectorMessages.ts',
   'src/data/refreshMessages.ts',
   'src/engine/liveRefusals.ts',
+  'src/data/refreshHookMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";
