@@ -559,3 +559,60 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
 - **Not done (scope):** a pipeline cron's dataset refresh (`pipelineRunner`, also under the tick)
   still leaves no audit row; only the dataset scheduler's refreshes are `scheduled_refresh`. `connection:refresh` and the MCP `datasets
   refresh` tool still bypass the job and the lock (noted under L0.3/L0.4).
+
+## 2026-10-09 — L3.2 Live on a PostgreSQL read replica (opt-in)
+
+- **Built.** `ConnectorLive.optIn` (`src/connectors/types.ts`): the key of a non-secret checkbox a
+  connection must have ticked before Live is offered for it. Data, not a function, so the catalog
+  sends it (`CatalogEntry.liveOptIn`) and the web applies the same rule to a connection's values
+  without a round trip; the server enforces it. `isLiveCapable(def)` now means CAN be Live (and is
+  false for an opt-in naming no non-secret checkbox — fail closed); `isLiveOffered(def, values)`
+  (`src/connectors/index.ts`) decides per connection, strictly `values[optIn] === true`.
+  `src/ipc/liveOptIn.ts`: `liveOfferRefusal` (the catalog sentence) — asked by `connection:import
+  {mode:'live'}` and `dataset:setMode` (`liveDatasets.ts`), by `dataset:source`'s `canGoLive`
+  (`datasetViews.ts`) and by the executor on EVERY question (`liveTarget.ts`); and the new channel
+  `connection:setLiveOptIn` (contract in `src/api/live.ts`, `write`). PostgreSQL, AlloyDB, Neon,
+  Supabase and TimescaleDB declare the Redshift dialect + the opt-in field "This is a read replica
+  or a warehouse" (`readReplica`, off by default, last on the form, its help the one-line why).
+  Web: the form renders it generically; the workbench offers Copy/Live by `liveOffered(def, conn)`;
+  the rail has a switch (`ReplicaSwitch.tsx`) under the connection's facts.
+- **Decided — which members.** Only those whose server IS PostgreSQL (parser, functions, casts):
+  the dialect's `$n`, `~` with `[[:space:]]`, `BTRIM(x, chars)`, `DATE_TRUNC`, `TO_CHAR`, `date - date`,
+  windows and CTEs are all PostgreSQL ≥ 9.x. Not CockroachDB (a reimplementation; RE2 regular
+  expressions, not PostgreSQL's), not YugabyteDB (a fork of the PG 11 query layer over distributed
+  storage), not Materialize / QuestDB / RisingWave (pgwire only). Unverified here, so not Live.
+- **Decided — unticking is REFUSED while Live datasets ask the connection**, naming how many
+  (`code: 'live_in_use'`, `liveDatasets: n`), rather than switching them to copies: each switch is a
+  full import from the database just called a primary, and it would silently change what every
+  dashboard over them shows. The count and the write are not atomic; a Live dataset created in
+  between (or restored from the Trash later) is still refused by the executor before any socket.
+- **Found and fixed — the live session's time zone.** `CAST(timestamptz AS DATE)` and `DATE_TRUNC`
+  follow the SESSION's `TimeZone`; an extract reads a timestamptz as an instant and stores it in UTC.
+  On a database whose zone is not UTC, live put the same instant on another day. `runBound` (the
+  Redshift / Postgres family) now runs `set timezone to 'UTC'` first — as Snowflake's session already
+  does. Measured in a scratch database `ALTER DATABASE … SET timezone TO 'Pacific/Kiritimati'`: without
+  it the day chart has 9 rows where the copy has 7; with it, equal. Negative control kept in the suite
+  (the chart's own statement, re-sent on a raw session in the database's zone, answers other days).
+- **Found, NOT fixed (for L2.8) — `''` and `NULL` in a text category.** Every import types `''` as
+  null (`parse.coerceCell`), so a copy has ONE blank category; a real warehouse groups `''` and `NULL`
+  apart and live answers TWO rows labelled "" (their figures add up to the copy's). The L2.2 bench
+  missed it because its extract fixture is saved with `datasets.saveDataset`, which keeps `''` — the
+  bench's extract shows two "" rows as well. Applies to every dialect and to a split's series. The fix
+  is a compiler change (`NULLIF(key, '')` for text keys) plus a bench fixture saved the way an import
+  saves it; it overlaps L2.8's parity work, so it is pinned (`test-liveReplica`: "PINNED — …") and left
+  to that task. The operator doc names it.
+- **Not testable here — collation.** This machine has only `C`/`C.UTF-8` locales. Text ordering filters
+  and tied labels follow the database's collation on live and code points on a copy; documented.
+- **Measured** (`test-liveReplica`, local PostgreSQL 16, 4 vCPU container shared with other suites,
+  four runs): a live KPI with cache age 0 — connect, read-only + `statement_timeout` + UTC, one bound
+  statement, close — median **7.6–13.0 ms** of 20; the `set timezone` statement alone **0.08–0.15 ms**
+  median of 200. The connection set-up dominates; a remote replica adds its round trips to each.
+- **Tests.** `test-liveReplica` (pure rule + catalog + contract with negative controls; RPC enforcement
+  without a database; with `DATABASE_URL` the end-to-end flow: 10 charts and 6 KPIs through
+  `liveVizData` / `liveMetric` equal `vizDataFor` / `computeCardMetric` over the copy with `Object.is`,
+  sums and averages included — the fixture's amounts are quarters, so no summation order rounds).
+  `test-connectors`: `postgres` moved from the "not live" list to "live, behind its opt-in" (the
+  catalog flag now means "can be Live", by design), and `liveOptIn` joined the documented catalog keys.
+  Vitest `replica.test.tsx` (5); `connections.e2e.ts`: the main flow asserts no Live choice on an
+  unticked PostgreSQL, and a new flow ticks the box on the form, saves a Live dataset, and sees the
+  untick refused in place (screens `connections-replica-form-*`, `connections-replica-workbench-*`).

@@ -26,4 +26,13 @@ export const live = {
     }),
     project: byProjectId,
   }),
+  // A saved connection's Live opt-in (src/ipc/liveOptIn.ts, L3.2): the checkbox an OLTP
+  // source declares — PostgreSQL's "This is a read replica or a warehouse". `write`, as
+  // testAndSave, which sets it on a new connection. Unticking is refused while a Live
+  // dataset asks the connection; the reply then says how many.
+  'connection:setLiveOptIn': rpc({
+    access: 'write',
+    input: z.strictObject({ projectId: Uuid, connId: Uuid, on: z.boolean() }),
+    project: byProjectId,
+  }),
 } as const;
