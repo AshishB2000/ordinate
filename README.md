@@ -6,123 +6,155 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/icons/ordinate-dark.svg" />
-  <img src="assets/icons/ordinate.svg" alt="" width="104" height="104" />
+  <img src="assets/icons/ordinate.svg" alt="" width="96" height="96" />
 </picture>
 
 # Ordinate
 
-**Self-hosted, open-source business intelligence.**
+### Open-source AI BI you host yourself
 
-Run it in your own infrastructure. Your team opens a URL and signs in with your SSO.<br/>
-Bring data in from files or **38 read-only sources**, **prepare** it with a reversible pipeline,<br/>
-**visualize** it across **39 chart, map &amp; table types**, and publish **dashboards**.
+Connect your data, build dashboards, and let AI analyse it for you.
 
-<sub>Self-hosted · model-agnostic · MIT. Your data stays in your Postgres and your bucket, and **every number is computed by the app.**</sub>
-
-<br/>
-
-<a href="docs/server/README.md"><b>Operator docs</b></a> &nbsp;·&nbsp;
-<a href="#quick-start"><b>Quick start</b></a> &nbsp;·&nbsp;
+<a href="#-quick-start"><b>Quick start</b></a> &nbsp;·&nbsp;
+<a href="#-features"><b>Features</b></a> &nbsp;·&nbsp;
+<a href="docs/server/README.md"><b>Deploy</b></a> &nbsp;·&nbsp;
 <a href="SECURITY.md"><b>Security</b></a> &nbsp;·&nbsp;
 <a href="https://github.com/AshishB2000/ordinate/issues"><b>Issues</b></a>
 
 <br/>
 
 <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2f81f7?style=flat-square" /></a>
-<img alt="Status" src="https://img.shields.io/badge/status-beta-f0883e?style=flat-square" />
+<img alt="Status: beta" src="https://img.shields.io/badge/status-beta-f0883e?style=flat-square" />
+<img alt="Self-hosted" src="https://img.shields.io/badge/self--hosted-Docker%20%C2%B7%20Helm-2496ED?style=flat-square&logo=docker&logoColor=white" />
 <img alt="Telemetry: none" src="https://img.shields.io/badge/telemetry-none-2ea043?style=flat-square" />
+<br/>
 <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" />
 <img alt="React" src="https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB" />
 <img alt="Postgres" src="https://img.shields.io/badge/Postgres-4169E1?style=flat-square&logo=postgresql&logoColor=white" />
 <img alt="DuckDB" src="https://img.shields.io/badge/DuckDB-FFF000?style=flat-square&logo=duckdb&logoColor=black" />
 
+<br/><br/>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/images/screens/hero-dark.png" />
+  <img src="assets/images/screens/hero-light.png" alt="An Ordinate analysis: four KPI cards, revenue by month, revenue by category and a profit-by-state map" width="100%" />
+</picture>
+
 </div>
 
----
+<br/>
 
-## What is Ordinate
+## ✨ Why Ordinate
 
-Ordinate is a web BI workspace your company runs itself: one stateless container image, plus a
-Postgres database and an S3 bucket (or a volume) that you provide. People sign in through your
-identity provider (OIDC, or a sign-in proxy such as oauth2-proxy), work in **projects** shared with
-people and teams by role, and publish dashboards to a link inside your network.
+- **Yours to run.** One container image plus your own Postgres and S3 bucket. Deploy with Docker
+  Compose, Kubernetes (Helm), or ECS. Your data never leaves your infrastructure.
+- **AI built in.** Ask questions about your data in plain words, have AI explain the changes that
+  stand out, and let it suggest charts, prepare steps and calculated fields.
+- **A complete BI workflow.** Connect 38 sources, clean data with a reversible pipeline, chart it
+  across 39 chart, map and table types, and publish dashboards your whole team can open.
+- **Built for teams.** Sign in with your company SSO, share projects by role, and keep an audit
+  log of who changed what.
+- **Open source.** MIT licensed, no telemetry, and you choose the AI model (or none at all).
 
-> [!IMPORTANT]
-> **The app does the math.** Every aggregate, statistic, metric and anomaly is computed by the
-> server, in code paired with differential tests. The browser only formats. An AI model, if you
-> connect one, may *extract structure* (a table out of a screenshot) or *narrate figures the app
-> already computed*. It is **never** the source of a number.
+## 🖼️ A quick look
 
-## Quick start
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="assets/images/screens/home.png" alt="Home: ask about your data, get-started steps and the changes that stand out" />
+      <p align="center"><b>Home</b> — ask about your data, and see what stands out</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="assets/images/screens/data.png" alt="A dataset page with typed columns and 5,000 rows" />
+      <p align="center"><b>Data</b> — every dataset with its quality, columns and history</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="assets/images/screens/visual.png" alt="The visual builder with a revenue-by-month line chart" />
+      <p align="center"><b>Visuals</b> — build any of 39 chart, map and table types</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="assets/images/screens/stats.png" alt="A correlation matrix in the statistics workbench" />
+      <p align="center"><b>Analytics</b> — correlation, regression, drivers and more</p>
+    </td>
+  </tr>
+</table>
 
-You need Node.js 24 for a development checkout, or Docker with Compose v2 for the team stack.
+## 🤖 AI that works with your data
 
-### Develop on one machine
+Connect an Anthropic, OpenAI, Gemini or OpenAI-compatible model, and Ordinate puts it to work:
+
+| | |
+|---|---|
+| **Ask anything** | Type a question on Home or in the Assistant and get an answer built from your datasets. |
+| **What stands out** | Notable rises, drops and anomalies are found for you, each with a one-click *Ask why*. |
+| **Suggestions** | Suggested charts, prepare steps and calculated fields, plus drafted dashboard layouts. |
+| **Plans you approve** | The Assistant proposes multi-step plans, and nothing runs until you say so. |
+| **Agents and scripts** | An MCP endpoint at `/api/mcp` lets AI agents work with Ordinate using an API token. |
+
+Answers are grounded in figures Ordinate calculates from your data, and every feature also works
+without a model.
+
+## 🚀 Quick start
+
+### Try it on your machine
+
+You need **Node.js 24**.
 
 ```bash
 git clone https://github.com/AshishB2000/ordinate.git
 cd ordinate
-npm install                # also compiles the server and fetches map boundaries
-npm --prefix web install
-npm run build:web          # the React app, served by the server from web/dist
-docker run -d --name ordinate-pg -e POSTGRES_PASSWORD=ordinate -p 127.0.0.1:5432:5432 postgres:17
-DATABASE_URL=postgres://postgres:ordinate@127.0.0.1:5432/postgres npm run server
+npm install && npm --prefix web install
+npm run build:web
+npm run server
 ```
 
-Open `http://127.0.0.1:8080`. Ordinate starts with **password sign-in**: the terminal prints a
-one-time setup code (`First-run setup code: …`), and the sign-in page asks for it to create your
-admin account. Add other people in Admin → People with a temporary password. Password sign-in is
-for trying Ordinate out. Switch to single sign-on before real use
-([docs/server/sso.md](docs/server/sso.md)).
+Open **http://localhost:8080**. You're signed in automatically as a local admin, and your data is
+kept in `./data`. No database is needed for this mode.
 
-For hot reload, keep `npm run server` running and start `npm run dev:web` in a second terminal.
-Vite serves the app on `http://localhost:5173` and proxies `/api` to the server. (`AUTH_MODE=dev`,
-which signs every request in as an admin with no Postgres, is for Ordinate's automated tests only.
-It is never the default, and production refuses it.)
+### Run it for a team with Docker Compose
 
-### Run it for a team: Docker Compose
-
-`deploy/docker-compose.yml` runs the server, Postgres 17 and MinIO on one host:
+Ordinate, Postgres 17 and MinIO on one host:
 
 ```bash
 cd deploy
-cp .env.example .env       # then add ORDINATE_MASTER_KEY and the two passwords
+cp .env.example .env       # add ORDINATE_MASTER_KEY, the two passwords and ORDINATE_ADMIN_EMAIL
 docker compose up -d --build
-docker compose logs ordinate | grep "setup code"   # then open http://127.0.0.1:8080 and enter it
 ```
 
-The full walk-through, including generating the secrets and switching to single sign-on, is
-[docs/server/quick-start.md](docs/server/quick-start.md). **Back up `ORDINATE_MASTER_KEY`.** Every
-stored connection password and AI key is encrypted under it.
+The full walk-through, including generating secrets and putting your SSO in front, is in
+[docs/server/quick-start.md](docs/server/quick-start.md).
 
-### Run it on Kubernetes: Helm
+> [!WARNING]
+> **Back up `ORDINATE_MASTER_KEY`.** Every stored connection password and AI key is encrypted
+> under it. Without it they can't be read, even from a good database backup.
 
-The chart in `deploy/helm/ordinate` runs migrations as a pre-install/pre-upgrade Job, keeps metrics
-on a Service the Ingress never routes, and takes secrets only from a Secret you create:
+### Deploy on Kubernetes with Helm
 
 ```bash
 helm install ordinate deploy/helm/ordinate -n ordinate -f my-values.yaml --wait
 ```
 
-Start from [docs/server/eks.md](docs/server/eks.md) (IRSA, RDS, S3, ALB),
-[ecs.md](docs/server/ecs.md) or [gke-aks.md](docs/server/gke-aks.md). Every environment variable is
-in [configuration.md](docs/server/configuration.md). More than one replica needs sticky sessions at
-the load balancer.
+Step-by-step guides: [EKS](docs/server/eks.md) · [ECS](docs/server/ecs.md) ·
+[GKE / AKS](docs/server/gke-aks.md) · [SSO setup](docs/server/sso.md) ·
+[all settings](docs/server/configuration.md) · [sizing](docs/server/sizing.md) ·
+[backup](docs/server/backup-restore.md) · [upgrades](docs/server/upgrade.md)
 
-## Features at a glance
+## 🧩 Features
 
-| | What you get |
+| | |
 |---|---|
-| **Bring in** | CSV, JSON and Excel uploads, pasted tables, an https JSON URL, a screenshot read into a table you review, and **38 read-only connectors**. Every query is bounded on the server. |
-| **Prepare** | An ordered, reversible pipeline: calculated fields (a hand-written formula language, no `eval`), filters, group and aggregate, dedupe, split and regex replace, pivot and unpivot, joins, window functions and more. Remove a step and the result recomputes from the source. Scheduled pipelines and refreshes. |
-| **Visualize** | 39 types: 31 charts, a pivot table, cohort and event-funnel grids, 4 maps and a table. Charts render with Chart.js 4; maps with MapLibre GL over OpenStreetMap tiles. |
-| **Analyze** | Statistics, drivers, scenarios, segments, snapshots, events, insights, anomaly detection and a SQL workbench, all computed on the server. |
-| **Author and publish** | Analyses with sheets, cards, filter controls and parameters; dashboards published **by value** as read-only snapshots, at `/p/<id>` for your org (or anyone with the link, if an admin allows it). Reports, stories and scorecards export to PDF, PowerPoint and Word. Comments and alerts. |
-| **Govern** | Orgs, teams and per-project roles (viewer, editor, admin); an audit log; personal API tokens; an admin console; backup and restore of every project. |
-| **Automate** | An MCP endpoint at `/api/mcp` for agents and scripts, signed in with an API token ([docs/automation.md](docs/automation.md)). |
-| **Assistant (optional)** | Connect an Anthropic, OpenAI, Gemini or OpenAI-compatible gateway key. The Assistant answers from app-computed facts and proposes plans you approve. Everything works without one. |
+| **📥 Bring data in** | Upload CSV, JSON or Excel, paste a table, point at a JSON URL, read a table out of a screenshot, or connect one of **38 read-only sources**. Datasets hold up to 1,000,000 rows. |
+| **🧹 Prepare** | A step-by-step pipeline you can reorder or undo: calculated fields, filters, grouping, joins, pivot and unpivot, dedupe, regex, window functions and more. Refreshes and pipelines run on a schedule. |
+| **📊 Visualize** | **39 types**: 31 charts, a pivot table, cohort and event-funnel grids, 4 maps and a table. Small multiples, drill-down, annotations, reference lines and forecasts. |
+| **🔬 Analyze** | Statistics, key drivers, what-if scenarios, segments, snapshots, events and a SQL workbench. |
+| **🗂️ Author and share** | Analyses with sheets, cards, filters and parameters; publish them as dashboards your org can open at a link. Reports, stories and scorecards export to PDF, PowerPoint and Word. Comments and alerts keep the team in the loop. |
+| **🛡️ Govern** | SSO sign-in, orgs, teams and per-project roles (viewer, editor, admin), an audit log, personal API tokens, an admin console, and backup and restore. |
 
-Connectors, one registry entry each. Wire-compatible engines share a driver.
+<details>
+<summary><b>All 38 connectors</b></summary>
+<br/>
 
 | Category | Sources |
 |---|---|
@@ -132,49 +164,55 @@ Connectors, one registry entry each. Wire-compatible engines share a driver.
 | **Apps &amp; SaaS** (6) | Google Sheets · Airtable · Notion · Stripe · GitHub · HubSpot |
 | **Web** (1) | URL / API (JSON) |
 
-Identifier columns stay text everywhere: `007`, ZIP codes and IDs longer than 15 digits are never
-turned into figures. A dataset holds up to 1,000,000 rows.
+Every connector is read-only, and every query is limited on the server. Identifier columns stay
+text, so `007`, ZIP codes and long IDs are never turned into numbers.
 
-## Security model
+</details>
 
-Responsibility is split. **Ordinate** handles sign-in, sessions, roles and tenant isolation inside
-the app; the SSRF guard on every connector; DuckDB locked to each org's own data; secrets encrypted
-at rest and never sent to a browser or a log; CSRF protection, CSP and security headers. **You**
-handle the network, ingress and TLS, the pod's cloud identity, Postgres and the bucket (including
-their encryption and backups), your IdP, and applying releases.
+## 🔒 Security
 
-- [docs/phase-7-web/threat-model.md](docs/phase-7-web/threat-model.md) lists every asset, trust
-  boundary and mitigation, with the test that proves each one, plus the open and accepted risks.
-- [SECURITY.md](SECURITY.md) says how to report a vulnerability privately. Please do not open a
-  public issue for one.
-- The image never downloads anything at run time, and the app sends no telemetry. The only external
-  fetches are OpenStreetMap tiles when a map is on screen, and the model endpoint you connect, if any.
+Ordinate runs inside your network, so security is shared:
 
-## How it is built
+| **Ordinate takes care of** | **You take care of** |
+|---|---|
+| Sign-in, sessions, roles and keeping each org's data separate | Your network, ingress and TLS |
+| Blocking connectors from reaching internal addresses | The pod's cloud permissions |
+| Encrypting stored passwords and AI keys, and never sending them to a browser or a log | Your Postgres and bucket, including their backups |
+| CSRF protection, a strict content security policy and security headers | Your identity provider and who can sign in |
+| Fixing vulnerabilities and shipping patched releases | Applying those releases |
+
+The image downloads nothing at run time, and Ordinate sends no telemetry. The full threat model,
+with the test behind each protection, is in
+[docs/phase-7-web/threat-model.md](docs/phase-7-web/threat-model.md). To report a vulnerability,
+see [SECURITY.md](SECURITY.md); please don't open a public issue for one.
+
+<details>
+<summary><b>🛠️ How it's built</b></summary>
+<br/>
 
 | Layer | What it is |
 |---|---|
-| **Server** | Node 24, Fastify 5. Every endpoint is an RPC channel with a zod contract and a role check; no contract, no channel. |
-| **Web app** | React 19, Vite, React Router, TanStack Query, Radix primitives, CSS Modules. |
-| **Metadata** | Postgres: users, orgs, roles, records (row-level security per org), jobs, audit and encrypted secrets. |
-| **Tables** | Parquet on a volume or S3, queried in place by DuckDB through one locked worker per org. |
-| **Push and jobs** | Server-sent events; jobs claimed from a Postgres table and events fanned out across pods with `LISTEN/NOTIFY`. |
-| **Packaging** | One image for amd64 and arm64, a Compose stack, a Helm chart, and `/metrics` for Prometheus on its own port. |
+| **Server** | Node 24 and Fastify 5. Every endpoint is a typed RPC call with a validated input and a role check. |
+| **Web app** | React 19, Vite, React Router, TanStack Query and Radix, styled with CSS Modules. |
+| **Metadata** | Postgres: users, orgs, roles, records with row-level security per org, jobs, audit log and encrypted secrets. |
+| **Tables** | Parquet on a volume or S3, queried in place by DuckDB, one locked worker per org. |
+| **Live updates and jobs** | Server-sent events, plus a Postgres job queue shared across pods. |
+| **Packaging** | One image for amd64 and arm64, a Compose stack, a Helm chart, and Prometheus `/metrics` on its own port. |
 
-Architecture and conventions are in [CLAUDE.md](CLAUDE.md). The history and the measurements behind
-each decision are in [docs/](docs/README.md); Phase 7, the move from a desktop app to this web app,
-is [docs/phase-7-web/](docs/phase-7-web/).
+Architecture and conventions are in [CLAUDE.md](CLAUDE.md). The decisions and the measurements
+behind them are in [docs/](docs/README.md).
 
-## Contributing
+</details>
 
-Issues and pull requests are welcome. Work goes on a branch off **`develop`** and merges through a PR
-once CI is green. The conventions are in [CLAUDE.md](CLAUDE.md).
+## 🤝 Contributing
+
+Issues and pull requests are welcome. Branch off **`develop`**, and open a PR once CI is green.
 
 ```bash
-npm test                   # every server self-check suite
-npm run test:web           # Vitest
-npm --prefix web run e2e   # Playwright, one spec per screen, fails on any console error
-npm run lint               # oxlint, blocking, zero findings
+npm test                   # server test suites
+npm run test:web           # web unit tests
+npm --prefix web run e2e   # end-to-end tests, one per screen
+npm run lint               # lint (must be zero findings)
 ```
 
 ---
@@ -183,6 +221,6 @@ npm run lint               # oxlint, blocking, zero findings
 
 [MIT](LICENSE) © Ordinate contributors
 
-<sub><b>Self-hosted.</b> <b>Model-agnostic.</b> <b>The app does the math.</b></sub>
+<sub><b>Open source.</b> <b>Self-hosted.</b> <b>AI-powered.</b></sub>
 
 </div>
