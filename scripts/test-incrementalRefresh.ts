@@ -18,6 +18,11 @@
 //   6. recovery after an interrupted run — a throw mid-merge leaves the table,
 //      the source copy and the mark exactly as they were, and a leftover temp
 //      file is cleaned up by the next run
+//   8. BigQuery (L1.4): the predicate pushed to the warehouse, end to end over
+//      the real connector and a fake transport
+//   9. Snowflake (L1.4): the real connector over a fake SQL API — the cursor
+//      predicate is PUSHED into the statement ("…" quoting, '…'::timestamp_tz),
+//      inside the connector's own row cap, and only the rows past the mark come back
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
@@ -47,6 +52,10 @@ const record: typeof import('../src/data/datasetRecord') = require('../src/data/
 const parse: typeof import('../src/data/parse') = require('../src/data/parse');
 const inc: typeof import('../src/data/incremental') = require('../src/data/incremental');
 const duck: any = require('../src/engine/duckdb');
+const snowflake: typeof import('../src/connectors/snowflake') = require('../src/connectors/snowflake');
+const sqlGen: typeof import('../src/connectors/incrementalSql') = require('../src/connectors/incrementalSql');
+const configSecrets: typeof import('../src/app/configSecrets') = require('../src/app/configSecrets');
+import { FakeSnowflake, HANDLE, reply } from './snowflakeFake';
 type Cell = import('../src/data/incremental').Cell;
 
 /** Publish a table at its URL — written as CSV here for legibility, served as JSON rows (numbers as numbers). */
@@ -185,6 +194,109 @@ async function main(): Promise<void> {
   ok('7. they ran in turn: the requested full run first, then an incremental one over its result',
     s7.log.length === logLen + 2 && s7.log[1].mode === 'full' && s7.log[0].mode === 'incremental', JSON.stringify(s7.log.slice(0, 2)));
   ok('7. …so the run count is 1 after the full reset, not bumped twice', s7.runsSinceFull === 1, s7.runsSinceFull);
+
+  // ── 8. BigQuery: the cursor predicate is pushed to the warehouse (L1.4) ────
+  // The real bigquery connector over a recorded-shape fake transport: the
+  // full run reads the table through its one-backtick path, the incremental
+  // run sends the pushed predicate (dry-run gated, inside the cap wrapper), and
+  // the exact cut is still made in JS on the stored column type.
+  {
+    const bq: typeof import('../src/connectors/bigquery') = require('../src/connectors/bigquery');
+    const fake: typeof import('./bigqueryFake') = require('./bigqueryFake');
+    const secretsIpc: typeof import('../src/ipc/connectionSecrets') = require('../src/ipc/connectionSecrets');
+    const day = (d: number): string => String(Date.UTC(2024, 0, d) / 1000); // TIMESTAMP as BigQuery sends it: epoch seconds
+    let warehouse: string[][] = [['1', day(1), '10'], ['2', day(2), '20']];
+    const f = fake.fakeTransport((c) => {
+      if (fake.isToken(c)) return { json: { access_token: 'ya29.incremental', expires_in: 3599 } };
+      if (fake.isDry(c)) return { json: { statementType: 'SELECT', totalBytesProcessed: '2048' } };
+      if (fake.isQuery(c)) {
+        return { json: {
+          schema: { fields: [{ name: 'id', type: 'INTEGER' }, { name: 'updated_at', type: 'TIMESTAMP' }, { name: 'amount', type: 'NUMERIC' }] },
+          jobReference: { projectId: fake.PROJECT, jobId: 'job_incremental', location: 'US' },
+          jobComplete: true,
+          rows: warehouse.map((r) => ({ f: r.map((v) => ({ v })) })),
+        } };
+      }
+      return { status: 404, json: { error: { code: 404, message: 'unexpected' } } };
+    });
+    bq.setTransport(f.transport);
+    try {
+      const conn = (await connections.saveConnection(pid, { name: 'warehouse', connectorId: 'bigquery', values: { project: fake.PROJECT } }))!;
+      await secretsIpc.storeSecrets(conn.id, { token: fake.makeKey().json });
+      const ds = (await datasets.saveDataset(pid, {
+        name: 'bq orders', sourceKind: 'postgres',
+        columns: [{ name: 'id', type: 'number' }, { name: 'updated_at', type: 'date' }, { name: 'amount', type: 'number' }],
+        rows: [[1, '2024-01-01T00:00:00.000Z', 10], [2, '2024-01-02T00:00:00.000Z', 20]],
+        origin: { kind: 'connection', connId: conn.id, table: 'shop.orders' },
+      } as any))!; // any: saveDataset's input, as the importers build it
+      await datasets.writeIncremental(pid, ds.id, () => ({
+        enabled: true, cursorColumn: 'updated_at', keyColumn: 'id', lookback: 0, highWater: null, runsSinceFull: 0, log: [],
+      }));
+      let b = await run(ds.id);
+      const full = f.calls.filter(fake.isQuery).pop();
+      ok('8. bigquery: the first run is full, through the table\'s backtick path in the cap wrapper',
+        b.mode === 'full' && full?.json.query === 'select * from (\nselect * from `shop.orders` limit 1000000\n) limit 1000001', full?.json.query);
+      ok('8. …and the mark is the TIMESTAMP, converted to ISO', b.highWater === '2024-01-02T00:00:00.000Z', JSON.stringify(b));
+      warehouse = [['1', day(1), '10'], ['2', day(3), '25'], ['3', day(4), '40']];
+      await tick();
+      b = await run(ds.id);
+      const pushed = f.calls.filter(fake.isQuery).pop();
+      ok('8. bigquery: the incremental run pushes the predicate to the warehouse',
+        b.mode === 'incremental' && b.how === 'server' && pushed?.json.query === "select * from (\nselect * from `shop.orders` where `updated_at` >= '2024-01-01'\n) limit 1000001", `${JSON.stringify(b)} ${pushed?.json.query}`);
+      ok('8. …dry-run first, like every statement run sends', f.calls.filter(fake.isDry).some((c) => c.json.query === pushed?.json.query));
+      ok('8. …and JS makes the exact cut: id 2 updated, id 3 inserted', b.fetched === 2 && b.updated === 1 && b.inserted === 1 && b.highWater === '2024-01-04T00:00:00.000Z', JSON.stringify(b));
+      const stored = (await datasets.getDataset(pid, ds.id))!;
+      ok('8. hand-written result', JSON.stringify(stored.rows) === JSON.stringify([[1, '2024-01-01T00:00:00.000Z', 10], [2, '2024-01-03T00:00:00.000Z', 25], [3, '2024-01-04T00:00:00.000Z', 40]]), JSON.stringify(stored.rows));
+    } finally {
+      bq.setTransport(null);
+    }
+  }
+  // ── 9. Snowflake: the predicate pushed to the warehouse ──────────────────
+  const day = Date.UTC(2024, 4, 2, 12, 0, 0); // the literal is widened by a day
+  ok('9. snowflake: a three-part table, "…" quoting with doubling, a timestamp_tz literal',
+    sqlGen.pushdownSql('snowflake', { table: 'SALES.PUBLIC.ORDERS' }, 'UPDATED"AT', 'date', day)
+    === `select * from "SALES"."PUBLIC"."ORDERS" where "UPDATED""AT" >= '2024-05-01T12:00:00'::timestamp_tz`);
+  ok('9. snowflake: a query is wrapped with an alias',
+    sqlGen.pushdownSql('snowflake', { query: 'select * from orders;' }, 'ID', 'number', 41) === 'select * from ( select * from orders ) ord_inc where "ID" >= 41');
+  ok('9. snowflake: an unsafe table name is not pushed', sqlGen.pushdownSql('snowflake', { table: 'x; drop table y' }, 'ID', 'number', 1) === null);
+
+  const sfTable: string[][] = [['1', '100', '10.00'], ['2', '101', '20.00'], ['3', '102', '30.00']];
+  const fixed = (name: string, precision: number, scale = 0) => ({ name, type: 'fixed', precision, scale, nullable: true });
+  const sf = new FakeSnowflake();
+  sf.answer = (req, kind) => {
+    if (kind !== 'submit') return reply(200, '{}');
+    const m = /where "UPDATED" >= (\d+)/.exec(String(JSON.parse(req.body ?? '{}').statement));
+    const rows = m ? sfTable.filter((r) => Number(r[1]) >= Number(m[1])) : sfTable;
+    return reply(200, JSON.stringify({
+      resultSetMetaData: { numRows: rows.length, format: 'jsonv2', partitionInfo: [{ rowCount: rows.length }], rowType: [fixed('ID', 9), fixed('UPDATED', 9), fixed('AMOUNT', 12, 2)] },
+      data: rows, statementHandle: HANDLE,
+    }));
+  };
+  snowflake.setTransport(sf.transport);
+  const sfConn = await connections.saveConnection(pid, {
+    name: 'Warehouse', connectorId: 'snowflake', table: 'PUBLIC.ORDERS',
+    values: { account: 'myorg-myaccount', user: 'reader', auth: 'pat', warehouse: 'COMPUTE_WH', role: 'ORDINATE_READER', database: 'SALES' },
+  });
+  await configSecrets.saveConnectionSecrets(sfConn!.id, { token: 'pat-for-the-fake' });
+  const first = parse.parseCsv('ID,UPDATED,AMOUNT\n1,100,10\n2,101,20\n3,102,30\n');
+  const sfOrders = (await datasets.saveDataset(pid, {
+    name: 'sf orders', sourceKind: 'csv', columns: first.columns, rows: first.rows,
+    origin: { kind: 'connection', connId: sfConn!.id, table: 'PUBLIC.ORDERS' },
+  } as any))!.id;
+  await datasets.writeIncremental(pid, sfOrders, () => ({ enabled: true, cursorColumn: 'UPDATED', keyColumn: 'ID', lookback: 0, highWater: null, runsSinceFull: 0, log: [] }));
+  e = await run(sfOrders);
+  ok('9. the first run is full: the table SQL, quoted part by part, inside the cap',
+    e.mode === 'full' && sf.statements()[0] === 'select * from (\nselect * from "PUBLIC"."ORDERS" limit 1000000\n) limit 1000001', sf.statements()[0]);
+  await tick();
+  sfTable[1] = ['2', '103', '25.00'];
+  sfTable.push(['4', '104', '40.00']);
+  e = await run(sfOrders);
+  ok('9. the next run pushes the cursor predicate to Snowflake (how: server)',
+    e.mode === 'incremental' && e.how === 'server' && sf.statements()[1] === 'select * from (\nselect * from "PUBLIC"."ORDERS" where "UPDATED" >= 102\n) limit 1000001', JSON.stringify({ e, sql: sf.statements()[1] }));
+  ok('9. only the rows past the mark came back; one updated, one inserted', e.fetched === 3 && e.inserted === 1 && e.updated === 1 && e.highWater === 104, JSON.stringify(e));
+  ok('9. the stored table is the warehouse table',
+    JSON.stringify((await datasets.getDataset(pid, sfOrders))!.rows) === JSON.stringify([[1, 100, 10], [2, 103, 25], [3, 102, 30], [4, 104, 40]]));
+  snowflake.setTransport(null);
 }
 
 main()

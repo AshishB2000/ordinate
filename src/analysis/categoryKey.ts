@@ -145,6 +145,17 @@ function pad(n: number, width: number): string {
 export function dateBucketLabel(epochDay: number, grain: DateGrain): string {
   const wc = grain === 'day' ? null : activeWeekCal();
   if (wc) return weekLabel(epochDay, unitOfGrain(grain)!, wc);
+  return gregorianBucketLabel(epochDay, grain);
+}
+
+/**
+ * `dateBucketLabel` with the calendar decided by the CALLER rather than read
+ * from the workspace setting: the gregorian label of a bucket. The live path
+ * (engine/live/shape.ts) needs it because its query carries the calendar it was
+ * compiled under, and a label must follow the query, not whatever the setting
+ * says a few milliseconds later. Same text, same function — just no lookup.
+ */
+export function gregorianBucketLabel(epochDay: number, grain: DateGrain): string {
   const c = civilFromDays(epochDay);
   const y = pad(c.y, 4);
   if (grain === 'year') return y;

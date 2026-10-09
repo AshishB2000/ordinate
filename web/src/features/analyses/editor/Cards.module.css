@@ -25,6 +25,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The figure's freshness (ui/AsOf), between the title and the controls. */
+.asOf {
+  margin-left: var(--sp-8);
+}
 .ctrls {
   display: flex;
   align-items: center;

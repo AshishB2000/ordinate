@@ -2,15 +2,18 @@
 
 A **self-hosted, open-source BI web app.** A company runs it in its own infrastructure (Docker
 Compose, Kubernetes via Helm, ECS); people open a URL and sign in with the company's IdP. Bring data
-in (files, paste, Excel, 38 SQL/HTTP/SaaS sources, a URL, or an uploaded screenshot) → **prepare**
+in (files, paste, Excel, 40 SQL/HTTP/SaaS sources, a URL, or an uploaded screenshot) → **prepare**
 it with a reversible pipeline → **visualize** across 39 chart, map & table types → author
 **analyses**, publish **dashboards** → share them at a URL. MIT, model-agnostic.
 
-**Core principle: the app does the math.** All aggregation, stats, metrics and anomaly detection run
-in pure server code; React only formats what the server returns — it never sums, averages or rounds
-a figure the server did not. A model only *extracts structure* (a table from a screenshot) or
-*narrates figures the app already computed*; it **never** writes a computed number. A screen that
-needs a number the API lacks gets it added on the server, with its differential test.
+**Core principle: deterministic engines do the math, never a model.** For a copied (extract)
+dataset the engine is ours — pure server code and DuckDB over our Parquet; React only formats what
+the server returns — it never sums, averages or rounds a figure the server did not. For a **Live**
+dataset it is the source warehouse, running SQL the app compiled from a validated spec, and a parity
+test proves that SQL and our engine agree on the same rows. A model only *extracts structure* (a
+table from a screenshot) or *narrates figures an engine computed*; it **never** writes a computed
+number. A screen that needs a number the API lacks gets it added on the server, with its
+differential test.
 
 **History lives in `docs/`, not here** (index: `docs/README.md`). Phase 7 — the move to the web —
 is `docs/phase-7-web/`: plan, task log with every measurement, threat model, retro. Older
@@ -112,17 +115,61 @@ and quantile interpolation by ~1e-15 (neither reaches a rendered figure, but `me
 prompts unrounded); a leading U+FEFF is lost on every string the bridge returns (upstream
 `@duckdb/node-api` bug, worked around in `parquetStore` and the readers that grep for `FEFF`).
 
+#### Live datasets (`docs/live-data/`)
+
+- **Mode is in the record**: `Dataset.mode` (`'extract'` when absent) and `live: {maxCacheAgeSec`
+  (0 s – 30 days, default 300), `epoch, schemaSyncedAt}` — no SQL migration (`src/data/liveDataset.ts`).
+  A Live dataset is **schema only**: columns DECLARED from the warehouse catalog (`liveSchema.ts`),
+  no Parquet, no row cap. Only a connector with `ConnectorDef.live` (a dialect + `runBound`, values
+  ALWAYS bind parameters, never SQL text) offers it; the catalog sends a `live` boolean, no dialect.
+- **`getDataset` throws `LiveDatasetError` on a Live dataset** — the safety net (D6). A reader not yet
+  routed refuses loudly: RPC 409 `live_dataset`, or `{ok:false, code:'live_dataset'}` (per item in a
+  batch; the route tags a caught refusal). Never compute on zero rows: a catch that turns errors into
+  `[]`/`null` rethrows it, a metadata path never hydrates, a walk over every dataset skips Live
+  (`isLive`). `scripts/test-liveSafetyNet.ts` calls every row-reading channel — add a new one there.
+- **Compile → bind → cache** (`src/engine/live/`, L2.2–L2.4): a validated spec compiles per dialect,
+  runs through `runBound`, cached under `orgKey()` with the record's `epoch` (Refresh bumps it) and
+  `maxCacheAgeSec`. There is **no JS fallback** (D7): correctness rests on the parity tests — the
+  compiler's DuckDB dialect against the extract path with `Object.is` (`test-liveParity`), then real
+  engines (L2.8).
+- **The executor** (`src/engine/live/liveQuery.ts`: `liveVizData`/`liveMetric`/`liveAnswer`, L2.3):
+  cache (an expired entry is kept as the stale fallback) → ONE warehouse call per question however
+  many ask, cancelled only when every asker hangs up → `warehouse()` (`liveWarehouse.ts`, the ONE
+  door every Live statement takes, `test-liveUsage` checks): `liveBudget` (`LIVE_MAX_CONCURRENT`;
+  L2.7: `LIVE_DAILY_QUERY_LIMIT` counted per statement in `live_usage` across pods, the `/p/` cache
+  floor `LIVE_MIN_CACHE_AGE_PUBLIC_SEC`) → `connectors/liveRun.ts` (SSRF guard, `costTag 'live'`,
+  `LIVE_QUERY_TIMEOUT_MS`, the row cap, the warehouse's billed bytes back to the count). A failure
+  is the stale answer (`asOf.stale`) or a typed error in a catalog sentence — warehouse text goes to
+  the log only (R-L6). `live:<dialect>` outcomes on `/metrics`. CI's warehouse is
+  `scripts/liveFakeConnector.ts` (DuckDB dialect; tests or `ORDINATE_TEST_LIVE_FAKE` only, never listed).
+- **The doors** (`src/ipc/liveRoute.ts`, `liveAnswers.ts`, L2.4): `vizDataFor`, `computeCardMetric` and
+  `computeCard` send a Live dataset to the executor FIRST — before the extract's answer cache, never
+  through `getDataset` — so every batch, tile, publish, export, alert and copilot fact that funnels into
+  them is live. A KPI failure THROWS `LiveFigureError` (an `ok:false` would read as "dataset gone");
+  a handler's catch keeps it typed with `liveCodeOf`, the route answers an uncaught one 409 with its
+  code. The live `asOf` is kept by `stampAsOf`. A new figure path goes through one of the three doors,
+  never `buildVizData` on hydrated rows (`test-liveRoute` spies on `getDataset`).
+- **An OLTP source is Live only by opt-in** (L3.2, D8): the PostgreSQL family declares `live.optIn`
+  (the "This is a read replica or a warehouse" checkbox); `isLiveOffered(def, values)` decides per
+  CONNECTION — create, `dataset:setMode`, `dataset:source` and every executor question ask it. The
+  catalog's `live` means "can be Live"; `liveOptIn` names the box. A Postgres/Redshift live session runs in UTC.
+- **Off for Live, in the web** (L2.6, `web/src/features/live/`): a screen that reads rows never asks its
+  channel for a Live dataset — it gates on `mode: 'live'` from the list or header it already has and
+  shows why, with **"Make a copy"** (`dataset:copyLive`: a NEW extract of the same selection through
+  the import door; the Live record is never written). A typed refusal from any figure renders through
+  `liveRefusalOf` + `<LiveRefusal>` (the server's sentence, never a retry).
+
 ### Workspace
 
 - **Sources** — `src/data/parse.ts` centralises parsing (strict `isFiniteNumber`, so `007`, zips
-  and >15-digit ids stay text). **`src/connectors/` is a REGISTRY of 38 read-only sources — one
+  and >15-digit ids stay text). **`src/connectors/` is a REGISTRY of 40 read-only sources — one
   connector is one entry, never a union type**; wire-compatible sources share a driver (`postgres.ts`
   11, `mysql.ts` 8, `http.ts` 7, `saas.ts` 6, `mssql.ts` 3, `oracle.ts` 2 **thin mode only, never
-  `initOracleClient`**, `url.ts` 1). **Rules: read-only; secrets never leave the server (replies
-  carry `secretSet` flags); EVERY query bounded server-side** (user SQL on its own line inside the
-  dialect's wrapper — a trailing comment once dropped the cap, F3/F3b); **every socket goes through
-  the SSRF guard** (`src/connectors/ssrf.ts`: check every resolved address, pin to it, re-check each
-  redirect; private ranges only via `SSRF_ALLOW`).
+  `initOracleClient`**, `url.ts` 1, `snowflake.ts` 1, `bigquery.ts` 1). **Rules: read-only; secrets
+  never leave the server (replies carry `secretSet` flags); EVERY query bounded server-side** (user
+  SQL on its own line inside the dialect's wrapper — a trailing comment once dropped the cap,
+  F3/F3b); **every socket goes through the SSRF guard** (`src/connectors/ssrf.ts`: check every
+  resolved address, pin to it, re-check each redirect; private ranges only via `SSRF_ALLOW`).
 - **No dataset origin reaches a browser** — no file path, keyed URL or SQL text; replies carry
   `{kind, label, refreshable}` (`dataset:source`). The server keeps no `file` origin (F1).
 - **Captures are a SOURCE**: upload a screenshot → `captureDataset:draft` → composer (preview cells
@@ -207,7 +254,9 @@ call. Every env var is in `docs/server/configuration.md`; `test-serverDocs` enfo
   `web/e2e/__screens__/` — look at them. `E2E_CHROMIUM` overrides the browser.
 - **CI** (`ci.yml`, every PR to `develop`): jobs `check`, `web`, `audit` (`scripts/audit-gate.ts`),
   `docker`, `helm`, plus `lint.yml`. The required check **`smoke (all shards)`** aggregates check,
-  web, docker, helm and audit. `e2e-nightly.yml` runs Firefox and WebKit.
+  web, docker, helm and audit. `e2e-nightly.yml` runs Firefox and WebKit. `warehouse-nightly.yml`
+  runs `scripts/test-warehouseLive.ts` against real Snowflake / BigQuery accounts from repo secrets
+  (it skips, green, without them — locally too).
 
 ```bash
 npm run server        # build:ts, then the server on 127.0.0.1:8080 (./data); serves web/dist. Needs

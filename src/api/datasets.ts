@@ -91,17 +91,19 @@ export const datasets = {
   // preload: invoke('dataset:refresh', { projectId, id }) — re-fetch from the origin, as a job.
   // The reply names the dataset by its header only (src/ipc/datasets.ts `headerOf`), never its origin.
   'dataset:refresh': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
-  // preload: invoke('dataset:update', { projectId, datasetId, columns | autoRefresh | watch }) —
+  // preload: invoke('dataset:update', { projectId, datasetId, columns | autoRefresh | watch | freshOnAsk }) —
   // rename / retype columns (indexed against the shown, prepared columns; resolved by name — src/data/columnEdit.ts), the refresh
-  // schedule and the anomaly watch. Same header-only reply.
+  // schedule, the anomaly watch and fresh on ask (L3.1: 1 min – 1 day, null = off; refused without
+  // incremental refresh — src/data/freshOnAskRule.ts). Same header-only reply.
   'dataset:update': rpc({
     access: 'write',
     input: z.strictObject({
       projectId: Uuid,
       datasetId: Uuid,
       columns: z.array(z.strictObject({ name: z.string().min(1).max(512), type: z.enum(['text', 'number', 'date']) })).max(5_000).optional(),
-      autoRefresh: z.enum(['hourly', 'daily', 'weekly', 'off']).nullable().optional(),
+      autoRefresh: z.enum(['hourly', 'daily', 'weekly', 'off', '5min', '15min']).nullable().optional(),
       watch: z.boolean().optional(),
+      freshOnAsk: z.strictObject({ maxStalenessSec: z.number().int().min(60).max(86_400) }).nullable().optional(),
     }),
     project: byProjectId,
   }),

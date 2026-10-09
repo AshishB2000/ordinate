@@ -22,6 +22,7 @@ import { liveFilters } from './filters/filterText';
 import { useColorEdits, useColorMap, usePersistDeal } from './format/colorMap';
 import { categoryType, suggestName, type Column } from './model';
 import { engineKind, engineName, switchEncoding } from '../analytics/grids/gridEncoding';
+import { chartFeature, LIVE_OFF_CHARTS } from '../live/offFeatures';
 
 export interface Initial {
   visualId?: string;
@@ -32,6 +33,8 @@ export interface Initial {
   overrides: Overrides;
   filters: FilterStep[];
   analytics: Record<string, unknown>[];
+  /** The dataset is Live (L2.6): pivot, cohort and funnel are off, and the stage says so instead of asking. */
+  live?: boolean;
 }
 
 /** `value`, settled for `ms`. */
@@ -79,9 +82,11 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
   const eff = useMemo(() => effective(enc, isDate), [enc, isDate]);
   const live = useMemo(() => liveFilters(filters), [filters]);
   const complete = !!eff.pivot || (!!eff.category && eff.values.length > 0);
+  // A grid type on a Live dataset is off in v1: nothing is asked, the stage explains (../live/offFeatures).
+  const offType = initial.live ? chartFeature(chartType) : null;
   const wanted = useMemo(
-    () => (complete ? { projectId, datasetId, encoding: eff, filters: live, ...(overlays.length ? { analytics: overlays } : {}), ...(asOf ? { asOf } : {}) } : undefined),
-    [complete, projectId, datasetId, eff, live, overlays, asOf],
+    () => (complete && !offType ? { projectId, datasetId, encoding: eff, filters: live, ...(overlays.length ? { analytics: overlays } : {}), ...(asOf ? { asOf } : {}) } : undefined),
+    [complete, offType, projectId, datasetId, eff, live, overlays, asOf],
   );
   const preview = usePreview(useSettled(wanted, 160));
   const reply = complete ? preview.data : undefined;
@@ -92,7 +97,8 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
   const fit = data ? facetControlsData(data) : undefined;
   const hasGeo = !!data?.geo;
   const shape = data?.geo ? (isDate ? 'time_series' : 'categorical') : (reply?.recommendedShape ?? 'unstructured');
-  const recommended = fit ? withGeoChartType(eligibleChartTypes(shape, countNumericSeries(fit), (fit.labels || []).length), data?.geo) : [];
+  const eligible = fit ? withGeoChartType(eligibleChartTypes(shape, countNumericSeries(fit), (fit.labels || []).length), data?.geo) : [];
+  const recommended = initial.live ? eligible.filter((t) => !LIVE_OFF_CHARTS.has(t)) : eligible;
   const current = fit && chartType && (recommended.includes(chartType) || chartCanRender(chartType, fit, hasGeo)) ? chartType : (recommended[0] ?? '');
   const engine = engineKind(current);
   const label = initial.name || (engine && engineName(engine, eff)) || suggestName(eff, current);
@@ -156,7 +162,7 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
   return {
     enc, setEnc, chartType, setChartType, overrides, patch, filters, setFilters, live, overlays, setOverlays,
     eff, isDate, complete, preview, reply, data, fit, hasGeo, recommended, current, label, pickType, save, explain,
-    drawn, scope, measures: measureNames(eff), visualId, datasetId, asOf, setAsOf,
+    drawn, scope, measures: measureNames(eff), visualId, datasetId, asOf, setAsOf, liveDataset: !!initial.live, offType,
   };
 }
 

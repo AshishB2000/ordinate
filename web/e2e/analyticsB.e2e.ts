@@ -261,6 +261,8 @@ e2e('events: empty state, new event, CSV import, a holiday calendar, delete', as
   await page.getByRole('button', { name: 'Delete v2 launch' }).click();
   await page.getByRole('dialog', { name: 'Delete "v2 launch"?' }).getByRole('button', { name: 'Delete' }).click();
   await page.getByText('Deleted "v2 launch".').waitFor();
+  // The toast can land before the list re-renders: wait for the row to go, then count.
+  await page.getByRole('row', { name: /v2 launch/ }).waitFor({ state: 'detached' });
   assert.equal(await page.getByRole('row', { name: /v2 launch/ }).count(), 0);
   report(s);
 });

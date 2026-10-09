@@ -32,6 +32,7 @@ import type { FilterStep } from '../data/transforms';
 import { vizDataFor } from '../ipc/visuals';
 import { withEvents } from '../ipc/events'; // r8:events
 import { computeCardMetric } from '../ipc/dashboards';
+import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { resolveMetric } from '../ipc/metrics';
 import { computeStatsTile } from '../ipc/stats';
 import { computeSummary } from '../ipc/summary';
@@ -394,18 +395,24 @@ export async function buildDashboard(
           if (ctx.checkCancelled) ctx.checkCancelled();
           const bound = resolveFilterParams(scope.filters, scope.params);
           let payload: any = null;
-          if (m.metricId) {
-            const r = await resolveMetric(projectId, m.metricId, { filters: bound.steps, params: scope.params });
-            if (r && r.ok) {
-              if (!m.label && r.name) title = r.name;
-              payload = { value: r.value, display: r.display };
+          try {
+            if (m.metricId) {
+              const r = await resolveMetric(projectId, m.metricId, { filters: bound.steps, params: scope.params });
+              if (r && r.ok) {
+                if (!m.label && r.name) title = r.name;
+                payload = { value: r.value, display: r.display };
+              }
             }
-          }
-          if (!payload) {
-            const r = await computeCardMetric(projectId, m.datasetId, { column: m.column, aggregation: m.aggregation }, bound.steps, scope.params);
-            payload = r.ok
-              ? { value: r.value, display: r.value == null ? '—' : formatValue(r.value, m.format || 'auto') }
-              : { error: 'Source removed' };
+            if (!payload) {
+              const r = await computeCardMetric(projectId, m.datasetId, { column: m.column, aggregation: m.aggregation }, bound.steps, scope.params);
+              payload = r.ok
+                ? { value: r.value, display: r.value == null ? '—' : formatValue(r.value, m.format || 'auto') }
+                : { error: 'Source removed' };
+            }
+          } catch (err) {
+            // A Live KPI its warehouse could not give (L2.4): this tile says so, as a chart tile does — the page still publishes.
+            if (!isLiveFigureError(err)) throw err;
+            payload = { error: err.message };
           }
           if (!payload.error) payload.caption = tileCaption({ kpis: [{ label: title, value: payload.value }] });
           base.variants.push(intern(store, payload));

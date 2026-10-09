@@ -14,6 +14,7 @@ import { Icon, type IconName } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { ProjectGate } from '../import/ProjectGate';
+import { LiveBanner } from '../live/LiveOff';
 import s from './Analytics.module.css';
 
 const WORKBENCHES: Array<{ kind: string; icon: IconName; name: string; blurb: string }> = [
@@ -83,8 +84,10 @@ function Hub({ projectId }: { projectId: string }) {
               options={datasets.map((d) => ({ value: d.id, label: d.name || 'Untitled dataset' }))}
               onValueChange={setPicked}
             />
-            {chosen && <p className={s.hubNote}>{`${formatNumber(chosen.rowCount)} rows · ${chosen.columnCount} columns`}</p>}
+            {chosen && <p className={s.hubNote}>{`${chosen.mode === 'live' ? 'Live' : `${formatNumber(chosen.rowCount)} rows`} · ${chosen.columnCount} columns`}</p>}
           </div>
+          {/* A Live dataset keeps its rows in the warehouse (L2.6): every door below needs a copy, and says so when opened. */}
+          {chosen?.mode === 'live' && <LiveBanner projectId={projectId} datasetId={chosen.id} name={chosen.name || 'This dataset'} />}
           <ul className={s.hubGrid} aria-label="Workbenches">
             {WORKBENCHES.map((w) => (
               <li key={w.kind} className={s.hubCard}>

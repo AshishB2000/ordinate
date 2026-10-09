@@ -23,9 +23,11 @@ browser ──HTTPS──▶ your ingress / ALB ──▶ ordinate pods (N, stat
 | Run it on GKE or AKS | [gke-aks.md](gke-aks.md): what differs, and what is untested |
 | Connect your IdP | [sso.md](sso.md): Okta, Entra ID, Google, Keycloak, Auth0, oauth2-proxy |
 | Look up a setting | [configuration.md](configuration.md): every environment variable the server reads |
+| Connect a cloud warehouse | [live-data.md](live-data.md): BigQuery's roles, read-only and what a query can cost |
 | Plan capacity | [sizing.md](sizing.md): measured numbers and starting points |
 | Protect the data | [backup-restore.md](backup-restore.md): Postgres, the bucket, the master key |
 | Move between versions | [upgrade.md](upgrade.md): releases, migrations, rollbacks |
+| Connect a warehouse | [live-data.md](live-data.md): Snowflake's read-only role, key pair and network |
 
 ## What you get from a release
 

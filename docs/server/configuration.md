@@ -74,10 +74,24 @@ from these tables, or when a table names one that no code reads.
 | `MAX_UPLOAD_MB` | Largest file `POST /api/files` accepts, in MB. Uploads stream to disk and are cut at the cap without buffering. | `200` | — | no |
 | `MAX_RPC_BODY_KB` | Cap on every JSON request body, in KB. Larger bodies get 413. | `1024` | — | no |
 | `RPC_TIMEOUT_SECONDS` | A call running longer gets 504, and its DuckDB queries are interrupted. | `60` | — | no |
-| `RATE_LIMIT_LOGIN_PER_MINUTE` | Sign-in starts plus IdP callbacks, per client IP. | `60` | — | no |
+| `RATE_LIMIT_LOGIN_PER_MINUTE` | Sign-in starts plus IdP callbacks, per client IP. Calls of [refresh URLs](live-data.md#refresh-url) get a bucket of their own of the same size. | `60` | — | no |
 | `RATE_LIMIT_RPC_PER_MINUTE` | RPC and `/api/mcp` calls per signed-in user, across all their tabs and tokens. | `1200` | — | no |
 | `RATE_LIMIT_RPC_IP_PER_MINUTE` | RPC and `/api/mcp` calls per client IP. | `3000` | — | no |
 | `SSRF_ALLOW` | Comma-separated CIDRs that connectors, URL sources and AI gateways may reach even though they are private, loopback or link-local. Everything else in those ranges, including cloud metadata, is refused before a socket opens. List your internal database subnets here. `0.0.0.0/0` turns the guard off. | unset: no private range allowed | a connector reads a database inside your VPC | no |
+
+## Warehouses and live data
+
+Bounds on what a connection may cost in the warehouse it reads. See [live-data.md](live-data.md).
+
+| Variable | Purpose | Default | Required when | Secret |
+|---|---|---|---|---|
+| `LIVE_MAX_BYTES_BILLED` | The most a single BigQuery query may bill, in bytes. Every query a BigQuery connection runs carries BigQuery's `maximumBytesBilled` = the lower of this and the connection's own "Max bytes billed per query", so a query over it fails before it runs, at no charge. A whole number of bytes, no unit. | `10737418240` (10 GiB) | — | no |
+| `LIVE_QUERY_TIMEOUT_MS` | How long one warehouse statement of a Live dataset may run, in milliseconds (100 – 3600000). Past it the statement is cancelled in the warehouse, and the figure is the last cached answer, labelled stale, or an error. A viewer who closes the tab cancels it too. | `60000` | — | no |
+| `LIVE_MAX_CONCURRENT` | Live warehouse statements in flight at once, per org, in each pod (1 – 1000). More wait their turn; one that is cancelled while waiting never reaches the warehouse. N pods allow N × this. | `4` | — | no |
+| `LIVE_DAILY_QUERY_LIMIT` | Warehouse statements Live datasets may send per org per UTC day (0 – 1000000000; `0` = no limit). Counted in Postgres across every pod, so N pods share one limit; without `DATABASE_URL` each pod counts its own. Past it, a figure is the last cached answer, labelled stale, or a refusal saying so, until 00:00 UTC; the org's admins get one notice the first time. Admin → Live usage shows the count per day and connection. | `10000` | — | no |
+| `LIVE_MIN_CACHE_AGE_PUBLIC_SEC` | The least age, in seconds, a Live figure has on a published `/p/` page, whatever the dataset's own cache age (0 – 2592000; `0` = no floor), so a public link cannot be used to run up the warehouse bill. Signed-in requests keep the dataset's own age. | `60` | — | no |
+| `REFRESH_HOOK_MIN_INTERVAL_SEC` | The least gap, in seconds, between two calls of one [refresh URL](live-data.md#refresh-url). A call inside it gets `429` with `Retry-After` and starts nothing. Kept in Postgres, so it holds across every pod. Each refresh URL has its own clock; per client IP, refresh URL calls also share a bucket the size of `RATE_LIMIT_LOGIN_PER_MINUTE`. | `60` | — | no |
+| `FRESH_ON_ASK_WAIT_MS` | How long a chart, KPI or answer on a stale copy with "Fresh on ask" waits for its incremental pull, in milliseconds. Landed in time: the answer has the new rows. Not yet: the answer comes from the copy marked "refreshing…", and open dashboards redraw when the rows land. `0` never waits. At most `30000`; keep it well under `RPC_TIMEOUT_SECONDS`. See [live-data.md](live-data.md#fresh-on-ask). | `5000` | — | no |
 
 ## DuckDB
 
@@ -101,6 +115,7 @@ Do not set these in a deployment. They are listed because server code reads them
 | `ORDINATE_DUCKDB_PIPELINE` | `1` lets an unforced prepare pipeline run on DuckDB. Since T4.2 no shipped code path calls it unforced, so it has no effect on the server. | unset | never | no |
 | `ORDINATE_TODAY` | Pins "today" (`YYYY-MM-DD`) for relative-date filters. Smoke tests use it. | unset: the server's local date | never | no |
 | `ORDINATE_SAAS_FIXTURE_BASE` | Points SaaS connectors at a loopback fixture server (`http://127.0.0.1:<port>` only) for tests. | unset | never | no |
+| `ORDINATE_TEST_LIVE_FAKE` | `1` registers the test harness's fake warehouse (DuckDB, `scripts/liveFakeConnector.ts`) so the e2e can drive a Live dataset. Never offered in the connection picker. Refused with `ORDINATE_ENV=prod`, and the image does not contain it. | unset | never | no |
 
 ## Read by libraries, not by Ordinate
 

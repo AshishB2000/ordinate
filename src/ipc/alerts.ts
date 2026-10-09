@@ -26,6 +26,7 @@ import * as execConfig from '../app/execConfig';
 import { askCopilot } from '../ai/analyze';
 import { buildFacts, guardAnswer } from './copilot';
 import { serverDataDir } from '../server/context';
+import { liveCodeOf } from './liveRoute';
 
 // ── Delivery ─────────────────────────────────────────────────────────────────
 
@@ -167,7 +168,7 @@ export function register(): void {
       if (!res.ok) return { ok: false, error: 'That rule is not complete.' };
       return res;
     } catch (err: any) {
-      return { ok: false, error: err?.message || 'Could not test the rule' };
+      return { ok: false, error: err?.message || 'Could not test the rule', ...liveCodeOf(err) };
     }
   });
 

@@ -33,7 +33,10 @@ import { runForDataset } from '../engine/sqlDatasets';
 import { scanDataset } from '../app/privacyStore';
 import { getNotebook } from '../analysis/notebook/store';
 import { cellTable } from '../analysis/notebook/run';
-import { serverDataDir } from '../server/context';
+import { orgKey, serverDataDir } from '../server/context';
+import { isLive } from './liveDataset';
+import { liveRefusedMessage } from './liveMessages';
+import { freshOnAskSkippedNotIncremental } from './freshOnAskMessages';
 
 /**
  * Row ceiling for a refreshed table. Deliberately the same 1,000,000 the import
@@ -56,8 +59,21 @@ export interface RefreshOk {
 export interface RefreshErr {
   ok: false;
   error: string;
+  /** Nothing ran: a refresh of this dataset was already running on another pod (src/data/refreshJob.ts, L0.4). */
+  alreadyRunning?: true;
+  /** Nothing ran: an incremental-only refresh found a full one due (RefreshMode). The markers stay as they were. */
+  skipped?: true;
 }
 export type RefreshResult = RefreshOk | RefreshErr;
+
+/**
+ * What a refresh may do. 'any': whatever the source and its settings call for.
+ * 'incremental': ONLY an incremental run — the pull fresh on ask starts
+ * (src/data/freshOnAsk.ts, L3.1). A run that would be full, or a source with
+ * no incremental refresh, is SKIPPED: nothing fetched, nothing written, no
+ * marker moved, `{ ok: false, skipped: true }`.
+ */
+export type RefreshMode = 'any' | 'incremental';
 
 interface Walk {
   /** Datasets already visited on THIS refresh, so a combine cycle terminates. */
@@ -67,6 +83,11 @@ interface Walk {
 
 function fail(error: string): RefreshErr {
   return { ok: false, error };
+}
+
+/** An incremental-only refresh (RefreshMode) of a dataset that cannot refresh incrementally. */
+function skipped(): RefreshErr {
+  return { ok: false, error: freshOnAskSkippedNotIncremental(), skipped: true };
 }
 
 /**
@@ -80,11 +101,15 @@ export async function refreshDataset(
   projectId: string,
   id: string,
   walk: Walk = { visited: new Set(), depth: 0 },
+  mode: RefreshMode = 'any',
 ): Promise<RefreshResult> {
   // Cheap metadata read — the origin and the steps are all this needs to decide
   // what to do, and hydrating a million rows to find out would be absurd.
   const meta = await datasets.getDatasetMeta(projectId, id);
   if (!meta) return fail('Dataset not found');
+  // A Live dataset holds no rows to re-fetch; its refresh is an epoch bump
+  // (src/ipc/liveDatasets.ts refreshLive), done by the doors a person uses.
+  if (isLive(meta)) return fail(liveRefusedMessage());
   const origin = meta.origin;
   if (!origin) {
     return fail(`"${meta.name}" has no re-fetchable source. Re-import it to make it refreshable.`);
@@ -99,7 +124,15 @@ export async function refreshDataset(
     return fail(`"${meta.name}" is nested more than ${MAX_COMBINE_DEPTH} combines deep, so it was left unchanged.`);
   }
   walk.visited.add(id);
-  return serialized(projectId + '/' + id, () => refreshLocked(projectId, id, meta.name, origin, walk));
+  return serialized(flightKey(projectId, id), () => refreshLocked(projectId, id, meta.name, origin, walk, mode));
+}
+
+/** Per org: ids repeat across orgs after an import, and one org's refresh must not read as another's. */
+const flightKey = (projectId: string, id: string): string => orgKey(projectId + '/' + id);
+
+/** Is a refresh of this dataset running (or chained) in THIS process right now? */
+export function refreshInFlight(projectId: string, id: string): boolean {
+  return inFlight.has(flightKey(projectId, id));
 }
 
 /**
@@ -124,16 +157,20 @@ async function refreshLocked(
   name: string,
   origin: DatasetOrigin,
   walk: Walk,
+  mode: RefreshMode,
 ): Promise<RefreshResult> {
   const warnings: string[] = [];
   let result: RefreshResult;
   try {
-    result = await runOrigin(projectId, id, name, origin, walk, warnings);
+    result = await runOrigin(projectId, id, name, origin, walk, warnings, mode);
   } catch (err: any) {
     // Belt and braces: every branch already returns a typed error, so reaching
     // here means an unexpected throw — which must still not touch the table.
     result = fail(err?.message || 'Refresh failed');
   }
+  // Skipped (an incremental-only run met a full one due): nothing was tried,
+  // so the dataset must not read as a failed refresh.
+  if (!result.ok && result.skipped) return result;
 
   // The markers are written LAST and separately, so the stored table is either
   // the old one (on failure) or the new one (on success) — never a mix.
@@ -157,7 +194,10 @@ async function runOrigin(
   origin: DatasetOrigin,
   walk: Walk,
   warnings: string[],
+  mode: RefreshMode,
 ): Promise<RefreshResult> {
+  // Only a connection can refresh incrementally (sanitizeIncremental).
+  if (mode === 'incremental' && origin.kind !== 'connection') return skipped();
   switch (origin.kind) {
     case 'file':
       return refreshFromFile(projectId, id, origin, warnings);
@@ -166,8 +206,9 @@ async function runOrigin(
     case 'connection': {
       // Opted in to incremental refresh: only rows past the high-water mark
       // (src/data/incrementalRefresh.ts). Null means it has not.
-      const incremental = await refreshIncremental(projectId, id, origin, warnings);
+      const incremental = await refreshIncremental(projectId, id, origin, warnings, mode);
       if (incremental) return incremental;
+      if (mode === 'incremental') return skipped(); // not opted in: the full refresh below is not ours to run
       // Delegated whole: the secret is resolved in main by the connections
       // layer, and the connection's own lastStatus/lastRefreshedAt still update.
       const res = await refreshConnectionInto(projectId, origin.connId, id, warnings);

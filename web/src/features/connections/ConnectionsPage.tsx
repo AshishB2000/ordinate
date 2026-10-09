@@ -1,5 +1,5 @@
 // /connections/:projectId — Connect data (legacy connections.ts + connNew.ts +
-// connRun.ts): the project's saved connections above, the 35-source picker
+// connRun.ts): the project's saved connections above, the 40-source picker
 // below, and the chosen source's form in its place. `?source=<id>` lands
 // straight on one source's form (the desktop's sidebar shortcuts), and is
 // what "Change source" clears. /connections alone shows the first project.
@@ -63,10 +63,12 @@ function Connect({ projectId, projects }: { projectId: string; projects: { id: s
   const choose = (id: string | null) => setParams(id ? { source: id } : {}, { replace: false });
   const logoMap = logos.data ?? {};
 
-  function saved(c: Connection) {
+  function saved(c: Connection, warnings: string[]) {
     if (chosen) setDrafts(({ [chosen.id]: _gone, ...rest }) => rest);
     refreshLists();
     toast(`Connected “${c.name}”.`, { kind: 'success' });
+    // Also shown, to stay, beside the rail's test result in the workbench.
+    for (const w of warnings) toast(w, { kind: 'info' });
     // Saving a connection is never the goal — querying it is.
     void navigate(`/connections/${projectId}/${c.id}`);
   }

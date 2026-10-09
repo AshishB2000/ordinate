@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { useDatasets, type DatasetSummary } from '../../api/datasets';
+import { useDatasets, type AutoRefreshEvery, type DatasetSummary } from '../../api/datasets';
 import { toastMovedToTrash } from '../projects/trashToast';
 import { Button, buttonClass, IconButton } from '../../ui/Button';
 import { Select } from '../../ui/Select';
@@ -14,12 +14,13 @@ import { SkeletonRows } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { useTags, useWrite } from './api';
-import { freshness, fromControl, NOT_REFRESHABLE, rowsText, SCHEDULES, sourceLabel } from './format';
+import { freshness, fromControl, NOT_REFRESHABLE, rowsOf, SCHEDULES, sourceLabel } from './format';
+import { BehindBadge, cadenceOptions } from './cadence';
 import { TagChips, TagFilterBar, tagsOf, useActiveTag } from './tags';
 import s from './Data.module.css';
 
 type Outcome = { busy?: boolean; message?: string; error?: boolean };
-type RefreshReply = { ok: boolean; error?: string; warnings?: string[] };
+type RefreshReply = { ok: boolean; error?: string; warnings?: string[]; alreadyRunning?: boolean; live?: { epoch: number } };
 
 /** The quality dot: FAIL rules failing in the latest run (a count the server made). */
 export function QualityDot({ n }: { n: number | undefined }) {
@@ -31,16 +32,16 @@ export function QualityDot({ n }: { n: number | undefined }) {
 /** The schedule picker: one control in the list and on the dataset page, one channel. */
 export function SchedulePicker({ projectId, d }: { projectId: string; d: DatasetSummary }) {
   const set = useWrite('dataset:update', ['dataset:list'], { onDone: (r) => r.ok === false && toast('Could not change the schedule.', { kind: 'error' }) });
-  if (!d.originKind) return null;
+  if (!d.originKind || d.mode === 'live') return null; // a Live dataset's cache age is its schedule
   return (
     <Select
       size="sm"
       aria-label={`Auto-refresh ${d.name}`}
       className={s.schedule}
       value={d.autoRefresh?.every ?? 'off'}
-      options={SCHEDULES}
+      options={cadenceOptions(SCHEDULES, !!d.incrementalOn)}
       disabled={set.isPending}
-      onValueChange={(v) => set.mutate({ projectId, datasetId: d.id, autoRefresh: v === 'off' ? null : (v as 'hourly' | 'daily' | 'weekly') })}
+      onValueChange={(v) => set.mutate({ projectId, datasetId: d.id, autoRefresh: v === 'off' ? null : (v as AutoRefreshEvery) })}
     />
   );
 }
@@ -96,9 +97,11 @@ export function useRefresh(projectId: string) {
       r = { ok: false, error: 'Could not refresh this dataset.' };
     }
     // Warnings are not a failure — the data landed, but a step no longer fits it.
-    const message = r.ok ? (r.warnings ?? []).join(' · ') : r.error || 'Could not refresh this dataset.';
-    setState((m) => ({ ...m, [id]: { message, error: !r.ok } }));
-    return r.ok;
+    // Nor is "already being refreshed" (another server got there first).
+    // A Live dataset fetches nothing: its refresh resets the cache (L2.6), and says so.
+    const message = r.ok ? (r.live ? 'Cache reset — the next figure asks the warehouse.' : (r.warnings ?? []).join(' · ')) : r.error || 'Could not refresh this dataset.';
+    setState((m) => ({ ...m, [id]: { message, error: !r.ok && !r.alreadyRunning } }));
+    return r.ok || r.alreadyRunning === true;
   };
   return { state, run };
 }
@@ -125,7 +128,7 @@ function Row({ projectId, d, outcome, onRefresh, onDelete, tags }: {
           <TagChips tags={tags} />
         </span>
       </td>
-      <td className={s.num}>{rowsText(d.rowCount)}</td>
+      <td className={s.num}>{rowsOf(d)}</td>
       <td>
         <span className={s.badge}>{sourceLabel(d.sourceKind)}</span>
       </td>
@@ -134,6 +137,7 @@ function Row({ projectId, d, outcome, onRefresh, onDelete, tags }: {
           <span className={s.freshLine}>
             {d.lastRefreshStatus === 'error' && <span className={s.failDot} role="img" aria-label="Last refresh failed" />}
             <span>{freshness(d)}</span>
+            <BehindBadge behind={d.behindSchedule} />
           </span>
           <span className={s.freshTools}>
             <SchedulePicker projectId={projectId} d={d} />
@@ -156,9 +160,12 @@ function Row({ projectId, d, outcome, onRefresh, onDelete, tags }: {
           <Link className={buttonClass('secondary', 'sm', s.hoverAction)} to={`/visuals?project=${projectId}&datasetId=${d.id}`} title="Build a chart from this dataset">
             New visual
           </Link>
-          <Link className={buttonClass('secondary', 'sm', s.hoverAction)} to={`/data/import?project=${projectId}&source=combine`} title="Combine this dataset with another">
-            Combine
-          </Link>
+          {/* Joins need the rows here: a Live dataset is combined through a copy (L2.6). */}
+          {d.mode !== 'live' && (
+            <Link className={buttonClass('secondary', 'sm', s.hoverAction)} to={`/data/import?project=${projectId}&source=combine`} title="Combine this dataset with another">
+              Combine
+            </Link>
+          )}
           <IconButton icon="trash" size="sm" label={`Move ${d.name} to the Trash`} onClick={onDelete} />
         </span>
       </td>

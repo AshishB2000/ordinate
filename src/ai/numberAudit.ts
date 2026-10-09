@@ -93,6 +93,15 @@ const DATE_SHAPES: RegExp[] = [
   /\d{1,2}[-/]\d{1,2}[-/]\d{4}/g, // 03/05/2024
   /\d{4}-Q[1-4]/gi, // 2024-Q1
   /Q[1-4][-\s]\d{4}/gi, // Q1 2024
+  // A clock time and a month-and-day: the facts state when the data is from
+  // ("Data as of: Oct 9, 2026, 1:00 AM UTC", ./answerFacts), and a narration
+  // that repeats it must not be accused of inventing a 1 and a 9. Blind spot:
+  // a figure written as h:mm, or a day number 1–31 straight after a month name
+  // and before a comma, "at", a year or the end of a sentence ("in May 12.")
+  // — never a figure in practice. "March 12 orders" is still audited.
+  /(?<![\d.])\d{1,2}(?::\d{2}){1,2}(?!\d)(?:\s?[ap]\.?m\b\.?)?/gi, // 1:00, 13:05:59, 1:00 AM, 9:30p.m.
+  /(?<![\d.])\d{1,2}\s?[ap]\.?m\b\.?/gi, // 1 AM, 11pm
+  /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(?:[12]\d|3[01]|0?[1-9])(?:st|nd|rd|th)?(?=,|\s+at\b|\s+\d{4}\b|\s*[.;:!?)](?!\d)|\s*$)/gi, // Oct 9, 2026 · October 9 at …
   // 2024-03 (month grain). Last, so the full dates above win. The lookahead
   // rejects only a further DIGIT — a trailing '.' is a sentence ending far more
   // often than a decimal, and masking one character too many is harmless while

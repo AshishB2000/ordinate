@@ -44,6 +44,7 @@ import * as parquetStore from '../engine/parquetStore';
 import { OTHER_LABEL } from '../analysis/categoryKey';
 import type { VizEncoding } from '../analysis/visuals';
 import { engineColumns, isEngineEncoding } from '../analysis/engineViz';
+import { withoutSamples } from '../data/liveProfile';
 
 export type SensitiveLevel = 'personal' | 'financial';
 export const HIDDEN_BY_POLICY = 'Hidden by the share policy';
@@ -352,6 +353,14 @@ export async function applyToBundle(projectId: string, bytes: Buffer): Promise<B
       const id = m[1];
       let record: Record<string, unknown>;
       try { record = JSON.parse(e.data.toString('utf8')); } catch (_) { continue; }
+      if (record.mode === 'live') {
+        // Schema only — no stored rows to mask — but its profile keeps sample values (L2.5): a marked column's go.
+        if (withoutSamples(record.live, await withheldColumns(projectId, id))) {
+          e.data = Buffer.from(JSON.stringify(record, null, 2), 'utf8');
+          changed = true;
+        }
+        continue;
+      }
       const sens = await sensitiveColumns(projectId, id);
       const steps = Array.isArray(record.steps) ? record.steps : [];
       if (!sens.size && !steps.some(isMaskStep)) continue;

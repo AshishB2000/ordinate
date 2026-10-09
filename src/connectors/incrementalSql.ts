@@ -20,7 +20,7 @@
 //     after fetch.
 //
 // Values are LITERALS, not bound parameters: `ConnectorDef.run(ctx, sql)` takes
-// one statement and no binds, and widening that contract across 35 sources for
+// one statement and no binds, and widening that contract across 40 sources for
 // one number is not worth it. The literal is safe by construction — a finite
 // number printed by JS, or an ISO timestamp printed by Date — never user text.
 // Identifiers are quoted with each dialect's own doubling.
@@ -40,6 +40,8 @@ interface Dialect {
 }
 
 const dq = (n: string): string => '"' + n.replace(/"/g, '""') + '"';
+// BigQuery escapes inside a backtick identifier with a backslash, not by doubling.
+const bq = (n: string): string => '`' + n.replace(/[\\`]/g, (c) => '\\' + c).replace(/\n/g, '\\n').replace(/\r/g, '\\r') + '`';
 const plain = (col: string, _t: 'number' | 'date', lit: string): string => `${col} >= ${lit}`;
 const ansiTs = (s: string): string => `TIMESTAMP '${s.replace('T', ' ')}'`;
 
@@ -48,6 +50,12 @@ const DIALECTS: Readonly<Record<string, Dialect>> = {
   oracle: { col: dq, ts: ansiTs, cmp: plain },
   mysql: { col: (n) => '`' + n.replace(/`/g, '``') + '`', ts: ansiTs, cmp: plain },
   mssql: { col: (n) => '[' + n.replace(/]/g, ']]') + ']', ts: (s) => `CAST('${s}' AS DATETIME2)`, cmp: plain },
+  // BigQuery will not compare a DATE or DATETIME column with a TIMESTAMP (no
+  // implicit coercion), and DATE is the usual partition column. An untyped
+  // string literal IS coerced to the column's own type — DATE, DATETIME or
+  // TIMESTAMP alike — so the cursor is the literal's day: one more day of
+  // superset, and the bare column keeps partition pruning.
+  bigquery: { col: bq, ts: (s) => `'${s.slice(0, 10)}'`, cmp: plain },
   duckdb: {
     col: dq,
     ts: ansiTs,
@@ -56,6 +64,9 @@ const DIALECTS: Readonly<Record<string, Dialect>> = {
       return `(${cast} IS NULL OR ${cast} >= ${lit})`;
     },
   },
+  // A zone-less literal read as TIMESTAMP_TZ takes the session zone, which
+  // snowflake.ts pins to UTC on every statement — the instant the mark means.
+  snowflake: { col: dq, ts: (s) => `'${s}'::timestamp_tz`, cmp: plain },
 };
 
 /** The families that can take a pushed predicate. */

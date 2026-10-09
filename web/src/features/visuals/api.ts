@@ -6,6 +6,7 @@
 
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc, RpcError } from '../../api/client';
+import { replyError } from '../live/refusal';
 import type { VizData } from '../../api/visuals';
 import type { Overrides } from '../../charts/types';
 
@@ -195,7 +196,8 @@ export function usePreview(req: Parameters<typeof rpcPreview>[0] | undefined) {
 async function rpcPreview(req: { projectId: string; datasetId: string; encoding: Encoding; filters: FilterStep[]; analytics?: Record<string, unknown>[]; asOf?: string }) {
   // "As of" a kept snapshot reads in full through `visual:data` (src/data/asOf.ts); Latest previews (T2.11).
   const r = (await rpc(req.asOf ? 'visual:data' : 'visual:preview', req)) as ({ ok: true } & Preview) | Fail;
-  if (!r.ok) throw new Error(r.error || 'Could not compute the visual.');
+  // An "off for Live" refusal keeps its code, so the stage can offer a copy (../live/refusal.ts).
+  if (!r.ok) throw replyError(r, 'Could not compute the visual.');
   return r;
 }
 

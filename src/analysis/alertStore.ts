@@ -40,6 +40,8 @@ import { distinctAllJs, distinctAllResident } from '../engine/distinctAll';
 import { periodPlan, orderPeriods } from './insightsAgg';
 import type { FilterStep } from '../data/transforms';
 import * as recordFs from '../app/recordFs';
+import { isLiveDatasetError } from '../data/liveDataset';
+import { isLiveFigureError } from '../engine/live/liveFigureError';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -328,7 +330,8 @@ async function distinctValues(projectId: string, datasetId: string, column: stri
     const ds = await datasets.getDataset(projectId, datasetId);
     if (!ds) return null;
     return distinctAllJs(ds.columns, ds.rows, column);
-  } catch (_) {
+  } catch (err) {
+    if (isLiveDatasetError(err)) throw err; // D6: "no periods" would be a silent answer for a Live dataset
     return null; // a rule that cannot read its period column simply does not fire
   }
 }
@@ -352,7 +355,8 @@ async function anomaliesFor(projectId: string, rule: AlertRule) {
     const ds = await datasets.getDataset(projectId, rule.datasetId);
     if (!ds) return [];
     return detectAnomalies(ds.columns, ds.rows, opts);
-  } catch (_) {
+  } catch (err) {
+    if (isLiveDatasetError(err)) throw err;
     return [];
   }
 }
@@ -382,7 +386,16 @@ export async function evaluateProject(
     // A disabled rule is not evaluated at all — not evaluated and then dropped.
     // Its history would otherwise keep growing while it was supposed to be off.
     if (!rule.enabled) continue;
-    const { value, previous } = await metricFor(projectId, rule);
+    let read: { value: number | null; previous: number | null };
+    try {
+      read = await metricFor(projectId, rule);
+    } catch (err) {
+      // A Live rule whose warehouse did not answer (L2.4) is not evaluated this
+      // time — its state untouched, never "the value was null" — and the others still are.
+      if (isLiveFigureError(err)) continue;
+      throw err;
+    }
+    const { value, previous } = read;
     const res = alerts.evaluateRule({
       rule,
       value,

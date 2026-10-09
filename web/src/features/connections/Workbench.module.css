@@ -318,6 +318,15 @@
 .gap {
   flex: 1 1 var(--sp-8);
 }
+.estimate {
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+.estimateMuted {
+  color: var(--muted);
+}
 .limitLabel {
   font-size: var(--t-12);
   color: var(--muted);
@@ -416,6 +425,9 @@
 .saveName {
   width: 200px;
 }
+.saveMode {
+  width: 150px;
+}
 .grid {
   flex: 1;
   min-height: 200px;
@@ -486,6 +498,25 @@
   color: var(--error);
   overflow-wrap: anywhere;
 }
+.testWarn {
+  margin: 0;
+  display: flex;
+  gap: var(--sp-8);
+  align-items: flex-start;
+  padding: var(--sp-8);
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+  color: var(--text-strong);
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  border-radius: var(--r-sm);
+  overflow-wrap: anywhere;
+}
+.testWarn > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--warn);
+}
 .dsList {
   list-style: none;
   margin: 0;
@@ -505,6 +536,10 @@
 }
 .dsError {
   border-color: var(--error);
+}
+/* "Refresh URL" (live data L0.5): a quiet link-like action under the schedule. */
+.dsHook {
+  align-self: flex-start;
 }
 .dsTop {
   display: flex;
@@ -556,4 +591,13 @@
   .treePane {
     max-height: 220px;
   }
+}
+
+/* ── The Live opt-in (L3.2): a switch under the connection's facts ─────── */
+.optIn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--border-hairline);
 }

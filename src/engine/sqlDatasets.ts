@@ -58,6 +58,7 @@ import { bindSqlParams, sanitizeSqlParams } from '../analysis/params';
 import type { SqlBindValue, SqlParam } from '../analysis/params';
 import { assignViewNames, extractDeps, slugify } from './sqlNames';
 import { readOnlyError } from './sqlGate';
+import { requireExtract } from '../data/liveDataset';
 // One API surface for callers and the self-check.
 export { assignViewNames, extractDeps, slugify } from './sqlNames';
 export { readOnlyError } from './sqlGate';
@@ -245,6 +246,7 @@ async function compile(projectId: unknown, sql: unknown, params: unknown, views:
     const e = cat.find((x) => x.id === id) as CatalogEntry;
     const src = await datasets.residentSource(projectId, id);
     if (!src) {
+      requireExtract(await datasets.getDatasetMeta(projectId, id)); // a Live dataset: refused, typed — never an empty table
       return { error: `"${e.name}" can't be queried — it was saved before datasets were stored as Parquet. Import it again (or re-save it), then run this.` };
     }
     const primary = e.alias ?? e.slug;

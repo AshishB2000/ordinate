@@ -69,11 +69,21 @@ export interface ConnectorRows {
   rows: (string | number | boolean | null)[][];
   /** True when `rowLimit` clipped the result. Report it; never trim silently. */
   truncated: boolean;
+  /**
+   * The bytes the WAREHOUSE says this statement billed (live data L2.7: Admin →
+   * Live usage). Set only from the warehouse's own reply — BigQuery's
+   * `totalBytesBilled` (else `totalBytesProcessed`) — never estimated; absent
+   * where it reports none (Snowflake's SQL API, the SQL drivers).
+   */
+  bytes?: number;
 }
 
 export interface ConnectorTables {
   ok: true;
   tables: ConnectorTable[];
+  /** User-facing notes a connection test should show beside "OK" (a Snowflake
+   *  administrator role, say). Already through the catalog (`t()`); no secret. */
+  warnings?: string[];
 }
 
 /** One column as the SOURCE's own catalog describes it. Richer than
@@ -118,6 +128,65 @@ export interface ConnectorContext {
    * `pinned.host`), so DNS answering differently at connect time changes nothing.
    */
   pinned?: PinnedHost;
+  /**
+   * Live data (docs/live-data/00-plan.md): what this query is for — 'live' or
+   * 'extract'. Tagged on the warehouse's own query log (Snowflake QUERY_TAG,
+   * BigQuery job labels) so the bill can be read back per purpose.
+   */
+  costTag?: 'live' | 'extract';
+  /** BigQuery `maximumBytesBilled` ceiling for this query; ignored elsewhere. */
+  maxBytes?: number;
+  /** Fired when the caller gives up (the client hung up, a timeout). A connector
+   *  that can cancel server-side (Snowflake, BigQuery) does so on it. */
+  signal?: AbortSignal;
+}
+
+/**
+ * A warehouse SQL dialect the live compiler targets (plan D2). `duckdb` is the
+ * TEST BENCH: only the test harness's fake warehouse declares it
+ * (scripts/liveFakeConnector.ts); no shipped connector may (test-liveQuery).
+ */
+export type LiveDialectId = 'snowflake' | 'bigquery' | 'redshift' | 'databricks' | 'clickhouse' | 'duckdb';
+
+/**
+ * One bind parameter of a compiled live query (plan D4: values are NEVER
+ * inlined into SQL text). The compiler never reuses a parameter: `params[i]`
+ * is the (i+1)-th placeholder in the statement's text order, named `p<i>`.
+ * Placeholder spelling is the dialect's own:
+ *   snowflake `?` · bigquery `@p0` · databricks `:p0` · clickhouse `{p0:Type}`
+ *   · redshift `$1`.
+ * `date` and `timestamp` values are ISO-8601 strings (UTC for timestamps).
+ */
+export interface LiveParam {
+  name: string;
+  type: 'text' | 'number' | 'boolean' | 'date' | 'timestamp';
+  value: string | number | boolean | null;
+}
+
+/** A connector's live capability: run one compiled, parameterised statement. */
+export interface ConnectorLive {
+  dialect: LiveDialectId;
+  /** Run `sql` with `params` bound, under ctx's row cap, timeout and signal. */
+  runBound(ctx: ConnectorContext, sql: string, params: LiveParam[]): Promise<ConnectorRows | ConnectorError>;
+  /** A free dry run's byte estimate, where the warehouse offers one (BigQuery). */
+  estimate?(ctx: ConnectorContext, sql: string, params: LiveParam[]): Promise<{ ok: true; bytes: number } | ConnectorError>;
+  /**
+   * The key of a CHECKBOX in this connector's `fields` that must be ticked on a
+   * connection before Live is offered for it (plan D8, L3.2). Absent: every
+   * connection may be Live (a warehouse). Present: the connector CAN be Live,
+   * and each connection decides — an OLTP database (PostgreSQL) stays a copy
+   * unless the person says it is "a read replica or a warehouse", because a
+   * live question runs on every view and must not land on a primary.
+   *
+   * Data, not a function, on purpose: the catalog sends the key, so the web
+   * applies the same rule to a connection's stored values without a round trip
+   * and renders the field like any other; the server is the one that enforces
+   * it (`isLiveOffered` in ./index — the create flow, `dataset:setMode` and the
+   * executor all ask it). Still one registry entry per connector. A key that
+   * names no non-secret checkbox makes the connector not Live at all (fail
+   * closed), so a typo can never turn the guard off.
+   */
+  optIn?: string;
 }
 
 export interface ConnectorDef {
@@ -161,6 +230,12 @@ export interface ConnectorDef {
    * value or whitelist it — it arrives from a renderer.
    */
   describeTable?(ctx: ConnectorContext, table: string): Promise<ConnectorSchema | ConnectorError>;
+  /**
+   * OPTIONAL. Present only on a connector that can answer a Live dataset's
+   * questions itself (plan D2). Still one registry entry per connector — this
+   * is a property, never a second kind of connector.
+   */
+  live?: ConnectorLive;
 }
 
 /** Redact anything that looks like a credential before it reaches a renderer.

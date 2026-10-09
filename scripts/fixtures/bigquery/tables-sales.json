@@ -1,0 +1,9 @@
+{
+  "kind": "bigquery#tableList",
+  "etag": "x5bIu0bUoQiKX5b5tA2kCg==",
+  "tables": [
+    { "kind": "bigquery#table", "id": "acme-analytics:sales.orders", "tableReference": { "projectId": "acme-analytics", "datasetId": "sales", "tableId": "orders" }, "type": "TABLE", "creationTime": "1704067200000" },
+    { "kind": "bigquery#table", "id": "acme-analytics:sales.orders_by_day", "tableReference": { "projectId": "acme-analytics", "datasetId": "sales", "tableId": "orders_by_day" }, "type": "VIEW", "view": { "useLegacySql": false }, "creationTime": "1704067200000" }
+  ],
+  "totalItems": 2
+}

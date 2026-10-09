@@ -42,8 +42,14 @@ import { versionRecordOf } from '../data/inputTable/store';
 import * as trash from '../app/trash';
 import type { ParsedColumn } from '../data/parse';
 import { redactOriginText } from '../data/datasetOrigin';
+import { needsIncremental } from '../data/refreshCadence';
+import { fastCadenceNeedsIncremental } from '../data/refreshMessages';
+import { setFreshOnAsk } from '../data/freshOnAskRecord';
 import { serverDataDir } from '../server/context';
 import { filledPcts } from '../data/profileView';
+import { refreshLive } from './liveDatasets';
+import { isLive, isLiveDatasetError } from '../data/liveDataset';
+import { liveDistinct } from './liveProfile';
 
 /**
  * A dataset as a grid draws it: name, row count and typed columns — never the
@@ -332,7 +338,8 @@ export function register() {
   // a URL with a key in it or a SQL statement, none of which a grid draws.
   ipcMain.handle('dataset:columns', async (_e, { projectId, id }: any = {}) => {
     const meta = await datasets.getDatasetMeta(projectId, id);
-    return meta ? headerOf(meta) : null;
+    // `mode: 'live'` so a screen knows before it asks for rows a Live dataset does not keep (L2.1).
+    return meta ? { ...headerOf(meta), ...(isLive(meta) ? { mode: 'live' as const } : {}) } : null;
   });
 
   // A delete is a move to the Trash (src/app/trash.ts), taking the dataset's
@@ -348,6 +355,8 @@ export function register() {
   // the write goes through the async Parquet path, reporting to the job.
   ipcMain.handle('dataset:refresh', async (_e, { projectId, id }: any = {}) => {
     try {
+      const live = await refreshLive(projectId, id); // Live: reset the cache (epoch), fetch nothing
+      if (live) return live;
       const res = await refreshAsJob(projectId, id);
       if (!res.ok) {
         // The reason can quote the URL or the server path it failed on.
@@ -446,6 +455,9 @@ export function register() {
       // say "showing the first 200 of 4,812" instead of implying 200 is all.
       const req = { limit: cap, search: typeof search === 'string' ? search : '' };
       if (!col) return { values: [], total: 0 };
+      // A profiled Live dataset answers from its sample (L2.5); an unprofiled one still refuses below.
+      const live = await liveDistinct(projectId, datasetId, col, req);
+      if (live) return live;
 
       const src = await datasets.residentSource(projectId, datasetId);
       if (src) {
@@ -462,7 +474,8 @@ export function register() {
       const ds = await datasets.getDataset(projectId, datasetId);
       if (!ds) return { values: [], total: 0 };
       return distinctValuesPageJs(ds.columns, ds.rows, col, req);
-    } catch {
+    } catch (err) {
+      if (isLiveDatasetError(err)) throw err; // D6: "no values" would be a silent answer for a Live dataset
       return { values: [], total: 0 };
     }
   });
@@ -522,11 +535,20 @@ export function register() {
   // The schedule rides on THIS channel rather than getting one of its own: it is
   // a field of the same record, and a second channel would be a second place to
   // validate a projectId and a datasetId.
-  ipcMain.handle('dataset:update', async (_e, { projectId, datasetId, columns, autoRefresh, watch }: any = {}) => {
+  ipcMain.handle('dataset:update', async (_e, { projectId, datasetId, columns, autoRefresh, watch, freshOnAsk }: any = {}) => {
     try {
+      // Fresh on ask (L3.1): only with incremental refresh on — refused with the catalog's reason.
+      if (freshOnAsk !== undefined) {
+        const res = await setFreshOnAsk(projectId, datasetId, freshOnAsk);
+        if (!res.ok) return res;
+      }
       // `undefined` means "not part of this patch"; `null` means "turn it off".
       if (autoRefresh !== undefined) {
         const every = autoRefresh === null || autoRefresh === 'off' ? null : String(autoRefresh);
+        // Every 5 or 15 minutes only with incremental refresh on (setAutoRefresh refuses it too, wordlessly).
+        if (needsIncremental(every) && (await datasets.getDatasetMeta(projectId, datasetId))?.incremental?.enabled !== true) {
+          return { ok: false, error: fastCadenceNeedsIncremental() };
+        }
         const res = await datasets.setAutoRefresh(projectId, datasetId, { every: every as any });
         if (res === false) return { ok: false, error: 'Could not set the schedule' };
       }

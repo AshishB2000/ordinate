@@ -1,0 +1,274 @@
+// Live datasets' channels (docs/live-data/00-plan.md L2.1) — server, MAIN ONLY.
+//
+//   connection:import {mode:'live'}  "Add from connection" → "Live": no rows are
+//                                    fetched; the selection's columns are read
+//                                    from the source's catalog (describeTable)
+//                                    or by running it at a one-row cap, and
+//                                    stored with DECLARED types (../data/liveSchema).
+//   dataset:setMode                  The dataset's settings: extract → Live drops
+//                                    the stored copy (only with `confirmDrop`,
+//                                    the web's confirm dialog); Live → extract
+//                                    runs a normal import of the same selection;
+//                                    Live → Live sets the cache age.
+//   dataset:copyLive                 "Make a copy" (L2.6): the same import, saved
+//                                    as a NEW extract beside the Live dataset,
+//                                    which is left as it was.
+//   refresh on a Live dataset        bumps the cache epoch (plan D5) — nothing
+//                                    is fetched, so nothing can go stale.
+//   connection:setLiveOptIn          a PostgreSQL connection's "This is a read
+//                                    replica or a warehouse" (L3.2, ./liveOptIn):
+//                                    both Live doors above refuse without it.
+//
+// Every socket goes through connectionRun (the SSRF guard); the secret is
+// resolved here, in main, exactly as ./connections.ts does; every error that
+// leaves has been through safeError. No SQL text, URL or dialect reaches a
+// reply — a dataset is named by its header only.
+
+import { ipcMain } from './bus';
+import * as connections from '../connectors/connections';
+import * as connectionRun from '../connectors/connectionRun';
+import { getConnector } from '../connectors';
+import * as datasets from '../data/datasets';
+import { loadSecrets } from './connectionSecrets';
+import { liveColumns, type DeclaredColumn, type SourceColumn } from '../data/liveSchema';
+import { bumpEpoch, isLive, parseMaxCacheAge, setMaxCacheAge } from '../data/liveDataset';
+import { saveLiveRecord, toExtractRecord, toLiveRecord } from '../data/liveRecord';
+import * as msg from '../data/liveMessages';
+import * as queryCache from '../engine/queryCache';
+import { scanDataset } from '../app/privacyStore';
+import { announceRefreshed } from '../data/refreshEvents';
+import type { ParseResult, ParsedColumn } from '../data/parse';
+import { liveOfferRefusal, setLiveOptIn } from './liveOptIn';
+import type { DatasetMeta } from '../data/datasets';
+import * as catalog from '../app/catalog';
+import { liveDatasetMissing } from '../engine/liveQueryMessages';
+import { safeError } from '../connectors/types';
+
+type Fail = { ok: false; error: string; code?: string };
+type Selection = { table?: string; query?: string };
+
+const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+const header = (d: { id: string; name: string; rowCount: number; columns: ParsedColumn[] }) =>
+  ({ id: d.id, name: d.name, rowCount: d.rowCount, columns: d.columns.map((c) => ({ name: c.name, type: c.type })) });
+
+/** What a connection origin re-runs — the same rule as ./connections selectionForDataset. */
+function selectionOf(origin: unknown): Selection | null {
+  const o = (origin && typeof origin === 'object' ? origin : {}) as Record<string, unknown>;
+  if (o.kind !== 'connection') return null;
+  if (typeof o.sql === 'string' && o.sql.trim()) return { query: o.sql };
+  if (typeof o.table === 'string' && o.table.trim()) return { table: o.table };
+  return null;
+}
+
+/**
+ * The selection's columns with declared types, read without fetching rows: the
+ * catalog for a table (or a one-row run where the connector has no catalog),
+ * a one-row run for a query. `rowEstimate` is the catalog's, when it has one
+ * (the schema sync's BigQuery sample percent, L2.5).
+ */
+export async function readLiveSchema(projectId: string, connId: string, sel: Selection): Promise<{ ok: true; columns: DeclaredColumn[]; rowEstimate?: number } | Fail> {
+  const conn = await connections.getConnection(projectId, connId);
+  if (!conn) return { ok: false, error: msg.liveConnectionGoneMessage() };
+  const def = getConnector(conn.connectorId);
+  // Can THIS connection be Live: a live dialect, and the opt-in an OLTP source asks for (L3.2).
+  const refusal = liveOfferRefusal(def, conn.values);
+  if (refusal || !def || !def.live) return { ok: false, error: refusal ?? msg.liveNotOfferedMessage() };
+  const secrets = await loadSecrets(connId, def);
+  let cols: SourceColumn[];
+  let rowEstimate: number | undefined;
+  if (sel.table) {
+    const described = await connectionRun.describeTable(conn.connectorId, conn.values, secrets, sel.table);
+    if (described && !described.ok) return described;
+    if (described) {
+      cols = described.columns;
+      rowEstimate = described.rowEstimate;
+    } else {
+      const sql = connectionRun.buildTableSql(def.family, sel.table, 1);
+      if (!sql) return { ok: false, error: 'Invalid table name' };
+      const ran = await connectionRun.explainSql(conn.connectorId, conn.values, secrets, sql);
+      if (!ran.ok) return ran;
+      cols = ran.columns;
+    }
+  } else if (sel.query) {
+    const ran = await connectionRun.explainSql(conn.connectorId, conn.values, secrets, sel.query);
+    if (!ran.ok) return ran;
+    cols = ran.columns;
+  } else {
+    return { ok: false, error: 'Pick a table or run a query first.' };
+  }
+  const typed = liveColumns(def.live.dialect, cols);
+  if (typed.ok) return rowEstimate === undefined ? typed : { ...typed, rowEstimate };
+  return { ok: false, error: typed.reason === 'duplicate' ? msg.liveDuplicateColumnMessage(typed.name) : msg.liveNoColumnsMessage() };
+}
+
+/**
+ * A new Live dataset's first schema sync and profile (L2.5), queued as a job:
+ * the create answers at once, the sample lands a moment later. Lazy, because
+ * the sync reads its columns through this module.
+ */
+function queueSync(projectId: string, id: string): void {
+  const job = require('../engine/live/schemaSyncJob') as typeof import('../engine/live/schemaSyncJob');
+  void job.startSchemaSync(projectId, id).catch(() => undefined);
+}
+
+/** `connection:import` with `mode: 'live'` — the schema stored, no rows fetched. */
+export async function createLiveDataset(p: Record<string, unknown>) {
+  const projectId = str(p.projectId);
+  const connId = str(p.connId);
+  const sql = str(p.sql);
+  const table = sql ? '' : str(p.table);
+  if (!sql && !table) return { ok: false, error: 'Pick a table or run a query first.' };
+  const maxCacheAgeSec = parseMaxCacheAge(p.maxCacheAgeSec);
+  if (maxCacheAgeSec === null) return { ok: false, error: msg.liveCacheAgeRangeMessage() };
+  const schema = await readLiveSchema(projectId, connId, sql ? { query: sql } : { table });
+  if (!schema.ok) return schema;
+  const origin: Record<string, unknown> = { kind: 'connection', connId, ...(sql ? { sql } : { table }) };
+  if (sql && str(p.queryId)) origin.queryId = str(p.queryId);
+  const ds = await saveLiveRecord(projectId, { name: str(p.name) || table || 'Connection data', columns: schema.columns, origin, maxCacheAgeSec });
+  if (!ds) return { ok: false, error: 'Invalid project, or the project no longer exists' };
+  queueSync(projectId, ds.id);
+  return { ok: true, dataset: { ...header(ds), mode: 'live' as const } };
+}
+
+/** Refresh on a Live dataset: reset its cache. Null when the dataset is not Live (the caller refreshes it as usual). */
+export async function refreshLive(projectId: string, id: string) {
+  const meta = await datasets.getDatasetMeta(projectId, id);
+  if (!meta || !isLive(meta)) return null;
+  const live = await bumpEpoch(projectId, id);
+  if (!live) return { ok: false as const, error: 'Could not reset the cache' };
+  queryCache.invalidateDataset(id, projectId);
+  // Every refresh is announced (L0.1), so an open dashboard re-asks the warehouse.
+  announceRefreshed({ projectId, datasetId: id, name: meta.name, rowsBefore: 0, rowsAfter: 0 });
+  return { ok: true as const, dataset: header(meta), warnings: [] as string[], warningCount: 0, live: { epoch: live.epoch } };
+}
+
+/**
+ * A Live dataset's selection, fetched the way an import fetches it: the secret
+ * resolved here, in main; the connector's own bounded run at the app's row cap;
+ * every socket through connectionRun's SSRF guard. Live → extract and "Make a
+ * copy" both read through this one door. `source`: the error is the
+ * connector's own (already through safeError) — "the connection is gone" is ours.
+ */
+async function fetchSelection(projectId: string, meta: DatasetMeta): Promise<{ ok: true; result: ParseResult } | (Fail & { source?: true })> {
+  const sel = selectionOf(meta.origin);
+  if (!sel || meta.origin?.kind !== 'connection') return { ok: false, error: msg.liveConnectionGoneMessage() };
+  const conn = await connections.getConnection(projectId, meta.origin.connId);
+  if (!conn) return { ok: false, error: msg.liveConnectionGoneMessage() };
+  const secrets = await loadSecrets(conn.id, getConnector(conn.connectorId));
+  // A normal import: the app's own row cap, the connector's own bounds.
+  const ran = await connectionRun.runConnection(conn.connectorId, conn.values, secrets, sel, { rowLimit: connectionRun.ROW_LIMIT });
+  return ran.ok ? { ok: true, result: ran.result } : { ok: false, error: ran.error, source: true };
+}
+
+/**
+ * The Live dataset's column notes onto its copy — display names, descriptions,
+ * examples and, above all, the personal / financial marks, so a copy is never
+ * less protected than the dataset it came from. Only columns the copy has.
+ */
+async function copyColumnNotes(projectId: string, fromId: string, toId: string, columns: ParsedColumn[]): Promise<void> {
+  const notes = await catalog.getColumns(projectId, fromId);
+  for (const c of columns) {
+    if (!Object.prototype.hasOwnProperty.call(notes, c.name)) continue;
+    const { description, displayName, example, sensitivity } = notes[c.name];
+    await catalog.setColumn(projectId, toId, c.name, { description, displayName, example, sensitivity });
+  }
+}
+
+/**
+ * `dataset:copyLive` — "Make a copy" (L2.6): the Live dataset's selection
+ * imported as a NEW extract named "<name> (copy)", beside it. The Live record
+ * is never written. The reply names the copy (id, name, rows) — never the
+ * selection's SQL, the connection's address or the warehouse's own words,
+ * which can quote either (R-L6): those go to the server log.
+ */
+export async function copyLiveDataset(p: Record<string, unknown>) {
+  const projectId = str(p.projectId);
+  const id = str(p.datasetId);
+  const meta = await datasets.getDatasetMeta(projectId, id);
+  if (!meta) return { ok: false, error: liveDatasetMissing() };
+  if (!isLive(meta)) return { ok: false, code: 'not_live', error: msg.liveCopyNotLiveMessage() };
+  const ran = await fetchSelection(projectId, meta);
+  if (!ran.ok) {
+    if (!ran.source) return { ok: false, error: ran.error };
+    console.warn(`[live] make a copy of dataset ${id}: the source refused — ${ran.error}`);
+    return { ok: false, error: msg.liveCopyReadFailedMessage() };
+  }
+  const saved = await datasets.saveDataset(projectId, {
+    name: `${meta.name} (copy)`,
+    sourceKind: meta.sourceKind,
+    columns: ran.result.columns,
+    rows: ran.result.rows,
+    origin: meta.origin,
+  });
+  if (!saved) return { ok: false, error: msg.liveCopySaveFailedMessage() };
+  await copyColumnNotes(projectId, id, saved.id, saved.columns).catch((err: unknown) =>
+    console.warn(`[live] make a copy of dataset ${id}: column notes not copied — ${safeError(err)}`));
+  await scanDataset(projectId, saved); // sensitivity proposals, as after any import; never throws
+  return { ok: true, dataset: { id: saved.id, name: saved.name, rowCount: saved.rowCount }, warnings: ran.result.warnings ?? [] };
+}
+
+/** `dataset:setMode`. */
+export async function setDatasetMode(p: Record<string, unknown>) {
+  const projectId = str(p.projectId);
+  const id = str(p.datasetId);
+  const meta = await datasets.getDatasetMeta(projectId, id);
+  if (!meta) return { ok: false, error: 'Dataset not found' };
+  const maxCacheAgeSec = p.maxCacheAgeSec === undefined ? undefined : parseMaxCacheAge(p.maxCacheAgeSec);
+  if (maxCacheAgeSec === null) return { ok: false, error: msg.liveCacheAgeRangeMessage() };
+
+  if (p.mode === 'live') {
+    if (isLive(meta)) {
+      const live = maxCacheAgeSec === undefined ? meta.live : await setMaxCacheAge(projectId, id, maxCacheAgeSec);
+      if (!live) return { ok: false, error: 'Could not change the cache age' };
+      return { ok: true, mode: 'live', dataset: header(meta), maxCacheAgeSec: live.maxCacheAgeSec };
+    }
+    const sel = selectionOf(meta.origin);
+    if (!sel || meta.origin?.kind !== 'connection') return { ok: false, error: msg.liveNeedsConnectionMessage() };
+    if ((meta.steps ?? []).length > 0) return { ok: false, error: msg.liveHasStepsMessage() };
+    // Can this source answer live at all? Asked before the confirm, so nobody confirms a drop that cannot happen.
+    const conn = await connections.getConnection(projectId, meta.origin.connId);
+    if (!conn) return { ok: false, error: msg.liveConnectionGoneMessage() };
+    const refusal = liveOfferRefusal(getConnector(conn.connectorId), conn.values);
+    if (refusal) return { ok: false, error: refusal };
+    if (p.confirmDrop !== true) return { ok: false, code: 'confirm_drop', error: msg.liveConfirmDropMessage() };
+    const schema = await readLiveSchema(projectId, meta.origin.connId, sel);
+    if (!schema.ok) return schema;
+    if (!(await toLiveRecord(projectId, id, schema.columns, maxCacheAgeSec))) return { ok: false, error: 'Could not switch the dataset to Live' };
+    queueSync(projectId, id);
+    const after = await datasets.getDatasetMeta(projectId, id);
+    return { ok: true, mode: 'live', dataset: after ? header(after) : header(meta), maxCacheAgeSec: after?.live?.maxCacheAgeSec };
+  }
+
+  if (!isLive(meta)) return { ok: true, mode: 'extract', dataset: header(meta) };
+  const ran = await fetchSelection(projectId, meta);
+  if (!ran.ok) return { ok: false, error: ran.error };
+  const ds = await toExtractRecord(projectId, id, ran.result);
+  if (!ds) return { ok: false, error: 'Could not copy the data' };
+  await scanDataset(projectId, ds);
+  return { ok: true, mode: 'extract', dataset: header(ds), warnings: ran.result.warnings ?? [] };
+}
+
+export function register(): void {
+  ipcMain.handle('dataset:setMode', async (_e, payload: Record<string, unknown> = {}) => {
+    try {
+      return await setDatasetMode(payload);
+    } catch (err: unknown) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Could not change the dataset' };
+    }
+  });
+  ipcMain.handle('dataset:copyLive', async (_e, payload: Record<string, unknown> = {}) => {
+    try {
+      return await copyLiveDataset(payload);
+    } catch (err: unknown) {
+      console.warn(`[live] make a copy failed — ${safeError(err)}`);
+      return { ok: false, error: msg.liveCopySaveFailedMessage() };
+    }
+  });
+  ipcMain.handle('connection:setLiveOptIn', async (_e, payload: Record<string, unknown> = {}) => {
+    try {
+      return await setLiveOptIn(payload);
+    } catch (err: unknown) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Could not change the connection' };
+    }
+  });
+}

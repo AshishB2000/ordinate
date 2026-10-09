@@ -1,0 +1,265 @@
+{
+  "kind": "bigquery#queryResponse",
+  "schema": {
+    "fields": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "mode": "REQUIRED"
+      },
+      {
+        "name": "big_id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "amount",
+        "type": "NUMERIC",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "ratio",
+        "type": "FLOAT",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "active",
+        "type": "BOOLEAN",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "day",
+        "type": "DATE",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "at",
+        "type": "DATETIME",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "ts",
+        "type": "TIMESTAMP",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "note",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "tags",
+        "type": "STRING",
+        "mode": "REPEATED"
+      },
+      {
+        "name": "addr",
+        "type": "RECORD",
+        "mode": "NULLABLE",
+        "fields": [
+          {
+            "name": "city",
+            "type": "STRING",
+            "mode": "NULLABLE"
+          },
+          {
+            "name": "zip",
+            "type": "STRING",
+            "mode": "NULLABLE"
+          },
+          {
+            "name": "since",
+            "type": "TIMESTAMP",
+            "mode": "NULLABLE"
+          },
+          {
+            "name": "floors",
+            "type": "INTEGER",
+            "mode": "NULLABLE"
+          }
+        ]
+      },
+      {
+        "name": "empty",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "jobReference": {
+    "projectId": "acme-analytics",
+    "jobId": "job_Types0123456789abcdef",
+    "location": "europe-west2"
+  },
+  "totalRows": "3",
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "1"
+        },
+        {
+          "v": "12345678901234567"
+        },
+        {
+          "v": "1234.5"
+        },
+        {
+          "v": "0.25"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "2024-01-02"
+        },
+        {
+          "v": "2024-01-02T03:04:05.123456"
+        },
+        {
+          "v": "1.7044176E9"
+        },
+        {
+          "v": "﻿hello"
+        },
+        {
+          "v": [
+            {
+              "v": "a"
+            },
+            {
+              "v": "b"
+            }
+          ]
+        },
+        {
+          "v": {
+            "f": [
+              {
+                "v": "Leeds"
+              },
+              {
+                "v": "01234"
+              },
+              {
+                "v": "1.7044176123456E9"
+              },
+              {
+                "v": "3"
+              }
+            ]
+          }
+        },
+        {
+          "v": null
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "2"
+        },
+        {
+          "v": "9007199254740993"
+        },
+        {
+          "v": "-0.000001"
+        },
+        {
+          "v": "-0.0"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "-1.5E0"
+        },
+        {
+          "v": "plain"
+        },
+        {
+          "v": []
+        },
+        {
+          "v": null
+        },
+        {
+          "v": null
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "3"
+        },
+        {
+          "v": "42"
+        },
+        {
+          "v": "99"
+        },
+        {
+          "v": "1.0E-5"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "1999-12-31"
+        },
+        {
+          "v": "1999-12-31T23:59:59"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "﻿"
+        },
+        {
+          "v": [
+            {
+              "v": "c"
+            }
+          ]
+        },
+        {
+          "v": {
+            "f": [
+              {
+                "v": null
+              },
+              {
+                "v": null
+              },
+              {
+                "v": null
+              },
+              {
+                "v": null
+              }
+            ]
+          }
+        },
+        {
+          "v": null
+        }
+      ]
+    }
+  ],
+  "totalBytesProcessed": "20971520",
+  "jobComplete": true,
+  "cacheHit": false,
+  "queryId": "job_Types0123456789abcdef",
+  "jobCreationReason": {
+    "code": "REQUESTED"
+  }
+}

@@ -12,6 +12,7 @@ import { mergeDashboardFilters } from '../analysis/dashboardFilters';
 import { tileCaption } from '../analysis/captions';
 import { vizDataFor } from '../ipc/visuals';
 import { resolveMetric } from '../ipc/metrics';
+import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { chartPayload } from './dashboardData';
 import { withEvents } from '../ipc/events'; // r8:events
 import type { BuildProgress, Outgoing } from './dashboardData';
@@ -81,11 +82,19 @@ export async function buildStory(
     // metric / metrics_row: the saved metrics, under the block's filters.
     const ids = b.kind === 'metric' ? [b.metricId] : b.metricIds;
     const metrics: PublishedBlock['metrics'] = [];
+    let liveReason = '';
     for (const id of ids) {
-      const r = await resolveMetric(projectId, id, { filters: b.filters });
+      let r: Awaited<ReturnType<typeof resolveMetric>> = null;
+      try {
+        r = await resolveMetric(projectId, id, { filters: b.filters });
+      } catch (err) {
+        // A Live metric its warehouse could not give (L2.4): left out, and said if none is left — the story still publishes.
+        if (!isLiveFigureError(err)) throw err;
+        liveReason = err.message;
+      }
       if (r && r.ok) metrics.push({ name: r.name, display: r.display, value: r.value });
     }
-    if (!metrics.length) { blocks.push({ kind: 'broken', reason: 'This metric was deleted.' }); continue; }
+    if (!metrics.length) { blocks.push({ kind: 'broken', reason: liveReason || 'This metric was deleted.' }); continue; }
     blocks.push({
       kind: 'metrics', metrics,
       caption: b.kind === 'metric' && b.caption ? b.caption : tileCaption({ kpis: metrics.map((m) => ({ label: m.name, value: m.value })) }),

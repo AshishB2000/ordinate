@@ -18,6 +18,9 @@ import { useLineage, useSource, useTags } from './api';
 import { ColumnsTab } from './ColumnsTab';
 import { DataTab } from './DataTab';
 import { QualityDot, SchedulePicker, useDeleteDataset, useRefresh, WatchToggle } from './DatasetList';
+import { BehindBadge } from './cadence';
+import { FreshOnAskPicker } from './FreshOnAsk';
+import { IncrementalButton } from './Incremental';
 import { useAdoptProject } from '../projects/current';
 import { RecordDetails } from './Details';
 import { formatNumber, freshness, NOT_REFRESHABLE, rowsText } from './format';
@@ -28,6 +31,10 @@ import { InsightsTab } from '../analytics/insights/InsightsTab';
 import { SnapshotsTab } from '../analytics/snapshots/SnapshotsTab';
 import s from './Data.module.css';
 import { CommentDoor } from '../dashboards/CommentsPanel';
+import { LiveBadge, SwitchToLiveDialog } from './LiveMode';
+import { LiveTabs } from './LiveDataset';
+import { CacheAgePicker, LiveSwitch, RefreshNow } from './LiveSettings';
+import { RefreshUrlDialog } from './RefreshUrl';
 
 const TABS = ['data', 'quality', 'columns', 'insights', 'snapshots'] as const;
 type TabId = (typeof TABS)[number];
@@ -71,7 +78,7 @@ function LineageLine({ projectId, id, list }: { projectId: string; id: string; l
   );
 }
 
-function Header({ projectId, id, name, rowCount, columnCount }: { projectId: string; id: string; name: string; rowCount: number; columnCount: number }) {
+function Header({ projectId, id, name, rowCount, columnCount, live }: { projectId: string; id: string; name: string; rowCount: number; columnCount: number; live: boolean }) {
   const navigate = useNavigate();
   const list = useDatasets(projectId);
   const source = useSource(projectId, id);
@@ -80,6 +87,8 @@ function Header({ projectId, id, name, rowCount, columnCount }: { projectId: str
   const refresh = useRefresh(projectId);
   const remove = useDeleteDataset(projectId, () => void navigate(`/data/${projectId}`));
   const [graph, setGraph] = useState(false);
+  const [goLive, setGoLive] = useState(false);
+  const [hooks, setHooks] = useState(false);
   const d = list.data?.find((x) => x.id === id);
   const outcome = refresh.state[id];
   return (
@@ -97,20 +106,29 @@ function Header({ projectId, id, name, rowCount, columnCount }: { projectId: str
                 {source.data.label}
               </span>
             )}
+            {live && <LiveBadge maxCacheAgeSec={source.data?.maxCacheAgeSec} />}
             <TagChips tags={tagsOf(tags.data, `dataset:${id}`)} max={4} />
           </div>
           <div className={s.dsMeta}>
             <span>
-              {rowsText(rowCount)} · {formatNumber(columnCount)} {columnCount === 1 ? 'column' : 'columns'}
+              {/* A Live dataset keeps no rows here: the badge and the freshness line say Live. */}
+              {live ? '' : `${rowsText(rowCount)} · `}
+              {formatNumber(columnCount)} {columnCount === 1 ? 'column' : 'columns'}
             </span>
             {d && (
               <span className={s.freshLine} title={d.lastRefreshStatus === 'error' ? d.lastRefreshError || 'The last refresh failed.' : undefined}>
                 <QualityDot n={d.qualityFailing} />
                 {d.lastRefreshStatus === 'error' && <span className={s.failDot} role="img" aria-label="Last refresh failed" />}
                 {freshness(d)}
+                <BehindBadge behind={d.behindSchedule} />
               </span>
             )}
             {d && <SchedulePicker projectId={projectId} d={d} />}
+            {/* A Live dataset's settings (L2.6): its cache age is its schedule; Refresh now resets the cache. */}
+            {live && <CacheAgePicker projectId={projectId} datasetId={id} name={name} maxCacheAgeSec={source.data?.maxCacheAgeSec ?? d?.maxCacheAgeSec} />}
+            <LiveSwitch projectId={projectId} datasetId={id} name={name} live={live} canGoLive={!!source.data?.canGoLive} rowCount={rowCount} />
+            {d && <IncrementalButton projectId={projectId} d={d} />}
+            {d && <FreshOnAskPicker projectId={projectId} d={d} />}
             {d && <WatchToggle projectId={projectId} d={d} />}
             {lineage.data && (
               <button type="button" className={s.usedIn} onClick={() => setGraph(true)}>
@@ -118,10 +136,14 @@ function Header({ projectId, id, name, rowCount, columnCount }: { projectId: str
                 {usedInText(lineage.data.usedIn) || 'Not used yet'}
               </button>
             )}
-            {d?.originKind && (
-              <Button size="sm" icon="refresh" loading={outcome?.busy} onClick={() => void refresh.run(id)}>
-                Refresh
-              </Button>
+            {live ? (
+              <RefreshNow projectId={projectId} datasetId={id} />
+            ) : (
+              d?.originKind && (
+                <Button size="sm" icon="refresh" loading={outcome?.busy} onClick={() => void refresh.run(id)}>
+                  Refresh
+                </Button>
+              )
             )}
           </div>
           {outcome?.message && (
@@ -132,11 +154,13 @@ function Header({ projectId, id, name, rowCount, columnCount }: { projectId: str
           {list.data && <LineageLine projectId={projectId} id={id} list={list.data} />}
         </div>
         <div className={s.dsActions}>
-          {/* The reversible step pipeline (T2.6): its own page, the rows beside the steps. */}
-          <Link className={buttonClass('secondary', 'sm')} to={`/data/${projectId}/${id}/prepare`}>
-            <Icon name="sliders" />
-            <span>Prepare</span>
-          </Link>
+          {/* The reversible step pipeline (T2.6): its own page, the rows beside the steps. Off for Live (L2.1). */}
+          {!live && (
+            <Link className={buttonClass('secondary', 'sm')} to={`/data/${projectId}/${id}/prepare`}>
+              <Icon name="sliders" />
+              <span>Prepare</span>
+            </Link>
+          )}
           {/* A SQL dataset's own statement, in the SQL workbench (queryTab.ts qtOpenWithSql, T2.11). */}
           {d?.originKind === 'sql' && (
             <Link className={buttonClass('secondary', 'sm')} to={`/analytics/${projectId}/sql?dataset=${id}`}>
@@ -159,6 +183,9 @@ function Header({ projectId, id, name, rowCount, columnCount }: { projectId: str
             trigger={<IconButton icon="more-horizontal" size="sm" label="More dataset actions" />}
             items={[
               { label: 'Lineage', icon: 'lineage', onSelect: () => setGraph(true) },
+              // A URL dbt or Airflow calls to refresh it (live data L0.5): only where there is a source to refresh from.
+              ...(d?.originKind || live ? [{ label: 'Refresh URL…', icon: 'link' as const, onSelect: () => setHooks(true) }] : []),
+              ...(source.data?.canGoLive ? [{ label: 'Switch to Live…', icon: 'zap' as const, onSelect: () => setGoLive(true) }] : []),
               { label: 'Pipeline history', icon: 'history', onSelect: () => void navigate(`/versions/${projectId}/dataset/${id}`) },
               { kind: 'separator' },
               { label: 'Move to Trash', icon: 'trash', danger: true, disabled: !d, onSelect: () => d && remove(d) },
@@ -167,6 +194,8 @@ function Header({ projectId, id, name, rowCount, columnCount }: { projectId: str
         </div>
       </div>
       {graph && <LineageDrawer projectId={projectId} id={id} name={name} onClose={() => setGraph(false)} />}
+      {goLive && <SwitchToLiveDialog projectId={projectId} datasetId={id} name={name} rowCount={rowCount} onClose={() => setGoLive(false)} />}
+      {hooks && <RefreshUrlDialog projectId={projectId} datasetId={id} name={name} live={live} onClose={() => setHooks(false)} />}
     </header>
   );
 }
@@ -215,9 +244,20 @@ export default function DatasetPage() {
   }
   const header = q.data;
   const failing = list.data?.find((x) => x.id === datasetId)?.qualityFailing;
+  // A Live dataset keeps no rows here: its Data tab says so, and the tabs that read rows are off (L2.1).
+  const live = header.mode === 'live';
+  const maxCacheAgeSec = list.data?.find((x) => x.id === datasetId)?.maxCacheAgeSec;
+  if (live) {
+    return (
+      <div className={s.page}>
+        <Header projectId={projectId} id={datasetId} name={header.name} rowCount={header.rowCount} columnCount={header.columns.length} live />
+        <LiveTabs projectId={projectId} datasetId={datasetId} header={header} tab={asked ?? 'data'} onTab={setTab} maxCacheAgeSec={maxCacheAgeSec} />
+      </div>
+    );
+  }
   return (
     <div className={s.page}>
-      <Header projectId={projectId} id={datasetId} name={header.name} rowCount={header.rowCount} columnCount={header.columns.length} />
+      <Header projectId={projectId} id={datasetId} name={header.name} rowCount={header.rowCount} columnCount={header.columns.length} live={false} />
       <Tabs value={tab} onValueChange={setTab}>
         <TabList label="Dataset views">
           <Tab value="data" icon="table">

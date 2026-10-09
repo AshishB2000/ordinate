@@ -12,6 +12,7 @@ import { buttonClass } from '../../ui/Button';
 import { Icon, type IconName } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
 import { useAdoptProject } from '../projects/current';
+import { LiveOffPage } from '../live/LiveOff';
 import s from './Analytics.module.css';
 
 export type WorkbenchKind = 'stats' | 'drivers' | 'segments';
@@ -68,8 +69,12 @@ export function WorkbenchHead({
   );
 }
 
-/** Renders `children(projectId, datasetId, dataset)` once the route's dataset is read; its states otherwise. */
-export function DatasetRoute({ title, children }: { title: string; children: (projectId: string, datasetId: string, d: DatasetColumns) => ReactNode }) {
+/**
+ * Renders `children(projectId, datasetId, dataset)` once the route's dataset is
+ * read; its states otherwise. A Live dataset keeps no rows for a workbench to
+ * read (L2.6): the page says so and offers a copy, and the workbench never runs.
+ */
+export function DatasetRoute({ title, kind, children }: { title: string; kind: WorkbenchKind; children: (projectId: string, datasetId: string, d: DatasetColumns) => ReactNode }) {
   const { projectId, datasetId } = useParams();
   useAdoptProject(projectId);
   const q = useDatasetColumns(projectId, datasetId);
@@ -98,5 +103,6 @@ export function DatasetRoute({ title, children }: { title: string; children: (pr
       </Page>
     );
   }
+  if (q.data.mode === 'live') return <LiveOffPage title={title} projectId={projectId} datasetId={datasetId} feature={kind} />;
   return <>{children(projectId, datasetId, q.data)}</>;
 }

@@ -53,7 +53,8 @@ const NUM_OPS = [
 function useDistinct(projectId: string, datasetId: string, column: string, limit: number, search: string, enabled = true) {
   return useQuery({
     queryKey: ['dataset:distinct', projectId, datasetId, column, limit, search],
-    queryFn: async () => (await rpc('dataset:distinct', { projectId, datasetId, column, limit, ...(search ? { search } : {}) })) as { values: string[]; total: number },
+    // A Live dataset answers from its schema sync's sample (L2.5): `approximate`, with the sample's size.
+    queryFn: async () => (await rpc('dataset:distinct', { projectId, datasetId, column, limit, ...(search ? { search } : {}) })) as { values: string[]; total: number; approximate?: true; sampleRows?: number },
     enabled,
     placeholderData: (prev) => prev,
   });
@@ -186,7 +187,11 @@ export function FilterDialog({
               )}
             </div>
             <p className={s.note} role="status">
-              {[total > shown.length ? `Showing the first ${fmt.format(shown.length)} of ${fmt.format(total)} values — search to narrow.` : '', selected.size ? `${selected.size} selected.` : '']
+              {[
+                list.data?.approximate ? `From a sample of ${fmt.format(list.data.sampleRows ?? 0)} rows — the warehouse may hold other values (use a Condition for those).` : '',
+                total > shown.length ? `Showing the first ${fmt.format(shown.length)} of ${fmt.format(total)} values — search to narrow.` : '',
+                selected.size ? `${selected.size} selected.` : '',
+              ]
                 .filter(Boolean)
                 .join(' ')}
             </p>

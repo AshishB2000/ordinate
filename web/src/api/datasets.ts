@@ -20,10 +20,22 @@ export interface DatasetSummary {
   lastRefreshedAt?: string;
   lastRefreshStatus?: 'ok' | 'error';
   lastRefreshError?: string | null;
-  autoRefresh?: { every: 'hourly' | 'daily' | 'weekly'; watch?: boolean };
+  autoRefresh?: { every: AutoRefreshEvery; watch?: boolean };
   /** FAIL rules failing in the latest quality run. */
   qualityFailing?: number;
+  /** Incremental refresh is on: the only way a schedule may run every 5 or 15 minutes. */
+  incrementalOn?: true;
+  /** The last scheduled refresh took longer than its own interval (the server decides). */
+  behindSchedule?: true;
+  /** A Live dataset: no stored rows (`rowCount` is 0 and means nothing) — L2.1. */
+  mode?: 'live';
+  maxCacheAgeSec?: number;
+  /** Fresh on ask (L3.1): pull the new rows when a figure asks a copy older than this; `fullDue` — it waits for a full refresh first. */
+  freshOnAsk?: { maxStalenessSec: number; fullDue?: true };
 }
+
+/** A refresh schedule (src/data/datasets.ts `AutoRefreshEvery`); 5 and 15 minutes need incremental refresh. */
+export type AutoRefreshEvery = '5min' | '15min' | 'hourly' | 'daily' | 'weekly';
 
 /** The project's saved datasets; idle until a project is chosen. */
 export function useDatasets(projectId: string | undefined) {
@@ -39,6 +51,8 @@ export interface DatasetColumns {
   name: string;
   rowCount: number;
   columns: { name: string; type: 'text' | 'number' | 'date' }[];
+  /** A Live dataset keeps no rows here (L2.1). */
+  mode?: 'live';
 }
 
 /** A dataset's name, row count and typed columns; `null` data = no such dataset. */

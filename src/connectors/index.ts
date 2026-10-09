@@ -30,13 +30,15 @@ const FAMILY_MODULES: readonly string[] = [
   './http',     // ClickHouse, Databricks SQL, Trino, Presto, Elasticsearch, OpenSearch, Druid
   './url',      // the original URL/API JSON source
   './saas',     // Google Sheets, Airtable, Notion, Stripe, GitHub, HubSpot
+  './bigquery', // Google BigQuery (REST, a service-account key)
+  './snowflake', // Snowflake (SQL API)
 ];
 
 // Picker grouping order. Anything with an unrecognised category sorts last —
 // it is still reachable, just not ahead of the known groups.
 const CATEGORY_ORDER: readonly string[] = ['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS'];
 const KNOWN_CATEGORIES: ReadonlySet<string> = new Set(CATEGORY_ORDER);
-const FIELD_TYPES: ReadonlySet<string> = new Set(['text', 'number', 'password', 'select', 'checkbox']);
+const FIELD_TYPES: ReadonlySet<string> = new Set(['text', 'number', 'password', 'select', 'checkbox', 'textarea']);
 
 export interface RegistryDiagnostics {
   /** Modules in FAMILY_MODULES that could not be required at all. */
@@ -139,6 +141,24 @@ function loadAll(): ConnectorDef[] {
 const REGISTRY: ConnectorDef[] = loadAll();
 const BY_ID: ReadonlyMap<string, ConnectorDef> = new Map(REGISTRY.map((d) => [d.id, d]));
 
+// The test harness's connectors (the Live datasets' fake warehouse,
+// scripts/liveFakeConnector.ts): reachable by id, so a connection record can
+// name one and the executor can run it, but NEVER listed — `listConnectors`
+// and so the picker's catalog only ever show REGISTRY.
+const TEST_ONLY = new Map<string, ConnectorDef>();
+
+/**
+ * Make a test connector resolvable by id. Refused under ORDINATE_ENV=prod (the
+ * server's own gate is ORDINATE_TEST_LIVE_FAKE in env.ts), refused for a
+ * half-connector, and refused for an id a real connector already has.
+ */
+export function registerTestConnector(def: ConnectorDef): void {
+  if (process.env.ORDINATE_ENV === 'prod') throw new Error('[connectors] test connectors cannot be registered when ORDINATE_ENV=prod');
+  if (!isConnectorDef(def)) throw new Error('[connectors] not a connector definition');
+  if (BY_ID.has(def.id)) throw new Error(`[connectors] "${def.id}" is a real connector's id`);
+  TEST_ONLY.set(def.id, def);
+}
+
 /** Every connector this process offers, grouped by category in picker order. */
 export function listConnectors(): ConnectorDef[] {
   return REGISTRY;
@@ -150,7 +170,7 @@ export function listConnectors(): ConnectorDef[] {
  *  with it at T8.1, so a record naming one gets null: "Unknown connection kind"). */
 export function getConnector(id: unknown): ConnectorDef | null {
   if (typeof id !== 'string' || !id) return null;
-  return BY_ID.get(id) ?? null;
+  return BY_ID.get(id) ?? TEST_ONLY.get(id) ?? null;
 }
 
 /** True when this id is one the registry can actually run. */
@@ -198,6 +218,18 @@ export interface CatalogEntry {
   /** The fixed hosts a SaaS source may contact — shown on its form. Absent
    *  when the user supplies the host. */
   hosts?: string[];
+  /** True when the source can price a statement before it runs (a free dry
+   *  run, `live.estimate` — BigQuery), so the editor shows "~1.2 GB" by Run.
+   *  A boolean on every entry, reported for the same reason as `browsable`. */
+  estimates: boolean;
+  /** True when a dataset from this connector can be Live (plan D2) — the
+   *  create flow offers "Live" beside "Copy the data". The flag only: the
+   *  dialect and the runner never leave the server. */
+  live: boolean;
+  /** With `live`: the checkbox field a connection must have ticked before
+   *  Live is offered for it (plan D8 — PostgreSQL's "This is a read replica or
+   *  a warehouse"). Absent: every connection of this connector may be Live. */
+  liveOptIn?: string;
 }
 
 // Rebuilt field-by-field, never spread. A ConnectorDef holds two live functions
@@ -239,11 +271,39 @@ export function connectorCatalog(): CatalogEntry[] {
       category: d.category,
       fields: (d.fields || []).map(catalogField),
       browsable: typeof d.describeTable === 'function',
+      estimates: typeof d.live?.estimate === 'function',
+      live: isLiveCapable(d),
     };
     if (typeof d.blurb === 'string') entry.blurb = d.blurb;
     if (Array.isArray(d.hosts)) entry.hosts = d.hosts.filter((h) => typeof h === 'string');
+    if (entry.live && typeof d.live?.optIn === 'string') entry.liveOptIn = d.live.optIn;
     return entry;
   });
+}
+
+/**
+ * Whether this connector CAN answer a Live dataset: a dialect and a runner,
+ * both present — and, when it declares an opt-in (types.ts `ConnectorLive.optIn`),
+ * one that names a non-secret checkbox of its own form. A broken opt-in is
+ * "not Live" rather than "Live for everyone".
+ */
+export function isLiveCapable(def: ConnectorDef | null | undefined): boolean {
+  if (!def || !def.live || typeof def.live.runBound !== 'function' || typeof def.live.dialect !== 'string') return false;
+  const optIn = def.live.optIn;
+  return optIn === undefined || (def.fields || []).some((f) => f.key === optIn && f.type === 'checkbox' && f.secret !== true);
+}
+
+/**
+ * Whether Live is offered for ONE connection (plan D8, L3.2): the connector can
+ * be Live and, when it asks for an opt-in, this connection's stored values have
+ * that checkbox ticked — strictly `true`, the coerced form a saved connection
+ * holds (`'true'`, `1` or a missing key are not a yes). The create flow,
+ * `dataset:setMode`, `dataset:source` and the executor all decide with this.
+ */
+export function isLiveOffered(def: ConnectorDef | null | undefined, values: Record<string, unknown> | null | undefined): boolean {
+  if (!isLiveCapable(def)) return false;
+  const optIn = def?.live?.optIn;
+  return optIn === undefined || (!!values && values[optIn] === true);
 }
 
 /** Field keys this connector routes to the secret store. */

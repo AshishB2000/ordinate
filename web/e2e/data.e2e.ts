@@ -4,7 +4,9 @@
 // planted API key.
 //
 //   1. The list: every dataset, the source and freshness cells, the failed
-//      refresh's reason cut to the host; search inside the data → Open filtered.
+//      refresh's reason cut to the host; a 5-minute incremental schedule that
+//      runs behind it, and the fast cadences greyed out where incremental
+//      refresh is off (L0.3); search inside the data → Open filtered.
 //   2. The dataset page: the filter banner, sort and hide from a column menu,
 //      the column profile (server figures), the lineage drawer.
 //   3. Quality: add a rule with its live preview, run the checks, show the
@@ -25,13 +27,14 @@ import { e2e, SCREENS, screens, settled, type Session } from './fixtures.ts';
 
 const CANARY = 'k3y-E2E-CANARY-91c4';
 const SEED = fileURLToPath(new URL('./seedData.ts', import.meta.url));
-let seeded: { regionsId: string; feedId: string } | undefined;
+type Seeded = { regionsId: string; feedId: string; liveId: string; snapshotId: string };
+let seeded: Seeded | undefined;
 
-function seed(s: Session): { regionsId: string; feedId: string } {
+function seed(s: Session): Seeded {
   if (seeded) return seeded;
   const r = spawnSync(process.execPath, [SEED, s.server.dataDir, s.server.sample.projectId, CANARY], { encoding: 'utf8', timeout: 60_000 });
   if (r.status !== 0) throw new Error(`seedData failed:\n${r.stderr || r.stdout}`);
-  seeded = JSON.parse(r.stdout.trim().split('\n').pop() ?? '{}') as { regionsId: string; feedId: string };
+  seeded = JSON.parse(r.stdout.trim().split('\n').pop() ?? '{}') as Seeded;
   return seeded;
 }
 
@@ -74,6 +77,20 @@ async function loadingShots(page: Page, url: string, channel: string, label: str
   await page.evaluate(() => localStorage.removeItem('ordinate.theme'));
 }
 
+/** A dialog in both themes: each theme loads the page, opens it (`open`), and shoots the page. */
+async function dialogShots(page: Page, open: () => Promise<unknown>, name: string): Promise<void> {
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate((t) => localStorage.setItem('ordinate.theme', t), theme);
+    await page.reload();
+    await settled(page);
+    await open();
+    await page.screenshot({ path: path.join(SCREENS, `${name}-${theme}.png`), fullPage: true });
+  }
+  await page.evaluate(() => localStorage.removeItem('ordinate.theme'));
+  await page.reload();
+  await settled(page);
+}
+
 const noCanary = (bodies: string[]) => {
   const leaks = bodies.filter((b) => b.includes(CANARY));
   assert.equal(leaks.length, 0, `the planted key reached the browser:\n${leaks.map((l) => l.slice(0, 200)).join('\n')}`);
@@ -97,7 +114,21 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
   const reason = await feedRow.locator('[title*="Could not fetch"]').getAttribute('title');
   assert.equal(reason, 'Could not fetch https://api.example.com: 401 Unauthorized', 'the reason is shown, cut to the host');
   assert.equal(await feedRow.getByRole('combobox', { name: 'Auto-refresh Feed' }).count(), 1, 'a refreshable dataset offers a schedule');
+  // Every 5 minutes, incrementally — and its last run took 7: the server says it is behind.
+  const liveRow = table.getByRole('row').filter({ hasText: 'Live orders' });
+  await liveRow.getByText(/^Refreshes every 5 minutes · last/).waitFor();
+  assert.equal(await liveRow.getByText('Behind schedule').count(), 1, 'a run longer than its cadence shows "Behind schedule"');
+  assert.equal(await feedRow.getByText('Behind schedule').count(), 0, 'one that never ran late does not');
   await screens(page, 'data-list');
+  // A URL dataset cannot refresh incrementally: the fast cadences are there, greyed, saying why.
+  await feedRow.getByRole('combobox', { name: 'Auto-refresh Feed' }).click();
+  const fast = page.getByRole('option', { name: /^Every 5 minutes/ });
+  assert.equal(await fast.getAttribute('aria-disabled'), 'true', 'no 5-minute schedule without incremental refresh');
+  assert.match((await fast.textContent()) ?? '', /needs incremental refresh/);
+  await page.keyboard.press('Escape');
+  await liveRow.getByRole('combobox', { name: 'Auto-refresh Live orders' }).click();
+  assert.equal(await page.getByRole('option', { name: /^Every 15 minutes$/ }).getAttribute('aria-disabled'), null, 'incremental: the fast cadences are offered');
+  await page.keyboard.press('Escape');
 
   // Search inside the data → open the dataset filtered to the value.
   await page.getByRole('searchbox', { name: /Search values/ }).fill('Furniture');
@@ -212,6 +243,119 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
 
   noCanary(bodies);
   void ids;
+});
+
+// Fresh on ask (L3.1) beside the schedule on the dataset page: offered where incremental refresh is
+// on, set and turned off again through dataset:update; disabled, saying why, where it is not — until
+// the Incremental refresh panel turns incremental refresh on, and the 5-minute schedule and fresh on
+// ask are picked there.
+e2e('fresh on ask and incremental refresh: set them beside the schedule, and see why they are off', async (s) => {
+  const { page } = s;
+  const ids = seed(s);
+  const pid = s.server.sample.projectId;
+  const bodies = replies(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(`/data/${pid}/${ids.liveId}`);
+  await settled(page);
+  await page.getByRole('heading', { level: 1, name: 'Live orders' }).waitFor();
+  const picker = page.getByRole('combobox', { name: 'Fresh on ask for Live orders' });
+  assert.equal(await picker.isDisabled(), false, 'incremental refresh is on: fresh on ask is offered');
+  assert.equal((await picker.textContent())?.trim(), 'Fresh on ask off');
+  await picker.click();
+  const saved = page.waitForResponse((r) => r.url().endsWith('/api/rpc/dataset%3Aupdate') && r.status() === 200);
+  await page.getByRole('option', { name: 'Fresh on ask · 5 min' }).click();
+  await saved;
+  await page.waitForFunction(() => document.querySelector('[aria-label="Fresh on ask for Live orders"]')?.textContent?.includes('5 min'));
+  await screens(page, 'dataset-fresh-on-ask');
+  assert.match((await page.getByRole('combobox', { name: 'Fresh on ask for Live orders' }).textContent()) ?? '', /Fresh on ask · 5 min/, 'kept on the record: it survives the reloads');
+
+  // Its Incremental refresh panel: on, over a connection since deleted — so here it can only be
+  // turned off — with the run log the record keeps.
+  const logPanel = async () => {
+    await page.getByRole('button', { name: 'Incremental refresh for Live orders: on' }).click();
+    const d = page.getByRole('dialog', { name: 'Incremental refresh · Live orders' });
+    await d.getByRole('table', { name: 'Refresh log' }).waitFor();
+    return d;
+  };
+  await dialogShots(page, logPanel, 'dataset-incremental-panel-log');
+  const logged = await logPanel();
+  assert.equal(await logged.getByRole('note').textContent(), 'The connection this dataset was imported from is gone, so it cannot refresh incrementally.');
+  const runs = await logged.getByRole('table', { name: 'Refresh log' }).getByRole('row').allTextContents();
+  assert.equal(runs.length, 3, 'a header row and the two runs on the record');
+  assert.match(runs[1], /Incremental\s*filtered at the source/);
+  assert.match(runs[2], /Full\s*The first run sets the high-water mark/);
+  assert.equal(await logged.getByRole('switch', { name: 'Refresh incrementally' }).isDisabled(), false, 'on over a gone connection: it can still be turned off');
+  assert.equal(await logged.getByRole('button', { name: 'Save' }).isDisabled(), true, 'nothing to save until it is switched off');
+  await logged.getByRole('button', { name: 'Cancel' }).click();
+  await logged.waitFor({ state: 'detached' });
+
+  // Without incremental refresh: there, disabled, the reason in words beside it.
+  await page.goto(`/data/${pid}/${ids.snapshotId}`);
+  await settled(page);
+  const off = page.getByRole('combobox', { name: 'Fresh on ask for Orders snapshot — needs incremental refresh' });
+  await off.waitFor();
+  assert.equal(await off.isDisabled(), true, 'no incremental refresh: fresh on ask is disabled');
+  await page.getByText('needs incremental refresh', { exact: true }).waitFor();
+  await screens(page, 'dataset-fresh-on-ask-off');
+
+  // Incremental refresh (the desktop panel's port): turn it on here, and the 5-minute
+  // schedule and fresh on ask open up beside it.
+  const openPanel = async () => {
+    await page.getByRole('button', { name: 'Incremental refresh for Orders snapshot: off' }).click();
+    const d = page.getByRole('dialog', { name: 'Incremental refresh · Orders snapshot' });
+    await d.getByText(/Each run asks PostgreSQL only for rows at or past the mark/).waitFor();
+    return d;
+  };
+  await dialogShots(page, openPanel, 'dataset-incremental-panel');
+  const panel = await openPanel();
+  await panel.getByText('No runs yet.', { exact: false }).waitFor();
+  await panel.getByRole('switch', { name: 'Refresh incrementally' }).check();
+  await panel.getByRole('combobox', { name: 'Cursor column' }).click();
+  assert.deepEqual(await page.getByRole('option').allTextContents(), ['id · number', 'updated · number'], 'only number and date columns can be the cursor');
+  await page.getByRole('option', { name: 'updated · number' }).click();
+  await panel.getByRole('combobox', { name: 'Key column' }).click();
+  await page.getByRole('option', { name: 'id', exact: true }).click();
+  const turnedOn = page.waitForResponse((r) => r.url().endsWith('/api/rpc/incremental%3Aset') && r.status() === 200);
+  await panel.getByRole('button', { name: 'Save' }).click();
+  await turnedOn;
+  await page.getByText('Incremental refresh is on. The next refresh is a full one: it sets the mark.').waitFor();
+  await page.getByRole('button', { name: 'Incremental refresh for Orders snapshot: on' }).waitFor();
+  // Now every 5 minutes, and fresh on ask.
+  await page.getByRole('combobox', { name: 'Auto-refresh Orders snapshot' }).click();
+  const scheduled = page.waitForResponse((r) => r.url().endsWith('/api/rpc/dataset%3Aupdate') && r.status() === 200);
+  await page.getByRole('option', { name: 'Every 5 minutes', exact: true }).click();
+  await scheduled;
+  const fresh = page.getByRole('combobox', { name: 'Fresh on ask for Orders snapshot' });
+  await fresh.waitFor();
+  assert.equal(await fresh.isDisabled(), false, 'incremental refresh on: fresh on ask is offered');
+  await fresh.click();
+  const freshSaved = page.waitForResponse((r) => r.url().endsWith('/api/rpc/dataset%3Aupdate') && r.status() === 200);
+  await page.getByRole('option', { name: 'Fresh on ask · 5 min' }).click();
+  await freshSaved;
+  await page.waitForFunction(() => document.querySelector('[aria-label="Fresh on ask for Orders snapshot"]')?.textContent?.includes('5 min'));
+  await screens(page, 'dataset-incremental-on');
+  assert.match((await page.getByRole('combobox', { name: 'Auto-refresh Orders snapshot' }).textContent()) ?? '', /Every 5 minutes/, 'the schedule is kept on the record');
+  // The panel again: the stored settings, and why the next run is full.
+  const reopen = async () => {
+    await page.getByRole('button', { name: 'Incremental refresh for Orders snapshot: on' }).click();
+    const d = page.getByRole('dialog', { name: 'Incremental refresh · Orders snapshot' });
+    await d.getByText('Next refresh: full').waitFor();
+    return d;
+  };
+  await dialogShots(page, reopen, 'dataset-incremental-panel-on');
+  const again = await reopen();
+  assert.equal(await again.getByRole('switch', { name: 'Refresh incrementally' }).isChecked(), true);
+  assert.match((await again.getByRole('combobox', { name: 'Key column' }).textContent()) ?? '', /^id/, 'the stored key');
+  await again.getByRole('button', { name: 'Cancel' }).click();
+
+  // Back to off, so the rest of the suite reads the seed as it was.
+  await page.goto(`/data/${pid}/${ids.liveId}`);
+  await settled(page);
+  await page.getByRole('combobox', { name: 'Fresh on ask for Live orders' }).click();
+  const offSaved = page.waitForResponse((r) => r.url().endsWith('/api/rpc/dataset%3Aupdate') && r.status() === 200);
+  await page.getByRole('option', { name: 'Fresh on ask off' }).click();
+  await offSaved;
+  noCanary(bodies);
 });
 
 e2e('empty states: a new project, and the import placeholder', async (s) => {

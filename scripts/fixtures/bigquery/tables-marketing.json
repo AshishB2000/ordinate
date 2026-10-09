@@ -1,0 +1,8 @@
+{
+  "kind": "bigquery#tableList",
+  "etag": "pZzJ8tRr0F0YpXc0n3V7Qg==",
+  "tables": [
+    { "kind": "bigquery#table", "id": "acme-analytics:marketing.campaigns", "tableReference": { "projectId": "acme-analytics", "datasetId": "marketing", "tableId": "campaigns" }, "type": "TABLE", "creationTime": "1704067200000" }
+  ],
+  "totalItems": 1
+}

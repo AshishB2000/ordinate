@@ -6,6 +6,9 @@
 //
 // With no model configured the turn has no prose, and the card shows the
 // app's facts as bullet points instead — the same content.
+//
+// The card says how fresh its figures are (`asOf`, L0.2) beside the dataset's
+// name — the time the narration was given too.
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -15,6 +18,10 @@ import { DataTable } from '../../charts/DataTable';
 import type { ChartDataShape } from '../../charts/types';
 import { Button } from '../../ui/Button';
 import { Skeleton } from '../../ui/Skeleton';
+import { AsOfCaption } from '../../ui/AsOf';
+import type { AsOf } from '../../ui/asOf';
+import { LiveRefusal } from '../live/LiveOff';
+import { liveRefusalOf } from '../live/refusal';
 import s from './AnswerCard.module.css';
 
 interface Card {
@@ -29,6 +36,7 @@ interface Card {
   chips: { label: string; spec: Record<string, unknown> }[];
   filterLabels: string[];
   notes: string[];
+  asOf?: AsOf;
 }
 type Reply = Card | { ok: false; reason?: string };
 
@@ -60,6 +68,16 @@ export function AnswerCard({
     );
   }
   const card = q.data;
+  // Off for a Live dataset (L2.6): the server's reason and a copy of the dataset it asked.
+  const live = liveRefusalOf(q.isError ? q.error : card);
+  if (live !== null) {
+    return (
+      <div className={`${s.card} ${s.error}`}>
+        <div className={s.title}>{title}</div>
+        <LiveRefusal message={live} projectId={projectId} datasetId={spec.datasetId} />
+      </div>
+    );
+  }
   if (!card || !card.ok) {
     return (
       <div className={`${s.card} ${s.error}`}>
@@ -74,6 +92,7 @@ export function AnswerCard({
         <div className={s.title}>{card.title || 'Answer'}</div>
         <div className={s.meta}>
           <span className={s.dataset}>{card.datasetName}</span>
+          <AsOfCaption asOf={card.asOf} className={s.asOf} />
           {card.filterLabels.map((f) => (
             <span key={f} className={s.filter}>
               {f}

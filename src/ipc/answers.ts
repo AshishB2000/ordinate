@@ -35,10 +35,16 @@ import {
   validateAnswerSpec,
 } from '../ai/answerSpec';
 import type { AnswerChip, AnswerSpec, SpecDataset, SpecMetric } from '../ai/answerSpec';
-import { answerFacts } from '../ai/answerFacts';
+import { answerFacts, describeAnswer } from '../ai/answerFacts';
 import type { Headline } from '../ai/answerFacts';
 import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
 import type { SuggestedAction } from '../ai/suggestedAction';
+import type { AsOf } from '../api/asOf';
+import { asOfFrom, utcLabel } from '../data/figureAsOf';
+import type { LiveFailureCode } from '../engine/live/liveQuery';
+import { liveCardFor } from './liveAnswers';
+import { ensureFresh } from '../data/freshOnAsk';
+import { withPulls } from '../data/freshOnAskState';
 
 export type Guard = (text: string, ledger: LedgerEntry[]) => { text: string; audit: NumberAudit };
 
@@ -58,16 +64,19 @@ export interface AnswerCard {
   /** The resolved filters, for "Save as visual" / "Open in builder". */
   steps: FilterStep[];
   notes: string[];
+  /** How fresh the figures are (L0.2, data/figureAsOf) — the card's caption, and a line of the facts. */
+  asOf?: AsOf;
 }
 
-interface Built {
+export interface Built {
   card: AnswerCard;
   factsText: string;
   ledger: LedgerEntry[];
   provenance: copilot.CopilotProvenance;
 }
 
-type Failure = { ok: false; reason: string };
+/** `code`: a Live dataset's typed failure (./liveAnswers) — the card says why, never an empty chart. */
+export type Failure = { ok: false; reason: string; code?: LiveFailureCode };
 
 const OK_AUDIT: NumberAudit = { ok: true, violations: [] };
 
@@ -119,12 +128,11 @@ function ranked(data: ChartData, top?: number): ChartData {
   };
 }
 
-function describe(spec: AnswerSpec): string {
-  const ms = spec.measures.map((m) => `${m.aggregation} of ${m.column}`).join(', ');
-  return `${ms} by ${spec.category}${spec.series ? `, split by ${spec.series}` : ''}`;
-}
-
 export async function computeCard(projectId: string, spec: AnswerSpec): Promise<Built | Failure> {
+  // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here.
+  const live = await liveCardFor(projectId, spec);
+  if (live) return live;
+  await ensureFresh(projectId, [spec.datasetId]); // L3.1 fresh on ask: before the rows are read
   // ponytail: hydrates the dataset (periods, value matching and split chips all
   // read cells); a resident distinct-values query when answers over 1M rows feel slow.
   const ds = await datasets.getDataset(projectId, spec.datasetId);
@@ -151,9 +159,12 @@ export async function computeCard(projectId: string, spec: AnswerSpec): Promise<
   // A column the user gave a display name reads as that name (the catalog).
   const caption = tileCaption({ chartType, data, names: await displayNames(projectId, ds.id).catch(() => ({})) });
   const additive = spec.measures.every((m) => m.aggregation === 'sum' || m.aggregation === 'count');
+  // The rows are already loaded, so their time comes off the same record — no second read.
+  const read = asOfFrom([ds]);
+  const asOf = read ? withPulls(read, projectId, [ds.id]) : read; // "· refreshing…" while a pull goes on (L3.1)
   const facts = answerFacts({
-    title: spec.title, datasetName: ds.name, describe: describe(spec), data,
-    categoryIsDate: isDate, additive, filterLabels, caption,
+    title: spec.title, datasetName: ds.name, describe: describeAnswer(spec), data,
+    categoryIsDate: isDate, additive, filterLabels, caption, ...(asOf ? { asOf: utcLabel(asOf.at) } : {}),
   });
   const notes = viz.warnings.slice();
   if (viz.category && viz.category.note) notes.push(viz.category.note);
@@ -163,7 +174,7 @@ export async function computeCard(projectId: string, spec: AnswerSpec): Promise<
       ok: true, spec, title: spec.title, chartType, datasetName: ds.name, data, caption,
       headline: facts.headline, bullets: facts.bullets,
       chips: answerChips(spec, { columns: ds.columns, splitCandidates: splitCandidates(ds.columns, ds.rows, spec.category) }),
-      filterLabels, steps, notes,
+      filterLabels, steps, notes, ...(asOf ? { asOf } : {}),
     },
     factsText: facts.text,
     ledger: facts.ledger,

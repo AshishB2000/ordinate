@@ -285,6 +285,12 @@
   font-family: var(--font-mono);
   font-size: var(--t-12);
 }
+/* A multi-line secret (SecretText.tsx): every character a disc, as in a
+   password input. Non-standard but in every engine we ship to (Firefox 114+). */
+.masked {
+  -webkit-text-security: disc;
+  resize: vertical;
+}
 .error {
   margin: 0;
   padding: var(--sp-8) var(--sp-12);

@@ -350,6 +350,15 @@ export const MAIN_FILES = [
   'src/analysis/reportSpec.ts',
   'src/analysis/reportPages.ts',
   'src/data/regexMessages.ts',
+  'src/connectors/connectorMessages.ts',
+  'src/data/refreshMessages.ts',
+  'src/engine/liveRefusals.ts',
+  'src/data/liveMessages.ts',
+  'src/engine/liveQueryMessages.ts',
+  'src/data/refreshHookMessages.ts',
+  'src/engine/liveProfileMessages.ts',
+  'src/data/freshOnAskMessages.ts',
+  'src/data/incrementalMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

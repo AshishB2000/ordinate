@@ -8,6 +8,7 @@ import { connectorCatalog, getConnector } from '../connectors';
 import type { ConnectorDef, ConnectorField } from '../connectors/types';
 import { buildSecrets, fieldsOf, isSecretField, loadSecrets, secretStatus, storeSecrets } from './connectionSecrets';
 import { composeSave } from './datasetCompose';
+import { registerEstimate } from './connectionEstimate';
 
 // Connected-data-source IPC. Every source is a ConnectorDef in src/connectors, so
 // these handlers are source-agnostic: they resolve a connectorId, shape the form
@@ -198,6 +199,8 @@ async function withSecretSet(c: connections.Connection) {
 
 /** `connection:import` — what produced the preview, re-run at the import bound and saved as a dataset. */
 async function importAsDataset(p: Record<string, unknown>) {
+  // "Live" stores the selection's schema and fetches no rows (./liveDatasets.ts).
+  if (p.mode === 'live') return (require('./liveDatasets') as typeof import('./liveDatasets')).createLiveDataset(p);
   const projectId = str(p.projectId);
   const connId = str(p.connId);
   const conn = await connections.getConnection(projectId, connId);
@@ -217,7 +220,7 @@ async function importAsDataset(p: Record<string, unknown>) {
   else origin.table = table;
   if (sql && str(p.queryId)) origin.queryId = str(p.queryId);
   // The composer's own save, server side: same quality checks, same sensitivity
-  // scan as any import. sourceKind is a display label the 35 sources share.
+  // scan as any import. sourceKind is a display label the 40 sources share.
   return composeSave({
     projectId,
     name,
@@ -311,6 +314,7 @@ export function register(): void {
         connection: await withSecretSet(saved),
         status: 'ok',
         tables: test.tables,
+        ...(test.warnings ? { warnings: test.warnings } : {}),
       };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not test or save the connection' };
@@ -326,7 +330,7 @@ export function register(): void {
       const def = getConnector(conn.connectorId);
       const secrets = await loadSecrets(connId, def);
       const res = await connectionRun.listTables(conn.connectorId, conn.values, secrets);
-      return res.ok ? { ok: true, tables: res.tables } : { ok: false, error: res.error };
+      return res.ok ? { ok: true, tables: res.tables, ...(res.warnings ? { warnings: res.warnings } : {}) } : { ok: false, error: res.error };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not list tables' };
     }
@@ -352,6 +356,8 @@ export function register(): void {
   // Re-run a connection and overwrite its linked dataset's data. Updates the
   // connection's lastRefreshedAt/lastStatus either way.
   ipcMain.handle('connection:refresh', async (_e, { projectId, connId, datasetId }: any = {}) => {
+    const live = await (require('./liveDatasets') as typeof import('./liveDatasets')).refreshLive(projectId, datasetId);
+    if (live) return live; // a Live dataset's refresh resets its cache; nothing is fetched
     const res = await refreshConnectionInto(projectId, connId, datasetId);
     return res.ok ? { ok: true, dataset: res.dataset } : res;
   });
@@ -442,7 +448,7 @@ export function register(): void {
       if (!test.ok) return { ok: false, error: test.error };
       await storeSecrets(connId, { [key]: value });
       const saved = await connections.updateConnection(projectId, connId, { lastStatus: 'ok', lastError: null });
-      return { ok: true, connection: await withSecretSet(saved ?? conn) };
+      return { ok: true, connection: await withSecretSet(saved ?? conn), ...(test.warnings ? { warnings: test.warnings } : {}) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not replace that secret' };
     }
@@ -458,6 +464,8 @@ export function register(): void {
       return { ok: false, error: err?.message || 'Could not save the dataset' };
     }
   });
+
+  registerEstimate();
 
   // The picker's brand marks (src/app/icons.ts): id → glyph path or data: image.
   // The desktop preload reads them synchronously over `connector:logos`.

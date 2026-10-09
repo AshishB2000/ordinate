@@ -304,7 +304,7 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
   // Login + callback share one bucket; X-Forwarded-For only from a trusted proxy.
   const bare = fastify();
   const proxies = envMod.proxyList(['10.0.0.0/8']);
-  limits.registerLimits(bare, { loginPerMinute: 2, rpcUserPerMinute: 99, rpcIpPerMinute: 99, jsonBodyBytes: 1024, rpcTimeoutMs: 1000 }, proxies);
+  limits.registerLimits(bare, { loginPerMinute: 2, rpcUserPerMinute: 99, rpcIpPerMinute: 99, jsonBodyBytes: 1024, rpcTimeoutMs: 1000, refreshHookMinIntervalSec: 60 }, proxies);
   bare.get('/api/auth/login', async () => 'login');
   bare.get('/api/auth/callback', async () => 'cb');
   bare.get('/other', async () => 'x');

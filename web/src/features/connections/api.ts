@@ -9,6 +9,7 @@
 
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
+import type { AutoRefreshEvery } from '../../api/datasets';
 
 export type FieldType = 'text' | 'number' | 'password' | 'select' | 'checkbox' | 'textarea';
 
@@ -35,6 +36,13 @@ export interface Connector {
   browsable: boolean;
   /** A SaaS source's fixed hosts. */
   hosts?: string[];
+  /** True: the source prices a statement before it runs (BigQuery's dry run) — the editor shows it by Run. */
+  estimates?: boolean;
+  /** A dataset from it CAN be Live — asked at the warehouse each time (docs/live-data/00-plan.md D2). */
+  live: boolean;
+  /** With `live`: the checkbox a connection must have ticked before Live is offered for it (L3.2, D8 —
+   *  PostgreSQL's "This is a read replica or a warehouse"). Absent: every connection may be Live. */
+  liveOptIn?: string;
 }
 
 export type Logo = { path: string; color: string; title: string } | { src: string; title: string };
@@ -75,7 +83,15 @@ export interface ConnDataset {
   lastRefreshedAt?: string;
   lastRefreshStatus?: 'ok' | 'error';
   lastRefreshError?: string | null;
-  autoRefresh?: { every?: 'hourly' | 'daily' | 'weekly' | null };
+  autoRefresh?: { every?: AutoRefreshEvery | null };
+  /** Incremental refresh is on: it may refresh every 5 or 15 minutes. */
+  incrementalOn?: true;
+  /** The last scheduled refresh took longer than its interval (the server decides). */
+  behindSchedule?: true;
+  /** A Live dataset keeps no rows here; its Refresh resets the cache (L2.1). */
+  mode?: 'live';
+  /** Fresh on ask (L3.1): the age past which a figure pulls the new rows first. */
+  freshOnAsk?: { maxStalenessSec: number; fullDue?: true };
 }
 
 export interface PreviewColumn {
@@ -149,14 +165,33 @@ export function useProjectDatasets(projectId: string | undefined) {
   });
 }
 
+/** One listTables call serves the tree (its tables) and the rail's test (its warnings). */
+type TablesReply = { tables: Table[]; warnings: string[] };
+
+async function fetchTables(projectId: string, connId: string): Promise<TablesReply> {
+  const r = unwrap((await rpc('connection:listTables', { projectId, connId })) as Reply<{ tables: Table[]; warnings?: string[] }>, 'Could not list tables');
+  return { tables: r.tables, warnings: r.warnings ?? [] };
+}
+
 export function useTables(projectId: string, connId: string, enabled: boolean) {
   return useQuery({
     queryKey: ['connection:listTables', projectId, connId],
-    queryFn: enabled
-      ? async () => unwrap((await rpc('connection:listTables', { projectId, connId })) as Reply<{ tables: Table[] }>, 'Could not list tables').tables
-      : skipToken,
+    queryFn: enabled ? () => fetchTables(projectId, connId) : skipToken,
     retry: false,
+    select: (d: TablesReply) => d.tables,
   });
+}
+
+/** What the last test said beside "OK" (an administrator role, say) — the same cache entry as useTables. */
+export function useTableWarnings(projectId: string, connId: string, enabled: boolean): string[] {
+  return (
+    useQuery({
+      queryKey: ['connection:listTables', projectId, connId],
+      queryFn: enabled ? () => fetchTables(projectId, connId) : skipToken,
+      retry: false,
+      select: (d: TablesReply) => d.warnings,
+    }).data ?? []
+  );
 }
 
 /** Invalidate what a connection write changes: the list (and its cards' dataset counts). */
@@ -175,7 +210,8 @@ export async function testAndSave(input: {
   values: Record<string, string | number | boolean>;
   secrets: Record<string, string>;
 }) {
-  return unwrap((await rpc('connection:testAndSave', input)) as Reply<{ connection: Connection }>, 'Could not connect').connection;
+  const r = unwrap((await rpc('connection:testAndSave', input)) as Reply<{ connection: Connection; warnings?: string[] }>, 'Could not connect');
+  return { connection: r.connection, warnings: r.warnings ?? [] };
 }
 
 export async function describeTable(projectId: string, connId: string, table: string) {
@@ -201,6 +237,16 @@ export async function explainQuery(projectId: string, connId: string, sql: strin
   return unwrap((await rpc('connection:explain', { projectId, connId, sql })) as Reply<{ columns: ColumnDetail[] }>, 'Could not check the query').columns;
 }
 
+/** What a statement would read, from the source's free dry run: bytes and the server's "~1.2 GB" label. */
+export interface Estimate {
+  bytes: number;
+  label: string;
+}
+
+export async function estimateQuery(projectId: string, connId: string, sql: string) {
+  return unwrap((await rpc('connection:estimate', { projectId, connId, sql })) as Reply<{ estimate: Estimate | null }>, 'Could not estimate the query').estimate;
+}
+
 export async function saveQuery(projectId: string, connId: string, q: { id?: string; name?: string; sql?: string }) {
   return unwrap((await rpc('connection:saveQuery', { projectId, connId, ...q })) as Reply<{ queries: SavedQuery[] }>, 'Could not save that query').queries;
 }
@@ -217,6 +263,24 @@ export async function replaceSecret(projectId: string, connId: string, key: stri
   return unwrap((await rpc('connection:replaceSecret', { projectId, connId, key, value })) as Reply<{ connection: Connection }>, 'Could not replace it').connection;
 }
 
+/** "Copy the data" (an import) or "Live" (the schema only; questions go to the warehouse). */
+export type SaveMode = 'extract' | 'live';
+
+/**
+ * Is Live offered for THIS connection: the connector can be Live and, when it asks for an
+ * opt-in, the connection has it ticked. The server's own rule (src/connectors/index.ts
+ * `isLiveOffered`), which also enforces it — this only decides what the workbench shows.
+ */
+export function liveOffered(def: Connector | null | undefined, conn: Pick<Connection, 'values'>): boolean {
+  if (!def?.live) return false;
+  return !def.liveOptIn || conn.values[def.liveOptIn] === true;
+}
+
+/** Tick or untick a connection's Live opt-in. Unticking is refused while Live datasets ask it — the error says how many. */
+export async function setLiveOptIn(projectId: string, connId: string, on: boolean) {
+  return unwrap((await rpc('connection:setLiveOptIn', { projectId, connId, on })) as Reply<{ on: boolean }>, 'Could not change it').on;
+}
+
 export async function importDataset(input: {
   projectId: string;
   connId: string;
@@ -225,14 +289,18 @@ export async function importDataset(input: {
   sql?: string;
   queryId?: string;
   limit: number;
+  mode?: SaveMode;
 }) {
-  return unwrap((await rpc('connection:import', input)) as Reply<{ dataset: { id: string; name: string; rowCount: number } }>, 'Could not save the dataset').dataset;
+  return unwrap(
+    (await rpc('connection:import', input)) as Reply<{ dataset: { id: string; name: string; rowCount: number; mode?: 'live' } }>,
+    'Could not save the dataset',
+  ).dataset;
 }
 
 export async function refreshDataset(projectId: string, connId: string, datasetId: string) {
   unwrap((await rpc('connection:refresh', { projectId, connId, datasetId })) as Reply<object>, 'Could not refresh that dataset');
 }
 
-export async function setSchedule(projectId: string, datasetId: string, every: 'hourly' | 'daily' | 'weekly' | null) {
+export async function setSchedule(projectId: string, datasetId: string, every: AutoRefreshEvery | null) {
   unwrap((await rpc('dataset:update', { projectId, datasetId, autoRefresh: every })) as Reply<object>, 'Could not change the schedule');
 }

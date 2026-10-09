@@ -33,7 +33,7 @@ import type { CopilotFacts } from './copilot';
 // app-computed and must not be recomputed. No builder ever derives a figure — it
 // only lays out the ones handed to it.
 
-const GUARD_LINE =
+export const GUARD_LINE =
   'The numbers below were computed by the app (Ordinate), not by you. ' +
   'Treat them as ground truth: cite them exactly and NEVER recompute, round, or invent a figure.';
 
@@ -50,7 +50,7 @@ function fmt(v: number | null | undefined): string {
 // One entry per figure the block hands the model. `n/a` adds nothing: a figure
 // the app could not compute is precisely one the model may not state.
 
-function num(
+export function num(
   ledger: LedgerEntry[],
   label: string,
   value: number | null | undefined,
@@ -83,7 +83,7 @@ function fromAppText(ledger: LedgerEntry[], label: string, appText: string, sour
  * entries stay the real ledger and this stays a backstop, rather than quietly
  * becoming the implementation.
  */
-function sealLedger(ledger: LedgerEntry[], text: string, source: string): number {
+export function sealLedger(ledger: LedgerEntry[], text: string, source: string): number {
   const before = ledger.length;
   for (const h of harvestAppNumbers(text)) {
     const covered = ledger.some((e) => Object.is(e.value, h.value) && (h.unit !== 'percent' || e.unit === 'percent'));
@@ -115,7 +115,7 @@ export interface FactMetric {
   description?: string;
 }
 
-function metricLines(lines: string[], ledger: LedgerEntry[], metrics: FactMetric[]): void {
+export function metricLines(lines: string[], ledger: LedgerEntry[], metrics: FactMetric[]): void {
   if (!metrics.length) return;
   lines.push('');
   lines.push('Defined metrics — use THESE names for these numbers, and write them the way the app does:');
@@ -134,7 +134,7 @@ export interface FactColumnDoc { description?: string; displayName?: string; sen
  * not figures: a digit a note happens to contain reaches the ledger through
  * sealLedger, exactly like a digit in a dataset name.
  */
-function columnNoteLines(lines: string[], docs: Record<string, FactColumnDoc>, only?: string[]): void {
+export function columnNoteLines(lines: string[], docs: Record<string, FactColumnDoc>, only?: string[]): void {
   const notes: string[] = [];
   for (const name of Object.keys(docs || {})) {
     if (only && only.indexOf(name) < 0) continue;
@@ -550,7 +550,9 @@ export function projectFacts(
   // needs real column names to write an answer spec, and the app resolves them.
   // …and the user's catalog notes on those columns, so "revenue" is written the
   // way the user names it and a described column is picked for what it means.
-  schemas: { name: string; columns: { name: string; type: string }[]; docs?: Record<string, FactColumnDoc> }[] = [],
+  // `notes`: a ready line-end per column — a Live dataset's profile and sample
+  // values (ai/liveFacts `liveColumnNotes`: bounded, labelled, a withheld column's values left out).
+  schemas: { name: string; columns: { name: string; type: string }[]; docs?: Record<string, FactColumnDoc>; notes?: Record<string, string> }[] = [],
 ): CopilotFacts {
   const lines: string[] = [GUARD_LINE, ''];
   const ledger: LedgerEntry[] = [];
@@ -567,10 +569,11 @@ export function projectFacts(
     schemas.forEach((s) => {
       const note = (col: string): string => {
         const d = (s.docs || {})[col];
-        if (!d) return '';
+        const extra = s.notes && Object.prototype.hasOwnProperty.call(s.notes, col) ? s.notes[col] : '';
+        if (!d) return extra;
         const bits = [d.displayName ? `called "${d.displayName}"` : '', d.description ? d.description.slice(0, 120) : '']
           .filter(Boolean);
-        return bits.length ? '; ' + bits.join('; ') : '';
+        return (bits.length ? '; ' + bits.join('; ') : '') + extra;
       };
       lines.push(`- ${s.name}: ${s.columns.map((c) => `${c.name} (${c.type}${note(c.name)})`).join(', ') || '(no columns)'}`);
     });

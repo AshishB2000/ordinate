@@ -18,6 +18,7 @@ import { toast } from '../../ui/Toast';
 import { columnsBefore, guessKeys, missingKey, MODES, type ChainTable, type Link, type Mode } from './composerModel';
 import type { GridColumn } from '../../ui/DataGrid/DataGrid';
 import cs from './Composer.module.css';
+import { LIVE_OFF } from '../live/offFeatures';
 
 const DRAG_TYPE = 'application/x-ordinate-dataset';
 
@@ -147,7 +148,7 @@ export function ComposerChain({ projectId, base, links, previewCols, sheet, open
     setOver(false);
     const id = e.dataTransfer.getData(DRAG_TYPE);
     const d = list.data?.find((x) => x.id === id);
-    if (d) void add(d.id, d.name);
+    if (d && d.mode !== 'live') void add(d.id, d.name);
   };
 
   const inline = base && 'inline' in base.ref ? base : null;
@@ -173,19 +174,27 @@ export function ComposerChain({ projectId, base, links, previewCols, sheet, open
           ) : list.data.length === 0 ? (
             <p className={cs.srcEmpty}>No saved datasets yet.</p>
           ) : (
-            list.data.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                className={cs.src}
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData(DRAG_TYPE, d.id)}
-                onClick={() => void add(d.id, d.name)}
-              >
-                <span className={cs.srcName}>{d.name}</span>
-                <span className={cs.srcMeta}>{formatNumber(d.rowCount)} rows</span>
-              </button>
-            ))
+            list.data.map((d) =>
+              // A Live dataset keeps its rows in the warehouse (L2.6): joins need a copy, so it is listed, not usable.
+              d.mode === 'live' ? (
+                <div key={d.id} className={`${cs.src} ${cs.srcUsed}`} aria-disabled="true" title={`${LIVE_OFF.joins.why} Make a copy of it from its dataset page to join it.`}>
+                  <span className={cs.srcName}>{d.name}</span>
+                  <span className={cs.srcMeta}>Live · joins need a copy</span>
+                </div>
+              ) : (
+                <button
+                  key={d.id}
+                  type="button"
+                  className={cs.src}
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData(DRAG_TYPE, d.id)}
+                  onClick={() => void add(d.id, d.name)}
+                >
+                  <span className={cs.srcName}>{d.name}</span>
+                  <span className={cs.srcMeta}>{formatNumber(d.rowCount)} rows</span>
+                </button>
+              ),
+            )
           )}
         </Group>
       </aside>

@@ -1,0 +1,8 @@
+{
+  "code": "001003",
+  "sqlState": "42000",
+  "message": "SQL compilation error:\nsyntax error line 2 at position 7 unexpected 'form'.",
+  "statementHandle": "01b0e8a5-0002-3c8a-0000-0001234a5b6e",
+  "statementStatusUrl": "/api/v2/statements/01b0e8a5-0002-3c8a-0000-0001234a5b6e?requestId=5f0a7b1e-6a4b-4c1d-9e7f-2a3b4c5d6e7f",
+  "createdOn": 1700000000123
+}

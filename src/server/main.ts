@@ -2,6 +2,7 @@
 // Reads the environment once, listens, and closes cleanly on SIGTERM/SIGINT
 // (what Kubernetes and Compose send on a rollout).
 
+import * as path from 'path';
 import { buildApp, registerHandlers } from './app';
 import { enterServerMode, identityFor } from './context';
 import { env, type ServerEnv } from './env';
@@ -35,6 +36,13 @@ forbidSyncOnMainThread();
 storage.configure(cfg.dataDir, cfg.storage.s3, cfg.storage.cacheBytes);
 routeByOrg({ dataDir: cfg.dataDir, ...cfg.duckdb, s3: cfg.storage.s3 });
 registerHandlers();
+// The test harness's fake warehouse for Live datasets (docs/live-data/00-plan.md
+// L2.3, L2.6): ORDINATE_TEST_LIVE_FAKE=1 only, which env.ts refuses in prod —
+// and the image ships no scripts/, so there it could not load anyway.
+if (cfg.testLiveFake) {
+  const load: (id: string) => unknown = require;
+  (load(path.join(__dirname, '..', '..', 'scripts', 'liveFakeConnector.js')) as { registerLiveFake(): void }).registerLiveFake();
+}
 const app = buildApp(cfg);
 
 // dev binds loopback only: dev mode runs every request as an admin (context.ts),

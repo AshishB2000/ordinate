@@ -17,6 +17,15 @@
 // name, and an org member with no grant on the project must see neither. A
 // refresh error is cut like every other origin text (no URL query, no path).
 //
+// A SUCCESSFUL refresh is announced by refreshAsJob itself (data/refreshEvents,
+// L0.1) — for every door, the tick's included — so the tick's reporter pushes
+// only a FAILED one here; announcing both would send a scheduled success twice.
+//
+// Every scheduled refresh that RAN leaves an audit row (`scheduled_refresh`,
+// live data L0.5): the actor is the jobs identity it ran as, the outcome the
+// refresh's own. One that coalesced with a refresh already running started
+// nothing and leaves none (refreshScheduler reports only what ran).
+//
 // Not carried over: `reports:run-due` (the desktop renderer generates reports;
 // the server has no generator until the reports port), the alert "explain"
 // model call (T2.12 routes AI keys first).
@@ -28,6 +37,7 @@ import * as alertStore from '../../analysis/alertStore';
 import type { Pool } from 'pg';
 import { redactOriginText } from '../../data/datasetOrigin';
 import { readerEmails } from '../authz/index';
+import { audit } from '../authz/audit';
 import { ctx } from '../context';
 import { publish } from '../sse';
 import { defineJob } from './runner';
@@ -74,9 +84,12 @@ export function wireSchedules(pool: Pool, devAuth: boolean): void {
 
   scheduler.setEnabledCheck(() => config.get().autoRefresh !== false);
   scheduler.onRefreshed((o) => {
-    push(o.projectId, 'hub:dataset-refreshed', o.error === undefined ? o : { ...o, error: redactOriginText(o.error) });
+    if (!o.ok) push(o.projectId, 'hub:dataset-refreshed', { ...o, error: redactOriginText(o.error ?? 'Refresh failed.') });
     // A published site that reads it, opted in, is rebuilt at its link (T2.9; the desktop's job hook).
     if (o.ok) scheduleRepublish(o.projectId, o.datasetId);
+    const { org, user, requestId } = ctx(); // the tick's: the job identity, for this org
+    void audit(pool, { org: org.id, actor: user.email, action: 'scheduled_refresh', projectId: o.projectId, targets: [o.datasetId], outcome: o.ok ? 'ok' : 'error', requestId })
+      .catch(() => undefined); // the trail must not stop the tick; the refresh itself is recorded on the dataset
   });
   // The store's evaluator directly: ipc/alerts' delivery is the RPC layer's.
   scheduler.onEvaluateAlerts(async (projectId, datasetId) => {

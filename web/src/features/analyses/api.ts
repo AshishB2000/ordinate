@@ -7,6 +7,7 @@ import { skipToken, useQuery } from '@tanstack/react-query';
 import { EditorCtx } from './editor/context';
 import { rpc, RpcError, type RpcInput } from '../../api/client';
 import type { ChartDataShape } from '../../charts/types';
+import type { AsOf } from '../../ui/asOf';
 
 export type Agg = 'sum' | 'avg' | 'count' | 'min' | 'max';
 export type Layout = { x: number; y: number; w: number; h: number };
@@ -135,7 +136,8 @@ export interface CompareReply {
   deltaDisplay?: string;
   direction?: 'up_good' | 'down_good';
 }
-export type VisualTile = { ok: true; data: ChartDataShape & Record<string, unknown>; warnings: string[]; paramErrors?: string[] } | { ok: false; error: string };
+/** Every tile's answer says how fresh it is (`asOf`, L0.2) — the card's head shows it. */
+export type VisualTile = { ok: true; data: ChartDataShape & Record<string, unknown>; warnings: string[]; paramErrors?: string[]; asOf?: AsOf } | { ok: false; error: string };
 /** A statistics card's answer (src/ipc/stats.ts computeStatsTile): every cell a string the server wrote. */
 export type StatsTile =
   | {
@@ -148,10 +150,11 @@ export type StatsTile =
         table: { head: string[]; rows: string[][] };
         chart: { chartType: string; data: ChartDataShape & Record<string, unknown> };
       };
+      asOf?: AsOf;
     }
   | { ok: false; error: string };
 export type MetricTile =
-  | { ok: true; value: number | null; display?: string; name?: string; paramErrors?: string[]; compare?: CompareReply; fx?: { target: string } }
+  | { ok: true; value: number | null; display?: string; name?: string; paramErrors?: string[]; compare?: CompareReply; fx?: { target: string }; asOf?: AsOf }
   | { ok: false; error: string };
 
 // A sheet is one round trip: the tiles asked for in the same tick go out as ONE

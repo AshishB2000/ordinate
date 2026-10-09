@@ -4,7 +4,7 @@
 // A source with no catalog (HTTP engines, URL) has no tree: hiding it is the
 // honest answer, the editor still works.
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { EmptyState, ErrorState, Page, PageSkeleton } from '../../app/blocks';
@@ -13,8 +13,10 @@ import { Icon } from '../../ui/icons/Icon';
 import { toast } from '../../ui/Toast';
 import {
   describeTable,
+  estimateQuery,
   explainQuery,
   importDataset,
+  liveOffered,
   qualify,
   runQuery,
   sampleTable,
@@ -25,10 +27,12 @@ import {
   useProjectDatasets,
   useRefreshLists,
   useTables,
+  useTableWarnings,
   type ColumnDetail,
   type Connection,
   type Connector,
   type Logo,
+  type SaveMode,
 } from './api';
 import { ConnLogo } from './ConnLogo';
 import { DetailsRail, type TestState } from './DetailsRail';
@@ -38,6 +42,17 @@ import { SqlEditor } from './SqlEditor';
 import { SavedQueries, type QueryDialog } from './SavedQueries';
 import { where } from './SavedConnections';
 import s from './Workbench.module.css';
+
+/** The editor's text once typing pauses — what the dry-run estimate is asked about. */
+const ESTIMATE_PAUSE_MS = 800;
+function useSettled(v: string, ms: number): string {
+  const [out, setOut] = useState(v);
+  useEffect(() => {
+    const t = setTimeout(() => setOut(v), ms);
+    return () => clearTimeout(t);
+  }, [v, ms]);
+  return out;
+}
 
 export default function WorkbenchPage() {
   const { projectId = '', connId = '' } = useParams();
@@ -85,6 +100,7 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
   const family = def?.family ?? '';
   const [testAsked, setTestAsked] = useState(false);
   const tables = useTables(projectId, conn.id, browsable || testAsked);
+  const testWarnings = useTableWarnings(projectId, conn.id, browsable || testAsked);
   const datasets = useProjectDatasets(projectId);
   const [columns, setColumns] = useState<ReadonlyMap<string, readonly string[]>>(new Map());
   // The selected table lives in the URL (?table=), so a reload or a shared
@@ -107,6 +123,16 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
   const [limit, setLimit] = useState('100000');
   const [details, setDetails] = useState(true);
   const [dialog, setDialog] = useState<QueryDialog>(null);
+  // A source that prices a statement before it runs (BigQuery's free dry run)
+  // shows "~1.2 GB" by Run, asked once typing pauses. Others never call.
+  const typed = useSettled(sql.trim(), ESTIMATE_PAUSE_MS);
+  const estimate = useQuery({
+    queryKey: ['connection:estimate', projectId, conn.id, typed],
+    queryFn: () => estimateQuery(projectId, conn.id, typed),
+    enabled: def?.estimates === true && typed !== '',
+    staleTime: 60_000,
+    retry: false,
+  });
 
   const keyOf = useCallback((table: string) => describeKey(projectId, conn.id, table), [projectId, conn.id]);
   const describe = useCallback(
@@ -188,7 +214,7 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
     }
   }
 
-  async function saveAsDataset(name: string) {
+  async function saveAsDataset(name: string, mode: SaveMode) {
     if (result.kind !== 'shown') return;
     const { table, sql: stmt } = result.shown;
     setSaving(true);
@@ -199,14 +225,25 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
         name: name || table || 'Connection data',
         ...(stmt ? { sql: stmt, ...(queryId ? { queryId } : {}) } : { table }),
         limit: Number(limit),
+        ...(mode === 'live' ? { mode } : {}),
       });
       refreshLists();
-      toast(`Saved “${ds.name}” as a dataset.`, { kind: 'success', action: { label: 'Open', onClick: () => void navigate(`/data/${projectId}/${ds.id}`) } });
+      const what = ds.mode === 'live' ? 'a Live dataset' : 'a dataset';
+      toast(`Saved “${ds.name}” as ${what}.`, { kind: 'success', action: { label: 'Open', onClick: () => void navigate(`/data/${projectId}/${ds.id}`) } });
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Could not save the dataset.', { kind: 'error' });
     } finally {
       setSaving(false);
     }
+  }
+
+  /** By Run: the dry run's size for the text on screen — never the previous statement's while typing. */
+  function estimateView() {
+    if (def?.estimates !== true || sql.trim() === '') return null;
+    if (sql.trim() !== typed || estimate.isPending) return { text: 'Estimating…', title: 'Asking the source what this query would read', muted: true };
+    if (estimate.isError) return { text: 'No estimate', title: estimate.error.message, muted: true };
+    const label = estimate.data?.label;
+    return label ? { text: label, title: `A free dry run says this query would process about ${label.replace(/^~/, '')}.` } : null;
   }
 
   const test: TestState = tables.isFetching ? 'testing' : tables.isError ? 'error' : tables.isSuccess ? 'ok' : conn.lastStatus;
@@ -246,6 +283,7 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
             onRun={() => void run()}
             onExplain={() => void explain()}
             onSave={() => void saveCurrent()}
+            estimate={estimateView()}
           />
           {message && (
             <div className={s.msgRow} role={message.error ? 'alert' : 'status'}>
@@ -274,7 +312,7 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
             onChanged={refreshLists}
             onMessage={(text, error) => setMessage({ text, error })}
           />
-          <Results state={result} saving={saving} onSave={(n) => void saveAsDataset(n)} />
+          <Results state={result} saving={saving} live={liveOffered(def, conn)} onSave={(n, m) => void saveAsDataset(n, m)} />
         </div>
         {details && (
           <DetailsRail
@@ -283,6 +321,7 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
             projectId={projectId}
             test={test}
             testError={testError}
+            testWarnings={testWarnings}
             onTest={() => (browsable || testAsked ? void tables.refetch() : setTestAsked(true))}
             datasets={mine}
             onChanged={refreshLists}

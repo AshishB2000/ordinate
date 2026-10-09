@@ -69,6 +69,9 @@ export const connections = {
     project: byProjectId,
   }),
   'connection:explain': rpc({ access: 'write', input: z.strictObject({ ...Conn, sql: Sql }), project: byProjectId }),
+  // What a statement would read, from the source's free dry run (BigQuery), before Run. `estimate: null`
+  // when the source cannot estimate. `write`, like explain: it uses the stored credential against the source.
+  'connection:estimate': rpc({ access: 'write', input: z.strictObject({ ...Conn, sql: Sql }), project: byProjectId }),
   'connection:refresh': rpc({ access: 'write', input: z.strictObject({ ...Conn, datasetId: Uuid }), project: byProjectId }),
   // Create (no id), edit or rename (no sql) a saved query; replies with the whole list.
   'connection:saveQuery': rpc({
@@ -94,6 +97,9 @@ export const connections = {
       sql: Sql.optional(),
       queryId: Uuid.optional(),
       limit: z.number().int().min(1).max(1_000_000),
+      // "Copy the data" (absent) or "Live" (docs/live-data/00-plan.md L2.1): Live stores the schema only.
+      mode: z.enum(['extract', 'live']).optional(),
+      maxCacheAgeSec: z.number().int().min(0).max(30 * 24 * 60 * 60).optional(),
     }),
     project: byProjectId,
   }),

@@ -9,6 +9,7 @@ import { annotationHooks } from '../../charts/annotations';
 import type { ChartHandle } from '../../charts/Chart';
 import type { Cx } from '../../charts/types';
 import { SkeletonBlock } from '../../ui/Skeleton';
+import { AsOfCaption } from '../../ui/AsOf';
 import { ErrorState } from '../../ui/States';
 import { newId, type Overlay } from './analytics/AnalyticsPane';
 import { sharedData } from './api';
@@ -20,7 +21,16 @@ import { DrillPanel, type DrillTarget } from './drill/DrillPanel';
 import { markAt } from './drill/mark';
 import { chartCanRender, GRID_TYPES, needsText, PICKER_POOL } from './eligibility';
 import { NameDialog } from './NameDialog';
+import { Button } from '../../ui/Button';
+import { toast } from '../../ui/Toast';
+import { LiveOff, LiveRefusal } from '../live/LiveOff';
+import { LIVE_OFF_CHARTS } from '../live/offFeatures';
+import { liveRefusalOf } from '../live/refusal';
 import s from './Builder.module.css';
+
+/** "+ More" on a Live dataset: every chart but the grid engines, which are off for Live (L2.6). */
+const LIVE_POOL: readonly string[] = PICKER_POOL.filter((t) => !LIVE_OFF_CHARTS.has(t));
+const LIVE_DRILL = 'The rows behind a mark are off for Live datasets: the rows stay in the warehouse. Make a copy to see them.';
 
 export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
   const [chart, setChart] = useState<ChartHandle | null>(null);
@@ -52,6 +62,7 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
   // `series` is a split value only when the encoding splits; on a multi-measure chart it is a legend entry.
   const onMark = (c: ChartHandle, e: MouseEvent, steps: Cx[], seriesName?: string) => {
     if (e.altKey) return; // ⌥-click annotates
+    if (b.liveDataset) return; // the rows behind a mark are rows: off for Live (the ⋯ menu says why)
     const m = markAt(c, e);
     if (!m) return;
     const split = !!b.eff.series;
@@ -63,7 +74,7 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
     <section className={s.stage} aria-label="Chart">
       <div className={s.stageHead}>
         {fit && recommended.length > 0 && (
-          <ChartPicker recommended={recommended} pool={PICKER_POOL} data={fit} selected={current} extras={extras} onSelect={b.pickType} onExtras={setExtras} />
+          <ChartPicker recommended={recommended} pool={b.liveDataset ? LIVE_POOL : PICKER_POOL} data={fit} selected={current} extras={extras} onSelect={b.pickType} onExtras={setExtras} />
         )}
         <div className={s.slot}>
           {drawable && (
@@ -76,7 +87,7 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
               menu={{
                 name: b.label,
                 explain: b.explain,
-                drill: () => setDrill(target(null)),
+                drill: () => (b.liveDataset ? toast(LIVE_DRILL, { kind: 'info' }) : setDrill(target(null))),
                 sharedData: () => sharedData({ projectId, datasetId: b.datasetId, encoding: b.eff, filters: b.live }),
                 format: { data: fit ?? null, measures: b.measures, scope: b.scope },
               }}
@@ -84,14 +95,29 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
           )}
         </div>
       </div>
-      {reply?.sample?.note && (
-        <p className={s.sample} role="status" title={reply.sample.by ? `Stratified by ${reply.sample.by}. Saving the visual and every dashboard use all rows.` : reply.sample.note}>
-          {reply.sample.note}
-        </p>
+      {(reply?.sample?.note || reply?.asOf) && (
+        <div className={s.stageNotes}>
+          {reply.sample?.note && (
+            <p className={s.sample} role="status" title={reply.sample.by ? `Stratified by ${reply.sample.by}. Saving the visual and every dashboard use all rows.` : reply.sample.note}>
+              {reply.sample.note}
+            </p>
+          )}
+          {/* How fresh the preview's figures are (L0.2). */}
+          <AsOfCaption asOf={reply.asOf} className={s.asOf} />
+        </div>
       )}
       <div className={b.preview.isFetching && reply ? `${s.area} ${s.loading}` : s.area} data-chart-type={current || undefined} data-chart-editable="">
-        {!b.complete ? (
+        {b.offType ? (
+          <div className={s.liveOff}>
+            <LiveOff projectId={projectId} datasetId={b.datasetId} feature={b.offType} heading={3} compact />
+            <Button size="sm" onClick={() => b.pickType('column')}>
+              Draw a column chart instead
+            </Button>
+          </div>
+        ) : !b.complete ? (
           <StageNote>Pick a category and at least one measure to draw a chart.</StageNote>
+        ) : b.preview.isError && !reply && liveRefusalOf(b.preview.error) !== null ? (
+          <LiveRefusal message={liveRefusalOf(b.preview.error) ?? ''} projectId={projectId} datasetId={b.datasetId} />
         ) : b.preview.isError && !reply ? (
           <ErrorState compact heading={3} title="Could not compute the visual" message={b.preview.error.message} onRetry={() => void b.preview.refetch()} />
         ) : !reply || !data ? (

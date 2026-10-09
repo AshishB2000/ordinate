@@ -6,17 +6,21 @@
 // prove no row was skipped or drawn twice. ~1 s, where building the rows in JS
 // and saving them would take many.
 // Plus a "Shipments" dataset with coordinates for the maps (scripts/geoFixture.ts —
-// the sample itself has none). Run as its own
+// the sample itself has none). With --live, a Live dataset over the test
+// harness's fake warehouse (scripts/liveFakeConnector.ts, docs/live-data L2.3):
+// its connection and record; the server must then run with
+// ORDINATE_TEST_LIVE_FAKE=1 to answer it (server.ts sets that). Run as its own
 // process by server.ts — the seed loads DuckDB, which would otherwise keep the
 // test runner alive.
 //
-//   node web/e2e/seed.ts <dataDir> [--large]     (needs `npm run build:ts` first)
+//   node web/e2e/seed.ts <dataDir> [--large] [--live]     (needs `npm run build:ts` first)
 
 import { createRequire } from 'node:module';
 
 const dataDir = process.argv[2];
-if (!dataDir) throw new Error('usage: node web/e2e/seed.ts <dataDir> [--large]');
+if (!dataDir) throw new Error('usage: node web/e2e/seed.ts <dataDir> [--large] [--live]');
 const large = process.argv.includes('--large');
+const live = process.argv.includes('--live');
 const LARGE_ROWS = 1_000_000;
 
 // The compiled main world, by the shapes used here only: `typeof import()` of
@@ -76,6 +80,12 @@ async function seedLarge(projectId: string): Promise<{ datasetId: string; rows: 
   return { datasetId: ds.id, rows: LARGE_ROWS, ms: Math.round(performance.now() - t0) };
 }
 
+/** The fake warehouse's connection and a Live dataset over its `orders` fixture table. Loaded only with --live. */
+function seedLive(projectId: string): Promise<{ connId: string; datasetId: string }> {
+  const fake = require('../../scripts/liveFakeConnector.js') as { seedLiveFake(projectId: string): Promise<{ connId: string; datasetId: string }> };
+  return fake.seedLiveFake(projectId);
+}
+
 const cfg = envMod.parseEnv({ AUTH_MODE: 'dev', ORDINATE_ENV: 'dev', DATA_DIR: dataDir });
 context.enterServerMode(cfg.dataDir);
 // The identity every dev-mode request gets, so the sample lands in that org.
@@ -89,7 +99,11 @@ const seeded = await context.runInContext(dev, 'e2e-seed', async () => {
     const fixture = geo.geoFixture();
     if (!(await datasets.saveDataset(s.projectId, { name: geo.GEO_FIXTURE_NAME, sourceKind: 'csv', ...fixture }))) throw new Error('the Shipments dataset was not saved');
   }
-  return { ...s, large: large && s.projectId ? await seedLarge(s.projectId) : undefined };
+  return {
+    ...s,
+    large: large && s.projectId ? await seedLarge(s.projectId) : undefined,
+    live: live && s.projectId ? await seedLive(s.projectId) : undefined,
+  };
 });
 if (!seeded.seeded || !seeded.projectId) throw new Error(`sample project was not seeded: ${JSON.stringify(seeded)}`);
 process.stdout.write(`${JSON.stringify({ ...seeded, projectName: sample.FIRST_PROJECT_NAME })}\n`);

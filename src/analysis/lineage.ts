@@ -92,8 +92,8 @@ function basename(p: string): string {
   return parts[parts.length - 1] || p;
 }
 
-/** Column names a visual's encoding and filters read. */
-function visualColumns(v: Rec): string[] {
+/** Column names a visual's encoding and filters read (also what a Live question names, L2.5). */
+export function visualColumns(v: Rec): string[] {
   const e: Rec = v.encoding || {};
   const cols = [str(e.category), str(e.series)];
   for (const m of arr(e.values)) if (m && !m.metricId) cols.push(str(m.column));

@@ -20,6 +20,7 @@ const PG: Connector = {
   category: 'Databases',
   blurb: 'Read-only access to a PostgreSQL database.',
   browsable: true,
+  live: false,
   fields: [
     { key: 'host', label: 'Host', type: 'text', required: true, secret: false },
     { key: 'port', label: 'Port', type: 'number', required: true, secret: false, default: 5432 },
@@ -28,7 +29,9 @@ const PG: Connector = {
     { key: 'ssl', label: 'Use TLS', type: 'checkbox', required: false, secret: false, default: false },
   ],
 };
-const URLC: Connector = { id: 'url', label: 'URL / API (JSON)', family: 'http', category: 'Files & local', browsable: false, fields: [{ key: 'url', label: 'URL', type: 'text', required: true, secret: false }] };
+const URLC: Connector = { id: 'url', label: 'URL / API (JSON)', family: 'http', category: 'Files & local', browsable: false, live: false, fields: [{ key: 'url', label: 'URL', type: 'text', required: true, secret: false }] };
+/** A warehouse that offers Live (docs/live-data/00-plan.md L2.1). */
+const RS: Connector = { ...PG, id: 'amazon-redshift', label: 'Amazon Redshift', category: 'Cloud warehouses', live: true };
 const CONN = {
   id: CID,
   projectId: PID,
@@ -41,6 +44,34 @@ const CONN = {
   secretSet: { password: true },
   datasetCount: 2,
 };
+
+// Snowflake (L1.1): a multi-line secret — the private key — in a masked textarea.
+const SF: Connector = {
+  id: 'snowflake',
+  label: 'Snowflake',
+  family: 'snowflake',
+  category: 'Cloud warehouses',
+  browsable: true,
+  live: true,
+  fields: [
+    { key: 'account', label: 'Account', type: 'text', required: true, secret: false },
+    { key: 'user', label: 'User', type: 'text', required: true, secret: false },
+    { key: 'token', label: 'Private key or access token', type: 'textarea', required: true, secret: true, placeholder: '-----BEGIN PRIVATE KEY-----' },
+    { key: 'password', label: 'Private key passphrase', type: 'password', required: false, secret: true },
+    { key: 'warehouse', label: 'Warehouse', type: 'text', required: true, secret: false },
+  ],
+};
+const PEM = '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7canary\nline+two/canary==\n-----END PRIVATE KEY-----';
+const PEM2 = '-----BEGIN PRIVATE KEY-----\nMIIEsecondKEYcanaryAAAA\n-----END PRIVATE KEY-----';
+const SF_CONN = {
+  ...CONN,
+  name: 'Warehouse',
+  connectorId: 'snowflake',
+  values: { account: 'myorg-myaccount', user: 'reader', warehouse: 'COMPUTE_WH', database: 'SALES' },
+  secretSet: { token: true, password: false },
+  datasetCount: 0,
+};
+const WARNING = 'This connection signs in with the ACCOUNTADMIN role, which can change data and account settings.';
 
 type Reply = { status?: number; body?: unknown } | ((payload: unknown) => { status?: number; body?: unknown });
 
@@ -128,6 +159,76 @@ describe('Connections', () => {
   });
 });
 
+describe('a multi-line secret (the Snowflake private key)', () => {
+  it('is a masked, write-only textarea whose value goes only into the secrets, line breaks intact', async () => {
+    let saved = false;
+    const calls = serve(
+      base({
+        'connectors:catalog': { body: [PG, SF] },
+        'connection:testAndSave': () => ((saved = true), { body: { ok: true, connection: SF_CONN, warnings: [WARNING] } }),
+        'connections:list': () => ({ body: saved ? [SF_CONN] : [] }),
+        'connection:listTables': { body: { ok: true, tables: [{ schema: 'PUBLIC', name: 'ORDERS' }], warnings: [WARNING] } },
+        'dataset:list': { body: [] },
+      }),
+    );
+    renderApp(`/connections/${PID}?source=snowflake`);
+    const key = (await screen.findByLabelText('Private key or access token *')) as HTMLTextAreaElement;
+    expect(key.tagName).toBe('TEXTAREA');
+    expect(key.value).toBe('');
+    expect(key.hasAttribute('data-secret')).toBe(true);
+    expect(key.getAttribute('spellcheck')).toBe('false');
+    expect(key.getAttribute('autocomplete')).toBe('off');
+    expect(key.getAttribute('autocapitalize')).toBe('off');
+    expect(document.getElementById(key.getAttribute('aria-describedby')!)!.textContent).toMatch(/Write-only: it is stored encrypted and never shown again\.$/);
+    fireEvent.change(key, { target: { value: PEM } });
+    // Copy and cut are refused, as on a password input.
+    expect(fireEvent.copy(key)).toBe(false);
+    expect(fireEvent.cut(key)).toBe(false);
+    fireEvent.change(screen.getByLabelText('Account *'), { target: { value: 'myorg-myaccount' } });
+    fireEvent.change(screen.getByLabelText('User *'), { target: { value: 'reader' } });
+    fireEvent.change(screen.getByLabelText('Warehouse *'), { target: { value: 'COMPUTE_WH' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Test & Save' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'connection:testAndSave')).toBe(true));
+    const sent = calls.find((c) => c.channel === 'connection:testAndSave')!.payload as { values: Record<string, unknown>; secrets: Record<string, string> };
+    expect(sent.secrets).toEqual({ token: PEM });
+    expect(JSON.stringify(sent.values)).not.toContain('PRIVATE KEY');
+    // Saved: the workbench opens; the test's warning is shown (toast and rail), the key nowhere.
+    const rail = await screen.findByRole('complementary', { name: 'Connection details' });
+    expect(await within(rail).findByText(WARNING)).toBeTruthy();
+    expect(within(rail).getByText('Key saved')).toBeTruthy();
+    expect(screen.getAllByText(WARNING).length).toBeGreaterThanOrEqual(1);
+    expect(document.body.innerHTML).not.toContain('canary');
+  });
+
+  it('shows "Key saved" in the rail; Replace reveals an EMPTY masked textarea and sends the new key once', async () => {
+    const calls = serve(
+      base({
+        'connectors:catalog': { body: [PG, SF] },
+        'connections:list': { body: [SF_CONN] },
+        'connection:listTables': { body: { ok: true, tables: [] } },
+        'dataset:list': { body: [] },
+        'connection:replaceSecret': { body: { ok: true, connection: SF_CONN } },
+      }),
+    );
+    renderApp(`/connections/${PID}/${CID}`);
+    const rail = await screen.findByRole('complementary', { name: 'Connection details' });
+    expect(within(rail).getByText('Key saved')).toBeTruthy();
+    expect(within(rail).getByText('Not set')).toBeTruthy(); // the passphrase
+    expect(rail.querySelector('textarea')).toBeNull();
+    fireEvent.click(within(rail).getByRole('button', { name: 'Replace Private key or access token' }));
+    const next = within(rail).getByLabelText('New private key or access token') as HTMLTextAreaElement;
+    expect(next.tagName).toBe('TEXTAREA');
+    expect(next.value).toBe('');
+    expect(next.hasAttribute('data-secret')).toBe(true);
+    fireEvent.change(next, { target: { value: PEM2 } });
+    fireEvent.click(within(rail).getByRole('button', { name: 'Test & replace' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'connection:replaceSecret')).toBe(true));
+    expect(calls.find((c) => c.channel === 'connection:replaceSecret')!.payload).toEqual({ projectId: PID, connId: CID, key: 'token', value: PEM2 });
+    await waitFor(() => expect(rail.querySelector('textarea')).toBeNull());
+    expect(document.body.innerHTML).not.toContain('secondKEYcanary');
+  });
+});
+
 describe('the workbench rail', () => {
   it('shows a stored password as Set and replaces it write-only', async () => {
     const calls = serve(
@@ -151,6 +252,82 @@ describe('the workbench rail', () => {
     expect(calls.find((c) => c.channel === 'connection:replaceSecret')!.payload).toEqual({ projectId: PID, connId: CID, key: 'password', value: 'n3w' });
     await waitFor(() => expect(within(rail).queryByLabelText('New password')).toBeNull());
     expect(document.body.innerHTML).not.toContain('n3w');
+  });
+
+  const SAMPLE = { ok: true, preview: { columns: [{ name: 'region', type: 'text' }], rows: [['North']], rowCount: 1 } };
+
+  it('asks "Copy the data" or "Live" when the connector offers Live, and saves Live as asked', async () => {
+    const calls = serve(
+      base({
+        'connectors:catalog': { body: [PG, URLC, RS] },
+        'connections:list': { body: [{ ...CONN, connectorId: 'amazon-redshift' }] },
+        'connection:listTables': { body: { ok: true, tables: [{ schema: 'public', name: 'orders' }] } },
+        'connection:sample': { body: SAMPLE },
+        'connection:import': { body: { ok: true, dataset: { id: 'd1', name: 'public.orders', rowCount: 0, mode: 'live' } } },
+        'dataset:list': { body: [] },
+      }),
+    );
+    renderApp(`/connections/${PID}/${CID}?table=public.orders`);
+    const how = await screen.findByRole('combobox', { name: 'How to save' });
+    expect(how.textContent).toBe('Copy the data');
+    expect(await screen.findByRole('button', { name: 'Save as dataset' })).toBeTruthy();
+    how.focus();
+    fireEvent.keyDown(how, { key: 'ArrowDown' }); // open
+    fireEvent.keyDown(how, { key: 'End' });
+    fireEvent.keyDown(how, { key: 'Enter' });
+    expect(how.textContent).toBe('Live');
+    fireEvent.click(await screen.findByRole('button', { name: 'Save as Live dataset' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'connection:import')).toBe(true));
+    expect(calls.find((c) => c.channel === 'connection:import')!.payload).toMatchObject({ table: 'public.orders', mode: 'live' });
+    expect(await screen.findByText('Saved “public.orders” as a Live dataset.')).toBeTruthy();
+  });
+
+  it('offers no Live choice where the connector has none, and saves a copy', async () => {
+    const calls = serve(
+      base({
+        'connections:list': { body: [CONN] },
+        'connection:listTables': { body: { ok: true, tables: [{ schema: 'public', name: 'orders' }] } },
+        'connection:sample': { body: SAMPLE },
+        'connection:import': { body: { ok: true, dataset: { id: 'd1', name: 'public.orders', rowCount: 1 } } },
+        'dataset:list': { body: [] },
+      }),
+    );
+    renderApp(`/connections/${PID}/${CID}?table=public.orders`);
+    fireEvent.click(await screen.findByRole('button', { name: 'Save as dataset' }));
+    expect(screen.queryByRole('combobox', { name: 'How to save' })).toBeNull();
+    await waitFor(() => expect(calls.some((c) => c.channel === 'connection:import')).toBe(true));
+    expect(calls.find((c) => c.channel === 'connection:import')!.payload).not.toHaveProperty('mode');
+  });
+
+  it('words a 5- or 15-minute schedule, says "Behind schedule", and offers the fast cadences only with incremental refresh', async () => {
+    const ds = (id: string, name: string, extra: object) => ({ id, name, rowCount: 10, updatedAt: '2026-10-01T10:00:00Z', originKind: 'connection', originConnId: CID, ...extra });
+    const LIVE = ds('33333333-3333-4333-8333-333333333333', 'Live', { autoRefresh: { every: '15min' }, incrementalOn: true, behindSchedule: true });
+    const PLAIN = ds('44444444-4444-4444-8444-444444444444', 'Plain', { autoRefresh: { every: 'hourly' } });
+    const calls = serve(
+      base({
+        'connections:list': { body: [CONN] },
+        'connection:listTables': { body: { ok: true, tables: [{ schema: 'public', name: 'orders' }] } },
+        'dataset:list': { body: [LIVE, PLAIN] },
+        'dataset:update': { body: { ok: true } },
+      }),
+    );
+    renderApp(`/connections/${PID}/${CID}`);
+    const rail = await screen.findByRole('complementary', { name: 'Connection details' });
+    const live = (await within(rail).findByRole('link', { name: 'Live' })).closest('li')!;
+    expect(within(live).getByText(/^Refreshes every 15 minutes · last/)).toBeTruthy();
+    expect(within(live).getByText('Behind schedule')).toBeTruthy();
+    const plain = within(rail).getByRole('link', { name: 'Plain' }).closest('li')!;
+    expect(within(plain).queryByText('Behind schedule')).toBeNull();
+
+    fireEvent.click(within(plain).getByRole('combobox', { name: 'Auto-refresh Plain' }));
+    const greyed = (await screen.findAllByRole('option')).filter((o) => o.getAttribute('aria-disabled') === 'true').map((o) => o.textContent);
+    expect(greyed).toEqual(['Refresh every 5 minutes — needs incremental refresh', 'Refresh every 15 minutes — needs incremental refresh']);
+    fireEvent.keyDown(within(plain).getByRole('combobox', { name: 'Auto-refresh Plain' }), { key: 'Escape' });
+
+    fireEvent.click(within(live).getByRole('combobox', { name: 'Auto-refresh Live' }));
+    fireEvent.click((await screen.findAllByRole('option')).find((o) => o.textContent === 'Refresh every 5 minutes')!);
+    await waitFor(() => expect(calls.some((c) => c.channel === 'dataset:update')).toBe(true));
+    expect(calls.find((c) => c.channel === 'dataset:update')!.payload).toEqual({ projectId: PID, datasetId: LIVE.id, autoRefresh: '5min' });
   });
 
   it('says so when the connection is gone', async () => {

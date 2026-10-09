@@ -9,6 +9,12 @@ import { createSecretKey, type KeyObject } from 'crypto';
 import { BlockList, isIP } from 'net';
 import * as os from 'os';
 import * as path from 'path';
+import { EnvError } from './envError';
+import { liveDailyQueryLimit, liveMaxConcurrent, liveMinCacheAgePublicSec, liveQueryTimeoutMs, maxBytesBilled } from './liveEnv';
+
+export { EnvError } from './envError';
+// The Live settings live in ./liveEnv.ts; their names stay importable from here.
+export * from './liveEnv';
 
 export type OrdinateEnv = 'dev' | 'prod';
 
@@ -41,6 +47,8 @@ export interface ServerEnv {
   readonly limits: LimitsEnv;
   /** Where Parquet tables live (T5.2, src/engine/storage.ts). */
   readonly storage: StorageEnv;
+  /** ORDINATE_TEST_LIVE_FAKE=1: register the test harness's fake warehouse at boot (./main.ts). Refused in prod. */
+  readonly testLiveFake: boolean;
 }
 
 export interface LimitsEnv {
@@ -54,6 +62,8 @@ export interface LimitsEnv {
   readonly jsonBodyBytes: number;
   /** RPC_TIMEOUT_SECONDS: a call running longer answers 504 and its DuckDB queries are interrupted. */
   readonly rpcTimeoutMs: number;
+  /** REFRESH_HOOK_MIN_INTERVAL_SEC: the least gap between two calls of one refresh URL (live data L0.5), across pods. */
+  readonly refreshHookMinIntervalSec: number;
 }
 
 /** STORAGE_URL=s3://bucket/prefix (T5.2). No keys here: the pod's credential chain signs. */
@@ -140,14 +150,6 @@ const ABSOLUTE_HOURS = 7 * 24;
 const ENVS: readonly OrdinateEnv[] = ['dev', 'prod'];
 const LEVELS: readonly LogLevel[] = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'];
 
-/** Thrown for a bad value; `message` is the one line printed at startup. */
-export class EnvError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'EnvError';
-  }
-}
-
 function oneOf<T extends string>(name: string, raw: string | undefined, allowed: readonly T[], dflt: T): T {
   if (raw === undefined || raw === '') return dflt;
   if ((allowed as readonly string[]).includes(raw)) return raw as T;
@@ -218,6 +220,20 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   const auth = parseAuth(src, env, databaseUrl);
   // SSRF_ALLOW (T6.1): internal ranges connectors may reach. Read by src/connectors/ssrf.ts; a typo stops startup here.
   proxyList(csv(src.SSRF_ALLOW), 'SSRF_ALLOW');
+  // LIVE_MAX_BYTES_BILLED (live data, L1.3): read by src/connectors/bigquery.ts at each query; a typo stops startup here.
+  maxBytesBilled(src.LIVE_MAX_BYTES_BILLED);
+  // LIVE_QUERY_TIMEOUT_MS, LIVE_MAX_CONCURRENT (live data, L2.3): read by src/engine/live/ at each query, the same way.
+  liveQueryTimeoutMs(src.LIVE_QUERY_TIMEOUT_MS);
+  liveMaxConcurrent(src.LIVE_MAX_CONCURRENT);
+  // LIVE_DAILY_QUERY_LIMIT, LIVE_MIN_CACHE_AGE_PUBLIC_SEC (live data, L2.7): src/engine/live/liveBudget.ts, the same way.
+  liveDailyQueryLimit(src.LIVE_DAILY_QUERY_LIMIT);
+  liveMinCacheAgePublicSec(src.LIVE_MIN_CACHE_AGE_PUBLIC_SEC);
+  const testLiveFake = oneOf('ORDINATE_TEST_LIVE_FAKE', src.ORDINATE_TEST_LIVE_FAKE, ['0', '1'], '0') === '1';
+  if (testLiveFake && env === 'prod') {
+    throw new EnvError('ORDINATE_ENV=prod refuses ORDINATE_TEST_LIVE_FAKE=1: it registers a fake warehouse for the test harness only');
+  }
+  // FRESH_ON_ASK_WAIT_MS (live data, L3.1): read by src/data/freshOnAsk.ts at each ask; a typo stops startup here.
+  freshOnAskWaitMs(src.FRESH_ON_ASK_WAIT_MS);
   const duckdb = parseDuck(src);
   const limits = Object.freeze({
     loginPerMinute: positiveInt('RATE_LIMIT_LOGIN_PER_MINUTE', src.RATE_LIMIT_LOGIN_PER_MINUTE, 60),
@@ -225,9 +241,10 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
     rpcIpPerMinute: positiveInt('RATE_LIMIT_RPC_IP_PER_MINUTE', src.RATE_LIMIT_RPC_IP_PER_MINUTE, 3000),
     jsonBodyBytes: positiveInt('MAX_RPC_BODY_KB', src.MAX_RPC_BODY_KB, 1024) * 1024,
     rpcTimeoutMs: positiveInt('RPC_TIMEOUT_SECONDS', src.RPC_TIMEOUT_SECONDS, 60) * 1000,
+    refreshHookMinIntervalSec: positiveInt('REFRESH_HOOK_MIN_INTERVAL_SEC', src.REFRESH_HOOK_MIN_INTERVAL_SEC, 60),
   });
   const storage = parseStorage(src, databaseUrl);
-  return Object.freeze({ port, metricsPort, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits, storage });
+  return Object.freeze({ port, metricsPort, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits, storage, testLiveFake });
 }
 
 /** The directory of a file:// STORAGE_URL, null for unset or s3://. */
@@ -339,6 +356,25 @@ export function parseMasterKey(name: string, raw: string): KeyObject {
   return key;
 }
 
+
+/** FRESH_ON_ASK_WAIT_MS's default: 5 s (docs/live-data/00-plan.md §8). */
+export const DEFAULT_FRESH_ON_ASK_WAIT_MS = 5000;
+/** The longest an answer may wait for a pull: well inside RPC_TIMEOUT_SECONDS' default 60. */
+export const MAX_FRESH_ON_ASK_WAIT_MS = 30_000;
+
+/**
+ * FRESH_ON_ASK_WAIT_MS: how long a chart, KPI or answer on a stale copy waits
+ * for its incremental pull before answering from the copy, "refreshing…".
+ * 0 is allowed — never wait, always answer at once and redraw when the rows
+ * land. Pure, so src/data/freshOnAsk.ts re-reads the variable the same way.
+ */
+export function freshOnAskWaitMs(raw: string | undefined): number {
+  if (raw === undefined || raw === '') return DEFAULT_FRESH_ON_ASK_WAIT_MS;
+  if (!/^\d{1,5}$/.test(raw) || Number(raw) > MAX_FRESH_ON_ASK_WAIT_MS) {
+    throw new EnvError(`FRESH_ON_ASK_WAIT_MS must be a whole number of milliseconds 0-${MAX_FRESH_ON_ASK_WAIT_MS}, got ${JSON.stringify(raw)}`);
+  }
+  return Number(raw);
+}
 
 function positiveInt(name: string, raw: string | undefined, dflt: number): number {
   if (raw === undefined || raw === '') return dflt;
