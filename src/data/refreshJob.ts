@@ -19,6 +19,9 @@
 // asks first — a job on this pod, a direct refresh in flight here, the lock on
 // any pod — and only then queues. The lock inside the job still decides, so a
 // race between two pods asking at the same instant runs the refresh once.
+//
+// A success is ANNOUNCED here (./refreshEvents, L0.1), once, whichever door it
+// came through, so every open tab of a reader redraws what reads the dataset.
 
 import * as jobs from '../app/jobs';
 import * as datasets from './datasets';
@@ -27,6 +30,7 @@ import type { RefreshResult } from './datasetRefresh';
 import { refreshAlreadyRunning } from './refreshMessages';
 import { ctx, serverDataDir } from '../server/context';
 import { refreshLockHeld, withRefreshLock } from '../server/jobs/refreshLock';
+import { announceRefreshed } from './refreshEvents';
 
 /** What `startRefresh` did: queued a job, or found one running and started nothing. */
 export type RefreshStart =
@@ -46,6 +50,7 @@ export async function refreshLabel(projectId: string, id: string, scheduled = fa
  * `done` never rejects: a cancel or an error is `{ok:false}`.
  */
 export function queueRefresh(projectId: string, id: string, label: string): { id: string; done: Promise<RefreshResult> } {
+  let before: { name: string; rowCount: number } | null = null; // read under the lock, for the announcement
   const job = jobs.submit<RefreshResult>({
     kind: 'refresh',
     label,
@@ -53,6 +58,8 @@ export function queueRefresh(projectId: string, id: string, label: string): { id
     datasetId: id,
     run: async (jctx) => {
       const locked = await withRefreshLock(id, async () => {
+        const meta = await datasets.getDatasetMeta(projectId, id);
+        before = meta ? { name: meta.name, rowCount: meta.rowCount } : null;
         jctx.progress(0.05, 'Fetching the source');
         return refreshDataset(projectId, id);
       });
@@ -68,8 +75,14 @@ export function queueRefresh(projectId: string, id: string, label: string): { id
       }
       : { message: r.error }, // coalesced: the job did its part by starting nothing
   });
-  const done = job.done.catch((err: any): RefreshResult => ( // any: whatever run() threw
-    { ok: false, error: err instanceof jobs.JobCancelled ? 'Cancelled.' : (err?.message || 'Refresh failed') }));
+  const done = job.done.then(
+    (res) => {
+      // After the job, not inside it: the table and its markers are both written by now.
+      if (res.ok) announceRefreshed({ projectId, datasetId: id, name: before?.name ?? 'dataset', rowsBefore: before?.rowCount ?? 0, rowsAfter: res.dataset.rowCount });
+      return res;
+    },
+    (err: any): RefreshResult => ( // any: whatever run() threw
+      { ok: false, error: err instanceof jobs.JobCancelled ? 'Cancelled.' : (err?.message || 'Refresh failed') }));
   return { id: job.id, done };
 }
 

@@ -1,5 +1,6 @@
 import { skipToken, useQuery } from '@tanstack/react-query';
 import type { ChartDataShape } from '../charts/types';
+import type { AsOf } from '../ui/asOf';
 import { rpc, RpcError, type RpcInput } from './client';
 
 /**
@@ -12,6 +13,8 @@ export interface VizData {
   data: ChartDataShape & Record<string, unknown>;
   recommendedShape: string;
   warnings: string[];
+  /** How fresh the figures are (L0.2) — the server's time; ui/AsOf words it. */
+  asOf?: AsOf;
 }
 
 type Reply = ({ ok: true } & VizData) | { ok: false; error: string };

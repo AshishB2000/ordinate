@@ -1,0 +1,19 @@
+/* A figure's freshness caption (./AsOf.tsx): small, quiet, one line. Tokens
+   only, so both themes follow; the warning tint is the theme's --warn. */
+
+.asOf {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex: 0 0 auto;
+  min-width: 0;
+  font-size: var(--t-11);
+  font-weight: 400;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.warn {
+  color: var(--warn);
+}

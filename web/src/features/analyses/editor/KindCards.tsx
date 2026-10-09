@@ -14,6 +14,7 @@ import { Icon, type IconName } from '../../../ui/icons/Icon';
 import { useTile, type Card, type StatsTile } from '../api';
 import { DrawnVisual } from '../VisualTile';
 import { useEditor } from './context';
+import { useTileAsOf } from './tileAsOf';
 import s from './Kinds.module.css';
 
 export type ImageSpec = { assetId: string; ext: 'png' | 'jpg' | 'svg'; fit: 'contain' | 'cover' | 'fill'; alt: string; lockAspect?: boolean; aspect?: number };
@@ -43,6 +44,7 @@ export function StatsBody({ card }: { card: Card }) {
   const spec = card.stats as StatsSpec | undefined;
   const req = useMemo(() => (spec ? { kind: 'stats' as const, spec, filters: ed.filters } : undefined), [spec, ed.filters]);
   const q = useTile<StatsTile>(ed.projectId, ed.params, req);
+  useTileAsOf(q.data?.ok ? q.data.asOf : undefined);
   const title = statsTitle(spec);
   if (!spec) return <p className={s.missing}>This statistics card has no analysis.</p>;
   if (q.isPending) return <SkeletonBlock label={`Computing ${title}`} />;

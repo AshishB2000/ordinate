@@ -43,6 +43,9 @@
   color: var(--muted);
   margin-right: var(--sp-4);
 }
+.asOf {
+  margin-right: var(--sp-4);
+}
 .filter {
   font-size: var(--t-11);
   padding: 1px var(--sp-8);

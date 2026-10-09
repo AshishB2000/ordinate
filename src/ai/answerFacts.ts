@@ -35,6 +35,13 @@ export interface AnswerFactsInput {
   /** One per filter in force, e.g. "order_date: 2024-Q4". */
   filterLabels: string[];
   caption: string;
+  /**
+   * When the rows are from, already worded ("Oct 9, 2026, 1:00 AM UTC" —
+   * data/figureAsOf.utcLabel), so the narration can say "as of 1:00 AM" by
+   * copying it. A time, not a figure: numberAudit masks it on both sides, so
+   * its digits neither enter the ledger nor count against the answer.
+   */
+  asOf?: string;
 }
 
 export interface Headline {
@@ -102,6 +109,7 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
   const lines: string[] = [GUARD_LINE, ''];
 
   lines.push(`Answer: "${input.title}" — ${input.describe}, over dataset "${input.datasetName}".`);
+  if (input.asOf) lines.push(`Data as of: ${input.asOf}.`);
   if (input.filterLabels.length) lines.push(`Filtered to: ${input.filterLabels.join('; ')}.`);
 
   const labels = Array.isArray(data.labels) ? data.labels : [];
