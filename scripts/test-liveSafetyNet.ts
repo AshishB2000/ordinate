@@ -237,6 +237,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ['related datasets', 'relationship:related', { projectId: P, datasetId: seed.extract }],
     ['quality rules list', 'quality:list', { projectId: P, datasetId: seed.live }],
     ['snapshots list', 'snapshots:list', { projectId: P, datasetId: seed.live }],
+    ['incremental refresh settings', 'incremental:get', { projectId: P, datasetId: seed.live }],
     ['Home', 'home:overview', { projectId: P }],
     ['palette search', 'search:query', { projectId: P, query: 'Orders' }],
     ['project insights', 'insights:list', { projectId: P }],

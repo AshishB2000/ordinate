@@ -438,9 +438,13 @@ datasets): **Fresh on ask** · Off, 1 min, 5 min, 15 min or 1 h. Through the API
 It needs **incremental refresh** on the dataset — a cursor column, and the mark its first, full
 refresh sets — because a pull on ask must be cheap for the source: only the rows past the cursor. A
 dataset without incremental refresh shows the control disabled, saying so, and the server refuses it.
-Turning incremental refresh off turns fresh on ask off with it. (Incremental refresh is set on the
-dataset record; the web app has no panel for it yet.) A Live dataset never has it: it is asked at the
-warehouse every time.
+Turn incremental refresh on in the dataset's **Incremental refresh** panel, beside the schedule (and
+in the workbench rail): a cursor column (a number or date that only grows), update by key or append,
+and a lookback. It is offered only for sources Ordinate can ask for "rows past the cursor" in SQL —
+Postgres, MySQL, SQL Server, Oracle, BigQuery, Snowflake and the other SQL families; an HTTP or SaaS
+source would be read whole on every run ("filtered after fetch"), so the panel says so and refuses
+it. Turning incremental refresh off turns fresh on ask off with it, and drops a 5- or 15-minute
+schedule to hourly. A Live dataset never has it: it is asked at the warehouse every time.
 
 ### What an ask does
 

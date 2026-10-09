@@ -464,4 +464,6 @@ export function registerHandlers(): void {
   (require('../ipc/alerts') as typeof import('../ipc/alerts')).register();
   // Live datasets (docs/live-data/00-plan.md L2.1): the mode switch.
   (require('../ipc/liveDatasets') as typeof import('../ipc/liveDatasets')).register();
+  // Incremental refresh settings (the desktop panel's web port): what 5/15-minute cadences and fresh on ask need.
+  (require('../ipc/incremental') as typeof import('../ipc/incremental')).register();
 }

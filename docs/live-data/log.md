@@ -636,3 +636,45 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   refresh" until a schedule or Refresh now runs the full one — by design (the brief: never full on
   ask); a schedule alongside avoids it. A chart reading a RELATED dataset (a join through a
   relationship) pulls only its own dataset, and is dated by it — as L0.2 dates it.
+
+## 2026-10-09 — Incremental refresh settings in the web app (closes the gap L0.3 and L3.1 reported)
+
+- **Built.** The desktop's `incremental:get` / `incremental:set` (deleted with T8.1), ported:
+  contracts in `src/api/incremental.ts` (`get` read, `set` write, both project-scoped), handlers in
+  `src/ipc/incremental.ts`, the logic in `src/data/incrementalSettings.ts`, sentences in
+  `src/data/incrementalMessages.ts` (a new `MAIN_FILES` entry, drafts translated). Web: an
+  "Incremental on/off" button beside the schedule on the dataset page and in the workbench rail,
+  opening a panel (`web/src/features/data/Incremental.tsx`): how the source is read, on/off, the
+  cursor (the server's number and date columns of the prepare SOURCE), update by key or append, the
+  key, the lookback (minutes / hours / days for a date cursor, ids for a number one), "Next refresh:
+  full" with the reason, and the run log (fetched / inserted / updated / mark per run).
+- **Decided — a source that cannot take the cursor predicate is refused.** HTTP engines and SaaS APIs
+  (`incrementalSql.canPush` false) would be read whole on every "incremental" run and filtered after
+  the fetch — the load the 5/15-minute cadences and fresh on ask are only allowed because incremental
+  refresh avoids. The panel says "Filtered after fetch" and why; the server refuses turning it on
+  (catalog sentence). An older record that has it on over such a source can still be turned OFF.
+- **Decided — one key column.** The merge (`incremental.mergeJs` and its DuckDB twin, differential-
+  tested) keys on one column; a composite key would change both and their tests, so the panel offers
+  one, as the desktop did.
+- **Kept from the desktop:** a new cursor column resets the mark and the run count (the next run is
+  full); the same cursor with a new lookback keeps them; off keeps the block and its log. New:
+  turning it off drops a 5/15-minute schedule to hourly and fresh on ask in the same write
+  (`writeIncremental`, L0.3 / L3.1), and Live datasets and non-connection datasets are refused even
+  "off" (they keep no block).
+- **Errors stay in the log.** A thrown error (it can carry a path) is logged; the browser gets the
+  catalog's "Could not read / save the incremental refresh settings." — never the error's text.
+- **Tests.** `test-incrementalSettings` (44 checks: the view from the source columns, on/off, every
+  refusal with its catalog sentence, the contract's 400s, the mark reset with a NEGATIVE CONTROL,
+  the five blocked kinds incl. ClickHouse "filtered after fetch" — and Live, a paste and a gone
+  connection describing no read at all, not "after the fetch" — the 5-minute cadence and fresh on
+  ask refused before and taken after (NEGATIVE CONTROL), a missing dataset and a thrown error
+  answered with the catalog's sentence and no planted path (NEGATIVE CONTROL: the log has it));
+  `test-liveSafetyNet` reads `incremental:get` on a Live dataset as a metadata path (200, no
+  `live_dataset`); Vitest `incremental.test.tsx` (11, incl. a number cursor's lookback reading back
+  as ids, not seconds — fails on the first draft, which split it into minutes); `data.e2e` opens the
+  panel of a dataset on over a connection since deleted (only "off" is possible; the run log the
+  record keeps), turns it on for another, then picks every 5 minutes and fresh on ask — the panel
+  in three states and the page, both themes; `connections.e2e` opens it from the rail.
+- **Not done.** "Next refresh: full" and a full run's note in the log are `fullReason`'s English
+  (src/data/incrementalRefresh.ts, stored on the record as the desktop did), not catalog sentences;
+  translating them means a messages file for incrementalRefresh and keys, not text, in the log.

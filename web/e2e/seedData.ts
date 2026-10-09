@@ -4,8 +4,10 @@
 // dataset whose origin and stored refresh error hold a planted key — which no
 // reply the browser receives may ever carry — "Live orders", refreshed
 // incrementally every 5 minutes, whose last run took 7 (L0.3: behind schedule),
-// and "Orders snapshot", from a connection WITHOUT incremental refresh (L3.1:
-// fresh on ask is offered there, disabled, saying why).
+// with two runs on its log, and "Orders snapshot", from a saved PostgreSQL
+// connection (never reached: the e2e only changes its settings) WITHOUT
+// incremental refresh — fresh on ask is offered there, disabled, saying why
+// (L3.1), until the incremental refresh panel turns it on.
 //
 //   node web/e2e/seedData.ts <dataDir> <projectId> <canary>   (after npm run build:ts)
 
@@ -27,6 +29,9 @@ const datasets = require('../../src/data/datasets.js') as {
   saveDataset(projectId: string, input: { name: string; sourceKind: string; columns: Column[]; rows: (string | number | null)[][]; origin?: unknown }): Promise<{ id: string } | null>;
   writeIncremental(projectId: string, id: string, mutate: () => object): Promise<unknown>;
   setAutoRefresh(projectId: string, id: string, patch: { every?: string; lastAutoAt?: string; lastAutoMs?: number }): Promise<unknown>;
+};
+const connections = require('../../src/connectors/connections.js') as {
+  saveConnection(projectId: string, input: { name: string; connectorId: string; values: Record<string, unknown> }): Promise<{ id: string } | null>;
 };
 const record = require('../../src/data/datasetRecord.js') as {
   markRefresh(projectId: string, id: string, status: 'ok' | 'error', error: string | null): Promise<boolean>;
@@ -59,17 +64,24 @@ const out = await context.runInContext(dev, 'e2e-data-seed', async () => {
     rows: [[1, 100], [2, 101]],
     origin: { kind: 'connection', connId: '7d1f3c2a-0b6e-4f5a-9c8d-1e2f3a4b5c6d', table: 'orders' },
   });
-  const snapshot = await datasets.saveDataset(projectId, {
+  const appDb = await connections.saveConnection(projectId, { name: 'App DB', connectorId: 'postgres', values: { host: 'db.example.com', port: 5432, database: 'app', user: 'reader' } });
+  const snapshot = appDb && await datasets.saveDataset(projectId, {
     name: 'Orders snapshot',
     sourceKind: 'postgres',
     columns: [{ name: 'id', type: 'number' }, { name: 'updated', type: 'number' }],
     rows: [[1, 100], [2, 101]],
-    origin: { kind: 'connection', connId: '7d1f3c2a-0b6e-4f5a-9c8d-1e2f3a4b5c6d', table: 'orders' },
+    origin: { kind: 'connection', connId: appDb.id, table: 'orders' },
   });
   if (!regions || !feed || !live || !snapshot) throw new Error('the Data fixture was not saved');
   await record.markRefresh(projectId, feed.id, 'error', `Could not fetch ${url}: 401 Unauthorized`);
   await record.markRefresh(projectId, live.id, 'ok', null);
-  await datasets.writeIncremental(projectId, live.id, () => ({ enabled: true, cursorColumn: 'updated', keyColumn: 'id', lookback: 0, highWater: 101, runsSinceFull: 1, log: [] }));
+  // Two runs on its log (the Incremental refresh panel draws them): the full one that set the mark, then one incremental.
+  const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+  const log = [
+    { at: ago(5), mode: 'incremental', fetched: 1, inserted: 0, updated: 1, highWater: 101, how: 'server' },
+    { at: ago(12), mode: 'full', fetched: 2, inserted: null, updated: null, highWater: 101, how: 'full', note: 'The first run sets the high-water mark' },
+  ];
+  await datasets.writeIncremental(projectId, live.id, () => ({ enabled: true, cursorColumn: 'updated', keyColumn: 'id', lookback: 0, highWater: 101, runsSinceFull: 1, log }));
   await datasets.setAutoRefresh(projectId, live.id, { every: '5min', lastAutoAt: new Date().toISOString(), lastAutoMs: 7 * 60_000 });
   return { regionsId: regions.id, feedId: feed.id, liveId: live.id, snapshotId: snapshot.id };
 });

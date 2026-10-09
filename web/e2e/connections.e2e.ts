@@ -265,6 +265,12 @@ if (adminUrl) {
     const freshPicker = row.getByRole('combobox', { name: 'Fresh on ask for Regions — needs incremental refresh' });
     assert.equal(await freshPicker.isDisabled(), true, 'no incremental refresh: fresh on ask is disabled');
     await row.getByText('needs incremental refresh', { exact: true }).waitFor();
+    // …and the Incremental refresh panel that turns it on (web/e2e/data.e2e.ts walks it).
+    await row.getByRole('button', { name: 'Incremental refresh for Regions: off' }).click();
+    const inc = page.getByRole('dialog', { name: 'Incremental refresh · Regions' });
+    await inc.getByText(/Each run asks PostgreSQL only for rows at or past the mark/).waitFor();
+    await inc.getByRole('button', { name: 'Cancel' }).click();
+    await inc.waitFor({ state: 'detached' });
     // Its refresh URL panel (live data L0.5), opened from the rail (web/e2e/refreshUrl.e2e.ts walks it).
     await row.getByRole('button', { name: 'Refresh URL for Regions' }).click();
     const hooks = page.getByRole('dialog', { name: 'Refresh URL · Regions' });
