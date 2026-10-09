@@ -96,6 +96,14 @@ ok('bigquery: a query is wrapped with an alias',
   sqlGen.pushdownSql('bigquery', { query: 'select * from sales.orders;' }, 'id', 'number', 7)
   === 'select * from ( select * from sales.orders ) ord_inc where `id` >= 7');
 ok('bigquery: an unsafe table name is not pushed', sqlGen.pushdownSql('bigquery', { table: 'sales.orders`; drop table x' }, 'id', 'number', 1) === null);
+ok('snowflake: db.schema.table quoted part by part, a column with its quote doubled, a timestamp_tz literal (session zone UTC)',
+  sqlGen.pushdownSql('snowflake', { table: 'SALES.PUBLIC.ORDERS' }, 'UPDATED"AT', 'date', day)
+  === `select * from "SALES"."PUBLIC"."ORDERS" where "UPDATED""AT" >= '2024-05-01T12:00:00'::timestamp_tz`);
+ok('snowflake: a query is wrapped with an alias, a number literal as JS prints it',
+  sqlGen.pushdownSql('snowflake', { query: 'select * from orders;' }, 'ID', 'number', 41.5)
+  === 'select * from ( select * from orders ) ord_inc where "ID" >= 41.5');
+ok('snowflake: an unsafe table name is not pushed', sqlGen.pushdownSql('snowflake', { table: 'ORDERS"; drop table x' }, 'ID', 'number', 1) === null);
+ok('both warehouses can take a pushed predicate (canPush)', sqlGen.canPush('snowflake') && sqlGen.canPush('bigquery') && !sqlGen.canPush('http'));
 ok('http / saas / url families are never pushed',
   ['http', 'saas', 'url'].every((f) => sqlGen.pushdownSql(f, { table: 't' }, 'id', 'number', 1) === null));
 ok('an unsafe table name is not pushed', sqlGen.pushdownSql('postgres', { table: 'x; drop table y' }, 'id', 'number', 1) === null);

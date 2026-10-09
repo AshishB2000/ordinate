@@ -193,9 +193,9 @@ The tree lists up to 1,000 tables, the default dataset's first.
    `https://www.googleapis.com/auth/bigquery.readonly` and
    `https://www.googleapis.com/auth/cloud-platform.read-only`. Whether Google refuses a write
    statement under these scopes has **not** been verified against a real account yet
-   ([log](../live-data/log.md)). If Google refuses the scopes themselves, every query fails with an
-   error that says *insufficient authentication scopes*; Ordinate will not ask for broader access to
-   work around it.
+   ([log](../live-data/log.md)); the real-account run below records the answer each night. If
+   Google refuses the scopes themselves, every query fails with an error that says *insufficient
+   authentication scopes*; Ordinate will not ask for broader access to work around it.
 3. **A dry run first** — every statement the workbench, an import or a refresh sends is first
    dry-run (free), and refused unless BigQuery reports it is a `SELECT`. The dry run is of the exact
    text that then runs.
@@ -254,3 +254,69 @@ With incremental refresh on, Ordinate asks BigQuery only for rows at or past the
 literal, which BigQuery reads as the column's own type (`DATE`, `DATETIME` or `TIMESTAMP`), so a
 partitioned table scans only the partitions it needs. It is a day wider than needed on purpose; the
 exact cut is made in Ordinate.
+
+## Testing against a real account
+
+The connectors' self-checks run against recorded replies. `scripts/test-warehouseLive.ts` runs the
+same code against a **real** Snowflake account and a **real** Google Cloud project, through the
+registry, over the network, with the SSRF guard on. For each warehouse it checks test connection,
+the table list, a table's columns, a query cut at the row limit (and one exactly at it, not cut),
+reading past the first result partition or page, how each type arrives (numbers, ids longer than 15
+digits, dates and timestamps as UTC, JSON), bound values against hostile literals, and that a query
+whose caller hangs up is cancelled *on the warehouse*, as the warehouse itself then reports. For
+BigQuery it also checks the cost estimate and the dry-run gate, and records the read-only scope
+answer (below). Throughout, it checks that no key, passphrase, token or signed assertion reaches a
+result, an error or its output.
+
+It runs only when a warehouse's variables are set. Without them it prints that it skipped and
+passes, so `npm test` stays green. Setting only some of one warehouse's variables is a failure.
+These are inputs to the test, **not server settings**: the server never reads them, so they are not
+in [configuration.md](configuration.md).
+
+| Variable | Required | What it is |
+|---|---|---|
+| `SNOWFLAKE_ACCOUNT` | yes | The account identifier, as in the connection form. |
+| `SNOWFLAKE_USER` | yes | A user that signs in with the key below (`ORDINATE_SVC` above). |
+| `SNOWFLAKE_PRIVATE_KEY` | this or the PAT | The PEM private key. A one-line value with `\n` escapes is accepted. |
+| `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE` | for an encrypted key | Its passphrase. |
+| `SNOWFLAKE_PAT` | this or the key | A programmatic access token, instead of the key. |
+| `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_ROLE` | yes | As in the connection form. Use the read-only role above. |
+| `SNOWFLAKE_DATABASE` | no | A database with **at least one table** the role can read. Without it, the account's first visible table is described, and the query-tag check is skipped. |
+| `SNOWFLAKE_SCHEMA` | no | The schema whose table is described first. |
+| `BIGQUERY_KEY_JSON` | yes | The service-account key file, whole. |
+| `BIGQUERY_PROJECT` | no | The billing project. Defaults to the key's own. |
+| `BIGQUERY_DATASET` | no | The default dataset, listed first. |
+| `BIGQUERY_LOCATION` | no | Where jobs run, as in the connection form. |
+| `BIGQUERY_SCRATCH_DATASET` | no | A dataset the test account may **write**, used only by the scope probe below. Leave it unset unless you want that probe; never grant write access to the account a real connection uses. |
+
+Run it locally:
+
+```bash
+npm run build:ts
+SNOWFLAKE_ACCOUNT=myorg-myaccount SNOWFLAKE_USER=ORDINATE_SVC SNOWFLAKE_WAREHOUSE=ORDINATE_WH \
+SNOWFLAKE_ROLE=ORDINATE_READER SNOWFLAKE_DATABASE=SALES SNOWFLAKE_PRIVATE_KEY="$(cat ordinate_svc.p8)" \
+SNOWFLAKE_PRIVATE_KEY_PASSPHRASE=… BIGQUERY_KEY_JSON="$(cat ordinate-key.json)" \
+node scripts/test-warehouseLive.js
+```
+
+**Nightly.** `.github/workflows/warehouse-nightly.yml` runs it every night and on demand
+(**Actions → Warehouse nightly → Run workflow**). It reads repository secrets with the same names;
+add the ones you have, for example `gh secret set SNOWFLAKE_PRIVATE_KEY < ordinate_svc.p8` and
+`gh secret set BIGQUERY_KEY_JSON < ordinate-key.json`. It is not a required check. The run's log
+prints no credential and no account identifier, because the log of a public repository is public.
+
+**What it costs.** Snowflake: about two minutes of the warehouse (most of it the cancel check,
+which waits for Snowflake's own 45-second hand-off before cancelling), plus the warehouse's
+auto-suspend time. BigQuery: nothing billed in the usual case. Every query it runs reads generated
+rows rather than a table; the one table it touches, the public `bigquery-public-data.samples.shakespeare`,
+is only described and dry-run, and both are free.
+
+**The read-only scope answer.** Each BigQuery run records, as `spike:` lines in the log and a table
+in the run's summary: which scopes Google granted the query token (from Google's `tokeninfo`),
+whether `jobs.query` accepts that token, and whether a **write** sent with it is refused by Google or
+only by Ordinate's dry-run gate. The write it sends needs no IAM grant (a temporary table in a
+script), so a refusal can only come from the token's scopes. With `BIGQUERY_SCRATCH_DATASET` set, it
+also tries `CREATE TABLE … AS SELECT 1` there, and drops the table again if Google allowed it. Either
+answer is safe, because the dry-run gate and the IAM roles hold regardless. The answer decides
+whether the gate is the only read-only guarantee or defence in depth.
+

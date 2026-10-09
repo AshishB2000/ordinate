@@ -322,3 +322,54 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
 - **Environment:** in this sandbox OpenStreetMap tiles are unreachable (`ERR_TUNNEL_CONNECTION_FAILED`),
   so the e2e flows over the sample dashboard's map fail on the base commit and on this branch alike;
   with the tiles stubbed locally (not committed) `dashboards`, `analyses` and `visuals` pass in full.
+
+## 2026-10-09 — L1.4 and L1.5 finished: counts, the real-account nightly, the canaries
+
+- **L1.4 checked, one gap filled.** Both dialects were in `incrementalSql.ts` (`snowflake`: `"…"`
+  with doubling, `'…'::timestamp_tz` under the session's UTC; `bigquery`: one backtick path, a day
+  literal — the BigQuery log entry above says why it is not `TIMESTAMP('…')`), the dispatch's table
+  SQL quotes `` `project.dataset.table` `` (`connectionRun.quotedTable` → `quotedTablePath`), and
+  `test-incrementalRefresh` §8 and §9 push the predicate end to end through each real connector.
+  `test-incrementalMerge`'s per-dialect list had BigQuery but not Snowflake; it has both now.
+- **Counts 38 → 40:** README (the two sentences, the connector table's heading, and Snowflake and
+  Google BigQuery in its Cloud warehouses row, 7 → 9, in catalog order), CLAUDE.md (the sources
+  count, the registry count, and `snowflake.ts` 1, `bigquery.ts` 1 in the family list); the stale
+  "35" in four code comments. `test-icons` already pinned 40. Plan, phase-7 history and the
+  dated `docs/superpowers/` notes keep the counts of their day.
+- **The real-account test, `scripts/test-warehouseLive.ts`** (+ `warehouseLiveHarness.ts`,
+  `warehouseLiveSnowflake.ts`, `warehouseLiveBigquery.ts`, split by job). It runs in server mode
+  (the SSRF guard on) inside a request context, through `getConnector` and `connectionRun`, and
+  only WATCHES the real transports through their seams. Without credentials it prints one skip
+  line per warehouse and exits 0; with some but not all of one warehouse's variables it fails. The
+  log prints no secret and no account identifier (a public repo's Actions log is public): every
+  printed line and failure detail is redacted, while the canary greps the raw results and errors
+  plus every printed byte for the key, passphrase, PAT, and every JWT, access token and assertion
+  issued during the run — with a negative control in the suite. `.github/workflows/warehouse-nightly.yml`
+  runs it at 05:41 UTC and on demand, `contents: read`, not a required check.
+- **The scope spike, made answerable.** The BigQuery half records (`spike:` lines and the run's
+  step summary): the scopes the query token asked for; the scopes Google granted, read back from
+  `oauth2.googleapis.com/tokeninfo` (POST, bearer header, then form body); whether `jobs.query`
+  accepts that token; and how a WRITE is refused — through Ordinate's estimate and run (the gate,
+  or BigQuery's parser at the dry run), and sent straight to `jobs.query` with the read-only token,
+  bypassing the gate. That write is a temp-table script, which needs no IAM grant, so a refusal can
+  only be the scopes; with `BIGQUERY_SCRATCH_DATASET` it also tries the plan's `CREATE TABLE … AS
+  SELECT 1` and drops the table if it was created. A verdict line maps the outcome onto the
+  three rows of the table above. The answer is recorded, not asserted: every outcome is safe.
+- **Canaries, re-checked.** Connector level was already complete for both (results, errors,
+  requests, printed output; Snowflake also the catalog). Server level had Snowflake's
+  testAndSave / list / listTables only and no BigQuery. `test-connections-server` now drives both
+  through `connection:run`, `connection:explain`, `connection:estimate` (Snowflake: `null`;
+  BigQuery: priced), `connection:listTables`, `connection:describe`, `connectors:catalog` and
+  `connections:list`, including a warehouse whose every error echoes the bearer, the key and the
+  passphrase (each reply must carry `***` and no needle). The BigQuery key's PEM lines and id, the
+  Snowflake JWTs, and every BigQuery assertion and access token join the needles, so the existing
+  database dump, `pg_dump`, disk, reply, trace-log and output greps cover them.
+- **Not measured: no real account was available here.** The live test was exercised only against
+  in-process fakes of both APIs (a scratch harness, not committed), including its negative
+  controls: a passphrase printed mid-run and an access token returned in a row both fail the
+  canary. What the fakes cannot settle, and the first nightly will: whether a Snowflake result
+  of ~48 MB spans several partitions (asserted), the exact 422 body of a cancelled statement
+  (`000604` or "cancel" asserted), BigQuery accepting `…Z` timestamp parameters and dry-running
+  `ASSERT` and a script (either may be the gate's case), the scope answers, and whether a 450-step
+  recursive CTE is still running ~10 s in, when the late cancel lands (chosen over a cross join,
+  which the on-demand billing tier can stop on CPU first).
