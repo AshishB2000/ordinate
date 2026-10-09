@@ -13,6 +13,9 @@
 //                                    Live sets the cache age.
 //   refresh on a Live dataset        bumps the cache epoch (plan D5) — nothing
 //                                    is fetched, so nothing can go stale.
+//   connection:setLiveOptIn          a PostgreSQL connection's "This is a read
+//                                    replica or a warehouse" (L3.2, ./liveOptIn):
+//                                    both Live doors above refuse without it.
 //
 // Every socket goes through connectionRun (the SSRF guard); the secret is
 // resolved here, in main, exactly as ./connections.ts does; every error that
@@ -22,7 +25,7 @@
 import { ipcMain } from './bus';
 import * as connections from '../connectors/connections';
 import * as connectionRun from '../connectors/connectionRun';
-import { getConnector, isLiveCapable } from '../connectors';
+import { getConnector } from '../connectors';
 import * as datasets from '../data/datasets';
 import { loadSecrets } from './connectionSecrets';
 import { liveColumns, type SourceColumn } from '../data/liveSchema';
@@ -33,6 +36,7 @@ import * as queryCache from '../engine/queryCache';
 import { scanDataset } from '../app/privacyStore';
 import { announceRefreshed } from '../data/refreshEvents';
 import type { ParsedColumn } from '../data/parse';
+import { liveOfferRefusal, setLiveOptIn } from './liveOptIn';
 
 type Fail = { ok: false; error: string; code?: string };
 type Selection = { table?: string; query?: string };
@@ -59,7 +63,9 @@ export async function readLiveSchema(projectId: string, connId: string, sel: Sel
   const conn = await connections.getConnection(projectId, connId);
   if (!conn) return { ok: false, error: msg.liveConnectionGoneMessage() };
   const def = getConnector(conn.connectorId);
-  if (!def || !def.live || !isLiveCapable(def)) return { ok: false, error: msg.liveNotOfferedMessage() };
+  // Can THIS connection be Live: a live dialect, and the opt-in an OLTP source asks for (L3.2).
+  const refusal = liveOfferRefusal(def, conn.values);
+  if (refusal || !def || !def.live) return { ok: false, error: refusal ?? msg.liveNotOfferedMessage() };
   const secrets = await loadSecrets(connId, def);
   let cols: SourceColumn[];
   if (sel.table) {
@@ -136,7 +142,8 @@ export async function setDatasetMode(p: Record<string, unknown>) {
     // Can this source answer live at all? Asked before the confirm, so nobody confirms a drop that cannot happen.
     const conn = await connections.getConnection(projectId, meta.origin.connId);
     if (!conn) return { ok: false, error: msg.liveConnectionGoneMessage() };
-    if (!isLiveCapable(getConnector(conn.connectorId))) return { ok: false, error: msg.liveNotOfferedMessage() };
+    const refusal = liveOfferRefusal(getConnector(conn.connectorId), conn.values);
+    if (refusal) return { ok: false, error: refusal };
     if (p.confirmDrop !== true) return { ok: false, code: 'confirm_drop', error: msg.liveConfirmDropMessage() };
     const schema = await readLiveSchema(projectId, meta.origin.connId, sel);
     if (!schema.ok) return schema;
@@ -166,6 +173,13 @@ export function register(): void {
       return await setDatasetMode(payload);
     } catch (err: unknown) {
       return { ok: false, error: err instanceof Error ? err.message : 'Could not change the dataset' };
+    }
+  });
+  ipcMain.handle('connection:setLiveOptIn', async (_e, payload: Record<string, unknown> = {}) => {
+    try {
+      return await setLiveOptIn(payload);
+    } catch (err: unknown) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Could not change the connection' };
     }
   });
 }
