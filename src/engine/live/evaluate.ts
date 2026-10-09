@@ -29,9 +29,16 @@ export type LiveStep = 'latest' | 'binRange' | 'grain' | 'chart' | 'metric';
 /** Runs one compiled statement; rows positional to `query.columns`. Throws on a warehouse error. */
 export type LiveRunner = (query: CompiledQuery, step: LiveStep) => Promise<LiveRows>;
 
+/**
+ * A data-relative period as it resolved — the inclusive days, or `null` when its
+ * column holds no date — in filter order. An answer card's `steps` (what "Save
+ * as visual" keeps) are written from these, as `specFilterSteps` writes them.
+ */
+export type PeriodRange = { column: string; from: string; to: string } | { column: string; from: null; to: null };
+
 export type LiveOutcome =
-  | { ok: true; kind: 'chart'; chart: LiveChart; warnings: string[]; periodLabels: string[] }
-  | { ok: true; kind: 'metric'; value: number | null; warnings: string[]; periodLabels: string[] }
+  | { ok: true; kind: 'chart'; chart: LiveChart; warnings: string[]; periodLabels: string[]; periodRanges?: PeriodRange[] }
+  | { ok: true; kind: 'metric'; value: number | null; warnings: string[]; periodLabels: string[]; periodRanges?: PeriodRange[] }
   | LiveRefusal;
 
 /**
@@ -49,9 +56,10 @@ export type LiveOutcome =
 export function resolvePeriods(
   ir: LiveIR,
   latest: Record<string, CivilDate | null>,
-): { ir: LiveIR; warnings: string[]; periodLabels: string[] } {
+): { ir: LiveIR; warnings: string[]; periodLabels: string[]; periodRanges: PeriodRange[] } {
   const warnings: string[] = [];
   const periodLabels: string[] = [];
+  const periodRanges: PeriodRange[] = [];
   const filters: LiveFilter[] = [];
   for (const f of ir.filters) {
     if (f.kind !== 'latest') {
@@ -62,14 +70,16 @@ export function resolvePeriods(
     if (!day) {
       warnings.push(emptyListWarning(f.column, 'in'));
       periodLabels.push(`${f.column}: no dates`);
+      periodRanges.push({ column: f.column, from: null, to: null });
       continue;
     }
     const p = resolvePeriod(f.period, day, f.yearsBack || 0);
     const b = periodBounds(p.grain, p.bucket);
     periodLabels.push(`${f.column}: ${p.label}`);
+    periodRanges.push({ column: f.column, from: b.from, to: b.to });
     filters.push({ kind: 'range', column: f.column, from: b.from, to: b.to });
   }
-  return { ir: { ...ir, filters }, warnings, periodLabels };
+  return { ir: { ...ir, filters }, warnings, periodLabels, periodRanges };
 }
 
 /** The category key, asking the warehouse only when the extract would have looked at the data. */
@@ -101,6 +111,7 @@ export async function evaluateLive(ir: LiveIR, env: CompileEnv, run: LiveRunner)
   let q = ir;
   let warnings: string[] = [];
   let periodLabels: string[] = [];
+  let periodRanges: PeriodRange[] = [];
   const names = latestColumns(ir);
   if (names.length) {
     const lq = compileLatestDates(ir, env);
@@ -111,6 +122,7 @@ export async function evaluateLive(ir: LiveIR, env: CompileEnv, run: LiveRunner)
     q = r.ir;
     warnings = r.warnings;
     periodLabels = r.periodLabels;
+    periodRanges = r.periodRanges;
   }
 
   if (q.kind === 'metric') {
@@ -118,7 +130,7 @@ export async function evaluateLive(ir: LiveIR, env: CompileEnv, run: LiveRunner)
     if (!mq.ok) return mq;
     const value = shapeMetric(await run(mq.query, 'metric'), mq.query, q);
     if (isRefusal(value)) return value;
-    return { ok: true, kind: 'metric', value, warnings, periodLabels };
+    return { ok: true, kind: 'metric', value, warnings, periodLabels, ...(periodRanges.length ? { periodRanges } : {}) };
   }
 
   const key = await resolveKey(q, env, run);
@@ -127,5 +139,5 @@ export async function evaluateLive(ir: LiveIR, env: CompileEnv, run: LiveRunner)
   if (!cq.ok) return cq;
   const chart = shapeChart(await run(cq.query, 'chart'), cq.query, q, key, env.columns);
   if (isRefusal(chart)) return chart;
-  return { ok: true, kind: 'chart', chart, warnings, periodLabels };
+  return { ok: true, kind: 'chart', chart, warnings, periodLabels, ...(periodRanges.length ? { periodRanges } : {}) };
 }

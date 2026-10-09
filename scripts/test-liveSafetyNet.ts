@@ -2,19 +2,24 @@
 // route, in server mode, against org acme's locked DuckDB worker.
 //
 // A Live dataset stores its schema and nothing else. Every channel that READS
-// ROWS and is not yet routed to the warehouse (L2.4) would, handed one, find
-// zero rows and compute a confident zero. So:
+// ROWS and is not routed to the warehouse would, handed one, find zero rows and
+// compute a confident zero. So:
 //
-// 1. EVERY ROW-READING CHANNEL REFUSES, TYPED. Each channel whose contract
-//    takes a dataset (enumerated from src/api/ — see ROW_READERS) is called
-//    against a Live dataset and must answer the typed refusal: HTTP 409
-//    `live_dataset` with the catalog's sentence, or a handler's own
-//    `{ok:false, code:'live_dataset'}`. Never a 200 with a figure in it.
-//    Charts, KPI tiles and answers refuse too until L2.4 routes them.
+// 1. EVERY ROW-READING CHANNEL ANSWERS FROM THE WAREHOUSE OR REFUSES, TYPED.
+//    Each channel whose contract takes a dataset (enumerated from src/api/ —
+//    see ROW_READERS) is called against a Live dataset over the test harness's
+//    fake warehouse (scripts/liveFakeConnector.ts). The doors L2.4 routes —
+//    charts, KPI tiles, answers and what funnels into them (ROUTED) — must
+//    ANSWER, with a live-dated figure. Every other one must answer the typed
+//    refusal: HTTP 409 `live_dataset` with the catalog's sentence, or a
+//    handler's own `{ok:false, code:'live_dataset' | 'live_refused'}` (a pivot,
+//    cohort or funnel is the compiler's refusal). Never a 200 with a figure in it.
 // 2. NOTHING THAT MERELY LISTS BREAKS. The list, columns, source, catalog,
 //    lineage, search, Home, trash/restore, versions and a project bundle all
 //    answer 200 with the Live dataset in them (or skipped, for a value search).
-// 3. A refusal carries no SQL text, no address and no dataset id.
+// 3. A refusal carries no SQL text, no address and no dataset id — including a
+//    routed door whose Live dataset's connection is gone (a second Live dataset,
+//    whose origin is a canary SQL text): every reader is a typed failure there.
 // 4. Negative control: the same channels on an EXTRACT dataset with the same
 //    columns answer without the refusal — the net is not a blanket 409.
 //
@@ -37,6 +42,7 @@ const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckd
 const appMod: typeof import('../src/server/app') = require('../src/server/app');
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
 const wire: typeof import('../src/server/wire') = require('../src/server/wire');
+const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnector');
 
 type Cell = import('../src/data/transforms').Cell;
 type ParsedColumn = import('../src/data/parse').ParsedColumn;
@@ -52,6 +58,15 @@ const COLUMNS: ParsedColumn[] = [
 const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
   `r${i % 5}`, (i * 37) % 101, `2024-0${1 + (i % 9)}-1${i % 9}`, `c${i % 17}`, (i * 7) % 13,
 ]);
+const WAREHOUSE_TYPE: Record<string, string> = { text: 'VARCHAR', number: 'DOUBLE', date: 'DATE' };
+
+/** The fake warehouse's table: ROWS typed as a warehouse holds them, in the current org's DuckDB worker. */
+async function loadWarehouseTable(table: string): Promise<void> {
+  await duck.execAsync(`CREATE OR REPLACE TABLE "${table}" (${COLUMNS.map((c) => `"${c.name}" ${WAREHOUSE_TYPE[c.type]}`).join(', ')})`);
+  const params: Cell[] = [];
+  const tuples = ROWS.map((r) => `(${COLUMNS.map((c, i) => { params.push(r[i]); return `CAST($${params.length} AS ${WAREHOUSE_TYPE[c.type]})`; }).join(', ')})`);
+  await duck.queryAsync(`INSERT INTO "${table}" VALUES ${tuples.join(', ')}`, params as (string | number | null)[]);
+}
 
 (async () => {
   context.enterServerMode(DATA);
@@ -63,17 +78,26 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
   const liveDataset: typeof import('../src/data/liveDataset') = require('../src/data/liveDataset');
   const messages: typeof import('../src/data/liveMessages') = require('../src/data/liveMessages');
 
+  fakeMod.registerLiveFake();
+  const connections: typeof import('../src/connectors/connections') = require('../src/connectors/connections');
   const seed = await context.runInContext(ADMIN, 'seed', async () => {
     await projects.init();
     const projectId = (await projects.createProject('Live safety net')).id;
     const extract = await datasets.saveDataset(projectId, { name: 'Orders copy', sourceKind: 'csv', columns: COLUMNS, rows: ROWS });
-    const live = await liveRecord.saveLiveRecord(projectId, {
-      name: 'Orders live',
+    // The Live dataset under test: the same rows in the fake warehouse, over a real connection record.
+    await loadWarehouseTable('live_net_orders');
+    const conn = await connections.saveConnection(projectId, { name: 'Fake warehouse', connectorId: fakeMod.LIVE_FAKE_ID, values: {} });
+    const live = conn && await liveRecord.saveLiveRecord(projectId, {
+      name: 'Orders live', columns: COLUMNS, origin: { kind: 'connection', connId: conn.id, table: 'live_net_orders' },
+    });
+    // The canary: a Live dataset whose connection is gone and whose origin is a SQL text no reply may carry.
+    const gone = await liveRecord.saveLiveRecord(projectId, {
+      name: 'Orders gone',
       columns: COLUMNS,
       origin: { kind: 'connection', connId: '7d1f3c2a-0b6e-4f5a-9c8d-1e2f3a4b5c6d', sql: SQL_CANARY },
     });
-    if (!extract || !live) throw new Error('fixture not saved');
-    return { projectId, extract: extract.id, live: live.id };
+    if (!extract || !live || !gone) throw new Error('fixture not saved');
+    return { projectId, extract: extract.id, live: live.id, gone: gone.id };
   });
   const P = seed.projectId;
   duck.forbidSyncOnMainThread();
@@ -95,11 +119,15 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     return { status: r.statusCode, body: r.body, value: value as Record<string, unknown> | null }; // a batch's reply is an array; typedReply reads either
   };
   const REFUSAL = messages.liveRefusedMessage();
+  /** A Live code: the safety net's refusal, or the executor's typed failure (refused, unavailable, failed…). */
+  const LIVE_CODES = new Set([liveDataset.LIVE_DATASET_CODE, 'live_refused', 'live_unavailable', 'live_failed', 'live_timeout', 'live_cancelled']);
   /** A handler's own reply: `{ok:false, code, error|reason}` — per item for a batch, where one Live tile must not fail the rest. */
   const typedReply = (v: unknown): boolean => {
     if (Array.isArray(v)) return v.length > 0 && v.every(typedReply);
     const o = (v ?? {}) as Record<string, unknown>;
-    return o.ok === false && o.code === liveDataset.LIVE_DATASET_CODE && (o.error === REFUSAL || o.reason === REFUSAL);
+    if (o.ok !== false || typeof o.code !== 'string' || !LIVE_CODES.has(o.code)) return false;
+    const said = typeof o.error === 'string' ? o.error : o.reason;
+    return o.code === liveDataset.LIVE_DATASET_CODE ? said === REFUSAL : typeof said === 'string' && said.length > 0;
   };
   const isRefusal = (r: { status: number; value: unknown }): boolean =>
     (r.status === 409 && (r.value as Record<string, unknown> | null)?.code === liveDataset.LIVE_DATASET_CODE
@@ -112,7 +140,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     const metricId = String((metric.value?.metric as { id?: string } | undefined)?.id ?? (metric.value as { id?: string } | null)?.id ?? '');
     return { metricId };
   };
-  const recs = { live: await mk(seed.live), extract: await mk(seed.extract) };
+  const recs = { live: await mk(seed.live), extract: await mk(seed.extract), gone: await mk(seed.gone) };
   ok('a metric can be DEFINED on a Live dataset (a definition is metadata)', /^[0-9a-f-]{36}$/.test(recs.live.metricId), JSON.stringify(recs.live));
 
   const enc = { category: 'region', values: [{ column: 'sales', aggregation: 'sum' }] };
@@ -159,6 +187,8 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ['metric values', 'metric:values', { projectId: P, ids: [metricId] }],
     // answers
     ['answer card', 'answer:card', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
+    ['answer: explain a tile', 'answer:explain', { projectId: P, tile: { datasetId: d, encoding: enc, filters: [], chartType: 'bar', name: 'Sales by region' } }],
+    ['answer: rerun', 'answer:rerun', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
     // drivers, segments, scenarios
     ['key drivers', 'drivers:explain', { projectId: P, request: { datasetId: d, metric: { column: 'sales', aggregation: 'sum' }, compare: { mode: 'latest', column: 'day' }, dimension: 'region' } }],
     ['segments: features', 'segments:features', { projectId: P, datasetId: d }],
@@ -177,12 +207,35 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ['snapshots: keep', 'snapshots:setKeep', { projectId: P, datasetId: d, keep: 3 }],
   ];
 
-  // ── 1. Every row reader refuses a Live dataset, typed ─────────────────────
+  /**
+   * The readers L2.4 routes to the warehouse: charts, KPI tiles, answers and the
+   * batches over them. On the Live dataset each must ANSWER — and a figure must
+   * be dated by the warehouse (`asOf.mode: 'live'`), never by the record.
+   */
+  const ROUTED = new Set(['chart (visual:data)', 'chart batch', 'chart preview', 'KPI tile (dashboard:metric)', 'dashboard tiles',
+    'metric preview', 'metric values', 'answer card', 'answer: explain a tile', 'answer: rerun', 'alert test: threshold']);
+  /** Every `ok` in a reply (a batch answers per item): all true, and every dated one dated live. */
+  const answered = (v: unknown): boolean => {
+    if (Array.isArray(v)) return v.length > 0 && v.every(answered);
+    const o = (v ?? {}) as Record<string, unknown>;
+    const asOf = o.asOf as { mode?: string } | undefined;
+    return o.ok !== false && !('code' in o) && (!asOf || asOf.mode === 'live');
+  };
+
+  // ── 1. Every row reader answers from the warehouse or refuses, typed ───────
   const bodies: string[] = [];
   for (const [label, channel, payload] of ROW_READERS(seed.live, seed.extract, recs.live.metricId)) {
     const r = await post(channel, payload);
     bodies.push(r.body);
-    ok(`Live → ${label} (${channel}) refuses, typed`, isRefusal(r), `${r.status} ${r.body.slice(0, 240)}`);
+    if (ROUTED.has(label)) ok(`Live → ${label} (${channel}) ANSWERS from the warehouse (L2.4)`, r.status === 200 && answered(r.value), `${r.status} ${r.body.slice(0, 240)}`);
+    else ok(`Live → ${label} (${channel}) refuses, typed`, isRefusal(r), `${r.status} ${r.body.slice(0, 240)}`);
+  }
+  ok('every routed door was exercised', ROW_READERS(seed.live, seed.extract, '').filter(([l]) => ROUTED.has(l)).length === ROUTED.size);
+  // The canary Live dataset (its connection gone): EVERY reader — routed or not — a typed failure.
+  for (const [label, channel, payload] of ROW_READERS(seed.gone, seed.extract, recs.gone.metricId)) {
+    const r = await post(channel, payload);
+    bodies.push(r.body);
+    ok(`Live, connection gone → ${label} (${channel}) is a typed failure`, isRefusal(r), `${r.status} ${r.body.slice(0, 240)}`);
   }
   // The project's SQL over a Live dataset by name: refused, never an empty table.
   const sqlRun = await post('sql:run', { projectId: P, sql: 'SELECT count(*) AS n FROM "Orders live"' });
@@ -199,19 +252,26 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ok('a scenario on a Live metric could be created to test', false, scen.body.slice(0, 240));
   }
 
-  // A chart can be DEFINED on a Live dataset (L2.4 draws it); its thumbnail refuses until then.
+  // A chart can be DEFINED on a Live dataset, and its thumbnail is drawn through the chart door (L2.4).
   const vis = await post('visual:save', { projectId: P, datasetId: seed.live, name: 'Sales by region', chartType: 'bar', encoding: enc });
   const visualId = String((vis.value?.visual as { id?: string } | undefined)?.id ?? (vis.value as { id?: string } | null)?.id ?? '');
   ok('a visual can be saved on a Live dataset (a definition is metadata)', vis.status === 200 && /^[0-9a-f-]{36}$/.test(visualId), vis.body.slice(0, 240));
   if (visualId) {
     const thumbs = await post('visual:thumbs', { projectId: P, ids: [visualId] });
     bodies.push(thumbs.body);
-    ok('Live → gallery thumbnail (visual:thumbs) refuses, typed', isRefusal(thumbs) || /"code":"live_dataset"/.test(thumbs.body), `${thumbs.status} ${thumbs.body.slice(0, 240)}`);
+    ok('Live → gallery thumbnail (visual:thumbs) ANSWERS from the warehouse (L2.4)', thumbs.status === 200 && answered(thumbs.value), `${thumbs.status} ${thumbs.body.slice(0, 240)}`);
+  }
+  const goneVis = await post('visual:save', { projectId: P, datasetId: seed.gone, name: 'Gone by region', chartType: 'bar', encoding: enc });
+  const goneVisualId = String((goneVis.value?.visual as { id?: string } | undefined)?.id ?? '');
+  if (goneVisualId) {
+    const thumbs = await post('visual:thumbs', { projectId: P, ids: [goneVisualId] });
+    bodies.push(thumbs.body);
+    ok('Live, connection gone → gallery thumbnail is a typed failure', thumbs.status === 200 && /"code":"live_unavailable"/.test(thumbs.body), `${thumbs.status} ${thumbs.body.slice(0, 240)}`);
   }
 
   // ── 3. A refusal leaks nothing ─────────────────────────────────────────────
   ok('no refusal carries the selection\'s SQL', bodies.every((b) => !b.includes('SECRET_CANARY')));
-  ok('no refusal carries the dataset id', bodies.filter((b) => /live_dataset/.test(b)).every((b) => !b.includes(seed.live)));
+  ok('no refusal carries the dataset id', bodies.filter((b) => /"code":"live_/.test(b)).every((b) => !b.includes(seed.live) && !b.includes(seed.gone)));
 
   // ── 4. Negative control: the same readers on the extract do not refuse ─────
   let extractRefused = 0;
@@ -281,7 +341,7 @@ const ROWS: Cell[][] = Array.from({ length: 120 }, (_, i) => [
     ok('getDatasetMeta reads it — Live, schema only, not resident', meta?.mode === 'live' && meta.resident === false && meta.columns.length === COLUMNS.length);
     ok('residentSource is null for it (so every resident path falls through to the refusal)', (await datasets.residentSource(P, seed.live)) === null);
     const summaries = await datasets.listDatasets(P);
-    ok('listDatasets does not throw and lists both', summaries.length === 2);
+    ok('listDatasets does not throw and lists all three', summaries.length === 3);
   });
 
   await app.close();

@@ -41,6 +41,7 @@ import { periodPlan, orderPeriods } from './insightsAgg';
 import type { FilterStep } from '../data/transforms';
 import * as recordFs from '../app/recordFs';
 import { isLiveDatasetError } from '../data/liveDataset';
+import { isLiveFigureError } from '../engine/live/liveFigureError';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -385,7 +386,16 @@ export async function evaluateProject(
     // A disabled rule is not evaluated at all — not evaluated and then dropped.
     // Its history would otherwise keep growing while it was supposed to be off.
     if (!rule.enabled) continue;
-    const { value, previous } = await metricFor(projectId, rule);
+    let read: { value: number | null; previous: number | null };
+    try {
+      read = await metricFor(projectId, rule);
+    } catch (err) {
+      // A Live rule whose warehouse did not answer (L2.4) is not evaluated this
+      // time — its state untouched, never "the value was null" — and the others still are.
+      if (isLiveFigureError(err)) continue;
+      throw err;
+    }
+    const { value, previous } = read;
     const res = alerts.evaluateRule({
       rule,
       value,

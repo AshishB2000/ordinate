@@ -50,6 +50,9 @@ import { fxScope } from './fxQuery';
 import { mergeFx } from '../analysis/fx';
 import type { FxInfo } from '../analysis/fx';
 import { formatMetric } from '../app/format';
+import type { AsOf } from '../api/asOf';
+import { liveCodeOf } from './liveRoute';
+import { isLiveDatasetError } from '../data/liveDataset';
 
 /** How many distinct values of a breakout column are read before rolling up. */
 const SERIES_SCAN = 2000;
@@ -78,6 +81,13 @@ interface ResolveCtx {
   params: ParamValues;
   /** Set when any operand was money converted to the target currency (./fxQuery). */
   fx?: FxInfo;
+  /** The oldest warehouse time of any LIVE operand (L2.4) — the figure's `asOf`. */
+  asOf?: AsOf;
+}
+
+/** The older of two live times: a figure is as old as its oldest operand. */
+function olderAsOf(a: AsOf | undefined, b: AsOf | undefined): AsOf | undefined {
+  return !a ? b : !b ? a : b.at < a.at ? b : a;
 }
 
 /**
@@ -120,6 +130,7 @@ async function resolveDefinition(
     if (!definition.column) return null;
     const res = await computeCardMetric(ctx.projectId, datasetId, definition, all, ctx.params);
     ctx.fx = mergeFx(ctx.fx, res.fx);
+    ctx.asOf = olderAsOf(ctx.asOf, res.asOf);
     return res.ok ? res.value : null;
   }
 
@@ -145,6 +156,7 @@ async function resolveDefinition(
       ctx.params,
     );
     ctx.fx = mergeFx(ctx.fx, res.fx);
+    ctx.asOf = olderAsOf(ctx.asOf, res.asOf);
     values.set(agg.ref, res.ok ? res.value : null);
   }
 
@@ -199,6 +211,8 @@ export interface ResolvedMetric {
   definitionText: string;
   direction?: 'up_good' | 'down_good';
   fx?: FxInfo;
+  /** Set when an operand is LIVE: the warehouse's time (L2.4), kept by stampAsOf. */
+  asOf?: AsOf;
 }
 
 /**
@@ -232,6 +246,7 @@ export async function resolveMetric(
   };
   if (metric.direction) out.direction = metric.direction;
   if (ctx.fx) out.fx = ctx.fx;
+  if (ctx.asOf) out.asOf = ctx.asOf;
   return out;
 }
 
@@ -247,7 +262,10 @@ async function distinctValues(projectId: string, datasetId: string, column: stri
     const ds = await datasets.getDataset(projectId, datasetId);
     if (!ds) return null;
     return distinctValuesPageJs(ds.columns, ds.rows, column, { limit: SERIES_SCAN, search: '' }).values;
-  } catch (_) {
+  } catch (err) {
+    // D6: "no series" would be a silent blank for a Live dataset — its sparkline
+    // is not routed (one statement per point; L2.4 log), so it refuses, typed.
+    if (isLiveDatasetError(err)) throw err;
     return null;
   }
 }
@@ -459,7 +477,7 @@ export function register() {
       const dated = await stampAsOf(res, projectId, [(await metrics.getMetric(projectId, id))?.datasetId]);
       return bound.errors.length ? { ...dated, paramErrors: bound.errors } : dated;
     } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to compute the metric' };
+      return { ok: false, error: err?.message || 'Failed to compute the metric', ...liveCodeOf(err) };
     }
   })));
 
@@ -483,7 +501,7 @@ export function register() {
         definitionText: describeDefinition({ definition: def, filters: own }),
       };
     } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to preview the metric' };
+      return { ok: false, error: err?.message || 'Failed to preview the metric', ...liveCodeOf(err) };
     }
   });
 

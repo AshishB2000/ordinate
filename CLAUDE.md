@@ -139,6 +139,13 @@ prompts unrounded); a leading U+FEFF is lost on every string the bridge returns 
   is the stale answer (`asOf.stale`) or a typed error in a catalog sentence — warehouse text goes to
   the log only (R-L6). `live:<dialect>` outcomes on `/metrics`. CI's warehouse is
   `scripts/liveFakeConnector.ts` (DuckDB dialect; tests or `ORDINATE_TEST_LIVE_FAKE` only, never listed).
+- **The doors** (`src/ipc/liveRoute.ts`, `liveAnswers.ts`, L2.4): `vizDataFor`, `computeCardMetric` and
+  `computeCard` send a Live dataset to the executor FIRST — before the extract's answer cache, never
+  through `getDataset` — so every batch, tile, publish, export, alert and copilot fact that funnels into
+  them is live. A KPI failure THROWS `LiveFigureError` (an `ok:false` would read as "dataset gone");
+  a handler's catch keeps it typed with `liveCodeOf`, the route answers an uncaught one 409 with its
+  code. The live `asOf` is kept by `stampAsOf`. A new figure path goes through one of the three doors,
+  never `buildVizData` on hydrated rows (`test-liveRoute` spies on `getDataset`).
 
 ### Workspace
 

@@ -130,11 +130,16 @@ export interface E2eOptions {
 // is registered, before the spec's own top-level code (withLargeDataset) has.
 let server: Promise<Server> | undefined;
 let browser: Browser | undefined;
-const seedOpts: { large?: boolean } = {};
+const seedOpts: { large?: boolean; live?: boolean } = {};
 
 /** Call at a spec's top level: this file's server also gets the 1M-row dataset (server.sample.large). */
 export function withLargeDataset(): void {
   seedOpts.large = true;
+}
+
+/** Call at a spec's top level: this file's server also gets a Live dataset over the test harness's fake warehouse (server.sample.live). */
+export function withLiveDataset(): void {
+  seedOpts.live = true;
 }
 
 let serverEnv: Record<string, string> = {};

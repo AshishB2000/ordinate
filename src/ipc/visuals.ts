@@ -49,6 +49,8 @@ import { facetVizData, isFaceted } from './visualsFacets';
 import { buildFacetData } from '../analysis/facets';
 import { fxScope, fxVizContext, fxVizData } from './fxQuery';
 import type { FxInfo } from '../analysis/fx';
+import { liveChart, liveMetaOf } from './liveRoute';
+import type { LiveFailureCode } from '../engine/live/liveQuery';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -383,7 +385,8 @@ export type VizDataReply =
       /** How fresh the figures are — stamped by `visual:data` itself, never cached (data/figureAsOf). */
       asOf?: AsOf;
     }
-  | { ok: false; error: string; tooLarge?: true };
+  // `code`: a Live dataset's typed failure (./liveRoute) — refused, unavailable, failed, timed out.
+  | { ok: false; error: string; tooLarge?: true; code?: LiveFailureCode; reason?: string };
 
 /** The JS fallback's cost ceiling (below): a reply when it is exceeded, else null. */
 async function overCeiling(projectId: string, datasetId: string, max?: number): Promise<VizDataReply | null> {
@@ -424,6 +427,9 @@ export async function vizDataFor(
   filters: FilterStep[],
   opts: { maxHydrateRows?: number; params?: ParamValues; sample?: boolean } = {},
 ): Promise<VizDataReply> {
+  // A Live dataset is asked of its warehouse (L2.4, ./liveRoute) — before the cache below, which would outlive its cache age.
+  const live = await liveMetaOf(projectId, datasetId);
+  if (live) return liveChart(projectId, live, encoding, filters);
   // The answer cache (engine/queryCache): a dashboard re-open, a type switch in
   // the builder or a tab coming back asks the same question over unchanged
   // data. Only successful answers are kept; an error is recomputed every time.

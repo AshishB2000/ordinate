@@ -107,7 +107,8 @@ export function register(): void {
         const r = await call(e, 'dashboard:metric', {
           projectId, datasetId: it.datasetId, column: it.column, aggregation: it.aggregation, filters: it.filters, params, asOf, currency,
         });
-        if (!r || r.ok === false) return { ok: false, error: (r && r.error) || 'The metric could not be computed.' };
+        // A Live tile's failure keeps its type (L2.4): refused, failed, timed out — never a bare blank.
+        if (!r || r.ok === false) return { ok: false, error: (r && r.error) || 'The metric could not be computed.', ...(r && r.code ? { code: r.code, ...(r.reason ? { reason: r.reason } : {}) } : {}) };
         res = { ok: true, value: r.value, ...(r.paramErrors ? { paramErrors: r.paramErrors } : {}), ...(r.fx ? { fx: r.fx } : {}), ...(r.asOfMissing ? { asOfMissing: true } : {}), ...(r.asOf ? { asOf: r.asOf } : {}) };
       }
       // Under "As of" a delta would compare a past figure with today's periods (kpiCompare.ts): none.
@@ -171,9 +172,9 @@ export function register(): void {
   ipcMain.handle('metric:values', async (e, { projectId, ids, filters, params }: any = {}) =>
     Promise.all((Array.isArray(ids) ? ids : []).map(async (id: string) => {
       const r = await call(e, 'metric:value', { projectId, id, filters, params });
-      // A Live metric's refusal is kept (typed, D6); any other failure stays a bare `ok:false`.
+      // A Live metric's refusal or failure is kept (typed, D6); any other failure stays a bare `ok:false`.
       return r && r.ok !== false
         ? { id, ok: true, value: r.value, display: r.display, ...(r.asOf ? { asOf: r.asOf } : {}) }
-        : { id, ok: false, ...(isLiveRefusalReply(r) ? liveRefusal() : {}) };
+        : { id, ok: false, ...(isLiveRefusalReply(r) ? liveRefusal() : r && typeof r.code === 'string' && r.code.startsWith('live_') ? { code: r.code, error: r.error } : {}) };
     })));
 }

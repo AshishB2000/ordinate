@@ -35,6 +35,7 @@ import { registerGeoRoutes } from './geo';
 import { registerRequestMetrics } from './metrics';
 import { registerPublishedRoutes } from './published';
 import { isLiveDatasetError, LIVE_DATASET_CODE, liveRefusalsRaised, tagLiveRefusals } from '../data/liveDataset';
+import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -358,6 +359,13 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         // 409 with the catalog's sentence (no id, no SQL), never a figure from zero rows.
         await record('error', decision.projectId);
         return reply.code(409).send({ error: LIVE_DATASET_CODE, code: LIVE_DATASET_CODE, message: err.message });
+      }
+      if (isLiveFigureError(err)) {
+        // L2.4: a Live KPI the warehouse could not give, thrown past a handler that
+        // did not catch it — typed the same way, its catalog sentence only (R-L6).
+        const f = err.failure;
+        await record('error', decision.projectId);
+        return reply.code(409).send({ error: f.code, code: f.code, message: f.error, ...(f.reason ? { reason: f.reason } : {}) });
       }
       // The message can carry a path or a value; it goes to the log, not the wire.
       req.log.error({ err, channel }, 'rpc handler failed');

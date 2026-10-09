@@ -9,7 +9,7 @@ import * as visuals from '../analysis/visuals';
 import * as dashboards from '../analysis/dashboards';
 import * as analysis from '../analysis/analysis';
 import { computeColumnSummary, findQualityIssues } from '../data/datasetStats';
-import { buildVizData } from '../analysis/vizData';
+import type { VizDataResult } from '../analysis/vizData';
 import { withTableCalcs } from '../analysis/tableCalc';
 import { computeMetric } from '../analysis/metricValue';
 import { askCopilot } from '../ai/analyze';
@@ -32,6 +32,10 @@ import * as history from '../app/history';
 import * as captureDataset from '../data/captureDataset';
 import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
 import * as answers from './answers';
+import { vizDataFor } from './visuals';
+import { computeCardMetric } from './dashboards';
+import { isLiveFigureError, liveMetaOf } from './liveRoute';
+import { liveDatasetFacts } from '../ai/liveDatasetFacts';
 // The catalog's column docs, with a sensitivity mark carried across a later
 // rename — so a withheld column stays withheld under its new name.
 import { assistantColumnDocs as catalogColumns } from '../app/sharePolicy';
@@ -137,7 +141,11 @@ async function factMetrics(projectId: string, datasetId?: string): Promise<FactM
     const out: FactMetric[] = [];
     for (const s of list) {
       if (datasetId && s.datasetId !== datasetId) continue;
-      const r = await resolveMetric(projectId, s.id);
+      // A Live metric its warehouse could not give is left out (L2.4) — never a guess, and never the others with it.
+      const r = await resolveMetric(projectId, s.id).catch((err: unknown) => {
+        if (isLiveFigureError(err)) return null;
+        throw err;
+      });
       if (!r) continue;
       out.push({ name: r.name, definitionText: r.definitionText, value: r.value, display: r.display, description: s.description });
     }
@@ -156,11 +164,18 @@ async function computeMetricCards(
   pages: dashboards.Page[],
 ): Promise<{ label: string; value: number | null }[]> {
   const dsCache = new Map<string, Awaited<ReturnType<typeof datasets.getDataset>>>();
+  const liveCache = new Map<string, boolean>();
   const computed: { label: string; value: number | null }[] = [];
   for (const page of pages || []) {
     for (const card of page.cards || []) {
       if (card.type !== 'metric' || !card.metric) continue;
       const m = card.metric;
+      if (!liveCache.has(m.datasetId)) liveCache.set(m.datasetId, !!(await liveMetaOf(projectId, m.datasetId)));
+      if (liveCache.get(m.datasetId)) {
+        // A Live card's number is the warehouse's, as the tile shows it (L2.4); one it cannot give is n/a, never a guess.
+        computed.push({ label: m.label || `${m.aggregation}(${m.column})`, value: await liveCardValue(projectId, m) });
+        continue;
+      }
       let ds = dsCache.get(m.datasetId);
       if (ds === undefined) {
         ds = await datasets.getDataset(projectId, m.datasetId);
@@ -171,6 +186,16 @@ async function computeMetricCards(
     }
   }
   return computed;
+}
+
+/** A Live metric card's figure through the KPI door, or null when the warehouse could not give one. */
+async function liveCardValue(projectId: string, m: NonNullable<dashboards.Card['metric']>): Promise<number | null> {
+  try {
+    return (await computeCardMetric(projectId, m.datasetId, { column: m.column, aggregation: m.aggregation })).value;
+  } catch (err) {
+    if (isLiveFigureError(err)) return null;
+    throw err;
+  }
 }
 
 // Build the app-computed FACTS + provenance for a { kind, id } reference, reusing
@@ -192,6 +217,14 @@ export async function buildFacts(
   // (scripts/test-copilot-analysis-facts.ts) and any non-ask caller see the
   // exact same behaviour as before, and the computed numbers are untouched.
   if (kind === 'dataset' && id) {
+    // A Live dataset has no rows here to summarise: its schema, notes and metrics (L2.4, ai/liveDatasetFacts).
+    const live = await liveMetaOf(projectId, id);
+    if (live) {
+      emit({ kind: 'read', label: 'Read ' + live.name, detail: plural(live.columns.length, 'column') });
+      const defined = await factMetrics(projectId, id);
+      if (defined.length) emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
+      return liveDatasetFacts(live, defined, await catalogColumns(projectId, id));
+    }
     const ds = await datasets.getDataset(projectId, id);
     if (ds) {
       emit({ kind: 'read', label: 'Read ' + ds.name, detail: plural(ds.rowCount, 'row') });
@@ -218,15 +251,15 @@ export async function buildFacts(
     const v = await visuals.getVisual(projectId, id);
     if (v) {
       emit({ kind: 'read', label: 'Read ' + v.name });
-      const ds = await datasets.getDataset(projectId, v.datasetId);
+      const ds = await datasets.getDatasetMeta(projectId, v.datasetId);
       emit({ kind: 'read', label: 'Read ' + (ds ? ds.name : '(missing dataset)') });
-      // The calculated figures the chart shows, beside the raw ones (tableCalc.ts).
-      const viz = withTableCalcs({ ok: true, ...buildVizData(
-        ds ? ds.columns : [],
-        ds ? ds.rows : [],
-        v.encoding,
-        v.filters,
-      ) }, v.encoding);
+      // The chart's figures through THE chart door (vizDataFor) — the same numbers
+      // the tile draws, a Live dataset's from its warehouse (L2.4) — with the
+      // calculated figures beside the raw ones (tableCalc.ts). No figure → none.
+      const reply = await vizDataFor(projectId, v.datasetId, v.encoding, v.filters);
+      const viz = withTableCalcs<{ ok: true } & VizDataResult>(reply.ok
+        ? { ok: true, data: reply.data, recommendedShape: reply.recommendedShape, warnings: reply.warnings, category: reply.category }
+        : { ok: true, data: { labels: [], series: [] }, recommendedShape: 'categorical', warnings: [] }, v.encoding);
       emit({ kind: 'compute', label: 'Built chart data' });
       const columnDocs = await catalogColumns(projectId, v.datasetId); // the user's own column notes (catalog)
       // The visual's Analytics overlays, resolved under the visual's own filters.

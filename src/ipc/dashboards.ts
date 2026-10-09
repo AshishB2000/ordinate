@@ -18,6 +18,8 @@ import { withAsOf } from '../data/asOf';
 import { stampAsOf } from '../data/figureAsOf';
 import { fxCardMetric, fxContext, fxScope } from './fxQuery';
 import type { FxInfo } from '../analysis/fx';
+import type { AsOf } from '../api/asOf';
+import { liveCardMetric, liveCodeOf, liveMetaOf } from './liveRoute';
 
 // Dashboards IPC — list/get/save/update/delete a Dashboard, plus `dashboard:metric`
 // which loads a dataset and runs the PURE src/metricValue.ts helper to produce the
@@ -145,7 +147,10 @@ export async function computeCardMetric(
   spec: { column: string; aggregation: MetricAggregation },
   filters: FilterStep[] = [],
   params?: ParamValues,
-): Promise<{ ok: boolean; value: number | null; fx?: FxInfo }> {
+): Promise<{ ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf }> {
+  // A Live dataset is asked of its warehouse (L2.4, ./liveRoute) — before the cache below. A failure THROWS (LiveFigureError).
+  const live = await liveMetaOf(projectId, datasetId);
+  if (live) return liveCardMetric(projectId, live, spec, filters);
   // A declared money column converts to the target currency (./fxQuery); a count never does.
   const fxc = spec.aggregation !== 'count' ? await fxContext(projectId, datasetId, [spec.column], [spec.column, ...filters.map((f) => f.column)]) : null;
   const run = (): Promise<{ ok: boolean; value: number | null; fx?: FxInfo }> => fxc
@@ -254,11 +259,12 @@ export function register() {
       const res = await computeCardMetric(projectId, datasetId, spec, bound.steps, values);
       if (!res.ok) return { ok: false, error: 'Dataset not found' };
       const fx = res.fx ? { fx: res.fx } : {};
+      const live = res.asOf ? { asOf: res.asOf } : {}; // the warehouse's own time (L2.4), which stampAsOf keeps
       // Dated (L0.2, data/figureAsOf) inside the as-of scope: a snapshot view says the snapshot's time.
-      return await stampAsOf(bound.errors.length ? { ok: true, value: res.value, paramErrors: bound.errors, ...fx } : { ok: true, value: res.value, ...fx },
+      return await stampAsOf(bound.errors.length ? { ok: true, value: res.value, paramErrors: bound.errors, ...fx, ...live } : { ok: true, value: res.value, ...fx, ...live },
         projectId, [datasetId]);
     } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to compute the metric' };
+      return { ok: false, error: err?.message || 'Failed to compute the metric', ...liveCodeOf(err) };
     }
   })));
 }

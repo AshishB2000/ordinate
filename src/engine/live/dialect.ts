@@ -73,6 +73,12 @@ export interface SqlDialect {
   likeEscape: string;
   /** A text label as projected for the transport (the DuckDB BOM fix); identity elsewhere. */
   label(x: string): string;
+  /**
+   * A text expression as the answers' case fix compares it — JS `trim()` (the
+   * class above, in full) then `toLowerCase()` — so "west" asked finds "West"
+   * stored (L2.4). NULL stays NULL.
+   */
+  caseKey(x: string, b: Binder): string;
 }
 
 /** A `contains` needle → the LIKE pattern, with `%`, `_` and the escape itself escaped. */
