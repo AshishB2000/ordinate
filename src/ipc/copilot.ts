@@ -35,10 +35,10 @@ import * as answers from './answers';
 import { vizDataFor } from './visuals';
 import { computeCardMetric } from './dashboards';
 import { isLiveFigureError, liveMetaOf } from './liveRoute';
-import { liveDatasetFacts } from '../ai/liveDatasetFacts';
 // The catalog's column docs, with a sensitivity mark carried across a later
 // rename — so a withheld column stays withheld under its new name.
 import { assistantColumnDocs as catalogColumns } from '../app/sharePolicy';
+import { liveCopilotFacts, liveInventoryNotes } from './liveProfile';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -217,13 +217,14 @@ export async function buildFacts(
   // (scripts/test-copilot-analysis-facts.ts) and any non-ask caller see the
   // exact same behaviour as before, and the computed numbers are untouched.
   if (kind === 'dataset' && id) {
-    // A Live dataset has no rows here to summarise: its schema, notes and metrics (L2.4, ai/liveDatasetFacts).
-    const live = await liveMetaOf(projectId, id);
+    // A Live dataset keeps no rows: its columns, its sampled profile and — unless
+    // withheld — its sample values (L2.5), with its defined metrics' figures from
+    // the warehouse (L2.4). One source: ai/liveFacts.
+    const live = await liveCopilotFacts(projectId, id, () => factMetrics(projectId, id));
     if (live) {
-      emit({ kind: 'read', label: 'Read ' + live.name, detail: plural(live.columns.length, 'column') });
-      const defined = await factMetrics(projectId, id);
-      if (defined.length) emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
-      return liveDatasetFacts(live, defined, await catalogColumns(projectId, id));
+      emit({ kind: 'read', label: 'Read the schema of ' + live.name });
+      if (live.metrics) emit({ kind: 'compute', label: 'Resolved ' + plural(live.metrics, 'metric'), count: live.metrics });
+      return live.facts;
     }
     const ds = await datasets.getDataset(projectId, id);
     if (ds) {
@@ -385,6 +386,7 @@ export async function buildFacts(
     dashboards: dashList.map((x) => x.name),
   }, await Promise.all(metas.filter((m) => !!m).map(async (m) => ({
     name: m!.name, columns: m!.columns, docs: await catalogColumns(projectId, m!.id),
+    notes: await liveInventoryNotes(projectId, m!), // a Live dataset's profile and sample values (L2.5)
   }))));
 }
 

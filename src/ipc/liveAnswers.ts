@@ -12,14 +12,15 @@
 //   - text-filter case fixing ("west" asked, "West" stored) is a cached lookup,
 //     `SELECT DISTINCT col … WHERE key(col) IN (…) LIMIT 20` — the asked values
 //     bound as parameters, never inlined (engine/live/compile.compileCaseMatches);
-//   - the "Split by …" chip's candidates come from `liveSplitCandidates`, which
-//     the dataset's profile will feed (L2.5).
+//   - the "Split by …" chip's candidates come from `liveSplitCandidates`: the
+//     extract's rule over the dataset's schema profile (L2.5); none unprofiled.
 // Every figure on the card is the warehouse's, and it enters the facts' ledger
 // exactly as an extract's does, so `guardAnswer` audits a narration of it.
 
 import * as datasets from '../data/datasets';
 import type { DatasetMeta } from '../data/datasets';
 import { isLive } from '../data/liveDataset';
+import { profileSplitCandidates } from '../data/liveProfile';
 import type { ParsedColumn } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';
 import { utcLabel } from '../data/figureAsOf';
@@ -33,6 +34,7 @@ import { liveAnswer, liveLookup } from '../engine/live/liveQuery';
 import type { LiveFailure } from '../engine/live/liveQuery';
 import type { PeriodRange } from '../engine/live/evaluate';
 import { compileCaseMatches } from '../engine/live/compile';
+import { answerNames, missingRefusal } from '../engine/live/liveMissing';
 import type { Built, Failure } from './answers';
 
 /** The operators the case fix applies to — `answers.canonicaliseTextFilters`'s. */
@@ -42,14 +44,15 @@ const CASE_OPS: ReadonlySet<string> = new Set(['=', '!=', 'in', 'not in']);
 const caseKey = (v: string): string => v.trim().toLowerCase();
 
 /**
- * Text columns worth offering as "Split by …" on a Live dataset. Until the
- * dataset's profile exists (L2.5: approximate distinct counts, sample values)
- * this is the declared text columns other than the category, in schema order —
- * the extract's rule (2–12 distinct values, fewest first) needs counts a
- * schema does not have. L2.5 fills this from the profile; nothing else changes.
+ * Text columns worth offering as "Split by …" on a Live dataset: the extract's
+ * rule (2–12 distinct values, fewest first) read from the schema profile
+ * (L2.5, data/liveProfile.profileSplitCandidates). A dataset never profiled
+ * offers NONE — not every text column: a split by a column of thousands of
+ * values is a chip that draws 50 + "Other", and the counts to know are the
+ * profile's. One "Sync schema" and the chips appear.
  */
-export function liveSplitCandidates(meta: Pick<DatasetMeta, 'columns'>, exclude: string): string[] {
-  return meta.columns.filter((c) => c.type === 'text' && c.name !== exclude).map((c) => c.name);
+export function liveSplitCandidates(meta: DatasetMeta, category: string): string[] {
+  return profileSplitCandidates(meta, category);
 }
 
 function fail(f: LiveFailure): Failure {
@@ -145,6 +148,9 @@ function cardLabels(spec: AnswerSpec, columns: ParsedColumn[], answered: string[
 export async function liveCardFor(projectId: string, spec: AnswerSpec): Promise<Built | Failure | null> {
   const meta = await datasets.getDatasetMeta(projectId, spec && spec.datasetId);
   if (!meta || !isLive(meta)) return null;
+  // A column the warehouse dropped (L2.5): said as exactly that, typed — before the case fix asks anything.
+  const gone = missingRefusal(meta.live?.missingColumns, answerNames(spec));
+  if (gone) return { ok: false, reason: gone.message, code: 'live_refused' };
   // computeCard's own first check, with its own words.
   const has = (n: string): boolean => meta.columns.some((c) => c.name === n);
   const used = [spec.category, ...spec.measures.map((m) => m.column), ...spec.filters.map((f) => f.column)].concat(spec.series ? [spec.series] : []);

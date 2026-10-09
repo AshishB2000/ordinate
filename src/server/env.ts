@@ -231,6 +231,8 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   if (testLiveFake && env === 'prod') {
     throw new EnvError('ORDINATE_ENV=prod refuses ORDINATE_TEST_LIVE_FAKE=1: it registers a fake warehouse for the test harness only');
   }
+  // FRESH_ON_ASK_WAIT_MS (live data, L3.1): read by src/data/freshOnAsk.ts at each ask; a typo stops startup here.
+  freshOnAskWaitMs(src.FRESH_ON_ASK_WAIT_MS);
   const duckdb = parseDuck(src);
   const limits = Object.freeze({
     loginPerMinute: positiveInt('RATE_LIMIT_LOGIN_PER_MINUTE', src.RATE_LIMIT_LOGIN_PER_MINUTE, 60),
@@ -385,6 +387,25 @@ export function liveMaxConcurrent(raw: string | undefined): number {
   if (raw === undefined || raw === '') return DEFAULT_LIVE_MAX_CONCURRENT;
   if (/^\d{1,4}$/.test(raw) && Number(raw) >= 1 && Number(raw) <= 1000) return Number(raw);
   throw new EnvError(`LIVE_MAX_CONCURRENT must be a whole number from 1 to 1000, got ${JSON.stringify(raw)}`);
+}
+
+/** FRESH_ON_ASK_WAIT_MS's default: 5 s (docs/live-data/00-plan.md §8). */
+export const DEFAULT_FRESH_ON_ASK_WAIT_MS = 5000;
+/** The longest an answer may wait for a pull: well inside RPC_TIMEOUT_SECONDS' default 60. */
+export const MAX_FRESH_ON_ASK_WAIT_MS = 30_000;
+
+/**
+ * FRESH_ON_ASK_WAIT_MS: how long a chart, KPI or answer on a stale copy waits
+ * for its incremental pull before answering from the copy, "refreshing…".
+ * 0 is allowed — never wait, always answer at once and redraw when the rows
+ * land. Pure, so src/data/freshOnAsk.ts re-reads the variable the same way.
+ */
+export function freshOnAskWaitMs(raw: string | undefined): number {
+  if (raw === undefined || raw === '') return DEFAULT_FRESH_ON_ASK_WAIT_MS;
+  if (!/^\d{1,5}$/.test(raw) || Number(raw) > MAX_FRESH_ON_ASK_WAIT_MS) {
+    throw new EnvError(`FRESH_ON_ASK_WAIT_MS must be a whole number of milliseconds 0-${MAX_FRESH_ON_ASK_WAIT_MS}, got ${JSON.stringify(raw)}`);
+  }
+  return Number(raw);
 }
 
 function positiveInt(name: string, raw: string | undefined, dflt: number): number {

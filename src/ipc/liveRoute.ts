@@ -68,7 +68,9 @@ function refusal(error: string, reason: LiveFailure['reason']): LiveFailure {
 async function preRefusal(projectId: string, meta: DatasetMeta, names: string[], converted: () => Promise<boolean>): Promise<LiveFailure | null> {
   if (asOfIso()) return refusal(msg.liveAsOfRefused(), 'asOf');
   const own = new Set(meta.columns.map((c) => c.name));
-  const foreign = names.filter((n) => typeof n === 'string' && n !== '' && !own.has(n));
+  // A column the warehouse dropped (L2.5) is not "foreign": the executor refuses it `columnMissing`.
+  const gone = new Set(meta.live?.missingColumns ?? []);
+  const foreign = names.filter((n) => typeof n === 'string' && n !== '' && !own.has(n) && !gone.has(n));
   if (foreign.length) {
     const related = new Set(await relatedColumnNames(projectId, meta.id));
     if (foreign.some((n) => related.has(n))) {

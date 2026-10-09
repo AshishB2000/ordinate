@@ -148,8 +148,12 @@ interface PgVariant {
   /** false → a rejected `set statement_timeout` is tolerated instead of fatal.
    *  Only for engines that speak the wire protocol without being Postgres. */
   statementTimeoutVerified: boolean;
-  /** Set on a warehouse that can answer a Live dataset itself (plan D2): `runBound`. */
+  /** Set on a source that can answer a Live dataset itself (plan D2): `runBound`. */
   live?: 'redshift';
+  /** An OLTP database: Live only on a connection ticked as a read replica (D8, L3.2). Set only
+   *  where the server IS PostgreSQL — its parser, functions and casts — so the Redshift dialect's
+   *  portable subset holds; CockroachDB, YugabyteDB and the pgwire engines are not verified. */
+  liveOnReplica?: true;
 }
 
 // The standard listing: parameterised, catalog schemas excluded, ordered. This
@@ -178,6 +182,7 @@ const VARIANTS: PgVariant[] = [
     port: 5432,
     ssl: false, // Usually reached over a private network or localhost.
     statementTimeoutVerified: true,
+    live: 'redshift', liveOnReplica: true,
   },
   {
     id: 'amazon-redshift',
@@ -235,6 +240,7 @@ const VARIANTS: PgVariant[] = [
     port: 5432,
     ssl: true, // Public-IP connections require SSL.
     statementTimeoutVerified: true,
+    live: 'redshift', liveOnReplica: true,
   },
   {
     id: 'neon',
@@ -244,6 +250,7 @@ const VARIANTS: PgVariant[] = [
     port: 5432,
     ssl: true, // Neon refuses a plaintext connection.
     statementTimeoutVerified: true,
+    live: 'redshift', liveOnReplica: true,
   },
   {
     id: 'supabase',
@@ -253,6 +260,7 @@ const VARIANTS: PgVariant[] = [
     port: 5432, // Direct connection. The pooler answers on 6543 — user-editable.
     ssl: true, // Supabase requires TLS on the public endpoint.
     statementTimeoutVerified: true,
+    live: 'redshift', liveOnReplica: true,
   },
   {
     id: 'timescaledb',
@@ -262,6 +270,7 @@ const VARIANTS: PgVariant[] = [
     port: 5432, // An extension on stock Postgres — same port, same catalogs.
     ssl: false,
     statementTimeoutVerified: true,
+    live: 'redshift', liveOnReplica: true,
   },
   {
     id: 'yugabytedb',
@@ -340,6 +349,15 @@ const VARIANTS: PgVariant[] = [
 
 // ── Form ─────────────────────────────────────────────────────────────────────
 
+/** The per-connection Live opt-in (plan D8, L3.2): `live.optIn` names it. Off unless ticked. */
+const REPLICA_FIELD: ConnectorField = {
+  key: 'readReplica',
+  label: 'This is a read replica or a warehouse',
+  type: 'checkbox',
+  default: false,
+  help: 'Needed for Live datasets. Live questions run on every view, so pointing them at a primary OLTP database adds load to production.',
+};
+
 function buildFields(v: PgVariant): ConnectorField[] {
   return [
     { key: 'host', label: 'Host', type: 'text', required: true, placeholder: 'db.example.com' },
@@ -366,6 +384,7 @@ function buildFields(v: PgVariant): ConnectorField[] {
       default: false,
       help: 'Off by default. Turning it on keeps the connection encrypted but stops checking WHO is on the other end, so anyone able to intercept the network can impersonate the server. Only for a private network with a self-signed certificate.',
     },
+    ...(v.liveOnReplica ? [REPLICA_FIELD] : []),
   ];
 }
 
@@ -676,8 +695,11 @@ async function describeTable(
 // its values as `$n` binds — never SQL text — under the same guards as `run`
 // (read-only session, server-side statement_timeout, the client closed on
 // every path, the SSRF-pinned address). The row cap is the same wrapper with
-// the statement on its own line (rule F3); the outer select is a plain
-// projection, so the compiled ORDER BY's order is what comes back.
+// the statement on its own line (rule F3). The answer's order does not rest on
+// the wrapper: the compiled statement returns its ranks, and the live shaping
+// sorts by them (Postgres keeps a derived table's order anyway, measured in L2.8).
+// The session runs in UTC (below); L2.8's parity run pins it on a database whose
+// own default zone is UTC+14 (scripts/liveParityPgPins.ts, R2).
 
 /** The text and values a bound query sends. Exported: the self-check pins that a value never reaches the text. */
 export function redshiftBound(
@@ -714,6 +736,9 @@ async function runBound(v: PgVariant, ctx: ConnectorContext, sql: string, params
   const signal = ctx.signal;
   if (signal?.aborted) return { ok: false, error: 'Cancelled' };
   return withClient<ConnectorRows>(v, ctx, async (client) => {
+    // UTC, as the extract reads a timestamptz (an instant → an ISO `Z` string): CAST(… AS DATE) and
+    // DATE_TRUNC follow the SESSION's zone, so a database set to another would shift a day (L3.2).
+    await client.query("set timezone to 'UTC'");
     if (signal?.aborted) return { ok: false, error: 'Cancelled' };
     const pid: unknown = (client as unknown as { processID?: unknown }).processID;
     const cancel: { done: Promise<void> | null } = { done: null };
@@ -751,7 +776,7 @@ function define(v: PgVariant): ConnectorDef {
     listTables: (ctx: ConnectorContext) => listTables(v, ctx),
     run: (ctx: ConnectorContext, sql: string) => run(v, ctx, sql),
     describeTable: (ctx: ConnectorContext, table: string) => describeTable(v, ctx, table),
-    ...(v.live ? { live: { dialect: v.live, runBound: (ctx: ConnectorContext, sql: string, params: LiveParam[]) => runBound(v, ctx, sql, params) } } : {}),
+    ...(v.live ? { live: { dialect: v.live, runBound: (ctx: ConnectorContext, sql: string, params: LiveParam[]) => runBound(v, ctx, sql, params), ...(v.liveOnReplica ? { optIn: REPLICA_FIELD.key } : {}) } } : {}),
   };
 }
 

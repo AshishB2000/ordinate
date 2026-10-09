@@ -28,6 +28,7 @@ import * as versions from '../app/versions';
 import { DASHBOARD_STYLE_PRESETS } from '../analysis/dashboards';
 import { pairLine, statsFigures } from '../analysis/stats/figures';
 import { stampAsOf } from '../data/figureAsOf';
+import { ensureFresh } from '../data/freshOnAsk';
 
 // Statistics workbench IPC — every figure the panel, a dashboard "stats" tile
 // and the Assistant show is computed here, by src/analysis/stats, on vectors
@@ -158,6 +159,7 @@ async function shareTile(projectId: string, spec: StatsSpec, data: TileData, sha
 export async function computeStatsTile(projectId: string, raw: unknown, filters: FilterStep[] = [], sharePath?: SharePath) {
   const spec = sanitizeStatsSpec(raw);
   if (!spec) return { ok: false as const, error: 'That analysis is not valid.' };
+  await ensureFresh(projectId, [spec.datasetId]); // L3.1 fresh on ask: a statistics tile reads the copy too
   const out = await compute<StatsResult>(projectId, spec, { filters });
   if (!out.ok) return out;
   if (!out.value.ok) return { ok: false as const, error: out.value.error };

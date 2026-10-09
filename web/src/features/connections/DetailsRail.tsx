@@ -20,9 +20,12 @@ import { toast } from '../../ui/Toast';
 import type { AutoRefreshEvery } from '../../api/datasets';
 import { BehindBadge, cadenceOptions } from '../data/cadence';
 import { everyWord } from '../data/format';
+import { FreshOnAskPicker } from '../data/FreshOnAsk';
+import { IncrementalButton } from '../data/Incremental';
 import { refreshDataset, replaceSecret, setSchedule, type CatalogField, type ConnDataset, type Connection, type Connector } from './api';
 import { SecretTextarea } from './SecretText';
 import { RefreshUrlDialog } from '../data/RefreshUrl';
+import { ReplicaSwitch } from './ReplicaSwitch';
 import { formatWhen } from './SavedConnections';
 import s from './Workbench.module.css';
 
@@ -167,6 +170,8 @@ function DatasetRow({ d, projectId, connId, onChanged }: { d: ConnDataset; proje
           options={cadenceOptions(SCHEDULE, !!d.incrementalOn)}
         />
       )}
+      <IncrementalButton projectId={projectId} d={d} wide />
+      <FreshOnAskPicker projectId={projectId} d={d} onChanged={onChanged} wide />
       {/* For dbt / Airflow to call when new data lands (live data L0.5). */}
       {(d.originKind || live) && (
         <Button size="sm" variant="ghost" icon="link" className={s.dsHook} onClick={() => setHooks(true)} aria-label={`Refresh URL for ${d.name}`}>
@@ -201,12 +206,15 @@ export function DetailsRail({
   onChanged: () => void;
 }) {
   const fields = def?.fields ?? [];
+  // The Live opt-in (L3.2) is a setting, not a fact about the connection: a switch under the list.
+  const optIn = def?.live && def.liveOptIn ? fields.find((f) => f.key === def.liveOptIn && f.type === 'checkbox') : undefined;
   return (
     <aside className={`${s.pane} ${s.details}`} aria-label="Connection details" id="conn-wb-details">
       <h2 className={s.detailsH}>Connection</h2>
       <dl className={s.kv}>
         {fields.map((f) => {
           if (f.secret) return <SecretRow key={f.key} f={f} set={conn.secretSet?.[f.key] === true} projectId={projectId} conn={conn} onReplaced={onChanged} />;
+          if (f === optIn) return null;
           const raw = conn.values[f.key];
           if (raw === undefined || raw === null || raw === '') return null;
           const text = typeof raw === 'boolean' ? (raw ? 'Yes' : 'No') : String(raw);
@@ -218,6 +226,7 @@ export function DetailsRail({
           );
         })}
       </dl>
+      {optIn && <ReplicaSwitch f={optIn} conn={conn} projectId={projectId} onChanged={onChanged} />}
       <div className={s.testRow}>
         <Button size="sm" icon="activity" onClick={onTest} disabled={test === 'testing'}>
           Test

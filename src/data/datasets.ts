@@ -56,6 +56,7 @@ import * as recordFs from '../app/recordFs';
 import { scheduleIndex, removeIndex } from '../engine/dataSearchResident'; // ⌘K's value index
 import { applyLive, isLive, isLiveDatasetError, LiveDatasetError } from './liveDataset'; // Live: schema only, getDataset refuses
 import type { DatasetMode, LiveSettings } from './liveDataset';
+import { applyFreshOnAsk, type FreshOnAsk } from './freshOnAskRule';
 export type { DatasetOrigin } from './datasetOrigin';
 export type { DatasetSummary } from './datasetSummary';
 export { sanitizeOrigin };
@@ -128,6 +129,8 @@ export interface Dataset {
   /** Absent = 'extract'. A Live dataset is schema only and `getDataset` refuses it (./liveDataset.ts). */
   mode?: DatasetMode;
   live?: LiveSettings;
+  /** Pull the new rows when a figure asks a copy older than this (./freshOnAskRule.ts, L3.1). Incremental refresh only. */
+  freshOnAsk?: FreshOnAsk;
 }
 
 export interface AutoRefresh {
@@ -359,6 +362,7 @@ function normalize(data: any, projectId: string): Dataset {
   if (input) ds.input = input;
   if (incremental) ds.incremental = incremental;
   applyLive(ds, data);
+  applyFreshOnAsk(ds, data); // after incremental and mode: it needs the one and refuses the other
   return ds;
 }
 

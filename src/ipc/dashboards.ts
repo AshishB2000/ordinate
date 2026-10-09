@@ -16,6 +16,7 @@ import type { ParamValues } from '../analysis/params';
 import { paramTable } from '../data/paramReplay';
 import { withAsOf } from '../data/asOf';
 import { stampAsOf } from '../data/figureAsOf';
+import { ensureFresh } from '../data/freshOnAsk';
 import { fxCardMetric, fxContext, fxScope } from './fxQuery';
 import type { FxInfo } from '../analysis/fx';
 import type { AsOf } from '../api/asOf';
@@ -151,6 +152,7 @@ export async function computeCardMetric(
   // A Live dataset is asked of its warehouse (L2.4, ./liveRoute) — before the cache below. A failure THROWS (LiveFigureError).
   const live = await liveMetaOf(projectId, datasetId);
   if (live) return liveCardMetric(projectId, live, spec, filters);
+  await ensureFresh(projectId, [datasetId]); // L3.1 fresh on ask: before the cache key reads the record
   // A declared money column converts to the target currency (./fxQuery); a count never does.
   const fxc = spec.aggregation !== 'count' ? await fxContext(projectId, datasetId, [spec.column], [spec.column, ...filters.map((f) => f.column)]) : null;
   const run = (): Promise<{ ok: boolean; value: number | null; fx?: FxInfo }> => fxc

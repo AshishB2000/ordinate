@@ -10,7 +10,7 @@
 
 import type { LiveParam } from '../../../connectors/types';
 import type { SqlDialect } from '../dialect';
-import { WS_REGEX_CLASS } from '../dialect';
+import { WS_REGEX_CLASS, sqlInt } from '../dialect';
 
 const TYPE: Record<LiveParam['type'], string> = {
   text: 'String', number: 'Float64', boolean: 'Bool', date: 'Date32', timestamp: "DateTime64(3, 'UTC')",
@@ -50,4 +50,7 @@ export const clickhouseDialect: SqlDialect = {
   label: (x) => x,
   // RE2 again, not trim(): a byte-wise trim would eat a multi-byte character (above).
   caseKey: (x) => `lowerUTF8(replaceRegexpAll(${x}, '^[${CLASS_LITERAL}]+|[${CLASS_LITERAL}]+$', ''))`,
+  // SAMPLE needs the table's SAMPLE BY key (asked first, ../profileSql.ts); without one
+  // ClickHouse refuses it, so the LIMIT bounds the rows instead.
+  tableSample: (plan) => (plan.samplingKey ? `SAMPLE ${sqlInt(plan.rows)}` : null),
 };

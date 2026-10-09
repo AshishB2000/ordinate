@@ -38,6 +38,37 @@ export const JS_WHITESPACE =
 export const WS_REGEX_CLASS =
   '\\x{0009}-\\x{000D}\\x{0020}\\x{00A0}\\x{1680}\\x{2000}-\\x{200A}\\x{2028}\\x{2029}\\x{202F}\\x{205F}\\x{3000}\\x{FEFF}';
 
+/**
+ * How the schema sync samples a TABLE (L2.5, ./profileSql.ts). The numbers are
+ * the APP's own — chosen from the column count and the catalog's row estimate,
+ * never from a request — and are spliced as literals (checked by `sqlInt` /
+ * `sqlPercent`), because no engine takes a bound parameter in its sample clause.
+ */
+export interface SamplePlan {
+  /** Rows the profile reads: the LIMIT always, and the sample size where an engine samples by rows. */
+  rows: number;
+  /** BigQuery: TABLESAMPLE SYSTEM's percent, from the table's row estimate. Absent: none. */
+  percent?: number;
+  /** ClickHouse: the table declares a SAMPLE BY key (asked of system.tables first). */
+  samplingKey?: boolean;
+  /** No sample clause at all, the LIMIT only: the schema sync's second try (../schemaSync.ts). */
+  limitOnly?: boolean;
+}
+
+/** A positive whole number as SQL text — the only shape an app-chosen count may splice as. Throws otherwise. */
+export function sqlInt(n: number): string {
+  if (!Number.isSafeInteger(n) || n < 1) throw new Error('A sample size must be a positive whole number');
+  return String(n);
+}
+
+/** A percent in (0, 100] as plain SQL decimal text (no exponent, at most 4 decimals). Throws otherwise. */
+export function sqlPercent(p: number): string {
+  if (!Number.isFinite(p) || p <= 0 || p > 100) throw new Error('A sample percent must be in (0, 100]');
+  const text = (Math.ceil(p * 10_000) / 10_000).toFixed(4).replace(/\.?0+$/, '');
+  if (!/^\d{1,3}(\.\d{1,4})?$/.test(text)) throw new Error('A sample percent must be plain decimal text');
+  return text;
+}
+
 /** Hands out a placeholder for one value; ./sqlParams.ts numbers them in text order. */
 export interface Binder {
   bind(type: LiveParam['type'], value: string | number): string;
@@ -79,6 +110,12 @@ export interface SqlDialect {
    * stored (L2.4). NULL stays NULL.
    */
   caseKey(x: string, b: Binder): string;
+  /**
+   * The schema profile's sample clause, written after a TABLE's name (L2.5), or
+   * null when this engine has none worth using here — the profile's LIMIT then
+   * bounds the rows (but not, on BigQuery, the bytes: the estimate gate does).
+   */
+  tableSample(plan: SamplePlan): string | null;
 }
 
 /** A `contains` needle → the LIKE pattern, with `%`, `_` and the escape itself escaped. */

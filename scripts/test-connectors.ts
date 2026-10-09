@@ -125,8 +125,10 @@ async function main(): Promise<void> {
   // field's `secret` flag, which travels while the secret never does.
   // `estimates` is the ninth: a BOOLEAN on every entry, true where the source
   // prices a statement before it runs (a free dry run — BigQuery). `live` is the
-  // tenth: true where a dataset from it can be Live (docs/live-data L2.1).
-  const CATALOG_KEYS = new Set(['id', 'label', 'family', 'category', 'blurb', 'fields', 'browsable', 'hosts', 'estimates', 'live']);
+  // tenth: true where a dataset from it CAN be Live (docs/live-data L2.1).
+  // `liveOptIn` is the eleventh, optional: the checkbox a connection must have
+  // ticked before Live is offered for it (L3.2 — PostgreSQL's read-replica box).
+  const CATALOG_KEYS = new Set(['id', 'label', 'family', 'category', 'blurb', 'fields', 'browsable', 'hosts', 'estimates', 'live', 'liveOptIn']);
   const FIELD_KEYS = new Set(['key', 'label', 'type', 'required', 'placeholder', 'default', 'options', 'secret', 'help']);
   let extraKeys: string[] = [];
   let functionsFound: string[] = [];
@@ -148,7 +150,7 @@ async function main(): Promise<void> {
   }
   scanForFunctions(catalog, 'catalog');
 
-  ok('connectorCatalog() exposes ONLY the ten documented keys', extraKeys.length === 0, extraKeys.join(', '));
+  ok('connectorCatalog() exposes ONLY the eleven documented keys', extraKeys.length === 0, extraKeys.join(', '));
   const badEstimates = catalog.filter((e: any) => typeof e.estimates !== 'boolean').map((e: any) => e.id);
   ok('every catalog entry reports `estimates` as a boolean', badEstimates.length === 0, badEstimates.join(', '));
   ok('…true only where the connector has a live estimate (BigQuery), false for the SQL families',
@@ -176,9 +178,16 @@ async function main(): Promise<void> {
   const liveIds = catalog.filter((e: any) => e.live).map((e: any) => e.id);
   ok('Snowflake, BigQuery, Redshift, Databricks SQL and ClickHouse are live (the v1 dialects, D2)',
     ['snowflake', 'bigquery', 'amazon-redshift', 'databricks-sql', 'clickhouse'].every((id) => liveIds.includes(id)), liveIds.join(', '));
-  ok('…and the OLTP and other engines are not (plan D2, D8)',
-    ['postgres', 'mysql', 'sqlserver', 'oracle', 'trino', 'presto', 'druid', 'url', 'google-sheets'].every((id) => !liveIds.includes(id)),
+  ok('…and the other OLTP databases and engines are not (plan D2, D8)',
+    ['mysql', 'sqlserver', 'oracle', 'cockroachdb', 'trino', 'presto', 'druid', 'url', 'google-sheets'].every((id) => !liveIds.includes(id)),
     liveIds.join(', '));
+  // L3.2 (plan D8): PostgreSQL CAN be Live, but only on a connection ticked as a
+  // read replica — the catalog names that checkbox; the warehouses need none.
+  const optInOf = (id: string) => catalog.find((e) => e.id === id)?.liveOptIn;
+  ok('PostgreSQL is live only behind its read-replica opt-in; the v1 warehouses need none',
+    liveIds.includes('postgres') && optInOf('postgres') === 'readReplica'
+      && ['snowflake', 'bigquery', 'amazon-redshift', 'databricks-sql', 'clickhouse'].every((id) => optInOf(id) === undefined),
+    `${liveIds.join(', ')} / postgres: ${optInOf('postgres')}`);
   ok('the catalog names no dialect', !JSON.stringify(catalog).includes('"dialect"'));
   ok('connectorCatalog() carries NO functions (listTables/run never cross the bridge)',
     functionsFound.length === 0, functionsFound.join(', '));

@@ -43,6 +43,8 @@ import type { AsOf } from '../api/asOf';
 import { asOfFrom, utcLabel } from '../data/figureAsOf';
 import type { LiveFailureCode } from '../engine/live/liveQuery';
 import { liveCardFor } from './liveAnswers';
+import { ensureFresh } from '../data/freshOnAsk';
+import { withPulls } from '../data/freshOnAskState';
 
 export type Guard = (text: string, ledger: LedgerEntry[]) => { text: string; audit: NumberAudit };
 
@@ -130,6 +132,7 @@ export async function computeCard(projectId: string, spec: AnswerSpec): Promise<
   // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here.
   const live = await liveCardFor(projectId, spec);
   if (live) return live;
+  await ensureFresh(projectId, [spec.datasetId]); // L3.1 fresh on ask: before the rows are read
   // ponytail: hydrates the dataset (periods, value matching and split chips all
   // read cells); a resident distinct-values query when answers over 1M rows feel slow.
   const ds = await datasets.getDataset(projectId, spec.datasetId);
@@ -157,7 +160,8 @@ export async function computeCard(projectId: string, spec: AnswerSpec): Promise<
   const caption = tileCaption({ chartType, data, names: await displayNames(projectId, ds.id).catch(() => ({})) });
   const additive = spec.measures.every((m) => m.aggregation === 'sum' || m.aggregation === 'count');
   // The rows are already loaded, so their time comes off the same record — no second read.
-  const asOf = asOfFrom([ds]);
+  const read = asOfFrom([ds]);
+  const asOf = read ? withPulls(read, projectId, [ds.id]) : read; // "· refreshing…" while a pull goes on (L3.1)
   const facts = answerFacts({
     title: spec.title, datasetName: ds.name, describe: describeAnswer(spec), data,
     categoryIsDate: isDate, additive, filterLabels, caption, ...(asOf ? { asOf: utcLabel(asOf.at) } : {}),

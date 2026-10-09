@@ -9,7 +9,7 @@
 
 import type { LiveParam } from '../../../connectors/types';
 import type { SqlDialect } from '../dialect';
-import { JS_WHITESPACE } from '../dialect';
+import { JS_WHITESPACE, sqlPercent } from '../dialect';
 
 const TYPE: Record<LiveParam['type'], string> = {
   text: 'STRING', number: 'FLOAT64', boolean: 'BOOL', date: 'DATE', timestamp: 'TIMESTAMP',
@@ -42,4 +42,8 @@ export const bigqueryDialect: SqlDialect = {
   likeEscape: '\\',
   label: (x) => x,
   caseKey: (x, b) => `LOWER(TRIM(${x}, ${b.bind('text', JS_WHITESPACE)}))`,
+  // Block sampling — it is what cuts the bytes BILLED (a LIMIT does not), so it needs the
+  // table's row estimate to pick a percent; without one the LIMIT bounds the rows and
+  // the estimate gate (../schemaSync.ts) bounds the bill. Tables only: never a query source.
+  tableSample: (plan) => (plan.percent === undefined ? null : `TABLESAMPLE SYSTEM (${sqlPercent(plan.percent)} PERCENT)`),
 };

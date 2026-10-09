@@ -38,8 +38,11 @@ export interface Connector {
   hosts?: string[];
   /** True: the source prices a statement before it runs (BigQuery's dry run) — the editor shows it by Run. */
   estimates?: boolean;
-  /** A dataset from it can be Live — asked at the warehouse each time (docs/live-data/00-plan.md D2). */
+  /** A dataset from it CAN be Live — asked at the warehouse each time (docs/live-data/00-plan.md D2). */
   live: boolean;
+  /** With `live`: the checkbox a connection must have ticked before Live is offered for it (L3.2, D8 —
+   *  PostgreSQL's "This is a read replica or a warehouse"). Absent: every connection may be Live. */
+  liveOptIn?: string;
 }
 
 export type Logo = { path: string; color: string; title: string } | { src: string; title: string };
@@ -87,6 +90,8 @@ export interface ConnDataset {
   behindSchedule?: true;
   /** A Live dataset keeps no rows here; its Refresh resets the cache (L2.1). */
   mode?: 'live';
+  /** Fresh on ask (L3.1): the age past which a figure pulls the new rows first. */
+  freshOnAsk?: { maxStalenessSec: number; fullDue?: true };
 }
 
 export interface PreviewColumn {
@@ -260,6 +265,21 @@ export async function replaceSecret(projectId: string, connId: string, key: stri
 
 /** "Copy the data" (an import) or "Live" (the schema only; questions go to the warehouse). */
 export type SaveMode = 'extract' | 'live';
+
+/**
+ * Is Live offered for THIS connection: the connector can be Live and, when it asks for an
+ * opt-in, the connection has it ticked. The server's own rule (src/connectors/index.ts
+ * `isLiveOffered`), which also enforces it — this only decides what the workbench shows.
+ */
+export function liveOffered(def: Connector | null | undefined, conn: Pick<Connection, 'values'>): boolean {
+  if (!def?.live) return false;
+  return !def.liveOptIn || conn.values[def.liveOptIn] === true;
+}
+
+/** Tick or untick a connection's Live opt-in. Unticking is refused while Live datasets ask it — the error says how many. */
+export async function setLiveOptIn(projectId: string, connId: string, on: boolean) {
+  return unwrap((await rpc('connection:setLiveOptIn', { projectId, connId, on })) as Reply<{ on: boolean }>, 'Could not change it').on;
+}
 
 export async function importDataset(input: {
   projectId: string;

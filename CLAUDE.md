@@ -146,6 +146,10 @@ prompts unrounded); a leading U+FEFF is lost on every string the bridge returns 
   a handler's catch keeps it typed with `liveCodeOf`, the route answers an uncaught one 409 with its
   code. The live `asOf` is kept by `stampAsOf`. A new figure path goes through one of the three doors,
   never `buildVizData` on hydrated rows (`test-liveRoute` spies on `getDataset`).
+- **An OLTP source is Live only by opt-in** (L3.2, D8): the PostgreSQL family declares `live.optIn`
+  (the "This is a read replica or a warehouse" checkbox); `isLiveOffered(def, values)` decides per
+  CONNECTION — create, `dataset:setMode`, `dataset:source` and every executor question ask it. The
+  catalog's `live` means "can be Live"; `liveOptIn` names the box. A Postgres/Redshift live session runs in UTC.
 
 ### Workspace
 

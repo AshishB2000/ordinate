@@ -15,7 +15,7 @@
 
 import type { LiveParam } from '../../../connectors/types';
 import type { SqlDialect } from '../dialect';
-import { JS_WHITESPACE, doubleQuoted, finiteBySubtraction } from '../dialect';
+import { JS_WHITESPACE, doubleQuoted, finiteBySubtraction, sqlInt } from '../dialect';
 
 const TYPE: Record<LiveParam['type'], string> = {
   text: 'VARCHAR', number: 'DOUBLE', boolean: 'BOOLEAN', date: 'DATE', timestamp: 'TIMESTAMP_NTZ',
@@ -44,4 +44,6 @@ export const snowflakeDialect: SqlDialect = {
   likeEscape: '!',
   label: (x) => x,
   caseKey: (x, b) => `LOWER(TRIM(${x}, ${b.bind('text', JS_WHITESPACE)}))`,
+  // Fixed-size row sampling (Bernoulli): exactly `rows` rows, or the whole table when it is smaller.
+  tableSample: (plan) => `SAMPLE (${sqlInt(plan.rows)} ROWS)`,
 };

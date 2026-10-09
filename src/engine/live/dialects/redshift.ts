@@ -44,4 +44,7 @@ export const redshiftDialect: SqlDialect = {
   likeEscape: '!',
   label: (x) => x,
   caseKey: (x, b) => `LOWER(BTRIM(${x}, ${b.bind('text', JS_WHITESPACE)}))`,
+  // Redshift has no TABLESAMPLE, and this dialect stays the Postgres-portable subset:
+  // the profile's LIMIT bounds the rows.
+  tableSample: () => null,
 };

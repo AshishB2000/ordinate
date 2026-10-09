@@ -26,4 +26,31 @@ export const live = {
     }),
     project: byProjectId,
   }),
+  // A saved connection's Live opt-in (src/ipc/liveOptIn.ts, L3.2): the checkbox an OLTP
+  // source declares — PostgreSQL's "This is a read replica or a warehouse". `write`, as
+  // testAndSave, which sets it on a new connection. Unticking is refused while a Live
+  // dataset asks the connection; the reply then says how many.
+  'connection:setLiveOptIn': rpc({
+    access: 'write',
+    input: z.strictObject({ projectId: Uuid, connId: Uuid, on: z.boolean() }),
+    project: byProjectId,
+  }),
+  // "Sync schema" on a Live dataset (src/ipc/liveProfile.ts, L2.5): re-read its
+  // columns from the warehouse and profile them from one sampled, cost-guarded
+  // query; waits for the job and answers counts, column names and the sample's
+  // typed outcome — never SQL or warehouse text. `write`: it spends a warehouse
+  // query, like a refresh.
+  'dataset:syncLiveSchema': rpc({
+    access: 'write',
+    input: z.strictObject({ projectId: Uuid, datasetId: Uuid }),
+    project: byProjectId,
+  }),
+  // The Live dataset page's Schema panel: when it was synced, each column's
+  // profile (figures computed server side), its sample values, and the columns
+  // gone from the warehouse with what still uses them.
+  'dataset:liveSchema': rpc({
+    access: 'read',
+    input: z.strictObject({ projectId: Uuid, datasetId: Uuid }),
+    project: byProjectId,
+  }),
 } as const;

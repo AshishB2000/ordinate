@@ -9,7 +9,7 @@
 
 import type { LiveParam } from '../../../connectors/types';
 import type { SqlDialect } from '../dialect';
-import { JS_WHITESPACE, finiteBySubtraction } from '../dialect';
+import { JS_WHITESPACE, finiteBySubtraction, sqlInt } from '../dialect';
 
 const TYPE: Record<LiveParam['type'], string> = {
   text: 'STRING', number: 'DOUBLE', boolean: 'BOOLEAN', date: 'DATE', timestamp: 'TIMESTAMP',
@@ -39,4 +39,5 @@ export const databricksDialect: SqlDialect = {
   likeEscape: '!',
   label: (x) => x,
   caseKey: (x, b) => `lower(btrim(${x}, ${b.bind('text', JS_WHITESPACE)}))`,
+  tableSample: (plan) => `TABLESAMPLE (${sqlInt(plan.rows)} ROWS)`,
 };

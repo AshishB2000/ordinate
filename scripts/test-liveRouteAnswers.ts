@@ -168,7 +168,7 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
     facts.text.includes(`${lab === null ? '' : lab}=${String(chart.data.series[0].values[i])}`) && facts.ledger.some((e) => Object.is(e.value, chart.data.series[0].values[i]))), facts ? facts.text : '');
   (visualsIpc as { vizDataFor: typeof realViz }).vizDataFor = realViz;
   const dsFacts = await H.as(ORG_A, () => copilotIpc.buildFacts(P, { kind: 'dataset', id: L }));
-  ok('copilot: a Live dataset\'s facts are its schema — every column, LIVE, and never a row count', dsFacts.provenance.kind === 'dataset' && /LIVE dataset/.test(dsFacts.text)
+  ok('copilot: a Live dataset\'s facts are its schema — every column, LIVE, and never a row count', dsFacts.provenance.kind === 'dataset' && /— Live: its rows stay in the warehouse/.test(dsFacts.text)
     && H.fx.COLUMNS.every((c) => dsFacts.text.includes(`- ${c.name} (${c.type})`)) && !/\b0 rows\b|\brows,/.test(dsFacts.text), dsFacts.text);
   const board = await H.as(ORG_A, () => analysis.saveAnalysis(P, {
     name: 'Live KPIs', sheets: [{ name: 'One', cards: [{ type: 'metric', metric: { datasetId: L, column: 'qty', aggregation: 'sum', label: 'Live qty' }, layout: { x: 0, y: 0, w: 3, h: 2 } }] }],

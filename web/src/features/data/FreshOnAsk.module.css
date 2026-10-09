@@ -1,0 +1,26 @@
+/* "Fresh on ask" beside the refresh schedule (FreshOnAsk.tsx): the picker,
+   and when it cannot be used, the reason in words beside it. */
+
+.fresh {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-8);
+  min-width: 0;
+}
+
+.select {
+  min-width: 168px;
+}
+
+.note {
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+
+/* The workbench rail: the picker as wide as the schedule above it. */
+.wide {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}

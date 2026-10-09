@@ -93,6 +93,9 @@ function goldenShapes(): void {
     const missing = want[id].filter((w) => !sql.includes(w));
     ok(`${id}: golden shape (${want[id].length} fragments)`, missing.length === 0, `missing ${show(missing)}\n${sql}`);
     ok(`${id}: placeholders numbered in text order, one per parameter, named p<i>`, t.ok && placeholdersInOrder(id, t.query), t.ok && show(t.query.params));
+    // L2.8: a text GROUP key folds '' into NULL (an import stores '' as null); a text filter does not need to.
+    const textCast = dialects.dialectFor(id).text(`lv_src.${dialects.dialectFor(id).ident('region')}`);
+    ok(`${id}: a text category key folds '' into NULL, as every import stores it`, sqlOf(t).includes(`CASE WHEN ${textCast} = '' THEN NULL ELSE ${textCast} END AS lv_g`), sqlOf(t));
     // The needle `50%_off!`: % and _ always escaped; `!` too where it is the escape.
     const pattern = dialects.dialectFor(id).likeEscape === '!' ? '%50!%!_off!!%' : '%50\\%\\_off!%';
     ok(`${id}: the LIKE pattern escapes %, _ and the escape itself (${pattern})`,
@@ -295,6 +298,18 @@ async function pure(): Promise<void> {
   const chart = shape.shapeChart([['b', -0, 1, null], ['a', 2, 2, null]], q(['o_g', 'o_m0s', 'o_cr', 'o_nc']),
     { kind: 'chart', category: { column: 'region', kind: 'text' }, measures: [{ column: 'amount', aggregation: 'sum' }], filters: [], order: 'natural', weekCal: null }, { kind: 'text' }, COLS);
   ok('a chart keeps the statement order and names the series like vizData.measureLabel', !('code' in chart) && show(chart.data) === '{"labels":["b","a"],"series":[{"name":"sum of amount","values":[0,2]}]}', show(chart));
+  // L2.8: the order comes from the RANKS the statement returns, not from the
+  // transport — a row-cap wrapper (`select * from (…) limit n`) may reorder.
+  const textIr: LiveIR = { kind: 'chart', category: { column: 'region', kind: 'text' }, measures: [{ column: 'amount', aggregation: 'sum' }], filters: [], order: 'natural', weekCal: null };
+  const reversed = shape.shapeChart([['a', 2, 2, null], ['b', -0, 1, null]], q(['o_g', 'o_m0s', 'o_cr', 'o_nc']), textIr, { kind: 'text' }, COLS);
+  ok('a reply in another order than the ranks gives the same chart (rows re-sorted by o_cr)', show(reversed) === show(chart), show(reversed));
+  const splitIr: LiveIR = { ...textIr, series: 'region' };
+  const splitCols = q(['o_g', 'o_s', 'o_m0s', 'o_cr', 'o_sr', 'o_nc']);
+  const inOrder = [['b', 'x', 1, 1, 1, null], ['b', 'y', 2, 1, 2, null], ['a', 'x', 3, 2, 1, null], ['a', 'y', 4, 2, 2, null]];
+  const split = shape.shapeChart(inOrder, splitCols, splitIr, { kind: 'text' }, COLS);
+  const shuffled = shape.shapeChart([inOrder[3], inOrder[0], inOrder[2], inOrder[1]], splitCols, splitIr, { kind: 'text' }, COLS);
+  ok('…and a split reply shuffled gives the same categories, series and values (o_cr, then o_sr)',
+    !('code' in split) && show(split.data) === '{"labels":["b","a"],"series":[{"name":"x","values":[1,3]},{"name":"y","values":[2,4]}]}' && show(shuffled) === show(split), show([split, shuffled]));
   const bins = shape.readBinRange([[-0, 10]], q(['o_lo', 'o_hi']), 5);
   ok('the bin probe goes through binPlan (−0 read as 0)', show(bins) === '{"kind":"bins","lo":0,"hi":10,"width":2,"bins":5}', show(bins));
   ok('the grain probe goes through chooseGrain (an unreadable count coarsens)', shape.readGrain([[400, null, 30, 10, 3]], q(['a', 'b', 'c', 'd', 'e'])) === 'month');

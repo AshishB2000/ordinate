@@ -369,6 +369,7 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   refusal and L0.2's `asOf`.
 - **Not done here (by plan):** executor and cache (L2.3), routing charts / KPIs / answers (L2.4 —
   until then they refuse, as the suite asserts), the full Live UI (L2.6).
+
 ## 2026-10-09 — L1.4 and L1.5 finished: counts, the real-account nightly, the canaries
 
 - **L1.4 checked, one gap filled.** Both dialects were in `incrementalSql.ts` (`snowflake`: `"…"`
@@ -559,6 +560,379 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
 - **Not done (scope):** a pipeline cron's dataset refresh (`pipelineRunner`, also under the tick)
   still leaves no audit row; only the dataset scheduler's refreshes are `scheduled_refresh`. `connection:refresh` and the MCP `datasets
   refresh` tool still bypass the job and the lock (noted under L0.3/L0.4).
+
+## 2026-10-09 — L3.2 Live on a PostgreSQL read replica (opt-in)
+
+- **Built.** `ConnectorLive.optIn` (`src/connectors/types.ts`): the key of a non-secret checkbox a
+  connection must have ticked before Live is offered for it. Data, not a function, so the catalog
+  sends it (`CatalogEntry.liveOptIn`) and the web applies the same rule to a connection's values
+  without a round trip; the server enforces it. `isLiveCapable(def)` now means CAN be Live (and is
+  false for an opt-in naming no non-secret checkbox — fail closed); `isLiveOffered(def, values)`
+  (`src/connectors/index.ts`) decides per connection, strictly `values[optIn] === true`.
+  `src/ipc/liveOptIn.ts`: `liveOfferRefusal` (the catalog sentence) — asked by `connection:import
+  {mode:'live'}` and `dataset:setMode` (`liveDatasets.ts`), by `dataset:source`'s `canGoLive`
+  (`datasetViews.ts`) and by the executor on EVERY question (`liveTarget.ts`); and the new channel
+  `connection:setLiveOptIn` (contract in `src/api/live.ts`, `write`). PostgreSQL, AlloyDB, Neon,
+  Supabase and TimescaleDB declare the Redshift dialect + the opt-in field "This is a read replica
+  or a warehouse" (`readReplica`, off by default, last on the form, its help the one-line why).
+  Web: the form renders it generically; the workbench offers Copy/Live by `liveOffered(def, conn)`;
+  the rail has a switch (`ReplicaSwitch.tsx`) under the connection's facts.
+- **Decided — which members.** Only those whose server IS PostgreSQL (parser, functions, casts):
+  the dialect's `$n`, `~` with `[[:space:]]`, `BTRIM(x, chars)`, `DATE_TRUNC`, `TO_CHAR`, `date - date`,
+  windows and CTEs are all PostgreSQL ≥ 9.x. Not CockroachDB (a reimplementation; RE2 regular
+  expressions, not PostgreSQL's), not YugabyteDB (a fork of the PG 11 query layer over distributed
+  storage), not Materialize / QuestDB / RisingWave (pgwire only). Unverified here, so not Live.
+- **Decided — unticking is REFUSED while Live datasets ask the connection**, naming how many
+  (`code: 'live_in_use'`, `liveDatasets: n`), rather than switching them to copies: each switch is a
+  full import from the database just called a primary, and it would silently change what every
+  dashboard over them shows. The count and the write are not atomic; a Live dataset created in
+  between (or restored from the Trash later) is still refused by the executor before any socket.
+- **Found and fixed — the live session's time zone.** `CAST(timestamptz AS DATE)` and `DATE_TRUNC`
+  follow the SESSION's `TimeZone`; an extract reads a timestamptz as an instant and stores it in UTC.
+  On a database whose zone is not UTC, live put the same instant on another day. `runBound` (the
+  Redshift / Postgres family) now runs `set timezone to 'UTC'` first — as Snowflake's session already
+  does. Measured in a scratch database `ALTER DATABASE … SET timezone TO 'Pacific/Kiritimati'`: without
+  it the day chart has 9 rows where the copy has 7; with it, equal. Negative control kept in the suite
+  (the chart's own statement, re-sent on a raw session in the database's zone, answers other days).
+- **Found, NOT fixed (for L2.8) — `''` and `NULL` in a text category.** Every import types `''` as
+  null (`parse.coerceCell`), so a copy has ONE blank category; a real warehouse groups `''` and `NULL`
+  apart and live answers TWO rows labelled "" (their figures add up to the copy's). The L2.2 bench
+  missed it because its extract fixture is saved with `datasets.saveDataset`, which keeps `''` — the
+  bench's extract shows two "" rows as well. Applies to every dialect and to a split's series. The fix
+  is a compiler change (`NULLIF(key, '')` for text keys) plus a bench fixture saved the way an import
+  saves it; it overlaps L2.8's parity work, so it is pinned (`test-liveReplica`: "PINNED — …") and left
+  to that task. The operator doc names it.
+- **Not testable here — collation.** This machine has only `C`/`C.UTF-8` locales. Text ordering filters
+  and tied labels follow the database's collation on live and code points on a copy; documented.
+- **Measured** (`test-liveReplica`, local PostgreSQL 16, 4 vCPU container shared with other suites,
+  four runs): a live KPI with cache age 0 — connect, read-only + `statement_timeout` + UTC, one bound
+  statement, close — median **7.6–13.0 ms** of 20; the `set timezone` statement alone **0.08–0.15 ms**
+  median of 200. The connection set-up dominates; a remote replica adds its round trips to each.
+- **Tests.** `test-liveReplica` (pure rule + catalog + contract with negative controls; RPC enforcement
+  without a database; with `DATABASE_URL` the end-to-end flow: 10 charts and 6 KPIs through
+  `liveVizData` / `liveMetric` equal `vizDataFor` / `computeCardMetric` over the copy with `Object.is`,
+  sums and averages included — the fixture's amounts are quarters, so no summation order rounds).
+  `test-connectors`: `postgres` moved from the "not live" list to "live, behind its opt-in" (the
+  catalog flag now means "can be Live", by design), and `liveOptIn` joined the documented catalog keys.
+  Vitest `replica.test.tsx` (5); `connections.e2e.ts`: the main flow asserts no Live choice on an
+  unticked PostgreSQL, and a new flow ticks the box on the form, saves a Live dataset, and sees the
+  untick refused in place (screens `connections-replica-form-*`, `connections-replica-workbench-*`).
+
+## 2026-10-09 — L2.5 Profile and AI context for live
+
+- **Built.** `src/data/liveProfile.ts` — the profile a Live record keeps in its `live` block (no SQL
+  migration): per column the warehouse's type name, filled and distinct counts in the sample, and for
+  a low-cardinality text column (≤ 50 distinct in the sample) up to 20 values with their counts, most
+  frequent first; the sample's rows, time, method (`sample`/`limit`) and, when the last sync read
+  none, why (`tooCostly`/`failed`/`refused`). Sanitized on every load and before every write, like
+  the rest of the record. Readers: `profileDistinct` (the pickers), `profileSplitCandidates`,
+  `sampleMatrix` (the sensitivity detector), `withoutSamples` (bundles).
+  `src/engine/live/profileSql.ts` — the ONE statement per table, the ClickHouse sampling-key probe,
+  the cost model and the reading of the rows; `tableSample(plan)` on every dialect (DuckDB
+  `USING SAMPLE n ROWS`, Snowflake `SAMPLE (n ROWS)`, Databricks `TABLESAMPLE (n ROWS)`, BigQuery
+  `TABLESAMPLE SYSTEM (p PERCENT)` from the catalog's row count, ClickHouse `SAMPLE n` only with a
+  sampling key, Redshift none), sizes spliced only through `sqlInt`/`sqlPercent`.
+  `src/engine/live/schemaSync.ts` (describe → sample → one write) and `schemaSyncJob.ts` (the three
+  doors, one at a time). `src/engine/live/liveMissing.ts` + `src/analysis/liveDependents.ts` (column
+  missing). `src/ai/liveFacts.ts` (a Live dataset's facts block and inventory notes).
+  `src/ipc/liveProfile.ts` — `dataset:syncLiveSchema` (`write`; waits for the job and answers counts,
+  column names and the sample's typed outcome) and `dataset:liveSchema` (`read`; the Schema panel's
+  figures, computed server side, with the missing columns and what uses them), contracts in
+  `src/api/live.ts`. `estimateLive` in `src/connectors/liveRun.ts` (the dry run's context and
+  guard). 8 catalog sentences (`src/engine/liveProfileMessages.ts`) + the `columnMissing` refusal.
+- **Decided — the three doors.** On create (`connection:import` → Live and `dataset:setMode` queue a
+  job; the create does not wait), on demand (`dataset:syncLiveSchema`), daily (the scheduler's tick
+  hands the Live datasets it skips for refresh to `queueDueSchemaSyncs`: due 24 h after the last
+  sync; the attempt is stamped first, so a failing warehouse is asked hourly, not every 60 s tick).
+  The job is a `refresh` job under the L0.4 lock: one sync per dataset across pods, never beside a
+  refresh or a cache reset of it. A daily one is `silent`.
+- **Decided — one write.** Columns, profile, missing list and `schemaSyncedAt` land in one
+  read-modify-write (`writeSchemaSync`). `schemaSyncedAt` is in every live cache key (L2.3), so a
+  sync retires the dataset's cached answers by itself — at most one extra warehouse call per question
+  per day, which is what "the schema may have changed" costs. A changed column list also announces
+  the dataset (`hub:dataset-refreshed`), so an open dashboard redraws.
+- **Decided — a sample not read keeps the last figures.** Too costly, refused or failed: the columns
+  still sync, and each column still declared with the same type keeps its last figures, marked
+  `skipped`, with a catalog sentence on the panel. A failed DESCRIBE changes nothing.
+- **Decided — UNPIVOT, not GROUPING SETS.** The first version grouped `GROUPING SETS ((), (k0), (k1),
+  …)`. Every set carries every key column, so its cost grows with columns²: on the bench a
+  500-column sample ran a 1 GiB DuckDB worker out of memory. The statement now unpivots the sample
+  against constant set ids (`SELECT 0 UNION ALL SELECT 1 …` — the one spelling all six engines take)
+  into three narrow slots (set, text key, DOUBLE key), groups once, ranks per set. The sample is still
+  referenced ONCE (BigQuery re-evaluates a CTE per reference). Same figures, byte for byte, where the
+  sample is the whole table; faster at every width (below); and the Redshift dialect's statement runs
+  on Postgres 16 and agrees with the DuckDB bench on every column (`test-liveProfile` §6).
+- **Decided — the cost guard.** ≤ 1M (row, column) cells: 10,000 rows, fewer past 100 columns, never
+  under 1,000 (`sampleRowsFor`), at most 500 columns profiled. BigQuery: TABLESAMPLE's percent is
+  twice the sample's share of the catalog's row count (block sampling is lumpy); the dry run prices
+  the statement first and past `LIVE_MAX_BYTES_BILLED` or the connection's own ceiling the sample is
+  skipped. Everything else goes through the executor's own door, `runStatement(t, query, signal)` →
+  `warehouse()`: the daily limit, a concurrency slot, the timeout and cancel, `costTag 'live'`.
+- **Decided — at most one second try, LIMIT only**, through the same gate: when the warehouse refused
+  the sampled statement (an engine may take its sample clause on a base table only, and a "table" can
+  be a view), and when a BLOCK sample came back empty (TABLESAMPLE SYSTEM on a table of few blocks
+  often picks none — never stored as "every column empty"). Never after a timeout, a cancel or a
+  limit, and never when there was no clause to drop.
+- **Decided — a dropped column.** It leaves the declared columns (nothing compiles it) and its name
+  stays in `live.missingColumns` only while a visual, metric, dashboard KPI or control, or alert
+  names it. The executor checks a question's columns (lineage's `visualColumns` rule) against that
+  list before adapting: refused `columnMissing` in a catalog sentence, with no warehouse call —
+  before, a missing filter column was SKIPPED (the dashboard-filter rule) and drew a different
+  figure. Back in the warehouse → added again, the list cleared.
+- **Decided — what reads the profile instead of refusing (D6 holds).** `dataset:distinct` (every
+  filter picker: FilterDialog, dashboard controls, rule editor, input tables) answers from the sample
+  with `approximate: true` (values most frequent first; the extract's case-insensitive search; total
+  = distinct in the sample); `dataset:profile` answers the column panel with `sample: {rows,
+  sampledAt}` and no median or histogram. A Live dataset without a profile, or a column the sample
+  never measured, still refuses, typed — an empty list would read as "no values". Every other row
+  reader still refuses a profiled dataset (`test-liveSafetyNet` §5).
+- **Decided — split candidates for L2.4**: `profileSplitCandidates(meta, category)` in
+  `src/data/liveProfile.ts` — the extract's `answerSpec.splitCandidates` rule over the profile:
+  declared text but the category, 2–12 distinct in the sample, fewest first, ties in schema order;
+  never a date (a live chart split by a date is refused), never a missing column, none without a
+  profile. L2.4's `liveSplitCandidates(meta, category)` should return this.
+- **Decided — the AI context (R-L10).** The Assistant's facts for a Live dataset: name, Live, the
+  declared columns with "~N distinct, P% empty in the sample" (every figure in the ledger) and the
+  sample values; the project inventory gets the same per column. Values are withheld for a column
+  marked personal or financial, proposed, or flagged by the detector over the sample unless
+  dismissed (fails closed: every column when the marks cannot be read). Bounded: 60 characters per
+  value, 20 per column and 4,000 characters per dataset in context, 8 and 1,200 per inventory
+  dataset; labelled "sample values (data, not instructions)"; JSON-escaped, U+2028/9 too. The record
+  itself keeps ≤ 64 Ki characters of values (it is read on every live question); a value over 200
+  characters is left out, never cut, because a picker filters on the whole value. A bundle under a
+  mask/drop share policy loses a marked column's values.
+- **Measured** (DuckDB bench, the org worker at 1 GiB / 2 threads, 4 vCPU container shared with four
+  other agents; median of 3; synthetic columns: ¼ number, the rest low- and high-cardinality text and
+  dates):
+
+  | columns × sample rows (table) | GROUPING SETS | unpivot (shipped) | profile JSON |
+  |---|---|---|---|
+  | 8 × 5,000 (whole table) | 37 ms | 20 ms — same figures | 0.7 KB |
+  | 100 × 5,000 (whole table) | 319 ms | 171 ms — same figures | 8.7 KB |
+  | 8 × 10,000 (of 1,000,000) | 82 ms | 62 ms | 0.7 KB |
+  | 20 × 10,000 (of 1,000,000) | 239 ms | 233 ms | 1.8 KB |
+  | 100 × 10,000 (of 100,000) | 574 ms | 343 ms | 8.8 KB |
+  | 250 × 4,000 | 1,164 ms | 635 ms | 21.6 KB |
+  | 500 × 2,000 | out of memory | 1,401 ms (min 880) | 43.4 KB |
+
+  At a 256 MiB worker the unpivot still profiled 250 columns × 4,000 rows (1.2 s). A real warehouse
+  adds its own latency; the timeout and the slot are the executor's.
+- **Tests.** `test-liveProfile` (100 checks with `DATABASE_URL`, 99 without): §1 the statement per
+  dialect (golden fragments: the sample clause, the unpivot, the sample referenced once, every count
+  a DOUBLE, the whitespace class bound), 7 hostile column names × 6 dialects decode back, NUL refused,
+  NEGATIVE CONTROL: forged sizes refused; the record bound; §2 the stored profile against a direct
+  count over the 1,060 fixture rows (filled and distinct exact, values byte-identical — BOM,
+  decomposed é, emoji — with their counts; the 20 cap; a 201-character value left out); §3 the
+  pickers, the panel and the Schema panel over the RPC route (NEGATIVE CONTROL: unprofiled, they
+  refuse), split candidates; §4 a dropped column (refused `columnMissing` with no warehouse call;
+  NEGATIVE CONTROL: a chart not naming it answers; back → cleared); §5 the privacy canary; §5b the
+  prompt bounds; §6 Postgres. `test-liveProfileSync` (39): the due rule; the tick (one job, none
+  while it runs, the attempt stamped, no retry within the hour); create / on demand / two starts;
+  the dry-run gate with its NEGATIVE CONTROL; the second try's two cases and their NEGATIVE CONTROLS;
+  the daily limit, the concurrency slot, a warehouse error (R-L6 canary), a timeout, a cancel (nothing
+  written); a sync moves the cache key. `test-liveSafetyNet` +6 (92): the Schema panel lists; a
+  profile opens the pickers and the column panel and nothing else; an unmeasured column refuses.
+- **For L2.4 / L2.6 / L2.7 / L2.8.** L2.4: wire `profileSplitCandidates`; the pickers need nothing
+  more. L2.6: the Schema panel (`dataset:liveSchema`) and the **Sync schema** button
+  (`dataset:syncLiveSchema`); say "from a sample" where `approximate`/`sample` is set. L2.7: the
+  profile's statements already take `runStatement` → `warehouse()`; the BigQuery dry run
+  (`estimateLive`, free, unbilled) is the one live call that does not — count it or not there. L2.8:
+  on real engines, check the profile statement on each (GROUPING-free, but a 500-way `UNION ALL` and
+  a CASE per cell), Snowflake's fixed-size `SAMPLE (n ROWS)` cost on a large table, and BigQuery's
+  TABLESAMPLE percent against its block size.
+## 2026-10-09 — L3.1 Pull the new rows before answering (fresh on ask)
+
+- **Built.** `freshOnAsk: { maxStalenessSec }` on the dataset record (60 s – 1 day; the picker offers
+  1 min · 5 min · 15 min · 1 h), allowed only with incremental refresh on and never on Live —
+  sanitized on every load (`src/data/freshOnAskRule.ts`, one line in `datasets.normalize`), refused
+  by `dataset:update` with a catalog sentence (`src/data/freshOnAskMessages.ts`, a new `MAIN_FILES`
+  entry), and dropped by `writeIncremental` in the same write that turns incremental refresh off.
+  `ensureFresh(projectId, datasetIds)` (`src/data/freshOnAsk.ts`) is one line at the top of
+  `vizDataFor`, `computeCardMetric`, `computeStatsTile` and `computeCard` — before the answer-cache
+  key reads the record, so a pull that lands in time moves `updatedAt` and the answer is recomputed.
+  `figureAsOf` (and `computeCard`'s own stamp) adds `refreshing: true` from what the request found
+  (`src/data/freshOnAskState.ts`). Web: `FreshOnAskPicker` beside the schedule on the dataset page
+  and in the workbench rail — disabled with "needs incremental refresh" in words without it, "Waits
+  for a full refresh" when the server says the next run is full (`freshOnAsk.fullDue` on the list).
+- **Never a full refresh — a mode, not a pre-check.** `startRefresh(…, { incrementalOnly })` → the
+  job → `refreshDataset(…, mode 'incremental')` → `refreshIncremental`, which returns `skipped`
+  instead of reaching `runFull` both when `fullReason` says so up front (first run, 7th run, "Full
+  refresh now", cursor/key gone, no Parquet) and when it finds out after the fetch (the columns
+  changed). A skipped run writes nothing, moves no marker and is not an error; the job ends `done`.
+  The ask also checks `fullReason` first (verdict `full`), so normally no job starts at all.
+  **Negative control** (`test-freshOnAskDoors` §4): the same dataset refreshed in the ordinary mode
+  reaches the full re-fetch spy; in the incremental mode it never does (3 cases).
+- **One check per dataset per request** — memoised on the request's own context object (a WeakMap,
+  so it dies with the request): a 6-tile `analysis:tiles` load over one stale dataset did ONE
+  metadata read and ONE pull; two such loads at the same instant, still one pull (`pulls`, this pod's
+  in-flight map, orgKey'd). One wait per request, too: a request asking several datasets one after
+  another shares one `FRESH_ON_ASK_WAIT_MS` budget (measured: two slow datasets in a row, 600 ms
+  budget → both answered "refreshing" in < 1 s).
+- **Decided — the window lives on the record, claimed under an advisory lock.** "At most one pull per
+  dataset per window" needs a time every pod reads. The record is already what every check reads
+  (and a `records` row with Postgres), so `freshOnAsk.triggeredAt` costs no extra read on the hot
+  path and no migration (and no migration number to collide with L0.5's). Its read-modify-write is
+  made a compare-and-set across pods by taking the refresh lock's primitive on a key of its own
+  (`<org>:fresh-on-ask:<id>`, never the refresh lock itself) around "re-read, still stale and
+  unclaimed? stamp". This pod also remembers its own starts (`triggered`, orgKey'd), so a stamp lost
+  to a racing whole-record write still holds the window here. Rejected: reusing `lastRefreshedAt`
+  alone — a FAILED pull never moves it, so every ask would retry a broken source; a new table — a
+  migration for one timestamp the record already has room for.
+- **Decided — the pull runs detached.** As the system in the org (like a scheduled refresh: in nobody's
+  Jobs list, for no tab), inside an `AsyncResource` captured when the module loads — so it carries no
+  request abort signal (a closed tab ends that person's wait, not the refresh everyone else waits
+  for), no as-of scope and no display currency (`afterRefresh`'s alert evaluation must not run in the
+  asker's currency). Proven by the fake source reading its own context: `jobs@system`, no signal, no
+  as-of, not the asker's EUR. After a landing, `afterRefresh` runs as after a ↻ (alerts, quality,
+  republish, the SQL datasets built on it — otherwise a dashboard over a query on the table stays
+  stale).
+- **Not pulled:** inside an as-of read; outside server mode (no request to memoise on, no job queue
+  shared with readers, no push); outside a request on the server; for a Live dataset.
+- **Measured** (this container, Node 22, local Postgres 16 as both the SOURCE and the records store,
+  `test-freshOnAskPg`; one `analysis:tiles` load = a chart + two KPIs over one dataset):
+
+  | Load (median per run; the range is over 5 runs) | Median |
+  |---|---|
+  | Dataset without fresh on ask (15 loads) | 5.4 – 7.6 ms |
+  | Fresh on ask, copy fresh (15 loads) — the added cost is one record read per dataset per request | 6.0 – 9.0 ms (+0.2 – 1.4 ms, at run-to-run noise) |
+  | Fresh on ask, copy stale: one incremental pull from Postgres (cursor pushed down, DuckDB merge, Parquet + record write, announce), waited for (7 loads, a new dataset each) | 119 – 164 ms (single loads 103 – 187 ms) |
+
+  So a stale ask costs ~110 – 160 ms over a fresh one on a small table, all of it the incremental
+  run itself. With records as files and a fake source (`test-freshOnAskDoors`): a 7-tile load
+  waiting for a 150 ms pull 354 – 398 ms; the same load fresh 15 – 16 ms. A stale ask whose pull outlasts the wait
+  answers at the budget (250 ms → < 1.2 s round trip, old figures, `refreshing`), the push arrives
+  when the rows land, and the next ask is fresh. A 10 ms timer kept ticking through a 1 s wait (≥ 50
+  ticks: the wait never blocks the event loop).
+- **Cross-pod, measured with a second Postgres session as "another pod":** holding this window's claim
+  → this pod pulls nothing; holding the refresh lock with the window stamped → this pod polls
+  `pg_locks` every 200 ms and answers fresh ~400 ms later when it is let go, or `refreshing` at the
+  budget when it is not. (Not run: two real server processes — L0.4's `test-refreshLock` covers the
+  lock between processes; the claim is the same primitive.)
+- **Not done / for the owner.** The web app still has no panel to turn incremental refresh on
+  (T8.1; L0.3 noted the same for the fast cadences), so fresh on ask is only offered on datasets
+  whose incremental refresh was set before or through the record. Every 7th incremental run is full,
+  so a dataset refreshed ONLY by fresh on ask pulls six times and then shows "Waits for a full
+  refresh" until a schedule or Refresh now runs the full one — by design (the brief: never full on
+  ask); a schedule alongside avoids it. A chart reading a RELATED dataset (a join through a
+  relationship) pulls only its own dataset, and is dated by it — as L0.2 dates it.
+
+## 2026-10-09 — Incremental refresh settings in the web app (closes the gap L0.3 and L3.1 reported)
+
+- **Built.** The desktop's `incremental:get` / `incremental:set` (deleted with T8.1), ported:
+  contracts in `src/api/incremental.ts` (`get` read, `set` write, both project-scoped), handlers in
+  `src/ipc/incremental.ts`, the logic in `src/data/incrementalSettings.ts`, sentences in
+  `src/data/incrementalMessages.ts` (a new `MAIN_FILES` entry, drafts translated). Web: an
+  "Incremental on/off" button beside the schedule on the dataset page and in the workbench rail,
+  opening a panel (`web/src/features/data/Incremental.tsx`): how the source is read, on/off, the
+  cursor (the server's number and date columns of the prepare SOURCE), update by key or append, the
+  key, the lookback (minutes / hours / days for a date cursor, ids for a number one), "Next refresh:
+  full" with the reason, and the run log (fetched / inserted / updated / mark per run).
+- **Decided — a source that cannot take the cursor predicate is refused.** HTTP engines and SaaS APIs
+  (`incrementalSql.canPush` false) would be read whole on every "incremental" run and filtered after
+  the fetch — the load the 5/15-minute cadences and fresh on ask are only allowed because incremental
+  refresh avoids. The panel says "Filtered after fetch" and why; the server refuses turning it on
+  (catalog sentence). An older record that has it on over such a source can still be turned OFF.
+- **Decided — one key column.** The merge (`incremental.mergeJs` and its DuckDB twin, differential-
+  tested) keys on one column; a composite key would change both and their tests, so the panel offers
+  one, as the desktop did.
+- **Kept from the desktop:** a new cursor column resets the mark and the run count (the next run is
+  full); the same cursor with a new lookback keeps them; off keeps the block and its log. New:
+  turning it off drops a 5/15-minute schedule to hourly and fresh on ask in the same write
+  (`writeIncremental`, L0.3 / L3.1), and Live datasets and non-connection datasets are refused even
+  "off" (they keep no block).
+- **Errors stay in the log.** A thrown error (it can carry a path) is logged; the browser gets the
+  catalog's "Could not read / save the incremental refresh settings." — never the error's text.
+- **Tests.** `test-incrementalSettings` (44 checks: the view from the source columns, on/off, every
+  refusal with its catalog sentence, the contract's 400s, the mark reset with a NEGATIVE CONTROL,
+  the five blocked kinds incl. ClickHouse "filtered after fetch" — and Live, a paste and a gone
+  connection describing no read at all, not "after the fetch" — the 5-minute cadence and fresh on
+  ask refused before and taken after (NEGATIVE CONTROL), a missing dataset and a thrown error
+  answered with the catalog's sentence and no planted path (NEGATIVE CONTROL: the log has it));
+  `test-liveSafetyNet` reads `incremental:get` on a Live dataset as a metadata path (200, no
+  `live_dataset`); Vitest `incremental.test.tsx` (11, incl. a number cursor's lookback reading back
+  as ids, not seconds — fails on the first draft, which split it into minutes); `data.e2e` opens the
+  panel of a dataset on over a connection since deleted (only "off" is possible; the run log the
+  record keeps), turns it on for another, then picks every 5 minutes and fresh on ask — the panel
+  in three states and the page, both themes; `connections.e2e` opens it from the rail.
+- **Not done.** "Next refresh: full" and a full run's note in the log are `fullReason`'s English
+  (src/data/incrementalRefresh.ts, stored on the record as the desktop did), not catalog sentences;
+  translating them means a messages file for incrementalRefresh and keys, not text, in the log.
+## 2026-10-09 — L2.8 Parity on real engines
+
+- **Built.** The L2.2 matrix moved out of `test-liveParity` into `scripts/liveParityMatrix.ts`, run
+  on any `ParityEngine` (`liveParityFixture.ts`: a dialect, a loader that returns a live source,
+  a runner). `scripts/liveParityEngines.ts`: Postgres as Redshift and ClickHouse, each running every
+  statement through the REAL connector's `live.runBound` (via `liveRun.runLiveBound`, server mode,
+  the SSRF guard pinning the one address that answers). Suites: `test-liveParity` (DuckDB, every
+  `npm test`), `test-liveParityPostgres` (needs `DATABASE_URL`: CI's `check` job runs it; a scratch
+  database `ordinate_l28_<pid>_<ms>`, byte-ordered `C`, default zone UTC+14, dropped `WITH (FORCE)`),
+  `test-liveParityClickhouse` (needs `CLICKHOUSE_URL`; the new `clickhouse` job of
+  `warehouse-nightly.yml` runs it against a `clickhouse/clickhouse-server:25.8` service container).
+  Snowflake and BigQuery: `scripts/warehouseLiveParity.ts`, called by `test-warehouseLive` after each
+  warehouse's connector checks, under its secret canary (job timeout 20 → 60 min).
+- **Decided — the real accounts are never written.** Their roles are read-only, so the nightly's
+  twin is a DEFINING QUERY over literals (`scripts/liveParityLiteral.ts`): every cell a text literal
+  (backslash-escaped) or NULL, typed only by `CAST` — `FROM (VALUES …) AS v(c0, …)` on Snowflake,
+  `UNNEST(ARRAY<STRUCT<c0 STRING, …>>[…])` on BigQuery. A Live dataset over SQL is a production shape,
+  and the same twin runs on CI's Postgres (`E'…'` literals, the same escaping) every 9th case, so the
+  mechanism is proved before a warehouse sees it. Warehouse runs take every 8th chart, KPI and answer
+  case (≈500 statements each); every filter op, both negative controls and the pins always run.
+- **Fixed — `''` and NULL were two blank categories on live, one in a copy** (found by L3.2). Every
+  import stores `''` as null (`parse.coerceCell`); a warehouse groups them apart. A text GROUP key —
+  category or split — is now `CASE WHEN t = '' THEN NULL ELSE t END` (`compileFilter.keyText`, used by
+  `compile.keyExpr` and the text series), in all six dialects; filters already compared NULL as `''`.
+  The L2.2 bench missed it because it saved its extract raw; the fixture is now typed exactly as an
+  import types it (`fx.importTyped`: stringify as `connectionRun` does, then `parse.finalizeTable`),
+  and so is the L2.3 executor harness. The matrix's skip for "split + top N over `cat`" ('' twice made
+  the label set ambiguous) is gone: 120 answers, not 112. L3.2's `liveReplicaFlow` pin of the old
+  behaviour ("two blank rows on live") will now fail on merge, as a pin should — flip it to equality.
+- **Fixed — the answer's order no longer rests on the row-cap wrapper.** Every connector runs
+  `select * from (…) limit n`, and SQL does not promise a derived table's ORDER BY survives it.
+  `shape.shapeChart` now orders rows by the ranks the statement returns (`o_cr`, then `o_sr`), a
+  stable sort. Observed: Postgres kept the order in 1,899 of 1,899 chart statements, ClickHouse in
+  1,663 of 1,663 — the sort is for Snowflake, BigQuery and Redshift, which make no such promise.
+- **Fixed — the Postgres/Redshift live session runs in UTC** (`set timezone to 'UTC'` in
+  `runBound`, the same lines as L3.2, so the two merge clean). `CAST(timestamptz AS DATE)` takes the
+  day in the session's zone; Redshift defaults to UTC but a user, database or parameter group can
+  change it.
+- **Divergences, each a named pin with a test that it still exists** (`scripts/liveParityPgPins.ts`,
+  read off the run in `test-liveParityPostgres`):
+  - R1 collation — Postgres orders text by its collation (CI's `postgres:17` defaults to
+    `en_US.utf8`); Redshift and the extract compare code points. On an ICU twin `k < 'b'` keeps 2 of
+    6 where the extract keeps 4, and tied labels order differently. The matrix runs byte-ordered.
+    **Open for L3.2 / L2.9:** a Postgres read replica whose database collation is not `C` will
+    differ from its copy on text ordering filters and on the order of tied categories.
+  - R2 session zone — TIMESTAMPTZ days agree in a database defaulting to UTC+14; CONTROL: the same
+    statement in a session left at +14 puts every instant on the next day.
+  - R3 order through the wrapper — kept by Postgres (above); NEGATIVE CONTROL on the order check.
+  - R4 −0 — Postgres returned −0 in 5,853 cells (ClickHouse 2,575; DuckDB stores none); every figure
+    still matched, the shaping reports +0 (pin 8).
+  - R5 read-only — `nextval()` through `runBound` is refused by the read-only session.
+  - The eight L2.2 pins run again on every engine, through its own twins, and hold on Postgres and
+    ClickHouse unchanged.
+- **ClickHouse, run here without Docker.** ClickHouse 25.8.2.1's engine embedded (chdb 4.0.2, from
+  PyPI) behind a 60-line Python stand-in for its HTTP interface (query from the body, `param_*` as
+  query parameters; not committed — the nightly runs the real server). The whole matrix and every pin
+  agree: `match()` over UTF-8, `{p:Type}` values (a tab, a quote, a backslash and a decomposed é now
+  ride in three new filter cases), `accurateCastOrNull`, `toMonday`, MergeTree parts in any order.
+  Nothing to pin. Databricks still has golden shapes only (no engine in L2.8's scope).
+- **Found outside L2.8:** a KPI `sum` whose filter leaves no number (`amt = '007'`, `amt is_empty`)
+  is a legitimate null on the resident path, which `dashboards.metricFor` cannot tell from a failure
+  — it traces `failed` and recomputes in JS (correct, slower, and one spurious warning per run).
+- **Measured** (4 vCPU container; first runs, before four other agents loaded it): DuckDB 1,090
+  charts + 108 KPIs + 112 answers, 2,313 statements in 35 s; Postgres 16.15 the same matrix, 2,331
+  statements through `runBound` in 41 s (43 s whole suite); ClickHouse 25.8 (embedded) 2,326 statements
+  in 68 s. Largest sum/avg deviation: 1.0e-15 (DuckDB, Postgres), 3.0e-15 (ClickHouse) — inside the
+  documented 1e-13. Final runs (load average ~22): DuckDB 2,374 statements / 43 s, Postgres 2,815
+  (matrix + literal twin 417) / 185 s, ClickHouse 2,393 / 124 s.
+- **Tests.** Negative controls on every engine: a broken empty predicate, and the fold stripped from
+  the very statements (`unfoldedBlankCaught`: a `cat` chart, a split by `cat`, an answer) must each
+  disagree; on DuckDB also the extract saved raw. Mutations checked by hand in the compiled `.js`:
+  the fold removed → 35 + 4 + 29 charts, 42 filter ops and 9 answers disagree on DuckDB and on
+  Postgres, and `test-liveCompile`'s fold shape fails for all six dialects; DuckDB's empty predicate
+  without whitespace → 239 disagreements; the shaping's rank sort removed → `test-liveCompile`'s two
+  shuffled-reply checks fail. The SSRF guard is shown on (the database refused without the
+  allowance). A set but unusable `CLICKHOUSE_URL` fails; unset, the suite prints one skip line.
 
 ## 2026-10-09 — L2.4 Route every door
 
