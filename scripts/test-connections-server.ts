@@ -8,6 +8,12 @@
 // in any RPC reply. And it IS used: the Postgres connector receives it on every
 // run. A server WITHOUT the store refuses the secret and writes nothing.
 //
+// The two warehouses' secrets (L1.1–L1.3) get the same proof: a Snowflake key
+// and passphrase, a BigQuery key file, and every bearer token and assertion
+// minted from them, through testAndSave, list, listTables, describe, run,
+// explain, connection:estimate and the catalog — including errors from a
+// warehouse that echoes every credential back.
+//
 // Also: the desktop's three local-file sources are gone from the registry (they
 // went with the desktop app, T8.1); a secret is replaced only after a test passes;
 // one project cannot delete another project's connection secret; every channel
@@ -29,6 +35,7 @@ import * as path from 'path';
 import { Writable } from 'stream';
 import { Client, Pool } from 'pg';
 import { FakeSnowflake, fixture, reply } from './snowflakeFake';
+import * as bqFake from './bigqueryFake';
 
 // ── Capture every byte this process prints ─────────────────────────────────
 let captured = '';
@@ -55,6 +62,7 @@ const store: typeof import('../src/server/secrets/store') = require('../src/serv
 const api: typeof import('../src/api/index') = require('../src/api/index');
 const connApi: typeof import('../src/api/connections') = require('../src/api/connections');
 const snowflake: typeof import('../src/connectors/snowflake') = require('../src/connectors/snowflake');
+const bigquery: typeof import('../src/connectors/bigquery') = require('../src/connectors/bigquery');
 
 const LOCAL = ['duckdb-file', 'parquet-folder', 'csv-folder'];
 const CANARY = `Canary/pw+${randomBytes(6).toString('hex')}=x y`;
@@ -306,7 +314,77 @@ async function listen(env: Record<string, string>): Promise<{ base: string; clos
     const sfTables = await call(srv.base, 'connection:listTables', { projectId: project, connId: sfId });
     ok('snowflake: listTables runs with the STORED key and carries the warning', sfTables.body.ok && sfTables.body.tables.length === 3 && sf.of('submit').length === 2 && /ACCOUNTADMIN/.test(sfTables.body.warnings?.[0]));
     ok('snowflake: no request to the warehouse carries the key or the passphrase', sf.seen.every((q) => !leaks(`${q.url.href}${q.body}${JSON.stringify(q.headers)}`)));
+    // Every other channel that uses it (a preview, explain, the estimate — null: no dry run), then a
+    // warehouse whose errors ECHO the bearer, the key and the passphrase. The JWT joins NEEDLES too.
+    sf.answer = (_r, kind) => (kind === 'submit' ? reply(200, fixture('result-types')) : reply(200, '{}'));
+    const sfAt = { projectId: project, connId: sfId };
+    const sfOk = [await call(srv.base, 'connection:run', { ...sfAt, tableOrQuery: { query: 'select * from orders' }, limit: 5 }),
+      await call(srv.base, 'connection:explain', { ...sfAt, sql: 'select 1' })];
+    ok('snowflake: connection:run and connection:explain answer with the stored key', sfOk.every((r) => r.body.ok === true), JSON.stringify(sfOk.map((r) => r.body)).slice(0, 300));
+    const sfEst = await call(srv.base, 'connection:estimate', { ...sfAt, sql: 'select 1' });
+    ok('snowflake: connection:estimate is null (no dry run to price with), not an error', sfEst.body.ok === true && sfEst.body.estimate === null, JSON.stringify(sfEst.body));
+    for (const b of new Set(sf.seen.map((q) => (q.headers.authorization ?? '').replace(/^Bearer /, '')).filter((b) => b.length > 40))) NEEDLES.push(b.toLowerCase());
+    sf.answer = (r) => reply(422, JSON.stringify({ code: '000001', message: `echo ${r.headers.authorization} ${SF_PASS} ${SF_KEY}`, statementHandle: '01b0e8a5-0002-3c8a-0000-0001234a5b6e' }));
+    for (const [channel, payload] of [['connection:run', { ...sfAt, tableOrQuery: { query: 'select 1' } }], ['connection:explain', { ...sfAt, sql: 'select 1' }],
+      ['connection:listTables', sfAt], ['connection:describe', { ...sfAt, table: 'PUBLIC.ORDERS' }]] as const) {
+      const r = await call(srv.base, channel, payload);
+      ok(`snowflake: ${channel} — an error echoing the bearer, key and passphrase reaches the browser redacted`, r.body.ok === false && String(r.body.error).includes('***') && !leaks(JSON.stringify(r.body)), JSON.stringify(r.body).slice(0, 200));
+    }
     snowflake.setTransport(null);
+
+    // ── BigQuery (L1.3): a service-account key file ────────────────────────
+    // The key file goes in `token`. The connector runs for real (an assertion
+    // signed with the key, exchanged for an access token) over a fake Google.
+    // The key's PEM lines and id, every assertion and every access token join
+    // NEEDLES, so the dump, disk, reply and log greps below cover them as well.
+    const BQ_KEY = bqFake.makeKey();
+    NEEDLES.push(BQ_KEY.privateKeyId.toLowerCase(), ...BQ_KEY.pem.split('\n').filter((l) => l.length >= 40 && !l.startsWith('-----')).map((l) => l.toLowerCase()));
+    ok('grep: the BigQuery key\'s PEM lines are needles, in the key file too', leaks(BQ_KEY.pem) && leaks(BQ_KEY.json));
+    const minted = (c: bqFake.Call): bqFake.Reply => {
+      const token = `ya29.${randomBytes(18).toString('base64url')}`;
+      NEEDLES.push(token.toLowerCase(), bqFake.assertionOf(c).assertion.toLowerCase());
+      return { json: { access_token: token, expires_in: 3599 } };
+    };
+    const bqF = bqFake.fakeTransport(bqFake.happy((c) => {
+      if (bqFake.isToken(c)) return minted(c);
+      if (c.url.pathname.endsWith('/datasets')) return { json: bqFake.fixture('datasets.json') };
+      if (/\/datasets\/[^/]+\/tables$/.test(c.url.pathname)) return { json: bqFake.fixture('tables-sales.json') };
+      return null;
+    }));
+    bigquery.setTransport(bqF.transport);
+    const bqSaved = await call(srv.base, 'connection:testAndSave', { projectId: project, connectorId: 'bigquery', name: 'BigQuery', values: { project: bqFake.PROJECT }, secrets: { token: BQ_KEY.json } });
+    const bqId = bqSaved.body.connection?.id as string;
+    ok('bigquery: tested (a token minted with the key) and saved; the reply says token: true, nothing else', bqSaved.body.ok === true && bqF.calls.some(bqFake.isToken)
+      && JSON.stringify(bqSaved.body.connection?.secretSet) === JSON.stringify({ token: true }) && !('token' in bqSaved.body.connection.values), JSON.stringify(bqSaved.body).slice(0, 300));
+    ok('bigquery: the key file is in the encrypted store, under `token`', (await enc.get('default', 'connection.token', bqId)) === BQ_KEY.json);
+    const bqAt = { projectId: project, connId: bqId };
+    const bqOk = [await call(srv.base, 'connection:listTables', bqAt), await call(srv.base, 'connection:run', { ...bqAt, tableOrQuery: { query: 'select region from sales.orders' }, limit: 5 }),
+      await call(srv.base, 'connection:explain', { ...bqAt, sql: 'select region from sales.orders' })];
+    ok('bigquery: listTables, run and explain answer with the stored key', bqOk.every((r) => r.body.ok === true), JSON.stringify(bqOk.map((r) => r.body)).slice(0, 300));
+    const bqEst = await call(srv.base, 'connection:estimate', { ...bqAt, sql: 'select region from sales.orders' });
+    ok('bigquery: connection:estimate prices the statement with the stored key', bqEst.body.ok === true && bqEst.body.estimate?.label === '~1.2 GB', JSON.stringify(bqEst.body));
+    // A Google whose every error echoes the bearer, the request, the key file and its PEM.
+    bigquery.setTransport(bqFake.fakeTransport(bqFake.happy((c) => {
+      if (bqFake.isToken(c)) return minted(c);
+      const echo = `${c.headers.authorization ?? ''} ${c.body} ${BQ_KEY.json} ${BQ_KEY.pem}`;
+      return bqFake.isDry(c) ? { status: 400, json: { error: { code: 400, message: echo } } } : { status: 403, json: { error: { code: 403, message: echo, errors: [{ reason: 'accessDenied' }] } } };
+    })).transport);
+    for (const [channel, payload] of [['connection:run', { ...bqAt, tableOrQuery: { query: 'select 1' } }], ['connection:estimate', { ...bqAt, sql: 'select 1' }],
+      ['connection:explain', { ...bqAt, sql: 'select 1' }], ['connection:listTables', bqAt], ['connection:describe', { ...bqAt, table: 'sales.orders' }]] as const) {
+      const r = await call(srv.base, channel, payload);
+      ok(`bigquery: ${channel} — an error echoing the bearer, key file and PEM reaches the browser redacted`, r.body.ok === false && String(r.body.error).includes('***') && !leaks(JSON.stringify(r.body)), JSON.stringify(r.body).slice(0, 200));
+    }
+    bigquery.setTransport(null);
+    ok('bigquery: no request carried the key file or its PEM; access tokens only in the Authorization header',
+      bqF.calls.filter((c) => !bqFake.isToken(c)).every((c) => !leaks(`${c.url.href}${c.body}${JSON.stringify({ ...c.headers, authorization: '' })}`)));
+
+    // The catalog and the connection list, with both warehouse secrets stored.
+    const catalog = await call(srv.base, 'connectors:catalog');
+    const fieldOf = (id: string, key: string) => (catalog.body as { id: string; fields: { key: string; secret?: boolean }[] }[]).find((c) => c.id === id)?.fields.find((f) => f.key === key);
+    ok('catalog: both warehouses offered, their key fields flagged secret, no value anywhere', fieldOf('snowflake', 'token')?.secret === true && fieldOf('snowflake', 'password')?.secret === true
+      && fieldOf('bigquery', 'token')?.secret === true && !leaks(JSON.stringify(catalog.body)));
+    const listed = (await call(srv.base, 'connections:list', { projectId: project })).body as { id: string; secretSet: Record<string, boolean> }[];
+    ok('list: the warehouse connections carry secretSet booleans and no secret', JSON.stringify(listed.find((c) => c.id === bqId)?.secretSet) === JSON.stringify({ token: true }) && !leaks(JSON.stringify(listed)));
 
     // Every surface, while the secret is stored.
     const dumpTables = async (): Promise<string> => {
