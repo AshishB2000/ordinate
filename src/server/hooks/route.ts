@@ -11,7 +11,8 @@
 // a Live dataset, reset its cache — ./act.ts). The answers:
 //
 //   202 {status}   'queued' | 'already_running' (a refresh of it was running
-//                  here or on another pod; this call joined it)
+//                  here or on another pod; this call joined it) | 'cache_reset'
+//                  (a Live dataset: its cache was reset; nothing to fetch)
 //   404            unknown OR revoked token — one answer, one shape (./store.ts)
 //   429            called again inside REFRESH_HOOK_MIN_INTERVAL_SEC (Retry-After)
 //   403            the hook's creator can no longer refresh it: disabled,
@@ -85,7 +86,8 @@ async function fire(pool: Pool, hook: ClaimedHook, who: Identity): Promise<Fired
   const datasets = require('../../data/datasets') as typeof import('../../data/datasets');
   const meta = await datasets.getDatasetMeta(hook.projectId, hook.datasetId);
   if (!meta) return { code: 404, error: 'dataset not found', outcome: 'error' };
-  return { code: 202, status: await runHookAction(hook.projectId, hook.datasetId, meta) };
+  const status = await runHookAction(hook.projectId, hook.datasetId, meta);
+  return status === 'gone' ? { code: 404, error: 'dataset not found', outcome: 'error' } : { code: 202, status };
 }
 
 export function registerRefreshHookRoute(app: FastifyInstance, o: HookRouteOptions): void {
