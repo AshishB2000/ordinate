@@ -73,3 +73,39 @@ export async function runLiveBound(
     return { ok: false, error: safeError(err, ctx.secrets) };
   }
 }
+
+/**
+ * A free dry run's byte estimate for one compiled statement, where the
+ * connector offers one (BigQuery) — the schema sync's cost check before its
+ * sample (L2.5). The same context and guard as `runLiveBound`; no row is read
+ * and nothing is billed. Null when the connector cannot estimate.
+ */
+export async function estimateLive(
+  def: ConnectorDef,
+  values: Record<string, unknown>,
+  secrets: Record<string, string>,
+  sql: string,
+  params: LiveParam[],
+  opts: LiveRunOpts,
+): Promise<{ ok: true; bytes: number } | ConnectorError | null> {
+  const live = def.live;
+  if (!live || typeof live.estimate !== 'function') return null;
+  const ctx = {
+    values: values && typeof values === 'object' ? values : {},
+    secrets: secrets && typeof secrets === 'object' ? secrets : {},
+    rowLimit: 1,
+    timeoutMs: opts.timeoutMs,
+    costTag: 'live' as const,
+    maxBytes: maxBytesBilled(process.env.LIVE_MAX_BYTES_BILLED),
+    signal: opts.signal,
+  };
+  const refused = await guardHost(def, ctx);
+  if (refused) return { ok: false, error: refused };
+  try {
+    const res = await live.estimate(ctx, sql, params);
+    if (!res.ok) return { ok: false, error: safeError(res.error, ctx.secrets) };
+    return Number.isFinite(res.bytes) && res.bytes >= 0 ? { ok: true, bytes: res.bytes } : { ok: false, error: 'The estimate was not a byte count.' };
+  } catch (err: unknown) {
+    return { ok: false, error: safeError(err, ctx.secrets) };
+  }
+}

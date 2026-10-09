@@ -60,6 +60,10 @@ export interface DatasetSummary {
   // means nothing — the list says "Live" instead. Absent on an extract.
   mode?: 'live';
   maxCacheAgeSec?: number;
+  // A Live dataset's last schema sync, and the scheduler's last attempt at one
+  // (L2.5): the tick finds the daily syncs that are due from the list alone.
+  schemaSyncedAt?: string;
+  schemaSyncAttemptAt?: string;
 }
 
 /** The parent ids an origin names, in its own order. */
@@ -106,6 +110,8 @@ export function summarize(ds: Dataset): DatasetSummary {
   if (ds.mode === 'live' && ds.live) {
     summary.mode = 'live';
     summary.maxCacheAgeSec = ds.live.maxCacheAgeSec;
+    summary.schemaSyncedAt = ds.live.schemaSyncedAt;
+    if (ds.live.syncAttemptAt) summary.schemaSyncAttemptAt = ds.live.syncAttemptAt;
   }
   return summary;
 }

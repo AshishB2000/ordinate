@@ -84,7 +84,13 @@ export async function liveTarget(projectId: string, datasetId: string): Promise<
   const dialect = def.live.dialect;
   const source = liveSourceOf(origin, def, dialect);
   if (!source) return { ok: false, kind: 'refused', refusal: refuse('badSource'), dialect };
-  const columns: LiveColumn[] = meta.columns.map((c) => ({ name: c.name, type: c.type }));
+  // The warehouse's own type names, where a schema sync recorded them (L2.5): the
+  // dialects that cannot safe-cast a typed value (Snowflake, Redshift) read them.
+  const sourceTypes = new Map((meta.live.profile?.columns ?? []).map((p) => [p.name, p.sourceType]));
+  const columns: LiveColumn[] = meta.columns.map((c) => {
+    const sourceType = sourceTypes.get(c.name);
+    return sourceType ? { name: c.name, type: c.type, sourceType } : { name: c.name, type: c.type };
+  });
   let secrets: Promise<Record<string, string>> | null = null;
   return {
     ok: true,

@@ -22,6 +22,8 @@ import type { ParsedColumn } from './parse';
 import { isValidId } from '../app/ids';
 import { datasetFilePath, serialized } from './datasetRecord';
 import { liveRefusedMessage } from './liveMessages';
+import type { LiveProfile } from './liveProfile';
+import { sanitizeMissing, sanitizeProfile, sanitizeStamp } from './liveProfile';
 
 export type DatasetMode = 'extract' | 'live';
 
@@ -33,6 +35,12 @@ export interface LiveSettings {
   epoch: number;
   /** When the columns were last read from the warehouse — also part of the cache key. */
   schemaSyncedAt: string;
+  /** What the last schema sync learned from one sampled query (L2.5, ./liveProfile.ts). */
+  profile?: LiveProfile;
+  /** Columns the warehouse no longer has that a chart, KPI or metric still names (L2.5). */
+  missingColumns?: string[];
+  /** When the scheduler last started a daily sync — a failing warehouse is retried hourly, not every tick. */
+  syncAttemptAt?: string;
 }
 
 /** 5 minutes (open question 1 in the plan; Omni's 6 h leans staler). A constant, not an env var. */
@@ -151,7 +159,14 @@ export function sanitizeLive(data: { mode?: unknown; live?: unknown; updatedAt?:
   const o = data.live && typeof data.live === 'object' ? (data.live as Record<string, unknown>) : {};
   const synced = typeof o.schemaSyncedAt === 'string' && Number.isFinite(Date.parse(o.schemaSyncedAt)) ? o.schemaSyncedAt
     : typeof data.updatedAt === 'string' ? data.updatedAt : new Date(0).toISOString();
-  return { maxCacheAgeSec: sanitizeMaxCacheAge(o.maxCacheAgeSec), epoch: sanitizeEpoch(o.epoch), schemaSyncedAt: synced };
+  const live: LiveSettings = { maxCacheAgeSec: sanitizeMaxCacheAge(o.maxCacheAgeSec), epoch: sanitizeEpoch(o.epoch), schemaSyncedAt: synced };
+  const profile = sanitizeProfile(o.profile);
+  const missing = sanitizeMissing(o.missingColumns);
+  const attempt = sanitizeStamp(o.syncAttemptAt);
+  if (profile) live.profile = profile;
+  if (missing) live.missingColumns = missing;
+  if (attempt) live.syncAttemptAt = attempt;
+  return live;
 }
 
 /**
@@ -211,4 +226,47 @@ export function setMaxCacheAge(projectId: string, id: string, maxCacheAgeSec: nu
     raw.live = next;
     return next;
   }).then((r) => r || false);
+}
+
+/** What a schema sync writes (L2.5, src/engine/live/schemaSync.ts). */
+export interface SchemaSyncWrite {
+  columns: ParsedColumn[];
+  profile: LiveProfile;
+  missingColumns: string[];
+  syncedAt: string;
+  /** The columns themselves changed (added, removed, retyped): the dataset's `updatedAt` moves too. */
+  changed: boolean;
+}
+
+/**
+ * Land a schema sync: the warehouse's columns, the profile, the missing list
+ * and the new `schemaSyncedAt` — ONE read-modify-write of the record, so the
+ * columns and the cache key move together (a question compiled against the old
+ * columns can only ever be cached under the old key). False when the record is
+ * missing or no longer Live.
+ */
+export function writeSchemaSync(projectId: string, id: string, w: SchemaSyncWrite): Promise<boolean> {
+  if (!isValidId(projectId) || !isValidId(id)) return Promise.resolve(false);
+  return serialized(datasetFilePath(projectId, id), (raw) => {
+    const live = sanitizeLive(raw);
+    if (!live) return false;
+    const next: LiveSettings = { ...live, schemaSyncedAt: w.syncedAt, profile: sanitizeProfile(w.profile) ?? { columns: [] } };
+    if (w.missingColumns.length) next.missingColumns = w.missingColumns;
+    else delete next.missingColumns;
+    raw.columns = liveColumnsOf(w.columns);
+    raw.live = next;
+    if (w.changed) raw.updatedAt = w.syncedAt;
+    return true;
+  }).then((r) => r === true);
+}
+
+/** Stamp a scheduled sync's start (win or lose), so a failing warehouse is not asked again every tick. */
+export function stampSyncAttempt(projectId: string, id: string, at: string): Promise<boolean> {
+  if (!isValidId(projectId) || !isValidId(id)) return Promise.resolve(false);
+  return serialized(datasetFilePath(projectId, id), (raw) => {
+    const live = sanitizeLive(raw);
+    if (!live) return false;
+    raw.live = { ...live, syncAttemptAt: at };
+    return true;
+  }).then((r) => r === true);
 }

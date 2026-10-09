@@ -32,6 +32,7 @@ import { listConnections } from '../connectors/connections';
 import { vizDataFor } from './visuals';
 import { getConnector, isLiveCapable } from '../connectors';
 import { isLive } from '../data/liveDataset';
+import { liveColumnProfile } from './liveProfile';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -99,6 +100,9 @@ export function register(): void {
       const meta = await datasets.getDatasetMeta(p, d);
       const col = meta?.columns.find((c) => c.name === name);
       if (!meta || !col) return { ok: false, error: 'That column is not in this dataset.' };
+      // A profiled Live dataset: the panel from its sample (L2.5). Unprofiled, the paths below refuse it.
+      const live = liveColumnProfile(meta, name);
+      if (live) return live;
       // The distribution through `visual:data`'s own path: count of the column
       // itself, a number column in PROFILE_BINS buckets, a date by month.
       const encoding = sanitizeEncoding({

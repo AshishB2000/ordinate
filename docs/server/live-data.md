@@ -3,8 +3,8 @@
 This page is for the team that connects Ordinate to a cloud warehouse. It covers what each warehouse
 needs on its side (a read-only identity) and on yours (network egress). The plan behind it is
 [docs/live-data/00-plan.md](../live-data/00-plan.md). It also covers the [refresh URL](#refresh-url)
-that dbt or Airflow calls when new data has landed. Sections for cost limits and cache ages are
-added by the tasks that build them.
+that dbt or Airflow calls when new data has landed, and the [schema sync](#schema-sync) a Live
+dataset runs. Sections for cost limits and cache ages are added by the tasks that build them.
 
 ## Snowflake
 
@@ -320,6 +320,34 @@ script), so a refusal can only come from the token's scopes. With `BIGQUERY_SCRA
 also tries `CREATE TABLE … AS SELECT 1` there, and drops the table again if Google allowed it. Either
 answer is safe, because the dry-run gate and the IAM roles hold regardless. The answer decides
 whether the gate is the only read-only guarantee or defence in depth.
+
+## Schema sync
+
+A **Live** dataset keeps no rows, so Ordinate learns about its columns from the warehouse: when it is
+created (or switched to Live), when someone with edit rights clicks **Sync schema**, and once a day.
+A sync re-reads the columns from the catalog (or a one-row run of the defining query) and then sends
+**one sampled statement** for the table, labelled `ordinate=live` like every live query:
+
+- **Its size is the app's**: at most a million (row, column) cells — 10,000 rows, fewer for a table
+  wider than 100 columns, never under 1,000 — read through the engine's own sample clause where it
+  has one (Snowflake `SAMPLE (n ROWS)`, BigQuery `TABLESAMPLE SYSTEM` sized from the table's row
+  count, Databricks `TABLESAMPLE (n ROWS)`, ClickHouse `SAMPLE` when the table has a sampling key),
+  always under a `LIMIT`. Redshift has no sample clause: the `LIMIT` bounds it.
+- **BigQuery prices it first** (a free dry run). Past `LIVE_MAX_BYTES_BILLED`, or the connection's
+  lower "Max bytes billed per query", no sample is read; the columns still sync and the figures of the
+  last sample are kept.
+- **It counts like a live question**: the daily limit, the per-org concurrency cap and
+  `LIVE_QUERY_TIMEOUT_MS` (cancelled in the warehouse) all apply. One sync per dataset runs at a
+  time across pods; a daily sync that fails is retried after an hour.
+- **At most one second try**, `LIMIT` only, when the warehouse refused the sample clause (a view,
+  say) or a BigQuery block sample came back empty.
+
+It stores, per column, how much of the sample is filled, roughly how many distinct values it holds
+and — for a text column with few distinct values — up to 20 of the most frequent ones. Those values
+fill the filter pickers and help the Assistant spell a filter right; a column marked personal or
+financial never has its values shown to a model. A column that has gone from the warehouse leaves the
+dataset, and any chart, KPI or answer that still uses it says "column missing" until it is changed or
+the column comes back.
 
 ## Refresh URL
 

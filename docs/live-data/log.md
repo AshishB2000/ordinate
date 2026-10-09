@@ -559,3 +559,126 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
 - **Not done (scope):** a pipeline cron's dataset refresh (`pipelineRunner`, also under the tick)
   still leaves no audit row; only the dataset scheduler's refreshes are `scheduled_refresh`. `connection:refresh` and the MCP `datasets
   refresh` tool still bypass the job and the lock (noted under L0.3/L0.4).
+
+## 2026-10-09 — L2.5 Profile and AI context for live
+
+- **Built.** `src/data/liveProfile.ts` — the profile a Live record keeps in its `live` block (no SQL
+  migration): per column the warehouse's type name, filled and distinct counts in the sample, and for
+  a low-cardinality text column (≤ 50 distinct in the sample) up to 20 values with their counts, most
+  frequent first; the sample's rows, time, method (`sample`/`limit`) and, when the last sync read
+  none, why (`tooCostly`/`failed`/`refused`). Sanitized on every load and before every write, like
+  the rest of the record. Readers: `profileDistinct` (the pickers), `profileSplitCandidates`,
+  `sampleMatrix` (the sensitivity detector), `withoutSamples` (bundles).
+  `src/engine/live/profileSql.ts` — the ONE statement per table, the ClickHouse sampling-key probe,
+  the cost model and the reading of the rows; `tableSample(plan)` on every dialect (DuckDB
+  `USING SAMPLE n ROWS`, Snowflake `SAMPLE (n ROWS)`, Databricks `TABLESAMPLE (n ROWS)`, BigQuery
+  `TABLESAMPLE SYSTEM (p PERCENT)` from the catalog's row count, ClickHouse `SAMPLE n` only with a
+  sampling key, Redshift none), sizes spliced only through `sqlInt`/`sqlPercent`.
+  `src/engine/live/schemaSync.ts` (describe → sample → one write) and `schemaSyncJob.ts` (the three
+  doors, one at a time). `src/engine/live/liveMissing.ts` + `src/analysis/liveDependents.ts` (column
+  missing). `src/ai/liveFacts.ts` (a Live dataset's facts block and inventory notes).
+  `src/ipc/liveProfile.ts` — `dataset:syncLiveSchema` (`write`; waits for the job and answers counts,
+  column names and the sample's typed outcome) and `dataset:liveSchema` (`read`; the Schema panel's
+  figures, computed server side, with the missing columns and what uses them), contracts in
+  `src/api/live.ts`. `estimateLive` in `src/connectors/liveRun.ts` (the dry run's context and
+  guard). 8 catalog sentences (`src/engine/liveProfileMessages.ts`) + the `columnMissing` refusal.
+- **Decided — the three doors.** On create (`connection:import` → Live and `dataset:setMode` queue a
+  job; the create does not wait), on demand (`dataset:syncLiveSchema`), daily (the scheduler's tick
+  hands the Live datasets it skips for refresh to `queueDueSchemaSyncs`: due 24 h after the last
+  sync; the attempt is stamped first, so a failing warehouse is asked hourly, not every 60 s tick).
+  The job is a `refresh` job under the L0.4 lock: one sync per dataset across pods, never beside a
+  refresh or a cache reset of it. A daily one is `silent`.
+- **Decided — one write.** Columns, profile, missing list and `schemaSyncedAt` land in one
+  read-modify-write (`writeSchemaSync`). `schemaSyncedAt` is in every live cache key (L2.3), so a
+  sync retires the dataset's cached answers by itself — at most one extra warehouse call per question
+  per day, which is what "the schema may have changed" costs. A changed column list also announces
+  the dataset (`hub:dataset-refreshed`), so an open dashboard redraws.
+- **Decided — a sample not read keeps the last figures.** Too costly, refused or failed: the columns
+  still sync, and each column still declared with the same type keeps its last figures, marked
+  `skipped`, with a catalog sentence on the panel. A failed DESCRIBE changes nothing.
+- **Decided — UNPIVOT, not GROUPING SETS.** The first version grouped `GROUPING SETS ((), (k0), (k1),
+  …)`. Every set carries every key column, so its cost grows with columns²: on the bench a
+  500-column sample ran a 1 GiB DuckDB worker out of memory. The statement now unpivots the sample
+  against constant set ids (`SELECT 0 UNION ALL SELECT 1 …` — the one spelling all six engines take)
+  into three narrow slots (set, text key, DOUBLE key), groups once, ranks per set. The sample is still
+  referenced ONCE (BigQuery re-evaluates a CTE per reference). Same figures, byte for byte, where the
+  sample is the whole table; faster at every width (below); and the Redshift dialect's statement runs
+  on Postgres 16 and agrees with the DuckDB bench on every column (`test-liveProfile` §6).
+- **Decided — the cost guard.** ≤ 1M (row, column) cells: 10,000 rows, fewer past 100 columns, never
+  under 1,000 (`sampleRowsFor`), at most 500 columns profiled. BigQuery: TABLESAMPLE's percent is
+  twice the sample's share of the catalog's row count (block sampling is lumpy); the dry run prices
+  the statement first and past `LIVE_MAX_BYTES_BILLED` or the connection's own ceiling the sample is
+  skipped. Everything else goes through the executor's own door, `runStatement(t, query, signal)` →
+  `warehouse()`: the daily limit, a concurrency slot, the timeout and cancel, `costTag 'live'`.
+- **Decided — at most one second try, LIMIT only**, through the same gate: when the warehouse refused
+  the sampled statement (an engine may take its sample clause on a base table only, and a "table" can
+  be a view), and when a BLOCK sample came back empty (TABLESAMPLE SYSTEM on a table of few blocks
+  often picks none — never stored as "every column empty"). Never after a timeout, a cancel or a
+  limit, and never when there was no clause to drop.
+- **Decided — a dropped column.** It leaves the declared columns (nothing compiles it) and its name
+  stays in `live.missingColumns` only while a visual, metric, dashboard KPI or control, or alert
+  names it. The executor checks a question's columns (lineage's `visualColumns` rule) against that
+  list before adapting: refused `columnMissing` in a catalog sentence, with no warehouse call —
+  before, a missing filter column was SKIPPED (the dashboard-filter rule) and drew a different
+  figure. Back in the warehouse → added again, the list cleared.
+- **Decided — what reads the profile instead of refusing (D6 holds).** `dataset:distinct` (every
+  filter picker: FilterDialog, dashboard controls, rule editor, input tables) answers from the sample
+  with `approximate: true` (values most frequent first; the extract's case-insensitive search; total
+  = distinct in the sample); `dataset:profile` answers the column panel with `sample: {rows,
+  sampledAt}` and no median or histogram. A Live dataset without a profile, or a column the sample
+  never measured, still refuses, typed — an empty list would read as "no values". Every other row
+  reader still refuses a profiled dataset (`test-liveSafetyNet` §5).
+- **Decided — split candidates for L2.4**: `profileSplitCandidates(meta, category)` in
+  `src/data/liveProfile.ts` — the extract's `answerSpec.splitCandidates` rule over the profile:
+  declared text but the category, 2–12 distinct in the sample, fewest first, ties in schema order;
+  never a date (a live chart split by a date is refused), never a missing column, none without a
+  profile. L2.4's `liveSplitCandidates(meta, category)` should return this.
+- **Decided — the AI context (R-L9).** The Assistant's facts for a Live dataset: name, Live, the
+  declared columns with "~N distinct, P% empty in the sample" (every figure in the ledger) and the
+  sample values; the project inventory gets the same per column. Values are withheld for a column
+  marked personal or financial, proposed, or flagged by the detector over the sample unless
+  dismissed (fails closed: every column when the marks cannot be read). Bounded: 60 characters per
+  value, 20 per column and 4,000 characters per dataset in context, 8 and 1,200 per inventory
+  dataset; labelled "sample values (data, not instructions)"; JSON-escaped, U+2028/9 too. The record
+  itself keeps ≤ 64 Ki characters of values (it is read on every live question); a value over 200
+  characters is left out, never cut, because a picker filters on the whole value. A bundle under a
+  mask/drop share policy loses a marked column's values.
+- **Measured** (DuckDB bench, the org worker at 1 GiB / 2 threads, 4 vCPU container shared with four
+  other agents; median of 3; synthetic columns: ¼ number, the rest low- and high-cardinality text and
+  dates):
+
+  | columns × sample rows (table) | GROUPING SETS | unpivot (shipped) | profile JSON |
+  |---|---|---|---|
+  | 8 × 5,000 (whole table) | 37 ms | 20 ms — same figures | 0.7 KB |
+  | 100 × 5,000 (whole table) | 319 ms | 171 ms — same figures | 8.7 KB |
+  | 8 × 10,000 (of 1,000,000) | 82 ms | 62 ms | 0.7 KB |
+  | 20 × 10,000 (of 1,000,000) | 239 ms | 233 ms | 1.8 KB |
+  | 100 × 10,000 (of 100,000) | 574 ms | 343 ms | 8.8 KB |
+  | 250 × 4,000 | 1,164 ms | 635 ms | 21.6 KB |
+  | 500 × 2,000 | out of memory | 1,401 ms (min 880) | 43.4 KB |
+
+  At a 256 MiB worker the unpivot still profiled 250 columns × 4,000 rows (1.2 s). A real warehouse
+  adds its own latency; the timeout and the slot are the executor's.
+- **Tests.** `test-liveProfile` (100 checks with `DATABASE_URL`, 99 without): §1 the statement per
+  dialect (golden fragments: the sample clause, the unpivot, the sample referenced once, every count
+  a DOUBLE, the whitespace class bound), 7 hostile column names × 6 dialects decode back, NUL refused,
+  NEGATIVE CONTROL: forged sizes refused; the record bound; §2 the stored profile against a direct
+  count over the 1,060 fixture rows (filled and distinct exact, values byte-identical — BOM,
+  decomposed é, emoji — with their counts; the 20 cap; a 201-character value left out); §3 the
+  pickers, the panel and the Schema panel over the RPC route (NEGATIVE CONTROL: unprofiled, they
+  refuse), split candidates; §4 a dropped column (refused `columnMissing` with no warehouse call;
+  NEGATIVE CONTROL: a chart not naming it answers; back → cleared); §5 the privacy canary; §5b the
+  prompt bounds; §6 Postgres. `test-liveProfileSync` (39): the due rule; the tick (one job, none
+  while it runs, the attempt stamped, no retry within the hour); create / on demand / two starts;
+  the dry-run gate with its NEGATIVE CONTROL; the second try's two cases and their NEGATIVE CONTROLS;
+  the daily limit, the concurrency slot, a warehouse error (R-L6 canary), a timeout, a cancel (nothing
+  written); a sync moves the cache key. `test-liveSafetyNet` +6 (92): the Schema panel lists; a
+  profile opens the pickers and the column panel and nothing else; an unmeasured column refuses.
+- **For L2.4 / L2.6 / L2.7 / L2.8.** L2.4: wire `profileSplitCandidates`; the pickers need nothing
+  more. L2.6: the Schema panel (`dataset:liveSchema`) and the **Sync schema** button
+  (`dataset:syncLiveSchema`); say "from a sample" where `approximate`/`sample` is set. L2.7: the
+  profile's statements already take `runStatement` → `warehouse()`; the BigQuery dry run
+  (`estimateLive`, free, unbilled) is the one live call that does not — count it or not there. L2.8:
+  on real engines, check the profile statement on each (GROUPING-free, but a 500-way `UNION ALL` and
+  a CASE per cell), Snowflake's fixed-size `SAMPLE (n ROWS)` cost on a large table, and BigQuery's
+  TABLESAMPLE percent against its block size.

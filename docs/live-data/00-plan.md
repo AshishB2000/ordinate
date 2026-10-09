@@ -502,6 +502,8 @@ These go into `docs/phase-7-web/threat-model.md` with the PR that introduces eac
 | R-L6 | Warehouse error text leaking SQL or names to a browser | Errors pass `safeError` and the origin redaction; no SQL text reaches a browser (`dataset:source` rule). |
 | R-L7 | A refresh URL used for more than a refresh | A capability for one dataset and one action; sha256-stored, shown once, revocable, audited, rate-limited. |
 | R-L8 | A wrong number that looks right (silent zero, an unrouted reader) | `getDataset` refuses live (D6); unsupported features refuse; parity tests; `live:*` outcomes on `/metrics`. |
+| R-L9 | Warehouse rows reaching a model through the profile's sample values (L2.5): an injected instruction, or personal data sent to a model provider | Values withheld for marked, proposed and detected columns (fails closed); bounded per value, per column and per dataset; JSON-quoted and labelled as data; stripped from a bundle under the share policy. |
+| R-L10 | The schema sync's sampling query run up the bill (L2.5) | One statement per sync, ≤ 1M (row, column) cells, the engine's sample clause; BigQuery priced first against `LIVE_MAX_BYTES_BILLED`; the executor's daily limit, slots and timeout; one sync per dataset across pods; daily, retried hourly. |
 
 Unchanged and stated in the UI: a live query runs as the **connection's** warehouse identity, like
 an extract does today. Project grants decide who may open the dataset. Per-viewer identity is L4.

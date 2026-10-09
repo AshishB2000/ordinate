@@ -17,6 +17,9 @@
 //   live-fake       no host field — the executor's everyday path
 //   live-fake-net   the same with a `host` field, so the SSRF guard resolves,
 //                   checks and pins it before runBound sees the context
+//   live-fake-priced  the same with `live.estimate`, answering `fake.bytes` —
+//                   a warehouse that prices a statement first, as BigQuery's
+//                   dry run does (the schema sync's cost gate, L2.5)
 //
 // The spy: `fake.calls` records every runBound (statement, parameters, signal,
 // the context's bounds); `fake.hook` may hold, fail or slow a call, as a real
@@ -31,6 +34,7 @@ const registry: typeof import('../src/connectors/index') = require('../src/conne
 
 export const LIVE_FAKE_ID = 'live-fake';
 export const LIVE_FAKE_NET_ID = 'live-fake-net';
+export const LIVE_FAKE_PRICED_ID = 'live-fake-priced';
 
 /** The e2e seed's built-in warehouse table: `values.fixture = 'orders'` creates it on first use. */
 export const ORDERS_TABLE = 'live_fake_orders';
@@ -62,7 +66,15 @@ export interface FakeCall {
 /** A test's say over one call: return a reply to answer with it, or undefined to run the statement. */
 export type FakeHook = (call: FakeCall, ctx: ConnectorContext) => Promise<ConnectorRows | ConnectorError | undefined>;
 
-export const fake: { calls: FakeCall[]; hook: FakeHook | null } = { calls: [], hook: null };
+export const fake: {
+  calls: FakeCall[];
+  hook: FakeHook | null;
+  /** live-fake-priced: every statement it was asked to price, and the bytes it answers (or an error). */
+  estimates: { sql: string; params: LiveParam[]; maxBytes: number | undefined }[];
+  bytes: number | ConnectorError;
+  /** The catalog's row estimate `describeTable` answers, as BigQuery's and Snowflake's do (L2.5's sample percent). */
+  rowEstimate: number | undefined;
+} = { calls: [], hook: null, estimates: [], bytes: 0, rowEstimate: undefined };
 
 const CANCELLED: ConnectorError = { ok: false, error: 'Cancelled' };
 const TABLE_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -119,7 +131,13 @@ async function describe(sql: string): Promise<Map<string, string>> {
   return new Map(rows.map((r) => [String(r.column_name), String(r.column_type)]));
 }
 
-function def(id: string, label: string, withHost: boolean): ConnectorDef {
+/** live-fake-priced's dry run: records the statement, answers `fake.bytes`. Reads nothing. */
+async function estimate(ctx: ConnectorContext, sql: string, params: LiveParam[]): Promise<{ ok: true; bytes: number } | ConnectorError> {
+  fake.estimates.push({ sql, params, maxBytes: ctx.maxBytes });
+  return typeof fake.bytes === 'number' ? { ok: true, bytes: fake.bytes } : fake.bytes;
+}
+
+function def(id: string, label: string, withHost: boolean, priced = false): ConnectorDef {
   return {
     id,
     label,
@@ -150,9 +168,10 @@ function def(id: string, label: string, withHost: boolean): ConnectorDef {
       if (!TABLE_RE.test(table)) return { ok: false, error: 'Invalid table name' };
       await ensureFixture(ctx.values);
       const types = await describe(`"${table}"`);
-      return { ok: true, columns: [...types].map(([name, type]) => ({ name, type })) };
+      const columns = [...types].map(([name, type]) => ({ name, type }));
+      return fake.rowEstimate === undefined ? { ok: true, columns } : { ok: true, columns, rowEstimate: fake.rowEstimate };
     },
-    live: { dialect: 'duckdb', runBound },
+    live: priced ? { dialect: 'duckdb', runBound, estimate } : { dialect: 'duckdb', runBound },
   };
 }
 
@@ -163,6 +182,7 @@ export function registerLiveFake(): void {
   if (registered) return;
   registry.registerTestConnector(def(LIVE_FAKE_ID, 'Fake warehouse (tests)', false));
   registry.registerTestConnector(def(LIVE_FAKE_NET_ID, 'Fake networked warehouse (tests)', true));
+  registry.registerTestConnector(def(LIVE_FAKE_PRICED_ID, 'Fake priced warehouse (tests)', false, true));
   registered = true;
 }
 
@@ -170,6 +190,9 @@ export function registerLiveFake(): void {
 export function resetFake(): void {
   fake.calls.length = 0;
   fake.hook = null;
+  fake.estimates.length = 0;
+  fake.bytes = 0;
+  fake.rowEstimate = undefined;
 }
 
 /**
