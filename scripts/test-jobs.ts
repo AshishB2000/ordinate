@@ -1,6 +1,6 @@
 // Background jobs (src/app/jobs.ts): the state machine, the concurrency rules
-// (three overall, one per dataset), cancel in both states, and `interrupted`
-// after a crash.
+// (three overall, one per dataset), cancel in both states, `interrupted`
+// after a crash, and a queued job running as whoever SUBMITTED it.
 //
 //   npm run build:ts && node scripts/test-jobs.js
 
@@ -9,6 +9,7 @@ import { ok, finish } from './selfcheck';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { AsyncLocalStorage } from 'async_hooks';
 import * as jobs from '../src/app/jobs';
 
 const tick = () => new Promise((r) => setTimeout(r, 5));
@@ -85,6 +86,29 @@ void (async () => {
   ok('dataset: the waiting job starts once the first finishes', jobs.get(r2.id)?.state === 'running');
   g2.release(); g3.release();
   await Promise.all([r2.done, r3.done]);
+
+  // ── A queued job runs in its SUBMITTER's async context ─────────────────────
+  // It is started by whichever job finishes first — inside THAT job's context.
+  // On the server the context is the org: a refresh queued by org B behind
+  // three of org A's ran as org A (found by L0.3's queued refreshes).
+  jobs.reset();
+  const who = new AsyncLocalStorage<string>();
+  const ga = [gate(), gate(), gate()];
+  const asA = ga.map((gg) => who.run('org-a', () => jobs.submit({ kind: 'report', label: 'A', run: async () => gg.p })));
+  const sawB: Array<string | undefined> = [];
+  const asB = who.run('org-b', () => jobs.submit({ kind: 'report', label: 'B', run: async () => { sawB.push(who.getStore()); } }));
+  const sawNone: Array<string | undefined> = [];
+  const asNone = jobs.submit({ kind: 'report', label: 'none', run: async () => { sawNone.push(who.getStore()); } });
+  await tick();
+  ok('context: B and the context-free job are queued behind A\'s three', jobs.get(asB.id)?.state === 'queued' && jobs.get(asNone.id)?.state === 'queued');
+  ga[0].release();
+  await asB.done;
+  ok('context: a queued job started by org A\'s finish runs as org B, who submitted it', sawB.join() === 'org-b', sawB.join());
+  ga[1].release();
+  await asNone.done;
+  ok('context (control): one submitted outside any context sees none — not the finisher\'s', sawNone.length === 1 && sawNone[0] === undefined, String(sawNone[0]));
+  ga[2].release();
+  await Promise.all(asA.map((a) => a.done));
 
   // ── Cancel ─────────────────────────────────────────────────────────────────
   jobs.reset();

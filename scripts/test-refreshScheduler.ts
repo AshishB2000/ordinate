@@ -19,6 +19,10 @@
 //     forever; treating it as never lets it self-heal on the next tick.
 //   - NO ORIGIN must never be due. There is nothing to re-fetch, so a schedule
 //     there is a retry loop against nothing.
+//   - MOST OVERDUE FIRST (L0.3). The order is the order the jobs runner starts
+//     them in; when more are due than it runs at once, the one that has waited
+//     longest past its time must not be the one left waiting.
+//   - EVERY 5 AND 15 MINUTES behave like any other interval at the boundary.
 //
 //   npm run build:ts && node scripts/test-refreshScheduler.js
 
@@ -30,12 +34,13 @@ import { ok, failureCount } from './selfcheck';
 const sched: typeof import('../src/app/refreshScheduler') = require('../src/app/refreshScheduler');
 const { dueDatasets } = sched;
 
-const HOUR = 60 * 60 * 1000;
+const MIN = 60 * 1000;
+const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 const WEEK = 7 * DAY;
 const NOW = Date.parse('2026-08-08T12:00:00.000Z');
 
-type Every = 'hourly' | 'daily' | 'weekly';
+type Every = 'hourly' | 'daily' | 'weekly' | '5min' | '15min';
 function meta(id: string, every?: Every, lastAutoAt?: string | null, originKind: any = 'file'): any {
   const m: any = { projectId: 'p', id, name: id, originKind };
   if (every) {
@@ -65,13 +70,13 @@ ok('a schedule on a dataset with NO ORIGIN never fires',
 ok('a schedule that has never run is due at once',
   ids(dueDatasets([meta('fresh', 'hourly')], NOW)) === 'fresh');
 ok('…for every interval, not just the short one',
-  dueDatasets([meta('h', 'hourly'), meta('d', 'daily'), meta('w', 'weekly')], NOW).length === 3);
+  dueDatasets([meta('h', 'hourly'), meta('d', 'daily'), meta('w', 'weekly'), meta('5', '5min'), meta('15', '15min')], NOW).length === 5);
 ok('an unparseable lastAutoAt counts as never run, so the schedule self-heals',
   ids(dueDatasets([meta('corrupt', 'hourly', 'not-a-date')], NOW)) === 'corrupt');
 
 // ── The interval boundary, per interval ──────────────────────────────────────
 
-for (const [every, span] of [['hourly', HOUR], ['daily', DAY], ['weekly', WEEK]] as const) {
+for (const [every, span] of [['5min', 5 * MIN], ['15min', 15 * MIN], ['hourly', HOUR], ['daily', DAY], ['weekly', WEEK]] as const) {
   ok(`${every}: just run is NOT due`, dueDatasets([meta('x', every, at(1000))], NOW).length === 0);
   ok(`${every}: one second short of the interval is NOT due`,
     dueDatasets([meta('x', every, at(span - 1000))], NOW).length === 0);
@@ -85,18 +90,33 @@ for (const [every, span] of [['hourly', HOUR], ['daily', DAY], ['weekly', WEEK]]
 ok('intervals are independent of each other',
   ids(dueDatasets([meta('h', 'hourly', at(25 * HOUR)), meta('w', 'weekly', at(25 * HOUR))], NOW)) === 'h');
 
-// ── Order and selectivity ────────────────────────────────────────────────────
+// A 5-minute and a 15-minute schedule both last run 10 minutes ago.
+ok('5 and 15 minutes are distinct intervals',
+  ids(dueDatasets([meta('5', '5min', at(10 * MIN)), meta('15', '15min', at(10 * MIN))], NOW)) === '5');
+
+// ── Order (most overdue first) and selectivity ──────────────────────────────
 
 const mixed = [
-  meta('a-due', 'hourly', at(2 * HOUR)),
+  meta('a-due', 'hourly', at(2 * HOUR)), // 1 h past due
   meta('b-off'),
-  meta('c-due', 'daily'),
+  meta('c-due', 'daily'), // never run: infinitely overdue
   meta('d-recent', 'daily', at(HOUR)),
-  meta('e-due', 'weekly', at(8 * DAY)),
+  meta('e-due', 'weekly', at(8 * DAY)), // 1 day past due
+  meta('f-due', '5min', at(7 * MIN)), // 2 min past due
 ];
-ok('only the due ones come back, in input order', ids(dueDatasets(mixed, NOW)) === 'a-due,c-due,e-due',
+ok('only the due ones come back, MOST OVERDUE FIRST (never run leads)', ids(dueDatasets(mixed, NOW)) === 'c-due,e-due,a-due,f-due',
   ids(dueDatasets(mixed, NOW)));
-ok('…and the input is not mutated', mixed.length === 5);
+ok('…and the input is not mutated (order included)', mixed.length === 6 && ids(mixed) === 'a-due,b-off,c-due,d-recent,e-due,f-due');
+ok('lateness is TIME past due, not a share of the interval: a 15-min schedule 20 min late beats a 5-min one 10 min late',
+  ids(dueDatasets([meta('five', '5min', at(15 * MIN)), meta('fifteen', '15min', at(35 * MIN))], NOW)) === 'fifteen,five');
+ok('ties keep input order — several never-run schedules, a corrupt stamp among them',
+  ids(dueDatasets([meta('n1', '5min'), meta('n2', 'weekly', 'not-a-date'), meta('n3', 'hourly')], NOW)) === 'n1,n2,n3');
+ok('…and equal lateness keeps input order too',
+  ids(dueDatasets([meta('x', '5min', at(6 * MIN)), meta('y', '15min', at(16 * MIN))], NOW)) === 'x,y');
+// Negative control for the ordering itself: the same set given in the
+// opposite order comes back in the SAME order, so the sort is doing the work.
+ok('negative control: reversed input, same most-overdue order', ids(dueDatasets([...mixed].reverse(), NOW)) === 'c-due,e-due,a-due,f-due',
+  ids(dueDatasets([...mixed].reverse(), NOW)));
 
 // The catch-up story, which is the one users will ask about: the app was closed
 // for three days, so on the first tick after launch everything overdue fires.

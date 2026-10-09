@@ -87,7 +87,7 @@ export const prepare = {
     input: z.strictObject({
       projectId: Uuid,
       nodeId: NodeId,
-      every: z.enum(['off', 'hourly', 'daily', 'weekly']).optional(),
+      every: z.enum(['off', 'hourly', 'daily', 'weekly', '5min', '15min']).optional(),
       cadence: z.enum(['off', 'daily', 'weekly', 'monthly']).optional(),
       at: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     }),

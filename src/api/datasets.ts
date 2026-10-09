@@ -100,7 +100,7 @@ export const datasets = {
       projectId: Uuid,
       datasetId: Uuid,
       columns: z.array(z.strictObject({ name: z.string().min(1).max(512), type: z.enum(['text', 'number', 'date']) })).max(5_000).optional(),
-      autoRefresh: z.enum(['hourly', 'daily', 'weekly', 'off']).nullable().optional(),
+      autoRefresh: z.enum(['hourly', 'daily', 'weekly', 'off', '5min', '15min']).nullable().optional(),
       watch: z.boolean().optional(),
     }),
     project: byProjectId,

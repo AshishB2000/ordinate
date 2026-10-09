@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderApp } from '../../test-utils';
-import { freshness, fromControl, pctText } from './format';
+import { everyWord, freshness, fromControl, pctText, SCHEDULES } from './format';
+import { cadenceOptions } from './cadence';
 import { laneLayout } from './RelationshipsTab';
 import { columnsFor, ruleWords } from './ruleWords';
 import { normTag } from './tags';
@@ -69,6 +70,37 @@ describe('Data list', () => {
     expect(within(row).getByRole('button', { name: 'Watch' })).toBeTruthy();
   }, 30_000); // the first test pays for the lazy route chunk's transform
 
+  it('a 5-minute schedule: its words, the server\'s "Behind schedule", and the fast options only with incremental refresh', async () => {
+    const LIVE = { ...ORDERS, id: '2b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b', name: 'Live orders', lastRefreshStatus: 'ok', lastRefreshError: null, qualityFailing: undefined,
+      originKind: 'connection', autoRefresh: { every: '5min' }, incrementalOn: true, behindSchedule: true };
+    const PLAIN = { ...ORDERS, id: '3b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b', name: 'Plain', lastRefreshStatus: 'ok', lastRefreshError: null, qualityFailing: undefined,
+      originKind: 'connection', autoRefresh: { every: 'hourly' } };
+    serve({
+      'projects:list': { body: [{ id: P, name: 'Sales', createdAt: '', updatedAt: '' }] },
+      'dataset:list': { body: [LIVE, PLAIN] },
+      'catalog:tags': { body: { ok: true, tags: [], refs: {} } },
+    });
+    renderApp(`/data/${P}`);
+    const live = (await screen.findByRole('link', { name: 'Live orders' }, { timeout: LAZY })).closest('tr')!;
+    expect(within(live).getByText(/^Refreshes every 5 minutes · last/)).toBeTruthy();
+    expect(within(live).getByText('Behind schedule')).toBeTruthy();
+    const plain = screen.getByRole('link', { name: 'Plain' }).closest('tr')!;
+    expect(within(plain).queryByText('Behind schedule')).toBeNull();
+
+    // One read of the open list: the popover hides itself once jsdom's layout says its anchor is detached.
+    fireEvent.click(within(plain).getByRole('combobox', { name: 'Auto-refresh Plain' }));
+    const opts = await screen.findAllByRole('option');
+    const state = (label: RegExp) => opts.filter((o) => label.test(o.textContent ?? '')).map((o) => `${o.textContent}:${o.getAttribute('aria-disabled') ?? 'on'}`);
+    expect(state(/^Every 5 minutes/)).toEqual(['Every 5 minutes — needs incremental refresh:true']);
+    expect(state(/^Every 15 minutes/)).toEqual(['Every 15 minutes — needs incremental refresh:true']);
+    expect(state(/^Hourly/)).toEqual(['Hourly:on']);
+    fireEvent.keyDown(within(plain).getByRole('combobox', { name: 'Auto-refresh Plain' }), { key: 'Escape' });
+
+    fireEvent.click(within(live).getByRole('combobox', { name: 'Auto-refresh Live orders' }));
+    const liveOpts = await screen.findAllByRole('option');
+    expect(liveOpts.filter((o) => /^Every (5|15) minutes$/.test(o.textContent ?? '') && !o.getAttribute('aria-disabled'))).toHaveLength(2);
+  }, 30_000);
+
   it('designs the empty state, and says so once (no header Import beside it)', async () => {
     serve({ 'projects:list': { body: [] }, 'dataset:list': { body: [] }, 'catalog:tags': { body: { ok: true, tags: [], refs: {} } } });
     renderApp(`/data/${P}`);
@@ -103,6 +135,18 @@ describe('Data helpers', () => {
   it('lays a lookup out one lane right of what reads it; the unrelated last', () => {
     const rel = (from: string, to: string) => ({ id: `${from}${to}`, from: { datasetId: from, column: 'k' }, to: { datasetId: to, column: 'k' } }) as Relationship;
     expect(laneLayout(['f', 'r', 'c', 'x'], [rel('f', 'r'), rel('r', 'c')])).toEqual({ lanes: [['f'], ['r'], ['c']], loose: ['x'] });
+  });
+
+  it('words a cadence and greys the fast ones without incremental refresh', () => {
+    expect(everyWord('5min')).toBe('every 5 minutes');
+    expect(everyWord('15min')).toBe('every 15 minutes');
+    expect(everyWord('daily')).toBe('daily');
+    expect(freshness({ updatedAt: '2026-10-01T10:00:00Z', sourceKind: 'json', originKind: 'connection', autoRefresh: { every: '15min' } })).toMatch(/^Refreshes every 15 minutes · last /);
+    const off = cadenceOptions(SCHEDULES, false);
+    expect(off.filter((o) => o.disabled).map((o) => o.value)).toEqual(['5min', '15min']);
+    expect(off.find((o) => o.value === '5min')?.label).toBe('Every 5 minutes — needs incremental refresh');
+    expect(cadenceOptions(SCHEDULES, true).some((o) => o.disabled)).toBe(false);
+    expect(cadenceOptions(SCHEDULES, true).map((o) => o.value)).toEqual(['off', '5min', '15min', 'hourly', 'daily', 'weekly']);
   });
 
   it('formats without computing', () => {

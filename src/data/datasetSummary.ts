@@ -10,6 +10,7 @@ import { qualityFailingCount } from '../analysis/qualityRules';
 import { stepRefIds } from './stepTypes';
 import { redactOriginText } from './datasetOrigin';
 import { serverDataDir } from '../server/context';
+import { behindSchedule } from './refreshCadence';
 
 export interface DatasetSummary {
   id: string;
@@ -49,6 +50,12 @@ export interface DatasetSummary {
   // FAIL-severity quality rules failing in the latest run — the red dot. Absent
   // when the dataset has never been checked.
   qualityFailing?: number;
+  // Incremental refresh is on — what lets a schedule run every 5 or 15 minutes
+  // (src/data/refreshCadence.ts). The flag only, never the cursor or the mark.
+  incrementalOn?: true;
+  // The last scheduled run took longer than its own interval. Computed here,
+  // on the server; the list only draws it.
+  behindSchedule?: true;
 }
 
 /** The parent ids an origin names, in its own order. */
@@ -88,6 +95,8 @@ export function summarize(ds: Dataset): DatasetSummary {
     summary.lastRefreshError = serverDataDir() ? redactOriginText(ds.lastRefreshError, ds.origin) : ds.lastRefreshError;
   }
   if (ds.autoRefresh) summary.autoRefresh = ds.autoRefresh;
+  if (ds.incremental?.enabled) summary.incrementalOn = true;
+  if (behindSchedule(ds.autoRefresh)) summary.behindSchedule = true;
   const qualityFailing = qualityFailingCount(ds.quality);
   if (qualityFailing !== undefined) summary.qualityFailing = qualityFailing;
   return summary;

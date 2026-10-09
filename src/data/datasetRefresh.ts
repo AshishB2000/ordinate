@@ -33,7 +33,7 @@ import { runForDataset } from '../engine/sqlDatasets';
 import { scanDataset } from '../app/privacyStore';
 import { getNotebook } from '../analysis/notebook/store';
 import { cellTable } from '../analysis/notebook/run';
-import { serverDataDir } from '../server/context';
+import { orgKey, serverDataDir } from '../server/context';
 
 /**
  * Row ceiling for a refreshed table. Deliberately the same 1,000,000 the import
@@ -56,6 +56,8 @@ export interface RefreshOk {
 export interface RefreshErr {
   ok: false;
   error: string;
+  /** Nothing ran: a refresh of this dataset was already running on another pod (src/data/refreshJob.ts, L0.4). */
+  alreadyRunning?: true;
 }
 export type RefreshResult = RefreshOk | RefreshErr;
 
@@ -99,7 +101,15 @@ export async function refreshDataset(
     return fail(`"${meta.name}" is nested more than ${MAX_COMBINE_DEPTH} combines deep, so it was left unchanged.`);
   }
   walk.visited.add(id);
-  return serialized(projectId + '/' + id, () => refreshLocked(projectId, id, meta.name, origin, walk));
+  return serialized(flightKey(projectId, id), () => refreshLocked(projectId, id, meta.name, origin, walk));
+}
+
+/** Per org: ids repeat across orgs after an import, and one org's refresh must not read as another's. */
+const flightKey = (projectId: string, id: string): string => orgKey(projectId + '/' + id);
+
+/** Is a refresh of this dataset running (or chained) in THIS process right now? */
+export function refreshInFlight(projectId: string, id: string): boolean {
+  return inFlight.has(flightKey(projectId, id));
 }
 
 /**

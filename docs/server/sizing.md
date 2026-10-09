@@ -12,7 +12,7 @@ as ratios and orders of magnitude, not as guarantees for your hardware.
 | Rows per dataset | 1,000,000 | `CLAUDE.md`, enforced on import |
 | Upload size | `MAX_UPLOAD_MB`, 200 MB by default | [configuration.md](configuration.md#limits-and-egress) |
 | One RPC | `RPC_TIMEOUT_SECONDS` (60 s); one DuckDB query, `DUCKDB_QUERY_TIMEOUT_SECONDS` (60 s) | same |
-| Postgres connections per pod | 10 (fixed pool, `src/server/db/pool.ts`) | size `max_connections` ≥ 10 × pods + the migration Job + your sessions |
+| Postgres connections per pod | 10 (fixed pool, `src/server/db/pool.ts`) | size `max_connections` ≥ 10 × pods + the migration Job + your sessions. A running dataset refresh holds one of the ten for its length — the lock that keeps two pods from refreshing one dataset at once — at most 3 per pod (the job limit) |
 | Compute threads per pod | 3 (`src/engine/computePool.ts`) | each borrows its org's DuckDB worker |
 | Regex threads per pod | 4, 2 s deadline per call (T6.4) | user regexes run off the request thread |
 

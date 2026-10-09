@@ -2,7 +2,7 @@
 // here arrived computed from the server.
 
 import { formatNumber } from '../../../../src/app/format.ts';
-import type { DatasetSummary } from '../../api/datasets';
+import type { AutoRefreshEvery, DatasetSummary } from '../../api/datasets';
 
 export { formatNumber };
 
@@ -54,13 +54,23 @@ export function ago(iso: string | undefined): string {
   return hours < 24 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
 }
 
+/** "Refreshes {word}": "every 5 minutes", "hourly". */
+const EVERY_WORD: Record<AutoRefreshEvery, string> = {
+  '5min': 'every 5 minutes',
+  '15min': 'every 15 minutes',
+  hourly: 'hourly',
+  daily: 'daily',
+  weekly: 'weekly',
+};
+export const everyWord = (every: string): string => EVERY_WORD[every as AutoRefreshEvery] ?? every;
+
 /**
  * "Data as of …": the last refresh, else the last update — and a schedule is
  * stated as a promise ("Refreshes daily · last 08:00"), as dsList.ts does.
  */
 export function freshness(d: Pick<DatasetSummary, 'lastRefreshedAt' | 'updatedAt' | 'autoRefresh' | 'originKind' | 'sourceKind'>): string {
   const when = stamp(d.lastRefreshedAt || d.updatedAt);
-  if (d.autoRefresh?.every) return `Refreshes ${d.autoRefresh.every} · last ${when}`;
+  if (d.autoRefresh?.every) return `Refreshes ${everyWord(d.autoRefresh.every)} · last ${when}`;
   if (d.originKind) return `Data as of ${when}`;
   return `${d.sourceKind === 'input' ? 'Edited' : 'Imported'} ${when}`;
 }
@@ -69,6 +79,8 @@ export const NOT_REFRESHABLE = 'This dataset was saved before refresh existed, o
 
 export const SCHEDULES = [
   { value: 'off', label: 'Auto-refresh off' },
+  { value: '5min', label: 'Every 5 minutes' },
+  { value: '15min', label: 'Every 15 minutes' },
   { value: 'hourly', label: 'Hourly' },
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },

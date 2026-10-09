@@ -20,10 +20,17 @@ export interface DatasetSummary {
   lastRefreshedAt?: string;
   lastRefreshStatus?: 'ok' | 'error';
   lastRefreshError?: string | null;
-  autoRefresh?: { every: 'hourly' | 'daily' | 'weekly'; watch?: boolean };
+  autoRefresh?: { every: AutoRefreshEvery; watch?: boolean };
   /** FAIL rules failing in the latest quality run. */
   qualityFailing?: number;
+  /** Incremental refresh is on: the only way a schedule may run every 5 or 15 minutes. */
+  incrementalOn?: true;
+  /** The last scheduled refresh took longer than its own interval (the server decides). */
+  behindSchedule?: true;
 }
+
+/** A refresh schedule (src/data/datasets.ts `AutoRefreshEvery`); 5 and 15 minutes need incremental refresh. */
+export type AutoRefreshEvery = '5min' | '15min' | 'hourly' | 'daily' | 'weekly';
 
 /** The project's saved datasets; idle until a project is chosen. */
 export function useDatasets(projectId: string | undefined) {
