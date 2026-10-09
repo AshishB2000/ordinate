@@ -32,6 +32,8 @@
 // the size. `jobTimeoutMs` makes BigQuery stop a job on its own if we are gone;
 // on abort (the client hung up, ctx.signal) or our own timeout the job is
 // CANCELLED — with a cancel-only token, since no read-only scope covers it.
+// A finished query's rows carry the bytes BigQuery says it billed (`bytes`,
+// from the reply), which Live counts per connection per day (L2.7).
 //
 // SECRETS. The key arrives in ctx.secrets.token (plan L1.1: the `token` slot)
 // and leaves only as a signature. Every error is scrubbed of the key file, the
@@ -42,7 +44,7 @@ import type { HttpRequestOptions, HttpResult } from './http';
 import { accessToken, CANCEL_SCOPES, parseKey, READ_SCOPES, readTokenReply, TOKEN_HOST, tokenRequest } from './bigqueryAuth';
 import type { ServiceAccountKey } from './bigqueryAuth';
 import {
-  apiError, BQ_HOST, buildRequest, bytesCap, cancelUrl, capSql, datasetsUrl, describeColumns, estimateLabel, jobOf,
+  apiError, billedBytesOf, BQ_HOST, buildRequest, bytesCap, cancelUrl, capSql, datasetsUrl, describeColumns, estimateLabel, jobOf,
   parseDatasetRef, parseTablePath, prop, queriesUrl, resultsUrl, shapeResponse, tablesUrl, tableUrl, validDataset,
   validLocation, validProject,
 } from './bigqueryShape';
@@ -50,7 +52,7 @@ import type { Job } from './bigqueryShape';
 import { safeError } from './types';
 import type { ConnectorContext, ConnectorDef, ConnectorError, ConnectorRows, ConnectorSchema, ConnectorTable, ConnectorTables, LiveParam } from './types';
 import { ctx as requestContext } from '../server/context';
-import { DEFAULT_MAX_BYTES_BILLED, maxBytesBilled } from '../server/env';
+import { DEFAULT_MAX_BYTES_BILLED, maxBytesBilled } from '../server/liveEnv';
 
 export const HOSTS: readonly string[] = [BQ_HOST, TOKEN_HOST];
 
@@ -315,6 +317,7 @@ async function execute(ctx: ConnectorContext, sql: string, params: readonly Live
   let reply = await callJson(conn, { url: queriesUrl(conn.project), method: 'POST', token: token.token, body: req.body, timeoutMs: deadline - Date.now() }, signal, lateCancel);
   let byteBudget = MAX_BYTES;
   let schema: unknown;
+  let billed: number | undefined;
   const rows: unknown[] = [];
   let clipped = false;
 
@@ -339,6 +342,7 @@ async function execute(ctx: ConnectorContext, sql: string, params: readonly Live
     } else {
       complete = true;
       schema = schema ?? prop(reply.json, 'schema');
+      billed = billed ?? billedBytesOf(reply.json); // the reply that finished the job says what it billed
       for (const r of Array.isArray(prop(reply.json, 'rows')) ? (prop(reply.json, 'rows') as unknown[]) : []) rows.push(r);
       const pageToken = prop(reply.json, 'pageToken');
       if (rows.length > cap || typeof pageToken !== 'string' || !pageToken) break;
@@ -352,7 +356,9 @@ async function execute(ctx: ConnectorContext, sql: string, params: readonly Live
     }
     reply = await callJson(conn, { url: resultsUrl(job!, next), method: 'GET', token: token.token, timeoutMs: deadline - Date.now(), maxBytes: Math.max(1, byteBudget) }, signal);
   }
-  return shapeResponse({ schema, rows }, ctx, clipped);
+  const shaped = shapeResponse({ schema, rows }, ctx, clipped);
+  if (shaped.ok && billed !== undefined) shaped.bytes = billed;
+  return shaped;
 }
 
 // ── catalog ─────────────────────────────────────────────────────────────────

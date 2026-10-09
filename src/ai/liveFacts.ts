@@ -26,8 +26,8 @@
 // Their counts stay; they are aggregates.
 
 import type { CopilotFacts } from './copilot';
-import type { FactColumnDoc } from './copilotFacts';
-import { GUARD_LINE, WITHHELD, columnNoteLines, num, sealLedger } from './copilotFacts';
+import type { FactColumnDoc, FactMetric } from './copilotFacts';
+import { GUARD_LINE, WITHHELD, columnNoteLines, metricLines, num, sealLedger } from './copilotFacts';
 import type { LedgerEntry } from './numberAudit';
 import type { ParsedColumn } from '../data/parse';
 import type { LiveColumnProfile, LiveProfile } from '../data/liveProfile';
@@ -67,6 +67,8 @@ export interface LiveFactsInput {
   /** Columns whose VALUES a model is never shown. */
   withheld: ReadonlySet<string>;
   docs?: Record<string, FactColumnDoc>;
+  /** The dataset's defined metrics, each figure the warehouse's (L2.4) — in the ledger like any other. */
+  metrics?: FactMetric[];
 }
 
 /** A value as a prompt shows it: cut (never inside a surrogate pair), JSON-quoted, line separators escaped too. */
@@ -175,6 +177,7 @@ export function liveDatasetFacts(input: LiveFactsInput): CopilotFacts {
   const hidden = input.columns.filter((c) => input.withheld.has(c.name) && byName.get(c.name)?.values?.length).map((c) => c.name);
   if (hidden.length) lines.push(`(Values of ${hidden.join(', ')} are withheld — marked, or detected, as personal or financial data.)`);
   columnNoteLines(lines, input.docs || {});
+  metricLines(lines, ledger, input.metrics || []);
   lines.push('');
   lines.push('No row-level figures are available for a Live dataset. A question answerable from these columns can be answered ' +
     'with an "answer" action; the app computes it in the warehouse.');

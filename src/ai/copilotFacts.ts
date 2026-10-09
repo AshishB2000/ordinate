@@ -115,7 +115,7 @@ export interface FactMetric {
   description?: string;
 }
 
-function metricLines(lines: string[], ledger: LedgerEntry[], metrics: FactMetric[]): void {
+export function metricLines(lines: string[], ledger: LedgerEntry[], metrics: FactMetric[]): void {
   if (!metrics.length) return;
   lines.push('');
   lines.push('Defined metrics — use THESE names for these numbers, and write them the way the app does:');

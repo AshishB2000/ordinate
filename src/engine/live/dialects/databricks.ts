@@ -38,5 +38,6 @@ export const databricksDialect: SqlDialect = {
   like: (x, p) => `${x} LIKE ${p} ESCAPE '!'`,
   likeEscape: '!',
   label: (x) => x,
+  caseKey: (x, b) => `lower(btrim(${x}, ${b.bind('text', JS_WHITESPACE)}))`,
   tableSample: (plan) => `TABLESAMPLE (${sqlInt(plan.rows)} ROWS)`,
 };

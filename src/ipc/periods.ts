@@ -25,6 +25,7 @@ import { bucketStartOf, weekCalOf, weekLabel, weekPos } from '../analysis/retail
 import { compareScope } from '../analysis/periodScope';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import { computeCardMetric } from './dashboards';
+import { liveCodeOf } from './liveRoute';
 import { displayOf, resolveMetric } from './metrics';
 import { fxScope } from './fxQuery';
 import type { FxInfo } from '../analysis/fx';
@@ -148,7 +149,7 @@ export function register(): void {
       // A dashboard's own currency: both figures and the delta convert to it, as the headline does.
       return await fxScope(currency, () => compareMetric(projectId, card && typeof card === 'object' ? card : {}, filters, compare, params));
     } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to compare' };
+      return { ok: false, error: err?.message || 'Failed to compare', ...liveCodeOf(err) };
     }
   });
 }

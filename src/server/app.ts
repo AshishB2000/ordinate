@@ -24,6 +24,7 @@ import { useSecretStore } from '../app/configSecrets';
 import { createSecretStore } from './secrets/store';
 import { useAiKeys } from './aiKeys';
 import { useRefreshLockDb } from './jobs/refreshLock';
+import { useLiveUsageDb } from './live/usageStore';
 import { handlers } from './rpc';
 import { maskFileToken, registerFileRoutes } from './files';
 import { clientFor, registerEvents } from './sse';
@@ -35,6 +36,7 @@ import { registerGeoRoutes } from './geo';
 import { registerRequestMetrics } from './metrics';
 import { registerPublishedRoutes } from './published';
 import { isLiveDatasetError, LIVE_DATASET_CODE, liveRefusalsRaised, tagLiveRefusals } from '../data/liveDataset';
+import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -175,6 +177,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       useRecordDb(pool);
       // One refresh of a dataset at a time across pods (L0.4): an advisory lock per (org, dataset).
       useRefreshLockDb(pool);
+      // Live warehouse statements counted per org per day across pods (L2.7): the daily limit holds org-wide.
+      useLiveUsageDb(pool, cfg.auth.mode === 'dev');
       // Connection passwords/tokens: the encrypted store (T5.3), never the
       // per-org config.json. Without a master key there is no store, and a
       // connection secret is refused (src/app/configSecrets.ts).
@@ -203,6 +207,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     app.addHook('onClose', async () => {
       useRecordDb(null);
       useRefreshLockDb(null);
+      useLiveUsageDb(null);
       if (cfg.storage.s3) (require('../engine/storage') as typeof import('../engine/storage')).useStorageDb(null);
       useSecretStore(null);
       useAiKeys(null, null);
@@ -359,6 +364,13 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         await record('error', decision.projectId);
         return reply.code(409).send({ error: LIVE_DATASET_CODE, code: LIVE_DATASET_CODE, message: err.message });
       }
+      if (isLiveFigureError(err)) {
+        // L2.4: a Live KPI the warehouse could not give, thrown past a handler that
+        // did not catch it — typed the same way, its catalog sentence only (R-L6).
+        const f = err.failure;
+        await record('error', decision.projectId);
+        return reply.code(409).send({ error: f.code, code: f.code, message: f.error, ...(f.reason ? { reason: f.reason } : {}) });
+      }
       // The message can carry a path or a value; it goes to the log, not the wire.
       req.log.error({ err, channel }, 'rpc handler failed');
       await record('error', decision.projectId);
@@ -416,6 +428,8 @@ export function registerHandlers(): void {
   (require('./admin/people') as typeof import('./admin/people')).register(() => dbPool, () => env().auth.allowedDomains);
   (require('./admin/passwords') as typeof import('./admin/passwords')).register(() => dbPool, () => (appEnv ?? env()).auth.mode, () => env().auth.allowedDomains);
   (require('./admin/org') as typeof import('./admin/org')).register(() => dbPool, () => env().maxUploadMb);
+  // Admin → Live usage (live data L2.7): Postgres's counts, or this pod's without it.
+  (require('./admin/liveUsage') as typeof import('./admin/liveUsage')).register();
   (require('./auth/tokens') as typeof import('./auth/tokens')).register(() => dbPool);
   // Refresh URLs (live data L0.5): a project writer's, per dataset.
   (require('./hooks/rpc') as typeof import('./hooks/rpc')).register(() => dbPool, () => env().limits.refreshHookMinIntervalSec);

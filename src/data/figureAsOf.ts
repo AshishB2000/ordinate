@@ -9,6 +9,12 @@
 // A figure read from several datasets (a join, a formula metric) is only as
 // fresh as its STALEST input, so the oldest time wins.
 //
+// A LIVE figure (L2.4) is dated by the warehouse's answer — the executor's
+// `asOf`, carried on the reply — never by its record, whose times say nothing
+// about when the warehouse's rows are from. So a Live dataset adds no time
+// here, and `stampAsOf` keeps a reply's live `asOf` (the oldest still wins
+// when a figure also read an extract).
+//
 // Stamped on the reply OUTSIDE the answer cache (engine/queryCache), never
 // cached with the figure: a refresh writes the new table first and the
 // markers after it (datasetRefresh.refreshLocked), so an answer cached in
@@ -24,9 +30,10 @@
 import type { AsOf } from '../api/asOf';
 import * as datasets from './datasets';
 import type { DatasetMeta } from './datasets';
+import { isLive } from './liveDataset';
 import { withPulls } from './freshOnAskState';
 
-type Stamps = Pick<DatasetMeta, 'lastRefreshedAt' | 'createdAt' | 'updatedAt' | 'sourceKind'>;
+type Stamps = Pick<DatasetMeta, 'lastRefreshedAt' | 'createdAt' | 'updatedAt' | 'sourceKind' | 'mode'>;
 
 /** A stored time as canonical ISO, or null when it does not parse. */
 function iso(v: unknown): string | null {
@@ -53,7 +60,7 @@ export function dataAt(meta: Stamps): string | null {
 export function asOfFrom(metas: ReadonlyArray<Stamps | null | undefined>): AsOf | undefined {
   let oldest: string | null = null;
   for (const m of metas) {
-    const at = m ? dataAt(m) : null;
+    const at = m && !isLive(m) ? dataAt(m) : null;
     if (at && (oldest === null || at < oldest)) oldest = at;
   }
   return oldest ? { at: oldest, mode: 'extract' } : undefined;
@@ -75,7 +82,10 @@ export async function figureAsOf(projectId: string, datasetIds: ReadonlyArray<st
 export async function stampAsOf<R extends { ok: boolean }>(reply: R, projectId: string, datasetIds: ReadonlyArray<string | undefined>): Promise<R | (R & { asOf: AsOf })> {
   if (!reply || reply.ok !== true) return reply;
   const asOf = await figureAsOf(projectId, datasetIds);
-  return asOf ? { ...reply, asOf } : reply;
+  const own = (reply as { asOf?: AsOf }).asOf;
+  const live = own && own.mode === 'live' ? own : undefined;
+  const pick = live && (!asOf || live.at <= asOf.at) ? live : asOf;
+  return pick ? { ...reply, asOf: pick } : reply;
 }
 
 /**

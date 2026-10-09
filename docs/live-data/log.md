@@ -857,6 +857,321 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
 - **Not done.** "Next refresh: full" and a full run's note in the log are `fullReason`'s English
   (src/data/incrementalRefresh.ts, stored on the record as the desktop did), not catalog sentences;
   translating them means a messages file for incrementalRefresh and keys, not text, in the log.
+## 2026-10-09 — L2.8 Parity on real engines
+
+- **Built.** The L2.2 matrix moved out of `test-liveParity` into `scripts/liveParityMatrix.ts`, run
+  on any `ParityEngine` (`liveParityFixture.ts`: a dialect, a loader that returns a live source,
+  a runner). `scripts/liveParityEngines.ts`: Postgres as Redshift and ClickHouse, each running every
+  statement through the REAL connector's `live.runBound` (via `liveRun.runLiveBound`, server mode,
+  the SSRF guard pinning the one address that answers). Suites: `test-liveParity` (DuckDB, every
+  `npm test`), `test-liveParityPostgres` (needs `DATABASE_URL`: CI's `check` job runs it; a scratch
+  database `ordinate_l28_<pid>_<ms>`, byte-ordered `C`, default zone UTC+14, dropped `WITH (FORCE)`),
+  `test-liveParityClickhouse` (needs `CLICKHOUSE_URL`; the new `clickhouse` job of
+  `warehouse-nightly.yml` runs it against a `clickhouse/clickhouse-server:25.8` service container).
+  Snowflake and BigQuery: `scripts/warehouseLiveParity.ts`, called by `test-warehouseLive` after each
+  warehouse's connector checks, under its secret canary (job timeout 20 → 60 min).
+- **Decided — the real accounts are never written.** Their roles are read-only, so the nightly's
+  twin is a DEFINING QUERY over literals (`scripts/liveParityLiteral.ts`): every cell a text literal
+  (backslash-escaped) or NULL, typed only by `CAST` — `FROM (VALUES …) AS v(c0, …)` on Snowflake,
+  `UNNEST(ARRAY<STRUCT<c0 STRING, …>>[…])` on BigQuery. A Live dataset over SQL is a production shape,
+  and the same twin runs on CI's Postgres (`E'…'` literals, the same escaping) every 9th case, so the
+  mechanism is proved before a warehouse sees it. Warehouse runs take every 8th chart, KPI and answer
+  case (≈500 statements each); every filter op, both negative controls and the pins always run.
+- **Fixed — `''` and NULL were two blank categories on live, one in a copy** (found by L3.2). Every
+  import stores `''` as null (`parse.coerceCell`); a warehouse groups them apart. A text GROUP key —
+  category or split — is now `CASE WHEN t = '' THEN NULL ELSE t END` (`compileFilter.keyText`, used by
+  `compile.keyExpr` and the text series), in all six dialects; filters already compared NULL as `''`.
+  The L2.2 bench missed it because it saved its extract raw; the fixture is now typed exactly as an
+  import types it (`fx.importTyped`: stringify as `connectionRun` does, then `parse.finalizeTable`),
+  and so is the L2.3 executor harness. The matrix's skip for "split + top N over `cat`" ('' twice made
+  the label set ambiguous) is gone: 120 answers, not 112. L3.2's `liveReplicaFlow` pin of the old
+  behaviour ("two blank rows on live") will now fail on merge, as a pin should — flip it to equality.
+- **Fixed — the answer's order no longer rests on the row-cap wrapper.** Every connector runs
+  `select * from (…) limit n`, and SQL does not promise a derived table's ORDER BY survives it.
+  `shape.shapeChart` now orders rows by the ranks the statement returns (`o_cr`, then `o_sr`), a
+  stable sort. Observed: Postgres kept the order in 1,899 of 1,899 chart statements, ClickHouse in
+  1,663 of 1,663 — the sort is for Snowflake, BigQuery and Redshift, which make no such promise.
+- **Fixed — the Postgres/Redshift live session runs in UTC** (`set timezone to 'UTC'` in
+  `runBound`, the same lines as L3.2, so the two merge clean). `CAST(timestamptz AS DATE)` takes the
+  day in the session's zone; Redshift defaults to UTC but a user, database or parameter group can
+  change it.
+- **Divergences, each a named pin with a test that it still exists** (`scripts/liveParityPgPins.ts`,
+  read off the run in `test-liveParityPostgres`):
+  - R1 collation — Postgres orders text by its collation (CI's `postgres:17` defaults to
+    `en_US.utf8`); Redshift and the extract compare code points. On an ICU twin `k < 'b'` keeps 2 of
+    6 where the extract keeps 4, and tied labels order differently. The matrix runs byte-ordered.
+    **Open for L3.2 / L2.9:** a Postgres read replica whose database collation is not `C` will
+    differ from its copy on text ordering filters and on the order of tied categories.
+  - R2 session zone — TIMESTAMPTZ days agree in a database defaulting to UTC+14; CONTROL: the same
+    statement in a session left at +14 puts every instant on the next day.
+  - R3 order through the wrapper — kept by Postgres (above); NEGATIVE CONTROL on the order check.
+  - R4 −0 — Postgres returned −0 in 5,853 cells (ClickHouse 2,575; DuckDB stores none); every figure
+    still matched, the shaping reports +0 (pin 8).
+  - R5 read-only — `nextval()` through `runBound` is refused by the read-only session.
+  - The eight L2.2 pins run again on every engine, through its own twins, and hold on Postgres and
+    ClickHouse unchanged.
+- **ClickHouse, run here without Docker.** ClickHouse 25.8.2.1's engine embedded (chdb 4.0.2, from
+  PyPI) behind a 60-line Python stand-in for its HTTP interface (query from the body, `param_*` as
+  query parameters; not committed — the nightly runs the real server). The whole matrix and every pin
+  agree: `match()` over UTF-8, `{p:Type}` values (a tab, a quote, a backslash and a decomposed é now
+  ride in three new filter cases), `accurateCastOrNull`, `toMonday`, MergeTree parts in any order.
+  Nothing to pin. Databricks still has golden shapes only (no engine in L2.8's scope).
+- **Found outside L2.8:** a KPI `sum` whose filter leaves no number (`amt = '007'`, `amt is_empty`)
+  is a legitimate null on the resident path, which `dashboards.metricFor` cannot tell from a failure
+  — it traces `failed` and recomputes in JS (correct, slower, and one spurious warning per run).
+- **Measured** (4 vCPU container; first runs, before four other agents loaded it): DuckDB 1,090
+  charts + 108 KPIs + 112 answers, 2,313 statements in 35 s; Postgres 16.15 the same matrix, 2,331
+  statements through `runBound` in 41 s (43 s whole suite); ClickHouse 25.8 (embedded) 2,326 statements
+  in 68 s. Largest sum/avg deviation: 1.0e-15 (DuckDB, Postgres), 3.0e-15 (ClickHouse) — inside the
+  documented 1e-13. Final runs (load average ~22): DuckDB 2,374 statements / 43 s, Postgres 2,815
+  (matrix + literal twin 417) / 185 s, ClickHouse 2,393 / 124 s.
+- **Tests.** Negative controls on every engine: a broken empty predicate, and the fold stripped from
+  the very statements (`unfoldedBlankCaught`: a `cat` chart, a split by `cat`, an answer) must each
+  disagree; on DuckDB also the extract saved raw. Mutations checked by hand in the compiled `.js`:
+  the fold removed → 35 + 4 + 29 charts, 42 filter ops and 9 answers disagree on DuckDB and on
+  Postgres, and `test-liveCompile`'s fold shape fails for all six dialects; DuckDB's empty predicate
+  without whitespace → 239 disagreements; the shaping's rank sort removed → `test-liveCompile`'s two
+  shuffled-reply checks fail. The SSRF guard is shown on (the database refused without the
+  allowance). A set but unusable `CLICKHOUSE_URL` fails; unset, the suite prints one skip line.
+
+## 2026-10-09 — L2.7 Usage and budget
+
+- **Built.** Migration `0012_live_usage.sql`: `live_usage(org_id, day, connection_id, project_id,
+  queries, bytes, refused)`, key `(org_id, day, connection_id)`, forced RLS on `ordinate.org`.
+  `src/server/live/usageStore.ts` (admission, bytes, the read; Postgres, or per-pod memory keyed with
+  `orgKey()` without `DATABASE_URL`), `src/server/live/limitNotice.ts` (the once-a-day notice),
+  `src/server/admin/liveUsage.ts` (`admin:liveUsage`, contract in `src/api/admin.ts`, `adminList`),
+  `src/engine/live/liveWarehouse.ts` (the one door, below — split out of `liveQuery.ts`, which was at
+  500 lines and is now 404),
+  `src/server/liveEnv.ts` (the Live settings, split out of `env.ts`, which re-exports them; it was at
+  501 lines, now 469; `EnvError` moved to `envError.ts` so the split has no require cycle). L2.3's
+  seams in `liveBudget.ts` are filled: `checkDaily` (async now), `noteCall(ticket, bytes)`,
+  `cacheAgeFloorSec()` + `publicFloorSec()`. `RequestContext.published` with `runAsPublished` /
+  `isPublishedRequest` (`context.ts`), set by `/p/` (`published.ts`). `ConnectorRows.bytes?` — BigQuery
+  sets it from its reply (`billedBytesOf`: `totalBytesBilled`, else `totalBytesProcessed`); liveRun
+  passes it through. Web: Admin → **Live usage** tab (`LiveUsageTab.tsx`; an org tab, so it shows
+  without accounts too, saying the counts are this server's), and `liveLimitNotice.ts` in the shell (a
+  toast with "See usage"). Settings `LIVE_DAILY_QUERY_LIMIT` (10,000; 0 = none),
+  `LIVE_MIN_CACHE_AGE_PUBLIC_SEC` (60; 0 = none), both re-read per statement like L2.3's.
+- **Decided — admitting a statement IS counting it.** The plan's "checkDaily refuses, noteCall
+  upserts" would be check-then-count: N pods (× `LIVE_MAX_CONCURRENT`) at limit − 1 all pass. So the
+  check and the count are one transaction: `BEGIN; set_config('ordinate.org'); pg_advisory_xact_lock(
+  hashtextextended('live_usage:<org>:<day>'))` in one round trip, then one statement that reads the
+  org's sum (a snapshot taken after the lock) and upserts `queries + 1` or, past the limit,
+  `refused + 1`. `noteCall` adds only the bytes, when the connector settles, to the row of the day the
+  statement was admitted on. A statement counts when admitted, whatever then happens (an error or a
+  cancel can still bill). NEGATIVE CONTROL in `test-liveUsage-db`: check-then-count on two pools at
+  limit 1 lets 2 through; the store lets 1.
+- **Decided — admitted only once a slot is held.** L2.3 asked the daily seam before the concurrency
+  slot; now `acquire → checkDaily → runBound`, so a question that hangs up while queued is never
+  counted, and one whose askers all hang up while it is being counted is not sent (it stays counted:
+  the cautious side). The cost: past the limit a refusal waits for a slot like anyone else.
+- **Decided — fail closed.** A count that cannot be written (Postgres down) sends nothing: the stale
+  answer, else `live_failed`, the reason logged once. An uncounted statement is an unbounded one.
+- **Decided — one notice per org per UTC day, decided under the same lock.** `refused` is a column,
+  so "is this the day's first refusal?" is `sum(refused) = 0` read under the per-day lock — exactly
+  one across pods (tested: 13 racing refusals on two pools, one first). The notice is one log line and
+  a `live:daily-limit` push to each enabled org admin (dev sign-in / no Postgres: the org's tabs),
+  payload `{day, limit}` only. The admin page also shows the day's refusals for the rest of the day.
+- **Decided — keyed by connection** (plus `project_id`, not in the key, to name it), not the plan's
+  `(org_id, day)`: the page is per connection; the limit sums the org's rows. `bytes` is NULL until a
+  statement reports a figure, so Snowflake (whose SQL API reports no byte statistic per statement —
+  checked against the reply shape, not guessed) reads "Not reported", never "0 B".
+- **Decided — the public floor is a lookup age; the entry keeps the longest.** `queryCache` takes the
+  tighter of an entry's age and a lookup's, so an answer stored at age 0 by a signed-in viewer could
+  never serve a page. An entry now keeps `max(dataset age, LIVE_MIN_CACHE_AGE_PUBLIC_SEC)`; each asker
+  looks up with its own (`max(dataset age, the request's floor)`). NEGATIVE CONTROL: a signed-in ask
+  at age 0 still goes to the warehouse every time, a fresh public answer notwithstanding.
+- **Found — a `/p/` page sends no warehouse query today.** A published site is a snapshot built at
+  publish (CSP `default-src 'none'`: it fetches nothing), so the floor guards no live read yet. The
+  route still runs as a published request, and `test-liveUsage` drives the executor through a real
+  `GET /p/…` (site lookup stubbed) to prove the floor holds there and nowhere else. A re-publish after
+  a refresh runs as the publisher, not as a page request, and is bounded by the daily limit.
+- **The one door.** Every Live statement goes through `warehouse()` (`src/engine/live/liveWarehouse.ts`,
+  re-exported by `liveQuery.ts` with `LiveCallError` and `CallKind`): slot, daily admission,
+  `runLiveBound` (the only caller of a connector's `live.runBound`), bytes on settle. Its signature is
+  `warehouse(t: LiveTarget, query: CompiledQuery, shared: AbortSignal): Promise<LiveRows>` — rows
+  positional to `query.columns`; it throws `LiveCallError` (`cancelled`, `timeout`, `failed`,
+  `tooLarge`, or `daily` with the catalog sentence in `detail`), logged once; it caches and shares
+  nothing, and counts against `ctx()`'s org. `test-liveUsage` fails when anything else in `src/` calls
+  `runLiveBound` or `.runBound(` — **L2.4's DISTINCT and L2.5's profile/sample statements must go
+  through `warehouse()`** to be slotted, limited and counted.
+- **Measured.** One admission on Postgres (local PG 16, 4 vCPU container shared with other jobs,
+  median of 100 sequential, `test-liveUsage-db`): three runs at low load gave 1.38 / 1.44 / 1.57 ms
+  with a limit (lock + sum + upsert) and 1.50 / 1.37 / 1.45 ms without (no lock) — noise between the
+  two; two runs at load average 13 gave 4.0 ms both ways. The executor's warehouse call on the fake
+  (in-memory admission included), median of 40, after the `liveWarehouse.ts` split: 1.78 / 2.08 /
+  2.39 ms over three runs of `test-liveQuery` (L2.3 measured 2.41–2.53 ms) — no cost visible.
+- **Tests.** `test-liveUsage` (55 checks, no DB): every statement one query (KPIs, an answer and its
+  MAX()), a hit or a joined flight none; bytes summed, null when unreported; past the limit stale or a
+  typed refusal with no statement sent, never empty; 0 = none; re-read per statement; a new UTC day
+  starts over; one notice per org per day (NEGATIVE CONTROL: the 2nd and 3rd send and log nothing);
+  fail closed; a statement whose askers all hang up while it is being counted is not sent
+  (NEGATIVE CONTROL: with the asker still waiting it is); the floor inside a real `GET /p/…` and
+  nowhere else (NEGATIVE CONTROLS); the one-door static check, and `warehouse()` exported by the
+  executor (NEGATIVE CONTROL: a planted caller is found); BigQuery bytes from three reply shapes;
+  `admin:liveUsage`'s labels; env. `test-liveUsage-db` (24, Postgres): 60 racing admissions on two
+  pools = 60 (NEGATIVE CONTROL: read-then-write leaves 1), bytes exact, the limit across pods with one
+  first refusal (NEGATIVE CONTROL above), the executor on Postgres, the notice on the admin's stream
+  only and once, RLS as an ordinary role, the admin channel per org. `test-admin-db`'s matrix covers
+  the new channel (16 admin channels; 6 audited-on-denial lists). Vitest `liveUsage.test.tsx` (5); the
+  admin e2e adds Live usage empty, counted and limit-reached screens (light + dark).
+- **Found — `test-refreshLock` counted every advisory lock on the server**, not its own database's,
+  and killed the backend of whichever it saw first. With the admission's lock in `test-liveUsage-db`
+  running beside it in `npm test` (or any other suite on a shared Postgres) it failed 6 checks; both
+  probes now read `pg_locks` for the scratch database only (passes run beside `test-liveUsage-db`).
+  `test-liveUsage` no longer closes its app before exiting: closing shuts the org DuckDB workers down
+  asynchronously, and it once died with the known exit-time `Napi::Error` (retro, phase 7) after
+  every check passed, under a load average of 20.
+- **Merged with L2.5, L3.1, L3.2 and L2.8.** L2.5's `runStatement` (the schema sync's profile, its
+  sample and the ClickHouse sampling-key probe) now wraps this `warehouse()`, so a sync is slotted,
+  daily-limited and counted like a question (its `callFailure` already read `daily`); there is one
+  `LiveCallError`, in `liveWarehouse.ts`. The BigQuery dry run before a sample (`estimateLive`) is
+  free and stays uncounted. The fake warehouse's billed figure is `fake.billedBytes`: L2.5's
+  `fake.bytes` is the priced variant's dry-run estimate. `FRESH_ON_ASK_WAIT_MS` stays in `env.ts`.
+- **Not done (scope):** nothing routes a chart, KPI or answer to the executor yet (L2.4), so the e2e
+  seeds `live_usage` rows rather than causing them. Usage rows are kept indefinitely (one small row
+  per connection per day).
+
+## 2026-10-09 — L2.4 Route every door
+
+- **Built.** `src/ipc/liveRoute.ts` (the KPI and chart doors: `liveMetaOf`, `liveChart`,
+  `liveCardMetric`) and `src/ipc/liveAnswers.ts` (the answer door: `liveCardFor`, `liveCaseFix`,
+  `liveSplitCandidates`). One early branch in each of the three functions every figure goes
+  through — `vizDataFor`, `computeCardMetric`, `computeCard` — before the extract's answer cache and
+  before any `getDataset`. `src/engine/live/liveFigureError.ts` (`LiveFigureError`, `liveCodeOf`; its
+  own file so the RPC route can type one without importing the doors). Executor: `liveLookup` (one
+  compiled lookup, cached and shared like the period MAX(), through the same `warehouse()` as every
+  other statement — since the merge, L2.7's one door in `liveWarehouse.ts`), the answer reply's
+  `periodRanges`, and `liveFlight.ts` (the flights moved out of `liveQuery.ts`, which the lookup
+  would have taken past 500 lines; 406 after the L2.7 merge). Compiler:
+  `compileCaseMatches` and a `caseKey` per dialect (JS `trim()`'s class, then lower case; RE2 on
+  DuckDB and ClickHouse — a byte-wise trim would eat a multi-byte character — `TRIM`/`BTRIM` with the
+  class bound as a value elsewhere). Assistant: a Live dataset's facts (merged into L2.5's
+  `src/ai/liveFacts.ts`, below).
+- **What now works on Live, through those three:** `visual:data` / `dataBatch` / `preview` /
+  `thumbs`, every `analysis:tiles` tile (chart, KPI, saved metric, compare delta), `dashboard:metric`,
+  `metric:values` / `preview` (and `metric:table`'s value column), `answer:card` / `explain` /
+  `rerun` and the dock's answer action, `alerts:test` and the alert evaluator (threshold and
+  change-since-last), the Summary card (its KPI level), copilot facts for a chart (now through
+  `vizDataFor` for every dataset), a Live dataset (schema, notes, metrics — never a row count), a
+  dashboard's KPI cards and the defined metrics, publish (`buildDashboard`, a story's `buildStory`)
+  and the HTML export (`dashboardPageHtml`), `story:figures`, `scorecard:compute` (anchored on the
+  warehouse's latest date), report pages (through `analysis:tiles` / `visual:data`), the
+  analysis-plan preview, MCP (`creators` / `metricValue` call the same doors).
+- **What still refuses, typed** (L2.6's "off for live" list): pivot, cohort, funnel, drivers,
+  facets, maps, raw points (the adapter's `live_refused` + reason, never an empty chart); and at the
+  door — new, each with a NEGATIVE CONTROL (the extract answers): an **"as of"** read (`asOf`: the
+  warehouse answers now and a Live dataset keeps no snapshots), a **currency conversion** (`fx`: the
+  warehouse would sum unconverted amounts), a **filter or column through a relationship**
+  (`related`; with no relationship an unknown filter column is skipped with the extract's own
+  warning, as before). Scenarios refuse in `operand()` (their KPIs would now route, but a driver's
+  partitions read rows — never a half-live figure). The column profile of an UNPROFILED Live dataset
+  refuses before its chart asks the warehouse (a profiled one answers from its sample, L2.5). Not routed and still the L2.1 refusal (`live_dataset`): **`metric:series`** — the
+  Metrics table's sparkline (N+1 statements by design, one per point; it wants one grouped live
+  query) — so `metric:table` shows a Live metric's value with no sparkline; `metrics.distinctValues`
+  now rethrows the refusal instead of answering "no series" (a silent blank before this); the
+  **scorecard detail** page (its top dimension reads distinct values); a dropdown control's options on
+  a Live column (publish refuses such a dashboard; the filter pickers come from the L2.5 profile);
+  drill-down rows, stats, insights.
+- **Decided — a KPI failure THROWS** `LiveFigureError` from `computeCardMetric`, a chart failure is
+  RETURNED as `{ok:false, code, error, reason}`. Every caller of `computeCardMetric` reads `ok:false`
+  as "the dataset is gone" and shows a blank (`metrics.resolveDefinition` → null, the alert evaluator
+  → no fire, publish → "Source removed"), exactly the silent figure D6 forbids, while a throw is loud
+  everywhere for free: one that no handler catches is answered by the RPC route as a typed **409**
+  with its code, reason and catalog sentence (as `LiveDatasetError` is; any other throw stays the bare
+  500). Where a figure is SHOWN the type is kept: `dashboard:metric`, `metric:value` / `preview` /
+  `compare` and `alerts:test` spread `liveCodeOf(err)`, the tiles batch passes `code` + `reason` on.
+  Where one KPI must not sink the rest it is caught: publish (that tile, or that story block, says
+  why; the page still publishes), the alert evaluator (the rule is skipped, its state untouched, the
+  others evaluated), the Summary card (no KPI sentence), copilot facts (the card n/a, that defined
+  metric left out — the others still listed). A scorecard row whose warehouse fails reads n/a
+  (`scorecards.figure` already caught every error that way); its reason is L2.6's to show.
+- **Decided — the live `asOf` is kept.** `stampAsOf` keeps a reply's `mode: 'live'` time (the oldest
+  wins when a figure also read an extract), and `asOfFrom` gives a Live dataset no record time, so
+  `dashboard:asOfStamps`' "Latest" is the sheet's stalest EXTRACT. A saved metric carries its
+  operands' oldest live time (`ResolveCtx.asOf`).
+- **Decided — the case fix.** One lookup per text column per answer, `SELECT DISTINCT col … WHERE
+  caseKey(col) IN (…) ORDER BY col LIMIT 20·k` (k = the distinct values asked: the plan's LIMIT 20
+  per value, so an `in` of 30 values is never cut short at 20 — a value left unfixed would silently
+  drop its category), the asked values keyed in JS (`trim().toLowerCase()`) and bound; keys sorted,
+  so the same values in any order and case are one cached statement. It goes through the executor's
+  `warehouse()` like every statement (`liveQuery.liveLookup`), never `runLiveBound` directly. Named
+  divergence: where two spellings share a key ("West", "WEST") the extract keeps the first SEEN, live
+  the first in the warehouse's order. The card's labels keep the values AS ASKED and its `steps` the
+  fixed ones, as the extract's do; a period's steps are the day bounds the warehouse's latest date
+  resolved it to (`periodRanges`).
+- **Decided — split candidates** are `liveSplitCandidates(meta, category)` =
+  `liveProfile.profileSplitCandidates`: the extract's rule (2–12 distinct values, fewest first)
+  over the schema profile's counts. A dataset never profiled offers **none** — not the text columns
+  in schema order (this entry's first draft): a "Split by" chip on a column of thousands of values
+  draws 50 + "Other", and only the profile knows the counts. One "Sync schema" and the chips appear.
+- **Found, not ours:** `scorecards.latestDate` reads the LAST label of a day-grain chart as the
+  latest date, but an extract's date axis is in first-seen order (the L2.2 note above), so on an
+  extract whose rows are not in date order the scorecard anchors on the last-SEEN date (the parity
+  fixture: 2023-09-16 where the data runs to 2025-03-01). Live orders dates ascending, so a Live
+  scorecard anchors right. Left for its own change.
+- **Measured** (`test-liveRoute`, 4 vCPU container shared with four other agents — load average
+  ~8 —, the fake warehouse over the 1,060-row parity fixture, through the real RPC route; medians of
+  15 views per run, cache cleared before each first view, five runs): a dashboard of **4 Live tiles**
+  (a text chart, a quarter chart, two KPIs) makes **4 warehouse calls on first view and 0 on the
+  second** inside the cache age; `analysis:tiles` **18–26 ms first, 4.4–6.6 ms cached** (no network —
+  a real warehouse adds 100 ms to seconds per statement on the first view only). Four tiles asking
+  two questions: 2 calls. A date axis with no grain (or a number axis) asks one probe first, so such a
+  tile costs 2 statements, still 0 on the second view. After Refresh (an epoch bump) the view asks
+  again. The Live check on an EXTRACT door is one more metadata read: **0.08–0.17 ms** median of 400
+  (records as files; L0.2 measured 0.50 ms in Postgres).
+- **Measured after the L2.5 / L2.7 / L2.8 merge** (L2.7's daily admission now in every statement's
+  path; a quiet machine, load average ~1.5, three runs): still 4 calls then 0; `analysis:tiles`
+  **16–18 ms first, 4.1–4.7 ms cached**; the Live check 0.16 ms. (One run under load — average
+  ~8 — read 31 ms / 5.8 ms.)
+- **Measured, e2e** (`web/e2e/liveTiles.e2e.ts`, built server, `ORDINATE_TEST_LIVE_FAKE=1`): a
+  dashboard with a Live KPI and a Live chart opens in **10 RPCs** (budget 25), each card captioned
+  "Live · <time>" (or "Live · cached just now" when an RPC asked first), a reload inside the cache age
+  "Live · cached just now"; both themes screenshotted. `dashboards` and `analyses` fail here only on
+  the unreachable OSM tiles (as on the base commit, L0.1's note); with the tiles stubbed locally (not
+  committed) they pass 4/4 and 5/5. `freshness`, `stories` and `scorecards` pass as they are.
+- **Tests.** `test-liveRoute` (69 checks): 15 doors on Live equal the extract of the same rows,
+  dated live, the `getDataset` spy never asked for the Live dataset (and asked for the extract —
+  the spy works); the call counts above; publish and export carry the live figures, `sanitizeBundle`
+  keeps them and drops `asOf`, codes and a planted secret; 7 adapter refusals (the extract draws the
+  same pivot — the control) + 3 door refusals, each with its negative control; the live time through
+  the stamp and `asOfStamps`; a Live scorecard's window equals the extract over that window; a
+  published story's Live metric, and its warehouse down (that block says why, the rest publishes);
+  `metric:table`'s value is live and `metric:series` refuses typed (NEGATIVE CONTROL: the extract's
+  series); an uncaught `LiveFigureError` is a typed 409 (NEGATIVE CONTROL: any other throw, a bare
+  500); L2.7's daily limit at the chart, KPI and answer doors (the case-fix lookup first) is a typed
+  `dailyLimit` refusal (NEGATIVE CONTROL: lifted, the same chart answers). `test-liveRouteAnswers` (39): the case-fix statement × 25 hostile literals × 6 dialects
+  (NEGATIVE CONTROL: an inlining dialect is caught), the JS key on DuckDB (NBSP, tab, case), 30
+  values asked all fixed (NEGATIVE CONTROL: one LIMIT 20 fixes 20), the door (one lookup, bound keys,
+  cached across case and order, a hostile answer filter = the extract's empty chart and the table
+  intact); the live card's ledger holds the extract's figures label for label, `guardAnswer` passes
+  a narration of them and catches an invented number (NEGATIVE CONTROL); copilot facts through a
+  `vizDataFor` spy, the schema facts, a dashboard's live KPI card, the defined metrics (the warehouse
+  down: that one left out, the others listed); `answer:explain`, the Summary card, alerts (a failing
+  warehouse skips only that rule). `test-liveSafetyNet` (now over the fake warehouse, 145 checks):
+  the routed doors — `answer:explain` and `answer:rerun` added — ANSWER, dated live; everything
+  else still refuses, typed; a Live dataset whose connection is gone is a typed failure on every
+  door, its canary SQL in no reply.
+- **Merged with L2.5, L2.7 and L2.8** (the integration branch at 3722c2a), both sides kept:
+  - **One source of a Live dataset's facts** for the Assistant: L2.5's `src/ai/liveFacts.ts`
+    (columns, the sampled profile, bounded and labelled sample values, withheld columns), which now
+    also lists the dataset's defined metrics with the warehouse's figures, in the ledger
+    (`liveProfile.liveCopilotFacts(projectId, id, defined)`); this entry's `liveDatasetFacts.ts`
+    is gone.
+  - **A column the warehouse dropped** (L2.5 `missingColumns`) is refused `columnMissing` at every
+    door: the chart and KPI doors no longer read it as a relationship's column, and the answer door
+    says so before its case-fix lookup asks anything.
+  - **The column panel**: a profiled Live dataset answers from its sample (L2.5); an unprofiled one
+    is still refused up front (the chart door would otherwise route it to the warehouse).
+  - **The case fix groups text as L2.8 does** (`keyText`: '' folded into NULL — an import stores ''
+    as null, so '' is never a copy's spelling either).
+  - **One door, one error class:** the lookup goes through L2.7's `warehouse()`
+    (`liveWarehouse.ts`: slot, daily admission and count, `runLiveBound`, bytes), looked up at
+    `agesOf(t).lookupMs` and kept for `keepMs` like every answer; `liveFlight.ts` keeps only the
+    flights, rejecting with L2.7's `LiveCallError`.
+  - The safety net's §5 (L2.5: a profile opens nothing but the pickers and the panel) skips the
+    routed doors, which answer profiled or not — and checks that they do.
 
 ## 2026-10-09 — L2.6 The Live experience
 
@@ -890,7 +1205,7 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   joins (the composer lists a Live dataset but not as a source; the relationship dialog leaves it out
   and says how many), "Combine" on a Live row, the Analytics hub (a banner, "Live" not "0 rows"), data
   search (says how many Live datasets it skipped). Rendered from a typed refusal: the builder's stage,
-  dashboard chart and KPI tiles, the answer card, scenarios. Filter pickers over a profile say "From a
+  dashboard chart and KPI tiles, the answer card, scenarios, the scorecard's detail panel. Filter pickers over a profile say "From a
   sample of N rows" (`dataset:distinct` gains `sampleRows`, L2.5's reply).
 - **Every figure, checked.** The words were L0.2's (`ui/asOf.ts`, tests for "Live · 2:05 AM", "Live ·
   cached 3 min ago", "Stale · as of …"); the builder's stage, dashboard cards (chart, KPI, statistics)
@@ -904,6 +1219,9 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   ordinary error with a retry — the negative controls in `live.test`, `liveTile.test`, `liveBuilder.test`.
 - **Decided — the copy carries the column notes**, the personal / financial marks above all, onto the
   columns it has: a copy is never less protected than the dataset it came from.
+- **Decided — a copy is an import, not a live question:** it reads through the connector's `run`
+  (the import door and its row cap), never `warehouse()`, so it is not counted against
+  `LIVE_DAILY_QUERY_LIMIT` (L2.7) — as "Copy the data instead" never was.
 - **Decided — the warehouse's words stay in the log** (R-L6, as the executor): a failed copy answers a
   catalog sentence, and the connector's (safeError'd) error is one `[live]` line in the server log.
 - **Measured.** A copy over the route (`test-liveCopy`; the fake warehouse's 240 rows in the org's
@@ -929,4 +1247,7 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   of its absence.
 - **Not done.** A dashboard dropdown control over an UNPROFILED Live column still meets
   `dataset:distinct`'s 409 (L2.5's refusal; the control cannot know the profile is missing without a
-  request); Sync schema fixes it. The published `/p/` page is unchanged (L2.4's).
+  request); Sync schema fixes it. The published `/p/` page is unchanged (L2.4's). A scorecard ROW whose
+  warehouse call fails still reads n/a without the reason: `scorecards.ts`' `figure()` swallows it
+  under `resolveMetric(...).catch(() => null)`, so showing why needs the reason threaded through the
+  row — a server change left for a follow-up (the detail panel does say why).

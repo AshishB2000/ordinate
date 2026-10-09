@@ -48,6 +48,8 @@ export const clickhouseDialect: SqlDialect = {
   like: (x, p) => `${x} LIKE ${p}`,
   likeEscape: '\\',
   label: (x) => x,
+  // RE2 again, not trim(): a byte-wise trim would eat a multi-byte character (above).
+  caseKey: (x) => `lowerUTF8(replaceRegexpAll(${x}, '^[${CLASS_LITERAL}]+|[${CLASS_LITERAL}]+$', ''))`,
   // SAMPLE needs the table's SAMPLE BY key (asked first, ../profileSql.ts); without one
   // ClickHouse refuses it, so the LIMIT bounds the rows instead.
   tableSample: (plan) => (plan.samplingKey ? `SAMPLE ${sqlInt(plan.rows)}` : null),

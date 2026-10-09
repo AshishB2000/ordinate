@@ -362,6 +362,20 @@ export function shapeResponse(json: unknown, ctx: Pick<ConnectorContext, 'rowLim
   return { ok: true, columns, rows, truncated };
 }
 
+/**
+ * What a finished query billed, from BigQuery's own reply: `totalBytesBilled`
+ * (jobs.query), else `totalBytesProcessed` (getQueryResults carries only that).
+ * Undefined when the reply has neither — never estimated (live data L2.7).
+ */
+export function billedBytesOf(json: unknown): number | undefined {
+  for (const k of ['totalBytesBilled', 'totalBytesProcessed']) {
+    const raw = prop(json, k);
+    const n = typeof raw === 'string' && /^\d{1,16}$/.test(raw) ? Number(raw) : typeof raw === 'number' ? raw : NaN;
+    if (Number.isSafeInteger(n) && n >= 0) return n;
+  }
+  return undefined;
+}
+
 /** tables.get's schema → the workbench's column list (top-level fields). */
 export function describeColumns(json: unknown): { name: string; type: string; nullable: boolean }[] {
   return arr(prop(prop(json, 'schema'), 'fields')).map(fieldOf).filter((f) => f.name)

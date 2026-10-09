@@ -35,12 +35,14 @@ import {
   validateAnswerSpec,
 } from '../ai/answerSpec';
 import type { AnswerChip, AnswerSpec, SpecDataset, SpecMetric } from '../ai/answerSpec';
-import { answerFacts } from '../ai/answerFacts';
+import { answerFacts, describeAnswer } from '../ai/answerFacts';
 import type { Headline } from '../ai/answerFacts';
 import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
 import type { SuggestedAction } from '../ai/suggestedAction';
 import type { AsOf } from '../api/asOf';
 import { asOfFrom, utcLabel } from '../data/figureAsOf';
+import type { LiveFailureCode } from '../engine/live/liveQuery';
+import { liveCardFor } from './liveAnswers';
 import { ensureFresh } from '../data/freshOnAsk';
 import { withPulls } from '../data/freshOnAskState';
 
@@ -66,14 +68,15 @@ export interface AnswerCard {
   asOf?: AsOf;
 }
 
-interface Built {
+export interface Built {
   card: AnswerCard;
   factsText: string;
   ledger: LedgerEntry[];
   provenance: copilot.CopilotProvenance;
 }
 
-type Failure = { ok: false; reason: string };
+/** `code`: a Live dataset's typed failure (./liveAnswers) — the card says why, never an empty chart. */
+export type Failure = { ok: false; reason: string; code?: LiveFailureCode };
 
 const OK_AUDIT: NumberAudit = { ok: true, violations: [] };
 
@@ -125,12 +128,10 @@ function ranked(data: ChartData, top?: number): ChartData {
   };
 }
 
-function describe(spec: AnswerSpec): string {
-  const ms = spec.measures.map((m) => `${m.aggregation} of ${m.column}`).join(', ');
-  return `${ms} by ${spec.category}${spec.series ? `, split by ${spec.series}` : ''}`;
-}
-
 export async function computeCard(projectId: string, spec: AnswerSpec): Promise<Built | Failure> {
+  // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here.
+  const live = await liveCardFor(projectId, spec);
+  if (live) return live;
   await ensureFresh(projectId, [spec.datasetId]); // L3.1 fresh on ask: before the rows are read
   // ponytail: hydrates the dataset (periods, value matching and split chips all
   // read cells); a resident distinct-values query when answers over 1M rows feel slow.
@@ -162,7 +163,7 @@ export async function computeCard(projectId: string, spec: AnswerSpec): Promise<
   const read = asOfFrom([ds]);
   const asOf = read ? withPulls(read, projectId, [ds.id]) : read; // "· refreshing…" while a pull goes on (L3.1)
   const facts = answerFacts({
-    title: spec.title, datasetName: ds.name, describe: describe(spec), data,
+    title: spec.title, datasetName: ds.name, describe: describeAnswer(spec), data,
     categoryIsDate: isDate, additive, filterLabels, caption, ...(asOf ? { asOf: utcLabel(asOf.at) } : {}),
   });
   const notes = viz.warnings.slice();

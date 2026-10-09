@@ -145,10 +145,10 @@ async function flow(post: Post, u: URL, who: Identity, src: import('pg').Client)
     ok(`KPI ${label}: live (Postgres) equals the extract, Object.is`, got.ok && ext.ok && typeof got.value === 'number' && Object.is(ext.value, got.value), show([ext.value, got]));
   }
 
-  // PINNED DIVERGENCE — '' and NULL in a text category (for L2.8 to settle, docs/live-data/log.md L3.2).
-  // Every import types '' as null (parse.coerceCell), so the copy holds ONE empty group; the warehouse
-  // groups '' and NULL apart, so live answers TWO rows labelled "" whose counts add up to the copy's.
-  // The L2.2 bench did not see it: its extract was saved without the import's typing, '' kept.
+  // '' and NULL in a text category — found here (L3.2), settled by L2.8 (docs/live-data/log.md).
+  // Every import types '' as null (parse.coerceCell), so the copy holds ONE empty group; the
+  // warehouse groups '' and NULL apart, so live folds '' into NULL in a category key
+  // (compileFilter.keyText) and answers the same single "" row, with the same count.
   const pinEnc: VizEncoding = { category: 'note', values: [M('id', 'count')] };
   const pinExt = await as(() => visualsIpc.vizDataFor(P, extractId, pinEnc, []));
   const pinLive = await as(() => lq.liveVizData(P, liveId, pinEnc, []));
@@ -156,8 +156,8 @@ async function flow(post: Post, u: URL, who: Identity, src: import('pg').Client)
     d.labels.flatMap((l, i) => (l === '' ? [d.series[0].values[i] ?? 0] : []));
   const extBlank = pinExt.ok ? blanks(pinExt.data) : [];
   const liveBlank = pinLive.ok ? blanks(pinLive.data) : [];
-  ok('PINNED — a text category holding both \'\' and NULL: the copy has one "" row, live two that add up to it',
-    extBlank.length === 1 && liveBlank.length === 2 && liveBlank[0] + liveBlank[1] === extBlank[0], show({ extBlank, liveBlank }));
+  ok('a text category holding both \'\' and NULL: live (Postgres) answers the copy\'s one "" row, Object.is',
+    extBlank.length === 1 && liveBlank.length === 1 && Object.is(liveBlank[0], extBlank[0]), show({ extBlank, liveBlank }));
 
   // ── The UTC session, and its negative control ─────────────────────────────
   // Catch the statement the executor sends for the day chart, then send it again on a raw

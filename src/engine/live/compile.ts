@@ -10,6 +10,9 @@
 //   compileChart        the chart itself — categories, series, measures
 //   compileMetric       one number
 //
+// …and one lookup an AI answer asks before them (L2.4): compileCaseMatches,
+// the stored spellings of the text values a question names.
+//
 // THE RULES (copied from the resident layer so live and extract mean the same):
 //   - Identifiers come ONLY from the declared schema, quoted per dialect; a name
 //     the schema does not declare is refused. Values ONLY as parameters.
@@ -27,6 +30,8 @@
 //     there, the label wins here. A NULL key sorts last.
 //   - Bucket ids, not labels, come back: an epoch day, a bin index. Every label
 //     is written by `analysis/categoryKey` in ./shape.ts, never by SQL.
+//   - A text key folds '' into NULL, as every import stores '' (./compileFilter.ts
+//     `keyText`): one blank category, never two rows labelled ''.
 //
 // Aliases are distinct at every stage (`lv_a…` aggregates, `lv_b…` re-aggregates,
 // `o_…` outputs) because ClickHouse resolves an alias before a column of the
@@ -42,7 +47,7 @@ import { dialectFor } from './dialects';
 import type { CompiledQuery } from './sqlParams';
 import { ParamSink, hasNul } from './sqlParams';
 import type { Ctx } from './compileFilter';
-import { dateOf, emptyOf, nullsLast, numberOf, predicate, textOf } from './compileFilter';
+import { dateOf, emptyOf, keyText, nullsLast, numberOf, predicate } from './compileFilter';
 
 export type { CompiledQuery } from './sqlParams';
 
@@ -252,7 +257,7 @@ export function compileGrainProbe(ir: LiveIR, env: CompileEnv): Compiled {
 function keyExpr(c: Ctx, col: LiveColumn, key: LiveKey): string | LiveRefusal {
   if (key.kind === 'text') {
     if (col.type !== 'text') return refuse('categoryType', col.name);
-    return textOf(c, col);
+    return keyText(c, col);
   }
   if (key.kind === 'bins') {
     if (col.type !== 'number') return refuse('categoryType', col.name);
@@ -319,7 +324,7 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
     if (sc.type === 'date') return refuse('dateSeries', sc.name);
     seriesText = sc.type === 'text';
     if (seriesText) {
-      s = textOf(c, sc);
+      s = keyText(c, sc);
     } else {
       // −0 and 0 are ONE series, as they are one stored value in an extract
       // (String(-0) is '0'); a warehouse may group them apart.
@@ -404,4 +409,40 @@ export function compileChart(ir: LiveIR, key: LiveKey, env: CompileEnv): Compile
   const top = ir.top !== undefined && !s ? ` WHERE lv_cr2 <= ${c.b.bind('number', ir.top)}` : '';
   const sql = `WITH ${ctes.join(',\n')}\nSELECT ${out.join(', ')} FROM lv_ord${top} ORDER BY lv_cr2${s ? ', lv_sr' : ''}`;
   return { ok: true, query: c.b.finish(sql, d, cols) };
+}
+
+// ── The answers' case fix (L2.4) ─────────────────────────────────────────────
+
+/**
+ * How many stored spellings a case-fix lookup reads back PER ASKED VALUE (plan
+ * L2.4's LIMIT 20): one value asked is `LIMIT 20`, and an `in` of 25 values is
+ * never cut short at 20 — a value left unfixed would silently drop its category.
+ */
+export const CASE_FIX_LIMIT = 20;
+
+/**
+ * The stored spellings of asked text values — `answers.canonicaliseTextFilters`
+ * as one statement: `SELECT DISTINCT col … WHERE key(col) IN (…)`, where
+ * `key` is `trim().toLowerCase()` on both sides (the asked keys arrive keyed,
+ * each a bound parameter). Over ALL rows, as the extract reads every row.
+ * Ordered by the value so the LIMIT is deterministic: where two spellings share
+ * a key ("West" and "WEST") the extract keeps the first SEEN and live the first
+ * in the warehouse's order — a named divergence (docs/live-data/log.md, L2.4).
+ * Bounded at CASE_FIX_LIMIT rows per distinct key.
+ */
+export function compileCaseMatches(column: string, keys: string[], env: CompileEnv): Compiled {
+  const probe: LiveIR = { kind: 'chart', category: { column, kind: 'text' }, measures: [], filters: [], order: 'natural', weekCal: null };
+  const p = prepare(probe, env);
+  if (isRefusal(p)) return p;
+  const col = columnOf(p.c.columns, column)!;
+  if (col.type !== 'text') return refuse('categoryType', col.name);
+  if (!Array.isArray(keys) || keys.length === 0 || keys.some((k) => typeof k !== 'string')) return refuse('badQuery');
+  const c = p.c;
+  // The GROUP key's text (L2.8's fold): an import stores '' as null, so '' is
+  // never a stored spelling of a copy — nor, folded to NULL, of the warehouse.
+  const v = keyText(c, col);
+  const distinct = [...new Set(keys)];
+  const asked = distinct.map((k) => c.b.bind('text', k)).join(', ');
+  const sql = `SELECT DISTINCT ${c.d.label(v)} AS o_v FROM ${p.from} WHERE ${c.d.caseKey(v, c.b)} IN (${asked}) ORDER BY o_v LIMIT ${CASE_FIX_LIMIT * distinct.length}`;
+  return { ok: true, query: c.b.finish(sql, c.d, ['o_v']) };
 }

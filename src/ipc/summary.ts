@@ -43,6 +43,8 @@ import { listInsights } from './insights';
 import { resolveMetric } from './metrics';
 import { computeCardMetric } from './dashboards';
 import { guardAnswer } from './copilot';
+import { isLive } from '../data/liveDataset';
+import { isLiveFigureError } from './liveRoute';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_CARDS = 500;
@@ -102,11 +104,13 @@ async function kpiAndDriver(projectId: string, card: Card, filters: FilterStep[]
   const meta = await datasets.getDatasetMeta(projectId, m.datasetId);
   if (!meta) return { kpi: null, driver: null };
   const metric = { ...(m.metricId ? { metricId: m.metricId } : {}), column: m.column, aggregation: m.aggregation, ...(m.label ? { label: m.label } : {}) };
-  const dateCol = meta.columns.find((c) => c.type === 'date');
+  // A Live dataset's KPI is its level alone: the drivers read rows, which live has none of here (L2.4).
+  const live = isLive(meta);
+  const dateCol = live ? undefined : meta.columns.find((c) => c.type === 'date');
   // The card's own Compare first (but not under "as of": it moves TODAY's
   // periods), then the two latest periods the data has.
   const compares: unknown[] = [];
-  if (m.compare && m.compare.mode && !asOfIso()) compares.push(m.compare);
+  if (m.compare && m.compare.mode && !asOfIso() && !live) compares.push(m.compare);
   if (dateCol) compares.push({ mode: 'latest', column: dateCol.name });
   for (const compare of compares) {
     const spec = sanitizeDriversSpec({ datasetId: m.datasetId, metric, compare, path: [] }, filters);
@@ -126,24 +130,34 @@ async function kpiAndDriver(projectId: string, card: Card, filters: FilterStep[]
     }) : null;
     return { kpi, driver };
   }
-  // No second period to compare: the level alone, from the card's own resolver.
+  try {
+    return { kpi: await kpiLevel(projectId, card, m, filters, params), driver: null };
+  } catch (err) {
+    // A Live KPI the warehouse could not give: no sentence — the tile itself says why.
+    if (isLiveFigureError(err)) return { kpi: null, driver: null };
+    throw err;
+  }
+}
+
+/** No second period to compare: the level alone, from the card's own resolver. */
+async function kpiLevel(projectId: string, card: Card, m: NonNullable<Card['metric']>, filters: FilterStep[], params: ParamValues): Promise<SummarySentence | null> {
   if (m.metricId) {
     const r = await resolveMetric(projectId, m.metricId, { filters, params });
     if (r && r.ok && r.value !== null) {
-      return { kpi: kpiSentence({ cardId: card.id, metric: m.label || r.name, a: r.value, b: null, delta: null, pct: null, aText: r.display, bText: '', deltaText: '', aLabel: '', bLabel: '' }), driver: null };
+      return kpiSentence({ cardId: card.id, metric: m.label || r.name, a: r.value, b: null, delta: null, pct: null, aText: r.display, bText: '', deltaText: '', aLabel: '', bLabel: '' });
     }
   }
   const r = await computeCardMetric(projectId, m.datasetId, { column: m.column, aggregation: m.aggregation }, filters, params);
   const text = r.ok && r.value !== null ? formatValue(r.value, m.format || 'auto') : '';
-  return {
-    kpi: r.ok ? kpiSentence({ cardId: card.id, metric: m.label || `${m.aggregation} of ${m.column}`, a: r.value, b: null, delta: null, pct: null, aText: text, bText: '', deltaText: '', aLabel: '', bLabel: '' }) : null,
-    driver: null,
-  };
+  return r.ok ? kpiSentence({ cardId: card.id, metric: m.label || `${m.aggregation} of ${m.column}`, a: r.value, b: null, delta: null, pct: null, aText: text, bText: '', deltaText: '', aLabel: '', bLabel: '' }) : null;
 }
 
 async function insightFacts(projectId: string, ids: string[], tiles: Tile[]): Promise<SummarySentence[]> {
   const all = [];
-  for (const id of ids) all.push(...await listInsights(projectId, id));
+  for (const id of ids) {
+    if (isLive(await datasets.getDatasetMeta(projectId, id))) continue; // insights read rows: none on a Live dataset (as Home)
+    all.push(...await listInsights(projectId, id));
+  }
   return rankInsights(all, INSIGHTS_KEPT).map((i) => {
     const enc = i.chart && i.chart.encoding;
     const measures = enc ? (enc.values || []).map((m) => m.column) : [];

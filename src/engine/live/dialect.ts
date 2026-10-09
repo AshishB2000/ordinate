@@ -105,6 +105,12 @@ export interface SqlDialect {
   /** A text label as projected for the transport (the DuckDB BOM fix); identity elsewhere. */
   label(x: string): string;
   /**
+   * A text expression as the answers' case fix compares it — JS `trim()` (the
+   * class above, in full) then `toLowerCase()` — so "west" asked finds "West"
+   * stored (L2.4). NULL stays NULL.
+   */
+  caseKey(x: string, b: Binder): string;
+  /**
    * The schema profile's sample clause, written after a TABLE's name (L2.5), or
    * null when this engine has none worth using here — the profile's LIMIT then
    * bounds the rows (but not, on BigQuery, the bytes: the estimate gate does).

@@ -7,6 +7,8 @@
 // — the workspace's formats, branding and Assistant rules, dashboard themes,
 // and backups. Those live in the org's config, not in Postgres, so a server
 // without accounts (dev) still shows them; the account tabs need Postgres.
+// Live usage (live data L2.7) works either way: without Postgres it shows this
+// server's own counts, and says so.
 
 import { useSearchParams } from 'react-router';
 import { Page } from '../../app/blocks';
@@ -23,11 +25,12 @@ import { NoAccounts } from './NoAccounts';
 import { WorkspaceTab } from '../settings/WorkspaceTab';
 import { ThemesTab } from '../settings/ThemesTab';
 import { BackupsTab } from '../settings/BackupsTab';
+import { LiveUsageTab } from './LiveUsageTab';
 import { Icon } from '../../ui/icons/Icon';
 import s from './Admin.module.css';
 
 const ACCOUNT_TABS = ['people', 'teams', 'projects', 'audit', 'settings'] as const;
-const ORG_TABS = ['workspace', 'themes', 'backups'] as const;
+const ORG_TABS = ['workspace', 'themes', 'backups', 'live'] as const;
 type TabId = (typeof ACCOUNT_TABS)[number] | (typeof ORG_TABS)[number];
 
 export default function AdminPage() {
@@ -109,6 +112,9 @@ export default function AdminPage() {
           <Tab value="backups" icon="hard-drive">
             Backups
           </Tab>
+          <Tab value="live" icon="gauge">
+            Live usage
+          </Tab>
         </TabList>
         {accounts && (
           <>
@@ -137,6 +143,9 @@ export default function AdminPage() {
         </TabPanel>
         <TabPanel value="backups">
           <BackupsTab />
+        </TabPanel>
+        <TabPanel value="live">
+          <LiveUsageTab />
         </TabPanel>
       </Tabs>
     </Page>

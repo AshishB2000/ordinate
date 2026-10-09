@@ -30,6 +30,7 @@ import { assistantColumnDocs, withheldColumns } from '../app/sharePolicy';
 import { missingDependents, type MissingColumn } from '../analysis/liveDependents';
 import { liveColumnNotes, liveDatasetFacts } from '../ai/liveFacts';
 import type { CopilotFacts } from '../ai/copilot';
+import type { FactMetric } from '../ai/copilotFacts';
 import { startSchemaSync } from '../engine/live/schemaSyncJob';
 import * as msg from '../engine/liveProfileMessages';
 import { loadInput } from './lineage';
@@ -60,10 +61,19 @@ export async function liveWithheld(projectId: string, datasetId: string, meta: P
   }
 }
 
-/** The Assistant's facts for a Live dataset in context, or null when the dataset is not Live. */
-export async function liveCopilotFacts(projectId: string, datasetId: string): Promise<{ name: string; facts: CopilotFacts } | null> {
+/**
+ * The Assistant's facts for a Live dataset in context, or null when the dataset
+ * is not Live. `defined` reads the dataset's defined metrics — asked only for a
+ * Live dataset, each figure the warehouse's (the KPI door, L2.4).
+ */
+export async function liveCopilotFacts(
+  projectId: string,
+  datasetId: string,
+  defined: () => Promise<FactMetric[]> = async () => [],
+): Promise<{ name: string; facts: CopilotFacts; metrics: number } | null> {
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta || !isLive(meta) || !meta.live) return null;
+  const metrics = await defined();
   const facts = liveDatasetFacts({
     name: meta.name,
     columns: meta.columns,
@@ -71,8 +81,9 @@ export async function liveCopilotFacts(projectId: string, datasetId: string): Pr
     schemaSyncedAt: meta.live.schemaSyncedAt,
     withheld: await liveWithheld(projectId, datasetId, meta),
     docs: await assistantColumnDocs(projectId, datasetId),
+    metrics,
   });
-  return { name: meta.name, facts };
+  return { name: meta.name, facts, metrics: metrics.length };
 }
 
 /** A Live dataset's per-column line-ends for the project inventory; undefined for an extract. */

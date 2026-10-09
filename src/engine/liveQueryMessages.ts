@@ -37,3 +37,18 @@ export function liveNotLive(): string {
 export function liveDatasetMissing(): string {
   return t('liveQueryMessages.this_dataset_no_longer_exists');
 }
+
+/** A Live figure asked "as of" a past time: the warehouse answers now, and a Live dataset keeps no snapshots. */
+export function liveAsOfRefused(): string {
+  return t('liveQueryMessages.a_live_dataset_keeps_no_history');
+}
+
+/** A figure the extract would convert to another currency: the warehouse sums the amounts as they are stored. */
+export function liveFxRefused(): string {
+  return t('liveQueryMessages.this_figure_would_be_converted_to');
+}
+
+/** LIVE_DAILY_QUERY_LIMIT is used up for today and nothing was cached (L2.7). `limit` is formatted. */
+export function liveDailyLimit(limit: string): string {
+  return t('liveQueryMessages.this_organization_has_used_today_s', { limit });
+}

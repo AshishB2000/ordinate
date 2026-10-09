@@ -165,8 +165,11 @@ const readProbe = (file: string): Line[] =>
   const watch = mkPool();
   const pods: Pod[] = [];
   const allPods: Pod[] = [];
+  // Advisory locks in THIS scratch database only: other suites (live_usage's admission lock,
+  // test-liveUsage-db) and other runs share the server, and their locks are not this test's.
+  const OWN_ADVISORY = `locktype = 'advisory' AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`;
   const advisory = async (): Promise<number> =>
-    Number((await watch.query<{ n: string }>(`SELECT count(*) AS n FROM pg_locks WHERE locktype = 'advisory'`)).rows[0].n);
+    Number((await watch.query<{ n: string }>(`SELECT count(*) AS n FROM pg_locks WHERE ${OWN_ADVISORY}`)).rows[0].n);
   try {
     const lockB = freshLockModule();
     ok('two module copies: two pods\' state', lockB !== lockA);
@@ -248,7 +251,7 @@ const readProbe = (file: string): Line[] =>
       const gate = new Promise<void>((r) => { release = r; });
       const holding = inOrg('default', () => lockA.withRefreshLock(DS, () => gate.then(() => 'landed')));
       await sleep(50);
-      const pid = (await watch.query<{ pid: number }>(`SELECT pid FROM pg_locks WHERE locktype = 'advisory'`)).rows[0]?.pid;
+      const pid = (await watch.query<{ pid: number }>(`SELECT pid FROM pg_locks WHERE ${OWN_ADVISORY}`)).rows[0]?.pid;
       await watch.query('SELECT pg_terminate_backend($1)', [pid]);
       await sleep(100);
       ok('killed: the lock went with its session', (await advisory()) === 0);

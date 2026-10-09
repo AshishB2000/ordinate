@@ -12,6 +12,14 @@
 //      can tell "exists elsewhere" from "never existed".
 // A site whose project has been deleted is not served either.
 //
+// A PUBLIC LINK CANNOT RUN UP A WAREHOUSE BILL (live data L2.7, R-L2). Every
+// read here runs as a published page's request (context.ts runAsPublished):
+// a Live figure under it is never fresher than LIVE_MIN_CACHE_AGE_PUBLIC_SEC,
+// whatever its dataset's own cache age. A page is a snapshot built at publish
+// time (CSP `default-src 'none'`: it fetches nothing), so today a view sends
+// no warehouse query at all; the mark is what keeps that true for a page that
+// one day reads a Live figure when it is opened.
+//
 // THE PAGE'S OWN CSP. Every page pins its inline scripts and stylesheet by
 // SHA-256 in a <meta> (src/publish/siteHtml.ts); the app's header CSP
 // (script-src 'self') would refuse those very scripts, so this route sends the
@@ -21,7 +29,7 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
-import { runInContext, type Identify, type Identity } from './context';
+import { runAsPublished, type Identify, type Identity } from './context';
 import { getPage, getSite, PAGE_RE, type HostedSite } from '../publish/hosted';
 import { isValidId } from '../app/ids';
 
@@ -49,8 +57,9 @@ const anonymous = (org: string): Identity => ({ user: { email: 'anonymous', role
 
 /** The site and page as `who` (or, when null, the public) may see them. */
 async function find(pool: Pool | null, who: Identity | null, id: string, file: string, reqId: string): Promise<string | null> {
+  // As a published page's request: the Live cache floor (header) holds below it.
   const read = (as: Identity, allow: (s: HostedSite) => boolean | Promise<boolean>) =>
-    runInContext(as, reqId, async () => {
+    runAsPublished(as, reqId, async () => {
       const site = await getSite(id);
       if (!site || !(await allow(site))) return null;
       const projects = require('../app/projects') as typeof import('../app/projects');

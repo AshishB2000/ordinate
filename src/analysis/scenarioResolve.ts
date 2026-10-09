@@ -41,6 +41,7 @@ import { computeCardMetric } from '../ipc/dashboards';
 import { resolveMetric } from '../ipc/metrics';
 import { relatedColumnNames } from '../ipc/relationships';
 import { paramTable } from '../data/paramReplay';
+import { requireExtract } from '../data/liveDataset';
 import * as residentQuery from '../engine/residentQuery';
 import * as trace from '../engine/residentTrace';
 import { scenarioInputsResident } from '../engine/scenarioResident';
@@ -188,6 +189,9 @@ function inputsFor(ctx: Ctx, datasetId: string, column: string, all: FilterStep[
 // ── the mirror of metrics.ts resolveDefinition ───────────────────────────────
 
 async function operand(pass: Pass, datasetId: string, spec: { column: string; aggregation: MetricAggregation }, all: FilterStep[]): Promise<number | null> {
+  // Scenarios are off for a Live dataset in v1 (plan L2.6): refused, typed — though its
+  // KPIs are routed (L2.4), a driver's partitions read rows, so never a half-live figure.
+  requireExtract(await datasets.getDatasetMeta(pass.ctx.projectId, datasetId));
   const moves = spec.aggregation === 'count' ? [] : columnMoves(pass.ctx.drivers, spec.column);
   if (moves.length) {
     const parts = await inputsFor(pass.ctx, datasetId, spec.column, all, moves.map((m) => m.filter));

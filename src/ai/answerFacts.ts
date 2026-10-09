@@ -17,6 +17,13 @@ import type { ChartData } from '../analysis/vizData';
 import { compact } from '../analysis/captions';
 import { harvestAppNumbers } from './numberAudit';
 import type { LedgerEntry, LedgerUnit } from './numberAudit';
+import type { AnswerSpec } from './answerSpec';
+
+/** The spec in words — "sum of revenue by region, split by tier" — for `AnswerFactsInput.describe`. */
+export function describeAnswer(spec: AnswerSpec): string {
+  const ms = spec.measures.map((m) => `${m.aggregation} of ${m.column}`).join(', ');
+  return `${ms} by ${spec.category}${spec.series ? `, split by ${spec.series}` : ''}`;
+}
 
 const GUARD_LINE =
   'The numbers below were computed by the app (Ordinate), not by you. ' +
