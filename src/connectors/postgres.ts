@@ -676,8 +676,11 @@ async function describeTable(
 // its values as `$n` binds — never SQL text — under the same guards as `run`
 // (read-only session, server-side statement_timeout, the client closed on
 // every path, the SSRF-pinned address). The row cap is the same wrapper with
-// the statement on its own line (rule F3); the outer select is a plain
-// projection, so the compiled ORDER BY's order is what comes back.
+// the statement on its own line (rule F3). The answer's order does not rest on
+// the wrapper: the compiled statement returns its ranks, and the live shaping
+// sorts by them (Postgres keeps a derived table's order anyway, measured in L2.8).
+// The session runs in UTC (below); L2.8's parity run pins it on a database whose
+// own default zone is UTC+14 (scripts/liveParityPgPins.ts, R2).
 
 /** The text and values a bound query sends. Exported: the self-check pins that a value never reaches the text. */
 export function redshiftBound(
@@ -714,6 +717,9 @@ async function runBound(v: PgVariant, ctx: ConnectorContext, sql: string, params
   const signal = ctx.signal;
   if (signal?.aborted) return { ok: false, error: 'Cancelled' };
   return withClient<ConnectorRows>(v, ctx, async (client) => {
+    // UTC, as the extract reads a timestamptz (an instant → an ISO `Z` string): CAST(… AS DATE) and
+    // DATE_TRUNC follow the SESSION's zone, so a database set to another would shift a day (L3.2).
+    await client.query("set timezone to 'UTC'");
     if (signal?.aborted) return { ok: false, error: 'Cancelled' };
     const pid: unknown = (client as unknown as { processID?: unknown }).processID;
     const cancel: { done: Promise<void> | null } = { done: null };

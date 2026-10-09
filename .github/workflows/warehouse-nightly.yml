@@ -1,10 +1,17 @@
-name: Warehouse nightly (Snowflake, BigQuery)
+name: Warehouse nightly (Snowflake, BigQuery, ClickHouse)
 
 # The two warehouse connectors against REAL accounts (docs/live-data/00-plan.md,
 # L1.5): scripts/test-warehouseLive.ts, with credentials from repository
 # secrets. The per-PR suites run the same code off recorded replies; this run
 # says whether those recordings still match the services, and answers the
-# BigQuery read-only scope spike in the run's summary.
+# BigQuery read-only scope spike in the run's summary. Each warehouse then runs
+# the live-parity matrix (L2.8): every compiled statement through its runBound,
+# compared with the extract path — over a fixture held in literals, so the
+# accounts are never written.
+#
+# The `clickhouse` job runs the same matrix against a ClickHouse server in a
+# service container (scripts/test-liveParityClickhouse.ts); it needs no secret.
+# Postgres, standing in for Redshift, runs it on every PR (ci.yml's `check`).
 #
 # Not a required check, and nothing else depends on it. Without the secrets (a
 # fork, or before they are added) the script prints that it skipped and the job
@@ -36,7 +43,8 @@ jobs:
   live:
     name: Snowflake + BigQuery (real accounts)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The connector checks take a few minutes; the parity matrix ~500 statements a warehouse.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -63,3 +71,35 @@ jobs:
           BIGQUERY_DATASET: ${{ secrets.BIGQUERY_DATASET }}
           BIGQUERY_LOCATION: ${{ secrets.BIGQUERY_LOCATION }}
           BIGQUERY_SCRATCH_DATASET: ${{ secrets.BIGQUERY_SCRATCH_DATASET }}
+
+  clickhouse:
+    name: Live parity on ClickHouse (container)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      clickhouse:
+        # The LTS line the matrix was first run against (25.8, docs/live-data/log.md L2.8).
+        image: clickhouse/clickhouse-server:25.8
+        env:
+          CLICKHOUSE_USER: parity
+          CLICKHOUSE_PASSWORD: parity
+        ports:
+          - 8123:8123
+        options: --ulimit nofile=262144:262144
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci
+      - name: Type-check + compile TypeScript
+        run: npm run build:ts
+      - name: Wait for ClickHouse
+        run: |
+          for i in $(seq 1 60); do curl -fs http://127.0.0.1:8123/ping && exit 0; sleep 2; done
+          echo "ClickHouse never answered on 8123"; exit 1
+      - name: Live parity on ClickHouse
+        run: node scripts/test-liveParityClickhouse.js
+        env:
+          CLICKHOUSE_URL: http://parity:parity@127.0.0.1:8123

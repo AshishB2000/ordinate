@@ -1,7 +1,8 @@
 // The live-parity FIXTURE: one table holding every edge case the live compiler
 // must agree with the extract on, loaded twice — as an extract (a real dataset
 // in a scratch project, Parquet and all) and as a warehouse would hold it (TYPED
-// DuckDB tables). Helper for scripts/test-liveParity.ts; not a suite itself.
+// tables: DuckDB here, a real engine through ./liveParityEngines.ts). Helper for
+// scripts/test-liveParity*.ts and the real-account nightly; not a suite itself.
 //
 // Edge cases, by column:
 //   many    60 categories ('m00'…'m59') — past the 50 cap, so "Other" folds.
@@ -16,7 +17,8 @@
 //           round at its scale, a BIASED error of ~n·ε that tests the summation
 //           order of the engine, not the compiler (measured 8.9e-14 — at the edge).
 //           (DuckDB stores −0 as 0, so the bench cannot hold one; the shaping's
-//           −0 rule is pinned in test-liveCompile against a hand-made reply.)
+//           −0 rule is pinned in test-liveCompile against a hand-made reply,
+//           and Postgres and ClickHouse return real ones — L2.8's pin R4.)
 //   d       ISO-week (Sun 2024-12-29 / Mon 2024-12-30, ISO 2025-W01), quarter and
 //           year boundaries, a leap day, nulls.
 //   bigid   ids past 15 digits: text in the extract, HUGEINT in the warehouse.
@@ -24,10 +26,12 @@
 
 import type { LiveColumn } from '../src/engine/live/liveSpec';
 import type { CompileEnv, CompiledQuery, LiveSource } from '../src/engine/live/compile';
-import type { SqlDialect } from '../src/engine/live/dialect';
+import type { CompileDialectId, SqlDialect } from '../src/engine/live/dialect';
+import type { LiveStep } from '../src/engine/live/evaluate';
 import type { LiveRows } from '../src/engine/live/shape';
 
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
+const parse: typeof import('../src/data/parse') = require('../src/data/parse');
 
 export type Cell = string | number | null;
 
@@ -42,10 +46,25 @@ export const COLUMNS: LiveColumn[] = [
   { name: 'bigid', type: 'text' },
 ];
 
-/** How the warehouse holds each column (the DuckDB DDL type). */
-const TYPED: Record<string, string> = {
-  many: 'VARCHAR', cat: 'VARCHAR', region: 'VARCHAR', amt: 'DOUBLE', qty: 'DOUBLE', tier: 'DOUBLE', d: 'DATE', bigid: 'HUGEINT',
+/**
+ * How a warehouse holds a column — a storage KIND, which every engine spells in
+ * its own DDL (`ParityEngine.typeName`): a float, an integer, a 38-digit
+ * decimal, a DATE, a TIMESTAMP with or without a zone, text.
+ */
+export type Store = 'text' | 'float' | 'int' | 'smallint' | 'decimal' | 'date' | 'timestamp' | 'timestamptz';
+
+/** The fixture as a warehouse types it: a quantity is an integer, a long id a DECIMAL(38,0). */
+const STORES: Record<string, Store> = {
+  many: 'text', cat: 'text', region: 'text', amt: 'float', qty: 'int', tier: 'smallint', d: 'date', bigid: 'decimal',
 };
+
+/** The VARCHAR-number variant stores these two as text (the declared-type cast's case). */
+const TEXT_NUMBERS = new Set(['amt', 'qty']);
+
+export interface StoredColumn {
+  name: string;
+  store: Store;
+}
 
 export const CATS: Cell[] = [
   'Alpha', 'beta', 'Beta', '', '  ', '\t', '\u00a0', null, '007', '7', '\u00e9', 'e\u0301', '東京', '😀',
@@ -104,36 +123,95 @@ export function fixtureRows(): Cell[][] {
   return rows;
 }
 
+// ── The extract side ─────────────────────────────────────────────────────────
+
+/**
+ * `rows` typed EXACTLY as an import types them: every cell stringified as
+ * `connectionRun` does (null → '', −0 → '0'), then `parse.finalizeTable` — the
+ * core of every CSV, JSON and connection import — which detects the types and
+ * stores '' as null (a whitespace-only cell stays text). So '' and NULL, apart
+ * in the warehouse, are ONE null in the extract, as in every real copy (found
+ * by L3.2: the L2.2 bench saved its rows raw and kept them apart). Detected
+ * types must be the declared ones, or the two sides would answer different
+ * questions — a mismatch throws.
+ */
+export function importTyped(columns: { name: string; type: string }[], rows: Cell[][]): { columns: { name: string; type: import('../src/data/parse').ColumnType }[]; rows: Cell[][] } {
+  const r = parse.finalizeTable(columns.map((c) => c.name), rows.map((row) => row.map((v) => (v == null ? '' : String(v)))));
+  const off = r.columns.filter((c, i) => c.type !== columns[i].type);
+  if (off.length) throw new Error(`an import types ${off.map((c) => `${c.name} as ${c.type}`).join(', ')}, not as declared`);
+  return { columns: r.columns.map((c) => ({ name: c.name, type: c.type })), rows: r.rows };
+}
+
 // ── The warehouse side ───────────────────────────────────────────────────────
 
-function sqlType(name: string, textNumbers: boolean): string {
-  if (textNumbers && (name === 'amt' || name === 'qty')) return 'VARCHAR';
-  return TYPED[name];
+/** The fixture's columns as a warehouse holds them; with `textNumbers`, `amt` and `qty` are text. */
+export function layout(columns: LiveColumn[], textNumbers = false): StoredColumn[] {
+  return columns.map((c) => ({ name: c.name, store: textNumbers && TEXT_NUMBERS.has(c.name) ? 'text' : STORES[c.name] ?? 'text' }));
+}
+
+/**
+ * The rows as the warehouse holds them. With `textNumbers`, `amt` and `qty` are
+ * the number's JS text ('-0' for −0) and an empty one rotates NULL / '' / '  '.
+ */
+export function warehouseCells(columns: LiveColumn[], rows: Cell[][], textNumbers = false): Cell[][] {
+  if (!textNumbers) return rows;
+  let blank = 0;
+  return rows.map((r) => r.map((v, i) => {
+    if (!TEXT_NUMBERS.has(columns[i].name)) return v;
+    return v === null ? [null, '', '  '][blank++ % 3] : Object.is(v, -0) ? '-0' : String(v);
+  }));
+}
+
+/**
+ * Where the live side of the parity matrix runs: a compile dialect, a way to
+ * load a table typed the warehouse's way, and a runner. The DuckDB bench below
+ * is one; scripts/liveParityEngines.ts and scripts/warehouseLiveParity.ts hold
+ * the real engines, each running through its connector's own `runBound`.
+ */
+export interface ParityEngine {
+  /** Names the run in every check label. */
+  name: string;
+  dialect: CompileDialectId;
+  /** One compiled statement → rows positional to `q.columns`. Throws on a warehouse error. */
+  run(q: CompiledQuery, step: LiveStep): Promise<LiveRows>;
+  /**
+   * `rows` typed per `columns`, as a live source: a table created (or replaced)
+   * for them, or — on a warehouse the run may not write — a defining query
+   * that SELECTs them from literals.
+   */
+  load(table: string, columns: StoredColumn[], rows: Cell[][]): Promise<LiveSource>;
+  /** The engine's own name for a store — what a schema sync records as `sourceType`. */
+  typeName(store: Store): string;
+}
+
+/**
+ * The DuckDB bench's DDL. Every number is DOUBLE and the long id HUGEINT — the
+ * types L2.2 measured the matrix with; the real engines use integers and decimals.
+ */
+const DUCK_TYPE: Record<Store, string> = {
+  text: 'VARCHAR', float: 'DOUBLE', int: 'DOUBLE', smallint: 'DOUBLE', decimal: 'HUGEINT', date: 'DATE', timestamp: 'TIMESTAMP', timestamptz: 'TIMESTAMPTZ',
+};
+
+async function loadDuck(table: string, columns: StoredColumn[], rows: Cell[][]): Promise<LiveSource> {
+  const types = columns.map((c) => DUCK_TYPE[c.store]);
+  await duck.execAsync(`CREATE OR REPLACE TABLE "${table}" (${columns.map((c, i) => `"${c.name}" ${types[i]}`).join(', ')})`);
+  for (let at = 0; at < rows.length; at += 40) {
+    const params: Cell[] = [];
+    const tuples = rows.slice(at, at + 40).map((r) => `(${r.map((v, i) => {
+      params.push(v);
+      return `CAST($${params.length} AS ${types[i]})`;
+    }).join(', ')})`);
+    await duck.queryAsync(`INSERT INTO "${table}" VALUES ${tuples.join(', ')}`, params);
+  }
+  return { kind: 'table', parts: [table] };
 }
 
 /**
  * Load `rows` into a DuckDB table typed the way a warehouse types it. With
- * `textNumbers`, `amt` and `qty` are VARCHAR (the declared-type cast's case):
- * a number is its JS text ('-0' for −0), an empty one rotates NULL / '' / '  '.
+ * `textNumbers`, `amt` and `qty` are VARCHAR (see `warehouseCells`).
  */
 export async function loadWarehouse(table: string, columns: LiveColumn[], rows: Cell[][], textNumbers = false): Promise<void> {
-  const ddl = columns.map((c) => `"${c.name}" ${sqlType(c.name, textNumbers)}`).join(', ');
-  await duck.execAsync(`CREATE OR REPLACE TABLE "${table}" (${ddl})`);
-  let blank = 0;
-  for (let at = 0; at < rows.length; at += 40) {
-    const chunk = rows.slice(at, at + 40);
-    const params: (string | number | null)[] = [];
-    const tuples = chunk.map((r) => `(${columns.map((c, i) => {
-      let v = r[i];
-      const type = sqlType(c.name, textNumbers);
-      if (type === 'VARCHAR' && textNumbers && (c.name === 'amt' || c.name === 'qty')) {
-        v = v === null ? [null, '', '  '][blank++ % 3] : Object.is(v, -0) ? '-0' : String(v);
-      }
-      params.push(v);
-      return `CAST($${params.length} AS ${type})`;
-    }).join(', ')})`);
-    await duck.queryAsync(`INSERT INTO "${table}" VALUES ${tuples.join(', ')}`, params);
-  }
+  await loadDuck(table, layout(columns, textNumbers), warehouseCells(columns, rows, textNumbers));
 }
 
 /** A runner over the DuckDB bridge: rows come back by alias and leave positional. */
@@ -142,6 +220,15 @@ export async function runDuck(q: CompiledQuery): Promise<LiveRows> {
   return rows.map((r) => q.columns.map((c) => r[c] ?? null));
 }
 
-export function env(source: LiveSource, columns: LiveColumn[] = COLUMNS, dialect: SqlDialect | 'duckdb' = 'duckdb'): CompileEnv {
+/** The DuckDB bench as a parity engine — what every `npm test` runs the whole matrix on. */
+export const duckEngine: ParityEngine = {
+  name: 'duckdb',
+  dialect: 'duckdb',
+  run: (q) => runDuck(q),
+  load: loadDuck,
+  typeName: (store) => DUCK_TYPE[store],
+};
+
+export function env(source: LiveSource, columns: LiveColumn[] = COLUMNS, dialect: SqlDialect | CompileDialectId = 'duckdb'): CompileEnv {
   return { dialect, source, columns };
 }

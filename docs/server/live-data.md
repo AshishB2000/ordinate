@@ -269,6 +269,12 @@ BigQuery it also checks the cost estimate and the dry-run gate, and records the 
 answer (below). Throughout, it checks that no key, passphrase, token or signed assertion reaches a
 result, an error or its output.
 
+Then, for each warehouse, it runs the **live-parity matrix**: charts, KPI tiles and AI answers asked
+of a Live dataset and of a copy of the same rows, which must agree figure for figure. The rows are
+held in the query itself (literals cast to the warehouse's types), so nothing is written to the
+account and the read-only role below is enough. The same matrix runs against PostgreSQL on every
+pull request and against a ClickHouse container every night.
+
 It runs only when a warehouse's variables are set. Without them it prints that it skipped and
 passes, so `npm test` stays green. Setting only some of one warehouse's variables is a failure.
 These are inputs to the test, **not server settings**: the server never reads them, so they are not
@@ -307,10 +313,11 @@ add the ones you have, for example `gh secret set SNOWFLAKE_PRIVATE_KEY < ordina
 prints no credential and no account identifier, because the log of a public repository is public.
 
 **What it costs.** Snowflake: about two minutes of the warehouse (most of it the cancel check,
-which waits for Snowflake's own 45-second hand-off before cancelling), plus the warehouse's
-auto-suspend time. BigQuery: nothing billed in the usual case. Every query it runs reads generated
-rows rather than a table; the one table it touches, the public `bigquery-public-data.samples.shakespeare`,
-is only described and dry-run, and both are free.
+which waits for Snowflake's own 45-second hand-off before cancelling), plus the parity matrix's
+roughly 500 small statements, plus the warehouse's auto-suspend time. BigQuery: nothing billed in
+the usual case. Every query it runs reads generated or literal rows rather than a table; the one
+table it touches, the public `bigquery-public-data.samples.shakespeare`, is only described and
+dry-run, and both are free.
 
 **The read-only scope answer.** Each BigQuery run records, as `spike:` lines in the log and a table
 in the run's summary: which scopes Google granted the query token (from Google's `tokeninfo`),
