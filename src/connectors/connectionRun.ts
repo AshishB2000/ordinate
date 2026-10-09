@@ -43,7 +43,7 @@ export interface RunBounds {
 
 type RunOk = { ok: true; result: ParseResult; truncated: boolean };
 type RunErr = { ok: false; error: string };
-type TablesOk = { ok: true; tables: { schema?: string; name: string }[] };
+type TablesOk = { ok: true; tables: { schema?: string; name: string }[]; warnings?: string[] };
 
 /** Build the per-call context. Bounds are clamped to the module defaults — a
  *  caller may ask for LESS, never more, so no call site can quietly uncap. */
@@ -99,7 +99,9 @@ const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_$]*$/;
 
 // Per-family identifier quoting + row-limit syntax. Only the five families this
 // app ships are listed; anything else gets ANSI double quotes and LIMIT, which is
-// what Postgres, DuckDB, ClickHouse, Trino and Presto all accept.
+// what Postgres, DuckDB, ClickHouse, Trino and Presto all accept — and Snowflake,
+// whose listTables names `SCHEMA.TABLE`, or `DB.SCHEMA.TABLE` when the connection
+// has no database (quoted part by part, so the stored case is matched exactly).
 interface Dialect {
   quote: (part: string) => string;
   limit: (sql: string, n: number) => string;
@@ -243,7 +245,9 @@ export async function listTables(
       schema: typeof t?.schema === 'string' ? t.schema : undefined,
       name: String(t?.name ?? ''),
     }));
-    return { ok: true, tables };
+    // A test's warnings travel beside the tables, redacted like an error would be.
+    const warnings = (Array.isArray(res.warnings) ? res.warnings : []).filter((w) => typeof w === 'string' && w).map((w) => safeError(w, ctx.secrets));
+    return warnings.length ? { ok: true, tables, warnings } : { ok: true, tables };
   } catch (err: unknown) {
     return { ok: false, error: safeError(err, ctx.secrets) };
   }
@@ -321,7 +325,7 @@ export async function testConnection(
   secrets: Record<string, string>,
   selection?: { table?: string; query?: string },
   bounds?: RunBounds,
-): Promise<{ ok: true; tables: { schema?: string; name: string }[] } | RunErr> {
+): Promise<TablesOk | RunErr> {
   const def = resolve(connectorId);
   if (!def) return { ok: false, error: unknownConnector(connectorId) };
 

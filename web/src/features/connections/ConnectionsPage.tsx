@@ -63,10 +63,12 @@ function Connect({ projectId, projects }: { projectId: string; projects: { id: s
   const choose = (id: string | null) => setParams(id ? { source: id } : {}, { replace: false });
   const logoMap = logos.data ?? {};
 
-  function saved(c: Connection) {
+  function saved(c: Connection, warnings: string[]) {
     if (chosen) setDrafts(({ [chosen.id]: _gone, ...rest }) => rest);
     refreshLists();
     toast(`Connected “${c.name}”.`, { kind: 'success' });
+    // Also shown, to stay, beside the rail's test result in the workbench.
+    for (const w of warnings) toast(w, { kind: 'info' });
     // Saving a connection is never the goal — querying it is.
     void navigate(`/connections/${projectId}/${c.id}`);
   }

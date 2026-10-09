@@ -56,6 +56,9 @@ const DIALECTS: Readonly<Record<string, Dialect>> = {
       return `(${cast} IS NULL OR ${cast} >= ${lit})`;
     },
   },
+  // A zone-less literal read as TIMESTAMP_TZ takes the session zone, which
+  // snowflake.ts pins to UTC on every statement — the instant the mark means.
+  snowflake: { col: dq, ts: (s) => `'${s}'::timestamp_tz`, cmp: plain },
 };
 
 /** The families that can take a pushed predicate. */

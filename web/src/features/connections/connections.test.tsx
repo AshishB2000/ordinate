@@ -42,6 +42,33 @@ const CONN = {
   datasetCount: 2,
 };
 
+// Snowflake (L1.1): a multi-line secret — the private key — in a masked textarea.
+const SF: Connector = {
+  id: 'snowflake',
+  label: 'Snowflake',
+  family: 'snowflake',
+  category: 'Cloud warehouses',
+  browsable: true,
+  fields: [
+    { key: 'account', label: 'Account', type: 'text', required: true, secret: false },
+    { key: 'user', label: 'User', type: 'text', required: true, secret: false },
+    { key: 'token', label: 'Private key or access token', type: 'textarea', required: true, secret: true, placeholder: '-----BEGIN PRIVATE KEY-----' },
+    { key: 'password', label: 'Private key passphrase', type: 'password', required: false, secret: true },
+    { key: 'warehouse', label: 'Warehouse', type: 'text', required: true, secret: false },
+  ],
+};
+const PEM = '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7canary\nline+two/canary==\n-----END PRIVATE KEY-----';
+const PEM2 = '-----BEGIN PRIVATE KEY-----\nMIIEsecondKEYcanaryAAAA\n-----END PRIVATE KEY-----';
+const SF_CONN = {
+  ...CONN,
+  name: 'Warehouse',
+  connectorId: 'snowflake',
+  values: { account: 'myorg-myaccount', user: 'reader', warehouse: 'COMPUTE_WH', database: 'SALES' },
+  secretSet: { token: true, password: false },
+  datasetCount: 0,
+};
+const WARNING = 'This connection signs in with the ACCOUNTADMIN role, which can change data and account settings.';
+
 type Reply = { status?: number; body?: unknown } | ((payload: unknown) => { status?: number; body?: unknown });
 
 function serve(routes: Record<string, Reply>) {
@@ -125,6 +152,76 @@ describe('Connections', () => {
     const card = await screen.findByRole('link', { name: 'Open Orders DB' });
     expect(card.textContent).toContain('PostgreSQL · db.acme.test / orders');
     expect(card.textContent).toContain('2 datasets · never used');
+  });
+});
+
+describe('a multi-line secret (the Snowflake private key)', () => {
+  it('is a masked, write-only textarea whose value goes only into the secrets, line breaks intact', async () => {
+    let saved = false;
+    const calls = serve(
+      base({
+        'connectors:catalog': { body: [PG, SF] },
+        'connection:testAndSave': () => ((saved = true), { body: { ok: true, connection: SF_CONN, warnings: [WARNING] } }),
+        'connections:list': () => ({ body: saved ? [SF_CONN] : [] }),
+        'connection:listTables': { body: { ok: true, tables: [{ schema: 'PUBLIC', name: 'ORDERS' }], warnings: [WARNING] } },
+        'dataset:list': { body: [] },
+      }),
+    );
+    renderApp(`/connections/${PID}?source=snowflake`);
+    const key = (await screen.findByLabelText('Private key or access token *')) as HTMLTextAreaElement;
+    expect(key.tagName).toBe('TEXTAREA');
+    expect(key.value).toBe('');
+    expect(key.hasAttribute('data-secret')).toBe(true);
+    expect(key.getAttribute('spellcheck')).toBe('false');
+    expect(key.getAttribute('autocomplete')).toBe('off');
+    expect(key.getAttribute('autocapitalize')).toBe('off');
+    expect(document.getElementById(key.getAttribute('aria-describedby')!)!.textContent).toMatch(/Write-only: it is stored encrypted and never shown again\.$/);
+    fireEvent.change(key, { target: { value: PEM } });
+    // Copy and cut are refused, as on a password input.
+    expect(fireEvent.copy(key)).toBe(false);
+    expect(fireEvent.cut(key)).toBe(false);
+    fireEvent.change(screen.getByLabelText('Account *'), { target: { value: 'myorg-myaccount' } });
+    fireEvent.change(screen.getByLabelText('User *'), { target: { value: 'reader' } });
+    fireEvent.change(screen.getByLabelText('Warehouse *'), { target: { value: 'COMPUTE_WH' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Test & Save' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'connection:testAndSave')).toBe(true));
+    const sent = calls.find((c) => c.channel === 'connection:testAndSave')!.payload as { values: Record<string, unknown>; secrets: Record<string, string> };
+    expect(sent.secrets).toEqual({ token: PEM });
+    expect(JSON.stringify(sent.values)).not.toContain('PRIVATE KEY');
+    // Saved: the workbench opens; the test's warning is shown (toast and rail), the key nowhere.
+    const rail = await screen.findByRole('complementary', { name: 'Connection details' });
+    expect(await within(rail).findByText(WARNING)).toBeTruthy();
+    expect(within(rail).getByText('Key saved')).toBeTruthy();
+    expect(screen.getAllByText(WARNING).length).toBeGreaterThanOrEqual(1);
+    expect(document.body.innerHTML).not.toContain('canary');
+  });
+
+  it('shows "Key saved" in the rail; Replace reveals an EMPTY masked textarea and sends the new key once', async () => {
+    const calls = serve(
+      base({
+        'connectors:catalog': { body: [PG, SF] },
+        'connections:list': { body: [SF_CONN] },
+        'connection:listTables': { body: { ok: true, tables: [] } },
+        'dataset:list': { body: [] },
+        'connection:replaceSecret': { body: { ok: true, connection: SF_CONN } },
+      }),
+    );
+    renderApp(`/connections/${PID}/${CID}`);
+    const rail = await screen.findByRole('complementary', { name: 'Connection details' });
+    expect(within(rail).getByText('Key saved')).toBeTruthy();
+    expect(within(rail).getByText('Not set')).toBeTruthy(); // the passphrase
+    expect(rail.querySelector('textarea')).toBeNull();
+    fireEvent.click(within(rail).getByRole('button', { name: 'Replace Private key or access token' }));
+    const next = within(rail).getByLabelText('New private key or access token') as HTMLTextAreaElement;
+    expect(next.tagName).toBe('TEXTAREA');
+    expect(next.value).toBe('');
+    expect(next.hasAttribute('data-secret')).toBe(true);
+    fireEvent.change(next, { target: { value: PEM2 } });
+    fireEvent.click(within(rail).getByRole('button', { name: 'Test & replace' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'connection:replaceSecret')).toBe(true));
+    expect(calls.find((c) => c.channel === 'connection:replaceSecret')!.payload).toEqual({ projectId: PID, connId: CID, key: 'token', value: PEM2 });
+    await waitFor(() => expect(rail.querySelector('textarea')).toBeNull());
+    expect(document.body.innerHTML).not.toContain('secondKEYcanary');
   });
 });
 

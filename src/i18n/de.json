@@ -151,6 +151,7 @@
   "common.total": "Gesamt",
   "common.value": "Wert",
   "common.vs_previous": "ggü. Vorherigem",
+  "connectorMessages.this_connection_signs_in_with_the": null,
   "dashShare.and_more": "{p0} und {p1} weitere",
   "insights.a_change_of": " — eine Veränderung von {delta} ({p1}).",
   "insights.a_least_squares_line_through_over": "Eine Ausgleichsgerade durch {measure} über die letzten {n} Zeiträume ({p2} bis {p3}) {p4, select, true {steigt} other {fällt}} um {p5}, bzw. {p6} ihres Startwerts.",

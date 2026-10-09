@@ -22,12 +22,13 @@ export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import { withCsrf } from './csrfPair';
 import { execFileSync } from 'child_process';
-import { createSecretKey, randomBytes, randomUUID } from 'crypto';
+import { createSecretKey, generateKeyPairSync, randomBytes, randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { Writable } from 'stream';
 import { Client, Pool } from 'pg';
+import { FakeSnowflake, fixture, reply } from './snowflakeFake';
 
 // ── Capture every byte this process prints ─────────────────────────────────
 let captured = '';
@@ -53,6 +54,7 @@ const wire: typeof import('../src/server/wire') = require('../src/server/wire');
 const store: typeof import('../src/server/secrets/store') = require('../src/server/secrets/store');
 const api: typeof import('../src/api/index') = require('../src/api/index');
 const connApi: typeof import('../src/api/connections') = require('../src/api/connections');
+const snowflake: typeof import('../src/connectors/snowflake') = require('../src/connectors/snowflake');
 
 const LOCAL = ['duckdb-file', 'parquet-folder', 'csv-folder'];
 const CANARY = `Canary/pw+${randomBytes(6).toString('hex')}=x y`;
@@ -271,6 +273,38 @@ async function listen(env: Record<string, string>): Promise<{ base: string; clos
     const crossDel = await call(srv.base, 'connection:delete', { projectId: other, connId });
     ok('cross-project: another project\'s id finds no connection, and its secret survives', crossRun.body.ok === false && crossDel.body.ok === false
       && (await enc.get('default', 'connection.password', connId)) === CANARY2);
+
+    // ── Snowflake (L1.1): a multi-line private key and its passphrase ──────
+    // The key goes in the `token` slot and the passphrase in `password`; the
+    // reply carries `secretSet` booleans only. The connector runs for real
+    // (a JWT is signed with the key) over a fake SQL API, and both canaries join
+    // NEEDLES, so every check below — dumps, disk, replies, log — covers them.
+    const SF_PASS = `Sf/pass+${randomBytes(6).toString('hex')}=x y`;
+    const SF_KEY = generateKeyPairSync('rsa', {
+      modulusLength: 2048, publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem', cipher: 'aes-256-cbc', passphrase: SF_PASS },
+    }).privateKey;
+    NEEDLES.push(...spellings(SF_PASS), ...SF_KEY.split('\n').filter((l) => l.length >= 40 && !l.startsWith('-----')).map((l) => l.toLowerCase()));
+    ok('grep: the key\'s PEM lines are needles', leaks(SF_KEY) && leaks(`x ${encodeURIComponent(SF_PASS)}`));
+    const sf = new FakeSnowflake();
+    sf.answer = (_r, kind) => (kind === 'submit' ? reply(200, fixture('information-schema-tables')) : reply(200, '{}'));
+    snowflake.setTransport(sf.transport);
+    const sfValues = { account: 'MyOrg-MyAccount', user: 'reader', auth: 'keypair', warehouse: 'COMPUTE_WH', role: 'accountadmin', database: 'SALES' };
+    const sfSaved = await call(srv.base, 'connection:testAndSave', { projectId: project, connectorId: 'snowflake', name: 'Snowflake', values: sfValues, secrets: { token: SF_KEY, password: SF_PASS } });
+    const sfId = sfSaved.body.connection?.id as string;
+    ok('snowflake: tested (a key-pair JWT signed with the stored key) and saved', sfSaved.body.ok === true && sf.of('submit').length === 1
+      && sf.of('submit')[0].headers['x-snowflake-authorization-token-type'] === 'KEYPAIR_JWT', JSON.stringify(sfSaved.body).slice(0, 300));
+    ok('snowflake: the reply says WHICH secrets are set — booleans, nothing else', JSON.stringify(sfSaved.body.connection?.secretSet) === JSON.stringify({ token: true, password: true })
+      && !('token' in sfSaved.body.connection.values) && !('password' in sfSaved.body.connection.values));
+    ok('snowflake: the admin role is warned about, beside OK', Array.isArray(sfSaved.body.warnings) && /ACCOUNTADMIN role/.test(sfSaved.body.warnings[0]));
+    ok('snowflake: key in `token`, passphrase in `password`, in the encrypted store', (await enc.get('default', 'connection.token', sfId)) === SF_KEY
+      && (await enc.get('default', 'connection.password', sfId)) === SF_PASS);
+    const sfList = ((await call(srv.base, 'connections:list', { projectId: project })).body as { id: string; secretSet: Record<string, boolean> }[]).find((c) => c.id === sfId);
+    ok('snowflake: listed with secretSet only', JSON.stringify(sfList?.secretSet) === JSON.stringify({ token: true, password: true }));
+    const sfTables = await call(srv.base, 'connection:listTables', { projectId: project, connId: sfId });
+    ok('snowflake: listTables runs with the STORED key and carries the warning', sfTables.body.ok && sfTables.body.tables.length === 3 && sf.of('submit').length === 2 && /ACCOUNTADMIN/.test(sfTables.body.warnings?.[0]));
+    ok('snowflake: no request to the warehouse carries the key or the passphrase', sf.seen.every((q) => !leaks(`${q.url.href}${q.body}${JSON.stringify(q.headers)}`)));
+    snowflake.setTransport(null);
 
     // Every surface, while the secret is stored.
     const dumpTables = async (): Promise<string> => {

@@ -38,11 +38,11 @@ ok('mapped PostgreSQL resolves to a bundled path',
 ok('Amazon Redshift resolves to the supplied local PNG',
   typeof logos['amazon-redshift']?.src === 'string' &&
   logos['amazon-redshift'].src.startsWith('data:image/png;base64,'));
-// 41 until the desktop's three local-file sources went with it (T8.1).
-ok('catalog exposes exactly 38 unique connector ids',
-  catalogIds.length === 38 && new Set(catalogIds).size === 38,
+// 41 until the desktop's three local-file sources went with it (T8.1); 39 with Snowflake (L1.2).
+ok('catalog exposes exactly 39 unique connector ids',
+  catalogIds.length === 39 && new Set(catalogIds).size === 39,
   JSON.stringify(catalogIds));
-ok('all 38 catalog connectors resolve to real marks',
+ok('all 39 catalog connectors resolve to real marks',
   missing.length === 0,
   JSON.stringify(missing));
 ok('connector logos are structured-clone safe', (() => {

@@ -51,6 +51,7 @@ export const CONNECTOR_SI: Record<string, string> = {
   stripe: 'siStripe',
   github: 'siGithub',
   hubspot: 'siHubspot',
+  snowflake: 'siSnowflake',
 };
 
 // Relative luminance (WCAG) of a 6-hex color, 0 (black) … 1 (white).

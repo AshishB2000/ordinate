@@ -311,6 +311,7 @@ export function register(): void {
         connection: await withSecretSet(saved),
         status: 'ok',
         tables: test.tables,
+        ...(test.warnings ? { warnings: test.warnings } : {}),
       };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not test or save the connection' };
@@ -326,7 +327,7 @@ export function register(): void {
       const def = getConnector(conn.connectorId);
       const secrets = await loadSecrets(connId, def);
       const res = await connectionRun.listTables(conn.connectorId, conn.values, secrets);
-      return res.ok ? { ok: true, tables: res.tables } : { ok: false, error: res.error };
+      return res.ok ? { ok: true, tables: res.tables, ...(res.warnings ? { warnings: res.warnings } : {}) } : { ok: false, error: res.error };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not list tables' };
     }
@@ -442,7 +443,7 @@ export function register(): void {
       if (!test.ok) return { ok: false, error: test.error };
       await storeSecrets(connId, { [key]: value });
       const saved = await connections.updateConnection(projectId, connId, { lastStatus: 'ok', lastError: null });
-      return { ok: true, connection: await withSecretSet(saved ?? conn) };
+      return { ok: true, connection: await withSecretSet(saved ?? conn), ...(test.warnings ? { warnings: test.warnings } : {}) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not replace that secret' };
     }

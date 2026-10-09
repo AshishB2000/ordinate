@@ -149,14 +149,33 @@ export function useProjectDatasets(projectId: string | undefined) {
   });
 }
 
+/** One listTables call serves the tree (its tables) and the rail's test (its warnings). */
+type TablesReply = { tables: Table[]; warnings: string[] };
+
+async function fetchTables(projectId: string, connId: string): Promise<TablesReply> {
+  const r = unwrap((await rpc('connection:listTables', { projectId, connId })) as Reply<{ tables: Table[]; warnings?: string[] }>, 'Could not list tables');
+  return { tables: r.tables, warnings: r.warnings ?? [] };
+}
+
 export function useTables(projectId: string, connId: string, enabled: boolean) {
   return useQuery({
     queryKey: ['connection:listTables', projectId, connId],
-    queryFn: enabled
-      ? async () => unwrap((await rpc('connection:listTables', { projectId, connId })) as Reply<{ tables: Table[] }>, 'Could not list tables').tables
-      : skipToken,
+    queryFn: enabled ? () => fetchTables(projectId, connId) : skipToken,
     retry: false,
+    select: (d: TablesReply) => d.tables,
   });
+}
+
+/** What the last test said beside "OK" (an administrator role, say) — the same cache entry as useTables. */
+export function useTableWarnings(projectId: string, connId: string, enabled: boolean): string[] {
+  return (
+    useQuery({
+      queryKey: ['connection:listTables', projectId, connId],
+      queryFn: enabled ? () => fetchTables(projectId, connId) : skipToken,
+      retry: false,
+      select: (d: TablesReply) => d.warnings,
+    }).data ?? []
+  );
 }
 
 /** Invalidate what a connection write changes: the list (and its cards' dataset counts). */
@@ -175,7 +194,8 @@ export async function testAndSave(input: {
   values: Record<string, string | number | boolean>;
   secrets: Record<string, string>;
 }) {
-  return unwrap((await rpc('connection:testAndSave', input)) as Reply<{ connection: Connection }>, 'Could not connect').connection;
+  const r = unwrap((await rpc('connection:testAndSave', input)) as Reply<{ connection: Connection; warnings?: string[] }>, 'Could not connect');
+  return { connection: r.connection, warnings: r.warnings ?? [] };
 }
 
 export async function describeTable(projectId: string, connId: string, table: string) {

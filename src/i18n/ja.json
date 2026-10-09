@@ -151,6 +151,7 @@
   "common.total": "合計",
   "common.value": "値",
   "common.vs_previous": "対前",
+  "connectorMessages.this_connection_signs_in_with_the": null,
   "dashShare.and_more": "{p0}、ほか{p1}件",
   "insights.a_change_of": " — {delta}（{p1}）の変化。",
   "insights.a_least_squares_line_through_over": "直近{n}期間（{p2}〜{p3}）の{measure}を通る最小二乗直線は、{p5}{p4, select, true {上昇} other {下降}}しており、開始時点の{p6}に相当します。",

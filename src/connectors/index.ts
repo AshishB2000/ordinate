@@ -30,13 +30,14 @@ const FAMILY_MODULES: readonly string[] = [
   './http',     // ClickHouse, Databricks SQL, Trino, Presto, Elasticsearch, OpenSearch, Druid
   './url',      // the original URL/API JSON source
   './saas',     // Google Sheets, Airtable, Notion, Stripe, GitHub, HubSpot
+  './snowflake', // Snowflake (SQL API)
 ];
 
 // Picker grouping order. Anything with an unrecognised category sorts last —
 // it is still reachable, just not ahead of the known groups.
 const CATEGORY_ORDER: readonly string[] = ['Databases', 'Cloud warehouses', 'Query engines', 'Files & local', 'Apps & SaaS'];
 const KNOWN_CATEGORIES: ReadonlySet<string> = new Set(CATEGORY_ORDER);
-const FIELD_TYPES: ReadonlySet<string> = new Set(['text', 'number', 'password', 'select', 'checkbox']);
+const FIELD_TYPES: ReadonlySet<string> = new Set(['text', 'number', 'password', 'select', 'checkbox', 'textarea']);
 
 export interface RegistryDiagnostics {
   /** Modules in FAMILY_MODULES that could not be required at all. */
