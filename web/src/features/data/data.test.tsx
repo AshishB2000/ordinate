@@ -136,7 +136,7 @@ describe('Live datasets (L2.1)', () => {
     expect(within(row).queryByRole('combobox')).toBeNull();
   }, 30_000);
 
-  it('the dataset page: a Live badge, no row-reading tabs, and no request for rows', async () => {
+  it('the dataset page: a Live badge, the row-reading tabs say why they are off, and no request for rows', async () => {
     const calls = serve({
       ...common,
       'dataset:list': { body: [LIVE] },
@@ -146,7 +146,11 @@ describe('Live datasets (L2.1)', () => {
     renderApp(`/data/${P}/${D}`);
     expect(await screen.findByRole('heading', { name: 'Live — the rows stay in the warehouse' }, { timeout: LAZY })).toBeTruthy();
     expect(await screen.findByText('Live · cached up to 5 min')).toBeTruthy();
-    expect(screen.queryByRole('tab', { name: /Quality/ })).toBeNull();
+    // L2.6: Quality, Insights and Snapshots stay as tabs, each saying why it is off and offering a copy.
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /Quality/ }), { button: 0 });
+    expect(await screen.findByRole('heading', { name: 'Quality checks are off for Live datasets' })).toBeTruthy();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Data' }), { button: 0 });
+    await screen.findByRole('heading', { name: 'Live — the rows stay in the warehouse' });
     expect(screen.queryByRole('link', { name: 'Prepare' })).toBeNull();
     expect(calls.some((c) => ['dataset:page', 'dataset:stats', 'quality:list', 'insights:list'].includes(c.channel))).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Copy the data instead' }));

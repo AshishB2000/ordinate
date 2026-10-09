@@ -81,7 +81,8 @@ export function Editor({ projectId, datasets, columns, related, initial }: {
             // Another dataset starts a fresh build — the open visual and its styling stay as saved.
             onValueChange={(id) => void navigate(`/visuals/${projectId}/new?dataset=${encodeURIComponent(id)}`)}
           />
-          <AsOfPicker projectId={projectId} datasetIds={[datasetId]} value={b.asOf} onChange={b.setAsOf} />
+          {/* "As of" reads a kept snapshot; a Live dataset keeps none (L2.6). */}
+          {!b.liveDataset && <AsOfPicker projectId={projectId} datasetIds={[datasetId]} value={b.asOf} onChange={b.setAsOf} />}
           <Button
             size="sm"
             icon="sparkles"

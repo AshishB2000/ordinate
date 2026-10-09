@@ -1,0 +1,47 @@
+/* Off for Live (L2.6): the reason and "Make a copy" — the shared empty-state
+   frame, on the web tokens, so both themes follow theme.css. */
+
+.off {
+  display: flex;
+  flex-direction: column;
+}
+
+.pageBack {
+  display: flex;
+  margin-bottom: var(--sp-12);
+}
+
+/* A refused figure sits inside a card or a tile: no frame of its own, centred in what it has. */
+.refusal {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+.refusal > * {
+  max-width: 420px;
+}
+
+/* A note above row-reading tools when the dataset picked is Live. */
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8) var(--sp-12);
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: var(--t-13);
+}
+.banner > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.banner > p {
+  flex: 1 1 320px;
+  margin: 0;
+}

@@ -15,6 +15,8 @@ import { AGG_LABEL, useTile, type Card, type MetricTile } from '../api';
 import { useEditor } from './context';
 import { useTileAsOf } from './tileAsOf';
 import s from './Cards.module.css';
+import { LiveRefusal } from '../../live/LiveOff';
+import { liveRefusalOf } from '../../live/refusal';
 
 /** "+18.2%" / "−4.1%" — one decimal under 10%, none above, a real minus sign (kpiPct). */
 export function kpiPct(pct: number): string {
@@ -53,6 +55,9 @@ export function MetricBody({ card }: { card: Card }) {
     );
   }
   const t = q.data;
+  // Off for a Live dataset (L2.6): the server's reason and a copy.
+  const live = liveRefusalOf(q.isError ? q.error : t);
+  if (live !== null) return <LiveRefusal message={live} projectId={ed.projectId} datasetId={m.datasetId} />;
   if (q.isError || !t || !t.ok) {
     return (
       <div className={s.metric}>

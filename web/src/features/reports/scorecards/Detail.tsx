@@ -13,6 +13,8 @@ import { IconButton } from '../../../ui/Button';
 import { SkeletonBlock, SkeletonRows } from '../../../ui/Skeleton';
 import { ErrorState } from '../../../ui/States';
 import type { ScoreDetail } from '../api';
+import { LiveRefusal } from '../../live/LiveOff';
+import { liveRefusalOf, replyError } from '../../live/refusal';
 import { Dot } from './Dot';
 import s from './Scorecard.module.css';
 
@@ -24,7 +26,8 @@ export function Detail({ projectId, scorecardId, metricId, offset, onClose }: { 
     queryKey: ['scorecard:detail', projectId, scorecardId, metricId, offset],
     queryFn: async () => {
       const r = (await rpc('scorecard:detail', { projectId, id: scorecardId, metricId, offset })) as ScoreDetail | { ok: false; error: string };
-      if (!r.ok) throw new Error(r.error || 'Could not load this metric.');
+      // A metric over a Live dataset (L2.6): its history reads rows — the server's typed refusal keeps its code.
+      if (!r.ok) throw replyError(r, 'Could not load this metric.');
       return r;
     },
   });
@@ -50,6 +53,8 @@ export function Detail({ projectId, scorecardId, metricId, offset, onClose }: { 
             <SkeletonBlock label="Loading the history" />
           </div>
         </div>
+      ) : q.isError && liveRefusalOf(q.error) !== null ? (
+        <LiveRefusal message={liveRefusalOf(q.error) ?? ''} projectId={projectId} />
       ) : q.isError ? (
         <ErrorState compact heading={3} title="Could not load this metric" message={q.error.message} onRetry={() => void q.refetch()} />
       ) : (

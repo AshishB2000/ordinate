@@ -137,7 +137,11 @@ export function withLargeDataset(): void {
   seedOpts.large = true;
 }
 
-/** Call at a spec's top level: this file's server also gets a Live dataset over the test harness's fake warehouse (server.sample.live). */
+/**
+ * Call at a spec's top level: this file's server also gets a Live dataset over
+ * the test harness's fake warehouse (server.sample.live), and runs with
+ * ORDINATE_TEST_LIVE_FAKE=1 so the fake connector resolves (L2.3, L2.4, L2.6).
+ */
 export function withLiveDataset(): void {
   seedOpts.live = true;
 }

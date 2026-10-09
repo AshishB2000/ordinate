@@ -67,3 +67,18 @@ export function liveOptInInUseMessage(n: number, count: string, label: string): 
 export function liveNoOptInMessage(): string {
   return t('liveMessages.this_connection_has_no_read_replica');
 }
+
+/** "Make a copy" (L2.6) asked of a dataset that is not Live: it keeps its rows already. */
+export function liveCopyNotLiveMessage(): string {
+  return t('liveMessages.this_dataset_is_not_live_it');
+}
+
+/** "Make a copy" could not read the warehouse. Its own words go to the server log only (R-L6). */
+export function liveCopyReadFailedMessage(): string {
+  return t('liveMessages.the_warehouse_could_not_be_read');
+}
+
+/** "Make a copy" read the rows but could not store them. */
+export function liveCopySaveFailedMessage(): string {
+  return t('liveMessages.the_copy_could_not_be_saved');
+}

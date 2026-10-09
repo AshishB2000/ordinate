@@ -153,6 +153,11 @@ prompts unrounded); a leading U+FEFF is lost on every string the bridge returns 
   (the "This is a read replica or a warehouse" checkbox); `isLiveOffered(def, values)` decides per
   CONNECTION — create, `dataset:setMode`, `dataset:source` and every executor question ask it. The
   catalog's `live` means "can be Live"; `liveOptIn` names the box. A Postgres/Redshift live session runs in UTC.
+- **Off for Live, in the web** (L2.6, `web/src/features/live/`): a screen that reads rows never asks its
+  channel for a Live dataset — it gates on `mode: 'live'` from the list or header it already has and
+  shows why, with **"Make a copy"** (`dataset:copyLive`: a NEW extract of the same selection through
+  the import door; the Live record is never written). A typed refusal from any figure renders through
+  `liveRefusalOf` + `<LiveRefusal>` (the server's sentence, never a retry).
 
 ### Workspace
 

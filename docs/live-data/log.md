@@ -1172,3 +1172,82 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
     flights, rejecting with L2.7's `LiveCallError`.
   - The safety net's §5 (L2.5: a profile opens nothing but the pickers and the panel) skips the
     routed doors, which answer profiled or not — and checks that they do.
+
+## 2026-10-09 — L2.6 The Live experience
+
+- **Built — the dataset page.** A Live dataset's header carries its settings: the **Live switch**
+  (`LiveSettings.tsx`; off asks "Copy the data instead?" — Keep it Live · Make a copy · Copy the data;
+  on an extract it appears only where `dataset:source.canGoLive`, and opens the existing confirm), the
+  **cache-age picker** (Always live · 1 min · 5 min (default) · 1 h · 6 h · 1 day — an age set another
+  way is shown in its place, never replaced; `dataset:setMode` live → live) and **Refresh now**
+  (`dataset:refresh`, which bumps the epoch; it says "Cache reset — the next figure asks the
+  warehouse."). Tabs (`LiveDataset.tsx`): **Data** (what works, the plan's six groups that need a copy,
+  Make a copy / Copy the data instead), **Schema** (`SchemaPanel.tsx`, L2.5's panel at last: when the
+  columns were synced, "Profiled from a sample of 240 rows", each column's filled share, distinct count
+  and sample values, a lock where a model is never shown them, the missing columns and what names them,
+  and **Sync schema**), **Columns** (the notes; its example placeholder from the sample, no
+  `dataset:stats` call), and **Quality · Insights · Snapshots**, each saying why it is off.
+- **Built — "Make a copy".** `dataset:copyLive` (`write`, project-scoped, strict input; contract in
+  `src/api/live.ts`, handler in `src/ipc/liveDatasets.ts`): the Live dataset's selection fetched through
+  the SAME door as Live → extract (`fetchSelection`, factored out of `setDatasetMode`: the secret
+  resolved in main, `connectionRun.runConnection` at the app's row cap, the SSRF guard) and saved as a
+  NEW extract "<name> (copy)" by `datasets.saveDataset`, then the sensitivity scan. The Live record is
+  never written. Reply: `{ok, dataset: {id, name, rowCount}, warnings}`. Three catalog sentences
+  (`liveMessages.ts`). Not a job: `connection:import` is not one either.
+- **Built — off for Live everywhere else** (`web/src/features/live/`): `offFeatures.ts` (each feature's
+  title, why, and where the copy opens — the copy of a Live dataset opened from its Quality tab lands on
+  the copy's Quality tab), `LiveOff.tsx` (`<LiveOff>`, `<LiveOffPage>`, `<LiveRefusal>`, `<LiveBanner>`,
+  `useMakeCopy`, `useIsLive`), `refusal.ts` (`liveRefusalOf`: ONE reading of the three shapes — a reply's
+  `live_dataset`, the adapter's `live_refused` with its sentence, the route's 409 — and `replyError`,
+  which keeps the code through a hook's throw). Gated before any request: Prepare (`PreparePage`), the
+  three workbenches (`DatasetRoute`), pivot / cohort / funnel in the builder (not offered, and a saved
+  one says why with "Draw a column chart instead"), the rows behind a mark and the builder's "As of",
+  joins (the composer lists a Live dataset but not as a source; the relationship dialog leaves it out
+  and says how many), "Combine" on a Live row, the Analytics hub (a banner, "Live" not "0 rows"), data
+  search (says how many Live datasets it skipped). Rendered from a typed refusal: the builder's stage,
+  dashboard chart and KPI tiles, the answer card, scenarios, the scorecard's detail panel. Filter pickers over a profile say "From a
+  sample of N rows" (`dataset:distinct` gains `sampleRows`, L2.5's reply).
+- **Every figure, checked.** The words were L0.2's (`ui/asOf.ts`, tests for "Live · 2:05 AM", "Live ·
+  cached 3 min ago", "Stale · as of …"); the builder's stage, dashboard cards (chart, KPI, statistics)
+  and answer cards already show a reply's `asOf`. No gap in the web; the builder test pins "Live · …" on
+  a live reply.
+- **Decided — gate on what the screen already has, never on the refusal.** A 409 in the browser is a
+  console error, and a 200 refusal is a round trip spent to learn what `dataset:list` (or the header)
+  already said. So the gates read `mode: 'live'`; `liveRefusalOf` is for the figures L2.4 routes and
+  the ones it still refuses (pivot, facets, maps, raw points, "as of", fx, related columns, the daily
+  limit, a missing column). A Live failure that is not "off" (`live_failed`, `live_timeout`, …) stays an
+  ordinary error with a retry — the negative controls in `live.test`, `liveTile.test`, `liveBuilder.test`.
+- **Decided — the copy carries the column notes**, the personal / financial marks above all, onto the
+  columns it has: a copy is never less protected than the dataset it came from.
+- **Decided — a copy is an import, not a live question:** it reads through the connector's `run`
+  (the import door and its row cap), never `warehouse()`, so it is not counted against
+  `LIVE_DAILY_QUERY_LIMIT` (L2.7) — as "Copy the data instead" never was.
+- **Decided — the warehouse's words stay in the log** (R-L6, as the executor): a failed copy answers a
+  catalog sentence, and the connector's (safeError'd) error is one `[live]` line in the server log.
+- **Measured.** A copy over the route (`test-liveCopy`; the fake warehouse's 240 rows in the org's
+  DuckDB worker, the Parquet write, the scan; 4 vCPU container shared with other agents): median
+  17.9 – 28.3 ms over 3 runs of 5. The e2e's page loads stay well inside the RPC budget.
+- **Tests.** `test-liveCopy` (33): the contract, a project viewer refused (authorize over a grant table)
+  — NEGATIVE CONTROL: the same viewer reads the Schema panel — a member without a grant 403 over the
+  route with nothing saved; the copy (every row against a direct count, typed, refreshable, pages, the
+  personal mark carried, a second copy is another dataset); the Live record byte-identical and no
+  `runBound` spent; the reply's exact keys and no SQL or secret; a warehouse error answered with the
+  catalog sentence — NEGATIVE CONTROL: the log has the canary; the metadata address refused by the SSRF
+  guard — NEGATIVE CONTROL: a public address copies; refusals: an extract, a missing dataset, a gone
+  connection, a non-UUID. `test-liveSafetyNet` +1: Make a copy answers 200, never the refusal (the way
+  out). Vitest: `live.test` (refusal shapes, the off table, the cache-age options, the Schema panel's
+  words), `livePage.test` (the page, the settings' payloads, the confirm, Schema + Sync, Make a copy
+  landing on the copy's Quality tab, a refused copy, Prepare and Statistics never asked — NEGATIVE
+  CONTROL: an extract's Prepare asks), `liveBuilder.test`, `liveTile.test`; `data.test`'s L2.1 case now
+  opens the Quality tab. e2e `live.e2e.ts` over the fake warehouse (`withLiveDataset()` in the fixtures):
+  the page, Sync schema (240 rows), a new cache age on the server, Refresh now, Quality / Prepare /
+  Statistics off, the builder (the warehouse's "Live · …" or the typed refusal), Make a copy → 240 rows
+  and the Live dataset still Live; screens `live-dataset`, `live-schema`, `live-off-quality`,
+  `live-builder`, both themes. `connections.e2e`'s Live flow asserts the Quality tab's reason instead
+  of its absence.
+- **Not done.** A dashboard dropdown control over an UNPROFILED Live column still meets
+  `dataset:distinct`'s 409 (L2.5's refusal; the control cannot know the profile is missing without a
+  request); Sync schema fixes it. The published `/p/` page is unchanged (L2.4's). A scorecard ROW whose
+  warehouse call fails still reads n/a without the reason: `scorecards.ts`' `figure()` swallows it
+  under `resolveMetric(...).catch(() => null)`, so showing why needs the reason threaded through the
+  row — a server change left for a follow-up (the detail panel does say why).

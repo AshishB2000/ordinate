@@ -69,7 +69,7 @@ function Drivers({ projectId, datasetId, ds }: { projectId: string; datasetId: s
 
 export default function DriversPage() {
   return (
-    <DatasetRoute title="Why did this change?">
+    <DatasetRoute title="Why did this change?" kind="drivers">
       {(projectId, datasetId, ds) => <Drivers key={datasetId} projectId={projectId} datasetId={datasetId} ds={ds} />}
     </DatasetRoute>
   );

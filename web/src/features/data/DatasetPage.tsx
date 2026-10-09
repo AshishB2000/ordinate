@@ -31,7 +31,9 @@ import { InsightsTab } from '../analytics/insights/InsightsTab';
 import { SnapshotsTab } from '../analytics/snapshots/SnapshotsTab';
 import s from './Data.module.css';
 import { CommentDoor } from '../dashboards/CommentsPanel';
-import { LiveBadge, LiveNotice, SwitchToLiveDialog } from './LiveMode';
+import { LiveBadge, SwitchToLiveDialog } from './LiveMode';
+import { LiveTabs } from './LiveDataset';
+import { CacheAgePicker, LiveSwitch, RefreshNow } from './LiveSettings';
 import { RefreshUrlDialog } from './RefreshUrl';
 
 const TABS = ['data', 'quality', 'columns', 'insights', 'snapshots'] as const;
@@ -122,6 +124,9 @@ function Header({ projectId, id, name, rowCount, columnCount, live }: { projectI
               </span>
             )}
             {d && <SchedulePicker projectId={projectId} d={d} />}
+            {/* A Live dataset's settings (L2.6): its cache age is its schedule; Refresh now resets the cache. */}
+            {live && <CacheAgePicker projectId={projectId} datasetId={id} name={name} maxCacheAgeSec={source.data?.maxCacheAgeSec ?? d?.maxCacheAgeSec} />}
+            <LiveSwitch projectId={projectId} datasetId={id} name={name} live={live} canGoLive={!!source.data?.canGoLive} rowCount={rowCount} />
             {d && <IncrementalButton projectId={projectId} d={d} />}
             {d && <FreshOnAskPicker projectId={projectId} d={d} />}
             {d && <WatchToggle projectId={projectId} d={d} />}
@@ -131,10 +136,14 @@ function Header({ projectId, id, name, rowCount, columnCount, live }: { projectI
                 {usedInText(lineage.data.usedIn) || 'Not used yet'}
               </button>
             )}
-            {d?.originKind && (
-              <Button size="sm" icon="refresh" loading={outcome?.busy} onClick={() => void refresh.run(id)}>
-                Refresh
-              </Button>
+            {live ? (
+              <RefreshNow projectId={projectId} datasetId={id} />
+            ) : (
+              d?.originKind && (
+                <Button size="sm" icon="refresh" loading={outcome?.busy} onClick={() => void refresh.run(id)}>
+                  Refresh
+                </Button>
+              )
             )}
           </div>
           {outcome?.message && (
@@ -242,22 +251,7 @@ export default function DatasetPage() {
     return (
       <div className={s.page}>
         <Header projectId={projectId} id={datasetId} name={header.name} rowCount={header.rowCount} columnCount={header.columns.length} live />
-        <Tabs value={tab === 'columns' ? 'columns' : 'data'} onValueChange={setTab}>
-          <TabList label="Dataset views">
-            <Tab value="data" icon="table">
-              Data
-            </Tab>
-            <Tab value="columns" icon="columns">
-              Columns
-            </Tab>
-          </TabList>
-          <TabPanel value="data">
-            <LiveNotice projectId={projectId} datasetId={datasetId} maxCacheAgeSec={maxCacheAgeSec} />
-          </TabPanel>
-          <TabPanel value="columns">
-            <ColumnsTab projectId={projectId} datasetId={datasetId} header={header} />
-          </TabPanel>
-        </Tabs>
+        <LiveTabs projectId={projectId} datasetId={datasetId} header={header} tab={asked ?? 'data'} onTab={setTab} maxCacheAgeSec={maxCacheAgeSec} />
       </div>
     );
   }

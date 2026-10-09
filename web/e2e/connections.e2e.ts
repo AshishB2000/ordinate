@@ -354,11 +354,12 @@ if (adminUrl) {
     await row.getByText('Live · asked at the warehouse').waitFor();
     assert.equal(await row.getByRole('combobox').count(), 0, 'no refresh schedule on a Live dataset');
 
-    // The dataset page: a Live badge, the notice in place of rows, only Data and Columns.
+    // The dataset page: a Live badge, the notice in place of rows; Quality says why it is off (L2.6).
     await row.getByRole('link', { name: 'Orders live' }).click();
     await page.getByRole('heading', { name: 'Live — the rows stay in the warehouse' }).waitFor();
     await page.getByText('Live · cached up to 5 min').waitFor();
-    assert.equal(await page.getByRole('tab', { name: /Quality/ }).count(), 0);
+    await page.getByRole('tab', { name: 'Quality' }).click();
+    await page.getByRole('heading', { name: 'Quality checks are off for Live datasets' }).waitFor();
     assert.equal(await page.getByRole('link', { name: 'Prepare' }).count(), 0);
     const datasetId = new URL(page.url()).pathname.split('/').pop()!;
     await page.getByRole('tab', { name: 'Columns' }).click();

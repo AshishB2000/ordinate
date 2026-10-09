@@ -10,12 +10,16 @@ import { Button } from '../../ui/Button';
 import { Dialog, DialogClose } from '../../ui/Dialog';
 import { EmptyState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
+import { MakeCopyButton } from '../live/LiveOff';
+import { LIVE_OFF_LIST } from '../live/offFeatures';
 import { useWrite } from './api';
 import { formatNumber, rowsText } from './format';
 import s from './Data.module.css';
+import l from './LiveData.module.css';
 
 /** What a mode switch changes on screen. */
-const REFRESH = ['dataset:list', 'dataset:columns', 'dataset:source', 'dataset:page', 'dataset:stats', 'lineage:get'] as const;
+export const MODE_REFRESH = ['dataset:list', 'dataset:columns', 'dataset:source', 'dataset:page', 'dataset:stats', 'dataset:liveSchema', 'lineage:get'] as const;
+const REFRESH = MODE_REFRESH;
 
 type ModeReply = { ok?: boolean; error?: string; code?: string };
 
@@ -86,23 +90,42 @@ export function SwitchToLiveDialog({ projectId, datasetId, name, rowCount, onClo
   );
 }
 
-/** The Data tab of a Live dataset: no rows are kept here to page through. */
+/**
+ * The Data tab of a Live dataset: no rows are kept here to page through. What
+ * works here (charts, KPI tiles, answers), what needs a copy (the plan's list),
+ * and the two ways to get one: "Make a copy" (a new dataset beside this one) or
+ * "Copy the data instead" (this dataset stops being Live).
+ */
 export function LiveNotice({ projectId, datasetId, maxCacheAgeSec }: { projectId: string; datasetId: string; maxCacheAgeSec?: number }) {
   const set = useWrite('dataset:setMode', REFRESH, {
     onDone: (r: ModeReply) => r.ok !== false && toast('Copied — the rows are stored here now.', { kind: 'success' }),
   });
   const cache = cacheText(maxCacheAgeSec);
   return (
-    <EmptyState
-      icon="zap"
-      title="Live — the rows stay in the warehouse"
-      actions={
-        <Button icon="download" loading={set.isPending} onClick={() => set.mutate({ projectId, datasetId, mode: 'extract' })}>
-          Copy the data instead
-        </Button>
-      }
-    >
-      {`Charts, KPI tiles and answers on this dataset ask its warehouse${cache ? ` (${cache})` : ''}. Browsing rows, prepare steps and the other tools need a copy.`}
-    </EmptyState>
+    <div className={l.notice}>
+      <EmptyState
+        icon="zap"
+        title="Live — the rows stay in the warehouse"
+        actions={
+          <>
+            <MakeCopyButton projectId={projectId} datasetId={datasetId} />
+            <Button icon="download" loading={set.isPending} onClick={() => set.mutate({ projectId, datasetId, mode: 'extract' })}>
+              Copy the data instead
+            </Button>
+          </>
+        }
+      >
+        {`Charts, KPI tiles and answers on this dataset ask its warehouse${cache ? ` (${cache})` : ''}. Browsing rows, prepare steps and the other tools need a copy.`}
+      </EmptyState>
+      <section className={l.offList} aria-label="Needs a copy">
+        <h3 className={l.offHead}>Off while Live — each works on a copy</h3>
+        <ul>
+          {LIVE_OFF_LIST.map((what) => (
+            <li key={what}>{what}</li>
+          ))}
+        </ul>
+        <p className={s.note}>“Make a copy” imports the same source as a new dataset that keeps its rows here; this one stays Live. “Copy the data instead” turns this dataset into the copy.</p>
+      </section>
+    </div>
   );
 }
