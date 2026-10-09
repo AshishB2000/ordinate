@@ -44,6 +44,8 @@ import type { ParsedColumn } from '../data/parse';
 import { redactOriginText } from '../data/datasetOrigin';
 import { serverDataDir } from '../server/context';
 import { filledPcts } from '../data/profileView';
+import { refreshLive } from './liveDatasets';
+import { isLive, isLiveDatasetError } from '../data/liveDataset';
 
 /**
  * A dataset as a grid draws it: name, row count and typed columns — never the
@@ -332,7 +334,8 @@ export function register() {
   // a URL with a key in it or a SQL statement, none of which a grid draws.
   ipcMain.handle('dataset:columns', async (_e, { projectId, id }: any = {}) => {
     const meta = await datasets.getDatasetMeta(projectId, id);
-    return meta ? headerOf(meta) : null;
+    // `mode: 'live'` so a screen knows before it asks for rows a Live dataset does not keep (L2.1).
+    return meta ? { ...headerOf(meta), ...(isLive(meta) ? { mode: 'live' as const } : {}) } : null;
   });
 
   // A delete is a move to the Trash (src/app/trash.ts), taking the dataset's
@@ -348,6 +351,8 @@ export function register() {
   // the write goes through the async Parquet path, reporting to the job.
   ipcMain.handle('dataset:refresh', async (_e, { projectId, id }: any = {}) => {
     try {
+      const live = await refreshLive(projectId, id); // Live: reset the cache (epoch), fetch nothing
+      if (live) return live;
       const res = await refreshAsJob(projectId, id);
       if (!res.ok) {
         // The reason can quote the URL or the server path it failed on.
@@ -462,7 +467,8 @@ export function register() {
       const ds = await datasets.getDataset(projectId, datasetId);
       if (!ds) return { values: [], total: 0 };
       return distinctValuesPageJs(ds.columns, ds.rows, col, req);
-    } catch {
+    } catch (err) {
+      if (isLiveDatasetError(err)) throw err; // D6: "no values" would be a silent answer for a Live dataset
       return { values: [], total: 0 };
     }
   });

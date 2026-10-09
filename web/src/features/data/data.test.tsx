@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderApp } from '../../test-utils';
 import { freshness, fromControl, pctText } from './format';
 import { laneLayout } from './RelationshipsTab';
@@ -82,6 +82,66 @@ describe('Data list', () => {
     const alert = await screen.findByRole('alert', {}, { timeout: LAZY });
     expect(alert.textContent).toContain('The catalog could not be read.');
     fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+  }, 30_000);
+});
+
+describe('Live datasets (L2.1)', () => {
+  const COLS = { id: D, name: 'Orders live', rowCount: 0, columns: [{ name: 'region', type: 'text' }], mode: 'live' };
+  const LIVE = { ...ORDERS, name: 'Orders live', rowCount: 0, originKind: 'connection', lastRefreshStatus: undefined, lastRefreshError: undefined, autoRefresh: undefined, qualityFailing: undefined, mode: 'live', maxCacheAgeSec: 300 };
+  const common = {
+    'projects:list': { body: [{ id: P, name: 'Sales', createdAt: '', updatedAt: '' }] },
+    'catalog:tags': { body: { ok: true, tags: [], refs: {} } },
+    'lineage:get': { body: null },
+    'catalog:columns': { body: { columns: {} } },
+  };
+
+  it('a Live row says Live, not "0 rows", and offers no schedule', async () => {
+    serve({ ...common, 'dataset:list': { body: [LIVE] } });
+    renderApp(`/data/${P}`);
+    const row = (await screen.findByRole('link', { name: 'Orders live' }, { timeout: LAZY })).closest('tr')!;
+    expect(within(row).getByText('Live')).toBeTruthy();
+    expect(within(row).queryByText('0 rows')).toBeNull();
+    expect(within(row).queryByRole('combobox')).toBeNull();
+  }, 30_000);
+
+  it('the dataset page: a Live badge, no row-reading tabs, and no request for rows', async () => {
+    const calls = serve({
+      ...common,
+      'dataset:list': { body: [LIVE] },
+      'dataset:columns': { body: COLS },
+      'dataset:source': { body: { kind: 'connection', label: 'Connection · Warehouse · orders', refreshable: true, live: true, maxCacheAgeSec: 300 } },
+    });
+    renderApp(`/data/${P}/${D}`);
+    expect(await screen.findByRole('heading', { name: 'Live — the rows stay in the warehouse' }, { timeout: LAZY })).toBeTruthy();
+    expect(await screen.findByText('Live · cached up to 5 min')).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: /Quality/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Prepare' })).toBeNull();
+    expect(calls.some((c) => ['dataset:page', 'dataset:stats', 'quality:list', 'insights:list'].includes(c.channel))).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Copy the data instead' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'dataset:setMode')?.payload).toEqual({ projectId: P, datasetId: D, mode: 'extract' }));
+  }, 30_000);
+
+  it('switching an extract to Live asks first, then sends the confirm', async () => {
+    const calls = serve({
+      ...common,
+      'dataset:list': { body: [{ ...ORDERS, originKind: 'connection' }] },
+      'dataset:columns': { body: { ...COLS, name: 'Orders', rowCount: 1200, mode: undefined } },
+      'dataset:source': { body: { kind: 'connection', label: 'Connection · Warehouse · orders', refreshable: true, canGoLive: true } },
+      'dataset:page': { body: { ok: true, rows: [], total: 0, offset: 0 } },
+      'dataset:stats': { body: { ok: true, columns: [] } },
+      'dataset:setMode': { body: { ok: true, mode: 'live' } },
+    });
+    renderApp(`/data/${P}/${D}`);
+    await screen.findByText('Connection · Warehouse · orders', {}, { timeout: LAZY }); // the source says it can go Live
+    const more = screen.getByRole('button', { name: 'More dataset actions' });
+    act(() => more.focus());
+    fireEvent.keyDown(more, { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Switch to Live…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Switch to Live?' });
+    expect(dialog.textContent).toContain('The stored copy of 1,200 rows is deleted.');
+    expect(calls.some((c) => c.channel === 'dataset:setMode')).toBe(false);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete the copy and go Live' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'dataset:setMode')?.payload).toEqual({ projectId: P, datasetId: D, mode: 'live', confirmDrop: true }));
   }, 30_000);
 });
 

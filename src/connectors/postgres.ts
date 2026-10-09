@@ -57,8 +57,10 @@ import type {
   ConnectorSchema,
   ConnectorTable,
   ConnectorTables,
+  LiveParam,
 } from './types';
 import { safeError } from './types';
+import { checkParams, isParamError } from './liveParams';
 
 // ── Bounds ───────────────────────────────────────────────────────────────────
 
@@ -146,6 +148,8 @@ interface PgVariant {
   /** false → a rejected `set statement_timeout` is tolerated instead of fatal.
    *  Only for engines that speak the wire protocol without being Postgres. */
   statementTimeoutVerified: boolean;
+  /** Set on a warehouse that can answer a Live dataset itself (plan D2): `runBound`. */
+  live?: 'redshift';
 }
 
 // The standard listing: parameterised, catalog schemas excluded, ordered. This
@@ -183,6 +187,7 @@ const VARIANTS: PgVariant[] = [
     port: 5439, // Redshift's own default, NOT 5432.
     ssl: true, // Reached over the public internet; clusters commonly require SSL.
     statementTimeoutVerified: true, // Redshift implements statement_timeout (ms).
+    live: 'redshift',
     list: [
       // WHY a Redshift-specific query: `information_schema.tables` on Redshift
       // does not report Spectrum/external tables, which live in external
@@ -665,6 +670,73 @@ async function describeTable(
   });
 }
 
+// ── Live (Redshift) ──────────────────────────────────────────────────────────
+//
+// docs/live-data/00-plan.md L2.1, D4: one statement the live compiler wrote,
+// its values as `$n` binds — never SQL text — under the same guards as `run`
+// (read-only session, server-side statement_timeout, the client closed on
+// every path, the SSRF-pinned address). The row cap is the same wrapper with
+// the statement on its own line (rule F3); the outer select is a plain
+// projection, so the compiled ORDER BY's order is what comes back.
+
+/** The text and values a bound query sends. Exported: the self-check pins that a value never reaches the text. */
+export function redshiftBound(
+  sql: string,
+  rawParams: unknown,
+  rowLimit: number,
+): { text: string; values: (string | number | boolean | null)[] } | ConnectorError {
+  const params = checkParams(rawParams);
+  if (isParamError(params)) return params;
+  const input = typeof sql === 'string' ? sql.trim().replace(/;\s*$/, '') : '';
+  if (!input) return { ok: false, error: 'No query specified' };
+  const probe = Math.max(1, Math.floor(rowLimit) || 1) + 1;
+  return { text: `select * from (\n${input}\n) as _ord_live limit ${probe}`, values: params.map((p) => p.value) };
+}
+
+/** Stop a running statement from a second session: the hang-up must stop the warehouse, not just our wait. */
+async function cancelBackend(v: PgVariant, ctx: ConnectorContext, pid: unknown): Promise<void> {
+  if (typeof pid !== 'number' || !Number.isInteger(pid)) return;
+  const client = new Client(clientConfig(v, { ...ctx, timeoutMs: 5_000 }));
+  try {
+    await client.connect();
+    await queryArray(client, 'select pg_cancel_backend($1)', [pid]);
+  } catch {
+    /* best effort: statement_timeout still bounds it */
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+async function runBound(v: PgVariant, ctx: ConnectorContext, sql: string, params: LiveParam[]): Promise<ConnectorRows | ConnectorError> {
+  const bound = redshiftBound(sql, params, ctx.rowLimit);
+  if ('ok' in bound) return bound;
+  const cap = Math.max(1, Math.floor(ctx.rowLimit) || 1);
+  const signal = ctx.signal;
+  if (signal?.aborted) return { ok: false, error: 'Cancelled' };
+  return withClient<ConnectorRows>(v, ctx, async (client) => {
+    if (signal?.aborted) return { ok: false, error: 'Cancelled' };
+    const pid: unknown = (client as unknown as { processID?: unknown }).processID;
+    const cancel: { done: Promise<void> | null } = { done: null };
+    const onAbort = (): void => {
+      cancel.done = cancelBackend(v, ctx, pid);
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    try {
+      const res = await queryArray(client, bound.text, bound.values);
+      const columns: ConnectorColumn[] = (res.fields || []).map((f) => ({ name: String(f.name), type: typeName(Number(f.dataTypeID)) }));
+      const raw = res.rows || [];
+      const truncated = raw.length > cap;
+      return { ok: true, columns, rows: (truncated ? raw.slice(0, cap) : raw).map((row) => row.map(cellValue)), truncated };
+    } catch (e) {
+      if (!cancel.done) throw e;
+      await cancel.done; // the statement's own error is "canceling statement due to user request"
+      return { ok: false, error: 'Cancelled' };
+    } finally {
+      signal?.removeEventListener('abort', onAbort);
+    }
+  });
+}
+
 // ── The eleven ───────────────────────────────────────────────────────────────
 
 function define(v: PgVariant): ConnectorDef {
@@ -679,6 +751,7 @@ function define(v: PgVariant): ConnectorDef {
     listTables: (ctx: ConnectorContext) => listTables(v, ctx),
     run: (ctx: ConnectorContext, sql: string) => run(v, ctx, sql),
     describeTable: (ctx: ConnectorContext, table: string) => describeTable(v, ctx, table),
+    ...(v.live ? { live: { dialect: v.live, runBound: (ctx: ConnectorContext, sql: string, params: LiveParam[]) => runBound(v, ctx, sql, params) } } : {}),
   };
 }
 

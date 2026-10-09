@@ -350,6 +350,7 @@ export const MAIN_FILES = [
   'src/analysis/reportSpec.ts',
   'src/analysis/reportPages.ts',
   'src/data/regexMessages.ts',
+  'src/data/liveMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

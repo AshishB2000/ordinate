@@ -416,6 +416,9 @@
 .saveName {
   width: 200px;
 }
+.saveMode {
+  width: 150px;
+}
 .grid {
   flex: 1;
   min-height: 200px;

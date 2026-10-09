@@ -10,6 +10,7 @@ import { ipcMain } from './bus';
 import * as quality from '../analysis/qualityRun';
 import { pageFor } from './datasets';
 import { getDatasetMeta } from '../data/datasets';
+import { requireExtract } from '../data/liveDataset';
 import * as jobs from '../app/jobs';
 
 /**
@@ -66,6 +67,7 @@ export function register(): void {
   // per dataset, and the resident evaluation runs in a compute worker.
   ipcMain.handle('quality:run', async (_e, { projectId, datasetId }: any = {}) => {
     try {
+      requireExtract(await getDatasetMeta(projectId, datasetId)); // D6: checks read rows; Live has none here
       await (await submitQualityRun(projectId, datasetId)).done;
       const q = await quality.listQuality(projectId, datasetId);
       if (!q) return { ok: false, error: 'Dataset not found' };

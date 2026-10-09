@@ -3,6 +3,7 @@ import * as store from '../app/privacyStore';
 import * as sharePolicy from '../app/sharePolicy';
 import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
+import { isLive } from '../data/liveDataset';
 import { sanitizeEncoding } from '../analysis/visuals';
 
 // Privacy IPC — sensitivity proposals, the Share policy, and the policy applied
@@ -56,7 +57,8 @@ export function register(): void {
   /** Detect again over the stored table — for datasets imported before detection existed. */
   ipcMain.handle('privacy:scan', async (_e, { projectId, datasetIds }: { projectId?: unknown; datasetIds?: unknown } = {}) => {
     const pid = str(projectId);
-    const ids = Array.isArray(datasetIds) ? datasetIds.map(str).filter(Boolean) : (await datasets.listDatasets(pid)).map((d) => d.id);
+    // A Live dataset holds no stored values to scan; its columns are read at the warehouse.
+    const ids = Array.isArray(datasetIds) ? datasetIds.map(str).filter(Boolean) : (await datasets.listDatasets(pid)).filter((d) => !isLive(d)).map((d) => d.id);
     let found = 0;
     for (const id of ids) found += (await store.scanDataset(pid, await datasets.getDataset(pid, id))).length;
     return { ok: true, found, scanned: ids.length };

@@ -14,6 +14,7 @@ import { loadStepRefs } from '../data/stepRefs';
 import { checkPowerStep } from '../data/stepsSanitize';
 import { lookupStats, unionPlan } from '../data/stepsCombine';
 import { parseDatePreview } from '../data/stepsClean';
+import { requireExtract } from '../data/liveDataset';
 
 /** The table a step at `index` would receive (index < 0 or past the end: after every step). */
 export async function inputAt(projectId: string, datasetId: string, index: number, extra: TransformStep): Promise<{
@@ -88,6 +89,7 @@ export async function stepCounts(projectId: string, datasetId: string): Promise<
 export async function prepareState(projectId: string, datasetId: string): Promise<unknown> {
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta) return null;
+  requireExtract(meta); // prepare steps run over rows; Live is schema only (D6)
   const counts = (await stepCounts(projectId, datasetId)) as { ok: boolean; stepCounts?: unknown };
   return {
     id: meta.id,

@@ -23,6 +23,9 @@ export interface DatasetSummary {
   autoRefresh?: { every: 'hourly' | 'daily' | 'weekly'; watch?: boolean };
   /** FAIL rules failing in the latest quality run. */
   qualityFailing?: number;
+  /** A Live dataset: no stored rows (`rowCount` is 0 and means nothing) — L2.1. */
+  mode?: 'live';
+  maxCacheAgeSec?: number;
 }
 
 /** The project's saved datasets; idle until a project is chosen. */
@@ -39,6 +42,8 @@ export interface DatasetColumns {
   name: string;
   rowCount: number;
   columns: { name: string; type: 'text' | 'number' | 'date' }[];
+  /** A Live dataset keeps no rows here (L2.1). */
+  mode?: 'live';
 }
 
 /** A dataset's name, row count and typed columns; `null` data = no such dataset. */

@@ -441,9 +441,11 @@ export async function explainSql(
     if (!res.ok) return { ok: false, error: safeError(res.error, ctx.secrets) };
     return {
       ok: true,
+      // `columnType` rides along where the source DECLARED it (a Live dataset's schema reads it, L2.1).
       columns: (res.columns || []).map((c) => ({
         name: String(c?.name ?? ''),
         type: String(c?.type ?? ''),
+        ...(c?.columnType === 'text' || c?.columnType === 'number' || c?.columnType === 'date' ? { columnType: c.columnType } : {}),
       })),
     };
   } catch (err: unknown) {

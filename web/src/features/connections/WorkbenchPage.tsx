@@ -29,6 +29,7 @@ import {
   type Connection,
   type Connector,
   type Logo,
+  type SaveMode,
 } from './api';
 import { ConnLogo } from './ConnLogo';
 import { DetailsRail, type TestState } from './DetailsRail';
@@ -188,7 +189,7 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
     }
   }
 
-  async function saveAsDataset(name: string) {
+  async function saveAsDataset(name: string, mode: SaveMode) {
     if (result.kind !== 'shown') return;
     const { table, sql: stmt } = result.shown;
     setSaving(true);
@@ -199,9 +200,11 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
         name: name || table || 'Connection data',
         ...(stmt ? { sql: stmt, ...(queryId ? { queryId } : {}) } : { table }),
         limit: Number(limit),
+        ...(mode === 'live' ? { mode } : {}),
       });
       refreshLists();
-      toast(`Saved “${ds.name}” as a dataset.`, { kind: 'success', action: { label: 'Open', onClick: () => void navigate(`/data/${projectId}/${ds.id}`) } });
+      const what = ds.mode === 'live' ? 'a Live dataset' : 'a dataset';
+      toast(`Saved “${ds.name}” as ${what}.`, { kind: 'success', action: { label: 'Open', onClick: () => void navigate(`/data/${projectId}/${ds.id}`) } });
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Could not save the dataset.', { kind: 'error' });
     } finally {
@@ -274,7 +277,7 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
             onChanged={refreshLists}
             onMessage={(text, error) => setMessage({ text, error })}
           />
-          <Results state={result} saving={saving} onSave={(n) => void saveAsDataset(n)} />
+          <Results state={result} saving={saving} live={def?.live === true} onSave={(n, m) => void saveAsDataset(n, m)} />
         </div>
         {details && (
           <DetailsRail

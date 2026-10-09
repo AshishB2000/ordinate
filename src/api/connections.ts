@@ -94,6 +94,9 @@ export const connections = {
       sql: Sql.optional(),
       queryId: Uuid.optional(),
       limit: z.number().int().min(1).max(1_000_000),
+      // "Copy the data" (absent) or "Live" (docs/live-data/00-plan.md L2.1): Live stores the schema only.
+      mode: z.enum(['extract', 'live']).optional(),
+      maxCacheAgeSec: z.number().int().min(0).max(30 * 24 * 60 * 60).optional(),
     }),
     project: byProjectId,
   }),

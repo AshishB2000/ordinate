@@ -51,7 +51,6 @@ const ALLOWED: Record<string, number> = {
   'scripts/test-connectorsHttp.ts': 880,
   'src/ai/analyze.ts': 854,
   'src/engine/anomaliesResident.ts': 870,
-  'src/connectors/http.ts': 1035,
 };
 
 // Roots to walk. `scripts` is included for the hand-written build tools that

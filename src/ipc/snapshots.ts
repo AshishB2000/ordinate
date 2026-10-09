@@ -26,6 +26,7 @@ import * as metrics from '../analysis/metrics';
 import { resolveMetric } from './metrics';
 import { afterRefresh } from './datasets';
 import { isValidId } from '../app/ids';
+import { requireExtract } from '../data/liveDataset';
 
 /** How many datasets / metrics one picker may ask about — a page, not a project dump. */
 const MAX_PICKER_IDS = 50;
@@ -140,7 +141,9 @@ export function register(deps: { headless?: boolean }): void {
 
   ipcMain.handle('snapshots:setKeep', async (_e, { projectId, datasetId, keep }: any = {}) => {
     try {
-      if (!(await datasets.getDatasetMeta(projectId, datasetId))) return fail('Dataset not found');
+      const meta = await datasets.getDatasetMeta(projectId, datasetId);
+      if (!meta) return fail('Dataset not found');
+      requireExtract(meta); // snapshots are copies of stored rows; Live keeps none (D6)
       const r = await snapshots.setKeep(projectId, datasetId, keep);
       return r ? { ok: true, keep: r.keep, removed: r.removed.length } : fail('Dataset not found');
     } catch (err: any) {
@@ -150,6 +153,7 @@ export function register(deps: { headless?: boolean }): void {
 
   ipcMain.handle('snapshots:diff', async (_e, { projectId, datasetId, stamp, key, limit }: any = {}) => {
     try {
+      requireExtract(await datasets.getDatasetMeta(projectId, datasetId));
       return await diffSnapshot(projectId, datasetId, stamp, key, limit);
     } catch (err: any) {
       return fail(err?.message || 'Could not compare the snapshot');
@@ -158,6 +162,7 @@ export function register(deps: { headless?: boolean }): void {
 
   ipcMain.handle('snapshots:restore', async (_e, { projectId, datasetId, stamp }: any = {}) => {
     try {
+      requireExtract(await datasets.getDatasetMeta(projectId, datasetId));
       const r = await restoreSnapshot(projectId, datasetId, stamp);
       if (!r.ok) return r;
       await afterRefresh(projectId, datasetId);

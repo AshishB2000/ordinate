@@ -33,6 +33,7 @@ import { registerMcpRoute } from '../automation/serverMcp';
 import { registerGeoRoutes } from './geo';
 import { registerRequestMetrics } from './metrics';
 import { registerPublishedRoutes } from './published';
+import { isLiveDatasetError, LIVE_DATASET_CODE, liveRefusalsRaised, tagLiveRefusals } from '../data/liveDataset';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Pool } from 'pg';
@@ -313,10 +314,13 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     try {
       // Raced against the request's signal: past RPC_TIMEOUT_SECONDS → 504, and
       // the same signal has interrupted the handler's DuckDB queries (T4.3).
+      const refusals = liveRefusalsRaised();
       let result: unknown = await untilAborted(Promise.resolve(handler(SERVER_EVENT, ...(args.length ? [parsed.data] : []))), who.signal);
       const created = 'creates' in contract && contract.creates ? contract.creates(result) : undefined;
       if (created) await grantCreator(pool, who, created);
       if ('visible' in contract && contract.visible) result = contract.visible(result, await readable(pool, who));
+      // D6: a Live refusal a handler caught keeps its type (src/data/liveDataset.ts).
+      if (liveRefusalsRaised() !== refusals) tagLiveRefusals(result);
       const body = encode(result);
       await record('ok', decision.projectId, created ? [created] : []);
       return reply.type('application/json').send(body);
@@ -325,6 +329,12 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         req.log.warn({ channel, limitMs: cfg.limits.rpcTimeoutMs }, 'rpc timed out');
         await record('error', decision.projectId);
         return reply.code(504).send({ error: 'timeout' });
+      }
+      if (isLiveDatasetError(err)) {
+        // D6: a reader not yet built for a Live dataset refuses LOUDLY — a typed
+        // 409 with the catalog's sentence (no id, no SQL), never a figure from zero rows.
+        await record('error', decision.projectId);
+        return reply.code(409).send({ error: LIVE_DATASET_CODE, code: LIVE_DATASET_CODE, message: err.message });
       }
       // The message can carry a path or a value; it goes to the log, not the wire.
       req.log.error({ err, channel }, 'rpc handler failed');
@@ -422,4 +432,6 @@ export function registerHandlers(): void {
   (require('../ipc/publishServer') as typeof import('../ipc/publishServer')).register(() => dbPool);
   for (const mod of ['../ipc/comments', '../ipc/summary', '../ipc/dashboardsServer', '../ipc/fx']) (require(mod) as { register: () => void }).register();
   (require('../ipc/alerts') as typeof import('../ipc/alerts')).register();
+  // Live datasets (docs/live-data/00-plan.md L2.1): the mode switch.
+  (require('../ipc/liveDatasets') as typeof import('../ipc/liveDatasets')).register();
 }

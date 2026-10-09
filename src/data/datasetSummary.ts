@@ -49,6 +49,10 @@ export interface DatasetSummary {
   // FAIL-severity quality rules failing in the latest run — the red dot. Absent
   // when the dataset has never been checked.
   qualityFailing?: number;
+  // A Live dataset (./liveDataset.ts): no stored rows, so `rowCount` is 0 and
+  // means nothing — the list says "Live" instead. Absent on an extract.
+  mode?: 'live';
+  maxCacheAgeSec?: number;
 }
 
 /** The parent ids an origin names, in its own order. */
@@ -90,5 +94,9 @@ export function summarize(ds: Dataset): DatasetSummary {
   if (ds.autoRefresh) summary.autoRefresh = ds.autoRefresh;
   const qualityFailing = qualityFailingCount(ds.quality);
   if (qualityFailing !== undefined) summary.qualityFailing = qualityFailing;
+  if (ds.mode === 'live' && ds.live) {
+    summary.mode = 'live';
+    summary.maxCacheAgeSec = ds.live.maxCacheAgeSec;
+  }
   return summary;
 }

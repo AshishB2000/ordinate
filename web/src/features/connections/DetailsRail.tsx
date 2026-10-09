@@ -95,12 +95,13 @@ function DatasetRow({ d, projectId, connId, onChanged }: { d: ConnDataset; proje
   const [busy, setBusy] = useState(false);
   const every = d.autoRefresh?.every ?? null;
   const stamp = formatWhen(d.lastRefreshedAt ?? d.updatedAt);
-  const when = every ? `Refreshes ${every} · last ${stamp}` : `Data as of ${stamp}`;
+  const live = d.mode === 'live';
+  const when = live ? 'Live · asked at the warehouse' : every ? `Refreshes ${every} · last ${stamp}` : `Data as of ${stamp}`;
   async function refresh() {
     setBusy(true);
     try {
       await refreshDataset(projectId, connId, d.id);
-      toast(`Refreshed “${d.name}”.`, { kind: 'success' });
+      toast(live ? `Reset the cache of “${d.name}”.` : `Refreshed “${d.name}”.`, { kind: 'success' });
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Could not refresh that dataset.', { kind: 'error' });
     } finally {
@@ -128,10 +129,11 @@ function DatasetRow({ d, projectId, connId, onChanged }: { d: ConnDataset; proje
         </Button>
       </div>
       <p className={s.dsMeta} title={failed ? d.lastRefreshError || 'The last refresh failed' : undefined}>
-        {when} · {d.rowCount === 1 ? '1 row' : `${formatNumber(d.rowCount)} rows`}
+        {when}
+        {!live && ` · ${d.rowCount === 1 ? '1 row' : `${formatNumber(d.rowCount)} rows`}`}
         {failed && ` · last refresh failed: ${d.lastRefreshError || 'unknown error'}`}
       </p>
-      {d.originKind && <Select size="sm" aria-label={`Auto-refresh ${d.name}`} value={every ?? 'off'} onValueChange={(v) => void schedule(v)} options={SCHEDULE} />}
+      {d.originKind && !live && <Select size="sm" aria-label={`Auto-refresh ${d.name}`} value={every ?? 'off'} onValueChange={(v) => void schedule(v)} options={SCHEDULE} />}
     </li>
   );
 }
