@@ -118,6 +118,44 @@ export interface ConnectorContext {
    * `pinned.host`), so DNS answering differently at connect time changes nothing.
    */
   pinned?: PinnedHost;
+  /**
+   * Live data (docs/live-data/00-plan.md): what this query is for — 'live' or
+   * 'extract'. Tagged on the warehouse's own query log (Snowflake QUERY_TAG,
+   * BigQuery job labels) so the bill can be read back per purpose.
+   */
+  costTag?: 'live' | 'extract';
+  /** BigQuery `maximumBytesBilled` ceiling for this query; ignored elsewhere. */
+  maxBytes?: number;
+  /** Fired when the caller gives up (the client hung up, a timeout). A connector
+   *  that can cancel server-side (Snowflake, BigQuery) does so on it. */
+  signal?: AbortSignal;
+}
+
+/** A warehouse SQL dialect the live compiler targets (plan D2). */
+export type LiveDialectId = 'snowflake' | 'bigquery' | 'redshift' | 'databricks' | 'clickhouse';
+
+/**
+ * One bind parameter of a compiled live query (plan D4: values are NEVER
+ * inlined into SQL text). The compiler never reuses a parameter: `params[i]`
+ * is the (i+1)-th placeholder in the statement's text order, named `p<i>`.
+ * Placeholder spelling is the dialect's own:
+ *   snowflake `?` · bigquery `@p0` · databricks `:p0` · clickhouse `{p0:Type}`
+ *   · redshift `$1`.
+ * `date` and `timestamp` values are ISO-8601 strings (UTC for timestamps).
+ */
+export interface LiveParam {
+  name: string;
+  type: 'text' | 'number' | 'boolean' | 'date' | 'timestamp';
+  value: string | number | boolean | null;
+}
+
+/** A connector's live capability: run one compiled, parameterised statement. */
+export interface ConnectorLive {
+  dialect: LiveDialectId;
+  /** Run `sql` with `params` bound, under ctx's row cap, timeout and signal. */
+  runBound(ctx: ConnectorContext, sql: string, params: LiveParam[]): Promise<ConnectorRows | ConnectorError>;
+  /** A free dry run's byte estimate, where the warehouse offers one (BigQuery). */
+  estimate?(ctx: ConnectorContext, sql: string, params: LiveParam[]): Promise<{ ok: true; bytes: number } | ConnectorError>;
 }
 
 export interface ConnectorDef {
@@ -161,6 +199,12 @@ export interface ConnectorDef {
    * value or whitelist it — it arrives from a renderer.
    */
   describeTable?(ctx: ConnectorContext, table: string): Promise<ConnectorSchema | ConnectorError>;
+  /**
+   * OPTIONAL. Present only on a connector that can answer a Live dataset's
+   * questions itself (plan D2). Still one registry entry per connector — this
+   * is a property, never a second kind of connector.
+   */
+  live?: ConnectorLive;
 }
 
 /** Redact anything that looks like a credential before it reaches a renderer.
