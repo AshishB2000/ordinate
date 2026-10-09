@@ -2,8 +2,9 @@
 
 This page is for the team that connects Ordinate to a cloud warehouse. It covers what each warehouse
 needs on its side (a read-only identity) and on yours (network egress). The plan behind it is
-[docs/live-data/00-plan.md](../live-data/00-plan.md). Sections for cost limits, cache ages
-and the refresh URL are added by the tasks that build them.
+[docs/live-data/00-plan.md](../live-data/00-plan.md). It also covers the [refresh URL](#refresh-url)
+that dbt or Airflow calls when new data has landed. Sections for cost limits and cache ages are
+added by the tasks that build them.
 
 ## Snowflake
 
@@ -254,3 +255,102 @@ With incremental refresh on, Ordinate asks BigQuery only for rows at or past the
 literal, which BigQuery reads as the column's own type (`DATE`, `DATETIME` or `TIMESTAMP`), so a
 partitioned table scans only the partitions it needs. It is a day wider than needed on purpose; the
 exact cut is made in Ordinate.
+
+## Refresh URL
+
+A refresh URL lets a pipeline tell Ordinate that new data has landed. A dbt run or an Airflow DAG
+POSTs to it when it finishes, and Ordinate refreshes **one dataset** from its source. The URL can
+do nothing else. On a **Live** dataset there is nothing to fetch, so the call resets the dataset's
+cache instead, and the next chart or answer asks the warehouse again.
+
+It works for any dataset that has a source to refresh from: a connection table or query, a web
+address, SQL over other datasets, or a combined dataset. It does not work for pasted rows or a
+screenshot. It needs the server's Postgres (`DATABASE_URL`).
+
+### Making one
+
+Open the dataset, then **⋯ → Refresh URL…**. The same panel opens from **Refresh URL** under the
+dataset on its connection's details rail. Only editors of the project see the panel. Press **New
+refresh URL**. The URL is shown **once**: Ordinate keeps only its SHA-256 and its first 13
+characters (`ordh_…`), which name it in the list. Store it in your scheduler's secret store. The
+list shows who made each URL, when, and when it was last called. **Revoke** stops it at once.
+
+A call refreshes **as the person who made the URL**, with their role at the time of the call. If
+they are disabled or lose write access to the project, the URL answers `403`. Make a new one as
+someone who still has access.
+
+### What a call gets back
+
+`POST https://<your host>/api/hooks/refresh/<token>`. No body and no headers are needed. A body
+(dbt Cloud and Airflow send JSON) is read up to 64 KiB and ignored. It names nothing: the token
+alone decides the dataset.
+
+| Status | Body | Meaning |
+|---|---|---|
+| `202` | `{"status":"queued"}` | A refresh was started. It runs in the background, and every open dashboard over the dataset redraws when it lands. |
+| `202` | `{"status":"already_running"}` | A refresh of this dataset was already running, on this pod or another. Nothing new started. If it began before your load finished, call again once it has landed. |
+| `202` | `{"status":"cache_reset"}` | A Live dataset: its cache was reset. Nothing is fetched. |
+| `429` | `{"error":"too soon","retryAfter":N}` | This URL was called less than `REFRESH_HOOK_MIN_INTERVAL_SEC` (60 s by default) ago. `Retry-After` says how many seconds to wait. |
+| `403` | `{"error":"forbidden"}` | The URL's creator can no longer refresh the dataset. |
+| `404` | `{"error":"unknown refresh URL"}` | No such URL, or it was revoked. The two are the same answer on purpose. |
+| `404` | `{"error":"dataset not found"}` | The dataset was deleted or is in the Trash. |
+
+Every call that gets past the interval leaves an audit row, **Refresh URL called**, naming the URL's
+creator, the URL's id and the dataset (Admin → Audit log). Unknown and revoked tokens leave none, so
+the trail cannot be flooded with them. Scheduled refreshes are audited too, as **Scheduled
+refresh**.
+
+### curl
+
+```bash
+# --retry waits out a 429 (it honours Retry-After) and tries again.
+curl -fsS --retry 3 -X POST "$ORDINATE_REFRESH_URL"
+```
+
+### dbt
+
+dbt's `on-run-end` hooks run SQL **in the warehouse**. They cannot call a URL by themselves. So call
+the URL from the step that runs dbt, after the models are built:
+
+```bash
+dbt build && curl -fsS --retry 3 -X POST "$ORDINATE_REFRESH_URL"
+```
+
+With **dbt Cloud**, use a webhook instead: Account settings → Webhooks → Create webhook, event
+**Run completed**, endpoint = the refresh URL. Ordinate ignores the payload and dbt Cloud's
+signature header.
+
+### Airflow
+
+Use the HTTP provider's `HttpOperator` (`SimpleHttpOperator` in older versions of the provider). Make
+a connection `ordinate` whose host is your Ordinate URL, and a Variable `ordinate_refresh_token` that
+holds the part of the URL after `/api/hooks/refresh/`. Airflow masks a Variable whose name contains
+`token` in its task logs.
+
+```python
+from datetime import timedelta
+from airflow.providers.http.operators.http import HttpOperator
+
+refresh_orders = HttpOperator(
+    task_id="refresh_orders",
+    http_conn_id="ordinate",
+    endpoint="api/hooks/refresh/{{ var.value.ordinate_refresh_token }}",
+    method="POST",
+    response_check=lambda r: r.status_code == 202,
+    retries=3,
+    retry_delay=timedelta(seconds=60),  # a 429 means: called less than a minute ago
+)
+load_orders >> refresh_orders
+```
+
+### Network and sign-in in front of Ordinate
+
+The scheduler must reach Ordinate's ingress. The URL carries its own credential, so the server looks
+up no session, cookie or proxy header for it. If an authenticating proxy sits in front of Ordinate
+(`AUTH_MODE=header` behind oauth2-proxy, for example), let `POST /api/hooks/refresh/` through without
+sign-in. With oauth2-proxy that is `--skip-auth-route="POST=^/api/hooks/refresh/"`. Ordinate still
+checks the token on every call.
+
+The token is in the URL path, so Ordinate masks that path in its own request log
+(`/api/hooks/refresh/[redacted]`). Your ingress, proxy and scheduler logs may record full URLs. Keep
+those logs as private as the token, or use a scheduler that masks it, like Airflow's Variable.

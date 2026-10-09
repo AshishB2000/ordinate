@@ -22,6 +22,7 @@ import { BehindBadge, cadenceOptions } from '../data/cadence';
 import { everyWord } from '../data/format';
 import { refreshDataset, replaceSecret, setSchedule, type CatalogField, type ConnDataset, type Connection, type Connector } from './api';
 import { SecretTextarea } from './SecretText';
+import { RefreshUrlDialog } from '../data/RefreshUrl';
 import { formatWhen } from './SavedConnections';
 import s from './Workbench.module.css';
 
@@ -115,6 +116,7 @@ function SecretRow({ f, set, projectId, conn, onReplaced }: { f: CatalogField; s
 
 function DatasetRow({ d, projectId, connId, onChanged }: { d: ConnDataset; projectId: string; connId: string; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [hooks, setHooks] = useState(false);
   const every = d.autoRefresh?.every ?? null;
   const stamp = formatWhen(d.lastRefreshedAt ?? d.updatedAt);
   const live = d.mode === 'live';
@@ -165,6 +167,13 @@ function DatasetRow({ d, projectId, connId, onChanged }: { d: ConnDataset; proje
           options={cadenceOptions(SCHEDULE, !!d.incrementalOn)}
         />
       )}
+      {/* For dbt / Airflow to call when new data lands (live data L0.5). */}
+      {(d.originKind || live) && (
+        <Button size="sm" variant="ghost" icon="link" className={s.dsHook} onClick={() => setHooks(true)} aria-label={`Refresh URL for ${d.name}`}>
+          Refresh URL
+        </Button>
+      )}
+      {hooks && <RefreshUrlDialog projectId={projectId} datasetId={d.id} name={d.name} live={live} onClose={() => setHooks(false)} />}
     </li>
   );
 }

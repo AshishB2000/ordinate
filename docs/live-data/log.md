@@ -369,3 +369,54 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   refusal and L0.2's `asOf`.
 - **Not done here (by plan):** executor and cache (L2.3), routing charts / KPIs / answers (L2.4 —
   until then they refuse, as the suite asserts), the full Live UI (L2.6).
+
+## 2026-10-09 — L0.5 A refresh URL for dbt / Airflow
+
+- **Built.** Migration `0011_refresh_hooks.sql` (`refresh_hooks`, forced RLS, the audit CHECK
+  widened); `src/server/hooks/` — `store.ts` (token, hash, the claim, list/create/revoke under RLS),
+  `route.ts` (`POST /api/hooks/refresh/<token>`, beside the file and MCP routes), `act.ts` (THE
+  decision: refresh an extract through `startRefresh`, reset a Live dataset's cache through
+  `refreshLive`), `rpc.ts` (`refreshHook:list|create|revoke`, contracts in
+  `src/api/refreshHooks.ts`); `REFRESH_HOOK_MIN_INTERVAL_SEC`; audit actions `hook_refresh` and
+  `scheduled_refresh` (the tick's reporter in `src/server/jobs/schedules.ts` now writes one per
+  scheduled refresh that ran). Web: `RefreshUrl.tsx` (the panel), opened from the dataset page's
+  ⋯ menu and from a connection rail's dataset row; the Audit tab's two new event names.
+- **Decided — the refresh runs as the hook's CREATOR**, with their current role, re-checked on every
+  call by `dataset:refresh`'s own rule (`authorize` with that contract). A hook is a credential a
+  person minted, like a personal token, so it is never worth more than that person is now: disabled,
+  removed or demoted → 403 and a `denied` row. A scheduled refresh stays `jobs@system` (it belongs
+  to the dataset, not a person). The job lands in the creator's Jobs list; the audit actor is the
+  creator. Under `AUTH_MODE=dev` (no users rows) the creator is the dev admin, as everyone is.
+  `created_by` is therefore an email (the key every grant check uses), not a users FK.
+- **Decided — the interval IS the claim.** One `UPDATE … SET last_used_at = now() WHERE … AND
+  last_used_at <= now() - interval RETURNING …`: concurrent claims serialize on the row and the
+  loser re-checks against the winner's stamp, on the database clock. A claim that is then refused
+  (403) still spends the interval, which bounds audit rows a leaked URL can write too.
+- **Decided — RLS that works without an org.** The URL names no org, so `refresh_hooks` has a second
+  pair of policies keyed on `ordinate.hook` = the token's hash: a call sees and stamps exactly the
+  row it holds the hash of; a member's call sees its org's rows (`ordinate.org`, as `records`).
+- **Decided — revoked ≡ unknown**: same 404 body and headers, the same two SQL statements (the
+  UPDATE, then a SELECT that would find a live row's wait), no audit row for either. Measured
+  (`test-refreshHooks-db`, median of 15 calls over HTTP, loaded container): revoked 2.35 ms,
+  unknown 2.24 ms (first run 2.88 / 2.91).
+- **Decided — `cache_reset` is a third status**, not `queued`: on a Live dataset nothing is queued,
+  the bump is done when the call is answered, and a pipeline can tell the two apart.
+- **Decided — a personal API token cannot create a refresh URL** (as `tokens:create`): it would
+  outlive the token's own revocation. The list is `audit: 'denials'`; create and revoke are `rpc`
+  rows like `tokens:*` (no new create/revoke actions: the vocabulary has none for tokens either).
+- **Decided — any body, any method.** dbt Cloud and Airflow send JSON, `curl -d` a form; the route
+  has its own catch-all body parser (≤ 64 KiB, ignored), answers 405 to other methods, and matches
+  every deeper path, so neither a 415 nor Fastify's "Route … not found" log line (which no serializer
+  masks) can happen with a token in it. A pino `logMethod` hook masks `ordh_…` in every message as
+  well; the request serializer masks the path.
+- **Measured — across pods.** Two in-process apps on one database (two pools), both calling one URL
+  at the same instant: exactly one 202 and one 429 in each of 4 rounds; two real server processes:
+  the same in each of 5 rounds, and the dataset refreshed. NEGATIVE CONTROLS: a check-then-act claim
+  on two pools lets both through; two different URLs of one dataset at once both get 202.
+- **Deviation — the dbt snippet.** The plan says "dbt `on-run-end`". An `on-run-end` hook runs SQL in
+  the warehouse and cannot call a URL without warehouse-side network setup, so the panel and
+  `docs/server/live-data.md` show `dbt build && curl …` for dbt Core and a dbt Cloud "Run completed"
+  webhook instead, and say why.
+- **Not done (scope):** a pipeline cron's dataset refresh (`pipelineRunner`, also under the tick)
+  still leaves no audit row; only the dataset scheduler's refreshes are `scheduled_refresh`. `connection:refresh` and the MCP `datasets
+  refresh` tool still bypass the job and the lock (noted under L0.3/L0.4).
