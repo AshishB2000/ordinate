@@ -38,6 +38,7 @@ const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze')
 const execConfig: typeof import('../src/app/execConfig') = require('../src/app/execConfig');
 const vizData: typeof import('../src/analysis/vizData') = require('../src/analysis/vizData');
 const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+const asOfMod: typeof import('../src/data/figureAsOf') = require('../src/data/figureAsOf');
 
 // ── 1. Facts ────────────────────────────────────────────────────────────────
 
@@ -62,6 +63,17 @@ ok('facts: every mark is in the ledger, unrounded',
 ok('facts: the total and the share are ledger entries, the share as a percent',
   facts.ledger.some((e) => Object.is(e.value, TOTAL)) && facts.ledger.some((e) => e.unit === 'percent' && Math.abs(e.value - 30.13) < 0.01));
 ok('facts: the text block carries the guard line', /computed by the app/.test(facts.text) && /Highest: West at 1565150.46/.test(facts.text));
+
+// When the data is from (L0.2): a line the narration can copy — never a figure.
+const dated = F.answerFacts({
+  title: 'Revenue by region', datasetName: 'Retail orders', describe: 'sum of revenue by region',
+  data: REGION, categoryIsDate: false, additive: true, filterLabels: [], caption: 'West leads revenue at 1.6M, 1.1× East',
+  asOf: 'Oct 9, 2026, 1:00 AM UTC',
+});
+ok('facts: when the data is from is a line of the facts, worded to be copied', /^Data as of: Oct 9, 2026, 1:00 AM UTC\.$/m.test(dated.text), dated.text);
+ok('facts: …and none of its digits enter the ledger (it would widen the audit)', dated.ledger.length === facts.ledger.length,
+  JSON.stringify(dated.ledger.slice(facts.ledger.length)));
+ok('facts: without one the block is as it was', !/Data as of/.test(facts.text));
 
 const avg = F.answerFacts({
   title: 'Avg revenue', datasetName: 'd', describe: 'avg of revenue by region',
@@ -100,6 +112,9 @@ ok('ledger: an invented growth rate is rejected', JSON.stringify(flagged('Revenu
 ok('ledger: an invented total is rejected, the real figure beside it is not',
   JSON.stringify(flagged('West has 1.6M out of a 7.3M total.')) === '["7.3M"]');
 ok('ledger: a derived share the facts do not carry is rejected', flagged('East is 27% of revenue.').includes('27%'));
+ok('ledger: a narration saying when the data is from passes', audit.auditNumbers('As of 1:00 AM UTC on Oct 9, 2026, West leads at 1.57M.', dated.ledger).ok);
+ok('ledger: …and an invented figure beside that time is still rejected (negative control)',
+  JSON.stringify(audit.auditNumbers('As of 1:00 AM UTC, West leads at 1.9M.', dated.ledger).violations.map((v) => v.token)) === '["1.9M"]');
 
 // ── 3. End to end through the handlers ──────────────────────────────────────
 
@@ -147,6 +162,8 @@ async function main(): Promise<void> {
     JSON.stringify(last));
   ok('ask: the narration was asked of the CARD\'s facts', asked.length === 2 && /Answer: "Revenue by region last quarter"/.test(asked[1])
     && /West=160/.test(asked[1]), asked[1]);
+  ok('ask: …which say when the data is from (the dataset\'s import, never refreshed), in UTC',
+    asked[1].includes(`Data as of: ${asOfMod.utcLabel(ds!.createdAt)}.`), asked[1]);
   ok('ask: the narration is audited against the card — the invented 12.4% is flagged, the real 160 is not',
     /Contains a figure the app did not compute: 12\.4%$/.test(last.text) && r.numberAudit.violations.length === 1, last.text);
   ok('ask: the answer proposes nothing further', r.suggestedAction.kind === 'none');
@@ -163,6 +180,8 @@ async function main(): Promise<void> {
   ok('card: the period is labelled, the caption names the leader', card.filterLabels[0] === 'order_date: 2024-Q4' && /^West leads/.test(card.caption), card.caption);
   ok('card: chips come from the spec', card.chips.map((c: any) => c.label).join('|') === 'Split by category|Same for last year|Show as table',
     card.chips.map((c: any) => c.label).join('|'));
+  ok('card: dated — the server\'s time, for the browser to word', JSON.stringify(card.asOf) === JSON.stringify({ at: new Date(ds!.createdAt).toISOString(), mode: 'extract' }),
+    JSON.stringify(card.asOf));
 
   const bad = [];
   replies.push({ ok: true, text: 'Here it is.', suggestedAction: { kind: 'answer', intent: 'x', spec: { dataset: 'Retail orders', category: 'state', measures: ['revenue'] } } });

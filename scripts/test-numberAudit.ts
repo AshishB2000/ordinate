@@ -105,6 +105,19 @@ clean('a month-grain label is masked entirely', 'The peak was 2024-03.', []);
 clean('a US-order date is masked entirely', 'The peak was on 03/05/2024.', []);
 clean('a quarter label is masked entirely', 'The peak was 2024-Q1.', []);
 clean('a spelled quarter is masked entirely', 'The peak was Q1 2024.', []);
+// When the data is from (L0.2): the answer facts say "Data as of: Oct 9, 2026,
+// 1:00 AM UTC", and a narration repeating it in any usual shape is not inventing.
+clean('a clock time is masked entirely', 'As of 1:00 AM UTC, West leads.', []);
+clean('…in 24-hour form, with seconds', 'Refreshed at 13:05:59.', []);
+clean('…as an hour alone', 'The data is from 1 AM, and from 11pm the day before.', []);
+clean('…the facts\' own wording, verbatim', 'Data as of Oct 9, 2026, 1:00 AM UTC.', []);
+clean('a month and day before a comma, "at", a year or a full stop', 'As of October 9, then Oct 9 at 1:00 AM, Sep 30 2026, and Mar 3.', []);
+clean('an ordinal day', 'As of Oct 9th.', []);
+flags('a figure straight after a month name is still audited ("March 12 orders")', 'In March 12 orders came in.', [], '12');
+flags('a figure beside a time is still audited (negative control)', 'As of 1:00 AM revenue was 999.', [], '999');
+flags('a decimal after a month is a figure, not a day', 'In May 3.5 million was booked.', [], '3.5');
+flags('a day number past 31 is a figure', 'In March 45 orders came in.', [], '45');
+ok('harvest banks none of a time\'s digits (they must not widen the ledger)', harvestAppNumbers('Data as of: Oct 9, 2026, 1:00 AM UTC.').length === 0);
 
 // ── 5. Tokenising discipline ─────────────────────────────────────────────────
 clean('a digit inside a word is not a figure', 'Column A1 holds the key.', []);

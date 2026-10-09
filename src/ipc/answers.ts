@@ -39,6 +39,8 @@ import { answerFacts } from '../ai/answerFacts';
 import type { Headline } from '../ai/answerFacts';
 import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
 import type { SuggestedAction } from '../ai/suggestedAction';
+import type { AsOf } from '../api/asOf';
+import { asOfFrom, utcLabel } from '../data/figureAsOf';
 
 export type Guard = (text: string, ledger: LedgerEntry[]) => { text: string; audit: NumberAudit };
 
@@ -58,6 +60,8 @@ export interface AnswerCard {
   /** The resolved filters, for "Save as visual" / "Open in builder". */
   steps: FilterStep[];
   notes: string[];
+  /** How fresh the figures are (L0.2, data/figureAsOf) — the card's caption, and a line of the facts. */
+  asOf?: AsOf;
 }
 
 interface Built {
@@ -151,9 +155,11 @@ export async function computeCard(projectId: string, spec: AnswerSpec): Promise<
   // A column the user gave a display name reads as that name (the catalog).
   const caption = tileCaption({ chartType, data, names: await displayNames(projectId, ds.id).catch(() => ({})) });
   const additive = spec.measures.every((m) => m.aggregation === 'sum' || m.aggregation === 'count');
+  // The rows are already loaded, so their time comes off the same record — no second read.
+  const asOf = asOfFrom([ds]);
   const facts = answerFacts({
     title: spec.title, datasetName: ds.name, describe: describe(spec), data,
-    categoryIsDate: isDate, additive, filterLabels, caption,
+    categoryIsDate: isDate, additive, filterLabels, caption, ...(asOf ? { asOf: utcLabel(asOf.at) } : {}),
   });
   const notes = viz.warnings.slice();
   if (viz.category && viz.category.note) notes.push(viz.category.note);
@@ -163,7 +169,7 @@ export async function computeCard(projectId: string, spec: AnswerSpec): Promise<
       ok: true, spec, title: spec.title, chartType, datasetName: ds.name, data, caption,
       headline: facts.headline, bullets: facts.bullets,
       chips: answerChips(spec, { columns: ds.columns, splitCandidates: splitCandidates(ds.columns, ds.rows, spec.category) }),
-      filterLabels, steps, notes,
+      filterLabels, steps, notes, ...(asOf ? { asOf } : {}),
     },
     factsText: facts.text,
     ledger: facts.ledger,

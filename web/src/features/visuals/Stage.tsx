@@ -9,6 +9,7 @@ import { annotationHooks } from '../../charts/annotations';
 import type { ChartHandle } from '../../charts/Chart';
 import type { Cx } from '../../charts/types';
 import { SkeletonBlock } from '../../ui/Skeleton';
+import { AsOfCaption } from '../../ui/AsOf';
 import { ErrorState } from '../../ui/States';
 import { newId, type Overlay } from './analytics/AnalyticsPane';
 import { sharedData } from './api';
@@ -84,10 +85,16 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
           )}
         </div>
       </div>
-      {reply?.sample?.note && (
-        <p className={s.sample} role="status" title={reply.sample.by ? `Stratified by ${reply.sample.by}. Saving the visual and every dashboard use all rows.` : reply.sample.note}>
-          {reply.sample.note}
-        </p>
+      {(reply?.sample?.note || reply?.asOf) && (
+        <div className={s.stageNotes}>
+          {reply.sample?.note && (
+            <p className={s.sample} role="status" title={reply.sample.by ? `Stratified by ${reply.sample.by}. Saving the visual and every dashboard use all rows.` : reply.sample.note}>
+              {reply.sample.note}
+            </p>
+          )}
+          {/* How fresh the preview's figures are (L0.2). */}
+          <AsOfCaption asOf={reply.asOf} className={s.asOf} />
+        </div>
       )}
       <div className={b.preview.isFetching && reply ? `${s.area} ${s.loading}` : s.area} data-chart-type={current || undefined} data-chart-editable="">
         {!b.complete ? (

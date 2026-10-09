@@ -13,6 +13,7 @@ import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Input } from '../../ui/Field';
 import { Select } from '../../ui/Select';
 import { toast } from '../../ui/Toast';
+import { asOfView } from '../../ui/asOf';
 import { useThemes } from '../settings/api';
 import { themeCssVars } from '../settings/themeModel';
 import type { EditorApi } from '../analyses/editor/context';
@@ -200,6 +201,8 @@ export function ViewControls() {
   const fx = useFx(ed.projectId);
   const setCurrency = useSetDashboardCurrency(ed.projectId);
   const items = stamps.data?.items ?? [];
+  // "Latest" says how fresh latest is: the sheet's stalest dataset (L0.2).
+  const latest = asOfView(stamps.data?.latest);
   const declared = fx.data ? Object.values(fx.data.settings.columns ?? {}).some((c) => c && Object.keys(c).length) : false;
   return (
     <>
@@ -210,7 +213,7 @@ export function ViewControls() {
           className={ed.view.asOf ? s.asOfOn : undefined}
           value={ed.view.asOf ?? ''}
           onValueChange={(v) => ed.view.setAsOf(v || null)}
-          options={[{ value: '', label: 'Latest' }, ...items.map((it) => ({ value: it.at, label: `As of ${new Date(it.at).toLocaleString()}${datasetIds.length > 1 ? ` — ${it.datasets.join(', ')}` : ''}` }))]}
+          options={[{ value: '', label: latest ? `Latest · ${latest.text.replace(/^As of/, 'as of')}` : 'Latest' }, ...items.map((it) => ({ value: it.at, label: `As of ${new Date(it.at).toLocaleString()}${datasetIds.length > 1 ? ` — ${it.datasets.join(', ')}` : ''}` }))]}
         />
       )}
       {declared && fx.data && (

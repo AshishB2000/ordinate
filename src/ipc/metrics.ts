@@ -45,6 +45,7 @@ import { relatedColumnNames } from './relationships';
 import * as versions from '../app/versions';
 import * as trash from '../app/trash';
 import { withAsOf } from '../data/asOf';
+import { stampAsOf } from '../data/figureAsOf';
 import { fxScope } from './fxQuery';
 import { mergeFx } from '../analysis/fx';
 import type { FxInfo } from '../analysis/fx';
@@ -454,7 +455,9 @@ export function register() {
       const bound = resolveFilterParams(sanitizeDashboardFilters(filters), values);
       const res = await resolveMetric(projectId, id, { filters: bound.steps, params: values });
       if (!res) return { ok: false, error: 'Metric not found' };
-      return bound.errors.length ? { ...res, paramErrors: bound.errors } : res;
+      // Dated by the metric's dataset (L0.2, data/figureAsOf), inside the as-of scope.
+      const dated = await stampAsOf(res, projectId, [(await metrics.getMetric(projectId, id))?.datasetId]);
+      return bound.errors.length ? { ...dated, paramErrors: bound.errors } : dated;
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the metric' };
     }

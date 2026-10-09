@@ -7,11 +7,15 @@
 // scheduled refresh and a click on ↻ for the same dataset queue instead of
 // racing each other's Parquet write. The write itself reports its progress to
 // the job (datasets.persist reads jobs.current()).
+//
+// A success is ANNOUNCED here (./refreshEvents, L0.1), once, whichever door it
+// came through, so every open tab of a reader redraws what reads the dataset.
 
 import * as jobs from '../app/jobs';
 import * as datasets from './datasets';
 import { refreshDataset } from './datasetRefresh';
 import type { RefreshResult } from './datasetRefresh';
+import { announceRefreshed } from './refreshEvents';
 
 /** Refresh through the jobs system. Never throws: a cancel is `{ok:false}`. */
 export async function refreshAsJob(projectId: string, id: string, opts: { scheduled?: boolean } = {}): Promise<RefreshResult> {
@@ -35,9 +39,13 @@ export async function refreshAsJob(projectId: string, id: string, opts: { schedu
       }
       : undefined,
   });
+  let res: RefreshResult;
   try {
-    return await job.done;
+    res = await job.done;
   } catch (err: any) {
     return { ok: false, error: err instanceof jobs.JobCancelled ? 'Cancelled.' : (err?.message || 'Refresh failed') };
   }
+  // After the job, not inside it: the table and its markers are both written by now.
+  if (res.ok) announceRefreshed({ projectId, datasetId: id, name, rowsBefore: meta ? meta.rowCount : 0, rowsAfter: res.dataset.rowCount });
+  return res;
 }

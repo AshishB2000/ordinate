@@ -12,10 +12,15 @@
 // The DB half needs a Postgres it may CREATE DATABASE on. Without DATABASE_URL
 // it prints one `skip` line and runs only the no-DB checks.
 //
+// The real scheduler tick's hub:dataset-refreshed reaches every reader's tab
+// on both pods exactly once (refreshAsJob announces it; the tick's reporter
+// pushes only failures), and so does a manual dataset:refresh (L0.1).
+//
 //   npm run build:ts && DATABASE_URL=… node scripts/test-jobs-pods.js
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 import { spawn, type ChildProcess } from 'child_process';
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
@@ -340,6 +345,28 @@ const quietLog = () => {
     const meta = await metaOf();
     ok('tick: the dataset was refreshed once, on disk (3 rows, lastAutoAt stamped)', meta?.rowCount === 3 && !!meta?.autoRefresh?.lastAutoAt, JSON.stringify(meta?.autoRefresh));
     ok('tick: both rows count one run with no error', tickRows.rows.every((r) => r.runs === '1' && r.last_error === null), JSON.stringify(tickRows.rows));
+
+    // ── A MANUAL refresh is announced too (L0.1), on every pod, once ───────
+    // `dataset:refresh` on pod A: refreshAsJob announces it, and the tabs on
+    // BOTH pods get it over the fan-out — the dashboard open on either redraws.
+    await context.runInContext(who('default', 'dev@local'), 'fixture', () =>
+      datasets.updateDatasetData(fixture.projectId, fixture.rightId, { columns: cols, rows: [['south', 20], ['east', 30], ['west', 40]] }));
+    const manual = await fetch(`${bases[0]}/api/rpc/dataset:refresh`, {
+      method: 'POST',
+      headers: withCsrf({ 'content-type': 'application/json', 'x-test-org': 'default', 'x-test-user': 'dev@local' }),
+      body: wire.encode({ args: [{ projectId: fixture.projectId, id: fixture.datasetId }] }),
+    });
+    const manualBody = wire.decode(await manual.text()) as { ok?: boolean };
+    ok('manual: dataset:refresh on one pod succeeded', manual.status === 200 && manualBody.ok === true, JSON.stringify(manualBody).slice(0, 200));
+    await until(() => [devA, devB, otherA, otherB].every((t) => count(t, 'hub:dataset-refreshed') >= 2), 3000);
+    await sleep(300);
+    for (const t of [devA, devB, otherA, otherB]) {
+      const evs = t.events.filter((e) => e.channel === 'hub:dataset-refreshed');
+      const o = evs[1]?.data as { ok?: boolean; datasetId?: string; rowsBefore?: number; rowsAfter?: number } | undefined;
+      ok(`manual: ${t.label} got the manual refresh's hub:dataset-refreshed exactly once (3 → 4 rows)`,
+        evs.length === 2 && o?.ok === true && o.datasetId === fixture.datasetId && o.rowsBefore === 3 && o.rowsAfter === 4, JSON.stringify(evs.map((e) => e.data)));
+    }
+    ok('manual: another org\'s tabs got no refresh event', count(orgxA, 'hub:dataset-refreshed') + count(orgxB, 'hub:dataset-refreshed') === 0);
 
     // ── Kill a pod mid-run; the other retakes after the lease expires ──────
     await pool.query(`UPDATE jobs SET next_run_at = now() WHERE org_id = 'default' AND kind = 'test:slow'`);

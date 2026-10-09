@@ -42,6 +42,8 @@ import * as trash from '../app/trash';
 import { applyToChart } from '../app/sharePolicy';
 import { isSharePath } from '../app/privacyStore';
 import { withAsOf } from '../data/asOf';
+import { stampAsOf } from '../data/figureAsOf';
+import type { AsOf } from '../api/asOf';
 import { driversVizData } from './drivers';
 import { facetVizData, isFaceted } from './visualsFacets';
 import { buildFacetData } from '../analysis/facets';
@@ -378,6 +380,8 @@ export type VizDataReply =
       sample?: SampleInfo & { note: string };
       /** Present when a money measure was converted — see ./fxQuery. */
       fx?: FxInfo;
+      /** How fresh the figures are — stamped by `visual:data` itself, never cached (data/figureAsOf). */
+      asOf?: AsOf;
     }
   | { ok: false; error: string; tooLarge?: true };
 
@@ -589,10 +593,11 @@ export function register() {
       // the shaped chart still shows.
       const reply = await withEvents(await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), flt, values), projectId, datasetId, flt); // r8:events
       // A parameter that cannot be made well-typed is a VALIDATION message the
-      // tile shows — never a silently empty chart.
-      return reply.ok && bound.errors.length
+      // tile shows — never a silently empty chart. Dated last (L0.2), inside the
+      // as-of scope, so a snapshot view says the snapshot's time.
+      return await stampAsOf(reply.ok && bound.errors.length
         ? { ...reply, warnings: reply.warnings.concat(bound.errors), paramErrors: bound.errors }
-        : reply;
+        : reply, projectId, [datasetId]);
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to compute the visual data' };
     }
