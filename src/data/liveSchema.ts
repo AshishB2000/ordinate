@@ -95,25 +95,32 @@ export interface SourceColumn {
   columnType?: ColumnType;
 }
 
+/** A declared column and the warehouse type it was declared from (kept by the schema sync's profile, L2.5). */
+export interface DeclaredColumn extends ParsedColumn {
+  sourceType: string;
+}
+
 /**
  * The columns a Live record stores, or the name of the problem: none at all,
  * an empty name, or two columns of one name (a Live query names what it reads
- * by column name, so two alike could not be told apart).
+ * by column name, so two alike could not be told apart). Each carries the
+ * warehouse's type name too; the record itself keeps only name and type
+ * (`liveColumnsOf`), the profile keeps the rest.
  */
 export function liveColumns(
   dialect: LiveDialectId,
   cols: readonly SourceColumn[],
-): { ok: true; columns: ParsedColumn[] } | { ok: false; reason: 'none' } | { ok: false; reason: 'duplicate'; name: string } {
+): { ok: true; columns: DeclaredColumn[] } | { ok: false; reason: 'none' } | { ok: false; reason: 'duplicate'; name: string } {
   if (!cols.length) return { ok: false, reason: 'none' };
   const seen = new Set<string>();
-  const columns: ParsedColumn[] = [];
+  const columns: DeclaredColumn[] = [];
   for (const c of cols) {
     const name = String(c.name ?? '');
     if (!name.trim()) return { ok: false, reason: 'none' };
     if (seen.has(name)) return { ok: false, reason: 'duplicate', name };
     seen.add(name);
     const declared = c.columnType === 'text' || c.columnType === 'number' || c.columnType === 'date' ? c.columnType : undefined;
-    columns.push({ name, type: declared ?? liveColumnType(dialect, c.type) });
+    columns.push({ name, type: declared ?? liveColumnType(dialect, c.type), sourceType: String(c.type ?? '') });
   }
   return { ok: true, columns };
 }

@@ -35,4 +35,22 @@ export const live = {
     input: z.strictObject({ projectId: Uuid, connId: Uuid, on: z.boolean() }),
     project: byProjectId,
   }),
+  // "Sync schema" on a Live dataset (src/ipc/liveProfile.ts, L2.5): re-read its
+  // columns from the warehouse and profile them from one sampled, cost-guarded
+  // query; waits for the job and answers counts, column names and the sample's
+  // typed outcome — never SQL or warehouse text. `write`: it spends a warehouse
+  // query, like a refresh.
+  'dataset:syncLiveSchema': rpc({
+    access: 'write',
+    input: z.strictObject({ projectId: Uuid, datasetId: Uuid }),
+    project: byProjectId,
+  }),
+  // The Live dataset page's Schema panel: when it was synced, each column's
+  // profile (figures computed server side), its sample values, and the columns
+  // gone from the warehouse with what still uses them.
+  'dataset:liveSchema': rpc({
+    access: 'read',
+    input: z.strictObject({ projectId: Uuid, datasetId: Uuid }),
+    project: byProjectId,
+  }),
 } as const;

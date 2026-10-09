@@ -464,4 +464,6 @@ export function registerHandlers(): void {
   (require('../ipc/alerts') as typeof import('../ipc/alerts')).register();
   // Live datasets (docs/live-data/00-plan.md L2.1): the mode switch.
   (require('../ipc/liveDatasets') as typeof import('../ipc/liveDatasets')).register();
+  // …its schema sync and column profile (L2.5).
+  (require('../ipc/liveProfile') as typeof import('../ipc/liveProfile')).register();
 }

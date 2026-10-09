@@ -28,7 +28,7 @@ import * as connectionRun from '../connectors/connectionRun';
 import { getConnector } from '../connectors';
 import * as datasets from '../data/datasets';
 import { loadSecrets } from './connectionSecrets';
-import { liveColumns, type SourceColumn } from '../data/liveSchema';
+import { liveColumns, type DeclaredColumn, type SourceColumn } from '../data/liveSchema';
 import { bumpEpoch, isLive, parseMaxCacheAge, setMaxCacheAge } from '../data/liveDataset';
 import { saveLiveRecord, toExtractRecord, toLiveRecord } from '../data/liveRecord';
 import * as msg from '../data/liveMessages';
@@ -57,9 +57,10 @@ function selectionOf(origin: unknown): Selection | null {
 /**
  * The selection's columns with declared types, read without fetching rows: the
  * catalog for a table (or a one-row run where the connector has no catalog),
- * a one-row run for a query.
+ * a one-row run for a query. `rowEstimate` is the catalog's, when it has one
+ * (the schema sync's BigQuery sample percent, L2.5).
  */
-export async function readLiveSchema(projectId: string, connId: string, sel: Selection): Promise<{ ok: true; columns: ParsedColumn[] } | Fail> {
+export async function readLiveSchema(projectId: string, connId: string, sel: Selection): Promise<{ ok: true; columns: DeclaredColumn[]; rowEstimate?: number } | Fail> {
   const conn = await connections.getConnection(projectId, connId);
   if (!conn) return { ok: false, error: msg.liveConnectionGoneMessage() };
   const def = getConnector(conn.connectorId);
@@ -68,11 +69,14 @@ export async function readLiveSchema(projectId: string, connId: string, sel: Sel
   if (refusal || !def || !def.live) return { ok: false, error: refusal ?? msg.liveNotOfferedMessage() };
   const secrets = await loadSecrets(connId, def);
   let cols: SourceColumn[];
+  let rowEstimate: number | undefined;
   if (sel.table) {
     const described = await connectionRun.describeTable(conn.connectorId, conn.values, secrets, sel.table);
     if (described && !described.ok) return described;
-    if (described) cols = described.columns;
-    else {
+    if (described) {
+      cols = described.columns;
+      rowEstimate = described.rowEstimate;
+    } else {
       const sql = connectionRun.buildTableSql(def.family, sel.table, 1);
       if (!sql) return { ok: false, error: 'Invalid table name' };
       const ran = await connectionRun.explainSql(conn.connectorId, conn.values, secrets, sql);
@@ -87,8 +91,18 @@ export async function readLiveSchema(projectId: string, connId: string, sel: Sel
     return { ok: false, error: 'Pick a table or run a query first.' };
   }
   const typed = liveColumns(def.live.dialect, cols);
-  if (typed.ok) return typed;
+  if (typed.ok) return rowEstimate === undefined ? typed : { ...typed, rowEstimate };
   return { ok: false, error: typed.reason === 'duplicate' ? msg.liveDuplicateColumnMessage(typed.name) : msg.liveNoColumnsMessage() };
+}
+
+/**
+ * A new Live dataset's first schema sync and profile (L2.5), queued as a job:
+ * the create answers at once, the sample lands a moment later. Lazy, because
+ * the sync reads its columns through this module.
+ */
+function queueSync(projectId: string, id: string): void {
+  const job = require('../engine/live/schemaSyncJob') as typeof import('../engine/live/schemaSyncJob');
+  void job.startSchemaSync(projectId, id).catch(() => undefined);
 }
 
 /** `connection:import` with `mode: 'live'` — the schema stored, no rows fetched. */
@@ -106,6 +120,7 @@ export async function createLiveDataset(p: Record<string, unknown>) {
   if (sql && str(p.queryId)) origin.queryId = str(p.queryId);
   const ds = await saveLiveRecord(projectId, { name: str(p.name) || table || 'Connection data', columns: schema.columns, origin, maxCacheAgeSec });
   if (!ds) return { ok: false, error: 'Invalid project, or the project no longer exists' };
+  queueSync(projectId, ds.id);
   return { ok: true, dataset: { ...header(ds), mode: 'live' as const } };
 }
 
@@ -148,6 +163,7 @@ export async function setDatasetMode(p: Record<string, unknown>) {
     const schema = await readLiveSchema(projectId, meta.origin.connId, sel);
     if (!schema.ok) return schema;
     if (!(await toLiveRecord(projectId, id, schema.columns, maxCacheAgeSec))) return { ok: false, error: 'Could not switch the dataset to Live' };
+    queueSync(projectId, id);
     const after = await datasets.getDatasetMeta(projectId, id);
     return { ok: true, mode: 'live', dataset: after ? header(after) : header(meta), maxCacheAgeSec: after?.live?.maxCacheAgeSec };
   }

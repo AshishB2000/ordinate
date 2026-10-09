@@ -48,6 +48,7 @@ import { serverDataDir } from '../server/context';
 import { filledPcts } from '../data/profileView';
 import { refreshLive } from './liveDatasets';
 import { isLive, isLiveDatasetError } from '../data/liveDataset';
+import { liveDistinct } from './liveProfile';
 
 /**
  * A dataset as a grid draws it: name, row count and typed columns — never the
@@ -453,6 +454,9 @@ export function register() {
       // say "showing the first 200 of 4,812" instead of implying 200 is all.
       const req = { limit: cap, search: typeof search === 'string' ? search : '' };
       if (!col) return { values: [], total: 0 };
+      // A profiled Live dataset answers from its sample (L2.5); an unprofiled one still refuses below.
+      const live = await liveDistinct(projectId, datasetId, col, req);
+      if (live) return live;
 
       const src = await datasets.residentSource(projectId, datasetId);
       if (src) {

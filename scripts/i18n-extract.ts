@@ -356,6 +356,7 @@ export const MAIN_FILES = [
   'src/data/liveMessages.ts',
   'src/engine/liveQueryMessages.ts',
   'src/data/refreshHookMessages.ts',
+  'src/engine/liveProfileMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

@@ -43,4 +43,7 @@ export const redshiftDialect: SqlDialect = {
   like: (x, p) => `${x} LIKE ${p} ESCAPE '!'`,
   likeEscape: '!',
   label: (x) => x,
+  // Redshift has no TABLESAMPLE, and this dialect stays the Postgres-portable subset:
+  // the profile's LIMIT bounds the rows.
+  tableSample: () => null,
 };
