@@ -6,7 +6,7 @@
 // the current bubble). Every figure arrives from the server; nothing here
 // computes one.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { useDatasets } from '../../api/datasets';
@@ -30,6 +30,9 @@ import { starterPrompts } from './prompts';
 import { ThreadActionDialog, type ThreadAct } from './ThreadActions';
 import { Transcript, type Pending } from './Transcript';
 import s from './Dock.module.css';
+
+// The draft review draws charts: loaded when a reply first proposes a dashboard, not with the dock.
+const DraftFlow = lazy(() => import('../analyses/DraftReview').then((m) => ({ default: m.DraftFlow })));
 
 const MIN_WIDTH = 300;
 const DEFAULT_WIDTH = 340;
@@ -62,6 +65,8 @@ export default function DockPanel() {
   const [hint, setHint] = useState('');
   const [plans, setPlans] = useState<PlanSlot[]>([]);
   const [getData, setGetData] = useState(false); // the last reply proposed bringing data in
+  // The last reply proposed a dashboard: drafted from what was asked, reviewed, and created only on the click.
+  const [draft, setDraft] = useState<{ projectId: string; datasetId?: string; intent: string } | null>(null);
   const [text, setText] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
   const [act, setAct] = useState<ThreadAct | null>(null); // a rename or delete being asked about
@@ -86,12 +91,13 @@ export default function DockPanel() {
     (input.current && !input.current.disabled ? input.current : panel.current)?.focus();
   }, []);
 
-  // A rename or delete dialog closing: what opened it (a menu item, a History row)
-  // is gone, so focus would fall to <body>. Back to the composer, a tick after
-  // the dialog lets go of it.
+  // A rename, delete or draft dialog closing: what opened it (a menu item, a
+  // History row, a question since sent) is gone, so focus would fall to <body>.
+  // Back to the composer, a tick after the dialog lets go of it.
   const hadAct = useRef(false);
+  const dialog = !!act || !!draft;
   useEffect(() => {
-    if (act) {
+    if (dialog) {
       hadAct.current = true;
       return;
     }
@@ -99,7 +105,7 @@ export default function DockPanel() {
     hadAct.current = false;
     const id = setTimeout(() => (input.current && !input.current.disabled ? input.current : panel.current)?.focus(), 0);
     return () => clearTimeout(id);
-  }, [act]);
+  }, [dialog]);
 
   // Esc closes and hands focus back to the toggle — unless something above (a menu, a select) took it.
   useEffect(() => {
@@ -208,6 +214,10 @@ export default function DockPanel() {
         setPlans((ps) => [...ps, { key: askId, action: { intent: action.intent, steps: action.steps ?? [], droppedSteps: action.droppedSteps }, threadId: r.threadId ?? '' }]);
       }
       setGetData(action?.kind === 'import');
+      if (action?.kind === 'dashboard') {
+        // ponytail: one turn's intent; fold a thread's earlier dashboard asks in if follow-ups should refine one plan.
+        setDraft({ projectId: pid, ...(context.kind === 'dataset' && context.id ? { datasetId: context.id } : {}), intent: (action.intent || q).slice(0, 2000) });
+      }
       return;
     }
     // Failure: the server left the thread unchanged; keep the typed text so nothing is lost.
@@ -357,6 +367,11 @@ export default function DockPanel() {
           }
         />
       </aside>
+      {draft && (
+        <Suspense fallback={null}>
+          <DraftFlow projectId={draft.projectId} datasetId={draft.datasetId} intent={draft.intent} onClose={() => setDraft(null)} />
+        </Suspense>
+      )}
       {pid && act && <ThreadActionDialog key={`${act.kind}:${act.thread.id}`} projectId={pid} act={act} onClose={() => setAct(null)} onDone={acted} />}
     </>
   );

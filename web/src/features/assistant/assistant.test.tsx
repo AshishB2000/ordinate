@@ -379,4 +379,28 @@ describe('the dock', () => {
     expect(await href('Paste data')).toBe(`/data/import?project=${PID}&source=paste`);
     expect(await href('Connect a source')).toBe(`/connections/${PID}`);
   });
+
+  it('a reply that proposes a dashboard drafts it from what was asked and opens the review', async () => {
+    const turns = [
+      { id: 't1', role: 'user', text: 'build a dashboard for this', createdAt: '' },
+      { id: 't2', role: 'assistant', text: 'I will build a population dashboard.', createdAt: '' },
+    ];
+    const calls = serve({
+      ...base(ADMIN, true),
+      'copilot:ask': { body: { ok: true, answer: turns[1].text, threadId: null, turns, suggestedAction: { kind: 'dashboard', intent: 'population by state' } } },
+      'analysis:draft': { body: { ok: true, name: 'Population overview', sheets: [{ name: 'Overview', visuals: [] }], plan: { name: 'Population overview' } } },
+    });
+    renderApp('/');
+    const dock = await openDock();
+    const box = within(dock).getByRole('textbox', { name: 'Ask the Assistant' }) as HTMLTextAreaElement;
+    await waitFor(() => expect(box.disabled).toBe(false));
+    expect(screen.queryByRole('dialog', { name: 'Assistant draft — review before creating' })).toBeNull(); // negative control: nothing proposed yet
+    fireEvent.change(box, { target: { value: 'build a dashboard for this' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    const review = await screen.findByRole('dialog', { name: 'Assistant draft — review before creating' });
+    expect(await within(review).findByText('Population overview')).toBeTruthy();
+    expect(within(review).getByRole('button', { name: 'Create dashboard' })).toBeTruthy();
+    expect(calls.find((c) => c.channel === 'analysis:draft')?.payload).toEqual({ projectId: PID, intent: 'population by state' });
+    expect(calls.some((c) => c.channel === 'analysis:buildPlan')).toBe(false); // nothing is created until the click
+  });
 });

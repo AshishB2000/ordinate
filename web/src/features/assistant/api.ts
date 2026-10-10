@@ -74,7 +74,7 @@ export interface ActivityStep {
   detail?: string;
 }
 
-/** What a turn proposes next (src/ai/suggestedAction.ts). The dock acts on `plan` and `import`. */
+/** What a turn proposes next (src/ai/suggestedAction.ts). The dock acts on `plan`, `import` and `dashboard`. */
 export interface SuggestedAction {
   kind: string;
   intent: string;

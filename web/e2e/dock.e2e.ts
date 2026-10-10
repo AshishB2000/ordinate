@@ -14,7 +14,9 @@
 // stub is asked with it, and the answer STREAMS into the pending bubble token
 // by token over this tab's event stream; then a plan whose import step is fed
 // by an upload (T0.4 — the server has no file picker) runs to the
-// app-computed KPI. Zero console errors throughout; screens in both themes.
+// app-computed KPI; and a reply that proposes a dashboard drafts it, shows the
+// review, and creates it on the click. Zero console errors throughout; screens
+// in both themes.
 
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -36,13 +38,29 @@ const PLAN = {
   ],
 };
 
+/** What the model answers a "build me a dashboard" with (the action), and what it then drafts (structure only — no figure). */
+const DASHBOARD = '\n@@ACTION {"kind":"dashboard","intent":"revenue by region"}';
+const DRAFT = {
+  name: 'Regional revenue',
+  rationale: 'Revenue split by region, with the total beside it.',
+  calculatedFields: [],
+  sheets: [{
+    name: 'Overview',
+    metrics: [{ dataset: 'Sales', column: 'revenue', aggregation: 'sum', label: 'Total revenue' }],
+    visuals: [{ dataset: 'Sales', name: 'Revenue by region', chartType: 'column', encoding: { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] }, filters: [] }],
+    texts: [],
+  }],
+};
+/** What `analysis:draft` asked the model, last. */
+let draftAsk = '';
+
 /** The models the stub asked with, in order. */
 const askedModels: string[] = [];
 
 /** What the model adds to ANSWER when the project has no data: the dock shows the three ways in. */
 const GET_DATA = '\n@@ACTION {"kind":"import","intent":"bring data in"}';
 
-/** The provider stub: lists two models, a connectivity test gets "OK", a streamed ask gets ANSWER and GET_DATA (or a plan when asked for one). */
+/** The provider stub: lists two models, a connectivity test gets "OK", a draft gets DRAFT, a streamed ask gets ANSWER and GET_DATA (or a plan or a dashboard proposal when asked for one). */
 const stub = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c: Buffer) => (body += c.toString()));
@@ -52,15 +70,21 @@ const stub = http.createServer((req, res) => {
       res.end(JSON.stringify({ data: [{ id: 'claude-sonnet-stub', display_name: 'Claude Sonnet Stub', created_at: 2 }, { id: 'claude-haiku-stub', display_name: 'Claude Haiku Stub', created_at: 1 }] }));
       return;
     }
-    const json = JSON.parse(body || '{}') as { stream?: boolean; model?: string; messages?: { content: unknown }[] };
+    const json = JSON.parse(body || '{}') as { stream?: boolean; model?: string; system?: unknown; messages?: { content: unknown }[] };
     askedModels.push(String(json.model));
+    const asked = JSON.stringify(json.messages?.at(-1)?.content ?? '');
     if (!json.stream) {
+      const drafting = JSON.stringify(json.system ?? '').includes('ANALYSIS PLAN');
+      if (drafting) draftAsk = asked;
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn' }));
+      res.end(JSON.stringify({ content: [{ type: 'text', text: drafting ? JSON.stringify(DRAFT) : 'OK' }], stop_reason: 'end_turn' }));
       return;
     }
-    const asked = JSON.stringify(json.messages?.at(-1)?.content ?? '');
-    const parts = asked.includes('a plan') ? ['Here is a plan you can run step by step.', `\n@@ACTION ${JSON.stringify(PLAN)}`] : [...ANSWER, GET_DATA];
+    const parts = asked.includes('a plan')
+      ? ['Here is a plan you can run step by step.', `\n@@ACTION ${JSON.stringify(PLAN)}`]
+      : asked.includes('regional dashboard')
+        ? ['I will draft a dashboard of revenue by region.', DASHBOARD]
+        : [...ANSWER, GET_DATA];
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     let i = 0;
     const tick = setInterval(() => {
@@ -278,5 +302,23 @@ if (!dbUrl) {
     await confirm.getByRole('button', { name: 'Delete' }).click();
     await dock.getByRole('button', { name: 'Conversations — New conversation' }).waitFor();
     assert.equal(await dock.getByText(ANSWER.join(''), { exact: true }).count(), 0, 'the deleted conversation\'s turns are gone from the dock');
+
+    // ── A dashboard: drafted from what was asked, reviewed, created on the click ──
+    await page.reload();
+    await settled(page);
+    await box.fill('Build a regional dashboard');
+    await box.press('Enter');
+    const review = page.getByRole('dialog', { name: 'Assistant draft — review before creating' });
+    await review.getByText('Revenue by region', { exact: true }).waitFor();
+    await review.locator('canvas').first().waitFor(); // the app drew it, from its own figures
+    assert.match(draftAsk, /revenue by region/, 'the draft was asked for what the reply proposed');
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: path.join(SCREENS, `dock-draft-${theme}.png`), fullPage: true });
+    }
+    await review.getByRole('button', { name: 'Create dashboard' }).click();
+    await page.waitForURL(/\/analyses\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
+    await page.getByText('Revenue by region', { exact: true }).first().waitFor(); // the dashboard it built, open
   });
 }
