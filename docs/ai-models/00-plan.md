@@ -1,6 +1,6 @@
 # AI models: admins set them up, members pick one
 
-Status: plan, not started. Base: `origin/develop` @ c110491.
+Status: built (AI1–AI4 in one PR). Base: `origin/develop` @ c110491. See "As built" at the end.
 
 ## 1. The problem
 
@@ -241,3 +241,26 @@ These come from CLAUDE.md, with the extra ones for this work:
   errors and no CSP violations, and must stay within the RPC budget.
 - **Branches.** If a PR shows no checks, read `mergeStateStatus`. Resolve conflicts by keeping both
   sides.
+
+## As built (where it differs from the plan above)
+
+- **One PR, four commits** (AI1 server, AI2 admin tab, AI3 dock and surfaces, AI4 docs and security),
+  not four PRs. The task split and its file ownership held.
+- **`user_ai_model.user_email`**, not `user_id`: the request context (`ctx().user`) carries an email
+  and no id, and per-member data is already keyed by it (`config.starredFor`). Emails are unique per org.
+- **`org_ai_imports`** (a fourth table): marks an org imported, so an admin who disconnects every
+  provider never gets the old `config.json` block back, and racing pods import once.
+- **No database → the pod's `config.json`**, as before: dev mode and the e2e harness run without
+  Postgres. Nothing can be set up there (no key store). `ai:admin` says why; `ai:status` reports what
+  that pod's file already has.
+- **`ai:connect` takes an optional `model`**, the id the connection test calls. The gateway has no
+  default model.
+- **`ai:status` also carries `copilotEnabled` and `keyStore`**, so the dock needs one call. `ai:setMine`
+  pushes nothing (it changes no one else's view).
+- **`executionReady()` is async**: with a database, readiness is a Postgres read.
+- **The model picker is under the composer**, not in the dock header. At the dock's 340 px minimum the
+  header could not fit it: the thread title collapsed and the close button was pushed off.
+- **Captures** (`ScreenshotSource`) moved to `ai:status` and `AiNotReady` too. `captureDataset:status`
+  stays registered (append-only).
+- Found by `test-aiModels-db`: the legacy import borrowed a second pool connection while holding one,
+  which deadlocks a full pool. It now reads the old policy on its own transaction's client.

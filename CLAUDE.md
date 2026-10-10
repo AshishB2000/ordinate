@@ -184,7 +184,8 @@ prompts unrounded); a leading U+FEFF is lost on every string the bridge returns 
 - **Analyses** — analysis = mutable authoring surface, dashboard = published read-only snapshot,
   copied **by value** on publish. Spec: `docs/analysis/00-model.md`.
 - **AI (optional, `not_ready` without a model)** — API-key providers only, keys per org in the
-  secrets store, calls via `src/ai/providerFetch.ts` (SSRF-guarded), org allow-list checked each call.
+  secrets store, calls via `src/ai/providerFetch.ts` (SSRF-guarded). Admin → AI approves exact models;
+  each member's pick and the rest of the setup are in Postgres (`src/server/aiConfig.ts`, `docs/ai-models/`).
   `src/analysis/anomalies.ts` is a pure detector; the model only puts app-found figures into words.
 - **Automation** — live surface: HTTP MCP, `POST /api/mcp` (`src/automation/serverMcp.ts`, bearer
   token, runs as its user). The CLI (`cli.ts`, `argv.ts`) has no entry point since T8.1.

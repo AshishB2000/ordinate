@@ -6,6 +6,7 @@
 |---|---|
 | [`server/`](server/README.md) | **Operator docs** for running Ordinate: Compose quick start, EKS, ECS, GKE/AKS, SSO, every environment variable, sizing, backup and restore, upgrades. |
 | [`phase-7-web/`](phase-7-web/) | **Phase 7**, the move from a desktop app to the self-hosted web app: the [plan](phase-7-web/00-plan.md), the [tasks](phase-7-web/01-tasks.md), the [log](phase-7-web/log.md) of every measured decision, the [threat model](phase-7-web/threat-model.md) and the [retro](phase-7-web/99-retro.md). |
+| [`ai-models/`](ai-models/00-plan.md) | **AI models**: Admin → AI connects providers and approves the exact models members may use; each member picks one; all of it in Postgres so every pod agrees. Operator walkthrough: [`server/ai.md`](server/ai.md). |
 | [`live-data/`](live-data/00-plan.md) | **Live data**, the plan for fresh numbers: Snowflake and BigQuery, Live warehouse datasets with a cache age, fresh-on-ask for copies, dashboards that update themselves, and a refresh URL for dbt/Airflow. |
 | [`analysis/`](analysis/00-model.md) | The analysis and dashboard record model (an analysis is the authoring surface; a dashboard is a by-value snapshot) and the authoring surface. Still the spec. |
 | [`automation.md`](automation.md) | The MCP endpoint and the command registry. Generated from `src/automation/registry.ts`; do not edit by hand. |

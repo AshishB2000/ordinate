@@ -21,6 +21,7 @@ import { keyStoreUnavailable } from '../server/aiKeys';
 import { ctx } from '../server/context';
 import { publish } from '../server/sse';
 import { podMemberView } from './aiModels';
+import { AI_PROVIDERS } from '../api/admin';
 
 function changed(): void {
   publish({ org: ctx().org.id }, 'key:changed');
@@ -32,20 +33,19 @@ async function status() {
     const view = podMemberView();
     return { ...pub, isReady: view.ready, allowedProviders: [...new Set(view.models.map((m) => m.provider))], keyStore: keyStoreUnavailable() };
   }
-  const [view, admin] = [await aiConfig.memberView(), await aiConfig.adminView()];
+  // From the member's view alone: any member reads this (Settings loads it), so no key is decrypted for it.
+  const view = await aiConfig.memberView();
   const providers: Record<string, { hasKey: boolean; verified: boolean; connected: boolean; baseUrl: string; maxTokens: string; model: string }> = {};
-  for (const p of admin.providers) {
-    providers[p.provider] = {
-      hasKey: p.hasKey, verified: p.connected, connected: p.connected, baseUrl: '', maxTokens: '',
-      model: view.models.find((m) => m.provider === p.provider)?.model ?? '',
-    };
+  for (const p of AI_PROVIDERS) {
+    const model = view.models.find((m) => m.provider === p)?.model ?? '';
+    providers[p] = { hasKey: Boolean(model), verified: Boolean(model), connected: Boolean(model), baseUrl: '', maxTokens: '', model };
   }
   return {
     ...pub,
     isReady: view.ready,
     byok: { activeProvider: view.mine?.provider ?? null, providers },
     allowedProviders: [...new Set(view.models.map((m) => m.provider))],
-    keyStore: admin.keyStore,
+    keyStore: keyStoreUnavailable(),
   };
 }
 
