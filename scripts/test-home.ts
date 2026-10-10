@@ -107,8 +107,14 @@ const ids = (s: Snap): string[] => [...s.active, ...s.recent].map((j) => j.id);
   JSON.stringify(ov.body.datasets));
   ok('only the picked fields leave (no origin, no crop path, no source kind)',
     ov.body.datasets.every((d: object) => Object.keys(d).every((k) => ['id', 'name', 'rowCount', 'columnCount', 'qualityFailing'].includes(k))), JSON.stringify(ov.body.datasets));
-  ok('the first four visuals, in the store\'s order, as id/name/chartType',
-    ov.body.visuals.length === 4 && ov.body.visuals.every((v: any, i: number) => v.id === direct.vis[i].id && Object.keys(v).length === 3), JSON.stringify(ov.body.visuals)); // any: a reply row
+  // Saved visuals are work like the rest: they ride recent:list (differential against the store's own list).
+  const rl = await rpc('org-a', 'u1', 'recent:list');
+  const recentVis = (rl.body as any[]).filter((r) => r.type === 'visual'); // any: a reply row
+  ok('recent:list: every saved visual, with the store\'s name, time and chart type', rl.status === 200 && recentVis.length === direct.vis.length
+    && direct.vis.every((v) => recentVis.some((r) => r.id === v.id && r.name === v.name && r.updatedAt === v.updatedAt && r.meta.chartType === v.chartType && r.projectId === seed.pid)),
+  JSON.stringify(recentVis));
+  ok('…and a visual row carries nothing else (no encoding, no dataset id)', recentVis.every((r) => Object.keys(r).sort().join() === 'id,meta,name,projectId,projectName,type,updatedAt' && Object.keys(r.meta).join() === 'chartType'), JSON.stringify(recentVis[0]));
+  ok('home:overview no longer carries a visuals list', !('visuals' in ov.body), Object.keys(ov.body).join());
   ok('home:overview needs a UUID → 400', (await rpc('org-a', 'u1', 'home:overview', { projectId: 'x' })).status === 400);
   ok('another org\'s caller is refused the project → 403', (await rpc('org-b', 'u1', 'home:overview', { projectId: seed.pid })).status === 403);
 

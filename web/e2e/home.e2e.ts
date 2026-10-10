@@ -1,6 +1,7 @@
 // Home and the app chrome (T2.1) against the real server and the seeded
-// sample: the greeting and its counts, Starred and Recent, a pin that survives
-// a reload (the caller's own, on the server), the Get-started card folding to
+// sample: the greeting and its counts, the preview cards, the one table of
+// recent work and its pills, the New menu's doors, a pin that survives a
+// reload (the caller's own, on the server), the Get-started card folding to
 // its pill and back, a question handed to the Assistant dock, and a real job
 // (`quality:run`, started from this tab) reaching the Jobs popover and a toast
 // over the event stream. Screenshots of Home and the open Jobs popover in both
@@ -22,7 +23,7 @@ function clientIdOf(page: Page): { current: string } {
   return id;
 }
 
-e2e('Home: greeting, Starred and Recent, a pin, Get started, the ask bar, and a live job', async (s) => {
+e2e('Home: greeting, preview cards, the table of work, a pin, Get started, the ask bar, and a live job', async (s) => {
   const { page, server } = s;
   const client = clientIdOf(page);
   const t0 = Date.now();
@@ -32,36 +33,54 @@ e2e('Home: greeting, Starred and Recent, a pin, Get started, the ask bar, and a 
 
   // ── the greeting names the sample project and its counts (the server's) ──
   assert.match((await page.getByTestId('home-greet').textContent()) ?? '', /, Dev$/);
-  // The seed also adds a geo dataset for the maps (seed.ts), so the count is read off the side list it must match.
-  const sideList = page.getByRole('region', { name: 'Your data' }).getByRole('listitem');
-  await sideList.first().waitFor();
-  const n = await sideList.count();
+  // The seed also adds a geo dataset for the maps (seed.ts), so the count is read off the table it must match.
+  const recent = page.getByRole('region', { name: 'Recent', exact: true });
+  const filterBy = (name: string) => page.getByRole('group', { name: 'Filter recent' }).getByRole('button', { name, exact: true });
+  await recent.getByRole('listitem').first().waitFor();
+  await filterBy('Datasets').click();
+  const n = await recent.getByRole('listitem').count();
   assert.equal(await page.getByTestId('home-sub').textContent(), `${server.sample.projectName}  ·  ${n} dataset${n === 1 ? '' : 's'}  ·  1 dashboard`);
-
-  // ── Starred holds the sample dashboard (the seed pins it); Recent the sample dataset ──
-  const starred = page.getByRole('region', { name: 'Starred' });
-  const recent = page.getByRole('region', { name: /^Recent/ });
-  assert.equal(await starred.getByRole('listitem').count(), 1);
-  assert.match((await starred.getByRole('link').getAttribute('aria-label')) ?? '', /, Dashboard, /);
   const orders = recent.getByRole('link', { name: /^Retail orders, Dataset, 5,000 rows × \d+ columns, in / });
   await orders.waitFor();
   assert.match((await orders.getAttribute('href')) ?? '', new RegExp(`^/data/${server.sample.projectId}/[0-9a-f-]{36}$`));
-  // The side column, the suggestions written for the sample, a saved-visuals strip.
-  const side = page.getByRole('complementary', { name: 'This project' });
-  await side.getByRole('link', { name: /Retail orders/ }).waitFor();
+
+  // ── one table, every kind of work: the pills narrow it, Starred holds the seed's pinned dashboard ──
+  await filterBy('Visuals').click();
+  assert.ok((await recent.getByRole('listitem').count()) >= 1, 'saved visuals are rows of the same table');
+  assert.match((await recent.getByRole('link').first().getAttribute('href')) ?? '', new RegExp(`^/visuals/${server.sample.projectId}/[0-9a-f-]{36}$`));
+  await filterBy('Starred').click();
+  assert.equal(await recent.getByRole('listitem').count(), 1);
+  assert.match((await recent.getByRole('link').getAttribute('aria-label')) ?? '', /, Dashboard, /);
+  assert.match((await recent.getByRole('link').getAttribute('href')) ?? '', new RegExp(`^/analyses/${server.sample.projectId}/[0-9a-f-]{36}$`));
+  await filterBy('All').click();
+
+  // ── Jump back in: the newest records as cards, a saved visual and the dashboard with their picture drawn ──
+  const jump = page.getByRole('region', { name: 'Jump back in' });
+  const cards = await jump.getByRole('link').count();
+  assert.ok(cards >= 2 && cards <= 4, `preview cards: ${cards}`);
+  await jump.locator('canvas').first().waitFor();
+  // No side column, and nothing on the page repeats the New menu's doors.
+  assert.equal(await page.getByRole('complementary', { name: 'This project' }).count(), 0);
+  assert.equal(await page.getByRole('link', { name: 'CSV / Excel' }).count(), 0);
+  await page.getByRole('button', { name: 'New', exact: true }).click();
+  const menu = page.getByRole('menu', { name: 'New' });
+  for (const door of ['Dashboard', 'Visual', 'CSV / Excel', 'Paste data', 'Screenshot', 'Database']) await menu.getByRole('menuitem', { name: door }).waitFor();
+  await page.keyboard.press('Escape');
   // Starter chips from the project's real dataset names (the seed's two datasets, so not the sample-only pair).
   const chips = page.getByRole('group', { name: 'Suggested questions' }).getByRole('button');
   assert.equal(await chips.count(), 3);
   assert.match((await chips.first().textContent()) ?? '', /^What stands out in .+\?$/);
-  assert.ok((await side.getByRole('region', { name: 'Saved visuals' }).getByRole('listitem').count()) >= 1);
 
   // ── a pin is the caller's own and survives a reload ──
   await recent.getByRole('button', { name: 'Star Retail orders' }).click();
-  await starred.getByRole('button', { name: 'Unstar Retail orders' }).waitFor();
+  await recent.getByRole('button', { name: 'Unstar Retail orders' }).waitFor();
   await page.reload();
   await settled(page);
-  assert.equal(await starred.getByRole('listitem').count(), 2);
-  await starred.getByRole('button', { name: 'Unstar Retail orders' }).click();
+  await filterBy('Starred').click();
+  assert.equal(await recent.getByRole('listitem').count(), 2);
+  await recent.getByRole('button', { name: 'Unstar Retail orders' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('section[aria-labelledby="home-recent"] li').length === 1);
+  await filterBy('All').click();
   await recent.getByRole('button', { name: 'Star Retail orders' }).waitFor();
 
   // ── Get started: ticked by the server, folds to the pill and comes back ──

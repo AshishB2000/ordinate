@@ -90,7 +90,7 @@ function PaletteBox({ onClose }: { onClose: () => void }) {
       if (!text.trim()) {
         const rows = (recent.data ?? []).slice(0, 6).map<Row>((it) => ({
           key: `rec:${it.type}:${it.id}`,
-          icon: it.type === 'dataset' ? 'database' : it.type === 'analysis' ? 'layout-dashboard' : it.type === 'capture' ? 'camera' : 'file-text',
+          icon: it.type === 'dataset' ? 'database' : it.type === 'analysis' ? 'layout-dashboard' : it.type === 'capture' ? 'camera' : it.type === 'visual' ? 'chart-bar' : 'file-text',
           title: it.name,
           sub: `${TYPE_LABEL[it.type]} · ${it.projectName}`,
           run: go(itemHref(it)),

@@ -7,7 +7,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from './client';
 
-export type RecentType = 'dataset' | 'analysis' | 'capture' | 'report';
+export type RecentType = 'dataset' | 'analysis' | 'capture' | 'report' | 'visual';
 
 export interface RecentItem {
   type: RecentType;
@@ -16,13 +16,12 @@ export interface RecentItem {
   projectName: string;
   name: string;
   updatedAt: string;
-  meta?: { rowCount?: number; columnCount?: number; sheetCount?: number; qualityFailing?: number };
+  meta?: { rowCount?: number; columnCount?: number; sheetCount?: number; qualityFailing?: number; chartType?: string };
 }
 
 export interface HomeOverview {
   counts: { datasets: number; dashboards: number; captures: number; visuals: number };
   datasets: { id: string; name: string; rowCount: number; columnCount: number; qualityFailing?: number }[];
-  visuals: { id: string; name: string; chartType: string }[];
   /** T2.11: "What stands out" — insights with a chart, each with its sparkline's figures (src/ipc/insights.ts standsOut). */
   standsOut: Array<{ id: string; spark: { labels: unknown[]; series: unknown[] } | null } & Record<string, unknown>>;
   /** Home's "Recent comments" (T2.9): the open threads, newest activity first. */
@@ -94,7 +93,6 @@ export function useOverview(projectId: string | undefined) {
       return {
         counts: { datasets: n(c.datasets), dashboards: n(c.dashboards), captures: n(c.captures), visuals: n(c.visuals) },
         datasets: list(o.datasets),
-        visuals: list(o.visuals),
         standsOut: list(o.standsOut),
         comments: { open: n(obj(o.comments).open), recent: list(obj(o.comments).recent) },
       };

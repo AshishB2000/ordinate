@@ -35,9 +35,10 @@ describe('home words', () => {
     expect(suggestPrompts([], ['Orders'])).toEqual([]);
   });
 
-  it('opens a dataset on its page and every other record on its section', () => {
+  it('opens a dataset, a dashboard and a visual on their own page and the rest on their section', () => {
     expect(itemHref({ type: 'dataset', id: 'd', projectId: 'p' })).toBe('/data/p/d');
-    expect(itemHref({ type: 'analysis', id: 'a', projectId: 'p' })).toBe('/dashboards');
+    expect(itemHref({ type: 'analysis', id: 'a', projectId: 'p' })).toBe('/analyses/p/a');
+    expect(itemHref({ type: 'visual', id: 'v', projectId: 'p' })).toBe('/visuals/p/v');
     expect(itemHref({ type: 'report', id: 'r', projectId: 'p' })).toBe('/reports');
     expect(itemHref({ type: 'capture', id: 'c', projectId: 'p' })).toBe('/data');
   });

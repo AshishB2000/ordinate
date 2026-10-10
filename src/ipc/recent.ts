@@ -12,10 +12,8 @@ import { targetNames } from './comments';
 
 // Home's IPC: the cross-project "Recent" list (see src/app/recent.ts:
 // metadata-only, never hydrates a table or computes a figure), the Starred
-// pins, and one project's overview for the greeting and the side column.
+// pins, and one project's overview for the greeting and the ask bar.
 
-/** How many saved visuals Home's strip shows. */
-const HOME_VISUALS = 4;
 /** Open threads Home shows (commentDoors.ts CMT_HOME_MAX). */
 const HOME_COMMENTS = 4;
 
@@ -36,10 +34,11 @@ export function register() {
   );
 
   // One project at a glance (server; the desktop's Home makes these four reads
-  // itself): the record counts the greeting names, the datasets the "Your data"
-  // card lists and the first saved visuals. Counted HERE so the browser never
-  // counts a figure; every field is picked, so no origin, path or crop path
-  // the summaries carry reaches a browser.
+  // itself): the record counts the greeting names and the datasets the ask
+  // bar's suggestions are written from (saved visuals ride `recent:list` with
+  // the rest of the work). Counted HERE so the browser never counts a figure;
+  // every field is picked, so no origin, path or crop path the summaries carry
+  // reaches a browser.
   // Home's "Recent comments" (T2.9, commentDoors.ts cmtPaintHome): the open
   // threads, newest activity first, each with what it is on — here, so the
   // page needs no extra call. A plain snippet of the body; the author is the
@@ -85,7 +84,6 @@ export function register() {
         columnCount: d.columnCount,
         ...(d.qualityFailing !== undefined ? { qualityFailing: d.qualityFailing } : {}),
       })),
-      visuals: vis.slice(0, HOME_VISUALS).map((v) => ({ id: v.id, name: v.name, chartType: v.chartType })),
       standsOut: stands,
       comments: await recentComments(projectId),
     };

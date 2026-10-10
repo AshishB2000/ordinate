@@ -145,11 +145,9 @@ if (!adminUrl) {
 
     await open(`/?project=${pid}`);
     await page.getByTestId('home-sub').getByText(PROJECT).waitFor();
-    await page.getByRole('complementary', { name: 'This project' }).getByRole('link', { name: /Orders/ }).waitFor();
+    await page.getByRole('region', { name: 'Recent', exact: true }).getByRole('link', { name: /^Orders, Dataset/ }).waitFor();
     await page.getByPlaceholder('Ask about your data…').waitFor(); // asking is anyone's
     assert.equal(await count(page, 'button', 'New'), 0, 'Home: no New menu');
-    assert.equal(await count(page, 'link', 'CSV / Excel'), 0, 'Home: no Connect shortcuts');
-    assert.equal(await count(page, 'link', 'Paste data'), 0);
     assert.equal(await count(page, 'link', 'Bring in some data'), 0);
     assert.equal(await count(page, 'button', 'Save as visual'), 0);
     await screens(page, 'view-only-home');

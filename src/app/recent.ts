@@ -14,10 +14,11 @@
 import * as projects from './projects';
 import * as datasets from '../data/datasets';
 import * as analysis from '../analysis/analysis';
+import * as visuals from '../analysis/visuals';
 import * as history from './history';
 import * as reportSpec from '../analysis/reportSpec';
 
-export type RecentType = 'dataset' | 'analysis' | 'capture' | 'report';
+export type RecentType = 'dataset' | 'analysis' | 'capture' | 'report' | 'visual';
 
 /**
  * What the record IS, in numbers — carried so a Home row can say more than a
@@ -39,6 +40,8 @@ export interface RecentMeta {
   sheetCount?: number;
   /** FAIL-severity data-quality rules failing in the dataset's latest run (the red dot). */
   qualityFailing?: number;
+  /** A saved visual's chart id (VisualSummary.chartType) — what its row and its thumbnail are drawn as. */
+  chartType?: string;
 }
 
 export interface RecentItem {
@@ -63,6 +66,9 @@ export interface RecentGroup {
   // GENERATED reports only — see listRecent. Optional so an older caller (and
   // every existing test) builds a group without one.
   reports?: { id: string; name: string; updatedAt: string }[];
+  // Saved visuals: a record like the others, so Home lists and previews them
+  // with the rest. Optional for the same reason as the two above.
+  visuals?: { id: string; name: string; updatedAt: string; meta?: RecentMeta }[];
 }
 
 /**
@@ -123,6 +129,17 @@ export function buildRecent(groups: RecentGroup[], limit: number): RecentItem[] 
         meta: a.meta,
       });
     }
+    for (const v of g.visuals || []) {
+      items.push({
+        type: 'visual',
+        id: v.id,
+        projectId: g.projectId,
+        projectName: g.projectName,
+        name: v.name,
+        updatedAt: v.updatedAt,
+        meta: v.meta,
+      });
+    }
   }
 
   // Stable descending sort: carry the original index so equal timestamps keep
@@ -163,11 +180,12 @@ export async function listRecent(limit = 50): Promise<RecentItem[]> {
 
   const groups: RecentGroup[] = await Promise.all(
     projectList.map(async (p): Promise<RecentGroup> => {
-      const [ds, an, caps, reps] = await Promise.all([
+      const [ds, an, caps, reps, vis] = await Promise.all([
         datasets.listDatasets(p.id).catch(() => []),
         analysis.listAnalyses(p.id).catch(() => []),
         history.loadAllSummaries(p.id).catch(() => []),
         reportSpec.listReports(p.id).catch(() => []),
+        visuals.listVisuals(p.id).catch(() => []),
       ]);
       return {
         projectId: p.id,
@@ -198,6 +216,7 @@ export async function listRecent(limit = 50): Promise<RecentItem[]> {
         reports: reps
           .filter((r) => !!r.lastRunAt && !!r.lastFile)
           .map((r) => ({ id: r.id, name: r.name, updatedAt: r.lastRunAt as string })),
+        visuals: vis.map((v) => ({ id: v.id, name: v.name, updatedAt: v.updatedAt, meta: { chartType: v.chartType } })),
       };
     }),
   );

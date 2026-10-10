@@ -1,7 +1,9 @@
-// Home — homePage.ts, homeAsk.ts, homeData.ts and getStarted.ts, ported. In
-// weight order: the greeting, the ASK BAR (the one dominant element), the
-// Get-started card while first-run guidance lasts, then two columns — Starred
-// and Recent on the left, "Your data" and "Saved visuals" on the right.
+// Home — homePage.ts, homeAsk.ts and getStarted.ts, ported. In weight order:
+// the greeting, the ASK BAR (the one dominant element), the Get-started card
+// while first-run guidance lasts, then ONE column the page's full measure —
+// "Jump back in" (the newest records as preview cards), what the app found in
+// the data, the open comments, and the table of all recent work. Bringing data
+// in is the New menu's, so nothing on the page repeats it.
 //
 // The project Home speaks for is the most recently updated one the caller can
 // read (projects:list comes newest first). T2.2's switcher will make it the
@@ -17,11 +19,12 @@ import { NoProject } from '../projects/NoProject';
 import { Button } from '../../ui/Button';
 import { Menu } from '../../ui/Menu';
 import { Skeleton } from '../../ui/Skeleton';
+import { ErrorState } from '../../ui/States';
 import { AskBar } from './AskBar';
 import { GetStarted, GetStartedPill } from './GetStarted';
-import { displayName, greeting, plural, suggestPrompts } from './homeText';
-import { RecentColumn } from './RecentColumn';
-import { SideColumn } from './SideColumn';
+import { displayName, greeting, importPath, plural, suggestPrompts } from './homeText';
+import { JumpBackIn } from './JumpBackIn';
+import { RecentTable } from './RecentTable';
 import { WhatStandsOut } from '../analytics/insights/WhatStandsOut';
 import s from './HomePage.module.css';
 import { RecentComments } from '../dashboards/RecentComments';
@@ -46,7 +49,8 @@ function Subtitle({ project, failed, loading }: { project: Project | undefined; 
   );
 }
 
-function NewMenu() {
+/** Dashboard and Visual open their section; each way of bringing data in opens its own door, in Home's project. */
+function NewMenu({ projectId }: { projectId: string | undefined }) {
   const navigate = useNavigate();
   return (
     <Menu
@@ -60,7 +64,12 @@ function NewMenu() {
       items={[
         { label: 'Dashboard', icon: 'layout-dashboard', onSelect: () => void navigate('/dashboards') },
         { label: 'Visual', icon: 'chart-bar', onSelect: () => void navigate('/visuals') },
-        { label: 'Data source', icon: 'database', onSelect: () => void navigate('/data') },
+        { kind: 'separator' },
+        { kind: 'heading', label: 'Add data' },
+        { label: 'CSV / Excel', icon: 'file-text', onSelect: () => void navigate(importPath(projectId, 'file')) },
+        { label: 'Paste data', icon: 'clipboard', onSelect: () => void navigate(importPath(projectId, 'paste')) },
+        { label: 'Screenshot', icon: 'camera', onSelect: () => void navigate(importPath(projectId, 'screenshot')) },
+        { label: 'Database', icon: 'database', onSelect: () => void navigate(projectId ? `/connections/${projectId}` : '/connections') },
       ]}
     />
   );
@@ -72,7 +81,7 @@ export default function HomePage() {
   const project = homeProject(projects.data);
   const ov = useOverview(project?.id);
   const recent = useRecent();
-  // New, Connect and "Bring in some data" change the project: an editor's.
+  // New and "Bring in some data" change the project: an editor's.
   const canEdit = useCanEdit(project?.id);
   const prompts = suggestPrompts(
     (ov.data?.datasets ?? []).map((d) => d.name),
@@ -91,7 +100,7 @@ export default function HomePage() {
         </div>
         <div className={s.headActions}>
           <GetStartedPill />
-          {canEdit && <NewMenu />}
+          {canEdit && <NewMenu projectId={project?.id} />}
         </div>
       </header>
       <AskBar prompts={prompts} onAsk={openDockWith} />
@@ -101,13 +110,12 @@ export default function HomePage() {
           <NoProject why="Your data, visuals and dashboards live in a project." />
         </div>
       )}
+      {projects.isError && <ErrorState compact heading={2} title="Your projects could not be loaded" message="Check your connection and try again." onRetry={() => void projects.refetch()} />}
+      <JumpBackIn projectId={project?.id} recent={recent} />
       {/* What the app FOUND in the project's data (T2.11); renders nothing when nothing stands out. */}
       <WhatStandsOut projectId={project?.id} />
       {project && ov.data && <RecentComments projectId={project.id} comments={ov.data.comments} />}
-      <div className={s.cols}>
-        <RecentColumn projectId={project?.id} recent={recent} canEdit={canEdit} />
-        <SideColumn project={project} canEdit={canEdit} projectsFailed={projects.isError} retryProjects={() => void projects.refetch()} />
-      </div>
+      <RecentTable projectId={project?.id} recent={recent} canEdit={canEdit} />
     </div>
   );
 }

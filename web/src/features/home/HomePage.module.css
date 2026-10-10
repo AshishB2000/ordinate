@@ -1,8 +1,10 @@
-/* hub.css "home" — the greeting, the ask-bar hero, the two-column body:
-   .home-scroll, .home-head, .home-ask*, .home-cols, .home-pill, .home-rows,
-   .home-row*, .home-card, .home-data*, .home-quick*, .home-viz*. */
+/* hub.css "home" — the greeting, the ask-bar hero, then one column: the
+   section headings, the filter pills and the table of recent work
+   (.home-scroll, .home-head, .home-ask*, .home-pill, .home-rows, .home-row*).
+   The preview cards are JumpBackIn.module.css. */
 
-/* One measure for the whole page, so a wide monitor keeps its spine. */
+/* One measure for the whole page: wide enough to use a wide monitor, capped so
+   a table row stays one glance. */
 .scroll {
   min-height: 100%;
   display: flex;
@@ -11,7 +13,7 @@
   padding: var(--sp-24) var(--sp-32) var(--sp-32);
 }
 .scroll > * {
-  max-width: 1080px;
+  max-width: 1440px;
   width: 100%;
   margin-inline: auto;
 }
@@ -158,38 +160,33 @@
   color: var(--text);
 }
 
-/* ── two-column body ── */
-.cols {
-  flex: 1 0 auto;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: var(--sp-24);
-  align-items: stretch;
-}
-.colMain,
-.colSide {
+/* ── sections: an uppercase label over its content ── */
+.sec {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-16);
+  gap: var(--sp-8);
   min-width: 0;
 }
-.colSide {
-  align-self: start;
-}
-@media (max-width: 900px) {
-  .cols {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.secH {
+  margin: 0;
+  font-size: var(--t-11);
+  line-height: var(--lh-body);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
-/* Filter pills over Recent, and the scope at their far end. */
+/* Recent's heading, its filter pills, and the scope at the far end. */
 .filter {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-4);
+  gap: var(--sp-8) var(--sp-12);
 }
 .pills {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--sp-4);
 }
 .pill,
@@ -227,87 +224,49 @@
   font-weight: 600;
 }
 
-/* ── Starred and Recent ── */
-.sec {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-8);
-  min-height: 0;
-}
-.grow {
-  flex: 1 1 auto;
-}
-.secHead {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-8);
-}
-.secH {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-8);
-  margin: 0;
-  font-size: var(--t-11);
-  line-height: var(--lh-body);
-  font-weight: 600;
-  letter-spacing: var(--tr-label);
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.secCount {
-  color: var(--text-faint);
-  letter-spacing: 0.04em;
-  font-variant-numeric: tabular-nums;
-}
-.showAll {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-4);
-  margin-left: auto;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  font-size: var(--t-12);
-  cursor: pointer;
-}
-.showAll:hover {
-  color: var(--text-strong);
-  text-decoration: underline;
-}
-
-.rows {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+/* ── the table of recent work: one surface — column names, rows, "Show all" ── */
+.table {
   border: 1px solid var(--border-hairline);
   border-radius: var(--r-lg);
   overflow: hidden;
   background: var(--surface-1);
 }
-.grow > .rows {
-  flex: 1 0 auto;
+/* The header and every row share these tracks:
+   icon · name · type · details · project · updated. */
+.grid {
+  display: grid;
+  grid-template-columns: var(--sp-24) minmax(0, 2.4fr) 104px minmax(0, 1.3fr) minmax(0, 1fr) 132px;
+  align-items: center;
+  gap: var(--ctl-gap);
+  padding-left: var(--sp-12);
+}
+.thead {
+  height: 32px;
+  /* the star's column, so the names line up with the rows' */
+  padding-right: calc(var(--ctl-sm) + var(--sp-8));
+  border-bottom: 1px solid var(--border-hairline);
+  background: var(--surface-2);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 /* An empty section is one designed panel, not a panel inside a panel. */
 .emptyBox > * {
   border: 1px dashed var(--border-2);
   background: transparent;
 }
-.emptyGrow {
-  flex: 1 0 auto;
-  display: flex;
-}
-.emptyGrow > * {
-  flex: 1;
-  justify-content: center;
-}
 
-/* One 40px line: type icon · name · meta · time (right, tabular) · star. */
 .row {
   display: flex;
   align-items: center;
-  height: 40px;
+  height: 44px;
   padding-right: var(--sp-8);
   border-bottom: 1px solid var(--border-hairline);
   transition: background var(--dur-fast) var(--ease-out);
@@ -322,10 +281,6 @@
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
-  display: flex;
-  align-items: center;
-  gap: var(--ctl-gap);
-  padding-left: var(--sp-12);
   color: inherit;
   text-decoration: none;
 }
@@ -333,7 +288,6 @@
   outline-offset: -2px;
 }
 .rowIcon {
-  flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -346,63 +300,60 @@
   background: var(--surface-3);
   color: var(--text);
 }
-.rowBody {
-  flex: 1 1 auto;
+.rowName,
+.cell {
   min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: var(--ctl-gap);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rowName {
-  flex: 0 0 auto;
-  max-width: 60%; /* the name keeps its width; the meta gives way first */
-  min-width: 0;
   font-size: var(--t-13);
   font-weight: 500;
   color: var(--text-strong);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-/* Separators are CSS, so a screen reader never reads them as punctuation. */
-.rowMeta {
-  flex: 0 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-8);
-  overflow: hidden;
-  white-space: nowrap;
+.cell {
   font-size: var(--t-12);
   color: var(--text-dim);
 }
-.rowMeta > * + *::before {
-  content: '·';
-  margin-right: var(--sp-8);
-  color: var(--text-faint);
-}
-.rowMeta > :not(.rowProj) {
-  flex: none;
-}
-.rowProj {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tnum,
-.rowTime {
+.tnum {
   font-variant-numeric: tabular-nums;
 }
-.rowTime {
-  flex: none;
-  margin-left: auto;
-  padding: 0 var(--sp-8) 0 var(--sp-12);
-  font-size: var(--t-12);
-  color: var(--text-dim);
-}
-@media (max-width: 860px) {
-  .rowProj {
+/* Narrower: the project goes first, then the details — the name never gives way. */
+@media (max-width: 1000px) {
+  .grid {
+    grid-template-columns: var(--sp-24) minmax(0, 2.4fr) 104px minmax(0, 1.3fr) 132px;
+  }
+  .cProject {
     display: none;
   }
+}
+@media (max-width: 700px) {
+  .grid {
+    grid-template-columns: var(--sp-24) minmax(0, 1fr) 96px 120px;
+  }
+  .cDetail {
+    display: none;
+  }
+}
+.showAll {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  height: 36px;
+  padding: 0 var(--sp-12);
+  border: none;
+  border-top: 1px solid var(--border-hairline);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
+}
+.showAll:hover {
+  background: var(--surface-2);
+  color: var(--text-strong);
 }
 /* The star shows on hover or focus; a starred row keeps it at rest — that is
    the state it reports. Opacity, not display, so it stays in the tab order. */
@@ -439,153 +390,4 @@
   border-radius: var(--r-full);
   background: var(--error);
   vertical-align: middle;
-}
-
-/* ── right column cards: surface-1 behind a hairline, no shadow ── */
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-12);
-  padding: var(--sp-16);
-  background: var(--surface-1);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--r-lg);
-}
-.cardH {
-  margin: 0;
-  font-size: var(--t-15);
-  line-height: var(--lh-snug);
-  letter-spacing: var(--tr-tight);
-  font-weight: 600;
-  color: var(--text-strong);
-}
-.dataList {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: 210px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  overflow-y: auto;
-}
-.dataEmpty {
-  margin: 2px 0;
-  font-size: var(--t-13);
-  color: var(--muted);
-}
-.dataRow {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: var(--sp-8);
-  border-radius: var(--r-sm);
-  color: var(--text);
-  text-decoration: none;
-}
-.dataRow:hover {
-  background: var(--surface-2);
-}
-.dataRow:focus-visible {
-  outline-offset: -2px;
-}
-.dataName {
-  font-size: var(--t-13);
-  font-weight: 500;
-  color: var(--text-strong);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.dataMeta {
-  font-size: var(--t-12);
-  color: var(--text-dim);
-  font-variant-numeric: tabular-nums;
-}
-.connect {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-8);
-  padding-top: var(--sp-12);
-  border-top: 1px solid var(--border);
-}
-.quickLabel {
-  font-size: var(--t-11);
-  line-height: var(--lh-body);
-  font-weight: 600;
-  letter-spacing: var(--tr-label);
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.quickRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-8);
-}
-/* Neutral on hover, NOT accent: these are secondary to the hero. */
-.quickBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-8);
-  padding: var(--sp-8) var(--sp-12);
-  border: 1px solid var(--border);
-  border-radius: var(--r-full);
-  background: var(--surface);
-  color: var(--text);
-  font-size: var(--t-13);
-  font-weight: 500;
-  white-space: nowrap;
-  text-decoration: none;
-  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
-}
-.quickBtn > svg {
-  color: var(--muted);
-}
-.quickBtn:hover {
-  background: var(--surface-2);
-  border-color: var(--border-3);
-  color: var(--text-strong);
-}
-
-/* Saved visuals: two tiles a row, the chart type's glyph on the tile. */
-.vizStrip {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--sp-8);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.vizCard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--surface);
-  overflow: hidden;
-  color: inherit;
-  text-decoration: none;
-  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
-}
-.vizCard:hover {
-  border-color: var(--accent-line);
-  box-shadow: var(--shadow-sm);
-}
-.vizTile {
-  display: grid;
-  place-items: center;
-  aspect-ratio: 16 / 10;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--chart-1);
-}
-.vizName {
-  padding: 0 var(--sp-8) var(--sp-8);
-  font-size: var(--t-12);
-  font-weight: 500;
-  color: var(--text-strong);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
