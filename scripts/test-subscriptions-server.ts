@@ -198,9 +198,9 @@ const show = (v: unknown): string => JSON.stringify(v).slice(0, 400);
       await analysis.updateAnalysis(pid, s.aid, { views: [{ id: viewId, name: 'West only', createdAt: now, updatedAt: now, state: { page: '', controls: {}, params: {}, selection: [{ type: 'filter', column: 'region', op: '=', value: 'West' }], tiles: {}, groupTabs: {}, asOf: null } }], sheets: a!.sheets } as never);
     });
     const viewed = await call('subscription:preview', { projectId: pid, draft: B.definition(s, [SL], { viewId }) });
-    ok('saved view: the send carries the view\'s filters — one region left — names the view, and links to it',
+    ok('saved view: the send carries the view\'s filters — one region left — and names the view',
       viewed.body.views.length === 1 && viewed.body.slack.model.sections[0].rows.length === 1 && viewed.body.slack.model.sections[0].rows[0][0] === 'West'
-      && viewed.body.slack.model.subtitle.includes(say.viewText('West only')) && viewed.body.slack.model.link.url.endsWith(`?view=${viewId}`), show(viewed.body.slack.model.sections[0]));
+      && viewed.body.slack.model.subtitle.includes(say.viewText('West only')), show(viewed.body.slack.model.sections[0]));
 
     // ── Send now ──────────────────────────────────────────────────────────
     const sent = await call('subscription:sendNow', { projectId: pid, id: sid });
@@ -250,6 +250,9 @@ const show = (v: unknown): string => JSON.stringify(v).slice(0, 400);
     waits.length = 0;
     const down = await post(deadUrl);
     ok('delivery: a connection that cannot be made is retried, then `unreachable`', !down.ok && down.code === 'unreachable' && down.attempts === 3 && waits.length === 2, show(down));
+    waits.length = 0;
+    const nowhere = await post('https://hooks.invalid/services/x');
+    ok('delivery: a host that does not resolve is unreachable (retried), not "not allowed"', !nowhere.ok && nowhere.code === 'unreachable' && nowhere.attempts === 3 && waits.length === 2, show(nowhere));
     ok('delivery: what the remote said is in the LOG (status and body), with the URL cut out', deliveryLog.some((l) => l.includes('"status":404') && l.includes('no_service')) && deliveryLog.some((l) => l.includes('"status":500') && l.includes('oops')));
     ok('redactWebhook cuts the URL, its path and its query out of a string', B.deliver.redactWebhook(`failed POST ${rx.url()} and /services/${B.CANARY} again`, rx.url()) === 'failed POST [webhook] and [webhook] again');
     rx.hits.length = 0;

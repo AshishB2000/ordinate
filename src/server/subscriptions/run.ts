@@ -103,7 +103,7 @@ export async function buildMessage(projectId: string, def: Definition): Promise<
     note: def.message.note,
     kpis: figs.kpis,
     visuals: figs.visuals,
-    link: def.message.includeLink ? dashboardLink(projectId, a.id, view?.id) : null,
+    link: def.message.includeLink ? dashboardLink(projectId, a.id) : null,
     footer: footerText(def.name, scheduleText(def.schedule, def.timezone)),
   });
   return { model, dataAt: figs.dataAt, hash: createHash('sha256').update(figuresOf(model)).digest('hex') };

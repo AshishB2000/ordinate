@@ -35,8 +35,11 @@ export function publicOrigin(raw: string | undefined, oidcRedirect?: string): st
   return u.origin;
 }
 
-/** The link to a dashboard in the app, or null. `viewId` opens it on that saved view. */
-export function dashboardLink(projectId: string, analysisId: string, viewId?: string): string | null {
+/**
+ * The link to a dashboard in the app, or null.
+ * ponytail: always the dashboard as saved — the web app has no saved-view URL yet; add `?view=` when it reads one.
+ */
+export function dashboardLink(projectId: string, analysisId: string): string | null {
   const origin = publicOrigin(process.env.ORDINATE_PUBLIC_URL, process.env.OIDC_REDIRECT_URL);
-  return origin ? `${origin}/analyses/${projectId}/${analysisId}${viewId ? `?view=${viewId}` : ''}` : null;
+  return origin ? `${origin}/analyses/${projectId}/${analysisId}` : null;
 }

@@ -18,7 +18,7 @@ import { useEditor } from './context';
 import { nextSheetName, uuid } from './doc';
 import { SizeSwitch } from './SizeNote';
 import s from './Editor.module.css';
-import { StyleDialog, ViewControls, exportHtml } from '../../dashboards/DashboardChrome';
+import { StyleDialog, SubscribeButton, ViewControls, exportHtml } from '../../dashboards/DashboardChrome';
 import { addSummary } from '../../dashboards/SummaryBody';
 
 function NameDialog({ title, initial, onSave, onClose }: { title: string; initial: string; onSave: (v: string) => void; onClose: () => void }) {
@@ -190,6 +190,7 @@ export function Head() {
         <ViewControls />
         <SizeSwitch />
         <IconButton icon="message-square" size="sm" label="Comments on this dashboard" onClick={() => ed.view.openComments('all')} />
+        <SubscribeButton />
         <Button size="sm" icon="monitor" onClick={() => ed.view.setPresenting(true)}>
           Present
         </Button>

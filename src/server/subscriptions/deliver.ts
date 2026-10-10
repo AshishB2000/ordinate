@@ -85,7 +85,9 @@ export async function postJson(url: string, body: string, channel: string): Prom
       if (res.status === 429) wait = retryAfterMs(res.headers.get('retry-after')) ?? wait;
       else if (res.status < 500) return last;
     } catch (err) {
-      const refused = err instanceof SsrfError;
+      // The guard's refusals are final; a name that did not resolve is the network's failure, not a refusal
+      // (ssrf.ts words it "Could not resolve …"), and is retried like any other.
+      const refused = err instanceof SsrfError && !err.message.startsWith('Could not resolve');
       last = { ok: false, code: refused ? 'refused' : 'unreachable', attempts: attempt };
       // The message only (an error object can carry the request, URL included), with the URL cut out.
       log.warn({ channel, attempt, error: redactWebhook(err instanceof Error ? err.message : String(err), url) }, 'subscription post failed');

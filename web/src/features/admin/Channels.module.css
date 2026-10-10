@@ -1,0 +1,74 @@
+/* Admin → Channels: the add / edit form with its how-to beside it, and the
+   delete warning. Tokens only. */
+
+.form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 300px);
+  gap: var(--sp-24);
+  align-items: start;
+}
+@media (max-width: 720px) {
+  .form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  min-width: 0;
+}
+.how {
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--text-dim);
+}
+.howTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin: 0 0 var(--sp-8);
+  font-size: var(--t-13);
+  font-weight: 650;
+  color: var(--text-strong);
+}
+.howLead {
+  margin: 0;
+  color: var(--muted);
+}
+.howSteps {
+  margin: var(--sp-8) 0;
+  padding-left: 1.3em;
+  display: grid;
+  gap: 6px;
+}
+.warn {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--warn);
+  border-radius: var(--r-lg);
+  background: var(--warn-soft);
+}
+.warn > svg {
+  flex: 0 0 auto;
+  color: var(--warn);
+}
+.warnTitle {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.uses {
+  margin: var(--sp-8) 0 0;
+  padding-left: 1.2em;
+  display: grid;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}

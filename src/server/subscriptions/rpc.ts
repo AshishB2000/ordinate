@@ -16,6 +16,7 @@ import * as store from '../../analysis/subscriptions';
 import type { RunEntry, Subscription, SubscriptionInput } from '../../analysis/subscriptions';
 import * as say from '../../analysis/subscriptionText';
 import { sendableCards } from '../../ipc/subscriptionFigures';
+import { formatBytes } from '../../publish/combos';
 import { ctx } from '../context';
 import { dashboardLink } from '../publicUrl';
 import { registry } from '../rpc';
@@ -64,8 +65,9 @@ async function dashboardNames(projectId: string): Promise<Map<string, string>> {
   return new Map((await analysis.listAnalyses(projectId)).map((a) => [a.id, a.name]));
 }
 
-async function channelViews(): Promise<PublicChannel[]> {
-  return Promise.all((await listChannels()).map(publicChannel));
+/** What every channel picker needs: the channels, whether this server can keep a URL at all, and whether the caller may add one. */
+async function channelFrame(): Promise<{ channels: PublicChannel[]; canStore: boolean; canManage: boolean }> {
+  return { channels: await Promise.all((await listChannels()).map(publicChannel)), canStore: canKeepWebhooks(), canManage: ctx().user.role === 'admin' };
 }
 
 /** The message a channel's "Send a test message" posts: fixed words, no data. */
@@ -86,14 +88,14 @@ type Draft = SubscriptionInput & { analysisId: string; channelIds: string[] };
 
 export function register(): void {
   // ── Channels ──────────────────────────────────────────────────────────
-  registry.handle('channel:list', async () => ({ ok: true as const, canStore: canKeepWebhooks(), channels: await channelViews() }));
+  registry.handle('channel:list', async () => ({ ok: true as const, ...(await channelFrame()) }));
 
   registry.handle('channel:save', async (_e, input: { id?: string; name: string; kind: string; webhookUrl?: string }) => {
     const r = await saveChannel(input, ctx().user.email);
     return r.ok ? { ok: true as const, channel: await publicChannel(r.channel) } : r;
   });
 
-  registry.handle('channel:usage', async (_e, { id }: { id: string }) => ({ ok: true as const, subscriptions: await usage(id) }));
+  registry.handle('channel:usage', async (_e, { id }: { id: string }) => ({ ok: true as const, subscriptions: await usage(id), alerts: [] as Array<{ projectId: string; project: string; id: string; name: string }> }));
 
   registry.handle('channel:delete', async (_e, { id }: { id: string }) => ((await deleteChannel(id)) ? { ok: true as const } : { ok: false as const, error: say.channelGone() }));
 
@@ -111,8 +113,7 @@ export function register(): void {
     return {
       ok: true as const,
       subscriptions: (await store.listSubscriptions(projectId)).map((s) => publicSubscription(s, names)),
-      channels: await channelViews(),
-      canStore: canKeepWebhooks(),
+      ...(await channelFrame()),
     };
   });
 
@@ -148,8 +149,8 @@ export function register(): void {
       ok: true as const,
       ...frame,
       empty: null,
-      slack: { model: slack.model, bytes: slack.bytes, blocks: slack.payload.blocks.length, notes: slack.notes },
-      teams: { model: teams.model, bytes: teams.bytes, notes: teams.notes },
+      slack: { model: slack.model, bytes: slack.bytes, size: formatBytes(slack.bytes), blocks: slack.payload.blocks.length, notes: slack.notes },
+      teams: { model: teams.model, bytes: teams.bytes, size: formatBytes(teams.bytes), notes: teams.notes },
     };
   });
 

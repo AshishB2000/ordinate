@@ -10,13 +10,15 @@ import { ProjectGate } from '../import/ProjectGate';
 import { ReportList } from './ReportList';
 import { ScorecardList } from './scorecards/ScorecardList';
 import { StoryList } from './stories/StoryList';
+import { SubscriptionList } from '../subscriptions/SubscriptionList';
 
-const TABS = ['reports', 'stories', 'scorecards'] as const;
+const TABS = ['reports', 'stories', 'scorecards', 'subscriptions'] as const;
 type TabId = (typeof TABS)[number];
 const SUB: Record<TabId, string> = {
   reports: 'Dashboards as files you can send — PDF, PowerPoint or Word, built from the figures the app computed.',
   stories: 'Documents you read top to bottom: prose with live charts and metrics in between.',
   scorecards: 'Metrics against their targets, one period at a time.',
+  subscriptions: 'Dashboards posted to Slack or Teams on a schedule — the figures as text, with a link back.',
 };
 
 export default function ReportsPage() {
@@ -38,6 +40,7 @@ export default function ReportsPage() {
               <Tab value="reports" icon="file-text">Reports</Tab>
               <Tab value="stories" icon="type-text">Stories</Tab>
               <Tab value="scorecards" icon="target">Scorecards</Tab>
+              <Tab value="subscriptions" icon="send">Subscriptions</Tab>
             </TabList>
             <TabPanel value="reports">
               <ReportList key={projectId} projectId={projectId} />
@@ -47,6 +50,9 @@ export default function ReportsPage() {
             </TabPanel>
             <TabPanel value="scorecards">
               <ScorecardList key={projectId} projectId={projectId} />
+            </TabPanel>
+            <TabPanel value="subscriptions">
+              <SubscriptionList key={projectId} projectId={projectId} />
             </TabPanel>
           </Tabs>
         </Page>
