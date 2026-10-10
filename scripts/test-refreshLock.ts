@@ -311,6 +311,12 @@ const readProbe = (file: string): Line[] =>
     ok('door: …its job ends DONE (the data is being refreshed), not as an error', finished?.state === 'done' && finished.result?.message === (r1.ok ? '' : r1.error),
       JSON.stringify(finished));
     ok('door: …and the dataset was not touched (1 row)', (await rows()) === 1);
+    // The other doors a refresh comes through (scripts/test-refreshOneDoor.ts): the ↻ channels' one function, and the `datasets refresh` command.
+    const press = await inOrg('default', () => (require('../src/ipc/datasets') as typeof import('../src/ipc/datasets')).refreshNow(fx.projectId, fx.id)) as { ok: boolean; alreadyRunning?: boolean };
+    const cmd = await inOrg('default', () => (require('../src/automation/handlers') as typeof import('../src/automation/handlers'))
+      .datasetsRefresh({ projectId: fx.projectId, transport: 'cli', cwd: data, headless: true, progress: () => undefined }, fx.id)).then(() => 'ran', (e: Error) => e.message);
+    ok('door: dataset:refresh / connection:refresh and `datasets refresh` meet the lock too — refused, the dataset untouched', press.ok === false && press.alreadyRunning === true
+      && cmd === (r1.ok ? '' : r1.error) && (await rows()) === 1, `${JSON.stringify(press)} ${cmd}`);
     await other.query('SELECT pg_advisory_unlock(hashtext($1))', [lockA.lockKey('default', fx.id)]);
     await other.end();
     const s2 = await inOrg('default', () => refreshJob.startRefresh(fx.projectId, fx.id));
