@@ -7,6 +7,8 @@
 //             inside the RPC budget
 //   again     a reload inside the cache age is served from the cache: the
 //             same figure, "Live · cached …"
+//   scorecard a scorecard row whose Live figure the warehouse refuses (a sum
+//             over a text column) says why in the row, in the server's words
 //
 //   npm --prefix web run e2e
 
@@ -80,4 +82,32 @@ e2e('live: a dashboard of Live tiles draws the warehouse\'s figures, each card s
   await cached.waitFor();
   assert.match((await cached.textContent()) ?? '', /^Live · cached (just now|\d+ min ago)$/);
   assert.match((await chart.getByTestId('as-of').textContent()) ?? '', /^Live · cached (just now|\d+ min ago)$/);
+});
+
+e2e('live: a scorecard row with no Live figure says why, in the row', async ({ page, server }) => {
+  const pid = server.sample.projectId;
+  const live = server.sample.live;
+  assert.ok(live, 'the server was seeded with a Live dataset');
+  await page.goto('/');
+  await settled(page);
+  // The warehouse cannot sum text: a typed refusal (200), where an extract would simply have no figure.
+  const bad = await call(page, 'metric:save', { projectId: pid, input: { name: 'Region total (live)', datasetId: live.datasetId, definition: { column: 'region', aggregation: 'sum' } } });
+  const good = await call(page, 'metric:save', { projectId: pid, input: { name: 'Amount total (live)', datasetId: live.datasetId, definition: { column: 'amount', aggregation: 'sum' } } });
+  const badId = bad.metric?.id;
+  const goodId = good.metric?.id;
+  assert.ok(badId && goodId, JSON.stringify([bad, good]));
+  const sc = await call(page, 'scorecard:create', { projectId: pid, name: 'Live scorecard', period: 'month', rows: [{ metricId: badId }, { metricId: goodId }] });
+  assert.ok(sc.scorecard?.id, JSON.stringify(sc));
+
+  await page.goto(`/scorecards/${pid}/${sc.scorecard.id}`);
+  await settled(page);
+  const refused = page.locator(`tr[data-metric-id="${badId}"]`);
+  const why = refused.locator('[data-live-refusal]');
+  await why.waitFor();
+  assert.ok(((await why.textContent()) ?? '').trim().length > 20, 'the server\'s sentence, in the open');
+  // NEGATIVE CONTROL: the row the warehouse answered carries no reason.
+  const answered = page.locator(`tr[data-metric-id="${goodId}"]`);
+  await answered.waitFor();
+  assert.equal(await answered.locator('[data-live-refusal]').count(), 0);
+  await screens(page, 'live-scorecard-row');
 });

@@ -1270,3 +1270,21 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   `test-serverDocs` passes. The page's one stale line ("a section on choosing a Live cache age is added
   by the task that builds it") is gone, and L3.2's "Empty text" difference now says what L2.8 settled
   (one blank row, as the copy).
+
+## 2026-10-10 — L2.6's two leftovers
+
+- **Built — a scorecard row says why its figure is missing.** `scorecards.ts`' `figure()` no longer
+  swallows a typed Live failure: a `LiveFigureError` (or a `LiveDatasetError`) met while resolving a
+  row's CURRENT figure is kept beside the memo, and the row carries it as `unavailable: {code, error,
+  reason?}` — the fields a handler's `{ok: false}` refusal has, so the web reads the row and the detail
+  panel with the same `liveRefusalOf`. `error` is the failure's catalog sentence (R-L6: the warehouse's
+  words stay in the log). Any other null — an empty period, an extract with no rows in the window —
+  carries nothing. The row shows the sentence under the metric's name (`<LiveRefusalLine>`, in the
+  open: nothing to hover); the figure cell keeps the server's "—". The published scorecard
+  (`publish/scorecardData.ts`, a whitelist) is unchanged.
+- **Tests.** `test-liveRoute` +2: the fake warehouse down → the row has no figure, `live_failed` and
+  the catalog sentence, no warehouse text or canary in the reply — NEGATIVE CONTROLS: an extract row
+  with no data in its period carries no reason, nor does the Live row the warehouse answered. Vitest
+  `scorecardRow.test` (a failure, an "off for Live" refusal, a plain empty row). e2e `liveTiles.e2e`:
+  a metric the warehouse refuses (a sum over text, a 200) says why in its row, the answered row does
+  not; screens `live-scorecard-row`, both themes.
