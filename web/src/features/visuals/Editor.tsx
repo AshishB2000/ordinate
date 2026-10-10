@@ -9,7 +9,8 @@ import type { DatasetSummary } from '../../api/datasets';
 import { Button } from '../../ui/Button';
 import { Select } from '../../ui/Select';
 import { toast } from '../../ui/Toast';
-import { useKeyStatus } from '../assistant/api';
+import { useAiStatus } from '../assistant/api';
+import { AI_NOT_READY } from '../assistant/AiNotReady';
 import { AnalyticsPane } from './analytics/AnalyticsPane';
 import type { RelatedCol } from './api';
 import { useBuilder, type Initial } from './builderState';
@@ -37,7 +38,7 @@ export function Editor({ projectId, datasets, columns, related, initial }: {
   initial: Initial;
 }) {
   const navigate = useNavigate();
-  const ai = useKeyStatus();
+  const ai = useAiStatus();
   const b = useBuilder(projectId, columns, related, initial);
   const [naming, setNaming] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
@@ -86,8 +87,8 @@ export function Editor({ projectId, datasets, columns, related, initial }: {
           <Button
             size="sm"
             icon="sparkles"
-            disabled={!ai.data?.isReady}
-            title={ai.data && !ai.data.isReady ? 'The Assistant isn’t set up yet.' : undefined}
+            disabled={!ai.data?.ready}
+            title={ai.data && !ai.data.ready ? AI_NOT_READY : undefined}
             onClick={() => setSuggesting(true)}
           >
             Suggest chart

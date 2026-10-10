@@ -20,8 +20,8 @@ import { Textarea } from '../../ui/Field';
 import { Icon } from '../../ui/icons/Icon';
 import { Skeleton, SkeletonBlock, SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
-import { useKeyStatus } from '../assistant/api';
-import { setDockOpen } from '../assistant/dockState';
+import { useAiStatus } from '../assistant/api';
+import { AiNotReady } from '../assistant/AiNotReady';
 import { suggestCharts, type Encoding, type SuggestReply, type Suggestion } from './api';
 import { countNumericSeries, eligibleChartTypes } from './eligibility';
 import { typeLabel } from './model';
@@ -51,8 +51,8 @@ export function NewVisualDialog({
 }) {
   const navigate = useNavigate();
   const sets = useDatasets(projectId);
-  const ai = useKeyStatus();
-  const aiReady = !!ai.data?.isReady;
+  const ai = useAiStatus();
+  const aiReady = !!ai.data?.ready;
   const [selected, setSelected] = useState(datasetId ?? '');
   const [step, setStep] = useState<1 | 2 | 3>(startAtSuggest && datasetId ? 3 : datasetId ? 2 : 1);
   const [intent, setIntent] = useState('');
@@ -137,7 +137,7 @@ export function NewVisualDialog({
               autoFocus={aiReady}
               onChange={(e) => setIntent(e.target.value)}
             />
-            {ai.data && !aiReady && <AiNotice />}
+            {ai.data && !aiReady && <AiNotReady status={ai.data} className={s.note} />}
             <Button variant="primary" icon="sparkles" disabled={!aiReady} onClick={() => ask()}>
               Ask the Assistant
             </Button>
@@ -159,17 +159,6 @@ export function NewVisualDialog({
   );
 }
 
-function AiNotice() {
-  return (
-    <p className={s.note}>
-      The Assistant isn’t set up yet.{' '}
-      <Button size="sm" variant="ghost" onClick={() => setDockOpen(true)}>
-        Set up the Assistant
-      </Button>
-    </p>
-  );
-}
-
 function Proposals({ projectId, datasetId, intent, asked, onUse, onManual, onRegenerate }: {
   projectId: string;
   datasetId: string;
@@ -179,6 +168,7 @@ function Proposals({ projectId, datasetId, intent, asked, onUse, onManual, onReg
   onManual: () => void;
   onRegenerate: () => void;
 }) {
+  const ai = useAiStatus();
   const q = useQuery({
     queryKey: ['visual:suggest', projectId, datasetId, intent, asked],
     queryFn: (): Promise<SuggestReply> => suggestCharts(projectId, datasetId, intent),
@@ -203,7 +193,7 @@ function Proposals({ projectId, datasetId, intent, asked, onUse, onManual, onReg
                 ? 'Pick one to open it in the builder. Nothing is saved until you save it.'
                 : 'Could not suggest a chart.'}
       </p>
-      {r && !r.ok && r.notReady && <AiNotice />}
+      {r && !r.ok && r.notReady && <AiNotReady status={ai.data} className={s.note} />}
       {q.isPending ? (
         <div className={s.options} role="status" aria-busy="true" aria-label="Asking for charts">
           {[0, 1, 2].map((i) => (

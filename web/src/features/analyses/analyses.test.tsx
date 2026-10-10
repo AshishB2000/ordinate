@@ -16,7 +16,7 @@ const M1 = '55555555-5555-4555-8555-555555555555';
 const ME = { user: { email: 'dev@local', role: 'admin' }, org: 'default', mode: 'dev', canSignOut: false };
 const PROJECT = { id: PID, name: 'Sales', updatedAt: '2026-10-01T10:00:00Z', lastOpenedAt: null, archived: false, datasets: 1, dashboards: 2, sample: false };
 const TAGS = { ok: true, tags: [{ name: 'finance', color: 2, count: 2 }], refs: { [`analysis:${A1}`]: ['finance'], [`metric:${M1}`]: ['finance'] } };
-const NO_MODEL = { isReady: false, byok: { activeProvider: null, providers: {} } };
+const NO_MODEL = { ready: false, reason: 'no_model', models: [], mine: null, keyStore: null };
 
 type Reply = { status?: number; body?: unknown };
 
@@ -41,7 +41,7 @@ const base = (extra: Record<string, Reply> = {}) => ({
   'projects:roles': { body: { [PID]: 'admin' } },
   'dataset:list': { body: [{ id: DID, name: 'Orders', sourceKind: 'csv', rowCount: 120, columnCount: 3, updatedAt: '2026-10-01T10:00:00Z' }] },
   'catalog:tags': { body: TAGS },
-  'key:status': { body: NO_MODEL },
+  'ai:status': { body: NO_MODEL },
   ...extra,
 });
 
@@ -59,13 +59,13 @@ describe('Analyses list', () => {
     expect(within(screen.getByRole('list', { name: 'Dashboards' })).getByText('Revenue board')).toBeTruthy();
   });
 
-  it('shuts the Assistant’s doors with no model, and says where to connect one', async () => {
+  it('shuts the Assistant’s doors with no model, and sends an admin to Admin → AI', async () => {
     serve(base({ 'analysis:gallery': { body: [] } }));
     renderApp(`/analyses?project=${PID}`);
     await screen.findByRole('heading', { name: 'No dashboards yet' });
-    await screen.findByText(/The Assistant isn’t set up yet/);
+    await screen.findByText(/AI isn’t set up for your organization yet/);
     for (const b of screen.getAllByRole('button', { name: 'Draft with the Assistant' })) expect((b as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByRole('button', { name: 'Open the Assistant' })).toBeTruthy();
+    expect((await screen.findByRole('link', { name: /Set up AI/ })).getAttribute('href')).toBe('/admin?tab=ai');
   });
 
   it('opens the wizard on “Start from” for a dataset named in the URL (a dataset page’s New dashboard)', async () => {

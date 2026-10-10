@@ -38,10 +38,15 @@ export function podMemberView(): aiConfig.MemberView {
 const noStore = (): { ok: false; error: string } => ({ ok: false, error: keyStoreUnavailable() ?? 'no key store' });
 
 export function register(): void {
-  ipcMain.handle('ai:status', () => (aiConfig.enabled() ? aiConfig.memberView() : podMemberView()));
+  // Plus the org's Assistant on/off switch and why keys cannot be stored here (not secret): the dock needs nothing else.
+  ipcMain.handle('ai:status', async () => ({
+    ...(aiConfig.enabled() ? await aiConfig.memberView() : podMemberView()),
+    copilotEnabled: execConfig.publicConfig().copilotEnabled,
+    keyStore: keyStoreUnavailable(),
+  }));
 
   ipcMain.handle('ai:setMine', async (_e, { provider, model }: { provider: string; model: string }) => {
-    if (aiConfig.enabled()) return pushed(await aiConfig.setMine(provider, model));
+    if (aiConfig.enabled()) return aiConfig.setMine(provider, model); // the caller's own: nobody else's dock changes
     const mine = podMemberView().mine;
     return mine && mine.provider === provider && mine.model === model ? { ok: true } : { ok: false, error: aiModelNotEnabled() };
   });

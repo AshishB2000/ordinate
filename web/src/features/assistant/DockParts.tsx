@@ -1,15 +1,18 @@
 // The dock's chrome around the conversation: the top bar's toggle, the
-// header (thread switcher, on/off pill, new, close) and the composer's model
-// chip — dock.ts's header and execMenu.ts's cloud rows, ported. The local-CLI
-// rows of the model menu are gone: a server runs API-key providers only.
+// header (thread switcher, on/off pill, new, close) — dock.ts's header,
+// ported — and the model picker under the composer. Which models there are is the org admin's (Admin → AI); which
+// one answers is each member's own pick.
 
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { IconButton } from '../../ui/Button';
 import { Icon } from '../../ui/icons/Icon';
 import { Menu, type MenuEntry } from '../../ui/Menu';
+import { Select } from '../../ui/Select';
 import { toast } from '../../ui/Toast';
-import { activateProvider, listThreads, PROVIDER_LABEL, setAssistantEnabled, type KeyStatus, type Provider, type ThreadSummary } from './api';
+import { listThreads, mineModel, PROVIDER_LABEL, setAssistantEnabled, setMyModel, type AiModel, type AiStatus, type Provider, type ThreadSummary } from './api';
+
+const PROVIDER_ORDER: readonly Provider[] = ['anthropic', 'openai', 'gemini', 'gateway'];
 import { setDockOpen, useDockOpen } from './dockState';
 import s from './Dock.module.css';
 
@@ -87,17 +90,10 @@ export function ThreadMenu({ projectId, threadId, title, onOpen }: { projectId: 
   );
 }
 
-/** Not set up / Assistant: On / Off. With no model there is nothing to toggle, so it says so and leads to the fix. */
-export function AiPill({ status, isAdmin, onSetUp }: { status: KeyStatus | undefined; isAdmin: boolean; onSetUp: () => void }) {
+/** Assistant: On / Off — the org's switch, an admin's to flip. Not shown until a model is set up (the dock says why). */
+export function AiPill({ status, isAdmin }: { status: AiStatus | undefined; isAdmin: boolean }) {
   const qc = useQueryClient();
-  if (!status) return null;
-  if (!status.isReady) {
-    return (
-      <button type="button" className={`${s.pill} ${s.pillNone}`} title="The Assistant isn't set up yet." onClick={onSetUp}>
-        Not set up
-      </button>
-    );
-  }
+  if (!status?.ready) return null;
   const on = status.copilotEnabled;
   return (
     <button
@@ -108,7 +104,7 @@ export function AiPill({ status, isAdmin, onSetUp }: { status: KeyStatus | undef
       title={isAdmin ? (on ? 'Turn the Assistant off' : 'Turn the Assistant on') : 'An org admin turns the Assistant on or off'}
       onClick={() => {
         void setAssistantEnabled(!on).then(
-          () => qc.invalidateQueries({ queryKey: ['key:status'] }),
+          () => qc.invalidateQueries({ queryKey: ['ai:status'] }),
           () => toast('Could not change the Assistant setting.', { kind: 'error' }),
         );
       }}
@@ -118,40 +114,49 @@ export function AiPill({ status, isAdmin, onSetUp }: { status: KeyStatus | undef
   );
 }
 
-/** The composer's model chip: which provider answers, and (admins) switching to another connected one. */
-export function ModelChip({ status, isAdmin, onConnect }: { status: KeyStatus; isAdmin: boolean; onConnect: () => void }) {
+/** "Claude Sonnet 4.6 · Default", with the provider named when the list spans more than one. */
+export function modelLabel(m: AiModel, models: readonly AiModel[]): string {
+  const several = new Set(models.map((x) => x.provider)).size > 1;
+  return `${m.label}${several ? ` (${PROVIDER_LABEL[m.provider]})` : ''}${m.isDefault ? ' · Default' : ''}`;
+}
+
+/**
+ * Which model answers YOU: the models the org admin enabled, grouped by
+ * provider, the default marked. The pick is saved on the server (`ai:setMine`),
+ * so it follows you to every tab and every AI feature. With one model there is
+ * nothing to choose — its name, as text.
+ */
+export function ModelPicker({ status }: { status: AiStatus | undefined }) {
   const qc = useQueryClient();
-  const active = status.byok.activeProvider;
-  const rows = status.allowedProviders.filter((p) => status.byok.providers[p]?.connected);
-  const items: MenuEntry[] = [
-    { kind: 'heading', label: 'Model provider' },
-    {
-      kind: 'radio',
-      label: 'Model provider',
-      value: active ?? '',
-      options: rows.map((p) => ({ value: p, label: PROVIDER_LABEL[p] })),
-      onChange: (v) => {
-        if (!isAdmin) return;
-        void activateProvider(v as Provider).then((ok) => {
-          if (!ok) toast('That provider is not connected.', { kind: 'error' });
-          void qc.invalidateQueries({ queryKey: ['key:status'] });
-        });
-      },
-    },
-    ...(isAdmin ? ([{ kind: 'separator' }, { label: 'Connect a provider…', icon: 'plug', onSelect: onConnect }] as MenuEntry[]) : []),
-  ];
+  const mine = mineModel(status);
+  if (!status?.ready || !mine) return null;
+  if (status.models.length === 1) {
+    return (
+      <span className={s.modelName} title={`Model: ${modelLabel(mine, status.models)}`}>
+        {mine.label}
+      </span>
+    );
+  }
+  const order = [...status.models].sort((a, b) => PROVIDER_ORDER.indexOf(a.provider) - PROVIDER_ORDER.indexOf(b.provider));
   return (
-    <Menu
-      label="Model provider"
-      side="top"
-      trigger={
-        <button type="button" className={s.model} aria-label={`Model: ${active ? PROVIDER_LABEL[active] : 'none'}`}>
-          <Icon name="sparkles" size={12} />
-          {active ? PROVIDER_LABEL[active] : 'No model'}
-          <Icon name="chevron-down" size={12} />
-        </button>
-      }
-      items={items}
-    />
+    <span className={s.modelPick}>
+      <Select
+        size="sm"
+        aria-label="Model"
+        value={`${mine.provider}/${mine.model}`}
+        options={order.map((m) => ({ value: `${m.provider}/${m.model}`, label: modelLabel(m, status.models) }))}
+        onValueChange={(v) => {
+          const m = order.find((x) => `${x.provider}/${x.model}` === v);
+          if (!m) return;
+          void setMyModel(m.provider, m.model).then(
+            (ok) => {
+              if (!ok) toast('That model is no longer available. Pick another.', { kind: 'error' });
+              return qc.invalidateQueries({ queryKey: ['ai:status'] });
+            },
+            () => toast('Could not change the model.', { kind: 'error' }),
+          );
+        }}
+      />
+    </span>
   );
 }

@@ -3,16 +3,18 @@
 // no real network call is made).
 //
 // Without DATABASE_URL: the dock opens from the top bar onto its designed
-// not-set-up state, which says this server cannot store an API key (no
-// database) instead of offering a key field. Screens in both themes.
+// not-set-up state — "AI isn't set up", and for this admin the operator line
+// (no database, so no key can be stored) instead of a key field. Screens in
+// both themes.
 //
 // With DATABASE_URL (its own scratch database, header sign-in as the org
-// admin, a master key): the admin connects the stub through the dock's
-// write-only key field (save → test → activate), asks a question and watches
-// the answer STREAM into the pending bubble token by token over this tab's
-// event stream, then asks for a plan whose import step is fed by an upload
-// (T0.4 — the server has no file picker) and runs it to the app-computed KPI.
-// Zero console errors throughout; screens in both themes.
+// admin, a master key): AI is set up the way Admin → AI does it (ai:connect,
+// ai:setModels — the tab's own walk is admin.e2e.ts), then the dock's model
+// picker offers both models and saves the pick, "Powered by" names it, the
+// stub is asked with it, and the answer STREAMS into the pending bubble token
+// by token over this tab's event stream; then a plan whose import step is fed
+// by an upload (T0.4 — the server has no file picker) runs to the
+// app-computed KPI. Zero console errors throughout; screens in both themes.
 
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -34,12 +36,21 @@ const PLAN = {
   ],
 };
 
-/** The provider stub: a connectivity test gets "OK", a streamed ask gets ANSWER (or a plan when asked for one). */
+/** The models the stub asked with, in order. */
+const askedModels: string[] = [];
+
+/** The provider stub: lists two models, a connectivity test gets "OK", a streamed ask gets ANSWER (or a plan when asked for one). */
 const stub = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c: Buffer) => (body += c.toString()));
   req.on('end', () => {
-    const json = JSON.parse(body || '{}') as { stream?: boolean; messages?: { content: unknown }[] };
+    if (req.method === 'GET' && req.url === '/v1/models') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ data: [{ id: 'claude-sonnet-stub', display_name: 'Claude Sonnet Stub', created_at: 2 }, { id: 'claude-haiku-stub', display_name: 'Claude Haiku Stub', created_at: 1 }] }));
+      return;
+    }
+    const json = JSON.parse(body || '{}') as { stream?: boolean; model?: string; messages?: { content: unknown }[] };
+    askedModels.push(String(json.model));
     if (!json.stream) {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn' }));
@@ -76,11 +87,11 @@ if (!dbUrl) {
     await settled(page);
     await openDock(page);
     const setup = page.getByTestId('dock-setup');
-    await setup.getByText('The Assistant isn’t set up yet.').waitFor();
+    await setup.getByText(/AI isn’t set up for your organization yet/).waitFor();
     await setup.getByText(/no database, so it cannot store API keys/).waitFor();
-    assert.equal(await page.getByLabel('API key').count(), 0, 'no key field where a key cannot be stored');
+    assert.equal(await page.getByLabel('API key').count(), 0, 'no key field in the dock, ever');
+    assert.equal(await setup.getByRole('link', { name: /Set up AI/ }).count(), 0, 'no Set up button where nothing can be set up');
     assert.equal(await page.getByRole('textbox', { name: 'Ask the Assistant' }).isDisabled(), true);
-    await page.getByRole('button', { name: 'Not set up' }).waitFor();
     await screens(page, 'dock-setup');
     // Escape closes it and hands focus back to the toggle.
     await page.keyboard.press('Escape');
@@ -112,7 +123,7 @@ if (!dbUrl) {
     headers: { 'x-forwarded-email': ADMIN },
   });
 
-  e2e('dock: connect a provider, stream an answer into the dock, run a plan fed by an upload', async ({ page, server }) => {
+  e2e('dock: pick a model, stream an answer into the dock, run a plan fed by an upload', async ({ page, server }) => {
     // Records live in Postgres here: make the project over RPC.
     // Any GET hands the context its CSRF cookie (T6.2); the POST repeats it, as the app does.
     await page.request.get(`${server.base}/api/auth/me`);
@@ -120,19 +131,31 @@ if (!dbUrl) {
     const made = await page.request.post(`${server.base}/api/rpc/projects:create`, { headers: { 'x-csrf-token': csrf }, data: { args: [{ name: 'Ledger' }] } });
     assert.equal(made.status(), 200);
 
-    // ── Connect (write-only key, through the server's encrypted store) ──────
+    // ── Set up, as Admin → AI does: connect the stub, enable two models ──────
+    const rpc = async (channel: string, input: unknown) => {
+      const r = await page.request.post(`${server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': csrf }, data: { args: [input] } });
+      return (await r.json()) as { ok: boolean };
+    };
+    assert.equal((await rpc('ai:connect', { provider: 'anthropic', apiKey: 'sk-ant-e2e-' + randomBytes(6).toString('hex'), baseUrl: stubUrl })).ok, true);
+    const models = [
+      { provider: 'anthropic', model: 'claude-sonnet-stub', label: 'Claude Sonnet Stub' },
+      { provider: 'anthropic', model: 'claude-haiku-stub', label: 'Claude Haiku Stub' },
+    ];
+    assert.equal((await rpc('ai:setModels', { models, defaultIndex: 0 })).ok, true);
+
+    // ── The picker: both models, the default marked; the pick is saved ──────
     await page.goto('/');
     await settled(page);
     await openDock(page);
-    const key = page.getByLabel('API key');
-    assert.equal(await key.getAttribute('type'), 'password');
-    await key.fill('sk-ant-e2e-' + randomBytes(6).toString('hex'));
-    await page.getByLabel('Endpoint (optional)').fill(stubUrl);
-    await page.getByRole('button', { name: 'Connect', exact: true }).click();
     const box = page.getByRole('textbox', { name: 'Ask the Assistant' });
     await page.waitForFunction(() => !(document.querySelector('textarea[aria-label="Ask the Assistant"]') as HTMLTextAreaElement | null)?.disabled);
-    assert.equal(await key.count(), 0, 'the connect form is gone once a provider answers');
-    await page.getByText('Powered by Anthropic').waitFor();
+    assert.equal(await page.getByLabel('API key').count(), 0, 'no key field in the dock, ever');
+    await page.getByText('Powered by Claude Sonnet Stub').waitFor();
+    await page.getByRole('combobox', { name: 'Model' }).click();
+    assert.deepEqual(await page.getByRole('option').allTextContents(), ['Claude Sonnet Stub · Default', 'Claude Haiku Stub']);
+    await page.getByRole('option', { name: 'Claude Haiku Stub' }).click();
+    await page.getByText('Powered by Claude Haiku Stub').waitFor();
+    await screens(page, 'dock-picker');
 
     // ── Ask: the answer streams in, then is the stored turn ──────────────────
     await page.reload();
@@ -148,6 +171,7 @@ if (!dbUrl) {
     assert.ok(seen.length > 0 && seen.length < ANSWER.join('').length, `a PARTIAL answer was on screen while streaming (${JSON.stringify(seen)})`);
     const dock = page.getByRole('complementary', { name: 'Assistant' });
     await dock.getByText(ANSWER.join(''), { exact: true }).waitFor();
+    assert.equal(askedModels.at(-1), 'claude-haiku-stub', 'the question went to the member\'s pick, which survived the reload');
     await dock.getByText(/stats app-computed$/).first().waitFor();
     await page.getByRole('button', { name: /Scanned the project/ }).waitFor(); // the app's work, collapsed above the answer
     await screens(page, 'dock-answer');

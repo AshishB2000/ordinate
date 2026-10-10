@@ -1,6 +1,6 @@
 // The Assistant's calls. Contracts carry inputs only, so every reply is
 // narrowed here by hand to what its handler returns (src/ipc/copilot.ts,
-// answers.ts, plan.ts, providersServer.ts). Every figure in a reply — a KPI, a
+// answers.ts, plan.ts, aiModels.ts). Every figure in a reply — a KPI, a
 // row count, a turn count — is the server's; the dock only formats it.
 
 import { useQuery } from '@tanstack/react-query';
@@ -13,26 +13,34 @@ export const PROVIDER_LABEL: Record<Provider, string> = {
   anthropic: 'Anthropic',
   openai: 'OpenAI',
   gemini: 'Google Gemini',
-  gateway: 'Gateway (OpenAI-compatible)',
+  gateway: 'OpenAI-compatible gateway',
 };
 
-export interface ProviderStatus {
-  hasKey: boolean;
-  verified: boolean;
-  connected: boolean;
-  baseUrl: string;
-  maxTokens: string;
+/** A model the org admin enabled (src/server/aiConfig.ts AiModel). */
+export interface AiModel {
+  provider: Provider;
   model: string;
+  label: string;
+  isDefault: boolean;
 }
 
-/** `key:status` — readiness and has-key FLAGS. There is no key in it, ever. */
-export interface KeyStatus {
-  isReady: boolean;
+/** `ai:status` — what the caller may use and what answers them. There is no key in it, ever. */
+export interface AiStatus {
+  ready: boolean;
+  /** Why not: this server cannot store a key, or no model is enabled on a connected provider. */
+  reason?: 'no_key_store' | 'no_model';
+  models: AiModel[];
+  /** The caller's pick while it is enabled, else the org default. */
+  mine: { provider: Provider; model: string } | null;
   copilotEnabled: boolean;
-  byok: { activeProvider: Provider | null; providers: Record<Provider, ProviderStatus> };
-  allowedProviders: Provider[];
   /** Why this server cannot store an API key (no database / no master key), or null. */
   keyStore: string | null;
+}
+
+/** The model that answers, as the picker and "Powered by" name it. */
+export function mineModel(status: AiStatus | undefined): AiModel | undefined {
+  const m = status?.mine;
+  return m ? status.models.find((x) => x.provider === m.provider && x.model === m.model) : undefined;
 }
 
 export interface Provenance {
@@ -81,12 +89,18 @@ export type AskReply =
 /** What the dock is looking at — resolved inside the project by the server (buildFacts). */
 export type Ask = { kind: RpcInput<'copilot:ask'>['context']['kind']; id?: string };
 
-export function useKeyStatus(enabled = true) {
+/** One hook for every AI surface: the dock, Home, Analyses, Visuals, captures. */
+export function useAiStatus(enabled = true) {
   return useQuery({
-    queryKey: ['key:status'],
-    queryFn: async () => (await rpc('key:status')) as KeyStatus,
+    queryKey: ['ai:status'],
+    queryFn: async () => (await rpc('ai:status')) as AiStatus,
     enabled,
   });
+}
+
+/** The caller's own pick (`ai:setMine`); refused unless the admin enabled it. */
+export async function setMyModel(provider: Provider, model: string): Promise<boolean> {
+  return ((await rpc('ai:setMine', { provider, model })) as { ok: boolean }).ok;
 }
 
 export function useHistory(projectId: string | null, threadId: string) {
@@ -125,37 +139,4 @@ export async function ask(projectId: string, context: Ask, question: string, thr
 
 export async function setAssistantEnabled(enabled: boolean): Promise<void> {
   await rpc('copilot:setEnabled', { enabled });
-}
-
-/** One typed result from `byok:test` / a refused save. */
-export interface Outcome {
-  ok: boolean;
-  error?: string;
-  message?: string;
-  detail?: string;
-}
-
-/**
- * Connect a provider the way the desktop's settings pane did it, in its three
- * steps: save (the key goes to the server's encrypted store and never comes
- * back), a real connectivity test, then make it the active one.
- */
-export async function connectProvider(provider: Provider, fields: { apiKey: string; baseUrl?: string; model?: string }): Promise<Outcome> {
-  const saved = (await rpc('byok:saveProvider', {
-    provider,
-    fields: {
-      apiKey: fields.apiKey,
-      ...(fields.baseUrl !== undefined ? { baseUrl: fields.baseUrl } : {}),
-      ...(fields.model !== undefined ? { model: fields.model } : {}),
-    },
-  })) as Outcome;
-  if (!saved.ok) return { ok: false, message: saved.error || saved.message || 'The key could not be saved.' };
-  const tested = (await rpc('byok:test', { provider })) as Outcome;
-  if (!tested.ok) return { ok: false, message: [tested.message, tested.detail].filter(Boolean).join(' — ') || 'The provider did not answer.' };
-  const active = (await rpc('byok:activate', { provider })) as Outcome;
-  return active.ok ? { ok: true } : { ok: false, message: 'Connected, but it could not be made the active provider.' };
-}
-
-export async function activateProvider(provider: Provider): Promise<boolean> {
-  return ((await rpc('byok:activate', { provider })) as Outcome).ok;
 }

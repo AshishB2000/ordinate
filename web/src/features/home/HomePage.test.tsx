@@ -42,7 +42,7 @@ function stubServer(replies: Record<string, Reply>, role = 'admin') {
     'jobs:list': { active: [], recent: [] },
     'prefs:get': { formats: {}, branding: { accent: '' } },
     // The Assistant dock (T2.12): not set up, unless a test says otherwise.
-    'key:status': { isReady: false, copilotEnabled: true, byok: { activeProvider: null, providers: {} }, allowedProviders: [], keyStore: null },
+    'ai:status': { ready: false, reason: 'no_model', models: [], mine: null, copilotEnabled: true, keyStore: null },
     'copilot:history': { ok: true, turns: [], threadId: null },
     'dataset:list': [],
     ...replies,
@@ -119,7 +119,13 @@ describe('Home', () => {
 
   it('hands a question to the Assistant dock, which asks it; a chip only fills the bar', async () => {
     const calls = stubServer({
-      'key:status': { isReady: true, copilotEnabled: true, byok: { activeProvider: 'anthropic', providers: {} }, allowedProviders: ['anthropic'], keyStore: null },
+      'ai:status': {
+        ready: true,
+        models: [{ provider: 'anthropic', model: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', isDefault: true }],
+        mine: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+        copilotEnabled: true,
+        keyStore: null,
+      },
       'copilot:ask': { ok: true, turns: [], threadId: 't' },
     });
     renderApp('/');

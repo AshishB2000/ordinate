@@ -12,15 +12,15 @@ import { useDatasets } from '../../api/datasets';
 import { onServerEvent } from '../../api/events';
 import { rpc } from '../../api/client';
 import { useMe } from '../auth/api';
-import { Button, IconButton } from '../../ui/Button';
+import { IconButton } from '../../ui/Button';
 import { Select } from '../../ui/Select';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { Splitter, useStoredSize } from '../../ui/Splitter';
 import { ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
-import { ask, newThread, useHistory, useKeyStatus, PROVIDER_LABEL, type ActivityStep, type SuggestedAction, type Turn } from './api';
-import { Connect } from './Connect';
-import { AiPill, ModelChip, ThreadMenu, TOGGLE_ID } from './DockParts';
+import { ask, mineModel, newThread, useAiStatus, useHistory, type ActivityStep, type SuggestedAction, type Turn } from './api';
+import { AiNotReady } from './AiNotReady';
+import { AiPill, modelLabel, ModelPicker, ThreadMenu, TOGGLE_ID } from './DockParts';
 import { pickDockProject, setDockOpen, takePendingQuestion, useDockContext, useDockProject, usePendingQuestion } from './dockState';
 import { PlanCard, type PlanAction } from './PlanCard';
 import { starterPrompts } from './prompts';
@@ -44,7 +44,7 @@ export default function DockPanel() {
   const project = useDockProject(true);
   const pid = project.id;
   const context = useDockContext(pid);
-  const status = useKeyStatus();
+  const status = useAiStatus();
   const [threadId, setThreadId] = useState('');
   const history = useHistory(pid, threadId);
   const datasets = useDatasets(pid ?? undefined);
@@ -52,7 +52,6 @@ export default function DockPanel() {
   const [lastSteps, setLastSteps] = useState<{ turnId: string; steps: ActivityStep[] } | null>(null);
   const [hint, setHint] = useState('');
   const [plans, setPlans] = useState<PlanSlot[]>([]);
-  const [connecting, setConnecting] = useState(false);
   const [text, setText] = useState('');
   const input = useRef<HTMLTextAreaElement>(null);
   const panel = useRef<HTMLElement>(null);
@@ -64,7 +63,7 @@ export default function DockPanel() {
   // The thread the server resolved (the most recent one when none was asked for).
   const shownThread = history.data?.threadId ?? '';
   const turns: Turn[] = history.data?.turns ?? [];
-  const ready = status.data?.isReady === true;
+  const ready = status.data?.ready === true;
   const enabled = status.data?.copilotEnabled !== false;
   const usable = !!pid && ready && enabled && !pending;
 
@@ -96,7 +95,7 @@ export default function DockPanel() {
       const step = d.step;
       setPending((cur) => (cur && d.askId === cur.askId ? { ...cur, steps: [...cur.steps, step] } : cur));
     });
-    const offKey = onServerEvent('key:changed', () => void qc.invalidateQueries({ queryKey: ['key:status'] }));
+    const offKey = onServerEvent('key:changed', () => void qc.invalidateQueries({ queryKey: ['ai:status'] }));
     return () => {
       offChunk();
       offStep();
@@ -174,7 +173,7 @@ export default function DockPanel() {
     }
     // Failure: the server left the thread unchanged; keep the typed text so nothing is lost.
     setText(q);
-    if (r.notReady) void qc.invalidateQueries({ queryKey: ['key:status'] });
+    if (r.notReady) void qc.invalidateQueries({ queryKey: ['ai:status'] });
     else setHint(r.error || 'Could not answer that. Try again.');
   }
 
@@ -202,7 +201,7 @@ export default function DockPanel() {
   const placeholder = !pid
     ? 'Open a project to ask a question…'
     : !ready
-      ? 'Set up the Assistant to ask a question…'
+      ? 'AI isn’t set up for your organization yet.'
       : !enabled
         ? 'The Assistant is off. Turn it back on with the toggle above.'
         : "Ask about what you're looking at…";
@@ -211,24 +210,10 @@ export default function DockPanel() {
     if (!project.loading && !pid) return <div className={s.hint}>Open a project to ask a question.</div>;
     if (status.isError) return <ErrorState compact heading={3} title="The Assistant could not load" message="Check your connection and try again." onRetry={() => void status.refetch()} />;
     if (!status.data) return null;
-    if (!ready || connecting) {
+    if (!ready) {
       return (
         <div className={s.hint} data-testid="dock-setup">
-          <strong>{ready ? 'Connect a provider' : 'The Assistant isn’t set up yet.'}</strong>
-          <Connect
-            status={status.data}
-            isAdmin={isAdmin}
-            onConnected={(p) => {
-              setConnecting(false);
-              toast(`Connected — ${PROVIDER_LABEL[p]} is answering.`, { kind: 'success' });
-              void qc.invalidateQueries({ queryKey: ['key:status'] });
-            }}
-          />
-          {ready && (
-            <Button size="sm" variant="ghost" onClick={() => setConnecting(false)}>
-              Cancel
-            </Button>
-          )}
+          <AiNotReady status={status.data} />
         </div>
       );
     }
@@ -236,7 +221,7 @@ export default function DockPanel() {
     return null;
   })();
 
-  const active = status.data?.byok.activeProvider;
+  const mine = mineModel(status.data);
   return (
     <>
       <div className={s.scrim} onClick={() => setDockOpen(false)} aria-hidden="true" />
@@ -247,7 +232,7 @@ export default function DockPanel() {
         <div className={s.head}>
           <ThreadMenu projectId={pid} threadId={shownThread} title={title} onOpen={switchThread} />
           <div className={s.headActions}>
-            <AiPill status={status.data} isAdmin={isAdmin} onSetUp={() => setConnecting(true)} />
+            <AiPill status={status.data} isAdmin={isAdmin} />
             <IconButton icon="plus" size="sm" label="New conversation" disabled={!pid || !!pending} onClick={() => void startNew()} />
             <IconButton icon="x" size="sm" label="Close the Assistant" onClick={() => setDockOpen(false)} />
           </div>
@@ -266,7 +251,9 @@ export default function DockPanel() {
           {hint && <div className={s.hint} role="alert">{hint}</div>}
           {pid && history.isPending && <SkeletonRows rows={3} label="Loading the conversation" />}
           {history.isError && <ErrorState compact heading={3} title="The conversation could not load" message={history.error.message} onRetry={() => void history.refetch()} />}
-          {empty && ready && enabled && active && !history.isPending && <div className={`${s.powered} ${s.stageTop}`}>{`Powered by ${PROVIDER_LABEL[active]}`}</div>}
+          {empty && ready && enabled && mine && status.data && !history.isPending && (
+            <div className={`${s.powered} ${s.stageTop}`}>{`Powered by ${modelLabel({ ...mine, isDefault: false }, status.data.models)}`}</div>
+          )}
           {pid && <Transcript turns={turns} pending={pending} lastSteps={lastSteps} projectId={pid} onFollowUp={followUp} />}
           {pid &&
             plans.map((p) => (
@@ -313,9 +300,9 @@ export default function DockPanel() {
             />
             <IconButton icon="send" variant="primary" label="Send" disabled={!usable || !text.trim()} onClick={() => void send(text)} />
           </div>
-          {ready && status.data && (
+          {ready && (
             <div className={s.composeFoot}>
-              <ModelChip status={status.data} isAdmin={isAdmin} onConnect={() => setConnecting(true)} />
+              <ModelPicker status={status.data} />
             </div>
           )}
         </div>

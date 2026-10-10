@@ -14,7 +14,7 @@ const Provider = z.enum(AI_PROVIDERS);
 const ModelId = z.string().trim().min(1).max(200);
 
 export const ai = {
-  // { ready, reason?, models, mine } — the caller's models, never a key.
+  // { ready, reason?, models, mine, copilotEnabled, keyStore } — the caller's models, never a key.
   'ai:status': rpc({ access: 'read', org: true, input: z.undefined() }),
   // The caller's own pick; refused unless the model is enabled on a connected provider.
   'ai:setMine': rpc({ access: 'read', org: true, input: z.strictObject({ provider: Provider, model: ModelId }) }),

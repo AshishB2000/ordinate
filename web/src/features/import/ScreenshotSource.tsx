@@ -6,14 +6,15 @@
 // when no model can run, the not-ready state instead of a drop zone.
 
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { upload } from '../../api/client';
-import { Button, buttonClass } from '../../ui/Button';
+import { Button } from '../../ui/Button';
 import { SkeletonBlock } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { Icon, type IconName } from '../../ui/icons/Icon';
-import { draftCapture, useModelStatus } from './api';
+import { useAiStatus } from '../assistant/api';
+import { AiNotReady } from '../assistant/AiNotReady';
+import { draftCapture } from './api';
 import type { ComposerStart } from './Composer';
 import { DropZone } from './DropZone';
 import { readyImage } from './screenshotImage';
@@ -71,18 +72,13 @@ function FailureCard({ f, onRetry }: { f: Failure; onRetry: () => void }) {
         <Button variant="primary" icon="refresh" onClick={onRetry}>
           Try another screenshot
         </Button>
-        {f.errorType === 'auth' && (
-          <Link className={buttonClass('ghost')} to="/settings">
-            Open Settings
-          </Link>
-        )}
       </div>
     </div>
   );
 }
 
 export function ScreenshotSource({ projectId, onComposer }: { projectId: string; onComposer: (start: ComposerStart) => void }) {
-  const status = useModelStatus();
+  const status = useAiStatus();
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
@@ -131,22 +127,8 @@ export function ScreenshotSource({ projectId, onComposer }: { projectId: string;
   if (status.isPending) return <SkeletonBlock label="Checking the model" />;
   if (status.isError) return <ErrorState title="The model's status could not be read" message={status.error.message} onRetry={() => void status.refetch()} heading={3} />;
   if (!status.data.ready) {
-    const blocked = status.data.reason === 'not_allowed';
     return (
-      <EmptyState
-        icon="sparkles"
-        heading={3}
-        title={blocked ? 'This AI provider is not allowed here' : 'The model isn’t set up yet'}
-        actions={
-          <Link className={buttonClass('secondary')} to={blocked ? '/admin' : '/settings'}>
-            {blocked ? 'Open Admin' : 'Open Settings'}
-          </Link>
-        }
-      >
-        {blocked
-          ? 'A model is connected, but your organization’s admin has not allowed its provider. An admin can allow it in Admin → Settings.'
-          : 'Reading a screenshot needs an AI provider with an API key (Anthropic, OpenAI, Gemini or a gateway). Connect one in Settings and come back.'}
-      </EmptyState>
+      <EmptyState icon="sparkles" heading={3} title="Reading a screenshot needs AI" actions={<AiNotReady status={status.data} />} />
     );
   }
   if (busy) return <Steps />;

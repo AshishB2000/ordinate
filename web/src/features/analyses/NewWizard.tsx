@@ -18,7 +18,8 @@ import { ErrorState } from '../../ui/States';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
-import { useKeyStatus } from '../assistant/api';
+import { useAiStatus } from '../assistant/api';
+import { AiNotReady } from '../assistant/AiNotReady';
 import { failure, type Analysis, type BuildReply, type DraftReply, type PlanPreview, type Sheet, type TemplateList } from './api';
 import { DraftFlow } from './DraftReview';
 import { MapColumns, TemplateGallery } from './TemplateStep';
@@ -48,8 +49,8 @@ const fmtCount = new Intl.NumberFormat();
  */
 export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClose }: { projectId: string; datasetId?: string; initialStep?: 1 | 2; onClose: () => void }) {
   const sets = useDatasets(projectId);
-  const key = useKeyStatus();
-  const aiReady = !!key.data?.isReady;
+  const key = useAiStatus();
+  const aiReady = !!key.data?.ready;
   const navigate = useNavigate();
   const client = useQueryClient();
 
@@ -357,11 +358,11 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
             })}
           </div>
           {key.isPending ? (
-            <p className={s.note}>Checking whether a model is connected…</p>
+            <p className={s.note}>Checking whether a model is set up…</p>
           ) : key.isError ? (
             <p className={s.note}>Could not check for a model, so drafting is unavailable for now. Everything else works — pick any of the other three.</p>
           ) : (
-            !aiReady && <p className={s.note}>No model is connected. Drafting is unavailable, but everything else works without one — pick any of the other three.</p>
+            !aiReady && <AiNotReady status={key.data} className={s.note} />
           )}
         </div>
       )}

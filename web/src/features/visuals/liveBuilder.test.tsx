@@ -31,7 +31,7 @@ function serve(live: boolean, extra: Record<string, unknown> = {}) {
     '/api/auth/me': ME,
     'projects:overview': [{ id: PID, name: 'Sales', updatedAt: '2026-10-01T10:00:00Z', lastOpenedAt: null, archived: false, datasets: 1, dashboards: 0, sample: false }],
     'projects:roles': { [PID]: 'admin' },
-    'key:status': { isReady: false },
+    'ai:status': { ready: false, models: [], mine: null, keyStore: null },
     'dataset:list': [{ id: DID, name: 'Orders', sourceKind: 'postgres', rowCount: live ? 0 : 10, columnCount: 2, updatedAt: '', ...(live ? { mode: 'live', maxCacheAgeSec: 300 } : {}) }],
     'dataset:columns': { id: DID, name: 'Orders', rowCount: live ? 0 : 10, columns: COLS, ...(live ? { mode: 'live' } : {}) },
     'relationship:related': { ok: true, groups: [] },

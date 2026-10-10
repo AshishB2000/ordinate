@@ -18,8 +18,9 @@ import { Menu } from '../../ui/Menu';
 import { Skeleton } from '../../ui/Skeleton';
 import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
-import { useKeyStatus } from '../assistant/api';
-import { openDockWith, setDockOpen } from '../assistant/dockState';
+import { useAiStatus } from '../assistant/api';
+import { AI_NOT_READY, AiNotReady } from '../assistant/AiNotReady';
+import { openDockWith } from '../assistant/dockState';
 import { useTags, type TagIndex } from '../data/api';
 import { LineageDrawer } from '../data/LineageDrawer';
 import { TagChips, TagFilterBar, tagsOf, useActiveTag } from '../data/tags';
@@ -109,7 +110,7 @@ function Gallery({ projectId }: { projectId: string }) {
   const datasets = useDatasets(projectId);
   const tags = useTags(projectId);
   const [tag, setTag] = useActiveTag();
-  const key = useKeyStatus();
+  const key = useAiStatus();
   const client = useQueryClient();
   const [params, setParams] = useSearchParams();
   // `?new=1[&dataset=<id>]` opens the wizard — the palette's "New dashboard" and a dataset page's (anCreateWizard).
@@ -158,8 +159,8 @@ function Gallery({ projectId }: { projectId: string }) {
 
   const count = q.data?.length ?? 0;
   // The Assistant's doors are shut, and say why, until a model is connected (execMenu.ts gateAssistantDoors).
-  const aiReady = !!key.data?.isReady;
-  const aiWhy = key.isPending ? 'Checking whether a model is connected…' : 'The Assistant isn\u2019t set up yet — connect a model in the Assistant.';
+  const aiReady = !!key.data?.ready;
+  const aiWhy = key.isPending ? 'Checking whether a model is set up…' : AI_NOT_READY;
   const actions = (
     <div className={s.actions}>
       <Link className={buttonClass('ghost')} to={`/data/metrics?project=${projectId}`}>
@@ -222,12 +223,7 @@ function Gallery({ projectId }: { projectId: string }) {
       body = (
         <>
           {body}
-          <p className={s.aiHint}>
-            The Assistant isn’t set up yet — connect a model in the Assistant to draft dashboards. Everything else works without one.{' '}
-            <Button variant="ghost" size="sm" icon="sparkles" onClick={() => setDockOpen(true)}>
-              Open the Assistant
-            </Button>
-          </p>
+          <AiNotReady status={key.data} className={s.aiHint} />
         </>
       );
     }

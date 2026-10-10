@@ -39,8 +39,8 @@ const STEPS: Step[] = [
     line: 'Start from a template and have a laid-out sheet in one step.',
   },
   {
-    id: 'assistant', icon: 'sparkles', title: 'Set up the Assistant', to: '/settings', action: 'Set up',
-    line: 'Pick a model to ask about your data in plain words. Everything else works without one.',
+    id: 'assistant', icon: 'sparkles', title: 'Set up the Assistant', to: '/admin?tab=ai', action: 'Set up',
+    line: 'An admin connects a provider and picks the models everyone may use. Everything else works without one.',
   },
 ];
 

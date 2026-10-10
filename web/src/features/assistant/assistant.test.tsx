@@ -14,13 +14,17 @@ afterEach(() => {
 const PID = '11111111-1111-4111-8111-111111111111';
 const ADMIN = { user: { email: 'boss@acme.test', role: 'admin' }, org: 'acme', mode: 'oidc', canSignOut: true };
 const VIEWER = { user: { email: 'pat@acme.test', role: 'viewer' }, org: 'acme', mode: 'oidc', canSignOut: true };
-const provider = (connected: boolean) => ({ hasKey: connected, verified: connected, connected, baseUrl: '', maxTokens: '', model: '' });
-const status = (ready: boolean) => ({
-  isReady: ready,
+const SONNET = { provider: 'anthropic', model: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', isDefault: true };
+const HAIKU = { provider: 'anthropic', model: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', isDefault: false };
+const FLASH = { provider: 'gemini', model: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', isDefault: false };
+/** `ai:status`: ready with `models` (the first the caller's), or not set up. */
+const status = (ready: boolean, models = [SONNET], keyStore: string | null = null) => ({
+  ready,
+  ...(ready ? {} : { reason: keyStore ? 'no_key_store' : 'no_model' }),
+  models: ready ? models : [],
+  mine: ready ? { provider: models[0].provider, model: models[0].model } : null,
   copilotEnabled: true,
-  byok: { activeProvider: ready ? 'anthropic' : null, providers: { anthropic: provider(ready), openai: provider(false), gemini: provider(false), gateway: provider(false) } },
-  allowedProviders: ['anthropic', 'openai'],
-  keyStore: null,
+  keyStore,
 });
 
 type Reply = { status?: number; body?: unknown } | ((payload: unknown) => { status?: number; body?: unknown });
@@ -45,7 +49,7 @@ function serve(routes: Record<string, Reply>) {
 const base = (me: unknown, ready: boolean): Record<string, Reply> => ({
   '/api/auth/me': { body: me },
   'projects:list': { body: [{ id: PID, name: 'Ledger', createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z' }] },
-  'key:status': { body: status(ready) },
+  'ai:status': { body: status(ready) },
   'copilot:history': { body: { ok: true, turns: [], threadId: null } },
   'dataset:list': { body: [{ id: 'd1', name: 'Retail orders' }] },
 });
@@ -77,46 +81,59 @@ describe('the dock', () => {
     renderApp('/');
     const dock = await openDock();
     expect(within(dock).getByText('Based on whole project')).toBeTruthy();
-    expect(await within(dock).findByText('Powered by Anthropic')).toBeTruthy();
+    expect(await within(dock).findByText('Powered by Claude Sonnet 4.6')).toBeTruthy();
     expect(await within(dock).findByRole('button', { name: 'Which region had the worst month?' })).toBeTruthy();
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Assistant' })).toBeNull());
     expect(document.activeElement?.id).toBe('dock-toggle');
   });
 
-  it('not set up, for an admin: connects with a write-only key — save, test, activate', async () => {
-    let ready = false;
-    const calls = serve({
-      ...base(ADMIN, false),
-      'key:status': () => ({ body: status(ready) }),
-      'byok:saveProvider': { body: { ok: true } },
-      'byok:test': { body: { ok: true, message: 'Connected' } },
-      'byok:activate': () => {
-        ready = true;
-        return { body: { ok: true } };
-      },
-    });
+  it('not set up, for an admin: the sentence and a Set up AI button to Admin → AI — no key field in the dock', async () => {
+    serve(base(ADMIN, false));
     renderApp('/');
     const dock = await openDock();
-    expect(await within(dock).findByText('The Assistant isn’t set up yet.')).toBeTruthy();
+    expect(await within(dock).findByText(/AI isn’t set up for your organization yet/)).toBeTruthy();
+    const setUp = await within(dock).findByRole('link', { name: /Set up AI/ });
+    expect(setUp.getAttribute('href')).toBe('/admin?tab=ai');
     expect((within(dock).getByRole('textbox', { name: 'Ask the Assistant' }) as HTMLTextAreaElement).disabled).toBe(true);
-    const key = within(dock).getByLabelText('API key') as HTMLInputElement;
-    expect(key.type).toBe('password');
-    expect(key.value).toBe('');
-    fireEvent.change(key, { target: { value: 'sk-test-123' } });
-    fireEvent.click(within(dock).getByRole('button', { name: 'Connect' }));
-    await waitFor(() => expect(calls.map((c) => c.channel).filter((c) => c.startsWith('byok:'))).toEqual(['byok:saveProvider', 'byok:test', 'byok:activate']));
-    expect(calls.find((c) => c.channel === 'byok:saveProvider')?.payload).toEqual({ provider: 'anthropic', fields: { apiKey: 'sk-test-123' } });
-    await waitFor(() => expect((within(dock).getByRole('textbox', { name: 'Ask the Assistant' }) as HTMLTextAreaElement).disabled).toBe(false));
-    expect(screen.queryByDisplayValue('sk-test-123')).toBeNull();
+    expect(within(dock).queryByLabelText('API key')).toBeNull();
   });
 
-  it('not set up, for a member: says an org admin connects one, and offers no key field', async () => {
+  it('not set up, for a member: the sentence alone — no button, no key field', async () => {
     serve(base(VIEWER, false));
     renderApp('/');
     const dock = await openDock();
-    expect(await within(dock).findByText(/An org admin connects a provider/)).toBeTruthy();
+    expect(await within(dock).findByText(/AI isn’t set up for your organization yet/)).toBeTruthy();
+    await waitFor(() => expect(within(dock).queryByRole('link', { name: /Set up AI/ })).toBeNull());
     expect(within(dock).queryByLabelText('API key')).toBeNull();
+  });
+
+  it('not set up, on a server with no key store: an admin gets the operator line instead of the button', async () => {
+    serve({ ...base(ADMIN, false), 'ai:status': { body: status(false, [], 'This server has no database, so it cannot store API keys.') } });
+    renderApp('/');
+    const dock = await openDock();
+    expect(await within(dock).findByText(/An operator sets DATABASE_URL and ORDINATE_MASTER_KEY/)).toBeTruthy();
+    expect(within(dock).queryByRole('link', { name: /Set up AI/ })).toBeNull();
+  });
+
+  it('one model: its name as text, no dropdown', async () => {
+    serve(base(VIEWER, true));
+    renderApp('/');
+    const dock = await openDock();
+    expect(await within(dock).findByTitle('Model: Claude Sonnet 4.6 · Default')).toBeTruthy();
+    expect(within(dock).queryByRole('combobox', { name: 'Model' })).toBeNull();
+  });
+
+  it('several models: a picker grouped by provider, the default marked; choosing one saves YOUR pick', async () => {
+    const calls = serve({ ...base(VIEWER, true), 'ai:status': { body: status(true, [SONNET, FLASH, HAIKU]) }, 'ai:setMine': { body: { ok: true } } });
+    renderApp('/');
+    const dock = await openDock();
+    const picker = await within(dock).findByRole('combobox', { name: 'Model' });
+    fireEvent.click(picker);
+    const options = screen.getAllByRole('option'); // read and pick in one go: the list closes on the next layout check
+    expect(options.map((o) => o.textContent)).toEqual(['Claude Sonnet 4.6 (Anthropic) · Default', 'Claude Haiku 4.5 (Anthropic)', 'Gemini 3.8 Flash (Google Gemini)']);
+    fireEvent.click(options[2]);
+    await waitFor(() => expect(calls.find((c) => c.channel === 'ai:setMine')?.payload).toEqual({ provider: 'gemini', model: 'gemini-3.8-flash' }));
   });
 
   it('asks, and draws the stored turns as TEXT — markup in an answer is never HTML', async () => {
