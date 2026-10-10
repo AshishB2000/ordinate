@@ -20,7 +20,7 @@ import { EmptyState, ErrorState } from '../../ui/States';
 import { Tab, TabList, TabPanel, Tabs } from '../../ui/Tabs';
 import { toast } from '../../ui/Toast';
 import { ago } from './format';
-import { hookUrl, intervalText, snippets, useCreateHook, useRefreshHooks, useRevokeHook, type HookTarget, type RefreshHook } from './refreshUrls';
+import { hookUrl, intervalText, lastCall, snippets, useCreateHook, useRefreshHooks, useRevokeHook, type HookTarget, type RefreshHook } from './refreshUrls';
 import s from './RefreshUrl.module.css';
 
 function copy(text: string, what: string) {
@@ -69,11 +69,14 @@ function RevokeButton({ hook, projectId, target }: { hook: RefreshHook; projectI
 
 function HookRow({ hook, projectId, target }: { hook: RefreshHook; projectId: string; target: HookTarget }) {
   const revoked = hook.revokedAt !== null;
+  const last = revoked ? null : lastCall(hook);
   return (
     <li className={revoked ? `${s.row} ${s.revoked}` : s.row}>
       <div className={s.rowMain}>
         <code className={s.prefix}>{hook.prefix}…</code>
         <Badge tone={revoked ? 'neutral' : 'ok'}>{revoked ? 'Revoked' : 'Active'}</Badge>
+        {/* How its last call ended — what a GET of the URL tells the pipeline. */}
+        {last && <Badge tone={last.tone}>{last.word}</Badge>}
       </div>
       <p className={s.rowMeta}>
         Made by {hook.createdBy} · {ago(hook.createdAt)}
@@ -114,7 +117,8 @@ function Usage({ name, interval }: { name: string; interval: number }) {
       <h3 className={s.h}>Call it</h3>
       <p className={s.lead}>
         A POST with no body or headers. It answers <code>202</code> at once, and <code>429</code> with <code>Retry-After</code> when it was
-        called less than {interval === 60 ? 'a minute' : `${interval} seconds`} ago.
+        called less than {interval === 60 ? 'a minute' : `${interval} seconds`} ago. A GET of the same URL says how that call ended:{' '}
+        <code>running</code>, <code>ok</code> or <code>failed</code>.
       </p>
       <Tabs value={tab} onValueChange={setTab}>
         <TabList label="Examples">

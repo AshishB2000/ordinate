@@ -282,6 +282,31 @@ if (adminUrl) {
     await hooks.getByRole('heading', { name: 'No refresh URLs yet' }).waitFor();
     await hooks.getByRole('button', { name: 'Done' }).click();
     await hooks.waitFor({ state: 'detached' });
+    // ONE URL for every dataset of the connection: made on the rail, called from outside as a pipeline
+    // would, then asked (GET) until the refresh it started has landed.
+    await rail.getByRole('button', { name: 'Refresh URL for all datasets' }).click();
+    const all = page.getByRole('dialog', { name: 'Refresh URL · Orders warehouse' });
+    await all.getByText(/refreshes every dataset that came from “Orders warehouse”/).waitFor();
+    await all.getByRole('button', { name: 'New refresh URL' }).click();
+    const allUrl = (await all.getByTestId('new-refresh-url').textContent()) ?? '';
+    const fired = await fetch(allUrl, { method: 'POST' });
+    assert.equal(fired.status, 202);
+    assert.deepEqual(await fired.json(), { status: 'queued', datasets: { queued: 1, already_running: 0, cache_reset: 0 } });
+    let landed = '';
+    for (let i = 0; i < 50 && landed !== 'ok'; i++) {
+      landed = ((await (await fetch(allUrl)).json()) as { status: string }).status;
+      if (landed !== 'ok') await new Promise((r) => setTimeout(r, 500));
+    }
+    assert.equal(landed, 'ok', 'the connection\'s URL refreshed its dataset');
+    // The URL is shown once, so both themes are taken in place (screens() reloads, which would close the panel).
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((t) => { document.documentElement.dataset.theme = t; }, theme);
+      await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))).then(() => undefined));
+      await page.screenshot({ path: path.join(SCREENS, `connections-refresh-url-all-${theme}.png`), fullPage: true });
+    }
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+    await all.getByRole('button', { name: 'Done' }).click();
+    await all.waitFor({ state: 'detached' });
 
     // Replace the password: tested, kept, never shown.
     await rail.getByRole('button', { name: 'Replace Password' }).click();

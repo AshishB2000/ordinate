@@ -41,6 +41,18 @@ export const PREFIX_LEN = 13;
 export const MAX_LIVE_PER_DATASET = 10;
 /** The newest this many, revoked included, are listed. */
 const LIST_MAX = 50;
+/**
+ * A call nobody settled reads as running for this long, and after it only
+ * while a refresh of its datasets runs somewhere (./route.ts): the pod that
+ * would have settled it died mid-refresh, and a pipeline must not wait on it
+ * for ever.
+ */
+export const PENDING_STALE_SEC = 900;
+
+/** How a call ended (0015_refresh_hooks_outcome.sql). */
+export type HookResult = 'ok' | 'failed' | 'already_running';
+/** What the row holds: `running` while a call's refreshes are in flight; NULL when no call's outcome was ever recorded. */
+export type HookOutcome = HookResult | 'running';
 
 /** 256 random bits, base64url, behind the recognisable prefix. */
 export const newHookToken = (): string => HOOK_TOKEN_PREFIX + randomBytes(32).toString('base64url');
@@ -57,6 +69,9 @@ export interface HookRow {
   readonly createdBy: string;
   readonly createdAt: string;
   readonly lastUsedAt: string | null;
+  /** How the last call ended, `running` while it has not; null: no outcome recorded (never called, or called before outcomes were kept). */
+  readonly lastResult: HookOutcome | null;
+  readonly lastFinishedAt: string | null;
   readonly revokedAt: string | null;
 }
 
@@ -73,6 +88,17 @@ export interface ClaimedHook {
   readonly projectId: string;
   readonly target: HookTarget;
   readonly createdBy: string;
+}
+
+/** A hook as a status read sees it (`GET`): whose it is, and how its last call ended. */
+export interface HookState extends ClaimedHook {
+  readonly calledAt: string | null;
+  readonly result: HookOutcome | null;
+  readonly finishedAt: string | null;
+  /** The recorded outcome is older than the last call: that call recorded none (its pod died first). */
+  readonly settledBeforeCall: boolean;
+  /** Seconds since the last call, on the database's clock. */
+  readonly ageSec: number;
 }
 
 export type Claim =
@@ -105,7 +131,8 @@ async function within<T>(pool: Pool, setting: 'ordinate.org' | 'ordinate.hook', 
 }
 
 const COLS = `id, prefix, created_by AS "createdBy", to_json(created_at) #>> '{}' AS "createdAt",
-  to_json(last_used_at) #>> '{}' AS "lastUsedAt", to_json(revoked_at) #>> '{}' AS "revokedAt"`;
+  to_json(last_used_at) #>> '{}' AS "lastUsedAt", last_result AS "lastResult",
+  to_json(last_finished_at) #>> '{}' AS "lastFinishedAt", to_json(revoked_at) #>> '{}' AS "revokedAt"`;
 
 /** The target's hooks, newest first, revoked ones included (greyed in the list). */
 export function listHooks(pool: Pool, org: string, projectId: string, target: HookTarget): Promise<HookRow[]> {
@@ -140,6 +167,62 @@ export function revokeHook(pool: Pool, org: string, projectId: string, id: strin
       .rowCount === 1);
 }
 
+/** Whose hook a token's row is: read by the claim and by a status read. */
+interface OwnRow { id: string; org_id: string; project_id: string; dataset_id: string | null; connection_id: string | null; token_hash: string; created_by: string }
+const OWN = 'id, org_id, project_id::text, dataset_id::text, connection_id::text, token_hash, created_by';
+const ownerOf = (r: OwnRow): ClaimedHook => ({
+  id: r.id, orgId: r.org_id, projectId: r.project_id, createdBy: r.created_by,
+  target: r.connection_id ? { connId: r.connection_id } : { datasetId: r.dataset_id ?? '' }, // the CHECK: one of the two is set
+});
+
+/** A call has queued refreshes: the hook is `running` until `settleHook(…, 'landed')` says how they ended. */
+export function beginHook(pool: Pool, hook: Pick<ClaimedHook, 'id' | 'orgId'>): Promise<void> {
+  return within(pool, 'ordinate.org', hook.orgId, async (c) => {
+    await c.query(`UPDATE refresh_hooks SET last_result = 'running', last_finished_at = NULL WHERE org_id = $1 AND id = $2`, [hook.orgId, hook.id]);
+  });
+}
+
+/**
+ * Record how a call ended. Two moments, and `running` decides between them:
+ *
+ *   'landed'  the refreshes a call queued are over — written only while the
+ *             hook still reads `running` (it is theirs to end)
+ *   'at once' a call that queued nothing (it joined a running refresh, reset
+ *             a cache, or was refused) — written only while the hook is NOT
+ *             `running`: with an earlier call's refreshes still in flight
+ *             (the same pipeline, POSTing again), that call's end is the
+ *             answer, and this one must not paint over it
+ */
+export function settleHook(pool: Pool, hook: Pick<ClaimedHook, 'id' | 'orgId'>, result: HookResult, when: 'landed' | 'at once'): Promise<void> {
+  return within(pool, 'ordinate.org', hook.orgId, async (c) => {
+    await c.query(
+      `UPDATE refresh_hooks SET last_result = $3, last_finished_at = now()
+        WHERE org_id = $1 AND id = $2 AND (last_result IS NOT DISTINCT FROM 'running') = $4`,
+      [hook.orgId, hook.id, result, when === 'landed'],
+    );
+  });
+}
+
+/**
+ * The hook a status read presents, or null — unknown and revoked alike, by
+ * one statement. It claims nothing and stamps nothing: asking how the last
+ * call went is not a call.
+ */
+export function readHook(pool: Pool, token: string): Promise<HookState | null> {
+  const hash = hookHash(token);
+  return within(pool, 'ordinate.hook', hash, async (c) => {
+    const r = await c.query<OwnRow & { called_at: string | null; last_result: HookOutcome | null; finished_at: string | null; before: boolean | null; age: number | null }>(
+      `SELECT ${OWN}, to_json(last_used_at) #>> '{}' AS called_at, last_result, to_json(last_finished_at) #>> '{}' AS finished_at,
+              last_finished_at < last_used_at AS before, EXTRACT(EPOCH FROM now() - last_used_at)::float8 AS age
+         FROM refresh_hooks WHERE token_hash = $1 AND revoked_at IS NULL`,
+      [hash],
+    );
+    const row = r.rows[0];
+    if (!row || !timingSafeEqual(Buffer.from(row.token_hash, 'hex'), Buffer.from(hash, 'hex'))) return null;
+    return { ...ownerOf(row), calledAt: row.called_at, result: row.last_result, finishedAt: row.finished_at, settledBeforeCall: row.before === true, ageSec: row.age ?? 0 };
+  });
+}
+
 /**
  * Claim the hook a call presents, or say why not. Always the same two
  * statements when nothing is claimed — the UPDATE, then a SELECT for the wait
@@ -150,18 +233,17 @@ export function revokeHook(pool: Pool, org: string, projectId: string, id: strin
 export function claimHook(pool: Pool, token: string, minIntervalSec: number): Promise<Claim> {
   const hash = hookHash(token);
   return within(pool, 'ordinate.hook', hash, async (c) => {
-    const won = await c.query<{ id: string; org_id: string; project_id: string; dataset_id: string | null; connection_id: string | null; token_hash: string; created_by: string }>(
+    const won = await c.query<OwnRow>(
       `UPDATE refresh_hooks SET last_used_at = now()
         WHERE token_hash = $1 AND revoked_at IS NULL
           AND (last_used_at IS NULL OR last_used_at <= now() - $2 * interval '1 second')
-       RETURNING id, org_id, project_id::text, dataset_id::text, connection_id::text, token_hash, created_by`,
+       RETURNING ${OWN}`,
       [hash, minIntervalSec],
     );
     const row = won.rows[0];
     if (row) {
       if (!timingSafeEqual(Buffer.from(row.token_hash, 'hex'), Buffer.from(hash, 'hex'))) return { kind: 'unknown' } as const;
-      const target = row.connection_id ? { connId: row.connection_id } : { datasetId: row.dataset_id ?? '' }; // the CHECK: one of the two is set
-      return { kind: 'claimed', hook: { id: row.id, orgId: row.org_id, projectId: row.project_id, target, createdBy: row.created_by } } as const;
+      return { kind: 'claimed', hook: ownerOf(row) } as const;
     }
     // A new statement: it sees a claim another pod committed while this one waited on the row.
     const seen = await c.query<{ live: boolean; wait: number }>(
