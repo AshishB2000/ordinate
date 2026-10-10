@@ -6,7 +6,7 @@
 // the current bubble). Every figure arrives from the server; nothing here
 // computes one.
 
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDatasets } from '../../api/datasets';
 import { onServerEvent } from '../../api/events';
@@ -20,9 +20,10 @@ import { ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { ask, mineModel, newThread, useAiStatus, useHistory, type ActivityStep, type SuggestedAction, type Turn } from './api';
 import { AiNotReady } from './AiNotReady';
-import { DockMenu, modelLabel, ModelPicker, ThreadMenu, TOGGLE_ID } from './DockParts';
+import { Composer } from './Composer';
+import { DockMenu, modelLabel, ThreadMenu, TOGGLE_ID } from './DockParts';
 import { History } from './History';
-import { pickDockProject, setDockOpen, takePendingQuestion, useDockContext, useDockProject, usePendingQuestion } from './dockState';
+import { pickDockProject, setDockOpen, takePendingQuestion, useDockContext, useDockProject, usePendingQuestion, type DockContext } from './dockState';
 import { PlanCard, type PlanAction } from './PlanCard';
 import { starterPrompts } from './prompts';
 import { Transcript, type Pending } from './Transcript';
@@ -45,7 +46,11 @@ export default function DockPanel() {
   const isAdmin = me.data?.user?.role === 'admin';
   const project = useDockProject(true);
   const pid = project.id;
-  const context = useDockContext(pid);
+  // What `@` pinned, for the project it was pinned in; otherwise the context follows the screen.
+  const [pin, setPin] = useState<{ projectId: string; context: DockContext } | null>(null);
+  const onScreen = useDockContext(pid);
+  const pinned = pin && pin.projectId === pid ? pin.context : null;
+  const context = pinned ?? onScreen;
   const status = useAiStatus();
   const [threadId, setThreadId] = useState('');
   const history = useHistory(pid, threadId);
@@ -196,13 +201,6 @@ export default function DockPanel() {
     else toast((r && !r.ok && r.reason) || 'Could not run that follow-up.', { kind: 'error' });
   }
 
-  const onComposerKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      void send(text);
-    }
-  };
-
   const firstUser = turns.find((t) => t.role === 'user')?.text.trim() ?? '';
   const title = firstUser ? (firstUser.length > 40 ? `${firstUser.slice(0, 40)}…` : firstUser) : 'New conversation';
   const empty = turns.length === 0 && !pending;
@@ -213,7 +211,9 @@ export default function DockPanel() {
       ? 'AI isn’t set up for your organization yet.'
       : !enabled
         ? 'The Assistant is off.'
-        : "Ask about what you're looking at…";
+        : pinned
+          ? `Ask about ${pinned.name}…`
+          : "Ask about what you're looking at, or type @ to pick…";
 
   const notice = (() => {
     if (!project.loading && !pid) return <div className={s.hint}>Open a project to ask a question.</div>;
@@ -260,15 +260,6 @@ export default function DockPanel() {
             <IconButton icon="x" size="sm" label="Close the Assistant" onClick={() => setDockOpen(false)} />
           </div>
         </div>
-        <div className={s.context}>
-          <span className={s.contextLabel}>{`Based on ${context.label}`}</span>
-          <span className={s.provChip}>stats app-computed</span>
-          {!project.fromRoute && project.projects.length > 1 && (
-            <span className={s.projectPick}>
-              <Select size="sm" aria-label="Project" value={pid} onValueChange={(v) => { pickDockProject(v); switchThread(''); }} options={project.projects.map((p) => ({ value: p.id, label: p.name }))} />
-            </span>
-          )}
-        </div>
         <div className={s.stage} ref={stage} data-testid="dock-messages">
           {notice}
           {hint && <div className={s.hint} role="alert">{hint}</div>}
@@ -308,27 +299,24 @@ export default function DockPanel() {
             ))}
           </div>
         )}
-        <div className={s.composer}>
-          <div className={s.composeRow}>
-            <textarea
-              ref={input}
-              className={s.input}
-              rows={1}
-              aria-label="Ask the Assistant"
-              placeholder={placeholder}
-              disabled={!usable}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={onComposerKey}
-            />
-            <IconButton icon="send" variant="primary" label="Send" disabled={!usable || !text.trim()} onClick={() => void send(text)} />
-          </div>
-          {ready && (
-            <div className={s.composeFoot}>
-              <ModelPicker status={status.data} />
-            </div>
-          )}
-        </div>
+        <Composer
+          inputRef={input}
+          projectId={pid}
+          status={status.data}
+          context={context}
+          pinned={pinned !== null}
+          onPin={(c) => setPin(c && pid ? { projectId: pid, context: c } : null)}
+          text={text}
+          onText={setText}
+          onSend={() => void send(text)}
+          usable={usable}
+          placeholder={placeholder}
+          projectPick={
+            !project.fromRoute && project.projects.length > 1 ? (
+              <Select size="sm" aria-label="Project" value={pid} onValueChange={(v) => { pickDockProject(v); switchThread(''); }} options={project.projects.map((p) => ({ value: p.id, label: p.name }))} />
+            ) : undefined
+          }
+        />
       </aside>
     </>
   );

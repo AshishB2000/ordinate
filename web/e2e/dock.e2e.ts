@@ -215,5 +215,28 @@ if (!dbUrl) {
       await card.scrollIntoViewIfNeeded();
       await page.screenshot({ path: path.join(SCREENS, `dock-plan-${theme}.png`), fullPage: true });
     }
+
+    // ── @ points the Assistant at one thing ─────────────────────────────────
+    // Typed where a word starts it opens the picker and is not kept; the chip
+    // names the pick, and the answer's provenance is THAT dataset — the
+    // reference reached the server, which built its facts from it.
+    await box.pressSequentially('Tell me about @');
+    const picker = page.getByRole('dialog', { name: 'Point the Assistant at' });
+    await picker.getByRole('textbox', { name: 'Search the project' }).fill('sal');
+    await picker.getByRole('button', { name: 'Sales' }).waitFor();
+    await page.keyboard.press('Enter');
+    await picker.waitFor({ state: 'detached' });
+    assert.equal(await page.getByTestId('dock-context').textContent(), 'Sales');
+    assert.equal(await box.inputValue(), 'Tell me about ', 'the @ opened the picker and was not typed');
+    // Focus comes back to the composer (a tick after the picker goes), not to the @ button.
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Ask the Assistant');
+    // The pin is this panel's own state (a reload returns to the screen's context), so no reload here either.
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+      await page.screenshot({ path: path.join(SCREENS, `dock-context-${theme}.png`), fullPage: true });
+    }
+    await box.pressSequentially('it');
+    await box.press('Enter');
+    await dock.getByText(/^dataset: Sales · /).waitFor();
   });
 }

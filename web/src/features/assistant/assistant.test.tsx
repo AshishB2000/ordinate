@@ -154,12 +154,65 @@ describe('the dock header', () => {
   });
 });
 
+describe('the composer', () => {
+  it('@ points the Assistant at one thing: the chip names it, the ask carries its reference, × follows the screen again', async () => {
+    const calls = serve({
+      ...base(ADMIN, true),
+      'visual:list': { body: [{ id: 'v1', name: 'Revenue by region' }, { id: 'v2', name: 'Orders per month' }] },
+      'analysis:gallery': { body: [{ id: 'a1', name: 'Board pack' }] },
+      'copilot:ask': { body: { ok: true, answer: 'ok', threadId: null, turns: [], suggestedAction: { kind: 'none', intent: '' } } },
+    });
+    renderApp('/');
+    const dock = await openDock();
+    const box = within(dock).getByRole('textbox', { name: 'Ask the Assistant' }) as HTMLTextAreaElement;
+    await waitFor(() => expect(box.disabled).toBe(false));
+
+    // Inside a word — an email address — `@` is a character, not the picker.
+    fireEvent.change(box, { target: { value: 'me' } });
+    fireEvent.change(box, { target: { value: 'me@' } });
+    expect(box.value).toBe('me@');
+    expect(screen.queryByRole('dialog', { name: 'Point the Assistant at' })).toBeNull();
+
+    // Where a word starts it opens the picker, and the `@` is not kept.
+    fireEvent.change(box, { target: { value: 'Compare ' } });
+    fireEvent.change(box, { target: { value: 'Compare @' } });
+    expect(box.value).toBe('Compare ');
+    const picker = await screen.findByRole('dialog', { name: 'Point the Assistant at' });
+    await within(picker).findByRole('button', { name: 'Board pack' });
+    await within(picker).findByRole('button', { name: 'Revenue by region' });
+    expect(within(picker).getAllByRole('button').map((b) => b.textContent)).toEqual(['What’s on screenDefault', 'Retail orders', 'Revenue by region', 'Orders per month', 'Board pack']);
+    const search = within(picker).getByRole('textbox', { name: 'Search the project' });
+    fireEvent.change(search, { target: { value: 'orders per' } });
+    fireEvent.keyDown(search, { key: 'Enter' }); // the first match
+    await waitFor(() => expect(within(dock).getByTestId('dock-context').textContent).toBe('Orders per month'));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Point the Assistant at' })).toBeNull());
+
+    fireEvent.change(box, { target: { value: 'Why the dip?' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect((calls.find((c) => c.channel === 'copilot:ask')?.payload as { context: unknown } | undefined)?.context).toEqual({ kind: 'visual', id: 'v2' }));
+    fireEvent.click(await within(dock).findByRole('button', { name: 'Follow what’s on screen again' }));
+    expect(within(dock).getByTestId('dock-context').textContent).toBe('whole project');
+  });
+
+  it('Add data opens the import page’s doors in the dock’s project', async () => {
+    serve(base(ADMIN, true));
+    const router = renderApp('/');
+    const dock = await openDock();
+    const add = within(dock).getByRole('button', { name: 'Add data' }) as HTMLButtonElement;
+    await waitFor(() => expect(add.disabled).toBe(false));
+    fireEvent.keyDown(add, { key: 'Enter' });
+    expect((await screen.findAllByRole('menuitem')).map((m) => m.textContent)).toEqual(['Import a file', 'Paste a table', 'Read a screenshot', 'Connect a source']);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Paste a table' }));
+    await waitFor(() => expect(router.state.location.pathname + router.state.location.search).toBe(`/data/import?project=${PID}&source=paste`));
+  });
+});
+
 describe('the dock', () => {
   it('opens from the top bar, shows its context, and closes on Escape back to the toggle', async () => {
     serve(base(ADMIN, true));
     renderApp('/');
     const dock = await openDock();
-    expect(within(dock).getByText('Based on whole project')).toBeTruthy();
+    expect(within(dock).getByTestId('dock-context').textContent).toBe('whole project');
     expect(await within(dock).findByText('Powered by Claude Sonnet 4.6')).toBeTruthy();
     expect(await within(dock).findByRole('button', { name: 'Which region had the worst month?' })).toBeTruthy();
     fireEvent.keyDown(document, { key: 'Escape' });

@@ -1,7 +1,8 @@
-/* The dock's History popover: a search field over a list that scrolls inside
-   the panel. Rows are the kit's menu row, so they read as the title menu's. */
+/* The dock's two pick-lists — History and the composer's `@` — are one shape:
+   a search field over grouped rows that scroll inside the popover. Rows are
+   the kit's menu row, so they read as the title menu's. */
 
-.history {
+.popover {
   display: flex;
   flex-direction: column;
   gap: var(--sp-8);
@@ -35,6 +36,9 @@
 .row[aria-current] {
   background: var(--surface-2);
   font-weight: 600;
+}
+.row > svg {
+  flex: none;
 }
 .rowTitle {
   composes: itemText from '../../ui/floating.module.css';

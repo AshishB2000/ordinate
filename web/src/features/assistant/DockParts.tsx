@@ -171,6 +171,7 @@ export function ModelPicker({ status }: { status: AiStatus | undefined }) {
     <span className={s.modelPick}>
       <Select
         size="sm"
+        className={s.modelQuiet}
         aria-label="Model"
         value={`${mine.provider}/${mine.model}`}
         options={order.map((m) => ({ value: `${m.provider}/${m.model}`, label: modelLabel(m, status.models) }))}
