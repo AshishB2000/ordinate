@@ -98,6 +98,11 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-12);
+  /* A scroll box clips at its padding edge, and a field's focus ring sits 4px
+     outside the field: pad the box by that much and pull it back out, so the
+     ring of a field at any edge is whole and nothing moves. */
+  padding: var(--sp-4);
+  margin: calc(-1 * var(--sp-4));
 }
 .footer {
   display: flex;
@@ -139,4 +144,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-8);
+  /* Room for a focus ring, as `.body`. */
+  padding: var(--sp-4);
+  margin: calc(-1 * var(--sp-4));
 }

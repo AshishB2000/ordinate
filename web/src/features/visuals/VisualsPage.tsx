@@ -9,7 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { useDatasets, type DatasetSummary } from '../../api/datasets';
-import { EmptyState, ErrorState, Page, PageSkeleton } from '../../app/blocks';
+import { ErrorState, Page, PageSkeleton } from '../../app/blocks';
 import { Button } from '../../ui/Button';
 import { Skeleton } from '../../ui/Skeleton';
 import { toast } from '../../ui/Toast';
@@ -17,6 +17,7 @@ import { useAiStatus } from '../assistant/api';
 import { AiNotReady } from '../assistant/AiNotReady';
 import { pickDockProject, setDockOpen } from '../assistant/dockState';
 import { useVisualsProject } from './project';
+import { NoProject } from '../projects/NoProject';
 import { toastMovedToTrash } from '../projects/trashToast';
 import { deleteVisual, duplicateVisual, explainVisual, updateVisual, useRefreshVisuals, useVisualList, type VisualSummary } from './api';
 import { NameDialog } from './NameDialog';
@@ -45,9 +46,7 @@ export default function VisualsPage() {
   if (!projectId) {
     return (
       <Page title={TITLE} sub={SUB}>
-        <EmptyState icon="folder" title="No project open">
-          A visual belongs to a project and reads one of its datasets. Create or open a project from the switcher, then bring some data in.
-        </EmptyState>
+        <NoProject why="A visual belongs to a project and reads one of its datasets." />
       </Page>
     );
   }

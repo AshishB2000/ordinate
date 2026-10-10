@@ -22,12 +22,13 @@ import { ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { useMe } from '../auth/api';
 import { fmtOpened, plural, useRoles, type ProjectRow } from './api';
-import { useCurrentProject } from './current';
+import { useCanCreateProject, useCurrentProject } from './current';
 import shell from '../../app/Shell.module.css';
 import s from './Projects.module.css';
 
 // The dialogs load on first use: the switcher is in the shell's initial chunk.
 const NameDialog = lazy(() => import('./ProjectDialogs').then((m) => ({ default: m.NameDialog })));
+const NewProjectDialog = lazy(() => import('./ProjectDialogs').then((m) => ({ default: m.NewProjectDialog })));
 const DeleteDialog = lazy(() => import('./ProjectDialogs').then((m) => ({ default: m.DeleteDialog })));
 const ShareDialog = lazy(() => import('./ShareDialog').then((m) => ({ default: m.ShareDialog })));
 
@@ -75,8 +76,7 @@ export function ProjectSwitcher() {
   const [importing, setImporting] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const orgRole = me.data?.user?.role;
-  const canCreate = orgRole === 'admin' || orgRole === 'editor';
+  const canCreate = useCanCreateProject();
   const sharing = me.data?.accounts === true;
   const live = cur.projects.filter((p) => !p.archived);
   const archived = cur.projects.filter((p) => p.archived);
@@ -185,7 +185,7 @@ export function ProjectSwitcher() {
   } else if (live.length === 0) {
     body = (
       <p className={s.none}>
-        {canCreate ? 'No projects yet. Create one to start bringing data in.' : 'Nothing has been shared with you yet. Ask a project admin to share a project.'}
+        {canCreate ? 'No projects yet. Create one to start bringing data in.' : 'Nothing has been shared with you yet. Ask a project admin for access.'}
       </p>
     );
   } else {
@@ -294,21 +294,7 @@ export function ProjectSwitcher() {
         onChange={(e) => void importFile(e.target.files?.[0])}
       />
       <Suspense fallback={null}>
-        {dialog?.kind === 'new' && (
-          <NameDialog
-            title="New project"
-            confirm="Create"
-            initial=""
-            onClose={() => setDialog(null)}
-            run={async (n) => {
-              const made = (await rpc('projects:create', { name: n || 'Untitled project' })) as { id: string; name: string } | null;
-              if (!made?.id) throw new Error('the server did not create it');
-              refresh();
-              switchTo(made.id);
-              toast(`Created “${made.name}”.`, { kind: 'success' });
-            }}
-          />
-        )}
+        {dialog?.kind === 'new' && <NewProjectDialog onClose={() => setDialog(null)} onCreated={switchTo} />}
         {dialog?.kind === 'rename' && (
           <NameDialog
             title="Rename project"

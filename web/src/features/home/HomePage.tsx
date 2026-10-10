@@ -12,6 +12,7 @@ import { useOverview, useRecent } from '../../api/home';
 import { useProjects, type Project } from '../../api/projects';
 import { openDockWith } from '../assistant/dockState';
 import { useMe } from '../auth/api';
+import { NoProject } from '../projects/NoProject';
 import { Button } from '../../ui/Button';
 import { Menu } from '../../ui/Menu';
 import { Skeleton } from '../../ui/Skeleton';
@@ -32,7 +33,7 @@ function Subtitle({ project, failed, loading }: { project: Project | undefined; 
   const ov = useOverview(project?.id);
   if (loading) return <Skeleton className={s.subSk} />;
   if (failed) return <p className={s.sub}>Your projects could not be loaded.</p>;
-  if (!project) return <p className={s.sub}>No project yet — bring some data in to begin.</p>;
+  if (!project) return <p className={s.sub}>No project yet.</p>;
   const c = ov.data?.counts;
   const parts = [project.name || 'Untitled project'];
   // Captures only when there are any: a project that never took one is not told it has none.
@@ -92,6 +93,11 @@ export default function HomePage() {
       </header>
       <AskBar prompts={prompts} onAsk={openDockWith} />
       <GetStarted />
+      {projects.isSuccess && !project && (
+        <div className={s.emptyBox}>
+          <NoProject why="Your data, visuals and dashboards live in a project." />
+        </div>
+      )}
       {/* What the app FOUND in the project's data (T2.11); renders nothing when nothing stands out. */}
       <WhatStandsOut projectId={project?.id} />
       {project && ov.data && <RecentComments projectId={project.id} comments={ov.data.comments} />}

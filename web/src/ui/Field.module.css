@@ -84,6 +84,11 @@
   font: inherit;
   outline: none;
 }
+/* base.css's global `:focus-visible` ring ties with `.input` on specificity
+   and wins on order, which drew a second, square ring inside the box's. */
+.input:focus-visible {
+  outline: none;
+}
 .input::placeholder,
 .textarea::placeholder {
   color: var(--text-faint);

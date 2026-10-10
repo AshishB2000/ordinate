@@ -7,10 +7,11 @@
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useProjects } from '../../api/projects';
-import { EmptyState, ErrorState, Page, PageSkeleton } from '../../app/blocks';
+import { ErrorState, Page, PageSkeleton } from '../../app/blocks';
 import { Select } from '../../ui/Select';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { toast } from '../../ui/Toast';
+import { NoProject } from '../projects/NoProject';
 import { useCatalog, useConnections, useLogos, useRefreshLists, type Connection } from './api';
 import { ConnectionForm, initialDraft, type Draft } from './ConnectionForm';
 import { ConnectorPicker } from './ConnectorPicker';
@@ -36,9 +37,7 @@ export default function ConnectionsPage() {
   if (projects.data.length === 0) {
     return (
       <Page title={TITLE} sub={SUB}>
-        <EmptyState icon="folder" title="No project to connect into">
-          A connection belongs to a project, and its datasets land there. Create a project first, then come back here.
-        </EmptyState>
+        <NoProject why="A connection belongs to a project, and its datasets land there." />
       </Page>
     );
   }

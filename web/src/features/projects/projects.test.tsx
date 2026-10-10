@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderApp } from '../../test-utils';
 import { fmtDay, fmtOpened } from './api';
 import { restoredLine } from './trashToast';
@@ -229,6 +229,60 @@ describe('Trash', () => {
       'Restored “Chart” — and its dataset “Orders”, which was in Trash too',
     );
     expect(restoredLine([{ type: 'metric', id: 'm', name: 'MRR' }])).toBe('Restored “MRR”');
+  });
+});
+
+describe('no project yet', () => {
+  const none = (role: string) => ({ '/api/auth/me': { body: { ...ME, user: { ...ME.user, role } } }, 'projects:overview': { body: [] }, 'projects:roles': { body: {} } });
+
+  it('lets someone who may create one do it from the page, with the switcher\'s dialog', async () => {
+    let made = false;
+    const calls = serve({
+      ...none('editor'),
+      'projects:overview': () => ({ body: made ? [row(A, 'Fresh')] : [] }),
+      'projects:create': () => ((made = true), { body: { id: A, name: 'Fresh' } }),
+    });
+    renderApp('/analyses');
+    expect(await screen.findByText('Analyses belong to a project. Create one, or start with sample data to look around.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'New project' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New project' });
+    fireEvent.change(within(dialog).getByLabelText('Project name'), { target: { value: 'Fresh' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'projects:create')?.payload).toEqual({ name: 'Fresh' }));
+    await waitFor(() => expect(switcher().textContent).toContain('Fresh'));
+    expect(screen.queryByRole('heading', { name: 'No project yet' })).toBeNull();
+  });
+
+  it('starts with the sample data: one call, then the project is the current one', async () => {
+    let made = false;
+    const calls = serve({
+      ...none('admin'),
+      'projects:overview': () => ({ body: made ? [row(A, 'My project')] : [] }),
+      'sample:seed': () => ((made = true), { body: { ok: true, projectId: A, analysisId: 'a1' } }),
+    });
+    renderApp('/data');
+    fireEvent.click(await screen.findByRole('button', { name: 'Start with sample data' }));
+    await waitFor(() => expect(calls.filter((c) => c.channel === 'sample:seed')).toHaveLength(1));
+    await waitFor(() => expect(switcher().textContent).toContain('My project'));
+    expect(screen.queryByRole('heading', { name: 'No project yet' })).toBeNull();
+  });
+
+  it('says so when the organization already has a project, and adds nothing', async () => {
+    serve({ ...none('admin'), 'sample:seed': { body: { ok: false, error: 'has_projects' } } });
+    renderApp('/data');
+    fireEvent.click(await screen.findByRole('button', { name: 'Start with sample data' }));
+    expect(await screen.findByText('Your organization already has a project.')).toBeTruthy();
+  });
+
+  it('tells an org viewer to ask for access, with no button', async () => {
+    serve(none('viewer'));
+    for (const path of ['/data', '/visuals', '/dashboards']) {
+      renderApp(path);
+      expect(await screen.findByText('Nothing has been shared with you yet. Ask a project admin for access.')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'New project' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Start with sample data' })).toBeNull();
+      cleanup();
+    }
   });
 });
 

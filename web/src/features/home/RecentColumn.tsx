@@ -13,7 +13,7 @@ import { SkeletonRows } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { shortTime } from '../../app/when';
-import { itemHref, metaText, qualityLabel, TYPE_LABEL } from './homeText';
+import { importPath, itemHref, metaText, qualityLabel, TYPE_LABEL } from './homeText';
 import s from './HomePage.module.css';
 
 const COLLAPSED = 8;
@@ -202,10 +202,10 @@ export function RecentColumn({ projectId, recent }: { projectId: string | undefi
               title="Your work will collect here"
               actions={
                 <>
-                  <Link className={buttonClass('primary')} to="/data">
+                  <Link className={buttonClass('primary')} to={importPath(projectId)}>
                     Bring in some data
                   </Link>
-                  <Link className={buttonClass('ghost')} to="/data">
+                  <Link className={buttonClass('ghost')} to={projectId ? `/connections/${projectId}` : '/connections'}>
                     Browse sources
                   </Link>
                 </>

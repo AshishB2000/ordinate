@@ -69,6 +69,17 @@ function stubServer(replies: Record<string, Reply>, role = 'admin') {
 }
 
 describe('Home', () => {
+  it('sends each Connect shortcut to its own door, in Home\'s project', async () => {
+    stubServer({});
+    renderApp('/');
+    const side = await screen.findByRole('complementary', { name: 'This project' });
+    const href = (name: string) => within(side).getByRole('link', { name }).getAttribute('href');
+    await waitFor(() => expect(href('CSV / Excel')).toBe(`/data/import?project=${P}&source=file`));
+    expect(href('Paste data')).toBe(`/data/import?project=${P}&source=paste`);
+    expect(href('Screenshot')).toBe(`/data/import?project=${P}&source=screenshot`);
+    expect(href('Database')).toBe(`/connections/${P}`);
+  });
+
   it('greets, then fills the hero, Starred, Recent and the side column from the server', async () => {
     stubServer({});
     renderApp('/');
@@ -173,11 +184,14 @@ describe('Home', () => {
   it('designs the empty states: no project, no work, no pins', async () => {
     stubServer({ 'projects:list': [], 'recent:list': [], 'starred:get': [], 'onboarding:status': { show: false } });
     renderApp('/');
-    expect(await screen.findByText('No project yet — bring some data in to begin.')).toBeTruthy();
+    expect(await screen.findByText('No project yet.')).toBeTruthy();
+    // An org admin may create one, right here.
+    expect(await screen.findByRole('button', { name: 'New project' })).toBeTruthy();
     expect(await screen.findByRole('heading', { name: 'Your work will collect here' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Nothing pinned yet' })).toBeTruthy();
     expect(screen.getByText('No datasets yet — connect one below.')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Bring in some data' }).getAttribute('href')).toBe('/data');
+    expect(screen.getByRole('link', { name: 'Bring in some data' }).getAttribute('href')).toBe('/data/import');
+    expect(screen.getByRole('link', { name: 'Browse sources' }).getAttribute('href')).toBe('/connections');
     expect(screen.queryByRole('region', { name: 'Get started' })).toBeNull();
   });
 
