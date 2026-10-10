@@ -455,7 +455,8 @@ export function register() {
       // say "showing the first 200 of 4,812" instead of implying 200 is all.
       const req = { limit: cap, search: typeof search === 'string' ? search : '' };
       if (!col) return { values: [], total: 0 };
-      // A profiled Live dataset answers from its sample (L2.5); an unprofiled one still refuses below.
+      // A Live dataset answers from its profile's sample (L2.5) — or, with no list to give, a typed
+      // refusal saying which case it is (never synced, not sampled, not listed). Never an empty list (D6).
       const live = await liveDistinct(projectId, datasetId, col, req);
       if (live) return live;
 

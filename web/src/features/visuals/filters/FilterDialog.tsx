@@ -14,7 +14,8 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { rpc } from '../../../api/client';
+import { distinctValues } from '../../live/distinct';
+import { liveRefusalOf } from '../../live/refusal';
 import { Button } from '../../../ui/Button';
 import { Checkbox, Switch } from '../../../ui/Choice';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
@@ -54,7 +55,7 @@ function useDistinct(projectId: string, datasetId: string, column: string, limit
   return useQuery({
     queryKey: ['dataset:distinct', projectId, datasetId, column, limit, search],
     // A Live dataset answers from its schema sync's sample (L2.5): `approximate`, with the sample's size.
-    queryFn: async () => (await rpc('dataset:distinct', { projectId, datasetId, column, limit, ...(search ? { search } : {}) })) as { values: string[]; total: number; approximate?: true; sampleRows?: number },
+    queryFn: () => distinctValues({ projectId, datasetId, column, limit, ...(search ? { search } : {}) }),
     enabled,
     placeholderData: (prev) => prev,
   });
@@ -179,7 +180,8 @@ export function FilterDialog({
               {list.isPending ? (
                 <SkeletonRows rows={5} label="Loading values" />
               ) : list.isError ? (
-                <p className={s.empty}>The values could not be loaded: {list.error.message}</p>
+                // A Live column with no list to give says why in the server's own sentence (the Condition tab still filters it).
+                <p className={s.empty}>{liveRefusalOf(list.error) ?? `The values could not be loaded: ${list.error.message}`}</p>
               ) : shown.length === 0 ? (
                 <p className={s.empty}>{search ? 'No values match that search.' : 'This column has no values to filter on.'}</p>
               ) : (

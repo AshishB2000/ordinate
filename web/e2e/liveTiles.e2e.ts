@@ -9,12 +9,16 @@
 //             same figure, "Live · cached …"
 //   scorecard a scorecard row whose Live figure the warehouse refuses (a sum
 //             over a text column) says why in the row, in the server's words
+//   controls  a dropdown over a Live column not synced yet says so (a typed
+//             200 — no console error); Sync schema lists its values; a number
+//             column then says its values are not listed
 //
 //   npm --prefix web run e2e
 
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import type { Page } from 'playwright';
-import { e2e, screens, settled, withLiveDataset } from './fixtures.ts';
+import { e2e, SCREENS, screens, settled, withLiveDataset } from './fixtures.ts';
 
 withLiveDataset();
 
@@ -110,4 +114,64 @@ e2e('live: a scorecard row with no Live figure says why, in the row', async ({ p
   await answered.waitFor();
   assert.equal(await answered.locator('[data-live-refusal]').count(), 0);
   await screens(page, 'live-scorecard-row');
+});
+
+/** Both themes of the page AS IT STANDS (an open panel survives; `screens()` reloads). */
+async function screensInPlace(page: Page, name: string): Promise<void> {
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: path.join(SCREENS, `${name}-${theme}.png`) });
+  }
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+}
+
+// LAST in this file: it syncs the schema, which the tests above find unsynced.
+e2e('live: a dashboard control over a Live column says why it has no values, and Sync schema lists them', async ({ page, server, rpc }) => {
+  const pid = server.sample.projectId;
+  const live = server.sample.live;
+  assert.ok(live, 'the server was seeded with a Live dataset');
+  await page.goto('/');
+  await settled(page);
+  const control = (column: string, label: string, x: number) => ({ id: crypto.randomUUID(), type: 'control', layout: { x, y: 0, w: 3, h: 1 }, control: { kind: 'dropdown', datasetId: live.datasetId, column, label } });
+  const board = await call(page, 'analysis:create', {
+    projectId: pid,
+    name: 'Live controls',
+    sheets: [{ name: 'One', cards: [
+      control('region', 'Region', 0),
+      control('amount', 'Amount', 3),
+      { id: crypto.randomUUID(), type: 'metric', layout: { x: 0, y: 1, w: 6, h: 2 }, metric: { datasetId: live.datasetId, column: 'amount', aggregation: 'sum', label: 'Live total' } },
+    ] }],
+  });
+  assert.ok(board.id, JSON.stringify(board));
+
+  await page.goto(`/analyses/${pid}/${board.id}`);
+  await page.getByRole('heading', { level: 1, name: 'Live controls' }).waitFor();
+  const region = page.getByRole('button', { name: 'Region: not synced yet' });
+  await region.waitFor();
+  await page.getByRole('button', { name: 'Amount: not synced yet' }).waitFor();
+  console.log(`rpc: Live controls open ${rpc.loads.at(-1)?.rpcs ?? 0}`);
+  await region.click();
+  await page.getByText(/has not been synced yet, so there is no list of values/).waitFor();
+  await screensInPlace(page, 'live-control-not-synced');
+
+  // Sync schema (an editor's): the profile lands, the values are refetched, the control is a menu.
+  await page.getByRole('button', { name: 'Sync schema' }).click();
+  const menu = page.getByRole('combobox', { name: 'Region' });
+  await menu.waitFor({ timeout: 30_000 });
+  assert.deepEqual((await menu.locator('option').allTextContents()).sort(), ['All', 'East', 'North', 'South', 'West']);
+  // A number column is never listed: it says so, and offers no sync that would not help.
+  const amount = page.getByRole('button', { name: 'Amount: values not listed' });
+  await amount.waitFor();
+  await amount.click();
+  await page.getByText(/keeps a list only for a text column with up to 50 different values/).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Sync schema' }).count(), 0);
+  await screensInPlace(page, 'live-control-not-listed');
+  await page.keyboard.press('Escape');
+
+  // The menu filters the Live KPI through the warehouse.
+  const kpi = page.getByRole('group', { name: 'Live total card' });
+  const all = await kpi.textContent();
+  await menu.selectOption('North');
+  await page.waitForFunction((before) => document.querySelector('[role="group"][aria-label="Live total card"]')?.textContent !== before, all);
 });

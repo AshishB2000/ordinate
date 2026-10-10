@@ -225,6 +225,8 @@ export interface PlanPage {
   mode: 'all' | 'single';
   bytes: number;
   dropped: Array<{ control: string; options: string[] }>;
+  /** Controls left out of the page's filter bar — a Live column with no list of values — each with why. */
+  unlisted?: Array<{ control: string; reason: string }>;
 }
 
 export interface PublishPlan {
@@ -257,7 +259,7 @@ export async function planPublish(config: PublishConfig, outgoing: Outgoing = po
     const geo = one ? await geoFor(config.projectId, one.geoLevels, one.boundaryIds) : {};
     const combos = planned.plan.keys.length;
     const bytes = fixed + perCombo * combos + Buffer.byteLength(JSON.stringify(geo));
-    pages.push({ kind: 'dashboard', id, name: planned.name, combos, mode: planned.plan.mode, bytes, dropped: planned.plan.dropped });
+    pages.push({ kind: 'dashboard', id, name: planned.name, combos, mode: planned.plan.mode, bytes, dropped: planned.plan.dropped, ...(planned.unlisted.length ? { unlisted: planned.unlisted } : {}) });
     // What removing each control would save: the plan without it.
     planned.specs.forEach((s, i) => {
       const without = planCombos(planned.specs.filter((_, j) => j !== i).map((x) => x.domain), maxCombos).keys.length;

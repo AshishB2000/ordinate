@@ -64,7 +64,7 @@ export type SyncReply =
   | Fail;
 
 /** What a sync or a cache change moves on screen. */
-const AFTER = ['dataset:liveSchema', 'dataset:columns', 'dataset:list', 'dataset:source', 'lineage:get'] as const;
+const AFTER = ['dataset:liveSchema', 'dataset:columns', 'dataset:list', 'dataset:source', 'lineage:get', 'dataset:distinct'] as const;
 
 function useLiveWrite<R>(call: () => Promise<R>) {
   const client = useQueryClient();
