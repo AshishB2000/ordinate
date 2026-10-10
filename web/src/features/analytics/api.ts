@@ -202,6 +202,8 @@ export interface DriversResult {
     };
   } | null;
   headline: string;
+  /** A chart point's header, written by the server with its figures (src/analysis/driverPoint.ts). */
+  sentence?: string;
   caption: string;
   path: Array<{ column: string; value: string; label: string }>;
   alert: unknown;
@@ -209,9 +211,12 @@ export interface DriversResult {
 }
 export type DriversReply = DriversResult | Fail;
 
+/** The cache key of one drivers question — a door that already holds its answer seeds it (./explain/api.ts). */
+export const driversKey = (projectId: string, request: DriversRequest | null) => ['drivers:explain', projectId, request] as const;
+
 export function useDrivers(projectId: string, request: DriversRequest | null) {
   return useQuery({
-    queryKey: ['drivers:explain', projectId, request],
+    queryKey: driversKey(projectId, request),
     queryFn: request ? () => call<DriversResult>(rpc('drivers:explain', { projectId, request }), 'Could not explain the change.') : skipToken,
     staleTime: Infinity,
     retry: false,

@@ -466,7 +466,7 @@ export function registerHandlers(): void {
   (require('../ipc/pipelines') as typeof import('../ipc/pipelines')).register({ headless: true });
 
   // Analytics workbenches A (T2.10): statistics, key drivers, scenarios, segments.
-  for (const mod of ['../ipc/stats', '../ipc/drivers', '../ipc/scenarios', '../ipc/segments']) {
+  for (const mod of ['../ipc/stats', '../ipc/drivers', '../ipc/driversPoint', '../ipc/scenarios', '../ipc/segments']) {
     (require(mod) as { register: () => void }).register();
   }
 

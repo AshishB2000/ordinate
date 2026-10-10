@@ -196,6 +196,7 @@ async function loadWarehouseTable(table: string): Promise<void> {
     ['answer: rerun', 'answer:rerun', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
     // drivers, segments, scenarios
     ['key drivers', 'drivers:explain', { projectId: P, request: { datasetId: d, metric: { column: 'sales', aggregation: 'sum' }, compare: { mode: 'latest', column: 'day' }, dimension: 'region' } }],
+    ['key drivers from a chart point', 'drivers:explainPoint', { projectId: P, datasetId: d, encoding: { category: 'day', values: [{ column: 'sales', aggregation: 'sum' }], grain: 'month' }, point: {} }],
     ['segments: features', 'segments:features', { projectId: P, datasetId: d }],
     ['segments: fit', 'segments:fit', { projectId: P, datasetId: d, features: ['sales', 'qty'] }],
     ['segments: RFM', 'segments:rfm', { projectId: P, datasetId: d, spec: { id: 'customer', date: 'day', amount: 'sales' } }],

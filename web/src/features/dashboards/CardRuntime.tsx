@@ -15,6 +15,10 @@ import { clickFilterOn } from '../analyses/editor/filters';
 import { mergeFilters, VisualTileBody } from '../analyses/VisualTile';
 import { AlertDialog, subjectOf, type AlertSubject } from './AlertDialog';
 import { DrillPanel, type DrillTarget } from '../visuals/drill/DrillPanel';
+import { VIZ_RENDERER, type VizId } from '../../charts/vizLabels';
+import { ExplainPanel, type ExplainTarget } from '../analytics/explain/ExplainPanel';
+import { PointMenu } from '../analytics/explain/PointMenu';
+import type { ChartPoint } from '../analytics/explain/pointAt';
 import { useAlerts, useComments } from './api';
 import { pinsOn } from './CommentsPanel';
 import { presentRow } from './DashboardChrome';
@@ -33,6 +37,25 @@ export function drillTarget(ed: EditorApi, cardId: string, def: VisualDef, mark:
     mark,
   };
 }
+
+/** What "Explain this change" asks about: the SAME definition, filters and view state that drew the tile, and the point (none: the chart's latest period). */
+export function explainTarget(ed: EditorApi, cardId: string, def: VisualDef, point: Partial<ChartPoint>): ExplainTarget {
+  return {
+    name: def.name || 'Visual',
+    projectId: ed.projectId,
+    datasetId: def.datasetId,
+    encoding: def.encoding,
+    filters: mergeFilters(tileFilters(ed, cardId), def.filters),
+    params: ed.params,
+    ...(ed.view.asOf ? { asOf: ed.view.asOf } : {}),
+    ...(ed.view.currency ? { currency: ed.view.currency } : {}),
+    point,
+    readOnly: ed.readOnly,
+  };
+}
+
+/** A Chart.js visual that is not itself a drivers tile: the only kind with a point to explain (the server says whether its axis is time). */
+const explainable = (def: VisualDef): boolean => !VIZ_RENDERER[def.chartType as VizId] && !def.encoding.drivers;
 
 /** The pivot as it may LEAVE the app: the server's grid through the Share policy's export path. */
 /** What a tile reads: the sheet's filters (less the click-filters it made itself), then a filter_target narrowing on this tile. */
@@ -63,6 +86,7 @@ export function useCardRuntime(ed: EditorApi, gridRef: RefObject<HTMLDivElement 
   const run = useRunAction(ed);
   const [alertFor, setAlertFor] = useState<AlertSubject | null>(null);
   const [rowsDrill, setRowsDrill] = useState<DrillTarget | null>(null);
+  const [explain, setExplain] = useState<ExplainTarget | null>(null);
   const [rowPx, setRowPx] = useState<number | null>(null);
   const [rows, setRows] = useState(0);
   const presenting = ed.view.presenting;
@@ -118,6 +142,8 @@ export function useCardRuntime(ed: EditorApi, gridRef: RefObject<HTMLDivElement 
     }
     // The rows behind the whole visual — the drill a click on a mark narrows (dashGrid.ts, the chart's ⋯).
     if (def && !def.chartType.startsWith('map_')) out.push({ label: 'Show the rows', icon: 'table', onSelect: () => setRowsDrill(drillTarget(ed, card.id, def, null)) });
+    // The keyboard's and touch's way to "Explain this change" (a right-click on a point is neither): the period is picked in the panel.
+    if (def && explainable(def)) out.push({ label: 'Explain a change…', icon: 'activity', onSelect: () => setExplain(explainTarget(ed, card.id, def, {})) });
     out.push(...actionMenu(card, def, run));
     return out;
   };
@@ -132,6 +158,7 @@ export function useCardRuntime(ed: EditorApi, gridRef: RefObject<HTMLDivElement 
     <>
       {alertFor && <AlertDialog projectId={ed.projectId} subject={alertFor} onClose={() => setAlertFor(null)} />}
       {rowsDrill && <DrillPanel target={rowsDrill} onClose={() => setRowsDrill(null)} />}
+      {explain && <ExplainPanel target={explain} onClose={() => setExplain(null)} />}
     </>
   );
   return { menu, gridVars, overlays };
@@ -168,6 +195,14 @@ export function VisualCard({ ed, card, def, asTable, onMark }: { ed: EditorApi; 
   const shown = useMemo(() => (sel === '{}' ? drawn : { ...drawn, overrides: { ...drawn.overrides, markSelection: JSON.parse(sel) as unknown } }), [drawn, sel]);
   // A plain click: the tile's own actions, else click-to-filter, else the rows behind the mark (dashGrid.ts wireDrillClick).
   const [drill, setDrill] = useState<DrillTarget | null>(null);
+  // A right-click on a point of a time-series tile: its context menu, then the panel. Apart from the left click above.
+  const [pointMenu, setPointMenu] = useState<{ x: number; y: number; point: ChartPoint } | null>(null);
+  const [explain, setExplain] = useState<ExplainTarget | null>(null);
+  const pointItems: MenuEntry[] = pointMenu
+    ? [
+        { label: 'Explain this change', icon: 'activity', onSelect: () => setExplain(explainTarget(ed, card.id, def, pointMenu.point)) },
+      ]
+    : [];
   const mark = clicks.length
     ? (v: string | number) => clicks.forEach((a) => run(a, card, def, v))
     : (onMark ?? ((v: string | number, series?: string) => setDrill(drillTarget(ed, card.id, def, { category: v, ...(def.encoding.series && series ? { series } : {}) }))));
@@ -190,7 +225,10 @@ export function VisualCard({ ed, card, def, asTable, onMark }: { ed: EditorApi; 
         }}
         onPinAt={(category, series) => ed.view.openComments({ kind: 'card', id: card.id, point: { label: String(category), ...(series ? { series } : {}) } })}
         onHover={tip ? (category, e) => setHover(category === null ? null : { category, x: e.clientX, y: e.clientY }) : undefined}
+        onMarkMenu={(point, e) => setPointMenu({ x: e.clientX, y: e.clientY, point })}
       />
+      <PointMenu key={pointMenu ? `${pointMenu.x}:${pointMenu.y}` : ''} at={pointMenu} items={pointItems} label="Chart point actions" onClose={() => setPointMenu(null)} />
+      {explain && <ExplainPanel target={explain} onClose={() => setExplain(null)} />}
       {drill && <DrillPanel target={drill} onClose={() => setDrill(null)} />}
       {tip && hover && <TooltipVisual ed={ed} tip={ed.visuals.get(tip.tooltipVisualId as string)} column={def.encoding.category} category={hover.category} at={hover} />}
     </>

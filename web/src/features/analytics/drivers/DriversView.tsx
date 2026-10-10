@@ -125,8 +125,30 @@ function Waterfall({ r, onDrill }: { r: DriversResult; onDrill: ((key: string) =
   );
 }
 
+/** The panel while its answer is on the way — also what another door shows while it asks its own question. */
+export function DriversPending() {
+  return (
+    <div className={s.panel}>
+      <Header title="Explaining the change…" />
+      <Loading />
+    </div>
+  );
+}
+
 /** The answer to one drivers question; the user's next questions (a dimension, a drill, a crumb) are asked here. */
-export function DriversView({ projectId, request }: { projectId: string; request: DriversRequest }) {
+export function DriversView({
+  projectId,
+  request,
+  readOnly,
+  actions,
+}: {
+  projectId: string;
+  request: DriversRequest;
+  /** A viewer's panel: nothing that saves ("Add as a waterfall tile" writes a visual). */
+  readOnly?: boolean;
+  /** More footer actions for the answer on screen (a door's "Open in Analytics"). */
+  actions?: (r: DriversResult) => ReactNode;
+}) {
   // The question on screen: the caller's, then the server's echo of it with the user's next step.
   const [asked, setAsked] = useState<{ base: DriversRequest; next: DriversRequest }>({ base: request, next: request });
   const current = asked.base === request ? asked.next : request;
@@ -137,14 +159,7 @@ export function DriversView({ projectId, request }: { projectId: string; request
     setAsked({ base: request, next });
   };
 
-  if (q.isPending || q.isFetching) {
-    return (
-      <div className={s.panel}>
-        <Header title="Explaining the change…" />
-        <Loading />
-      </div>
-    );
-  }
+  if (q.isPending || q.isFetching) return <DriversPending />;
   const r = q.data;
   if (!r || !r.ok) {
     return (
@@ -175,7 +190,8 @@ export function DriversView({ projectId, request }: { projectId: string; request
 
   return (
     <div className={s.panel}>
-      <Header title={r.headline || r.metric.name}>
+      {/* A chart point's question arrives with its whole sentence ("… fell 18% in Mar 2026 vs Feb 2026 (from … to …)"). */}
+      <Header title={r.sentence || r.headline || r.metric.name}>
         <div className={s.periods}>
           <span className={s.period}>
             <span className={s.periodL}>{r.periods.b}</span>
@@ -284,9 +300,12 @@ export function DriversView({ projectId, request }: { projectId: string; request
           Every figure is computed by Ordinate from your data.
         </span>
         <div className={s.footActs}>
-          <Button icon="layout-dashboard" disabled={!sel} onClick={() => void addTile()}>
-            Add as tile
-          </Button>
+          {actions?.(r)}
+          {!readOnly && (
+            <Button icon="layout-dashboard" disabled={!sel} onClick={() => void addTile()}>
+              Add as a waterfall tile
+            </Button>
+          )}
           <Button icon="sparkles" onClick={ask}>
             Ask the Assistant
           </Button>

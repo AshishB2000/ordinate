@@ -255,6 +255,7 @@ async function partTwo(adminUrl: string): Promise<void> {
       ['stats:dashboards', () => ({ projectId: pid })],
       ['drivers:explain', () => ({ projectId: pid, request: req })],
       ['drivers:addTile', () => ({ projectId: pid, request: { ...req, dimension: 'region' }, name: 'W' })],
+      ['drivers:explainPoint', () => ({ projectId: pid, datasetId: ds, encoding: { category: 'order_date', values: [{ column: 'revenue', aggregation: 'sum' }] }, point: {} })],
       ['scenario:list', () => ({ projectId: pid })],
       ['scenario:get', () => ({ projectId: pid, id: sc })],
       ['scenario:create', () => ({ projectId: pid, input: { name: 'N', baseMetricIds: [], drivers: [] } })],

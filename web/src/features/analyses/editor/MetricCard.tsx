@@ -123,6 +123,7 @@ export function MetricBody({ card }: { card: Card }) {
         <Drawer open wide onOpenChange={(o) => !o && setWhy(false)} title={`Why did ${label} change?`} description="What drove the change against the comparison period">
           <DriversView
             projectId={ed.projectId}
+            readOnly={ed.readOnly}
             request={{
               datasetId: m.datasetId,
               metric: { ...(m.metricId ? { metricId: m.metricId } : {}), column: m.column, aggregation: m.aggregation, ...(m.label ? { label: m.label } : {}) },
