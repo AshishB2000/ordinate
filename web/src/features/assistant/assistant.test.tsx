@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderApp } from '../../test-utils';
 import { setDockOpen } from './dockState';
+import { groupThreads } from './History';
 import { starterPrompts } from './prompts';
 import { provenanceLine } from './Transcript';
 
@@ -72,6 +73,84 @@ describe('starter prompts', () => {
 describe('provenance', () => {
   it('is one footnote line, columns capped at six, the app named as the source', () => {
     expect(provenanceLine({ kind: 'dataset', name: 'Sales', columns: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] })).toBe('dataset: Sales · columns: a, b, c, d, e, f… · stats app-computed');
+  });
+});
+
+describe('history groups', () => {
+  it('splits by the viewer’s calendar day, keeps the server’s order inside a group, drops empty groups', () => {
+    const at = (id: string, d: Date) => ({ id, title: id, updatedAt: d.toISOString(), turnCount: 1 });
+    const now = new Date(2026, 9, 10, 9, 0);
+    const groups = groupThreads(
+      [at('a', new Date(2026, 9, 10, 8, 59)), at('b', new Date(2026, 9, 10, 0, 0)), at('c', new Date(2026, 9, 9, 23, 59)), at('d', new Date(2026, 9, 8, 23, 59)), { id: 'e', title: 'e', updatedAt: '', turnCount: 0 }],
+      now,
+    );
+    expect(groups.map((g) => [g.label, g.threads.map((t) => t.id)])).toEqual([
+      ['Today', ['a', 'b']],
+      ['Yesterday', ['c']],
+      ['Earlier', ['d', 'e']],
+    ]);
+    expect(groupThreads([at('a', now)], now).map((g) => g.label)).toEqual(['Today']);
+  });
+});
+
+/** Seven conversations, newest first — two more than the title's menu shows. */
+const THREADS = ['Revenue by region', 'Churn last month', 'Upload data', 'Top customers', 'Margin outliers', 'Q2 forecast check', 'Refund spikes'].map((title, i) => ({
+  id: `0000000${i}-0000-4000-8000-000000000000`,
+  title,
+  updatedAt: new Date(Date.now() - i * 36 * 3600_000).toISOString(),
+  turnCount: i + 1,
+}));
+
+describe('the dock header', () => {
+  it('the title’s menu offers the five most recent conversations, then History for all of them, searchable', async () => {
+    const calls = serve({ ...base(ADMIN, true), 'copilot:threads': { body: { ok: true, threads: THREADS } } });
+    renderApp('/');
+    const dock = await openDock();
+    fireEvent.keyDown(within(dock).getByRole('button', { name: /^Conversations —/ }), { key: 'Enter' });
+    await screen.findByRole('menuitem', { name: /Revenue by region/ });
+    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Revenue by region1 turn', 'Churn last month2 turns', 'Upload data3 turns', 'Top customers4 turns', 'Margin outliers5 turns', 'All conversations']);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'All conversations' }));
+    const history = await screen.findByRole('dialog', { name: 'Conversation history' });
+    expect(within(history).getAllByRole('button').length).toBe(THREADS.length);
+    expect(within(history).getByText('Today')).toBeTruthy();
+    expect(within(history).getByText('Earlier')).toBeTruthy();
+    fireEvent.change(within(history).getByRole('textbox', { name: 'Search conversations' }), { target: { value: 'refund' } });
+    expect(within(history).getAllByRole('button').map((b) => b.textContent)).toEqual(['Refund spikes7 turns']);
+    fireEvent.change(within(history).getByRole('textbox', { name: 'Search conversations' }), { target: { value: 'zzz' } });
+    expect(within(history).getByText('No conversation matches that search.')).toBeTruthy();
+    fireEvent.change(within(history).getByRole('textbox', { name: 'Search conversations' }), { target: { value: 'refund' } });
+    fireEvent.click(within(history).getByRole('button', { name: /Refund spikes/ }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'copilot:history' && (c.payload as { threadId?: string }).threadId === THREADS[6].id)).toBe(true));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Conversation history' })).toBeNull());
+  });
+
+  it('the clock opens History on its own; the ⋯ menu carries the org switch and Admin → AI for an admin', async () => {
+    const calls = serve({ ...base(ADMIN, true), 'copilot:threads': { body: { ok: true, threads: THREADS.slice(0, 2) } }, 'copilot:setEnabled': { body: null } });
+    renderApp('/');
+    const dock = await openDock();
+    expect(within(dock).queryByText(/Assistant: On/)).toBeNull(); // the pill is gone from the header
+    fireEvent.click(within(dock).getByRole('button', { name: 'Conversation history' }));
+    const history = await screen.findByRole('dialog', { name: 'Conversation history' });
+    await within(history).findByRole('button', { name: /Churn last month/ });
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Conversation history' })).toBeNull());
+    expect(screen.getByRole('complementary', { name: 'Assistant' })).toBeTruthy(); // Escape closed History, not the dock
+
+    await within(dock).findByText('Powered by Claude Sonnet 4.6'); // ai:status is in: the switch is offered
+    fireEvent.keyDown(within(dock).getByRole('button', { name: 'More' }), { key: 'Enter' });
+    expect((await screen.findAllByRole('menuitem')).map((m) => m.textContent)).toEqual(['Copy conversation', 'Turn the Assistant off', 'AI models']);
+    expect(screen.getByRole('menuitem', { name: 'Copy conversation' }).getAttribute('aria-disabled')).toBe('true'); // nothing to copy yet
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Turn the Assistant off' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'copilot:setEnabled')?.payload).toEqual({ enabled: false }));
+  });
+
+  it('a member’s ⋯ menu has no org switch and no way to Admin', async () => {
+    serve(base(VIEWER, true));
+    renderApp('/');
+    const dock = await openDock();
+    await within(dock).findByTitle('Model: Claude Sonnet 4.6 · Default');
+    fireEvent.keyDown(within(dock).getByRole('button', { name: 'More' }), { key: 'Enter' });
+    expect((await screen.findAllByRole('menuitem')).map((m) => m.textContent)).toEqual(['Copy conversation']);
   });
 });
 

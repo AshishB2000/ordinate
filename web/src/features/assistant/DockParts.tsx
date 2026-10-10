@@ -1,16 +1,17 @@
 // The dock's chrome around the conversation: the top bar's toggle, the
-// header (thread switcher, on/off pill, new, close) — dock.ts's header,
-// ported — and the model picker under the composer. Which models there are is the org admin's (Admin → AI); which
+// header's thread switcher and ⋯ menu (new, History and close sit beside them
+// in Dock.tsx) and the model picker under the composer. Which models there are is the org admin's (Admin → AI); which
 // one answers is each member's own pick.
 
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router';
 import { IconButton } from '../../ui/Button';
 import { Icon } from '../../ui/icons/Icon';
 import { Menu, type MenuEntry } from '../../ui/Menu';
 import { Select } from '../../ui/Select';
 import { toast } from '../../ui/Toast';
-import { listThreads, mineModel, PROVIDER_LABEL, setAssistantEnabled, setMyModel, type AiModel, type AiStatus, type Provider, type ThreadSummary } from './api';
+import { mineModel, PROVIDER_LABEL, setAssistantEnabled, setMyModel, threadTitle, turnsLabel, useThreads, type AiModel, type AiStatus, type Provider, type Turn } from './api';
 
 const PROVIDER_ORDER: readonly Provider[] = ['anthropic', 'openai', 'gemini', 'gateway'];
 import { setDockOpen, useDockOpen } from './dockState';
@@ -56,31 +57,37 @@ export function DockToggle() {
   );
 }
 
-/** The header's active-conversation title; opens the project's conversations to switch to. */
-export function ThreadMenu({ projectId, threadId, title, onOpen }: { projectId: string | null; threadId: string; title: string; onOpen: (id: string) => void }) {
-  const [threads, setThreads] = useState<ThreadSummary[] | null>(null);
-  const items: MenuEntry[] =
-    threads === null
-      ? [{ label: 'Loading conversations…', disabled: true, onSelect: () => {} }]
-      : threads.length === 0
-        ? [{ label: 'No past conversations yet — ask something below', disabled: true, onSelect: () => {} }]
-        : threads.map((t) => ({
-            label: t.title || 'Conversation',
-            icon: t.id === threadId ? 'check' : undefined,
-            shortcut: t.turnCount === 1 ? '1 turn' : `${t.turnCount} turns`,
-            onSelect: () => onOpen(t.id),
-          }));
+/** How many conversations the title's menu offers before handing over to History. */
+const RECENT = 5;
+
+/** The header's active-conversation title; opens the most recent conversations to switch to, and History for the rest. */
+export function ThreadMenu({ projectId, threadId, title, onOpen, onAll }: { projectId: string | null; threadId: string; title: string; onOpen: (id: string) => void; onAll: () => void }) {
+  const [open, setOpen] = useState(false);
+  const threads = useThreads(projectId, open);
+  const list = threads.data;
+  const note = (label: string): MenuEntry[] => [{ label, disabled: true, onSelect: () => {} }];
+  const items: MenuEntry[] = !list
+    ? note(threads.isError ? 'Conversations could not load' : 'Loading conversations…')
+    : list.length === 0
+      ? note('No past conversations yet — ask something below')
+      : [
+          ...list.slice(0, RECENT).map(
+            (t): MenuEntry => ({
+              label: threadTitle(t),
+              icon: t.id === threadId ? 'check' : undefined,
+              shortcut: turnsLabel(t),
+              onSelect: () => onOpen(t.id),
+            }),
+          ),
+          ...(list.length > RECENT ? ([{ kind: 'separator' }, { label: 'All conversations', icon: 'history', onSelect: onAll }] satisfies MenuEntry[]) : []),
+        ];
   return (
     <Menu
       label="Conversations"
-      onOpenChange={(o) => {
-        if (!o || !projectId) return;
-        setThreads(null);
-        void listThreads(projectId).then(setThreads, () => setThreads([]));
-      }}
+      open={open}
+      onOpenChange={setOpen}
       trigger={
         <button type="button" className={s.threadTitle} aria-label={`Conversations — ${title}`} disabled={!projectId}>
-          <Icon name="message-square" />
           <span className={s.threadText}>{title}</span>
           <Icon name="chevron-down" />
         </button>
@@ -90,28 +97,50 @@ export function ThreadMenu({ projectId, threadId, title, onOpen }: { projectId: 
   );
 }
 
-/** Assistant: On / Off — the org's switch, an admin's to flip. Not shown until a model is set up (the dock says why). */
-export function AiPill({ status, isAdmin }: { status: AiStatus | undefined; isAdmin: boolean }) {
+/** One conversation as plain text, for the clipboard: who said what, in order. */
+export function transcriptText(turns: readonly Turn[]): string {
+  return turns.map((t) => `${t.role === 'user' ? 'You' : 'Assistant'}: ${t.text}`).join('\n\n');
+}
+
+/**
+ * The header's ⋯: what is done to the conversation or the Assistant as a whole.
+ * The org's on/off switch and the way to Admin → AI are an admin's, so a member
+ * sees neither; the switch waits for a model to be set up (the dock says why).
+ */
+export function DockMenu({ status, isAdmin, turns }: { status: AiStatus | undefined; isAdmin: boolean; turns: readonly Turn[] }) {
   const qc = useQueryClient();
-  if (!status?.ready) return null;
-  const on = status.copilotEnabled;
-  return (
-    <button
-      type="button"
-      className={on ? s.pill : `${s.pill} ${s.pillOff}`}
-      aria-pressed={on}
-      disabled={!isAdmin}
-      title={isAdmin ? (on ? 'Turn the Assistant off' : 'Turn the Assistant on') : 'An org admin turns the Assistant on or off'}
-      onClick={() => {
-        void setAssistantEnabled(!on).then(
-          () => qc.invalidateQueries({ queryKey: ['ai:status'] }),
-          () => toast('Could not change the Assistant setting.', { kind: 'error' }),
+  const navigate = useNavigate();
+  const on = status?.copilotEnabled !== false;
+  const items: MenuEntry[] = [
+    {
+      label: 'Copy conversation',
+      icon: 'copy',
+      disabled: turns.length === 0,
+      onSelect: () => {
+        navigator.clipboard.writeText(transcriptText(turns)).then(
+          () => toast('Conversation copied.', { kind: 'success' }),
+          () => toast('Copy failed — select the text and copy it instead.', { kind: 'error' }),
         );
-      }}
-    >
-      {on ? 'Assistant: On' : 'Assistant: Off'}
-    </button>
-  );
+      },
+    },
+  ];
+  if (isAdmin) {
+    items.push({ kind: 'separator' });
+    if (status?.ready) {
+      items.push({
+        label: on ? 'Turn the Assistant off' : 'Turn the Assistant on',
+        icon: 'zap',
+        onSelect: () => {
+          void setAssistantEnabled(!on).then(
+            () => qc.invalidateQueries({ queryKey: ['ai:status'] }),
+            () => toast('Could not change the Assistant setting.', { kind: 'error' }),
+          );
+        },
+      });
+    }
+    items.push({ label: 'AI models', icon: 'settings', onSelect: () => void navigate('/admin?tab=ai') });
+  }
+  return <Menu label="More" align="end" trigger={<IconButton icon="more-horizontal" size="sm" label="More" />} items={items} />;
 }
 
 /** "Claude Sonnet 4.6 · Default", with the provider named when the list spans more than one. */

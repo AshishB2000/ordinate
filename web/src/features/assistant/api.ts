@@ -122,6 +122,19 @@ export async function listThreads(projectId: string): Promise<ThreadSummary[]> {
   return r.ok && Array.isArray(r.threads) ? r.threads : [];
 }
 
+/** A conversation's row, as the title menu and History both write it. */
+export const threadTitle = (t: ThreadSummary): string => t.title || 'Conversation';
+export const turnsLabel = (t: ThreadSummary): string => (t.turnCount === 1 ? '1 turn' : `${t.turnCount} turns`);
+
+/** The project's conversations, newest-touched first — one list for the header's switcher and History. */
+export function useThreads(projectId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['copilot:threads', projectId],
+    enabled: enabled && !!projectId,
+    queryFn: () => listThreads(projectId as string),
+  });
+}
+
 export async function newThread(projectId: string): Promise<string> {
   const r = (await rpc('copilot:newThread', { projectId })) as { ok: boolean; thread?: { id: string } };
   return r.ok && r.thread ? r.thread.id : '';
