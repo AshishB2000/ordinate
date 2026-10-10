@@ -130,6 +130,12 @@ export interface AlertEvent {
   seen: boolean;
   /** Carried from the rule so the inbox can offer "Open dashboard" without a second read. */
   analysisId?: string;
+  /**
+   * Where the change came from, for a period-over-period rule: the key-drivers
+   * caption computed when the rule fired (ipc/alertDiagnosis). App-computed like
+   * `message`; absent when nothing could be broken down.
+   */
+  diagnosis?: string;
 }
 
 /** Points kept for the inbox sparkline. Twelve is what the row is 96px wide for. */
@@ -309,6 +315,8 @@ export function sanitizeEvent(raw: any): AlertEvent | null {
     seen: raw.seen === true,
   };
   if (raw.analysisId && UUID_RE.test(String(raw.analysisId))) ev.analysisId = String(raw.analysisId);
+  const diagnosis = str(raw.diagnosis, 400);
+  if (diagnosis) ev.diagnosis = diagnosis;
   return ev;
 }
 

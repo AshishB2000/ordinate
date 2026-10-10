@@ -170,6 +170,7 @@ function EventRow({ e, rule, projectId, onClose }: { e: AlertEvent; rule?: Alert
         <p className={s.eventMsg}>{e.message}</p>
         <Spark values={rule?.history} />
       </div>
+      {e.diagnosis && <p className={s.eventWhy}>{e.diagnosis}</p>}
       <div className={s.eventActions}>
         {e.analysisId && (
           <Link className={s.linkBtn} to={`/analyses/${projectId}/${e.analysisId}`} onClick={onClose}>

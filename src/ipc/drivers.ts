@@ -47,6 +47,7 @@ import {
 } from '../analysis/driverScope';
 import type { DriversSpec, PeriodScopes } from '../analysis/driverScope';
 import * as alertStore from '../analysis/alertStore';
+import type { AlertRule } from '../analysis/alerts';
 import { resolveMetric } from './metrics';
 import { computeCardMetric } from './dashboards';
 import { dateRangeSpan, duringClause, eventWhen, eventsDuring, periodSpan } from '../analysis/events'; // r8:events
@@ -457,7 +458,11 @@ function specFrom(raw: any): { spec: DriversSpec; params: unknown } | null {
 async function specFromAlert(projectId: string, ruleId: string): Promise<DriversSpec | null> {
   const file = await alertStore.load(projectId);
   const rule = file.rules.find((r) => r.id === ruleId);
-  if (!rule) return null;
+  return rule ? specForRule(projectId, rule) : null;
+}
+
+/** EXPORTED for the diagnosis a fired event carries (./alertDiagnosis). */
+export async function specForRule(projectId: string, rule: AlertRule): Promise<DriversSpec | null> {
   const meta = await datasets.getDatasetMeta(projectId, rule.datasetId);
   if (!meta) return null;
   const column = rule.change?.periodColumn || (meta.columns.find((c) => c.type === 'date') || { name: '' }).name;
