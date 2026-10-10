@@ -4,9 +4,9 @@
 // carries the greeting's counts.
 //
 // Changed from the desktop: the visual tiles show the chart type's glyph, not
-// a live thumbnail — the thumbnail engine (vizThumbs) is T2.7's. The Connect
-// shortcuts land on Data until the import and connection flows (T2.4, T2.5)
-// arrive; the screenshot hotkey is gone (no OS capture in a browser).
+// a live thumbnail — the thumbnail engine (vizThumbs) is T2.7's. Each Connect
+// shortcut opens its own door: the import page on that source, or Connections.
+// The screenshot hotkey is gone (no OS capture in a browser).
 
 import { Link } from 'react-router';
 import { useOverview, type HomeOverview } from '../../api/home';
@@ -14,14 +14,15 @@ import type { Project } from '../../api/projects';
 import { Icon, type IconName } from '../../ui/icons/Icon';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
-import { plural, qualityLabel } from './homeText';
+import { importPath, plural, qualityLabel } from './homeText';
 import s from './HomePage.module.css';
 
-const CONNECT: { label: string; icon: IconName }[] = [
-  { label: 'CSV / Excel', icon: 'file-text' },
-  { label: 'Paste data', icon: 'clipboard' },
+/** `source`: the import page's `?source=`; none = the project's Connections. */
+const CONNECT: { label: string; icon: IconName; source?: 'file' | 'paste' | 'screenshot' }[] = [
+  { label: 'CSV / Excel', icon: 'file-text', source: 'file' },
+  { label: 'Paste data', icon: 'clipboard', source: 'paste' },
   { label: 'Database', icon: 'database' },
-  { label: 'Screenshot', icon: 'camera' },
+  { label: 'Screenshot', icon: 'camera', source: 'screenshot' },
 ];
 
 /** A chart id → the closest glyph in the icon set. */
@@ -94,7 +95,7 @@ export function SideColumn({
           <span className={s.quickLabel}>Connect</span>
           <div className={s.quickRow}>
             {CONNECT.map((c) => (
-              <Link key={c.label} className={s.quickBtn} to="/data">
+              <Link key={c.label} className={s.quickBtn} to={c.source ? importPath(project?.id, c.source) : project ? `/connections/${project.id}` : '/connections'}>
                 <Icon name={c.icon} />
                 {c.label}
               </Link>

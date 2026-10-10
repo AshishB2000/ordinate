@@ -22,6 +22,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
+import { useMe } from '../auth/api';
 import { byRecent, useOverview, type ProjectRow } from './api';
 
 const KEY = 'ordinate.project';
@@ -97,6 +98,12 @@ export function useCurrentProject(): CurrentProject {
   const c = useContext(Ctx);
   if (!c) throw new Error('useCurrentProject() outside <ProjectProvider> (the shell provides it)');
   return c;
+}
+
+/** May the caller create a project? An org admin or editor — the rule `projects:create` applies. */
+export function useCanCreateProject(): boolean {
+  const role = useMe().data?.user?.role;
+  return role === 'admin' || role === 'editor';
 }
 
 /** A page whose URL names its project: make it the current one, so the switcher shows it. */

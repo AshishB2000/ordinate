@@ -313,7 +313,7 @@ function Gallery({ projectId }: { projectId: string }) {
 
 export default function AnalysesPage() {
   return (
-    <ProjectGate title="Analyses" why="Dashboards belong to a project.">
+    <ProjectGate title="Analyses" why="Analyses belong to a project.">
       {(projectId) => <Gallery key={projectId} projectId={projectId} />}
     </ProjectGate>
   );

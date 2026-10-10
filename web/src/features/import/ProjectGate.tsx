@@ -4,12 +4,11 @@
 // shell's switcher changes it; this page follows.
 
 import type { ReactNode } from 'react';
-import { Link } from 'react-router';
-import { EmptyState, ErrorState, Page, PageSkeleton } from '../../app/blocks';
-import { buttonClass } from '../../ui/Button';
+import { ErrorState, Page, PageSkeleton } from '../../app/blocks';
 import { useCurrentProject } from '../projects/current';
+import { NoProject } from '../projects/NoProject';
 
-/** Renders `children(projectId)` for the current project; its loading, error and no-project states otherwise. */
+/** Renders `children(projectId)` for the current project; its loading, error and no-project states otherwise. `why`: what a project holds for this page, one sentence. */
 export function ProjectGate({ title, sub, why, children }: { title: string; sub?: string; why: string; children: (projectId: string) => ReactNode }) {
   const { projectId, status, error, refetch } = useCurrentProject();
   if (status === 'pending') return <PageSkeleton />;
@@ -23,17 +22,7 @@ export function ProjectGate({ title, sub, why, children }: { title: string; sub?
   if (!projectId) {
     return (
       <Page title={title} sub={sub}>
-        <EmptyState
-          icon="folder"
-          title="No project yet"
-          actions={
-            <Link className={buttonClass('primary')} to="/">
-              Go to Home
-            </Link>
-          }
-        >
-          {why} Create one from Home, then come back.
-        </EmptyState>
+        <NoProject why={why} />
       </Page>
     );
   }

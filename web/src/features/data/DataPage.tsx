@@ -3,8 +3,9 @@
 // most recently opened) at /data/:projectId.
 
 import { Navigate } from 'react-router';
-import { EmptyState, ErrorState, Page, PageSkeleton } from '../../app/blocks';
+import { ErrorState, Page, PageSkeleton } from '../../app/blocks';
 import { useCurrentProject } from '../projects/current';
+import { NoProject } from '../projects/NoProject';
 
 export default function DataPage() {
   const cur = useCurrentProject();
@@ -19,9 +20,7 @@ export default function DataPage() {
   if (!cur.projectId) {
     return (
       <Page title="Data" sub="Datasets, their catalog, quality rules and relationships — per project.">
-        <EmptyState icon="folder" title="No projects yet">
-          Data lives in a project. Create one from Home, then bring a file in.
-        </EmptyState>
+        <NoProject why="Datasets live in a project." />
       </Page>
     );
   }
