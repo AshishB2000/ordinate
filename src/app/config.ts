@@ -251,6 +251,30 @@ export const MEMORY_MODES: string[] = ['same_as_chat', 'override'];
 let cache: Config | null = null;
 let cacheFile = '';
 
+// A server with a database keeps the document in Postgres, not on this pod's
+// disk (src/server/orgConfig.ts). `stamp` moves when another pod's change
+// arrives, and the parsed copy here is dropped.
+export interface Backing { read(): string | undefined; write(body: string): void; stamp(): number }
+let backing: Backing | null = null;
+let cacheStamp = 0;
+
+export function useBacking(b: Backing | null): void {
+  backing = b;
+  cache = null;
+}
+
+/** The document as it may be stored outside this pod: every key and password blanked. */
+export function storable(cfg: Config): string {
+  const noKey = <T extends { apiKey?: string | null }>(all: Record<string, T> | undefined): Record<string, T> =>
+    Object.fromEntries(Object.entries(all || {}).map(([k, v]) => [k, { ...v, apiKey: null }]));
+  return JSON.stringify({
+    ...cfg,
+    providers: noKey(cfg.providers),
+    byok: cfg.byok ? { ...cfg.byok, providers: noKey(cfg.byok.providers) } : cfg.byok,
+    connectionSecrets: {},
+  });
+}
+
 function configPath(): string {
   return path.join(appPaths.userData(), 'config.json');
 }
@@ -449,6 +473,11 @@ export function persist(cfg: Config): void {
   setCalendar(cfg.formats);
   setFormatPrefs(cfg.formats);
   setLanguage(cfg.language);
+  if (backing) {
+    backing.write(storable(cfg));
+    cacheStamp = backing.stamp();
+    return;
+  }
   // Atomic write (temp sibling → rename), mirroring the BI stores. config.json
   // holds every plaintext API key + connection secret; a crash / full disk mid-
   // write must never leave it truncated (which load() would then read as {} and
@@ -462,14 +491,17 @@ export function persist(cfg: Config): void {
 export function load(): Config {
   let onDisk: any = {}; // ponytail: raw JSON off disk, shape unknown until migrate()
   const p = configPath();
+  const stored = backing ? backing.read() : undefined;
+  cacheStamp = backing ? backing.stamp() : 0;
   try {
-    onDisk = JSON.parse(fs.readFileSync(p, 'utf8'));
+    // No stored document yet: this pod's file, if an earlier version left one (orgConfig imports the same file).
+    onDisk = JSON.parse(stored !== undefined ? stored : fs.readFileSync(p, 'utf8'));
   } catch (err: any) {
     // If the file exists but failed to parse (corruption/truncation), preserve it
     // as config.json.corrupt BEFORE defaults are re-persisted — keys stay
     // recoverable rather than being overwritten on the next save. A plain ENOENT
     // (first run) is not corruption; leave it alone.
-    if (err && err.code !== 'ENOENT') {
+    if (!backing && err && err.code !== 'ENOENT') {
       try { fs.renameSync(p, `${p}.corrupt`); } catch (_) {}
     }
     onDisk = {};
@@ -493,7 +525,7 @@ export function load(): Config {
 }
 
 export function get(): Config {
-  return cache && cacheFile === configPath() ? cache : load();
+  return cache && cacheFile === configPath() && cacheStamp === (backing ? backing.stamp() : 0) ? cache : load();
 }
 
 export function save(partial: any): Config {

@@ -21,6 +21,7 @@ import { QualityDot, SchedulePicker, useDeleteDataset, useRefresh, WatchToggle }
 import { BehindBadge } from './cadence';
 import { FreshOnAskPicker } from './FreshOnAsk';
 import { IncrementalButton } from './Incremental';
+import { useCanEdit } from '../projects/api';
 import { useAdoptProject } from '../projects/current';
 import { RecordDetails } from './Details';
 import { formatNumber, freshness, NOT_REFRESHABLE, rowsText } from './format';
@@ -89,6 +90,8 @@ function Header({ projectId, id, name, rowCount, columnCount, live }: { projectI
   const [graph, setGraph] = useState(false);
   const [goLive, setGoLive] = useState(false);
   const [hooks, setHooks] = useState(false);
+  // Everything here that changes the dataset — its schedule, mode, steps, a refresh, the Trash — is an editor's.
+  const canEdit = useCanEdit(projectId);
   const d = list.data?.find((x) => x.id === id);
   const outcome = refresh.state[id];
   return (
@@ -123,13 +126,13 @@ function Header({ projectId, id, name, rowCount, columnCount, live }: { projectI
                 <BehindBadge behind={d.behindSchedule} />
               </span>
             )}
-            {d && <SchedulePicker projectId={projectId} d={d} />}
+            {canEdit && d && <SchedulePicker projectId={projectId} d={d} />}
             {/* A Live dataset's settings (L2.6): its cache age is its schedule; Refresh now resets the cache. */}
             {live && <CacheAgePicker projectId={projectId} datasetId={id} name={name} maxCacheAgeSec={source.data?.maxCacheAgeSec ?? d?.maxCacheAgeSec} />}
             <LiveSwitch projectId={projectId} datasetId={id} name={name} live={live} canGoLive={!!source.data?.canGoLive} rowCount={rowCount} />
-            {d && <IncrementalButton projectId={projectId} d={d} />}
-            {d && <FreshOnAskPicker projectId={projectId} d={d} />}
-            {d && <WatchToggle projectId={projectId} d={d} />}
+            {canEdit && d && <IncrementalButton projectId={projectId} d={d} />}
+            {canEdit && d && <FreshOnAskPicker projectId={projectId} d={d} />}
+            {canEdit && d && <WatchToggle projectId={projectId} d={d} />}
             {lineage.data && (
               <button type="button" className={s.usedIn} onClick={() => setGraph(true)}>
                 <Icon name="lineage" size={16} />
@@ -139,6 +142,7 @@ function Header({ projectId, id, name, rowCount, columnCount, live }: { projectI
             {live ? (
               <RefreshNow projectId={projectId} datasetId={id} />
             ) : (
+              canEdit &&
               d?.originKind && (
                 <Button size="sm" icon="refresh" loading={outcome?.busy} onClick={() => void refresh.run(id)}>
                   Refresh
@@ -155,7 +159,7 @@ function Header({ projectId, id, name, rowCount, columnCount, live }: { projectI
         </div>
         <div className={s.dsActions}>
           {/* The reversible step pipeline (T2.6): its own page, the rows beside the steps. Off for Live (L2.1). */}
-          {!live && (
+          {canEdit && !live && (
             <Link className={buttonClass('secondary', 'sm')} to={`/data/${projectId}/${id}/prepare`}>
               <Icon name="sliders" />
               <span>Prepare</span>
@@ -168,13 +172,17 @@ function Header({ projectId, id, name, rowCount, columnCount, live }: { projectI
               <span>View query</span>
             </Link>
           )}
-          <Link className={buttonClass('primary', 'sm')} to={`/visuals?project=${projectId}&datasetId=${id}`}>
-            New visual
-          </Link>
-          {/* The dashboard wizard on this dataset, at "Start from" (T2.8; dsExplorer's "New dashboard"). */}
-          <Link className={buttonClass('secondary', 'sm')} to={`/analyses?project=${projectId}&new=1&dataset=${id}`}>
-            New dashboard
-          </Link>
+          {canEdit && (
+            <>
+              <Link className={buttonClass('primary', 'sm')} to={`/visuals?project=${projectId}&datasetId=${id}`}>
+                New visual
+              </Link>
+              {/* The dashboard wizard on this dataset, at "Start from" (T2.8; dsExplorer's "New dashboard"). */}
+              <Link className={buttonClass('secondary', 'sm')} to={`/analyses?project=${projectId}&new=1&dataset=${id}`}>
+                New dashboard
+              </Link>
+            </>
+          )}
           <CommentDoor projectId={projectId} kind="dataset" id={id} />
           <RecordDetails projectId={projectId} kind="dataset" id={id} name={name} trigger={<Button size="sm" icon="info">Details</Button>} />
           <Menu
@@ -184,11 +192,10 @@ function Header({ projectId, id, name, rowCount, columnCount, live }: { projectI
             items={[
               { label: 'Lineage', icon: 'lineage', onSelect: () => setGraph(true) },
               // A URL dbt or Airflow calls to refresh it (live data L0.5): only where there is a source to refresh from.
-              ...(d?.originKind || live ? [{ label: 'Refresh URL…', icon: 'link' as const, onSelect: () => setHooks(true) }] : []),
-              ...(source.data?.canGoLive ? [{ label: 'Switch to Live…', icon: 'zap' as const, onSelect: () => setGoLive(true) }] : []),
+              ...(canEdit && (d?.originKind || live) ? [{ label: 'Refresh URL…', icon: 'link' as const, onSelect: () => setHooks(true) }] : []),
+              ...(canEdit && source.data?.canGoLive ? [{ label: 'Switch to Live…', icon: 'zap' as const, onSelect: () => setGoLive(true) }] : []),
               { label: 'Pipeline history', icon: 'history', onSelect: () => void navigate(`/versions/${projectId}/dataset/${id}`) },
-              { kind: 'separator' },
-              { label: 'Move to Trash', icon: 'trash', danger: true, disabled: !d, onSelect: () => d && remove(d) },
+              ...(canEdit ? [{ kind: 'separator' as const }, { label: 'Move to Trash', icon: 'trash' as const, danger: true, disabled: !d, onSelect: () => d && remove(d) }] : []),
             ]}
           />
         </div>

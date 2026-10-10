@@ -22,6 +22,7 @@ import { Link } from 'react-router';
 import { formatNumber } from '../../../../src/app/format.ts';
 import * as edits from '../../../../src/data/inputTable/edits.ts';
 import { rpc } from '../../api/client';
+import { distinctValues } from '../live/distinct';
 import { EmptyState, ErrorState, Page, PageSkeleton } from '../../app/blocks';
 import { buttonClass } from '../../ui/Button';
 import { DataGrid, type CellFlag, type GridRange } from '../../ui/DataGrid/DataGrid';
@@ -164,8 +165,7 @@ function Editor({ projectId, initial }: { projectId: string; initial: TableView 
   const lists = useQueries({
     queries: lookups.map(({ c }) => ({
       queryKey: ['dataset:distinct', projectId, c.lookup?.datasetId, c.lookup?.column],
-      queryFn: async () =>
-        (await rpc('dataset:distinct', { projectId, datasetId: c.lookup?.datasetId ?? '', column: c.lookup?.column ?? '', limit: 200 })) as { values: string[]; total: number },
+      queryFn: () => distinctValues({ projectId, datasetId: c.lookup?.datasetId ?? '', column: c.lookup?.column ?? '', limit: 200 }),
     })),
   });
   const listId = (col: number) => (cols[col]?.lookup ? `it-lookup-${col}` : undefined);

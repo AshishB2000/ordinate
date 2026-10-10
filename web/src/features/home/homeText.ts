@@ -86,3 +86,11 @@ export function itemHref(it: Pick<RecentItem, 'type' | 'id' | 'projectId'>): str
       return '/data';
   }
 }
+
+/** The import page in `projectId` (the current project when there is none yet), on one source. */
+export function importPath(projectId: string | undefined, source?: string): string {
+  const q = new URLSearchParams();
+  if (projectId) q.set('project', projectId);
+  if (source) q.set('source', source);
+  return q.size ? `/data/import?${q.toString()}` : '/data/import';
+}

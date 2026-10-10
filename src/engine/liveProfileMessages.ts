@@ -42,6 +42,21 @@ export function liveSampleFailed(): string {
   return t('liveProfileMessages.the_columns_were_synced_but_the');
 }
 
+/** A picker asked for the values of a column of a Live dataset no schema sync has profiled yet. */
+export function liveValuesNotSynced(): string {
+  return t('liveProfileMessages.this_live_dataset_has_not_been');
+}
+
+/** …of a column the last sample never measured: no sample was read, or the column is newer than it. */
+export function liveValuesNotSampled(): string {
+  return t('liveProfileMessages.the_last_schema_sync_read_no');
+}
+
+/** …of a column a list is never kept for: a number, a date, or text with more than `limit` (formatted) values. */
+export function liveValuesNotListed(limit: string): string {
+  return t('liveProfileMessages.the_values_of_this_column_are', { limit });
+}
+
 /** A live query limit (the daily limit, or the size cap) refused the sample. */
 export function liveSampleRefused(): string {
   return t('liveProfileMessages.the_columns_were_synced_but_a');

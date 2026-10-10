@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CLIENT_ID, csrfHeaders, rpc, RpcError, upload } from './client';
+import { CLIENT_ID, csrfHeaders, rpc, RpcError, upload, VIEW_ONLY } from './client';
+import { toast } from '../ui/Toast';
 import { stubFetch } from '../test-utils';
 import { decode, encode } from '../../../src/server/wire.ts';
+
+vi.mock('../ui/Toast', () => ({ toast: vi.fn() }));
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 const TOKEN = 'a'.repeat(43);
@@ -112,6 +116,56 @@ describe('CSRF (T6.2)', () => {
       const spy = stubFetch(403, { error });
       await expect(rpc('projects:list')).rejects.toMatchObject({ status: 403, code: error });
       expect(spy).toHaveBeenCalledTimes(1);
+    }
+  });
+});
+
+describe('a refused write is never silent', () => {
+  const P = '11111111-1111-4111-8111-111111111111';
+  const said = () => vi.mocked(toast).mock.calls.filter((c) => c[0] === VIEW_ONLY).length;
+  /** Each test starts well past the last one's toast. */
+  let clock = Date.UTC(2026, 9, 10);
+  const start = () => {
+    vi.useFakeTimers();
+    vi.setSystemTime((clock += 60_000));
+    vi.mocked(toast).mockClear();
+  };
+
+  it('says view-only once for a burst of refused writes, and again later', async () => {
+    start();
+    stubFetch(403, { error: 'forbidden' });
+    await expect(rpc('visual:delete', { projectId: P, id: P })).rejects.toMatchObject({ status: 403, code: 'forbidden' });
+    await expect(rpc('analysis:rename', { projectId: P, id: P, name: 'x' })).rejects.toBeInstanceOf(RpcError);
+    await expect(upload(new Blob(['a']), 'a.csv')).rejects.toBeInstanceOf(RpcError);
+    expect(said()).toBe(1);
+    expect(vi.mocked(toast).mock.calls[0][1]).toEqual({ kind: 'error' });
+    vi.advanceTimersByTime(4001);
+    await expect(rpc('visual:delete', { projectId: P, id: P })).rejects.toBeInstanceOf(RpcError);
+    expect(said()).toBe(2);
+  });
+
+  it('says nothing for a refused READ, an admin-only call, a CSRF refusal or another failure', async () => {
+    start();
+    stubFetch(403, { error: 'forbidden' });
+    await expect(rpc('home:overview', { projectId: P })).rejects.toMatchObject({ code: 'forbidden' }); // read: the screen shows it
+    await expect(rpc('projects:delete', { id: P })).rejects.toMatchObject({ code: 'forbidden' }); // admin: not "become an editor"
+    stubFetch(403, { error: 'csrf' });
+    await expect(rpc('visual:delete', { projectId: P, id: P })).rejects.toMatchObject({ code: 'csrf' });
+    stubFetch(500, { error: 'boom' });
+    await expect(rpc('visual:delete', { projectId: P, id: P })).rejects.toMatchObject({ status: 500 });
+    expect(said()).toBe(0);
+  });
+
+  it('knows a write from the contracts themselves', async () => {
+    const { contracts } = await import('../../../src/api/index.ts');
+    start();
+    stubFetch(403, { error: 'forbidden' });
+    for (const [name, c] of Object.entries(contracts)) {
+      vi.advanceTimersByTime(4001);
+      const before = said();
+      // The payload is never checked on the client; the stubbed server refuses every call.
+      await expect((rpc as (c: string) => Promise<unknown>)(name)).rejects.toBeInstanceOf(RpcError);
+      expect(`${name}: ${said() - before}`).toBe(`${name}: ${c.access === 'write' ? 1 : 0}`);
     }
   });
 });

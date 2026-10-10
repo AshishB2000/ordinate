@@ -4,9 +4,9 @@
 // carries the greeting's counts.
 //
 // Changed from the desktop: the visual tiles show the chart type's glyph, not
-// a live thumbnail — the thumbnail engine (vizThumbs) is T2.7's. The Connect
-// shortcuts land on Data until the import and connection flows (T2.4, T2.5)
-// arrive; the screenshot hotkey is gone (no OS capture in a browser).
+// a live thumbnail — the thumbnail engine (vizThumbs) is T2.7's. Each Connect
+// shortcut opens its own door: the import page on that source, or Connections.
+// The screenshot hotkey is gone (no OS capture in a browser).
 
 import { Link } from 'react-router';
 import { useOverview, type HomeOverview } from '../../api/home';
@@ -14,14 +14,15 @@ import type { Project } from '../../api/projects';
 import { Icon, type IconName } from '../../ui/icons/Icon';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
-import { plural, qualityLabel } from './homeText';
+import { importPath, plural, qualityLabel } from './homeText';
 import s from './HomePage.module.css';
 
-const CONNECT: { label: string; icon: IconName }[] = [
-  { label: 'CSV / Excel', icon: 'file-text' },
-  { label: 'Paste data', icon: 'clipboard' },
+/** `source`: the import page's `?source=`; none = the project's Connections. */
+const CONNECT: { label: string; icon: IconName; source?: 'file' | 'paste' | 'screenshot' }[] = [
+  { label: 'CSV / Excel', icon: 'file-text', source: 'file' },
+  { label: 'Paste data', icon: 'clipboard', source: 'paste' },
   { label: 'Database', icon: 'database' },
-  { label: 'Screenshot', icon: 'camera' },
+  { label: 'Screenshot', icon: 'camera', source: 'screenshot' },
 ];
 
 /** A chart id → the closest glyph in the icon set. */
@@ -36,8 +37,10 @@ function chartIcon(type: string): IconName {
   return 'chart-bar';
 }
 
-function DataList({ data, projectId }: { data: HomeOverview; projectId: string }) {
-  if (!data.datasets.length) return <p className={s.dataEmpty}>No datasets yet — connect one below.</p>;
+const noData = (canEdit: boolean) => <p className={s.dataEmpty}>{canEdit ? 'No datasets yet — connect one below.' : 'No datasets yet.'}</p>;
+
+function DataList({ data, projectId, canEdit }: { data: HomeOverview; projectId: string; canEdit: boolean }) {
+  if (!data.datasets.length) return noData(canEdit);
   return (
     <ul className={s.dataList}>
       {data.datasets.map((d) => {
@@ -62,10 +65,13 @@ function DataList({ data, projectId }: { data: HomeOverview; projectId: string }
 
 export function SideColumn({
   project,
+  canEdit,
   projectsFailed,
   retryProjects,
 }: {
   project: Project | undefined;
+  /** An editor of `project`: the Connect shortcuts are theirs. */
+  canEdit: boolean;
   projectsFailed: boolean;
   retryProjects: () => void;
 }) {
@@ -74,13 +80,13 @@ export function SideColumn({
   if (projectsFailed) {
     body = <ErrorState compact heading={3} title="Your projects could not be loaded" message="Check your connection and try again." onRetry={retryProjects} />;
   } else if (!project) {
-    body = <p className={s.dataEmpty}>No datasets yet — connect one below.</p>;
+    body = noData(canEdit);
   } else if (ov.isPending) {
     body = <SkeletonRows rows={3} label="Loading your data" />;
   } else if (ov.isError) {
     body = <ErrorState compact heading={3} title="Your data could not be loaded" message={ov.error.message} onRetry={() => void ov.refetch()} />;
   } else {
-    body = <DataList data={ov.data} projectId={project.id} />;
+    body = <DataList data={ov.data} projectId={project.id} canEdit={canEdit} />;
   }
   const visuals = ov.data?.visuals ?? [];
   return (
@@ -90,17 +96,19 @@ export function SideColumn({
           Your data
         </h2>
         {body}
-        <div className={s.connect}>
-          <span className={s.quickLabel}>Connect</span>
-          <div className={s.quickRow}>
-            {CONNECT.map((c) => (
-              <Link key={c.label} className={s.quickBtn} to="/data">
-                <Icon name={c.icon} />
-                {c.label}
-              </Link>
-            ))}
+        {canEdit && (
+          <div className={s.connect}>
+            <span className={s.quickLabel}>Connect</span>
+            <div className={s.quickRow}>
+              {CONNECT.map((c) => (
+                <Link key={c.label} className={s.quickBtn} to={c.source ? importPath(project?.id, c.source) : project ? `/connections/${project.id}` : '/connections'}>
+                  <Icon name={c.icon} />
+                  {c.label}
+                </Link>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </section>
       {visuals.length > 0 && (
         <section className={s.card} aria-labelledby="home-viz">

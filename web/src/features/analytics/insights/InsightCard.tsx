@@ -128,7 +128,8 @@ export function InsightCard({
   projectId: string;
   ins: Insight;
   actions: CardAction[];
-  onDismiss: (id: string) => Promise<void>;
+  /** Absent for a viewer: dismissing changes the project. */
+  onDismiss?: (id: string) => Promise<void>;
 }) {
   const chips = chipsOf(ins);
   return (
@@ -138,12 +139,14 @@ export function InsightCard({
         <h3 className={s.cardTitle} title={ins.detail}>
           {ins.title}
         </h3>
-        <IconButton
-          icon="x"
-          size="sm"
-          label="Dismiss this insight"
-          onClick={() => void onDismiss(ins.id).catch((e: unknown) => toast(e instanceof Error ? e.message : 'Could not dismiss the insight.', { kind: 'error' }))}
-        />
+        {onDismiss && (
+          <IconButton
+            icon="x"
+            size="sm"
+            label="Dismiss this insight"
+            onClick={() => void onDismiss(ins.id).catch((e: unknown) => toast(e instanceof Error ? e.message : 'Could not dismiss the insight.', { kind: 'error' }))}
+          />
+        )}
       </header>
       {chips.length > 0 && (
         <div className={s.chips}>

@@ -16,6 +16,12 @@ export type SaveState = 'saved' | 'saving' | 'error';
 export interface EditorApi {
   projectId: string;
   analysisId: string;
+  /**
+   * A viewer's editor: the dashboard reads and responds (controls, parameters,
+   * sheets, drill, Present, comments) and nothing changes it — `edit` and the
+   * selection do nothing, and no authoring tool is drawn.
+   */
+  readOnly: boolean;
   history: History;
   doc: Doc;
   /** One labelled, undoable change. `coalesce`: a keystroke in a field (one step per burst). */

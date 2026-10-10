@@ -15,6 +15,7 @@ import { Icon } from '../../ui/icons/Icon';
 import { SkeletonBlock } from '../../ui/Skeleton';
 import { toast } from '../../ui/Toast';
 import { ProjectGate } from '../import/ProjectGate';
+import { useCanEdit } from '../projects/api';
 import { useAdoptProject } from '../projects/current';
 import { pipelineKey, runPipeline, setNodeSchedule, setPaused, setPolicy, setSchedule, usePipeline, type PipelineView } from './pipelinesApi';
 import { PipelineHead } from './PipelineHead';
@@ -42,6 +43,7 @@ function Pipeline({ projectId }: { projectId: string }) {
   const [running, setRunning] = useState(false);
   const [live, setLive] = useState<Record<string, string> | null>(null);
   const reload = () => void qc.invalidateQueries({ queryKey: pipelineKey(projectId) });
+  const canEdit = useCanEdit(projectId);
 
   // A run in this org (any tab, any pod) pushes its live state; the view is re-read just after.
   useEffect(() => {
@@ -81,6 +83,7 @@ function Pipeline({ projectId }: { projectId: string }) {
   }
 
   const act: DetailActions = {
+    canEdit,
     running,
     run: (id) => void run(id),
     pause: (id, paused) => void save(setPaused(projectId, id, paused), 'Could not save.'),
@@ -145,7 +148,7 @@ function Ready({
 }) {
   return (
     <>
-      <PipelineHead view={view} running={act.running} onRunAll={onRunAll} saveSchedule={saveSchedule} savePolicy={savePolicy} />
+      <PipelineHead view={view} running={act.running} canEdit={act.canEdit} onRunAll={onRunAll} saveSchedule={saveSchedule} savePolicy={savePolicy} />
       {view.nodes.length === 0 ? (
         <div className={s.empty}>
           <div className={s.ghostCols} aria-hidden="true">
@@ -162,10 +165,12 @@ function Ready({
               icon="lineage"
               title="Nothing runs on its own yet"
               actions={
-                <Link className={buttonClass('primary', 'md')} to={`/connections/${projectId}`}>
-                  <Icon name="plug" />
-                  <span>Connect data</span>
-                </Link>
+                act.canEdit && (
+                  <Link className={buttonClass('primary', 'md')} to={`/connections/${projectId}`}>
+                    <Icon name="plug" />
+                    <span>Connect data</span>
+                  </Link>
+                )
               }
             >
               Connect a database or import a file you can refresh. Its refreshes, the SQL datasets built on it, quality checks, alerts, reports and publishes

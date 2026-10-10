@@ -35,6 +35,7 @@ import {
   type SaveMode,
 } from './api';
 import { ConnLogo } from './ConnLogo';
+import { EditorsOnly } from './EditorsOnly';
 import { DetailsRail, type TestState } from './DetailsRail';
 import { Results, type ResultState, type Shown } from './Results';
 import { describeKey, SchemaTree } from './SchemaTree';
@@ -55,6 +56,15 @@ function useSettled(v: string, ms: number): string {
 }
 
 export default function WorkbenchPage() {
+  const { projectId = '' } = useParams();
+  return (
+    <EditorsOnly projectId={projectId}>
+      <Opened />
+    </EditorsOnly>
+  );
+}
+
+function Opened() {
   const { projectId = '', connId = '' } = useParams();
   const conns = useConnections(projectId);
   const catalog = useCatalog();

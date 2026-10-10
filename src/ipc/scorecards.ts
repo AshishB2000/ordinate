@@ -42,6 +42,14 @@ import { resolveMetric, resolveMetricSeries } from './metrics';
 import { vizDataFor } from './visuals';
 import * as reportSpec from '../analysis/reportSpec';
 import * as versions from '../app/versions';
+import { isLiveFigureError, liveCodeOf } from './liveRoute';
+import { isLiveDatasetError, LIVE_DATASET_CODE } from '../data/liveDataset';
+
+/**
+ * Why a Live figure is missing — the fields a handler's `{ok: false, error, code, reason}`
+ * carries, so a row and the detail panel read alike. `error` is a catalog sentence, never warehouse text.
+ */
+export interface FigureRefusal { code: string; error: string; reason?: string }
 
 export interface ScoreRow {
   metricId: string;
@@ -73,6 +81,8 @@ export interface ScoreRow {
   attainmentDisplay: string;
   /** "+4.2%" — the change on the previous period as a percentage; '' when there is none. */
   pctDisplay: string;
+  /** `value` is null because its Live dataset gave no figure. Absent when there is simply no data. */
+  unavailable?: FigureRefusal;
 }
 
 export interface ScoreResult {
@@ -119,10 +129,12 @@ interface Ctx {
   metrics: Map<string, Metric | null>;
   dateCols: Map<string, string | null>;
   memo: Map<string, number | null>;
+  /** Memo key → why that figure is null, for the typed Live failures only. */
+  why: Map<string, FigureRefusal>;
 }
 
 function newCtx(projectId: string): Ctx {
-  return { projectId, metrics: new Map(), dateCols: new Map(), memo: new Map() };
+  return { projectId, metrics: new Map(), dateCols: new Map(), memo: new Map(), why: new Map() };
 }
 
 async function metricOf(ctx: Ctx, id: string): Promise<Metric | null> {
@@ -156,14 +168,29 @@ function periodFilter(column: string, w: PeriodWindow): FilterStep {
   return { type: 'filter', column, op: 'period', period: { preset: 'custom', from: w.from, to: w.to } } as FilterStep;
 }
 
+const figureKey = (metricId: string, col: string | null, w: PeriodWindow | null): string =>
+  `${metricId}|${col && w ? w.from + '|' + w.to : 'all'}`;
+
+/** A typed Live failure as a row carries it; null for any other error (which stays a plain "no figure"). */
+function refusalOf(err: unknown): FigureRefusal | null {
+  if (isLiveFigureError(err)) return { ...liveCodeOf(err), code: err.failure.code, error: err.failure.error };
+  if (isLiveDatasetError(err)) return { code: LIVE_DATASET_CODE, error: err.message };
+  return null;
+}
+
 /** A metric's figure over one window (or all-time when its dataset has no date column). */
 async function figure(ctx: Ctx, metricId: string, w: PeriodWindow | null): Promise<number | null> {
   const m = await metricOf(ctx, metricId);
   if (!m) return null;
   const col = await dateColOf(ctx, m.datasetId);
-  const key = `${metricId}|${col && w ? w.from + '|' + w.to : 'all'}`;
+  const key = figureKey(metricId, col, w);
   if (ctx.memo.has(key)) return ctx.memo.get(key) as number | null;
-  const r = await resolveMetric(ctx.projectId, metricId, { filters: col && w ? [periodFilter(col, w)] : [] }).catch(() => null);
+  const r = await resolveMetric(ctx.projectId, metricId, { filters: col && w ? [periodFilter(col, w)] : [] }).catch((err: unknown) => {
+    // D6: a Live figure the warehouse did not give is said, not shown as an empty period.
+    const why = refusalOf(err);
+    if (why) ctx.why.set(key, why);
+    return null;
+  });
   const v = r && finite(r.value) ? r.value : null;
   ctx.memo.set(key, v);
   return v;
@@ -266,7 +293,8 @@ export async function computeScorecard(projectId: string, sc: Scorecard, offset 
       });
       continue;
     }
-    const dated = !!(await dateColOf(ctx, m.datasetId));
+    const dateCol = await dateColOf(ctx, m.datasetId);
+    const dated = !!dateCol;
     const spark: Array<number | null> = [];
     if (dated) for (const w of windows) spark.push(await figure(ctx, m.id, w));
     const value = dated ? spark[spark.length - 1] ?? null : await figure(ctx, m.id, null);
@@ -289,6 +317,8 @@ export async function computeScorecard(projectId: string, sc: Scorecard, offset 
       attainmentDisplay: attainmentText(attainment), pctDisplay: pctText(change.pct),
     };
     if (!dated) row.undated = true;
+    const why = value === null ? ctx.why.get(figureKey(m.id, dateCol, dated ? windows[windows.length - 1] ?? null : null)) : undefined;
+    if (why) row.unavailable = why;
     if (targetName) row.targetName = targetName;
     if (def.owner) row.owner = def.owner;
     if (def.group) row.group = def.group;

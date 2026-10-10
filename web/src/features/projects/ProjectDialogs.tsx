@@ -3,6 +3,7 @@
 // because nothing brings a deleted project back (no Trash for a whole one).
 
 import { useState, type FormEvent } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
 import { Button } from '../../ui/Button';
 import { Dialog, DialogClose } from '../../ui/Dialog';
@@ -64,6 +65,26 @@ export function NameDialog({
         />
       </form>
     </Dialog>
+  );
+}
+
+/** New project: the ONE create dialog — the switcher's, and every "no project yet" state's. */
+export function NewProjectDialog({ onCreated, onClose }: { onCreated: (id: string) => void; onClose: () => void }) {
+  const client = useQueryClient();
+  return (
+    <NameDialog
+      title="New project"
+      confirm="Create"
+      initial=""
+      onClose={onClose}
+      run={async (n) => {
+        const made = (await rpc('projects:create', { name: n || 'Untitled project' })) as { id: string; name: string } | null;
+        if (!made?.id) throw new Error('the server did not create it');
+        for (const key of ['projects:overview', 'projects:roles', 'projects:list']) void client.invalidateQueries({ queryKey: [key] });
+        onCreated(made.id);
+        toast(`Created “${made.name}”.`, { kind: 'success' });
+      }}
+    />
   );
 }
 

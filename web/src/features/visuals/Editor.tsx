@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { DatasetSummary } from '../../api/datasets';
+import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
 import { Select } from '../../ui/Select';
 import { toast } from '../../ui/Toast';
@@ -109,9 +110,13 @@ export function Editor({ projectId, datasets, columns, related, initial }: {
               History
             </Button>
           )}
-          <Button variant="primary" onClick={trySave}>
-            Save visual
-          </Button>
+          {b.canEdit ? (
+            <Button variant="primary" onClick={trySave}>
+              Save visual
+            </Button>
+          ) : (
+            <Badge icon="eye">View only</Badge>
+          )}
         </div>
       </header>
 

@@ -24,6 +24,25 @@
   max-width: 420px;
 }
 
+/* The same reason inside a table row: one small line that wraps, the Live mark before it. */
+.refusalLine {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  max-width: 46ch;
+  margin-top: 2px;
+  font-size: var(--t-11);
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--muted);
+  white-space: normal;
+}
+.refusalLine > svg {
+  flex: 0 0 auto;
+  align-self: center;
+  color: var(--accent);
+}
+
 /* A note above row-reading tools when the dataset picked is Live. */
 .banner {
   display: flex;

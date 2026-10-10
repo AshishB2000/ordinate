@@ -8,8 +8,30 @@
 import type { z } from 'zod';
 import type { Channel, contracts } from '../../../src/api/index.ts';
 import { decode, encode } from '../../../src/server/wire.ts';
+import { toast } from '../ui/Toast';
 
 export type { Channel };
+
+/** Every `access: 'write'` channel, injected by vite.config.ts from the contracts. */
+declare const __WRITE_CHANNELS__: readonly string[];
+const WRITES: ReadonlySet<string> = new Set(__WRITE_CHANNELS__);
+
+export const VIEW_ONLY = 'You have view-only access to this project. Ask a project admin to make you an editor.';
+const VIEW_ONLY_QUIET_MS = 4000; // one toast's life (ui/Toast): a burst of refusals says it once
+let viewOnlyAt = -Infinity;
+
+/**
+ * The safety net under every screen: a WRITE the server refused (403
+ * `forbidden`) is never silent. Screens hide what a viewer cannot use
+ * (`useCan`); this catches the control one of them forgot.
+ */
+function refusedWrite(err: RpcError): void {
+  if (err.status !== 403 || err.code !== 'forbidden') return;
+  const now = Date.now();
+  if (now - viewOnlyAt < VIEW_ONLY_QUIET_MS) return;
+  viewOnlyAt = now;
+  toast(VIEW_ONLY, { kind: 'error' });
+}
 
 /** The payload a channel's contract accepts. */
 export type RpcInput<C extends Channel> = z.input<(typeof contracts)[C]['input']>;
@@ -125,7 +147,11 @@ export async function rpc<C extends Channel>(channel: C, ...args: RpcArgs<C>): P
   }
   const text = await res.text();
   if (res.status === 401) toSignIn();
-  if (!res.ok) throw toError(res.status, res.statusText, text);
+  if (!res.ok) {
+    const err = toError(res.status, res.statusText, text);
+    if (WRITES.has(channel)) refusedWrite(err);
+    throw err;
+  }
   return decode(text);
 }
 
@@ -159,6 +185,10 @@ export async function upload(file: Blob, name: string): Promise<Uploaded> {
     const e = toError(res.status, res.statusText, text);
     throw new RpcError(413, e.code, typeof maxMb === 'number' ? `That file is over the ${maxMb} MB upload limit.` : 'That file is over the upload limit.');
   }
-  if (!res.ok) throw toError(res.status, res.statusText, text);
+  if (!res.ok) {
+    const err = toError(res.status, res.statusText, text);
+    refusedWrite(err); // an upload is a write
+    throw err;
+  }
   return JSON.parse(text) as Uploaded; // the server's own reply shape (src/server/files.ts)
 }

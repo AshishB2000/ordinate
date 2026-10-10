@@ -25,6 +25,7 @@ import { useTags, type TagIndex } from '../data/api';
 import { LineageDrawer } from '../data/LineageDrawer';
 import { TagChips, TagFilterBar, tagsOf, useActiveTag } from '../data/tags';
 import { ProjectGate } from '../import/ProjectGate';
+import { useCanEdit } from '../projects/api';
 import { toastMovedToTrash } from '../projects/trashToast';
 import { failure, useGallery, type GalleryItem } from './api';
 import { DraftFlow } from './DraftReview';
@@ -65,8 +66,9 @@ function Preview({ projectId, item }: { projectId: string; item: GalleryItem }) 
 /** A dashboard's catalog ref (src/app/catalog.ts: the record kind is `analysis`). */
 const refOf = (item: GalleryItem) => `analysis:${item.id}`;
 
-function Card({ projectId, item, tags, onRename, onDelete, onLineage }: {
+function Card({ projectId, item, tags, onRename, onDelete, onLineage, canEdit }: {
   projectId: string;
+  canEdit: boolean;
   item: GalleryItem;
   tags: TagIndex | undefined;
   onRename: () => void;
@@ -93,11 +95,10 @@ function Card({ projectId, item, tags, onRename, onDelete, onLineage }: {
           trigger={<IconButton icon="more-horizontal" label="Dashboard options" size="sm" />}
           items={[
             { label: 'Open', icon: 'layout-dashboard', onSelect: () => void navigate(open) },
-            { label: 'Rename', icon: 'pencil', onSelect: onRename },
+            ...(canEdit ? [{ label: 'Rename', icon: 'pencil' as const, onSelect: onRename }] : []),
             { label: 'History', icon: 'history', onSelect: () => void navigate(`/versions/${projectId}/dashboard/${item.id}`) },
             { label: 'Lineage', icon: 'lineage', onSelect: onLineage },
-            { kind: 'separator' },
-            { label: 'Delete', icon: 'trash', danger: true, onSelect: onDelete },
+            ...(canEdit ? [{ kind: 'separator' as const }, { label: 'Delete', icon: 'trash' as const, danger: true, onSelect: onDelete }] : []),
           ]}
         />
       </span>
@@ -112,6 +113,8 @@ function Gallery({ projectId }: { projectId: string }) {
   const [tag, setTag] = useActiveTag();
   const key = useAiStatus();
   const client = useQueryClient();
+  // Creating, renaming and deleting a dashboard are an editor's; a viewer opens and reads.
+  const canEdit = useCanEdit(projectId);
   const [params, setParams] = useSearchParams();
   // `?new=1[&dataset=<id>]` opens the wizard — the palette's "New dashboard" and a dataset page's (anCreateWizard).
   const [wizard, setWizard] = useState<{ datasetId?: string } | null>(() => (params.get('new') ? { datasetId: params.get('dataset') ?? undefined } : null));
@@ -167,12 +170,16 @@ function Gallery({ projectId }: { projectId: string }) {
         <Icon name="target" />
         <span>Metrics</span>
       </Link>
-      <Button icon="sparkles" onClick={() => setDrafting(true)} disabled={!aiReady} title={aiReady ? undefined : aiWhy}>
-        Draft with the Assistant
-      </Button>
-      <Button variant="primary" icon="plus" onClick={() => setWizard({})}>
-        Create dashboard
-      </Button>
+      {canEdit && (
+        <>
+          <Button icon="sparkles" onClick={() => setDrafting(true)} disabled={!aiReady} title={aiReady ? undefined : aiWhy}>
+            Draft with the Assistant
+          </Button>
+          <Button variant="primary" icon="plus" onClick={() => setWizard({})}>
+            Create dashboard
+          </Button>
+        </>
+      )}
     </div>
   );
 
@@ -191,6 +198,12 @@ function Gallery({ projectId }: { projectId: string }) {
     );
   } else if (q.isError) {
     body = <ErrorState title="Dashboards could not be loaded" message={q.error.message} onRetry={() => void q.refetch()} />;
+  } else if (count === 0 && !canEdit) {
+    body = (
+      <EmptyState icon="layout-dashboard" title="No dashboards yet">
+        An editor of this project can build dashboards over its datasets. You have view-only access.
+      </EmptyState>
+    );
   } else if (count === 0) {
     const sets = (datasets.data ?? []).slice(0, CHIP_MAX);
     body = (
@@ -257,6 +270,7 @@ function Gallery({ projectId }: { projectId: string }) {
           <Card
             key={item.id}
             projectId={projectId}
+            canEdit={canEdit}
             item={item}
             tags={tags.data}
             onLineage={() => setLineage(item)}
@@ -279,7 +293,7 @@ function Gallery({ projectId }: { projectId: string }) {
         {actions}
       </div>
       {body}
-      {wizard && <NewWizard projectId={projectId} datasetId={wizard.datasetId} initialStep={wizard.datasetId ? 2 : 1} onClose={() => setWizard(null)} />}
+      {wizard && canEdit && <NewWizard projectId={projectId} datasetId={wizard.datasetId} initialStep={wizard.datasetId ? 2 : 1} onClose={() => setWizard(null)} />}
       {lineage && <LineageDrawer projectId={projectId} type="dashboard" id={lineage.id} name={lineage.name || 'Untitled dashboard'} onClose={() => setLineage(null)} />}
       {drafting && <DraftFlow projectId={projectId} onClose={() => setDrafting(false)} />}
       <Dialog
@@ -313,7 +327,7 @@ function Gallery({ projectId }: { projectId: string }) {
 
 export default function AnalysesPage() {
   return (
-    <ProjectGate title="Analyses" why="Dashboards belong to a project.">
+    <ProjectGate title="Analyses" why="Analyses belong to a project.">
       {(projectId) => <Gallery key={projectId} projectId={projectId} />}
     </ProjectGate>
   );

@@ -50,6 +50,7 @@ function serve(connectorId: string, estimate: Reply) {
   const routes: Record<string, Reply> = {
     '/api/auth/me': { body: ME },
     'projects:list': { body: [{ id: PID, name: 'Sales', createdAt: '', updatedAt: '' }] },
+    'projects:roles': { body: { [PID]: 'editor' } },
     'connectors:catalog': { body: [BQ, PG] },
     'connectors:logos': { body: {} },
     'connections:list': { body: [conn(connectorId)] },

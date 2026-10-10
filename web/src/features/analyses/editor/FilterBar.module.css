@@ -75,6 +75,23 @@
   white-space: nowrap;
   cursor: pointer;
 }
+/* A Live column with no list of values: a control's own box, the Live mark, and which case it is. */
+.noList {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  color: var(--muted);
+}
+.noList > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.why {
+  margin: 0;
+  font-size: var(--t-12);
+  line-height: 1.4;
+  color: var(--text);
+}
 .multi {
   display: flex;
   flex-direction: column;

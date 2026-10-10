@@ -17,6 +17,8 @@ import { useAiStatus } from '../assistant/api';
 import { AiNotReady } from '../assistant/AiNotReady';
 import { pickDockProject, setDockOpen } from '../assistant/dockState';
 import { useVisualsProject } from './project';
+import { useCanEdit } from '../projects/api';
+import { NoProject } from '../projects/NoProject';
 import { toastMovedToTrash } from '../projects/trashToast';
 import { deleteVisual, duplicateVisual, explainVisual, updateVisual, useRefreshVisuals, useVisualList, type VisualSummary } from './api';
 import { NameDialog } from './NameDialog';
@@ -45,9 +47,7 @@ export default function VisualsPage() {
   if (!projectId) {
     return (
       <Page title={TITLE} sub={SUB}>
-        <EmptyState icon="folder" title="No project open">
-          A visual belongs to a project and reads one of its datasets. Create or open a project from the switcher, then bring some data in.
-        </EmptyState>
+        <NoProject why="A visual belongs to a project and reads one of its datasets." />
       </Page>
     );
   }
@@ -66,6 +66,7 @@ function Gallery({ projectId }: { projectId: string }) {
   const refresh = useRefreshVisuals(projectId);
   const [creating, setCreating] = useState<{ datasetId?: string; startAtSuggest?: boolean } | null>(null);
   const [renaming, setRenaming] = useState<VisualSummary | null>(null);
+  const canEdit = useCanEdit(projectId);
 
   const go = (choice: NewChoice) => {
     setCreating(null);
@@ -110,9 +111,11 @@ function Gallery({ projectId }: { projectId: string }) {
       <div className={s.toolbar}>
         <span className={s.spacer} />
         {count > 0 && <span className={s.count}>{count === 1 ? '1 visual' : `${count} visuals`}</span>}
-        <Button variant="primary" icon="plus" onClick={() => setCreating({})}>
-          New visual
-        </Button>
+        {canEdit && (
+          <Button variant="primary" icon="plus" onClick={() => setCreating({})}>
+            New visual
+          </Button>
+        )}
       </div>
 
       {list.isPending ? (
@@ -130,11 +133,15 @@ function Gallery({ projectId }: { projectId: string }) {
       ) : list.data.length > 0 ? (
         <div className={s.grid}>
           {list.data.map((v) => (
-            <VisualCard key={`${v.id}:${v.updatedAt}`} projectId={projectId} v={v} actions={actions} />
+            <VisualCard key={`${v.id}:${v.updatedAt}`} projectId={projectId} v={v} actions={actions} canEdit={canEdit} />
           ))}
         </div>
-      ) : (
+      ) : canEdit ? (
         <Empty projectId={projectId} onNew={setCreating} />
+      ) : (
+        <EmptyState icon="chart-bar" title="No visuals yet">
+          An editor of this project can build visuals from its data. You have view-only access.
+        </EmptyState>
       )}
 
       {creating && (

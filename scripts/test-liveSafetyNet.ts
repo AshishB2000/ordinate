@@ -13,7 +13,8 @@
 //    ANSWER, with a live-dated figure. Every other one must answer the typed
 //    refusal: HTTP 409 `live_dataset` with the catalog's sentence, or a
 //    handler's own `{ok:false, code:'live_dataset' | 'live_refused'}` (a pivot,
-//    cohort or funnel is the compiler's refusal). Never a 200 with a figure in it.
+//    cohort or funnel is the compiler's refusal; a picker with no list of values
+//    to give says which case it is, §5). Never a 200 with a figure in it.
 // 2. NOTHING THAT MERELY LISTS BREAKS. The list, columns, source, catalog,
 //    lineage, search, Home, trash/restore, versions and a project bundle all
 //    answer 200 with the Live dataset in them (or skipped, for a value search).
@@ -362,6 +363,17 @@ async function loadWarehouseTable(table: string): Promise<void> {
     && picked.value?.total === 5 && picked.value?.approximate === true && !picked.body.includes('SECRET_CANARY'), picked.body.slice(0, 240));
   const unmeasured = await post('dataset:distinct', { projectId: P, datasetId: seed.live, column: 'customer' });
   ok('profiled, but a column the sample never measured → still refuses, typed (never an empty list)', isRefusal(unmeasured), unmeasured.body.slice(0, 240));
+  // The picker's refusal is a REPLY that says which case it is (L2.6's leftover) — recognised exactly, on top of `isRefusal`.
+  const pmsg: typeof import('../src/engine/liveProfileMessages') = require('../src/engine/liveProfileMessages');
+  const noList = (r: { status: number; value: Record<string, unknown> | null }, reason: string, sentence: string): boolean => isRefusal(r) && r.status === 200
+    && r.value?.code === 'live_refused' && r.value.reason === reason && r.value.error === sentence && !('values' in r.value) && !('total' in r.value);
+  const unlisted = await post('dataset:distinct', { projectId: P, datasetId: seed.live, column: 'sales' });
+  const NOT_LISTED = pmsg.liveValuesNotListed('50');
+  ok('…and says why: not sampled for the unmeasured column, not listed for a column with 101 values — neither carries a list',
+    noList(unmeasured, 'notSampled', pmsg.liveValuesNotSampled()) && noList(unlisted, 'notListed', NOT_LISTED), `${unmeasured.body.slice(0, 160)} | ${unlisted.body.slice(0, 160)}`);
+  ok('NEGATIVE CONTROL: the recogniser takes neither the listed column\'s answer, nor an untyped empty list, nor a refusal without its sentence', !isRefusal(picked)
+    && !isRefusal({ status: 200, value: { values: [], total: 0 } }) && !noList({ status: 200, value: { ok: false, code: 'live_refused', reason: 'notListed' } }, 'notListed', NOT_LISTED)
+    && !noList(unlisted, 'notSynced', NOT_LISTED), picked.body.slice(0, 160));
   const panel = await post('dataset:profile', { projectId: P, datasetId: seed.live, column: 'sales' });
   const prof = panel.value?.profile as { distinct?: number; sample?: { rows?: number } } | undefined;
   ok('profiled → the column panel answers from the sample, and says so', panel.value?.ok === true && prof?.distinct === 101 && prof.sample?.rows === 120, panel.body.slice(0, 240));
