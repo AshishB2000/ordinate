@@ -245,9 +245,13 @@ async function patchSampleSheet(projectId: string, analysisId: string): Promise<
  * opened, which is far worse than one launch with a partial sample — and the
  * flag records that seeding HAPPENED, not that the sample still exists, so a
  * user who deletes it never gets it back.
+ *
+ * `again` skips that flag: the server's `sample:seed` (src/ipc/projects.ts)
+ * decides for itself — it seeds only while the org has no project — and the
+ * flag is a per-pod file there, so it could not be the rule.
  */
-export async function seedSampleProject(): Promise<{ seeded: boolean; projectId?: string; analysisId?: string }> {
-  if (config.get().sampleSeeded) return { seeded: false };
+export async function seedSampleProject(opts: { again?: boolean } = {}): Promise<{ seeded: boolean; projectId?: string; analysisId?: string }> {
+  if (!opts.again && config.get().sampleSeeded) return { seeded: false };
   const csv = sampleCsvPath();
   if (!fs.existsSync(csv)) {
     console.error('[sample] bundled CSV missing at', csv, '— skipping seed');

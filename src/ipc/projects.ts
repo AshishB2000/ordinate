@@ -3,7 +3,7 @@ import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { ipcMain } from './bus';
 import * as appPaths from '../app/paths';
-import { serverDataDir } from '../server/context';
+import { orgKey, serverDataDir } from '../server/context';
 import { FileTokenError, offerDownload, resolveUpload, type Upload } from '../server/files';
 import * as projects from '../app/projects';
 import * as bundle from '../app/bundle';
@@ -13,6 +13,11 @@ import * as config from '../app/config';
 import { projectDir } from '../app/recordKinds';
 import { safetyBackup } from './backups';
 import * as recordFs from '../app/recordFs';
+import * as sample from '../app/sampleProject';
+
+type SeedReply = { ok: true; projectId: string; analysisId?: string } | { ok: false; error: 'has_projects' | 'unavailable' };
+/** `sample:seed` calls in flight, by org. */
+const seeding = new Map<string, Promise<SeedReply>>();
 
 // Projects (workspace shell) IPC — list/create/rename/archive/open, the
 // switcher's overview, and the .ordinate bundle's export and import.
@@ -38,6 +43,29 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
       await projects.touchOpened(created.id);
     }
     return created;
+  });
+
+  // The bundled sample as the org's FIRST project (Home's "Start with sample
+  // data"). Refused once the org has any project, archived ones included, so a
+  // second click or a second admin adds nothing. Callers that arrive while a
+  // seed is running share its answer.
+  // ponytail: the in-flight map is per pod — two admins on two pods clicking
+  // in the same second would make two sample projects. An advisory lock on the
+  // org if that ever happens.
+  ipcMain.handle('sample:seed', async () => {
+    const key = orgKey('sample:seed');
+    const running = seeding.get(key);
+    if (running) return running;
+    const run = (async (): Promise<SeedReply> => {
+      if ((await projects.listProjects()).length > 0) return { ok: false, error: 'has_projects' };
+      const made = await sample.seedSampleProject({ again: true });
+      if (!made.seeded || !made.projectId) return { ok: false, error: 'unavailable' };
+      active(made.projectId);
+      await projects.touchOpened(made.projectId);
+      return { ok: true, projectId: made.projectId, analysisId: made.analysisId };
+    })().finally(() => seeding.delete(key));
+    seeding.set(key, run);
+    return run;
   });
 
   ipcMain.handle('projects:rename', async (_e, { id, name }: any) => projects.renameProject(id, name));
