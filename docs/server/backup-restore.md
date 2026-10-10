@@ -1,5 +1,7 @@
 # Backup and restore
 
+<sub>[← All operator docs](README.md)</sub>
+
 Ordinate keeps its state in three places. A complete backup covers all three:
 
 | What | Where | Holds |

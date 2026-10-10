@@ -1,5 +1,7 @@
 # Configuration reference
 
+<sub>[← All operator docs](README.md)</sub>
+
 Every environment variable the Ordinate server reads. The server reads its configuration once at
 startup and validates it there (`src/server/env.ts`). A bad value stops the process with one line
 that names the variable, for example `ordinate: AUTH_MODE must be one of password|oidc|header|dev, got "sso"`.

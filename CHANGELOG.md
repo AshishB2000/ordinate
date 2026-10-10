@@ -44,6 +44,30 @@ local CLI model execution, the local-folder connectors (DuckDB file, Parquet fol
 folder watch, the sync folder, OS menus and notifications, the Mosaic renderer, the Svelte spike and
 the desktop installers.
 
+### Added — since the move to the web
+
+- **Live datasets.** A warehouse table can stay **Live**: charts, KPI tiles, AI answers, alerts and
+  scorecards ask the warehouse itself, through SQL Ordinate compiles, and cache the answer for the
+  cache age you choose (from always live to 1 day, 5 minutes by default). Offered on Snowflake,
+  BigQuery, Redshift, Databricks SQL, ClickHouse, and a PostgreSQL connection marked as a read
+  replica. Every figure says how fresh it is (*As of*, *Live*, or *Stale*). Tools that read rows are
+  off on a Live dataset and offer **Make a copy**. A parity test proves a Live answer and a copy's
+  answer agree. See [`docs/server/live-data.md`](docs/server/live-data.md).
+- **Snowflake and Google BigQuery connectors**, taking the catalog to 40 read-only sources.
+- **Warehouse cost controls.** A daily query limit per org, a concurrency limit, a query timeout, a
+  BigQuery bytes-billed cap, and **Admin → Live usage** showing queries and billed bytes per
+  connection.
+- **Fresher copies.** Open dashboards update by themselves after a refresh, every tile says how
+  fresh it is, a copy can refresh every 5 minutes or pull only its new rows when someone asks
+  ("fresh on ask"), and a refresh URL lets dbt or Airflow say when new data has landed.
+- **Admin → AI.** An admin connects each AI provider once and approves the exact models members may
+  use, with one default. Members pick a model from that list and never see a key. The setup moved
+  from a file on each pod to Postgres, so every pod agrees. The "Connect a provider" form is gone
+  from the Assistant. See [`docs/server/ai.md`](docs/server/ai.md).
+- **Password sign-in for trying Ordinate out**, now the default. The server prints a one-time setup
+  code at first start; you create the admin account in the browser and add people with temporary
+  passwords. Switch to single sign-on before real use. See [`docs/server/sso.md`](docs/server/sso.md).
+
 ### Added
 - **The app is no longer empty on first launch.** A bundled sample project — 5,000 rows of generated
   retail orders across two years, five regions and twenty-five US states — arrives with a dashboard

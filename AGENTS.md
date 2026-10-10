@@ -1,70 +1,52 @@
 # Ordinate — agent instructions
 
-**[`CLAUDE.md`](CLAUDE.md) is the architecture reference. Read it first, and treat it as
-authoritative.** It documents the data layer, the IPC surface, the config schema, the on-disk store
-layout, the security model, and every phase decision with the measurements behind it.
-
-This file is deliberately a pointer rather than a copy.
-
-> **Why.** AGENTS.md used to be a byte-identical duplicate of CLAUDE.md. It drifted, and by the time
-> anyone noticed it was claiming that the DuckDB migration, MapLibre, Mosaic and Svelte were all
-> "planned — NOT built" — every clause false. In this repo that is not a cosmetic problem: a stale
-> architecture note once caused an audit pass to stash the live `maplibre-gl` dependency mid-port as
-> "stray … contradicts phase-3 §3", destroying work in progress. Two copies of a 466-line document
-> cannot be kept in sync by hand, so there is now one copy.
-
----
+**[`CLAUDE.md`](CLAUDE.md) is the architecture reference. Read it first and treat it as
+authoritative.** This file is a pointer, not a copy: two copies of one long document drifted apart
+once, and a stale note cost real work.
 
 ## What this project is
 
-A **local-first, open-source personal BI workspace.** Data comes in (files, paste, Excel, Postgres,
-a URL/API, or a screenshot capture) → **prepare** it with a reversible transform pipeline →
-**visualize** across 34 chart, map & table types → assemble **dashboards** → **share** offline. AI is
-optional at every step. MIT.
+A **self-hosted, open-source BI web app.** A company runs it in its own infrastructure (Docker
+Compose, Kubernetes via Helm, ECS), and people open a URL and sign in. Bring data in → **prepare**
+it with a reversible pipeline → **visualize** it → author **analyses** → publish **dashboards**.
+AI is optional at every step. MIT.
 
-**Core principle: the app does the math.** Aggregation, statistics, metrics and anomaly detection
-all run in deterministic, auditable code. A model may extract structure (a table from a screenshot)
-or narrate figures the app already computed — it **never** writes a computed number.
+**Core principle: deterministic engines do the math, never a model.** Ordinate's own engine
+(or the source warehouse, for a Live dataset) computes every figure. React only formats what the
+server returns. A model may extract structure or narrate figures an engine computed; it never
+writes a computed number.
 
 ## Rules that must not be got wrong
 
-These are the ones where a mistake is expensive or silent. Everything else is in CLAUDE.md.
+A mistake here is expensive or silent. The reasons, and everything else, are in CLAUDE.md.
 
-- **Branch off `develop` for every change** (`fix/…`, `feat/…`, `perf/…`, `test/…`, `docs/…`), then
-  open a pull request. `develop` is the default branch and the trunk; `main` sits at the initial
-  import and is unused. **Never commit directly to either.** If the trunk is ever renamed again,
-  the branch lists in `ci.yml`/`lint.yml` must move with it — otherwise CI stops running silently.
-- **Never** add a `Co-Authored-By` trailer or any AI co-author line to a commit message.
-- **No `eval`, no `new Function`, anywhere.** User and model input never becomes executable code.
-  The formula evaluator is a hand-written tokenizer + parser + tree-walker for exactly this reason.
-- **Secrets never leave the main process.** API keys and connection secrets live in
-  `userData/config.json`; `publicConfig()` / `publicByok()` are the only renderer-safe views, and
-  they strip every raw value. Nothing secret reaches a renderer, a project folder, or an export.
-- **Local CLI execution is shell-free** — `execFile`/`spawn` with an args array, never `shell: true`.
-  The app **detects and runs only; it never installs anything** for the user.
-- **Strict number parsing is a correctness guarantee.** `007`, zip codes and >15-digit identifiers
-  stay text. See `isFiniteNumber` / `finalizeTable` in `src/parse.ts`.
-- **The hub CSP is strict** (`default-src 'none'; style-src 'self'; script-src 'self'`). No inline
-  `style=` in hub HTML — use a `hub.css` class. Setting `element.style.x` from JS is fine.
-- **Every resident (SQL) path keeps its pure-JS original**, falls back to it on any failure, and is
-  guarded by a *differential* test asserting the two agree. Change one, change or re-verify the
-  other.
-- **Ask before adding a runtime dependency.** Prefer stdlib, native platform features, or something
-  already installed.
+| Rule | In short |
+|---|---|
+| **One worktree per change** | `git worktree add -b feat/x .claude/worktrees/x origin/develop`, then a PR to `develop`. Never commit to `develop`, and never `git checkout` in the shared clone. |
+| **No AI co-author** | Never add a `Co-Authored-By` trailer or any AI co-author line to a commit. |
+| **No release without the owner** | No tag, GitHub release or image push unless the owner asks. |
+| **No contract, no channel** | Every RPC channel has a zod contract in `src/api/` with the narrowest access. `src/api/index.ts`, `web/src/app/routes.tsx` and `web/src/app/nav.ts` are append-only. |
+| **Org isolation** | Every in-memory cache is keyed with `orgKey()`. Every record id and org id is validated before it touches a path. |
+| **Secrets stay on the server** | Never logged, never sent to a browser. A new secret field gets a canary test. |
+| **Never block the event loop** | Request paths use the async DuckDB calls. User regex runs in a worker. |
+| **No `eval`, no `new Function`** | User and model input never becomes executable code. No child process built from a user string, and never `shell: true`. |
+| **Strict number parsing** | `007`, ZIP codes and long ids stay text. Cast on the declared column type, never by inference. |
+| **Two implementations agree** | Every fast SQL path keeps its pure-JS reference and a differential test. Change one, re-verify the other. |
+| **Additive migrations only** | A rollback does not undo a migration. |
+| **Ask before adding a runtime dependency** | Prefer the standard library, the platform, or something already installed. |
+| **File size** | 500 lines soft, 800 hard. See [`.claude/rules/file-size.md`](.claude/rules/file-size.md). |
 
 ## Commands
 
 ```bash
-npm start          # run the app
-npm test           # scripts/test-*.js self-checks (~3,300 assertions)
-npm run smoke      # launch the REAL app via Playwright; fails on any renderer console error
-npm run build:ts   # tsc, in-place sibling emit, no bundler
+npm run server              # build, then the server on 127.0.0.1:8080 (needs DATABASE_URL, or AUTH_MODE=dev)
+npm run dev:web             # Vite dev server with hot reload
+npm test                    # every server self-check suite
+npm run test:web            # web unit tests (Vitest)
+npm --prefix web run e2e    # Playwright end-to-end tests, one per screen
+npm run lint                # oxlint; zero findings, blocking in CI
 ```
 
-`npm run smoke` is the only check that runs the actual application, and the only one that catches a
-CSP violation or a broken renderer. Run it for anything touching the hub.
-
----
-
-Everything else — architecture, module layout, the full IPC table, config schema, phase history and
-the reasoning behind each decision — is in **[`CLAUDE.md`](CLAUDE.md)**.
+Everything else is in **[`CLAUDE.md`](CLAUDE.md)**: the architecture, the module layout, the
+testing style and the reasoning behind each decision. History and measurements are in
+[`docs/`](docs/README.md).

@@ -1,5 +1,7 @@
 # Quick start: Docker Compose
 
+<sub>[← All operator docs](README.md)</sub>
+
 This runs Ordinate for one team on one host: the server, Postgres 17 (users, records, jobs,
 secrets) and MinIO (the Parquet tables, over the S3 API), from `deploy/docker-compose.yml`. Postgres
 and MinIO publish no ports. The app port is published on `127.0.0.1` only.

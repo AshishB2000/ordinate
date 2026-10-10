@@ -1,5 +1,7 @@
 # AI: providers and models
 
+<sub>[← All operator docs](README.md)</sub>
+
 AI is optional. Everything except the Assistant, drafting, chart suggestions, "explain" and
 reading a screenshot works without it. An org admin turns it on in **Admin → AI**; members never
 see a key or a connect form.
