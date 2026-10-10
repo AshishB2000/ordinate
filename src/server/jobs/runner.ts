@@ -45,6 +45,7 @@ import * as path from 'path';
 import type { Pool } from 'pg';
 import type { FastifyBaseLogger } from 'fastify';
 import { runInContext, type Identity } from '../context';
+import * as orgConfig from '../orgConfig';
 
 export interface JobKind {
   /** Interval between the end of one run and the next. */
@@ -131,7 +132,9 @@ export async function runClaim(pool: Pool, c: Claim, log: FastifyBaseLogger): Pr
   let error: string | null = null;
   try {
     if (!def) throw new Error(`unknown job kind ${c.kind}`);
+    await orgConfig.fresh(c.orgId);
     await runInContext(systemIdentity(c.orgId), `job:${c.kind}:${c.orgId}`, () => def.run(c.target));
+    await orgConfig.flushed(c.orgId);
   } catch (err) {
     error = (err instanceof Error ? err.message : String(err)).slice(0, ERROR_MAX);
     log.error({ err, org: c.orgId, kind: c.kind }, 'scheduled job failed');

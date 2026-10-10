@@ -57,6 +57,9 @@ SPA (`web/dist`) and the API from one origin. Metadata in Postgres; Parquet on `
   transaction under an advisory lock; an edited applied file or an out-of-order number refuses
   startup. **Migrations must be additive** (`helm rollback` does not undo them). Records go through
   `src/app/recordFs.ts`: a JSON file without `DATABASE_URL`, a `records` row (RLS forced) with it.
+  The org's settings document (`src/app/config.ts`: formats, branding, starred, onboarding) is a row
+  of `org_config` through `src/server/orgConfig.ts`, never a pod's `config.json`: read at most once a
+  second per pod, written before the reply is sent, keys and passwords blanked (`config.storable`).
 - **Secrets**: envelope encryption under `ORDINATE_MASTER_KEY` (`src/server/secrets/`), a data key
   per org. Connection passwords and AI keys go through it, never `config.json`; no DB or key → saving
   a secret is refused. Browser-safe views are `publicConfig()`/`publicByok()`
