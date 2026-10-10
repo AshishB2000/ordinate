@@ -1,5 +1,7 @@
 # Single sign-on
 
+<sub>[← All operator docs](README.md)</sub>
+
 Ordinate signs people in with single sign-on, one of two ways (`AUTH_MODE`):
 
 - **`oidc`**: Ordinate itself is the OpenID Connect client of your IdP. This is the recommended

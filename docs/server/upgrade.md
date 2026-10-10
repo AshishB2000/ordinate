@@ -1,5 +1,7 @@
 # Upgrades and rollbacks
 
+<sub>[← All operator docs](README.md)</sub>
+
 ## Versions
 
 A release is a git tag `v<major>.<minor>.<patch>`, or `v1.2.3-rc.1` for a pre-release, cut by

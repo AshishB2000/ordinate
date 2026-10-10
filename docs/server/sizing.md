@@ -1,5 +1,7 @@
 # Sizing
 
+<sub>[← All operator docs](README.md)</sub>
+
 Every figure on this page is either **measured**, in which case it names the task in
 `docs/phase-7-web/log.md` that measured it and the conditions, or **an estimate**, labelled as such.
 The measurements come from developer machines, often under heavy load from parallel work. Read them
