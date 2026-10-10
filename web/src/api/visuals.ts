@@ -1,6 +1,6 @@
 import { skipToken, useQuery } from '@tanstack/react-query';
 import type { ChartDataShape } from '../charts/types';
-import type { AsOf } from '../ui/asOf';
+import type { AsOf } from '../ui/asOfView';
 import { rpc, RpcError, type RpcInput } from './client';
 
 /**

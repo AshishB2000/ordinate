@@ -19,7 +19,7 @@ import type { ChartDataShape } from '../../charts/types';
 import { Button } from '../../ui/Button';
 import { Skeleton } from '../../ui/Skeleton';
 import { AsOfCaption } from '../../ui/AsOf';
-import type { AsOf } from '../../ui/asOf';
+import type { AsOf } from '../../ui/asOfView';
 import { LiveRefusal } from '../live/LiveOff';
 import { liveRefusalOf } from '../live/refusal';
 import s from './AnswerCard.module.css';

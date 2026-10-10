@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { useState } from 'react';
 import { act, render, screen } from '@testing-library/react';
 import { AsOfCaption } from '../../../ui/AsOf';
-import type { AsOf } from '../../../ui/asOf';
+import type { AsOf } from '../../../ui/asOfView';
 import { TileAsOfSlot, useTileAsOf } from './tileAsOf';
 
 const A: AsOf = { at: '2026-10-09T01:00:00.000Z', mode: 'extract' };

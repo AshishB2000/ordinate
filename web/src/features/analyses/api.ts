@@ -7,7 +7,7 @@ import { skipToken, useQuery } from '@tanstack/react-query';
 import { EditorCtx } from './editor/context';
 import { rpc, RpcError, type RpcInput } from '../../api/client';
 import type { ChartDataShape } from '../../charts/types';
-import type { AsOf } from '../../ui/asOf';
+import type { AsOf } from '../../ui/asOfView';
 
 export type Agg = 'sum' | 'avg' | 'count' | 'min' | 'max';
 export type Layout = { x: number; y: number; w: number; h: number };

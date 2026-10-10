@@ -9,7 +9,7 @@ import { IconButton, buttonClass } from '../../../ui/Button';
 import { Menu, type MenuEntry } from '../../../ui/Menu';
 import { Icon } from '../../../ui/icons/Icon';
 import { AsOfCaption } from '../../../ui/AsOf';
-import type { AsOf } from '../../../ui/asOf';
+import type { AsOf } from '../../../ui/asOfView';
 import type { Card } from '../api';
 import { vizLabel } from '../VisualTile';
 import { builderFor } from './AddVisual';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { asOfView, OLD_AFTER_MS } from './asOf';
+import { asOfView, OLD_AFTER_MS } from './asOfView';
 import { AsOfCaption } from './AsOf';
 
 // Pinned clock, locale and zone: the words must not depend on where the test runs.
