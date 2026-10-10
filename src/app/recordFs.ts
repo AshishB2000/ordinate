@@ -37,6 +37,7 @@
 // row lives under it, and a listing is the union of both (disk Parquet beside
 // DB JSON), record-shaped disk files excluded — the rows are the truth.
 
+import { AsyncLocalStorage } from 'async_hooks';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Pool, QueryResult } from 'pg';
@@ -107,6 +108,42 @@ function enoent(syscall: string, p: string): NodeJS.ErrnoException {
   return e;
 }
 
+// A read memo for one long READ-ONLY computation. Publishing a dashboard asks
+// for the same few records (the dataset, the visual, the metric) once per tile
+// per filter combination, and each read is its own transaction: 8 tiles × 156
+// combinations was 9,438 transactions and 35 s on a local Postgres, for 5,000
+// rows. Inside `withReadMemo` a record is read once; any write through this
+// module (either backend) forgets everything read so far. Not for code that reads a record,
+// waits, and writes it back: it would write over a change made meanwhile.
+const memo = new AsyncLocalStorage<Map<string, Promise<unknown>>>();
+
+/** Runs `fn` reading each record from Postgres at most once. Nested calls share the outer memo. */
+export function withReadMemo<T>(fn: () => Promise<T>): Promise<T> {
+  return memo.getStore() ? fn() : memo.run(new Map(), fn);
+}
+
+/** A write happened: nothing read before it may be served again. */
+function forget(): void {
+  memo.getStore()?.clear();
+}
+
+/**
+ * `read()`, once per `key` inside `withReadMemo`; outside it, every time. For
+ * a read that is expensive to repeat and is not changed by its callers (a
+ * record's body; `datasets.getDataset`'s hydrated table).
+ */
+export function memoRead<T>(key: string, read: () => Promise<T>): Promise<T> {
+  const seen = memo.getStore();
+  if (!seen) return read();
+  let got = seen.get(key) as Promise<T> | undefined;
+  if (!got) {
+    got = read();
+    seen.set(key, got);
+    got.catch(() => seen.delete(key)); // a failed read is asked again, not remembered
+  }
+  return got;
+}
+
 /** One statement for `a.org`, in a transaction that sets the RLS org. `$1` is always the org. */
 async function sql(a: At, text: string, params: unknown[] = []): Promise<QueryResult> {
   const c = await a.pool.connect();
@@ -137,10 +174,14 @@ function under(rel: string): [string, string] {
 const staged = new Map<string, string>();
 const keyOf = (a: At): string => a.org + '\0' + a.rel;
 
-async function readRow(a: At): Promise<string | undefined> {
-  if (isTmp(a.rel)) return staged.get(keyOf(a));
+async function selectRow(a: At): Promise<string | undefined> {
   const r = await sql(a, 'SELECT body FROM records WHERE org_id = $1 AND path = $2', [a.rel]);
   return r.rows.length ? (r.rows[0].body as string) : undefined;
+}
+
+async function readRow(a: At): Promise<string | undefined> {
+  if (isTmp(a.rel)) return staged.get(keyOf(a));
+  return memoRead('row\0' + keyOf(a), () => selectRow(a));
 }
 
 async function writeRow(a: At, body: string): Promise<void> {
@@ -181,12 +222,14 @@ export async function readFile(p: string, enc?: BufferEncoding): Promise<string 
 }
 
 export async function writeFile(p: string, data: string | Uint8Array, opts?: BufferEncoding | fs.WriteFileOptions): Promise<void> {
+  forget();
   const a = rec(p);
   if (!a) return fs.promises.writeFile(p, data, opts);
   await writeRow(a, asText(data));
 }
 
 export async function rename(from: string, to: string): Promise<void> {
+  forget();
   const a = rec(from);
   const b = rec(to);
   if (!a && !b) return fs.promises.rename(from, to);
@@ -218,6 +261,7 @@ export async function rename(from: string, to: string): Promise<void> {
 }
 
 export async function copyFile(from: string, to: string): Promise<void> {
+  forget();
   if (!rec(from) && !rec(to)) return fs.promises.copyFile(from, to);
   await writeFile(to, await readFile(from));
 }
@@ -247,12 +291,14 @@ export async function exists(p: string): Promise<boolean> {
 }
 
 export async function unlink(p: string): Promise<void> {
+  forget();
   const a = rec(p);
   if (!a) return fs.promises.unlink(p);
   if (!(await deleteRow(a))) throw enoent('unlink', p);
 }
 
 export async function rm(p: string, opts?: fs.RmOptions): Promise<void> {
+  forget();
   const a = at(p);
   if (!a) return fs.promises.rm(p, opts);
   if (isRecordPath(a.rel)) {
