@@ -39,7 +39,10 @@ const PLAN = {
 /** The models the stub asked with, in order. */
 const askedModels: string[] = [];
 
-/** The provider stub: lists two models, a connectivity test gets "OK", a streamed ask gets ANSWER (or a plan when asked for one). */
+/** What the model adds to ANSWER when the project has no data: the dock shows the three ways in. */
+const GET_DATA = '\n@@ACTION {"kind":"import","intent":"bring data in"}';
+
+/** The provider stub: lists two models, a connectivity test gets "OK", a streamed ask gets ANSWER and GET_DATA (or a plan when asked for one). */
 const stub = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c: Buffer) => (body += c.toString()));
@@ -57,7 +60,7 @@ const stub = http.createServer((req, res) => {
       return;
     }
     const asked = JSON.stringify(json.messages?.at(-1)?.content ?? '');
-    const parts = asked.includes('a plan') ? ['Here is a plan you can run step by step.', `\n@@ACTION ${JSON.stringify(PLAN)}`] : ANSWER;
+    const parts = asked.includes('a plan') ? ['Here is a plan you can run step by step.', `\n@@ACTION ${JSON.stringify(PLAN)}`] : [...ANSWER, GET_DATA];
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     let i = 0;
     const tick = setInterval(() => {
@@ -174,6 +177,16 @@ if (!dbUrl) {
     assert.equal(askedModels.at(-1), 'claude-haiku-stub', 'the question went to the member\'s pick, which survived the reload');
     await dock.getByText(/stats app-computed$/).first().waitFor();
     await page.getByRole('button', { name: /Scanned the project/ }).waitFor(); // the app's work, collapsed above the answer
+    // The reply proposed bringing data in: the three ways in, as links into this project.
+    const ways = page.getByTestId('dock-get-data');
+    assert.deepEqual(await ways.getByRole('link').allTextContents(), ['Import a file', 'Paste data', 'Connect a source']);
+    assert.match((await ways.getByRole('link', { name: 'Import a file' }).getAttribute('href')) ?? '', /^\/data\/import\?project=[0-9a-f-]{36}$/);
+    // Like a plan card, the buttons are not persisted: switch the theme in place, then let screens() reload.
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+      await page.waitForTimeout(300); // the colour transition, or the shot catches the buttons mid-fade
+      await page.screenshot({ path: path.join(SCREENS, `dock-get-data-${theme}.png`), fullPage: true });
+    }
     await screens(page, 'dock-answer');
 
     // ── A plan: its import step reads an upload ─────────────────────────────

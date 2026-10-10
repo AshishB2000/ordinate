@@ -68,8 +68,8 @@ const ACTION_MARKER_SRC = '@@ACTION';
 export const MAX_INTENT = 400;
 
 /** The whitelist. Anything not on it becomes 'none'. */
-export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'answer' | 'story' | 'plan' | 'none';
-const KIND_LIST = ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'answer', 'story', 'plan', 'none'] as const;
+export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'answer' | 'story' | 'plan' | 'import' | 'none';
+const KIND_LIST = ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'answer', 'story', 'plan', 'import', 'none'] as const;
 
 /** The most JSON an answer's spec may carry. A spec names a dataset, a few
  *  columns and a few filter values; anything longer is not a spec. */
@@ -168,7 +168,7 @@ export const NO_ACTION: SuggestedAction = { kind: 'none', intent: '' };
 const ACTION_PROMPT =
   '\n\nAFTER your answer, output ONE final line, exactly:\n' +
   ACTION_MARKER + ' {"kind":"<kind>","intent":"<intent>"}\n' +
-  'where <kind> is one of: dashboard, story, edit, chart, step, calc, style, answer, plan, none. Use "dashboard" when the ' +
+  'where <kind> is one of: dashboard, story, edit, chart, step, calc, style, answer, import, plan, none. Use "dashboard" when the ' +
   'user is asking to BUILD or CREATE a NEW dashboard, report or overview; "story" when they want a WRITTEN ' +
   'piece instead — a story, write-up, narrative or brief to be read top to bottom, with charts in it; "edit" when the FACTS ' +
   'show a dashboard is already open and they are asking to CHANGE it — add, remove, move, retype ' +
@@ -176,7 +176,9 @@ const ACTION_PROMPT =
   'single chart or visualisation; "step" when they want the data cleaned or filtered; "calc" when ' +
   'they want a new calculated column or formula; "style" when they want the dashboard they ' +
   'already have to LOOK different (darker, denser, more executive or more formal) rather than ' +
-  'to contain anything new; and "none" for an ordinary question. <intent> is a ' +
+  'to contain anything new; "import" when they want to bring data in — upload, import, paste or ' +
+  'connect a source — and ask for nothing else, or when they ask about data the FACTS show the ' +
+  'project does not have yet; and "none" for an ordinary question. <intent> is a ' +
   'short restatement of what they want built, in their own terms, or "" when kind is none. ' +
   'For "style" ONLY, the line carries one extra field:\n' +
   ACTION_MARKER + ' {"kind":"style","intent":"<intent>","preset":"<preset>"}\n' +
@@ -194,7 +196,9 @@ const ACTION_PROMPT =
   '{"column":"<date column>","period":"last_month|last_quarter|last_year"}; for "X vs Y" filter the ' +
   'category with "in". "top" keeps the N largest. The spec NEVER contains a computed number. ' +
   'When the kind is "answer", your prose is ONE short sentence saying what the chart shows, with no ' +
-  'figures at all — the app computes and displays them.' + PLAN_PROMPT + ' ' +
+  'figures at all — the app computes and displays them. When the kind is "import", the app shows ' +
+  'the Import, Paste and Connect buttons under your reply: your prose is ONE short sentence, and it ' +
+  'never asks for a file name or tells them where to click.' + PLAN_PROMPT + ' ' +
   'This line is machine-read and never shown; write nothing after it.';
 
 /** The chat system prompt. Lives here so the answer contract and the action
