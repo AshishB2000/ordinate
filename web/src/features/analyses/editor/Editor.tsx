@@ -84,7 +84,7 @@ function useAutosave(projectId: string, id: string, doc: Doc, version: number): 
   return { state, retry: write };
 }
 
-export function Editor({ projectId, analysis, visuals: initialVisuals }: { projectId: string; analysis: Analysis; visuals: VisualDef[] }) {
+export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly = false }: { projectId: string; analysis: Analysis; visuals: VisualDef[]; readOnly?: boolean }) {
   const [history, dispatch] = useReducer(reduce, analysis, (a) => initial(fromAnalysis(a)));
   const doc = history.doc;
   const save = useAutosave(projectId, analysis.id, doc, history.version);
@@ -129,11 +129,12 @@ export function Editor({ projectId, analysis, visuals: initialVisuals }: { proje
 
   const select = useCallback(
     (id: string | null) => {
+      if (readOnly) return; // nothing to select a card FOR
       setSelected(id);
       // Selecting a card OPENS Properties — editing the card is why it was clicked.
       if (id) setPane('props');
     },
-    [setPane],
+    [setPane, readOnly],
   );
 
   const paramValue = useCallback(
@@ -155,9 +156,13 @@ export function Editor({ projectId, analysis, visuals: initialVisuals }: { proje
   const api: EditorApi = {
     projectId,
     analysisId: analysis.id,
+    readOnly,
     history,
     doc,
-    edit: (label, mutate, coalesce) => dispatch({ type: 'edit', label, mutate, coalesce }),
+    // The one door every change takes: shut for a viewer, so the document never changes and the autosave never writes.
+    edit: (label, mutate, coalesce) => {
+      if (!readOnly) dispatch({ type: 'edit', label, mutate, coalesce });
+    },
     undo: () => dispatch({ type: 'undo' }),
     redo: () => dispatch({ type: 'redo' }),
     save,
@@ -171,7 +176,9 @@ export function Editor({ projectId, analysis, visuals: initialVisuals }: { proje
     selected: selected && cards.some((c) => c.id === selected) ? selected : null,
     select,
     multi,
-    setMulti,
+    setMulti: (next) => {
+      if (!readOnly) setMulti(next);
+    },
     pane,
     setPane,
     openAdd: setAdding,
@@ -234,12 +241,12 @@ export function Editor({ projectId, analysis, visuals: initialVisuals }: { proje
         <DashboardChrome />
         {!view.presenting && <Head />}
         <div className={s.bench}>
-          {!view.presenting && <Rail />}
+          {!view.presenting && !readOnly && <Rail />}
           <SheetHost onWidth={setWidth}>
             <Canvas />
           </SheetHost>
         </div>
-        <AddDialogs adding={adding} onClose={() => setAdding(null)} onSwitch={setAdding} />
+        {!readOnly && <AddDialogs adding={adding} onClose={() => setAdding(null)} onSwitch={setAdding} />}
       </div>
     </EditorCtx.Provider>
   );

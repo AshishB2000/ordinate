@@ -10,6 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { EmptyState, ErrorState, Page } from '../../app/blocks';
 import { buttonClass } from '../../ui/Button';
 import { Skeleton } from '../../ui/Skeleton';
+import { useRoles } from '../projects/api';
 import { useAdoptProject } from '../projects/current';
 import { useOpenAnalysis } from './api';
 import { Editor } from './editor/Editor';
@@ -44,6 +45,8 @@ export default function AuthoringPage() {
   const { projectId = '', analysisId = '' } = useParams();
   useAdoptProject(projectId);
   const q = useOpenAnalysis(projectId, analysisId);
+  // The caller's role decides whether this opens to edit or to read; wait for it, so the tools never flash.
+  const roles = useRoles();
   const client = useQueryClient();
   useEffect(() => () => client.removeQueries({ queryKey: ['analysis:open', projectId, analysisId] }), [client, projectId, analysisId]);
   const back = (
@@ -52,7 +55,7 @@ export default function AuthoringPage() {
     </Link>
   );
 
-  if (q.isPending) return <Loading />;
+  if (q.isPending || roles.isPending) return <Loading />;
   if (q.isError) {
     return (
       <Page title="Dashboard">
@@ -69,5 +72,6 @@ export default function AuthoringPage() {
       </Page>
     );
   }
-  return <Editor key={analysisId} projectId={projectId} analysis={q.data.analysis} visuals={q.data.visuals} />;
+  const role = roles.data?.[projectId];
+  return <Editor key={analysisId} projectId={projectId} analysis={q.data.analysis} visuals={q.data.visuals} readOnly={role !== 'editor' && role !== 'admin'} />;
 }

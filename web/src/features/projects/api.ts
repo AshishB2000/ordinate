@@ -105,6 +105,11 @@ export function useCan(projectId: string | null | undefined) {
   return (need: Role) => !!role && RANK[role] >= RANK[need];
 }
 
+/** May the caller change things in `projectId` (editor or admin)? False until the roles are known: a viewer never sees a control flash. */
+export function useCanEdit(projectId: string | null | undefined): boolean {
+  return useCan(projectId)('editor');
+}
+
 export function useAccess(projectId: string | null) {
   return useQuery({
     queryKey: ['project:access', projectId],

@@ -12,6 +12,7 @@ import { CapturesTab } from './CapturesTab';
 import { CatalogTab } from './CatalogTab';
 import { DatasetList } from './DatasetList';
 import { DataSearch } from './DataSearch';
+import { useCanEdit } from '../projects/api';
 import { useAdoptProject } from '../projects/current';
 import { RelationshipsTab } from './RelationshipsTab';
 import s from './Data.module.css';
@@ -31,6 +32,7 @@ export default function DataSection() {
   const [params, setParams] = useSearchParams();
   // With no datasets the empty card holds Import / Paste: the header shows them once, not twice (dsList.ts).
   const empty = useDatasets(projectId).data?.length === 0;
+  const canEdit = useCanEdit(projectId);
   const asked = params.get('tab');
   const tab: TabId = (TABS as readonly string[]).includes(asked ?? '') ? (asked as TabId) : 'datasets';
   // The URL names the project: the shell's switcher shows it (T2.2).
@@ -57,7 +59,7 @@ export default function DataSection() {
             <Icon name="target" />
             <span>Metrics</span>
           </Link>
-          {tab === 'datasets' && !empty && (
+          {tab === 'datasets' && !empty && canEdit && (
             <>
               <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
                 Import file

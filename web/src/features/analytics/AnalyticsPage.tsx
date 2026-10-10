@@ -14,6 +14,7 @@ import { Icon, type IconName } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { ProjectGate } from '../import/ProjectGate';
+import { useCanEdit } from '../projects/api';
 import { LiveBanner } from '../live/LiveOff';
 import s from './Analytics.module.css';
 
@@ -54,6 +55,7 @@ const DATASET_DOORS: Array<{ key: string; icon: IconName; name: string; blurb: s
 function Hub({ projectId }: { projectId: string }) {
   const list = useDatasets(projectId);
   const [picked, setPicked] = useState<string | null>(null);
+  const canEdit = useCanEdit(projectId);
   const datasets = list.data ?? [];
   const id = picked && datasets.some((d) => d.id === picked) ? picked : (datasets[0]?.id ?? null);
   const chosen = datasets.find((d) => d.id === id);
@@ -68,12 +70,14 @@ function Hub({ projectId }: { projectId: string }) {
           icon="database"
           title="No data to analyse"
           actions={
-            <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
-              Import a dataset
-            </Link>
+            canEdit && (
+              <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
+                Import a dataset
+              </Link>
+            )
           }
         >
-          Import a dataset first, then come back to find what drives it.
+          {canEdit ? 'Import a dataset first, then come back to find what drives it.' : 'An editor of this project can import a dataset. You have view-only access.'}
         </EmptyState>
       ) : (
         <>

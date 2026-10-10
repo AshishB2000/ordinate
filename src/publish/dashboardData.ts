@@ -32,6 +32,7 @@ import type { FilterStep } from '../data/transforms';
 import { vizDataFor } from '../ipc/visuals';
 import { withEvents } from '../ipc/events'; // r8:events
 import { computeCardMetric } from '../ipc/dashboards';
+import { liveDistinct } from '../ipc/liveProfile';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { resolveMetric } from '../ipc/metrics';
 import { computeStatsTile } from '../ipc/stats';
@@ -187,8 +188,10 @@ interface ControlSpec {
   states: unknown[];
 }
 
-async function distinct(projectId: string, datasetId: string, column: string): Promise<string[]> {
+async function distinct(projectId: string, datasetId: string, column: string): Promise<string[] | string> {
   const req = { limit: MAX_OPTIONS_PER_CONTROL, search: '' };
+  const live = await liveDistinct(projectId, datasetId, column, req);
+  if (live) return 'values' in live ? live.values : live.error; // Live: the profile's sample values, or the sentence saying why there is no list
   const src = await datasets.residentSource(projectId, datasetId);
   const fast = src ? await readDistinctPage(src, column, req) : null;
   if (fast) return fast.values.map((v) => String(v));
@@ -196,13 +199,14 @@ async function distinct(projectId: string, datasetId: string, column: string): P
   return ds ? distinctValuesPageJs(ds.columns, ds.rows, column, req).values.map((v) => String(v)) : [];
 }
 
-async function controlSpec(projectId: string, card: Card, a: analysis.Analysis): Promise<ControlSpec | null> {
+async function controlSpec(projectId: string, card: Card, a: analysis.Analysis, unlisted: Unlisted[]): Promise<ControlSpec | null> {
   const control = card.control;
   if (!control) return null;
   const id = card.id;
   const label = control.label || control.column || 'Filter';
   if (control.kind === 'dropdown' || control.kind === 'multi') {
     const values = await distinct(projectId, control.datasetId, control.column);
+    if (typeof values === 'string') { unlisted.push({ control: label, reason: values }); return null; } // left out, and the plan says why — never an empty "All"
     const def = control.default as any; // ControlValue union, narrowed by kind here
     const want = control.kind === 'dropdown' ? def && def.value : def && Array.isArray(def.values) ? def.values[0] : undefined;
     const idx = typeof want === 'string' ? values.indexOf(want) : -1;
@@ -257,13 +261,14 @@ async function controlSpec(projectId: string, card: Card, a: analysis.Analysis):
   };
 }
 
-/** Every control card on every sheet, in reading order. */
-async function controlSpecs(projectId: string, a: analysis.Analysis): Promise<ControlSpec[]> {
+export interface Unlisted { control: string; reason: string } // a control a page cannot offer (a Live column with no list of values), and why
+/** Every control card on every sheet, in reading order; the ones left out go onto `unlisted`. */
+async function controlSpecs(projectId: string, a: analysis.Analysis, unlisted: Unlisted[]): Promise<ControlSpec[]> {
   const out: ControlSpec[] = [];
   for (const sheet of a.sheets) {
     for (const card of sheet.cards) {
       if (!card || card.type !== 'control') continue;
-      const spec = await controlSpec(projectId, card, a);
+      const spec = await controlSpec(projectId, card, a, unlisted);
       if (spec) out.push(spec);
     }
   }
@@ -274,10 +279,11 @@ async function controlSpecs(projectId: string, a: analysis.Analysis): Promise<Co
 export async function planDashboard(projectId: string, analysisId: string, maxCombos: number) {
   const a = await analysis.getAnalysis(projectId, analysisId);
   if (!a) return null;
-  const specs = await controlSpecs(projectId, a);
+  const unlisted: Unlisted[] = [];
+  const specs = await controlSpecs(projectId, a, unlisted);
   const plan = planCombos(specs.map((s) => s.domain), maxCombos);
   const tiles = a.sheets.reduce((n, s) => n + s.cards.filter((c) => c && c.type !== 'control').length, 0);
-  return { id: a.id, name: a.name, plan, tiles, analysis: a, specs };
+  return { id: a.id, name: a.name, plan, tiles, analysis: a, specs, unlisted };
 }
 
 /** The filters and parameter values one combination stands for. */

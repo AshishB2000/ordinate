@@ -16,6 +16,11 @@
 .head:active {
   cursor: grabbing;
 }
+/* A viewer's card does not move: no grab cursor to say it would. */
+.readOnly > .head,
+.readOnly > .head:active {
+  cursor: default;
+}
 .title {
   flex: 1 1 auto;
   min-width: 0;
@@ -25,9 +30,28 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The figure's freshness (ui/AsOf), between the title and the controls. */
-.asOf {
+/* The figure's freshness (ui/AsOf), between the title and the controls. The
+   TITLE owns the room: the caption shrinks first (a thousand to one), cut with
+   an ellipsis, and is not shown at all on a head too narrow for both. */
+.head {
+  container-type: inline-size;
+}
+.head .asOf {
+  display: block;
+  flex: 0 1000 auto;
   margin-left: var(--sp-8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: var(--lh-snug);
+}
+.head .asOf > svg {
+  margin-right: var(--sp-4);
+  vertical-align: -2px;
+}
+@container (max-width: 300px) {
+  .head .asOf {
+    display: none;
+  }
 }
 .ctrls {
   display: flex;

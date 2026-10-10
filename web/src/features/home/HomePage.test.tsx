@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderApp } from '../../test-utils';
 import { setDockOpen, takePendingQuestion } from '../assistant/dockState';
 
@@ -28,6 +28,8 @@ function stubServer(replies: Record<string, Reply>, role = 'admin') {
   const calls: { channel: string; payload: unknown }[] = [];
   const all: Record<string, Reply> = {
     'projects:list': [{ id: P, name: 'My project', createdAt: NOW, updatedAt: NOW }],
+    // The caller's role on the project follows the org role these tests pass.
+    'projects:roles': { [P]: role === 'viewer' ? 'viewer' : 'admin' },
     'recent:list': recent,
     'starred:get': ['analysis:a1'],
     'home:overview': {
@@ -69,6 +71,17 @@ function stubServer(replies: Record<string, Reply>, role = 'admin') {
 }
 
 describe('Home', () => {
+  it('sends each Connect shortcut to its own door, in Home\'s project', async () => {
+    stubServer({});
+    renderApp('/');
+    const side = await screen.findByRole('complementary', { name: 'This project' });
+    const href = (name: string) => within(side).getByRole('link', { name }).getAttribute('href');
+    await waitFor(() => expect(href('CSV / Excel')).toBe(`/data/import?project=${P}&source=file`));
+    expect(href('Paste data')).toBe(`/data/import?project=${P}&source=paste`);
+    expect(href('Screenshot')).toBe(`/data/import?project=${P}&source=screenshot`);
+    expect(href('Database')).toBe(`/connections/${P}`);
+  });
+
   it('greets, then fills the hero, Starred, Recent and the side column from the server', async () => {
     stubServer({});
     renderApp('/');
@@ -173,12 +186,41 @@ describe('Home', () => {
   it('designs the empty states: no project, no work, no pins', async () => {
     stubServer({ 'projects:list': [], 'recent:list': [], 'starred:get': [], 'onboarding:status': { show: false } });
     renderApp('/');
-    expect(await screen.findByText('No project yet — bring some data in to begin.')).toBeTruthy();
+    expect(await screen.findByText('No project yet.')).toBeTruthy();
+    // An org admin may create one, right here.
+    expect(await screen.findByRole('button', { name: 'New project' })).toBeTruthy();
     expect(await screen.findByRole('heading', { name: 'Your work will collect here' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Nothing pinned yet' })).toBeTruthy();
-    expect(screen.getByText('No datasets yet — connect one below.')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Bring in some data' }).getAttribute('href')).toBe('/data');
+    // No project: nothing to connect into yet, so no Connect shortcuts and no "bring data in" below.
+    expect(screen.getByText('No datasets yet.')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Bring in some data' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Get started' })).toBeNull();
+  });
+
+  it('gives an editor of an empty project the doors to bring data in', async () => {
+    stubServer({ 'recent:list': [], 'home:overview': { counts: { datasets: 0, dashboards: 0, captures: 0, visuals: 0 }, datasets: [], visuals: [] } });
+    renderApp('/');
+    expect((await screen.findByRole('link', { name: 'Bring in some data' })).getAttribute('href')).toBe(`/data/import?project=${P}`);
+    expect(screen.getByRole('link', { name: 'Browse sources' }).getAttribute('href')).toBe(`/connections/${P}`);
+    expect(await screen.findByText('No datasets yet — connect one below.')).toBeTruthy();
+  });
+
+  it('shows a project viewer Home without the controls that change the project', async () => {
+    stubServer({ 'recent:list': [], 'onboarding:status': { show: false } }, 'viewer');
+    renderApp('/');
+    const side = await screen.findByRole('complementary', { name: 'This project' });
+    expect(await within(side).findByRole('link', { name: /Orders/ })).toBeTruthy(); // the data is still theirs to read
+    expect(await screen.findByRole('heading', { name: 'Your work will collect here' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'New' })).toBeNull();
+    expect(within(side).queryByRole('link', { name: 'CSV / Excel' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Bring in some data' })).toBeNull();
+    // Negative control: the same page, as an editor, has them.
+    cleanup();
+    stubServer({ 'recent:list': [], 'onboarding:status': { show: false } });
+    renderApp('/');
+    expect(await screen.findByRole('button', { name: 'New' })).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'CSV / Excel' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Bring in some data' })).toBeTruthy();
   });
 
   it('shows each failed read with its own retry', async () => {

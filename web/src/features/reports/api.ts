@@ -215,6 +215,8 @@ export interface ScoreRow {
   group?: string;
   alert?: { message: string; at: string };
   comments?: number;
+  /** Why there is no figure, when its Live dataset gave none: a refusal's own fields (code + the server's sentence). */
+  unavailable?: { code: string; error: string; reason?: string };
 }
 export interface ScoreResult {
   ok: true;

@@ -8,7 +8,7 @@
 // the mirrored chart fields, ./gridEncoding engineEncoding).
 
 import { useQuery } from '@tanstack/react-query';
-import { rpc } from '../../../api/client';
+import { distinctValues } from '../../live/distinct';
 import { Button, IconButton } from '../../../ui/Button';
 import { Checkbox } from '../../../ui/Choice';
 import { Input } from '../../../ui/Field';
@@ -101,7 +101,7 @@ function FunnelForm({ projectId, datasetId, cols, block, onChange }: { projectId
   const distinct = useQuery({
     queryKey: ['dataset:distinct', projectId, datasetId, block.event, 200, ''],
     enabled: !!block.event,
-    queryFn: async () => ((await rpc('dataset:distinct', { projectId, datasetId, column: block.event, limit: 200 })) as { values?: unknown[] } | null)?.values?.map(String) ?? [],
+    queryFn: async () => (await distinctValues({ projectId, datasetId, column: block.event, limit: 200 })).values.map(String),
   });
   const values = distinct.data ?? [];
   const free = values.filter((v) => v !== '' && !block.steps.includes(v)).slice(0, 60);

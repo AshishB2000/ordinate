@@ -473,7 +473,11 @@ A sync re-reads the columns from the catalog (or a one-row run of the defining q
 It stores, per column, how much of the sample is filled, roughly how many distinct values it holds
 and — for a text column with few distinct values — up to 20 of the most frequent ones. Those values
 fill the filter pickers and help the Assistant spell a filter right; a column marked personal or
-financial never has its values shown to a model. A column that has gone from the warehouse leaves the
+financial never has its values shown to a model. A picker or a dashboard control over a column with
+no stored list says which case it is — the dataset has not been synced yet, the last sync read no
+sample of the column, or it is not a column a list is kept for — and an editor can run **Sync
+schema** from the control. A published page leaves such a control out of its filter bar, and the
+Publish dialog says so before anything is written. A column that has gone from the warehouse leaves the
 dataset, and any chart, KPI or answer that still uses it says "column missing" until it is changed or
 the column comes back.
 

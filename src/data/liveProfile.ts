@@ -192,17 +192,25 @@ export interface ProfileDistinct {
 }
 
 /**
- * A column's values for a filter picker, from the profile. The search is the
- * extract's (`distinctValuesPageJs`: case-insensitive substring). A column
- * with no stored values (a number, a date, a high-cardinality text) answers
- * none, with its distinct count — the picker's Condition tab still works.
- * Null when the dataset has no profile, or the profile never measured this
- * column (one added since the last sample): the caller keeps refusing (D6) —
- * an empty list would read as "this column has no values".
+ * Why a Live column has no list of values to give a picker:
+ *   notSynced   no schema sync has stored a profile yet
+ *   notSampled  the profile never measured this column (no sample was read, or the column is newer than it)
+ *   notListed   measured, with values, but not a column a list is kept for (a number, a date, a high-cardinality text)
  */
-export function profileDistinct(meta: ProfileMeta, column: string, req: { limit?: number; search?: string } = {}): ProfileDistinct | null {
+export type UnlistedReason = 'notSynced' | 'notSampled' | 'notListed';
+
+/**
+ * A column's values for a filter picker, from the profile. The search is the
+ * extract's (`distinctValuesPageJs`: case-insensitive substring). Where there
+ * is no list to give, the REASON — the caller refuses with it, typed (D6): an
+ * empty list would read as "this column has no values". A column the sample
+ * found empty does answer an empty list: that is what it holds.
+ */
+export function profileDistinct(meta: ProfileMeta, column: string, req: { limit?: number; search?: string } = {}): ProfileDistinct | UnlistedReason {
+  if (!meta.live?.profile) return 'notSynced';
   const p = profileOf(meta, column);
-  if (!p || p.distinct === undefined) return null;
+  if (!p || p.distinct === undefined) return 'notSampled';
+  if (p.distinct > 0 && !p.values?.length) return 'notListed';
   const cap = Math.max(0, Math.floor(typeof req.limit === 'number' ? req.limit : PROFILE_SAMPLE_VALUES));
   const needle = typeof req.search === 'string' ? req.search.toLowerCase() : '';
   const all = p.values ?? [];
