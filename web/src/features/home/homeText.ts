@@ -2,6 +2,7 @@
 // figure here is one the server returned; these only write it out.
 
 import type { RecentItem, RecentType } from '../../api/home';
+import type { IconName } from '../../ui/icons/Icon';
 
 export const TYPE_LABEL: Record<RecentType, string> = {
   dataset: 'Dataset',
@@ -54,7 +55,16 @@ export function qualityLabel(failing: number | undefined): string {
 
 // i18n-skip: a dataset NAME — src/app/sampleProject.ts SAMPLE_DATASET_NAME.
 export const SAMPLE_DATASET = 'Retail orders';
-const SAMPLE_PROMPTS = ['Which region had the worst month?', 'Revenue by category this year'];
+
+/** A starter question and the glyph its card carries. */
+export interface Starter {
+  text: string;
+  icon: IconName;
+}
+const SAMPLE_PROMPTS: Starter[] = [
+  { text: 'Which region had the worst month?', icon: 'trending-up' },
+  { text: 'Revenue by category this year', icon: 'chart-bar' },
+];
 
 const sampleOnly = (names: string[]) => names.length === 1 && names[0] === SAMPLE_DATASET;
 
@@ -64,13 +74,13 @@ const sampleOnly = (names: string[]) => names.length === 1 && names[0] === SAMPL
  * questions written for it; a project with no datasets falls back to the
  * datasets in Recent (first launch: the sample may sit in another project).
  */
-export function suggestPrompts(projectDatasets: string[], recentDatasets: string[]): string[] {
+export function suggestPrompts(projectDatasets: string[], recentDatasets: string[]): Starter[] {
   const names = projectDatasets.map((n) => n.trim()).filter(Boolean);
   if (sampleOnly(names)) return [...SAMPLE_PROMPTS];
   if (!names.length) return sampleOnly(recentDatasets.map((n) => n.trim())) ? [...SAMPLE_PROMPTS] : [];
-  const out = [`What stands out in ${names[0]}?`];
-  if (names.length > 1) out.push(`How do ${names[0]} and ${names[1]} compare?`);
-  out.push(`Summarise ${names[0]} in plain terms`);
+  const out: Starter[] = [{ text: `What stands out in ${names[0]}?`, icon: 'zap' }];
+  if (names.length > 1) out.push({ text: `How do ${names[0]} and ${names[1]} compare?`, icon: 'columns' });
+  out.push({ text: `Summarise ${names[0]} in plain terms`, icon: 'file-text' });
   return out.slice(0, 3);
 }
 

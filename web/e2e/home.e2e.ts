@@ -66,7 +66,11 @@ e2e('Home: greeting, preview cards, the table of work, a pin, Get started, the a
   const menu = page.getByRole('menu', { name: 'New' });
   for (const door of ['Dashboard', 'Visual', 'CSV / Excel', 'Paste data', 'Screenshot', 'Database']) await menu.getByRole('menuitem', { name: door }).waitFor();
   await page.keyboard.press('Escape');
-  // Starter chips from the project's real dataset names (the seed's two datasets, so not the sample-only pair).
+  // ── the hero: the ask bar in its own panel; this server has no model, and the panel says so ──
+  const hero = page.getByRole('region', { name: 'Ask your data anything' });
+  await hero.getByRole('textbox', { name: 'Ask about your data' }).waitFor();
+  await hero.getByTestId('ai-not-ready').waitFor();
+  // Starter cards from the project's real dataset names (the seed's two datasets, so not the sample-only pair).
   const chips = page.getByRole('group', { name: 'Suggested questions' }).getByRole('button');
   assert.equal(await chips.count(), 3);
   assert.match((await chips.first().textContent()) ?? '', /^What stands out in .+\?$/);

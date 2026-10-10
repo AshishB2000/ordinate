@@ -24,15 +24,18 @@ describe('home words', () => {
   });
 
   it('suggests from real dataset names, the sample\'s own questions, or nothing', () => {
-    expect(suggestPrompts(['Orders', 'Returns', 'Stock'], [])).toEqual([
+    const texts = (project: string[], recent: string[]) => suggestPrompts(project, recent).map((p) => p.text);
+    expect(texts(['Orders', 'Returns', 'Stock'], [])).toEqual([
       'What stands out in Orders?',
       'How do Orders and Returns compare?',
       'Summarise Orders in plain terms',
     ]);
-    expect(suggestPrompts(['Orders'], [])).toEqual(['What stands out in Orders?', 'Summarise Orders in plain terms']);
-    expect(suggestPrompts([SAMPLE_DATASET], [])).toEqual(['Which region had the worst month?', 'Revenue by category this year']);
-    expect(suggestPrompts([], [SAMPLE_DATASET])).toEqual(['Which region had the worst month?', 'Revenue by category this year']);
-    expect(suggestPrompts([], ['Orders'])).toEqual([]);
+    expect(texts(['Orders'], [])).toEqual(['What stands out in Orders?', 'Summarise Orders in plain terms']);
+    expect(texts([SAMPLE_DATASET], [])).toEqual(['Which region had the worst month?', 'Revenue by category this year']);
+    expect(texts([], [SAMPLE_DATASET])).toEqual(['Which region had the worst month?', 'Revenue by category this year']);
+    expect(texts([], ['Orders'])).toEqual([]);
+    // Each starter card carries a glyph for the kind of question it is.
+    expect(suggestPrompts(['Orders', 'Returns'], []).map((p) => p.icon)).toEqual(['zap', 'columns', 'file-text']);
   });
 
   it('opens a dataset, a dashboard and a visual on their own page and the rest on their section', () => {

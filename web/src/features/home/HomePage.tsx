@@ -1,9 +1,10 @@
-// Home — homePage.ts, homeAsk.ts and getStarted.ts, ported. In weight order:
-// the greeting, the ASK BAR (the one dominant element), the Get-started card
-// while first-run guidance lasts, then ONE column the page's full measure —
-// "Jump back in" (the newest records as preview cards), what the app found in
-// the data, the open comments, and the table of all recent work. Bringing data
-// in is the New menu's, so nothing on the page repeats it.
+// Home — homePage.ts, homeAsk.ts and getStarted.ts, ported. ASK FIRST: after
+// the greeting comes the ask hero (a tinted panel the page's full measure —
+// asking is what Home is for) and its starter questions as cards, then the
+// Get-started card while first-run guidance lasts, then ONE column — "Jump
+// back in" (the newest records as preview cards), what the app found in the
+// data, the open comments, and the table of all recent work. Bringing data in
+// is the New menu's, so nothing on the page repeats it.
 //
 // The project Home speaks for is the most recently updated one the caller can
 // read (projects:list comes newest first). T2.2's switcher will make it the
@@ -57,7 +58,8 @@ function NewMenu({ projectId }: { projectId: string | undefined }) {
       align="end"
       label="New"
       trigger={
-        <Button variant="primary" icon="plus" iconEnd="chevron-down">
+        // Not the accent: on an ask-first page that is the hero's send button.
+        <Button variant="secondary" icon="plus" iconEnd="chevron-down">
           New
         </Button>
       }

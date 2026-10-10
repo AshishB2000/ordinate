@@ -68,18 +68,45 @@
   flex: none;
 }
 
-/* ── THE HERO: the ask bar — the one element that lifts off the page ── */
-.ask {
+/* ── THE HERO: asking is what Home is for — a tinted panel the page's full
+   measure, and on it the bar, the one element that lifts off the page ── */
+.hero {
   display: flex;
   flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-24);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-xl);
+}
+.heroH {
+  display: flex;
+  align-items: center;
   gap: var(--sp-8);
+  margin: 0;
+  font-size: var(--t-20);
+  line-height: var(--lh-tight);
+  font-weight: 600;
+  letter-spacing: var(--tr-tight);
+  color: var(--text-strong);
+}
+.heroH > svg {
+  flex: none;
+  color: var(--accent);
+}
+/* The "AI isn't set up" note: its sentence, then the way to fix it on its own line. */
+.heroNote {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  font-size: var(--t-13);
 }
 .askBar {
   display: flex;
   align-items: center;
   gap: var(--ctl-gap);
-  min-height: 52px;
-  padding: var(--sp-8) var(--sp-8) var(--sp-8) var(--sp-16);
+  min-height: 64px;
+  padding: var(--sp-12) var(--sp-12) var(--sp-12) var(--sp-24);
   background: var(--surface-float);
   border: 1px solid var(--border-hairline);
   border-radius: var(--r-xl);
@@ -90,11 +117,6 @@
   border-color: var(--accent-line);
   box-shadow: var(--shadow-lg);
 }
-.askIcon {
-  flex: none;
-  display: flex;
-  color: var(--accent);
-}
 .askInput {
   flex: 1 1 auto;
   min-width: 0;
@@ -102,7 +124,7 @@
   background: none;
   outline: none;
   font: inherit;
-  font-size: var(--t-15);
+  font-size: 17px;
   letter-spacing: var(--tr-tight);
   line-height: var(--lh-snug);
   color: var(--text);
@@ -115,8 +137,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--ctl-lg);
-  height: var(--ctl-lg);
+  width: 40px;
+  height: 40px;
   border: none;
   border-radius: var(--r-lg);
   background: var(--accent);
@@ -131,33 +153,48 @@
   opacity: 0.45;
   cursor: default;
 }
-/* Starter chips: ghost, never the accent — these are prompts, not a selection. */
-.chips {
+/* Starter questions: cards, never the accent — these are drafts, not a selection. */
+.starters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--sp-12);
+}
+.starter {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-8);
-}
-.chip {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  height: var(--ctl-sm);
-  padding: 0 var(--sp-12);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  min-width: 0;
+  padding: var(--sp-16);
   border: 1px solid var(--border-hairline);
-  border-radius: var(--r-full);
-  background: transparent;
-  color: var(--muted);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+  color: var(--text-strong);
   font: inherit;
-  font-size: var(--t-12);
+  text-align: left;
   cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
-.chip:hover {
-  background: var(--surface-2);
-  border-color: var(--border);
-  color: var(--text);
+.starter:hover {
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-md);
+}
+.starterIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ctl-md);
+  height: var(--ctl-md);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.starterQ {
+  max-width: 100%;
+  font-size: var(--t-13);
+  font-weight: 500;
+  line-height: var(--lh-snug);
+  overflow-wrap: anywhere;
 }
 
 /* ── sections: an uppercase label over its content ── */

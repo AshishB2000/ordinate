@@ -1,15 +1,21 @@
-// Home's hero — homeAsk.ts's ask bar. Enter or the send button hands the
-// question to the Assistant dock (still T2.12's placeholder: no model is
-// called from Home). The starter chips FILL the bar and focus it; they never
-// send — a suggestion is a draft to edit.
+// Home's hero — homeAsk.ts's ask bar, as the page's first thing: a tinted
+// panel the page's full measure with the bar on it, then the starter questions
+// as cards. Enter or the send button hands the question to the Assistant dock
+// (no model is called from Home). A starter FILLS the bar and focuses it; it
+// never sends — a suggestion is a draft to edit, and asking can cost money.
+// Where no model is set up the panel says so, with the one way to fix it.
 
 import { useRef, useState } from 'react';
 import { Icon } from '../../ui/icons/Icon';
+import { AiNotReady } from '../assistant/AiNotReady';
+import { useAiStatus } from '../assistant/api';
+import type { Starter } from './homeText';
 import s from './HomePage.module.css';
 
-export function AskBar({ prompts, onAsk }: { prompts: string[]; onAsk: (question: string) => void }) {
+export function AskBar({ prompts, onAsk }: { prompts: Starter[]; onAsk: (question: string) => void }) {
   const [q, setQ] = useState('');
   const input = useRef<HTMLInputElement>(null);
+  const ai = useAiStatus();
   const submit = () => {
     const text = q.trim();
     if (!text) return;
@@ -17,51 +23,63 @@ export function AskBar({ prompts, onAsk }: { prompts: string[]; onAsk: (question
     onAsk(text);
   };
   return (
-    <div className={s.ask}>
-      <form
-        className={s.askBar}
-        aria-label="Ask the Assistant"
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
-        <span className={s.askIcon} aria-hidden="true">
-          <Icon name="sparkles" />
-        </span>
-        <input
-          ref={input}
-          className={s.askInput}
-          type="text"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Ask about your data…"
-          aria-label="Ask about your data"
-          autoComplete="off"
-          spellCheck={false}
-          maxLength={2000}
-        />
-        <button className={s.askSend} type="submit" aria-label="Ask" disabled={!q.trim()}>
-          <Icon name="arrow-up" />
-        </button>
-      </form>
+    <>
+      <section className={s.hero} aria-labelledby="home-ask">
+        <h2 id="home-ask" className={s.heroH}>
+          <Icon name="sparkles" size={20} />
+          Ask your data anything
+        </h2>
+        <form
+          className={s.askBar}
+          aria-label="Ask the Assistant"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
+          <input
+            ref={input}
+            className={s.askInput}
+            type="text"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Ask about your data…"
+            aria-label="Ask about your data"
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={2000}
+          />
+          <button className={s.askSend} type="submit" aria-label="Ask" disabled={!q.trim()}>
+            <Icon name="arrow-up" />
+          </button>
+        </form>
+        {ai.data && !ai.data.ready && <AiNotReady status={ai.data} className={s.heroNote} />}
+      </section>
       {prompts.length > 0 && (
-        <div className={s.chips} aria-label="Suggested questions" role="group">
-          {prompts.map((p) => (
-            <button
-              key={p}
-              type="button"
-              className={s.chip}
-              onClick={() => {
-                setQ(p);
-                input.current?.focus();
-              }}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
+        <section className={s.sec} aria-labelledby="home-try">
+          <h2 id="home-try" className={s.secH}>
+            Try asking
+          </h2>
+          <div className={s.starters} aria-label="Suggested questions" role="group">
+            {prompts.map((p) => (
+              <button
+                key={p.text}
+                type="button"
+                className={s.starter}
+                onClick={() => {
+                  setQ(p.text);
+                  input.current?.focus();
+                }}
+              >
+                <span className={s.starterIcon} aria-hidden="true">
+                  <Icon name={p.icon} />
+                </span>
+                <span className={s.starterQ}>{p.text}</span>
+              </button>
+            ))}
+          </div>
+        </section>
       )}
-    </div>
+    </>
   );
 }
