@@ -127,7 +127,18 @@ export function Editor({ projectId, datasets, columns, related, initial }: {
           ) : engine ? (
             <EngineShelves kind={engine} projectId={projectId} datasetId={datasetId} cols={columns} encoding={b.enc} onChange={b.setEnc} />
           ) : (
-            <EncodingForm projectId={projectId} cols={columns} related={related} encoding={b.enc} info={b.reply?.category} onChange={b.setEnc} />
+            <EncodingForm
+              projectId={projectId}
+              datasetId={datasetId}
+              cols={columns}
+              related={related}
+              encoding={b.enc}
+              info={b.reply?.category}
+              live={b.liveDataset}
+              canEdit={b.canEdit}
+              onChange={b.setEnc}
+              onFormat={b.formatAs}
+            />
           )}
           {!engine && (
             <FacetShelf

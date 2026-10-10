@@ -190,6 +190,7 @@ async function loadWarehouseTable(table: string): Promise<void> {
     ['dashboard tiles', 'analysis:tiles', { projectId: P, items: [{ kind: 'visual', datasetId: d, encoding: enc }] }],
     ['metric preview', 'metric:preview', { projectId: P, datasetId: d, definition: { column: 'sales', aggregation: 'sum' } }],
     ['metric values', 'metric:values', { projectId: P, ids: [metricId] }],
+    ['metric check (the measure editor)', 'metric:check', { projectId: P, datasetId: d, expression: 'sum(sales) / sum(qty)', name: 'Per unit', chart: true }],
     // answers
     ['answer card', 'answer:card', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
     ['answer: explain a tile', 'answer:explain', { projectId: P, tile: { datasetId: d, encoding: enc, filters: [], chartType: 'bar', name: 'Sales by region' } }],
@@ -219,7 +220,7 @@ async function loadWarehouseTable(table: string): Promise<void> {
    * be dated by the warehouse (`asOf.mode: 'live'`), never by the record.
    */
   const ROUTED = new Set(['chart (visual:data)', 'chart batch', 'chart preview', 'KPI tile (dashboard:metric)', 'dashboard tiles',
-    'metric preview', 'metric values', 'answer card', 'answer: explain a tile', 'answer: rerun', 'alert test: threshold']);
+    'metric preview', 'metric values', 'metric check (the measure editor)', 'answer card', 'answer: explain a tile', 'answer: rerun', 'alert test: threshold']);
   /** Every `ok` in a reply (a batch answers per item): all true, and every dated one dated live. */
   const answered = (v: unknown): boolean => {
     if (Array.isArray(v)) return v.length > 0 && v.every(answered);

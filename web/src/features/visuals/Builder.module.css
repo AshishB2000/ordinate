@@ -138,19 +138,20 @@
 .agg {
   flex: 0 0 104px;
 }
+/* A measure that is a saved metric: where the aggregation would be, what it is and its edit. */
 .metric {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: var(--sp-4) var(--sp-8);
-  font-size: var(--t-12);
-  font-weight: 600;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-line);
-  border-radius: var(--r-full);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: 0 0 104px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+/* "Add measure" and, beside it, the way to write one. */
+.addRow {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-4);
 }
 /* "+ Add measure" reads as an empty SLOT, not a button: full width, dashed. */
 .addSlot {

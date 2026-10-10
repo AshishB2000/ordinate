@@ -476,7 +476,7 @@ export function registerHandlers(): void {
     (require(mod) as { register: () => void }).register();
   }
   // Analyses and authoring, metrics (T2.8). `periods` (metric:compare) is T2.14's registration above.
-  for (const mod of ['../ipc/analyses', '../ipc/templates', '../ipc/dashboards', '../ipc/metrics', '../ipc/analysesServer']) {
+  for (const mod of ['../ipc/analyses', '../ipc/templates', '../ipc/dashboards', '../ipc/metrics', '../ipc/metricCheck', '../ipc/analysesServer']) {
     (require(mod) as { register: () => void }).register();
   }
   // Reports, stories and scorecards (T2.13): the records, the server-resolved pages a file is written from.

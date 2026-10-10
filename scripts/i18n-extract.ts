@@ -361,6 +361,7 @@ export const MAIN_FILES = [
   'src/data/incrementalMessages.ts',
   'src/ai/aiMessages.ts',
   'src/analysis/driverPointMessages.ts',
+  'src/analysis/metricCheckMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

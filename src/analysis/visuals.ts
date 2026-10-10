@@ -52,6 +52,11 @@ export interface VizMeasure {
    * deleted — plots exactly as it did. `vizData.buildVizData` never reads it;
    * it is carried so the chip can show the metric's NAME and format, and so
    * `metric:usage` can say which visuals a metric appears on.
+   *
+   * A SIMPLE metric plots those stored fields. A FORMULA metric has no column of
+   * its own: the chart door (`ipc/visuals.vizDataFor`) plans it into the totals
+   * it is made of and calculates it per cell, after totals
+   * (./metricMeasures, ipc/vizMetricMeasures) — `column` then carries its name.
    */
   metricId?: string;
   /**

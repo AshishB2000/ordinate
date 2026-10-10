@@ -89,15 +89,17 @@ export interface PopItem {
  * An unclosed `[` is a column; inside an LOD's dimension list every column is
  * offered as `[name]`; otherwise two or more identifier characters start a
  * function name (one letter would open a popover over every expression typed).
+ * `refs` are other names a bracket can hold — a measure's saved metrics — and
+ * come first.
  */
-export function popContext(before: string, columns: readonly Column[], docs: readonly FunctionDoc[]): { items: PopItem[]; from: number } | null {
+export function popContext(before: string, columns: readonly Column[], docs: readonly FunctionDoc[], refs: readonly PopItem[] = []): { items: PopItem[]; from: number } | null {
   const open = before.lastIndexOf('[');
   if (open >= 0 && before.indexOf(']', open) < 0) {
     const frag = before.slice(open + 1).toLowerCase();
-    const items = columns
-      .filter((c) => c.name.toLowerCase().includes(frag))
-      .slice(0, 12)
-      .map((c) => ({ label: c.name, insert: `[${c.name}]`, sub: c.type }));
+    const items = refs
+      .filter((r) => r.label.toLowerCase().includes(frag))
+      .concat(columns.filter((c) => c.name.toLowerCase().includes(frag)).map((c) => ({ label: c.name, insert: `[${c.name}]`, sub: c.type })))
+      .slice(0, 12);
     return items.length ? { items, from: open } : null;
   }
   const lod = /\{\s*(fixed|include|exclude)(\s[^:{}]*)$/i.exec(before);

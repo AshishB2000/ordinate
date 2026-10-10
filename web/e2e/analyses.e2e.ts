@@ -201,6 +201,27 @@ e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, 
   console.log('rpc per load:', rpc.loads.map((l) => `${new URL(l.url).pathname} ${l.rpcs}`).join(' · '));
 });
 
+e2e('the rail’s "Calculated field" opens the dialog in place, over the selected card’s dataset', async ({ page, server }) => {
+  await page.goto(`/analyses?project=${server.sample.projectId}`);
+  await settled(page);
+  await page.getByRole('link', { name: /Retail overview/ }).click();
+  await page.getByRole('heading', { level: 1, name: 'Retail overview' }).waitFor();
+  await page.waitForFunction(() => document.querySelectorAll('[data-card-id] canvas').length >= 2);
+  const here = page.url();
+  await page.getByRole('group', { name: 'Revenue by month card' }).click({ position: { x: 200, y: 120 } });
+  await page.getByRole('navigation', { name: 'Authoring panels' }).getByRole('button', { name: 'Data' }).click();
+  await page.getByRole('button', { name: 'Calculated field' }).click();
+  // No trip to Prepare: both kinds, the measure editor ready, the dataset's metrics on offer.
+  const calc = page.getByRole('dialog', { name: 'New calculated field' });
+  await calc.getByRole('radio', { name: /^Column \(calculated on every row\)/ }).waitFor();
+  await calc.getByLabel('Formula').waitFor();
+  await calc.getByRole('button', { name: 'Margin %', exact: true }).waitFor();
+  assert.equal(page.url(), here, 'the dialog opened in place');
+  await screensInPlace(page, 'analyses-calculated-field');
+  await calc.getByRole('button', { name: 'Cancel' }).click();
+  await calc.waitFor({ state: 'detached' });
+});
+
 e2e('draft with the Assistant, no model: the door is shut and says why', async ({ page, server }) => {
   await page.goto(`/analyses?project=${server.sample.projectId}`);
   await settled(page);

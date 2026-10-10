@@ -10,7 +10,6 @@ import { Link } from 'react-router';
 import { rpc } from '../../../api/client';
 import { useDatasetColumns, useDatasets } from '../../../api/datasets';
 import { Button, buttonClass } from '../../../ui/Button';
-import { Checkbox } from '../../../ui/Choice';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Input, Textarea } from '../../../ui/Field';
 import { Select } from '../../../ui/Select';
@@ -25,6 +24,7 @@ import { FilterRows } from '../../visuals/filters/FilterRows';
 import { liveFilters } from '../../visuals/filters/filterText';
 import { AGG_LABEL, failure, type Agg } from '../api';
 import { isFormula, useMetricList, type Metric, type MetricFormat } from './api';
+import { DirectionSelect, FormatFields, saveMetric, type Direction } from './parts';
 import s from './Metrics.module.css';
 
 const AGGS: Agg[] = ['sum', 'avg', 'count', 'min', 'max'];
@@ -61,7 +61,7 @@ export function MetricEditor({ projectId, existing, onSaved, onClose }: { projec
     compact: fmt0?.compact === true,
   });
   const [description, setDescription] = useState(existing?.description ?? '');
-  const [direction, setDirection] = useState<string>(existing?.direction ?? '');
+  const [direction, setDirection] = useState<Direction>(existing?.direction ?? '');
   const [preview, setPreview] = useState<{ display: string; text: string; error?: string } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState('');
@@ -110,28 +110,13 @@ export function MetricEditor({ projectId, existing, onSaved, onClose }: { projec
     setError('');
     if (!name.trim()) return setError('A metric needs a name.');
     if (!ds || !definition) return setError('Choose a dataset and a column.');
-    const fields = {
-      name: name.trim(),
-      definition,
-      filters: live,
-      format,
-      description,
-      direction: direction as '' | 'up_good' | 'down_good',
-    };
     setSaving(true);
-    try {
-      const r = (editingId
-        ? await rpc('metric:update', { projectId, id: editingId, patch: fields })
-        : await rpc('metric:save', { projectId, input: { ...fields, datasetId: ds } })) as { ok: boolean; metric?: Metric; error?: string };
-      if (!r.ok || !r.metric) throw new Error(r.error || 'Could not save the metric.');
-      onSaved(r.metric);
-      onClose();
-    } catch (err) {
-      // In the dialog, not a toast: the user's work is still in these boxes.
-      setError(failure(err, 'Could not save the metric.'));
-    } finally {
-      setSaving(false);
-    }
+    const r = await saveMetric(projectId, editingId, ds, { name: name.trim(), definition, filters: live, format, description, direction });
+    setSaving(false);
+    // In the dialog, not a toast: the user's work is still in these boxes.
+    if ('error' in r) return setError(r.error);
+    onSaved(r.metric);
+    onClose();
   };
 
   const refs = (others.data ?? []).filter((m) => m.id !== editingId && m.datasetId === ds).slice(0, 12);
@@ -252,37 +237,10 @@ export function MetricEditor({ projectId, existing, onSaved, onClose }: { projec
           )}
           <div className={s.group}>
             <span className={s.groupLabel}>Format</span>
-            <div className={s.format}>
-              <Select
-                size="sm"
-                aria-label="Format"
-                value={format.kind}
-                options={[
-                  { value: 'number', label: 'Number' },
-                  { value: 'currency', label: 'Currency' },
-                  { value: 'percent', label: 'Percent' },
-                  { value: 'duration', label: 'Duration' },
-                ]}
-                onValueChange={(v) => setFormat((f) => ({ ...f, kind: v as MetricFormat['kind'] }))}
-              />
-              <Input size="sm" type="number" min={0} max={6} aria-label="Decimal places" value={String(format.decimals ?? 0)} onChange={(e) => setFormat((f) => ({ ...f, decimals: Number(e.target.value) || 0 }))} />
-              <Input size="sm" aria-label="Prefix" placeholder="Prefix" value={format.prefix ?? ''} maxLength={8} onChange={(e) => setFormat((f) => ({ ...f, prefix: e.target.value }))} />
-              <Input size="sm" aria-label="Suffix" placeholder="Suffix" value={format.suffix ?? ''} maxLength={8} onChange={(e) => setFormat((f) => ({ ...f, suffix: e.target.value }))} />
-              <Checkbox label="Compact" checked={!!format.compact} onCheckedChange={(c) => setFormat((f) => ({ ...f, compact: c }))} />
-            </div>
+            <FormatFields format={format} onChange={setFormat} affixes />
           </div>
           <Input label="Description" placeholder="What this number means, for whoever reads it next" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} />
-          <Select
-            label="Direction"
-            hint="Which way is good news, for the surfaces that colour a change."
-            value={direction}
-            options={[
-              { value: '', label: 'No opinion' },
-              { value: 'up_good', label: 'Up is good' },
-              { value: 'down_good', label: 'Down is good' },
-            ]}
-            onValueChange={setDirection}
-          />
+          <DirectionSelect value={direction} onChange={setDirection} />
         </div>
         <aside className={s.preview} aria-live="polite" aria-label="Preview">
           <span className={s.previewH}>Preview</span>

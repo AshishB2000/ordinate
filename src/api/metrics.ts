@@ -62,6 +62,23 @@ export const metrics = {
     input: z.strictObject({ projectId: Uuid, datasetId: Uuid, definition: Definition, filters: Steps.optional(), format: Format.optional() }),
     project: byProjectId,
   }),
+  // The measure editor, once per pause in typing (src/ipc/metricCheck.ts): the
+  // compiler's verdict and its position, why a formula that parses would have no
+  // value, whether the name is free, and the figure. `id` is the metric being
+  // edited; `chart` asks that every operand be this dataset's. Writes nothing.
+  'metric:check': rpc({
+    access: 'read',
+    input: z.strictObject({
+      projectId: Uuid,
+      datasetId: Uuid,
+      expression: z.string().max(20_000),
+      name: z.string().max(200).optional(),
+      id: Uuid.optional(),
+      format: Format.optional(),
+      chart: z.boolean().optional(),
+    }),
+    project: byProjectId,
+  }),
   // ── Server only (src/ipc/analysesServer.ts) ─────────────────────────────
   // The Metrics tab in one call: the decorated list, and per metric its value
   // (`metric:value`), its sparkline series (`metric:series`) and where it is
