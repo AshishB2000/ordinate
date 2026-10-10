@@ -57,6 +57,7 @@ const aiConfig: typeof import('../src/server/aiConfig') = require('../src/server
 const byok: typeof import('../src/ai/byok') = require('../src/ai/byok');
 const execConfig: typeof import('../src/app/execConfig') = require('../src/app/execConfig');
 const config: typeof import('../src/app/config') = require('../src/app/config');
+const orgConfig: typeof import('../src/server/orgConfig') = require('../src/server/orgConfig');
 
 type Identity = import('../src/server/context').Identity;
 const CANARY = `sk-ant-Canary/${randomBytes(8).toString('hex')}+x=y`;
@@ -250,7 +251,9 @@ function allFiles(dir: string): string {
 
     // ── Pods: pod B, another pool and another disk, sees the same setup ─────
     const masterKey = env('acme').masterKey;
-    // NEGATIVE CONTROL first: the old path, saved on A's disk…
+    // NEGATIVE CONTROL first: the old path, saved on A's disk… The org's settings
+    // document is a Postgres row now (0014_org_config), so this is the file alone.
+    config.useBacking(null);
     const legacyA = await as(BOSS, async () => {
       await execConfig.saveByokProvider('gateway', { baseUrl: stubUrl, model: 'x' });
       execConfig.setByokVerified('gateway', true);
@@ -261,6 +264,7 @@ function allFiles(dir: string): string {
     const legacyB = await as(BOSS, async () => execConfig.effectiveByokActive());
     const viewB = await as(VIC, () => aiConfig.memberView());
     ok('pods NEGATIVE CONTROL: config.json saved on pod A says ready there and not on pod B', legacyA === 'gateway' && legacyB === null, show({ legacyA, legacyB }));
+    orgConfig.useOrgConfig(podB, DATA_A);
     ok('pods: pod B is ready with the same two models and the default', viewB.ready && viewB.models.map((m) => m.model).join() === 'claude-sonnet-a,claude-haiku-b' && viewB.mine?.model === 'claude-sonnet-a', show(viewB));
     context.enterServerMode(DATA_A);
 
