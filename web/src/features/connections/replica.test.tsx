@@ -62,7 +62,8 @@ function serve(routes: Record<string, Reply>) {
       const channel = path.startsWith('/api/rpc/') ? decodeURIComponent(path.slice('/api/rpc/'.length)) : path;
       const payload = init?.body ? (JSON.parse(String(init.body)) as { args: unknown[] }).args[0] : undefined;
       if (path.startsWith('/api/rpc/')) calls.push({ channel, payload });
-      const r = routes[channel] ?? { body: [] };
+      // The caller edits this project unless a test says otherwise: the screens gate their change controls on it.
+      const r = routes[channel] ?? (channel === 'projects:roles' ? { body: { [PID]: 'editor' } } : { body: [] });
       const out = typeof r === 'function' ? r(payload) : r;
       return new Response(JSON.stringify(out.body ?? null), { status: out.status ?? 200 });
     }),

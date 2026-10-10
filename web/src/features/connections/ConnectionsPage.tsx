@@ -12,6 +12,7 @@ import { Select } from '../../ui/Select';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { toast } from '../../ui/Toast';
 import { NoProject } from '../projects/NoProject';
+import { EditorsOnly } from './EditorsOnly';
 import { useCatalog, useConnections, useLogos, useRefreshLists, type Connection } from './api';
 import { ConnectionForm, initialDraft, type Draft } from './ConnectionForm';
 import { ConnectorPicker } from './ConnectorPicker';
@@ -44,7 +45,27 @@ export default function ConnectionsPage() {
   // /connections shows the first project in place (no redirect: the nav item
   // stays on its own route); an unknown id falls back to it.
   if (projectId && !projects.data.some((p) => p.id === projectId)) return <Navigate to="/connections" replace />;
-  return <Connect projectId={projectId ?? projects.data[0].id} projects={projects.data} />;
+  const id = projectId ?? projects.data[0].id;
+  return (
+    <EditorsOnly projectId={id} above={<ProjectPick projectId={id} projects={projects.data} />}>
+      <Connect projectId={id} projects={projects.data} />
+    </EditorsOnly>
+  );
+}
+
+function ProjectPick({ projectId, projects }: { projectId: string; projects: { id: string; name: string }[] }) {
+  const navigate = useNavigate();
+  return (
+    <div className={s.toolbar}>
+      <Select
+        aria-label="Project"
+        className={s.project}
+        value={projectId}
+        onValueChange={(id) => void navigate(`/connections/${id}`)}
+        options={projects.map((p) => ({ value: p.id, label: p.name }))}
+      />
+    </div>
+  );
 }
 
 function Connect({ projectId, projects }: { projectId: string; projects: { id: string; name: string }[] }) {
@@ -74,15 +95,7 @@ function Connect({ projectId, projects }: { projectId: string; projects: { id: s
 
   return (
     <Page title={TITLE} sub={SUB}>
-      <div className={s.toolbar}>
-        <Select
-          aria-label="Project"
-          className={s.project}
-          value={projectId}
-          onValueChange={(id) => void navigate(`/connections/${id}`)}
-          options={projects.map((p) => ({ value: p.id, label: p.name }))}
-        />
-      </div>
+      <ProjectPick projectId={projectId} projects={projects} />
 
       {conns.isPending ? (
         <SkeletonRows rows={2} label="Loading saved connections" />

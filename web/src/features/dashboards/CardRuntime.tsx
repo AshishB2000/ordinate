@@ -81,7 +81,8 @@ export function useCardRuntime(ed: EditorApi, gridRef: RefObject<HTMLDivElement 
 
   const menu = (card: Card, def: VisualDef | undefined): MenuEntry[] => {
     const out: MenuEntry[] = [];
-    if (card.type === 'metric') {
+    // An alert is saved to the project (`alerts:save` is a write): not a viewer's.
+    if (card.type === 'metric' && !ed.readOnly) {
       out.push({
         label: 'Alert me…',
         icon: 'bell',

@@ -16,6 +16,7 @@ import { Menu } from '../../../ui/Menu';
 import { Skeleton } from '../../../ui/Skeleton';
 import { toast } from '../../../ui/Toast';
 import type { MetricSummary } from '../../analyses/metrics/api';
+import { useCanEdit } from '../../projects/api';
 import { failure, PERIOD_WORD, useScorecards, type Scorecard, type ScorecardSummary } from '../api';
 import s from '../Reports.module.css';
 
@@ -26,6 +27,7 @@ export function ScorecardList({ projectId }: { projectId: string }) {
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState('Monthly scorecard');
   const [deleting, setDeleting] = useState<ScorecardSummary | null>(null);
+  const canEdit = useCanEdit(projectId);
   const refresh = () => void client.invalidateQueries({ queryKey: ['scorecard:list', projectId] });
   const open = (id: string, edit = false) => void navigate(`/scorecards/${projectId}/${id}${edit ? '?edit=1' : ''}`);
 
@@ -61,7 +63,8 @@ export function ScorecardList({ projectId }: { projectId: string }) {
     refresh();
   };
 
-  const newButton = (
+  // Building a scorecard is an editor's; a viewer opens and reads one.
+  const newButton = canEdit && (
     <Button variant="primary" icon="plus" onClick={() => setNaming(true)}>
       New scorecard
     </Button>
@@ -85,7 +88,7 @@ export function ScorecardList({ projectId }: { projectId: string }) {
     body = (
       <EmptyState icon="target" title="No scorecards yet" actions={newButton}>
         A scorecard reads your metrics one period at a time against their targets: on track, at risk or off track, the change on the last period, and a
-        twelve-period trend. Every figure is recomputed by the app — nothing is stored.
+        twelve-period trend. Every figure is recomputed by the app — nothing is stored.{!canEdit && ' An editor of this project can create one. You have view-only access.'}
       </EmptyState>
     );
   } else {
@@ -125,9 +128,9 @@ export function ScorecardList({ projectId }: { projectId: string }) {
                 trigger={<IconButton icon="more-horizontal" label="Scorecard actions" size="sm" />}
                 items={[
                   { label: 'Open', icon: 'target', onSelect: () => open(sc.id) },
-                  { label: 'Duplicate', icon: 'copy', onSelect: () => void duplicate(sc) },
-                  { kind: 'separator' },
-                  { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setDeleting(sc) },
+                  ...(canEdit
+                    ? [{ label: 'Duplicate', icon: 'copy' as const, onSelect: () => void duplicate(sc) }, { kind: 'separator' as const }, { label: 'Delete', icon: 'trash' as const, danger: true, onSelect: () => setDeleting(sc) }]
+                    : []),
                 ]}
               />
             </span>

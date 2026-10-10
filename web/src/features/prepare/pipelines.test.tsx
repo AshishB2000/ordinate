@@ -35,7 +35,8 @@ function serve(routes: Record<string, Reply>) {
       const channel = path.startsWith('/api/rpc/') ? decodeURIComponent(path.slice('/api/rpc/'.length)) : path;
       const payload = init?.body ? (JSON.parse(String(init.body)) as { args: unknown[] }).args[0] : undefined;
       if (path.startsWith('/api/rpc/')) calls.push({ channel, payload });
-      const r = routes[channel] ?? { body: [] };
+      // The caller edits this project unless a test says otherwise: the screens gate their change controls on it.
+      const r = routes[channel] ?? (channel === 'projects:roles' ? { body: { [PID]: 'editor' } } : { body: [] });
       const out = typeof r === 'function' ? r(payload) : r;
       return new Response(JSON.stringify(out.body ?? null), { status: out.status ?? 200 });
     }),
@@ -93,6 +94,20 @@ const base = (extra: Record<string, Reply> = {}) => ({
 });
 
 describe('Pipelines', () => {
+  it('shows a viewer the pipeline without Run, Pause or the schedule editor', async () => {
+    const calls = serve(base({ 'projects:roles': { body: { [PID]: 'viewer' } } }));
+    renderApp('/pipelines');
+    expect(await screen.findByText('7 on their own schedule')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Run all' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^(Edit|Set a schedule)$/ })).toBeNull();
+    expect((screen.getByRole('combobox', { name: 'On failure' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: /^Dataset: Orders\. Failed\./ }));
+    const panel = await screen.findByRole('region', { name: 'Step: Orders' });
+    expect(within(panel).queryByRole('button', { name: 'Run from here' })).toBeNull();
+    expect(within(panel).queryByRole('button', { name: 'Pause' })).toBeNull();
+    expect(calls.some((c) => c.channel.startsWith('pipelines:set') || c.channel === 'pipelines:run')).toBe(false);
+  });
+
   it('prints the server’s summary, and a step’s panel with its run log', async () => {
     const calls = serve(base({ 'pipelines:setPaused': { body: { ok: true } } }));
     renderApp('/pipelines');

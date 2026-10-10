@@ -15,13 +15,14 @@ import { SkeletonRows } from '../../ui/Skeleton';
 import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
 import { ProjectGate } from '../import/ProjectGate';
+import { useCanEdit } from '../projects/api';
 import { reason, siteUrl, usePublishActions, useSites, type HostedSite } from './api';
 import { PublishDialog } from './PublishDialog';
 import p from './Publish.module.css';
 
 const size = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 
-function SiteRow({ site, projectId, publicLinks, onRepublish }: { site: HostedSite; projectId: string; publicLinks: boolean; onRepublish: () => void }) {
+function SiteRow({ site, projectId, publicLinks, onRepublish, canEdit }: { site: HostedSite; projectId: string; publicLinks: boolean; onRepublish: () => void; canEdit: boolean }) {
   const { access, unpublish } = usePublishActions(projectId);
   const [armed, setArmed] = useState(false);
   const url = siteUrl(site.id);
@@ -55,35 +56,40 @@ function SiteRow({ site, projectId, publicLinks, onRepublish }: { site: HostedSi
         <Button size="sm" icon="copy" onClick={() => void copy()}>
           Copy link
         </Button>
-        <Button size="sm" icon="refresh" onClick={onRepublish}>
-          Publish again
-        </Button>
-        <Menu
-          label={`${name} options`}
-          align="end"
-          trigger={<IconButton icon="more-horizontal" size="sm" label={`${name} options`} />}
-          items={[
-            { label: 'Open', icon: 'external-link', onSelect: () => window.open(url, '_blank', 'noopener,noreferrer') },
-            site.access === 'link'
-              ? { label: 'Only your organisation', icon: 'lock', onSelect: () => access.mutate({ id: site.id, access: 'org' }, { onError: fail }) }
-              : { label: 'Anyone with the link', icon: 'globe', disabled: !publicLinks, onSelect: () => access.mutate({ id: site.id, access: 'link' }, { onError: fail }) },
-            { kind: 'separator' },
-            {
-              label: armed ? 'Unpublish — the link stops working' : 'Unpublish…',
-              icon: 'trash',
-              danger: true,
-              onSelect: () => {
-                if (!armed) {
-                  setArmed(true);
-                  toast(`Choose Unpublish again to take “${name}” down.`);
-                  setTimeout(() => setArmed(false), 6000);
-                  return;
-                }
-                unpublish.mutate(site.id, { onSuccess: () => toast('Unpublished'), onError: fail });
-              },
-            },
-          ]}
-        />
+        {/* Publishing again, who may open it and Unpublish are an editor's; a viewer opens the page and copies its link. */}
+        {canEdit && (
+          <>
+            <Button size="sm" icon="refresh" onClick={onRepublish}>
+              Publish again
+            </Button>
+            <Menu
+              label={`${name} options`}
+              align="end"
+              trigger={<IconButton icon="more-horizontal" size="sm" label={`${name} options`} />}
+              items={[
+                { label: 'Open', icon: 'external-link', onSelect: () => window.open(url, '_blank', 'noopener,noreferrer') },
+                site.access === 'link'
+                  ? { label: 'Only your organisation', icon: 'lock', onSelect: () => access.mutate({ id: site.id, access: 'org' }, { onError: fail }) }
+                  : { label: 'Anyone with the link', icon: 'globe', disabled: !publicLinks, onSelect: () => access.mutate({ id: site.id, access: 'link' }, { onError: fail }) },
+                { kind: 'separator' },
+                {
+                  label: armed ? 'Unpublish — the link stops working' : 'Unpublish…',
+                  icon: 'trash',
+                  danger: true,
+                  onSelect: () => {
+                    if (!armed) {
+                      setArmed(true);
+                      toast(`Choose Unpublish again to take “${name}” down.`);
+                      setTimeout(() => setArmed(false), 6000);
+                      return;
+                    }
+                    unpublish.mutate(site.id, { onSuccess: () => toast('Unpublished'), onError: fail });
+                  },
+                },
+              ]}
+            />
+          </>
+        )}
       </div>
     </li>
   );
@@ -93,6 +99,7 @@ function Published({ projectId }: { projectId: string }) {
   const [params, setParams] = useSearchParams();
   const preselect = params.get('dashboard') ?? undefined;
   const q = useSites(projectId);
+  const canEdit = useCanEdit(projectId);
   const [dialog, setDialog] = useState<{ site?: HostedSite } | null>(() => (preselect ? {} : null));
   const close = () => {
     setDialog(null);
@@ -109,9 +116,11 @@ function Published({ projectId }: { projectId: string }) {
           <Icon name={publicLinks ? 'globe' : 'lock'} size={12} />
           {publicLinks ? 'Your organisation allows links anyone can open.' : 'Links open for people in your organisation only.'}
         </span>
-        <Button variant="primary" icon="globe" onClick={() => setDialog({})}>
-          Publish…
-        </Button>
+        {canEdit && (
+          <Button variant="primary" icon="globe" onClick={() => setDialog({})}>
+            Publish…
+          </Button>
+        )}
       </div>
       {q.isPending ? (
         <SkeletonRows rows={4} label="Loading published links" />
@@ -122,21 +131,25 @@ function Published({ projectId }: { projectId: string }) {
           icon="globe"
           title="Nothing published yet"
           actions={
-            <Button variant="primary" icon="globe" onClick={() => setDialog({})}>
-              Publish a dashboard
-            </Button>
+            canEdit && (
+              <Button variant="primary" icon="globe" onClick={() => setDialog({})}>
+                Publish a dashboard
+              </Button>
+            )
           }
         >
-          Publishing turns dashboards into read-only pages at a link you can share — with their filter bars, built from the figures as they are when you publish.
+          {canEdit
+            ? 'Publishing turns dashboards into read-only pages at a link you can share — with their filter bars, built from the figures as they are when you publish.'
+            : 'An editor of this project can publish its dashboards as read-only pages at a link. You have view-only access.'}
         </EmptyState>
       ) : (
         <ul className={p.sites} aria-label="Published links">
           {q.data.sites.map((site) => (
-            <SiteRow key={site.id} site={site} projectId={projectId} publicLinks={publicLinks} onRepublish={() => setDialog({ site })} />
+            <SiteRow key={site.id} site={site} projectId={projectId} publicLinks={publicLinks} canEdit={canEdit} onRepublish={() => setDialog({ site })} />
           ))}
         </ul>
       )}
-      {dialog && <PublishDialog projectId={projectId} site={dialog.site} preselect={preselect} publicLinks={publicLinks} onClose={close} onPublished={() => undefined} />}
+      {dialog && canEdit && <PublishDialog projectId={projectId} site={dialog.site} preselect={preselect} publicLinks={publicLinks} onClose={close} onPublished={() => undefined} />}
     </Page>
   );
 }

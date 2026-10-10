@@ -167,7 +167,7 @@ export function CardView({
   return (
     <div
       // A one-row navigation or divider card has no room for a head: it floats in the corner (authoring.css).
-      className={card.type === 'nav' || card.type === 'divider' ? `${className} ${s.slim}` : className}
+      className={[className, (card.type === 'nav' || card.type === 'divider') && s.slim, ed.readOnly && s.readOnly].filter(Boolean).join(' ')}
       style={style}
       data-card-id={card.id}
       data-kind={card.type}
@@ -206,25 +206,28 @@ export function CardView({
         {/* Present: a reading view, no card controls (dashShare.ts). */}
         {!ed.view.presenting && (
         <span className={s.ctrls} onPointerDown={(e) => e.stopPropagation()}>
-          {card.type === 'metric' && <WatchedBell ed={ed} card={card} />}
+          {/* A viewer keeps what reads: the comments, and the menu's table view, rows and export. */}
+          {!ed.readOnly && card.type === 'metric' && <WatchedBell ed={ed} card={card} />}
           {card.type !== 'control' && card.type !== 'divider' && <CommentButton ed={ed} card={card} />}
           {onHide && <IconButton icon="eye-off" size="sm" label={`${onHide.label}: ${title}`} onClick={onHide.run} />}
-          {visualId && (
+          {!ed.readOnly && visualId && (
             <Link className={buttonClass('ghost', 'sm', s.edit)} to={builderFor(ed.projectId, visualId)} title="Edit this visual in the Visuals builder">
               <Icon name="pencil" size={12} />
               <span>Edit</span>
             </Link>
           )}
-          <IconButton
-            icon="sliders"
-            size="sm"
-            label="Card properties"
-            onClick={() => {
-              ed.select(card.id);
-              ed.setPane('props');
-            }}
-          />
-          <Menu label={`${title} card actions`} align="end" trigger={<IconButton icon="more-horizontal" size="sm" label={`${title} card actions`} />} items={menu} />
+          {!ed.readOnly && (
+            <IconButton
+              icon="sliders"
+              size="sm"
+              label="Card properties"
+              onClick={() => {
+                ed.select(card.id);
+                ed.setPane('props');
+              }}
+            />
+          )}
+          {menu.length > 0 && <Menu label={`${title} card actions`} align="end" trigger={<IconButton icon="more-horizontal" size="sm" label={`${title} card actions`} />} items={menu} />}
         </span>
         )}
       </div>

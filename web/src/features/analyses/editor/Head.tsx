@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { Badge } from '../../../ui/Badge';
 import { Button, IconButton, buttonClass } from '../../../ui/Button';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Input } from '../../../ui/Field';
@@ -94,11 +95,11 @@ function SheetTabs() {
             aria-selected={i === ed.sheet}
             className={s.sheetBtn}
             onClick={() => ed.setSheet(i)}
-            onDoubleClick={() => setRenaming(i)}
+            onDoubleClick={() => !ed.readOnly && setRenaming(i)}
           >
             {sh.name}
           </button>
-          {i === ed.sheet && (
+          {i === ed.sheet && !ed.readOnly && (
             <Menu
               label={`${sh.name} sheet actions`}
               trigger={<IconButton icon="chevron-down" size="sm" label={`${sh.name} sheet actions`} />}
@@ -110,17 +111,19 @@ function SheetTabs() {
           )}
         </span>
       ))}
-      <IconButton
-        icon="plus"
-        size="sm"
-        label="Add sheet"
-        onClick={() => {
-          const id = uuid();
-          const n = sheets.length;
-          ed.edit('Add sheet', (d) => void d.sheets.push({ id, name: nextSheetName(d), cards: [] }));
-          ed.setSheet(n);
-        }}
-      />
+      {!ed.readOnly && (
+        <IconButton
+          icon="plus"
+          size="sm"
+          label="Add sheet"
+          onClick={() => {
+            const id = uuid();
+            const n = sheets.length;
+            ed.edit('Add sheet', (d) => void d.sheets.push({ id, name: nextSheetName(d), cards: [] }));
+            ed.setSheet(n);
+          }}
+        />
+      )}
       {renaming !== null && sheets[renaming] && (
         <NameDialog
           title="Rename sheet"
@@ -146,6 +149,7 @@ export function Head() {
   const [lineage, setLineage] = useState(false);
   const [styling, setStyling] = useState(false);
   const { past, future } = ed.history;
+  const ro = ed.readOnly;
   const back = `/analyses?project=${ed.projectId}`;
   // Publishing lives with the dashboard viewer (T2.9): write what is on screen now, then go there.
   const publish = () => {
@@ -160,14 +164,28 @@ export function Head() {
           <span>Analyses</span>
         </Link>
         <h1 className={s.nameH}>
-          <button type="button" className={s.name} title="Click to rename" onClick={() => setRenaming(true)}>
-            {ed.doc.name}
-          </button>
+          {ro ? (
+            <span className={s.name}>{ed.doc.name}</span>
+          ) : (
+            <button type="button" className={s.name} title="Click to rename" onClick={() => setRenaming(true)}>
+              {ed.doc.name}
+            </button>
+          )}
         </h1>
-        <SaveChip />
+        {ro ? (
+          <span title="You can read this dashboard, use its filters and comment. A project admin can make you an editor.">
+            <Badge icon="eye">View only</Badge>
+          </span>
+        ) : (
+          <SaveChip />
+        )}
         <span className={s.grow} />
-        <IconButton icon="undo" size="sm" label={past.length ? `Undo ${past[past.length - 1].label}` : 'Nothing to undo'} disabled={!past.length} onClick={ed.undo} />
-        <IconButton icon="redo" size="sm" label={future.length ? `Redo ${future[0].label}` : 'Nothing to redo'} disabled={!future.length} onClick={ed.redo} />
+        {!ro && (
+          <>
+            <IconButton icon="undo" size="sm" label={past.length ? `Undo ${past[past.length - 1].label}` : 'Nothing to undo'} disabled={!past.length} onClick={ed.undo} />
+            <IconButton icon="redo" size="sm" label={future.length ? `Redo ${future[0].label}` : 'Nothing to redo'} disabled={!future.length} onClick={ed.redo} />
+          </>
+        )}
         <ViewControls />
         <SizeSwitch />
         <IconButton icon="message-square" size="sm" label="Comments on this dashboard" onClick={() => ed.view.openComments('all')} />
@@ -181,55 +199,57 @@ export function Head() {
           items={[
             { label: 'History', icon: 'history', onSelect: () => void navigate(`/versions/${ed.projectId}/dashboard/${ed.analysisId}`) },
             { label: 'Lineage', icon: 'lineage', onSelect: () => setLineage(true) },
-            { label: 'Style…', icon: 'sliders', onSelect: () => setStyling(true) },
+            ...(ro ? [] : [{ label: 'Style…', icon: 'sliders' as const, onSelect: () => setStyling(true) }]),
             { label: 'Export HTML', icon: 'download', onSelect: () => void exportHtml(ed) },
             { label: 'Print or save as PDF', icon: 'file-text', onSelect: () => window.print() },
-            { label: 'Publish…', icon: 'external-link', onSelect: publish },
+            ...(ro ? [] : [{ label: 'Publish…', icon: 'external-link' as const, onSelect: publish }]),
           ]}
         />
       </div>
       <div className={s.headRow}>
         <SheetTabs />
         <span className={s.grow} />
-        <div className={s.adds} role="group" aria-label="Add to the sheet">
-          <Button size="sm" icon="plus" onClick={() => ed.openAdd('visual')}>
-            Visual
-          </Button>
-          <Button size="sm" icon="plus" onClick={() => ed.openAdd('kpi')}>
-            KPI
-          </Button>
-          <Button size="sm" icon="plus" onClick={() => ed.openAdd('text')}>
-            Text
-          </Button>
-          <Menu
-            label="Add a control"
-            trigger={
-              <Button size="sm" icon="filter" iconEnd="chevron-down">
-                Control
-              </Button>
-            }
-            items={[
-              { label: 'Filter control…', icon: 'filter', onSelect: () => ed.openAdd('control') },
-              { label: 'Parameter…', icon: 'sliders', onSelect: () => ed.openAdd('param') },
-            ]}
-          />
-          <Menu
-            label="Add more"
-            trigger={
-              <Button size="sm" iconEnd="chevron-down">
-                More
-              </Button>
-            }
-            items={[
-              { label: 'Image…', icon: 'camera', onSelect: addImage },
-              { label: 'Navigation', icon: 'arrow-right', onSelect: () => void addNav() },
-              { label: 'Divider', icon: 'minus', onSelect: () => addKind('divider') },
-              { label: 'Container', icon: 'layout-dashboard', onSelect: () => addKind('container') },
-              { label: 'Tabs', icon: 'columns', onSelect: () => addKind('tabs') },
-              { label: 'Summary', icon: 'sparkles', onSelect: () => addSummary(ed) },
-            ]}
-          />
-        </div>
+        {!ro && (
+          <div className={s.adds} role="group" aria-label="Add to the sheet">
+            <Button size="sm" icon="plus" onClick={() => ed.openAdd('visual')}>
+              Visual
+            </Button>
+            <Button size="sm" icon="plus" onClick={() => ed.openAdd('kpi')}>
+              KPI
+            </Button>
+            <Button size="sm" icon="plus" onClick={() => ed.openAdd('text')}>
+              Text
+            </Button>
+            <Menu
+              label="Add a control"
+              trigger={
+                <Button size="sm" icon="filter" iconEnd="chevron-down">
+                  Control
+                </Button>
+              }
+              items={[
+                { label: 'Filter control…', icon: 'filter', onSelect: () => ed.openAdd('control') },
+                { label: 'Parameter…', icon: 'sliders', onSelect: () => ed.openAdd('param') },
+              ]}
+            />
+            <Menu
+              label="Add more"
+              trigger={
+                <Button size="sm" iconEnd="chevron-down">
+                  More
+                </Button>
+              }
+              items={[
+                { label: 'Image…', icon: 'camera', onSelect: addImage },
+                { label: 'Navigation', icon: 'arrow-right', onSelect: () => void addNav() },
+                { label: 'Divider', icon: 'minus', onSelect: () => addKind('divider') },
+                { label: 'Container', icon: 'layout-dashboard', onSelect: () => addKind('container') },
+                { label: 'Tabs', icon: 'columns', onSelect: () => addKind('tabs') },
+                { label: 'Summary', icon: 'sparkles', onSelect: () => addSummary(ed) },
+              ]}
+            />
+          </div>
+        )}
       </div>
       {styling && <StyleDialog onClose={() => setStyling(false)} />}
       {lineage && <LineageDrawer projectId={ed.projectId} type="dashboard" id={ed.analysisId} name={ed.doc.name} onClose={() => setLineage(false)} />}

@@ -17,6 +17,7 @@ import { Dialog } from '../../../ui/Dialog';
 import { Textarea } from '../../../ui/Field';
 import { Skeleton } from '../../../ui/Skeleton';
 import { toast } from '../../../ui/Toast';
+import { useCanEdit } from '../../projects/api';
 import { useAdoptProject } from '../../projects/current';
 import { failure, useOpenReport, type OpenReport, type PagesReply, type Report } from '../api';
 import { materialize } from '../export/materialize';
@@ -48,6 +49,8 @@ function Builder({ projectId, opened }: { projectId: string; opened: OpenReport 
   const [busy, setBusy] = useState<'' | 'save' | 'generate'>('');
   const [appCaption, setAppCaption] = useState('');
   const { hooks, dialog } = useGenerateHooks();
+  // A viewer may look and generate the file as saved; Save is an editor's.
+  const canEdit = useCanEdit(projectId);
   const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && currentLocation.pathname !== nextLocation.pathname);
 
   const edit = (next: Report, sel = selected) => {
@@ -97,10 +100,10 @@ function Builder({ projectId, opened }: { projectId: string; opened: OpenReport 
     }
   };
   const generate = async () => {
-    if (dirty && !(await save())) return;
+    if (dirty && canEdit && !(await save())) return;
     setBusy('generate');
     toast('Building the report…');
-    const out = await generateReport(projectId, report.id, report, hooks);
+    const out = await generateReport(projectId, report.id, report, hooks, canEdit);
     setBusy('');
     if (out.ok) {
       toast(`Downloaded ${out.filename}`, { kind: 'success' });
@@ -125,9 +128,11 @@ function Builder({ projectId, opened }: { projectId: string; opened: OpenReport 
           <Link className={s.link} to={`/versions/${projectId}/report/${report.id}`}>
             History
           </Link>
-          <Button onClick={() => void save().then((ok) => ok && toast('Report saved', { kind: 'success' }))} loading={busy === 'save'} disabled={!dirty || !!busy}>
-            Save
-          </Button>
+          {canEdit && (
+            <Button onClick={() => void save().then((ok) => ok && toast('Report saved', { kind: 'success' }))} loading={busy === 'save'} disabled={!dirty || !!busy}>
+              Save
+            </Button>
+          )}
           <Button variant="primary" icon="download" onClick={() => void generate()} loading={busy === 'generate'} disabled={!!busy}>
             Generate {FORMAT_WORD[report.format]}
           </Button>

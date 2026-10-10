@@ -31,7 +31,8 @@ function serve(routes: Record<string, Reply>) {
       const channel = path.startsWith('/api/rpc/') ? decodeURIComponent(path.slice('/api/rpc/'.length)) : path;
       const payload = init?.body ? (JSON.parse(String(init.body)) as { args: unknown[] }).args[0] : undefined;
       calls.push({ channel, payload });
-      const r = routes[channel] ?? { body: null };
+      // The caller edits this project unless a test says otherwise: the screens gate their change controls on it.
+      const r = routes[channel] ?? (channel === 'projects:roles' ? { body: { [P]: 'editor' } } : { body: null });
       return new Response(JSON.stringify(r.body ?? null), { status: r.status ?? 200 });
     }),
   );
@@ -67,8 +68,35 @@ describe('Data list', () => {
     expect(within(row).getByText(/^Refreshes daily · last/)).toBeTruthy();
     expect(within(row).getByRole('img', { name: 'Last refresh failed' })).toBeTruthy();
     expect(within(row).getByText('finance')).toBeTruthy();
-    expect(within(row).getByRole('button', { name: 'Watch' })).toBeTruthy();
+    // An editor's row (the stub's default role): the schedule, Watch, Refresh, the Trash.
+    expect(await within(row).findByRole('button', { name: 'Watch' })).toBeTruthy();
+    expect(within(row).getByRole('button', { name: 'Refresh Orders' })).toBeTruthy();
+    expect(within(row).getByRole('button', { name: 'Move Orders to the Trash' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Import file' })).toBeTruthy();
   }, 30_000); // the first test pays for the lazy route chunk's transform
+
+  it('shows a viewer the datasets without the controls that change them', async () => {
+    serve({
+      'projects:list': { body: [{ id: P, name: 'Sales', createdAt: '', updatedAt: '' }] },
+      'projects:roles': { body: { [P]: 'viewer' } },
+      'dataset:list': { body: [ORDERS] },
+      'catalog:tags': { body: { ok: true, tags: [], refs: {} } },
+    });
+    renderApp(`/data/${P}`);
+    const row = (await screen.findByRole('link', { name: 'Orders' }, { timeout: LAZY })).closest('tr')!;
+    expect(within(row).getByText(/^Refreshes daily · last/)).toBeTruthy(); // what it is stays readable
+    await screen.findByRole('link', { name: /Metrics/ });
+    for (const name of ['Watch', 'Refresh Orders', 'Move Orders to the Trash', 'Refresh all']) expect(screen.queryByRole('button', { name })).toBeNull();
+    expect(within(row).queryByRole('combobox')).toBeNull();
+    for (const name of ['Import file', 'Paste data', 'New visual', 'Combine']) expect(screen.queryByRole('link', { name })).toBeNull();
+  }, 30_000);
+
+  it('tells a viewer of an empty project who can bring data in', async () => {
+    serve({ 'projects:list': { body: [{ id: P, name: 'Sales', createdAt: '', updatedAt: '' }] }, 'projects:roles': { body: { [P]: 'viewer' } }, 'dataset:list': { body: [] }, 'catalog:tags': { body: { ok: true, tags: [], refs: {} } } });
+    renderApp(`/data/${P}`);
+    expect(await screen.findByText(/An editor of this project can import/, undefined, { timeout: LAZY })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Import file' })).toBeNull();
+  }, 30_000);
 
   it('a 5-minute schedule: its words, the server\'s "Behind schedule", and the fast options only with incremental refresh', async () => {
     const LIVE = { ...ORDERS, id: '2b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b', name: 'Live orders', lastRefreshStatus: 'ok', lastRefreshError: null, qualityFailing: undefined,

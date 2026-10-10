@@ -17,6 +17,7 @@ import { openDockWith } from '../../assistant/dockState';
 import { saveVisual } from '../../visuals/api';
 import { useDismiss, type Insight } from './api';
 import { InsightCard, sparkKey } from './InsightCard';
+import { useCanEdit } from '../../projects/api';
 import s from './Insights.module.css';
 
 type Card = Insight & { spark: ChartDataShape | null };
@@ -26,6 +27,7 @@ export function WhatStandsOut({ projectId }: { projectId: string | undefined }) 
   const qc = useQueryClient();
   const navigate = useNavigate();
   const dismiss = useDismiss(projectId ?? '');
+  const canEdit = useCanEdit(projectId);
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
   if (!projectId) return null;
   if (q.isPending) {
@@ -79,14 +81,16 @@ export function WhatStandsOut({ projectId }: { projectId: string | undefined }) 
             key={ins.id}
             projectId={projectId}
             ins={ins}
-            onDismiss={async (id) => {
-              await dismiss(id);
-              setGone((g) => new Set(g).add(id));
-            }}
-            actions={[
-              { label: 'Save as visual', primary: true, run: save },
-              { label: 'Ask why', run: askWhy },
-            ]}
+            onDismiss={
+              canEdit
+                ? async (id) => {
+                    await dismiss(id);
+                    setGone((g) => new Set(g).add(id));
+                  }
+                : undefined
+            }
+            // Saving and dismissing change the project: an editor's. Asking is anyone's.
+            actions={[...(canEdit ? [{ label: 'Save as visual', primary: true, run: save }] : []), { label: 'Ask why', run: askWhy }]}
           />
         ))}
       </div>

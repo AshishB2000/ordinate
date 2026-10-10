@@ -45,18 +45,17 @@ function useSeen<T extends Element>(): [(el: T | null) => void, boolean] {
   return [ref, seen];
 }
 
-export function VisualCard({ projectId, v, actions }: { projectId: string; v: VisualSummary; actions: CardActions }) {
+export function VisualCard({ projectId, v, actions, canEdit }: { projectId: string; v: VisualSummary; actions: CardActions; canEdit: boolean }) {
   const [tileRef, seen] = useSeen<HTMLSpanElement>();
   const [drawn, setDrawn] = useState(false);
   const onDrawn = useCallback(() => setDrawn(true), []); // the parent keys a card by updatedAt, so an edit starts over
   const items: MenuEntry[] = [
     { label: 'Open', icon: 'external-link', onSelect: () => actions.open(v) },
-    { label: 'Rename', icon: 'pencil', onSelect: () => actions.rename(v) },
-    { label: 'Duplicate', icon: 'copy', onSelect: () => actions.duplicate(v) },
+    // Rename, Duplicate, Delete and the star change the project: an editor's.
+    ...(canEdit ? ([{ label: 'Rename', icon: 'pencil', onSelect: () => actions.rename(v) }, { label: 'Duplicate', icon: 'copy', onSelect: () => actions.duplicate(v) }] satisfies MenuEntry[]) : []),
     { label: 'Explain', icon: 'sparkles', onSelect: () => actions.explain(v) },
     { label: 'History', icon: 'history', onSelect: () => actions.history(v) },
-    { kind: 'separator' },
-    { label: 'Delete', icon: 'trash', danger: true, onSelect: () => actions.remove(v) },
+    ...(canEdit ? ([{ kind: 'separator' }, { label: 'Delete', icon: 'trash', danger: true, onSelect: () => actions.remove(v) }] satisfies MenuEntry[]) : []),
   ];
   const name = v.name || 'Untitled visual';
   return (
@@ -73,15 +72,17 @@ export function VisualCard({ projectId, v, actions }: { projectId: string; v: Vi
           {typeLabel(v.chartType)} · {shortTime(v.updatedAt)}
         </span>
       </button>
-      <button
-        type="button"
-        className={`${s.chip} ${s.star}`}
-        aria-pressed={v.favorite}
-        aria-label={v.favorite ? `Unfavourite ${name}` : `Favourite ${name}`}
-        onClick={() => actions.favorite(v, !v.favorite)}
-      >
-        <Icon name={v.favorite ? 'star-filled' : 'star'} />
-      </button>
+      {canEdit && (
+        <button
+          type="button"
+          className={`${s.chip} ${s.star}`}
+          aria-pressed={v.favorite}
+          aria-label={v.favorite ? `Unfavourite ${name}` : `Favourite ${name}`}
+          onClick={() => actions.favorite(v, !v.favorite)}
+        >
+          <Icon name={v.favorite ? 'star-filled' : 'star'} />
+        </button>
+      )}
       <Menu
         align="end"
         label={`${name} actions`}

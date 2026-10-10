@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderApp } from '../../test-utils';
 import { collect, initialDraft } from './ConnectionForm';
 import type { Connector } from './api';
@@ -84,7 +84,8 @@ function serve(routes: Record<string, Reply>) {
       const channel = path.startsWith('/api/rpc/') ? decodeURIComponent(path.slice('/api/rpc/'.length)) : path;
       const payload = init?.body ? (JSON.parse(String(init.body)) as { args: unknown[] }).args[0] : undefined;
       if (path.startsWith('/api/rpc/')) calls.push({ channel, payload });
-      const r = routes[channel] ?? { body: [] };
+      // The caller edits this project unless a test says otherwise: the screens gate their change controls on it.
+      const r = routes[channel] ?? (channel === 'projects:roles' ? { body: { [PID]: 'editor' } } : { body: [] });
       const out = typeof r === 'function' ? r(payload) : r;
       return new Response(JSON.stringify(out.body ?? null), { status: out.status ?? 200 });
     }),
@@ -148,6 +149,18 @@ describe('Connections', () => {
     const sent = calls.find((c) => c.channel === 'connection:testAndSave')!.payload as { values: object; secrets: object };
     expect(sent.values).toEqual({ host: 'db', port: 5432, database: 'orders', ssl: false });
     expect(sent.secrets).toEqual({ password: 's3cret' });
+  });
+
+  it('tells a viewer that connections are for editors, and asks the server for none', async () => {
+    const calls = serve(base({ 'projects:roles': { body: { [PID]: 'viewer' } }, 'connections:list': { body: [CONN] } }));
+    renderApp(`/connections/${PID}`);
+    expect(await screen.findByRole('heading', { name: 'Connections are for editors' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open Data' }).getAttribute('href')).toBe(`/data/${PID}`);
+    expect(screen.getByRole('combobox', { name: 'Project' })).toBeTruthy(); // another project is one pick away
+    cleanup();
+    renderApp(`/connections/${PID}/${CONN.id}`); // the workbench by its URL: the same notice, not a refused form
+    expect(await screen.findByRole('heading', { name: 'Connections are for editors' })).toBeTruthy();
+    expect(calls.filter((c) => c.channel.startsWith('connection:'))).toEqual([]);
   });
 
   it('cards a saved connection with its server-counted datasets', async () => {
