@@ -29,6 +29,7 @@ from these tables, or when a table names one that no code reads.
 | `PORT` | The app port: the web app, `/api/*`, `/healthz`, `/readyz`. `0` lets the OS pick one. | `8080` | — | no |
 | `METRICS_PORT` | Port for `GET /metrics` (Prometheus text format) on its own listener, so the ingress that routes `PORT` can never expose it. It must differ from `PORT`. | unset: no metrics listener (the chart and Compose set `9464`) | — | no |
 | `LOG_LEVEL` | pino level: `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`. Logs are JSON on stdout. | `info` | — | no |
+| `ORDINATE_PUBLIC_URL` | The origin people open Ordinate at, for example `https://bi.example.com` (no path). A message the server sends on a schedule (a subscription posted to Slack or Teams) links back to the dashboard with it. The link is never built from a request's `Host` or `Origin`. | unset: the origin of `OIDC_REDIRECT_URL` under `AUTH_MODE=oidc`; otherwise the messages are sent without a link | you want the link and do not use `AUTH_MODE=oidc` | no |
 
 ## Storage
 
@@ -49,7 +50,7 @@ from these tables, or when a table names one that no code reads.
 | Variable | Purpose | Default | Required when | Secret |
 |---|---|---|---|---|
 | `DATABASE_URL` | Postgres URL (`postgres://` or `postgresql://`) for users, passwords, sessions, roles, records, jobs, audit and secrets. Without it only `AUTH_MODE=dev` starts (Ordinate's automated tests). TLS options go in the query string, see [TLS to Postgres](#tls-to-postgres). The value never appears in an error or a log. | unset: no Postgres, records stay as JSON under `DATA_DIR` | `AUTH_MODE` is `password` (the default), `oidc` or `header`, or `STORAGE_URL` is `s3://` | yes |
-| `ORDINATE_MASTER_KEY` | 32 random bytes, written as base64 (44 chars) or hex (64 chars), made with `openssl rand -base64 32`. It wraps each org's data key, and those keys encrypt every stored connection password and AI provider key (AES-256-GCM). Without it, saving such a secret is refused. Losing it loses those secrets. | unset: no secrets store | `ORDINATE_ENV=prod` and `DATABASE_URL` is set | yes |
+| `ORDINATE_MASTER_KEY` | 32 random bytes, written as base64 (44 chars) or hex (64 chars), made with `openssl rand -base64 32`. It wraps each org's data key, and those keys encrypt every stored connection password, AI provider key and Slack or Teams webhook URL (AES-256-GCM). Without it, saving such a secret is refused. Losing it loses those secrets. | unset: no secrets store | `ORDINATE_ENV=prod` and `DATABASE_URL` is set | yes |
 | `ORDINATE_MASTER_KEY_OLD` | Rotation only: the current key, read by `node src/server/secrets/rotate.js` (`npm run secrets:rotate`). The server never reads it. | unset | running the rotation command | yes |
 | `ORDINATE_MASTER_KEY_NEW` | Rotation only: the replacement key, read by the same command. | unset | running the rotation command | yes |
 

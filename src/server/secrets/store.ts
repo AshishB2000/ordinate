@@ -1,5 +1,5 @@
-// Secrets at rest (T5.3): connection passwords/tokens and AI keys, encrypted in
-// Postgres. The desktop keeps its documented plaintext config.json
+// Secrets at rest (T5.3): connection passwords/tokens, AI keys and the webhook
+// URLs of Slack / Teams channels (src/app/channels.ts), encrypted in Postgres. The desktop keeps its documented plaintext config.json
 // (src/app/configSecrets.ts); this is the server's store.
 //
 // ENVELOPE. Each org has ONE random 32-byte data key (`secret_data_keys`),
@@ -20,7 +20,7 @@
 import { createCipheriv, createDecipheriv, createHash, createSecretKey, randomBytes, randomUUID, type KeyObject } from 'crypto';
 import type { Pool } from 'pg';
 
-export const SECRET_KINDS = ['connection.password', 'connection.token', 'ai.apiKey'] as const;
+export const SECRET_KINDS = ['connection.password', 'connection.token', 'ai.apiKey', 'channel.webhook'] as const;
 export type SecretKind = (typeof SECRET_KINDS)[number];
 
 export interface SecretStore {

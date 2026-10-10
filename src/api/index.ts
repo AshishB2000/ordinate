@@ -38,6 +38,8 @@ import { incremental } from './incremental';
 
 import { ai } from './ai';
 
+import { subscriptions } from './subscriptions';
+
 export const contracts = {
   ...projects,
   ...datasets,
@@ -75,6 +77,8 @@ export const contracts = {
   ...incremental,
 
   ...ai,
+
+  ...subscriptions,
 } as const;
 
 export type Channel = keyof typeof contracts;

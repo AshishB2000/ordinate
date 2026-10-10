@@ -276,6 +276,34 @@ async function loadWarehouseTable(table: string): Promise<void> {
     ok('Live, connection gone → gallery thumbnail is a typed failure', thumbs.status === 200 && /"code":"live_unavailable"/.test(thumbs.body), `${thumbs.status} ${thumbs.body.slice(0, 240)}`);
   }
 
+  // A subscription reads a dashboard's cards (src/ipc/subscriptionFigures.ts): through the doors, so a
+  // Live KPI is the warehouse's figure, and one whose connection is gone says why — never a zero.
+  const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+  const boardOn = (datasetId: string, visual: string) => context.runInContext(ADMIN, 'board', async () => (await analysisStore.saveAnalysis(P, {
+    name: 'Board',
+    sheets: [{ name: 'One', cards: [
+      { id: crypto.randomUUID(), type: 'metric', layout: { x: 0, y: 0, w: 3, h: 4 }, metric: { datasetId, column: 'sales', aggregation: 'sum', label: 'Sales' } },
+      ...(visual ? [{ id: crypto.randomUUID(), type: 'visual', layout: { x: 3, y: 0, w: 6, h: 4 }, visualId: visual }] : []),
+    ] }],
+  } as never))!.id);
+  const subDraft = (analysisId: string) => ({
+    name: 'Send', analysisId, content: { mode: 'all', cardIds: [] }, schedule: { cadence: 'daily', at: '08:00' }, timezone: 'UTC', channelIds: [],
+    message: { title: '', note: '', includeLink: false }, conditions: { skipUnchanged: false, onlyWhenRefreshed: false },
+  });
+  type SubModel = { kpis: { value: string }[]; sections: { rows: string[][]; note?: string }[] };
+  const subLive = await post('subscription:preview', { projectId: P, draft: subDraft(await boardOn(seed.live, visualId)) });
+  const liveModel = (subLive.value?.slack as { model?: SubModel } | undefined)?.model;
+  bodies.push(subLive.body);
+  ok('Live → a subscription\'s message (subscription:preview) ANSWERS from the warehouse: the KPI is a figure, the chart has rows (L2.4)',
+    subLive.status === 200 && !!liveModel && /\d/.test(liveModel.kpis[0].value) && liveModel.sections[0].rows.length === 5, `${subLive.status} ${subLive.body.slice(0, 240)}`);
+  const subGone = await post('subscription:preview', { projectId: P, draft: subDraft(await boardOn(seed.gone, goneVisualId)) });
+  const goneModel = (subGone.value?.slack as { model?: SubModel } | undefined)?.model;
+  bodies.push(subGone.body);
+  ok('Live, connection gone → a subscription\'s cards each carry the failure\'s sentence — no figure, no rows, no SQL, no dataset id',
+    subGone.status === 200 && !!goneModel && !/^[\d.,]+[KMB]?$/.test(goneModel.kpis[0].value) && goneModel.kpis[0].value.length > 10
+      && goneModel.sections.every((sec) => sec.rows.length === 0 && typeof sec.note === 'string' && sec.note.length > 10)
+      && !subGone.body.includes('SECRET_CANARY') && !subGone.body.includes(seed.gone), `${subGone.status} ${subGone.body.slice(0, 300)}`);
+
   // ── 3. A refusal leaks nothing ─────────────────────────────────────────────
   ok('no refusal carries the selection\'s SQL', bodies.every((b) => !b.includes('SECRET_CANARY')));
   ok('no refusal carries the dataset id', bodies.filter((b) => /"code":"live_/.test(b)).every((b) => !b.includes(seed.live) && !b.includes(seed.gone)));
