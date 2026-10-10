@@ -55,7 +55,7 @@ e2e('dashboards: list → wizard → blank sheet → text, KPI, parameter → ke
   await wiz.getByRole('radiogroup', { name: 'Templates' }).getByRole('radio').first().waitFor();
   // No model on this server: the AI card is not a choice, and says why.
   assert.equal(await wiz.getByRole('radio', { name: /Let the Assistant design it/ }).isDisabled(), true);
-  await wiz.getByText(/No model is connected\./).waitFor();
+  await wiz.getByText(/AI isn’t set up for your organization yet/).waitFor();
   console.log(`rpc: list load ${listRpcs} · wizard (open → Start from) ${(rpc.loads.at(-1)?.rpcs ?? 0) - listRpcs}`);
   await screensInPlace(page, 'analyses-wizard-start');
   await wiz.getByRole('radio', { name: /Blank sheet/ }).click();
@@ -204,7 +204,7 @@ e2e('draft with the Assistant, no model: the door is shut and says why', async (
   const draft = page.getByRole('button', { name: 'Draft with the Assistant' });
   await page.waitForFunction(() => {
     const b = [...document.querySelectorAll('button')].find((x) => x.textContent?.includes('Draft with the Assistant'));
-    return !!b && b.disabled && /isn’t set up yet/.test(b.title);
+    return !!b && b.disabled && /AI isn’t set up for your organization/.test(b.title);
   });
   assert.equal(await draft.isDisabled(), true);
 });

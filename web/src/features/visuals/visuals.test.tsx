@@ -51,7 +51,7 @@ const base = (extra: Record<string, Reply> = {}) => ({
     body: [{ id: PID, name: 'Sales', updatedAt: '2026-10-01T10:00:00Z', lastOpenedAt: null, archived: false, datasets: 1, dashboards: 0, sample: false }],
   },
   'projects:roles': { body: { [PID]: 'admin' } },
-  'key:status': { body: { isReady: false } },
+  'ai:status': { body: { ready: false, models: [], mine: null, keyStore: null } },
   'dataset:list': { body: [{ id: DID, name: 'Orders', sourceKind: 'csv', rowCount: 1234, columnCount: 3, updatedAt: '' }] },
   'dataset:columns': { body: { id: DID, name: 'Orders', rowCount: 1234, columns: COLS } },
   'relationship:related': { body: { ok: true, groups: [] } },
@@ -116,7 +116,7 @@ describe('the gallery', () => {
     const card = await screen.findByRole('button', { name: /Orders/ });
     expect(card.textContent).toContain('1,234 rows · 3 columns');
     expect((screen.getByRole('button', { name: 'Start with the Assistant' }) as HTMLButtonElement).disabled).toBe(true);
-    expect(await screen.findByText(/The Assistant isn’t set up yet/)).toBeTruthy();
+    expect(await screen.findByText(/AI isn’t set up for your organization yet/)).toBeTruthy();
     fireEvent.click(card);
     expect(await screen.findByRole('dialog', { name: 'New visual' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Open the builder' })).toBeTruthy();

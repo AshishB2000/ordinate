@@ -319,7 +319,7 @@ const FIX_PROMPT =
 
 /** Fix: re-ask the model with the app's error; the answer is checked like any step. */
 export async function fixStep(run: PlanRun, index: number): Promise<{ ok: true; step: PlanStep } | { ok: false; error: string }> {
-  if (!execConfig.executionReady()) return { ok: false, error: 'Fix needs an AI model — set one up in Settings, or edit the step yourself.' };
+  if (!(await execConfig.executionReady())) return { ok: false, error: 'Fix needs an AI model — set one up in Settings, or edit the step yourself.' };
   const ctx = await loadProjectCtx(run.projectId, ownKeys(run));
   const text = [
     'FACTS', ctxFactsText(ctx), '',

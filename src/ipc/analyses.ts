@@ -378,7 +378,7 @@ export async function draftDashboardEdit(
   try {
     const a = await analysis.getAnalysis(projectId, analysisId);
     if (!a) return { ok: false, error: 'That dashboard could not be read.' };
-    if (!execConfig.executionReady()) return { ok: false, notReady: true };
+    if (!(await execConfig.executionReady())) return { ok: false, notReady: true };
 
     const planCtx = await plan.loadPlanContext(projectId);
     const tiles = await analysis.listAnalysisTiles(projectId, a);

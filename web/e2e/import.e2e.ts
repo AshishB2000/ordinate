@@ -166,8 +166,10 @@ e2e('designed states: no model, no captures (in the current project)', async ({ 
   await page.getByRole('heading', { level: 1, name: 'Bring data in' }).waitFor();
 
   await page.getByRole('button', { name: /Upload or paste a screenshot/ }).click();
-  await page.getByRole('heading', { name: 'The model isn’t set up yet' }).waitFor();
-  assert.equal(await page.getByRole('link', { name: 'Open Settings' }).getAttribute('href'), '/settings');
+  await page.getByRole('heading', { name: 'Reading a screenshot needs AI' }).waitFor();
+  await page.getByText(/AI isn’t set up for your organization yet/).waitFor();
+  // The dev admin on a server with no database: what the operator sets, not a button to a tab that cannot help.
+  await page.getByText(/An operator sets DATABASE_URL and ORDINATE_MASTER_KEY/).waitFor();
   await screens(page, 'import-screenshot-not-ready');
 
   await page.goto(`/data/captures?project=${server.sample.projectId}`);

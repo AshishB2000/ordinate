@@ -162,7 +162,6 @@ e2e('capture: a rejected key shows the typed error card', async ({ page, server 
   await page.getByRole('region', { name: 'Upload or paste a screenshot' }).locator('input[type="file"]').setInputFiles({ name: 'shot.png', mimeType: 'image/png', buffer: await screenshotPng(page) });
   const card = page.getByRole('alert').filter({ hasText: 'The API key was rejected' });
   await card.waitFor();
-  assert.equal(await card.getByRole('link', { name: 'Open Settings' }).getAttribute('href'), '/settings');
   await screensInPlace(page, 'capture-error');
   model.status = 200;
   await card.getByRole('button', { name: 'Try another screenshot' }).click();

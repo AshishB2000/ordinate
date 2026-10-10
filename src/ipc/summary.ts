@@ -256,7 +256,7 @@ export function register(): void {
     try {
       if (typeof req.projectId !== 'string' || !UUID_RE.test(req.projectId)) return { ok: false, error: 'Invalid project' };
       const sentences = await computeSummary(req.projectId, req.pages, scopeOf(req));
-      const ready = execConfig.executionReady();
+      const ready = (await execConfig.executionReady());
       return {
         ok: true,
         sentences: sentences.map((s) => ({ kind: s.kind, text: s.text, tone: s.tone, cardId: s.cardId })),
@@ -275,7 +275,7 @@ export function register(): void {
   ipcMain.handle('summary:rewrite', async (_e, req: any = {}) => withAsOf(req.projectId, req.asOf, async () => {
     try {
       if (typeof req.projectId !== 'string' || !UUID_RE.test(req.projectId)) return { ok: false, error: 'Invalid project' };
-      if (!execConfig.executionReady()) return { ok: false, error: NO_MODEL };
+      if (!(await execConfig.executionReady())) return { ok: false, error: NO_MODEL };
       const sentences = await computeSummary(req.projectId, req.pages, scopeOf(req, true));
       if (!sentences.length) return { ok: false, error: 'There is nothing to rewrite yet.' };
       const name = typeof req.name === 'string' && req.name.trim() ? req.name.trim().slice(0, 200) : 'this dashboard';

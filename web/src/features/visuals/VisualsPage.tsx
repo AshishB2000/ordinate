@@ -13,7 +13,8 @@ import { EmptyState, ErrorState, Page, PageSkeleton } from '../../app/blocks';
 import { Button } from '../../ui/Button';
 import { Skeleton } from '../../ui/Skeleton';
 import { toast } from '../../ui/Toast';
-import { useKeyStatus } from '../assistant/api';
+import { useAiStatus } from '../assistant/api';
+import { AiNotReady } from '../assistant/AiNotReady';
 import { pickDockProject, setDockOpen } from '../assistant/dockState';
 import { useVisualsProject } from './project';
 import { toastMovedToTrash } from '../projects/trashToast';
@@ -165,8 +166,8 @@ function Gallery({ projectId }: { projectId: string }) {
 function Empty({ projectId, onNew }: { projectId: string; onNew: (o: { datasetId?: string; startAtSuggest?: boolean }) => void }) {
   const navigate = useNavigate();
   const ds = useDatasets(projectId);
-  const ai = useKeyStatus();
-  const aiReady = !!ai.data?.isReady;
+  const ai = useAiStatus();
+  const aiReady = !!ai.data?.ready;
   const sets: DatasetSummary[] = ds.data ?? [];
   return (
     <>
@@ -193,14 +194,7 @@ function Empty({ projectId, onNew }: { projectId: string; onNew: (o: { datasetId
             Start with the Assistant
           </Button>
         </div>
-        {ai.data && !aiReady && (
-          <p className={s.hint}>
-            The Assistant isn’t set up yet.{' '}
-            <Button size="sm" variant="ghost" onClick={() => setDockOpen(true)}>
-              Set up the Assistant
-            </Button>
-          </p>
-        )}
+        {ai.data && !aiReady && <AiNotReady status={ai.data} className={s.hint} />}
       </section>
 
       <section className={s.start} aria-labelledby="viz-start-h">

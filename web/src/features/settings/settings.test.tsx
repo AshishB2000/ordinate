@@ -158,7 +158,8 @@ describe('Organization settings (Admin)', () => {
     renderApp('/admin');
     expect(await screen.findByRole('heading', { name: 'This server keeps no accounts' })).toBeTruthy();
     // Live usage (live data L2.7) is an org tab: it counts this server's warehouse queries without Postgres too.
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Workspace', 'Themes', 'Backups', 'Live usage']);
+    // AI (docs/ai-models) is one as well: without Postgres it says what the operator sets.
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Workspace', 'AI', 'Themes', 'Backups', 'Live usage']);
     await screen.findByTestId('fmt-money');
     expect(calls.filter((c) => c.channel.startsWith('admin:'))).toEqual([]);
   });

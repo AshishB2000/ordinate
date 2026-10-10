@@ -104,12 +104,6 @@
 .pillOff {
   color: var(--text-dim);
 }
-.pillNone {
-  color: var(--text-faint);
-  border-style: dashed;
-  font-weight: 500;
-}
-
 /* "Based on …" — its own row under the header; only the label truncates. */
 .context {
   flex: none;
@@ -394,32 +388,25 @@
   color: var(--text-dim);
   cursor: not-allowed;
 }
+/* Which model answers you (DockParts ModelPicker), under the composer: a small select, or its name when there is one. */
 .composeFoot {
   display: flex;
   align-items: center;
   gap: var(--sp-8);
+  min-width: 0;
 }
-.model {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-4);
-  height: 22px;
-  padding: 0 var(--sp-8);
-  border: 1px solid var(--border);
-  border-radius: var(--r-full);
-  background: none;
+.modelPick {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.modelName {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-12);
   color: var(--muted);
-  font: inherit;
-  font-size: var(--t-11);
-  font-weight: 600;
-  cursor: pointer;
-}
-.model:hover {
-  color: var(--text);
-  background: var(--surface-2);
-}
-.model:focus-visible {
-  outline: var(--focus-ring-w) solid var(--focus-ring);
 }
 
 /* ── Narrow windows: an overlay with a scrim, chrome left reachable ──────── */

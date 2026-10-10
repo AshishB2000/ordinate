@@ -36,7 +36,7 @@ const LIVE = process.env.ORDINATE_LIVE_MODEL === '1';
 
 // A temp userData either way — nothing here writes to the user's real profile.
 // In LIVE mode the real config.json is COPIED in (not pointed at), because
-// `execConfig.executionReady()` reads the active CLI and its saved detection result
+// `(await execConfig.executionReady())` reads the active CLI and its saved detection result
 // from that file and there is no other way to reach a configured model. A copy,
 // so a bug in this script cannot corrupt the user's settings, and the seeded
 // project lands in the temp dir where it belongs.
@@ -140,9 +140,9 @@ async function runLive(): Promise<void> {
   const analyze: typeof import('../src/ai/analyze') = require('../src/ai/analyze');
   const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 
-  ok('LIVE: an execution path is configured', execConfig.executionReady(),
+  ok('LIVE: an execution path is configured', (await execConfig.executionReady()),
     'set one up in Settings → Assistant, or run without ORDINATE_LIVE_MODEL=1');
-  if (!execConfig.executionReady()) return;
+  if (!(await execConfig.executionReady())) return;
   const mode = config.get().executionMode || 'local';
   console.log(`\nLIVE MODE — execution ${mode}` +
     (mode === 'local' ? ` (${config.get().localCli.activeId})` : '') + '\n');

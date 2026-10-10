@@ -51,15 +51,6 @@ export const composeSave = async (input: ComposeInput) => (await rpc('dataset:co
 
 // ── Captures ──────────────────────────────────────────────────────────────
 
-export type ModelStatus = { ready: true; provider: string } | { ready: false; reason: 'no_model' | 'not_allowed' };
-
-export function useModelStatus(enabled = true) {
-  return useQuery({
-    queryKey: ['captureDataset:status'],
-    queryFn: enabled ? async () => (await rpc('captureDataset:status')) as ModelStatus : skipToken,
-  });
-}
-
 /** A capture drafted for the composer, or why not (a typed model error: src/ai/analyze.ts). */
 export type DraftReply =
   | { ok: true; captureId: string; title: string; columns: GridColumn[]; rows: Cell[][]; warnings: string[]; unsure: boolean }

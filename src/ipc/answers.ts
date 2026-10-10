@@ -189,7 +189,7 @@ export async function computeCard(projectId: string, spec: AnswerSpec): Promise<
 
 /** The model narrates the card's facts, audited against the card's own ledger. No model → no prose, and the card's bullets stand. */
 async function narrate(built: Built, question: string, guard: Guard): Promise<{ text: string; audit: NumberAudit }> {
-  if (!execConfig.executionReady()) return { text: '', audit: OK_AUDIT };
+  if (!(await execConfig.executionReady())) return { text: '', audit: OK_AUDIT };
   const res = await askCopilot([], built.factsText, question);
   if (!res.ok || !res.text) return { text: '', audit: OK_AUDIT };
   return guard(res.text, built.ledger);

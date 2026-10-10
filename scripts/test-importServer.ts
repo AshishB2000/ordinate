@@ -31,7 +31,6 @@ const appMod: typeof import('../src/server/app') = require('../src/server/app');
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
 const rpc: typeof import('../src/server/rpc') = require('../src/server/rpc');
 const wire: typeof import('../src/server/wire') = require('../src/server/wire');
-const aiKeys: typeof import('../src/server/aiKeys') = require('../src/server/aiKeys');
 const importStage: typeof import('../src/data/importStage') = require('../src/data/importStage');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 
@@ -199,13 +198,7 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
   connectModel('org-a', modelPort);
   const st1 = await call('org-a', 'captureDataset:status', undefined);
   ok('a connected gateway: ready (a local-CLI execution mode is ignored on the server)', st1.body?.ready === true && st1.body.provider === 'gateway', JSON.stringify(st1.body));
-  // The org allows only openai (org_settings.ai_providers, read by T2.12's policy per call): a stand-in pool answers that one query.
-  aiKeys.useAiKeys({ query: async () => ({ rows: [{ ai_providers: ['openai'] }] }) } as unknown as import('pg').Pool, null);
-  const st2 = await call('org-a', 'captureDataset:status', undefined);
-  const blocked = await call('org-a', 'captureDataset:draft', { projectId: PA, fileToken: await upload('org-a', 's.png', PNG) });
-  ok('org allows only openai: status not_allowed, draft refused, the model never called',
-    st2.body?.reason === 'not_allowed' && blocked.body?.ok === false && /does not allow/.test(blocked.body.message) && modelCalls === 0, JSON.stringify([st2.body, blocked.body]));
-  aiKeys.useAiKeys(null, null); // no database: every provider allowed again
+  // Which models an org may use is Admin → AI's allow-list in Postgres: scripts/test-aiModels-db.ts.
 
   const notPng = await call('org-a', 'captureDataset:draft', { projectId: PA, fileToken: await upload('org-a', 's.png', 'GIF89a…') });
   ok('a non-PNG upload: refused before the model', notPng.body?.ok === false && notPng.body.errorType === 'bad_image' && modelCalls === 0);

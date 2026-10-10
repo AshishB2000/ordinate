@@ -1,4 +1,12 @@
 {
+  "aiMessages.a_model_is_listed_twice": "A model is listed twice.",
+  "aiMessages.ai_isn_t_set_up_for": "AI isn’t set up for your organization. An admin can turn it on in Admin → AI.",
+  "aiMessages.choose_one_default_model": "Choose one default model.",
+  "aiMessages.connect_before_adding_its_models": "Connect {provider} before adding its models.",
+  "aiMessages.enter_a_model_id_to_test": "Enter a model id to test the gateway with (e.g. openai/gpt-4o-mini).",
+  "aiMessages.enter_an_api_key": "Enter an API key.",
+  "aiMessages.enter_the_gateway_s_base_url": "Enter the gateway’s base URL.",
+  "aiMessages.that_model_isn_t_one_your": "That model isn’t one your organization has turned on. Pick another.",
   "alerts.above": "above",
   "alerts.alerts_fired": "{listCount} alerts fired — {p1}{tail}.",
   "alerts.and_more": ", and {rest} more",

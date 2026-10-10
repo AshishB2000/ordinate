@@ -298,3 +298,80 @@
 .noticeWarn > svg {
   color: var(--warn);
 }
+
+/* ── AI ─────────────────────────────────────────────────────────────── */
+/* A group's title with its one action (or note) on the same line. */
+.aiHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+}
+.aiHead .meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  white-space: normal;
+}
+.aiList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border-hairline);
+}
+/* A provider: name, status, actions on one line; its connect form underneath, full width. */
+.aiRow {
+  display: grid;
+  grid-template-columns: minmax(120px, 200px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-8) var(--sp-12);
+  padding: var(--sp-12) 0;
+  border-bottom: 1px solid var(--border-hairline);
+}
+.aiRow:last-child {
+  border-bottom: 0;
+}
+.aiActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--sp-8);
+}
+.aiForm {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sp-8) var(--sp-12);
+  padding: var(--sp-12);
+  background: var(--surface-2);
+  border-radius: var(--r-md);
+}
+.aiGrow {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.aiFormActions {
+  display: flex;
+  gap: var(--sp-8);
+  margin-left: auto;
+  padding-top: 22px;
+}
+.aiRadio {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+}
+@media (max-width: 640px) {
+  .aiRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .aiActions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+  .aiFormActions {
+    padding-top: 0;
+  }
+}
