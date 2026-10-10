@@ -317,7 +317,7 @@ export async function buildPages(config: PublishConfig, ctx: PublishProgress, ou
     const slice = (f: number, note?: string) => ctx.progress && ctx.progress(0.9 * ((i + f) / targets.length), note);
     const sub = { progress: slice, checkCancelled: ctx.checkCancelled };
     const data = t.kind === 'dashboard'
-      ? await buildDashboard(config.projectId, t.id, config.options.maxCombos || DEFAULT_MAX_COMBOS, sub, outgoing)
+      ? await recordFs.withReadMemo(() => buildDashboard(config.projectId, t.id, config.options.maxCombos || DEFAULT_MAX_COMBOS, sub, outgoing))
       : t.kind === 'story' ? await buildStory(config.projectId, t.id, sub, outgoing)
         : await buildScorecard(config.projectId, t.id, sub);
     if (!data) continue; // deleted since it was picked: publish the rest

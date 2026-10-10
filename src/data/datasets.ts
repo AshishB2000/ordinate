@@ -485,6 +485,11 @@ export async function getDataset(projectId: string, id: string): Promise<Dataset
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const past = await asOf.datasetHook(projectId, id); // inside an as-of read: the snapshot's rows
   if (past !== undefined) return past;
+  // Inside recordFs.withReadMemo (a publish) the table is hydrated once, not once per tile per combination.
+  return recordFs.memoRead(`dataset\0${projectId}\0${id}`, () => loadDataset(projectId, id));
+}
+
+async function loadDataset(projectId: string, id: string): Promise<Dataset | null> {
   try {
     const raw = await recordFs.readFile(datasetFilePath(projectId, id), 'utf8');
     const data = JSON.parse(raw);
