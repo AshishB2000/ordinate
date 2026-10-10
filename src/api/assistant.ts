@@ -58,6 +58,10 @@ export const assistant = {
   'copilot:history': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, threadId: Uuid.optional() }), project: byProjectId }),
   'copilot:threads': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
   'copilot:newThread': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
+  // A conversation is its asker's own, so renaming or deleting it is `read` like starting one;
+  // the store acts only on the CALLER's threads (src/ai/copilot.ts `mine`). The title is cut to its cap there.
+  'copilot:renameThread': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, threadId: Uuid, title: z.string().trim().min(1).max(200) }), project: byProjectId }),
+  'copilot:deleteThread': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, threadId: Uuid }), project: byProjectId }),
   // The answer streams to the asking tab only (`copilot:ask:chunk` / `copilot:ask:activity`
   // on its own event stream, keyed by askId); the reply carries the persisted turns.
   'copilot:ask': rpc({

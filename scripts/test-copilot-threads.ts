@@ -254,6 +254,40 @@ async function main(): Promise<void> {
     ok('the thread cap survives a reload', (await copilot.loadThreads(p.id)).length === 50);
   }
 
+  // ── 8b. renameThread / deleteThread ─────────────────────────────────────────
+  {
+    const p = await projects.createProject('Rename and delete project');
+    const a = (await copilot.createThread(p.id))!;
+    await copilot.appendTurn(p.id, { role: 'user', text: 'first question' }, a.id);
+    const b = (await copilot.createThread(p.id))!;
+    await copilot.appendTurn(p.id, { role: 'user', text: 'second question' }, b.id);
+    const order = async () => JSON.stringify((await copilot.listThreads(p.id)).map((t) => [t.id, t.updatedAt]));
+    const titleOf = async (id: string) => (await copilot.loadThreads(p.id)).find((t) => t.id === id)?.title;
+    const before = await order();
+
+    const renamed = await copilot.renameThread(p.id, a.id, '  Q3\n board   pack  ');
+    ok('renameThread returns the summary with the title cleaned to one line',
+      renamed !== null && renamed.title === 'Q3 board pack' && renamed.id === a.id && renamed.turnCount === 1, JSON.stringify(renamed));
+    ok('a rename is not a touch: order and updatedAt are unchanged', (await order()) === before);
+    ok('the rename survives a reload', (await titleOf(a.id)) === 'Q3 board pack');
+    ok('the other conversation keeps its own title', (await titleOf(b.id)) === 'second question');
+    await copilot.appendTurn(p.id, { role: 'user', text: 'a later question' }, a.id);
+    ok('a later turn does not re-derive a renamed title', (await titleOf(a.id)) === 'Q3 board pack');
+    ok('a long title is cut at 60', (await copilot.renameThread(p.id, a.id, 'x'.repeat(200)))?.title === 'x'.repeat(60));
+    ok('an empty title renames nothing', (await copilot.renameThread(p.id, a.id, ' \n ')) === null && (await titleOf(a.id)) === 'x'.repeat(60));
+    ok('an unknown thread renames nothing', (await copilot.renameThread(p.id, '11111111-1111-4111-8111-111111111111', 'x')) === null);
+    ok('renameThread rejects a traversal projectId', (await copilot.renameThread('..', a.id, 'x')) === null);
+
+    ok('deleteThread removes the conversation', (await copilot.deleteThread(p.id, a.id)) === true);
+    const left = await copilot.listThreads(p.id);
+    ok('…and only that one: the other keeps its turns', left.length === 1 && left[0].id === b.id && left[0].turnCount === 1, JSON.stringify(left));
+    ok('its turns are gone: its id now resolves to the most recent conversation',
+      (await copilot.loadHistory(p.id, a.id)).map((t) => t.text).join() === 'second question');
+    ok('the delete survives a reload', (await copilot.loadThreads(p.id)).length === 1);
+    ok('deleting it again is false', (await copilot.deleteThread(p.id, a.id)) === false);
+    ok('deleteThread rejects a traversal projectId', (await copilot.deleteThread('..', b.id)) === false && (await copilot.loadThreads(p.id)).length === 1);
+  }
+
   // ── 9. clearHistory still wipes everything ──────────────────────────────────
   {
     ok('clearHistory returns true', (await copilot.clearHistory(proj.id)) === true);

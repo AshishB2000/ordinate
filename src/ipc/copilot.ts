@@ -407,7 +407,10 @@ export function register() {
       // renderer learns what it is now looking at instead of guessing.
       const threads = await copilot.listThreads(projectId);
       const resolved = tid && threads.some((t) => t.id === tid) ? tid : (threads.length > 0 ? threads[0].id : null);
-      return { ok: true, turns, threadId: resolved };
+      // Its title too: a renamed conversation's name is the stored one, which
+      // the turns alone cannot tell the header.
+      const title = threads.find((t) => t.id === resolved)?.title ?? null;
+      return { ok: true, turns, threadId: resolved, title };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to load Copilot history' };
     }
@@ -433,6 +436,25 @@ export function register() {
       return { ok: true, thread };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to start a new conversation' };
+    }
+  });
+
+  // Rename or delete ONE of the caller's own conversations. One `ok: false`
+  // sentence covers every way there was nothing to act on — an unknown id, another
+  // member's thread — so neither tells a caller what exists beyond their own list.
+  ipcMain.handle('copilot:renameThread', async (_e, { projectId, threadId, title }: any = {}) => {
+    try {
+      const thread = await copilot.renameThread(projectId, threadId, title);
+      return thread ? { ok: true, thread } : { ok: false, error: 'That conversation is no longer there' };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to rename the conversation' };
+    }
+  });
+  ipcMain.handle('copilot:deleteThread', async (_e, { projectId, threadId }: any = {}) => {
+    try {
+      return (await copilot.deleteThread(projectId, threadId)) ? { ok: true } : { ok: false, error: 'That conversation is no longer there' };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Failed to delete the conversation' };
     }
   });
 

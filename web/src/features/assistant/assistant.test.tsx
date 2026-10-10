@@ -111,15 +111,15 @@ describe('the dock header', () => {
     expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Revenue by region1 turn', 'Churn last month2 turns', 'Upload data3 turns', 'Top customers4 turns', 'Margin outliers5 turns', 'All conversations']);
     fireEvent.click(screen.getByRole('menuitem', { name: 'All conversations' }));
     const history = await screen.findByRole('dialog', { name: 'Conversation history' });
-    expect(within(history).getAllByRole('button').length).toBe(THREADS.length);
+    expect(within(history).getAllByTestId('history-row').length).toBe(THREADS.length);
     expect(within(history).getByText('Today')).toBeTruthy();
     expect(within(history).getByText('Earlier')).toBeTruthy();
     fireEvent.change(within(history).getByRole('textbox', { name: 'Search conversations' }), { target: { value: 'refund' } });
-    expect(within(history).getAllByRole('button').map((b) => b.textContent)).toEqual(['Refund spikes7 turns']);
+    expect(within(history).getAllByTestId('history-row').map((b) => b.textContent)).toEqual(['Refund spikes7 turns']);
     fireEvent.change(within(history).getByRole('textbox', { name: 'Search conversations' }), { target: { value: 'zzz' } });
     expect(within(history).getByText('No conversation matches that search.')).toBeTruthy();
     fireEvent.change(within(history).getByRole('textbox', { name: 'Search conversations' }), { target: { value: 'refund' } });
-    fireEvent.click(within(history).getByRole('button', { name: /Refund spikes/ }));
+    fireEvent.click(within(history).getByRole('button', { name: /^Refund spikes/ }));
     await waitFor(() => expect(calls.some((c) => c.channel === 'copilot:history' && (c.payload as { threadId?: string }).threadId === THREADS[6].id)).toBe(true));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Conversation history' })).toBeNull());
   });
@@ -131,15 +131,16 @@ describe('the dock header', () => {
     expect(within(dock).queryByText(/Assistant: On/)).toBeNull(); // the pill is gone from the header
     fireEvent.click(within(dock).getByRole('button', { name: 'Conversation history' }));
     const history = await screen.findByRole('dialog', { name: 'Conversation history' });
-    await within(history).findByRole('button', { name: /Churn last month/ });
+    await within(history).findByRole('button', { name: /^Churn last month/ });
     fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Conversation history' })).toBeNull());
     expect(screen.getByRole('complementary', { name: 'Assistant' })).toBeTruthy(); // Escape closed History, not the dock
 
     await within(dock).findByText('Powered by Claude Sonnet 4.6'); // ai:status is in: the switch is offered
     fireEvent.keyDown(within(dock).getByRole('button', { name: 'More' }), { key: 'Enter' });
-    expect((await screen.findAllByRole('menuitem')).map((m) => m.textContent)).toEqual(['Copy conversation', 'Turn the Assistant off', 'AI models']);
-    expect(screen.getByRole('menuitem', { name: 'Copy conversation' }).getAttribute('aria-disabled')).toBe('true'); // nothing to copy yet
+    expect((await screen.findAllByRole('menuitem')).map((m) => m.textContent)).toEqual(['Rename conversation', 'Copy conversation', 'Delete conversation', 'Turn the Assistant off', 'AI models']);
+    // Nothing to copy yet, and no conversation on the server to rename or delete.
+    for (const name of ['Rename conversation', 'Copy conversation', 'Delete conversation']) expect(screen.getByRole('menuitem', { name }).getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(screen.getByRole('menuitem', { name: 'Turn the Assistant off' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'copilot:setEnabled')?.payload).toEqual({ enabled: false }));
   });
@@ -150,7 +151,67 @@ describe('the dock header', () => {
     const dock = await openDock();
     await within(dock).findByTitle('Model: Claude Sonnet 4.6 · Default');
     fireEvent.keyDown(within(dock).getByRole('button', { name: 'More' }), { key: 'Enter' });
-    expect((await screen.findAllByRole('menuitem')).map((m) => m.textContent)).toEqual(['Copy conversation']);
+    expect((await screen.findAllByRole('menuitem')).map((m) => m.textContent)).toEqual(['Rename conversation', 'Copy conversation', 'Delete conversation']);
+  });
+
+  it('⋯ → Rename: the dialog opens on the stored name, saves the new one, and the header shows what the server kept', async () => {
+    let name = 'Revenue by region';
+    const turns = [{ id: 't1', role: 'user', text: 'Which region grew fastest?', createdAt: '' }];
+    const calls = serve({
+      ...base(VIEWER, true),
+      'copilot:history': () => ({ body: { ok: true, turns, threadId: THREADS[0].id, title: name } }),
+      'copilot:renameThread': (p) => {
+        name = (p as { title: string }).title;
+        return { body: { ok: true, thread: { ...THREADS[0], title: name } } };
+      },
+    });
+    renderApp('/');
+    const dock = await openDock();
+    // The stored name, not the first question's words.
+    await within(dock).findByRole('button', { name: 'Conversations — Revenue by region' });
+    fireEvent.keyDown(within(dock).getByRole('button', { name: 'More' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename conversation' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Rename conversation' });
+    const field = within(dialog).getByRole('textbox', { name: 'Name' }) as HTMLInputElement;
+    expect(field.value).toBe('Revenue by region');
+    expect((within(dialog).getByRole('button', { name: 'Rename' }) as HTMLButtonElement).disabled).toBe(true); // unchanged: nothing to save
+    fireEvent.change(field, { target: { value: '  Board prep ' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Rename' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'copilot:renameThread')?.payload).toEqual({ projectId: PID, threadId: THREADS[0].id, title: 'Board prep' }));
+    await within(dock).findByRole('button', { name: 'Conversations — Board prep' });
+    expect(screen.queryByRole('dialog', { name: 'Rename conversation' })).toBeNull();
+  });
+
+  it('History → Delete asks first; Cancel deletes nothing, Delete removes that conversation only', async () => {
+    let threads = THREADS.slice(0, 3);
+    const calls = serve({
+      ...base(VIEWER, true),
+      'copilot:threads': () => ({ body: { ok: true, threads } }),
+      'copilot:deleteThread': (p) => {
+        threads = threads.filter((t) => t.id !== (p as { threadId: string }).threadId);
+        return { body: { ok: true } };
+      },
+    });
+    renderApp('/');
+    const dock = await openDock();
+    const openHistory = async () => {
+      fireEvent.click(within(dock).getByRole('button', { name: 'Conversation history' }));
+      return screen.findByRole('dialog', { name: 'Conversation history' });
+    };
+    fireEvent.click(await within(await openHistory()).findByRole('button', { name: 'Delete Churn last month' }));
+    let confirm = await screen.findByRole('dialog', { name: 'Delete this conversation?' });
+    expect(within(confirm).getByText(/“Churn last month” and everything in it will be removed/)).toBeTruthy();
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete this conversation?' })).toBeNull());
+    expect(calls.some((c) => c.channel === 'copilot:deleteThread')).toBe(false);
+
+    fireEvent.click(await within(await openHistory()).findByRole('button', { name: 'Delete Churn last month' }));
+    confirm = await screen.findByRole('dialog', { name: 'Delete this conversation?' });
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'copilot:deleteThread')?.payload).toEqual({ projectId: PID, threadId: THREADS[1].id }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete this conversation?' })).toBeNull());
+    const after = await openHistory();
+    await waitFor(() => expect(within(after).getAllByTestId('history-row').map((r) => r.textContent)).toEqual(['Revenue by region1 turn', 'Upload data3 turns']));
   });
 });
 

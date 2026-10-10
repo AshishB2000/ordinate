@@ -15,6 +15,7 @@ import { mineModel, PROVIDER_LABEL, setAssistantEnabled, setMyModel, threadTitle
 
 const PROVIDER_ORDER: readonly Provider[] = ['anthropic', 'openai', 'gemini', 'gateway'];
 import { setDockOpen, useDockOpen } from './dockState';
+import type { ThreadAct, ThreadRef } from './ThreadActions';
 import s from './Dock.module.css';
 
 export const TOGGLE_ID = 'dock-toggle';
@@ -107,11 +108,25 @@ export function transcriptText(turns: readonly Turn[]): string {
  * The org's on/off switch and the way to Admin → AI are an admin's, so a member
  * sees neither; the switch waits for a model to be set up (the dock says why).
  */
-export function DockMenu({ status, isAdmin, turns }: { status: AiStatus | undefined; isAdmin: boolean; turns: readonly Turn[] }) {
+export function DockMenu({
+  status,
+  isAdmin,
+  turns,
+  thread,
+  onAct,
+}: {
+  status: AiStatus | undefined;
+  isAdmin: boolean;
+  turns: readonly Turn[];
+  /** The conversation on screen, once the server has one. */
+  thread: ThreadRef | null;
+  onAct: (act: ThreadAct) => void;
+}) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const on = status?.copilotEnabled !== false;
   const items: MenuEntry[] = [
+    { label: 'Rename conversation', icon: 'pencil', disabled: !thread, onSelect: () => thread && onAct({ kind: 'rename', thread }) },
     {
       label: 'Copy conversation',
       icon: 'copy',
@@ -123,6 +138,7 @@ export function DockMenu({ status, isAdmin, turns }: { status: AiStatus | undefi
         );
       },
     },
+    { label: 'Delete conversation', icon: 'trash', danger: true, disabled: !thread, onSelect: () => thread && onAct({ kind: 'delete', thread }) },
   ];
   if (isAdmin) {
     items.push({ kind: 'separator' });
