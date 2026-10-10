@@ -12,7 +12,7 @@ afterEach(() => {
 const P = '0b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b';
 const D = '1b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b';
 const TOKEN = 'ordh_' + 'A'.repeat(43);
-const ACTIVE = { id: '2b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b', prefix: 'ordh_Abc12345', createdBy: 'carol@acme.test', createdAt: '2026-10-09T08:00:00Z', lastUsedAt: null, revokedAt: null };
+const ACTIVE = { id: '2b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b', prefix: 'ordh_Abc12345', createdBy: 'carol@acme.test', createdAt: '2026-10-09T08:00:00Z', lastUsedAt: null, lastResult: null, lastFinishedAt: null, revokedAt: null };
 const REVOKED = { ...ACTIVE, id: '3b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b', prefix: 'ordh_Zyx98765', revokedAt: '2026-10-09T09:00:00Z' };
 
 type Reply = { status?: number; body?: unknown };
@@ -110,8 +110,47 @@ describe('Refresh URL panel', () => {
     expect(calls.find((c) => c.channel === 'refreshHook:create')?.payload).toEqual({ projectId: P, connId: D });
   });
 
+  it('each row says how its last call ended: never called, refreshing, refreshed, failed, joined — a revoked one nothing', async () => {
+    const called = { lastUsedAt: '2026-10-09T08:30:00Z' };
+    const row = (n: number, more: object) => ({ ...ACTIVE, id: `${n}b6b0e1c-2f0a-4b8e-9d34-1c2d3e4f5a6b`, prefix: `ordh_Row${n}0000`, ...more });
+    serve({
+      'refreshHook:list': {
+        body: {
+          available: true, minIntervalSec: 60,
+          hooks: [
+            row(3, called), // called by a release that kept no outcome: nothing to say
+            row(4, {}),
+            row(5, { ...called, lastResult: 'running' }),
+            row(6, { ...called, lastResult: 'ok', lastFinishedAt: '2026-10-09T08:31:00Z' }),
+            row(7, { ...called, lastResult: 'failed', lastFinishedAt: '2026-10-09T08:31:00Z' }),
+            row(8, { ...called, lastResult: 'already_running', lastFinishedAt: '2026-10-09T08:30:00Z' }),
+            row(9, { ...called, lastResult: 'failed', revokedAt: '2026-10-09T09:00:00Z' }),
+          ],
+        },
+      },
+    });
+    open();
+    const badges = async (n: number) => {
+      const main = (await screen.findByText(`ordh_Row${n}0000…`)).parentElement!; // the prefix and its badges
+      return [...main.querySelectorAll(':scope > span')].map((b) => b.textContent);
+    };
+    expect(await badges(3)).toEqual(['Active']);
+    expect(await badges(4)).toEqual(['Active']);
+    expect(await badges(5)).toEqual(['Active', 'Refreshing']);
+    expect(await badges(6)).toEqual(['Active', 'Refreshed']);
+    expect(await badges(7)).toEqual(['Active', 'Refresh failed']);
+    expect(await badges(8)).toEqual(['Active', 'Joined a refresh']);
+    expect(await badges(9)).toEqual(['Revoked']);
+    expect(screen.getByText(/A GET of the same URL says how that call ended/)).toBeTruthy();
+  });
+
   it('the examples: curl retries a 429, dbt calls it after the build, Airflow is an HttpOperator task', () => {
     const s = snippets('Orders 2026');
+    // Waiting for the refresh: a GET of the same URL — `"running"` in quotes, so `already_running` is not mistaken for it.
+    expect(s.curl).toContain('s=$(curl -fsS --retry 3 "$ORDINATE_REFRESH_URL") || exit 1');
+    expect(s.curl).toContain(`*'"running"'*) sleep 10 ;;`);
+    expect(s.airflow).toContain('refresh_orders_2026_landed = HttpSensor(');
+    expect(s.airflow).toContain('load_tables >> refresh_orders_2026 >> refresh_orders_2026_landed');
     expect(s.curl).toContain('curl -fsS --retry 3 -X POST "$ORDINATE_REFRESH_URL"');
     expect(s.dbt).toContain('dbt build && curl');
     expect(s.airflow).toContain('HttpOperator(');

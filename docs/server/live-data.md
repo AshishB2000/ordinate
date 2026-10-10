@@ -537,11 +537,51 @@ creator, the URL's id and the dataset (Admin → Audit log). Unknown and revoked
 the trail cannot be flooded with them. Scheduled refreshes are audited too, as **Scheduled
 refresh**.
 
+### Waiting for the refresh
+
+The `202` only says the refresh was started. To make your pipeline wait for it, and fail when the
+refresh fails, **`GET` the same URL**. It answers `200` with how the last `POST` ended:
+
+| `status` | Meaning | What a pipeline does |
+|---|---|---|
+| `running` | What the call started has not all landed yet. | Ask again in a few seconds. |
+| `ok` | All of it landed. A Live dataset's cache reset is `ok` at once. | Carry on. |
+| `failed` | A refresh it started failed, or the call itself was refused. | Fail the run. The reason is on the dataset in Ordinate, and in its creator's Jobs list. |
+| `already_running` | The call found a refresh that something else started (a schedule, a person, another URL) and started nothing. | `POST` again after the interval, for a refresh that begins after your load. |
+| `idle` | No call's outcome is on record: the URL has never been called. | — |
+
+If a `POST` finds the refresh that **this URL's own earlier call** started still running (your
+scheduler retried the call), the status stays `running` and ends as that refresh does.
+
+`running` comes with `calledAt`; the ended ones add `finishedAt`:
+`{"status":"ok","calledAt":"2026-10-10T02:00:04Z","finishedAt":"2026-10-10T02:00:41Z"}`. For a
+connection's URL the status covers every dataset: `failed` if any failed, `ok` when all landed.
+
+A `GET` is a read. It is never refused by the interval, leaves no audit row and starts nothing, and
+any server pod can answer it. It never carries the reason for a failure, because that text can quote
+your source's host or query. An unknown or revoked URL is the same `404` as for a `POST`, and a URL
+whose creator lost access is the same `403`. Ask every 5 to 15 seconds: per client IP, `GET`s and
+`POST`s share one bucket the size of `RATE_LIMIT_LOGIN_PER_MINUTE` (60 a minute by default).
+
+If the server pod running the refresh is restarted, nothing records how that call ended. It keeps
+reading `running` for 15 minutes, then `failed` once no refresh of its datasets is running on any
+pod. Call the URL again.
+
 ### curl
 
 ```bash
 # --retry waits out a 429 (it honours Retry-After) and tries again.
 curl -fsS --retry 3 -X POST "$ORDINATE_REFRESH_URL"
+
+# Optional: wait for the refresh, and fail this step if it failed.
+while :; do
+  s=$(curl -fsS --retry 3 "$ORDINATE_REFRESH_URL") || exit 1
+  case "$s" in
+    *'"running"'*) sleep 10 ;;
+    *'"ok"'*) break ;;
+    *) echo "$s" >&2; exit 1 ;;
+  esac
+done
 ```
 
 ### dbt
@@ -580,13 +620,40 @@ refresh_orders = HttpOperator(
 load_orders >> refresh_orders
 ```
 
+To wait for the refresh and fail the DAG when it fails, add a sensor that `GET`s the same URL:
+
+```python
+from airflow.exceptions import AirflowFailException
+from airflow.providers.http.sensors.http import HttpSensor
+
+def landed(response):
+    status = response.json()["status"]
+    if status == "running":
+        return False  # look again in poke_interval
+    if status != "ok":
+        raise AirflowFailException(f"Ordinate refresh: {status}")
+    return True
+
+orders_landed = HttpSensor(
+    task_id="orders_landed",
+    http_conn_id="ordinate",
+    endpoint="api/hooks/refresh/{{ var.value.ordinate_refresh_token }}",
+    response_check=landed,
+    poke_interval=15,
+    timeout=3600,
+    mode="reschedule",
+)
+refresh_orders >> orders_landed
+```
+
 ### Network and sign-in in front of Ordinate
 
 The scheduler must reach Ordinate's ingress. The URL carries its own credential, so the server looks
 up no session, cookie or proxy header for it. If an authenticating proxy sits in front of Ordinate
 (`AUTH_MODE=header` behind oauth2-proxy, for example), let `POST /api/hooks/refresh/` through without
-sign-in. With oauth2-proxy that is `--skip-auth-route="POST=^/api/hooks/refresh/"`. Ordinate still
-checks the token on every call.
+sign-in — and `GET`, if your pipeline [waits for the refresh](#waiting-for-the-refresh). With
+oauth2-proxy that is `--skip-auth-route="POST=^/api/hooks/refresh/"` and
+`--skip-auth-route="GET=^/api/hooks/refresh/"`. Ordinate still checks the token on every call.
 
 The token is in the URL path, so Ordinate masks that path in its own request log
 (`/api/hooks/refresh/[redacted]`). Your ingress, proxy and scheduler logs may record full URLs. Keep

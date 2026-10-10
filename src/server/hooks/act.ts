@@ -24,10 +24,13 @@ import * as datasets from '../../data/datasets';
 import type { DatasetMeta } from '../../data/datasets';
 import { isLive } from '../../data/liveDataset';
 import { startRefresh } from '../../data/refreshJob';
-import type { HookTarget } from './store';
+import type { HookResult, HookTarget } from './store';
 
 export type HookAction = 'refresh' | 'bump';
 export type HookStatus = 'queued' | 'already_running' | 'cache_reset';
+/** What a call did to one dataset, and how that ends: `end` resolves when its part of the call is over, and never rejects. */
+export interface HookStart { readonly status: HookStatus | 'gone'; readonly end: Promise<HookResult> }
+const ended = (status: HookStatus | 'gone', result: HookResult): HookStart => ({ status, end: Promise.resolve(result) });
 type HookMeta = Pick<DatasetMeta, 'origin'> & { mode?: unknown };
 
 /** Refresh an extract; reset a Live dataset's cache. */
@@ -53,17 +56,19 @@ export async function targetDatasets(projectId: string, target: HookTarget): Pro
  * Do it, in the caller's request context (the hook's org and creator). `gone`:
  * a Live dataset's record vanished between the read and the bump.
  */
-export async function runHookAction(projectId: string, datasetId: string, meta: HookMeta): Promise<HookStatus | 'gone'> {
+export async function runHookAction(projectId: string, datasetId: string, meta: HookMeta): Promise<HookStart> {
   if (hookAction(meta) === 'bump') {
     const live = await (require('../../ipc/liveDatasets') as typeof import('../../ipc/liveDatasets')).refreshLive(projectId, datasetId);
     // null: no longer Live (switched back to a copy since the read) — refresh it as one.
-    if (live) return live.ok ? 'cache_reset' : 'gone';
+    if (live) return live.ok ? ended('cache_reset', 'ok') : ended('gone', 'failed');
   }
   const start = await startRefresh(projectId, datasetId);
-  if (start.status === 'queued') {
-    void start.done.then(async (res) => {
-      if (res.ok) await (require('../../ipc/datasets') as typeof import('../../ipc/datasets')).afterRefresh(projectId, datasetId);
-    }).catch(() => undefined); // the refresh records its own failure on the dataset
-  }
-  return start.status;
+  if (start.status !== 'queued') return ended('already_running', 'already_running');
+  const end = start.done.then((res): HookResult => {
+    // The follow-ups are not the refresh: the rows have landed, and the call's outcome does not wait for them.
+    if (res.ok) void (require('../../ipc/datasets') as typeof import('../../ipc/datasets')).afterRefresh(projectId, datasetId).catch(() => undefined);
+    // Lost the lock to another pod between the ask and the job: joined after all. Any other failure is recorded on the dataset by the refresh itself.
+    return res.ok ? 'ok' : res.alreadyRunning ? 'already_running' : 'failed';
+  });
+  return { status: 'queued', end };
 }

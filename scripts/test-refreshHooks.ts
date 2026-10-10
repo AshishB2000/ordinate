@@ -8,7 +8,8 @@
 //    cross-site, cookie-less POST to /api/rpc is a 403, and identify runs.
 // 3. ANY BODY, ANY METHOD: dbt and Airflow send JSON, `curl -d` a form, curl
 //    -X POST nothing — all reach the handler (none is a 415); a body over the
-//    cap is a 413; another method is a 405; a deeper path is the same 404 as
+//    cap is a 413; a method other than POST and GET (the status read) is a
+//    405; a deeper path is the same 404 as
 //    an unknown token. Without a database there are no hooks: every
 //    well-formed token is that 404.
 // 4. THE PER-IP LIMIT: the sign-in limit's numbers, in a bucket of its own —
@@ -110,10 +111,13 @@ const sink = new Writable({
     }
     const big = await hook(token, { headers: { 'content-type': 'application/json' }, payload: `"${'x'.repeat(70 * 1024)}"`, ip: '10.0.1.2' });
     ok('body: over 64 KiB → 413', big.statusCode === 413, big.statusCode);
-    for (const method of ['GET', 'PUT', 'DELETE'] as const) {
+    for (const method of ['PUT', 'DELETE'] as const) {
       const r = await hook(token, { method, ip: '10.0.1.3' });
-      ok(`method: ${method} → 405, Allow: POST`, r.statusCode === 405 && r.headers.allow === 'POST', `${r.statusCode} ${r.body}`);
+      ok(`method: ${method} → 405, Allow: GET, POST`, r.statusCode === 405 && r.headers.allow === 'GET, POST', `${r.statusCode} ${r.body}`);
     }
+    // GET asks how the last call ended (scripts/test-refreshHooks-status.ts): the same gate, and the same 404 here.
+    const asked = await hook(token, { method: 'GET', ip: '10.0.1.3' });
+    ok('method: GET is the status read — without a database, the unknown token\'s 404', asked.statusCode === 404 && asked.json().error === 'unknown refresh URL', `${asked.statusCode} ${asked.body}`);
     const deeper = await hook(`${token}/extra`, { ip: '10.0.1.4' });
     const unknown = await hook(store.newHookToken(), { ip: '10.0.1.4' });
     ok('path: a deeper path is the same 404 as an unknown token', deeper.statusCode === 404 && deeper.body === unknown.body, `${deeper.statusCode} ${deeper.body}`);

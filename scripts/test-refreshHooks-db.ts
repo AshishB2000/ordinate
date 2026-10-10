@@ -165,8 +165,8 @@ async function until(fn: () => Promise<boolean>, ms = 15_000): Promise<boolean> 
     tokens.push(tA, personal);
     ok('create: ordh_ + 43 chars, once, with its 13-character prefix', made.ok && /^ordh_[A-Za-z0-9_-]{43}$/.test(tA) && made.hook.prefix === tA.slice(0, 13) && made.hook.createdBy === 'carol@acme.test');
     const listed = (await call(podA, 'carol@acme.test', 'refreshHook:list', { projectId: P, datasetId: A })).body.hooks as Record<string, unknown>[];
-    ok('list: prefix, creator, created, last used, revoked — nothing else', listed.length === 1
-      && Object.keys(listed[0]).sort().join() === 'createdAt,createdBy,id,lastUsedAt,prefix,revokedAt' && listed[0].lastUsedAt === null && listed[0].revokedAt === null, JSON.stringify(listed));
+    ok('list: prefix, creator, created, last used and how it ended, revoked — nothing else', listed.length === 1
+      && Object.keys(listed[0]).sort().join() === 'createdAt,createdBy,id,lastFinishedAt,lastResult,lastUsedAt,prefix,revokedAt' && listed[0].lastUsedAt === null && listed[0].revokedAt === null, JSON.stringify(listed));
     const row = (await q<{ token_hash: string; prefix: string; org_id: string; dataset_id: string }>('SELECT token_hash, prefix, org_id, dataset_id FROM refresh_hooks'))[0];
     ok('at rest: token_hash = sha256(token), prefix = its first 13 characters, org and dataset', row.token_hash === createHash('sha256').update(tA).digest('hex')
       && row.prefix === tA.slice(0, 13) && row.org_id === 'acme' && row.dataset_id === A);

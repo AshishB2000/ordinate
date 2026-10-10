@@ -119,6 +119,13 @@ if (!adminUrl) {
       if (!refreshed) await new Promise((r) => setTimeout(r, 200));
     }
     assert.ok(refreshed, 'the call refreshed the dataset');
+    // A GET of the same URL says how that call ended — what a pipeline waiting on the refresh asks.
+    let ended = '';
+    for (let i = 0; i < 50 && ended !== 'ok'; i++) {
+      ended = ((await (await fetch(url)).json()) as { status: string }).status;
+      if (ended !== 'ok') await new Promise((r) => setTimeout(r, 200));
+    }
+    assert.equal(ended, 'ok', 'the status read says the refresh landed');
     await page.keyboard.press('Escape');
     await page.reload();
     await settled(page);
@@ -126,6 +133,7 @@ if (!adminUrl) {
     // Reopened: the URL is gone from the screen for good; the list says it was called.
     await openPanel();
     await panel.getByText(/last called/).waitFor();
+    await panel.getByText('Refreshed', { exact: true }).waitFor(); // its row says how the call ended
     assert.equal(await panel.getByTestId('new-refresh-url').count(), 0, 'the URL is not shown again');
     await panel.getByRole('tab', { name: 'Airflow' }).click();
     await panel.getByText(/HttpOperator\(/).waitFor();

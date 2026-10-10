@@ -1322,3 +1322,53 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   `route.ts`: chunk the calls if one connection ever feeds hundreds.
 - **Tested** (`scripts/test-refreshHooks-conn.ts`, real Postgres, two pods, `scripts/hookHarness.ts`):
   19 checks — see the threat model's R-L7 row. Web: `refreshUrl.test.tsx` (the connection case).
+
+## 2026-10-10 — How a refresh URL's call ended (`GET` the URL)
+
+- **Why.** The `POST` answers `202 queued` and nothing more. A failed refresh showed in Ordinate and
+  never in the pipeline that asked for it, so a DAG went green over stale dashboards.
+- **Built.** Migration `0015_refresh_hooks_outcome.sql`: `last_result` (`running | ok | failed |
+  already_running`) and `last_finished_at`. The claim is untouched. A call that queued refreshes marks
+  the hook `running` before it answers (`beginHook`, `store.ts`); `settleHook` writes how it ended;
+  `readHook` is the status read's one SELECT (it claims and stamps nothing). `act.ts` `runHookAction`
+  now returns `{status, end}`, a promise per dataset; the route settles on `Promise.all` of them — any
+  failed → `failed`, else any joined → `already_running`, else `ok` — and
+  `GET /api/hooks/refresh/<token>` answers `{status, calledAt, finishedAt}`: `idle | running | ok |
+  failed | already_running`. The list rows carry `lastResult` / `lastFinishedAt`; the panel shows a
+  badge per URL and the curl and Airflow examples gain a wait step.
+- **Decided — the outcome lives on the HOOK ROW, written by the pod that ran the refresh.** Deriving it
+  from the dataset (its lock, its `lastRefreshStatus`) is wrong across pods: a job QUEUED on pod A
+  behind three others holds no lock yet, so pod B would read the dataset's old `ok`. A row in Postgres
+  is the same answer on every pod. Tested: POST on pod A, then GET on pod B at once → `running`.
+- **Decided — `running` is a stored state, and it decides who may write.** The end of queued
+  refreshes is written only while the hook reads `running`; a call that queued nothing (joined, reset
+  a cache, was refused) writes only while it does NOT. So a scheduler that retries its POST while the
+  first one's refresh is still running keeps reading `running` and then that refresh's own end,
+  from any pod. **Tried first and replaced:** the claim cleared the outcome and the end was fenced on
+  the claim's stamp. A retried POST then read `already_running` ("call again") over its own running
+  refresh, and every URL called before this migration read as running. Now a row with no outcome is
+  `idle`, and an outcome recorded BEFORE the last call (its pod died between the claim and the write)
+  reads `running`, never a stale `ok`.
+- **Known, accepted.** Two overlapping calls of one connection's URL that EACH queue refreshes end
+  when the first one's land (the second's still-running ones are not waited for), and a join that
+  loses a race with the first call's settle reads `already_running`. Both err toward "call again".
+- **Decided — never the reason.** A failed refresh's message can quote the source's host or SQL, and
+  the URL travels through schedulers and their logs. `failed` is a word; the reason stays on the
+  dataset for the people who may open it. Canary: the source's error is in no GET reply of the suite.
+- **Decided — a GET is a read**: no claim (never a 429 of the interval), no audit row (a poll every
+  10 s would bury the trail), the creator's access re-checked (403), unknown ≡ revoked ≡ the POST's
+  404 by one statement. Bounded by the route's per-IP bucket.
+- **Decided — joining SOMEBODY ELSE's refresh settles as `already_running`**, at once. The pipeline's
+  load may have finished after that refresh read the source, so its landing is not this call's
+  success: POST again.
+- **Decided — a call nobody settled** (its pod died or was redeployed mid-refresh) reads `running`
+  for `PENDING_STALE_SEC` (15 min), then `failed` unless a refresh of its datasets runs on some pod.
+  Marked `ponytail:` in `route.ts`: a job still queued on ANOTHER pod past 15 minutes holds no lock
+  and would read `failed`, then settle `ok`.
+- **Found by the suite** (`test-refreshHooks-pods`): a pod shut down under a running refresh settled
+  into an ended pool and logged an error. Not an error — the stale rule answers for it — so the
+  write is skipped when `pool.ending`.
+- **Tested.** `scripts/test-refreshHooks-status.ts` (28 checks, real Postgres, two pods),
+  `test-refreshHooks` (GET is no longer a 405; PUT and DELETE are, `Allow: GET, POST`),
+  `refreshUrl.test.tsx` (the five badges, the wait step — `"running"` matched in quotes so
+  `already_running` is not mistaken for it), `web/e2e/refreshUrl.e2e.ts` and `connections.e2e.ts`.
