@@ -9,16 +9,20 @@
 // (../limits.ts).
 //
 // What a call can do is exactly one thing: refresh the hook's dataset (or, on
-// a Live dataset, reset its cache — ./act.ts). The answers:
+// a Live dataset, reset its cache — ./act.ts). A CONNECTION's URL does that to
+// every dataset that came from the connection. The answers:
 //
 //   202 {status}   'queued' | 'already_running' (a refresh of it was running
 //                  here or on another pod; this call joined it) | 'cache_reset'
-//                  (a Live dataset: its cache was reset; nothing to fetch)
+//                  (a Live dataset: its cache was reset; nothing to fetch).
+//                  A connection's URL adds `datasets`: how many of each — and
+//                  its `status` is the first of the three that any dataset got
 //   404            unknown OR revoked token — one answer, one shape (./store.ts)
 //   429            called again inside REFRESH_HOOK_MIN_INTERVAL_SEC (Retry-After)
 //   403            the hook's creator can no longer refresh it: disabled,
 //                  removed, or without write on the project any more
-//   404 dataset    its dataset is gone (in the Trash, or deleted)
+//   404 dataset    its dataset is gone (in the Trash, or deleted); a
+//                  connection's URL: no dataset comes from the connection
 //
 // AS WHOM. The refresh runs as the hook's CREATOR, with their current role,
 // in a request context for the hook's org (ctx(), orgKey(), the org's DuckDB
@@ -42,7 +46,7 @@ import { audit, type Outcome } from '../authz/audit';
 import { runInContext, type Identity, type Role } from '../context';
 import { scrubbed } from '../db/pool';
 import { claimHook, HOOK_ROUTE, isHookToken, type ClaimedHook } from './store';
-import { runHookAction, type HookStatus } from './act';
+import { runHookAction, targetDatasets, type HookStatus } from './act';
 
 export { HOOK_ROUTE };
 const HOOK_PATH = /^(\/api\/hooks\/refresh\/)[^?#]*/;
@@ -77,18 +81,27 @@ async function creator(pool: Pool, hook: ClaimedHook, devAuth: boolean): Promise
   return r.rows[0] ? { user: { email: hook.createdBy, role: r.rows[0].role }, org: { id: hook.orgId } } : null;
 }
 
-type Fired = { code: 202; status: HookStatus } | { code: 403 | 404; error: string; outcome: Outcome };
+/** How many of the hook's datasets got each answer. */
+type Counts = Record<HookStatus, number>;
+type Fired = { code: 202; status: HookStatus; datasets?: Counts } | { code: 403 | 404; error: string; outcome: Outcome };
+const GONE: Fired = { code: 404, error: 'dataset not found', outcome: 'error' };
 
 /** Inside the hook's request context: may the creator refresh it, does it exist — then do it. */
 async function fire(pool: Pool, hook: ClaimedHook, who: Identity): Promise<Fired> {
   const refresh = contractFor('dataset:refresh');
-  const input = { projectId: hook.projectId, id: hook.datasetId };
-  if (!refresh || !(await authorize(refresh, input, who, pool)).ok) return { code: 403, error: 'forbidden', outcome: 'denied' };
+  // `dataset:refresh` is scoped by its project alone, so one check covers every dataset of a connection's URL.
+  if (!refresh || !(await authorize(refresh, { projectId: hook.projectId }, who, pool)).ok) return { code: 403, error: 'forbidden', outcome: 'denied' };
   const datasets = require('../../data/datasets') as typeof import('../../data/datasets');
-  const meta = await datasets.getDatasetMeta(hook.projectId, hook.datasetId);
-  if (!meta) return { code: 404, error: 'dataset not found', outcome: 'error' };
-  const status = await runHookAction(hook.projectId, hook.datasetId, meta);
-  return status === 'gone' ? { code: 404, error: 'dataset not found', outcome: 'error' } : { code: 202, status };
+  const counts: Counts = { queued: 0, already_running: 0, cache_reset: 0 };
+  // ponytail: every copy is queued at once and the jobs run three at a time per pod (src/app/jobs.ts); chunk the calls if one connection ever feeds hundreds of datasets.
+  for (const id of await targetDatasets(hook.projectId, hook.target)) {
+    const meta = await datasets.getDatasetMeta(hook.projectId, id);
+    const status = meta ? await runHookAction(hook.projectId, id, meta) : 'gone';
+    if (status !== 'gone') counts[status]++;
+  }
+  const status = (['queued', 'already_running', 'cache_reset'] as const).find((k) => counts[k] > 0);
+  if (!status) return GONE;
+  return 'connId' in hook.target ? { code: 202, status, datasets: counts } : { code: 202, status };
 }
 
 export function registerRefreshHookRoute(app: FastifyInstance, o: HookRouteOptions): void {
@@ -116,12 +129,12 @@ export function registerRefreshHookRoute(app: FastifyInstance, o: HookRouteOptio
       const fired: Fired = who
         ? await runInContext(who, requestId, () => fire(pool, hook, who))
         : { code: 403, error: 'forbidden', outcome: 'denied' };
-      // Who: the identity it ran as. Ids: the hook and its dataset — never the token, nor its prefix.
+      // Who: the identity it ran as. Ids: the hook and its dataset or connection — never the token, nor its prefix.
       await audit(pool, {
         org: hook.orgId, actor: hook.createdBy, action: 'hook_refresh', projectId: hook.projectId,
-        targets: [hook.id, hook.datasetId], outcome: fired.code === 202 ? 'ok' : fired.outcome, requestId,
+        targets: [hook.id, 'connId' in hook.target ? hook.target.connId : hook.target.datasetId], outcome: fired.code === 202 ? 'ok' : fired.outcome, requestId,
       }).catch((err: unknown) => req.log.error({ err: scrubbed(err, o.dbUrl) }, 'audit write failed'));
-      if (fired.code === 202) return reply.code(202).send({ status: fired.status });
+      if (fired.code === 202) return reply.code(202).send(fired.datasets ? { status: fired.status, datasets: fired.datasets } : { status: fired.status });
       return reply.code(fired.code).send({ error: fired.error });
     });
   });

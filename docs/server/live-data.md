@@ -504,6 +504,18 @@ A call refreshes **as the person who made the URL**, with their role at the time
 they are disabled or lose write access to the project, the URL answers `403`. Make a new one as
 someone who still has access.
 
+### One URL for a whole connection
+
+A dbt run usually builds many tables. Instead of one URL per dataset, make one for the
+**connection**: open the connection and, under **Datasets from this connection**, press **Refresh URL
+for all datasets**. One call then refreshes every dataset in the project that came from that
+connection, and resets the cache of its Live ones. A dataset saved from the connection later is
+included without making a new URL. A dataset from another connection is never touched.
+
+The refreshes are queued together and run three at a time on a server pod, so the source gets at
+most that many of these queries at once. Everything else is as for a dataset's URL: the interval,
+the creator's access, revoking, and the audit row, which names the connection.
+
 ### What a call gets back
 
 `POST https://<your host>/api/hooks/refresh/<token>`. No body and no headers are needed. A body
@@ -518,7 +530,11 @@ alone decides the dataset.
 | `429` | `{"error":"too soon","retryAfter":N}` | This URL was called less than `REFRESH_HOOK_MIN_INTERVAL_SEC` (60 s by default) ago. `Retry-After` says how many seconds to wait. |
 | `403` | `{"error":"forbidden"}` | The URL's creator can no longer refresh the dataset. |
 | `404` | `{"error":"unknown refresh URL"}` | No such URL, or it was revoked. The two are the same answer on purpose. |
-| `404` | `{"error":"dataset not found"}` | The dataset was deleted or is in the Trash. |
+| `404` | `{"error":"dataset not found"}` | The dataset was deleted or is in the Trash. For a connection's URL: no dataset comes from the connection. |
+
+A connection's URL adds how many datasets got each answer:
+`{"status":"queued","datasets":{"queued":2,"already_running":0,"cache_reset":1}}`. Its `status` is
+the first of `queued`, `already_running` and `cache_reset` that any dataset got.
 
 Every call that gets past the interval leaves an audit row, **Refresh URL called**, naming the URL's
 creator, the URL's id and the dataset (Admin → Audit log). Unknown and revoked tokens leave none, so

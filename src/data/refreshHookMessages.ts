@@ -28,3 +28,13 @@ export function hookNotRefreshable(name: string): string {
 export function hookLimit(max: number): string {
   return t('refreshHookMessages.a_dataset_can_have_at_most', { max });
 }
+
+/** A connection's URL: the connection is gone (deleted, or in the Trash). */
+export function hookConnectionGone(): string {
+  return t('refreshHookMessages.this_connection_no_longer_exists');
+}
+
+/** At the per-connection cap (the same MAX_LIVE_PER_DATASET). */
+export function hookLimitConnection(max: number): string {
+  return t('refreshHookMessages.a_connection_can_have_at_most', { max });
+}

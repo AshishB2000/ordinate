@@ -178,8 +178,21 @@ function DatasetRow({ d, projectId, connId, onChanged }: { d: ConnDataset; proje
           Refresh URL
         </Button>
       )}
-      {hooks && <RefreshUrlDialog projectId={projectId} datasetId={d.id} name={d.name} live={live} onClose={() => setHooks(false)} />}
+      {hooks && <RefreshUrlDialog projectId={projectId} target={{ datasetId: d.id }} name={d.name} live={live} onClose={() => setHooks(false)} />}
     </li>
+  );
+}
+
+/** One URL for every dataset from the connection: a dbt run or a DAG that feeds several calls it once. */
+function ConnectionUrl({ conn, projectId }: { conn: Connection; projectId: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button size="sm" variant="ghost" icon="link" className={s.dsHook} onClick={() => setOpen(true)} title="One URL a pipeline calls to refresh every dataset from this connection">
+        Refresh URL for all datasets
+      </Button>
+      {open && <RefreshUrlDialog projectId={projectId} target={{ connId: conn.id }} name={conn.name} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
@@ -251,11 +264,14 @@ export function DetailsRail({
       {datasets.length === 0 ? (
         <p className={s.msg}>Nothing imported from this connection yet. Pick a table or run a query, then Save as dataset.</p>
       ) : (
-        <ul className={s.dsList}>
-          {datasets.map((d) => (
-            <DatasetRow key={d.id} d={d} projectId={projectId} connId={conn.id} onChanged={onChanged} />
-          ))}
-        </ul>
+        <>
+          <ConnectionUrl conn={conn} projectId={projectId} />
+          <ul className={s.dsList}>
+            {datasets.map((d) => (
+              <DatasetRow key={d.id} d={d} projectId={projectId} connId={conn.id} onChanged={onChanged} />
+            ))}
+          </ul>
+        </>
       )}
     </aside>
   );

@@ -1,7 +1,8 @@
 // Refresh URLs at rest (live data L0.5, table `refresh_hooks`, 0011_refresh_hooks.sql).
 //
 // A refresh URL is `/api/hooks/refresh/<token>`: a capability for ONE action
-// on ONE dataset. The token is `ordh_` + 32 random bytes (base64url) — a
+// on ONE target — a dataset, or every dataset that came from one connection
+// (0014_refresh_hooks_connection.sql). The token is `ordh_` + 32 random bytes (base64url) — a
 // prefix secret scanners can match, like a personal token's `ord_`. The value
 // exists only in the reply that created it; the table keeps its sha256
 // (`token_hash`, what a call is looked up by) and `ordh_` + 8 characters
@@ -36,7 +37,7 @@ const TOKEN_RE = /^ordh_[A-Za-z0-9_-]{43}$/;
 const HASH_RE = /^[0-9a-f]{64}$/;
 /** What lists show: `ordh_` and 8 more characters. */
 export const PREFIX_LEN = 13;
-/** Live (unrevoked) URLs per dataset — one per pipeline is plenty. A soft cap: two creates racing may both pass. */
+/** Live (unrevoked) URLs per target — one per pipeline is plenty. A soft cap: two creates racing may both pass. */
 export const MAX_LIVE_PER_DATASET = 10;
 /** The newest this many, revoked included, are listed. */
 const LIST_MAX = 50;
@@ -59,12 +60,18 @@ export interface HookRow {
   readonly revokedAt: string | null;
 }
 
+/** What a refresh URL refreshes: ONE dataset, or every dataset that came from ONE connection. */
+export type HookTarget = { readonly datasetId: string } | { readonly connId: string };
+
+/** The target's column and id. The column is one of two literals, so it can be inlined. */
+const columnOf = (t: HookTarget): ['connection_id' | 'dataset_id', string] => ('connId' in t ? ['connection_id', t.connId] : ['dataset_id', t.datasetId]);
+
 /** A claimed hook: what the route acts on. */
 export interface ClaimedHook {
   readonly id: string;
   readonly orgId: string;
   readonly projectId: string;
-  readonly datasetId: string;
+  readonly target: HookTarget;
   readonly createdBy: string;
 }
 
@@ -100,25 +107,27 @@ async function within<T>(pool: Pool, setting: 'ordinate.org' | 'ordinate.hook', 
 const COLS = `id, prefix, created_by AS "createdBy", to_json(created_at) #>> '{}' AS "createdAt",
   to_json(last_used_at) #>> '{}' AS "lastUsedAt", to_json(revoked_at) #>> '{}' AS "revokedAt"`;
 
-/** The dataset's hooks, newest first, revoked ones included (greyed in the list). */
-export function listHooks(pool: Pool, org: string, projectId: string, datasetId: string): Promise<HookRow[]> {
+/** The target's hooks, newest first, revoked ones included (greyed in the list). */
+export function listHooks(pool: Pool, org: string, projectId: string, target: HookTarget): Promise<HookRow[]> {
+  const [col, id] = columnOf(target);
   return within(pool, 'ordinate.org', org, async (c) => (await c.query<HookRow>(
-    `SELECT ${COLS} FROM refresh_hooks WHERE org_id = $1 AND project_id = $2 AND dataset_id = $3
+    `SELECT ${COLS} FROM refresh_hooks WHERE org_id = $1 AND project_id = $2 AND ${col} = $3
       ORDER BY created_at DESC, id LIMIT ${LIST_MAX}`,
-    [org, projectId, datasetId],
+    [org, projectId, id],
   )).rows);
 }
 
 /** A new hook and its token, or null at the cap. The token is in this reply and nowhere else, ever. */
-export function createHook(pool: Pool, org: string, projectId: string, datasetId: string, createdBy: string): Promise<{ hook: HookRow; token: string } | null> {
+export function createHook(pool: Pool, org: string, projectId: string, target: HookTarget, createdBy: string): Promise<{ hook: HookRow; token: string } | null> {
   const token = newHookToken();
+  const [col, id] = columnOf(target);
   return within(pool, 'ordinate.org', org, async (c) => {
     const r = await c.query<HookRow>(
-      `INSERT INTO refresh_hooks (org_id, project_id, dataset_id, token_hash, prefix, created_by)
+      `INSERT INTO refresh_hooks (org_id, project_id, ${col}, token_hash, prefix, created_by)
        SELECT $1, $2, $3, $4, $5, $6
-        WHERE (SELECT count(*) FROM refresh_hooks WHERE org_id = $1 AND project_id = $2 AND dataset_id = $3 AND revoked_at IS NULL) < $7
+        WHERE (SELECT count(*) FROM refresh_hooks WHERE org_id = $1 AND project_id = $2 AND ${col} = $3 AND revoked_at IS NULL) < $7
        RETURNING ${COLS}`,
-      [org, projectId, datasetId, hookHash(token), token.slice(0, PREFIX_LEN), createdBy, MAX_LIVE_PER_DATASET],
+      [org, projectId, id, hookHash(token), token.slice(0, PREFIX_LEN), createdBy, MAX_LIVE_PER_DATASET],
     );
     return r.rows[0] ? { hook: r.rows[0], token } : null;
   });
@@ -141,17 +150,18 @@ export function revokeHook(pool: Pool, org: string, projectId: string, id: strin
 export function claimHook(pool: Pool, token: string, minIntervalSec: number): Promise<Claim> {
   const hash = hookHash(token);
   return within(pool, 'ordinate.hook', hash, async (c) => {
-    const won = await c.query<{ id: string; org_id: string; project_id: string; dataset_id: string; token_hash: string; created_by: string }>(
+    const won = await c.query<{ id: string; org_id: string; project_id: string; dataset_id: string | null; connection_id: string | null; token_hash: string; created_by: string }>(
       `UPDATE refresh_hooks SET last_used_at = now()
         WHERE token_hash = $1 AND revoked_at IS NULL
           AND (last_used_at IS NULL OR last_used_at <= now() - $2 * interval '1 second')
-       RETURNING id, org_id, project_id::text, dataset_id::text, token_hash, created_by`,
+       RETURNING id, org_id, project_id::text, dataset_id::text, connection_id::text, token_hash, created_by`,
       [hash, minIntervalSec],
     );
     const row = won.rows[0];
     if (row) {
       if (!timingSafeEqual(Buffer.from(row.token_hash, 'hex'), Buffer.from(hash, 'hex'))) return { kind: 'unknown' } as const;
-      return { kind: 'claimed', hook: { id: row.id, orgId: row.org_id, projectId: row.project_id, datasetId: row.dataset_id, createdBy: row.created_by } } as const;
+      const target = row.connection_id ? { connId: row.connection_id } : { datasetId: row.dataset_id ?? '' }; // the CHECK: one of the two is set
+      return { kind: 'claimed', hook: { id: row.id, orgId: row.org_id, projectId: row.project_id, target, createdBy: row.created_by } } as const;
     }
     // A new statement: it sees a claim another pod committed while this one waited on the row.
     const seen = await c.query<{ live: boolean; wait: number }>(

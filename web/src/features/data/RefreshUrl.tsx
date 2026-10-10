@@ -1,7 +1,9 @@
 // "Refresh URL" (live data L0.5): a URL a dbt run or an Airflow DAG calls when
 // new data has landed. It does exactly one thing — refresh this dataset (on a
 // Live one, reset its cache) — at most once per the server's interval. Opened
-// from the dataset page's menu and from a connection's details rail.
+// from the dataset page's menu and from a connection's details rail, where a
+// URL can also be made for the CONNECTION: one call for every dataset that
+// came from it.
 //
 // The URL is shown ONCE, right after it is made: the server keeps only its
 // hash and a short prefix, so the list can name a URL but never show it
@@ -18,7 +20,7 @@ import { EmptyState, ErrorState } from '../../ui/States';
 import { Tab, TabList, TabPanel, Tabs } from '../../ui/Tabs';
 import { toast } from '../../ui/Toast';
 import { ago } from './format';
-import { hookUrl, intervalText, snippets, useCreateHook, useRefreshHooks, useRevokeHook, type RefreshHook } from './refreshUrls';
+import { hookUrl, intervalText, snippets, useCreateHook, useRefreshHooks, useRevokeHook, type HookTarget, type RefreshHook } from './refreshUrls';
 import s from './RefreshUrl.module.css';
 
 function copy(text: string, what: string) {
@@ -28,9 +30,9 @@ function copy(text: string, what: string) {
   );
 }
 
-function RevokeButton({ hook, projectId, datasetId }: { hook: RefreshHook; projectId: string; datasetId: string }) {
+function RevokeButton({ hook, projectId, target }: { hook: RefreshHook; projectId: string; target: HookTarget }) {
   const [open, setOpen] = useState(false);
-  const revoke = useRevokeHook(projectId, datasetId);
+  const revoke = useRevokeHook(projectId, target);
   const go = () =>
     revoke.mutate(hook.id, {
       onSuccess: (r) => {
@@ -65,7 +67,7 @@ function RevokeButton({ hook, projectId, datasetId }: { hook: RefreshHook; proje
   );
 }
 
-function HookRow({ hook, projectId, datasetId }: { hook: RefreshHook; projectId: string; datasetId: string }) {
+function HookRow({ hook, projectId, target }: { hook: RefreshHook; projectId: string; target: HookTarget }) {
   const revoked = hook.revokedAt !== null;
   return (
     <li className={revoked ? `${s.row} ${s.revoked}` : s.row}>
@@ -78,7 +80,7 @@ function HookRow({ hook, projectId, datasetId }: { hook: RefreshHook; projectId:
         {' · '}
         {revoked ? `revoked ${ago(hook.revokedAt ?? undefined)}` : hook.lastUsedAt ? `last called ${ago(hook.lastUsedAt)}` : 'never called'}
       </p>
-      <div className={s.rowAction}>{!revoked && <RevokeButton hook={hook} projectId={projectId} datasetId={datasetId} />}</div>
+      <div className={s.rowAction}>{!revoked && <RevokeButton hook={hook} projectId={projectId} target={target} />}</div>
     </li>
   );
 }
@@ -141,9 +143,15 @@ function Usage({ name, interval }: { name: string; interval: number }) {
   );
 }
 
-function Body({ projectId, datasetId, name, live }: { projectId: string; datasetId: string; name: string; live: boolean }) {
-  const list = useRefreshHooks(projectId, datasetId, true);
-  const create = useCreateHook(projectId, datasetId);
+/** What a call does, in the panel's lead sentence. */
+function Does({ target, name, live }: { target: HookTarget; name: string; live: boolean }) {
+  if ('connId' in target) return <>refreshes every dataset that came from “{name}” from its source, and resets the cache of the Live ones</>;
+  return live ? <>resets the cache of “{name}”, so the next question goes to the warehouse</> : <>refreshes “{name}” from its source</>;
+}
+
+function Body({ projectId, target, name, live }: { projectId: string; target: HookTarget; name: string; live: boolean }) {
+  const list = useRefreshHooks(projectId, target, true);
+  const create = useCreateHook(projectId, target);
   const [token, setToken] = useState<string | null>(null);
   const make = () =>
     create.mutate(undefined, {
@@ -174,9 +182,8 @@ function Body({ projectId, datasetId, name, live }: { projectId: string; dataset
   return (
     <>
       <p className={s.lead}>
-        Call it from dbt, Airflow or any scheduler when new data has landed, and Ordinate{' '}
-        {live ? <>resets the cache of “{name}”, so the next question goes to the warehouse</> : <>refreshes “{name}” from its source</>}. It can do
-        nothing else, and it works at most {intervalText(list.data.minIntervalSec)}.
+        Call it from dbt, Airflow or any scheduler when new data has landed, and Ordinate <Does target={target} name={name} live={live} />. It can
+        do nothing else, and it works at most {intervalText(list.data.minIntervalSec)}.
       </p>
       {token && <NewUrl token={token} />}
       <section className={s.section} aria-label="Refresh URLs">
@@ -193,7 +200,7 @@ function Body({ projectId, datasetId, name, live }: { projectId: string; dataset
         ) : (
           <ul className={s.list}>
             {hooks.map((h) => (
-              <HookRow key={h.id} hook={h} projectId={projectId} datasetId={datasetId} />
+              <HookRow key={h.id} hook={h} projectId={projectId} target={target} />
             ))}
           </ul>
         )}
@@ -204,9 +211,11 @@ function Body({ projectId, datasetId, name, live }: { projectId: string; dataset
 }
 
 /** The panel. Its owner unmounts it on close, so a new URL never outlives it. */
-export function RefreshUrlDialog({ projectId, datasetId, name, live = false, onClose }: {
+export function RefreshUrlDialog({ projectId, target, name, live = false, onClose }: {
   projectId: string;
-  datasetId: string;
+  /** A dataset, or a connection: one URL for every dataset that came from it. */
+  target: HookTarget;
+  /** The dataset's name, or the connection's. */
   name: string;
   live?: boolean;
   onClose: () => void;
@@ -223,7 +232,7 @@ export function RefreshUrlDialog({ projectId, datasetId, name, live = false, onC
         </DialogClose>
       }
     >
-      <Body projectId={projectId} datasetId={datasetId} name={name} live={live} />
+      <Body projectId={projectId} target={target} name={name} live={live} />
     </Dialog>
   );
 }
