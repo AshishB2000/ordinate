@@ -1,10 +1,12 @@
-// Home's "What stands out" row (insights.ts insRenderHome): the project's
-// strongest findings that have a chart, at most six, each with its sparkline.
+// Home's "What stands out" (insights.ts insRenderHome): the project's
+// strongest findings that have a chart, at most six, each with its sparkline
+// — the strongest as ONE banner, the rest behind "Show all" (three cards that
+// say the same thing about three columns were the loudest thing on Home).
 // They ride Home's own `home:overview` reply (src/ipc/insights.ts standsOut),
-// the query Home already makes, so the row costs no round trip of its own
-// (plan §9). NO EMPTY STATE — with nothing to say the row does not render at
-// all (Home already has a greeting, an ask bar and two full columns). While it
-// loads it holds its place with a skeleton so the columns below do not jump.
+// the query Home already makes, so the banner costs no round trip of its own
+// (plan §9). NO EMPTY STATE — with nothing to say it does not render at all
+// (Home already has a greeting, an ask bar and its table). While it loads it
+// holds its place with a skeleton so the table below does not jump.
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -29,16 +31,13 @@ export function WhatStandsOut({ projectId }: { projectId: string | undefined }) 
   const dismiss = useDismiss(projectId ?? '');
   const canEdit = useCanEdit(projectId);
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
+  const [all, setAll] = useState(false);
   if (!projectId) return null;
   if (q.isPending) {
     return (
       <section className={s.home} aria-label="What stands out" aria-busy="true">
         <h2 className={s.homeH}>What stands out</h2>
-        <div className={s.row}>
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className={s.cardSk} />
-          ))}
-        </div>
+        <Skeleton className={s.bannerSk} />
       </section>
     );
   }
@@ -74,11 +73,19 @@ export function WhatStandsOut({ projectId }: { projectId: string | undefined }) 
   };
   return (
     <section className={s.home} aria-label="What stands out">
-      <h2 className={s.homeH}>What stands out</h2>
-      <div className={s.row}>
-        {list.map((ins) => (
+      <div className={s.homeHead}>
+        <h2 className={s.homeH}>What stands out</h2>
+        {list.length > 1 && (
+          <button type="button" className={s.homeMore} aria-expanded={all} onClick={() => setAll(!all)}>
+            {all ? 'Show less' : `Show all ${list.length}`}
+          </button>
+        )}
+      </div>
+      <div className={s.banners}>
+        {(all ? list : list.slice(0, 1)).map((ins) => (
           <InsightCard
             key={ins.id}
+            banner
             projectId={projectId}
             ins={ins}
             onDismiss={
@@ -90,7 +97,8 @@ export function WhatStandsOut({ projectId }: { projectId: string | undefined }) 
                 : undefined
             }
             // Saving and dismissing change the project: an editor's. Asking is anyone's.
-            actions={[...(canEdit ? [{ label: 'Save as visual', primary: true, run: save }] : []), { label: 'Ask why', run: askWhy }]}
+            // Neither is the accent here: on Home that is New's.
+            actions={[...(canEdit ? [{ label: 'Save as visual', run: save }] : []), { label: 'Ask why', run: askWhy }]}
           />
         ))}
       </div>

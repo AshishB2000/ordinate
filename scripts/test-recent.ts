@@ -96,3 +96,21 @@ test('equal timestamps preserve input order (stable sort)', () => {
     ['first', 'second', 'third'],
   );
 });
+
+test('saved visuals are listed with the rest, carrying their chart type', () => {
+  const out = buildRecent(
+    [
+      {
+        projectId: 'p1',
+        projectName: 'Alpha',
+        datasets: [{ id: 'd1', name: 'DS one', updatedAt: '2026-01-01T00:00:00.000Z' }],
+        analyses: [],
+        visuals: [{ id: 'v1', name: 'Vis one', updatedAt: '2026-01-03T00:00:00.000Z', meta: { chartType: 'bar' } }],
+      },
+    ],
+    50,
+  );
+  assert.deepStrictEqual(out.map((i) => [i.type, i.id]), [['visual', 'v1'], ['dataset', 'd1']]);
+  assert.deepStrictEqual(out[0]!.meta, { chartType: 'bar' });
+  assert.strictEqual(out[0]!.projectName, 'Alpha');
+});

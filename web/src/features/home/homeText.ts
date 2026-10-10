@@ -8,6 +8,7 @@ export const TYPE_LABEL: Record<RecentType, string> = {
   analysis: 'Dashboard',
   capture: 'Capture',
   report: 'Report',
+  visual: 'Visual',
 };
 
 /** The name to greet: an email's local part up to the first separator, capitalised ("ana.ruiz@x" → "Ana"). */
@@ -73,13 +74,15 @@ export function suggestPrompts(projectDatasets: string[], recentDatasets: string
   return out.slice(0, 3);
 }
 
-/** Where a Recent row opens. Areas not ported yet land on their section. */
+/** Where a Recent row opens: the record itself where it has a page, else its section. */
 export function itemHref(it: Pick<RecentItem, 'type' | 'id' | 'projectId'>): string {
   switch (it.type) {
     case 'dataset':
       return `/data/${it.projectId}/${it.id}`;
     case 'analysis':
-      return '/dashboards';
+      return `/analyses/${it.projectId}/${it.id}`;
+    case 'visual':
+      return `/visuals/${it.projectId}/${it.id}`;
     case 'report':
       return '/reports';
     default:

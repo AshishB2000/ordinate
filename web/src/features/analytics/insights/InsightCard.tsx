@@ -124,16 +124,19 @@ export function InsightCard({
   ins,
   actions,
   onDismiss,
+  banner,
 }: {
   projectId: string;
   ins: Insight;
   actions: CardAction[];
   /** Absent for a viewer: dismissing changes the project. */
   onDismiss?: (id: string) => Promise<void>;
+  /** Home's density: the same parts on one line. */
+  banner?: boolean;
 }) {
   const chips = chipsOf(ins);
   return (
-    <article className={s.card} data-insight-id={ins.id}>
+    <article className={banner ? `${s.card} ${s.banner}` : s.card} data-insight-id={ins.id}>
       <header className={s.cardHead}>
         <span className={ins.severity === 'warn' ? `${s.dot} ${s.dotWarn}` : s.dot} aria-hidden="true" />
         <h3 className={s.cardTitle} title={ins.detail}>
