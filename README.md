@@ -120,8 +120,18 @@ figures and suggests what to build next; it never makes up a number.
       <p align="center"><b>Visuals</b> — build any of 39 chart, map and table types</p>
     </td>
     <td width="50%" valign="top">
+      <img src="assets/images/screens/map.png" alt="A region map of profit by US state in the visual builder" />
+      <p align="center"><b>Maps</b> — region, bubble, hexbin and flow maps</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
       <img src="assets/images/screens/stats.png" alt="A correlation matrix in the statistics workbench" />
       <p align="center"><b>Analytics</b> — correlation, regression, drivers and more</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="assets/images/screens/admin-ai.png" alt="Admin → AI: two connected providers and the models members can use" />
+      <p align="center"><b>Admin → AI</b> — connect providers once, approve the models your team may use</p>
     </td>
   </tr>
 </table>
