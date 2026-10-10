@@ -23,9 +23,11 @@ export interface PopoverProps {
   side?: 'top' | 'right' | 'bottom' | 'left';
   /** Replaces the panel's own size and padding (a list that runs edge to edge). */
   className?: string;
+  /** Where focus goes on close instead of the trigger: call `preventDefault()` and focus it. */
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
-export function Popover({ trigger, anchorRef, children, title, heading, open, onOpenChange, align = 'start', side = 'bottom', className }: PopoverProps) {
+export function Popover({ trigger, anchorRef, children, title, heading, open, onOpenChange, align = 'start', side = 'bottom', className, onCloseAutoFocus }: PopoverProps) {
   return (
     <P.Root open={open} onOpenChange={onOpenChange}>
       {trigger && <P.Trigger asChild>{trigger}</P.Trigger>}
@@ -38,6 +40,7 @@ export function Popover({ trigger, anchorRef, children, title, heading, open, on
           sideOffset={6}
           collisionPadding={8}
           aria-label={title}
+          onCloseAutoFocus={onCloseAutoFocus}
         >
           {heading && <h2 className={s.title}>{title}</h2>}
           {children}

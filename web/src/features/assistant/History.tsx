@@ -11,7 +11,7 @@ import { Popover, PopoverClose } from '../../ui/Popover';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { threadTitle, turnsLabel, useThreads, type ThreadSummary } from './api';
-import s from './History.module.css';
+import s from './DockList.module.css';
 
 export interface ThreadGroup {
   label: 'Today' | 'Yesterday' | 'Earlier';
@@ -52,7 +52,7 @@ export function History({ projectId, threadId, open, onOpenChange, onOpen }: His
     <Popover
       title="Conversation history"
       align="end"
-      className={s.history}
+      className={s.popover}
       open={open}
       onOpenChange={(o) => {
         if (!o) setQuery('');

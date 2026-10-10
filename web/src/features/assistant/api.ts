@@ -135,6 +135,23 @@ export function useThreads(projectId: string | null, enabled: boolean) {
   });
 }
 
+/** Something the composer's `@` can point the Assistant at. */
+export interface Mentionable {
+  id: string;
+  name: string;
+}
+
+/**
+ * The project's visuals and analyses by name — the lists (and cache entries)
+ * the Visuals and Analyses pages read, so opening `@` after either costs no call.
+ */
+export function useVisualNames(projectId: string) {
+  return useQuery({ queryKey: ['visual:list', projectId], queryFn: async () => (await rpc('visual:list', { projectId })) as Mentionable[] });
+}
+export function useAnalysisNames(projectId: string) {
+  return useQuery({ queryKey: ['analysis:gallery', projectId], queryFn: async () => (await rpc('analysis:gallery', { projectId })) as Mentionable[] });
+}
+
 export async function newThread(projectId: string): Promise<string> {
   const r = (await rpc('copilot:newThread', { projectId })) as { ok: boolean; thread?: { id: string } };
   return r.ok && r.thread ? r.thread.id : '';

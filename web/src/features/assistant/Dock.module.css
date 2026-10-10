@@ -85,33 +85,65 @@
   gap: 2px;
 }
 
-/* "Based on …" — its own row under the header; only the label truncates. */
+/* "Based on [chip]" — the composer's first row: what the next answer is about.
+   The chip is quiet while it follows the screen and accent once `@` pinned it;
+   only its name truncates. */
 .context {
-  flex: none;
   min-width: 0;
   display: flex;
   align-items: center;
   gap: var(--sp-4);
-  padding: var(--sp-8) var(--sp-12) 0;
-  font-size: var(--t-13);
-  font-weight: 600;
-  color: var(--muted);
+  font-size: var(--t-12);
+  color: var(--text-dim);
 }
 .contextLabel {
+  flex: none;
+}
+.contextChip {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: 22px;
+  padding: 0 var(--sp-8);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-weight: 500;
+}
+.contextChip > svg {
+  flex: none;
+}
+.contextPinned {
+  padding-right: 2px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.contextName {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.provChip {
+.contextClear {
   flex: none;
-  padding: 2px var(--sp-8);
-  border-radius: var(--r-full);
-  background: var(--surface-3);
-  color: var(--text-dim);
-  font-size: var(--t-11);
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.contextClear:hover {
+  background: var(--accent-line);
+}
+.contextClear:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
 }
 .projectPick {
   flex: none;
@@ -325,7 +357,7 @@
   flex-direction: column;
   gap: var(--sp-4);
   margin: 0 var(--sp-12) var(--sp-12);
-  padding: var(--sp-8) var(--sp-8) var(--sp-8) var(--sp-12);
+  padding: var(--sp-8);
   background: var(--surface-float);
   border: 1px solid var(--border-hairline);
   border-radius: var(--r-lg);
@@ -337,13 +369,7 @@
     0 0 0 3px var(--accent-soft),
     var(--shadow-md);
 }
-.composeRow {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--sp-8);
-}
 .input {
-  flex: 1 1 auto;
   min-width: 0;
   border: none;
   background: none;
@@ -355,7 +381,7 @@
   color: var(--text);
   max-height: 140px;
   overflow-y: auto;
-  padding: var(--sp-4) 0;
+  padding: var(--sp-4);
   /* Grows with what is typed — and with a placeholder longer than one line. */
   field-sizing: content;
 }
@@ -369,20 +395,43 @@
   color: var(--text-dim);
   cursor: not-allowed;
 }
-/* Which model answers you (DockParts ModelPicker), under the composer: a small select, or its name when there is one. */
+/* The composer's last row: which model answers you on the left (DockParts
+   ModelPicker — a quiet select, or its name when there is one), then `@`, add
+   data and send on the right. */
 .composeFoot {
   display: flex;
   align-items: center;
   gap: var(--sp-8);
   min-width: 0;
 }
+.composeActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
 .modelPick {
   flex: 0 1 auto;
   min-width: 0;
+}
+/* The kit's select without its box: a label with a chevron until the pointer is on it. */
+.modelPick .modelQuiet {
+  width: auto;
   max-width: 100%;
+  padding: 0 var(--sp-4);
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+}
+.modelPick .modelQuiet:hover,
+.modelPick .modelQuiet[data-state='open'] {
+  background: var(--surface-2);
+  color: var(--text);
 }
 .modelName {
-  max-width: 100%;
+  min-width: 0;
+  padding: 0 var(--sp-4);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
