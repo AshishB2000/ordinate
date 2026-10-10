@@ -45,6 +45,12 @@ export const prepare = {
   'formula:functions': rpc({ access: 'read', org: true, input: z.undefined() }),
   // What an unsaved step would do to its real input — counted by the server.
   'prepare:stepPreview': rpc({ access: 'read', input: z.strictObject({ ...At, index: Index, step: Step }), project: byProjectId }),
+  // Which values of a text column look like one thing written differently — a suggestion for replace rules; writes nothing.
+  'prepare:similarValues': rpc({
+    access: 'read',
+    input: z.strictObject({ ...At, index: Index, column: z.string().max(1_000), assistant: z.boolean().optional() }),
+    project: byProjectId,
+  }),
   'text:profile': rpc({
     access: 'read',
     input: z.strictObject({ ...At, column: z.string().max(1_000), lang: z.enum(['en', 'es', 'fr', 'de']).optional() }),

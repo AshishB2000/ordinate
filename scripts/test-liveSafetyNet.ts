@@ -163,6 +163,7 @@ async function loadWarehouseTable(table: string): Promise<void> {
     ['prepare: add step', 'dataset:addStep', { projectId: P, datasetId: d, step: { type: 'filter', column: 'sales', op: '>', value: 1 } }],
     ['prepare: set steps', 'dataset:setSteps', { projectId: P, datasetId: d, steps: [{ type: 'filter', column: 'sales', op: '>', value: 1 }] }],
     ['prepare: step preview', 'prepare:stepPreview', { projectId: P, datasetId: d, index: -1, step: { type: 'split_column', column: 'region', mode: 'delimiter', delimiter: '-' } }],
+    ['prepare: similar values', 'prepare:similarValues', { projectId: P, datasetId: d, index: -1, column: 'region' }],
     ['prepare: suggest steps', 'dataset:suggestSteps', { projectId: P, datasetId: d }],
     ['prepare: suggest calc field', 'dataset:suggestCalcField', { projectId: P, datasetId: d }],
     ['formula check', 'formula:check', { projectId: P, datasetId: d, expression: '[sales] * 2' }],

@@ -124,6 +124,19 @@ export const suggestSteps = async (projectId: string, datasetId: string) =>
 export const suggestCalc = async (projectId: string, datasetId: string) =>
   (await rpc('dataset:suggestCalcField', { projectId, datasetId })) as CalcReply;
 
+/** Values that look like one thing written differently; every count is the server's (src/data/valueClusters.ts). */
+export interface ValueCluster {
+  to: string;
+  toCount: number;
+  from: Array<{ value: string; count: number }>;
+  rows: number;
+}
+export type SimilarReply =
+  | { ok: true; distinct: number; clusters: ValueCluster[]; more: number; assistant?: { notReady?: boolean; error?: string } }
+  | Fail;
+export const similarValues = async (projectId: string, datasetId: string, index: number, column: string, assistant: boolean) =>
+  (await rpc('prepare:similarValues', { projectId, datasetId, index, column, ...(assistant ? { assistant: true } : {}) })) as SimilarReply;
+
 // ── The formula editor ──
 
 export interface Tok {
