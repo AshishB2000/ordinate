@@ -8,7 +8,7 @@
 // report goes nowhere.
 
 import { createContext, useContext, useEffect } from 'react';
-import type { AsOf } from '../../../ui/asOf';
+import type { AsOf } from '../../../ui/asOfView';
 
 type Report = (asOf: AsOf | undefined) => void;
 

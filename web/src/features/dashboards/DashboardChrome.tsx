@@ -13,7 +13,7 @@ import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Input } from '../../ui/Field';
 import { Select } from '../../ui/Select';
 import { toast } from '../../ui/Toast';
-import { asOfView } from '../../ui/asOf';
+import { asOfView } from '../../ui/asOfView';
 import { useThemes } from '../settings/api';
 import { themeCssVars } from '../settings/themeModel';
 import type { EditorApi } from '../analyses/editor/context';

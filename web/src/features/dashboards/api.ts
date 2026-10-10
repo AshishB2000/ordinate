@@ -6,7 +6,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc, type RpcInput } from '../../api/client';
 import { useServerEvent } from '../../api/events';
-import type { AsOf } from '../../ui/asOf';
+import type { AsOf } from '../../ui/asOfView';
 
 // ── Publish to a URL ─────────────────────────────────────────────────────
 

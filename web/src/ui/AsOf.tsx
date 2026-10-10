@@ -5,7 +5,7 @@
 // The warning tint (stale, or over a day old) also carries an icon and the
 // date in words, so it is never colour alone (as ./Badge does).
 
-import { asOfView, type AsOf } from './asOf';
+import { asOfView, type AsOf } from './asOfView';
 import { Icon } from './icons/Icon';
 import s from './AsOf.module.css';
 
