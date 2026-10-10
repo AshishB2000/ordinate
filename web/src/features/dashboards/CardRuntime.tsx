@@ -11,6 +11,7 @@ import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
 import type { Card, Layout, VisualDef } from '../analyses/api';
 import type { EditorApi } from '../analyses/editor/context';
+import { clickFilterOn } from '../analyses/editor/filters';
 import { mergeFilters, VisualTileBody } from '../analyses/VisualTile';
 import { AlertDialog, subjectOf, type AlertSubject } from './AlertDialog';
 import { DrillPanel, type DrillTarget } from '../visuals/drill/DrillPanel';
@@ -34,10 +35,11 @@ export function drillTarget(ed: EditorApi, cardId: string, def: VisualDef, mark:
 }
 
 /** The pivot as it may LEAVE the app: the server's grid through the Share policy's export path. */
-/** What a tile reads: the sheet's filters, then a filter_target narrowing on this tile. */
+/** What a tile reads: the sheet's filters (less the click-filters it made itself), then a filter_target narrowing on this tile. */
 export function tileFilters(ed: EditorApi, cardId: string) {
   const narrow = ed.view.tileSteps(cardId);
-  return narrow.length ? [...ed.filters, ...narrow] : ed.filters;
+  const own = ed.filtersFor(cardId);
+  return narrow.length ? [...own, ...narrow] : own;
 }
 
 async function sharedPivot(ed: EditorApi, def: VisualDef, cardId: string): Promise<PivotGridShape | null> {
@@ -135,6 +137,15 @@ export function useCardRuntime(ed: EditorApi, gridRef: RefObject<HTMLDivElement 
   return { menu, gridVars, overlays };
 }
 
+/** A visual's click-to-filter columns on this sheet, or null: off, a table or a map, or no category (KindProps noClick). */
+export function clickColumns(ed: EditorApi, def: VisualDef): { column: string; seriesColumn?: string } | null {
+  const column = def.encoding.category;
+  if (!column || def.chartType === 'table' || def.chartType.startsWith('map_')) return null;
+  if (!clickFilterOn(ed.doc.sheets[ed.sheet]?.clickFilter, def.overrides?.crossFilter)) return null;
+  const series = def.encoding.series;
+  return { column, ...(typeof series === 'string' && series ? { seriesColumn: series } : {}) };
+}
+
 /** A visual card's drawing with its tile actions: a click action owns the click (cross-filter after). */
 export function VisualCard({ ed, card, def, asTable, onMark }: { ed: EditorApi; card: Card; def: VisualDef; asTable: boolean; onMark?: (v: string | number) => void }) {
   const run = useRunAction(ed);
@@ -151,6 +162,10 @@ export function VisualCard({ ed, card, def, asTable, onMark }: { ed: EditorApi; 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pins compared by value
     [def, card.id, JSON.stringify(pins)],
   );
+  // Click-to-filter: this card stays whole (tileFilters) and its chart dims what was NOT picked (charts/selection.ts).
+  const picked = (column: unknown) => ed.view.clicks.find((c) => c.origin === card.id && c.column === column)?.values;
+  const sel = JSON.stringify({ categories: picked(def.encoding.category), series: picked(def.encoding.series) });
+  const shown = useMemo(() => (sel === '{}' ? drawn : { ...drawn, overrides: { ...drawn.overrides, markSelection: JSON.parse(sel) as unknown } }), [drawn, sel]);
   // A plain click: the tile's own actions, else click-to-filter, else the rows behind the mark (dashGrid.ts wireDrillClick).
   const [drill, setDrill] = useState<DrillTarget | null>(null);
   const mark = clicks.length
@@ -160,11 +175,12 @@ export function VisualCard({ ed, card, def, asTable, onMark }: { ed: EditorApi; 
     <>
       <VisualTileBody
         projectId={ed.projectId}
-        def={drawn}
+        def={shown}
         filters={filters}
         params={ed.params}
         asTable={asTable}
         onMark={mark}
+        filterMark={!!onMark && !clicks.length}
         // A map has no Chart.js marks: a clicked region or point runs the tile's click actions, else joins the
         // sheet's selection (tileActions.ts wireTileActions, cv-mark-click).
         onMapMark={(column, category) => {

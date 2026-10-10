@@ -15,6 +15,11 @@
 //   runtime     Reset controls; Category…; a map click joins the selection; a
 //               bar click drills; the dataset page's comment door; Home's
 //               "Recent comments" opens the thread on its record
+//   click       click-to-filter on a new sheet: a bar click filters the OTHER
+//               cards (a KPI and a table, both the server's), the clicked
+//               chart keeps every category, the chip row says what is on;
+//               ⌘/Ctrl-click adds a value, Esc and a chip clear; nothing is
+//               saved; the sheet's switch off → the click drills again
 //   publish     /dashboards empty → Publish… → the live size estimate →
 //               Publish → the row → the published page at /p/<id>/ renders
 //               with ZERO CSP violations under its own pinned policy
@@ -292,6 +297,8 @@ e2e('runtime: reset controls, quick filters, map selection, a drill, comment doo
     sheets: [{
       id: crypto.randomUUID(),
       name: 'Sheet 1',
+      // Click-to-filter is ON for a new sheet; this one turns it off, so a plain click on a bar still drills (below).
+      clickFilter: false,
       cards: [
         card('control', { x: 0, y: 0, w: 0, h: 0 }, { control: { kind: 'dropdown', label: 'Region', datasetId: ds, column: 'region', default: { value: 'West' } } }),
         card('visual', { x: 0, y: 0, w: 6, h: 7 }, { visualId: byName('Revenue by category') }),
@@ -370,4 +377,184 @@ e2e('runtime: reset controls, quick filters, map selection, a drill, comment doo
   await page.goto('/');
   await settled(page);
   await page.getByRole('region', { name: 'Recent comments' }).getByText('Is ship_days right for the West?').waitFor();
+});
+
+type Point = { x: number; y: number };
+
+/** Clicks along a box, low rows first (where every bar is), until `done()` holds; returns the point that did it. */
+async function findMark(page: Page, box: { x: number; y: number; width: number; height: number }, done: () => Promise<boolean>, fromRight = false): Promise<Point | null> {
+  const cols = 14;
+  for (const fy of [0.8, 0.65, 0.5]) {
+    for (let c = 1; c <= cols; c++) {
+      const at = { x: box.x + (box.width * (fromRight ? cols + 1 - c : c)) / (cols + 1), y: box.y + box.height * fy };
+      await page.mouse.click(at.x, at.y);
+      await page.waitForTimeout(150);
+      if (await done()) return at;
+    }
+  }
+  return null;
+}
+
+async function until(cond: () => Promise<boolean>, what: string, ms = 10_000): Promise<void> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (await cond()) return;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  assert.fail(what);
+}
+
+e2e('click-to-filter: a bar filters the other cards, its own chart stays whole, chips, multi-select, Esc, the switch', async ({ page, server, rpc }) => {
+  const pid = server.sample.projectId;
+  await page.goto(`/analyses?project=${pid}`);
+  await settled(page);
+  const datasets = (await call(page, 'dataset:list', { projectId: pid })) as { id: string; name: string }[];
+  const ds = datasets.find((d) => d.name === 'Retail orders')?.id as string;
+  const vis = (await call(page, 'visual:list', { projectId: pid })) as { id: string; name: string }[];
+  const bars = vis.find((v) => v.name === 'Revenue by category')?.id as string;
+  // A second visual over the same category: what the OTHER cards see, read as a table.
+  const check = await call(page, 'visual:save', { projectId: pid, datasetId: ds, name: 'Category check', chartType: 'column', encoding: { category: 'category', values: [{ column: 'revenue', aggregation: 'sum' }] } });
+  const card = (type: string, layout: object, extra: object) => ({ id: crypto.randomUUID(), type, layout, ...extra });
+  // No `clickFilter` in the request: a NEW dashboard's sheet gets it ON from the server.
+  const made = await call(page, 'analysis:create', {
+    projectId: pid,
+    name: 'Click to filter',
+    sheets: [{
+      id: crypto.randomUUID(),
+      name: 'Sheet 1',
+      cards: [
+        card('metric', { x: 0, y: 0, w: 4, h: 3 }, { metric: { datasetId: ds, column: 'revenue', aggregation: 'sum', label: 'Total revenue' } }),
+        card('visual', { x: 0, y: 3, w: 7, h: 7 }, { visualId: bars }),
+        card('visual', { x: 7, y: 3, w: 5, h: 7 }, { visualId: check.visual?.id ?? check.id }),
+      ],
+    }],
+  });
+  assert.equal(made.sheets[0].clickFilter, true, 'a new sheet is written with click-to-filter on');
+  // Every write of the record from here on: a click must never be one.
+  const updates: string[] = [];
+  page.on('request', (r) => {
+    if (/\/api\/rpc\/analysis(:|%3A)update/.test(r.url())) updates.push(r.url());
+  });
+  await page.goto(`/analyses/${pid}/${made.id}`);
+  await settled(page);
+
+  const kpi = page.getByRole('group', { name: 'Total revenue card' });
+  const source = page.getByRole('group', { name: 'Revenue by category card' });
+  const other = page.getByRole('group', { name: 'Category check card' });
+  const chips = page.getByRole('group', { name: 'Click filters' });
+  const chip = chips.getByRole('button', { name: /^Remove click filter category: / });
+  const picked = async () => ((await chip.count()) ? ((await chip.getAttribute('aria-label')) ?? '').replace('Remove click filter category: ', '') : '');
+  const asTable = async (group: typeof source, name: string, on: boolean) => {
+    await page.getByRole('button', { name: `${name} card actions` }).click();
+    await page.getByRole('menuitem', { name: on ? 'View as table' : 'View as chart' }).click();
+    await (on ? group.getByRole('table') : group.locator('canvas').first()).waitFor();
+  };
+  const rows = (group: typeof source) => group.locator('tbody tr').count();
+
+  await asTable(other, 'Category check', true);
+  const all = await rows(other);
+  assert.ok(all >= 2, `the sample has several categories, got ${all}`);
+  // The KPI's figure: the server's display string, the one text in the card that is only a number.
+  const figure = () => kpi.getByText(/^[^\d\s]?[\d.,]+[KMB]?$/).first().innerText();
+  await kpi.getByText(/^[^\d\s]?[\d.,]+[KMB]?$/).first().waitFor();
+  const total = await figure();
+  // Nothing clicked yet: the row is already there, saying what a click does — so the sheet does not jump when a chip arrives.
+  await chips.getByText('Click a mark on a chart to filter the other cards.').waitFor();
+  assert.equal(await chip.count(), 0, 'nothing clicked: no chip');
+
+  // ── A plain click: the other cards filter, this chart does not ─────────
+  // A click on a card selects it and opens Properties beside the sheet: open it first, so the bars do not move after they are measured.
+  await source.getByRole('button', { name: 'Card properties' }).click();
+  const props = page.getByRole('complementary', { name: 'Properties' });
+  await props.getByRole('checkbox', { name: 'Clicking this visual filters the sheet' }).waitFor();
+  assert.equal(await props.getByRole('checkbox', { name: 'Clicking this visual filters the sheet' }).isChecked(), true, 'the visual follows the sheet’s switch');
+  const canvas = source.locator('canvas').first();
+  await canvas.waitFor();
+  await page.waitForTimeout(600); // the bars' entrance, the flyout's slide
+  const box = (await canvas.boundingBox())!;
+  const p1 = await findMark(page, box, async () => (await chip.count()) === 1);
+  assert.ok(p1, 'a click on a bar puts its category in the chip row');
+  const v1 = await picked();
+  assert.ok(v1 && !v1.includes(','), `one value picked, got “${v1}”`);
+  await until(async () => (await rows(other)) === 1, 'the other card is filtered to the one clicked category');
+  await other.getByRole('rowheader', { name: v1, exact: true }).waitFor();
+  await until(async () => (await figure()) !== total, 'the KPI is recomputed by the server under the click');
+  const narrowed = await figure();
+  await page.waitForTimeout(400); // the dimming's transition
+  await screensInPlace(page, 'dashboards-clickfilter');
+  // The clicked chart keeps EVERY category (its own click is left out of its request).
+  await asTable(source, 'Revenue by category', true);
+  assert.equal(await rows(source), all, 'the clicked chart stays whole');
+  await asTable(source, 'Revenue by category', false);
+  await page.waitForTimeout(400);
+
+  // ── A different bar replaces; ⌘/Ctrl-click adds; ⌘/Ctrl-click again takes away ─
+  const p2 = await findMark(page, box, async () => { const v = await picked(); return !!v && v !== v1; }, true);
+  assert.ok(p2, 'a plain click on another bar replaces the selection');
+  const v2 = await picked();
+  assert.ok(!v2.includes(','), `still one value after a plain click, got “${v2}”`);
+  await page.mouse.click(p1.x, p1.y);
+  await until(async () => (await picked()) === v1, 'back to the first bar');
+  await page.keyboard.down('ControlOrMeta');
+  await page.mouse.click(p2.x, p2.y);
+  await page.keyboard.up('ControlOrMeta');
+  await until(async () => (await picked()) === `${v1}, ${v2}`, 'a ⌘/Ctrl-click adds the second value');
+  await chips.getByText(`${v1}, ${v2}`).waitFor();
+  await until(async () => (await rows(other)) === 2, 'the other card shows both picked categories');
+  await screensInPlace(page, 'dashboards-clickfilter-multi');
+  await page.keyboard.down('ControlOrMeta');
+  await page.mouse.click(p1.x, p1.y);
+  await page.keyboard.up('ControlOrMeta');
+  await until(async () => (await picked()) === v2, 'a ⌘/Ctrl-click on a picked bar takes it away');
+
+  // ── Esc clears everything; the only picked bar clicked again clears; a chip removes from the keyboard ─
+  await page.keyboard.press('Escape');
+  await until(async () => (await chip.count()) === 0, 'Esc clears the click-filters');
+  await until(async () => (await rows(other)) === all && (await figure()) === total, 'and every card is back to the full figures');
+  await page.mouse.click(p1.x, p1.y);
+  await until(async () => (await picked()) === v1, 'picked again');
+  await page.mouse.click(p1.x, p1.y);
+  await until(async () => (await chip.count()) === 0, 'clicking the only picked bar again clears it');
+  await page.mouse.click(p1.x, p1.y);
+  await until(async () => (await picked()) === v1, 'picked a third time');
+  await until(async () => (await figure()) === narrowed, 'the same click, the same figure');
+  await chip.focus();
+  await page.keyboard.press('Enter');
+  await until(async () => (await chip.count()) === 0, 'a chip is a button: Enter removes it');
+  await page.mouse.click(p1.x, p1.y);
+  await until(async () => (await picked()) === v1, 'picked once more');
+  await chips.getByRole('button', { name: 'Clear' }).click();
+  await until(async () => (await chip.count()) === 0, 'Clear removes every chip');
+  await page.waitForTimeout(900); // past the 600 ms autosave debounce
+  assert.deepEqual(updates, [], 'clicking wrote nothing: click-filters are view state');
+  console.log(`rpc: click-to-filter ${rpc.loads.at(-1)?.rpcs ?? 0}`);
+
+  // ── The sheet's switch: off, and a plain click drills again ────────────
+  await page.reload();
+  await settled(page);
+  await page.getByRole('navigation', { name: 'Authoring panels' }).getByRole('button', { name: 'Filters' }).click();
+  const sw = page.getByRole('switch', { name: 'Click to filter' });
+  assert.equal(await sw.isChecked(), true, 'the sheet’s switch is on');
+  await screensInPlace(page, 'dashboards-clickfilter-switch');
+  await sw.click();
+  await page.getByRole('button', { name: 'Undo Turn off click to filter' }).waitFor();
+  await page.getByRole('status').filter({ hasText: 'Saved' }).waitFor();
+  const canvas2 = source.locator('canvas').first();
+  await canvas2.waitFor();
+  await page.waitForTimeout(600);
+  const drilled = await findMark(page, (await canvas2.boundingBox())!, async () => (await page.getByRole('dialog').count()) > 0);
+  assert.ok(drilled, 'with the switch off a click on a bar opens the rows behind it');
+  assert.equal(await chips.count(), 0, 'and filters nothing: with no chart to click, the row is gone too');
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog').waitFor({ state: 'detached' });
+
+  // ── A sheet the author adds starts with the switch ON, written to the record ─
+  await page.getByRole('button', { name: 'Add sheet' }).click();
+  await page.getByRole('tab', { name: 'Sheet 2' }).waitFor();
+  await page.getByRole('navigation', { name: 'Authoring panels' }).getByRole('button', { name: 'Filters' }).click();
+  await sw.waitFor();
+  assert.equal(await sw.isChecked(), true, 'a new sheet has click-to-filter on');
+  await page.getByRole('status').filter({ hasText: 'Saved' }).waitFor();
+  const stored = (await call(page, 'analysis:open', { projectId: pid, id: made.id })) as { analysis: { sheets: { name: string; clickFilter?: boolean }[] } };
+  assert.deepEqual(stored.analysis.sheets.map((s) => [s.name, s.clickFilter]), [['Sheet 1', false], ['Sheet 2', true]], 'both switches are in the saved record, as set');
 });

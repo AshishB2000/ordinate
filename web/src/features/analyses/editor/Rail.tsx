@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useDatasetColumns, useDatasets } from '../../../api/datasets';
+import { Switch } from '../../../ui/Choice';
 import { Select } from '../../../ui/Select';
 import { SkeletonRows } from '../../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../../ui/States';
@@ -145,8 +146,18 @@ function FiltersPane() {
   const dsId = picked ?? used[0] ?? sets.data?.[0]?.id ?? '';
   const cols = useDatasetColumns(ed.projectId, dsId || undefined);
   const steps = ed.doc.filters as FilterStep[];
+  const sheet = ed.doc.sheets[ed.sheet];
   return (
     <div className={s.paneBody}>
+      {/* One switch per sheet (dashboards.ts Page.clickFilter); a visual opts out in its own Properties → Interactions. */}
+      <div className={s.paneBlock}>
+        <Switch
+          label="Click to filter"
+          hint={`Clicking a mark on a chart filters the other cards on “${sheet?.name ?? 'this sheet'}”. Readers get it too; nothing they click is saved.`}
+          checked={sheet?.clickFilter === true}
+          onCheckedChange={(on) => ed.edit(on ? 'Turn on click to filter' : 'Turn off click to filter', (d) => void (d.sheets[ed.sheet].clickFilter = on))}
+        />
+      </div>
       <p className={s.paneHint}>Dashboard filters apply to every card before its own. Controls sit above the sheet, where readers move them.</p>
       {(sets.data?.length ?? 0) > 1 && (
         <Select

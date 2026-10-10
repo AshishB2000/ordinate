@@ -258,7 +258,9 @@ export async function saveAnalysis(
     id,
     projectId,
     name: typeof input.name === 'string' && input.name.trim() ? input.name.trim() : 'Untitled dashboard',
-    sheets: sanitizePages(input.sheets),
+    // A NEW dashboard's sheets get click-to-filter ON, written explicitly, unless the caller
+    // said otherwise. Only here: a stored sheet without the field stays as it was (updateAnalysis).
+    sheets: sanitizePages(input.sheets).map((s) => (s.clickFilter === undefined ? { ...s, clickFilter: true } : s)),
     filters: sanitizeDashboardFilters(input.filters),
     style: sanitizeStyle(input.style),
     parameters: sanitizeParameters(input.parameters, randomUUID),

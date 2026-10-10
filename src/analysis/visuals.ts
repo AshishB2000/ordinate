@@ -179,10 +179,12 @@ export interface VizOverrides extends FormatOverrides {
    * whitelists it — a new storage field would be a new file-format decision for
    * two booleans.
    *
-   * crossFilter: clicking a bar/slice on this visual applies the clicked
-   * category value as a dashboard-wide FilterStep. Default OFF: a click that
-   * silently refilters every other card is a surprise, and the sheet has an
-   * explicit filter bar for the deliberate case.
+   * crossFilter: clicking a mark on this visual filters the other cards on the
+   * sheet (dashboardFilters.clickFilterOn). Three states: `true` opts the
+   * visual in on any sheet; `false` opts it OUT of a sheet whose own
+   * "Click to filter" switch (Page.clickFilter) is on; absent follows the
+   * sheet — which is off for a sheet saved before the switch existed, so a
+   * click there never silently refilters every other card.
    * showTooltips: default ON when absent, matching every chart drawn before this
    * key existed.
    */

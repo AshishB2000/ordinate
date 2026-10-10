@@ -4,6 +4,7 @@
 // the tile's loading / error states. It computes nothing.
 
 import { useMemo, useRef } from 'react';
+import { asMonthLabels } from '../../charts/build';
 import { Chart, type ChartHandle } from '../../charts/Chart';
 import { DataTable } from '../../charts/DataTable';
 import { MapThumb } from '../../charts/maps/MapThumb';
@@ -46,6 +47,17 @@ export function mergeFilters(dash: readonly Step[], own: readonly Step[]): Step[
     out.push(st);
   }
   return out;
+}
+
+/**
+ * The server's own label for a clicked mark. A first-of-month axis is drawn as "Jan 2023" (build.ts asMonthLabels);
+ * a filter on that text would match no row, so a click-filter carries the label the server sent for that position.
+ */
+export function serverLabel(labels: readonly unknown[] | undefined, shown: string | number): string | number {
+  if (!labels) return shown;
+  const i = asMonthLabels(labels as unknown[]).findIndex((l) => String(l) === String(shown));
+  const raw = i < 0 ? shown : labels[i];
+  return typeof raw === 'number' ? raw : String(raw);
 }
 
 /** The thumbnail look (vizThumbs.ts): no legend, no grid, no value labels, the final frame at once. */
@@ -126,6 +138,7 @@ export function VisualTileBody({
   thumb,
   asTable,
   onMark,
+  filterMark,
   onHover,
   onPinAt,
   onMapMark,
@@ -137,11 +150,16 @@ export function VisualTileBody({
   thumb?: boolean;
   /** The figures as an accessible table instead of the chart (tileActions.ts "View as table"). */
   asTable?: boolean;
-  /** Click-to-filter (dashFiltersUi.ts wireCrossFilter): the clicked mark's category. */
-  onMark?: (category: string | number, series?: string) => void;
+  /** A left click on a mark (click-to-filter, a tile action, the drill): its category, its series, the click itself. */
+  onMark?: (category: string | number, series?: string, event?: React.MouseEvent) => void;
+  /**
+   * `onMark` is click-to-filter: ⌘/Ctrl-click reaches it (multi-select) instead of pinning a comment, and the
+   * category is the SERVER's label for the mark, not the axis text a month axis shows in its place.
+   */
+  filterMark?: boolean;
   /** A tile's tooltip_visual (T2.9): the hovered mark's category, or null off a mark. */
   onHover?: (category: string | number | null, e: React.MouseEvent) => void;
-  /** ⌘/Ctrl-click on a mark (T2.9, commentDoors.ts cmtOnChartClick): a comment pinned to that point. */
+  /** ⌥-click on a mark, or ⌘/Ctrl-click where that does not multi-select (T2.9, commentDoors.ts cmtOnChartClick): a comment pinned to that point. */
   onPinAt?: (category: string | number, series?: string) => void;
   onMapMark?: (column: string | undefined, category: string) => void;
 }) {
@@ -174,14 +192,15 @@ export function VisualTileBody({
     if (live !== null) return <LiveRefusal message={live} projectId={projectId} datasetId={def.datasetId} />;
     return <ErrorState compact heading={3} title="No data for this chart" message={message} onRetry={() => void q.refetch()} />;
   }
+  const labels: readonly unknown[] | undefined = q.data.data.labels;
   const click =
     onMark || onPinAt
       ? (e: React.MouseEvent) => {
           // A click on empty canvas, a map or a table is not a filter (no Chart.js mark).
           const m = markAt(chart.current, e.nativeEvent);
           if (!m) return;
-          if (onPinAt && (e.metaKey || e.ctrlKey)) return onPinAt(m.category, m.series);
-          onMark?.(m.category, m.series);
+          if (onPinAt && (e.altKey || (!filterMark && (e.metaKey || e.ctrlKey)))) return onPinAt(m.category, m.series);
+          onMark?.(filterMark ? serverLabel(labels, m.category) : m.category, m.series, e);
         }
       : undefined;
   return (

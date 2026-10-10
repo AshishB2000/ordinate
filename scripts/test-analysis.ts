@@ -127,6 +127,13 @@ async function main(): Promise<void> {
   const emptySheets = await analysis.saveAnalysis(proj.id, { name: 'Empty', sheets: [] });
   ok('an empty sheets array still yields one sheet', emptySheets !== null && emptySheets.sheets.length === 1);
 
+  // Click-to-filter: ON, written explicitly, for a NEW dashboard's sheets — unless the caller said otherwise.
+  ok('a new analysis writes clickFilter: true on its sheets',
+    noSheets !== null && noSheets.sheets[0].clickFilter === true && a !== null && a.sheets.every((s) => s.clickFilter === true));
+  const optedOut = await analysis.saveAnalysis(proj.id, { name: 'No click', sheets: [{ name: 'S', cards: [], clickFilter: false }] });
+  ok('…and keeps an explicit clickFilter: false', optedOut !== null && optedOut.sheets[0].clickFilter === false);
+  if (optedOut) await analysis.deleteAnalysis(proj.id, optedOut.id);
+
   // ── 4. filters — filter-only, same rule as a dashboard ──────────────────────
   const filtered = await analysis.saveAnalysis(proj.id, {
     name: 'Filtered',
@@ -173,6 +180,9 @@ async function main(): Promise<void> {
   ok('updateAnalysis leaves createdAt alone', upd !== null && a !== null && upd.createdAt === a.createdAt);
   const reUpd = a !== null ? await analysis.getAnalysis(proj.id, a.id) : null;
   ok('the update survives a reload', reUpd !== null && reUpd.sheets.length === 2);
+  // Negative control for the default above: an UPDATE never turns the switch on for a sheet that lacks it.
+  ok('updateAnalysis leaves an absent clickFilter absent',
+    reUpd !== null && reUpd.sheets.every((s) => !('clickFilter' in s)));
   const keepName = a !== null ? await analysis.updateAnalysis(proj.id, a.id, { sheets: [] }) : null;
   ok('updateAnalysis keeps the name when only sheets are patched', keepName !== null && keepName.name === 'Q3 renamed');
   ok('updateAnalysis with empty sheets → one default sheet', keepName !== null && keepName.sheets.length === 1);

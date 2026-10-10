@@ -355,3 +355,10 @@
   font-weight: 600;
   letter-spacing: 0.04em;
 }
+/* A setting of the sheet itself, set apart from the filter rows under it (the Filters pane's "Click to filter"). */
+.paneBlock {
+  padding: var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}

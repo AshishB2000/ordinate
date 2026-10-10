@@ -8,13 +8,13 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
-import type { Analysis, ControlValue, VisualDef } from '../api';
+import type { Analysis, ControlValue, Step, VisualDef } from '../api';
 import { mergeFilters } from '../VisualTile';
 import { AddDialogs, type Adding } from './AddDialogs';
 import { Canvas } from './Canvas';
 import { EditorCtx, type EditorApi, type Pane, type SaveState } from './context';
 import { allControls, fromAnalysis, initial, reduce, sheetOf, type Doc } from './doc';
-import { controlSteps, paramPayload } from './filters';
+import { clickFilterSteps, controlSteps, paramPayload } from './filters';
 import type { FilterStep } from '../../visuals/api';
 import { liveFilters } from '../../visuals/filters/filterText';
 import { pickSize, type Size } from './geometry';
@@ -146,12 +146,19 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly 
   );
 
   const params = useMemo(() => paramPayload(doc.parameters, paramValue), [doc.parameters, paramValue]);
-  const filters = useMemo(() => {
+  const baseFilters = useMemo(() => {
     const steps = allControls(doc).flatMap((c) => (c.control ? controlSteps(c.control, controls.get(c.id)) : []));
     // A filter row still being set up (no operator yet) filters nothing (filterText.ts liveFilters).
     // The reader's selection (a navigation's carry, a map click) joins after the controls (dashboards.ts effectiveFilters).
     return mergeFilters(liveFilters(doc.filters as FilterStep[]), [...steps, ...view.selection]);
   }, [doc, controls, view.selection]);
+  // Click-to-filter joins last. The card that was clicked reads the sheet WITHOUT its own clicks (filtersFor).
+  const filters = useMemo(() => (view.clicks.length ? mergeFilters(baseFilters, clickFilterSteps(view.clicks)) : baseFilters), [baseFilters, view.clicks]);
+  const ownFilters = useMemo(() => {
+    const m = new Map<string, Step[]>();
+    for (const c of view.clicks) if (!m.has(c.origin)) m.set(c.origin, mergeFilters(baseFilters, clickFilterSteps(view.clicks, c.origin)));
+    return m;
+  }, [baseFilters, view.clicks]);
 
   const api: EditorApi = {
     projectId,
@@ -171,6 +178,8 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly 
       setSheetRaw(i);
       setSelected(null);
       setMulti(new Set());
+      // A click-filter belongs to the sheet it was clicked on: its chart is not on the next one.
+      view.clearClicks();
     },
     cards,
     selected: selected && cards.some((c) => c.id === selected) ? selected : null,
@@ -195,6 +204,7 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly 
     paramValue,
     setParam: (id, v) => setParamLive((m) => new Map(m).set(id, v)),
     filters,
+    filtersFor: (cardId) => ownFilters.get(cardId) ?? filters,
     params,
     size,
     pinned,
@@ -226,6 +236,9 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly 
         e.preventDefault();
         if (e.shiftKey) apiRef.current.redo();
         else apiRef.current.undo();
+      } else if (e.key === 'Escape' && !e.defaultPrevented && apiRef.current.view.clicks.length) {
+        // Esc clears every click-filter first; the next Esc lets go of the selected card.
+        apiRef.current.view.clearClicks();
       } else if (e.key === 'Escape' && !e.defaultPrevented && (apiRef.current.selected || apiRef.current.multi.size)) {
         apiRef.current.select(null);
         apiRef.current.setMulti(new Set());

@@ -119,7 +119,8 @@ function SheetTabs() {
           onClick={() => {
             const id = uuid();
             const n = sheets.length;
-            ed.edit('Add sheet', (d) => void d.sheets.push({ id, name: nextSheetName(d), cards: [] }));
+            // A new sheet has click-to-filter ON, written explicitly (an absent switch means "as before": off).
+            ed.edit('Add sheet', (d) => void d.sheets.push({ id, name: nextSheetName(d), cards: [], clickFilter: true }));
             ed.setSheet(n);
           }}
         />

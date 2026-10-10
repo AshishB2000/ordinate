@@ -23,6 +23,7 @@ import { HiddenTray, SizeNote } from './SizeNote';
 import s from './Canvas.module.css';
 import { useCardRuntime } from '../../dashboards/CardRuntime';
 import { SelectionStrip } from '../../dashboards/tileActions';
+import { ClickFilterBar } from '../../dashboards/ClickFilters';
 
 /** Desktop: move / resize. A small size: drag the head to reorder, the bottom edge to change height (layoutEdit.ts). */
 type Mode = GestureMode | 'reorder' | 'height';
@@ -291,6 +292,7 @@ export function Canvas() {
   return (
     <div className={s.canvas} onClick={(e) => e.target === e.currentTarget && ed.select(null)}>
       <FilterBar />
+      <ClickFilterBar ed={ed} />
       <SelectionStrip ed={ed} />
       {!locked && (
         <>

@@ -17,6 +17,7 @@ import { failure, useGallery, type Card, type VisualDef } from '../api';
 import { vizLabel } from '../VisualTile';
 import { useEditor } from './context';
 import type { Doc } from './doc';
+import { clickFilterOn } from './filters';
 import { lockedRows, MAX_NAV_ITEMS, NAV_ICONS, type ImageSpec, type NavItem, type NavSpec, type StatsSpec } from './KindCards';
 import s from './Properties.module.css';
 
@@ -174,6 +175,9 @@ export function InteractionProps({ def }: { def: VisualDef }) {
   const [busy, setBusy] = useState(false);
   const ov = def.overrides ?? {};
   const noClick = def.chartType === 'table' || def.chartType.startsWith('map_');
+  // The sheet's "Click to filter" switch turns it on for every visual; this box is then the visual's opt-out.
+  const sheetOn = ed.doc.sheets[ed.sheet]?.clickFilter === true;
+  const canClick = !noClick && !!def.encoding.category;
   const write = async (patch: Record<string, unknown>) => {
     setBusy(true);
     try {
@@ -191,16 +195,18 @@ export function InteractionProps({ def }: { def: VisualDef }) {
     <>
       <Checkbox
         label="Clicking this visual filters the sheet"
-        checked={ov.crossFilter === true}
-        disabled={busy || noClick || !def.encoding.category}
+        checked={canClick && clickFilterOn(sheetOn, ov.crossFilter)}
+        disabled={busy || !canClick}
         onCheckedChange={(v) => void write({ crossFilter: v })}
       />
       <p className={s.note}>
         {noClick
           ? `Click-to-filter does not apply to a ${vizLabel(def.chartType)}.`
-          : def.encoding.category
-            ? `A click on a mark filters every card on the sheet to that ${def.encoding.category}; click it again to clear it.`
-            : 'Give this visual a category first.'}
+          : !def.encoding.category
+            ? 'Give this visual a category first.'
+            : `A click on a mark filters the other cards on the sheet to that ${def.encoding.category}${typeof def.encoding.series === 'string' && def.encoding.series ? ` and ${def.encoding.series}` : ''}; ⌘/Ctrl-click picks several, Esc clears. ${
+                sheetOn ? 'This sheet has Click to filter on (Filters panel) — untick to leave this visual out.' : 'Or turn it on for every visual on the sheet in the Filters panel.'
+              }`}
       </p>
       <Checkbox label="Show tooltips" checked={ov.showTooltips !== false} disabled={busy} onCheckedChange={(v) => void write({ showTooltips: v })} />
       <p className={s.note}>Both are the visual’s own settings: they change it everywhere it is used. Tile actions saved on this card run on a click or from its ⋯ menu.</p>

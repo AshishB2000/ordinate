@@ -51,8 +51,14 @@ export interface EditorApi {
   /** A parameter's live value (never saved); falls back to its default. */
   paramValue(paramId: string): unknown;
   setParam(paramId: string, v: unknown): void;
-  /** The dashboard filters + every control's live selection, as filter steps. */
+  /** The dashboard filters + every control's live selection + the reader's click-filters, as filter steps. */
   filters: Step[];
+  /**
+   * What ONE card reads: `filters`, less the click-filters that card itself
+   * made — the clicked chart stays whole and shows its selection. A step is
+   * left out of the request; no figure is computed here.
+   */
+  filtersFor(cardId: string): Step[];
   params: ParamPayload;
 
   size: Size;

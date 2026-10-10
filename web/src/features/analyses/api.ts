@@ -65,6 +65,8 @@ export type Sheet = {
   name: string;
   cards: Card[];
   layouts?: { tablet?: { items: SizeItem[] }; phone?: { items: SizeItem[] } };
+  /** Click-to-filter for the sheet (dashboards.ts Page.clickFilter). Absent is NOT on: only visuals that opted in. */
+  clickFilter?: boolean;
 };
 
 export type Parameter = {

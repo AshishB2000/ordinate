@@ -158,6 +158,8 @@ e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, 
   await page.waitForFunction(() => document.querySelectorAll('[data-card-id] canvas').length >= 2);
   await settled(page);
   console.log(`rpc: canvas load (sample dashboard, client-side open) ${rpc.loads.at(-1)?.rpcs ?? 0}`);
+  // The sample sheet is one the app built, so click-to-filter is on: its row is there, idle (dashboards.e2e.ts clicks it).
+  await page.getByRole('group', { name: 'Click filters' }).getByText('Click a mark on a chart to filter the other cards.').waitFor();
   await screens(page, 'analyses-editor');
 
   // A dropdown control on region: the KPI is recomputed by the server under it.
@@ -177,7 +179,8 @@ e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, 
   assert.notEqual(narrowed, '$5.2M');
 
   // Selecting a card opens its Properties; a visual's fields are the builder's.
-  await page.getByRole('group', { name: 'Revenue by month card' }).click({ position: { x: 200, y: 120 } });
+  // On the card's head: the sample sheet has click-to-filter on, so a click that landed on a mark would also filter.
+  await page.getByRole('group', { name: 'Revenue by month card' }).click({ position: { x: 200, y: 16 } });
   const props = page.getByRole('complementary', { name: 'Properties' });
   await props.getByRole('link', { name: 'Edit in the Visuals builder' }).waitFor();
   await screensInPlace(page, 'analyses-properties');

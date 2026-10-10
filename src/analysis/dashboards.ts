@@ -222,6 +222,12 @@ export interface Page {
   cards: Card[];
   /** Edited tablet / phone layouts. Absent = both derived from the cards' desktop grid. */
   layouts?: PageLayouts;
+  /**
+   * Click-to-filter for the whole sheet (dashboardFilters.clickFilterOn): a click
+   * on a mark filters the other cards, unless the visual opted out. ABSENT is not
+   * `true` — a sheet saved before the switch keeps its per-visual opt-ins only.
+   */
+  clickFilter?: boolean;
 }
 
 // Ids arrive from the renderer over IPC. Validate the SHAPE before either id ever
@@ -482,7 +488,10 @@ export function sanitizePage(raw: unknown): Page {
   // Against the SANITIZED cards: a card whose id was regenerated above, or that
   // was dropped, takes its layout entries with it.
   const layouts = sizeLayout.sanitizeLayouts(o.layouts, cards);
-  return layouts ? { id, name, cards, layouts } : { id, name, cards };
+  const page: Page = layouts ? { id, name, cards, layouts } : { id, name, cards };
+  // Kept only when the record says it: an absent switch must stay absent (see Page.clickFilter).
+  if (typeof o.clickFilter === 'boolean') page.clickFilter = o.clickFilter;
+  return page;
 }
 
 // Whitelist the pages array. A dashboard always has ≥1 page — an empty/invalid

@@ -59,35 +59,88 @@ export function mergeDashboardFilters(
 }
 
 // ── Click-to-filter ─────────────────────────────────────────────────────────
-// Clicking a bar/slice on a cross-filter-enabled visual TOGGLES that category
-// value as a dashboard-wide filter. Pure, so the construction is node-testable
-// (scripts/test-crossFilter.ts) rather than only reachable through a chart click.
+// Clicking a mark on a chart filters every OTHER card on the sheet. The clicks
+// are a reader's view state (never the record), one entry per (card, column):
+// `origin` is the card that was clicked, so that card can be left whole and
+// show its selection while the rest filter. Pure, so the rules are node-testable
+// (scripts/test-crossFilter.ts) rather than only reachable through a chart
+// click; web/src/features/analyses/editor/filters.ts mirrors them and
+// filters.test.ts holds the two together.
 //
-// Why `=` and why the category column: a click identifies one label on the
-// category axis, which is exactly one equality predicate. Anything richer (a
-// range from a brushed axis, multi-select) is a different gesture and would need
-// its own op — this deliberately does the one thing a click means.
+//   plain click      that mark alone (replaces this card's selection); on the
+//                    only selected mark it clears — the second click is the undo
+//   additive click   (⌘/Ctrl) adds the mark, or takes a selected one away
+//   a series chart   the click carries category AND series, one entry each
 //
-// TOGGLE, not push: clicking the same bar twice is the obvious way to undo, and
-// without it the only way back is the filter bar's ✕, which is a different
-// control in a different place. Clicking a DIFFERENT value on the same column
-// REPLACES it — two `=` predicates on one column match nothing, which would read
-// as "the chart broke" rather than "you filtered twice".
-export function toggleCrossFilter(
-  filters: FilterStep[] | null | undefined,
-  column: string,
-  value: unknown,
-): FilterStep[] {
-  const list = (Array.isArray(filters) ? filters : []).filter((s) => s && s.type === 'filter');
-  if (!column) return list.slice();
-  const v = value == null ? '' : String(value);
-  const same = (s: FilterStep): boolean => s.column === column && s.op === '=';
-  const already = list.some((s) => same(s) && String(s.value ?? '') === v);
-  // Drop any existing `=` on this column either way: on toggle-off that removes
-  // it, on a different value that replaces rather than stacks.
-  const rest = list.filter((s) => !same(s));
-  if (already) return rest;
-  return rest.concat([{ type: 'filter', column, op: '=', value: v } as FilterStep]);
+// One column, one click-filter: a click on a column another card already
+// selected takes it over — two predicates on one column narrowing to nothing
+// reads as "the chart broke", not as "you filtered twice".
+//
+// ponytail: filter steps are ANDed and there is no OR, so several marks picked
+// across series filter to (picked categories) × (picked series) — the chips and
+// the dimming show exactly that rectangle. Exact pairs need an OR group op.
+export interface ClickFilter {
+  /** The card whose mark was clicked — exempt from this filter. */
+  origin: string;
+  column: string;
+  /** Selected values, as text, in click order. Never empty. */
+  values: string[];
+}
+export interface ClickMark {
+  column: string;
+  value: unknown;
+  seriesColumn?: string;
+  series?: unknown;
+}
+
+const clickText = (v: unknown): string => (v == null ? '' : String(v));
+
+/**
+ * Whether a click on a visual filters the sheet: the sheet's switch turns it on
+ * for every visual that has not opted out; without it (a sheet saved before the
+ * switch existed) only a visual that opted in — exactly as before.
+ */
+export function clickFilterOn(sheet: unknown, visual: unknown): boolean {
+  return sheet === true ? visual !== false : visual === true;
+}
+
+export function toggleClickFilter(
+  clicks: readonly ClickFilter[] | null | undefined,
+  origin: string,
+  mark: ClickMark,
+  additive = false,
+): ClickFilter[] {
+  const list = (Array.isArray(clicks) ? clicks : []).filter((c) => c && c.origin && c.column && Array.isArray(c.values) && c.values.length > 0);
+  if (!origin || !mark || !mark.column) return list.slice();
+  const picks: [string, string][] = [[mark.column, clickText(mark.value)]];
+  if (mark.seriesColumn && mark.seriesColumn !== mark.column && mark.series !== undefined) picks.push([mark.seriesColumn, clickText(mark.series)]);
+  const mine = (column: string): string[] => list.find((c) => c.origin === origin && c.column === column)?.values ?? [];
+  const selected = picks.every(([column, v]) => mine(column).includes(v));
+  const next = new Map<string, string[]>();
+  if (!additive) {
+    // The only selected mark, clicked again, clears; anything else becomes the selection.
+    if (!(selected && picks.every(([column]) => mine(column).length === 1))) for (const [column, v] of picks) next.set(column, [v]);
+  } else if (!selected) {
+    for (const [column, v] of picks) next.set(column, mine(column).includes(v) ? mine(column) : mine(column).concat(v));
+  } else {
+    // Take the mark away along the first axis that has another value left; the last mark clears.
+    const at = picks.findIndex(([column]) => mine(column).length > 1);
+    if (at >= 0) picks.forEach(([column, v], i) => next.set(column, i === at ? mine(column).filter((x) => x !== v) : mine(column)));
+  }
+  const touched = new Set(picks.map(([column]) => column));
+  const out = list.filter((c) => !touched.has(c.column));
+  for (const [column, values] of next) out.push({ origin, column, values });
+  return out;
+}
+
+/** The click-filters as filter steps — `=` for one value, `in` for several — leaving out the card that is exempt. */
+export function clickFilterSteps(clicks: readonly ClickFilter[] | null | undefined, exceptOrigin?: string): FilterStep[] {
+  const out: FilterStep[] = [];
+  for (const c of Array.isArray(clicks) ? clicks : []) {
+    if (!c || !c.column || !Array.isArray(c.values) || !c.values.length || c.origin === exceptOrigin) continue;
+    out.push(c.values.length === 1 ? { type: 'filter', column: c.column, op: '=', value: c.values[0] } : { type: 'filter', column: c.column, op: 'in', values: c.values.slice() });
+  }
+  return out;
 }
 
 // ── Control widgets (dropdown / multi-select / date-range) ────────────────────
