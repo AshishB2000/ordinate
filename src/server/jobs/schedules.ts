@@ -11,7 +11,8 @@
 //
 // What changes on the server is delivery — no OS notification, no hub window:
 //   hub:dataset-refreshed  → every tab of a member who may READ the project
-//   alerts:fired           → the same, one per project per tick
+//   alerts:fired           → the same, one per project per tick; and to the Slack /
+//                            Teams channels a rule names (../subscriptions/alertPosts.ts)
 // both through sse.publish, so a tab on any pod gets them. Not the whole org
 // (T6.3): an alert carries the project's figures and a refresh its dataset's
 // name, and an org member with no grant on the project must see neither. A
@@ -31,6 +32,7 @@
 // model call (T2.12 routes AI keys first).
 
 import * as scheduler from '../../app/refreshScheduler';
+import type { TickAlerts } from '../../app/refreshScheduler';
 import * as config from '../../app/config';
 import * as pipelineRunner from '../../app/pipelineRunner';
 import * as alertStore from '../../analysis/alertStore';
@@ -71,6 +73,18 @@ export function pushToReaders(projectId: string, channel: string, payload: unkno
 }
 
 /**
+ * What a tick's fired alerts become: the push each reader's bell repaints from, and — for a rule that names
+ * Slack / Teams channels — a post there with the same sentence and figure (../subscriptions/alertPosts.ts),
+ * never awaited by the tick. Returns the posts in flight, for a test to wait on.
+ */
+export function deliverTickAlerts(batches: TickAlerts[], push: (projectId: string, channel: string, payload: unknown) => void): Promise<number>[] {
+  for (const b of batches) push(b.projectId, 'alerts:fired', b);
+  // Lazy: that module reaches back here (through ./run) for `toReaders`.
+  const { postFiredAlerts } = require('../subscriptions/alertPosts') as typeof import('../subscriptions/alertPosts');
+  return batches.map((b) => postFiredAlerts(b.projectId, b.events));
+}
+
+/**
  * Hooks the tick's callbacks to server delivery and declares the `tick` job.
  * Once per process. `devAuth`: AUTH_MODE=dev (see `toReaders`).
  */
@@ -96,9 +110,7 @@ export function wireSchedules(pool: Pool, devAuth: boolean): void {
     await alertStore.syncWatchRules(projectId);
     return alertStore.evaluateProject(projectId, datasetId);
   });
-  scheduler.onTickAlerts((batches) => {
-    for (const b of batches) push(b.projectId, 'alerts:fired', b);
-  });
+  scheduler.onTickAlerts((batches) => deliverTickAlerts(batches, push));
   // ponytail: ipc/pipelines adds this same hook when registered; it is not
   // registered on the server yet — drop this when it is. (ipc/trash is, since
   // T2.2: its own afterTick hook runs the 30-day Trash purge.)

@@ -108,6 +108,12 @@ export interface AlertRule {
   history?: number[];
   /** Anomaly edge state, exactly ./anomalyWatch's `keep`. */
   anomalyKeys?: string[];
+  /**
+   * Slack / Teams channels (src/app/channels.ts) this rule ALSO posts to when it
+   * fires on the server's tick: the same sentence, the same figure, a link.
+   * Absent on every rule written before channels existed, which is "none".
+   */
+  channelIds?: string[];
 }
 
 export interface AlertEvent {
@@ -132,6 +138,8 @@ export const MAX_HISTORY = 12;
 export const MAX_EVENTS = 200;
 /** Rules per project. Far past the point where a person wants a rules TABLE. */
 export const MAX_RULES = 100;
+/** Channels one rule may post to. */
+export const MAX_RULE_CHANNELS = 10;
 
 const AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
 const OPS: ReadonlySet<string> = new Set(['>', '<', '>=', '<=']);
@@ -278,6 +286,9 @@ export function sanitizeRule(raw: any): AlertRule | null {
   if (history) rule.history = history;
   const keys = sanitizeKeys(raw.anomalyKeys);
   if (keys) rule.anomalyKeys = keys;
+  // Channel ids are UUIDs or nothing; a rule posts to at most MAX_RULE_CHANNELS.
+  const channelIds = [...new Set((Array.isArray(raw.channelIds) ? raw.channelIds : []).filter((c: unknown) => UUID_RE.test(String(c))).map((c: unknown) => String(c).toLowerCase()))].slice(0, MAX_RULE_CHANNELS) as string[];
+  if (channelIds.length) rule.channelIds = channelIds;
   return rule;
 }
 

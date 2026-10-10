@@ -53,6 +53,11 @@ export function useSubscriptionDb(pool: Pool | null, devAuth: boolean): void {
   db = { pool, devAuth };
 }
 
+/** The pool an audit row is written through, or null without Postgres. */
+export function subscriptionDb(): Pool | null {
+  return db.pool;
+}
+
 const READ_PROJECT = rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId });
 
 /** The owner as they are NOW, or why they can no longer run this. */

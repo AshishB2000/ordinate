@@ -6,6 +6,7 @@
 // URL (the list says `secretSet`), never the figures hash, never anything a
 // remote answered.
 
+import * as alertStore from '../../analysis/alertStore';
 import * as analysis from '../../analysis/analysis';
 import * as projects from '../../app/projects';
 import { canKeepWebhooks, deleteChannel, getChannel, listChannels, publicChannel, saveChannel, type PublicChannel } from '../../app/channels';
@@ -75,13 +76,17 @@ function testMessage(name: string) {
   return composeMessage({ title: say.testTitle(), subtitle: [], note: say.testBody(name), kpis: [], visuals: [], link: null, footer: '' });
 }
 
-/** Every subscription in the org that posts to `channelId`, by project. */
-async function usage(channelId: string): Promise<Array<{ projectId: string; project: string; id: string; name: string }>> {
-  const out = [];
+type Use = { projectId: string; project: string; id: string; name: string };
+
+/** Every subscription and alert rule in the org that posts to `channelId`, by project. */
+async function usage(channelId: string): Promise<{ subscriptions: Use[]; alerts: Use[] }> {
+  const subscriptions: Use[] = [];
+  const alerts: Use[] = [];
   for (const p of await projects.listProjects()) {
-    for (const s of await store.listSubscriptions(p.id)) if (s.channelIds.includes(channelId)) out.push({ projectId: p.id, project: p.name, id: s.id, name: s.name });
+    for (const s of await store.listSubscriptions(p.id)) if (s.channelIds.includes(channelId)) subscriptions.push({ projectId: p.id, project: p.name, id: s.id, name: s.name });
+    for (const r of (await alertStore.load(p.id)).rules) if (r.channelIds?.includes(channelId)) alerts.push({ projectId: p.id, project: p.name, id: r.id, name: r.name });
   }
-  return out;
+  return { subscriptions, alerts };
 }
 
 type Draft = SubscriptionInput & { analysisId: string; channelIds: string[] };
@@ -95,7 +100,7 @@ export function register(): void {
     return r.ok ? { ok: true as const, channel: await publicChannel(r.channel) } : r;
   });
 
-  registry.handle('channel:usage', async (_e, { id }: { id: string }) => ({ ok: true as const, subscriptions: await usage(id), alerts: [] as Array<{ projectId: string; project: string; id: string; name: string }> }));
+  registry.handle('channel:usage', async (_e, { id }: { id: string }) => ({ ok: true as const, ...(await usage(id)) }));
 
   registry.handle('channel:delete', async (_e, { id }: { id: string }) => ((await deleteChannel(id)) ? { ok: true as const } : { ok: false as const, error: say.channelGone() }));
 

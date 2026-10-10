@@ -6,6 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { AlertChannels } from './AlertChannels';
 import SubscribeDialog from './SubscribeDialog';
 import { SubscriptionList } from './SubscriptionList';
 import { timeZones } from './Steps';
@@ -292,5 +293,26 @@ describe('Subscribe dialog', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(calls.find((c) => c.channel === 'subscription:save')?.payload).toMatchObject({ projectId: PID, id: existing.id, subscription: { schedule: { cadence: 'weekly', at: '07:15', days: [2] }, channelIds: [SLACK.id] } });
+  });
+});
+
+describe('Alert dialog → Also post to', () => {
+  it('draws nothing for an organization with no channels — the alert dialog is as it was', async () => {
+    const calls = serve({ 'channel:list': { body: { ok: true, channels: [], canStore: true, canManage: false } } });
+    const { container } = mount(<AlertChannels value={[]} onChange={() => undefined} />);
+    await waitFor(() => expect(calls.some((c) => c.channel === 'channel:list')).toBe(true));
+    expect(container.querySelector('fieldset')).toBeNull();
+  });
+
+  it('lists the channels with their platform, ticks the rule’s own, and reports a change', async () => {
+    serve({ 'channel:list': { body: { ok: true, ...frame } } });
+    const onChange = vi.fn();
+    mount(<AlertChannels value={[SLACK.id]} onChange={onChange} />);
+    const group = await screen.findByRole('group', { name: 'Also post to' });
+    expect((within(group).getByRole('checkbox', { name: '#sales-weekly' }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(within(group).getByRole('checkbox', { name: 'Leadership' }));
+    expect(onChange).toHaveBeenCalledWith([SLACK.id, TEAMS.id]);
+    fireEvent.click(within(group).getByRole('checkbox', { name: '#sales-weekly' }));
+    expect(onChange).toHaveBeenCalledWith([]);
   });
 });
