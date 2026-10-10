@@ -17,6 +17,12 @@ const byId = (input: { id: string }): string => input.id;
 const importedId = (out: unknown): string | undefined =>
   out && typeof out === 'object' ? createdId((out as { project?: unknown }).project) : undefined;
 
+/** The id of the project `sample:seed` made: `{ ok, projectId }`. */
+const seededId = (out: unknown): string | undefined => {
+  const id = out && typeof out === 'object' ? (out as { projectId?: unknown }).projectId : undefined;
+  return typeof id === 'string' ? id : undefined;
+};
+
 export const projects = {
   // preload: invoke('projects:list') — no payload. Only the projects the caller may read.
   'projects:list': rpc({ access: 'read', org: true, input: z.undefined(), visible: onlyReadable('id') }),
@@ -56,6 +62,11 @@ export const projects = {
   // /api/files first. It makes a NEW project, so it is org-level like
   // `projects:create`, and the importer is granted admin on it.
   'projects:import': rpc({ access: 'write', org: true, input: z.strictObject({ fileToken: FileToken }), creates: importedId }),
+  // Home's "Start with sample data", offered while the org has no project: a
+  // first project holding the bundled sample dataset and its dashboard. It
+  // makes a NEW project, so it is org-level like `projects:create`, and the
+  // caller is granted admin on it. Refused once the org has any project.
+  'sample:seed': rpc({ access: 'write', org: true, input: z.undefined(), creates: seededId }),
   // Server only: the caller's own effective role on each project they can
   // open, `{ [projectId]: role }`, so a screen offers only what the server
   // will allow (src/server/authz/share.ts). Their own grants only: any member.
