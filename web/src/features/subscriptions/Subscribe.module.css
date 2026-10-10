@@ -1,0 +1,254 @@
+/* The Subscribe dialog: steps and their fields on the left, the live preview on
+   the right. Tokens only. */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 460px) minmax(0, 1fr);
+  gap: var(--sp-24);
+  align-items: stretch;
+  min-height: 520px;
+}
+@media (max-width: 960px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.left {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  min-width: 0;
+}
+
+/* ── the stepper ──────────────────────────────────────────────────── */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-4);
+  padding-bottom: var(--sp-12);
+  border-bottom: 1px solid var(--border-hairline);
+}
+.stepBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  width: 100%;
+  padding: 6px var(--sp-8);
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.stepBtn:hover {
+  background: var(--surface-2);
+}
+.stepBtn:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.stepOn {
+  background: var(--accent-soft);
+  color: var(--text-strong);
+}
+.stepNo {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  color: var(--text-dim);
+  font-size: var(--t-11);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.stepOn .stepNo {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.stepDone {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.stepText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.stepLabel {
+  font-size: var(--t-13);
+  font-weight: 650;
+}
+.stepSub {
+  font-size: var(--t-11);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stepBody {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ── a step's fields ──────────────────────────────────────────────── */
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.legend {
+  display: block;
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+}
+.cards {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.cardList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  max-height: 260px;
+  overflow-y: auto;
+  padding: var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+}
+.channelRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-8);
+}
+.channelRow > :first-child {
+  margin-top: 1px;
+}
+.skRow {
+  height: 34px;
+}
+.skLine {
+  height: 14px;
+  width: 260px;
+}
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--sp-12);
+  align-items: start;
+}
+.segments {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 2px;
+  border-radius: var(--r-md);
+  background: var(--surface-3);
+}
+.segment {
+  height: 28px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 550;
+  cursor: pointer;
+}
+.segment:hover {
+  color: var(--text);
+}
+.segment:focus-visible,
+.dayChip:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.segmentOn {
+  background: var(--surface-float);
+  color: var(--text-strong);
+  box-shadow: var(--shadow-sm);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dayChip {
+  min-width: 46px;
+  height: 30px;
+  padding: 0 var(--sp-8);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+  background: var(--surface-1);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 600;
+  cursor: pointer;
+}
+.dayChip:hover {
+  border-color: var(--accent-line);
+}
+.dayOn {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.next {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  padding: var(--sp-12);
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+.nextSentence {
+  font-weight: 650;
+  color: var(--text-strong);
+}
+.nextRuns {
+  margin-top: 2px;
+  font-size: var(--t-12);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── the right side before a dashboard is chosen, and the footer ──── */
+.noPreview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-12);
+  padding: var(--sp-32);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-lg);
+  color: var(--muted);
+  text-align: center;
+}
+.footNote {
+  margin-right: auto;
+  align-self: center;
+  color: var(--muted);
+  font-size: var(--t-12);
+}

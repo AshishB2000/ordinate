@@ -28,11 +28,12 @@ import { ThemesTab } from '../settings/ThemesTab';
 import { BackupsTab } from '../settings/BackupsTab';
 import { LiveUsageTab } from './LiveUsageTab';
 import { AiTab } from './AiTab';
+import { ChannelsTab } from './ChannelsTab';
 import { Icon } from '../../ui/icons/Icon';
 import s from './Admin.module.css';
 
 const ACCOUNT_TABS = ['people', 'teams', 'projects', 'audit', 'settings'] as const;
-const ORG_TABS = ['workspace', 'ai', 'themes', 'backups', 'live'] as const;
+const ORG_TABS = ['workspace', 'ai', 'themes', 'backups', 'live', 'channels'] as const;
 type TabId = (typeof ACCOUNT_TABS)[number] | (typeof ORG_TABS)[number];
 
 export default function AdminPage() {
@@ -120,6 +121,9 @@ export default function AdminPage() {
           <Tab value="live" icon="gauge">
             Live usage
           </Tab>
+          <Tab value="channels" icon="send">
+            Channels
+          </Tab>
         </TabList>
         {accounts && (
           <>
@@ -154,6 +158,9 @@ export default function AdminPage() {
         </TabPanel>
         <TabPanel value="live">
           <LiveUsageTab />
+        </TabPanel>
+        <TabPanel value="channels">
+          <ChannelsTab />
         </TabPanel>
       </Tabs>
     </Page>

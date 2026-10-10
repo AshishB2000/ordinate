@@ -16,8 +16,19 @@
 // Screens in both themes: web/e2e/__screens__/visuals-*.png.
 
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import type { Page, Response } from 'playwright';
-import { e2e, screens, settled, type Session } from './fixtures.ts';
+import { e2e, screens, SCREENS, settled, type Session } from './fixtures.ts';
+
+/** Both themes WITHOUT a reload: an open dialog, or an unsaved draft, would not survive `screens`. */
+async function shots(page: Page, name: string): Promise<void> {
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: path.join(SCREENS, `${name}-${theme}.png`), animations: 'disabled' });
+  }
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+}
 
 async function post(s: Session, channel: string, payload?: unknown) {
   let csrf = (await s.page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value;
@@ -161,7 +172,8 @@ e2e('visuals: a new visual from the dialog, a region map, and the card menu', as
   await page.getByRole('combobox', { name: 'Category' }).click();
   await page.getByRole('option', { name: 'state' }).click();
   await page.getByRole('combobox', { name: 'Measure column' }).click();
-  await page.getByRole('option', { name: 'profit' }).click();
+  // Exact: the picker lists the project's metrics too, and one is called "Profit".
+  await page.getByRole('option', { name: 'profit', exact: true }).click();
   await page.getByRole('combobox', { name: 'Map regions' }).click();
   await page.getByRole('option', { name: 'US states' }).click();
   await page.getByRole('combobox', { name: 'Basemap' }).waitFor();
@@ -281,6 +293,132 @@ e2e('visuals: filters, analytics, small multiples, the rows behind a bar, and Fo
   const download = page.waitForEvent('download');
   await drawer.getByRole('button', { name: 'Export these rows (CSV)' }).click();
   assert.match((await download).suggestedFilename(), /\.csv$/);
+  report(s);
+});
+
+e2e('visuals: a calculated measure, written in the builder, becomes the chart’s measure', async (s) => {
+  const { page } = s;
+  const pid = s.server.sample.projectId;
+  await page.goto(`/visuals/${pid}`);
+  await settled(page);
+  await page.getByRole('button', { name: 'New visual' }).click();
+  const start = page.getByRole('dialog', { name: 'New visual' });
+  await start.getByRole('radio', { name: /^Retail orders/ }).click();
+  // The project's metrics arrive late here: a picker opened before them fills in while it is open.
+  await page.route('**/api/rpc/metric%3Alist', async (route) => {
+    await new Promise((r) => setTimeout(r, 1500));
+    await route.continue();
+  });
+  await start.getByRole('button', { name: 'Open the builder' }).click();
+  await page.waitForURL(/\/visuals\/[0-9a-f-]{36}\/new\?dataset=/);
+  const datasetId = new URL(page.url()).searchParams.get('dataset')!;
+  await page.getByRole('combobox', { name: 'Measure column' }).click();
+  await page.getByRole('option', { name: '+ New calculated measure…' }).waitFor();
+  assert.equal(await page.getByRole('option', { name: 'Margin %', exact: true }).count(), 0, 'the metrics are not in yet');
+  await page.getByRole('option', { name: 'Margin %', exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+  await page.unroute('**/api/rpc/metric%3Alist');
+  await page.locator('[data-chart-type] canvas').waitFor();
+  await page.getByRole('combobox', { name: 'Category' }).click();
+  await page.getByRole('option', { name: 'region', exact: true }).click();
+
+  // The measure picker's last entry opens the dialog in place.
+  await page.getByRole('combobox', { name: 'Measure column' }).click();
+  await page.getByRole('option', { name: '+ New calculated measure…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New calculated field' });
+  await dialog.getByRole('figure', { name: 'Why Margin % must be a measure' }).waitFor();
+  assert.equal(await dialog.getByRole('radio', { name: /^Measure/ }).getAttribute('aria-checked'), 'true');
+  await dialog.getByLabel('Name').fill('Profit per unit');
+
+  // A refusal is the server's sentence, at the server's position — nothing is parsed in the browser.
+  const refused = rpcReply(page, 'metric:check');
+  await dialog.getByLabel('Formula').fill('sum([profit]) / [Unitz]');
+  const no = (await (await refused).json()) as { valid: boolean; error: string; at: { start: number; end: number } };
+  assert.equal(no.valid, false);
+  assert.deepEqual(no.at, { start: 16, end: 23 });
+  await dialog.getByText(no.error, { exact: true }).waitFor();
+  assert.equal(await dialog.getByRole('button', { name: 'Create measure' }).isDisabled(), true);
+  await shots(page, 'visuals-calc-refused');
+
+  // A quick start writes the ratio; the server checks it and works out its value.
+  const checked = rpcReply(page, 'metric:check');
+  await dialog.getByRole('combobox', { name: 'A', exact: true }).click();
+  await page.getByRole('option', { name: 'profit', exact: true }).click();
+  await dialog.getByRole('combobox', { name: 'B', exact: true }).click();
+  await page.getByRole('option', { name: 'units', exact: true }).click();
+  await dialog.getByRole('button', { name: /^Ratio/ }).click();
+  assert.equal(await dialog.getByLabel('Formula').inputValue(), 'sum([profit]) / sum([units])');
+  const yes = (await (await checked).json()) as { valid: boolean; preview?: { value: number; display: string } };
+  assert.ok(yes.valid && yes.preview && Number.isFinite(yes.preview.value) && yes.preview.value > 0, `the server's value: ${JSON.stringify(yes)}`);
+  await dialog.getByLabel('Preview').getByText(yes.preview.display, { exact: true }).waitFor();
+  await shots(page, 'visuals-calc');
+
+  // Create: the metric is saved and is the chart's measure in the same step; the chart redraws with it.
+  const redrawn = page.waitForResponse(async (r: Response) => r.url().endsWith('/api/rpc/visual%3Apreview') && (await r.text()).includes('Profit per unit'));
+  const savedMetric = rpcReply(page, 'metric:save');
+  await dialog.getByRole('button', { name: 'Create measure' }).click();
+  const metric = ((await (await savedMetric).json()) as { ok: boolean; metric: { id: string } }).metric;
+  const drawn = (await (await redrawn).json()) as { ok: boolean; data: { labels: string[]; series: { name: string; values: number[] }[] } };
+  await dialog.waitFor({ state: 'detached' });
+  await page.getByText('“Profit per unit” is now this chart’s measure.').waitFor();
+  assert.equal(await page.getByRole('combobox', { name: 'Measure column' }).textContent(), 'Profit per unit');
+  assert.deepEqual(drawn.data.series.map((x) => x.name), ['Profit per unit']);
+
+  // The figures are each region's profit over each region's units — the plain totals, asked separately, agree.
+  const totals = (await (await post(s, 'visual:data', { projectId: pid, datasetId, encoding: { category: 'region', values: [{ column: 'profit', aggregation: 'sum' }, { column: 'units', aggregation: 'sum' }] } })).json()) as typeof drawn;
+  assert.ok(drawn.data.labels.length >= 2 && drawn.data.labels.join() === totals.data.labels.join(), `the same regions: ${drawn.data.labels.join()}`);
+  drawn.data.labels.forEach((label, i) => {
+    const want = totals.data.series[0].values[i] / totals.data.series[1].values[i];
+    assert.ok(Math.abs(drawn.data.series[0].values[i] - want) <= Math.abs(want) * 1e-12, `${label}: ${drawn.data.series[0].values[i]} vs ${want}`);
+  });
+  await page.waitForTimeout(400);
+  assert.ok((await ink(page, '[data-chart-type] canvas'))[0] > 1000, 'the chart drew the calculated measure');
+  await shots(page, 'visuals-calc-chart');
+
+  // The pencil reopens it; the sample is shared, so the metric made here goes again.
+  await page.getByRole('button', { name: 'Edit the metric Profit per unit' }).click();
+  const editing = page.getByRole('dialog', { name: 'Edit “Profit per unit”' });
+  assert.equal(await editing.getByLabel('Formula').inputValue(), 'sum([profit]) / sum([units])');
+  await editing.getByRole('button', { name: 'Cancel' }).click();
+  assert.equal((await post(s, 'metric:delete', { projectId: pid, id: metric.id })).status(), 200);
+  report(s);
+});
+
+e2e('visuals: a calculated column, added from the builder, is recomputed by the server and measured', async (s) => {
+  const { page } = s;
+  const pid = s.server.sample.projectId;
+  const datasetId = ((await (await post(s, 'dataset:list', { projectId: pid })).json()) as { id: string; name: string }[]).find((d) => d.name === 'Retail orders')!.id;
+  const stepsBefore = ((await (await post(s, 'prepare:get', { projectId: pid, datasetId })).json()) as { steps: unknown[] }).steps.length;
+  await page.goto(`/visuals/${pid}/new?dataset=${datasetId}`);
+  await page.locator('[data-chart-type] canvas').waitFor();
+
+  await page.getByRole('button', { name: 'Calculated measure' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New calculated field' });
+  await dialog.getByRole('radio', { name: /^Column \(calculated on every row\)/ }).click();
+  await dialog.getByLabel('New column name').fill('Unit margin');
+  const checked = rpcReply(page, 'formula:check');
+  await dialog.getByLabel('Expression').fill('[profit] / [units]');
+  assert.equal(((await (await checked).json()) as { ok: boolean }).ok, true);
+  // The server's sample rows, with the result column named for the new field.
+  await dialog.getByRole('columnheader', { name: 'Unit margin' }).waitFor();
+  await shots(page, 'visuals-calc-column');
+
+  // One step, appended through Prepare's own channel; the builder then measures the new column.
+  const added = rpcReply(page, 'dataset:addStep');
+  const redrawn = page.waitForResponse(async (r: Response) => r.url().endsWith('/api/rpc/visual%3Apreview') && (await r.text()).includes('sum of Unit margin'));
+  await dialog.getByRole('button', { name: 'Add column' }).click();
+  const reply = (await (await added).json()) as { ok: boolean; dataset: { steps: { type: string; name?: string }[] } };
+  assert.equal(reply.ok, true);
+  assert.deepEqual(reply.dataset.steps.at(-1), { type: 'calculated_field', name: 'Unit margin', expression: '[profit] / [units]' });
+  assert.equal(reply.dataset.steps.length, stepsBefore + 1, 'exactly one step was appended');
+  await page.getByText('Added the column “Unit margin” and measured it.').waitFor();
+  const drawn = (await (await redrawn).json()) as { ok: boolean; data: { series: { name: string }[] } };
+  assert.ok(drawn.ok && drawn.data.series.some((x) => x.name === 'sum of Unit margin'));
+  await page.getByRole('combobox', { name: 'Measure column' }).filter({ hasText: 'Unit margin' }).waitFor();
+
+  // The sample is shared: take the step back out (the pipeline recomputes from its source).
+  const removed = await post(s, 'dataset:removeStep', { projectId: pid, datasetId, index: stepsBefore });
+  assert.equal(((await removed.json()) as { ok: boolean }).ok, true);
   report(s);
 });
 

@@ -49,7 +49,7 @@ export function Dialog({
   children,
   footer,
   size = 'md',
-}: Common & { size?: 'sm' | 'md' | 'lg' }) {
+}: Common & { size?: 'sm' | 'md' | 'lg' | 'xl' | 'xxl' }) {
   return (
     <D.Root open={open} onOpenChange={onOpenChange}>
       {trigger && <D.Trigger asChild>{trigger}</D.Trigger>}

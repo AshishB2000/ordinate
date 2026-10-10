@@ -360,6 +360,9 @@ export const MAIN_FILES = [
   'src/data/freshOnAskMessages.ts',
   'src/data/incrementalMessages.ts',
   'src/ai/aiMessages.ts',
+  'src/analysis/driverPointMessages.ts',
+  'src/analysis/metricCheckMessages.ts',
+  'src/analysis/subscriptionText.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

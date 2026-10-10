@@ -231,6 +231,12 @@
   font-size: var(--t-12);
   color: var(--error);
 }
+/* While a save recomputes the dataset. */
+.working {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
 
 .preview {
   flex: 1;

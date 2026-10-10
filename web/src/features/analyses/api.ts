@@ -65,6 +65,8 @@ export type Sheet = {
   name: string;
   cards: Card[];
   layouts?: { tablet?: { items: SizeItem[] }; phone?: { items: SizeItem[] } };
+  /** Click-to-filter for the sheet (dashboards.ts Page.clickFilter). Absent is NOT on: only visuals that opted in. */
+  clickFilter?: boolean;
 };
 
 export type Parameter = {
@@ -137,7 +139,10 @@ export interface CompareReply {
   direction?: 'up_good' | 'down_good';
 }
 /** Every tile's answer says how fresh it is (`asOf`, L0.2) — the card's head shows it. */
-export type VisualTile = { ok: true; data: ChartDataShape & Record<string, unknown>; warnings: string[]; paramErrors?: string[]; asOf?: AsOf } | { ok: false; error: string };
+export type VisualTile =
+  // `category`: how the server bucketed the axis (src/analysis/categoryKey.ts) — a `date` axis is a time series.
+  | { ok: true; data: ChartDataShape & Record<string, unknown>; warnings: string[]; paramErrors?: string[]; asOf?: AsOf; category?: { kind: 'text' | 'date' | 'number'; grain?: string } }
+  | { ok: false; error: string };
 /** A statistics card's answer (src/ipc/stats.ts computeStatsTile): every cell a string the server wrote. */
 export type StatsTile =
   | {

@@ -52,6 +52,7 @@ import { computeCardMetric } from './dashboards';
 import { dateRangeSpan, duringClause, eventWhen, eventsDuring, periodSpan } from '../analysis/events'; // r8:events
 import { projectEvents } from '../analysis/eventStore';
 import { isoFromDays } from '../analysis/dateIntel';
+import { changeSentence } from '../analysis/driverPoint';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -113,6 +114,8 @@ export interface DriversResult {
   selected: DimensionView | null;
   /** "Revenue fell $412K" — the panel's title. */
   headline: string;
+  /** A chart point's header (analysis/driverPoint): "Revenue fell 18% in Mar 2026 vs Feb 2026 (from $1.2M to $984K)". */
+  sentence?: string;
   caption: string;
   /** Project events during period A — named in the caption (analysis/events). r8:events */
   events?: Array<{ title: string; kind: string; when: string }>;
@@ -404,12 +407,19 @@ export async function driversFor(projectId: string, spec: DriversSpec, rawParams
     spec: stored,
   };
   if (unavailable) out.unavailable = unavailable;
+  if (spec.compare.mode === 'bucket' && totals.delta !== null) {
+    out.sentence = changeSentence({
+      // A change in a PERCENT is in points (fmtFor), so it reads as the change itself, not a percent of a percent.
+      metric: fullName, delta: totals.delta, pct: metric?.format?.kind === 'percent' ? null : out.totals.pct, changeText: deltaWords,
+      period: scopes.aLabel, baseline: scopes.bLabel, from: out.totals.bText, to: out.totals.aText, day: spec.compare.grain === 'day',
+    });
+  }
   if (during.length) out.events = during.map((e) => ({ title: e.title, kind: e.kind, when: eventWhen(e) }));
   return out;
 }
 
-/** `driversFor`, as a visible job when the table is big. */
-async function runDrivers(projectId: string, spec: DriversSpec, rawParams: unknown): Promise<DriversReply> {
+/** `driversFor`, as a visible job when the table is big. EXPORTED for the chart-point door (./driversPoint). */
+export async function runDrivers(projectId: string, spec: DriversSpec, rawParams: unknown): Promise<DriversReply> {
   const meta = await datasets.getDatasetMeta(projectId, spec.datasetId);
   if (!meta || meta.rowCount < JOB_ROWS) return driversFor(projectId, spec, rawParams);
   const job = jobs.submit({

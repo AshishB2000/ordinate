@@ -14,9 +14,33 @@
   }
 }
 
+/* A question handed over from a chart point: says so, and offers the page's own. */
+.handed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+  margin: 0 var(--sp-24) var(--sp-12);
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--text-strong);
+  font-size: var(--t-13);
+}
+.handed > svg {
+  flex: 0 0 auto;
+  color: var(--accent-2);
+}
+.handed > span {
+  flex: 1 1 auto;
+}
+
 .panel {
   display: flex;
   flex-direction: column;
+  /* In a drawer's scrolling column it keeps its own height (it clips, so it would otherwise shrink under its footer). */
+  flex: 0 0 auto;
   margin: 0 var(--sp-24) var(--sp-32);
   background: var(--surface);
   border: 1px solid var(--border);

@@ -40,6 +40,12 @@ const DriversRequest = z.looseObject({
   params: Params.optional(),
 });
 
+/** A chart's encoding as a tile sends it (src/api/analyses.ts) — `sanitizeEncoding` whitelists every field before anything reads it. */
+const PointEncoding = z.looseObject({
+  category: z.string().max(512),
+  values: z.array(z.looseObject({ column: Column, aggregation: z.string().max(16) })).max(64),
+});
+
 /** A scenario's editable parts (src/analysis/scenarioModel.ts) — sanitizeDrivers owns each driver. */
 const ScenarioDraft = {
   baseMetricIds: z.array(Uuid).max(12),
@@ -88,6 +94,29 @@ export const analytics = {
   'drivers:addTile': rpc({
     access: 'write',
     input: z.strictObject({ projectId: Uuid, request: DriversRequest, name: z.string().max(200) }),
+    project: byProjectId,
+  }),
+  // Server only: "Explain this change" from a point on a time-series chart
+  // (src/ipc/driversPoint.ts). The browser names what it pointed at — the
+  // tile's definition and filters, the bucket's axis label, the series — and
+  // the SERVER builds the comparison from the chart's own buckets: the periods,
+  // the valid baselines, the figures and the header sentence. `read`: it
+  // computes and writes nothing. A Live dataset answers `live_refused`.
+  'drivers:explainPoint': rpc({
+    access: 'read',
+    input: z.strictObject({
+      projectId: Uuid,
+      datasetId: Uuid,
+      encoding: PointEncoding,
+      filters: Filters.optional(),
+      // The sheet's live parameter values, as `analysis:tiles` sends them (paramValues re-sanitizes).
+      params: z.array(z.looseObject({ name: z.string().max(40), kind: z.string().max(16) })).max(50).optional(),
+      // The clicked bucket (absent → the chart's latest), its series on a split or multi-measure chart, and the bucket to compare with (absent → the one before).
+      point: z.strictObject({ bucket: z.string().max(40).optional(), series: z.string().max(500).optional(), baseline: z.string().max(40).optional() }),
+      // The reader's view state: under either the server refuses with a sentence rather than explain different figures.
+      asOf: z.string().max(40).optional(),
+      currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+    }),
     project: byProjectId,
   }),
 

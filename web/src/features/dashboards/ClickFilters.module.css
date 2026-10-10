@@ -1,0 +1,98 @@
+/* Click-to-filter's chip row. The author's controls (FilterBar) are neutral
+   pills holding a widget; these are the reader's own clicks — accent-tinted,
+   one button each, behind the click mark. Tokens only: both themes follow. */
+
+/* One fixed-height line whether it holds the hint or the chips: the sheet below never moves when a click lands. */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+  min-height: var(--ctl-sm);
+}
+.idle .label {
+  color: var(--muted);
+}
+.note {
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--accent);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  max-width: 360px;
+  height: 26px;
+  padding: 0 var(--sp-8) 0 var(--sp-12);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: var(--t-12);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+.chip:hover {
+  border-color: var(--accent);
+}
+.chip:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.chip > svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+.chip:hover > svg,
+.chip:focus-visible > svg {
+  color: var(--text-strong);
+}
+.col {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--accent);
+}
+.vals {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-left: auto;
+  font-size: var(--t-11);
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* On paper: what is filtered, not how to filter. */
+@media print {
+  .idle,
+  .hint,
+  .bar button:not(.chip) {
+    display: none;
+  }
+}

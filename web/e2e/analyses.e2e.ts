@@ -158,6 +158,8 @@ e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, 
   await page.waitForFunction(() => document.querySelectorAll('[data-card-id] canvas').length >= 2);
   await settled(page);
   console.log(`rpc: canvas load (sample dashboard, client-side open) ${rpc.loads.at(-1)?.rpcs ?? 0}`);
+  // The sample sheet is one the app built, so click-to-filter is on: its row is there, idle (dashboards.e2e.ts clicks it).
+  await page.getByRole('group', { name: 'Click filters' }).getByText('Click a mark on a chart to filter the other cards.').waitFor();
   await screens(page, 'analyses-editor');
 
   // A dropdown control on region: the KPI is recomputed by the server under it.
@@ -177,7 +179,8 @@ e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, 
   assert.notEqual(narrowed, '$5.2M');
 
   // Selecting a card opens its Properties; a visual's fields are the builder's.
-  await page.getByRole('group', { name: 'Revenue by month card' }).click({ position: { x: 200, y: 120 } });
+  // On the card's head: the sample sheet has click-to-filter on, so a click that landed on a mark would also filter.
+  await page.getByRole('group', { name: 'Revenue by month card' }).click({ position: { x: 200, y: 16 } });
   const props = page.getByRole('complementary', { name: 'Properties' });
   await props.getByRole('link', { name: 'Edit in the Visuals builder' }).waitFor();
   await screensInPlace(page, 'analyses-properties');
@@ -196,6 +199,27 @@ e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, 
   await saved(page);
   // Measured, not asserted beyond the fixture's budget: RPCs per page load.
   console.log('rpc per load:', rpc.loads.map((l) => `${new URL(l.url).pathname} ${l.rpcs}`).join(' · '));
+});
+
+e2e('the rail’s "Calculated field" opens the dialog in place, over the selected card’s dataset', async ({ page, server }) => {
+  await page.goto(`/analyses?project=${server.sample.projectId}`);
+  await settled(page);
+  await page.getByRole('link', { name: /Retail overview/ }).click();
+  await page.getByRole('heading', { level: 1, name: 'Retail overview' }).waitFor();
+  await page.waitForFunction(() => document.querySelectorAll('[data-card-id] canvas').length >= 2);
+  const here = page.url();
+  await page.getByRole('group', { name: 'Revenue by month card' }).click({ position: { x: 200, y: 120 } });
+  await page.getByRole('navigation', { name: 'Authoring panels' }).getByRole('button', { name: 'Data' }).click();
+  await page.getByRole('button', { name: 'Calculated field' }).click();
+  // No trip to Prepare: both kinds, the measure editor ready, the dataset's metrics on offer.
+  const calc = page.getByRole('dialog', { name: 'New calculated field' });
+  await calc.getByRole('radio', { name: /^Column \(calculated on every row\)/ }).waitFor();
+  await calc.getByLabel('Formula').waitFor();
+  await calc.getByRole('button', { name: 'Margin %', exact: true }).waitFor();
+  assert.equal(page.url(), here, 'the dialog opened in place');
+  await screensInPlace(page, 'analyses-calculated-field');
+  await calc.getByRole('button', { name: 'Cancel' }).click();
+  await calc.waitFor({ state: 'detached' });
 });
 
 e2e('draft with the Assistant, no model: the door is shut and says why', async ({ page, server }) => {

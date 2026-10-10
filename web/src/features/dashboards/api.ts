@@ -178,6 +178,8 @@ export interface AlertRule {
   lastFiredAt?: string;
   history?: number[];
   fromWatch?: boolean;
+  /** Slack / Teams channels the rule also posts to when it fires on the server's tick. */
+  channelIds?: string[];
 }
 export interface AlertEvent {
   id: string;

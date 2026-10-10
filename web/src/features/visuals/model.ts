@@ -94,7 +94,8 @@ export function fitEncoding(preset: Encoding | undefined, cols: readonly Column[
     delete out.series;
     delete out.seriesDatasetId;
   }
-  const keep = (preset.values ?? []).filter((v) => v.column && has(v.column, v.datasetId));
+  // A measure that is a saved metric names the metric, not a column (../calc/api.ts metricMeasure).
+  const keep = (preset.values ?? []).filter((v) => v.column && (!!v.metricId || has(v.column, v.datasetId)));
   out.values = keep.length ? keep : base.values;
   return out;
 }

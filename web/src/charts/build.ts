@@ -23,6 +23,7 @@ import { fmtApply, fmtResolve } from './fmtApply';
 import { fmtVal, fmtWith, tcAxisFmt, tcTooltip } from './format';
 import { CHART_PALETTE, getCSSVar, paletteFromSeed } from './palette';
 import { buildChartScales } from './scales';
+import { selectionPlugin } from './selection';
 import { t } from './strings';
 import { legendOnByDefault } from './traits';
 import { resolveChartType } from './typeSpec';
@@ -309,6 +310,8 @@ export function buildChart(
   // r8:events — the project's events on a date axis (chartEvents.js), unless this visual hides them.
   const evMarks = evDrawable(data, spec, !!sortOrder, overrides);
   if (evMarks.length) inlinePlugins.push(eventsPlugin({ events: evMarks, fontFamily, isStatic: !!overrides.devicePixelRatio }));
+  // Click-to-filter (./selection): the marks the reader picked on THIS chart stay at full strength, the rest dim.
+  if (overrides.markSelection) inlinePlugins.push(selectionPlugin(overrides.markSelection, rawLabels, asMonthLabels(rawLabels)));
 
   // ── Series filter (period multi-select) ────────────────────────────────────
   // Hide deselected series. Indices align with `series` (both use chartSeries()).

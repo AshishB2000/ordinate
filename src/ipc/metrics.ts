@@ -250,6 +250,33 @@ export async function resolveMetric(
   return out;
 }
 
+/**
+ * The figure for a definition that is NOT saved — `metric:preview`, and the
+ * measure editor's check (./metricCheck.ts). The same resolver and formatter the
+ * saved record will use. `self` is the name it will be saved under, so a formula
+ * naming itself previews as it will resolve: no value. Throws `LiveFigureError`.
+ */
+export async function previewDefinition(projectId: string, datasetId: string, definition: unknown, filters: unknown, format: unknown, self?: string) {
+  const def = metrics.sanitizeDefinition(definition);
+  const own = sanitizeDashboardFilters(filters);
+  const ctx = newCtx(projectId, []);
+  if (self) ctx.stack.add(self.trim().toLowerCase());
+  const value = await resolveDefinition(ctx, datasetId, def, own, 0);
+  return {
+    ok: true as const,
+    value,
+    display: displayOf(value, metrics.sanitizeFormat(format), ctx.fx, !isFormulaDefinition(def)),
+    ...(ctx.fx ? { fx: ctx.fx } : {}),
+    ...(ctx.asOf ? { asOf: ctx.asOf } : {}),
+    definitionText: describeDefinition({ definition: def, filters: own }),
+  };
+}
+
+/** The sentence a duplicate name is refused with — said by save, update and the editor's check alike. */
+export function nameTakenMessage(name: unknown): string {
+  return `A metric called "${String(name).trim()}" already exists.`;
+}
+
 /** Distinct values of a column, resident-first. Mirrors alertStore's own
  *  `distinctValues` — same two calls, same "null means we could not read it". */
 async function distinctValues(projectId: string, datasetId: string, column: string): Promise<string[] | null> {
@@ -423,9 +450,8 @@ export function register() {
   ipcMain.handle('metric:save', async (_e, { projectId, input }: any = {}) => {
     try {
       const raw = input && typeof input === 'object' ? input : {};
-      if (await nameTaken(projectId, raw.name)) {
-        return { ok: false, error: `A metric called "${String(raw.name).trim()}" already exists.` };
-      }
+      // `field`: which box of the editor the sentence belongs beside.
+      if (await nameTaken(projectId, raw.name)) return { ok: false, error: nameTakenMessage(raw.name), field: 'name' };
       const m = await metrics.saveMetric(projectId, {
         ...raw,
         filters: sanitizeDashboardFilters(raw.filters),
@@ -441,9 +467,7 @@ export function register() {
   ipcMain.handle('metric:update', async (_e, { projectId, id, patch }: any = {}) => {
     try {
       const raw = patch && typeof patch === 'object' ? patch : {};
-      if (raw.name !== undefined && (await nameTaken(projectId, raw.name, id))) {
-        return { ok: false, error: `A metric called "${String(raw.name).trim()}" already exists.` };
-      }
+      if (raw.name !== undefined && (await nameTaken(projectId, raw.name, id))) return { ok: false, error: nameTakenMessage(raw.name), field: 'name' };
       const next = { ...raw };
       if (raw.filters !== undefined) next.filters = sanitizeDashboardFilters(raw.filters);
       const before = await metrics.getMetric(projectId, id);
@@ -488,18 +512,7 @@ export function register() {
    */
   ipcMain.handle('metric:preview', async (_e, { projectId, datasetId, definition, filters, format }: any = {}) => {
     try {
-      const def = metrics.sanitizeDefinition(definition);
-      const own = sanitizeDashboardFilters(filters);
-      const ctx = newCtx(projectId, []);
-      const value = await resolveDefinition(ctx, datasetId, def, own, 0);
-      const fmt = metrics.sanitizeFormat(format);
-      return {
-        ok: true,
-        value,
-        display: displayOf(value, fmt, ctx.fx, !isFormulaDefinition(def)),
-        ...(ctx.fx ? { fx: ctx.fx } : {}),
-        definitionText: describeDefinition({ definition: def, filters: own }),
-      };
+      return await previewDefinition(projectId, datasetId, definition, filters, format);
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to preview the metric', ...liveCodeOf(err) };
     }

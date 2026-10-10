@@ -18,12 +18,11 @@ import { activeTab, childrenOf } from './geometry';
 import { substitute } from './filters';
 import { ImageBody, NavBody, StatsBody, statsTitle, type ImageSpec, type StatsSpec } from './KindCards';
 import { MetricBody, metricLabel } from './MetricCard';
-import { toggleCrossFilter } from './filters';
 import s from './Cards.module.css';
 import { TextBody } from '../../dashboards/Markdown';
 import { SummaryBody } from '../../dashboards/SummaryBody';
 import { CommentButton } from '../../dashboards/CommentsPanel';
-import { VisualCard, WatchedBell } from '../../dashboards/CardRuntime';
+import { clickColumns, VisualCard, WatchedBell } from '../../dashboards/CardRuntime';
 import { TileAsOfSlot } from './tileAsOf';
 
 const KIND_TITLE: Record<string, string> = {
@@ -65,9 +64,13 @@ function Body({ card, asTable }: { card: Card; asTable: boolean }) {
     const def = card.visualId ? ed.visuals.get(card.visualId) : undefined;
     // A dangling visualId degrades to a placeholder, never a crash (00-model.md §6.4).
     if (!def) return <Missing>The visual this card showed was deleted.</Missing>;
-    // Click-to-filter (overrides.crossFilter, off by default): the clicked value becomes a DASHBOARD filter.
-    const column = def.overrides?.crossFilter === true ? def.encoding.category : '';
-    const onMark = column ? (v: string | number) => ed.edit('Cross-filter', (d) => void (d.filters = toggleCrossFilter(d.filters, column, v))) : undefined;
+    // Click-to-filter (the sheet's switch, a visual's own opt-out): the clicked mark joins the READER's click-filters —
+    // view state, so a viewer has it too and the record is never written. ⌘/Ctrl adds to the selection.
+    const cols = clickColumns(ed, def);
+    const onMark = cols
+      ? (v: string | number, series?: string, e?: { metaKey: boolean; ctrlKey: boolean }) =>
+          ed.view.clickMark(card.id, { column: cols.column, value: v, ...(cols.seriesColumn && series !== undefined ? { seriesColumn: cols.seriesColumn, series } : {}) }, !!e && (e.metaKey || e.ctrlKey))
+      : undefined;
     // A tile's own actions (T2.9) outrank cross-filter, as on the desktop; a narrowing reads here too.
     return <VisualCard ed={ed} card={card} def={def} asTable={asTable} onMark={onMark} />;
   }

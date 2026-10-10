@@ -1,0 +1,390 @@
+/* The calculated-field dialog: the kind picker with its worked example, the
+   quick-start row, and the measure editor's workbench (reference list · fields ·
+   live value). Tokens only; the formula box itself is ../prepare/Formula.module.css. */
+
+/* ── the two kinds, and why it matters ── */
+.kinds {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--sp-12);
+  align-items: stretch;
+}
+.kindRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-12);
+}
+.kind {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.kind:hover:not(.kindOff) {
+  border-color: var(--border-3);
+}
+.kindOn {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.kindPick {
+  flex: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--sp-8);
+  row-gap: var(--sp-4);
+  align-content: start;
+  padding: var(--sp-12);
+  border: 0;
+  border-radius: var(--r-lg);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kindPick:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.kindOff .kindPick {
+  cursor: not-allowed;
+}
+.kindOff .kindPick > * {
+  opacity: 0.55;
+}
+.kindIcon {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.kindOn .kindIcon {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.kindTitle {
+  align-self: center;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.kindWhen {
+  font-weight: 400;
+  color: var(--muted);
+}
+.kindWhat {
+  grid-column: 2;
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.kindOn .kindWhat {
+  color: var(--text);
+}
+.kindExample {
+  grid-column: 2;
+  justify-self: start;
+  margin-top: var(--sp-4);
+  padding: 2px var(--sp-8);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-11);
+  color: var(--text-strong);
+}
+.kindOn .kindExample {
+  background: var(--surface);
+}
+.kindWhy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-8);
+  margin: 0 var(--sp-12) var(--sp-12);
+  padding-top: var(--sp-8);
+  border-top: 1px dashed var(--border-2);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--text);
+}
+.kindWhy p {
+  margin: 0;
+}
+
+.example {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: var(--sp-12);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+}
+.exampleHead {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.exampleTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+.exampleTable th,
+.exampleTable td {
+  padding: 2px var(--sp-8) 2px 0;
+  text-align: right;
+  font-weight: 400;
+  color: var(--text);
+}
+.exampleTable thead th {
+  font-size: var(--t-11);
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.exampleTable th:first-child {
+  text-align: left;
+}
+.exampleWays {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--text);
+}
+.exampleWays li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: start;
+}
+.exampleWays strong {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.right svg,
+.right b {
+  color: var(--ok);
+}
+.wrong svg,
+.wrong b {
+  color: var(--error);
+}
+
+/* ── quick starts ── */
+.quick {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.quickLabel {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.quickPick {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(110px, 150px));
+  gap: var(--sp-4);
+}
+.quickChips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  height: 28px;
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: var(--t-12);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.chip:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.chip:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.chip:disabled {
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+.chipHint {
+  font-family: var(--font-mono);
+  font-size: var(--t-11);
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* ── the measure workbench ── */
+.work {
+  display: flex;
+  gap: var(--sp-12);
+  align-items: stretch;
+  min-height: 0;
+}
+/* The reference list keeps to the height of the fields beside it and scrolls inside. */
+.work > :first-child {
+  max-height: 520px;
+}
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+/* A label for a control that is not a Field (the formula box, the format row): Field.module.css's. */
+.label {
+  font-size: var(--t-12);
+  font-weight: 500;
+  color: var(--muted);
+}
+.hint {
+  margin: 0;
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.fieldError {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  margin: 0;
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--error);
+}
+.fieldError svg {
+  flex: none;
+  margin-top: 2px;
+}
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: var(--sp-16);
+  align-items: start;
+}
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+/* Format beside the good direction: two short controls, one row. */
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-12);
+  align-items: start;
+}
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-height: 132px;
+  padding: var(--sp-16);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+}
+.previewHead {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.previewValue {
+  font-family: var(--font-numeric);
+  font-size: var(--t-28);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tighter);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.stale {
+  opacity: 0.45;
+}
+.previewText {
+  font-family: var(--font-mono);
+  font-size: var(--t-11);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.previewNote,
+.previewEmpty {
+  margin: 0;
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.previewSkeleton {
+  display: block;
+  width: 60%;
+  height: 32px;
+  border-radius: var(--r-sm);
+}
+
+@media (max-width: 900px) {
+  .kinds,
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .kindRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .work {
+    flex-direction: column;
+  }
+  .work > :first-child {
+    width: auto;
+    flex: none;
+    max-height: 180px;
+  }
+}

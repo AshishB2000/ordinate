@@ -18,7 +18,7 @@ import { useEditor } from './context';
 import { nextSheetName, uuid } from './doc';
 import { SizeSwitch } from './SizeNote';
 import s from './Editor.module.css';
-import { StyleDialog, ViewControls, exportHtml } from '../../dashboards/DashboardChrome';
+import { StyleDialog, SubscribeButton, ViewControls, exportHtml } from '../../dashboards/DashboardChrome';
 import { addSummary } from '../../dashboards/SummaryBody';
 
 function NameDialog({ title, initial, onSave, onClose }: { title: string; initial: string; onSave: (v: string) => void; onClose: () => void }) {
@@ -119,7 +119,8 @@ function SheetTabs() {
           onClick={() => {
             const id = uuid();
             const n = sheets.length;
-            ed.edit('Add sheet', (d) => void d.sheets.push({ id, name: nextSheetName(d), cards: [] }));
+            // A new sheet has click-to-filter ON, written explicitly (an absent switch means "as before": off).
+            ed.edit('Add sheet', (d) => void d.sheets.push({ id, name: nextSheetName(d), cards: [], clickFilter: true }));
             ed.setSheet(n);
           }}
         />
@@ -189,6 +190,7 @@ export function Head() {
         <ViewControls />
         <SizeSwitch />
         <IconButton icon="message-square" size="sm" label="Comments on this dashboard" onClick={() => ed.view.openComments('all')} />
+        <SubscribeButton />
         <Button size="sm" icon="monitor" onClick={() => ed.view.setPresenting(true)}>
           Present
         </Button>

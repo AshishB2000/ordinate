@@ -1,0 +1,202 @@
+/* Reports → Subscriptions: full-width rows — what, when, where, how it last
+   went, and the row's own controls. Tokens only. */
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  padding-top: var(--sp-16);
+}
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-12);
+}
+.count {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-8);
+}
+.row {
+  display: grid;
+  grid-template-columns: 36px minmax(220px, 1.5fr) minmax(170px, 1fr) minmax(140px, 0.9fr) minmax(170px, 1fr) auto;
+  align-items: start;
+  gap: var(--sp-16);
+  padding: var(--sp-12) var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+.row:hover {
+  border-color: var(--border-2);
+}
+@media (max-width: 1180px) {
+  .row {
+    grid-template-columns: 36px minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .actions {
+    grid-column: 2 / -1;
+    justify-content: flex-start;
+  }
+}
+.rowOff .icon {
+  background: var(--surface-3);
+  color: var(--muted);
+}
+.icon {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.nameLine {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-width: 0;
+}
+.name {
+  font-weight: 650;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meta {
+  color: var(--muted);
+  font-size: var(--t-12);
+  overflow-wrap: anywhere;
+}
+.meta a {
+  color: var(--text-dim);
+}
+.gone {
+  color: var(--error);
+}
+.paused {
+  margin: var(--sp-4) 0 0;
+  padding: 6px var(--sp-8);
+  border-radius: var(--r-md);
+  background: var(--error-soft);
+  color: var(--error);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+}
+.cell {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  align-content: start;
+}
+.cellLabel {
+  font-size: var(--t-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tr-label);
+  color: var(--muted);
+}
+.cellValue {
+  color: var(--text);
+  font-size: var(--t-13);
+}
+.cellSub {
+  color: var(--muted);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.lastLine {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-8);
+}
+/* The row's switch: its state word sits right beside it, not across the cell. */
+.actions .toggle {
+  justify-content: flex-end;
+  gap: var(--sp-8);
+  min-width: 74px;
+}
+
+/* skeleton row */
+.skIcon {
+  width: 36px;
+  height: 36px;
+}
+.skMain {
+  height: 36px;
+}
+.skCell {
+  height: 28px;
+}
+
+/* ── the runs drawer ──────────────────────────────────────────────── */
+.runs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-8);
+}
+.run {
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+.runHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.runWhen {
+  color: var(--text-dim);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+.runTrigger {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--t-11);
+}
+.runText {
+  margin: var(--sp-4) 0 0;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+}
+.skRun {
+  height: 56px;
+}

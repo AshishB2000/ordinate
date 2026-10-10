@@ -11,6 +11,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { EnvError } from './envError';
 import { liveDailyQueryLimit, liveMaxConcurrent, liveMinCacheAgePublicSec, liveQueryTimeoutMs, maxBytesBilled } from './liveEnv';
+import { publicOrigin } from './publicUrl';
 
 export { EnvError } from './envError';
 // The Live settings live in ./liveEnv.ts; their names stay importable from here.
@@ -232,6 +233,8 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   if (testLiveFake && env === 'prod') {
     throw new EnvError('ORDINATE_ENV=prod refuses ORDINATE_TEST_LIVE_FAKE=1: it registers a fake warehouse for the test harness only');
   }
+  // ORDINATE_PUBLIC_URL: the origin a link in a Slack / Teams message points at (./publicUrl.ts, read at each send); a typo stops startup here.
+  publicOrigin(src.ORDINATE_PUBLIC_URL);
   // FRESH_ON_ASK_WAIT_MS (live data, L3.1): read by src/data/freshOnAsk.ts at each ask; a typo stops startup here.
   freshOnAskWaitMs(src.FRESH_ON_ASK_WAIT_MS);
   const duckdb = parseDuck(src);

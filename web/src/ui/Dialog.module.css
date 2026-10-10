@@ -63,6 +63,14 @@
 .lg {
   width: min(760px, calc(100vw - var(--sp-48)));
 }
+/* A workbench in a dialog (a formula editor with its reference list and preview). */
+.xl {
+  width: min(1040px, calc(100vw - var(--sp-48)));
+}
+/* A workspace in a dialog: steps on one side, a live preview on the other. */
+.xxl {
+  width: min(1180px, calc(100vw - var(--sp-48)));
+}
 
 .head {
   display: flex;

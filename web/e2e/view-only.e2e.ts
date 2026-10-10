@@ -39,7 +39,7 @@ if (!adminUrl) {
   await root.connect();
   await root.query(`CREATE DATABASE ${dbName}`);
 
-  const { e2e, settled, screens, configureServer } = await import('./fixtures.ts');
+  const { e2e, settled, screens, configureServer, SCREENS } = await import('./fixtures.ts');
   configureServer({
     env: { DATABASE_URL: scratch.toString(), AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ADMIN_EMAIL: ADMIN },
     headers: { 'x-forwarded-email': ADMIN },
@@ -213,6 +213,30 @@ if (!adminUrl) {
     await page.waitForTimeout(1200); // past the 600 ms autosave debounce
     assert.deepEqual(await kpi.boundingBox(), before, 'the card did not move');
     await screens(page, 'view-only-analysis');
+    await tiles();
+    // Click-to-filter is a READER's: a viewer's click on a bar filters the other cards for them alone — the KPI is
+    // recomputed by the server (a read), the chip says what is on, Esc clears it, and nothing is written (`writes`, below).
+    const chips = page.getByRole('group', { name: 'Click filters' });
+    await chips.getByText('Click a mark on a chart to filter the other cards.').waitFor(); // a viewer is told, too
+    const chip = chips.getByRole('button', { name: /^Remove click filter region: (East|West|North)$/ });
+    const bars =(await page.getByRole('group', { name: 'Amount by region card' }).locator('canvas').first().boundingBox())!;
+    let hit = false;
+    for (let c = 1; c <= 14 && !hit; c++) {
+      await page.mouse.click(bars.x + (bars.width * c) / 15, bars.y + bars.height * 0.8);
+      await page.waitForTimeout(150);
+      hit = (await chip.count()) > 0;
+    }
+    assert.ok(hit, 'a viewer’s click on a bar puts its region in the chip row');
+    await kpi.getByText('275').waitFor({ state: 'detached' }); // one region's amount now, summed by the server
+    // In place: `screens` reloads, and a reload forgets a click-filter (it is view state).
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+      await page.waitForTimeout(250);
+      await page.screenshot({ path: `${SCREENS}view-only-clickfilter-${theme}.png`, fullPage: true });
+    }
+    await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+    await page.keyboard.press('Escape');
+    await chip.waitFor({ state: 'detached' });
     await tiles();
 
     await open(`/dashboards?project=${pid}`);

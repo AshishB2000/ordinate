@@ -55,18 +55,61 @@ export function substitute(text: string, params: ParamPayload): string {
   });
 }
 
-/**
- * Click-to-filter (dashFiltersUi.ts toggleCrossFilterSteps): the clicked value
- * becomes the sheet's one `=` filter on that column, or clicking it again takes
- * it away. A mirror of src/analysis/dashboardFilters.ts `toggleCrossFilter`,
- * differential-tested against it (filters.test.ts).
- */
-export function toggleCrossFilter(filters: readonly Step[], column: string, value: unknown): Step[] {
-  const list = (Array.isArray(filters) ? filters : []).filter((s) => s && s.type === 'filter');
-  if (!column) return list.slice();
-  const v = value == null ? '' : String(value as string);
-  const same = (s: Step) => s.column === column && s.op === '=';
-  const already = list.some((s) => same(s) && String((s.value ?? '') as string) === v);
-  const rest = list.filter((s) => !same(s));
-  return already ? rest : [...rest, { type: 'filter', column, op: '=', value: v }];
+// ── Click-to-filter ─────────────────────────────────────────────────────────
+// A mirror of src/analysis/dashboardFilters.ts (`clickFilterOn`,
+// `toggleClickFilter`, `clickFilterSteps`) — the rules and their reasons are
+// written there; filters.test.ts holds the two together on the same inputs.
+// A reader's clicks are view state: one entry per (card, column), `origin`
+// being the card that was clicked, which stays whole while the rest filter.
+
+export interface ClickFilter {
+  origin: string;
+  column: string;
+  values: string[];
+}
+export interface ClickMark {
+  column: string;
+  value: unknown;
+  seriesColumn?: string;
+  series?: unknown;
+}
+
+const clickText = (v: unknown): string => (v == null ? '' : String(v as string));
+
+/** The sheet's switch turns it on for every visual that has not opted out; without it, only a visual that opted in. */
+export function clickFilterOn(sheet: unknown, visual: unknown): boolean {
+  return sheet === true ? visual !== false : visual === true;
+}
+
+/** A plain click selects that mark alone (the only selected one: clears); an additive one adds it or takes it away. */
+export function toggleClickFilter(clicks: readonly ClickFilter[] | null | undefined, origin: string, mark: ClickMark, additive = false): ClickFilter[] {
+  const list = (Array.isArray(clicks) ? (clicks as ClickFilter[]) : []).filter((c) => c && c.origin && c.column && Array.isArray(c.values) && c.values.length > 0);
+  if (!origin || !mark || !mark.column) return list.slice();
+  const picks: [string, string][] = [[mark.column, clickText(mark.value)]];
+  if (mark.seriesColumn && mark.seriesColumn !== mark.column && mark.series !== undefined) picks.push([mark.seriesColumn, clickText(mark.series)]);
+  const mine = (column: string): string[] => list.find((c) => c.origin === origin && c.column === column)?.values ?? [];
+  const selected = picks.every(([column, v]) => mine(column).includes(v));
+  const next = new Map<string, string[]>();
+  if (!additive) {
+    if (!(selected && picks.every(([column]) => mine(column).length === 1))) for (const [column, v] of picks) next.set(column, [v]);
+  } else if (!selected) {
+    for (const [column, v] of picks) next.set(column, mine(column).includes(v) ? mine(column) : mine(column).concat(v));
+  } else {
+    const at = picks.findIndex(([column]) => mine(column).length > 1);
+    if (at >= 0) picks.forEach(([column, v], i) => next.set(column, i === at ? mine(column).filter((x) => x !== v) : mine(column)));
+  }
+  const touched = new Set(picks.map(([column]) => column));
+  const out = list.filter((c) => !touched.has(c.column));
+  for (const [column, values] of next) out.push({ origin, column, values });
+  return out;
+}
+
+/** The click-filters as filter steps (`=` for one value, `in` for several), leaving out the card that is exempt. */
+export function clickFilterSteps(clicks: readonly ClickFilter[] | null | undefined, exceptOrigin?: string): Step[] {
+  const out: Step[] = [];
+  for (const c of Array.isArray(clicks) ? (clicks as ClickFilter[]) : []) {
+    if (!c || !c.column || !Array.isArray(c.values) || !c.values.length || c.origin === exceptOrigin) continue;
+    out.push(c.values.length === 1 ? { type: 'filter', column: c.column, op: '=', value: c.values[0] } : { type: 'filter', column: c.column, op: 'in', values: c.values.slice() });
+  }
+  return out;
 }

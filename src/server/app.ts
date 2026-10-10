@@ -62,6 +62,9 @@ const SECRET_KEYS = [
   'api_token',
   'accessToken',
   'bearer',
+  // A Slack / Teams channel's webhook URL (src/app/channels.ts): whoever has it can post there.
+  'webhookUrl',
+  'webhook',
 ];
 
 // ponytail: pino matches exact names at fixed depths (`*.k` is ONE level), so
@@ -190,6 +193,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       orgConfig.useOrgConfig(pool, cfg.dataDir);
       await orgConfig.fresh(cfg.auth.org);
       (require('./jobs/schedules') as typeof import('./jobs/schedules')).wireSchedules(pool, cfg.auth.mode === 'dev');
+      // Subscriptions: scheduled sends to Slack / Teams, their webhook URLs in the encrypted store (none without a master key).
+      (require('./subscriptions/job') as typeof import('./subscriptions/job')).wireSubscriptions(
+        pool, cfg.auth.mode === 'dev', cfg.masterKey ? createSecretStore(pool, cfg.masterKey) : null, app.log);
       // S3 (T5.2): objects are registered in Postgres; old versions are collected by a job.
       if (cfg.storage.s3) {
         const storage = require('../engine/storage') as typeof import('../engine/storage');
@@ -215,6 +221,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       if (cfg.storage.s3) (require('../engine/storage') as typeof import('../engine/storage')).useStorageDb(null);
       useSecretStore(null);
       useAiKeys(null, null);
+      (require('./subscriptions/job') as typeof import('./subscriptions/job')).unwireSubscriptions();
       orgConfig.useOrgConfig(null);
       await pool.end();
     });
@@ -466,7 +473,7 @@ export function registerHandlers(): void {
   (require('../ipc/pipelines') as typeof import('../ipc/pipelines')).register({ headless: true });
 
   // Analytics workbenches A (T2.10): statistics, key drivers, scenarios, segments.
-  for (const mod of ['../ipc/stats', '../ipc/drivers', '../ipc/scenarios', '../ipc/segments']) {
+  for (const mod of ['../ipc/stats', '../ipc/drivers', '../ipc/driversPoint', '../ipc/scenarios', '../ipc/segments']) {
     (require(mod) as { register: () => void }).register();
   }
 
@@ -476,7 +483,7 @@ export function registerHandlers(): void {
     (require(mod) as { register: () => void }).register();
   }
   // Analyses and authoring, metrics (T2.8). `periods` (metric:compare) is T2.14's registration above.
-  for (const mod of ['../ipc/analyses', '../ipc/templates', '../ipc/dashboards', '../ipc/metrics', '../ipc/analysesServer']) {
+  for (const mod of ['../ipc/analyses', '../ipc/templates', '../ipc/dashboards', '../ipc/metrics', '../ipc/metricCheck', '../ipc/analysesServer']) {
     (require(mod) as { register: () => void }).register();
   }
   // Reports, stories and scorecards (T2.13): the records, the server-resolved pages a file is written from.
@@ -497,4 +504,6 @@ export function registerHandlers(): void {
   (require('../ipc/liveProfile') as typeof import('../ipc/liveProfile')).register();
   // Incremental refresh settings (the desktop panel's web port): what 5/15-minute cadences and fresh on ask need.
   (require('../ipc/incremental') as typeof import('../ipc/incremental')).register();
+  // Subscriptions: scheduled sends to Slack / Teams, and the org's channels.
+  (require('./subscriptions/rpc') as typeof import('./subscriptions/rpc')).register();
 }

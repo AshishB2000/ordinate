@@ -1,0 +1,55 @@
+/* "Explain this change" — the chart point's side panel. The answer below the
+   pickers is DriversView's own (drivers/Drivers.module.css); this file lays out
+   the two period pickers above it and the refusal card. Tokens only. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  gap: var(--sp-16);
+}
+
+/* The two periods: the same gutter as the answer panel under them. */
+.controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 300px));
+  gap: var(--sp-12);
+  padding: var(--sp-4) var(--sp-24) 0;
+}
+.skelPick {
+  display: block;
+  height: 54px;
+  border-radius: var(--r-md);
+}
+
+/* A refusal or a failed call: the kit's own card with the server's sentence, in the answer's gutter — never a blank. */
+.state {
+  margin: 0 var(--sp-24) var(--sp-32);
+}
+/* The Live refusal is the compact, chromeless state (a tile's): here it gets the card. */
+.framed {
+  display: grid;
+  place-items: center;
+  padding: var(--sp-48) var(--sp-24);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+/* The anchor a point's context menu opens from: where the pointer was. */
+.anchor {
+  position: fixed;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 700px) {
+  .controls {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: var(--sp-8);
+  }
+  .state {
+    margin-inline: var(--sp-8);
+  }
+}

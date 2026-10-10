@@ -139,6 +139,15 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
     }
   };
 
+  /**
+   * A new calculated measure is the chart's only one: draw its figures in its own
+   * format (a ratio as a percent). Kept with the draft, saved by Save — never
+   * written on its own, or a saved chart would wear a format its saved measure lacks.
+   */
+  const formatAs = (kind: string) => {
+    if ((kind === 'percent' || kind === 'currency') && !overrides.numberFormat) setOverrides({ ...overrides, numberFormat: kind });
+  };
+
   const save = async (finalName: string) => {
     const grain = isDate && !eff.grain && reply?.category?.grain ? { grain: reply.category.grain } : {};
     const body = { name: finalName, chartType: current || chartType || 'column', encoding: { ...eff, ...grain }, overrides, filters: live, analytics: overlays };
@@ -165,6 +174,7 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
     eff, isDate, complete, preview, reply, data, fit, hasGeo, recommended, current, label, pickType, save, explain,
     drawn, scope, measures: measureNames(eff), visualId, datasetId, asOf, setAsOf, liveDataset: !!initial.live, offType,
     canEdit: can('editor'),
+    formatAs,
   };
 }
 

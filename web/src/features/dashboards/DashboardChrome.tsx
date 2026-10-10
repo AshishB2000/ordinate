@@ -21,6 +21,9 @@ import { useEditor } from '../analyses/editor/context';
 import { CommentsPanel } from './CommentsPanel';
 import { reason, useAsOfStamps, useCommentsLive, useFx, useSetDashboardCurrency } from './api';
 import st from './Style.module.css';
+
+// The head's Subscribe action (scheduled sends to Slack / Teams) lives with its dialog.
+export { SubscribeButton } from '../subscriptions/SubscribeButton';
 import s from './Dashboards.module.css';
 
 export interface DashStyle {

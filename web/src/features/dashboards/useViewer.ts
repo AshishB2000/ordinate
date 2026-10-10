@@ -5,7 +5,9 @@
 //   selection   sheet-wide filter steps the reader arrived with (a navigate
 //               action's carry) or clicked into (a map mark); every tile reads them
 //   tileSteps   per-tile narrowing from a `filter_target` action
-//   crumb       where a navigate action came FROM, for "From …" ← Back
+//   clicks      click-to-filter: the marks the reader clicked, each attributed to
+//               its card (filters.ts toggleClickFilter) — every OTHER card reads them
+//   crumb      where a navigate action came FROM, for "From …" ← Back
 //   asOf        the sheet read as of a snapshot time (KPI deltas then go: a past
 //               figure against today's periods means nothing)
 //   currency    the dashboard's own currency (fx settings), money shows in it
@@ -17,6 +19,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import type { Step } from '../analyses/api';
+import { toggleClickFilter, type ClickFilter, type ClickMark } from '../analyses/editor/filters';
 import { useFx, type TargetKind } from './api';
 import { linkedThread } from './CommentsPanel';
 
@@ -40,6 +43,12 @@ export interface Viewer {
   narrowed: ReadonlyMap<string, Step[]>;
   narrow(tiles: string[], steps: Step[]): void;
   unnarrow(tiles: string[]): void;
+  /** Click-to-filter (never saved): one entry per (card, column). */
+  clicks: readonly ClickFilter[];
+  /** A click on a mark of card `origin`; `additive` is ⌘/Ctrl held. */
+  clickMark(origin: string, mark: ClickMark, additive: boolean): void;
+  /** One chip's ×; no argument clears every click-filter (Esc, "Clear"). */
+  clearClicks(one?: ClickFilter): void;
   crumb: Crumb | null;
   asOf: string | null;
   setAsOf(v: string | null): void;
@@ -84,6 +93,9 @@ export function useViewer(projectId: string, analysisId: string): Viewer & { arr
   const [arrived] = useState(() => takeNavigation(analysisId));
   const [selection, setSelection] = useState<Step[]>(() => arrived?.carry ?? []);
   const [narrowed, setNarrowed] = useState<ReadonlyMap<string, Step[]>>(() => new Map());
+  const [clicks, setClicks] = useState<readonly ClickFilter[]>([]);
+  const clickMark = useCallback((origin: string, mark: ClickMark, additive: boolean) => setClicks((c) => toggleClickFilter(c, origin, mark, additive)), []);
+  const clearClicks = useCallback((one?: ClickFilter) => setClicks((c) => (one ? c.filter((x) => !(x.origin === one.origin && x.column === one.column)) : c.length ? [] : c)), []);
   const [asOf, setAsOf] = useState<string | null>(null);
   const [presenting, setPresenting] = useState(false);
   // `?comment=<kind>:<id>` (Home's "Recent comments"): the thread opens on arrival.
@@ -138,6 +150,9 @@ export function useViewer(projectId: string, analysisId: string): Viewer & { arr
           for (const t of tiles) next.delete(t);
           return next;
         }),
+      clicks,
+      clickMark,
+      clearClicks,
       crumb: arrived?.crumb ?? null,
       arrivedSheet: arrived?.sheet,
       asOf,
@@ -148,6 +163,6 @@ export function useViewer(projectId: string, analysisId: string): Viewer & { arr
       comments,
       openComments,
     }),
-    [selection, toggleSelection, narrowed, narrow, arrived, asOf, currency, presenting, comments],
+    [selection, toggleSelection, narrowed, narrow, clicks, clickMark, clearClicks, arrived, asOf, currency, presenting, comments],
   );
 }

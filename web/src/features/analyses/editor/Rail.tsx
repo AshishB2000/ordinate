@@ -2,9 +2,15 @@
 // (legacy authoringRail.ts): Data, Visuals, Filters, Properties. Clicking the
 // lit icon again closes the flyout and the sheet takes the window.
 
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useDatasetColumns, useDatasets } from '../../../api/datasets';
+import { Switch } from '../../../ui/Choice';
+import { toast } from '../../../ui/Toast';
+import { CalcDialog } from '../../calc/CalcDialog';
+import { useCan } from '../../projects/api';
+import { useMetricList } from '../metrics/api';
+import { useDatasetColumns, useDatasets, type DatasetColumns } from '../../../api/datasets';
 import { Select } from '../../../ui/Select';
 import { SkeletonRows } from '../../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../../ui/States';
@@ -45,13 +51,35 @@ function DataPane() {
   return <Fields key={def.datasetId} def={def} />;
 }
 
+/** The calculated-field dialog over the selected card's dataset; the metric list is read only once it opens. */
+function RailCalc({ projectId, dataset, onClose }: { projectId: string; dataset: DatasetColumns; onClose: () => void }) {
+  const metrics = useMetricList(projectId);
+  const client = useQueryClient();
+  return (
+    <CalcDialog
+      projectId={projectId}
+      datasetId={dataset.id}
+      columns={dataset.columns}
+      metrics={metrics.data ?? []}
+      live={dataset.mode === 'live'}
+      onClose={onClose}
+      onCreated={(made) => {
+        void client.invalidateQueries({ queryKey: ['metric:list', projectId] });
+        toast(made.kind === 'measure' ? `Saved the measure “${made.metric.name}”. Pick it as a measure in the Visuals builder, or on a KPI card.` : `Added the column “${made.name}” to ${dataset.name}.`, { kind: 'success' });
+      }}
+    />
+  );
+}
+
 function Fields({ def }: { def: VisualDef }) {
   const ed = useEditor();
   const cols = useDatasetColumns(ed.projectId, def.datasetId);
   // The catalog's display names and descriptions (authoringPanes.ts ctDocColumns).
   const docs = useColumnDocs(ed.projectId, def.datasetId);
   const sets = useDatasets(ed.projectId);
+  const can = useCan(ed.projectId);
   const [q, setQ] = useState('');
+  const [calc, setCalc] = useState(false);
   if (cols.isPending) return <SkeletonRows rows={6} label="Reading the fields" />;
   if (cols.isError || !cols.data) return <ErrorState compact heading={3} title="The fields could not be read" message={cols.error?.message ?? 'This dataset is no longer in the project.'} onRetry={() => void cols.refetch()} />;
   const label = (name: string) => docs.data?.[name]?.displayName || name;
@@ -77,11 +105,14 @@ function Fields({ def }: { def: VisualDef }) {
         ))}
         {shown.length === 0 && <li className={s.paneHint}>No field matches “{q.trim()}”.</li>}
       </ul>
-      {/* "+ Calculated field" (authoringRail.ts): a calculated_field step on this dataset, in Prepare. */}
-      <Link className={buttonClass('ghost', 'sm')} to={`/data/${ed.projectId}/${def.datasetId}/prepare?add=calculated_field`}>
-        <Icon name="plus" />
-        <span>Calculated field</span>
-      </Link>
+      {/* "+ Calculated field" (authoringRail.ts): a measure or a column on this dataset, written here (../../calc). */}
+      {can('editor') && (
+        <button type="button" className={buttonClass('ghost', 'sm')} onClick={() => setCalc(true)}>
+          <Icon name="plus" />
+          <span>Calculated field</span>
+        </button>
+      )}
+      {calc && <RailCalc projectId={ed.projectId} dataset={cols.data} onClose={() => setCalc(false)} />}
       <Link className={buttonClass('secondary', 'sm')} to={builderFor(ed.projectId, def.id)}>
         <Icon name="pencil" />
         <span>Edit fields in the Visuals builder</span>
@@ -145,8 +176,18 @@ function FiltersPane() {
   const dsId = picked ?? used[0] ?? sets.data?.[0]?.id ?? '';
   const cols = useDatasetColumns(ed.projectId, dsId || undefined);
   const steps = ed.doc.filters as FilterStep[];
+  const sheet = ed.doc.sheets[ed.sheet];
   return (
     <div className={s.paneBody}>
+      {/* One switch per sheet (dashboards.ts Page.clickFilter); a visual opts out in its own Properties → Interactions. */}
+      <div className={s.paneBlock}>
+        <Switch
+          label="Click to filter"
+          hint={`Clicking a mark on a chart filters the other cards on “${sheet?.name ?? 'this sheet'}”. Readers get it too; nothing they click is saved.`}
+          checked={sheet?.clickFilter === true}
+          onCheckedChange={(on) => ed.edit(on ? 'Turn on click to filter' : 'Turn off click to filter', (d) => void (d.sheets[ed.sheet].clickFilter = on))}
+        />
+      </div>
       <p className={s.paneHint}>Dashboard filters apply to every card before its own. Controls sit above the sheet, where readers move them.</p>
       {(sets.data?.length ?? 0) > 1 && (
         <Select

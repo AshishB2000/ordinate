@@ -52,6 +52,11 @@ export interface VizMeasure {
    * deleted — plots exactly as it did. `vizData.buildVizData` never reads it;
    * it is carried so the chip can show the metric's NAME and format, and so
    * `metric:usage` can say which visuals a metric appears on.
+   *
+   * A SIMPLE metric plots those stored fields. A FORMULA metric has no column of
+   * its own: the chart door (`ipc/visuals.vizDataFor`) plans it into the totals
+   * it is made of and calculates it per cell, after totals
+   * (./metricMeasures, ipc/vizMetricMeasures) — `column` then carries its name.
    */
   metricId?: string;
   /**
@@ -179,10 +184,12 @@ export interface VizOverrides extends FormatOverrides {
    * whitelists it — a new storage field would be a new file-format decision for
    * two booleans.
    *
-   * crossFilter: clicking a bar/slice on this visual applies the clicked
-   * category value as a dashboard-wide FilterStep. Default OFF: a click that
-   * silently refilters every other card is a surprise, and the sheet has an
-   * explicit filter bar for the deliberate case.
+   * crossFilter: clicking a mark on this visual filters the other cards on the
+   * sheet (dashboardFilters.clickFilterOn). Three states: `true` opts the
+   * visual in on any sheet; `false` opts it OUT of a sheet whose own
+   * "Click to filter" switch (Page.clickFilter) is on; absent follows the
+   * sheet — which is off for a sheet saved before the switch existed, so a
+   * click there never silently refilters every other card.
    * showTooltips: default ON when absent, matching every chart drawn before this
    * key existed.
    */

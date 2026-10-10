@@ -44,6 +44,7 @@ import * as parquetStore from '../engine/parquetStore';
 import { OTHER_LABEL } from '../analysis/categoryKey';
 import type { VizEncoding } from '../analysis/visuals';
 import { engineColumns, isEngineEncoding } from '../analysis/engineViz';
+import { hasMetricMeasure, withLeafMeasures } from '../analysis/metricMeasures';
 import { withoutSamples } from '../data/liveProfile';
 
 export type SensitiveLevel = 'personal' | 'financial';
@@ -239,6 +240,8 @@ export async function applyToChart<R extends ChartReplyLike>(
   if (!reply || !reply.ok || !reply.data || !encoding) return reply;
   const action = (await store.getPolicy(projectId))[sharePath];
   if (action === 'include') return reply;
+  // A formula measure is a figure drawn from the columns it totals: the policy is shown those.
+  if (hasMetricMeasure(encoding)) encoding = await withLeafMeasures(projectId, datasetId, encoding);
 
   const cache = new Map<string, Map<string, SensitiveLevel>>();
   const sens = async (ds: string | undefined, col: string | undefined): Promise<boolean> => {

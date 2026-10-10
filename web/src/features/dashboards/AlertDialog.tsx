@@ -17,6 +17,7 @@ import { Select } from '../../ui/Select';
 import { Tab, TabList, TabPanel, Tabs } from '../../ui/Tabs';
 import { toast } from '../../ui/Toast';
 import type { Card, Step } from '../analyses/api';
+import { AlertChannels } from '../subscriptions/AlertChannels';
 import { reason, useAlerts, useAlertWrite, type AlertRule } from './api';
 import s from './Alerts.module.css';
 
@@ -78,6 +79,7 @@ export function AlertDialog({ projectId, subject, onClose }: { projectId: string
   const [period, setPeriod] = useState(existing?.change?.periodColumn ?? '');
   const [name, setName] = useState(existing?.name ?? '');
   const [touched, setTouched] = useState(!!existing);
+  const [channelIds, setChannelIds] = useState<string[]>(existing?.channelIds ?? []);
   const [test, setTest] = useState<{ busy?: boolean; text?: string; fire?: boolean; error?: boolean } | null>(null);
   const cur = current.data?.ok && typeof current.data.value === 'number' ? current.data.value : null;
 
@@ -103,6 +105,7 @@ export function AlertDialog({ projectId, subject, onClose }: { projectId: string
     ...(mode === 'threshold' ? { threshold: { op: op as '<', value: Number(value) } } : {}),
     ...(mode === 'change' ? { change: { pct: Number(pct), direction: dir as 'down', vs: vs as 'previous_refresh', ...(vs === 'previous_period' ? { periodColumn: period } : {}) } } : {}),
     ...(subject.analysisId ? { createdFrom: { analysisId: subject.analysisId, cardId: subject.cardId ?? '' } } : {}),
+    ...(channelIds.length ? { channelIds } : {}),
   });
   const complete = mode === 'anomaly' || (mode === 'threshold' ? value.trim() !== '' && Number.isFinite(Number(value)) : Number(pct) > 0 && (vs !== 'previous_period' || !!period));
 
@@ -194,6 +197,7 @@ export function AlertDialog({ projectId, subject, onClose }: { projectId: string
           setName(e.target.value);
         }}
       />
+      <AlertChannels value={channelIds} onChange={setChannelIds} />
       {test && (
         <p className={test.error ? `${s.alTest} ${s.alTestBad}` : test.fire ? `${s.alTest} ${s.alTestFire}` : s.alTest} role="status">
           {test.text}
