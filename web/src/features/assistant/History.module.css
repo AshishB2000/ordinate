@@ -1,0 +1,50 @@
+/* The dock's History popover: a search field over a list that scrolls inside
+   the panel. Rows are the kit's menu row, so they read as the title menu's. */
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  width: min(320px, calc(100vw - var(--sp-32)));
+  padding: var(--sp-8);
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  max-height: min(360px, 55vh);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-3) transparent;
+}
+.group {
+  display: flex;
+  flex-direction: column;
+}
+.groupLabel {
+  padding: var(--sp-4) var(--sp-8);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+}
+.row {
+  composes: item from '../../ui/floating.module.css';
+  flex: none;
+}
+.row[aria-current] {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+.rowTitle {
+  composes: itemText from '../../ui/floating.module.css';
+}
+.rowMeta {
+  composes: shortcut from '../../ui/floating.module.css';
+}
+.empty {
+  padding: var(--sp-12) var(--sp-8);
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}

@@ -93,6 +93,20 @@ if (!dbUrl) {
     assert.equal(await setup.getByRole('link', { name: /Set up AI/ }).count(), 0, 'no Set up button where nothing can be set up');
     assert.equal(await page.getByRole('textbox', { name: 'Ask the Assistant' }).isDisabled(), true);
     await screens(page, 'dock-setup');
+    // The left edge is a handle the pointer can find: it runs the panel's height
+    // (it was 0 x 0 once), drags the panel wider, and a double-click restores the default.
+    const dock = page.getByRole('complementary', { name: 'Assistant' });
+    const edge = await dock.getByRole('separator', { name: 'Resize the Assistant panel' }).boundingBox();
+    const start = await dock.boundingBox();
+    assert.ok(edge && start && edge.height === start.height, `the resize handle spans the panel (${JSON.stringify(edge)})`);
+    const y = edge.y + edge.height / 2;
+    await page.mouse.move(edge.x, y);
+    await page.mouse.down();
+    await page.mouse.move(edge.x - 60, y, { steps: 4 });
+    await page.mouse.up();
+    assert.equal(Math.round((await dock.boundingBox())?.width ?? 0), Math.round(start.width) + 60, 'dragging the edge left widens the panel by the drag');
+    await page.mouse.dblclick(edge.x - 60, y);
+    assert.equal(Math.round((await dock.boundingBox())?.width ?? 0), 340, 'a double-click restores the default width');
     // Escape closes it and hands focus back to the toggle.
     await page.keyboard.press('Escape');
     await page.getByRole('complementary', { name: 'Assistant' }).waitFor({ state: 'detached' });

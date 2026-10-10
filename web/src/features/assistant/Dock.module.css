@@ -15,13 +15,16 @@
   outline: none;
 }
 
-/* The kit's Splitter, astride the panel's left border. */
+/* The kit's Splitter, ON the panel's left border (left: -1px is the border's
+   own pixel). A flex row, so the Splitter's `align-self: stretch` has something
+   to stretch against: as a block child it was 0 x 0 and could not be grabbed. */
 .handle {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -3px;
+  left: -1px;
   z-index: 5;
+  display: flex;
 }
 
 .head {
@@ -30,10 +33,11 @@
   align-items: center;
   gap: var(--sp-8);
   height: var(--sp-48);
-  padding: 0 var(--sp-12);
+  padding: 0 var(--sp-8) 0 var(--sp-4);
   border-bottom: 1px solid var(--border-hairline);
 }
-/* A chip sized to the thread's name; margin-right:auto pins the actions right. */
+/* The conversation's name, as quiet as a heading until the pointer is on it;
+   margin-right:auto pins the actions right. */
 .threadTitle {
   flex: 0 1 auto;
   margin-right: auto;
@@ -42,20 +46,24 @@
   align-items: center;
   gap: var(--sp-4);
   height: var(--ctl-sm);
-  padding: 0 var(--sp-12);
-  border: 1px solid var(--border);
-  border-radius: var(--r-full);
-  background: var(--surface-1);
-  color: var(--text);
+  padding: 0 var(--sp-8);
+  border: none;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text-strong);
   font: inherit;
-  font-size: var(--t-12);
-  font-weight: 500;
+  font-size: var(--t-13);
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
 }
-.threadTitle:hover {
+.threadTitle:hover:not(:disabled),
+.threadTitle[data-state='open'] {
   background: var(--surface-2);
-  color: var(--text-strong);
+}
+.threadTitle:disabled {
+  color: var(--text-dim);
+  cursor: default;
 }
 .threadTitle:focus-visible {
   outline: var(--focus-ring-w) solid var(--focus-ring);
@@ -74,36 +82,9 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
+  gap: 2px;
 }
 
-/* The on/off pill: a toggle when a model is ready, a signpost when not. */
-.pill {
-  flex: none;
-  padding: 3px var(--sp-8);
-  border: 1px solid var(--border);
-  border-radius: var(--r-full);
-  background: var(--surface);
-  color: var(--muted);
-  font: inherit;
-  font-size: var(--t-12);
-  font-weight: 600;
-  cursor: pointer;
-}
-.pill:hover:not(:disabled) {
-  color: var(--text);
-  border-color: var(--border-3);
-}
-.pill:focus-visible {
-  outline: var(--focus-ring-w) solid var(--focus-ring);
-  outline-offset: 1px;
-}
-.pill:disabled {
-  cursor: default;
-}
-.pillOff {
-  color: var(--text-dim);
-}
 /* "Based on …" — its own row under the header; only the label truncates. */
 .context {
   flex: none;

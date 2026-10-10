@@ -20,7 +20,8 @@ import { ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { ask, mineModel, newThread, useAiStatus, useHistory, type ActivityStep, type SuggestedAction, type Turn } from './api';
 import { AiNotReady } from './AiNotReady';
-import { AiPill, modelLabel, ModelPicker, ThreadMenu, TOGGLE_ID } from './DockParts';
+import { DockMenu, modelLabel, ModelPicker, ThreadMenu, TOGGLE_ID } from './DockParts';
+import { History } from './History';
 import { pickDockProject, setDockOpen, takePendingQuestion, useDockContext, useDockProject, usePendingQuestion } from './dockState';
 import { PlanCard, type PlanAction } from './PlanCard';
 import { starterPrompts } from './prompts';
@@ -28,6 +29,7 @@ import { Transcript, type Pending } from './Transcript';
 import s from './Dock.module.css';
 
 const MIN_WIDTH = 300;
+const DEFAULT_WIDTH = 340;
 
 /** A plan proposal on screen; `key` keeps a started one mounted across turns. */
 interface PlanSlot {
@@ -53,12 +55,13 @@ export default function DockPanel() {
   const [hint, setHint] = useState('');
   const [plans, setPlans] = useState<PlanSlot[]>([]);
   const [text, setText] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const panel = useRef<HTMLElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const pendingRef = useRef<Pending | null>(null);
   pendingRef.current = pending;
-  const [width, setWidth, commitWidth] = useStoredSize('ordinate.dockWidth', 340, MIN_WIDTH, Math.max(window.innerWidth * 0.4, MIN_WIDTH));
+  const [width, setWidth, commitWidth] = useStoredSize('ordinate.dockWidth', DEFAULT_WIDTH, MIN_WIDTH, Math.max(window.innerWidth * 0.4, MIN_WIDTH));
 
   // The thread the server resolved (the most recent one when none was asked for).
   const shownThread = history.data?.threadId ?? '';
@@ -127,6 +130,7 @@ export default function DockPanel() {
     (next: Turn[], tid: string | null) => {
       if (tid) setThreadId(tid);
       qc.setQueryData(['copilot:history', pid, tid ?? threadId], { ok: true, turns: next, threadId: tid });
+      void qc.invalidateQueries({ queryKey: ['copilot:threads', pid] }); // a new turn renames and reorders the list
     },
     [qc, pid, threadId],
   );
@@ -139,6 +143,11 @@ export default function DockPanel() {
 
   async function startNew(): Promise<void> {
     if (!pid) return;
+    // Already on a blank conversation: a second one would only be an empty row in History.
+    if (shownThread && turns.length === 0) {
+      input.current?.focus();
+      return;
+    }
     const id = await newThread(pid).catch(() => '');
     switchThread(id);
     setTurns([], id || null);
@@ -203,7 +212,7 @@ export default function DockPanel() {
     : !ready
       ? 'AI isn’t set up for your organization yet.'
       : !enabled
-        ? 'The Assistant is off. Turn it back on with the toggle above.'
+        ? 'The Assistant is off.'
         : "Ask about what you're looking at…";
 
   const notice = (() => {
@@ -217,7 +226,13 @@ export default function DockPanel() {
         </div>
       );
     }
-    if (!enabled) return <div className={s.hint}>The Assistant is off. Everything else in Ordinate works exactly as it does now.</div>;
+    if (!enabled) {
+      return (
+        <div className={s.hint}>
+          {`The Assistant is off. ${isAdmin ? 'Turn it back on from the ⋯ menu above.' : 'An org admin can turn it back on.'} Everything else in Ordinate works exactly as it does now.`}
+        </div>
+      );
+    }
     return null;
   })();
 
@@ -226,14 +241,22 @@ export default function DockPanel() {
     <>
       <div className={s.scrim} onClick={() => setDockOpen(false)} aria-hidden="true" />
       <aside id="dock-panel" ref={panel} className={s.panel} style={{ width }} tabIndex={-1} aria-label="Assistant">
-        <div className={s.handle}>
+        {/* Double-click the line: back to the width the dock ships with. */}
+        <div
+          className={s.handle}
+          onDoubleClick={() => {
+            setWidth(DEFAULT_WIDTH);
+            commitWidth(DEFAULT_WIDTH);
+          }}
+        >
           <Splitter pane="after" label="Resize the Assistant panel" size={width} min={MIN_WIDTH} max={Math.max(window.innerWidth * 0.4, MIN_WIDTH)} onSizeChange={setWidth} onCommit={commitWidth} />
         </div>
         <div className={s.head}>
-          <ThreadMenu projectId={pid} threadId={shownThread} title={title} onOpen={switchThread} />
+          <ThreadMenu projectId={pid} threadId={shownThread} title={title} onOpen={switchThread} onAll={() => setHistoryOpen(true)} />
           <div className={s.headActions}>
-            <AiPill status={status.data} isAdmin={isAdmin} />
             <IconButton icon="plus" size="sm" label="New conversation" disabled={!pid || !!pending} onClick={() => void startNew()} />
+            <History projectId={pid} threadId={shownThread} open={historyOpen} onOpenChange={setHistoryOpen} onOpen={switchThread} />
+            <DockMenu status={status.data} isAdmin={isAdmin} turns={turns} />
             <IconButton icon="x" size="sm" label="Close the Assistant" onClick={() => setDockOpen(false)} />
           </div>
         </div>
