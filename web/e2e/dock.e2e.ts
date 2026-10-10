@@ -238,5 +238,32 @@ if (!dbUrl) {
     await box.pressSequentially('it');
     await box.press('Enter');
     await dock.getByText(/^dataset: Sales · /).waitFor();
+
+    // ── Rename and delete a conversation ────────────────────────────────────
+    // ⋯ renames the one on screen; the header then shows the STORED name, which a
+    // reload proves. History's row deletes it after asking, and its turns go with it.
+    await page.reload();
+    await settled(page);
+    await dock.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitem', { name: 'Rename conversation' }).click();
+    const rename = page.getByRole('dialog', { name: 'Rename conversation' });
+    assert.equal(await rename.getByRole('textbox', { name: 'Name' }).inputValue(), 'What is in this project?', 'the dialog opens on the name its first question gave it');
+    await rename.getByRole('textbox', { name: 'Name' }).fill('Ledger review');
+    await rename.getByRole('button', { name: 'Rename' }).click();
+    await dock.getByRole('button', { name: 'Conversations — Ledger review' }).waitFor();
+    await page.reload();
+    await settled(page);
+    await dock.getByRole('button', { name: 'Conversations — Ledger review' }).waitFor();
+    await dock.getByText(ANSWER.join(''), { exact: true }).first().waitFor(); // the stub gave the same answer twice
+
+    await dock.getByRole('button', { name: 'Conversation history' }).click();
+    const history = page.getByRole('dialog', { name: 'Conversation history' });
+    await history.getByTestId('history-row').first().hover(); // the row's actions show under the pointer
+    await history.getByRole('button', { name: 'Delete Ledger review' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Delete this conversation?' });
+    await confirm.getByText(/“Ledger review” and everything in it will be removed/).waitFor();
+    await confirm.getByRole('button', { name: 'Delete' }).click();
+    await dock.getByRole('button', { name: 'Conversations — New conversation' }).waitFor();
+    assert.equal(await dock.getByText(ANSWER.join(''), { exact: true }).count(), 0, 'the deleted conversation\'s turns are gone from the dock');
   });
 }

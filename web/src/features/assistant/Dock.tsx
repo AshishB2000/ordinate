@@ -18,7 +18,7 @@ import { SkeletonRows } from '../../ui/Skeleton';
 import { Splitter, useStoredSize } from '../../ui/Splitter';
 import { ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
-import { ask, mineModel, newThread, useAiStatus, useHistory, type ActivityStep, type SuggestedAction, type Turn } from './api';
+import { ask, mineModel, newThread, UNTITLED, useAiStatus, useHistory, type ActivityStep, type SuggestedAction, type Turn } from './api';
 import { AiNotReady } from './AiNotReady';
 import { Composer } from './Composer';
 import { DockMenu, modelLabel, ThreadMenu, TOGGLE_ID } from './DockParts';
@@ -26,6 +26,7 @@ import { History } from './History';
 import { pickDockProject, setDockOpen, takePendingQuestion, useDockContext, useDockProject, usePendingQuestion, type DockContext } from './dockState';
 import { PlanCard, type PlanAction } from './PlanCard';
 import { starterPrompts } from './prompts';
+import { ThreadActionDialog, type ThreadAct } from './ThreadActions';
 import { Transcript, type Pending } from './Transcript';
 import s from './Dock.module.css';
 
@@ -61,6 +62,7 @@ export default function DockPanel() {
   const [plans, setPlans] = useState<PlanSlot[]>([]);
   const [text, setText] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [act, setAct] = useState<ThreadAct | null>(null); // a rename or delete being asked about
   const input = useRef<HTMLTextAreaElement>(null);
   const panel = useRef<HTMLElement>(null);
   const stage = useRef<HTMLDivElement>(null);
@@ -70,6 +72,8 @@ export default function DockPanel() {
 
   // The thread the server resolved (the most recent one when none was asked for).
   const shownThread = history.data?.threadId ?? '';
+  // Its stored name, once it has one: a first question's words, or what it was renamed to.
+  const storedTitle = history.data?.title && history.data.title !== UNTITLED ? history.data.title : null;
   const turns: Turn[] = history.data?.turns ?? [];
   const ready = status.data?.ready === true;
   const enabled = status.data?.copilotEnabled !== false;
@@ -79,6 +83,21 @@ export default function DockPanel() {
   useEffect(() => {
     (input.current && !input.current.disabled ? input.current : panel.current)?.focus();
   }, []);
+
+  // A rename or delete dialog closing: what opened it (a menu item, a History row)
+  // is gone, so focus would fall to <body>. Back to the composer, a tick after
+  // the dialog lets go of it.
+  const hadAct = useRef(false);
+  useEffect(() => {
+    if (act) {
+      hadAct.current = true;
+      return;
+    }
+    if (!hadAct.current) return;
+    hadAct.current = false;
+    const id = setTimeout(() => (input.current && !input.current.disabled ? input.current : panel.current)?.focus(), 0);
+    return () => clearTimeout(id);
+  }, [act]);
 
   // Esc closes and hands focus back to the toggle — unless something above (a menu, a select) took it.
   useEffect(() => {
@@ -134,10 +153,11 @@ export default function DockPanel() {
   const setTurns = useCallback(
     (next: Turn[], tid: string | null) => {
       if (tid) setThreadId(tid);
-      qc.setQueryData(['copilot:history', pid, tid ?? threadId], { ok: true, turns: next, threadId: tid });
+      // The same conversation keeps the name the server gave for it (a rename outlives its next turn).
+      qc.setQueryData(['copilot:history', pid, tid ?? threadId], { ok: true, turns: next, threadId: tid, title: tid && tid === shownThread ? storedTitle : null });
       void qc.invalidateQueries({ queryKey: ['copilot:threads', pid] }); // a new turn renames and reorders the list
     },
-    [qc, pid, threadId],
+    [qc, pid, threadId, shownThread, storedTitle],
   );
 
   function switchThread(id: string): void {
@@ -202,7 +222,14 @@ export default function DockPanel() {
   }
 
   const firstUser = turns.find((t) => t.role === 'user')?.text.trim() ?? '';
-  const title = firstUser ? (firstUser.length > 40 ? `${firstUser.slice(0, 40)}…` : firstUser) : 'New conversation';
+  const title = storedTitle ?? (firstUser ? (firstUser.length > 40 ? `${firstUser.slice(0, 40)}…` : firstUser) : 'New conversation');
+
+  /** A conversation was renamed or deleted: the lists are stale, and a deleted one on screen gives way to the most recent. */
+  function acted(done: ThreadAct): void {
+    if (done.kind === 'delete' && done.thread.id === shownThread) switchThread('');
+    void qc.invalidateQueries({ queryKey: ['copilot:threads', pid] });
+    void qc.invalidateQueries({ queryKey: ['copilot:history', pid] });
+  }
   const empty = turns.length === 0 && !pending;
   const prompts = empty && usable ? starterPrompts((datasets.data ?? []).map((d) => d.name), context.name) : [];
   const placeholder = !pid
@@ -255,8 +282,8 @@ export default function DockPanel() {
           <ThreadMenu projectId={pid} threadId={shownThread} title={title} onOpen={switchThread} onAll={() => setHistoryOpen(true)} />
           <div className={s.headActions}>
             <IconButton icon="plus" size="sm" label="New conversation" disabled={!pid || !!pending} onClick={() => void startNew()} />
-            <History projectId={pid} threadId={shownThread} open={historyOpen} onOpenChange={setHistoryOpen} onOpen={switchThread} />
-            <DockMenu status={status.data} isAdmin={isAdmin} turns={turns} />
+            <History projectId={pid} threadId={shownThread} open={historyOpen} onOpenChange={setHistoryOpen} onOpen={switchThread} onAct={setAct} />
+            <DockMenu status={status.data} isAdmin={isAdmin} turns={turns} thread={shownThread && !pending ? { id: shownThread, title } : null} onAct={setAct} />
             <IconButton icon="x" size="sm" label="Close the Assistant" onClick={() => setDockOpen(false)} />
           </div>
         </div>
@@ -318,6 +345,7 @@ export default function DockPanel() {
           }
         />
       </aside>
+      {pid && act && <ThreadActionDialog key={`${act.kind}:${act.thread.id}`} projectId={pid} act={act} onClose={() => setAct(null)} onDone={acted} />}
     </>
   );
 }

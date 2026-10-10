@@ -449,6 +449,35 @@ export async function appendTurn(
   return target.turns;
 }
 
+// Rename ONE of the caller's conversations to the user's own words — cleaned the
+// way a derived title is (one line, hard cap). Not a touch: the thread keeps its
+// place and its updatedAt, so renaming an old conversation does not make it the
+// one that reopens next. Null when there is nothing to rename: an invalid id, a
+// thread that is not the caller's, or a title with nothing in it.
+// ponytail: a thread renamed to exactly FALLBACK_TITLE is re-derived by its next
+// first user turn — a marker field if anyone wants "Conversation" to stick.
+export async function renameThread(projectId: string, threadId: string, title: string): Promise<CopilotThreadSummary | null> {
+  if (!isValidId(projectId) || typeof title !== 'string' || title.trim() === '') return null;
+  const threads = await loadThreads(projectId);
+  const target = mine(threads).find((t) => t.id === threadId);
+  if (!target) return null;
+  target.title = clampTitle(title);
+  await writeThreads(projectId, threads);
+  return { id: target.id, title: target.title, updatedAt: target.updatedAt, turnCount: target.turns.length };
+}
+
+// Delete ONE of the caller's conversations, turns and all. False when there is
+// nothing of the caller's to delete — which is also what another member's thread
+// id gets, so a delete can never say whether someone else's conversation exists.
+export async function deleteThread(projectId: string, threadId: string): Promise<boolean> {
+  if (!isValidId(projectId)) return false;
+  const threads = await loadThreads(projectId);
+  const target = mine(threads).find((t) => t.id === threadId);
+  if (!target) return false;
+  await writeThreads(projectId, threads.filter((t) => t !== target));
+  return true;
+}
+
 // Delete a project's copilot.json. Returns true on success — a missing file is
 // success (force), an invalid id is false.
 export async function clearHistory(projectId: string): Promise<boolean> {

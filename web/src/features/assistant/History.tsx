@@ -4,13 +4,14 @@
 // order and the turn counts are the server's (`copilot:threads`); the search
 // filters TITLES only.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { IconButton } from '../../ui/Button';
 import { Input } from '../../ui/Field';
 import { Popover, PopoverClose } from '../../ui/Popover';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { threadTitle, turnsLabel, useThreads, type ThreadSummary } from './api';
+import type { ThreadAct } from './ThreadActions';
 import s from './DockList.module.css';
 
 export interface ThreadGroup {
@@ -41,11 +42,20 @@ export interface HistoryProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOpen: (id: string) => void;
+  /** Rename or delete a row's conversation (ThreadActions.tsx asks, then does it). */
+  onAct: (act: ThreadAct) => void;
 }
 
-export function History({ projectId, threadId, open, onOpenChange, onOpen }: HistoryProps) {
+export function History({ projectId, threadId, open, onOpenChange, onOpen, onAct }: HistoryProps) {
   const threads = useThreads(projectId, open);
   const [query, setQuery] = useState('');
+  // A row's action closes this and opens a dialog: focus belongs to the dialog's
+  // field then, not back on the clock (which would pull it out from under the dialog).
+  const handingOff = useRef(false);
+  const act = (a: ThreadAct) => {
+    handingOff.current = true;
+    onAct(a);
+  };
   const needle = query.trim().toLowerCase();
   const shown = (threads.data ?? []).filter((t) => threadTitle(t).toLowerCase().includes(needle));
   return (
@@ -58,6 +68,10 @@ export function History({ projectId, threadId, open, onOpenChange, onOpen }: His
         if (!o) setQuery('');
         onOpenChange(o);
       }}
+      onCloseAutoFocus={(e) => {
+        if (handingOff.current) e.preventDefault();
+        handingOff.current = false;
+      }}
       trigger={<IconButton icon="history" size="sm" label="Conversation history" disabled={!projectId} />}
     >
       <Input size="sm" icon="search" aria-label="Search conversations" placeholder="Search conversations" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -69,12 +83,23 @@ export function History({ projectId, threadId, open, onOpenChange, onOpen }: His
           <section key={g.label} className={s.group} aria-label={g.label}>
             <h3 className={s.groupLabel}>{g.label}</h3>
             {g.threads.map((t) => (
-              <PopoverClose asChild key={t.id}>
-                <button type="button" className={s.row} aria-current={t.id === threadId ? 'true' : undefined} onClick={() => onOpen(t.id)}>
-                  <span className={s.rowTitle}>{threadTitle(t)}</span>
-                  <span className={s.rowMeta}>{turnsLabel(t)}</span>
-                </button>
-              </PopoverClose>
+              // The row opens the conversation; its two actions sit beside it (a button cannot hold buttons) and show on hover or focus.
+              <div key={t.id} className={s.rowWrap} data-testid="history-row">
+                <PopoverClose asChild>
+                  <button type="button" className={s.row} aria-current={t.id === threadId ? 'true' : undefined} onClick={() => onOpen(t.id)}>
+                    <span className={s.rowTitle}>{threadTitle(t)}</span>
+                    <span className={s.rowMeta}>{turnsLabel(t)}</span>
+                  </button>
+                </PopoverClose>
+                <span className={s.rowActions}>
+                  <PopoverClose asChild>
+                    <IconButton icon="pencil" size="sm" label={`Rename ${threadTitle(t)}`} onClick={() => act({ kind: 'rename', thread: { id: t.id, title: threadTitle(t) } })} />
+                  </PopoverClose>
+                  <PopoverClose asChild>
+                    <IconButton icon="trash" size="sm" label={`Delete ${threadTitle(t)}`} onClick={() => act({ kind: 'delete', thread: { id: t.id, title: threadTitle(t) } })} />
+                  </PopoverClose>
+                </span>
+              </div>
             ))}
           </section>
         ))}

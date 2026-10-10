@@ -290,6 +290,24 @@ const listen = async (app: import('fastify').FastifyInstance): Promise<string> =
     ok('threads: nor reads one by id', peek.body.ok === true && peek.body.turns.length === 0 && peek.body.threadId === null, JSON.stringify(peek.body));
     ok('threads: the owner still has it', (await boss('copilot:threads', { projectId: project })).body.threads.length === 1);
 
+    // ── Rename and delete are the owner's alone ──────────────────────────────
+    const tid = asked.body.threadId as string;
+    const bossList = async () => (await boss('copilot:threads', { projectId: project })).body.threads as { id: string; title: string; turnCount: number }[];
+    const vicRename = await vic('copilot:renameThread', { projectId: project, threadId: tid, title: 'Mine now' });
+    const vicDelete = await vic('copilot:deleteThread', { projectId: project, threadId: tid });
+    ok('threads: another member can neither rename nor delete it', vicRename.body.ok === false && vicDelete.body.ok === false, JSON.stringify([vicRename.body, vicDelete.body]));
+    const untouched = await bossList();
+    ok('threads: …and it is untouched', untouched.length === 1 && untouched[0].title === 'What is in this project?' && untouched[0].turnCount === 2, JSON.stringify(untouched));
+    const renamed = await boss('copilot:renameThread', { projectId: project, threadId: tid, title: '  Project   overview ' });
+    ok('threads: the owner renames it', renamed.body.ok === true && renamed.body.thread.title === 'Project overview', JSON.stringify(renamed.body));
+    ok('threads: history carries the stored title', (await boss('copilot:history', { projectId: project, threadId: tid })).body.title === 'Project overview');
+    ok('threads: a title with nothing in it is refused by the contract', (await boss('copilot:renameThread', { projectId: project, threadId: tid, title: '   ' })).status === 400);
+    const spare = (await boss('copilot:newThread', { projectId: project })).body.thread.id as string;
+    const gone = await boss('copilot:deleteThread', { projectId: project, threadId: spare });
+    const kept = await bossList();
+    ok('threads: the owner deletes one; the other stays whole', gone.body.ok === true && kept.length === 1 && kept[0].id === tid && kept[0].turnCount === 2, JSON.stringify(kept));
+    ok('threads: deleting it again finds nothing', (await boss('copilot:deleteThread', { projectId: project, threadId: spare })).body.ok === false);
+
     // ── The org's model allow-list (Admin → AI) ─────────────────────────────
     const enabled = (await boss('ai:admin')).body.models as { provider: string; model: string; label: string }[];
     ok('allow-list: activate put the provider\'s model on the list as the default', enabled.length === 1 && enabled[0].provider === 'anthropic', JSON.stringify(enabled));

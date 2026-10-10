@@ -37,6 +37,35 @@
   background: var(--surface-2);
   font-weight: 600;
 }
+/* A History row with its actions: they lie over the row's right end, where the
+   turn count is, and take its place while the pointer or focus is on the row. */
+.rowWrap {
+  position: relative;
+  flex: none;
+  display: flex;
+}
+.rowActions {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  bottom: 0;
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+.rowWrap:hover .rowActions,
+.rowWrap:focus-within .rowActions {
+  display: flex;
+}
+.rowWrap:hover .rowMeta,
+.rowWrap:focus-within .rowMeta {
+  display: none;
+}
+/* …and the title gives them the room, so a long name is cut before them, not under them. */
+.rowWrap:hover .row,
+.rowWrap:focus-within .row {
+  padding-right: 64px;
+}
 .row > svg {
   flex: none;
 }

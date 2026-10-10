@@ -109,7 +109,7 @@ export function useHistory(projectId: string | null, threadId: string) {
     enabled: !!projectId,
     queryFn: async () => {
       const r = (await rpc('copilot:history', { projectId: projectId as string, ...(threadId ? { threadId } : {}) })) as
-        | { ok: true; turns: Turn[]; threadId: string | null }
+        | { ok: true; turns: Turn[]; threadId: string | null; title?: string | null }
         | { ok: false; error?: string };
       if (!r.ok) throw new Error(r.error || 'Could not load the conversation.');
       return r;
@@ -122,8 +122,11 @@ export async function listThreads(projectId: string): Promise<ThreadSummary[]> {
   return r.ok && Array.isArray(r.threads) ? r.threads : [];
 }
 
+/** What the server calls a conversation nobody has named yet — by a first question or by hand (src/ai/copilot.ts FALLBACK_TITLE). */
+export const UNTITLED = 'Conversation';
+
 /** A conversation's row, as the title menu and History both write it. */
-export const threadTitle = (t: ThreadSummary): string => t.title || 'Conversation';
+export const threadTitle = (t: ThreadSummary): string => t.title || UNTITLED;
 export const turnsLabel = (t: ThreadSummary): string => (t.turnCount === 1 ? '1 turn' : `${t.turnCount} turns`);
 
 /** The project's conversations, newest-touched first — one list for the header's switcher and History. */
@@ -155,6 +158,14 @@ export function useAnalysisNames(projectId: string) {
 export async function newThread(projectId: string): Promise<string> {
   const r = (await rpc('copilot:newThread', { projectId })) as { ok: boolean; thread?: { id: string } };
   return r.ok && r.thread ? r.thread.id : '';
+}
+
+/** Rename or delete one of the caller's own conversations; false = it was not there to act on. */
+export async function renameThread(projectId: string, threadId: string, title: string): Promise<boolean> {
+  return ((await rpc('copilot:renameThread', { projectId, threadId, title })) as { ok: boolean }).ok;
+}
+export async function deleteThread(projectId: string, threadId: string): Promise<boolean> {
+  return ((await rpc('copilot:deleteThread', { projectId, threadId })) as { ok: boolean }).ok;
 }
 
 export async function ask(projectId: string, context: Ask, question: string, threadId: string, askId: string): Promise<AskReply> {
