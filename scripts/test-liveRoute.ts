@@ -20,7 +20,9 @@
 //   asOf       the live time survives visual:data's stamp (cached on a hit);
 //              `dashboard:asOfStamps` dates a sheet by its extracts only
 //   more       a scorecard's window on Live (anchored on the warehouse's latest
-//              date) equals the extract over that window; a published story's
+//              date) equals the extract over that window, and a row whose
+//              warehouse call failed carries the code and the catalog sentence
+//              (NEGATIVE CONTROL: an extract's empty period carries none); a published story's
 //              Live metric, and one its warehouse could not give (the block
 //              says why, the rest publishes); the Metrics table's sparkline is
 //              NOT routed and says so, typed; a `LiveFigureError` no handler
@@ -350,6 +352,21 @@ function sameChart(label: string, ext: Reply, live: Reply): void {
   const extWindow = (await post('dashboard:metric', { projectId: P, datasetId: X, column: 'amt', aggregation: 'sum', filters: inWindow })).value;
   ok('scorecard:compute on a Live metric: anchored on the warehouse\'s latest date, the window\'s figure equals the extract\'s over it', card.ok === true
     && card.anchor === lastDay && cmp.sameNumber(extWindow.value, card.rows?.[0]?.value, true) && card.rows[0].spark.length > 1, show([card.anchor, lastDay, win, card.rows?.[0]?.value, extWindow.value]));
+
+  // A row whose warehouse call fails says why — the reason the detail panel's refusal carries.
+  queryCache.clear();
+  fake.hook = async () => ({ ok: false, error: `warehouse down ${H.SECRET_CANARY}` });
+  const downCard = await H.capturingWarn(() => post('scorecard:compute', { projectId: P, id: sc.scorecard?.id, offset: 0 }));
+  fake.hook = null;
+  queryCache.clear();
+  const downRow = downCard.value.value.rows?.[0];
+  ok('…its warehouse down: the row has no figure and carries the code and the catalog\'s sentence, no warehouse text', downCard.value.value.ok === true && downRow?.value === null
+    && show(downRow.unavailable) === show({ code: 'live_failed', error: H.msg.liveWarehouseFailed() }) && !/warehouse down/.test(downCard.value.body) && !downCard.value.body.includes(H.SECRET_CANARY),
+    show(downRow).slice(0, 300));
+  const scExt = (await post('scorecard:create', { projectId: P, name: 'Extract card', period: 'month', rows: [{ metricId: recs.extract.metricId }] })).value;
+  const emptyRow = (await post('scorecard:compute', { projectId: P, id: scExt.scorecard?.id, offset: 600 })).value.rows?.[0];
+  ok('NEGATIVE CONTROLS: an extract row with no data in its period has no figure and NO reason; nor has the Live row the warehouse answered',
+    !!emptyRow && emptyRow.value === null && !('unavailable' in emptyRow) && typeof card.rows?.[0]?.value === 'number' && !('unavailable' in card.rows[0]), show([emptyRow, card.rows?.[0]]).slice(0, 300));
 
   const story = await H.as(ORG_A, () => stories.saveStory(P, { name: 'Live story', blocks: [
     { kind: 'metric', metricId: recs.live.metricId, filters: [] },

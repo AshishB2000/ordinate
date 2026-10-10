@@ -238,6 +238,12 @@ export function PublishDialog({
                             “{d.control}” keeps its first options; {d.options.length} left out.
                           </span>
                         ))}
+                        {/* A control over a Live column with no list of values: not on the page, and the server's sentence says why. */}
+                        {pg.unlisted?.map((u) => (
+                          <span key={u.control} className={p.dropped}>
+                            “{u.control}” is left out of the filter bar. {u.reason}
+                          </span>
+                        ))}
                       </li>
                     ))}
                   </ul>

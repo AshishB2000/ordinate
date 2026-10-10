@@ -18,10 +18,13 @@ export const LIVE_OFF_CODES: ReadonlySet<string> = new Set(['live_dataset', 'liv
 /** An Error that keeps the server's code — what a hook throws so a screen can still tell. */
 export class LiveRefusalError extends Error {
   readonly code: string;
-  constructor(code: string, message: string) {
+  /** The server's machine reason beside the sentence ('pivot', 'notSynced'…), when it sent one. */
+  readonly reason?: string;
+  constructor(code: string, message: string, reason?: string) {
     super(message);
     this.name = 'LiveRefusalError';
     this.code = code;
+    if (reason) this.reason = reason;
   }
 }
 
@@ -51,7 +54,8 @@ export const LIVE_OFF_FALLBACK = 'This is a Live dataset — this isn’t availa
  */
 export function replyError(reply: unknown, fallback: string): Error {
   const live = liveRefusalOf(reply);
-  if (live !== null) return new LiveRefusalError(text((reply as { code?: unknown }).code), live);
-  const o = (reply ?? {}) as { error?: unknown; reason?: unknown };
+  const o = (reply ?? {}) as { code?: unknown; error?: unknown; reason?: unknown };
+  // A machine reason has no spaces; an answer card's `reason` is its sentence, already in `live`.
+  if (live !== null) return new LiveRefusalError(text(o.code), live, /\s/.test(text(o.reason)) ? undefined : text(o.reason));
   return new Error(text(o.error) || text(o.reason) || fallback);
 }

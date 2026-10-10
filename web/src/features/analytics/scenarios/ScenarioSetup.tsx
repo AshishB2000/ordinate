@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { rpc } from '../../../api/client';
+import { distinctValues } from '../../live/distinct';
 import { Button, IconButton } from '../../../ui/Button';
 import { Menu, type MenuEntry } from '../../../ui/Menu';
 import { Select } from '../../../ui/Select';
@@ -153,10 +153,7 @@ function AddDriver({ projectId, targets, onAdd }: { projectId: string; targets: 
   const ds = targets?.datasets.find((x) => x.id === dsId);
   const values = useQuery({
     queryKey: ['dataset:distinct', projectId, dsId, a.fcol],
-    queryFn: async () => {
-      const r = (await rpc('dataset:distinct', { projectId, datasetId: dsId, column: a.fcol, limit: 200 })) as { values?: unknown[] } | null;
-      return (r?.values ?? []).map((v) => String(v));
-    },
+    queryFn: async () => (await distinctValues({ projectId, datasetId: dsId, column: a.fcol, limit: 200 })).values.map((v) => String(v)),
     enabled: open && a.mode === 'column' && !!a.fcol && !!dsId,
   });
   const fval = values.data?.includes(a.fval) ? a.fval : (values.data?.[0] ?? '');
