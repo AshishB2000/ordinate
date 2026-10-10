@@ -29,7 +29,7 @@ from these tables, or when a table names one that no code reads.
 | `PORT` | The app port: the web app, `/api/*`, `/healthz`, `/readyz`. `0` lets the OS pick one. | `8080` | — | no |
 | `METRICS_PORT` | Port for `GET /metrics` (Prometheus text format) on its own listener, so the ingress that routes `PORT` can never expose it. It must differ from `PORT`. | unset: no metrics listener (the chart and Compose set `9464`) | — | no |
 | `LOG_LEVEL` | pino level: `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`. Logs are JSON on stdout. | `info` | — | no |
-| `ORDINATE_PUBLIC_URL` | The origin people open Ordinate at, for example `https://bi.example.com` (no path). A message the server sends on a schedule (a subscription posted to Slack or Teams) links back to the dashboard with it. The link is never built from a request's `Host` or `Origin`. | unset: the origin of `OIDC_REDIRECT_URL` under `AUTH_MODE=oidc`; otherwise the messages are sent without a link | you want the link and do not use `AUTH_MODE=oidc` | no |
+| `ORDINATE_PUBLIC_URL` | The origin people open Ordinate at, for example `https://bi.example.com` (no path). A message the server sends on a schedule (a [subscription](subscriptions.md) or an alert posted to Slack or Teams) links back to the dashboard with it. The link is never built from a request's `Host` or `Origin`. | unset: the origin of `OIDC_REDIRECT_URL` under `AUTH_MODE=oidc`; otherwise the messages are sent without a link | you want the link and do not use `AUTH_MODE=oidc` | no |
 
 ## Storage
 
