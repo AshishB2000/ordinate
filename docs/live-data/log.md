@@ -1296,3 +1296,29 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   the old handler's direct call beside a running job is 2 at once. `test-refreshLock` §3: with another
   session holding the dataset's lock, both ↻ channels' function and `datasets refresh` are refused
   (`alreadyRunning`) and the dataset keeps its 1 row.
+
+## 2026-10-10 — A refresh URL for a whole connection
+
+- **Why.** A refresh URL was one dataset. A dbt run that builds twenty models needed twenty URLs,
+  twenty secrets and twenty calls.
+- **Built.** Migration `0014_refresh_hooks_connection.sql`: `dataset_id` nullable, `connection_id`,
+  a CHECK that exactly one is set, an index for the connection's list. A hook's target is
+  `HookTarget = {datasetId} | {connId}` (`src/server/hooks/store.ts`); `refreshHook:list|create` take
+  the same strict union (`src/api/refreshHooks.ts`: both or neither is a 400). `act.ts`
+  `targetDatasets`: the project's datasets whose `origin.connId` is the connection, Live ones
+  included. The route runs the one action (`runHookAction`) on each and answers
+  `{status, datasets: {queued, already_running, cache_reset}}`; a dataset's URL answers `{status}` as
+  before. Web: the panel takes a target; the connection rail has **Refresh URL for all datasets**.
+- **Decided — the datasets are resolved at CALL time**, not stored on the hook: a dataset saved from
+  the connection next month is refreshed by the URL made today, and one moved to the Trash drops out.
+- **Decided — one authorization for the call.** `dataset:refresh` is scoped by its project alone, so
+  the creator's write on the project is checked once and covers every dataset; it is still re-checked
+  on every call.
+- **Decided — no dataset to refresh is the dataset URL's 404** (`dataset not found`): the pipeline's
+  step fails, which is how the engineer learns the URL refreshes nothing any more.
+- **Decided — queued together, no cap.** Each copy is its own refresh job, so the source sees at most
+  `jobs.MAX_RUNNING` (3) of them at once per pod, the same bound a tick of scheduled refreshes has.
+  The answer waits for one metadata read and one lock probe per dataset. Marked `ponytail:` in
+  `route.ts`: chunk the calls if one connection ever feeds hundreds.
+- **Tested** (`scripts/test-refreshHooks-conn.ts`, real Postgres, two pods, `scripts/hookHarness.ts`):
+  19 checks — see the threat model's R-L7 row. Web: `refreshUrl.test.tsx` (the connection case).

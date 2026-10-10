@@ -195,7 +195,7 @@ function Header({ projectId, id, name, rowCount, columnCount, live }: { projectI
       </div>
       {graph && <LineageDrawer projectId={projectId} id={id} name={name} onClose={() => setGraph(false)} />}
       {goLive && <SwitchToLiveDialog projectId={projectId} datasetId={id} name={name} rowCount={rowCount} onClose={() => setGoLive(false)} />}
-      {hooks && <RefreshUrlDialog projectId={projectId} datasetId={id} name={name} live={live} onClose={() => setHooks(false)} />}
+      {hooks && <RefreshUrlDialog projectId={projectId} target={{ datasetId: id }} name={name} live={live} onClose={() => setHooks(false)} />}
     </header>
   );
 }

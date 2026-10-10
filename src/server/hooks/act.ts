@@ -16,10 +16,15 @@
 //
 // After a refresh lands, the same follow-ups as the ↻ button's run (alerts,
 // quality checks, a published site's rebuild, the SQL datasets built on it).
+//
+// A CONNECTION's URL does that to every dataset that came from the connection
+// (`targetDatasets`), one after another through the same door.
 
+import * as datasets from '../../data/datasets';
 import type { DatasetMeta } from '../../data/datasets';
 import { isLive } from '../../data/liveDataset';
 import { startRefresh } from '../../data/refreshJob';
+import type { HookTarget } from './store';
 
 export type HookAction = 'refresh' | 'bump';
 export type HookStatus = 'queued' | 'already_running' | 'cache_reset';
@@ -33,6 +38,15 @@ export function hookAction(meta: HookMeta): HookAction {
 /** Can this dataset have a refresh URL — is there something a call could do to it? A screenshot cannot be re-read. */
 export function hookable(meta: HookMeta): boolean {
   return isLive(meta) || (!!meta.origin && meta.origin.kind !== 'capture');
+}
+
+/**
+ * The datasets a URL refreshes: its own, or — a connection's URL — every
+ * dataset in the project that came from the connection, the Live ones too.
+ */
+export async function targetDatasets(projectId: string, target: HookTarget): Promise<string[]> {
+  if ('datasetId' in target) return [target.datasetId];
+  return (await datasets.listDatasets(projectId)).filter((d) => d.originConnId === target.connId).map((d) => d.id);
 }
 
 /**

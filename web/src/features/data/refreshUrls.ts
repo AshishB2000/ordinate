@@ -1,9 +1,13 @@
-// A dataset's refresh URLs (live data L0.5; src/server/hooks/rpc.ts). The list
-// never carries a token: only create's reply does, once, and the panel drops
-// it when it closes.
+// The refresh URLs of a dataset, or of a connection — one URL for every
+// dataset that came from it (live data L0.5; src/server/hooks/rpc.ts). The
+// list never carries a token: only create's reply does, once, and the panel
+// drops it when it closes.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
+
+/** What a URL refreshes: one dataset, or every dataset that came from one connection. */
+export type HookTarget = { datasetId: string } | { connId: string };
 
 export interface RefreshHook {
   id: string;
@@ -27,28 +31,28 @@ export type Created = { ok: true; hook: RefreshHook; token: string } | { ok: fal
 
 const KEY = 'refreshHook:list';
 
-export function useRefreshHooks(projectId: string, datasetId: string, enabled: boolean) {
+export function useRefreshHooks(projectId: string, target: HookTarget, enabled: boolean) {
   return useQuery({
-    queryKey: [KEY, projectId, datasetId],
-    queryFn: async () => (await rpc(KEY, { projectId, datasetId })) as HookList,
+    queryKey: [KEY, projectId, target],
+    queryFn: async () => (await rpc(KEY, { projectId, ...target })) as HookList,
     enabled,
     retry: (n, err) => (err as { status?: number }).status !== 403 && n < 2,
   });
 }
 
-export function useCreateHook(projectId: string, datasetId: string) {
+export function useCreateHook(projectId: string, target: HookTarget) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async () => (await rpc('refreshHook:create', { projectId, datasetId })) as Created,
-    onSuccess: () => void client.invalidateQueries({ queryKey: [KEY, projectId, datasetId] }),
+    mutationFn: async () => (await rpc('refreshHook:create', { projectId, ...target })) as Created,
+    onSuccess: () => void client.invalidateQueries({ queryKey: [KEY, projectId, target] }),
   });
 }
 
-export function useRevokeHook(projectId: string, datasetId: string) {
+export function useRevokeHook(projectId: string, target: HookTarget) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => (await rpc('refreshHook:revoke', { projectId, id })) as { ok: boolean },
-    onSuccess: () => void client.invalidateQueries({ queryKey: [KEY, projectId, datasetId] }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: [KEY, projectId, target] }),
   });
 }
 
@@ -63,8 +67,8 @@ export function intervalText(sec: number): string {
 }
 
 /** The three ways to call it. The URL is a secret: every snippet reads it from the pipeline's own secret store. */
-export function snippets(datasetName: string) {
-  const task = `refresh_${datasetName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'dataset'}`;
+export function snippets(name: string) {
+  const task = `refresh_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'dataset'}`;
   return {
     curl: `# The URL is a secret: keep it in your scheduler's secret store.\n# --retry waits out a 429 (Retry-After) and tries again.\ncurl -fsS --retry 3 -X POST "$ORDINATE_REFRESH_URL"`,
     dbt: `# dbt Core: call it from the step that runs dbt, once the models are built.\ndbt build && curl -fsS --retry 3 -X POST "$ORDINATE_REFRESH_URL"\n\n# dbt Cloud: Account settings → Webhooks → Create webhook,\n# event "Run completed", endpoint = the refresh URL.`,

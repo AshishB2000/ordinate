@@ -30,11 +30,11 @@ function serve(routes: Record<string, Reply | (() => Reply)>) {
   return calls;
 }
 
-function open(live = false) {
+function open(live = false, connId?: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <RefreshUrlDialog projectId={P} datasetId={D} name="Orders" live={live} onClose={() => {}} />
+      <RefreshUrlDialog projectId={P} target={connId ? { connId } : { datasetId: D }} name={connId ? 'Warehouse' : 'Orders'} live={live} onClose={() => {}} />
     </QueryClientProvider>,
   );
 }
@@ -94,6 +94,20 @@ describe('Refresh URL panel', () => {
     open(true);
     expect(await screen.findByText(/resets the cache of “Orders”/)).toBeTruthy();
     expect(screen.getByText(/at most once every 90 seconds/)).toBeTruthy();
+  });
+
+  it('a connection: one URL for every dataset that came from it — listed and made by the connection\'s id', async () => {
+    const calls = serve({
+      'refreshHook:list': { body: { available: true, minIntervalSec: 60, hooks: [] } },
+      'refreshHook:create': { body: { ok: true, hook: ACTIVE, token: TOKEN } },
+    });
+    open(false, D);
+    expect(await screen.findByText(/refreshes every dataset that came from “Warehouse”/)).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Refresh URL · Warehouse' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'New refresh URL' }));
+    await screen.findByTestId('new-refresh-url');
+    expect(calls.find((c) => c.channel === 'refreshHook:list')?.payload).toEqual({ projectId: P, connId: D });
+    expect(calls.find((c) => c.channel === 'refreshHook:create')?.payload).toEqual({ projectId: P, connId: D });
   });
 
   it('the examples: curl retries a 429, dbt calls it after the build, Airflow is an HttpOperator task', () => {
