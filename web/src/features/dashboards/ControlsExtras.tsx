@@ -14,7 +14,8 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { rpc } from '../../api/client';
+import { distinctValues } from '../live/distinct';
+import { liveRefusalOf } from '../live/refusal';
 import { Button } from '../../ui/Button';
 import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Select } from '../../ui/Select';
@@ -72,7 +73,7 @@ function QuickDialog({ kind, datasetId, cols, onClose }: { kind: 'category' | 'p
   const values = useQuery({
     queryKey: ['dataset:distinct', ed.projectId, datasetId, column, ''],
     enabled: !!column,
-    queryFn: async () => (await rpc('dataset:distinct', { projectId: ed.projectId, datasetId, column: column as string, limit: 200 })) as { values: unknown[]; total: number },
+    queryFn: () => distinctValues({ projectId: ed.projectId, datasetId, column: column as string, limit: 200 }),
   });
   const opts = (values.data?.values ?? []).filter((v) => v != null && String(v).trim() !== '').map((v) => ({ value: String(v), label: String(v) }));
   const title = kind === 'period' ? 'Period: pick a value' : 'Category: pick a value';
@@ -113,7 +114,8 @@ function QuickDialog({ kind, datasetId, cols, onClose }: { kind: 'category' | 'p
       <Select
         label="Value"
         value={value}
-        placeholder={values.isPending ? 'Loading…' : opts.length ? 'Pick a value' : 'This column has no values'}
+        placeholder={values.isPending ? 'Loading…' : values.isError ? 'No list of values' : opts.length ? 'Pick a value' : 'This column has no values'}
+        hint={values.isError ? (liveRefusalOf(values.error) ?? `The values could not be loaded: ${values.error.message}`) : undefined}
         disabled={!opts.length}
         onValueChange={setValue}
         options={opts}

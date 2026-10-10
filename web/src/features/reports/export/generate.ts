@@ -54,12 +54,12 @@ async function finish(reply: PagesReply, setup: PageSetup, projectId: string, ho
 }
 
 /** A saved report → its file. The caller saves unsaved settings first, so the file is reproducible. */
-export async function generateReport(projectId: string, id: string, setup: PageSetup, hooks: GenerateHooks): Promise<GenerateResult> {
+export async function generateReport(projectId: string, id: string, setup: PageSetup, hooks: GenerateHooks, stamp: boolean): Promise<GenerateResult> {
   try {
     const reply = (await rpc('report:build', { projectId, id })) as PagesReply;
     const out = await finish(reply, setup, projectId, hooks);
-    // Stamped for an editor; a viewer's generate is not a write, so its 403 is expected and ignored.
-    if (out.ok) await rpc('reports:generated', { projectId, id }).catch(() => undefined);
+    // Stamped for an editor (`stamp`). A viewer's generate is not a write, so the stamp is never asked for.
+    if (out.ok && stamp) await rpc('reports:generated', { projectId, id }).catch(() => undefined);
     return out;
   } catch (err) {
     return { ok: false, error: failure(err, 'Couldn’t build the report.') };

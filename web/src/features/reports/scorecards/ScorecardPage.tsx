@@ -20,6 +20,8 @@ import { EmptyState } from '../../../ui/States';
 import { toast } from '../../../ui/Toast';
 import { Icon } from '../../../ui/icons/Icon';
 import { Sparkline } from '../../analyses/metrics/Sparkline';
+import { LiveRefusalLine } from '../../live/LiveOff';
+import { liveRefusalOf } from '../../live/refusal';
 import { useAdoptProject } from '../../projects/current';
 import { failure, STATUS_WORD, type ScorePeriod, type Scorecard, type ScoreResult, type ScoreRow } from '../api';
 import { Detail } from './Detail';
@@ -27,7 +29,13 @@ import { Dot } from './Dot';
 import { RowsEditor } from './RowsEditor';
 import s from './Scorecard.module.css';
 
-function Row({ r, selected, onOpen }: { r: ScoreRow; selected: boolean; onOpen: () => void }) {
+/** Why a row has no figure: the server's sentence — an "off for Live" refusal's or a warehouse failure's. */
+export function rowReason(r: ScoreRow): string {
+  return r.unavailable ? (liveRefusalOf({ ok: false, ...r.unavailable }) ?? r.unavailable.error) : '';
+}
+
+export function Row({ r, selected, onOpen }: { r: ScoreRow; selected: boolean; onOpen: () => void }) {
+  const why = rowReason(r);
   // The meter is geometry over the server's attainment (150% fills it); the figure printed is the server's.
   const fill = r.attainment === null ? 0 : Math.max(2, Math.min(100, (r.attainment / 150) * 100));
   return (
@@ -48,6 +56,7 @@ function Row({ r, selected, onOpen }: { r: ScoreRow; selected: boolean; onOpen: 
       <th scope="row" className={s.cName}>
         <span className={s.metricName}>{r.name}</span>
         {r.undated && <span className={s.note}>All time — no date column</span>}
+        {why && <LiveRefusalLine message={why} />}
       </th>
       <td className={s.cNum}>{r.display || '—'}</td>
       <td className={s.cNum} title={r.targetName ? `Target from the metric “${r.targetName}”` : undefined}>{r.targetDisplay || '—'}</td>

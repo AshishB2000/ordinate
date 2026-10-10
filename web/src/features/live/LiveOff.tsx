@@ -6,6 +6,7 @@
 //   <LiveOffPage feature>     a route (prepare, a workbench): the same, as a page
 //   <LiveRefusal message>     any figure the server refused, typed (./refusal.ts):
 //                             the SERVER's sentence, compact, for a card or a tile
+//   <LiveRefusalLine message> the same sentence as one line, for a table row
 //
 // None of them calls a row-reading channel: the gate decides from what the
 // dataset list or header already said (`mode: 'live'`), so a Live dataset's
@@ -146,6 +147,16 @@ export function LiveRefusal({ message, projectId, datasetId, title = 'Off for th
         {message}
       </EmptyState>
     </div>
+  );
+}
+
+/** A refused figure's reason where there is no room for a card — a table row: the server's sentence, in the open (no hover). */
+export function LiveRefusalLine({ message }: { message: string }) {
+  return (
+    <span className={s.refusalLine} data-live-refusal="">
+      <Icon name="zap" size={12} />
+      <span>{message}</span>
+    </span>
   );
 }
 

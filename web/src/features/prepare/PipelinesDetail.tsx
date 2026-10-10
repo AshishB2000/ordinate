@@ -15,6 +15,8 @@ import { absTime, dur, iconFor, KIND, nextText, STATUS } from './pipelineFormat'
 import s from './Pipelines.module.css';
 
 export interface DetailActions {
+  /** An editor runs, pauses and schedules a step; a viewer reads it. */
+  canEdit: boolean;
   running: boolean;
   run: (nodeId: string) => void;
   pause: (nodeId: string, paused: boolean) => void;
@@ -48,6 +50,7 @@ function ScheduleBox({ n, act }: { n: PipelineNode; act: DetailActions }) {
           <Select
             aria-label="Refresh this dataset"
             size="sm"
+            disabled={!act.canEdit}
             value={sch.every || 'off'}
             onValueChange={(v) => act.setNode(n.id, { every: v as 'off' | AutoRefreshEvery })}
             options={cadenceOptions(
@@ -71,6 +74,7 @@ function ScheduleBox({ n, act }: { n: PipelineNode; act: DetailActions }) {
             <Select
               aria-label="How often the report is written"
               size="sm"
+              disabled={!act.canEdit}
               value={sch.cadence || 'off'}
               onValueChange={(v) => act.setNode(n.id, { cadence: v as 'off' | 'daily' | 'weekly' | 'monthly', at: sch.at || '09:00' })}
               options={[
@@ -85,7 +89,7 @@ function ScheduleBox({ n, act }: { n: PipelineNode; act: DetailActions }) {
               className={s.time}
               aria-label="At"
               defaultValue={sch.at || '09:00'}
-              disabled={(sch.cadence || 'off') === 'off'}
+              disabled={!act.canEdit || (sch.cadence || 'off') === 'off'}
               onChange={(e) => e.target.value && act.setNode(n.id, { cadence: (sch.cadence || 'off') as 'off' | 'daily' | 'weekly' | 'monthly', at: e.target.value })}
             />
           </div>
@@ -181,7 +185,7 @@ export function PipelinesDetail({ projectId, view, selected, act }: { projectId:
     return (
       <section className={`${s.detail} ${s.detailHint}`} aria-label="Selected step">
         <Icon name="lineage" />
-        <span>Select a step to change its schedule, run it and everything after it, or read its run history. Hover one to trace its path.</span>
+        <span>{act.canEdit ? 'Select a step to change its schedule, run it and everything after it, or read its run history.' : 'Select a step to read its schedule and its run history.'} Hover one to trace its path.</span>
       </section>
     );
   }
@@ -200,17 +204,21 @@ export function PipelinesDetail({ projectId, view, selected, act }: { projectId:
           </span>
         </div>
         <div className={s.detailActs}>
-          <Button size="sm" icon="play" loading={act.running} title="Runs this step, then everything after it, in order." onClick={() => act.run(n.id)}>
-            {act.running ? 'Running…' : 'Run from here'}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            title={n.paused ? 'Run this step again in pipeline runs.' : 'Step over this step in pipeline runs; what follows it still runs.'}
-            onClick={() => act.pause(n.id, !n.paused)}
-          >
-            {n.paused ? 'Resume' : 'Pause'}
-          </Button>
+          {act.canEdit && (
+            <>
+              <Button size="sm" icon="play" loading={act.running} title="Runs this step, then everything after it, in order." onClick={() => act.run(n.id)}>
+                {act.running ? 'Running…' : 'Run from here'}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                title={n.paused ? 'Run this step again in pipeline runs.' : 'Step over this step in pipeline runs; what follows it still runs.'}
+                onClick={() => act.pause(n.id, !n.paused)}
+              >
+                {n.paused ? 'Resume' : 'Pause'}
+              </Button>
+            </>
+          )}
           {link && (
             <Link className={buttonClass('ghost', 'sm')} to={link}>
               <Icon name="external-link" />

@@ -1271,104 +1271,72 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   by the task that builds it") is gone, and L3.2's "Empty text" difference now says what L2.8 settled
   (one blank row, as the copy).
 
-## 2026-10-10 — One refresh door for `connection:refresh` and `datasets refresh` (closes the gap L0.3/L0.4 and L0.5 reported)
+## 2026-10-10 — L2.6's two leftovers
 
-- **Built.** `refreshNow` (`src/ipc/datasets.ts`) is `dataset:refresh`'s whole sequence as one function:
-  the Live cache reset, else `refreshAsJob` (the job, the queue per dataset, the lock across pods, the
-  announcement), then `afterRefresh`, and the header-only reply. `connection:refresh` — the ↻ on a
-  dataset under its connection's rail — now calls it; the `datasets refresh` command goes through
-  `refreshAsJob`. `refreshConnectionInto` is the refresh service's alone: no channel calls it.
-- **Found by the failing test** (`scripts/test-refreshOneDoor.ts`, written first). The old
-  `connection:refresh` called `refreshConnectionInto` directly, so it (1) fetched and wrote BESIDE a
-  running refresh of the same dataset — two fetches at once on one pod, no lock across pods; (2) answered
-  with the stored dataset whole — every row, and its `origin` (connection id, table, a query dataset's
-  SQL text) — against "no dataset origin reaches a browser"; (3) overwrote ANY dataset of the project
-  with the named connection's saved selection; (4) ran no alerts, quality checks, re-publish or
-  dependents and announced nothing, so an open dashboard kept the old figures.
-- **Decided — a dataset that did not come from the connection is refused** ("Linked dataset not
-  found") before the source is asked: the door re-runs what BUILT the dataset (`origin.connId`), so a
-  connection id that is not its origin has nothing to say. The rail only lists a connection's own.
-- **Corrected.** The L0.5 entry calls `datasets refresh` an MCP tool. It is CLI only (its registry
-  entry has no `tool`), and the CLI has had no entry point since T8.1, so nothing reaches it on a
-  server. It is routed anyway: one door, whichever front end returns.
-- **Measured** (`test-refreshOneDoor`, a source that takes 150 ms). ↻ on the dataset and ↻ on its
-  connection row at the same instant: 2 fetches, never 2 at once (before: 2 at once). NEGATIVE CONTROL:
-  the old handler's direct call beside a running job is 2 at once. `test-refreshLock` §3: with another
-  session holding the dataset's lock, both ↻ channels' function and `datasets refresh` are refused
-  (`alreadyRunning`) and the dataset keeps its 1 row.
-
-## 2026-10-10 — A refresh URL for a whole connection
-
-- **Why.** A refresh URL was one dataset. A dbt run that builds twenty models needed twenty URLs,
-  twenty secrets and twenty calls.
-- **Built.** Migration `0014_refresh_hooks_connection.sql`: `dataset_id` nullable, `connection_id`,
-  a CHECK that exactly one is set, an index for the connection's list. A hook's target is
-  `HookTarget = {datasetId} | {connId}` (`src/server/hooks/store.ts`); `refreshHook:list|create` take
-  the same strict union (`src/api/refreshHooks.ts`: both or neither is a 400). `act.ts`
-  `targetDatasets`: the project's datasets whose `origin.connId` is the connection, Live ones
-  included. The route runs the one action (`runHookAction`) on each and answers
-  `{status, datasets: {queued, already_running, cache_reset}}`; a dataset's URL answers `{status}` as
-  before. Web: the panel takes a target; the connection rail has **Refresh URL for all datasets**.
-- **Decided — the datasets are resolved at CALL time**, not stored on the hook: a dataset saved from
-  the connection next month is refreshed by the URL made today, and one moved to the Trash drops out.
-- **Decided — one authorization for the call.** `dataset:refresh` is scoped by its project alone, so
-  the creator's write on the project is checked once and covers every dataset; it is still re-checked
-  on every call.
-- **Decided — no dataset to refresh is the dataset URL's 404** (`dataset not found`): the pipeline's
-  step fails, which is how the engineer learns the URL refreshes nothing any more.
-- **Decided — queued together, no cap.** Each copy is its own refresh job, so the source sees at most
-  `jobs.MAX_RUNNING` (3) of them at once per pod, the same bound a tick of scheduled refreshes has.
-  The answer waits for one metadata read and one lock probe per dataset. Marked `ponytail:` in
-  `route.ts`: chunk the calls if one connection ever feeds hundreds.
-- **Tested** (`scripts/test-refreshHooks-conn.ts`, real Postgres, two pods, `scripts/hookHarness.ts`):
-  19 checks — see the threat model's R-L7 row. Web: `refreshUrl.test.tsx` (the connection case).
-
-## 2026-10-10 — How a refresh URL's call ended (`GET` the URL)
-
-- **Why.** The `POST` answers `202 queued` and nothing more. A failed refresh showed in Ordinate and
-  never in the pipeline that asked for it, so a DAG went green over stale dashboards.
-- **Built.** Migration `0015_refresh_hooks_outcome.sql`: `last_result` (`running | ok | failed |
-  already_running`) and `last_finished_at`. The claim is untouched. A call that queued refreshes marks
-  the hook `running` before it answers (`beginHook`, `store.ts`); `settleHook` writes how it ended;
-  `readHook` is the status read's one SELECT (it claims and stamps nothing). `act.ts` `runHookAction`
-  now returns `{status, end}`, a promise per dataset; the route settles on `Promise.all` of them — any
-  failed → `failed`, else any joined → `already_running`, else `ok` — and
-  `GET /api/hooks/refresh/<token>` answers `{status, calledAt, finishedAt}`: `idle | running | ok |
-  failed | already_running`. The list rows carry `lastResult` / `lastFinishedAt`; the panel shows a
-  badge per URL and the curl and Airflow examples gain a wait step.
-- **Decided — the outcome lives on the HOOK ROW, written by the pod that ran the refresh.** Deriving it
-  from the dataset (its lock, its `lastRefreshStatus`) is wrong across pods: a job QUEUED on pod A
-  behind three others holds no lock yet, so pod B would read the dataset's old `ok`. A row in Postgres
-  is the same answer on every pod. Tested: POST on pod A, then GET on pod B at once → `running`.
-- **Decided — `running` is a stored state, and it decides who may write.** The end of queued
-  refreshes is written only while the hook reads `running`; a call that queued nothing (joined, reset
-  a cache, was refused) writes only while it does NOT. So a scheduler that retries its POST while the
-  first one's refresh is still running keeps reading `running` and then that refresh's own end,
-  from any pod. **Tried first and replaced:** the claim cleared the outcome and the end was fenced on
-  the claim's stamp. A retried POST then read `already_running` ("call again") over its own running
-  refresh, and every URL called before this migration read as running. Now a row with no outcome is
-  `idle`, and an outcome recorded BEFORE the last call (its pod died between the claim and the write)
-  reads `running`, never a stale `ok`.
-- **Known, accepted.** Two overlapping calls of one connection's URL that EACH queue refreshes end
-  when the first one's land (the second's still-running ones are not waited for), and a join that
-  loses a race with the first call's settle reads `already_running`. Both err toward "call again".
-- **Decided — never the reason.** A failed refresh's message can quote the source's host or SQL, and
-  the URL travels through schedulers and their logs. `failed` is a word; the reason stays on the
-  dataset for the people who may open it. Canary: the source's error is in no GET reply of the suite.
-- **Decided — a GET is a read**: no claim (never a 429 of the interval), no audit row (a poll every
-  10 s would bury the trail), the creator's access re-checked (403), unknown ≡ revoked ≡ the POST's
-  404 by one statement. Bounded by the route's per-IP bucket.
-- **Decided — joining SOMEBODY ELSE's refresh settles as `already_running`**, at once. The pipeline's
-  load may have finished after that refresh read the source, so its landing is not this call's
-  success: POST again.
-- **Decided — a call nobody settled** (its pod died or was redeployed mid-refresh) reads `running`
-  for `PENDING_STALE_SEC` (15 min), then `failed` unless a refresh of its datasets runs on some pod.
-  Marked `ponytail:` in `route.ts`: a job still queued on ANOTHER pod past 15 minutes holds no lock
-  and would read `failed`, then settle `ok`.
-- **Found by the suite** (`test-refreshHooks-pods`): a pod shut down under a running refresh settled
-  into an ended pool and logged an error. Not an error — the stale rule answers for it — so the
-  write is skipped when `pool.ending`.
-- **Tested.** `scripts/test-refreshHooks-status.ts` (28 checks, real Postgres, two pods),
-  `test-refreshHooks` (GET is no longer a 405; PUT and DELETE are, `Allow: GET, POST`),
-  `refreshUrl.test.tsx` (the five badges, the wait step — `"running"` matched in quotes so
-  `already_running` is not mistaken for it), `web/e2e/refreshUrl.e2e.ts` and `connections.e2e.ts`.
+- **Built — a scorecard row says why its figure is missing.** `scorecards.ts`' `figure()` no longer
+  swallows a typed Live failure: a `LiveFigureError` (or a `LiveDatasetError`) met while resolving a
+  row's CURRENT figure is kept beside the memo, and the row carries it as `unavailable: {code, error,
+  reason?}` — the fields a handler's `{ok: false}` refusal has, so the web reads the row and the detail
+  panel with the same `liveRefusalOf`. `error` is the failure's catalog sentence (R-L6: the warehouse's
+  words stay in the log). Any other null — an empty period, an extract with no rows in the window —
+  carries nothing. The row shows the sentence under the metric's name (`<LiveRefusalLine>`, in the
+  open: nothing to hover); the figure cell keeps the server's "—". The published scorecard
+  (`publish/scorecardData.ts`, a whitelist) is unchanged.
+- **Tests.** `test-liveRoute` +2: the fake warehouse down → the row has no figure, `live_failed` and
+  the catalog sentence, no warehouse text or canary in the reply — NEGATIVE CONTROLS: an extract row
+  with no data in its period carries no reason, nor does the Live row the warehouse answered. Vitest
+  `scorecardRow.test` (a failure, an "off for Live" refusal, a plain empty row). e2e `liveTiles.e2e`:
+  a metric the warehouse refuses (a sum over text, a 200) says why in its row, the answered row does
+  not; screens `live-scorecard-row`, both themes.
+- **Built — a picker over a Live column with no list of values says why.** `dataset:distinct` on a
+  Live dataset now answers one of two things, never a 409 and never an empty list that reads as "no
+  values": the profile's sample values (L2.5, unchanged), or a typed REPLY in the chart refusals'
+  shape — `{ok: false, code: 'live_refused', reason, error}` (200) — whose `reason` is `notSynced` (no
+  schema sync has stored a profile), `notSampled` (the profile never measured the column: the sample
+  was skipped, or the column is newer than it) or `notListed` (measured, but a number, a date or a
+  text with more than 50 values — no list is kept). `error` is a new catalog sentence for each
+  (`liveProfileMessages`, translated in the four drafts — three `null`s would have put them under the
+  90% gate). A column the sample found EMPTY still answers an empty list: that is what it holds.
+- **Decided — a 200 reply, not the route's 409.** The control cannot know the profile is missing
+  without asking, so the answer is an expected state: a 409 is a console error in the browser, which
+  the e2e fixtures fail on. `live_refused` + `reason` is the shape `liveRefusalOf` and
+  `test-liveSafetyNet`'s recogniser already read, so neither had to be loosened.
+- **Changed on purpose — `notListed` used to be an answer.** L2.5 answered a number, a date or a
+  high-cardinality text with `{values: [], total: N}` ("the Condition tab still works"); the dashboard
+  multi-select printed that as "This column has no values." It is a refusal now, and
+  `test-liveProfile`'s assertion ("a number column lists no values, with its distinct count") says so
+  instead; its unprofiled negative control recognises the new reply exactly.
+- **Built — the web.** `features/live/distinct.ts` is the ONE call every picker makes
+  (`distinctValues`): a refusal is THROWN as a `LiveRefusalError` that keeps the server's `reason`, so
+  no caller can read it as an empty list — the dashboard control, the builder's filter dialog (its
+  Values tab prints the sentence; Condition still filters), the quick category/period dialog, the
+  input table's lookups, the funnel's step picker, scenarios. A refusal is not retried (`main.tsx`:
+  it will not fix itself). The dashboard dropdown and multi-select (`ControlWidget.tsx` `<NoList>`)
+  keep a control's own box — "Not synced yet", "Values not sampled", "Values not listed", the Live
+  mark — and a press opens the server's sentence; for `notSynced` / `notSampled` an editor
+  (`useCanEdit`) gets **Sync schema** (`dataset:syncLiveSchema`, which now invalidates
+  `dataset:distinct`, so the control becomes its menu when the profile lands, or says why the sync
+  read no sample); a viewer gets the sentence only.
+- **Built — the publish path.** It was worse than the note in L2.6 said: `dashboardData.distinct()`
+  read a control's options from the rows, so a dashboard with ANY dropdown or multi-select over a Live
+  column — profiled or not — failed `publish:plan` and `publish:run` whole, on the safety net's
+  refusal. It asks the profile first now (`liveDistinct`): a listed column's control publishes with
+  the sample's values (each option's tiles computed by the warehouse), and one with no list is LEFT
+  OUT of the page's filter bar, reported as `unlisted: [{control, reason}]` on the plan's page — the
+  Publish dialog prints "“Region” is left out of the filter bar." and the server's sentence. Never an
+  empty "All"-only menu. Not done: a default value set on a left-out control is not applied to the
+  published figures (as for an extract control whose default is no longer among its values).
+- **Tests.** New `test-liveValues` (17): each reason over the route, exact reply, no table name, id or
+  secret — NEGATIVE CONTROLS: a listed column answers its values, a search with no match and a column
+  the sample found empty answer an empty list, the extract answers unflagged; the `getDataset` spy;
+  publish builds, the listed control carries the sample's values, the plan names the two left out —
+  NEGATIVE CONTROLS: nothing left out with only the listed control, and with the profile's door
+  removed the same publish is refused whole. `test-liveSafetyNet` +2 (148): the reasons recognised
+  exactly on top of `isRefusal`, and a negative control (a listed answer, an untyped empty list, a
+  refusal without its sentence are not taken for one). `test-liveProfile` (101): the two assertions
+  above. Vitest: `controlNoList.test` (7: each state, editor and viewer, Sync schema refetching,
+  a sync that reads no sample, the ordinary menu and an ordinary failure), `live.test` +2 (the
+  reason kept; a sentence in `reason` is never one). e2e `liveTiles.e2e`: two controls over the
+  unsynced fixture say "Not synced yet" with no console error, Sync schema turns one into its menu
+  and the number column into "Values not listed", the menu filters the Live KPI; 13 RPCs on open;
+  screens `live-control-not-synced`, `live-control-not-listed`, both themes.

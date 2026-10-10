@@ -1,6 +1,24 @@
+import { createRequire } from 'node:module';
 import { defineConfig } from 'vitest/config';
 import type { Plugin } from 'vite';
 import { appLicences } from './scripts/licenses.ts';
+
+// The channels whose contract is `access: 'write'`, for the RPC client's
+// view-only safety net (src/api/client.ts): read off the contracts at build
+// time, so the list cannot drift and no zod reaches the bundle. From the
+// COMPILED contracts (`npm run build:ts`, which postinstall runs): the root
+// package is CommonJS, and its TypeScript cannot be imported from this ES module.
+function writeChannels(): string[] {
+  let api: typeof import('../src/api/index.ts');
+  try {
+    api = createRequire(import.meta.url)('../src/api/index.js') as typeof api;
+  } catch (cause) {
+    throw new Error('The compiled contracts (src/api/index.js) could not be loaded: run `npm run build:ts` in the repo root first.', { cause });
+  }
+  return Object.entries(api.contracts)
+    .filter(([, c]) => c.access === 'write')
+    .map(([name]) => name);
+}
 
 // The About page's licences (T2.14): every production dependency the app
 // ships, read from node_modules at build time and written beside index.html.
@@ -29,6 +47,7 @@ function licences(): Plugin {
 
 export default defineConfig({
   plugins: [licences()],
+  define: { __WRITE_CHANNELS__: JSON.stringify(writeChannels()) },
   oxc: { jsx: { runtime: 'automatic' } },
   server: {
     // `npm run server` listens on :8080 (src/server/env.ts default).

@@ -49,6 +49,7 @@ const appMod: typeof import('../src/server/app') = require('../src/server/app');
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
 const wire: typeof import('../src/server/wire') = require('../src/server/wire');
 const messages: typeof import('../src/data/liveMessages') = require('../src/data/liveMessages');
+const pmsg: typeof import('../src/engine/liveProfileMessages') = require('../src/engine/liveProfileMessages');
 const dependents: typeof import('../src/analysis/liveDependents') = require('../src/analysis/liveDependents');
 const lineage: typeof import('../src/ipc/lineage') = require('../src/ipc/lineage');
 
@@ -223,7 +224,9 @@ async function readers(s: H.OrgSetup, post: Post, unprofiled: string): Promise<v
   const searched = await post('dataset:distinct', { projectId: P, datasetId: s.liveId, column: 'cat', search: 'BE', limit: 1 });
   ok('distinct: the search is the extract\'s (case-insensitive), the total counts the matches', show(searched.value?.values) === '["beta"]' && searched.value?.total === 2, searched.body.slice(0, 200));
   const amt = await post('dataset:distinct', { projectId: P, datasetId: s.liveId, column: 'amt' });
-  ok('distinct: a number column lists no values, with its distinct count', show(amt.value?.values) === '[]' && amt.value?.total === direct(fx.fixtureRows(), 3, 'number').distinct, amt.body.slice(0, 200));
+  // L2.6's leftover: no list to give is a typed refusal saying why — it used to answer `values: []` with the distinct count, which a picker read as "no values".
+  ok('distinct: a number column has no list to give, and says so typed (notListed) — never an empty list', amt.status === 200 && amt.value?.ok === false && amt.value?.code === 'live_refused'
+    && amt.value?.reason === 'notListed' && amt.value?.error === pmsg.liveValuesNotListed(String(liveProfile.LOW_CARDINALITY)) && !('values' in (amt.value ?? {})), amt.body.slice(0, 200));
   const prof = await post('dataset:profile', { projectId: P, datasetId: s.liveId, column: 'region' });
   const pr = prof.value?.profile as Record<string, unknown> | undefined;
   ok('profile: the column panel from the sample — filled, %, distinct, top values with bars', prof.value?.ok === true && pr?.rowCount === 1060 && pr.distinct === 4
@@ -240,7 +243,10 @@ async function readers(s: H.OrgSetup, post: Post, unprofiled: string): Promise<v
   const refusedProfile = await post('dataset:profile', { projectId: P, datasetId: unprofiled, column: 'region' });
   const typed = (r: { status: number; value: Record<string, unknown> | null }): boolean => (r.status === 409 && r.value?.code === 'live_dataset')
     || (r.value?.ok === false && r.value?.code === 'live_dataset' && r.value?.error === messages.liveRefusedMessage());
-  ok('NEGATIVE CONTROL: unprofiled, distinct and profile still refuse, typed', typed(refused) && typed(refusedProfile), `${refused.status} ${refused.body.slice(0, 120)} | ${refusedProfile.body.slice(0, 120)}`);
+  // The picker's refusal is its own reply (scripts/test-liveValues.ts): typed `live_refused`, the reason and the catalog's sentence — still no list.
+  const notSynced = (r: { status: number; value: Record<string, unknown> | null }): boolean => r.status === 200 && r.value?.ok === false && r.value?.code === 'live_refused'
+    && r.value?.reason === 'notSynced' && r.value?.error === pmsg.liveValuesNotSynced() && !('values' in r.value);
+  ok('NEGATIVE CONTROL: unprofiled, distinct and profile still refuse, typed', notSynced(refused) && typed(refusedProfile), `${refused.status} ${refused.body.slice(0, 120)} | ${refusedProfile.body.slice(0, 120)}`);
   const meta = await H.as(ORG_A, () => H.datasets.getDatasetMeta(P, s.liveId));
   const split = (m: NonNullable<typeof meta>, category: string): string => show(liveProfile.profileSplitCandidates(m, category));
   ok('split candidates: text with 2–12 distinct in the sample, fewest first; never a date, never one past 12', !!meta

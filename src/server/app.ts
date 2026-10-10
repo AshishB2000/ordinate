@@ -23,6 +23,7 @@ import { useRecordDb } from '../app/recordFs';
 import { useSecretStore } from '../app/configSecrets';
 import { createSecretStore } from './secrets/store';
 import { useAiKeys } from './aiKeys';
+import * as orgConfig from './orgConfig';
 import { useRefreshLockDb } from './jobs/refreshLock';
 import { useLiveUsageDb } from './live/usageStore';
 import { handlers } from './rpc';
@@ -185,6 +186,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       if (cfg.masterKey) useSecretStore(createSecretStore(pool, cfg.masterKey));
       // AI provider keys go to the encrypted secrets store (T5.3) — with no master key, nowhere (T2.12).
       useAiKeys(pool, cfg.masterKey);
+      // The org's settings document is a row every pod reads, not a file on this pod's disk (0014).
+      orgConfig.useOrgConfig(pool, cfg.dataDir);
+      await orgConfig.fresh(cfg.auth.org);
       (require('./jobs/schedules') as typeof import('./jobs/schedules')).wireSchedules(pool, cfg.auth.mode === 'dev');
       // S3 (T5.2): objects are registered in Postgres; old versions are collected by a job.
       if (cfg.storage.s3) {
@@ -211,6 +215,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       if (cfg.storage.s3) (require('../engine/storage') as typeof import('../engine/storage')).useStorageDb(null);
       useSecretStore(null);
       useAiKeys(null, null);
+      orgConfig.useOrgConfig(null);
       await pool.end();
     });
   }
@@ -229,6 +234,12 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // A signed-out browser NAVIGATING to the app (a GET that wants HTML, not a
   // file, not the probes or /sign-in itself) is redirected to /sign-in before
   // any of the app loads: no flash of the shell, no burst of 401s.
+  // A settings change made by this request is in Postgres before its reply goes out (./orgConfig.ts).
+  const orgOf = new WeakMap<object, string>();
+  app.addHook('onSend', async (req) => {
+    const org = orgOf.get(req);
+    if (org) await orgConfig.flushed(org);
+  });
   app.addHook('onRequest', (req, reply, done) => {
     const path = req.url.split('?')[0];
     const api = path.startsWith('/api/');
@@ -238,7 +249,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     if (api ? route?.startsWith('/api/auth/') || routeAccess(req.method, route) === 'self' : !isPageNavigation(req.method, path, req.headers.accept) || path.startsWith('/p/')) {
       return done();
     }
-    Promise.resolve(identify(req.headers, req.socket.remoteAddress)).then(
+    Promise.resolve(identify(req.headers, req.socket.remoteAddress)).then(async (who) => {
+      if (who) orgOf.set(req, who.org.id);
+      if (who) await orgConfig.fresh(who.org.id); // another pod's settings change, at most a second old
+      return who;
+    }).then(
       (who) => {
         if (!who && !api) return void reply.redirect(path === '/' ? '/sign-in' : `/sign-in?next=${encodeURIComponent(req.url)}`);
         if (!who) return void reply.code(401).send({ error: 'not signed in' });

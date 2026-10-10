@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDatasets, type AutoRefreshEvery, type DatasetSummary } from '../../api/datasets';
+import { useCanEdit } from '../projects/api';
 import { toastMovedToTrash } from '../projects/trashToast';
 import { Button, buttonClass, IconButton } from '../../ui/Button';
 import { Select } from '../../ui/Select';
@@ -106,8 +107,10 @@ export function useRefresh(projectId: string) {
   return { state, run };
 }
 
-function Row({ projectId, d, outcome, onRefresh, onDelete, tags }: {
+function Row({ projectId, d, outcome, onRefresh, onDelete, tags, canEdit }: {
   projectId: string;
+  /** An editor's row: the schedule, Refresh, New visual, Combine and Trash. A viewer's row opens the dataset. */
+  canEdit: boolean;
   d: DatasetSummary;
   outcome: Outcome | undefined;
   onRefresh: () => void;
@@ -139,10 +142,12 @@ function Row({ projectId, d, outcome, onRefresh, onDelete, tags }: {
             <span>{freshness(d)}</span>
             <BehindBadge behind={d.behindSchedule} />
           </span>
-          <span className={s.freshTools}>
-            <SchedulePicker projectId={projectId} d={d} />
-            <WatchToggle projectId={projectId} d={d} />
-          </span>
+          {canEdit && (
+            <span className={s.freshTools}>
+              <SchedulePicker projectId={projectId} d={d} />
+              <WatchToggle projectId={projectId} d={d} />
+            </span>
+          )}
         </span>
         {outcome?.message && (
           <span className={outcome.error ? s.rowError : s.rowNote} role="status">
@@ -151,23 +156,25 @@ function Row({ projectId, d, outcome, onRefresh, onDelete, tags }: {
         )}
       </td>
       <td className={s.actions}>
-        <span className={s.rowActions}>
-          {d.originKind && (
-            <Button size="sm" icon="refresh" loading={outcome?.busy} aria-label={`Refresh ${d.name}`} onClick={onRefresh}>
-              Refresh
-            </Button>
-          )}
-          <Link className={buttonClass('secondary', 'sm', s.hoverAction)} to={`/visuals?project=${projectId}&datasetId=${d.id}`} title="Build a chart from this dataset">
-            New visual
-          </Link>
-          {/* Joins need the rows here: a Live dataset is combined through a copy (L2.6). */}
-          {d.mode !== 'live' && (
-            <Link className={buttonClass('secondary', 'sm', s.hoverAction)} to={`/data/import?project=${projectId}&source=combine`} title="Combine this dataset with another">
-              Combine
+        {canEdit && (
+          <span className={s.rowActions}>
+            {d.originKind && (
+              <Button size="sm" icon="refresh" loading={outcome?.busy} aria-label={`Refresh ${d.name}`} onClick={onRefresh}>
+                Refresh
+              </Button>
+            )}
+            <Link className={buttonClass('secondary', 'sm', s.hoverAction)} to={`/visuals?project=${projectId}&datasetId=${d.id}`} title="Build a chart from this dataset">
+              New visual
             </Link>
-          )}
-          <IconButton icon="trash" size="sm" label={`Move ${d.name} to the Trash`} onClick={onDelete} />
-        </span>
+            {/* Joins need the rows here: a Live dataset is combined through a copy (L2.6). */}
+            {d.mode !== 'live' && (
+              <Link className={buttonClass('secondary', 'sm', s.hoverAction)} to={`/data/import?project=${projectId}&source=combine`} title="Combine this dataset with another">
+                Combine
+              </Link>
+            )}
+            <IconButton icon="trash" size="sm" label={`Move ${d.name} to the Trash`} onClick={onDelete} />
+          </span>
+        )}
       </td>
     </tr>
   );
@@ -180,6 +187,7 @@ export function DatasetList({ projectId }: { projectId: string }) {
   const remove = useDeleteDataset(projectId);
   const refresh = useRefresh(projectId);
   const [all, setAll] = useState(false);
+  const canEdit = useCanEdit(projectId);
 
   if (q.isPending) return <SkeletonRows rows={6} label="Loading datasets" />;
   if (q.isError) return <ErrorState heading={3} title="Datasets could not be loaded" message={q.error.message} onRetry={() => void q.refetch()} />;
@@ -190,17 +198,21 @@ export function DatasetList({ projectId }: { projectId: string }) {
         heading={3}
         title="No datasets yet"
         actions={
-          <>
-            <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
-              Import file
-            </Link>
-            <Link className={buttonClass('ghost')} to={`/data/import?project=${projectId}&source=paste`}>
-              Paste data
-            </Link>
-          </>
+          canEdit && (
+            <>
+              <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
+                Import file
+              </Link>
+              <Link className={buttonClass('ghost')} to={`/data/import?project=${projectId}&source=paste`}>
+                Paste data
+              </Link>
+            </>
+          )
         }
       >
-        Import a CSV, JSON or Excel file — or paste data straight in — to save a structured dataset in this project.
+        {canEdit
+          ? 'Import a CSV, JSON or Excel file — or paste data straight in — to save a structured dataset in this project.'
+          : 'An editor of this project can import a CSV, JSON or Excel file, or paste data in. You have view-only access.'}
       </EmptyState>
     );
   }
@@ -224,7 +236,7 @@ export function DatasetList({ projectId }: { projectId: string }) {
     <section className={s.section} aria-label="Datasets">
       <div className={s.listBar}>
         <TagFilterBar present={present} index={tags.data} active={tag} onPick={setTag} empty={shown.length === 0} />
-        {refreshable.length > 0 && (
+        {canEdit && refreshable.length > 0 && (
           <Button size="sm" icon="refresh" loading={all} className={s.barEnd} onClick={() => void refreshAll()}>
             Refresh all
           </Button>
@@ -250,6 +262,7 @@ export function DatasetList({ projectId }: { projectId: string }) {
               <Row
                 key={d.id}
                 projectId={projectId}
+                canEdit={canEdit}
                 d={d}
                 tags={tagged(d)}
                 outcome={refresh.state[d.id]}

@@ -63,6 +63,8 @@ export function Canvas() {
   const page = ed.doc.sheets[ed.sheet];
   const cards = page.cards;
   const small = ed.size !== 'desktop';
+  // Present, or a viewer's read-only editor: the sheet reads, nothing on it moves.
+  const locked = ed.view.presenting || ed.readOnly;
   const tabOf = (g: string) => ed.groupTab.get(g);
 
   // What the VIEW hides now: a folded container's cards, an inactive tab's (layoutKinds.ts).
@@ -130,7 +132,7 @@ export function Canvas() {
   };
 
   const begin = (e: React.PointerEvent, card: Card, mode: Mode) => {
-    if (e.button !== 0 || e.shiftKey || ed.view.presenting) return;
+    if (e.button !== 0 || e.shiftKey || locked) return;
     if ((e.target as HTMLElement).closest('button, a, input, select, textarea, [role="tab"]')) return;
     const grid = gridRef.current;
     if (!grid) return;
@@ -233,6 +235,7 @@ export function Canvas() {
       }
       return;
     }
+    if (locked) return;
     const d = e.key === 'ArrowLeft' ? [-1, 0] : e.key === 'ArrowRight' ? [1, 0] : e.key === 'ArrowUp' ? [0, -1] : e.key === 'ArrowDown' ? [0, 1] : null;
     if (!d) return;
     e.preventDefault();
@@ -252,7 +255,7 @@ export function Canvas() {
         ? [{ label: tables.has(card.id) ? 'View as chart' : 'View as table', icon: tables.has(card.id) ? 'chart-bar' : 'table', onSelect: () => toggleTable(card.id) }]
         : [];
     view.push(...runtime.menu(card, def));
-    if (ed.view.presenting) return view;
+    if (locked) return view;
     if (small) {
       const name = SIZE_LABEL[ed.size].toLowerCase();
       return [
@@ -289,7 +292,7 @@ export function Canvas() {
     <div className={s.canvas} onClick={(e) => e.target === e.currentTarget && ed.select(null)}>
       <FilterBar />
       <SelectionStrip ed={ed} />
-      {!ed.view.presenting && (
+      {!locked && (
         <>
           <SizeNote />
           <ArrangeBar />
@@ -342,12 +345,12 @@ export function Canvas() {
                   className={cls}
                   style={style}
                   menu={menuFor(card)}
-                  onHide={small ? { label: `Hide on ${SIZE_LABEL[ed.size].toLowerCase()}`, run: () => hide(card.id, true) } : undefined}
+                  onHide={small && !locked ? { label: `Hide on ${SIZE_LABEL[ed.size].toLowerCase()}`, run: () => hide(card.id, true) } : undefined}
                   asTable={tables.has(card.id)}
                   onKeyDown={onKey(card)}
                   onHeadPointerDown={(e) => begin(e, card, 'move')}
                   handles={
-                    small ? (
+                    locked ? null : small ? (
                       <span className={`${s.handle} ${s.h_s}`} aria-hidden="true" onPointerDown={(e) => {
                         e.stopPropagation();
                         begin(e, card, 's');
@@ -382,7 +385,7 @@ export function Canvas() {
           </div>
         </div>
       )}
-      {small && !ed.view.presenting && <HiddenTray hidden={placed.hidden} onShow={(id) => hide(id, false)} />}
+      {small && !locked && <HiddenTray hidden={placed.hidden} onShow={(id) => hide(id, false)} />}
       {runtime.overlays}
     </div>
   );

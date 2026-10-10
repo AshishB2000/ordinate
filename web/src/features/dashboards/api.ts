@@ -37,6 +37,8 @@ export interface PlanPage {
   mode: 'all' | 'single';
   bytes: number;
   dropped: { control: string; options: string[] }[];
+  /** Controls left out of the page's filter bar (a Live column with no list of values), each with the server's reason. */
+  unlisted?: { control: string; reason: string }[];
 }
 export interface Plan {
   pages: PlanPage[];

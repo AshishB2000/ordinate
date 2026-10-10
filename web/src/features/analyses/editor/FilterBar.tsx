@@ -100,7 +100,8 @@ function Chip({ card }: { card: Card }) {
         <ControlWidget projectId={ed.projectId} control={control} value={ed.controlValue(card.id)} onChange={(v) => ed.setControl(card.id, v)} />
       )}
       {active && <IconButton icon="x" size="sm" label={`Clear ${label}`} onClick={clear} />}
-      <Menu label={`Actions for ${label}`} align="end" trigger={<IconButton icon="more-horizontal" size="sm" label={`Actions for ${label}`} />} items={items} />
+      {/* Edit, the default and Remove change the dashboard: a viewer sets the control's value, and that is all. */}
+      {!ed.readOnly && <Menu label={`Actions for ${label}`} align="end" trigger={<IconButton icon="more-horizontal" size="sm" label={`Actions for ${label}`} />} items={items} />}
       {editing && !isParam && (
         <ControlDialog
           projectId={ed.projectId}

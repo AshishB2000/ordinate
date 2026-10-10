@@ -15,13 +15,15 @@
 // And what the rest of the server reads from the profile instead of refusing:
 // the filter pickers (`dataset:distinct`), the column profile
 // (`dataset:profile`), the Assistant's facts and its project inventory. A Live
-// dataset that has no profile yet keeps refusing those (D6) — never a guess.
+// dataset that has no profile yet keeps refusing those (D6) — never a guess;
+// the pickers' refusal is a reply (`LiveValuesRefusal`) that says which case it is.
 
 import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
 import type { DatasetMeta } from '../data/datasets';
 import { isLive } from '../data/liveDataset';
-import { profileDistinct, profileOf, type LiveProfile, type ProfileDistinct } from '../data/liveProfile';
+import { LOW_CARDINALITY, profileDistinct, profileOf, type LiveProfile, type ProfileDistinct, type UnlistedReason } from '../data/liveProfile';
+import { formatNumber } from '../app/format';
 import { distribution, pctOf, type ColumnProfile } from '../data/profileView';
 import { refreshRunning } from '../data/refreshJob';
 import { detectColumn } from '../data/sensitivity';
@@ -93,10 +95,25 @@ export async function liveInventoryNotes(projectId: string, meta: DatasetMeta): 
   return liveColumnNotes({ name: meta.name, columns: meta.columns, profile: meta.live.profile, withheld });
 }
 
-/** `dataset:distinct` for a profiled Live dataset; null for anything else (the caller's own path decides). */
-export async function liveDistinct(projectId: string, datasetId: string, column: string, req: { limit?: number; search?: string }): Promise<ProfileDistinct | null> {
+/**
+ * A Live column has no list of values to give: `dataset:distinct`'s answer, a
+ * REPLY (200) in the chart refusals' shape — an expected state a control words
+ * and offers "Sync schema" from, never an empty list. `error` is a catalog sentence.
+ */
+export interface LiveValuesRefusal { ok: false; code: 'live_refused'; reason: UnlistedReason; error: string }
+
+const UNLISTED: Record<UnlistedReason, () => string> = {
+  notSynced: msg.liveValuesNotSynced,
+  notSampled: msg.liveValuesNotSampled,
+  notListed: () => msg.liveValuesNotListed(formatNumber(LOW_CARDINALITY)),
+};
+
+/** `dataset:distinct` for a Live dataset: its sample's values, or why there is no list. Null for an extract (the caller's own path decides). */
+export async function liveDistinct(projectId: string, datasetId: string, column: string, req: { limit?: number; search?: string }): Promise<ProfileDistinct | LiveValuesRefusal | null> {
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
-  return meta && isLive(meta) ? profileDistinct(meta, column, req) : null;
+  if (!meta || !isLive(meta)) return null;
+  const r = profileDistinct(meta, column, req);
+  return typeof r === 'string' ? { ok: false, code: 'live_refused', reason: r, error: UNLISTED[r]() } : r;
 }
 
 /**

@@ -55,6 +55,20 @@ describe('replyError', () => {
   });
 });
 
+describe('a refusal’s machine reason', () => {
+  it('is kept beside the sentence, so a picker can tell "not synced yet" from "not listed"', () => {
+    const e = replyError({ ok: false, code: 'live_refused', reason: 'notSynced', error: 'Not synced yet.' }, 'x');
+    expect(e).toBeInstanceOf(LiveRefusalError);
+    expect((e as LiveRefusalError).reason).toBe('notSynced');
+    expect(e.message).toBe('Not synced yet.');
+  });
+  it('NEGATIVE CONTROL: a sentence in `reason` (an answer card) is the message, never a reason code', () => {
+    const e = replyError({ ok: false, code: 'live_dataset', reason: SENTENCE }, 'x') as LiveRefusalError;
+    expect(e.message).toBe(SENTENCE);
+    expect(e.reason).toBeUndefined();
+  });
+});
+
 describe('what is off for Live (the plan’s list)', () => {
   it('names the six groups of L2.6, and words every feature with a place to open the copy', () => {
     expect(LIVE_OFF_LIST).toHaveLength(6);

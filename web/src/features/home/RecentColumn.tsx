@@ -13,7 +13,7 @@ import { SkeletonRows } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { shortTime } from '../../app/when';
-import { itemHref, metaText, qualityLabel, TYPE_LABEL } from './homeText';
+import { importPath, itemHref, metaText, qualityLabel, TYPE_LABEL } from './homeText';
 import s from './HomePage.module.css';
 
 const COLLAPSED = 8;
@@ -81,7 +81,7 @@ function Row({ it, starred, onStar }: { it: RecentItem; starred: boolean; onStar
   );
 }
 
-export function RecentColumn({ projectId, recent }: { projectId: string | undefined; recent: ReturnType<typeof useRecent> }) {
+export function RecentColumn({ projectId, recent, canEdit }: { projectId: string | undefined; recent: ReturnType<typeof useRecent>; canEdit: boolean }) {
   const starredQ = useStarred();
   const setStarred = useSetStarred();
   const [filter, setFilter] = useState<Filter>('all');
@@ -201,14 +201,16 @@ export function RecentColumn({ projectId, recent }: { projectId: string | undefi
               icon="list"
               title="Your work will collect here"
               actions={
-                <>
-                  <Link className={buttonClass('primary')} to="/data">
-                    Bring in some data
-                  </Link>
-                  <Link className={buttonClass('ghost')} to="/data">
-                    Browse sources
-                  </Link>
-                </>
+                canEdit && (
+                  <>
+                    <Link className={buttonClass('primary')} to={importPath(projectId)}>
+                      Bring in some data
+                    </Link>
+                    <Link className={buttonClass('ghost')} to={projectId ? `/connections/${projectId}` : '/connections'}>
+                      Browse sources
+                    </Link>
+                  </>
+                )
               }
             >
               {allProjects

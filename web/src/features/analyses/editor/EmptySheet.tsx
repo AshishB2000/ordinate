@@ -49,6 +49,15 @@ export function EmptySheet() {
     }
   };
 
+  if (ed.readOnly) {
+    return (
+      <div className={s.empty}>
+        <EmptyState icon="layout-dashboard" title="This sheet is empty">
+          An editor of this project can add visuals, KPIs and text here. You have view-only access.
+        </EmptyState>
+      </div>
+    );
+  }
   return (
     <div className={s.empty}>
       <EmptyState
