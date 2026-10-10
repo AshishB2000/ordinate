@@ -1270,3 +1270,29 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   `test-serverDocs` passes. The page's one stale line ("a section on choosing a Live cache age is added
   by the task that builds it") is gone, and L3.2's "Empty text" difference now says what L2.8 settled
   (one blank row, as the copy).
+
+## 2026-10-10 — One refresh door for `connection:refresh` and `datasets refresh` (closes the gap L0.3/L0.4 and L0.5 reported)
+
+- **Built.** `refreshNow` (`src/ipc/datasets.ts`) is `dataset:refresh`'s whole sequence as one function:
+  the Live cache reset, else `refreshAsJob` (the job, the queue per dataset, the lock across pods, the
+  announcement), then `afterRefresh`, and the header-only reply. `connection:refresh` — the ↻ on a
+  dataset under its connection's rail — now calls it; the `datasets refresh` command goes through
+  `refreshAsJob`. `refreshConnectionInto` is the refresh service's alone: no channel calls it.
+- **Found by the failing test** (`scripts/test-refreshOneDoor.ts`, written first). The old
+  `connection:refresh` called `refreshConnectionInto` directly, so it (1) fetched and wrote BESIDE a
+  running refresh of the same dataset — two fetches at once on one pod, no lock across pods; (2) answered
+  with the stored dataset whole — every row, and its `origin` (connection id, table, a query dataset's
+  SQL text) — against "no dataset origin reaches a browser"; (3) overwrote ANY dataset of the project
+  with the named connection's saved selection; (4) ran no alerts, quality checks, re-publish or
+  dependents and announced nothing, so an open dashboard kept the old figures.
+- **Decided — a dataset that did not come from the connection is refused** ("Linked dataset not
+  found") before the source is asked: the door re-runs what BUILT the dataset (`origin.connId`), so a
+  connection id that is not its origin has nothing to say. The rail only lists a connection's own.
+- **Corrected.** The L0.5 entry calls `datasets refresh` an MCP tool. It is CLI only (its registry
+  entry has no `tool`), and the CLI has had no entry point since T8.1, so nothing reaches it on a
+  server. It is routed anyway: one door, whichever front end returns.
+- **Measured** (`test-refreshOneDoor`, a source that takes 150 ms). ↻ on the dataset and ↻ on its
+  connection row at the same instant: 2 fetches, never 2 at once (before: 2 at once). NEGATIVE CONTROL:
+  the old handler's direct call beside a running job is 2 at once. `test-refreshLock` §3: with another
+  session holding the dataset's lock, both ↻ channels' function and `datasets refresh` are refused
+  (`alreadyRunning`) and the dataset keeps its 1 row.

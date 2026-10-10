@@ -280,6 +280,32 @@ export async function afterRefresh(projectId: string, id: string): Promise<void>
   void refreshDependents(projectId, id);
 }
 
+/** The ↻ a person presses — `dataset:refresh`, and `connection:refresh` (./connections.ts): ONE door, so neither fetches and writes beside the other. */
+export async function refreshNow(projectId: string, id: string) {
+  try {
+    const live = await refreshLive(projectId, id); // Live: reset the cache (epoch), fetch nothing
+    if (live) return live;
+    const res = await refreshAsJob(projectId, id);
+    if (!res.ok) {
+      // The reason can quote the URL or the server path it failed on.
+      if (!serverDataDir()) return res;
+      const meta = await datasets.getDatasetMeta(projectId, id);
+      return { ...res, error: redactOriginText(res.error, meta?.origin) };
+    }
+    await afterRefresh(projectId, id);
+    // The header only — no caller reads the rows (a 1M-row clone is seconds
+    // of work for nothing), and the origin may hold a key.
+    return {
+      ok: true,
+      dataset: headerOf(res.dataset),
+      warnings: res.warnings,
+      warningCount: res.warnings.length,
+    };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Failed to refresh the dataset' };
+  }
+}
+
 export function register() {
   compose.setCommitSteps((p, d, st) => commitSteps(p, d, st));
 
@@ -353,30 +379,7 @@ export function register() {
   // 7 · 1 failed" without re-deriving it.
   // A JOB (src/app/jobs.ts), one at a time per dataset: the fetch is async and
   // the write goes through the async Parquet path, reporting to the job.
-  ipcMain.handle('dataset:refresh', async (_e, { projectId, id }: any = {}) => {
-    try {
-      const live = await refreshLive(projectId, id); // Live: reset the cache (epoch), fetch nothing
-      if (live) return live;
-      const res = await refreshAsJob(projectId, id);
-      if (!res.ok) {
-        // The reason can quote the URL or the server path it failed on.
-        if (!serverDataDir()) return res;
-        const meta = await datasets.getDatasetMeta(projectId, id);
-        return { ...res, error: redactOriginText(res.error, meta?.origin) };
-      }
-      await afterRefresh(projectId, id);
-      // The header only — no caller reads the rows (a 1M-row clone is seconds
-      // of work for nothing), and the origin may hold a key.
-      return {
-        ok: true,
-        dataset: headerOf(res.dataset),
-        warnings: res.warnings,
-        warningCount: res.warnings.length,
-      };
-    } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to refresh the dataset' };
-    }
-  });
+  ipcMain.handle('dataset:refresh', (_e, { projectId, id }: any = {}) => refreshNow(projectId, id));
 
   // Per-column summaries + quality issues for an opened dataset. Computed ONCE
   // when the renderer opens a dataset (not per keystroke — sort/filter/search are

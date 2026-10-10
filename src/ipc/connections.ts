@@ -148,8 +148,8 @@ export function selectionForDataset(origin: unknown): { table?: string; query?: 
  *
  * Exported because the dataset refresh service needs exactly this and must not
  * re-implement it: the secret is resolved here, in main, and a second copy would
- * be a second place for that to go wrong. `connection:refresh` is now a thin
- * wrapper over it, so the two cannot drift.
+ * be a second place for that to go wrong. It is that service's alone: no
+ * channel calls it (`connection:refresh` goes through the dataset's own door).
  *
  * `outWarnings` collects the pipeline warnings from re-deriving the dataset.
  */
@@ -353,13 +353,12 @@ export function register(): void {
     }
   });
 
-  // Re-run a connection and overwrite its linked dataset's data. Updates the
-  // connection's lastRefreshedAt/lastStatus either way.
+  // The ↻ on a dataset under its connection: that dataset's OWN refresh, through `dataset:refresh`'s door
+  // (./datasets.ts refreshNow), never a second fetch-and-write beside it. Not from this connection → refused.
   ipcMain.handle('connection:refresh', async (_e, { projectId, connId, datasetId }: any = {}) => {
-    const live = await (require('./liveDatasets') as typeof import('./liveDatasets')).refreshLive(projectId, datasetId);
-    if (live) return live; // a Live dataset's refresh resets its cache; nothing is fetched
-    const res = await refreshConnectionInto(projectId, connId, datasetId);
-    return res.ok ? { ok: true, dataset: res.dataset } : res;
+    const origin = (await datasets.getDatasetMeta(projectId, datasetId))?.origin;
+    if (!origin || origin.kind !== 'connection' || origin.connId !== connId) return { ok: false, error: 'Linked dataset not found' };
+    return (require('./datasets') as typeof import('./datasets')).refreshNow(projectId, datasetId);
   });
 
   // One table's columns, out of the source's own catalog. `schema: null` means

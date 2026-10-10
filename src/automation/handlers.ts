@@ -22,7 +22,7 @@ import * as sqlDatasets from '../engine/sqlDatasets';
 import { viewColumns } from '../engine/datasetView';
 import { sourceKindForPath, storedKind } from '../data/fileImport';
 import { parseAnyFile } from '../data/parquetImport';
-import { refreshDataset } from '../data/datasetRefresh';
+import { refreshAsJob } from '../data/refreshJob';
 import { refreshDependents } from '../data/datasetDependents';
 import { runQualityChecks } from '../analysis/qualityRun';
 import * as metrics from '../analysis/metrics';
@@ -140,23 +140,20 @@ export async function datasetsImport(ctx: Ctx, file: string, name: string): Prom
   );
 }
 
-/** `dataset:refresh`'s own sequence, with the dependents AWAITED — the process exits after. */
+/**
+ * `dataset:refresh`'s own sequence, through its own door (src/data/refreshJob.ts:
+ * the job, the queue per dataset, the lock across pods, the announcement), with
+ * the dependents AWAITED — the process exits after.
+ */
 export async function datasetsRefresh(ctx: Ctx, ref: string): Promise<unknown> {
   const d = await datasetFor(ctx, ref);
-  return runJob(
-    { kind: 'refresh', label: `Refresh ${d.name}`, projectId: ctx.projectId, datasetId: d.id },
-    async (progress) => {
-      ctx.progress(`Refreshing ${d.name}…`);
-      const res = await refreshDataset(ctx.projectId, d.id);
-      if (!res.ok) throw new AutomationError('runtime', res.error);
-      progress(0.8, 'Checking rules');
-      await evaluateAndDeliver(ctx.projectId, d.id);
-      await runQualityChecks(ctx.projectId, d.id);
-      await refreshDependents(ctx.projectId, d.id);
-      return { id: d.id, name: res.dataset.name, rows: res.dataset.rowCount, refreshedAt: res.dataset.lastRefreshedAt || null, warnings: res.warnings };
-    },
-    (r) => `${r.rows.toLocaleString('en-US')} rows`,
-  );
+  ctx.progress(`Refreshing ${d.name}…`);
+  const res = await refreshAsJob(ctx.projectId, d.id);
+  if (!res.ok) throw new AutomationError('runtime', res.error);
+  await evaluateAndDeliver(ctx.projectId, d.id);
+  await runQualityChecks(ctx.projectId, d.id);
+  await refreshDependents(ctx.projectId, d.id);
+  return { id: d.id, name: res.dataset.name, rows: res.dataset.rowCount, refreshedAt: res.dataset.lastRefreshedAt || null, warnings: res.warnings };
 }
 
 // ── SQL, metrics, insights ───────────────────────────────────────────────────
