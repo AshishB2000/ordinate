@@ -16,6 +16,7 @@ import { Skeleton } from '../../ui/Skeleton';
 import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
 import { useGallery } from '../analyses/api';
+import { useCanEdit } from '../projects/api';
 import { toastMovedToTrash } from '../projects/trashToast';
 import { failure, useReports, type Report, type ReportSummary } from './api';
 import { generateReport } from './export/generate';
@@ -87,7 +88,7 @@ function NewReport({ projectId, onClose }: { projectId: string; onClose: () => v
   );
 }
 
-function ReportCard({ projectId, r, onGenerate, busy }: { projectId: string; r: ReportSummary; onGenerate: () => void; busy: boolean }) {
+function ReportCard({ projectId, r, onGenerate, busy, canEdit }: { projectId: string; r: ReportSummary; onGenerate: () => void; busy: boolean; canEdit: boolean }) {
   const client = useQueryClient();
   const navigate = useNavigate();
   const open = `/reports/${projectId}/${r.id}`;
@@ -129,18 +130,20 @@ function ReportCard({ projectId, r, onGenerate, busy }: { projectId: string; r: 
         <Button size="sm" variant="primary" icon="download" onClick={onGenerate} loading={busy}>
           Generate now
         </Button>
-        <Button size="sm" icon="pencil" onClick={() => void navigate(open)}>
-          Edit
-        </Button>
+        {canEdit && (
+          <Button size="sm" icon="pencil" onClick={() => void navigate(open)}>
+            Edit
+          </Button>
+        )}
         <Menu
           label={`${r.name} options`}
           align="end"
           trigger={<IconButton icon="more-horizontal" label="Report options" size="sm" />}
           items={[
             { label: 'History', icon: 'history', onSelect: () => void navigate(`/versions/${projectId}/report/${r.id}`) },
-            { label: 'Duplicate', icon: 'copy', onSelect: () => void duplicate() },
-            { kind: 'separator' },
-            { label: 'Delete', icon: 'trash', danger: true, onSelect: () => void remove() },
+            ...(canEdit
+              ? [{ label: 'Duplicate', icon: 'copy' as const, onSelect: () => void duplicate() }, { kind: 'separator' as const }, { label: 'Delete', icon: 'trash' as const, danger: true, onSelect: () => void remove() }]
+              : []),
           ]}
         />
       </div>
@@ -153,11 +156,13 @@ export function ReportList({ projectId }: { projectId: string }) {
   const client = useQueryClient();
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState('');
+  // Creating, editing, duplicating and deleting a report are an editor's; anyone may generate the file.
+  const canEdit = useCanEdit(projectId);
   const { hooks, dialog } = useGenerateHooks();
   const generate = async (r: ReportSummary) => {
     setBusy(r.id);
     toast('Building the report…');
-    const out = await generateReport(projectId, r.id, r, hooks);
+    const out = await generateReport(projectId, r.id, r, hooks, canEdit);
     setBusy('');
     if (out.ok) toast(`Downloaded ${out.filename}`, { kind: 'success' });
     else if (!out.cancelled) toast(out.error || 'Couldn’t build the report.', { kind: 'error' });
@@ -185,20 +190,22 @@ export function ReportList({ projectId }: { projectId: string }) {
         icon="file-text"
         title="No reports yet"
         actions={
-          <Button variant="primary" size="lg" icon="plus" onClick={() => setCreating(true)}>
-            New report
-          </Button>
+          canEdit && (
+            <Button variant="primary" size="lg" icon="plus" onClick={() => setCreating(true)}>
+              New report
+            </Button>
+          )
         }
       >
         A report turns a dashboard into a file you can send: a cover, a summary of what the figures say, a page per sheet and chart. Every number in it is
-        one the app computed; the captions say what changed in words.
+        one the app computed; the captions say what changed in words.{!canEdit && ' An editor of this project can create one. You have view-only access.'}
       </EmptyState>
     );
   } else {
     body = (
       <ul className={s.grid} aria-label="Reports">
         {q.data.map((r) => (
-          <ReportCard key={r.id} projectId={projectId} r={r} busy={busy === r.id} onGenerate={() => void generate(r)} />
+          <ReportCard key={r.id} projectId={projectId} r={r} busy={busy === r.id} canEdit={canEdit} onGenerate={() => void generate(r)} />
         ))}
       </ul>
     );
@@ -208,9 +215,11 @@ export function ReportList({ projectId }: { projectId: string }) {
       {!!q.data?.length && (
         <div className={s.bar}>
           <span className={s.count}>{q.data.length === 1 ? '1 report' : `${q.data.length} reports`}</span>
-          <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
-            New report
-          </Button>
+          {canEdit && (
+            <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
+              New report
+            </Button>
+          )}
         </div>
       )}
       {body}

@@ -132,7 +132,8 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
     }
     setOverrides(next);
     // A saved visual keeps its styling as it changes; a draft keeps it until the first Save.
-    if (visualId) {
+    // A viewer may try a style on screen; nothing of theirs is written.
+    if (visualId && can('editor')) {
       window.clearTimeout(persist.current);
       persist.current = window.setTimeout(() => void updateVisual(projectId, visualId, { overrides: next }).then(() => refresh(visualId), () => undefined), 300);
     }
@@ -163,6 +164,7 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
     enc, setEnc, chartType, setChartType, overrides, patch, filters, setFilters, live, overlays, setOverlays,
     eff, isDate, complete, preview, reply, data, fit, hasGeo, recommended, current, label, pickType, save, explain,
     drawn, scope, measures: measureNames(eff), visualId, datasetId, asOf, setAsOf, liveDataset: !!initial.live, offType,
+    canEdit: can('editor'),
   };
 }
 

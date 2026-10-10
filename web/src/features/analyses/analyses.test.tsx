@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { renderApp } from '../../test-utils';
 import { buildParam } from './ParamDialog';
 
@@ -66,6 +66,31 @@ describe('Analyses list', () => {
     await screen.findByText(/AI isn’t set up for your organization yet/);
     for (const b of screen.getAllByRole('button', { name: 'Draft with the Assistant' })) expect((b as HTMLButtonElement).disabled).toBe(true);
     expect((await screen.findByRole('link', { name: /Set up AI/ })).getAttribute('href')).toBe('/admin?tab=ai');
+  });
+
+  it('shows a viewer the dashboards without Create, Rename or Delete — and an editor all three', async () => {
+    const gallery = { 'analysis:gallery': { body: [board(A1, 'Revenue board')] } };
+    serve(base({ ...gallery, 'projects:roles': { body: { [PID]: 'viewer' } } }));
+    renderApp(`/analyses?project=${PID}`);
+    await screen.findByRole('list', { name: 'Dashboards' });
+    await screen.findByRole('link', { name: /Metrics/ });
+    expect(screen.queryByRole('button', { name: 'Create dashboard' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Draft with the Assistant' })).toBeNull();
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Dashboard options' }), { button: 0, ctrlKey: false });
+    expect((await screen.findAllByRole('menuitem')).map((m) => m.textContent)).toEqual(['Open', 'History', 'Lineage']);
+    cleanup();
+    serve(base(gallery)); // the base role is admin
+    renderApp(`/analyses?project=${PID}`);
+    expect(await screen.findByRole('button', { name: 'Create dashboard' })).toBeTruthy();
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Dashboard options' }), { button: 0, ctrlKey: false });
+    expect((await screen.findAllByRole('menuitem')).map((m) => m.textContent)).toEqual(['Open', 'Rename', 'History', 'Lineage', 'Delete']);
+  });
+
+  it('a viewer following a “New dashboard” link gets no wizard, and is told who can build one', async () => {
+    serve(base({ 'analysis:gallery': { body: [] }, 'projects:roles': { body: { [PID]: 'viewer' } } }));
+    renderApp(`/analyses?project=${PID}&new=1&dataset=${DID}`);
+    expect(await screen.findByText(/An editor of this project can build dashboards/)).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: 'Create dashboard' })).toBeNull();
   });
 
   it('opens the wizard on “Start from” for a dataset named in the URL (a dataset page’s New dashboard)', async () => {

@@ -104,12 +104,15 @@ function Stat({ icon, tone, children }: { icon: IconName; tone?: 'bad' | 'good';
 export function PipelineHead({
   view,
   running,
+  canEdit,
   onRunAll,
   saveSchedule,
   savePolicy,
 }: {
   view: PipelineView;
   running: boolean;
+  /** An editor sets the schedule and the retry policy and runs the pipeline; a viewer reads them. */
+  canEdit: boolean;
   onRunAll: () => void;
   saveSchedule: (patch: { cron?: string | null; tz?: string; paused?: boolean }) => Promise<boolean>;
   savePolicy: (retries: number, backoffMs: number) => void;
@@ -137,16 +140,18 @@ export function PipelineHead({
                 : 'Run every step on one schedule, in order. Each step’s own schedule still applies.'}
             </span>
           </div>
-          <div className={s.schedActs}>
-            <Button size="sm" variant="ghost" aria-expanded={editing} onClick={() => setEditing(!editing)}>
-              {sch ? 'Edit' : 'Set a schedule'}
-            </Button>
-            {sch && (
-              <Button size="sm" variant="ghost" onClick={() => void saveSchedule({ paused: !sch.paused })}>
-                {sch.paused ? 'Resume' : 'Pause'}
+          {canEdit && (
+            <div className={s.schedActs}>
+              <Button size="sm" variant="ghost" aria-expanded={editing} onClick={() => setEditing(!editing)}>
+                {sch ? 'Edit' : 'Set a schedule'}
               </Button>
-            )}
-          </div>
+              {sch && (
+                <Button size="sm" variant="ghost" onClick={() => void saveSchedule({ paused: !sch.paused })}>
+                  {sch.paused ? 'Resume' : 'Pause'}
+                </Button>
+              )}
+            </div>
+          )}
         </div>
         <div className={s.field}>
           <span className={s.label}>On failure</span>
@@ -154,6 +159,7 @@ export function PipelineHead({
             <Select
               aria-label="On failure"
               size="sm"
+              disabled={!canEdit}
               value={String(policy.retries)}
               onValueChange={(v) => savePolicy(Number(v), policy.backoffMs)}
               options={RETRIES.map((l, i) => ({ value: String(i), label: l }))}
@@ -161,16 +167,18 @@ export function PipelineHead({
             <Select
               aria-label="First wait before a retry"
               size="sm"
-              disabled={policy.retries === 0}
+              disabled={!canEdit || policy.retries === 0}
               value={String(policy.backoffMs)}
               onValueChange={(v) => savePolicy(policy.retries, Number(v))}
               options={backoffs.map(([ms, l]) => ({ value: String(ms), label: l }))}
             />
           </div>
         </div>
-        <Button variant="primary" icon="play" loading={running} disabled={!steps} onClick={onRunAll}>
-          {running ? 'Running…' : 'Run all'}
-        </Button>
+        {canEdit && (
+          <Button variant="primary" icon="play" loading={running} disabled={!steps} onClick={onRunAll}>
+            {running ? 'Running…' : 'Run all'}
+          </Button>
+        )}
       </div>
       {steps > 0 && (
         <div className={s.stats}>

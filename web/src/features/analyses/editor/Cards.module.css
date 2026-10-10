@@ -16,6 +16,11 @@
 .head:active {
   cursor: grabbing;
 }
+/* A viewer's card does not move: no grab cursor to say it would. */
+.readOnly > .head,
+.readOnly > .head:active {
+  cursor: default;
+}
 .title {
   flex: 1 1 auto;
   min-width: 0;

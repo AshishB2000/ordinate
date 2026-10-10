@@ -109,6 +109,31 @@ describe('the gallery', () => {
     expect(calls.find((c) => c.channel === 'visual:update')!.payload).toEqual({ projectId: PID, id: VID, favorite: true });
   });
 
+  it('shows a viewer the gallery without New visual, the star, or Rename / Duplicate / Delete', async () => {
+    serve(base({ 'projects:roles': { body: { [PID]: 'viewer' } }, 'visual:list': { body: [summary()] } }));
+    renderApp(`/visuals/${PID}`);
+    expect(await screen.findByRole('button', { name: /^Amount by region/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'New visual' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Favourite Amount by region' })).toBeNull();
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'More actions for Amount by region' }), { button: 0, ctrlKey: false });
+    expect((await screen.findAllByRole('menuitem')).map((m) => m.textContent)).toEqual(['Open', 'Explain', 'History']);
+  });
+
+  it('…and an editor has all of them (negative control)', async () => {
+    serve(base({ 'projects:roles': { body: { [PID]: 'editor' } }, 'visual:list': { body: [summary()] } }));
+    renderApp(`/visuals/${PID}`);
+    expect(await screen.findByRole('button', { name: 'New visual' })).toBeTruthy();
+    fireEvent.pointerDown(await screen.findByRole('button', { name: 'More actions for Amount by region' }), { button: 0, ctrlKey: false });
+    expect((await screen.findAllByRole('menuitem')).map((m) => m.textContent)).toEqual(['Open', 'Rename', 'Duplicate', 'Explain', 'History', 'Delete']);
+  });
+
+  it('tells a viewer of a project with no visuals who can build one', async () => {
+    serve(base({ 'projects:roles': { body: { [PID]: 'viewer' } }, 'visual:list': { body: [] } }));
+    renderApp(`/visuals/${PID}`);
+    expect(await screen.findByText(/An editor of this project can build visuals/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'New visual' })).toBeNull();
+  });
+
   it('starts from a dataset when there are no visuals, and gates the Assistant door', async () => {
     serve(base({ 'visual:list': { body: [] } }));
     renderApp(`/visuals/${PID}`);

@@ -14,6 +14,7 @@ import { Input } from '../../../ui/Field';
 import { Menu } from '../../../ui/Menu';
 import { Skeleton } from '../../../ui/Skeleton';
 import { toast } from '../../../ui/Toast';
+import { useCanEdit } from '../../projects/api';
 import { failure, useStories, type Story, type StorySummary } from '../api';
 import { DraftStory } from './DraftStory';
 import s from '../Reports.module.css';
@@ -27,6 +28,7 @@ export function StoryList({ projectId }: { projectId: string }) {
   const [ask, setAsk] = useState<Ask>(null);
   const [name, setName] = useState('');
   const [drafting, setDrafting] = useState(false);
+  const canEdit = useCanEdit(projectId);
   const refresh = () => void client.invalidateQueries({ queryKey: ['story:list', projectId] });
   const open = (id: string, focusEnd = false) => void navigate(`/stories/${projectId}/${id}${focusEnd ? '?focus=end' : ''}`);
 
@@ -50,7 +52,8 @@ export function StoryList({ projectId }: { projectId: string }) {
     refresh();
   };
 
-  const actions = (
+  // Writing a story is an editor's; a viewer opens and reads one.
+  const actions = canEdit && (
     <div className={s.barActions}>
       <Button icon="sparkles" onClick={() => setDrafting(true)}>
         Draft with the Assistant
@@ -87,7 +90,7 @@ export function StoryList({ projectId }: { projectId: string }) {
     body = (
       <EmptyState icon="type-text" title="No stories yet" actions={actions}>
         A story is a document you read top to bottom: your words, with live charts and metrics where they make the point. Type <kbd>/</kbd> on an empty line to
-        add one. Present it section by section, or export it as a PDF.
+        add one. Present it section by section, or export it as a PDF.{!canEdit && ' An editor of this project can create one. You have view-only access.'}
       </EmptyState>
     );
   } else {
@@ -120,16 +123,20 @@ export function StoryList({ projectId }: { projectId: string }) {
                 trigger={<IconButton icon="more-horizontal" label="Story actions" size="sm" />}
                 items={[
                   { label: 'Open', icon: 'file-text', onSelect: () => open(st.id) },
-                  {
-                    label: 'Rename',
-                    icon: 'pencil',
-                    onSelect: () => {
-                      setName(st.name);
-                      setAsk({ kind: 'rename', story: st });
-                    },
-                  },
-                  { kind: 'separator' },
-                  { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setAsk({ kind: 'delete', story: st }) },
+                  ...(canEdit
+                    ? [
+                        {
+                          label: 'Rename',
+                          icon: 'pencil' as const,
+                          onSelect: () => {
+                            setName(st.name);
+                            setAsk({ kind: 'rename', story: st });
+                          },
+                        },
+                        { kind: 'separator' as const },
+                        { label: 'Delete', icon: 'trash' as const, danger: true, onSelect: () => setAsk({ kind: 'delete', story: st }) },
+                      ]
+                    : []),
                 ]}
               />
             </span>
