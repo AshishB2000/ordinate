@@ -134,10 +134,25 @@ export async function buildDraft(projectId: string, draft: PlanPreview, preferre
 
 /**
  * Draft → review → build → open. With `draft` given (the wizard already asked)
- * it opens on the review; otherwise it asks the model first, with no intent —
- * the list header's one-shot draft.
+ * it opens on the review; otherwise it asks the model first — with no intent
+ * (the list header's one-shot draft), or with what the Assistant was asked for
+ * (`intent`, and the dataset on screen).
  */
-export function DraftFlow({ projectId, draft: given, preferredName, onClose }: { projectId: string; draft?: PlanPreview; preferredName?: string; onClose: () => void }) {
+export function DraftFlow({
+  projectId,
+  draft: given,
+  datasetId,
+  intent,
+  preferredName,
+  onClose,
+}: {
+  projectId: string;
+  draft?: PlanPreview;
+  datasetId?: string;
+  intent?: string;
+  preferredName?: string;
+  onClose: () => void;
+}) {
   const [reply, setReply] = useState<DraftReply | null>(given ?? null);
   const [failed, setFailed] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -148,15 +163,15 @@ export function DraftFlow({ projectId, draft: given, preferredName, onClose }: {
   useEffect(() => {
     if (given && attempt === 0) return;
     let live = true;
-    rpc('analysis:draft', { projectId }).then(
+    rpc('analysis:draft', { projectId, ...(datasetId ? { datasetId } : {}), ...(intent ? { intent } : {}) }).then(
       (r) => live && setReply(r as DraftReply),
       (err: unknown) => live && setFailed(failure(err, 'Could not draft a dashboard.')),
     );
     return () => {
       live = false;
     };
-  }, [given, projectId, attempt]);
-  // Ask again after a failure (the one-shot draft, with no intent — as the first ask).
+  }, [given, projectId, datasetId, intent, attempt]);
+  // Ask again after a failure, as the first ask.
   const retry = () => {
     setFailed('');
     setReply(null);
