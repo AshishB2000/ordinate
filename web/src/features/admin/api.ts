@@ -114,6 +114,46 @@ export interface LiveUsage {
   rows: LiveUsageRow[];
 }
 
+/** One provider on Admin → AI (src/server/aiConfig.ts ProviderState): flags, never a key. */
+export interface AiProviderState {
+  provider: 'anthropic' | 'openai' | 'gemini' | 'gateway';
+  /** Saved and its last connection test passed. */
+  connected: boolean;
+  /** Saved; with `connected` false, the last test failed. */
+  saved: boolean;
+  hasKey: boolean;
+  baseUrl: string;
+  verifiedAt: string | null;
+}
+
+export interface AiModelRow {
+  provider: AiProviderState['provider'];
+  model: string;
+  label: string;
+  isDefault: boolean;
+}
+
+/** `ai:admin`: the org's AI setup. `keyStore` says why this server cannot store a key, or null. */
+export interface AiAdmin {
+  keyStore: string | null;
+  providers: AiProviderState[];
+  models: AiModelRow[];
+}
+
+/** A provider's live list (`ai:providerModels`, src/ai/models.ts). */
+export type ProviderModels = { ok: true; models: { id: string; label: string }[] } | { ok: false; errorType?: string };
+
+/** An ai:* write's reply: a refusal (`error`) or a failed connection test (`message`, `detail`). */
+export interface AiOutcome {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  detail?: string;
+}
+export const aiWhy = (r: AiOutcome): string => r.error || [r.message, r.detail].filter(Boolean).join(' — ') || 'The change did not go through.';
+
+export const useAiAdmin = () => useQuery({ queryKey: ['ai:admin'], queryFn: async () => (await rpc('ai:admin')) as AiAdmin });
+
 export type Created = { ok: true; id: string; name: string; prefix: string; createdAt: string; token: string } | { ok: false; error: string };
 
 /** A write's reply: `{ ok }`, or why not. */
@@ -177,6 +217,24 @@ export function useWrite<C extends Channel, R extends Result = Result>(
     onSuccess: (reply) => {
       for (const key of refresh) void client.invalidateQueries({ queryKey: [key] });
       if (!reply.ok) toast(refusal(reply.error), { kind: 'error' });
+      onDone?.(reply);
+    },
+    onError: (err) => toast(`The change did not go through: ${err.message}`, { kind: 'error' }),
+  });
+}
+
+/**
+ * An ai:* write: refreshes the admin view and every member's `ai:status` (the
+ * dock re-reads it), and hands the reply on — a refusal or a failed test is
+ * shown where it happened, not as a toast.
+ */
+export function useAiWrite<C extends 'ai:connect' | 'ai:disconnect' | 'ai:setModels'>(channel: C, onDone?: (reply: AiOutcome) => void) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: RpcInput<C>) => (await rpc(channel, ...([input] as RpcArgs<C>))) as AiOutcome,
+    // Pending until the admin view is re-read, so a control never shows the old state in between.
+    onSuccess: async (reply) => {
+      await Promise.all([client.invalidateQueries({ queryKey: ['ai:admin'] }), client.invalidateQueries({ queryKey: ['ai:status'] })]);
       onDone?.(reply);
     },
     onError: (err) => toast(`The change did not go through: ${err.message}`, { kind: 'error' }),

@@ -8,7 +8,8 @@
 // and backups. Those live in the org's config, not in Postgres, so a server
 // without accounts (dev) still shows them; the account tabs need Postgres.
 // Live usage (live data L2.7) works either way: without Postgres it shows this
-// server's own counts, and says so.
+// server's own counts, and says so. AI (docs/ai-models) is the providers and
+// the models members may use; without Postgres it says what the operator sets.
 
 import { useSearchParams } from 'react-router';
 import { Page } from '../../app/blocks';
@@ -26,11 +27,12 @@ import { WorkspaceTab } from '../settings/WorkspaceTab';
 import { ThemesTab } from '../settings/ThemesTab';
 import { BackupsTab } from '../settings/BackupsTab';
 import { LiveUsageTab } from './LiveUsageTab';
+import { AiTab } from './AiTab';
 import { Icon } from '../../ui/icons/Icon';
 import s from './Admin.module.css';
 
 const ACCOUNT_TABS = ['people', 'teams', 'projects', 'audit', 'settings'] as const;
-const ORG_TABS = ['workspace', 'themes', 'backups', 'live'] as const;
+const ORG_TABS = ['workspace', 'ai', 'themes', 'backups', 'live'] as const;
 type TabId = (typeof ACCOUNT_TABS)[number] | (typeof ORG_TABS)[number];
 
 export default function AdminPage() {
@@ -106,6 +108,9 @@ export default function AdminPage() {
           <Tab value="workspace" icon="sliders">
             Workspace
           </Tab>
+          <Tab value="ai" icon="sparkles">
+            AI
+          </Tab>
           <Tab value="themes" icon="layout-dashboard">
             Themes
           </Tab>
@@ -137,6 +142,9 @@ export default function AdminPage() {
         )}
         <TabPanel value="workspace">
           <WorkspaceTab />
+        </TabPanel>
+        <TabPanel value="ai">
+          <AiTab />
         </TabPanel>
         <TabPanel value="themes">
           <ThemesTab />
