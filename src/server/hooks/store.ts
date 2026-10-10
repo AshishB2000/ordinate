@@ -2,7 +2,7 @@
 //
 // A refresh URL is `/api/hooks/refresh/<token>`: a capability for ONE action
 // on ONE target — a dataset, or every dataset that came from one connection
-// (0014_refresh_hooks_connection.sql). The token is `ordh_` + 32 random bytes (base64url) — a
+// (0015_refresh_hooks_connection.sql). The token is `ordh_` + 32 random bytes (base64url) — a
 // prefix secret scanners can match, like a personal token's `ord_`. The value
 // exists only in the reply that created it; the table keeps its sha256
 // (`token_hash`, what a call is looked up by) and `ordh_` + 8 characters
@@ -49,7 +49,7 @@ const LIST_MAX = 50;
  */
 export const PENDING_STALE_SEC = 900;
 
-/** How a call ended (0015_refresh_hooks_outcome.sql). */
+/** How a call ended (0016_refresh_hooks_outcome.sql). */
 export type HookResult = 'ok' | 'failed' | 'already_running';
 /** What the row holds: `running` while a call's refreshes are in flight; NULL when no call's outcome was ever recorded. */
 export type HookOutcome = HookResult | 'running';
