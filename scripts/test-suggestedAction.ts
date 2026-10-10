@@ -21,7 +21,7 @@ const { ACTION_MARKER, MAX_INTENT, CHAT_SYSTEM_PROMPT } = sa;
 
 // ── validateAction: the whitelist ───────────────────────────────────────────
 
-for (const kind of ['dashboard', 'edit', 'chart', 'step', 'calc']) {
+for (const kind of ['dashboard', 'edit', 'chart', 'step', 'calc', 'import']) {
   const got = sa.validateAction({ kind, intent: 'x' });
   ok('validate: "' + kind + '" survives the whitelist', got.kind === kind, JSON.stringify(got));
 }
@@ -82,7 +82,7 @@ for (const preset of badPresets) {
 // object literal precisely so unnamed keys are dropped, and a 'dashboard'
 // proposal that quietly carried a preset would restyle the sheet on a click the
 // user read as "build me a dashboard".
-for (const kind of ['dashboard', 'edit', 'chart', 'step', 'calc']) {
+for (const kind of ['dashboard', 'edit', 'chart', 'step', 'calc', 'import']) {
   const got = sa.validateAction({ kind, intent: 'x', preset: 'dark' });
   ok('validate: preset is stripped from a "' + kind + '" action',
     got.kind === kind && !('preset' in got), JSON.stringify(got));
@@ -308,7 +308,7 @@ ok('filter: an action-SHAPED line with an off-whitelist kind is released, not ea
 
 ok('prompt: names the exact marker the parser looks for',
   CHAT_SYSTEM_PROMPT.indexOf(ACTION_MARKER) >= 0);
-for (const kind of ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'none']) {
+for (const kind of ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'import', 'none']) {
   // 'style' is the one kind that is invalid without a second field, so its
   // round-trip probe carries a preset — the parser rejecting a bare style
   // action is the documented behaviour, not a drift between prompt and parser.

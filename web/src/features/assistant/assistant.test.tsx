@@ -360,4 +360,23 @@ describe('the dock', () => {
     expect(ask.context).toEqual({ kind: '' });
     expect(ask.askId).toMatch(/^[0-9a-f-]{36}$/);
   });
+
+  it('a reply that proposes bringing data in shows the three ways in, as links into this project', async () => {
+    const turns = [
+      { id: 't1', role: 'user', text: 'upload data', createdAt: '' },
+      { id: 't2', role: 'assistant', text: 'Pick a file and I will take it from there.', createdAt: '' },
+    ];
+    serve({ ...base(ADMIN, true), 'copilot:ask': { body: { ok: true, answer: turns[1].text, threadId: null, turns, suggestedAction: { kind: 'import', intent: 'upload data' } } } });
+    renderApp('/');
+    const dock = await openDock();
+    const box = within(dock).getByRole('textbox', { name: 'Ask the Assistant' }) as HTMLTextAreaElement;
+    await waitFor(() => expect(box.disabled).toBe(false));
+    expect(within(dock).queryByTestId('dock-get-data')).toBeNull(); // negative control: nothing proposed yet
+    fireEvent.change(box, { target: { value: 'upload data' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    const href = async (name: string) => (await within(dock).findByRole('link', { name })).getAttribute('href');
+    expect(await href('Import a file')).toBe(`/data/import?project=${PID}`);
+    expect(await href('Paste data')).toBe(`/data/import?project=${PID}&source=paste`);
+    expect(await href('Connect a source')).toBe(`/connections/${PID}`);
+  });
 });

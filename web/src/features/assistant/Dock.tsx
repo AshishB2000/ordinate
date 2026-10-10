@@ -8,11 +8,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router';
 import { useDatasets } from '../../api/datasets';
 import { onServerEvent } from '../../api/events';
 import { rpc } from '../../api/client';
 import { useMe } from '../auth/api';
-import { IconButton } from '../../ui/Button';
+import { buttonClass, IconButton } from '../../ui/Button';
 import { Select } from '../../ui/Select';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { Splitter, useStoredSize } from '../../ui/Splitter';
@@ -60,6 +61,7 @@ export default function DockPanel() {
   const [lastSteps, setLastSteps] = useState<{ turnId: string; steps: ActivityStep[] } | null>(null);
   const [hint, setHint] = useState('');
   const [plans, setPlans] = useState<PlanSlot[]>([]);
+  const [getData, setGetData] = useState(false); // the last reply proposed bringing data in
   const [text, setText] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
   const [act, setAct] = useState<ThreadAct | null>(null); // a rename or delete being asked about
@@ -148,7 +150,7 @@ export default function DockPanel() {
   useEffect(() => {
     const el = stage.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [turns.length, pending, plans.length]);
+  }, [turns.length, pending, plans.length, getData]);
 
   const setTurns = useCallback(
     (next: Turn[], tid: string | null) => {
@@ -163,6 +165,7 @@ export default function DockPanel() {
   function switchThread(id: string): void {
     setThreadId(id);
     setLastSteps(null);
+    setGetData(false);
     setPlans((ps) => ps.filter((p) => p.key.startsWith('live:')));
   }
 
@@ -186,6 +189,7 @@ export default function DockPanel() {
     setLastSteps(null);
     setHint('');
     setText('');
+    setGetData(false);
     setPlans((ps) => ps.filter((p) => p.key.startsWith('live:'))); // last turn's proposal is superseded
     let r: Awaited<ReturnType<typeof ask>>;
     try {
@@ -203,6 +207,7 @@ export default function DockPanel() {
       if (action && action.kind === 'plan' && Array.isArray(action.steps)) {
         setPlans((ps) => [...ps, { key: askId, action: { intent: action.intent, steps: action.steps ?? [], droppedSteps: action.droppedSteps }, threadId: r.threadId ?? '' }]);
       }
+      setGetData(action?.kind === 'import');
       return;
     }
     // Failure: the server left the thread unchanged; keep the typed text so nothing is lost.
@@ -296,6 +301,13 @@ export default function DockPanel() {
             <div className={`${s.powered} ${s.stageTop}`}>{`Powered by ${modelLabel({ ...mine, isDefault: false }, status.data.models)}`}</div>
           )}
           {pid && <Transcript turns={turns} pending={pending} lastSteps={lastSteps} projectId={pid} onFollowUp={followUp} />}
+          {pid && getData && !pending && (
+            <div className={s.getData} data-testid="dock-get-data">
+              <Link className={buttonClass('primary', 'sm')} to={`/data/import?project=${pid}`}>Import a file</Link>
+              <Link className={buttonClass('secondary', 'sm')} to={`/data/import?project=${pid}&source=paste`}>Paste data</Link>
+              <Link className={buttonClass('secondary', 'sm')} to={`/connections/${pid}`}>Connect a source</Link>
+            </div>
+          )}
           {pid &&
             plans.map((p) => (
               <PlanCard

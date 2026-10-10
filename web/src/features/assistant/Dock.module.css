@@ -201,6 +201,14 @@
   text-align: center;
 }
 
+/* The three ways in, under a reply that proposed bringing data in. */
+.getData {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+
 /* ── Transcript ─────────────────────────────────────────────────────────── */
 .msg {
   display: flex;
