@@ -28,6 +28,9 @@ import type { Cell, FilterStep } from '../data/transforms';
 import type { ParsedColumn } from '../data/parse';
 import { coerceValue } from '../data/parse';
 import { CATEGORY_CAP, OTHER_LABEL } from '../analysis/categoryKey';
+import type { DateGrain } from '../analysis/categoryKey';
+import { bucketRange, periodStep } from '../analysis/driverScope';
+import { drillFilters } from './drillScope';
 // The drill-down panel pages rows through the SAME two-path decision the Explore
 // grid uses — see `pageFor`'s note on why there is only one of them.
 import { pageFor } from './datasets';
@@ -165,6 +168,7 @@ export function resolveDrill(
   encoding: VizEncoding,
   filters: FilterStep[],
   mark?: DrillMark,
+  grain?: DateGrain,
 ): DrillResolution {
   const base = Array.isArray(filters) ? filters.slice() : [];
   const cols = Array.isArray(columns) ? columns : [];
@@ -223,7 +227,11 @@ export function resolveDrill(
       reason: `"${encoding.category}" is a number, so this axis is grouped into ranges rather than single values — a bar covers a span, not one value, so its rows cannot be identified by an exact match.`,
     };
   }
-  if (catCol && catCol.type === 'date') {
+  // …unless the caller knows the GRAIN the chart bucketed this axis by (./drillScope
+  // reads it off the chart's own answer): then a bucket label is an exact range
+  // of dates — the one "Explain this change" already compares (driverScope.bucketRange).
+  const range = catCol && catCol.type === 'date' && grain ? bucketRange(String(category), grain) : null;
+  if (catCol && catCol.type === 'date' && !range) {
     return {
       available: false,
       reason: `"${encoding.category}" is a date, so this axis is rolled up to a period rather than single days — a bar covers a range of dates, so its rows cannot be identified by an exact match.`,
@@ -237,7 +245,7 @@ export function resolveDrill(
   }
 
   const steps: FilterStep[] = [];
-  const cat = markStep(cols, encoding.category, category);
+  const cat = range ? { step: periodStep(encoding.category, range) } : markStep(cols, encoding.category, category);
   if ('reason' in cat) return { available: false, reason: cat.reason };
   steps.push(cat.step);
   if (hasSplit) {
@@ -634,20 +642,15 @@ export function register() {
   //
   // Returns the resolved filter list so the panel can render it as chips, or
   // `available: false` + a reason when the row set cannot be derived faithfully.
-  ipcMain.handle('visual:rows', async (_e, { projectId, datasetId, encoding, filters, mark, page, params, asOf }: any = {}) => withAsOf(projectId, asOf, async () => {
+  ipcMain.handle('visual:rows', async (_e, { projectId, datasetId, encoding, filters, mark, page, params, asOf, metricId }: any = {}) => withAsOf(projectId, asOf, async () => {
     try {
-      // Untrusted renderer input, sanitized before anything reads it — the same
-      // two whitelists `visual:data` runs, and the same parameter resolution,
-      // so the rows behind a mark are selected by the filters that drew it.
-      const enc = sanitizeEncoding(encoding);
-      const flt = resolveFilterParams(visuals.sanitizeFilters(filters), paramValues(params)).steps;
-
       // Metadata only: the column list is all `resolveDrill` needs, and the grid
       // needs it for headers. No rows are hydrated to answer a refusal.
       const meta = await datasets.getDatasetMeta(projectId, datasetId);
       if (!meta) return { ok: false, error: 'Dataset not found' };
 
-      const resolved = resolveDrill(meta.columns, enc, flt, mark);
+      // Untrusted renderer input, sanitized before anything reads it (./drillScope).
+      const resolved = await drillFilters(projectId, datasetId, meta, { encoding, filters, mark, params, metricId });
       if (!resolved.available) return { ok: true, available: false, reason: resolved.reason };
 
       const p = page && typeof page === 'object' ? page : {};

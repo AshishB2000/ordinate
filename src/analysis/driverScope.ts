@@ -212,7 +212,8 @@ export function rangeLabel(r: DateRange | null | undefined): string {
   return `${day(f, fc.y !== tc.y)} – ${day(t, true)}`;
 }
 
-function periodStep(column: string, r: DateRange): FilterStep {
+/** The filter that selects one range of a date column. EXPORTED for the drill behind a dated chart mark (ipc/visuals.resolveDrill). */
+export function periodStep(column: string, r: DateRange): FilterStep {
   const period: FilterStep['period'] = { preset: 'custom' };
   if (r.from) period.from = r.from;
   if (r.to) period.to = r.to;

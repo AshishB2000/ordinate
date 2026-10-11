@@ -143,6 +143,7 @@ export function VisualTileBody({
   onHover,
   onPinAt,
   onMapMark,
+  serverMark,
   onMarkMenu,
 }: {
   projectId: string;
@@ -164,8 +165,13 @@ export function VisualTileBody({
   /** ⌥-click on a mark, or ⌘/Ctrl-click where that does not multi-select (T2.9, commentDoors.ts cmtOnChartClick): a comment pinned to that point. */
   onPinAt?: (category: string | number, series?: string) => void;
   onMapMark?: (column: string | undefined, category: string) => void;
-  /** A RIGHT-click on a point of a time-series chart ("Explain this change"): the point as the server names it. Its own path — `onMark` is the left click's. */
-  onMarkMenu?: (point: ChartPoint, e: React.MouseEvent) => void;
+  /** `onMark` gets the category as the SERVER labelled it, as `filterMark` does, without that prop's ⌘-click meaning — for the drill. */
+  serverMark?: boolean;
+  /**
+   * A RIGHT-click on a bar or a point ("Show the rows behind this point", "Explain this change"): the point as the
+   * server names it, and whether the server bucketed the axis by date. Its own path — `onMark` is the left click's.
+   */
+  onMarkMenu?: (point: ChartPoint, e: React.MouseEvent, time: boolean) => void;
 }) {
   const chart = useRef<ChartHandle | null>(null);
   const req = useMemo(
@@ -204,18 +210,19 @@ export function VisualTileBody({
           const m = markAt(chart.current, e.nativeEvent);
           if (!m) return;
           if (onPinAt && (e.altKey || (!filterMark && (e.metaKey || e.ctrlKey)))) return onPinAt(m.category, m.series);
-          onMark?.(filterMark ? serverLabel(labels, m.category) : m.category, m.series, e);
+          onMark?.(filterMark || serverMark ? serverLabel(labels, m.category) : m.category, m.series, e);
         }
       : undefined;
-  // Only where the SERVER bucketed the axis by date (its `category.kind`); off a point the browser's own menu opens.
+  // On a bar or a point of a chart with a category axis; off one, and on any other chart, the browser's own menu opens.
   const tile = q.data;
   const menu =
-    onMarkMenu && !thumb && !asTable && tile.category?.kind === 'date'
+    onMarkMenu && !thumb && !asTable && def.encoding.category
       ? (e: React.MouseEvent) => {
           const p = pointAt(chart.current, e.nativeEvent, tile.data.labels ?? []);
           if (!p) return;
           e.preventDefault();
-          onMarkMenu(p, e);
+          // "time": the SERVER bucketed the axis by date (its `category.kind`).
+          onMarkMenu(p, e, tile.category?.kind === 'date');
         }
       : undefined;
   return (

@@ -12,7 +12,9 @@ import { Skeleton } from '../../../ui/Skeleton';
 import { DriversView } from '../../analytics/drivers/DriversView';
 import { Icon } from '../../../ui/icons/Icon';
 import { AGG_LABEL, useTile, type Card, type MetricTile } from '../api';
-import { useEditor } from './context';
+import { DrillPanel, type DrillTarget } from '../../visuals/drill/DrillPanel';
+import { PointMenu } from '../../analytics/explain/PointMenu';
+import { useEditor, type EditorApi } from './context';
 import { useTileAsOf } from './tileAsOf';
 import s from './Cards.module.css';
 import { LiveRefusal } from '../../live/LiveOff';
@@ -26,6 +28,27 @@ export function kpiPct(pct: number): string {
 
 export function metricLabel(m: NonNullable<Card['metric']>, name?: string): string {
   return m.label || name || `${AGG_LABEL[m.aggregation] ?? m.aggregation} of ${m.column}`;
+}
+
+/**
+ * The rows behind a KPI's figure: the dataset under the SAME filters the card read
+ * (MetricBody's). A saved metric goes by id — the server adds its own filters, or
+ * says why a calculated one has no single set of rows (src/ipc/drillScope.ts).
+ */
+export function kpiDrillTarget(ed: Pick<EditorApi, 'projectId' | 'filters' | 'params'>, card: Card): DrillTarget | null {
+  const m = card.metric;
+  if (!m) return null;
+  return {
+    name: metricLabel(m),
+    projectId: ed.projectId,
+    datasetId: m.datasetId,
+    encoding: { values: [{ column: m.column, aggregation: m.aggregation }] } as DrillTarget['encoding'],
+    filters: ed.filters as DrillTarget['filters'],
+    mark: null,
+    description: 'The rows behind this figure',
+    params: ed.params,
+    ...(m.metricId ? { metricId: m.metricId } : {}),
+  };
 }
 
 export function MetricBody({ card }: { card: Card }) {
@@ -46,6 +69,9 @@ export function MetricBody({ card }: { card: Card }) {
   const q = useTile<MetricTile>(ed.projectId, ed.params, req);
   useTileAsOf(q.data?.ok ? q.data.asOf : undefined);
   const [why, setWhy] = useState(false);
+  // A right-click on the figure: the rows behind it (also in the card's ⋯ menu, for a keyboard and for touch).
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  const [rows, setRows] = useState<DrillTarget | null>(null);
   if (q.isPending) {
     return (
       <div className={s.metric} aria-busy="true">
@@ -114,7 +140,23 @@ export function MetricBody({ card }: { card: Card }) {
   }
   return (
     <div className={s.metric}>
-      <div className={s.value}>{text}</div>
+      <div
+        className={s.value}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setMenuAt({ x: e.clientX, y: e.clientY });
+        }}
+      >
+        {text}
+      </div>
+      <PointMenu
+        key={menuAt ? `${menuAt.x}:${menuAt.y}` : ''}
+        at={menuAt}
+        items={[{ label: 'Show the rows', icon: 'table', onSelect: () => setRows(kpiDrillTarget(ed, card)) }]}
+        label={`${label} actions`}
+        onClose={() => setMenuAt(null)}
+      />
+      {rows && <DrillPanel target={rows} onClose={() => setRows(null)} />}
       {/* The label goes when the delta line is there and the head already says it (kpiCompare.ts). */}
       {!(delta && label === metricLabel(m)) && <div className={s.metricLabel}>{label}</div>}
       {delta}

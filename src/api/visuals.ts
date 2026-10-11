@@ -95,8 +95,11 @@ const Drill = {
   datasetId: Uuid,
   encoding: Encoding,
   filters: Filters.optional(),
-  params: z.record(z.string().max(200), z.unknown()).optional(),
+  // The sheet's parameters at their current values, as `visual:data` takes them (analysis/params.paramValues reads this list).
+  params: z.array(z.looseObject({ name: z.string().max(40), kind: z.string().max(16) })).max(50).optional(),
   mark: z.strictObject({ category: Cell.optional(), series: Cell.optional() }).nullable().optional(),
+  /** A KPI card's saved metric: its own filters join the card's (src/ipc/drillScope.ts). */
+  metricId: Uuid.optional(),
 };
 const DrillPage = z.strictObject({
   offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),

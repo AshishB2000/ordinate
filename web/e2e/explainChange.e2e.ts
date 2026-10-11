@@ -10,9 +10,12 @@
 //   keyboard  the tile's ⋯ → "Explain a change…" (no right-click needed): the
 //             latest period by default; the first period is refused with the
 //             server's sentence and the picker still there.
+//   rows      the same menu's "Show the rows behind this point": a dated bar is
+//             its quarter's rows (a range of dates), a category bar its
+//             category's — listed, never refused.
 //   refusals  a chart by category says it needs a date axis; a right-click on
-//             it opens NO chart menu (the negative control); a Live tile shows
-//             the typed refusal with "Make a copy".
+//             it offers its rows but NO change to explain (the negative
+//             control); a Live tile shows the typed refusal with "Make a copy".
 //   handover  "Open in Analytics" lands on the workbench with the same question.
 //
 // Fails on any console error or CSP violation and stays inside the RPC budget.
@@ -143,12 +146,30 @@ e2e('explain a change: a chart point → the panel → another baseline → a ti
   await page.keyboard.press('Escape');
   await panel.waitFor({ state: 'detached' });
 
+  // ── The rows behind a dated bar: its quarter, as a range of dates ───────
+  await rightClickChart(quarters, 0.8);
+  await menu.getByRole('menuitem', { name: 'Show the rows behind this point' }).click();
+  const quarterRows = page.getByRole('dialog', { name: 'Revenue by quarter' });
+  await quarterRows.getByText('The rows behind the selected mark').waitFor();
+  await quarterRows.getByText(/^[\d,]+ rows?$/).waitFor();
+  assert.equal(await quarterRows.getByRole('note').count(), 0, 'a dated bar is not refused: its rows are listed');
+  await screensInPlace(page, 'explain-change-rows');
+  await page.keyboard.press('Escape');
+  await quarterRows.waitFor({ state: 'detached' });
+
   // ── Not a chart over time ───────────────────────────────────────────────
   const bars = page.getByRole('group', { name: 'Revenue by category (bars) card' });
   await bars.getByRole('img', { name: 'Revenue by category (bars)' }).waitFor();
   await rightClickChart(bars, 0.5);
-  await page.waitForTimeout(300);
-  assert.equal(await page.getByRole('menu', { name: 'Chart point actions' }).count(), 0, 'NEGATIVE CONTROL: no chart menu on a chart that is not over time');
+  await menu.getByRole('menuitem', { name: 'Show the rows behind this point' }).waitFor();
+  assert.equal(await menu.getByRole('menuitem', { name: 'Explain this change' }).count(), 0, 'NEGATIVE CONTROL: a chart that is not over time offers no change to explain');
+  await menu.getByRole('menuitem', { name: 'Show the rows behind this point' }).click();
+  const barRows = page.getByRole('dialog', { name: 'Revenue by category (bars)' });
+  await barRows.getByText('The rows behind the selected mark').waitFor();
+  await barRows.getByRole('button', { name: 'Export these rows (CSV)' }).waitFor();
+  assert.match((await barRows.getByLabel('The filters that define these rows').textContent()) ?? '', /category = /, 'the bar is one category, as a filter');
+  await page.keyboard.press('Escape');
+  await barRows.waitFor({ state: 'detached' });
   await page.getByRole('button', { name: 'Revenue by category (bars) card actions' }).click();
   await page.getByRole('menuitem', { name: 'Explain a change…' }).click();
   const flat = page.getByRole('dialog', { name: 'Explain a change · Revenue by category (bars)' });

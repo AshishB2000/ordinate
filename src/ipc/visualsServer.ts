@@ -23,11 +23,11 @@ import * as appPaths from '../app/paths';
 import { formatDateRange } from '../app/format';
 import * as visuals from '../analysis/visuals';
 import * as datasets from '../data/datasets';
-import { paramValues, resolveFilterParams } from '../analysis/params';
 import { rowShaper } from '../app/sharePolicy';
 import { describePeriod, getCalendar, resolvePeriodNow, sanitizePeriod, type PeriodSpec } from '../analysis/dateIntel';
 import { pageFor } from './datasets';
-import { csvFileName, resolveDrill, writeDrillCsv } from './visuals';
+import { csvFileName, writeDrillCsv } from './visuals';
+import { drillFilters } from './drillScope';
 
 /** The picker's quick picks, short to long (periodPicker.ts PP_GROUPS). */
 const PERIOD_GROUPS: { title: string; items: PeriodSpec[] }[] = [
@@ -66,13 +66,11 @@ export function register(): void {
   // The same arguments the panel's `visual:rows` took, so the file IS the grid:
   // same filters, search and order. The rows leave the app here, so the Share
   // policy shapes every row and the header (rowShaper 'export').
-  ipcMain.handle('visual:rowsDownload', async (_e, { projectId, datasetId, encoding, filters, mark, page, name, params }: any = {}) => { // any: zod-checked at the door
+  ipcMain.handle('visual:rowsDownload', async (_e, { projectId, datasetId, encoding, filters, mark, page, name, params, metricId }: any = {}) => { // any: zod-checked at the door
     try {
-      const enc = visuals.sanitizeEncoding(encoding);
-      const flt = resolveFilterParams(visuals.sanitizeFilters(filters), paramValues(params)).steps;
       const meta = await datasets.getDatasetMeta(projectId, datasetId);
       if (!meta) return { ok: false, error: 'Dataset not found' };
-      const resolved = resolveDrill(meta.columns, enc, flt, mark);
+      const resolved = await drillFilters(projectId, datasetId, meta, { encoding, filters, mark, params, metricId });
       if (!resolved.available) return { ok: false, error: resolved.reason };
       const p = page && typeof page === 'object' ? page : {};
       const base = { offset: 0, limit: 0, search: p.search, sortColumn: p.sortColumn, sortDir: p.sortDir, filters: resolved.filters };
