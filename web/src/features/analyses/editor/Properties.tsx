@@ -21,7 +21,7 @@ import { KIND_LABEL } from './ControlDialog';
 import type { Doc } from './doc';
 import { removeTab } from './geometry';
 import { ImageProps, InteractionProps, NavProps, StatsProps } from './KindProps';
-import { KpiCompare } from './KpiProps';
+import { KpiCompare, KpiScenario } from './KpiProps';
 import { toast } from '../../../ui/Toast';
 import { MetricLink } from './MetricLink';
 import s from './Properties.module.css';
@@ -216,6 +216,7 @@ function CardProps({ card }: { card: Card }) {
             <MetricLink card={card} />
             {/* Re-keyed on the stored compare, so an undo shows what the card really asks for. */}
             <KpiCompare key={`${card.id}:${JSON.stringify(card.metric.compare ?? null)}`} card={card} />
+            {card.metric.metricId && <KpiScenario card={card} />}
           </>
         )}
         {card.type === 'text' && (

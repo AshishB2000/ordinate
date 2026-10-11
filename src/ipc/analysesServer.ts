@@ -119,6 +119,12 @@ export function register(): void {
           filters: it.filters, compare: it.compare, params, currency,
         });
       }
+      // A what-if card (analysis/scenarios): the saved metric under the scenario, with the sheet's filters and
+      // parameters on BOTH sides — a driver that follows a parameter moves as its control does. Not under
+      // "As of": a scenario is about today's figure.
+      if (it.scenarioId && it.metricId && !asOf) {
+        res.scenario = await call(e, 'scenario:card', { projectId, scenarioId: it.scenarioId, metricId: it.metricId, filters: it.filters, params });
+      }
       return res;
     })));
 

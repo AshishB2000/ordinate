@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { Select } from '../../../ui/Select';
 import type { Card } from '../api';
+import { useScenarios } from '../../analytics/api';
 import { useEditor } from './context';
 import s from './Properties.module.css';
 
@@ -76,6 +77,47 @@ export function KpiCompare({ card }: { card: Card }) {
           : mode
             ? "Moves the date range of the dashboard's filters and resolves the figure again — so it needs a date filter or date control in scope."
             : 'Show how the figure changed against another period, coloured by whether up is good.'}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * A KPI on a saved metric can show it under a what-if scenario (Analytics →
+ * Scenarios): the figure with the scenario's drivers applied, beside its
+ * baseline. The server computes both on every render; the card stores only
+ * which scenario. A driver that follows a dashboard parameter takes that
+ * parameter's current value — so a parameter control on the sheet is its slider.
+ */
+export function KpiScenario({ card }: { card: Card }) {
+  const ed = useEditor();
+  const q = useScenarios(ed.projectId);
+  const cur = card.metric?.scenarioId ?? '';
+  const list = q.data ?? [];
+  // A scenario deleted since stays listed (as that), so the card says what it is asking for until it is changed.
+  const options = [{ value: '', label: 'None' }, ...list.map((x) => ({ value: x.id, label: x.name })), ...(cur && !q.isPending && !list.some((x) => x.id === cur) ? [{ value: cur, label: 'A deleted scenario' }] : [])];
+  return (
+    <div className={s.section}>
+      <Select
+        label="What-if scenario"
+        value={cur}
+        options={options}
+        disabled={q.isPending}
+        onValueChange={(id) =>
+          ed.edit('What-if scenario', (d) => {
+            const c = d.sheets[ed.sheet].cards.find((x) => x.id === card.id);
+            if (!c?.metric) return;
+            if (id) c.metric.scenarioId = id;
+            else delete c.metric.scenarioId;
+          })
+        }
+      />
+      <p className={s.note}>
+        {cur
+          ? 'The card shows this metric under the scenario, with its change on the baseline. A driver that follows a parameter moves with that parameter’s control on this sheet.'
+          : list.length
+            ? 'Show this metric as it would be under a scenario — and move it from a slider by adding a parameter control.'
+            : 'No scenarios yet. Build one in Analytics → Scenarios, then pick it here.'}
       </p>
     </div>
   );

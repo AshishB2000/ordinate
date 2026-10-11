@@ -65,6 +65,8 @@ export function MetricBody({ card }: { card: Card }) {
       aggregation: m.aggregation,
       ...(m.metricId ? { metricId: m.metricId } : {}),
       ...(compare ? { compare } : {}),
+      // A what-if is of a saved metric (the scenario's drivers aim at what the metric reads).
+      ...(m.scenarioId && m.metricId ? { scenarioId: m.scenarioId } : {}),
       filters: ed.filters,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the compare by value: a new object each render is the same question
@@ -142,6 +144,29 @@ export function MetricBody({ card }: { card: Card }) {
       );
     }
   }
+  // A what-if card: the figure UNDER the scenario is the headline, its change on the baseline the one comparison shown.
+  // The sheet's parameters reach both sides, so a driver that follows one moves with that parameter's slider.
+  const sc = t.scenario;
+  let figure = text;
+  let whatIfNote: string | null = null;
+  if (sc && sc.ok) {
+    figure = sc.display || '—';
+    const tone = !sc.delta || sc.tone === 'neutral' ? 'flat' : sc.tone;
+    delta = (
+      <>
+        <div className={`${s.delta} ${s[tone]}`} title={`${sc.baselineDisplay || '—'} without the scenario`}>
+          {!!sc.delta && <Icon name={sc.delta > 0 ? 'arrow-up' : 'arrow-down'} size={12} />}
+          <span className={s.tnum}>{sc.delta === null ? 'No figure' : sc.delta === 0 ? 'No change' : sc.deltaDisplay}</span>
+          {!!sc.delta && typeof sc.pct === 'number' && Number.isFinite(sc.pct) && <span className={s.tnum}>({kpiPct(sc.pct)})</span>}
+        </div>
+        <div className={s.vsRow}>
+          <span className={s.vs} title={`What-if: ${sc.scenarioName}`}>
+            What-if: {sc.scenarioName} · baseline {sc.baselineDisplay || '—'}
+          </span>
+        </div>
+      </>
+    );
+  } else if (sc) whatIfNote = `What-if unavailable: ${sc.error}`;
   return (
     <div className={s.metric}>
       <div
@@ -151,7 +176,7 @@ export function MetricBody({ card }: { card: Card }) {
           setMenuAt({ x: e.clientX, y: e.clientY });
         }}
       >
-        {text}
+        {figure}
       </div>
       <PointMenu
         key={menuAt ? `${menuAt.x}:${menuAt.y}` : ''}
@@ -164,6 +189,7 @@ export function MetricBody({ card }: { card: Card }) {
       {/* The label goes when the delta line is there and the head already says it (kpiCompare.ts). */}
       {!(delta && label === metricLabel(m)) && <div className={s.metricLabel}>{label}</div>}
       {delta}
+      {whatIfNote && <p className={s.paramErr}>{whatIfNote}</p>}
       {t.paramErrors && t.paramErrors.length > 0 && <p className={s.paramErr}>{t.paramErrors[0]}</p>}
       {why && compare && (
         <Drawer open wide onOpenChange={(o) => !o && setWhy(false)} title={`Why did ${label} change?`} description="What drove the change against the comparison period">

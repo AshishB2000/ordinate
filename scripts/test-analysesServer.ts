@@ -45,6 +45,7 @@ const visuals: typeof import('../src/analysis/visuals') = require('../src/analys
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const usageMod: typeof import('../src/analysis/metricUsage') = require('../src/analysis/metricUsage');
+const scenarios: typeof import('../src/analysis/scenarios') = require('../src/analysis/scenarios');
 const dashData: typeof import('../src/publish/dashboardData') = require('../src/publish/dashboardData');
 
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-analyses-'));
@@ -210,6 +211,27 @@ async function partOne(): Promise<void> {
       projectId: pid, card: { metricId: s.rev, datasetId: s.ds, column: 'amount', aggregation: 'sum' }, filters: items[6].filters, compare: { mode: 'previous_period' }, params,
     });
     ok('tiles: a compare IS metric:compare\'s reply', same(t.body[6].compare, cmp) && typeof cmp.delta === 'number', JSON.stringify(t.body[6].compare));
+    // A what-if card: the saved metric under a scenario whose driver follows the sheet's `uplift` parameter.
+    const sc = await context.runInContext(dev, 'seed', () => scenarios.saveScenario(pid, {
+      name: 'Price up', baseMetricIds: [s.rev], drivers: [{ name: 'Price', kind: 'pct', value: 5, target: { column: 'amount' }, param: 'uplift' }],
+    } as never));
+    const whatIf = (uplift?: number) => {
+      const p = uplift === undefined ? params : [...params, { name: 'uplift', kind: 'number', value: uplift }];
+      return Promise.all([
+        call('analysis:tiles', { projectId: pid, params: p, items: [{ kind: 'metric', datasetId: s.ds, column: 'amount', aggregation: 'sum', metricId: s.rev, scenarioId: sc!.id, filters: scope }] }),
+        direct('scenario:card', { projectId: pid, scenarioId: sc!.id, metricId: s.rev, filters: scope, params: p }),
+      ]);
+    };
+    const [atRest, atRestCard] = await whatIf();
+    ok('tiles: a what-if KPI carries scenario:card\'s reply beside its own figure', atRest.status === 200 && same(atRest.body[0].scenario, atRestCard) && atRestCard.ok && atRestCard.scenarioName === 'Price up'
+      && Object.is(atRest.body[0].value, mv.value) && Object.is(atRestCard.baseline, mv.value), JSON.stringify(atRest.body).slice(0, 300));
+    const [moved, movedCard] = await whatIf(20);
+    ok('tiles: a driver that follows a parameter moves with the sheet\'s value (the slider)', same(moved.body[0].scenario, movedCard) && Math.abs(movedCard.value - mv.value * 1.2) < 1e-6 && Math.abs(atRestCard.value - mv.value * 1.05) < 1e-6
+      && Object.is(movedCard.baseline, mv.value), JSON.stringify([atRestCard.value, movedCard.value, mv.value]));
+    ok('NEGATIVE CONTROL: a KPI with no scenario carries none', t.body[3].scenario === undefined);
+    const lost = await call('analysis:tiles', { projectId: pid, items: [{ kind: 'metric', datasetId: s.ds, column: 'amount', aggregation: 'sum', metricId: s.rev, scenarioId: '00000000-0000-4000-8000-000000000009' }] });
+    ok('tiles: a deleted scenario is a refusal on the scenario, and the KPI keeps its figure', lost.body[0].ok === true && typeof lost.body[0].value === 'number' && lost.body[0].scenario.ok === false);
+    ok('tiles: a scenario id that is not a UUID is a 400', (await call('analysis:tiles', { projectId: pid, items: [{ kind: 'metric', datasetId: s.ds, column: 'amount', aggregation: 'sum', metricId: s.rev, scenarioId: 'x' }] })).status === 400);
     const spec = { kind: 'groups', datasetId: s.ds, outcome: 'amount', group: 'region' };
     const narrow = [{ type: 'filter', column: 'amount', op: '>', value: 50 }];
     const [st] = (await call('analysis:tiles', { projectId: pid, items: [{ kind: 'stats', spec, filters: narrow }] })).body;
