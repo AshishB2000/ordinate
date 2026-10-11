@@ -23,6 +23,7 @@ import { HiddenTray, SizeNote } from './SizeNote';
 import s from './Canvas.module.css';
 import { useCardRuntime } from '../../dashboards/CardRuntime';
 import { SelectionStrip } from '../../dashboards/tileActions';
+import { CompareSummary } from '../../dashboards/CompareBar';
 import { ClickFilterBar } from '../../dashboards/ClickFilters';
 
 /** Desktop: move / resize. A small size: drag the head to reorder, the bottom edge to change height (layoutEdit.ts). */
@@ -294,6 +295,7 @@ export function Canvas() {
       <FilterBar />
       <ClickFilterBar ed={ed} />
       <SelectionStrip ed={ed} />
+      <CompareSummary ed={ed} />
       {!locked && (
         <>
           <SizeNote />

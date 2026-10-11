@@ -19,6 +19,7 @@ import { themeCssVars } from '../settings/themeModel';
 import type { EditorApi } from '../analyses/editor/context';
 import { useEditor } from '../analyses/editor/context';
 import { CommentsPanel } from './CommentsPanel';
+import { CompareControl } from './CompareBar';
 import { reason, useAsOfStamps, useCommentsLive, useFx, useSetDashboardCurrency } from './api';
 import st from './Style.module.css';
 
@@ -219,6 +220,8 @@ export function ViewControls() {
           options={[{ value: '', label: latest ? `Latest · ${latest.text.replace(/^As of/, 'as of')}` : 'Latest' }, ...items.map((it) => ({ value: it.at, label: `As of ${new Date(it.at).toLocaleString()}${datasetIds.length > 1 ? ` — ${it.datasets.join(', ')}` : ''}` }))]}
         />
       )}
+      {/* Compare: where there is a figure to compare — a KPI or a chart on any sheet. Off under "As of" (a past figure against today's periods means nothing). */}
+      {datasetIds.length > 0 && !ed.view.asOf && <CompareControl value={ed.view.compare} onChange={ed.view.setCompare} />}
       {declared && fx.data && (
         <Select
           size="sm"

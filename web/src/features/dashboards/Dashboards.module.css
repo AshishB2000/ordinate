@@ -211,6 +211,36 @@ h5.mdH {
   color: var(--muted);
   font-size: var(--t-12);
 }
+.cmpStrip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-8) var(--sp-12);
+  margin-bottom: var(--sp-8);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-lg);
+}
+.cmpList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  font-size: var(--t-13);
+  color: var(--text-strong);
+}
+.cmpNote {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.cmpSk {
+  width: min(420px, 80%);
+  height: 14px;
+}
 .selLabel {
   font-size: var(--t-11);
   font-weight: 600;

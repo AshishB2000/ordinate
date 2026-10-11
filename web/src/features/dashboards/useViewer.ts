@@ -11,6 +11,10 @@
 //   asOf        the sheet read as of a snapshot time (KPI deltas then go: a past
 //               figure against today's periods means nothing)
 //   currency    the dashboard's own currency (fx settings), money shows in it
+//   compare     the whole sheet against another period: every KPI shows its change
+//               and every bar chart its figure then beside its figure now — the
+//               server moves the date range in scope, exactly as a KPI card's own
+//               Compare does
 //   presenting  Present mode
 //   comments    the comment panel's target, or null
 //
@@ -31,6 +35,9 @@ export interface Crumb {
   fromSheet?: string;
 }
 export type CommentTarget = { kind: TargetKind; id: string; point?: { label: string; series?: string } } | 'all' | null;
+
+/** A comparison period, as a KPI card's `compare` is (dateIntel.sanitizeCompare). A custom one needs both dates. */
+export type Compare = { mode: 'previous_period' | 'previous_year' | 'custom'; from?: string; to?: string };
 
 export interface Viewer {
   selection: Step[];
@@ -53,6 +60,9 @@ export interface Viewer {
   asOf: string | null;
   setAsOf(v: string | null): void;
   currency: string | undefined;
+  /** The sheet's Compare, or null: off. Wins over a KPI card's own while it is on. */
+  compare: Compare | null;
+  setCompare(c: Compare | null): void;
   presenting: boolean;
   setPresenting(on: boolean): void;
   comments: CommentTarget;
@@ -97,6 +107,7 @@ export function useViewer(projectId: string, analysisId: string): Viewer & { arr
   const clickMark = useCallback((origin: string, mark: ClickMark, additive: boolean) => setClicks((c) => toggleClickFilter(c, origin, mark, additive)), []);
   const clearClicks = useCallback((one?: ClickFilter) => setClicks((c) => (one ? c.filter((x) => !(x.origin === one.origin && x.column === one.column)) : c.length ? [] : c)), []);
   const [asOf, setAsOf] = useState<string | null>(null);
+  const [compare, setCompare] = useState<Compare | null>(null);
   const [presenting, setPresenting] = useState(false);
   // `?comment=<kind>:<id>` (Home's "Recent comments"): the thread opens on arrival.
   const [comments, openComments] = useState<CommentTarget>(() => {
@@ -158,11 +169,13 @@ export function useViewer(projectId: string, analysisId: string): Viewer & { arr
       asOf,
       setAsOf,
       currency,
+      compare,
+      setCompare,
       presenting,
       setPresenting,
       comments,
       openComments,
     }),
-    [selection, toggleSelection, narrowed, narrow, clicks, clickMark, clearClicks, arrived, asOf, currency, presenting, comments],
+    [selection, toggleSelection, narrowed, narrow, clicks, clickMark, clearClicks, arrived, asOf, currency, compare, presenting, comments],
   );
 }

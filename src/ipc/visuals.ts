@@ -12,7 +12,7 @@ import { residentPivotData, residentVizData } from './visualsResident';
 import { lodVizFor } from './lodData';
 import { residentEngineData } from './visualsEngines';
 import { authoringVizData } from './vizExtras';
-import { withPeriodOverlay } from './visualsOverlay';
+import { withCompareSeries, withPeriodOverlay } from './visualsOverlay';
 import { sampledVizData } from './vizSampleData';
 import type { SampleInfo } from '../analysis/sampling';
 import { withAnalytics } from './visualsAnalytics';
@@ -605,7 +605,8 @@ export function register() {
       // on the overlay's prior slice alike, so both sides mean the same thing).
       const run = async (p: string, d: string, e: VizEncoding, f: FilterStep[]) =>
         withTableCalcs(await vizDataFor(p, d, e, f, { params: values }), e);
-      const computed = await withPeriodOverlay(await run(projectId, datasetId, enc, flt), projectId, datasetId, enc, flt, run);
+      const drawn = await withPeriodOverlay(await run(projectId, datasetId, enc, flt), projectId, datasetId, enc, flt, run);
+      const computed = await withCompareSeries(drawn, projectId, datasetId, enc, flt, run);
       const shaped = isSharePath(share) && share !== 'bundle'
         ? await applyToChart(projectId, datasetId, enc, computed, share)
         : computed;

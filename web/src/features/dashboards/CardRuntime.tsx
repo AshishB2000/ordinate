@@ -21,6 +21,8 @@ import { ExplainPanel, type ExplainTarget } from '../analytics/explain/ExplainPa
 import { PointMenu } from '../analytics/explain/PointMenu';
 import type { ChartPoint } from '../analytics/explain/pointAt';
 import { useAlerts, useComments } from './api';
+import { CHART_OVERLAY_TYPES } from '../../charts/build';
+import { usable } from './CompareBar';
 import { pinsOn } from './CommentsPanel';
 import { presentRow } from './DashboardChrome';
 import { pivotToCsv, pivotToTsv, saveText } from './pivotExport';
@@ -197,6 +199,12 @@ export function VisualCard({ ed, card, def, asTable, onMark }: { ed: EditorApi; 
   const picked = (column: unknown) => ed.view.clicks.find((c) => c.origin === card.id && c.column === column)?.values;
   const sel = JSON.stringify({ categories: picked(def.encoding.category), series: picked(def.encoding.series) });
   const shown = useMemo(() => (sel === '{}' ? drawn : { ...drawn, overrides: { ...drawn.overrides, markSelection: JSON.parse(sel) as unknown } }), [drawn, sel]);
+  // The sheet's Compare: a chart that can draw two bars side by side asks for the comparison period too (the server decides whether it applies).
+  const cmp = JSON.stringify(usable(ed.view.asOf ? null : ed.view.compare));
+  const compared = useMemo(
+    () => (cmp !== 'null' && CHART_OVERLAY_TYPES.has(def.chartType) ? { ...shown, encoding: { ...shown.encoding, compare: JSON.parse(cmp) as unknown } } : shown),
+    [shown, def.chartType, cmp],
+  );
   // A plain click: the tile's own actions, else click-to-filter, else the rows behind the mark (dashGrid.ts wireDrillClick).
   const [drill, setDrill] = useState<DrillTarget | null>(null);
   // A right-click on a bar or a point: its context menu, then a panel. Apart from the left click above.
@@ -217,7 +225,7 @@ export function VisualCard({ ed, card, def, asTable, onMark }: { ed: EditorApi; 
     <>
       <VisualTileBody
         projectId={ed.projectId}
-        def={shown}
+        def={compared}
         filters={filters}
         params={ed.params}
         asTable={asTable}

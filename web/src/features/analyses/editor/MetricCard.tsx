@@ -54,6 +54,9 @@ export function kpiDrillTarget(ed: Pick<EditorApi, 'projectId' | 'filters' | 'pa
 export function MetricBody({ card }: { card: Card }) {
   const ed = useEditor();
   const m = card.metric as NonNullable<Card['metric']>;
+  // The sheet's Compare (view state) wins while it is on: every KPI then answers the same question.
+  const sheetCompare = ed.view.compare && (ed.view.compare.mode !== 'custom' || (ed.view.compare.from && ed.view.compare.to)) ? ed.view.compare : null;
+  const compare = sheetCompare ?? m.compare;
   const req = useMemo(
     () => ({
       kind: 'metric' as const,
@@ -61,10 +64,11 @@ export function MetricBody({ card }: { card: Card }) {
       column: m.column,
       aggregation: m.aggregation,
       ...(m.metricId ? { metricId: m.metricId } : {}),
-      ...(m.compare ? { compare: m.compare } : {}),
+      ...(compare ? { compare } : {}),
       filters: ed.filters,
     }),
-    [m, ed.filters],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the compare by value: a new object each render is the same question
+    [m, ed.filters, JSON.stringify(compare)],
   );
   const q = useTile<MetricTile>(ed.projectId, ed.params, req);
   useTileAsOf(q.data?.ok ? q.data.asOf : undefined);
@@ -161,7 +165,7 @@ export function MetricBody({ card }: { card: Card }) {
       {!(delta && label === metricLabel(m)) && <div className={s.metricLabel}>{label}</div>}
       {delta}
       {t.paramErrors && t.paramErrors.length > 0 && <p className={s.paramErr}>{t.paramErrors[0]}</p>}
-      {why && m.compare && (
+      {why && compare && (
         <Drawer open wide onOpenChange={(o) => !o && setWhy(false)} title={`Why did ${label} change?`} description="What drove the change against the comparison period">
           <DriversView
             projectId={ed.projectId}
@@ -170,7 +174,7 @@ export function MetricBody({ card }: { card: Card }) {
               datasetId: m.datasetId,
               metric: { ...(m.metricId ? { metricId: m.metricId } : {}), column: m.column, aggregation: m.aggregation, ...(m.label ? { label: m.label } : {}) },
               filters: ed.filters,
-              compare: m.compare,
+              compare,
               path: [],
             }}
           />
