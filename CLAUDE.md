@@ -259,7 +259,7 @@ a `v*` tag) has never been cut — releasing is the user's call. Every env var i
   `web/e2e/__screens__/` — look at them. `E2E_CHROMIUM` overrides the browser.
 - **CI** (`ci.yml`, every PR to `develop`): jobs `check`, `web`, `audit` (`scripts/audit-gate.ts`),
   `docker`, `helm`, `migrations` (fails a PR that adds a migration number another open PR also
-  adds), plus `lint.yml`. A ruleset on `develop` requires **`smoke (all shards)`** (aggregates check,
+  adds), plus `lint.yml`. A ruleset on `develop` (`.github/rulesets/develop.json`) requires **`smoke (all shards)`** (aggregates check,
   web, docker, helm, audit and migrations) and **`oxlint (blocking)`**, and refuses a direct push.
   Actions are pinned by commit; Dependabot bumps them. A failed nightly opens an issue. `e2e-nightly.yml` runs Firefox and WebKit. `warehouse-nightly.yml`
   runs `scripts/test-warehouseLive.ts` against real Snowflake / BigQuery accounts from repo secrets
