@@ -2,8 +2,9 @@ name: CI build check
 
 # Per-push gate: install deps, type-check + compile the TypeScript tree, run the
 # node self-checks, build and test the web app, build the image and drive it
-# under Compose and on kind, and audit the runtime dependencies. Releases are
-# release.yml (tags only).
+# under Compose and on kind, and audit the runtime dependencies. A green push to
+# develop then publishes the :edge image (the `edge` job, through release.yml);
+# versioned releases are release.yml on a tag.
 #
 # Watches `develop`, which is this repo's DEFAULT branch. This list has now gone
 # stale TWICE, and both times the symptom was silence rather than a red check:
@@ -329,3 +330,23 @@ jobs:
           for r in "${{ needs.check.result }}" "${{ needs.web.result }}" "${{ needs.docker.result }}" "${{ needs.helm.result }}" "${{ needs.audit.result }}" "${{ needs.migrations.result }}"; do
             test "$r" = success
           done
+
+  # CD. A push to develop that passed every gate above publishes
+  # ghcr.io/<owner>/ordinate:edge through release.yml's own image job, so it is
+  # built and booted on amd64 and arm64 exactly as a tagged release is. Versioned
+  # releases stay on `v*` tags. `contents: write` is only the ceiling GitHub
+  # demands because release.yml also holds the Release job (skipped here, but
+  # checked when the run starts); the image job itself asks for `contents: read`.
+  # ponytail: runs are per commit, so two merges seconds apart can publish out of
+  # order and leave :edge one commit behind until the next merge. Queue the
+  # trunk's runs in one concurrency group if that ever matters.
+  edge:
+    name: edge image
+    needs: smoke-all
+    if: github.event_name == 'push' && github.ref_name == 'develop'
+    permissions:
+      contents: write
+      packages: write
+    uses: ./.github/workflows/release.yml
+    with:
+      edge: true
