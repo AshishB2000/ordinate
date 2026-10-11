@@ -1,42 +1,40 @@
 // The live pictures on Home's "Jump back in" cards — a lazy chunk, so Home
 // paints its cards (glyph tiles) before any chart code loads. A saved visual
-// draws the Visuals gallery's own thumbnail (`visual:thumbs`); a dashboard
-// draws its first sheet's first two visuals, as its card on Analyses does
-// (`analysis:gallery`). Every figure is the server's; any failure leaves the
-// card's glyph.
+// draws the Visuals gallery's own thumbnail; a dashboard draws its first two
+// visual cards the same way, from the ids `recent:list` carries for it. So
+// every picture on the page rides ONE batched `visual:thumbs` call. Every
+// figure is the server's; any failure leaves the card's glyph.
 
-import { useEffect } from 'react';
 import type { RecentItem } from '../../api/home';
-import { useGallery } from '../analyses/api';
-import { VisualTileBody } from '../analyses/VisualTile';
-import { Thumb } from '../visuals/Thumb';
+import { useThumb, type VisualSummary } from '../visuals/api';
+import { NO_THUMB, Thumb } from '../visuals/Thumb';
 import s from './JumpBackIn.module.css';
 
-const NONE: never[] = [];
+/** What the gallery's thumbnail reads of a summary: the id, the chart type and (its cache key) a time. */
+const summary = (it: RecentItem, id: string, chartType: string): VisualSummary => ({ id, name: it.name, chartType, updatedAt: it.updatedAt, datasetId: '', favorite: false });
 
-function DashboardThumb({ it, onDrawn }: { it: RecentItem; onDrawn: () => void }) {
-  const q = useGallery(it.projectId);
-  const previews = (Array.isArray(q.data) ? q.data : []).find((g) => g.id === it.id)?.previews ?? [];
-  const any = previews.length > 0;
-  useEffect(() => {
-    if (any) onDrawn();
-  }, [any, onDrawn]);
-  if (!any) return null;
+/** One of a dashboard's visuals. No cell until there is a picture for it: a hole, a table or a failure draws nothing. */
+function DashCell({ it, id, onDrawn }: { it: RecentItem; id: string; onDrawn: () => void }) {
+  const v = summary(it, id, '');
+  const t = useThumb(it.projectId, v, true).data; // the same cached answer Thumb reads below
+  if (!t || !t.ok || !t.data || NO_THUMB.has(t.chartType)) return null;
   return (
-    <span className={previews.length > 1 ? `${s.dash} ${s.dash2}` : s.dash}>
-      {previews.map((v) => (
-        <span key={v.id} className={s.dashCell}>
-          <VisualTileBody projectId={it.projectId} def={v} filters={NONE} params={NONE} thumb />
-        </span>
-      ))}
+    <span className={s.dashCell}>
+      <Thumb projectId={it.projectId} v={v} visible onDrawn={onDrawn} />
     </span>
   );
 }
 
 export default function HomeThumb({ it, onDrawn }: { it: RecentItem; onDrawn: () => void }) {
-  if (it.type === 'analysis') return <DashboardThumb it={it} onDrawn={onDrawn} />;
-  if (it.type !== 'visual') return null;
-  // The gallery's thumbnail reads the id, the chart type and (as its cache key) the time; the rest is the summary's shape.
-  const v = { id: it.id, name: it.name, chartType: it.meta?.chartType ?? '', updatedAt: it.updatedAt, datasetId: '', favorite: false };
-  return <Thumb projectId={it.projectId} v={v} visible onDrawn={onDrawn} />;
+  if (it.type === 'visual') return <Thumb projectId={it.projectId} v={summary(it, it.id, it.meta?.chartType ?? '')} visible onDrawn={onDrawn} />;
+  const ids = it.type === 'analysis' ? (it.meta?.previewIds ?? []) : [];
+  if (!ids.length) return null;
+  return (
+    <span className={s.dash}>
+      {ids.map((id, i) => (
+        // A sheet may show one visual twice, so the id alone is not a key.
+        <DashCell key={`${i}:${id}`} it={it} id={id} onDrawn={onDrawn} />
+      ))}
+    </span>
+  );
 }

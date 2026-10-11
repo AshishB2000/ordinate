@@ -20,7 +20,8 @@ import { useThumb, type VisualSummary } from './api';
 import { GRID_TYPES } from './eligibility';
 import s from './Visuals.module.css';
 
-const NO_THUMB = new Set(['table', ...GRID_TYPES]);
+/** Chart types whose tile keeps its glyph: a shrunken table or grid is unreadable. */
+export const NO_THUMB = new Set(['table', ...GRID_TYPES]);
 const THUMB: Overrides = { noAnimate: true, showLegend: false, showGridlines: false, valueMode: 'off', title: '' };
 
 /** Axis ticks, titles and borders off; inert — what buildChart's overrides cannot say. */
@@ -86,8 +87,11 @@ export function Thumb({ projectId, v, visible, onDrawn }: { projectId: string; v
   if (q.isPending) return <Skeleton className={s.thumbSkel} />;
   const t = q.data;
   if (!t || !t.ok || !t.data) return null;
-  if (isMapChartType(v.chartType)) return <MapTile data={t.data as unknown as MapData} v={v} projectId={projectId} onDrawn={onDrawn} />;
-  return <ChartThumb type={v.chartType} data={t.data} overrides={t.overrides} onDrawn={onDrawn} />;
+  // A caller that knows only the id (a dashboard's preview on Home) takes the chart type from the reply.
+  const type = v.chartType || t.chartType;
+  if (NO_THUMB.has(type)) return null;
+  if (isMapChartType(type)) return <MapTile data={t.data as unknown as MapData} v={{ ...v, chartType: type }} projectId={projectId} onDrawn={onDrawn} />;
+  return <ChartThumb type={type} data={t.data} overrides={t.overrides} onDrawn={onDrawn} />;
 }
 
 /** MapThumb keeps its own map glyph until the shapes are drawn, so it replaces the card's at once. */

@@ -42,6 +42,8 @@ export interface RecentMeta {
   qualityFailing?: number;
   /** A saved visual's chart id (VisualSummary.chartType) — what its row and its thumbnail are drawn as. */
   chartType?: string;
+  /** A dashboard's first two visual cards, as saved-visual ids (AnalysisSummary.previewIds) — its preview card's picture. */
+  previewIds?: string[];
 }
 
 export interface RecentItem {
@@ -202,7 +204,7 @@ export async function listRecent(limit = 50): Promise<RecentItem[]> {
           id: a.id,
           name: a.name,
           updatedAt: a.updatedAt,
-          meta: { sheetCount: a.sheetCount },
+          meta: a.previewIds ? { sheetCount: a.sheetCount, previewIds: a.previewIds } : { sheetCount: a.sheetCount },
         })),
         // No meta: a capture has no row/column/sheet count to carry, and an
         // invented one would be a figure the app did not compute.

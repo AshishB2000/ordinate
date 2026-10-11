@@ -171,4 +171,7 @@ e2e('projects: switcher, Trash, version history and the bundle round trip', asyn
   assert.equal(await pop.getByRole('listitem').count(), 2, 'the sample and E2E renamed stay');
   await page.keyboard.press('Escape');
   report(s);
-});
+  // One Home URL carries this whole flow — three project switches, two archives, an import and a delete,
+  // each re-reading Home for another project: 25 calls of the flow's own, plus the two Home makes for any
+  // project since it went ask-first (one batched `visual:thumbs` for every preview card, and `ai:status`).
+}, { rpcBudget: 28 });
