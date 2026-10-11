@@ -6,6 +6,7 @@ import { Button } from '../../ui/Button';
 import { Checkbox } from '../../ui/Choice';
 import { previewPower } from './api';
 import { buildStep, PARSE_FORMATS } from './drafts';
+import { SimilarValues } from './SimilarValues';
 import { fmtN } from './steps';
 import { arr, ColumnSelect, Hint, NameChecks, NameSelect, PickSelect, PreviewBox, RowLine, str, TextField, usePreview, type FormProps } from './FormParts';
 import s from './Prepare.module.css';
@@ -66,6 +67,7 @@ const REPLACE_HINTS: Record<string, string> = {
 
 export function ReplaceForm({ draft, set, ctx }: FormProps) {
   const mode = str(draft.mode) || 'exact';
+  const column = str(draft.column);
   const rules = arr<Record<string, unknown>>(draft.rules);
   const put = (i: number, patch: Record<string, unknown>) => set({ rules: rules.map((r, k) => (k === i ? { ...r, ...patch } : r)) });
   return (
@@ -88,6 +90,22 @@ export function ReplaceForm({ draft, set, ctx }: FormProps) {
           Add rule
         </Button>
       </div>
+      {mode === 'exact' && ctx.columns.some((c) => c.name === column && c.type === 'text') && (
+        // key: another column is another question — its groups must not linger.
+        <SimilarValues
+          key={column}
+          projectId={ctx.projectId}
+          datasetId={ctx.datasetId}
+          index={ctx.index}
+          column={column}
+          onAdd={(merges) => {
+            const taken = new Set(merges.map((m) => m.from));
+            // The blank starter row goes; a rule already written for one of these values is replaced, not doubled.
+            const kept = rules.filter((r) => (str(r.from) !== '' || str(r.to) !== '') && !taken.has(str(r.from)));
+            set({ rules: [...kept, ...merges] });
+          }}
+        />
+      )}
     </>
   );
 }

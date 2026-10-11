@@ -50,6 +50,8 @@ const Tile = z.discriminatedUnion('kind', [
     aggregation: Aggregation,
     metricId: Uuid.optional(),
     compare: Compare.optional(),
+    // A what-if: the saved metric under this scenario, beside its baseline (`scenario:card`).
+    scenarioId: Uuid.optional(),
     filters: Steps.optional(),
   }),
   // A statistics card: its spec (sanitizeStatsSpec owns every field), recomputed by stats:tile.

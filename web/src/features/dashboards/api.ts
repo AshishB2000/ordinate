@@ -191,6 +191,8 @@ export interface AlertEvent {
   value: number | null;
   seen: boolean;
   analysisId?: string;
+  /** Where the change came from — the server's sentence, written when the rule fired. */
+  diagnosis?: string;
 }
 export interface AlertList {
   ok: true;

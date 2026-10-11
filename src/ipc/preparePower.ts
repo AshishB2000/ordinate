@@ -15,6 +15,9 @@ import { checkPowerStep } from '../data/stepsSanitize';
 import { lookupStats, unionPlan } from '../data/stepsCombine';
 import { parseDatePreview } from '../data/stepsClean';
 import { requireExtract } from '../data/liveDataset';
+import { valueCountsJs } from '../data/dataSearch';
+import { MAX_CLUSTERS, MAX_DISTINCT, clusterValues } from '../data/valueClusters';
+import { suggestValueGroups } from '../ai/valueGroups';
 
 /** The table a step at `index` would receive (index < 0 or past the end: after every step). */
 export async function inputAt(projectId: string, datasetId: string, index: number, extra: TransformStep): Promise<{
@@ -67,6 +70,31 @@ export async function stepPreview(projectId: string, datasetId: string, index: n
   return res;
 }
 
+/**
+ * Values of one text column that look like the same thing written differently
+ * (data/valueClusters), over the input a step at `index` would receive — so the
+ * replace rules the editor builds from them match the cells that step will see.
+ * `assistant`: also ask the model which values are aliases (ai/valueGroups);
+ * the clusters without it are still returned when it cannot answer.
+ */
+export async function similarValues(projectId: string, datasetId: string, index: number, column: string, assistant: boolean): Promise<unknown> {
+  const at = await inputAt(projectId, datasetId, index, { type: 'replace_values', column, mode: 'exact', rules: [] } as TransformStep);
+  if (!at) return { ok: false, error: 'Dataset not found' };
+  const ci = at.input.columns.findIndex((c) => c.name === column);
+  if (ci < 0 || at.input.columns[ci].type !== 'text') return { ok: false, error: 'Pick a text column to look for similar values in.' };
+  const counts = valueCountsJs(at.input.rows, ci, MAX_DISTINCT);
+  if (!counts) return { ok: false, error: `"${column}" has more than ${MAX_DISTINCT.toLocaleString('en-US')} different values — too many to compare.` };
+  const asked = assistant ? await suggestValueGroups(column, counts) : null;
+  const clusters = clusterValues(counts, asked && asked.ok ? asked.groups : []);
+  return {
+    ok: true,
+    distinct: counts.length,
+    clusters: clusters.slice(0, MAX_CLUSTERS),
+    more: Math.max(0, clusters.length - MAX_CLUSTERS),
+    ...(asked && !asked.ok ? { assistant: asked.notReady ? { notReady: true } : { error: asked.error || 'The Assistant could not answer.' } } : {}),
+  };
+}
+
 /** The step list's "1,250 → 1,180 rows": stored with the last recompute, or recomputed once for an older record. */
 export async function stepCounts(projectId: string, datasetId: string): Promise<unknown> {
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
@@ -111,6 +139,13 @@ export function register(): void {
       return await stepPreview(String(projectId || ''), String(datasetId || ''), Number(index), step);
     } catch (err: any) { // ponytail: any thrown value, reported by its message only
       return { ok: false, error: err?.message || 'Could not preview the step' };
+    }
+  });
+  ipcMain.handle('prepare:similarValues', async (_e, { projectId, datasetId, index, column, assistant }: any = {}) => {
+    try {
+      return await similarValues(String(projectId || ''), String(datasetId || ''), Number(index), String(column || ''), assistant === true);
+    } catch (err: any) { // ponytail: any thrown value, reported by its message only
+      return { ok: false, error: err?.message || 'Could not compare the values' };
     }
   });
   ipcMain.handle('prepare:stepCounts', async (_e, { projectId, datasetId }: any = {}) => {

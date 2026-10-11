@@ -44,6 +44,8 @@ export interface Card {
     format?: string;
     metricId?: string;
     compare?: { mode: 'previous_period' | 'previous_year' | 'custom'; from?: string; to?: string };
+    /** Show the saved metric under this what-if scenario (analytics/scenarios); needs `metricId`. */
+    scenarioId?: string;
     [k: string]: unknown;
   };
   control?: { kind: ControlKind; label: string; datasetId: string; column: string; default?: ControlValue; paramId?: string; lngColumn?: string };
@@ -158,8 +160,12 @@ export type StatsTile =
       asOf?: AsOf;
     }
   | { ok: false; error: string };
+/** A what-if card's figure under its scenario, beside the baseline — `scenario:card`'s reply, every string the server's. */
+export type ScenarioReply =
+  | { ok: true; scenarioName: string; baseline: number | null; baselineDisplay: string; value: number | null; display: string; delta: number | null; deltaDisplay: string; pct: number | null; tone: 'good' | 'bad' | 'flat' | 'neutral' }
+  | { ok: false; error: string };
 export type MetricTile =
-  | { ok: true; value: number | null; display?: string; name?: string; paramErrors?: string[]; compare?: CompareReply; fx?: { target: string }; asOf?: AsOf }
+  | { ok: true; value: number | null; display?: string; name?: string; paramErrors?: string[]; compare?: CompareReply; scenario?: ScenarioReply; fx?: { target: string }; asOf?: AsOf }
   | { ok: false; error: string };
 
 // A sheet is one round trip: the tiles asked for in the same tick go out as ONE

@@ -12,7 +12,9 @@ import { Skeleton } from '../../../ui/Skeleton';
 import { DriversView } from '../../analytics/drivers/DriversView';
 import { Icon } from '../../../ui/icons/Icon';
 import { AGG_LABEL, useTile, type Card, type MetricTile } from '../api';
-import { useEditor } from './context';
+import { DrillPanel, type DrillTarget } from '../../visuals/drill/DrillPanel';
+import { PointMenu } from '../../analytics/explain/PointMenu';
+import { useEditor, type EditorApi } from './context';
 import { useTileAsOf } from './tileAsOf';
 import s from './Cards.module.css';
 import { LiveRefusal } from '../../live/LiveOff';
@@ -28,9 +30,33 @@ export function metricLabel(m: NonNullable<Card['metric']>, name?: string): stri
   return m.label || name || `${AGG_LABEL[m.aggregation] ?? m.aggregation} of ${m.column}`;
 }
 
+/**
+ * The rows behind a KPI's figure: the dataset under the SAME filters the card read
+ * (MetricBody's). A saved metric goes by id — the server adds its own filters, or
+ * says why a calculated one has no single set of rows (src/ipc/drillScope.ts).
+ */
+export function kpiDrillTarget(ed: Pick<EditorApi, 'projectId' | 'filters' | 'params'>, card: Card): DrillTarget | null {
+  const m = card.metric;
+  if (!m) return null;
+  return {
+    name: metricLabel(m),
+    projectId: ed.projectId,
+    datasetId: m.datasetId,
+    encoding: { values: [{ column: m.column, aggregation: m.aggregation }] } as DrillTarget['encoding'],
+    filters: ed.filters as DrillTarget['filters'],
+    mark: null,
+    description: 'The rows behind this figure',
+    params: ed.params,
+    ...(m.metricId ? { metricId: m.metricId } : {}),
+  };
+}
+
 export function MetricBody({ card }: { card: Card }) {
   const ed = useEditor();
   const m = card.metric as NonNullable<Card['metric']>;
+  // The sheet's Compare (view state) wins while it is on: every KPI then answers the same question.
+  const sheetCompare = ed.view.compare && (ed.view.compare.mode !== 'custom' || (ed.view.compare.from && ed.view.compare.to)) ? ed.view.compare : null;
+  const compare = sheetCompare ?? m.compare;
   const req = useMemo(
     () => ({
       kind: 'metric' as const,
@@ -38,14 +64,20 @@ export function MetricBody({ card }: { card: Card }) {
       column: m.column,
       aggregation: m.aggregation,
       ...(m.metricId ? { metricId: m.metricId } : {}),
-      ...(m.compare ? { compare: m.compare } : {}),
+      ...(compare ? { compare } : {}),
+      // A what-if is of a saved metric (the scenario's drivers aim at what the metric reads).
+      ...(m.scenarioId && m.metricId ? { scenarioId: m.scenarioId } : {}),
       filters: ed.filters,
     }),
-    [m, ed.filters],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the compare by value: a new object each render is the same question
+    [m, ed.filters, JSON.stringify(compare)],
   );
   const q = useTile<MetricTile>(ed.projectId, ed.params, req);
   useTileAsOf(q.data?.ok ? q.data.asOf : undefined);
   const [why, setWhy] = useState(false);
+  // A right-click on the figure: the rows behind it (also in the card's ⋯ menu, for a keyboard and for touch).
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  const [rows, setRows] = useState<DrillTarget | null>(null);
   if (q.isPending) {
     return (
       <div className={s.metric} aria-busy="true">
@@ -112,14 +144,54 @@ export function MetricBody({ card }: { card: Card }) {
       );
     }
   }
+  // A what-if card: the figure UNDER the scenario is the headline, its change on the baseline the one comparison shown.
+  // The sheet's parameters reach both sides, so a driver that follows one moves with that parameter's slider.
+  const sc = t.scenario;
+  let figure = text;
+  let whatIfNote: string | null = null;
+  if (sc && sc.ok) {
+    figure = sc.display || '—';
+    const tone = !sc.delta || sc.tone === 'neutral' ? 'flat' : sc.tone;
+    delta = (
+      <>
+        <div className={`${s.delta} ${s[tone]}`} title={`${sc.baselineDisplay || '—'} without the scenario`}>
+          {!!sc.delta && <Icon name={sc.delta > 0 ? 'arrow-up' : 'arrow-down'} size={12} />}
+          <span className={s.tnum}>{sc.delta === null ? 'No figure' : sc.delta === 0 ? 'No change' : sc.deltaDisplay}</span>
+          {!!sc.delta && typeof sc.pct === 'number' && Number.isFinite(sc.pct) && <span className={s.tnum}>({kpiPct(sc.pct)})</span>}
+        </div>
+        <div className={s.vsRow}>
+          <span className={s.vs} title={`What-if: ${sc.scenarioName}`}>
+            What-if: {sc.scenarioName} · baseline {sc.baselineDisplay || '—'}
+          </span>
+        </div>
+      </>
+    );
+  } else if (sc) whatIfNote = `What-if unavailable: ${sc.error}`;
   return (
     <div className={s.metric}>
-      <div className={s.value}>{text}</div>
+      <div
+        className={s.value}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setMenuAt({ x: e.clientX, y: e.clientY });
+        }}
+      >
+        {figure}
+      </div>
+      <PointMenu
+        key={menuAt ? `${menuAt.x}:${menuAt.y}` : ''}
+        at={menuAt}
+        items={[{ label: 'Show the rows', icon: 'table', onSelect: () => setRows(kpiDrillTarget(ed, card)) }]}
+        label={`${label} actions`}
+        onClose={() => setMenuAt(null)}
+      />
+      {rows && <DrillPanel target={rows} onClose={() => setRows(null)} />}
       {/* The label goes when the delta line is there and the head already says it (kpiCompare.ts). */}
       {!(delta && label === metricLabel(m)) && <div className={s.metricLabel}>{label}</div>}
       {delta}
+      {whatIfNote && <p className={s.paramErr}>{whatIfNote}</p>}
       {t.paramErrors && t.paramErrors.length > 0 && <p className={s.paramErr}>{t.paramErrors[0]}</p>}
-      {why && m.compare && (
+      {why && compare && (
         <Drawer open wide onOpenChange={(o) => !o && setWhy(false)} title={`Why did ${label} change?`} description="What drove the change against the comparison period">
           <DriversView
             projectId={ed.projectId}
@@ -128,7 +200,7 @@ export function MetricBody({ card }: { card: Card }) {
               datasetId: m.datasetId,
               metric: { ...(m.metricId ? { metricId: m.metricId } : {}), column: m.column, aggregation: m.aggregation, ...(m.label ? { label: m.label } : {}) },
               filters: ed.filters,
-              compare: m.compare,
+              compare,
               path: [],
             }}
           />

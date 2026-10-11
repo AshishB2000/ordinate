@@ -37,6 +37,8 @@ import type { TableCalc } from './tableCalc';
 import { sanitizeFormat, NUMBER_FORMAT_IDS, SORT_MODE_IDS } from './chartFormat';
 import type { FormatOverrides, FormatContext, SortMode } from './chartFormat';
 import * as recordFs from '../app/recordFs';
+import { sanitizeCompare } from './dateIntel';
+import type { CompareMode } from './dateIntel';
 
 export type VizAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
 
@@ -153,6 +155,13 @@ export interface VizEncoding {
    * which is why it rides on the encoding and not on the styling overrides.
    */
   overlay?: 'previous_year';
+  /**
+   * OPTIONAL comparison period — a dashboard's Compare (view state) sent with the
+   * tile, the SAME shape a KPI card's `compare` is: the chart is resolved a second
+   * time under the moved date scope and drawn as a muted series beside its own
+   * (ipc/visualsOverlay.withCompareSeries). Never stored by the dashboard.
+   */
+  compare?: { mode: CompareMode; from?: string; to?: string };
   /** A KEY DRIVERS waterfall tile's question (analysis/driverScope) — recomputed on every render. */
   drivers?: DriversEncoding;
   /** Small multiples (./facets): one panel per facet value. It changes the DATA, so it rides here. */
@@ -323,6 +332,8 @@ export function sanitizeEncoding(raw: unknown): VizEncoding {
   // Its own whitelist, in the file that owns the shape. Same discipline as
   // `grain` and `bins`: unknown keys dropped, every enum clamped to its set.
   if (o.overlay === 'previous_year') enc.overlay = 'previous_year';
+  const compare = sanitizeCompare(o.compare);
+  if (compare) enc.compare = compare;
   const pivot = sanitizePivot(o.pivot);
   if (pivot) enc.pivot = pivot;
   const drivers = sanitizeDriversEncoding(o.drivers);

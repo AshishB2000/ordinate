@@ -364,6 +364,19 @@ async function anomaliesFor(projectId: string, rule: AlertRule) {
 // ── Evaluation ───────────────────────────────────────────────────────────────
 
 /**
+ * Where a fired change came from (ipc/alertDiagnosis). Required lazily — that
+ * module reaches back here through ipc/drivers — and best-effort: an event is
+ * never held up or lost because its breakdown could not be computed.
+ */
+async function diagnosisFor(projectId: string, rule: AlertRule): Promise<string | null> {
+  try {
+    return await (require('../ipc/alertDiagnosis') as typeof import('../ipc/alertDiagnosis')).diagnoseAlert(projectId, rule);
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
  * Evaluate every enabled rule in a project — or only those on `datasetId`, which
  * is what a refresh asks for.
  *
@@ -406,7 +419,11 @@ export async function evaluateProject(
     });
     file.rules[i] = res.rule;
     changed = true;
-    if (res.event) fired.push(res.event);
+    if (res.event) {
+      const why = await diagnosisFor(projectId, res.rule);
+      if (why) res.event.diagnosis = why;
+      fired.push(res.event);
+    }
   }
 
   if (fired.length) file.events = fired.concat(file.events).slice(0, alerts.MAX_EVENTS);

@@ -221,4 +221,50 @@ describe('Prepare', () => {
     expect(await within(dialog).findByText('Missing ")" at 7')).toBeTruthy();
     await waitFor(() => expect((within(dialog).getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true));
   });
+
+  it('similar values: the server’s groups become the Replace step’s rules, minus the ones unticked', async () => {
+    const calls = serve(
+      base({
+        'prepare:similarValues': {
+          body: {
+            ok: true,
+            distinct: 9,
+            more: 0,
+            clusters: [
+              { to: 'East', toCount: 40, from: [{ value: 'east', count: 12 }, { value: 'EAST.', count: 3 }], rows: 15 },
+              { to: 'West', toCount: 30, from: [{ value: 'west', count: 1 }], rows: 1 },
+            ],
+            assistant: { notReady: true },
+          },
+        },
+        'dataset:addStep': { body: { ok: false, error: 'stop here' } },
+      }),
+    );
+    renderApp(`${URL_}?add=replace_values&column=region`);
+    fireEvent.click(await screen.findByRole('button', { name: 'Find similar values' }));
+    const box = await screen.findByRole('region', { name: 'Similar values' });
+    expect(within(box).getByText(/^2 groups of similar values in “region”/)).toBeTruthy();
+    // The counts are printed as the server sent them — never summed here.
+    expect(within(box).getByText('"east" (12), "EAST." (3) · 15 rows change')).toBeTruthy();
+    expect(within(box).getByText('"west" (1) · 1 row changes')).toBeTruthy();
+    expect(within(box).getByText(/The Assistant is not connected yet/)).toBeTruthy();
+    expect(calls.find((c) => c.channel === 'prepare:similarValues')?.payload).toEqual({ projectId: PID, datasetId: DID, index: -1, column: 'region' });
+
+    fireEvent.click(within(box).getByRole('checkbox', { name: 'Merge 2 variations into “West”' }));
+    fireEvent.click(within(box).getByRole('button', { name: 'Add 1 merge as rules' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save step' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'dataset:addStep')).toBe(true));
+    expect(calls.find((c) => c.channel === 'dataset:addStep')?.payload).toEqual({
+      projectId: PID,
+      datasetId: DID,
+      step: { type: 'replace_values', column: 'region', mode: 'exact', rules: [{ from: 'east', to: 'East' }, { from: 'EAST.', to: 'East' }] },
+    });
+  });
+
+  it('similar values: offered for an exact match on a text column only', async () => {
+    serve(base());
+    renderApp(`${URL_}?add=replace_values&column=units`);
+    await screen.findByRole('button', { name: 'Save step' });
+    expect(screen.queryByRole('button', { name: 'Find similar values' })).toBeNull();
+  });
 });

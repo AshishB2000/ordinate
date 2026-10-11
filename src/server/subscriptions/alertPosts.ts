@@ -3,7 +3,8 @@
 // Nothing is recomputed and nothing is reworded: the event already carries the
 // sentence the app composed (analysis/alerts.alertMessage) and the figure the
 // rule read through the KPI door (alertStore.metricFor → computeCardMetric), so
-// the post says exactly what the bell says. It goes out as the same neutral
+// the post says exactly what the bell says — the sentence, then where the change
+// came from when the event carries that (ipc/alertDiagnosis). It goes out as the same neutral
 // message a subscription uses — the rule's name, the sentence, the figure, a
 // link to the dashboard the rule was made on — through the same renderers and
 // the same single door to a webhook (./deliver.ts).
@@ -28,7 +29,7 @@ export function alertMessageModel(projectId: string, rule: AlertRule, event: Ale
   return composeMessage({
     title: alertTitle(rule.name),
     subtitle: [],
-    note: event.message,
+    note: event.diagnosis ? `${event.message} ${event.diagnosis}` : event.message,
     kpis: event.value === null ? [] : [{ label: rule.metric.label || rule.metric.column || rule.name, display: fmtMetric(event.value) }],
     visuals: [],
     link: event.analysisId ? dashboardLink(projectId, event.analysisId) : null,

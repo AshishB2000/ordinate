@@ -8,6 +8,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
+import { formatDateRange } from '../../../../../src/app/format.ts';
 import { rpc } from '../../../api/client';
 import { startDownload } from '../../../api/files';
 import type { Cx } from '../../../charts/types';
@@ -32,6 +33,12 @@ export interface DrillTarget {
   filters: FilterStep[];
   /** The clicked mark, or null for the rows behind the whole visual. */
   mark: { category?: string | number; series?: string | number } | null;
+  /** A KPI on a saved metric: the server adds the metric's own filters, so the rows are the figure's. */
+  metricId?: string;
+  /** The sheet's parameter values, as the figure was computed with them. */
+  params?: { name: string; kind: string; [k: string]: unknown }[];
+  /** The drawer's subtitle, when it is not a visual's (a KPI's figure). */
+  description?: string;
 }
 
 type Head = { ok: true; available: true; columns: GridColumn[]; filters: FilterStep[]; total: number } | { ok: true; available: false; reason: string } | { ok: false; error: string };
@@ -41,7 +48,11 @@ const fmt = new Intl.NumberFormat();
 /** A filter step as a chip: `region in (North, South)`. */
 function chip(f: FilterStep): string {
   const op = String(f.op);
-  if (op === 'period') return `${f.column}: a relative period`;
+  if (op === 'period') {
+    // A dated bar's own range (the server's dates) reads as dates; a preset stays "a relative period".
+    const p = (f.period ?? {}) as { preset?: string; from?: string; to?: string };
+    return p.preset === 'custom' && p.from && p.to ? `${f.column}: ${formatDateRange(p.from, p.to)}` : `${f.column}: a relative period`;
+  }
   if (op === 'is_empty' || op === 'not_empty') return `${f.column} ${OP_LABELS[op]}`;
   if (op === 'in' || op === 'not in') {
     const vals = Array.isArray(f.values) ? f.values.map((v) => (v == null ? '' : String(v))) : [];
@@ -61,7 +72,15 @@ export function DrillPanel({ target, onClose }: { target: DrillTarget; onClose: 
     return () => window.clearTimeout(t);
   }, [typed]);
 
-  const base = { projectId: target.projectId, datasetId: target.datasetId, encoding: target.encoding, filters: target.filters, mark: target.mark };
+  const base = {
+    projectId: target.projectId,
+    datasetId: target.datasetId,
+    encoding: target.encoding,
+    filters: target.filters,
+    mark: target.mark,
+    ...(target.metricId ? { metricId: target.metricId } : {}),
+    ...(target.params ? { params: target.params } : {}),
+  };
   const page = { ...(search ? { search } : {}), ...(sortColumn ? { sortColumn, sortDir } : {}) };
   const head = useQuery({
     queryKey: ['visual:rows', base, page, 'head'],
@@ -110,7 +129,7 @@ export function DrillPanel({ target, onClose }: { target: DrillTarget; onClose: 
       wide
       onOpenChange={(o) => !o && onClose()}
       title={target.name || 'Underlying rows'}
-      description={target.mark ? 'The rows behind the selected mark' : 'The rows behind this visual'}
+      description={target.description ?? (target.mark ? 'The rows behind the selected mark' : 'The rows behind this visual')}
       footer={
         <Button icon="download" loading={exporting} disabled={!ready || ready.total === 0} onClick={() => void exportRows()}>
           Export these rows (CSV)
