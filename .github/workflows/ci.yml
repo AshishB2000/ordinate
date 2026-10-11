@@ -266,6 +266,53 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  # Migration numbers (src/server/db/migrations/NNNN_*.sql) are claimed by hand,
+  # so two pull requests open at once can each add the same one and each pass
+  # alone: two shipped 0014 that way (renumbered in bb2f9b0b). A pull request
+  # that adds a number another OPEN pull request also adds fails here until one
+  # of them renumbers — then re-run this job on the other; it asks GitHub
+  # afresh rather than reading the checkout. A clash with the trunk itself needs
+  # no job: the merge commit CI tests holds both files, and the loader refuses
+  # two that share a version (`check`, test-db-migrate).
+  migrations:
+    name: migration numbers (no clash with an open PR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    steps:
+      # The first step is the negative control for the pattern in the second:
+      # if migrations move or are renamed, this fails instead of matching nothing.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: src/server/db/migrations
+      - run: ls src/server/db/migrations/[0-9][0-9][0-9][0-9]_*.sql > /dev/null
+      - name: No other open pull request adds the same number
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          added() {
+            gh api "repos/$GH_REPO/pulls/$1/files" --paginate --jq '.[] | select(.status == "added" or .status == "renamed") | .filename' \
+              | sed -n 's|^src/server/db/migrations/\([0-9]\{4\}\)_.*\.sql$|\1|p' | sort -u
+          }
+          mine=$(added "$PR")
+          if [ -z "$mine" ]; then echo "this pull request adds no migration"; exit 0; fi
+          echo "this pull request adds: $(echo $mine)"
+          bad=0
+          for other in $(gh pr list --base "$BASE" --state open --limit 200 --json number --jq ".[].number | select(. != $PR)"); do
+            clash=$(comm -12 <(echo "$mine") <(added "$other"))
+            if [ -n "$clash" ]; then
+              echo "::error::migration $(echo $clash) is also added by #$other: one of the two must take the next free number"
+              bad=1
+            fi
+          done
+          exit $bad
+
   # THE required check. Branch protection names one context, `smoke (all
   # shards)` — the name it kept from when it gathered the desktop app's smoke
   # shards (removed at the T8.1 cutover) — so the name stays, and the job now
@@ -274,11 +321,11 @@ jobs:
   smoke-all:
     name: smoke (all shards)
     runs-on: ubuntu-latest
-    needs: [check, web, docker, helm, audit]
+    needs: [check, web, docker, helm, audit, migrations]
     if: always()
     steps:
       - name: Every gating job passed
         run: |
-          for r in "${{ needs.check.result }}" "${{ needs.web.result }}" "${{ needs.docker.result }}" "${{ needs.helm.result }}" "${{ needs.audit.result }}"; do
+          for r in "${{ needs.check.result }}" "${{ needs.web.result }}" "${{ needs.docker.result }}" "${{ needs.helm.result }}" "${{ needs.audit.result }}" "${{ needs.migrations.result }}"; do
             test "$r" = success
           done
