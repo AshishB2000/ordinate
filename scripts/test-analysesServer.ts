@@ -159,6 +159,13 @@ async function partOne(): Promise<void> {
     ok('gallery: 200, both dashboards, newest first', g.status === 200 && g.body.length === 2 && g.body[0].id === s.empty, JSON.stringify(g.body.map((x: { name: string }) => x.name)));
     ok('gallery: previews = the first sheet\'s first two RESOLVABLE visuals (the dangling one skipped)',
       board.previews.map((p: { id: string }) => p.id).join() === [s.v1, s.v2].join(), JSON.stringify(board.previews.map((p: { name: string }) => p.name)));
+    // Home's preview card reads the same sheet off recent:list: ids only, as the sheet lists them (the
+    // lister reads no second file to resolve them, so a dangling id stays and simply draws nothing).
+    const rl = await call('recent:list');
+    const recentRow = (id: string) => rl.body.find((x: { type: string; id: string }) => x.type === 'analysis' && x.id === id);
+    ok('recent:list: a dashboard carries its first sheet\'s first two visual cards as ids',
+      rl.status === 200 && recentRow(s.aid)?.meta.previewIds.join() === ['00000000-0000-4000-8000-000000000000', s.v1].join() && recentRow(s.aid).meta.sheetCount === 2, JSON.stringify(recentRow(s.aid)));
+    ok('recent:list: a dashboard with no visual card carries no previewIds at all', !!recentRow(s.empty) && !('previewIds' in recentRow(s.empty).meta), JSON.stringify(recentRow(s.empty)));
     ok('gallery: a preview carries the store\'s definition, field for field',
       board.previews.every((p: any, i: number) => same(p.encoding, want[i]?.encoding) && same(p.filters, want[i]?.filters) && p.chartType === want[i]?.chartType && p.datasetId === s.ds), // any: a reply row
       JSON.stringify(board.previews[1]));

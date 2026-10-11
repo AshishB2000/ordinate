@@ -63,24 +63,19 @@
 .drawn .size {
   display: none;
 }
-/* A dashboard: its first sheet's first one or two visuals, side by side. */
+/* A dashboard: its first sheet's first one or two visuals, side by side —
+   a cell exists only once it has a picture, and the cells share the tile. */
 .dash {
   position: absolute;
   inset: var(--sp-8);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
+  display: flex;
   gap: var(--sp-4);
   pointer-events: none;
 }
-.dash2 {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
 .dashCell {
   position: relative;
+  flex: 1 1 0;
   min-width: 0;
-  min-height: 0;
-  padding: var(--sp-4);
   border-radius: var(--r-sm);
   background: var(--surface);
   overflow: hidden;

@@ -16,7 +16,7 @@ export interface RecentItem {
   projectName: string;
   name: string;
   updatedAt: string;
-  meta?: { rowCount?: number; columnCount?: number; sheetCount?: number; qualityFailing?: number; chartType?: string };
+  meta?: { rowCount?: number; columnCount?: number; sheetCount?: number; qualityFailing?: number; chartType?: string; previewIds?: string[] };
 }
 
 export interface HomeOverview {

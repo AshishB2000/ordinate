@@ -106,6 +106,8 @@ export interface AnalysisSummary {
   updatedAt: string;
   /** Saved views by name — ⌘K lists "Dashboard › View" rows from these. */
   views?: Array<{ id: string; name: string }>;
+  /** The first sheet's first two visual cards, as saved-visual ids — what a preview card draws (Home). Absent when it has none. */
+  previewIds?: string[];
 }
 
 
@@ -201,12 +203,15 @@ export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]
       const data = JSON.parse(raw);
       if (!isValidAnalysis(data)) continue;
       const a = normalize(data, projectId);
+      // From the record already read: no second file, no figure.
+      const previewIds = (a.sheets[0]?.cards ?? []).flatMap((c) => (c.type === 'visual' && c.visualId ? [c.visualId] : [])).slice(0, 2);
       out.push({
         id: a.id,
         name: a.name,
         sheetCount: a.sheets.length,
         updatedAt: a.updatedAt,
         views: (a.views || []).map((v) => ({ id: v.id, name: v.name })),
+        ...(previewIds.length ? { previewIds } : {}),
       });
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
