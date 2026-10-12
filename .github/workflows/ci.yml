@@ -2,8 +2,9 @@ name: CI build check
 
 # Per-push gate: install deps, type-check + compile the TypeScript tree, run the
 # node self-checks, build and test the web app, build the image and drive it
-# under Compose and on kind, and audit the runtime dependencies. Releases are
-# release.yml (tags only).
+# under Compose and on kind, and audit the runtime dependencies. A green push to
+# develop then publishes the :edge image (the `edge` job, through release.yml);
+# versioned releases are release.yml on a tag.
 #
 # Watches `develop`, which is this repo's DEFAULT branch. This list has now gone
 # stale TWICE, and both times the symptom was silence rather than a red check:
@@ -15,12 +16,24 @@ name: CI build check
 # exercise the same runtime the server ships on. The DuckDB native binding is a
 # prebuilt N-API module and resolves per-platform from npm, so no rebuild step
 # is needed here.
+#
+# Actions are pinned to the commit of the release named beside each one;
+# .github/dependabot.yml proposes the bumps.
 
 on:
   push:
     branches: [develop, main]
   pull_request:
     branches: [develop, main]
+
+permissions:
+  contents: read
+
+# A new push to a pull request supersedes the run before it. A push to the trunk
+# is never cancelled: every merged commit keeps its own verdict.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -42,8 +55,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: 'npm'
@@ -90,8 +103,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: 'npm'
@@ -116,7 +129,7 @@ jobs:
       - name: Upload the e2e screenshots
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: e2e-screens-chromium
           path: web/e2e/__screens__/*.png
@@ -135,8 +148,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
       - name: Server and web app dependencies
@@ -153,8 +166,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: 'npm'
@@ -204,7 +217,7 @@ jobs:
       - name: Upload the compose screenshots
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: compose-screens
           path: web/e2e/__screens__/compose-*.png
@@ -222,8 +235,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: 'npm'
@@ -247,12 +260,59 @@ jobs:
       - name: Upload the screenshots
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: helm-screens
           path: web/e2e/__screens__/compose-*.png
           if-no-files-found: warn
           retention-days: 7
+
+  # Migration numbers (src/server/db/migrations/NNNN_*.sql) are claimed by hand,
+  # so two pull requests open at once can each add the same one and each pass
+  # alone: two shipped 0014 that way (renumbered in bb2f9b0b). A pull request
+  # that adds a number another OPEN pull request also adds fails here until one
+  # of them renumbers — then re-run this job on the other; it asks GitHub
+  # afresh rather than reading the checkout. A clash with the trunk itself needs
+  # no job: the merge commit CI tests holds both files, and the loader refuses
+  # two that share a version (`check`, test-db-migrate).
+  migrations:
+    name: migration numbers (no clash with an open PR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    steps:
+      # The first step is the negative control for the pattern in the second:
+      # if migrations move or are renamed, this fails instead of matching nothing.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: src/server/db/migrations
+      - run: ls src/server/db/migrations/[0-9][0-9][0-9][0-9]_*.sql > /dev/null
+      - name: No other open pull request adds the same number
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          added() {
+            gh api "repos/$GH_REPO/pulls/$1/files" --paginate --jq '.[] | select(.status == "added" or .status == "renamed") | .filename' \
+              | sed -n 's|^src/server/db/migrations/\([0-9]\{4\}\)_.*\.sql$|\1|p' | sort -u
+          }
+          mine=$(added "$PR")
+          if [ -z "$mine" ]; then echo "this pull request adds no migration"; exit 0; fi
+          echo "this pull request adds: $(echo $mine)"
+          bad=0
+          for other in $(gh pr list --base "$BASE" --state open --limit 200 --json number --jq ".[].number | select(. != $PR)"); do
+            clash=$(comm -12 <(echo "$mine") <(added "$other"))
+            if [ -n "$clash" ]; then
+              echo "::error::migration $(echo $clash) is also added by #$other: one of the two must take the next free number"
+              bad=1
+            fi
+          done
+          exit $bad
 
   # THE required check. Branch protection names one context, `smoke (all
   # shards)` — the name it kept from when it gathered the desktop app's smoke
@@ -262,11 +322,31 @@ jobs:
   smoke-all:
     name: smoke (all shards)
     runs-on: ubuntu-latest
-    needs: [check, web, docker, helm, audit]
+    needs: [check, web, docker, helm, audit, migrations]
     if: always()
     steps:
       - name: Every gating job passed
         run: |
-          for r in "${{ needs.check.result }}" "${{ needs.web.result }}" "${{ needs.docker.result }}" "${{ needs.helm.result }}" "${{ needs.audit.result }}"; do
+          for r in "${{ needs.check.result }}" "${{ needs.web.result }}" "${{ needs.docker.result }}" "${{ needs.helm.result }}" "${{ needs.audit.result }}" "${{ needs.migrations.result }}"; do
             test "$r" = success
           done
+
+  # CD. A push to develop that passed every gate above publishes
+  # ghcr.io/<owner>/ordinate:edge through release.yml's own image job, so it is
+  # built and booted on amd64 and arm64 exactly as a tagged release is. Versioned
+  # releases stay on `v*` tags. `contents: write` is only the ceiling GitHub
+  # demands because release.yml also holds the Release job (skipped here, but
+  # checked when the run starts); the image job itself asks for `contents: read`.
+  # ponytail: runs are per commit, so two merges seconds apart can publish out of
+  # order and leave :edge one commit behind until the next merge. Queue the
+  # trunk's runs in one concurrency group if that ever matters.
+  edge:
+    name: edge image
+    needs: smoke-all
+    if: github.event_name == 'push' && github.ref_name == 'develop'
+    permissions:
+      contents: write
+      packages: write
+    uses: ./.github/workflows/release.yml
+    with:
+      edge: true

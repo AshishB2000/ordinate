@@ -25,15 +25,24 @@ on:
   pull_request:
     branches: [develop, main]
 
+permissions:
+  contents: read
+
+# A new push to a pull request supersedes the run before it. A push to the trunk
+# is never cancelled: every merged commit keeps its own verdict.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint:
     name: oxlint (blocking)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - run: npm ci
       # web/tsconfig.json references vite/client types: the web/ lint pass needs web's deps.
       - run: npm --prefix web ci
@@ -43,10 +52,10 @@ jobs:
     name: Prettier --check (advisory)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Report formatting drift (does not gate)
         continue-on-error: true
         run: npx --yes prettier@3 --check .

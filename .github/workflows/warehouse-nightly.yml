@@ -46,8 +46,8 @@ jobs:
     # The connector checks take a few minutes; the parity matrix ~500 statements a warehouse.
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: 'npm'
@@ -87,8 +87,8 @@ jobs:
           - 8123:8123
         options: --ulimit nofile=262144:262144
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: 'npm'
@@ -103,3 +103,26 @@ jobs:
         run: node scripts/test-liveParityClickhouse.js
         env:
           CLICKHOUSE_URL: http://parity:parity@127.0.0.1:8123
+
+  # A red nightly is otherwise seen by nobody. One open issue per workflow: the
+  # first failure opens it, each later one adds the run to it.
+  report:
+    name: Open an issue on failure
+    needs: [live, clickhouse]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: Nightly warehouse run is failing
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          n=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number // empty')
+          if [ -n "$n" ]; then
+            gh issue comment "$n" --body "Failed again: $RUN"
+          else
+            gh issue create --title "$TITLE" --body "First failing run: $RUN"
+          fi

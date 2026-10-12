@@ -242,8 +242,9 @@ loading (skeleton) and error state, in both themes.
 `deploy/Dockerfile` (non-root, amd64 + arm64, **≤ 600 MB**, CI-enforced); `deploy/docker-compose.yml`
 (+ Postgres, MinIO; app port on `127.0.0.1` only); `deploy/helm/ordinate` (migration hook Job,
 metrics Service never on the Ingress, secrets only via `existingSecret`). `/metrics` only on
-`METRICS_PORT`. `release.yml` (image + chart on a `v*` tag) has never run — releasing is the user's
-call. Every env var is in `docs/server/configuration.md`; `test-serverDocs` enforces it.
+`METRICS_PORT`. Every green push to `develop` publishes `ghcr.io/<owner>/ordinate:edge` (ci.yml's
+`edge` job, through `release.yml`'s image job). A versioned release (`release.yml`: image + chart on
+a `v*` tag) has never been cut — releasing is the user's call. Every env var is in `docs/server/configuration.md`; `test-serverDocs` enforces it.
 
 ## Testing
 
@@ -262,8 +263,10 @@ call. Every env var is in `docs/server/configuration.md`; `test-serverDocs` enfo
   load — batch an endpoint before raising it), and writes light + dark screenshots to
   `web/e2e/__screens__/` — look at them. `E2E_CHROMIUM` overrides the browser.
 - **CI** (`ci.yml`, every PR to `develop`): jobs `check`, `web`, `audit` (`scripts/audit-gate.ts`),
-  `docker`, `helm`, plus `lint.yml`. The required check **`smoke (all shards)`** aggregates check,
-  web, docker, helm and audit. `e2e-nightly.yml` runs Firefox and WebKit. `warehouse-nightly.yml`
+  `docker`, `helm`, `migrations` (fails a PR that adds a migration number another open PR also
+  adds), plus `lint.yml`. A ruleset on `develop` (`.github/rulesets/develop.json`) requires **`smoke (all shards)`** (aggregates check,
+  web, docker, helm, audit and migrations) and **`oxlint (blocking)`**, and refuses a direct push.
+  Actions are pinned by commit; Dependabot bumps them. A failed nightly opens an issue. `e2e-nightly.yml` runs Firefox and WebKit. `warehouse-nightly.yml`
   runs `scripts/test-warehouseLive.ts` against real Snowflake / BigQuery accounts from repo secrets
   (it skips, green, without them — locally too).
 

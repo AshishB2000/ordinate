@@ -224,7 +224,24 @@ async function suite(adminUrl: string): Promise<void> {
     const twin = await B.context.runInContext(BOSS, 'twin', () => store.createSubscription(pid, {
       ...B.definition(s, [SL], { name: 'Twin', schedule: { cadence: 'hourly', at: `00:${String(minuteAgo.getUTCMinutes()).padStart(2, '0')}` } }),
     }, 'boss@acme.test', new Date(Date.now() - 2 * 3_600_000)));
-    await Promise.all([asJob(() => run.tickSubscriptions()), asJob(() => run.tickSubscriptions())]);
+    // Each tick is held at its fence stamp until BOTH have read the subscription. Left to the scheduler, the
+    // second sometimes reads after the first has stamped and stops at runSubscription's own fence — one post,
+    // seen in CI under load — and that fence is not what this control is about. The timer only keeps a
+    // tick that never arrives from hanging the suite: the count below then fails it.
+    const realStamp = store.stampRun;
+    let atFence = 0;
+    let open: () => void = () => undefined;
+    const bothRead = new Promise<void>((r) => { open = r; });
+    (store as { stampRun: typeof realStamp }).stampRun = async (...a) => {
+      if (++atFence === 2) open();
+      await Promise.race([bothRead, new Promise((r) => setTimeout(r, 5000).unref())]);
+      return realStamp(...a);
+    };
+    try {
+      await Promise.all([asJob(() => run.tickSubscriptions()), asJob(() => run.tickSubscriptions())]);
+    } finally {
+      (store as { stampRun: typeof realStamp }).stampRun = realStamp;
+    }
     ok('NEGATIVE CONTROL: the lease is what makes it once — two ticks run with NO claim both post', twin !== null && rx.hits.length === 2, String(rx.hits.length));
 
     // ── audit and the canary ──────────────────────────────────────────────

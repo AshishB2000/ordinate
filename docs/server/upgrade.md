@@ -14,6 +14,10 @@ A release is a git tag `v<major>.<minor>.<patch>`, or `v1.2.3-rc.1` for a pre-re
 - **The Helm chart** `ordinate-<version>.tgz`, attached to the GitHub Release. Its `version` and
   `appVersion` both equal the tag, so by default it deploys the image of the same release.
 
+Between releases, `ghcr.io/ashishb2000/ordinate:edge` is the latest commit on `develop` that passed
+CI, built and booted the same way. It moves on every merge and has no chart: use it to try a change
+early, never in production.
+
 The version is also `package.json`'s `version`. The server writes it into every backup's manifest,
 and the release workflow refuses a tag that does not match it.
 
