@@ -259,7 +259,10 @@ const show = (v: unknown): string => JSON.stringify(v).slice(0, 400);
     rx.script.length = 0;
 
     // ── the tick ──────────────────────────────────────────────────────────
-    const first = Math.ceil((Date.now() + 1000) / DAY) * DAY + 8 * 3_600_000; // the next 08:00 UTC that is not today's
+    // The next 08:00 UTC after now, so no slot lies between the subscription's `since` and it. Tomorrow's
+    // 08:00 would leave today's in between whenever the suite runs before 08:00 UTC: the first tick below
+    // then records today's as missed, and every history count after it is one too many.
+    const first = (Math.floor((Date.now() - 8 * 3_600_000) / DAY) + 1) * DAY + 8 * 3_600_000;
     const slot = (k: number): number => first + k * DAY;
     const state = () => B.context.runInContext(DEV, 'read', () => store.getSubscription(pid, sid));
     ok('tick: before the slot nothing is due', (await asJob(() => run.tickSubscriptions(slot(0) - 60_000))) === 0 && rx.hits.length === 0);
