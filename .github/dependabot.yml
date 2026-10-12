@@ -1,0 +1,11 @@
+# Keeps the commit pins in .github/workflows current: one grouped pull request
+# a week. Actions only — runtime npm advisories are scripts/audit-gate.ts's job.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
