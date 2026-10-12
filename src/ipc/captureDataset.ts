@@ -108,6 +108,22 @@ export function register(deps: CaptureDeps = {}) {
       ...rest,
       hasImage: !!cropPath,
     })));
+  // The capture's own page. A dataset the capture was saved into counts only
+  // while it still exists (a metadata read — no rows are loaded).
+  ipcMain.handle('captureDataset:get', async (_e, { projectId, captureId }: any = {}) => {
+    const thread = await captureUpload.loadOwn(String(projectId), String(captureId)).catch(() => null);
+    if (!thread) return { ok: false, error: 'That capture no longer exists.' };
+    const view = captureUpload.viewOf(thread);
+    const kept = view.datasetId ? await datasets.getDatasetMeta(String(projectId), view.datasetId) : null;
+    return { ...view, datasetId: kept ? view.datasetId : null };
+  });
+  // ponytail: the whole PNG in one reply (≤ 20 MB, the upload cap). A streamed
+  // GET route if captures ever hold more than screenshots.
+  ipcMain.handle('captureDataset:image', async (_e, { projectId, captureId }: any = {}) => {
+    const thread = await captureUpload.loadOwn(String(projectId), String(captureId)).catch(() => null);
+    const png = thread ? await history.loadCrop(thread.id) : null;
+    return png ? { ok: true, dataUrl: 'data:image/png;base64,' + png.toString('base64') } : { ok: false };
+  });
   ipcMain.handle('captureDataset:delete', async (_e, { projectId, captureId }: any = {}) => {
     const thread = await captureUpload.loadOwn(String(projectId), String(captureId)).catch(() => null);
     if (!thread) return { ok: false, error: 'That capture no longer exists.' };

@@ -9,7 +9,8 @@
 //   · a screenshot upload is read by the org's model (a stdlib mock provider)
 //     on the server: the allow-list and the no-model state are honoured before
 //     any call; the capture is a project record whose list never carries a
-//     server path; corrected cells save as a 'capture' dataset linked back;
+//     server path; its page reads the stored analysis and the screenshot with
+//     no second model call; corrected cells save as a 'capture' dataset linked back;
 //     another project's capture is not found, not linkable, not deletable;
 //   · input tables: create, lookups, save batches (with the check), distinct,
 //     edit columns — and every contract refuses a malformed shape.
@@ -52,7 +53,15 @@ const MODEL_REPLY = {
     rows: [{ region: 'North', sales: 120 }, { region: 'South', sales: 95 }, { region: 'East', sales: 80 }],
   },
   extractionConfidence: 'medium',
+  dataShape: 'categorical',
+  columnRoles: { category: 'region', primaryValue: 'sales' },
+  suggestedCalculations: ['rank_by_value', 'pct_of_total'],
+  headline: { focus: ['rank_by_value'], angle: 'One region leads.' },
+  visualizations: [{ type: 'bar' }, { type: 'table' }],
+  followups: ['Which region leads?'],
 };
+/** What the stub answers next: the table above, or a screenshot with nothing to extract. */
+let modelReply: object = MODEL_REPLY;
 let modelCalls = 0;
 let lastModelBody = '';
 const model = http.createServer((req, res) => {
@@ -62,7 +71,7 @@ const model = http.createServer((req, res) => {
     modelCalls++;
     lastModelBody = body;
     res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(MODEL_REPLY) }, finish_reason: 'stop' }] }));
+    res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(modelReply) }, finish_reason: 'stop' }] }));
   });
 });
 
@@ -115,7 +124,9 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
   const projects: typeof import('../src/app/projects') = require('../src/app/projects');
   const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
   const history: typeof import('../src/app/history') = require('../src/app/history');
-  const project = (org: string, name: string) => context.runInContext(as(org), 'seed', async () => (await projects.createProject(name)).id);
+  const calc: typeof import('../src/formula/calc') = require('../src/formula/calc');
+  const headline: typeof import('../src/ai/headline') = require('../src/ai/headline');
+  const project =(org: string, name: string) => context.runInContext(as(org), 'seed', async () => (await projects.createProject(name)).id);
   const PA = await project('org-a', 'A');
   const PA2 = await project('org-a', 'A2');
   const PB = await project('org-b', 'B');
@@ -220,6 +231,41 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
   ok('re-draft from the stored capture: the same draft, no model call',
     (await call('org-a', 'captureDataset:draft', { projectId: PA, captureId: capId })).body?.rows?.length === 3 && modelCalls === 1);
 
+  // The capture's own page: the stored analysis and the screenshot, no model call.
+  const view = (await call('org-a', 'captureDataset:get', { projectId: PA, captureId: capId })).body;
+  ok('capture page: the narration, the follow-ups and the suggested chart ids as stored',
+    view?.ok === true && view.title === 'Regional sales' && view.analysis === 'Sales by region.' && view.unsure === true
+      && view.chartTypes.join() === 'bar,table' && view.followups.join() === 'Which region leads?' && modelCalls === 1, JSON.stringify(view).slice(0, 300));
+  ok('…its chart data is the app\'s own derivation from the extracted table',
+    JSON.stringify(view?.chart) === JSON.stringify(calc.deriveChartData(MODEL_REPLY.extractedTable, MODEL_REPLY.columnRoles, MODEL_REPLY.dataShape))
+      && JSON.stringify(view?.chart) === '{"labels":["North","South","East"],"series":[{"name":"Sales","values":[120,95,80]}]}', JSON.stringify(view?.chart));
+  ok('…its metrics are the app\'s, and every figure in the headline is one the app computed',
+    view?.metrics.length > 0 && view.metrics.every((m: { title: string; lines: string[] }) => m.title && m.lines.length > 0)
+      && Array.isArray(view.headline) && headline.verifyHeadlineNumbers({ plain: view.headline.map((x: { text: string }) => x.text).join(''), numbers: view.headline.filter((x: { bold?: boolean }) => x.bold).map((x: { text: string }) => x.text) }).ok,
+    JSON.stringify([view?.metrics, view?.headline]).slice(0, 300));
+  ok('…its table is the draft the composer opens', JSON.stringify(view?.table?.rows) === JSON.stringify(drafted.body.rows) && JSON.stringify(view?.table?.columns) === JSON.stringify(drafted.body.columns));
+  ok('…not yet a dataset, and no server path or provider thread in it',
+    view?.datasetId === null && view.hasImage === true && !('cropPath' in view) && !JSON.stringify(view).includes(DATA) && !JSON.stringify(view).includes('iVBORw0KGgo'));
+  const img = (await call('org-a', 'captureDataset:image', { projectId: PA, captureId: capId })).body;
+  ok('capture image: the uploaded PNG, byte for byte, as a data URL', img?.ok === true && img.dataUrl === 'data:image/png;base64,' + Buffer.from(PNG).toString('base64'), JSON.stringify(img).slice(0, 120));
+  ok('another project reads neither', (await call('org-a', 'captureDataset:get', { projectId: PA2, captureId: capId })).body?.ok === false
+    && (await call('org-a', 'captureDataset:image', { projectId: PA2, captureId: capId })).body?.ok === false);
+  ok('another org reads neither', (await call('org-b', 'captureDataset:get', { projectId: PB, captureId: capId })).body?.ok === false
+    && (await call('org-b', 'captureDataset:image', { projectId: PB, captureId: capId })).body?.ok === false);
+  ok('a path-shaped capture id is a 400 on both', (await call('org-a', 'captureDataset:get', { projectId: PA, captureId: '../x' })).status === 400
+    && (await call('org-a', 'captureDataset:image', { projectId: PA, captureId: '../x' })).status === 400);
+
+  // A screenshot with nothing to extract is still a capture: stored, its page opens, no table.
+  modelReply = { title: 'A busy dashboard', analysis: 'Several panels, no single table.', extractedTable: { columns: [], rows: [] }, visualizations: [] };
+  const bare = await call('org-a', 'captureDataset:draft', { projectId: PA, fileToken: await upload('org-a', 'd.png', PNG) });
+  modelReply = MODEL_REPLY;
+  const bareView = typeof bare.body?.captureId === 'string' ? (await call('org-a', 'captureDataset:get', { projectId: PA, captureId: bare.body.captureId })).body : null;
+  ok('no table: the draft is refused but names the capture it stored', bare.body?.ok === false && bare.body.errorType === 'no_table' && typeof bare.body.captureId === 'string', JSON.stringify(bare.body));
+  ok('…and its page has the narration, no table, no chart, no headline',
+    bareView?.ok === true && bareView.analysis === 'Several panels, no single table.' && bareView.table === null && bareView.chart.series.length === 0
+      && bareView.headline === null && bareView.metrics.length === 0, JSON.stringify(bareView).slice(0, 300));
+  await call('org-a', 'captureDataset:delete', { projectId: PA, captureId: bare.body.captureId });
+
   const edited = [['North', 120], ['South', '59'], ['East', 80]]; // the user corrects a mis-read cell
   const capSave = await save('org-a', PA, { inline: { name: 'Regional sales', columns: drafted.body.columns, rows: edited } }, {
     name: 'Regional sales', sourceKind: 'capture', origin: { kind: 'capture', captureId: capId },
@@ -230,6 +276,7 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
   ok('corrected cells save as a capture dataset, typed by the app',
     capSave.body?.ok === true && capDs?.sourceKind === 'capture' && JSON.stringify(capDs.rows) === '[["North",120],["South",59],["East",80]]', JSON.stringify(capSave.body).slice(0, 300));
   ok('…linked both ways: the dataset to its capture, the capture to its dataset', capDs?.capture?.entryId === capId && thread?.datasetId === capDsId);
+  ok('capture page: now names the dataset it became', (await call('org-a', 'captureDataset:get', { projectId: PA, captureId: capId })).body?.datasetId === capDsId);
   const listed = await call('org-a', 'dataset:list', { projectId: PA });
   const capRow = (listed.body as { id: string; capture?: Record<string, unknown> }[]).find((d) => d.id === capDsId);
   ok('dataset:list: a capture dataset says it has an image, never the crop’s server path',
@@ -246,6 +293,9 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
   const svg = await call('org-a', 'captureDataset:draft', { projectId: PA, fileToken: await upload('org-a', 'b.png', PNG), thumb: 'data:image/svg+xml;base64,PHN2Zz4=' });
   const svgThread = await context.runInContext(as('org-a'), 'h', () => history.loadThread(svg.body.captureId));
   ok('an SVG "thumbnail" is not stored (it could carry script)', svg.body?.ok === true && svgThread?.thumb === null);
+  // Negative control for the link above: a dataset that is not there is not named.
+  await context.runInContext(as('org-a'), 'h', () => history.setDatasetId(svg.body.captureId, '00000000-0000-4000-8000-000000000000'));
+  ok('capture page: a dataset that no longer exists is not named', (await call('org-a', 'captureDataset:get', { projectId: PA, captureId: svg.body.captureId })).body?.datasetId === null);
   ok('delete from another project: refused', (await call('org-a', 'captureDataset:delete', { projectId: PA2, captureId: capId })).body?.ok === false);
   const del = await call('org-a', 'captureDataset:delete', { projectId: PA, captureId: capId });
   ok('delete: gone from the list', del.body?.ok === true && (await call('org-a', 'captureDataset:list', { projectId: PA })).body.every((c: { id: string }) => c.id !== capId));

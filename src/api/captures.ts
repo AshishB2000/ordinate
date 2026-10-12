@@ -24,6 +24,20 @@ export const captures = {
   }),
   // One project's captures, newest first — never the crop's server path.
   'captureDataset:list': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
+  // One stored capture for its own page: the narration, the app's headline,
+  // metrics and chart data, and its table as the composer would open it.
+  'captureDataset:get': rpc({
+    access: 'read',
+    input: z.strictObject({ projectId: Uuid, captureId: CaptureId }),
+    project: byProjectId,
+  }),
+  // The screenshot itself as a PNG data URL — the page's <img>; the crop's
+  // server path never leaves the server.
+  'captureDataset:image': rpc({
+    access: 'read',
+    input: z.strictObject({ projectId: Uuid, captureId: CaptureId }),
+    project: byProjectId,
+  }),
   // Deletes a capture of THIS project (another project's id is not found).
   'captureDataset:delete': rpc({
     access: 'write',

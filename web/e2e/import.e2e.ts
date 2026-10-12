@@ -172,8 +172,9 @@ e2e('designed states: no model, no captures (in the current project)', async ({ 
   await page.getByText(/An operator sets DATABASE_URL and ORDINATE_MASTER_KEY/).waitFor();
   await screens(page, 'import-screenshot-not-ready');
 
+  // No captures: the way to make the first one is the empty state — and with no model, it says what is missing.
   await page.goto(`/data/captures?project=${server.sample.projectId}`);
   await settled(page);
-  await page.getByRole('heading', { name: 'No captures yet' }).waitFor();
+  await page.getByRole('region', { name: 'Upload a screenshot' }).getByRole('heading', { name: 'Reading a screenshot needs AI' }).waitFor();
   await screens(page, 'import-captures-empty');
 });

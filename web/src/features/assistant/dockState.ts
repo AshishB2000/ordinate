@@ -18,6 +18,7 @@ import { useSyncExternalStore } from 'react';
 import { useMatch } from 'react-router';
 import { useDatasetColumns } from '../../api/datasets';
 import { useProjects, type Project } from '../../api/projects';
+import { useCapture } from '../import/api';
 import type { Ask } from './api';
 
 const OPEN_KEY = 'ordinate.dock';
@@ -110,7 +111,10 @@ export interface DockProject {
 
 export function useDockProject(enabled: boolean): DockProject {
   const chosen = useSyncExternalStore(subscribe, () => picked);
-  const route = useMatch('/data/:projectId/*')?.params.projectId ?? null;
+  // A capture's page names its project one segment later: /data/captures/<project>/<capture>.
+  const capture = useMatch('/data/captures/:projectId/:captureId')?.params.projectId ?? null;
+  const data = useMatch('/data/:projectId/*')?.params.projectId ?? null;
+  const route = capture ?? data;
   const q = useProjects();
   const list = enabled ? (q.data ?? []) : [];
   const id = route ?? (chosen && list.some((p) => p.id === chosen) ? chosen : (newest(list)?.id ?? null));
@@ -132,6 +136,15 @@ export function useDockContext(projectId: string | null): DockContext {
   const datasetId = ds && ds.params.projectId === projectId ? (ds.params.datasetId ?? null) : null;
   // The same query (and cache entry) the dataset page's grid header reads.
   const cols = useDatasetColumns(projectId ?? undefined, datasetId ?? undefined);
+  // A capture's page: a question is about that capture (copilot:ask reads its
+  // table and computes its statistics). The same query the page itself reads.
+  const cap = useMatch('/data/captures/:projectId/:captureId');
+  const captureId = cap && cap.params.projectId === projectId ? cap.params.captureId : undefined;
+  const capture = useCapture(projectId ?? '', captureId);
+  if (captureId) {
+    const title = capture.data?.ok ? capture.data.title : '';
+    return { kind: 'capture', id: captureId, label: `capture · ${title || 'open capture'}`, name: title };
+  }
   if (!datasetId) return WHOLE;
   const name = cols.data?.name || 'open dataset';
   return { kind: 'dataset', id: datasetId, label: `dataset · ${name}`, name: cols.data?.name ?? '' };
