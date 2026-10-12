@@ -1,10 +1,11 @@
-// /data/import[?source=file|paste|screenshot|combine][&capture=<id>] — in the current project
+// /data/import[?source=file|paste|screenshot|combine][&capture=<id>[&then=analysis]] — in the current project
 //
 // Bringing data in (legacy dsImport.ts + the Data section's import dialog):
 // pick a source on the left, its panel on the right; every source ends in the
 // COMPOSER, the one create-a-dataset surface. An input table is defined in a
 // dialog and opens on its own grid. `capture=<id>` opens a stored capture's
-// table in the composer (the Captures tab's "Save as dataset").
+// table in the composer (a capture's "Save as dataset"); with `then=analysis`
+// the save continues into the new-analysis wizard on that dataset.
 
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -14,6 +15,7 @@ import { Icon, type IconName } from '../../ui/icons/Icon';
 import { toast } from '../../ui/Toast';
 import { draftCapture } from './api';
 import { Composer, type ComposerStart } from './Composer';
+import { captureStart } from './composerModel';
 import { FileSource, PasteSource } from './FileSources';
 import { InputColumnsDialog } from './InputColumnsDialog';
 import { ProjectGate } from './ProjectGate';
@@ -33,7 +35,7 @@ const SOURCES: readonly { id: Source; icon: IconName; label: string; hint: strin
 
 const isSource = (v: string | null): v is Source => SOURCES.some((x) => x.id === v);
 
-function StoredCapture({ projectId, captureId, onComposer }: { projectId: string; captureId: string; onComposer: (s: ComposerStart) => void }) {
+function StoredCapture({ projectId, captureId, next, onComposer }: { projectId: string; captureId: string; next?: ComposerStart['next']; onComposer: (s: ComposerStart) => void }) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
@@ -41,22 +43,14 @@ function StoredCapture({ projectId, captureId, onComposer }: { projectId: string
       (r) => {
         if (!live) return;
         if (!r.ok) return setError(r.message);
-        onComposer({
-          base: { label: r.title, rows: r.rows.length, kind: 'capture', ref: { inline: { name: r.title, columns: r.columns, rows: r.rows } }, columns: r.columns.map((c) => c.name) },
-          name: r.title,
-          sourceKind: 'capture',
-          origin: { kind: 'capture', captureId: r.captureId },
-          capture: true,
-          unsure: r.unsure,
-          warnings: r.warnings,
-        });
+        onComposer(captureStart(r, next));
       },
       (err: unknown) => live && setError(err instanceof Error ? err.message : 'The capture could not be opened.'),
     );
     return () => {
       live = false;
     };
-  }, [projectId, captureId, onComposer]);
+  }, [projectId, captureId, next, onComposer]);
   if (error) return <ErrorState title="This capture could not be opened" message={error} heading={2} />;
   return <SkeletonTable label="Opening the capture" />;
 }
@@ -73,6 +67,7 @@ function Importer({ projectId }: { projectId: string }) {
     const next = new URLSearchParams(params);
     next.set('source', id);
     next.delete('capture');
+    next.delete('then');
     setParams(next, { replace: true });
     if (id === 'combine') setStart({ base: null, name: '' });
     if (id === 'input') setDefining(true);
@@ -82,6 +77,7 @@ function Importer({ projectId }: { projectId: string }) {
     if (captureId) {
       const next = new URLSearchParams(params);
       next.delete('capture');
+      next.delete('then');
       setParams(next, { replace: true });
     }
   };
@@ -117,7 +113,7 @@ function Importer({ projectId }: { projectId: string }) {
         </nav>
         <section className={s.pane} aria-label={captureId ? 'Capture' : SOURCES.find((x) => x.id === source)?.label}>
           {captureId ? (
-            <StoredCapture projectId={projectId} captureId={captureId} onComposer={setStart} />
+            <StoredCapture projectId={projectId} captureId={captureId} next={params.get('then') === 'analysis' ? 'analysis' : undefined} onComposer={setStart} />
           ) : source === 'paste' ? (
             <PasteSource onComposer={setStart} />
           ) : source === 'screenshot' ? (

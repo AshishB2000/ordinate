@@ -1,12 +1,17 @@
-// Captures as a SOURCE (T2.4) against the real server and a stdlib stand-in
-// for an OpenAI-compatible provider (the org's "gateway"):
+// Captures (T2.4) against the real server and a stdlib stand-in for an
+// OpenAI-compatible provider (the org's "gateway"):
 //
-//   upload a screenshot → the model reads it ON THE SERVER (the request is
-//   asserted to carry the image) → the step list while it reads → the
-//   composer with editable cells, the model's caution said once → a mis-read
-//   cell corrected → saved as a 'capture' dataset → the Captures tab shows the
-//   card with its thumbnail and the Dataset badge, reopens its table, deletes
-//   it; and a rejected key shows the typed error card.
+//   as a SOURCE — upload a screenshot on Bring data in → the model reads it ON
+//   THE SERVER (the request is asserted to carry the image) → the step list
+//   while it reads → the composer with editable cells, the model's caution
+//   said once → a mis-read cell corrected → saved as a 'capture' dataset → the
+//   Captures tab shows the card with its thumbnail and the Dataset badge, opens
+//   its page, deletes it; and a rejected key shows the typed error card;
+//
+//   on the Captures tab — upload in place → the capture's own page: the
+//   screenshot beside the analysis, the app's figures, the chart and the table
+//   → "Build an analysis" → the composer's cell check → the wizard on the
+//   saved dataset.
 //
 // The org's config.json is written before the server reads it: the server
 // starts with the first session, and no request has reached it yet.
@@ -32,8 +37,14 @@ const REPLY = {
     rows: [{ region: 'North', sales: 120 }, { region: 'South', sales: 95 }, { region: 'East', sales: 80 }],
   },
   extractionConfidence: 'medium',
+  dataShape: 'categorical',
+  columnRoles: { category: 'region', primaryValue: 'sales' },
+  suggestedCalculations: ['rank_by_value', 'pct_of_total'],
+  headline: { focus: ['rank_by_value'], angle: 'One region leads.' },
+  visualizations: [{ type: 'bar' }, { type: 'pie' }, { type: 'table' }],
+  followups: ['Which region leads?', 'How far behind is East?'],
 };
-const model = { calls: 0, last: '', delay: 0, status: 200 };
+const model ={ calls: 0, last: '', delay: 0, status: 200 };
 const mock = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c: Buffer) => (body += String(c)));
@@ -139,18 +150,20 @@ e2e('capture: upload → read on the server → correct a cell → save → Capt
   assert.match((await card.locator('img').getAttribute('src')) ?? '', /^data:image\/jpeg;base64,/);
   await screens(page, 'capture-list');
 
-  // "Save as dataset" reopens the stored capture's table — no second model call.
-  await card.getByRole('link', { name: 'Save as dataset' }).click();
-  await page.getByRole('heading', { level: 1, name: 'New dataset' }).waitFor();
-  await page.getByRole('grid', { name: 'Preview' }).getByText('95').waitFor();
-  assert.equal(model.calls, 1);
+  // A capture that became a dataset links to it; the card itself opens the capture's page.
+  assert.match((await card.getByRole('link', { name: 'Open dataset' }).getAttribute('href')) ?? '', new RegExp(`^/data/${pid}/[0-9a-f-]{36}$`));
+  await card.getByRole('link', { name: /Regional sales/ }).click();
+  await page.getByRole('heading', { level: 1, name: 'Regional sales' }).waitFor();
+  // Already a dataset: "Build an analysis" needs no second cell check — the wizard opens on it.
+  assert.match((await page.getByRole('link', { name: 'Build an analysis' }).getAttribute('href')) ?? '', new RegExp(`^/analyses\\?project=${pid}&new=1&dataset=[0-9a-f-]{36}$`));
+  assert.equal(model.calls, 1, 'opening a stored capture asks no model');
 
-  // Delete it.
+  // Delete it: with none left, the way to make one is the empty state.
   await page.goto(`/data/captures?project=${pid}`);
   await settled(page);
   await page.getByRole('button', { name: 'Delete Regional sales' }).click();
   await page.getByRole('dialog', { name: 'Delete this capture?' }).getByRole('button', { name: 'Delete' }).click();
-  await page.getByRole('heading', { name: 'No captures yet' }).waitFor();
+  await page.getByRole('heading', { name: 'Drop a screenshot, or paste one' }).waitFor();
   for (const l of rpc.loads) console.log(`rpc  ${String(l.rpcs).padStart(2)}  ${new URL(l.url).pathname}${new URL(l.url).search}`);
 });
 
@@ -166,4 +179,75 @@ e2e('capture: a rejected key shows the typed error card', async ({ page, server 
   model.status = 200;
   await card.getByRole('button', { name: 'Try another screenshot' }).click();
   await page.getByRole('heading', { name: 'Drop a screenshot, or paste one' }).waitFor();
+});
+
+e2e('capture: upload on the Captures tab → its page, the analysis beside the screenshot → build an analysis', async ({ page, server, rpc }) => {
+  connectModel(server.dataDir);
+  const pid = server.sample.projectId;
+  const before = model.calls;
+  await page.goto(`/data/captures?project=${pid}`);
+  await settled(page);
+  // No captures: the drop zone is the empty state, on this tab — not a link to Bring data in.
+  const zone = page.getByRole('region', { name: 'Upload a screenshot' });
+  await zone.getByRole('heading', { name: 'Drop a screenshot, or paste one' }).waitFor();
+  await screens(page, 'captures-empty');
+
+  model.delay = 1500;
+  await zone.locator('input[type="file"]').setInputFiles({ name: 'shot.png', mimeType: 'image/png', buffer: await screenshotPng(page) });
+  await page.getByRole('status', { name: 'The model is reading the screenshot' }).waitFor();
+  assert.ok(new URL(page.url()).pathname === '/data/captures', 'the model reads without leaving Captures');
+  model.delay = 0;
+
+  // The capture's own page: the screenshot, and what was read out of it.
+  await page.getByRole('heading', { level: 1, name: 'Regional sales' }).waitFor();
+  assert.match(new URL(page.url()).pathname, new RegExp(`^/data/captures/${pid}/[0-9a-f-]{36}$`));
+  assert.equal(model.calls, before + 1);
+  const shot = page.getByRole('img', { name: 'Screenshot: Regional sales' });
+  await shot.waitFor();
+  assert.match((await shot.getAttribute('src')) ?? '', /^data:image\/png;base64,iVBORw0KGgo/);
+  const analysis = page.getByRole('region', { name: 'Analysis' });
+  await analysis.getByText('Sales by region.').waitFor();
+  // The headline's figure is the app's, from the extracted table: North, 120.
+  assert.equal(await analysis.locator('strong').first().textContent(), '120');
+  await page.getByRole('region', { name: 'Metrics' }).getByText('1. North — 120').waitFor();
+  await page.getByRole('region', { name: 'Chart' }).locator('canvas').waitFor();
+  const read = page.getByRole('region', { name: 'What the model read' });
+  await read.getByRole('cell', { name: '95' }).waitFor();
+  await read.getByText('The model was unsure about some of what it read').waitFor();
+  await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]'));
+  await screens(page, 'capture-page');
+  assert.equal(model.calls, before + 1, 'reloading the page asks no model');
+  // The lower half: the chart and the table, the screenshot still in view beside them.
+  await read.scrollIntoViewIfNeeded();
+  await screensInPlace(page, 'capture-page-table');
+
+  // The other suggested chart, and the screenshot at full size.
+  await page.getByRole('group', { name: 'Chart type' }).getByRole('button', { name: 'Pie' }).click();
+  await page.getByRole('group', { name: 'Chart type' }).locator('button[aria-pressed="true"]', { hasText: 'Pie' }).waitFor();
+  await page.getByRole('button', { name: 'Enlarge the screenshot' }).click();
+  await page.getByRole('dialog', { name: 'Regional sales' }).getByRole('img').waitFor();
+  await page.keyboard.press('Escape');
+
+  // The question: build an analysis → the cell check → saved → the wizard, on that dataset.
+  await page.getByRole('heading', { name: 'Want an analysis built from this?' }).waitFor();
+  await page.getByRole('link', { name: 'Build an analysis' }).click();
+  await page.getByRole('heading', { level: 1, name: 'New dataset' }).waitFor();
+  await page.getByRole('grid', { name: 'Preview' }).getByText('South').waitFor();
+  await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]'));
+  await page.getByRole('button', { name: 'Save and build the analysis' }).click();
+  const wizard = page.getByRole('dialog', { name: 'Create dashboard' });
+  await wizard.waitFor();
+  // "Start from" is the wizard's second step: it opens there only with a dataset of this project picked.
+  await wizard.getByText('Start from a template built for your data, a plain layout, or let a model design it.').waitFor();
+  assert.equal(new URL(page.url()).pathname, '/analyses');
+  assert.equal(model.calls, before + 1, 'the composer and the wizard open without a model call');
+
+  // Back on Captures there is one now: the button opens the same zone in place.
+  await page.goto(`/data/captures?project=${pid}`);
+  await settled(page);
+  await page.getByRole('listitem').filter({ hasText: 'Regional sales' }).getByText('Dataset', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Upload a screenshot' }).click();
+  await page.getByRole('region', { name: 'Upload a screenshot' }).getByRole('heading', { name: 'Drop a screenshot, or paste one' }).waitFor();
+  await screensInPlace(page, 'captures-upload');
+  for (const l of rpc.loads) console.log(`rpc  ${String(l.rpcs).padStart(2)}  ${new URL(l.url).pathname}${new URL(l.url).search}`);
 });

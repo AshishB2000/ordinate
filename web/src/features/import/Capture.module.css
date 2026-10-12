@@ -1,0 +1,339 @@
+/* One capture's page: the screenshot on the left (it stays in view while the
+   reading scrolls), what was read out of it on the right. Tokens only: both
+   themes follow. */
+
+.bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-12);
+  margin-top: calc(var(--sp-8) * -1);
+}
+.when {
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  align-items: start;
+  gap: var(--sp-24);
+}
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ── The screenshot ─────────────────────────────────────────────────────── */
+.shot {
+  position: sticky;
+  top: var(--sp-24);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+@media (max-width: 1100px) {
+  .shot {
+    position: static;
+  }
+}
+.shotBtn {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  overflow: hidden;
+  cursor: zoom-in;
+}
+.shotBtn:hover {
+  border-color: var(--accent-line);
+}
+.shotBtn:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.shotImg {
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+}
+.shotHint {
+  position: absolute;
+  right: var(--sp-8);
+  bottom: var(--sp-8);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  font-size: var(--t-11);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.shotBtn:hover .shotHint,
+.shotBtn:focus-visible .shotHint {
+  opacity: 1;
+}
+.shotSkel {
+  display: block;
+  aspect-ratio: 16 / 10;
+  border-radius: var(--r-md);
+}
+.shotNone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-8);
+  aspect-ratio: 16 / 10;
+  padding: var(--sp-16);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-12);
+  text-align: center;
+}
+.shotFull {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+/* ── What was read ──────────────────────────────────────────────────────── */
+.read {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  min-width: 0;
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-24);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+.headline {
+  font-size: var(--t-20);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tr-tight);
+  color: var(--text-strong);
+}
+.headline strong {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.narration {
+  max-width: 72ch;
+  font-size: var(--t-15);
+  line-height: var(--lh-body);
+  color: var(--text);
+}
+.note {
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.followups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  padding-top: var(--sp-4);
+}
+.followup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface-1);
+  color: var(--text);
+  font-size: var(--t-12);
+  cursor: pointer;
+}
+.followup:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--text-strong);
+}
+.followup:focus-visible,
+.type:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* The question. Accent-tinted: it is the one thing on the page that asks. */
+.ask {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-16);
+  padding: var(--sp-16) var(--sp-24);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-lg);
+}
+.ask[data-tone='quiet'] {
+  background: var(--surface-1);
+  border-color: var(--border);
+}
+.askText {
+  flex: 1 1 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.askTitle {
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.askBody {
+  max-width: 64ch;
+  color: var(--text);
+  font-size: var(--t-13);
+}
+.askActs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+
+/* The app's metrics: one small card each, its lines as the server wrote them. */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-12);
+}
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  min-width: 0;
+}
+.metricTitle {
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.metricLines {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 148px;
+  overflow: auto;
+  list-style: none;
+  color: var(--text);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+.type {
+  padding: 3px var(--sp-12);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  font-size: var(--t-12);
+  cursor: pointer;
+}
+.type:hover {
+  color: var(--text-strong);
+}
+.type[aria-pressed='true'] {
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-strong);
+  font-weight: 500;
+}
+.chart {
+  height: 320px;
+  min-width: 0;
+}
+
+.tableWrap {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+.table th,
+.table td {
+  padding: 6px var(--sp-12);
+  border-bottom: 1px solid var(--border-hairline);
+  text-align: left;
+  white-space: nowrap;
+}
+.table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-1);
+  color: var(--muted);
+  font-weight: 600;
+}
+.table td {
+  color: var(--text);
+}
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.table [data-type='number'] {
+  text-align: right;
+}

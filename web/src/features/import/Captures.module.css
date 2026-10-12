@@ -5,6 +5,12 @@
   display: flex;
   justify-content: flex-end;
 }
+/* The drop zone / the model reading / its error card, in place on the tab. */
+.capUpload {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
 .capGrid {
   margin: 0;
   padding: 0;

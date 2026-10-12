@@ -51,12 +51,57 @@ export const composeSave = async (input: ComposeInput) => (await rpc('dataset:co
 
 // ── Captures ──────────────────────────────────────────────────────────────
 
-/** A capture drafted for the composer, or why not (a typed model error: src/ai/analyze.ts). */
+/**
+ * A capture drafted for the composer, or why not (a typed model error:
+ * src/ai/analyze.ts). A refusal that carries `captureId` stored the capture —
+ * only its table is missing, and its page still opens.
+ */
 export type DraftReply =
   | { ok: true; captureId: string; title: string; columns: GridColumn[]; rows: Cell[][]; warnings: string[]; unsure: boolean }
-  | { ok: false; errorType: string; message: string; detail?: string };
+  | { ok: false; errorType: string; message: string; detail?: string; captureId?: string };
+export type DraftOk = Extract<DraftReply, { ok: true }>;
 
 export const draftCapture = async (input: RpcInput<'captureDataset:draft'>) => (await rpc('captureDataset:draft', input)) as DraftReply;
+
+/**
+ * One stored capture for its page (src/app/captureUpload.ts CaptureView). The
+ * narration and follow-ups are the model's words; the headline's figures, the
+ * metric lines and the chart data are the server's — the page only lays them out.
+ */
+export interface CaptureView {
+  ok: true;
+  id: string;
+  title: string;
+  createdAt: string;
+  datasetId: string | null;
+  hasImage: boolean;
+  analysis: string;
+  headline: { text: string; bold?: boolean }[] | null;
+  metrics: { id: string; title: string; lines: string[] }[];
+  chart: { labels: string[]; series: { name: string; values: (number | null)[] }[] };
+  chartTypes: string[];
+  followups: string[];
+  table: { columns: GridColumn[]; rows: Cell[][]; warnings: string[] } | null;
+  unsure: boolean;
+}
+
+/** `captureId` undefined: nothing is asked (the dock, off a capture's page). */
+export function useCapture(projectId: string, captureId: string | undefined) {
+  return useQuery({
+    queryKey: ['captureDataset:get', projectId, captureId],
+    queryFn: captureId === undefined ? skipToken : async () => (await rpc('captureDataset:get', { projectId, captureId })) as CaptureView | { ok: false; error: string },
+  });
+}
+
+/** The screenshot as a PNG data URL, or null when the capture has none. It never changes once stored. */
+export function useCaptureImage(projectId: string, captureId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['captureDataset:image', projectId, captureId],
+    queryFn: async () => ((await rpc('captureDataset:image', { projectId, captureId })) as { ok: boolean; dataUrl?: string }).dataUrl ?? null,
+    enabled,
+    staleTime: Infinity,
+  });
+}
 
 export interface CaptureSummary {
   id: string;

@@ -35,6 +35,8 @@ export interface ComposerStart {
   warnings?: readonly string[];
   /** The sheet a workbook import came from, said beside it. */
   sheet?: string;
+  /** Where a save continues: the new-analysis wizard on the saved dataset (a capture's "Build an analysis"). */
+  next?: 'analysis';
 }
 
 const plural = (n: number, one: string) => `${formatNumber(n)} ${one}${n === 1 ? '' : 's'}`;
@@ -97,7 +99,8 @@ export function Composer({ projectId, start, onBack }: { projectId: string; star
       toast(`Saved “${finalName}”.`, { kind: 'success' });
       void client.invalidateQueries({ queryKey: ['dataset:list', projectId] });
       void client.invalidateQueries({ queryKey: ['captureDataset:list', projectId] });
-      void navigate(`/data/${projectId}/${r.dataset.id}`);
+      void client.invalidateQueries({ queryKey: ['captureDataset:get', projectId] });
+      void navigate(start.next === 'analysis' ? `/analyses?project=${projectId}&new=1&dataset=${r.dataset.id}` : `/data/${projectId}/${r.dataset.id}`);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'The dataset could not be saved.', { kind: 'error' });
     } finally {
@@ -122,7 +125,7 @@ export function Composer({ projectId, start, onBack }: { projectId: string; star
           {head.data ? `${plural(head.data.total, 'row')} · ${plural(kept, 'column')}` : ''}
         </span>
         <Button variant="primary" loading={saving} disabled={!base || !head.data} onClick={() => void save()}>
-          Save
+          {start.next === 'analysis' ? 'Save and build the analysis' : 'Save'}
         </Button>
       </div>
       <div className={cs.composerBody}>

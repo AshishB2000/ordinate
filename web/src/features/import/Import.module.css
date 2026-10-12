@@ -154,6 +154,14 @@ textarea.paste {
   font-variant-numeric: tabular-nums;
 }
 
+/* The "AI isn't set up" note under the screenshot source's empty state: stacked
+   and centred, not a row. Doubled so it wins over AiNotReady's own row layout
+   whichever stylesheet loads first. */
+.aiNote.aiNote {
+  flex-direction: column;
+  text-align: center;
+}
+
 /* ── Screenshot: the model reading, and what it says when it cannot ─────── */
 .steps {
   margin: 0;

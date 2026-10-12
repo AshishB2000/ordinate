@@ -1,14 +1,15 @@
 // /data/captures?project=<id> — the Captures tab of Data (legacy
 // captureList.ts): the project's screenshots the model has read, as a card
-// grid. A capture is a project record and a SOURCE: "Save as dataset" opens
-// its table in the composer, a card that already became a dataset links to
-// it, and a new one comes from "Upload a screenshot".
+// grid. A capture is a project record: a card opens its own page (the
+// screenshot beside the analysis), "Save as dataset" opens its table in the
+// composer, and a new one is uploaded or pasted right here — the model reads
+// it and its page opens.
 
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
-import { EmptyState, ErrorState, Page } from '../../app/blocks';
+import { ErrorState, Page } from '../../app/blocks';
 import { Badge } from '../../ui/Badge';
 import { Button, buttonClass } from '../../ui/Button';
 import { Dialog, DialogClose } from '../../ui/Dialog';
@@ -17,6 +18,7 @@ import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
 import { useCaptures, type CaptureSummary } from './api';
 import { ProjectGate } from './ProjectGate';
+import { ScreenshotSource } from './ScreenshotSource';
 import s from './Captures.module.css';
 
 const when = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -25,7 +27,7 @@ function Card({ c, projectId, onDelete }: { c: CaptureSummary; projectId: string
   const save = `/data/import?project=${projectId}&capture=${encodeURIComponent(c.id)}`;
   return (
     <li className={s.capCard}>
-      <Link className={s.capBody} to={c.datasetId ? `/data/${projectId}/${c.datasetId}` : save}>
+      <Link className={s.capBody} to={`/data/captures/${projectId}/${encodeURIComponent(c.id)}`}>
         <span className={s.capTile}>
           {c.thumb ? (
             <img className={s.capImg} src={c.thumb} alt="" draggable={false} />
@@ -46,9 +48,15 @@ function Card({ c, projectId, onDelete }: { c: CaptureSummary; projectId: string
         </span>
       )}
       <div className={s.capActs}>
-        <Link className={buttonClass('secondary', 'sm')} to={save}>
-          Save as dataset
-        </Link>
+        {c.datasetId ? (
+          <Link className={buttonClass('secondary', 'sm')} to={`/data/${projectId}/${c.datasetId}`}>
+            Open dataset
+          </Link>
+        ) : (
+          <Link className={buttonClass('secondary', 'sm')} to={save}>
+            Save as dataset
+          </Link>
+        )}
         <Button size="sm" variant="ghost" icon="trash" onClick={onDelete} aria-label={`Delete ${c.title || 'capture'}`}>
           Delete
         </Button>
@@ -61,11 +69,13 @@ function Captures({ projectId }: { projectId: string }) {
   const q = useCaptures(projectId);
   const client = useQueryClient();
   const [deleting, setDeleting] = useState<CaptureSummary | null>(null);
-  const upload = (
-    <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}&source=screenshot`}>
-      <Icon name="camera" />
-      <span>Upload a screenshot</span>
-    </Link>
+  const navigate = useNavigate();
+  const [uploading, setUploading] = useState(false);
+  // The drop zone, the model's progress and its typed errors — here, not on Bring data in.
+  const reader = (
+    <section className={s.capUpload} aria-label="Upload a screenshot">
+      <ScreenshotSource projectId={projectId} onRead={(id) => void navigate(`/data/captures/${projectId}/${encodeURIComponent(id)}`)} />
+    </section>
   );
   const remove = async (c: CaptureSummary) => {
     setDeleting(null);
@@ -93,11 +103,8 @@ function Captures({ projectId }: { projectId: string }) {
   } else if (q.isError) {
     body = <ErrorState title="Captures could not be loaded" message={q.error.message} onRetry={() => void q.refetch()} />;
   } else if (q.data.length === 0) {
-    body = (
-      <EmptyState icon="camera" title="No captures yet" actions={upload}>
-        Upload or paste a screenshot of any chart or table and the model reads the figures out of it. Save the ones that carry a table as a dataset.
-      </EmptyState>
-    );
+    // No captures yet: the way to make the first one IS the empty state.
+    body = reader;
   } else {
     body = (
       <ul className={s.capGrid} aria-label="Captures">
@@ -109,7 +116,16 @@ function Captures({ projectId }: { projectId: string }) {
   }
   return (
     <Page title="Captures" sub="Screenshots the model has read in this project.">
-      {q.data && q.data.length > 0 && <div className={s.capBar}>{upload}</div>}
+      {q.data && q.data.length > 0 && (
+        <>
+          <div className={s.capBar}>
+            <Button variant={uploading ? 'secondary' : 'primary'} icon={uploading ? 'x' : 'camera'} aria-expanded={uploading} onClick={() => setUploading(!uploading)}>
+              {uploading ? 'Cancel' : 'Upload a screenshot'}
+            </Button>
+          </div>
+          {uploading && reader}
+        </>
+      )}
       {body}
       <Dialog
         open={deleting !== null}

@@ -1,7 +1,8 @@
 // "Upload or paste a screenshot" — the server form of the desktop's capture
-// (legacy captureDataset.ts + captureStatus.ts). The image is uploaded, the
-// org's model reads it ON THE SERVER (captureDataset:draft), and its table
-// opens in the composer with editable cells. While the model reads, the step
+// (legacy captureDataset.ts + captureStatus.ts). The image is uploaded and the
+// org's model reads it ON THE SERVER (captureDataset:draft). From Bring data
+// in, its table opens in the composer with editable cells; from the Captures
+// tab, the capture's own page opens with the analysis. While the model reads, the step
 // list the capture page showed; when it cannot, the typed error card; and
 // when no model can run, the not-ready state instead of a drop zone.
 
@@ -16,6 +17,7 @@ import { useAiStatus } from '../assistant/api';
 import { AiNotReady } from '../assistant/AiNotReady';
 import { draftCapture } from './api';
 import type { ComposerStart } from './Composer';
+import { captureStart } from './composerModel';
 import { DropZone } from './DropZone';
 import { readyImage } from './screenshotImage';
 import s from './Import.module.css';
@@ -77,7 +79,17 @@ function FailureCard({ f, onRetry }: { f: Failure; onRetry: () => void }) {
   );
 }
 
-export function ScreenshotSource({ projectId, onComposer }: { projectId: string; onComposer: (start: ComposerStart) => void }) {
+export function ScreenshotSource({
+  projectId,
+  onComposer,
+  onRead,
+}: {
+  projectId: string;
+  /** Bring data in: the capture's table, straight into the composer. */
+  onComposer?: (start: ComposerStart) => void;
+  /** The Captures tab: a capture was stored — with or without a table — and its page opens. */
+  onRead?: (captureId: string) => void;
+}) {
   const status = useAiStatus();
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
@@ -91,16 +103,9 @@ export function ScreenshotSource({ projectId, onComposer }: { projectId: string;
       const up = await upload(img.png, 'screenshot.png');
       const r = await draftCapture({ projectId, fileToken: up.fileToken, thumb: img.thumb });
       void client.invalidateQueries({ queryKey: ['captureDataset:list', projectId] });
+      if (onRead && r.captureId) return onRead(r.captureId);
       if (!r.ok) return setFailure(r);
-      onComposer({
-        base: { label: r.title, rows: r.rows.length, kind: 'capture', ref: { inline: { name: r.title, columns: r.columns, rows: r.rows } }, columns: r.columns.map((c) => c.name) },
-        name: r.title,
-        sourceKind: 'capture',
-        origin: { kind: 'capture', captureId: r.captureId },
-        capture: true,
-        unsure: r.unsure,
-        warnings: r.warnings,
-      });
+      onComposer?.(captureStart(r));
     } catch (err) {
       setFailure({ errorType: 'unknown', message: err instanceof Error ? err.message : 'The screenshot could not be read.' });
     } finally {
@@ -128,7 +133,7 @@ export function ScreenshotSource({ projectId, onComposer }: { projectId: string;
   if (status.isError) return <ErrorState title="The model's status could not be read" message={status.error.message} onRetry={() => void status.refetch()} heading={3} />;
   if (!status.data.ready) {
     return (
-      <EmptyState icon="sparkles" heading={3} title="Reading a screenshot needs AI" actions={<AiNotReady status={status.data} />} />
+      <EmptyState icon="sparkles" heading={3} title="Reading a screenshot needs AI" actions={<AiNotReady status={status.data} className={s.aiNote} />} />
     );
   }
   if (busy) return <Steps />;
@@ -137,7 +142,11 @@ export function ScreenshotSource({ projectId, onComposer }: { projectId: string;
     <DropZone
         icon="camera"
         title="Drop a screenshot, or paste one"
-        hint="A chart, a table, a dashboard — the model reads the figures out of it on the server, and you check every cell before it is saved. Ctrl+V / ⌘V pastes from the clipboard."
+        hint={
+          onRead
+            ? 'A chart, a table, a dashboard — the model reads it on the server and its analysis opens beside the screenshot. Ctrl+V / ⌘V pastes from the clipboard.'
+            : 'A chart, a table, a dashboard — the model reads the figures out of it on the server, and you check every cell before it is saved. Ctrl+V / ⌘V pastes from the clipboard.'
+        }
         accept="image/*"
         choose="Choose an image"
         onFile={(f) => void take(f)}

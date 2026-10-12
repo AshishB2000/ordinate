@@ -177,6 +177,11 @@ prompts unrounded); a leading U+FEFF is lost on every string the bridge returns 
   `{kind, label, refreshable}` (`dataset:source`). The server keeps no `file` origin (F1).
 - **Captures are a SOURCE**: upload a screenshot → `captureDataset:draft` → composer (preview cells
   editable — a model's reading of an image) → `composeSave`; the one origin that is not re-fetchable.
+  Uploaded on the Captures tab, a capture opens its own page instead
+  (`/data/captures/<project>/<id>`, `captureDataset:get` / `:image`): the screenshot beside the
+  stored analysis — headline, metrics and chart data are the app's, no second model call — and
+  "Build an analysis", which still goes through the composer's cell check (`then=analysis`) before
+  the new-dashboard wizard opens on the saved dataset.
 - **Prepare** — `src/data/transforms.ts` folds ordered steps over an immutable copy, so removing a
   step recomputes from source; an unknown step is skipped with a warning. `src/formula/` is a
   hand-written tokenizer + parser + tree-walker — **no `eval`, no `new Function`, ever** (lint-enforced).

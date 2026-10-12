@@ -7,8 +7,26 @@
 // join, and the field mapping (rename / retype / drop), which saves as
 // ordinary prepare steps.
 
-import type { Cell, ColType, JoinRef, TableRef } from './api';
+import type { Cell, ColType, DraftOk, JoinRef, TableRef } from './api';
+import type { ComposerStart } from './Composer';
 import type { GridColumn } from '../../ui/DataGrid/DataGrid';
+
+/**
+ * A capture's drafted table as the composer opens it: an inline base whose
+ * cells may be corrected (a model's reading), the model's caution carried.
+ */
+export function captureStart(r: DraftOk, next?: ComposerStart['next']): ComposerStart {
+  return {
+    base: { label: r.title, rows: r.rows.length, kind: 'capture', ref: { inline: { name: r.title, columns: r.columns, rows: r.rows } }, columns: r.columns.map((c) => c.name) },
+    name: r.title,
+    sourceKind: 'capture',
+    origin: { kind: 'capture', captureId: r.captureId },
+    capture: true,
+    unsure: r.unsure,
+    warnings: r.warnings,
+    ...(next ? { next } : {}),
+  };
+}
 
 export type Mode = 'inner' | 'left' | 'append';
 

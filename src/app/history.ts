@@ -50,6 +50,17 @@ export async function saveCrop(id: string | number, dataUrl: string): Promise<st
   return p;
 }
 
+// Read a thread's crop image, or null when there is none. The path is built
+// from the id, never from the cropPath the thread stores.
+export async function loadCrop(id: string | number): Promise<Buffer | null> {
+  if (!isValidId(id)) return null;
+  try {
+    return await recordFs.readFile(cropFilePath(id));
+  } catch (_) {
+    return null;
+  }
+}
+
 // Save (create or overwrite) a thread file.
 // thread: { id, title, createdAt, updatedAt, cropPath, messages, result, turns }
 // ponytail: the thread envelope carries the whole conversation JSON — not worth typing.

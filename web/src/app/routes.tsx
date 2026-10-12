@@ -85,6 +85,8 @@ export const pages: RouteObject[] = [
   // Analytics workbenches B (T2.11): SQL over the project's datasets, and its event annotations.
   page('/analytics/:projectId/sql', () => import('../features/analytics/sql/QueryPage')),
   page('/analytics/:projectId/events', () => import('../features/analytics/events/EventsPage')),
+  // One capture's own page: the screenshot beside the analysis the model and the app made of it.
+  page('/data/captures/:projectId/:captureId', () => import('../features/import/CapturePage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.
