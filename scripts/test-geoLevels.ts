@@ -23,9 +23,10 @@ import * as vm from 'vm';
 
 // ponytail: geoMatch.js is a UMD script (not a TS module) and the
 // boundary sets are postinstall-fetched build output — require both with loose types.
-const { normalizeName, matchGeoItem } = require('../src/analysis/geoMatch') as {
+const { normalizeName, matchGeoItem, featureNameSet } = require('../src/analysis/geoMatch') as {
   normalizeName: (n: string | null | undefined) => string;
-  matchGeoItem: (items: any[], featProps: any) => any;
+  matchGeoItem: (items: any[], featProps: any, shapeNames?: Set<string>) => any;
+  featureNameSet: (features: any[]) => Set<string>;
 };
 
 const GEO_DIR = path.join(__dirname, '..', 'assets', 'geo');
@@ -254,13 +255,15 @@ ok('us_city: no places boundary asset ships either',
   !fs.existsSync(path.join(GEO_DIR, 'us-city.json')) && !fs.existsSync(path.join(GEO_DIR, 'us-cities.json')));
 
 // ── §7 KNOWN DEFECTS — characterized, not endorsed ───────────────────────────
-// These assert what the shipped matcher DOES today. Each is a real mis-join, all
-// of them pre-date Phase 4, and none is caused by the renderer. They are pinned
-// here so a fix is a visible, deliberate test edit rather than a silent drift.
+// These assert what the shipped matcher DOES today. D1 and D2 were real
+// mis-joins that pre-dated Phase 4 and are now CLOSED: an item that names a
+// shape of its own only ever matches that shape. They stay pinned from both
+// sides — the fix, and what a caller that forgets the shape names still gets.
 
 // D1. The substring rule (item name >4 chars, containment either direction) is
-// unscoped by length ratio, so a longer country name captures a shorter one.
+// unscoped by length ratio, so a longer country name captured a shorter one.
 // 17 ordered collision pairs exist in the shipped 177-feature world asset.
+const worldNames = featureNameSet(WORLD.features);
 const worldNorm = WORLD.features.map(f => normalizeName(f.properties.name));
 const collisionPairs: string[] = [];
 for (const a of worldNorm) for (const b of worldNorm) {
@@ -268,25 +271,34 @@ for (const a of worldNorm) for (const b of worldNorm) {
 }
 ok('D1: the world asset holds 17 ordered substring-colliding country pairs (15 names)',
   collisionPairs.length === 17 && new Set(collisionPairs.map(p => p.split(' ~ ')[0])).size === 15);
-ok('D1: an item named "Nigeria" wrongly matches the Niger polygon',
-  matchGeoItem([{ name: 'Nigeria', value: 1 }], worldProps('Niger'))?.value === 1);
-ok('D1: an item named "Romania" wrongly matches the Oman polygon',
-  matchGeoItem([{ name: 'Romania', value: 1 }], worldProps('Oman'))?.value === 1);
-ok('D1: an item named "South Sudan" wrongly matches the Sudan polygon',
-  matchGeoItem([{ name: 'South Sudan', value: 1 }], worldProps('Sudan'))?.value === 1);
-// Item order decides the outcome, so the damage depends on the row order of the
-// user's data — the same dataset sorted differently shades a different country.
-ok('D1: with both present, list order decides which polygon Niger gets',
-  matchGeoItem([{ name: 'Nigeria', value: 1 }, { name: 'Niger', value: 2 }], worldProps('Niger'))?.value === 1 &&
+ok('D1: an item named "Nigeria" no longer matches the Niger polygon',
+  matchGeoItem([{ name: 'Nigeria', value: 1 }], worldProps('Niger'), worldNames) === undefined);
+ok('D1: an item named "Romania" no longer matches the Oman polygon',
+  matchGeoItem([{ name: 'Romania', value: 1 }], worldProps('Oman'), worldNames) === undefined);
+ok('D1: an item named "South Sudan" no longer matches the Sudan polygon',
+  matchGeoItem([{ name: 'South Sudan', value: 1 }], worldProps('Sudan'), worldNames) === undefined);
+ok('D1: a variant that names no shape ("United States of America") still matches by substring',
+  matchGeoItem([{ name: 'United States of America', value: 3 }], usa, worldNames)?.value === 3);
+// Item order used to decide the outcome, so the same dataset sorted differently
+// shaded a different country. The polygon's own item now wins in either order.
+ok('D1: with both present, Niger gets its own item whatever the list order',
+  matchGeoItem([{ name: 'Nigeria', value: 1 }, { name: 'Niger', value: 2 }], worldProps('Niger'))?.value === 2 &&
   matchGeoItem([{ name: 'Niger', value: 2 }, { name: 'Nigeria', value: 1 }], worldProps('Niger'))?.value === 2);
+// STILL OPEN without the names: the matcher alone cannot tell a variant from a
+// neighbour, so every map caller passes featureNameSet of its collection.
+ok('D1: called WITHOUT the shape names, a lone "Nigeria" item still matches the Niger polygon',
+  matchGeoItem([{ name: 'Nigeria', value: 1 }], worldProps('Niger'))?.value === 1);
 
-// D2. The same rule bites at us_state, where features carry no `state` prop to
+// D2. The same rule bit at us_state, where features carry no `state` prop to
 // disambiguate with: "West Virginia" contains "Virginia".
-ok('D2: an item named "West Virginia" wrongly matches the Virginia polygon',
-  matchGeoItem([{ name: 'West Virginia', value: 1 }], virginia)?.value === 1);
-ok('D2: a "Virginia" item listed first steals the West Virginia polygon',
+const stateNames = featureNameSet(STATES.features);
+ok('D2: an item named "West Virginia" no longer matches the Virginia polygon',
+  matchGeoItem([{ name: 'West Virginia', value: 1 }], virginia, stateNames) === undefined);
+ok('D2: a "Virginia" item listed first no longer steals the West Virginia polygon',
   matchGeoItem([{ name: 'Virginia', value: 1 }, { name: 'West Virginia', value: 2 }],
-    stateProps('West Virginia'))?.value === 1);
+    stateProps('West Virginia'))?.value === 2);
+ok('D2: a lone "Virginia" item leaves the West Virginia polygon empty',
+  matchGeoItem([{ name: 'Virginia', value: 1 }], stateProps('West Virginia'), stateNames) === undefined);
 
 // D3. matchGeoItem does String() the item's `kind` but not its `name`, so a
 // non-string name throws instead of degrading. PRECONDITION, not a live bug:

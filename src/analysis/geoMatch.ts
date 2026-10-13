@@ -21,29 +21,48 @@
   // Match an AI-provided place against a GeoJSON feature's properties.
   // For US sub-state levels, state + kind (county vs independent city) must agree
   // when both sides carry them — that's what tells "Roanoke" county from city.
-  function matchGeoItem(geoItems: any[], featProps: any): any {
+  //
+  // An item with the feature's own name wins wherever it sits in the list. Only
+  // when there is none does a variant get a look in — and never an item that
+  // names another shape in `shapeNames` (featureNameSet of the collection):
+  // "Arkansas" contains "kansas" and "West Virginia" contains "virginia", and
+  // the first hit of either kind used to paint Kansas with Arkansas's figure.
+  // Without `shapeNames` a variant cannot be told from a neighbour — pass it.
+  function matchGeoItem(geoItems: any[], featProps: any, shapeNames?: Set<string>): any {
     const featName = normalizeName(featProps.name || '');
     const featIso2 = (featProps.iso2 || '').toLowerCase();
     const featState = normalizeName(featProps.state || '');
     const featKind = (featProps.kind || '').toLowerCase();
+    let variant: any;
     for (const item of geoItems) {
       if (featState && item.state && normalizeName(item.state) !== featState) continue;
       if (featKind && item.kind && String(item.kind).toLowerCase() !== featKind) continue;
       const itemName = normalizeName(item.name);
       if (itemName === featName) return item;
+      if (variant !== undefined || (shapeNames && shapeNames.has(itemName))) continue;
       // Substring match for variants ("United States" vs "United States of America")
-      if (itemName.length > 4 && (featName.includes(itemName) || itemName.includes(featName))) return item;
-      if (featIso2 && featIso2 === normalizeName(item.name).slice(0, 2)) return item;
+      if (itemName.length > 4 && (featName.includes(itemName) || itemName.includes(featName))) variant = item;
+      else if (featIso2 && featIso2 === itemName.slice(0, 2)) variant = item;
     }
-    return undefined;
+    return variant;
   }
 
-  const api = { normalizeName, matchGeoItem };
+  // The normalized name of every shape in a boundary collection — what
+  // matchGeoItem needs to tell a variant spelling from a neighbouring shape's
+  // own name. Build it once per collection, not once per feature.
+  function featureNameSet(features: any[]): Set<string> {
+    const names = new Set<string>();
+    for (const f of features || []) names.add(normalizeName(f && f.properties && f.properties.name));
+    return names;
+  }
+
+  const api = { normalizeName, matchGeoItem, featureNameSet };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;            // Node (self-check)
   } else {
     global.normalizeName = normalizeName;  // Browser (the published site uses these globals)
     global.matchGeoItem = matchGeoItem;
+    global.featureNameSet = featureNameSet;
   }
 
 })(globalThis);

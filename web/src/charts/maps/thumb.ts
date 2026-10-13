@@ -8,7 +8,7 @@
 
 import { choroplethColor, unit } from './colors';
 import { extendBBox, geoBBox, hasCoords, withCentroids } from './geometry';
-import { matchGeoItem } from './geoMatch';
+import { featureNameSet, matchGeoItem } from './geoMatch';
 import type { BBox, Feature, GeoItem, MapGeo } from './types';
 
 export const MAP_THUMB_PAD = 2;
@@ -38,8 +38,9 @@ export function mapThumbFills(features: readonly Feature[], items: readonly GeoI
   const vs = (items || []).map((i) => i && i.value).filter((v): v is number => typeof v === 'number');
   const min = vs.length ? Math.min(...vs) : 0;
   const max = vs.length ? Math.max(...vs) : 1;
+  const shapeNames = featureNameSet(features);
   return (features || []).map((f) => {
-    const item = matchGeoItem(items || [], (f && f.properties) || {});
+    const item = matchGeoItem(items || [], (f && f.properties) || {}, shapeNames);
     if (!item || typeof item.value !== 'number') return emptyFill;
     return colorFor(unit(item.value, min, max));
   });
