@@ -267,7 +267,22 @@ export interface PlanPreview {
   dropped?: { kind?: string; where?: string; message?: string }[];
   plan?: Record<string, unknown>;
 }
-export type DraftReply = PlanPreview | { ok: false; notReady?: boolean; error?: string };
+/** A draft that was not asked to ask first (`story:draft`): a plan, or a refusal. */
+export type PlanReply = PlanPreview | { ok: false; notReady?: boolean; error?: string };
+
+// ASK FIRST (src/analysis/planClarify.ts). The kind and the look are spelled as
+// their contracts spell them, so a renamed one fails `tsc` here too.
+export type DraftKind = NonNullable<RpcInput<'analysis:draft'>['kind']>;
+/** A look by preset id — what `analysis:buildPlan` takes; the server holds what each one is. */
+export type LookId = NonNullable<RpcInput<'analysis:buildPlan'>['style']>;
+/** One of the model's own questions about the request: structure, validated by the server, never a figure. */
+export interface DraftQuestion {
+  ask: string;
+  options: string[];
+}
+export type DraftAnswer = NonNullable<RpcInput<'analysis:draft'>['answers']>[number];
+/** `analysis:draft` asked with `clarify`: the plan, a refusal — or, once, QUESTIONS instead of a plan. */
+export type DraftReply = PlanReply | { ok: true; questions: DraftQuestion[] };
 
 export type BuildReply = { ok: true; analysis: Analysis; dropped?: unknown[] } | { ok: false; error: string };
 

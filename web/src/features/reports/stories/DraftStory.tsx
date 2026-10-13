@@ -11,7 +11,7 @@ import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Textarea } from '../../../ui/Field';
 import { EmptyState } from '../../../ui/States';
 import { toast } from '../../../ui/Toast';
-import type { DraftReply, PlanPreview } from '../../analyses/api';
+import type { PlanPreview, PlanReply } from '../../analyses/api';
 import { DrawnVisual } from '../../analyses/VisualTile';
 import { failure } from '../api';
 import pk from './Pickers.module.css';
@@ -25,7 +25,7 @@ export function DraftStory({ projectId, onClose, onBuilt }: { projectId: string;
   const draft = async () => {
     setBusy(true);
     try {
-      const r = (await rpc('story:draft', { projectId, intent: intent.trim() })) as DraftReply;
+      const r = (await rpc('story:draft', { projectId, intent: intent.trim() })) as PlanReply;
       if (!r.ok) {
         if (r.notReady) setNotReady(true);
         else toast(failure(r, 'Could not draft a story.'), { kind: 'error' });

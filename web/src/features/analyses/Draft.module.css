@@ -189,3 +189,147 @@
   color: var(--muted);
   font-size: var(--t-12);
 }
+
+/* ── Ask first (CardRadios.tsx, DraftBrief.tsx, DraftClarify.tsx) ──
+   Selectable cards over NATIVE radios, in the wizard's card language
+   (Wizard.module.css `.start`). The input keeps its role, its one tab stop per
+   group and its arrow keys; the card only paints what the input says — `:has()`
+   reads its state, so there is no selected class to fall out of step with it. */
+.pick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: var(--sp-8);
+}
+/* The first card is the odd one out (the look that is no look) and its name is
+   two words: where there is room for one row, it gets a wider column. */
+.lead {
+  composes: cards;
+}
+@media (min-width: 720px) {
+  .lead {
+    grid-template-columns: 1.3fr;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+  }
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+  padding: var(--sp-8);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+.card:hover {
+  border-color: var(--accent-line);
+}
+.card:has(.cardRadio:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+/* The ring is the card's: the radio inside it is the thing focused. */
+.card:has(.cardRadio:focus-visible) {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* The app's radio (ui/Choice), a size down to sit beside a card's title. Each
+   override is scoped under `.card` so it outranks the composed rule whichever
+   stylesheet happens to load last. */
+.cardRadio {
+  composes: radio from '../../ui/Choice.module.css';
+}
+.card .cardRadio {
+  width: 14px;
+  height: 14px;
+}
+.card .cardRadio:checked {
+  background: radial-gradient(circle, var(--accent) 0 3px, var(--surface-1) 3.5px);
+}
+.card .cardRadio:focus-visible {
+  outline: none;
+}
+.cardT {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.cardP {
+  font-size: var(--t-11);
+  color: var(--muted);
+  line-height: var(--lh-snug);
+}
+/* A question's options: a wrapping row of pills, each as wide as its words. */
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+.options .card {
+  padding: var(--sp-4) var(--sp-12) var(--sp-4) var(--sp-8);
+  border-radius: var(--r-full);
+}
+.options .cardT {
+  font-weight: 500;
+  color: var(--text);
+}
+.ask {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+/* A kind's arrangement, in the review sketch's own boxes at the card's width. */
+.kindArt {
+  composes: sketch;
+  width: auto;
+  height: 76px;
+  align-content: start;
+  overflow: hidden;
+}
+.tile_control {
+  border-radius: var(--r-full);
+  background: var(--border-3);
+}
+/* A look, drawn under ITS OWN tokens: the caller adds the dashboard style's
+   classes (dashboards/Style.module.css), which redefine --bg, --surface, --accent
+   and the density's --dash-row / --dash-gap on this element. The rows and the
+   gap are the real ones at a quarter size, so Dense shows more of the page. */
+.swatch {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: calc(var(--dash-row, 48px) / 4);
+  gap: calc(var(--dash-gap, 12px) / 4);
+  height: 52px;
+  padding: var(--sp-4);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+}
+.swatch > span {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--surface);
+}
+.swatch > span:first-child {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.swatch > span:nth-child(n + 5) {
+  grid-column: span 2;
+  grid-row: span 2;
+}

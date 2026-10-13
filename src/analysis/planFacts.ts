@@ -5,6 +5,7 @@
 import { CHART_TYPE_IDS, type PlanContext } from './analysisPlan';
 import { GEO_LEVEL_LABELS } from './geoHits';
 import { columnNoteLines, type FactColumnDoc } from '../ai/copilotFacts';
+import { answersText, kindText, type DraftAsk } from './planClarify';
 
 /**
  * `intent` is the user's own words from the create-analysis wizard — what they
@@ -149,8 +150,13 @@ function userNoteLines(ctx: PlanContext, extras: PlanFactExtras): string[] {
  * still adds no row and no figure — a metric arrives as a definition, never a
  * value — but a definition is the user's own words, so a literal they typed
  * into one ("region = West") is in it.
+ *
+ * `ask` is what the user settled before the draft (planClarify.ts): the KIND of
+ * dashboard, as the app's own sentence, and their answers to the model's
+ * questions, fenced like the request they refine. Without it — every caller
+ * but the ask-first flow — the text is, again, byte-identical.
  */
-export function buildFactsText(ctx: PlanContext, intent?: string, extras?: PlanFactExtras): string {
+export function buildFactsText(ctx: PlanContext, intent?: string, extras?: PlanFactExtras, ask?: DraftAsk): string {
   const lines: string[] = [];
   lines.push('PROJECT FACTS — every figure below was computed by the app. No rows are included.');
   lines.push('');
@@ -189,6 +195,10 @@ export function buildFactsText(ctx: PlanContext, intent?: string, extras?: PlanF
   // The user's notes: after the app's facts, which they must not bury, and
   // before the request, which stays last.
   if (extras) lines.push(...userNoteLines(ctx, extras));
+  // The kind the user picked: the app's sentence, so it sits with the app's
+  // facts — above the request it shapes, never inside the user's fence.
+  const kind = ask ? kindText(ask.kind) : '';
+  if (kind) lines.push('', kind);
   // Last, and fenced: after the closed vocabularies, so the constraints are read
   // before the request that must live inside them.
   const want = typeof intent === 'string' ? intent.trim().slice(0, INTENT_MAX) : '';
@@ -202,5 +212,8 @@ export function buildFactsText(ctx: PlanContext, intent?: string, extras?: PlanF
     lines.push(want);
     lines.push('USER REQUEST');
   }
+  // Their answers refine the request, so they follow it — in a fence of their own.
+  const answers = ask ? answersText(ask.answers) : '';
+  if (answers) lines.push('', answers);
   return lines.join('\n');
 }

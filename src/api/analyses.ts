@@ -98,16 +98,32 @@ export const analyses = {
   // The AI draft: FACTS in (no rows, no secrets), a validated, previewed plan
   // out; nothing is saved. Asking is `read`, as the dock's copilot:ask is;
   // building what it proposed (`analysis:buildPlan`) is `write`.
+  // ASK FIRST (analysis/planClarify.ts): `kind` is the dashboard the user
+  // picked; with `clarify` the reply may be `{ questions }` instead of a plan,
+  // and the next call brings the `answers` — `[]` is "Skip — just build it".
+  // A call with `answers` is never answered with questions.
   'analysis:draft': rpc({
     access: 'read',
-    input: z.strictObject({ projectId: Uuid, datasetId: Uuid.optional(), intent: z.string().max(2_000).optional() }),
+    input: z.strictObject({
+      projectId: Uuid,
+      datasetId: Uuid.optional(),
+      intent: z.string().max(2_000).optional(),
+      kind: z.enum(['explore', 'overview', 'report']).optional(),
+      clarify: z.boolean().optional(),
+      answers: z.array(z.strictObject({ ask: z.string().max(200), answer: z.string().max(200) })).max(3).optional(),
+    }),
     project: byProjectId,
   }),
   // NOT AI: re-validate and re-preview a plan (a template's mapping step).
   'analysis:previewPlan': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, plan: Plan }), project: byProjectId }),
   // NOT AI: re-validate the approved plan and create its records — calculated
-  // fields, visuals, and the analysis itself.
-  'analysis:buildPlan': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, plan: Plan }), project: byProjectId }),
+  // fields, visuals, and the analysis itself. `style` is a look by preset id
+  // (dashboards.ts DASHBOARD_STYLE_PRESETS); without one, the workspace default.
+  'analysis:buildPlan': rpc({
+    access: 'write',
+    input: z.strictObject({ projectId: Uuid, plan: Plan, style: z.enum(['auto', 'clean', 'executive', 'dense', 'dark']).optional() }),
+    project: byProjectId,
+  }),
   // The starter layouts (starterPlan.ts StarterKind): builds VISUAL records from
   // the dataset's own columns and returns the cards; the editor places them.
   'analysis:starterCards': rpc({

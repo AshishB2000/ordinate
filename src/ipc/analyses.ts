@@ -4,6 +4,7 @@ import { listInsights } from './insights';
 import { draftDashboard, dispatch, parseFirstObject, type NeutralMsg } from '../ai/analyze';
 import * as plan from '../analysis/analysisPlan';
 import { buildFactsText } from '../analysis/planFacts';
+import { CLARIFY_PROMPT, validateQuestions } from '../analysis/planClarify';
 import { loadDraftFacts } from './draftFacts';
 import * as planPreview from '../analysis/planPreview';
 import * as planBuild from '../analysis/planBuild';
@@ -39,6 +40,8 @@ import * as trash from '../app/trash';
 //
 //   analysis:draft       AI. FACTS in (no rows, no secrets), plan envelope out,
 //                        validated + previewed. `not_ready` with no model.
+//                        Asked to (`clarify`), it may answer with QUESTIONS
+//                        first — once; see draftAnalysisPlan.
 //   analysis:previewPlan NOT AI. Re-validate + re-preview a user-EDITED plan.
 //   analysis:buildPlan   NOT AI. Re-validate the approved plan and create the
 //                        records: calculated fields → ordinary TransformSteps,
@@ -110,10 +113,11 @@ export function register() {
     trash.trashRecord(projectId, 'dashboard', id)); // to the Trash, restorable for 30 days
 
   // Exported so the self-check drives the real handler body, not a copy of it.
-  ipcMain.handle('analysis:draft', async (_e, { projectId, datasetId, intent }: any = {}) =>
+  ipcMain.handle('analysis:draft', async (_e, { projectId, datasetId, intent, kind, clarify, answers }: any = {}) =>
     draftAnalysisPlan(projectId, {
       datasetId: typeof datasetId === 'string' ? datasetId : undefined,
       intent: typeof intent === 'string' ? intent : undefined,
+      kind, clarify, answers, // each re-checked where it is used
     }));
 
   // Re-validate and re-preview a plan the USER edited. No model, so this works
@@ -167,9 +171,9 @@ export function register() {
 
   // APPROVAL. Re-validates with the same validatePlan the preview ran, then
   // creates the records through the existing stores. Also model-free.
-  ipcMain.handle('analysis:buildPlan', async (_e, { projectId, plan: raw }: any = {}) => {
+  ipcMain.handle('analysis:buildPlan', async (_e, { projectId, plan: raw, style }: any = {}) => {
     try {
-      return await planBuild.buildPlan(projectId, raw);
+      return await planBuild.buildPlan(projectId, raw, style);
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to build the analysis' };
     }
@@ -185,10 +189,22 @@ export function register() {
  *
  * `{ ok:false, notReady:true }` with no model configured, which is the whole of
  * what "AI is optional" costs this surface — preview and build still work.
+ *
+ * ASK FIRST (planClarify.ts). `kind` adds the app's sentence for that kind of
+ * dashboard to the facts. With `clarify: true` and no `answers`, the model is
+ * also told it may reply with questions instead of a plan, and valid ones come
+ * back as `{ ok:true, questions }` — and nothing else: no plan, no preview.
+ * The caller asks the user and calls again with `answers`.
+ *
+ * ONE ROUND, BY CONSTRUCTION: a call that carries `answers` — any value at all,
+ * and `[]` is the user's "Skip — just build it" — is sent the plain draft
+ * prompt, which has no way to ask, and its reply is only ever read as a plan.
+ * So is every caller that passes none of the three (story:draft, automation):
+ * for them this is the function it was.
  */
 export async function draftAnalysisPlan(
   projectId: string,
-  opts: { datasetId?: string; intent?: string } = {},
+  opts: { datasetId?: string; intent?: string; kind?: unknown; clarify?: unknown; answers?: unknown } = {},
 ): Promise<any> {
   try {
     const ctx = await plan.loadPlanContext(projectId, opts.datasetId);
@@ -204,7 +220,18 @@ export async function draftAnalysisPlan(
     }
 
     // App-computed, row-free, secret-free. See planFacts.buildFactsText.
-    const res = await draftDashboard(buildFactsText(ctx, opts.intent, await loadDraftFacts(projectId, ctx)));
+    const facts = buildFactsText(ctx, opts.intent, await loadDraftFacts(projectId, ctx), { kind: opts.kind, answers: opts.answers });
+    const asking = opts.clarify === true && opts.answers === undefined;
+    let res = asking ? await draftDashboard(facts, plan.DRAFT_DASHBOARD_SYSTEM_PROMPT + CLARIFY_PROMPT) : await draftDashboard(facts);
+    // Only the asking call's reply is ever read for questions.
+    const said: unknown = res.ok && asking ? res.structure : null;
+    if (said && typeof said === 'object' && 'questions' in said) {
+      const questions = validateQuestions(said.questions);
+      if (questions.length) return { ok: true, questions };
+      // It asked, and nothing it asked can be shown. The user is not made to
+      // answer for that: draft without asking — one more call, never a third.
+      res = await draftDashboard(facts);
+    }
     if (!res.ok) {
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };
       return { ok: false, error: res.message || 'Could not draft an analysis' };
