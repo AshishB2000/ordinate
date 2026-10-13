@@ -99,6 +99,10 @@ async function seed(who: Identity, projectId: string) {
         { name: 'Second', cards: [] },
       ],
     });
+    // The gallery is newest first by `updatedAt`, a millisecond stamp: saved in the
+    // same millisecond as the board, 'Empty' ties with it and the order is the
+    // store's, not time's (seen failing about one run in eight). So it is saved later.
+    await new Promise((r) => setTimeout(r, 5));
     const empty = await analysis.saveAnalysis(projectId, { name: 'Empty' });
     if (!a || !empty) throw new Error('seed analysis');
     return { ds: d.id, v1, v2, v3, rev: rev.id, avg: avg.id, aid: a.id, empty: empty.id };
