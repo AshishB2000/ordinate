@@ -1,7 +1,7 @@
 // The create-dashboard wizard (legacy anNew.ts): choose the data, choose what
 // to start from — a template mapped to the columns, a plain layout, or the
 // Assistant — then map the template's columns or describe the dashboard.
-// Step 3 belongs to the template and AI routes only; the three layouts finish
+// Step 3 belongs to the template and AI routes only; the plain layouts finish
 // at step 2. With no model, the AI card is disabled and says why; everything
 // else still works.
 
@@ -20,17 +20,22 @@ import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
 import { useAiStatus } from '../assistant/api';
 import { AiNotReady } from '../assistant/AiNotReady';
-import { failure, type Analysis, type BuildReply, type DraftReply, type PlanPreview, type Sheet, type TemplateList } from './api';
+import { failure, type Analysis, type BuildReply, type DraftReply, type PlanPreview, type Sheet, type StarterKind, type TemplateList } from './api';
 import { DraftFlow } from './DraftReview';
 import { MapColumns, TemplateGallery } from './TemplateStep';
 import s from './Wizard.module.css';
 
-type Start = 'blank' | 'kpis' | 'twoup' | 'ai' | 'template';
+type Start = 'blank' | StarterKind | 'ai' | 'template';
+/** The starts the server builds from the dataset's own columns (`analysis:starterCards`). */
+const isStarter = (start: Start): start is StarterKind => start !== 'blank' && start !== 'ai' && start !== 'template';
 
+// `art` is the card's wireframe, one block per token (Wizard.module.css `.b_*`).
 const STARTS: { id: Start; title: string; body: string; art: string[] }[] = [
   { id: 'blank', title: 'Blank sheet', body: 'One empty sheet. Add cards as you go.', art: ['full'] },
   { id: 'kpis', title: 'KPIs + chart', body: 'A KPI strip across the top, with a wide chart beneath it.', art: ['strip', 'wide'] },
   { id: 'twoup', title: 'Two-up', body: 'Two charts side by side, with a notes card below.', art: ['half', 'half', 'strip'] },
+  { id: 'spotlight', title: 'Spotlight', body: 'One wide chart, with the KPIs stacked beside it.', art: ['spot'] },
+  { id: 'lead', title: 'Chart first', body: 'A full-width chart on top, with the KPI strip beneath it.', art: ['wide', 'strip'] },
   { id: 'ai', title: 'Let the Assistant design it', body: 'Describe what you want and a model proposes the sheets. You review it first.', art: ['ai'] },
 ];
 
@@ -103,14 +108,14 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
     void navigate(`/analyses/${projectId}/${a.id}`);
   };
 
-  // A plain layout: create it, then (KPIs / Two-up) lay the starter's cards on its sheet.
+  // A plain layout: create it, then lay a starter's cards on its sheet — the server placed them.
   const createFrom = async (kind: Start) => {
     setBusy(true);
     try {
       const made = (await rpc('analysis:create', { projectId, name: chosenName })) as Analysis | { ok: false; error: string };
       if ('ok' in made && made.ok === false) throw new Error(made.error);
       const a = made as Analysis;
-      if ((kind === 'kpis' || kind === 'twoup') && selectedId) {
+      if (isStarter(kind) && selectedId) {
         const st = (await rpc('analysis:starterCards', { projectId, kind, datasetId: selectedId })) as { ok: boolean; cards?: Sheet['cards']; error?: string };
         if (!st.ok) toast(failure(st, 'The starter layout could not be built.'), { kind: 'error' });
         else if (st.cards && st.cards.length) {
@@ -360,7 +365,7 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
           {key.isPending ? (
             <p className={s.note}>Checking whether a model is set up…</p>
           ) : key.isError ? (
-            <p className={s.note}>Could not check for a model, so drafting is unavailable for now. Everything else works — pick any of the other three.</p>
+            <p className={s.note}>Could not check for a model, so drafting is unavailable for now. Everything else works — pick any of the others.</p>
           ) : (
             !aiReady && <AiNotReady status={key.data} className={s.note} />
           )}

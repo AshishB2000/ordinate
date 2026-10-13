@@ -105,10 +105,11 @@ function itemsOf(row: PlanRow | null | undefined): RowItems {
 
 /**
  * Rows put back into shape — the same rule validateRows applies, for rows that
- * are already typed. Two callers: planLayout.arrangeSheet, which places only
- * well-formed rows and so shapes whatever it is handed first; and
- * planBuild.ts, which passes `keepVisual` to take out a chart whose save failed
- * and let the row it was in re-form around what is left.
+ * are already typed. Three callers: planLayout.arrangeSheet, which places only
+ * well-formed rows and so shapes whatever it is handed first; planBuild.ts,
+ * which passes `keepVisual` to take out a chart whose save failed and let the
+ * row it was in re-form around what is left; and presetRows below, which writes
+ * the rows a named arrangement means and leaves fitting them to this.
  */
 export function shapeRows(rows: readonly PlanRow[] | undefined, keepVisual?: (v: PlannedVisual) => boolean): PlanRow[] {
   const list: readonly PlanRow[] = Array.isArray(rows) ? rows : [];
@@ -116,6 +117,36 @@ export function shapeRows(rows: readonly PlanRow[] | undefined, keepVisual?: (v:
     const items = itemsOf(row);
     return shape(row && row.type, keepVisual ? { ...items, visuals: items.visuals.filter(keepVisual) } : items);
   });
+}
+
+/** The arrangements a plan written in CODE asks for by name — the starter
+ *  layouts and the templates. A model writes its own rows. */
+export type RowPreset = 'spotlight' | 'lead';
+
+/**
+ * A sheet's flat lists as the rows of a named arrangement:
+ *
+ *   spotlight   the first chart with the KPIs in the rail beside it
+ *   lead        the first chart at full width, then the KPI strip
+ *
+ * and after either, the remaining charts and then the notes. Each kind keeps its
+ * order, so the lists handed in ARE the flattening of what comes back.
+ *
+ * It only says which row each tile is MEANT for. `shapeRows` decides what a row
+ * can hold — one KPI is no rail, a fourth spills onto a strip, charts go two to
+ * a row — so a short sheet needs no case here: with no chart there is only the
+ * strip, and with nothing at all there are no rows and the sheet stays flat.
+ */
+export function presetRows(preset: RowPreset, items: RowItems): PlanRow[] {
+  const { metrics, texts } = items;
+  const [first, ...rest] = items.visuals;
+  const strip: PlanRow = { type: 'kpis', metrics };
+  const head: PlanRow[] = !first
+    ? [strip]
+    : preset === 'spotlight'
+      ? [{ type: 'spotlight', visual: first, metrics }]
+      : [{ type: 'charts', visuals: [first] }, strip];
+  return shapeRows([...head, { type: 'charts', visuals: rest }, ...texts.map((text): PlanRow => ({ type: 'note', text }))]);
 }
 
 /** A stack of rows as a sheet's flat arrays: each kind in row order, and the

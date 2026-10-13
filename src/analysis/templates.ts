@@ -1,4 +1,4 @@
-// THE TEMPLATE CATALOGUE — six dashboards and three layouts, as pure data plus
+// THE TEMPLATE CATALOGUE — six dashboards and five layouts, as pure data plus
 // one plan factory each.
 //
 // A template is NOT a new way to build a dashboard. Every factory here returns
@@ -11,6 +11,18 @@
 // NO MODEL, NO NETWORK, NO I/O. Columns and app-computed summaries in, a plan
 // out. Nothing in this file produces a figure — the KPI tiles name a column and
 // an aggregation, and `dashboard:metric` computes them at render time.
+//
+// ── How a template is arranged ────────────────────────────────────────────
+//
+// A template says WHAT is on its sheet and may name an arrangement for it
+// (planRows.presetRows), so the six stop being one page six times:
+//
+//   Sales, Inventory       `lead`       the headline chart first, at full width
+//   Marketing, Customer    `spotlight`  the headline with its KPIs beside it
+//   Finance, Operations    —            the strip, then the charts
+//
+// A shape is built around the FIRST chart, so that chart is the headline — the
+// one the gallery thumbnail draws (scripts/test-templates.ts holds them equal).
 //
 // ── What a tile may assume ────────────────────────────────────────────────
 //
@@ -39,7 +51,8 @@ import type {
   AnalysisPlan, PlanDataset, PlanSheet, PlannedCalcField, PlannedControl,
   PlannedMetric, PlannedVisual,
 } from './analysisPlan';
-import { buildStarterPlan } from './starterPlan';
+import { presetRows, type RowPreset } from './planRows';
+import { buildStarterPlan, type StarterKind } from './starterPlan';
 import type { VizAggregation, VizEncoding } from './visuals';
 import type { ResolvedGeoLevel } from './geoResolve';
 import type { RoleMapping, TemplateRole } from './templateRoles';
@@ -54,7 +67,7 @@ export interface TemplateBuildOpts {
 
 export interface DashboardTemplate {
   id: string;
-  /** 'Templates' is the six subject dashboards; 'Layouts' is the three starters. */
+  /** 'Templates' is the six subject dashboards; 'Layouts' is the blank sheet and the four starters. */
   group: 'Templates' | 'Layouts';
   name: string;
   blurb: string;
@@ -162,13 +175,16 @@ class Draft {
     this.controls.push({ datasetId: this.ds.id, kind, column, label: cap(label) });
   }
 
-  plan(sheetName: string, opts: TemplateBuildOpts, fallbackName: string): AnalysisPlan {
+  /** `shape` arranges the sheet around its first chart; without one it stays flat. */
+  plan(sheetName: string, opts: TemplateBuildOpts, fallbackName: string, shape?: RowPreset): AnalysisPlan {
     const sheet: PlanSheet = {
       name: sheetName,
       metrics: this.metrics,
       visuals: this.visuals,
       texts: [],
     };
+    const rows = shape ? presetRows(shape, sheet) : [];
+    if (rows.length) sheet.rows = rows;
     if (this.controls.length) sheet.controls = this.controls;
     return {
       name: opts.name || fallbackName,
@@ -236,7 +252,7 @@ const SALES: DashboardTemplate = {
     }
     d.control('date_range', m.date, 'Date');
     d.control('dropdown', m.region || m.category, m.region || m.category || '');
-    return d.plan('Overview', opts, this.name);
+    return d.plan('Overview', opts, this.name, 'lead');
   },
 };
 
@@ -318,7 +334,7 @@ const MARKETING: DashboardTemplate = {
     // columns unpivoted into one stage column, which Prepare cannot express
     // without collapsing the table. So the funnel ranks CHANNELS by conversions
     // — the shape the chart type actually draws — and the three stage totals
-    // live in the KPI strip above it.
+    // are the KPIs in the rail beside it.
     d.chart(`Conversions by ${m.channel}`, 'funnel', m.channel, [{ column: m.conversions, aggregation: 'sum' }]);
     if (m.spend) {
       d.chart(`Spend vs conversions by ${m.channel}`, 'clustered_column', m.channel, [
@@ -330,7 +346,7 @@ const MARKETING: DashboardTemplate = {
     if (cpc) d.chart(`Cost per conversion by ${m.channel}`, 'table', m.channel, [{ column: cpc, aggregation: 'avg' }]);
     d.control('date_range', m.date, 'Date');
     d.control('dropdown', m.channel, m.channel || '');
-    return d.plan('Funnel', opts, this.name);
+    return d.plan('Funnel', opts, this.name, 'spotlight');
   },
 };
 
@@ -397,7 +413,7 @@ const CUSTOMER: DashboardTemplate = {
     }
     d.control('date_range', m.date, 'Date');
     d.control('dropdown', m.segment || m.region, m.segment || m.region || '');
-    return d.plan('Customers', opts, this.name);
+    return d.plan('Customers', opts, this.name, 'spotlight');
   },
 };
 
@@ -435,18 +451,18 @@ const INVENTORY: DashboardTemplate = {
     }
     if (value) d.chart(`Value by ${m.category}`, 'column', m.category, [{ column: value, aggregation: 'sum' }]);
     d.control('dropdown', m.category, m.category || '');
-    return d.plan('Inventory', opts, this.name);
+    return d.plan('Inventory', opts, this.name, 'lead');
   },
 };
 
-// ── The three starter layouts, in the same catalogue ────────────────────────
+// ── The five layouts, in the same catalogue ─────────────────────────────────
 //
 // ONE CODE PATH: the gallery, the mapping step and the Create button do not
 // know a "Layouts" card from a "Templates" card — they read `roles` (empty here)
-// and call `build`. The two real starters delegate to buildStarterPlan, which is
-// still the only author of those two shapes.
+// and call `build`. The four real starters delegate to buildStarterPlan, which
+// is still the only author of those shapes.
 
-function starter(id: 'kpis' | 'twoup', name: string, blurb: string, thumb: string): DashboardTemplate {
+function starter(id: StarterKind, name: string, blurb: string, thumb: string): DashboardTemplate {
   return {
     id, group: 'Layouts', name, blurb, thumb, roles: [],
     build(ds, _m, opts = {}) { return buildStarterPlan(id, ds, { name: opts.name }); },
@@ -475,6 +491,8 @@ export const TEMPLATES: DashboardTemplate[] = [
   BLANK,
   starter('kpis', 'KPIs + chart', 'A KPI strip across the top, with a wide chart beneath it.', 'column'),
   starter('twoup', 'Two-up', 'Two charts side by side, with a notes card below.', 'bar'),
+  starter('spotlight', 'Spotlight', 'One wide chart, with the KPIs stacked beside it.', 'column'),
+  starter('lead', 'Chart first', 'A full-width chart on top, with the KPI strip beneath it.', 'column'),
 ];
 
 export function templateById(id: string): DashboardTemplate | undefined {

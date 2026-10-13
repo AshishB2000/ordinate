@@ -21,6 +21,7 @@ import type { ParsedColumn } from '../src/data/parse';
 import type { ColumnSummary } from '../src/data/datasetStats';
 import type { AnalysisPlan, PlanContext, PlanDataset } from '../src/analysis/analysisPlan';
 import { validatePlan } from '../src/analysis/analysisPlan';
+import { arrangeSheet, readingOrder } from '../src/analysis/planLayout';
 import { resolveGeoHits, resolveGeoLevel } from '../src/analysis/geoResolve';
 import { mapRoles, mappingOf, type GeoHits, type RoleMapping } from '../src/analysis/templateRoles';
 import { TEMPLATES, templateById, type DashboardTemplate } from '../src/analysis/templates';
@@ -107,15 +108,15 @@ function tileCount(plan: AnalysisPlan): number {
 
 // ── §1 catalogue integrity ──────────────────────────────────────────────────
 
-ok('the catalogue has the six subject templates and the three layouts',
+ok('the catalogue has the six subject templates and the five layouts',
    TEMPLATES.filter((t) => t.group === 'Templates').length === 6 &&
-   TEMPLATES.filter((t) => t.group === 'Layouts').length === 3,
+   TEMPLATES.filter((t) => t.group === 'Layouts').length === 5,
    TEMPLATES.map((t) => `${t.group}/${t.id}`).join(' '));
 
 ok('…every id is unique', new Set(TEMPLATES.map((t) => t.id)).size === TEMPLATES.length);
 
-ok('…and buildStarterPlan’s two layouts are catalogue entries, not a second path',
-   !!templateById('kpis') && !!templateById('twoup'),
+ok('…and buildStarterPlan’s four layouts are catalogue entries, not a second path',
+   ['kpis', 'twoup', 'spotlight', 'lead'].every((id) => !!templateById(id)),
    TEMPLATES.filter((t) => t.group === 'Layouts').map((t) => t.id).join(' '));
 
 ok('every role declares a label, a kind and at least one hint',
@@ -252,6 +253,8 @@ const FIXTURES: Record<string, { ds: PlanDataset; geo: GeoHits }> = {
   blank: { ds: SAMPLE, geo: {} },
   kpis: { ds: SAMPLE, geo: {} },
   twoup: { ds: SAMPLE, geo: {} },
+  spotlight: { ds: SAMPLE, geo: {} },
+  lead: { ds: SAMPLE, geo: {} },
 };
 
 for (const t of TEMPLATES) {
@@ -323,7 +326,82 @@ ok('a geo role over non-places falls back to a bar chart',
    !noGeoPlan.sheets[0].visuals.some((v) => v.chartType === 'map_choropleth'),
    noGeoPlan.sheets[0].visuals.map((v) => v.chartType).join(','));
 
-// ── §6 a template never emits a figure, and never emits geometry ────────────
+// ── §6 the templates do not all look alike ──────────────────────────────────
+//
+// Every template used to be the same page: a KPI strip, then its charts two to
+// a row. Four of the six now say how they are arranged, in the SAME row
+// vocabulary a drafted plan uses (planRows.ts) — and what is asserted is where
+// planLayout.arrangeSheet puts the tiles, which is what the build places them by.
+
+/** A template's sheet on its own fixture, as built and as the validator keeps it. */
+function sheetsOf(id: string) {
+  const t = templateById(id) as DashboardTemplate;
+  const fx = FIXTURES[id];
+  const plan = t.build(fx.ds, mappingOf(mapRoles(t.roles, fx.ds, fx.geo).matches), { geoHits: fx.geo });
+  return { built: plan.sheets[0], kept: validatePlan(plan, ctxFor(fx.ds)).plan.sheets[0] };
+}
+type Sheet = ReturnType<typeof sheetsOf>['built'];
+const rowTypes = (sheet: Sheet): string => (sheet.rows || []).map((r) => r.type).join(',');
+/** Every tile in reading order, as `kind@x,y,w,h` (scripts/test-planRows.ts). */
+const placed = (sheet: Sheet): string =>
+  readingOrder(arrangeSheet(sheet)).map((t) => `${t.kind}@${t.x},${t.y},${t.w},${t.h}`).join(' ');
+const at = (sheet: Sheet, i: number): string => {
+  const l = arrangeSheet(sheet).visuals[i];
+  return `${l.x},${l.y},${l.w},${l.h}`;
+};
+
+const KPI_STRIP = 'metric@0,6,3,2 metric@3,6,3,2 metric@6,6,3,2 metric@9,6,3,2';
+const RAIL = 'metric@8,0,4,2 metric@8,2,4,2 metric@8,4,4,2';
+/** id → [the headline chart, the rows, every tile]. */
+const SHAPED: Record<string, [string, string, string]> = {
+  // Chart first: the headline at full width, the strip beneath it, the rest two-up.
+  sales: ['line', 'charts,kpis,charts,charts',
+    `visual@0,0,12,6 ${KPI_STRIP} visual@0,8,6,6 visual@6,8,6,6 visual@0,14,12,6`],
+  inventory: ['column', 'charts,kpis,charts',
+    `visual@0,0,12,6 ${KPI_STRIP} visual@0,8,6,6 visual@6,8,6,6`],
+  // Spotlight: the headline with three KPIs in the rail beside it. Marketing has
+  // a fourth, which follows on a strip of its own.
+  marketing: ['funnel', 'spotlight,kpis,charts,charts',
+    `visual@0,0,8,6 ${RAIL} metric@0,6,3,2 visual@0,8,6,6 visual@6,8,6,6 visual@0,14,12,6`],
+  customer: ['bar', 'spotlight,charts,charts',
+    `visual@0,0,8,6 ${RAIL} visual@0,6,6,6 visual@6,6,6,6 visual@0,12,12,6`],
+  // The two starters that are arrangements of KPIs + chart, on the sample data.
+  spotlight: ['column', 'spotlight,kpis,charts',
+    `visual@0,0,8,6 ${RAIL} metric@0,6,3,2 visual@0,8,12,6`],
+  lead: ['column', 'charts,kpis,charts',
+    `visual@0,0,12,6 ${KPI_STRIP} visual@0,8,12,6`],
+};
+for (const [id, [headline, rows, tiles]] of Object.entries(SHAPED)) {
+  const { built, kept } = sheetsOf(id);
+  ok(`${id}: carries its arrangement as rows`, rowTypes(built) === rows, rowTypes(built));
+  // The thumbnail in the gallery is the template's headline chart, so a
+  // template whose first chart is something else would lead with the wrong one.
+  ok(`${id}: its FIRST chart is its headline, and that is the one the shape leads with`,
+     built.visuals[0].chartType === headline && (templateById(id) as DashboardTemplate).thumb === headline
+     && at(built, 0) === (rows.startsWith('spotlight') ? '0,0,8,6' : '0,0,12,6'),
+     `${built.visuals[0].chartType} at ${at(built, 0)}`);
+  ok(`${id}: every tile sits where the shape puts it`, placed(built) === tiles, placed(built));
+  ok(`${id}: …and the validator keeps that arrangement as written`,
+     rowTypes(kept) === rows && placed(kept) === tiles, `${rowTypes(kept)} · ${placed(kept)}`);
+}
+
+// NEGATIVE CONTROL: the templates that keep the strip say nothing about rows,
+// and are packed exactly as every template was before rows existed.
+const FLAT: Record<string, string> = {
+  finance: 'metric@0,0,3,2 metric@3,0,3,2 metric@6,0,3,2 metric@9,0,3,2 '
+    + 'visual@0,2,6,6 visual@6,2,6,6 visual@0,8,6,6 visual@6,8,6,6',
+  operations: 'metric@0,0,3,2 metric@3,0,3,2 metric@6,0,3,2 visual@0,2,6,6 visual@6,2,6,6 visual@0,8,6,6',
+  kpis: 'metric@0,0,3,2 metric@3,0,3,2 metric@6,0,3,2 metric@9,0,3,2 visual@0,2,6,6 visual@6,2,6,6',
+  twoup: 'visual@0,0,6,6 visual@6,0,6,6 text@0,6,12,2',
+};
+for (const [id, tiles] of Object.entries(FLAT)) {
+  const { built, kept } = sheetsOf(id);
+  ok(`${id}: is unchanged — no rows, the strip and then the charts`,
+     !('rows' in built) && !('rows' in kept) && placed(built) === tiles && placed(kept) === tiles,
+     `${Object.keys(built).join(',')} · ${placed(built)}`);
+}
+
+// ── §7 a template never emits a figure, and never emits geometry ────────────
 
 const everyPlan = JSON.stringify(TEMPLATES.map((t) => {
   const fx = FIXTURES[t.id];

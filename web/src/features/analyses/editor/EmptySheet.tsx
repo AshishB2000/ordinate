@@ -11,9 +11,14 @@ import { Select } from '../../../ui/Select';
 import { Skeleton } from '../../../ui/Skeleton';
 import { EmptyState } from '../../../ui/States';
 import { toast } from '../../../ui/Toast';
-import { failure, type Card, type OpenReply } from '../api';
+import { failure, type Card, type OpenReply, type StarterKind } from '../api';
 import { useEditor } from './context';
 import s from './Canvas.module.css';
+
+/** Every starter, by the name the create wizard gives it. Exhaustive on purpose:
+ *  a kind added to the `analysis:starterCards` contract fails `tsc` here until
+ *  it has a button. */
+const STARTERS: Record<StarterKind, string> = { kpis: 'KPIs + chart', twoup: 'Two-up', spotlight: 'Spotlight', lead: 'Chart first' };
 
 export function EmptySheet() {
   const ed = useEditor();
@@ -22,7 +27,7 @@ export function EmptySheet() {
   const [busy, setBusy] = useState('');
   const ds = picked ?? sets.data?.[0]?.id ?? null;
 
-  const starter = async (kind: 'kpis' | 'twoup') => {
+  const starter = async (kind: StarterKind) => {
     if (!ds) return;
     setBusy(kind);
     try {
@@ -96,12 +101,11 @@ export function EmptySheet() {
               onValueChange={setPicked}
             />
           )}
-          <Button size="sm" loading={busy === 'kpis'} disabled={!!busy} onClick={() => void starter('kpis')}>
-            KPIs + chart
-          </Button>
-          <Button size="sm" loading={busy === 'twoup'} disabled={!!busy} onClick={() => void starter('twoup')}>
-            Two-up
-          </Button>
+          {(Object.keys(STARTERS) as StarterKind[]).map((kind) => (
+            <Button key={kind} size="sm" loading={busy === kind} disabled={!!busy} onClick={() => void starter(kind)}>
+              {STARTERS[kind]}
+            </Button>
+          ))}
         </div>
       )}
     </div>

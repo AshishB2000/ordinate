@@ -137,7 +137,7 @@ export function register() {
     }
   });
 
-  // The two STARTER LAYOUTS. NOT an AI call — it works with no model configured,
+  // The STARTER LAYOUTS. NOT an AI call — it works with no model configured,
   // because the plan is written by starterPlan.ts from the dataset's own columns
   // and the app's own per-column summaries, then run through the same validate →
   // records path the Assistant's plan uses.
@@ -147,7 +147,7 @@ export function register() {
   // dockEdit.ts follows for edit deltas.
   ipcMain.handle('analysis:starterCards', async (_e, { projectId, kind, datasetId }: any = {}) => {
     try {
-      if (kind !== 'kpis' && kind !== 'twoup') return { ok: false, error: 'Unknown starter layout.' };
+      if (kind !== 'kpis' && kind !== 'twoup' && kind !== 'spotlight' && kind !== 'lead') return { ok: false, error: 'Unknown starter layout.' };
       const ctx = await plan.loadPlanContext(projectId, typeof datasetId === 'string' ? datasetId : undefined);
       const ds = ctx.datasets[0];
       if (!ds) return { ok: false, error: 'Import a dataset first — a starter layout builds from one.' };
