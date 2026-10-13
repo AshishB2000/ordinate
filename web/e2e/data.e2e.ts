@@ -209,10 +209,11 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
   await page.getByRole('textbox', { name: 'Description of region' }).fill('Sales region the order shipped to');
   await page.keyboard.press('Enter');
   await saved;
-  // "Also called": a name another column already answers to is refused at the field, in the server's words…
-  await page.getByRole('textbox', { name: 'Also called, for state' }).fill('Region');
+  // "Also called": a name another column already answers to is refused at the field, in the server's words —
+  // `category` has no note of its own, so it is the dataset's columns the server checked, not the notes.
+  await page.getByRole('textbox', { name: 'Also called, for state' }).fill('Category');
   await page.keyboard.press('Enter');
-  await page.getByRole('alert').filter({ hasText: '"Region" is already what people call region.' }).waitFor();
+  await page.getByRole('alert').filter({ hasText: '"Category" is already what people call category.' }).waitFor();
   // The refusal lives in memory and screens() reloads, so it is shot in place, in both themes.
   const theme = await page.evaluate(() => document.documentElement.dataset.theme ?? 'light');
   for (const t of ['light', 'dark'] as const) {

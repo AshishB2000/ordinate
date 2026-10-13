@@ -34,6 +34,7 @@ import { isValidId } from './ids';
 import * as recordFs from './recordFs';
 import { ctx, serverDataDir } from '../server/context';
 import { aliasCollision, sanitizeAliases } from './columnNames';
+import type { NamedColumn } from './columnNames';
 import { alreadyCalled } from './columnNameMessages';
 
 // ── Kinds ────────────────────────────────────────────────────────────────────
@@ -322,7 +323,10 @@ export interface ColumnPatch { description?: unknown; displayName?: unknown; ali
  *
  * THROWS, saving nothing of the patch, when one of its aliases is a name
  * another column of the dataset already answers to (columnNames.aliasCollision)
- * — the message is the sentence to show at the field. `datasetColumns` is the
+ * — the message is the sentence to show at the field. So does a NEW display
+ * name that another column is "also called": the other door to a name that
+ * means two columns. (A display name may still repeat another column's name or
+ * caption, as it could before aliases existed.) `datasetColumns` is the
  * dataset's current column names; without it the documented columns stand in.
  */
 export async function setColumn(
@@ -336,16 +340,21 @@ export async function setColumn(
     const cols = file.columns[datasetId];
     const cur = own(cols, column) ? cols[column] : sanitizeColumnDoc({}, column);
     const aliases = p.aliases !== undefined ? sanitizeAliases(p.aliases, column) : cur.aliases;
-    if (p.aliases !== undefined) {
-      const others = (datasetColumns || Object.keys(cols)).filter((name) => name !== column)
+    const displayName = p.displayName !== undefined ? clip(p.displayName, MAX_DISPLAY) : cur.displayName;
+    const renamed = !!displayName && displayName !== cur.displayName;
+    if (p.aliases !== undefined || renamed) {
+      const others: NamedColumn[] = (datasetColumns || Object.keys(cols)).filter((name) => name !== column)
         .map((name) => ({ name, ...(own(cols, name) ? { displayName: cols[name].displayName, aliases: cols[name].aliases } : {}) }));
-      const hit = aliasCollision(aliases, others);
       // Thrown inside the write, before the file is touched: nothing of this patch is saved.
-      if (hit) throw new Error(alreadyCalled(hit.alias, hit.column.displayName || hit.column.name));
+      const refuse = (said: string, by: NamedColumn): never => { throw new Error(alreadyCalled(said, by.displayName || by.name)); };
+      const hit = p.aliases !== undefined ? aliasCollision(aliases, others) : null;
+      if (hit) refuse(hit.alias, hit.column);
+      const called = renamed ? others.find((o) => aliasCollision([displayName], [{ name: '', aliases: o.aliases }])) : undefined;
+      if (called) refuse(displayName, called);
     }
     const next: ColumnDoc = {
       description: p.description !== undefined ? clip(p.description, MAX_DESCRIPTION) : cur.description,
-      displayName: p.displayName !== undefined ? clip(p.displayName, MAX_DISPLAY) : cur.displayName,
+      displayName,
       aliases,
       example: p.example !== undefined ? clip(p.example, MAX_EXAMPLE) : cur.example,
       sensitivity: p.sensitivity !== undefined

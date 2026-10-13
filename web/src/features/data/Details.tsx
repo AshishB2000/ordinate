@@ -30,14 +30,19 @@ function Stamp({ by, at }: { by?: string; at?: string }) {
 }
 
 /** Text that commits on blur and on Enter (Shift+Enter is a newline in a textarea); `pending` holds what is typed. */
-function useCommitText(saved: string, commit: (v: string) => void) {
+function useCommitText(saved: string, commit: (v: string, refused: () => void) => void) {
   const [v, setV] = useState(saved);
   const last = useRef(saved);
   const flush = () => {
     const next = v.trim();
     if (next === last.current) return;
+    const was = last.current;
     last.current = next;
-    commit(next);
+    // A refused write is not the saved one: the field goes back to what is stored, and the toast says why.
+    commit(next, () => {
+      last.current = was;
+      setV(was);
+    });
   };
   return { v, setV, flush };
 }
@@ -151,8 +156,10 @@ export function ColumnDetails({ projectId, datasetId, column, doc, example, trig
 }) {
   const [open, setOpen] = useState(false);
   const save = useWrite('catalog:setColumn', ['catalog:columns']);
-  const patch = (p: Pick<ColumnDoc, 'displayName' | 'description' | 'example' | 'sensitivity'>) => save.mutate({ projectId, datasetId, column, patch: p });
-  const display = useCommitText(doc.displayName ?? '', (displayName) => patch({ displayName }));
+  // Per write: closing the popover flushes three fields at once, and the refusal of one (a display name another column is also called) is its own.
+  const patch = (p: Pick<ColumnDoc, 'displayName' | 'description' | 'example' | 'sensitivity'>, refused?: () => void) =>
+    void save.mutateAsync({ projectId, datasetId, column, patch: p }).then((r) => r?.ok === false && refused?.(), () => undefined);
+  const display = useCommitText(doc.displayName ?? '', (displayName, refused) => patch({ displayName }, refused));
   const desc = useCommitText(doc.description ?? '', (description) => patch({ description }));
   const ex = useCommitText(doc.example ?? '', (e) => patch({ example: e }));
   return (

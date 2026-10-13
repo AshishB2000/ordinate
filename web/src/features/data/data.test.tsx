@@ -272,6 +272,59 @@ describe('Columns tab: "Also called"', () => {
     expect(saves(calls)).toHaveLength(1);
   });
 
+  it('sends a refused line again once the field is come back to — the other column may have let the name go', async () => {
+    const table = routes({ [SET]: { body: { ok: false, error: TAKEN } } });
+    const calls = renderTab(table);
+    const input = await field('net_amount');
+    await waitFor(() => expect(input.readOnly).toBe(false));
+    fireEvent.change(input, { target: { value: 'sales, gross' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await screen.findByRole('alert');
+    fireEvent.blur(input); // leaving for the other column: the refused line is not sent a second time
+    expect(saves(calls)).toHaveLength(1);
+    table[SET] = { body: { ok: true, column: { aliases: ['sales', 'gross'] } } }; // gross is no longer called that
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: 'Enter' }); // the very line that was refused, untouched
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(saves(calls)).toHaveLength(2);
+    expect(input.value).toBe('sales, gross');
+    expect(input.title).toBe('sales, gross'); // a list longer than the cell is still readable, by a viewer too
+  });
+
+  it('does not write the server\'s reply over what was typed while it saved', async () => {
+    renderTab(routes({ [SET]: { body: { ok: true, column: { aliases: ['top line'] } } } }));
+    const input = await field('gross');
+    await waitFor(() => expect(input.readOnly).toBe(false));
+    // Hold the reply until more has been typed.
+    const answer = globalThis.fetch;
+    let release = () => {};
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (url.includes('setColumn')) await new Promise<void>((go) => (release = go));
+      return answer(url, init);
+    });
+    fireEvent.change(input, { target: { value: 'top line' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(input.getAttribute('aria-busy')).toBe('true'));
+    fireEvent.change(input, { target: { value: 'top line, turn' } });
+    release();
+    await waitFor(() => expect(input.getAttribute('aria-busy')).toBeNull());
+    expect(input.value).toBe('top line, turn');
+  });
+
+  it('a display name another column is also called: the sentence is said, and the cell goes back to what is stored', async () => {
+    const REFUSED = '"Sales" is already what people call Net Amount.';
+    const calls = renderTab(routes({ [SET]: { body: { ok: false, error: REFUSED } } }));
+    const input = (await screen.findByRole('textbox', { name: 'Display name of gross' })) as HTMLInputElement;
+    await waitFor(() => expect(input.readOnly).toBe(false));
+    fireEvent.change(input, { target: { value: 'Sales' } });
+    fireEvent.blur(input);
+    expect(await screen.findByText(REFUSED)).toBeTruthy();
+    await waitFor(() => expect(input.value).toBe('Gross Sales'));
+    fireEvent.change(input, { target: { value: 'Sales' } }); // typed again, it is asked again — never taken for saved
+    fireEvent.blur(input);
+    await waitFor(() => expect(saves(calls)).toHaveLength(2));
+  });
+
   it('says the limits at the field instead of sending a list the server would refuse', async () => {
     const calls = renderTab(routes());
     const input = await field('gross');
@@ -312,6 +365,24 @@ describe('Columns tab: "Also called"', () => {
     expect((within(pop).getByRole('textbox', { name: 'Display name' }) as HTMLInputElement).value).toBe('Net Amount');
     expect(within(pop).getByText('sales, revenue')).toBeTruthy();
     expect(within(pop).queryByRole('textbox', { name: /Also called/ })).toBeNull();
+  });
+
+  it('the Details popover puts a refused display name back, with a description saved in the same breath', async () => {
+    const calls = serve({ [SET]: { body: { ok: false, error: '"Sales" is already what people call gross.' } } });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ColumnDetails projectId={P} datasetId={D} column="net_amount" doc={{ displayName: 'Net Amount' }} trigger={<button type="button">Notes</button>} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Notes' }));
+    const pop = await screen.findByRole('dialog', { name: 'Details for column net_amount' });
+    const name = within(pop).getByRole('textbox', { name: 'Display name' }) as HTMLInputElement;
+    fireEvent.change(name, { target: { value: 'Sales' } });
+    fireEvent.blur(name);
+    fireEvent.change(within(pop).getByRole('textbox', { name: 'Description' }), { target: { value: 'After discounts' } });
+    fireEvent.blur(within(pop).getByRole('textbox', { name: 'Description' })); // a second write before the first is answered
+    await waitFor(() => expect(name.value).toBe('Net Amount'));
+    expect(saves(calls)).toHaveLength(2);
   });
 });
 

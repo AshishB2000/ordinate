@@ -10,7 +10,9 @@
 //   2. THE COLLISION RULE — a name another column answers to is refused with a
 //      sentence, and NOTHING of that patch is saved. DIFFERENTIAL against the
 //      resolver: the rule refuses exactly the names that, taught anyway, would
-//      not resolve to the column they were taught for.
+//      not resolve to the column they were taught for. A name is its letters
+//      and digits in ANY script. A display name is refused only when another
+//      column is ALSO CALLED it (it would un-teach that name).
 //   3. THE PATH TO THE VALIDATOR — a spec written in a taught name resolves
 //      through the real store; a doc left under an old column name teaches
 //      nothing; the catalog is read ONCE per project and no table is hydrated.
@@ -63,8 +65,16 @@ async function main(): Promise<void> {
     json(N.sanitizeAliases(N.sanitizeAliases(messy, 'c'), 'c')) === json(N.sanitizeAliases(messy, 'c')) && N.sanitizeAliases(messy, 'c').length === 8);
 
   // ── 2. the collision rule (pure), against the resolver ─────────────────────
-  const docs = { gross: { displayName: 'Gross Sales', aliases: ['top line'] } };
+  const docs = { gross: { displayName: 'Gross Sales', aliases: ['top line', '売上2024'] } };
   const others = [{ name: 'gross', ...docs.gross }, { name: 'region' }];
+  // A name is its own letters in ANY script. Two names that share only the Latin
+  // letters or digits beside them are two names (the Devanagari pair differs only
+  // in its vowel marks); one name in another width, case or spacing is still one.
+  const taken = [{ name: 'rev', aliases: ['売上 (USD)', '顧客ID', '売上2024', 'बिक्री'] }];
+  const apart = N.aliasCollision(['利益 (USD)', '注文ID', '利益2024', 'बकरी'], taken);
+  ok('collision: names in another script that share only Latin letters or digits are different names', apart === null, json(apart));
+  ok('collision: …and the same name in another width, case or spacing is still taken (negative control)',
+    ['売上（ＵＳＤ）', '顧客 id', '売上-2024', 'बिक्री '].every((a) => N.aliasCollision([a], taken)?.column.name === 'rev'));
   const hit = N.aliasCollision(['takings', 'GROSS  SALES'.replace(/\s+/g, ' ')], others);
   ok('collision: names the alias and the column that already answers to it',
     !!hit && hit.alias === 'GROSS SALES' && hit.column.name === 'gross' && hit.column.displayName === 'Gross Sales', json(hit));
@@ -75,8 +85,8 @@ async function main(): Promise<void> {
   // only the squashed passes can match: the rule compares squashed, so that it
   // holds however the name is later typed, where the resolver's earlier passes
   // would still tell "TopLine" from "top line".
-  const loosest = (c: string): string => (N.squash(c) ? N.squash(c).split('').join(' ') : c);
-  const candidates = ['sales', 'net', '売上', 'Gross Sales', 'gross-sales', 'GROSS', 'top line', 'TopLine', 'Top_Line', 'region', 'Region ', 're-gion'];
+  const loosest = (c: string): string => (N.squash(c) ? Array.from(N.squash(c)).join(' ') : c); // by code point, never half a character
+  const candidates = ['sales', 'net', '売上', '利益2024', '2024', '売上 2024', '売上２０２４', 'Gross Sales', 'gross-sales', 'GROSS', 'top line', 'TopLine', 'Top_Line', 'region', 'Region ', 're-gion'];
   let refusals = 0;
   for (const c of candidates) {
     const refused = N.aliasCollision(N.sanitizeAliases([c], 'net_amount'), others) !== null;
@@ -85,7 +95,7 @@ async function main(): Promise<void> {
     if (refused) refusals += 1;
     ok(`collision ≡ resolver: ${json(c)} is ${refused ? 'refused, and would not have resolved' : 'accepted, and resolves to its column'}`, refused === !resolved);
   }
-  ok('collision ≡ resolver: the candidates include both kinds (the check is not vacuous)', refusals === 9, String(refusals));
+  ok('collision ≡ resolver: the candidates include both kinds (the check is not vacuous)', refusals === 11, String(refusals));
 
   ok('taughtNames: display name first, then the aliases; a column with neither has no entry',
     json(N.taughtNames(COLS, { gross: { displayName: 'Gross Sales', aliases: ['top line'] }, region: { displayName: '', aliases: [] } })) === json({ gross: ['Gross Sales', 'top line'] }));
@@ -118,6 +128,10 @@ async function main(): Promise<void> {
   ok('refusal: another column\'s alias', (await refuse('net_amount', { aliases: ['Top Line'] }, names)) === '"Top Line" is already what people call Gross Sales.');
   ok('refusal: another column\'s own name, documented or not', (await refuse('net_amount', { aliases: ['Region'] }, names)) === '"Region" is already what people call region.');
   ok('refusal: an alias already taught the other way round', (await refuse('gross', { aliases: ['net-sales'] }, names)) === '"net-sales" is already what people call net_amount.');
+  // The other door to the same state: a DISPLAY NAME that another column is also called would un-teach that name.
+  ok('refusal: a display name another column is already also called, in any case or spacing',
+    (await refuse('region', { displayName: 'Top-Line', description: 'Where it shipped', sensitivity: 'personal' }, names)) === '"Top-Line" is already what people call Gross Sales.'
+    && (await refuse('gross', { displayName: 'NET SALES' }, names)) === '"NET SALES" is already what people call net_amount.');
   ok('refusal: NOTHING of a refused patch is saved — the file is byte for byte what it was',
     fs.readFileSync(path.join(tmpUserData, 'projects', pid, 'catalog.json'), 'utf8') === before);
   ok('refusal: …and the store still takes the next write (negative control: an untaken name is saved)',
@@ -128,12 +142,28 @@ async function main(): Promise<void> {
   ok('refusal: the same name on a column of ANOTHER dataset is no collision',
     json((await catalog.setColumn(pid, other!.id, 'plan', { aliases: ['Sales', 'top line'] }, ['region', 'plan']))!.aliases) === json(['Sales', 'top line']));
 
+  // NEGATIVE CONTROL: a caption may still repeat another column's name or caption, as it could before aliases
+  // existed — and one that is refused resolves again once the other column stops being called it.
+  ok('display name: one that repeats another column\'s NAME or its display name is saved, as before',
+    (await catalog.setColumn(pid, other!.id, 'plan', { displayName: 'Region' }, ['region', 'plan']))!.displayName === 'Region'
+    && (await catalog.setColumn(pid, D, 'region', { displayName: 'gross sales' }, names))!.displayName === 'gross sales'
+    && (await catalog.setColumn(pid, D, 'region', { displayName: '' }, names))!.displayName === '');
+  ok('display name: the column\'s own alias, and a name nobody is called, are no collision',
+    (await catalog.setColumn(pid, D, 'gross', { displayName: 'Top Line' }, names))!.displayName === 'Top Line'
+    && (await catalog.setColumn(pid, D, 'gross', { displayName: 'Gross Sales' }, names))!.displayName === 'Gross Sales');
+
   // The handler: the sentence reaches the browser as `error`, and the contract bounds the list.
   require('../src/ipc/catalog').register();
   const call = (payload: unknown): Promise<any> => handlers.get('catalog:setColumn')!({}, payload); // any: a handler's reply
   const refused = await call({ projectId: pid, datasetId: D, column: 'region', patch: { aliases: ['gross'] } });
   ok('handler: a refusal is { ok: false, error: the sentence }, checked against the record\'s columns',
     refused.ok === false && refused.error === '"gross" is already what people call Gross Sales.', json(refused));
+  // The dataset's CURRENT columns are the record's: Budget's `region` has no note at all, so only the record knows it.
+  const undocumented = await call({ projectId: pid, datasetId: other!.id, column: 'plan', patch: { aliases: ['Sales', 'top line', 'REGION'] } });
+  ok('handler: a column nobody has documented is still a name that is taken (the record\'s columns, not the notes\')',
+    undocumented.ok === false && undocumented.error === '"REGION" is already what people call region.', json(undocumented));
+  const caption = await call({ projectId: pid, datasetId: D, column: 'region', patch: { displayName: 'net sales' } });
+  ok('handler: a refused display name is the same reply', caption.ok === false && caption.error === '"net sales" is already what people call net_amount.', json(caption));
   const stored = await call({ projectId: pid, datasetId: D, column: 'region', patch: { aliases: ['area', 'territory'] } });
   ok('handler: a save answers with the stored doc', stored.ok === true && json(stored.column.aliases) === json(['area', 'territory']), json(stored));
   const input = contract.catalog['catalog:setColumn'].input;
@@ -187,6 +217,15 @@ async function main(): Promise<void> {
   ok('path: a name left under an old column resolves to nothing', !stale.ok && stale.reason === 'Unknown measure column "bookings".', json(stale));
   const elsewhere = A.validateAnswerSpec({ dataset: 'Budget', category: 'region', measures: ['top line'] }, spec);
   ok('path: a dataset answers to its own names only', elsewhere.ok && elsewhere.spec.measures[0].column === 'plan', json(elsewhere));
+
+  // Last (it changes the notes): a note left under a column the dataset no longer has takes no name —
+  // through the handler, which is where the record's columns come from. Without them the stale note would refuse both.
+  const freed = await call({ projectId: pid, datasetId: D, column: 'region', patch: { aliases: ['area', 'old_amount'], displayName: 'Bookings' } });
+  ok('handler: a name only a stale note holds is free, as an alias and as a display name',
+    freed.ok === true && json(freed.column.aliases) === json(['area', 'old_amount']) && freed.column.displayName === 'Bookings', json(freed));
+  ok('handler: …and without the record\'s columns the same patch is refused (negative control)',
+    (await refuse('region', { aliases: ['area', 'old amount'] })) === '"old amount" is already what people call Old amount.'
+    && (await refuse('region', { displayName: 'bookings ' })) === '"bookings" is already what people call Old amount.');
 }
 
 main()

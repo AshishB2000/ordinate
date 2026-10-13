@@ -19,7 +19,8 @@ export interface FactColumnDoc { description?: string; displayName?: string; ali
 export function columnNameBits(d: FactColumnDoc): string[] {
   const bits: string[] = [];
   if (d.displayName) bits.push(`called "${d.displayName}"`);
-  if (d.aliases && d.aliases.length) bits.push(`also called ${d.aliases.map((a) => `"${a}"`).join(', ')}`);
+  const also = (d.aliases || []).filter((a) => a.toLowerCase() !== (d.displayName || '').toLowerCase()); // a name is said once
+  if (also.length) bits.push(`also called ${also.map((a) => `"${a}"`).join(', ')}`);
   return bits;
 }
 

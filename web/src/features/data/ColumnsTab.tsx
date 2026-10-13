@@ -38,7 +38,7 @@ function AlsoCalled({ projectId, datasetId, column, names, helpId, readOnly }: {
   const [saved, setSaved] = useState(names.join(', '));
   const [v, setV] = useState(saved);
   const [problem, setProblem] = useState('');
-  /** The line last sent: Enter and then the blur it causes are one save, and a refused line is not sent again as it stands. */
+  /** The line last sent: Enter and the blur after it are one save, and a refused line is not sent again until the field is come back to. */
   const sent = useRef<string | null>(null);
   const errorId = useId();
   const save = useWrite('catalog:setColumn', ['catalog:columns'], {
@@ -47,7 +47,7 @@ function AlsoCalled({ projectId, datasetId, column, names, helpId, readOnly }: {
       if (!r.ok || !r.column) return setProblem(r.error || 'These names could not be saved.');
       const stored = (r.column.aliases ?? []).join(', ');
       setSaved(stored);
-      setV(stored);
+      setV((cur) => (namesOf(cur).join(', ') === sent.current ? stored : cur)); // not over what was typed while it saved
       setProblem('');
     },
   });
@@ -71,6 +71,7 @@ function AlsoCalled({ projectId, datasetId, column, names, helpId, readOnly }: {
         className={s.cellInput}
         type="text"
         value={v}
+        title={v || undefined /* the cell is narrower than eight names */}
         readOnly={readOnly}
         placeholder={readOnly ? '—' : 'Add names'}
         aria-label={`Also called, for ${column}`}
@@ -78,6 +79,10 @@ function AlsoCalled({ projectId, datasetId, column, names, helpId, readOnly }: {
         aria-invalid={problem ? true : undefined}
         aria-busy={save.isPending || undefined}
         onChange={(e) => setV(e.target.value)}
+        // Come back to: the column that had the name may have let it go, so a refused line may be sent again.
+        onFocus={() => {
+          if (!save.isPending) sent.current = null;
+        }}
         onBlur={commit}
         onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), commit())}
       />
@@ -90,14 +95,18 @@ function AlsoCalled({ projectId, datasetId, column, names, helpId, readOnly }: {
   );
 }
 
-function Cell({ value, placeholder, label, multiline, readOnly, onSave }: { value: string; placeholder: string; label: string; multiline?: boolean; readOnly?: boolean; onSave: (v: string) => void }) {
+function Cell({ value, placeholder, label, multiline, readOnly, onSave }: { value: string; placeholder: string; label: string; multiline?: boolean; readOnly?: boolean; onSave: (v: string, refused: () => void) => void }) {
   const [v, setV] = useState(value);
   const [saved, setSaved] = useState(value);
   const commit = () => {
     const next = v.trim();
     if (next === saved) return;
     setSaved(next);
-    onSave(next);
+    // A refused write is not the saved one: the cell goes back to what is stored, and the toast says why.
+    onSave(next, () => {
+      setSaved(saved);
+      setV(saved);
+    });
   };
   const common = {
     className: s.cellInput,
@@ -134,7 +143,9 @@ export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: 
   if (docs.isError) return <ErrorState heading={3} title="The column notes could not be loaded" message={docs.error.message} onRetry={() => void docs.refetch()} />;
   const all = docs.data;
   const doc = (name: string): ColumnDoc => (Object.prototype.hasOwnProperty.call(all, name) ? all[name] : {});
-  const patch = (column: string, p: Patch) => save.mutate({ projectId, datasetId, column, patch: p });
+  // Per write, not per observer: a refusal (a display name another column is also called) reaches the cell that asked.
+  const patch = (column: string, p: Patch, refused?: () => void) =>
+    void save.mutateAsync({ projectId, datasetId, column, patch: p }).then((r) => r?.ok === false && refused?.(), () => undefined);
   return (
     <section className={s.section} aria-label="Column notes">
       <p className={s.lead}>
@@ -168,16 +179,16 @@ export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: 
                     <span className={s.typeChip}>{c.type}</span>
                   </td>
                   <td>
-                    <Cell readOnly={!canEdit} value={d.displayName ?? ''} placeholder={c.name} label={`Display name of ${c.name}`} onSave={(v) => patch(c.name, { displayName: v })} />
+                    <Cell readOnly={!canEdit} value={d.displayName ?? ''} placeholder={c.name} label={`Display name of ${c.name}`} onSave={(v, no) => patch(c.name, { displayName: v }, no)} />
                   </td>
                   <td>
                     <AlsoCalled projectId={projectId} datasetId={datasetId} column={c.name} names={d.aliases ?? []} helpId={helpId} readOnly={!canEdit} />
                   </td>
                   <td>
-                    <Cell multiline readOnly={!canEdit} value={d.description ?? ''} placeholder={canEdit ? 'Add a description' : '—'} label={`Description of ${c.name}`} onSave={(v) => patch(c.name, { description: v })} />
+                    <Cell multiline readOnly={!canEdit} value={d.description ?? ''} placeholder={canEdit ? 'Add a description' : '—'} label={`Description of ${c.name}`} onSave={(v, no) => patch(c.name, { description: v }, no)} />
                   </td>
                   <td>
-                    <Cell readOnly={!canEdit} value={d.example ?? ''} placeholder={common || '—'} label={`Example of ${c.name}`} onSave={(v) => patch(c.name, { example: v })} />
+                    <Cell readOnly={!canEdit} value={d.example ?? ''} placeholder={common || '—'} label={`Example of ${c.name}`} onSave={(v, no) => patch(c.name, { example: v }, no)} />
                   </td>
                   <td>
                     <Select

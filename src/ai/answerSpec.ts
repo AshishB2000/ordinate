@@ -254,7 +254,8 @@ function resolveDataset(raw: unknown, datasets: SpecDataset[], defaultId?: strin
     if (byId) return byId;
     const byName = datasets.filter((d) => d.name.trim().toLowerCase() === r.toLowerCase());
     if (byName.length === 1) return byName[0];
-    const loose = datasets.filter((d) => squash(d.name) === squash(r));
+    const key = squash(r); // '' (a name of symbols only) matches nothing, as for a column
+    const loose = key ? datasets.filter((d) => squash(d.name) === key) : [];
     if (loose.length === 1) return loose[0];
     return null;
   }

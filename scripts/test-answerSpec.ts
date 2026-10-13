@@ -112,6 +112,22 @@ ok('names: two real columns the said name cannot tell apart are not settled by a
 ok('names: a name with no letters or digits to squash still matches as written, and only once',
   A.resolveColumn('売上', COLS, { revenue: ['売上'] })?.name === 'revenue'
   && A.resolveColumn('売上', COLS, { revenue: ['売上'], profit: ['売上'] }) === null);
+// A name in another script is matched on its OWN letters, never on the Latin letters or digits beside them.
+const IDS: ParsedColumn[] = [{ name: 'id', type: 'text' }, { name: 'customer_id', type: 'text' }, { name: 'rev', type: 'number' }, { name: '売上2024', type: 'number' }];
+const ID_NAMES = { customer_id: ['顧客ID'], rev: ['売上 (USD)'] };
+ok('names: an untaught name in another script is nobody\'s — not the column that shares its Latin letters or digits',
+  A.resolveColumn('注文ID', IDS, ID_NAMES) === null && A.resolveColumn('利益 (USD)', IDS, ID_NAMES) === null && A.resolveColumn('利益2024', IDS) === null);
+ok('names: …and a taught or real one is still found in another width, case or spacing (negative control)',
+  A.resolveColumn('顧客ID', IDS, ID_NAMES)?.name === 'customer_id' && A.resolveColumn('売上（usd）', IDS, ID_NAMES)?.name === 'rev'
+  && A.resolveColumn('売上 ２０２４', IDS)?.name === '売上2024' && A.resolveColumn('ID', IDS, ID_NAMES)?.name === 'id');
+const profitSaid = A.validateAnswerSpec({ category: 'region', measures: [{ column: '利益 (USD)', aggregation: 'sum' }] },
+  [{ ...DS, names: { revenue: ['売上 (USD)'] } }]);
+ok('names: a spec in an untaught name is refused, never charted as the column whose name shares "(USD)"',
+  !profitSaid.ok && profitSaid.reason === 'Unknown measure column "利益 (USD)".', JSON.stringify(profitSaid));
+ok('dataset: an unknown name in another script is not the one dataset whose name is also not Latin',
+  !A.validateAnswerSpec({ dataset: '利益', category: 'region', measures: ['revenue'] }, [{ ...DS, name: '売上' }, OTHER]).ok
+  && !A.validateAnswerSpec({ dataset: '📉', category: 'region', measures: ['revenue'] }, [{ ...DS, name: '📈' }, OTHER]).ok
+  && A.validateAnswerSpec({ dataset: '売上2024', category: 'region', measures: ['revenue'] }, [{ ...DS, name: '売上 2024' }, OTHER]).ok);
 ok('names: a column called "constructor" or "__proto__" has no taught names unless someone taught one',
   A.resolveColumn('ctor', [{ name: 'constructor', type: 'text' }, { name: '__proto__', type: 'text' }], {}) === null);
 const asBefore = ['revenue', 'Revenue', 'order date', 'sub_category', 'Order-Date', 'margin', '', 42, null];

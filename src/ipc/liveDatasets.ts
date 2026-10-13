@@ -170,7 +170,9 @@ async function copyColumnNotes(projectId: string, fromId: string, toId: string, 
   for (const c of columns) {
     if (!Object.prototype.hasOwnProperty.call(notes, c.name)) continue;
     const { description, displayName, aliases, example, sensitivity } = notes[c.name];
-    await catalog.setColumn(projectId, toId, c.name, { description, displayName, example, sensitivity });
+    // A caption the copy's columns refuse (a hand-edited catalog) is left out; the marks are written regardless.
+    await catalog.setColumn(projectId, toId, c.name, { description, displayName, example, sensitivity })
+      .catch(() => catalog.setColumn(projectId, toId, c.name, { description, example, sensitivity }));
     // On their own, after the marks: a list the copy's columns now collide with is left out, never the marks with it.
     if (aliases.length) await catalog.setColumn(projectId, toId, c.name, { aliases }, columns.map((x) => x.name)).catch(() => null);
   }

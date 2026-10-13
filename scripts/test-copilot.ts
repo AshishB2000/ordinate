@@ -212,6 +212,9 @@ async function main(): Promise<void> {
   ok('names: the notes print the also-called names beside the display name',
     said === 'called "Contact"; also called "mail", "e-mail"'
     && taught.text.includes(`- email: ${said}; personal data; sample values withheld`) && taught.text.includes('- spend: also called "sales"'), taught.text);
+  ok('names: a name is said once — an also-called name that is the display name is not repeated',
+    notes.columnNameBits({ displayName: 'Sales', aliases: ['sales', 'takings'] }).join('; ') === 'called "Sales"; also called "takings"'
+    && notes.columnNameBits({ displayName: 'Sales', aliases: ['SALES'] }).join('; ') === 'called "Sales"');
   ok('names: …and the marked column\'s VALUES are still withheld',
     !['grace@example.com', 'alan@example.com', '4111111111111111'].some((v) => taught.text.includes(v)) && taught.text.includes('(Values of email, card are withheld'));
   ok('names: the number ledger is entry for entry what it was without them',

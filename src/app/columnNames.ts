@@ -7,9 +7,15 @@
 // how a name someone said finds the column it was taught for — the last two
 // passes of the answer spec's resolver (src/ai/answerSpec.ts `resolveColumn`).
 
-/** Case, spaces, underscores and punctuation are not part of a name's identity to a reader. */
+/**
+ * Case, spaces, underscores and punctuation are not part of a name's identity
+ * to a reader; its letters and digits are — in ANY script. "売上 (USD)" and
+ * "利益 (USD)" are two names, not one "usd". NFKC first, so a full-width or
+ * decomposed spelling is the same name; combining marks are kept (in Devanagari
+ * or Thai they are the vowels). For an ASCII name this is the old a-z0-9 rule.
+ */
 export function squash(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return s.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, '');
 }
 
 export const MAX_ALIASES = 8;
@@ -46,7 +52,7 @@ export function sanitizeAliases(raw: unknown, column: string): string[] {
   return out;
 }
 
-/** Two names a reader would take for the same one: equal ignoring case, or equal squashed (letters and digits only). */
+/** Two names a reader would take for the same one: equal ignoring case, or equal squashed (letters and digits only, in any script). */
 function sameName(a: string, b: string): boolean {
   if (a.trim().toLowerCase() === b.trim().toLowerCase()) return true;
   const key = squash(a);
