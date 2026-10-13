@@ -5,17 +5,19 @@
 //
 // THE ONLY PLACE A DASHBOARD CARD IS BUILT. `buildPlan` puts the cards in a NEW
 // Analysis; the starter layouts (starterPlan.ts, via `buildPlanRecords`) put
-// them in one that is already open. Same validator, same packer, same
-// sanitizeCards — one way tiles get created, whether a model or the app authored
-// the plan.
+// them in one that is already open. Same validator, same arrangement
+// (planLayout.ts), same sanitizeCards — one way tiles get created, whether a
+// model or the app authored the plan.
 
 import type { TransformStep } from '../data/transforms';
 import * as datasets from '../data/datasets';
 import * as visuals from './visuals';
 import * as analysis from './analysis';
 import * as dashboards from './dashboards';
-import type { PlanDrop, PlannedCalcField } from './analysisPlan';
+import type { PlanDrop, PlannedCalcField, PlannedVisual } from './analysisPlan';
 import { loadPlanContext, validatePlan } from './analysisPlan';
+import { arrangeSheet } from './planLayout';
+import { shapeRows } from './planRows';
 
 /**
  * A plan turned into REAL records, minus the Analysis: the calculated fields and
@@ -41,41 +43,6 @@ export interface BuildResult {
   dropped: PlanDrop[];
   /** Pipeline warnings from applying the calculated-field steps. */
   warnings: string[];
-}
-
-// GEOMETRY IS THE APP'S, ENTIRELY — and it stays that way by adding no geometry
-// vocabulary at all. A plan cannot name an x, a y, a width or a height, so there
-// is nothing for a model to get wrong or to abuse. Size comes from the card KIND,
-// and a chart's width is DERIVED from how many charts share the sheet, which the
-// app counts for itself.
-//
-// Known ceiling: two stacked full-width charts is not expressible. Add a
-// `width: 'half' | 'full'` enum to PlannedVisual if a layout ever needs it —
-// that is still app-owned vocabulary, unlike raw coordinates.
-const KPI_W = 3;
-const KPI_H = 2;
-const CHART_H = 6;
-const TEXT_H = 2;
-
-/** Flow packer: left→right, wrapping at GRID_COLS. */
-function packer() {
-  let cx = 0;
-  let cy = 0;
-  let rowH = 0;
-  return {
-    place(w: number, h: number) {
-      if (cx + w > dashboards.GRID_COLS) { cx = 0; cy += rowH; rowH = 0; }
-      const layout = { x: cx, y: cy, w, h };
-      cx += w;
-      if (h > rowH) rowH = h;
-      return layout;
-    },
-    /** Break to a fresh row. A KPI strip and the charts beneath it are separate
-     *  BANDS, not one flow: without this, two 3-wide KPIs leave exactly enough
-     *  room for a 6-wide chart beside them and the strip stops reading as a
-     *  strip. */
-    newRow() { if (cx > 0) { cx = 0; cy += rowH; rowH = 0; } },
-  };
 }
 
 /**
@@ -125,29 +92,21 @@ export async function buildPlanRecords(projectId: string, raw: unknown): Promise
   const visualIds: string[] = [];
   const sheets: { name: string; cards: unknown[] }[] = [];
   for (const sheet of plan.sheets) {
-    // PER SHEET. It used to be created once for the whole plan, outside this
-    // loop, so sheet 2's first card inherited sheet 1's cursor and started N
-    // rows down its own empty grid — every sheet after the first opened with a
-    // band of blank rows above it. Each sheet is its own Page with its own grid.
-    const pk = packer();
     const cards: unknown[] = [];
 
     // CONTROLS FIRST, and with a zeroed layout. A control card is a filter-bar
     // chip (dashControlBar.ts), not a cell: the bar reads `layout` only to
     // recover the order the author built them in, and reserving a grid cell for
-    // one would leave a hole nothing draws in. So they never touch the packer.
+    // one would leave a hole nothing draws in. So they are never arranged.
     (sheet.controls || []).forEach((c, i) => {
       cards.push({ type: 'control', layout: { x: i, y: 0, w: 0, h: 0 }, control: c });
     });
 
-    for (const m of sheet.metrics) {
-      cards.push({ type: 'metric', layout: pk.place(KPI_W, KPI_H), metric: m });
-    }
-    pk.newRow();
-
-    // One chart fills the sheet; two or more share the row. Counted here rather
-    // than declared in the plan — see the note on the packer above.
-    const chartW = sheet.visuals.length > 1 ? dashboards.GRID_COLS / 2 : dashboards.GRID_COLS;
+    // VISUALS ARE SAVED BEFORE ANYTHING IS PLACED. A chart whose save failed is
+    // not on the sheet, and a row arranged around it would keep its hole — a
+    // spotlight with a rail and no chart beside it. So the sheet is arranged
+    // over what survived, and the rows re-form without the ones that did not.
+    const savedIds = new Map<PlannedVisual, string>();
     for (const pv of sheet.visuals) {
       let id = pv.visualId;
       if (pv.kind === 'new') {
@@ -163,13 +122,22 @@ export async function buildPlanRecords(projectId: string, raw: unknown): Promise
       }
       if (!id) continue;
       visualIds.push(id);
-      cards.push({ type: 'visual', layout: pk.place(chartW, CHART_H), visualId: id });
+      savedIds.set(pv, id);
     }
-    pk.newRow();
+    const alive = sheet.visuals.filter((pv) => savedIds.has(pv));
+    const at = arrangeSheet({
+      ...sheet,
+      visuals: alive,
+      rows: sheet.rows && shapeRows(sheet.rows, (pv) => savedIds.has(pv)),
+    });
 
-    for (const t of sheet.texts) {
-      cards.push({ type: 'text', layout: pk.place(dashboards.GRID_COLS, TEXT_H), ...t });
-    }
+    // THE ORDER OF `cards` IS NOT THE ARRANGEMENT, and does not follow it:
+    // metrics, then visuals, then texts, each in the sheet's flat order, however
+    // the rows interleave them. planExec.runDashboard ties each KPI card to its
+    // metric by that order. Only the layouts say where a tile is.
+    sheet.metrics.forEach((m, i) => cards.push({ type: 'metric', layout: at.metrics[i], metric: m }));
+    alive.forEach((pv, i) => cards.push({ type: 'visual', layout: at.visuals[i], visualId: savedIds.get(pv) }));
+    sheet.texts.forEach((t, i) => cards.push({ type: 'text', layout: at.texts[i], ...t }));
     // sanitizeCards is the same whitelist a hand-built sheet goes through — a
     // sheet IS a dashboards.Page.
     sheets.push({ name: sheet.name, cards: dashboards.sanitizeCards(cards) });

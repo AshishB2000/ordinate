@@ -259,18 +259,25 @@ async function withInsightCharts(
     const o: any = structure && typeof structure === 'object' ? { ...(structure as any) } : {};
     const sheets = Array.isArray(o.sheets) && o.sheets.length ? o.sheets.slice() : [{ name: 'Sheet 1', visuals: [] }];
     const first = { ...(sheets[0] || {}) };
-    first.visuals = [
-      ...(Array.isArray(first.visuals) ? first.visuals : []),
-      ...found.map((i) => ({
-        datasetId: i.datasetId,
-        // The app's own title. Never model text, and never a figure the model
-        // supplied — this string came out of `insights.ts`.
-        name: String(i.title).slice(0, 80),
-        chartType: i.chart.type,
-        encoding: i.chart.encoding,
-        filters: i.chart.filters || [],
-      })),
-    ];
+    const charts = found.map((i) => ({
+      datasetId: i.datasetId,
+      // The app's own title. Never model text, and never a figure the model
+      // supplied — this string came out of `insights.ts`.
+      name: String(i.title).slice(0, 80),
+      chartType: i.chart.type,
+      encoding: i.chart.encoding,
+      filters: i.chart.filters || [],
+    }));
+    if (Array.isArray(first.rows) && first.rows.length) {
+      // A sheet written as ROWS is read from its rows alone (planRows.ts), so a
+      // chart pushed onto `visuals` would never be seen. They go on the end as
+      // `charts` rows, two to a row. An empty list arranges nothing and leaves
+      // the flat arrays in charge, so it takes the branch below.
+      first.rows = first.rows.slice();
+      for (let n = 0; n < charts.length; n += 2) first.rows.push({ type: 'charts', visuals: charts.slice(n, n + 2) });
+    } else {
+      first.visuals = [...(Array.isArray(first.visuals) ? first.visuals : []), ...charts];
+    }
     sheets[0] = first;
     o.sheets = sheets;
     return o;

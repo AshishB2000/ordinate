@@ -21,6 +21,7 @@ import type {
   PlannedControl, PlannedMetric, PlannedText, PlannedVisual,
 } from './analysisPlan';
 import { loadPlanContext, validatePlan } from './analysisPlan';
+import { arrangeSheet, readingOrder, type PlacedTile } from './planLayout';
 // INVERTED IMPORT, deliberately. `vizDataFor` lives beside `residentVizData` in
 // src/ipc/visuals.ts because that is where the resident-vs-JS decision for a
 // chart already lives, and `register()` is inert until called (the same reason
@@ -95,6 +96,13 @@ export interface PlanPreview {
      *  it filters is the reader's own live selection — but a preview that hid
      *  the bar would still be showing less than the build produces. */
     controls: PlannedControl[];
+    /**
+     * Where each tile will be, in reading order (top to bottom, then left to
+     * right) — the sheet as a sketch. From the SAME `arrangeSheet` the build
+     * places the cards with, so the sketch is the page. Within one kind the
+     * order is the flat array's: the n-th `visual` here is `visuals[n]` above.
+     */
+    layout: PlacedTile[];
   }[];
   calculatedFields: CalcFieldPreview[];
   dropped: PlanDrop[];
@@ -179,6 +187,7 @@ async function previewValidated(
       visuals: out,
       texts: sheet.texts,
       controls: sheet.controls || [],
+      layout: readingOrder(arrangeSheet(sheet)),
     });
   }
 

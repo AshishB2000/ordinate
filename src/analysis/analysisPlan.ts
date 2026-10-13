@@ -50,7 +50,8 @@ import type { ColumnSummary } from '../data/datasetStats';
 import * as datasets from '../data/datasets';
 import * as visuals from './visuals';
 import * as dashboards from './dashboards';
-import { validateControl, type PlannedControl } from './planControls';
+import { CONTROLS_PROMPT, validateControl, type PlannedControl } from './planControls';
+import { ROWS_PROMPT, flattenRows, validateRows, type PlanRow } from './planRows';
 import type { VizEncoding } from './visuals';
 import { computeColumnSummariesResident } from '../engine/statsResident';
 import { fillMapRegions, geoHitsFor, type GeoHits } from './geoHits';
@@ -121,7 +122,7 @@ export interface PlannedText {
   text?: string;
 }
 
-export type { PlannedControl };
+export type { PlannedControl, PlanRow };
 
 export interface PlanSheet {
   name: string;
@@ -137,6 +138,12 @@ export interface PlanSheet {
    * (and every model envelope that never mentions one) reads back unchanged.
    */
   controls?: PlannedControl[];
+  /**
+   * The ARRANGEMENT, when the plan has one (planRows.ts). Where present it is
+   * the source of truth: `metrics` / `visuals` / `texts` above are then its
+   * flattening in row order, holding the same objects. Absent = packed flat.
+   */
+  rows?: PlanRow[];
 }
 
 export interface AnalysisPlan {
@@ -148,7 +155,7 @@ export interface AnalysisPlan {
 
 export type PlanDropKind =
   | 'dataset' | 'chartType' | 'formula' | 'encoding' | 'filter' | 'visual' | 'sheet'
-  | 'metric' | 'text';
+  | 'metric' | 'text' | 'row';
 
 export interface PlanDrop {
   kind: PlanDropKind;
@@ -243,7 +250,8 @@ export async function loadPlanContext(
 // buildPlan, but the schema below still described sheets as visuals only, so a
 // real model asked for "a units KPI" replied that "a KPI card is not an
 // available chart type" and substituted a gauge chart. The app could build the
-// tile the whole time; nothing had told the model it existed.
+// tile the whole time; nothing had told the model it existed. The row and the
+// control clauses live beside THEIR parsers: planRows.ts and planControls.ts.
 
 export const DRAFT_DASHBOARD_SYSTEM_PROMPT =
   'You propose an ANALYSIS PLAN for a project as ONLY a single JSON object — no markdown, no code fences, no ' +
@@ -253,9 +261,9 @@ export const DRAFT_DASHBOARD_SYSTEM_PROMPT =
   '  { "name": "<analysis name>",\n' +
   '    "rationale": "<1-3 sentences, NO numbers, on why these views>",\n' +
   '    "calculatedFields": [ { "dataset":"<dataset name>", "name":"<new column name>", "formula":"<expression>" } ],\n' +
-  '    "sheets": [ { "name":"<sheet name>", "metrics": [ <kpi>, ... ], "visuals": [ <visual>, ... ],\n' +
-  '                 "texts": [ {"heading":"<short>","text":"<1-2 sentences, NO numbers>"} ] } ] }\n' +
-  'Aim for 1-3 sheets and 2-5 visuals per sheet. Any of calculatedFields, metrics and texts may be [].\n' +
+  '    "sheets": [ { "name":"<sheet name>", "rows": [ <row>, ... ], "controls": [ <control>, ... ] } ] }\n' +
+  'Aim for 1-3 sheets and 2-5 visuals per sheet. Either of calculatedFields and controls may be [].\n' +
+  ROWS_PROMPT +
   'A KPI is a single headline figure, shown as its own tile — this is what "a KPI for X" means, NOT a gauge\n' +
   'or a one-bar chart. The app computes the figure; you only say which column and how to aggregate it:\n' +
   '  { "dataset":"<dataset name>", "column":"<column>", "aggregation":"sum|avg|count|min|max",\n' +
@@ -268,6 +276,7 @@ export const DRAFT_DASHBOARD_SYSTEM_PROMPT =
   '"value":<string or number>} ] }\n' +
   'OR a reference to an existing saved visual, to place it as-is:\n' +
   '  { "visual":"<saved visual name>" }\n' +
+  CONTROLS_PROMPT +
   'Rules: a measure using sum/avg/min/max MUST name a number column — "count" works on any column. A ' +
   'calculated-field formula may use + - * / %, comparisons (= != > < >= <=), and/or/not, parentheses, ' +
   'numeric/string literals, and functions such as round, abs, floor, ceil, min, max, lower, upper, trim, len, ' +
@@ -387,7 +396,15 @@ export function validatePlan(raw: unknown, ctx: PlanContext): ValidatedPlan {
       return;
     }
     const sheetName = str(rawSheet.name) || `Sheet ${si + 1}`;
-    const rawVisuals = Array.isArray(rawSheet.visuals) ? rawSheet.visuals : [];
+    // ROWS FIRST. Where a sheet has rows that survive, they are the sheet: its
+    // own flat arrays are not read, and the ones written below are the rows'
+    // flattening. Each item goes through the same validators as a flat one.
+    const rows = validateRows(rawSheet.rows, {
+      visual: (r, where, at) => validateVisual(r, ctx, proposedCols, where, at, dropped),
+      metric: (r, where, at) => validateMetric(r, ctx, proposedCols, where, at, dropped),
+      text: (r, where, at) => validateText(r, where, at, dropped),
+    }, dropped, `sheets[${si}].rows`, `Sheet "${sheetName}"`);
+    const rawVisuals = !rows.length && Array.isArray(rawSheet.visuals) ? rawSheet.visuals : [];
     const kept: PlannedVisual[] = [];
     rawVisuals.forEach((rawVisual, vi) => {
       const where = `sheets[${si}].visuals[${vi}]`;
@@ -395,14 +412,14 @@ export function validatePlan(raw: unknown, ctx: PlanContext): ValidatedPlan {
       const v = validateVisual(rawVisual, ctx, proposedCols, where, at, dropped);
       if (v) kept.push(v);
     });
-    const rawMetrics = Array.isArray(rawSheet.metrics) ? rawSheet.metrics : [];
+    const rawMetrics = !rows.length && Array.isArray(rawSheet.metrics) ? rawSheet.metrics : [];
     const keptMetrics: PlannedMetric[] = [];
     rawMetrics.forEach((rawMetric, mi) => {
       const m = validateMetric(rawMetric, ctx, proposedCols, `sheets[${si}].metrics[${mi}]`,
         `Sheet "${sheetName}" metric ${mi + 1}`, dropped);
       if (m) keptMetrics.push(m);
     });
-    const rawTexts = Array.isArray(rawSheet.texts) ? rawSheet.texts : [];
+    const rawTexts = !rows.length && Array.isArray(rawSheet.texts) ? rawSheet.texts : [];
     const keptTexts: PlannedText[] = [];
     rawTexts.forEach((rawText, ti) => {
       const t = validateText(rawText, `sheets[${si}].texts[${ti}]`,
@@ -416,7 +433,9 @@ export function validatePlan(raw: unknown, ctx: PlanContext): ValidatedPlan {
         `Sheet "${sheetName}" control ${ci + 1}`, dropped);
       if (c) keptControls.push(c);
     });
-    const sheet: PlanSheet = { name: sheetName, metrics: keptMetrics, visuals: kept, texts: keptTexts };
+    const sheet: PlanSheet = rows.length
+      ? { name: sheetName, ...flattenRows(rows), rows }
+      : { name: sheetName, metrics: keptMetrics, visuals: kept, texts: keptTexts };
     if (keptControls.length) sheet.controls = keptControls;
     sheets.push(sheet);
   });
