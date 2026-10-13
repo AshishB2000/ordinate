@@ -10,6 +10,11 @@
 // the same replies and must match those recordings. The name matcher and the
 // point clusterer are still the server's own (src/analysis/geoMatch.ts,
 // geoCluster.ts), so those two are compared live, over their whole input ranges.
+//
+// ONE recording was a wrong figure and has been amended by hand, not re-recorded:
+// the desktop's matcher lent the West Virginia shape Virginia's row (the fixture
+// has no West Virginia). That shape's fill, value and "Values → All" label now
+// read "no data" in the three region-map cases and the thumbnail fills.
 
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -18,10 +23,10 @@ import { describe, expect, it } from 'vitest';
 import { goldenSequence, golden } from '../../test-golden';
 import { CHART_PALETTE, choroplethColor, flowWidth, isDarkHex } from './colors';
 import { drawMap, type MapTheme, type Overlay } from './draw';
-import { valueLabelKeys } from './features';
+import { choroplethLayer, valueLabelKeys } from './features';
 import { buildPeriodGeo, geoBBox, abbrevFor, withCentroids } from './geometry';
 import { axisOf, detectLatLon, gridCluster } from './geoCluster';
-import { matchGeoItem, normalizeName } from './geoMatch';
+import { featureNameSet, matchGeoItem, normalizeName } from './geoMatch';
 import { geoChartTypeFor, geoMapFits, geoNeedsText, isMapChartType, withGeoChartType } from './mapKinds';
 import type { MapLibre, MlMap } from './maplibre';
 import { mapThumbFills, mapThumbProject } from './thumb';
@@ -167,18 +172,30 @@ describe('pure helpers equal the desktop', () => {
   it('normalizeName and matchGeoItem over every state shape', () => {
     const names = ['Roanoke City', 'St. Louis County', 'Prince of Wales-Hyder Census Area', 'United States of America', '  New   York (state) ', '', 'James City'];
     for (const n of names) expect(normalizeName(n)).toBe(SG.normalizeName(n));
+    // Each shape's row from both halves: without the collection's names, then with them (each half's own set).
+    const both = (fc: FeatureCollection, rows: Array<{ name: string; state?: string; kind?: string }>) => {
+      const ours = featureNameSet(fc.features);
+      const theirs = SG.featureNameSet(fc.features) as Set<string>;
+      agree([...ours], [...theirs]);
+      for (const f of fc.features) {
+        agree(matchGeoItem(rows, f.properties), SG.matchGeoItem(rows, f.properties));
+        agree(matchGeoItem(rows, f.properties, ours), SG.matchGeoItem(rows, f.properties, theirs));
+      }
+    };
     const items = byState('profit').geo!.items;
-    for (const f of states.features) agree(matchGeoItem(items, f.properties), SG.matchGeoItem(items, f.properties));
+    both(states, items);
     // Counties (state + county-vs-city kind disambiguate) and countries (iso2, long official names).
     const counties = JSON.parse(readFileSync(at('assets/geo/us-counties.json'), 'utf8')) as FeatureCollection;
     const cItems = counties.features.filter((_, i) => i % 9 === 0).map((f, i) => ({ name: `${String(f.properties.name)}${i % 3 ? ' County' : ''}`, state: String(f.properties.state), kind: i % 4 ? undefined : String(f.properties.kind), value: i }));
-    for (const f of counties.features) agree(matchGeoItem(cItems, f.properties), SG.matchGeoItem(cItems, f.properties));
+    both(counties, cItems);
     const world = JSON.parse(readFileSync(at('assets/geo/world-countries.js'), 'utf8').replace(/^[\s\S]*?=\s*/, '').replace(/;\s*$/, '')) as FeatureCollection;
     const wItems = ['United States of America', 'Russian Federation', 'UK', 'de', 'Congo', 'Korea', 'Niger', 'Guinea', 'Sudan'].map((name, value) => ({ name, value }));
-    for (const f of world.features) agree(matchGeoItem(wItems, f.properties), SG.matchGeoItem(wItems, f.properties));
+    both(world, wItems);
     for (const f of counties.features.slice(0, 400)) expect(normalizeName(String(f.properties.name) + ' Parish')).toBe(SG.normalizeName(String(f.properties.name) + ' Parish'));
-    // Pinned divergence from the truth, kept for parity: "virginia" ⊂ "west virginia".
-    expect(matchGeoItem(items, { name: 'West Virginia' })?.name).toBe('Virginia');
+    // "virginia" ⊂ "west virginia": the West Virginia shape takes its own row or none, never Virginia's.
+    expect(items.some((i) => i.name === 'West Virginia')).toBe(false); // the fixture has Virginia's row only
+    expect(matchGeoItem(items, { name: 'West Virginia' }, featureNameSet(states.features))).toBeUndefined();
+    expect(matchGeoItem([...items, { name: 'West Virginia', value: 1 }], { name: 'West Virginia' })?.name).toBe('West Virginia');
   });
 
   it('geoCluster: axis detection and grid clusters at every zoom', () => {
@@ -306,6 +323,51 @@ describe('every map kind draws the same marks as the desktop', () => {
     agreeSources(b.sources);
     agreeG(b.camera);
     eq(b.drawn.overlay.notes?.info);
+  });
+});
+
+// ── A row only ever paints its own shape ────────────────────────────────────
+describe('a region takes its own row or none', () => {
+  // The 50 states by population — the row order of a real file. "Virginia" comes before
+  // "West Virginia" and "Arkansas" before "Kansas", and each longer name contains the shorter.
+  const RANKED = [
+    'California', 'Texas', 'Florida', 'New York', 'Pennsylvania', 'Illinois', 'Ohio', 'Georgia', 'North Carolina', 'Michigan',
+    'New Jersey', 'Virginia', 'Washington', 'Arizona', 'Tennessee', 'Massachusetts', 'Indiana', 'Maryland', 'Missouri', 'Wisconsin',
+    'Colorado', 'Minnesota', 'South Carolina', 'Alabama', 'Louisiana', 'Kentucky', 'Oregon', 'Oklahoma', 'Connecticut', 'Utah',
+    'Iowa', 'Nevada', 'Arkansas', 'Kansas', 'Mississippi', 'New Mexico', 'Nebraska', 'Idaho', 'West Virginia', 'Hawaii',
+    'New Hampshire', 'Maine', 'Montana', 'Rhode Island', 'Delaware', 'South Dakota', 'North Dakota', 'Alaska', 'Vermont', 'Wyoming',
+  ];
+  const rows = RANKED.map((name, i) => ({ name, value: 50 - i }));
+  const paint = (r: typeof rows) => choroplethLayer(states.features, r, 'us_state', { min: 1, max: 50, dark: false, noData: '' }, String);
+  const shape = (layer: ReturnType<typeof paint>, name: string) => layer.fc.features.find((f) => f.properties.__name === name)!.properties;
+
+  it('region map over all 50 states in rank order', () => {
+    const layer = paint(rows);
+    const painted = layer.fc.features.filter((f) => f.properties.__matched);
+    expect(painted).toHaveLength(50);
+    for (const f of painted) {
+      expect(f.properties.__item).toBe(f.properties.__name);
+      expect(f.properties.__val).toBe(rows.find((r) => r.name === f.properties.__name)!.value);
+    }
+    expect(layer.matched.size).toBe(50);
+    expect(layer.labels.map((l) => l.text)).toContain('KS 17');
+    expect(layer.labels.map((l) => l.text)).toContain('WV 12');
+  });
+
+  it('a state filtered out leaves its shape empty, whatever its neighbour is called', () => {
+    const layer = paint(rows.filter((r) => r.name !== 'Kansas' && r.name !== 'West Virginia'));
+    for (const name of ['Kansas', 'West Virginia']) expect(shape(layer, name)).toMatchObject({ __matched: false, __has: false, __item: '', __val: null, __color: '' });
+    expect(shape(layer, 'Arkansas')).toMatchObject({ __item: 'Arkansas', __val: 18 });
+    expect(shape(layer, 'Virginia')).toMatchObject({ __item: 'Virginia', __val: 39 });
+    expect(layer.labels).toHaveLength(48);
+    // The gallery thumbnail and the bubble homes take the same join.
+    const kansas = states.features.findIndex((f) => f.properties.name === 'Kansas');
+    expect(mapThumbFills(states.features, rows.filter((r) => r.name !== 'Kansas'), '', (t) => `c${t}`)[kansas]).toBe('');
+    const va = geoBBox(states.features.find((f) => f.properties.name === 'Virginia')!.geometry)!;
+    for (const shapes of [states.features, states.features.slice().reverse()]) {
+      const home = withCentroids([{ name: 'Virginia', value: 1 }], shapes)[0];
+      expect([home.lng, home.lat]).toEqual([(va[0] + va[2]) / 2, (va[1] + va[3]) / 2]); // on Virginia, whichever shape the walk meets first
+    }
   });
 });
 

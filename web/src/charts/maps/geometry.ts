@@ -3,7 +3,7 @@
 // abbreviations, the per-period values of a time-series map, and bubble homes
 // at region centroids. PURE; geo.test.ts runs each against the desktop's.
 
-import { matchGeoItem, normalizeName } from './geoMatch';
+import { featureNameSet, matchGeoItem, normalizeName } from './geoMatch';
 import type { BBox, Feature, GeoItem, Series } from './types';
 
 export function geoBBox(geometry: Feature['geometry'] | undefined): BBox | null {
@@ -120,8 +120,9 @@ export function buildPeriodGeo(labels: readonly unknown[], series: readonly Seri
  */
 export function withCentroids(items: readonly GeoItem[], features: readonly Feature[] | null | undefined): GeoItem[] {
   const out = items.map((i) => ({ ...i }));
+  const shapeNames = featureNameSet(features);
   for (const feat of features || []) {
-    const item = matchGeoItem(out, (feat && feat.properties) || {});
+    const item = matchGeoItem(out, (feat && feat.properties) || {}, shapeNames);
     if (!item || (typeof item.lat === 'number' && typeof item.lng === 'number')) continue;
     const bb = geoBBox(feat && feat.geometry);
     if (!bb) continue;

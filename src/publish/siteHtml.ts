@@ -179,7 +179,7 @@ export function pageHtml(page: Record<string, any>, assets: SiteAssets, title: s
     assets.formatJs,
     'var OrdFormat = module.exports; module = { exports: {} }; exports = module.exports;',
     assets.geoMatchJs,
-    'var matchGeoItem = module.exports.matchGeoItem; var normalizeName = module.exports.normalizeName;',
+    'var matchGeoItem = module.exports.matchGeoItem; var normalizeName = module.exports.normalizeName; var featureNameSet = module.exports.featureNameSet;',
     assets.coreJs,
     assets.clientJs,
   ].map(scriptSafe);

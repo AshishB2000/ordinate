@@ -6,7 +6,7 @@
 
 import { choroplethColor, flowWidth, unit, type PointColors } from './colors';
 import { abbrevFor, bboxCenter, extendBBox, geoBBox, hasCoords } from './geometry';
-import { matchGeoItem, normalizeName } from './geoMatch';
+import { featureNameSet, matchGeoItem, normalizeName } from './geoMatch';
 import type { Cluster } from './geoCluster';
 import type { BBox, Feature, FeatureCollection, FlowRoute, GeoItem, HexLevel, MapData } from './types';
 
@@ -63,9 +63,10 @@ export function choroplethLayer(
   let matchedBBox: BBox | null = null;
   let allBBox: BBox | null = null;
   const labels: LabelEntry[] = [];
+  const shapeNames = featureNameSet(features);
   const out = features.map((feat): Feature => {
     const props = (feat && feat.properties) || {};
-    const item = matchGeoItem(items, props);
+    const item = matchGeoItem(items, props, shapeNames);
     const hasValue = !!(item && typeof item.value === 'number');
     const bb = geoBBox(feat && feat.geometry);
     allBBox = extendBBox(allBBox, bb);

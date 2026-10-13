@@ -126,6 +126,22 @@ async function main(): Promise<void> {
   const tagsOnly = html.replace(/(<script[^>]*>)[\s\S]*?<\/script>/g, '$1</script>');
   ok('page: no script tag with a src at all', !/<script[^>]*\ssrc=/i.test(tagsOnly));
   ok('page: the data block is JSON, never executed', /<script type="application\/json" id="ordinate-page">/.test(html));
+  // The region matcher reaches the client as page globals, bound by the line after geoMatch.js.
+  // Run exactly those scripts (the module shim, geoMatch.js, the binding): a name the client calls
+  // but the page never binds is a blank map, and a join without the shape names is a wrong figure.
+  const geoPage: any = {}; // any: a bare vm global the page's vars land on
+  vm.createContext(geoPage);
+  for (const i of [1, 4, 5]) vm.runInContext(inline[i], geoPage);
+  ok('page: binds every matcher function the client calls',
+    ['matchGeoItem', 'featureNameSet', 'normalizeName'].every((n) => typeof geoPage[n] === 'function'));
+  const twoShapes = [{ properties: { name: 'Kansas' } }, { properties: { name: 'Arkansas' } }];
+  const lone = [{ name: 'Arkansas', value: 1 }];
+  ok('page: a region takes its own row or none ("arkansas" contains "kansas")',
+    geoPage.matchGeoItem(lone, twoShapes[0].properties, geoPage.featureNameSet(twoShapes)) === undefined &&
+    geoPage.matchGeoItem(lone, twoShapes[1].properties, geoPage.featureNameSet(twoShapes)) === lone[0]);
+  const joins = assets.clientJs.match(/\bmatchGeoItem\([^)]*\)/g) || [];
+  ok('page: every region join in the client passes the shape names',
+    joins.length > 0 && joins.every((c) => /,\s*shapeNames\)$/.test(c)) && /shapeNames = featureNameSet\(features\)/.test(assets.clientJs));
 
   // ── 3. The client core, jsdom-free ──────────────────────────────────────────
   const ctx: any = {}; // any: a bare vm global the core's functions land on

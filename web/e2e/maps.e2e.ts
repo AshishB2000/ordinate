@@ -111,9 +111,9 @@ e2e('every map kind renders from the server, painted and labelled', async (s) =>
   await card(page, 'region').getByRole('button', { name: 'Value labels' }).click();
   await page.getByRole('menuitemradio', { name: 'All' }).click();
   await page.waitForFunction(() => document.querySelectorAll('[data-map-card="region"] .cv-map-value-label').length > 2);
-  // 26, not 25: West Virginia is not in the sample, but geoMatch's substring rule ("virginia" ⊂ "west
-  // virginia") gives it Virginia's value — a desktop bug kept for parity (geo.test.ts pins it too).
-  assert.equal(await card(page, 'region').locator('.cv-map-value-label').count(), 26);
+  // 25, one per state in the sample. West Virginia is not in it and stays unlabelled: "virginia" ⊂
+  // "west virginia" once lent it Virginia's value (geo.test.ts holds the join).
+  assert.equal(await card(page, 'region').locator('.cv-map-value-label').count(), 25);
 
   // Thumbnails: the same shapes on a 2D canvas, no WebGL. A point map has no polygons to draw on and
   // keeps the map glyph, as on the desktop (mapThumb.ts: point/city/ZIP levels resolve null).

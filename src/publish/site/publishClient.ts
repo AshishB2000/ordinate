@@ -9,7 +9,9 @@
 // external URL anywhere in the page.
 
 declare const Chart: any; // the app's own Chart.js UMD, inlined before this script
-declare function matchGeoItem(items: any[], props: any): any; // src/analysis/geoMatch.js, inlined
+// src/analysis/geoMatch.js, inlined
+declare function matchGeoItem(items: any[], props: any, shapeNames?: Set<string>): any;
+declare function featureNameSet(features: any[]): Set<string>;
 // src/app/format.js, inlined and bound by the page's prelude (src/publish/siteHtml.ts).
 declare const OrdFormat: { formatValue(v: unknown, mode?: string): string; setFormatPrefs(p: unknown): void };
 
@@ -229,6 +231,7 @@ function pcMap(payload: any, page: any, chartType: string): HTMLElement {
   const min = vals.length ? Math.min(...vals) : 0;
   const max = vals.length ? Math.max(...vals) : 1;
   const points = geo.points || chartType === 'map_bubble';
+  const shapeNames = featureNameSet(features); // every shape of the level, drawn or not
   // The offline basemap: land shapes from the bundled boundaries, under everything.
   for (const f of (points ? (land && land.features) || [] : drawn)) {
     if (!f.properties || f.properties.name === 'Antarctica' || !covered(f)) continue;
@@ -237,7 +240,7 @@ function pcMap(payload: any, page: any, chartType: string): HTMLElement {
     let t: number | null = null;
     let hit: any;
     if (!points) {
-      hit = matchGeoItem(items, f.properties);
+      hit = matchGeoItem(items, f.properties, shapeNames);
       t = hit ? pkRampT(hit.value, min, max) : null;
     }
     path.setAttribute('class', t === null ? 'pub-land' : 'pub-region');
