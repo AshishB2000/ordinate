@@ -10,6 +10,8 @@ import type { ChartDataShape } from '../../charts/types';
 import type { AsOf } from '../../ui/asOfView';
 
 export type Agg = 'sum' | 'avg' | 'count' | 'min' | 'max';
+/** A starter layout, spelled as the `analysis:starterCards` contract spells it. */
+export type StarterKind = RpcInput<'analysis:starterCards'>['kind'];
 export type Layout = { x: number; y: number; w: number; h: number };
 export type Step = { type: string; [k: string]: unknown };
 
@@ -252,7 +254,15 @@ export interface PlanPreview {
   ok: true;
   name?: string;
   rationale?: string;
-  sheets: { name: string; visuals?: PreviewVisual[]; cards?: unknown[]; metrics?: { datasetId: string; column: string; aggregation: string; label?: string }[]; controls?: unknown[] }[];
+  sheets: {
+    name: string;
+    visuals?: PreviewVisual[];
+    cards?: unknown[];
+    metrics?: { datasetId: string; column: string; aggregation: string; label?: string }[];
+    controls?: unknown[];
+    /** Where each tile will sit on the 12-column grid, in reading order (planPreview.ts). Absent from an older reply. */
+    layout?: { kind: 'metric' | 'visual' | 'text'; x: number; y: number; w: number; h: number }[];
+  }[];
   calculatedFields?: { name?: string; column?: string; formula?: string; expression?: string }[];
   dropped?: { kind?: string; where?: string; message?: string }[];
   plan?: Record<string, unknown>;

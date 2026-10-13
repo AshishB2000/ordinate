@@ -192,7 +192,8 @@
   justify-content: center;
 }
 .starterSk {
-  width: 240px;
+  width: 380px;
+  max-width: 100%;
   height: var(--ctl-sm);
   margin: 0 auto;
 }

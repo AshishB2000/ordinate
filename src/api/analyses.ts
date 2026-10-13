@@ -108,11 +108,11 @@ export const analyses = {
   // NOT AI: re-validate the approved plan and create its records — calculated
   // fields, visuals, and the analysis itself.
   'analysis:buildPlan': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, plan: Plan }), project: byProjectId }),
-  // The KPIs + chart / Two-up starters: builds VISUAL records from the
-  // dataset's own columns and returns the cards; the editor places them.
+  // The starter layouts (starterPlan.ts StarterKind): builds VISUAL records from
+  // the dataset's own columns and returns the cards; the editor places them.
   'analysis:starterCards': rpc({
     access: 'write',
-    input: z.strictObject({ projectId: Uuid, kind: z.enum(['kpis', 'twoup']), datasetId: Uuid.optional() }),
+    input: z.strictObject({ projectId: Uuid, kind: z.enum(['kpis', 'twoup', 'spotlight', 'lead']), datasetId: Uuid.optional() }),
     project: byProjectId,
   }),
   // preload: listTemplates / templatePlan — src/ipc/templates.ts. The catalogue

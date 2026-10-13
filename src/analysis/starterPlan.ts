@@ -1,4 +1,4 @@
-// The two STARTER LAYOUTS, built app-side from a dataset's own columns.
+// The STARTER LAYOUTS, built app-side from a dataset's own columns.
 //
 // "KPIs + chart" and "Two-up" used to insert a text card reading "Add metric
 // cards here" and then open a modal asking which SAVED VISUAL to use — so on a
@@ -11,16 +11,21 @@
 // It gets no privileges for being app code — scripts/test-starterPlan.ts asserts
 // the round trip, which is what makes that a property rather than a claim.
 //
+// Two of the four pick tiles — "KPIs + chart" and "Two-up". The other two,
+// "Spotlight" and "Chart first", are KPIs + chart ARRANGED: the same KPIs and the
+// same charts, with `rows` (planRows.ts) saying where they sit.
+//
 // No model, no network, no I/O: columns and app-computed summaries in, a plan
 // out. MAIN PROCESS, PURE.
 
 import { compile } from '../formula/formula';
-import type { AnalysisPlan, PlanDataset, PlannedCalcField, PlannedMetric, PlannedVisual } from './analysisPlan';
+import type { AnalysisPlan, PlanDataset, PlanSheet, PlannedCalcField, PlannedMetric, PlannedVisual } from './analysisPlan';
+import { presetRows } from './planRows';
 import type { ColumnSummary } from '../data/datasetStats';
 import type { ParsedColumn } from '../data/parse';
 import type { VizEncoding } from './visuals';
 
-export type StarterKind = 'kpis' | 'twoup';
+export type StarterKind = 'kpis' | 'twoup' | 'spotlight' | 'lead';
 
 /** Names that read as a measure someone actually wants totalled. Preference
  *  only — every numeric column is still eligible, these just go first. */
@@ -179,12 +184,16 @@ function chart(ds: PlanDataset, category: string, measure: string, label: string
 }
 
 /**
- * Build one of the two starter layouts for `ds`.
+ * Build one of the starter layouts for `ds`.
  *
  * Degenerate datasets still produce a VALID plan rather than nothing: with no
  * numeric column there are no KPIs and no chart, with no text column the date
  * column stands in as the category, and with neither the sheet is the KPI row
  * alone. validatePlan reports whatever that leaves out.
+ *
+ * `'spotlight'` and `'lead'` are `'kpis'` with rows. The two that existed before
+ * rows did stay FLAT, so they are packed exactly as they always were — the
+ * sample dashboard (src/app/sampleProject.ts) is built on `'kpis'`.
  */
 export function buildStarterPlan(kind: StarterKind, ds: PlanDataset, opts: { name?: string } = {}): AnalysisPlan {
   const kpis = kpiColumns(ds);
@@ -201,7 +210,7 @@ export function buildStarterPlan(kind: StarterKind, ds: PlanDataset, opts: { nam
   const metrics: PlannedMetric[] = [];
   const texts: { heading?: string; text?: string }[] = [];
 
-  if (kind === 'kpis') {
+  if (kind !== 'twoup') {
     for (const c of kpis) {
       metrics.push({ datasetId: ds.id, column: c.name, aggregation: aggregationFor(c.name), label: c.name });
     }
@@ -231,10 +240,12 @@ export function buildStarterPlan(kind: StarterKind, ds: PlanDataset, opts: { nam
     texts.push({ heading: 'Notes', text: 'Add your notes here.' });
   }
 
-  return {
-    name: opts.name || ds.name,
-    rationale: '',
-    calculatedFields,
-    sheets: [{ name: 'Overview', metrics, visuals, texts }],
-  };
+  const sheet: PlanSheet = { name: 'Overview', metrics, visuals, texts };
+  if (kind === 'spotlight' || kind === 'lead') {
+    // No rows when there is nothing to arrange: an empty `rows` would say the
+    // sheet has an arrangement, and it has none.
+    const rows = presetRows(kind, sheet);
+    if (rows.length) sheet.rows = rows;
+  }
+  return { name: opts.name || ds.name, rationale: '', calculatedFields, sheets: [sheet] };
 }

@@ -325,6 +325,19 @@ async function partOne(): Promise<void> {
     ok('metric:update: ok', mu.body.ok && mu.body.metric.name === 'Order count' && mu.body.metric.direction === 'up_good');
     const md = await call('metric:delete', { projectId: pid, id: ms.body.metric.id });
     ok('metric:delete: to the Trash', md.body.ok && JSON.stringify((await call('trash:list', { projectId: pid })).body).includes(ms.body.metric.id));
+
+    // ── Starter layouts: an arrangement arrives ARRANGED ───────────────────
+    // "Chart first" on Orders (one measure, a region, a date): the cards come
+    // back metrics-then-visuals as always, and only their layouts say the
+    // first chart leads, the strip follows and the second chart closes.
+    const starter = (kind: string) => call('analysis:starterCards', { projectId: pid, kind, datasetId: s.ds });
+    const lead = await starter('lead');
+    const tiles = ((lead.body.cards || []) as Array<{ type: string; layout: { x: number; y: number; w: number; h: number } }>)
+      .map((c) => `${c.type}@${c.layout.x},${c.layout.y},${c.layout.w},${c.layout.h}`).join(' ');
+    ok('analysis:starterCards: "Chart first" returns its cards placed chart, strip, chart',
+      lead.body.ok === true && tiles === 'metric@0,6,3,2 visual@0,0,12,6 visual@0,8,12,6', JSON.stringify(lead.body).slice(0, 300));
+    ok('analysis:starterCards: "Spotlight" is a starter too', (await starter('spotlight')).body.ok === true);
+    ok('analysis:starterCards: a kind that is not a starter is a 400 at the edge', (await starter('hero')).status === 400);
   } finally {
     await app.close();
   }

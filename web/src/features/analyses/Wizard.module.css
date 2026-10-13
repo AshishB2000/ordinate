@@ -164,10 +164,12 @@
   font-size: var(--t-12);
   color: var(--muted);
 }
+/* Six templates and six layouts: three to a row in the dialog, so each group is
+   two full rows — at 170px the dialog fits four, and both wrapped as 4 + 2. */
 .tpls,
 .starts {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: var(--sp-8);
 }
 .tpl,
@@ -262,6 +264,34 @@
   grid-row: span 2;
   background: var(--accent-soft);
   border: 1px solid var(--accent-line);
+}
+/* A spotlight: the wide chart with its rail of KPIs beside it. One token, so
+   the two parts are its pseudo-elements; the rail's second and third tiles are
+   shadows of the first, which gives each its own corners (14px tiles, 4px apart
+   — the art's own rows). */
+.b_spot {
+  grid-column: 1 / -1;
+  grid-row: span 3;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 4px;
+  background: none;
+}
+.b_spot::before,
+.b_spot::after {
+  content: '';
+  border-radius: inherit;
+}
+.b_spot::before {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+}
+.b_spot::after {
+  height: 14px;
+  background: var(--accent-line);
+  box-shadow:
+    0 18px var(--accent-line),
+    0 36px var(--accent-line);
 }
 .b_ai {
   grid-column: 1 / -1;

@@ -1,4 +1,6 @@
-// The two starter layouts, built app-side from a dataset's columns.
+// The starter layouts, built app-side from a dataset's columns: "KPIs + chart"
+// and "Two-up", and the two ARRANGEMENTS of the first — "Spotlight" and "Chart
+// first" — which pick the same tiles and differ only in where they sit.
 //
 // The point of this suite is the ROUND TRIP at the bottom: whatever
 // buildStarterPlan produces must survive validatePlan with nothing dropped. The
@@ -14,6 +16,13 @@ import { ok, failureCount } from './selfcheck';
 
 const starter: typeof import('../src/analysis/starterPlan') = require('../src/analysis/starterPlan');
 const plan: typeof import('../src/analysis/analysisPlan') = require('../src/analysis/analysisPlan');
+const layout: typeof import('../src/analysis/planLayout') = require('../src/analysis/planLayout');
+
+/** A sheet as the build will place it: every tile in reading order, as
+ *  `kind@x,y,w,h` — the same strings scripts/test-planRows.ts asserts. */
+const placed = (sheet: any): string =>
+  layout.readingOrder(layout.arrangeSheet(sheet)).map((t) => `${t.kind}@${t.x},${t.y},${t.w},${t.h}`).join(' ');
+const rowTypes = (sheet: any): string => (sheet.rows || []).map((r: any) => r.type).join(',');
 
 type Col = { name: string; type: 'text' | 'number' | 'date' };
 const DS_ID = '11111111-2222-4333-8444-555555555555';
@@ -198,6 +207,99 @@ const FULL_DISTINCT = { region: 5, order_id: 400 };
     p.sheets[0].visuals.length === 2, JSON.stringify(p.sheets[0].visuals.map((v) => v.encoding.category)));
 }
 
+// ── Spotlight and Chart first: the KPIs + chart tiles, ARRANGED ─────────────
+// Neither picks anything of its own. What they add is `rows`, and the layouts
+// below are what planLayout.arrangeSheet makes of those rows — the same call
+// the preview and the build place the cards with.
+const RETAIL: Col[] = [
+  { name: 'order_date', type: 'date' }, { name: 'region', type: 'text' },
+  { name: 'units', type: 'number' }, { name: 'unit_price', type: 'number' },
+  { name: 'revenue', type: 'number' }, { name: 'profit', type: 'number' },
+];
+{
+  const full = ds(FULL, FULL_DISTINCT);
+  const kpis = starter.buildStarterPlan('kpis', full);
+  for (const kind of ['spotlight', 'lead'] as const) {
+    const p = starter.buildStarterPlan(kind, full);
+    const { rows: _rows, ...flat } = p.sheets[0];
+    ok(`${kind}: the same tiles as KPIs + chart — same KPIs, same charts, same field`,
+      JSON.stringify({ ...p, sheets: [flat] }) === JSON.stringify(kpis), JSON.stringify(flat));
+  }
+
+  // Three KPIs and two charts.
+  const spot = starter.buildStarterPlan('spotlight', full).sheets[0];
+  ok('spotlight: the first chart with the KPIs beside it, then the other chart',
+    rowTypes(spot) === 'spotlight,charts', rowTypes(spot));
+  ok('spotlight: …and it is the FIRST chart that is spotlit',
+    (spot.rows as any)[0].visual === spot.visuals[0] && (spot.rows as any)[1].visuals[0] === spot.visuals[1]);
+  ok('spotlight: an 8-wide chart, a rail of three, then a full-width chart',
+    placed(spot) === 'visual@0,0,8,6 metric@8,0,4,2 metric@8,2,4,2 metric@8,4,4,2 visual@0,6,12,6', placed(spot));
+
+  const lead = starter.buildStarterPlan('lead', full).sheets[0];
+  ok('lead: the first chart, then the KPI strip, then the other chart',
+    rowTypes(lead) === 'charts,kpis,charts', rowTypes(lead));
+  ok('lead: …and it is the FIRST chart that leads',
+    (lead.rows as any)[0].visuals[0] === lead.visuals[0] && (lead.rows as any)[2].visuals[0] === lead.visuals[1]);
+  ok('lead: a full-width chart, the strip beneath it, then a full-width chart',
+    placed(lead) === 'visual@0,0,12,6 metric@0,6,3,2 metric@3,6,3,2 metric@6,6,3,2 visual@0,8,12,6', placed(lead));
+
+  // FOUR KPIs. A rail holds three (planRows), so the fourth follows on a strip
+  // of its own — shapeRows' rule, not one written a second time here.
+  const four = starter.buildStarterPlan('spotlight', ds(RETAIL, { region: 5 })).sheets[0];
+  ok('spotlight: four KPIs put three in the rail and the fourth on a strip',
+    rowTypes(four) === 'spotlight,kpis,charts'
+    && placed(four) === 'visual@0,0,8,6 metric@8,0,4,2 metric@8,2,4,2 metric@8,4,4,2 metric@0,6,3,2 visual@0,8,12,6',
+    `${rowTypes(four)} · ${placed(four)}`);
+  ok('spotlight: …in the strip\'s own order, so the flat list is still the rows\' flattening',
+    four.metrics.map((m) => m.column).join(',') === 'revenue,profit,units,unit_price',
+    four.metrics.map((m) => m.column).join(','));
+  // TWO KPIs fill the rail at half its height each.
+  const two = starter.buildStarterPlan('spotlight',
+    ds([{ name: 'region', type: 'text' }, { name: 'revenue', type: 'number' }, { name: 'units', type: 'number' }], { region: 5 })).sheets[0];
+  ok('spotlight: two KPIs share the rail', placed(two) === 'visual@0,0,8,6 metric@8,0,4,3 metric@8,3,4,3', placed(two));
+}
+{
+  // DEGENERATE DATASETS. Each is shapeRows' answer to a row that cannot be
+  // filled, and none of them is an empty sheet or a tile out of place.
+  const oneKpi = ds([{ name: 'region', type: 'text' }, { name: 'revenue', type: 'number' }], { region: 5 });
+  // A rail of one is a hole with a number in it, so there is no rail.
+  ok('spotlight: one KPI is a strip above the chart, never a rail of one',
+    placed(starter.buildStarterPlan('spotlight', oneKpi).sheets[0]) === 'metric@0,0,3,2 visual@0,2,12,6',
+    placed(starter.buildStarterPlan('spotlight', oneKpi).sheets[0]));
+  ok('lead: one KPI still sits beneath the chart',
+    placed(starter.buildStarterPlan('lead', oneKpi).sheets[0]) === 'visual@0,0,12,6 metric@0,6,3,2',
+    placed(starter.buildStarterPlan('lead', oneKpi).sheets[0]));
+
+  const numsOnly = ds([{ name: 'revenue', type: 'number' }, { name: 'units', type: 'number' }], {});
+  const textOnly = ds([{ name: 'a', type: 'text' }, { name: 'b', type: 'text' }], { a: 3, b: 4 });
+  for (const kind of ['spotlight', 'lead'] as const) {
+    const noChart = starter.buildStarterPlan(kind, numsOnly).sheets[0];
+    ok(`${kind}: no chart → just the KPI strip`,
+      rowTypes(noChart) === 'kpis' && placed(noChart) === 'metric@0,0,3,2 metric@3,0,3,2', `${rowTypes(noChart)} · ${placed(noChart)}`);
+    // Nothing to arrange is not an arrangement: no `rows` key at all, and the
+    // plan is the one KPIs + chart returns for the same dataset.
+    ok(`${kind}: nothing at all → the plan KPIs + chart builds, with no rows`,
+      JSON.stringify(starter.buildStarterPlan(kind, textOnly)) === JSON.stringify(starter.buildStarterPlan('kpis', textOnly)),
+      JSON.stringify(starter.buildStarterPlan(kind, textOnly).sheets[0]));
+  }
+}
+{
+  // NEGATIVE CONTROL: the two starters that existed before rows did are FLAT,
+  // and are packed exactly as they always were. The sample dashboard is built
+  // on 'kpis' (src/app/sampleProject.ts), so a `rows` key appearing here would
+  // move every tile of the first dashboard anyone sees.
+  const full = ds(FULL, FULL_DISTINCT);
+  const kpis = starter.buildStarterPlan('kpis', full).sheets[0];
+  const twoup = starter.buildStarterPlan('twoup', full).sheets[0];
+  ok('kpis and twoup carry no rows', !('rows' in kpis) && !('rows' in twoup), Object.keys(kpis).concat(Object.keys(twoup)).join(','));
+  ok('kpis: still the strip, then the charts two-up',
+    placed(kpis) === 'metric@0,0,3,2 metric@3,0,3,2 metric@6,0,3,2 visual@0,2,6,6 visual@6,2,6,6', placed(kpis));
+  ok('twoup: still two charts side by side, then the notes',
+    placed(twoup) === 'visual@0,0,6,6 visual@6,0,6,6 text@0,6,12,2', placed(twoup));
+  ok('…and the arrangements really are different from both',
+    new Set(['kpis', 'twoup', 'spotlight', 'lead'].map((k) => placed(starter.buildStarterPlan(k as any, full).sheets[0]))).size === 4);
+}
+
 // ── Degenerate datasets still produce a VALID plan ─────────────────────────
 {
   const textOnly = ds([{ name: 'a', type: 'text' }, { name: 'b', type: 'text' }], { a: 3, b: 4 });
@@ -234,7 +336,7 @@ const FULL_DISTINCT = { region: 5, order_id: 400 };
     ['a colliding Month column', ds([...FULL, { name: 'Month', type: 'text' }], { ...FULL_DISTINCT, Month: 12 })],
   ];
   for (const [label, d] of cases) {
-    for (const kind of ['kpis', 'twoup'] as const) {
+    for (const kind of ['kpis', 'twoup', 'spotlight', 'lead'] as const) {
       const built = starter.buildStarterPlan(kind, d);
       const res = plan.validatePlan(built, ctxFor(d));
       ok(`round trip: ${kind} on ${label} drops nothing`,
@@ -247,6 +349,12 @@ const FULL_DISTINCT = { region: 5, order_id: 400 };
         && after.texts.length === before.texts.length,
         `${before.metrics.length}/${before.visuals.length}/${before.texts.length} → `
         + `${after.metrics.length}/${after.visuals.length}/${after.texts.length}`);
+      // The ARRANGEMENT survives too. With rows the validator reads the rows and
+      // nothing else, so rows it re-shaped would be a starter writing a stack
+      // the app then corrects — and the sheet built would not be the one asked for.
+      ok(`round trip: ${kind} on ${label} is placed as it was written`,
+        rowTypes(after) === rowTypes(before) && placed(after) === placed(before),
+        `${rowTypes(before)} · ${placed(before)} → ${rowTypes(after)} · ${placed(after)}`);
     }
   }
 }

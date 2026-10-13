@@ -15,6 +15,7 @@ import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { setDockOpen } from '../assistant/dockState';
 import { failure, type Analysis, type BuildReply, type DraftReply, type PlanPreview, type PreviewVisual } from './api';
+import { PlanSketch } from './PlanSketch';
 import { DrawnVisual, vizLabel } from './VisualTile';
 import s from './Draft.module.css';
 
@@ -90,7 +91,9 @@ function Review({ draft, projectId }: { draft: PlanPreview; projectId: string })
         return (
           <section key={si} className={s.section} aria-label={sheet.name || `Sheet ${si + 1}`}>
             <h3 className={s.sectionH}>{sheet.name || `Sheet ${si + 1}`}</h3>
-            {visuals.length === 0 && cards.length === 0 && <p className={s.note}>Nothing survived on this sheet.</p>}
+            <PlanSketch layout={sheet.layout} />
+            {/* KPIs and notes are tiles too: a sheet the sketch draws is not an empty one. */}
+            {visuals.length === 0 && cards.length === 0 && !sheet.layout?.length && <p className={s.note}>Nothing survived on this sheet.</p>}
             {visuals.length === 0 && cards.length > 0 && <p className={s.note}>{cards.length === 1 ? '1 card' : `${cards.length} cards`}</p>}
             <div className={s.visuals}>
               {visuals.map((v, i) => (
