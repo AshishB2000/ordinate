@@ -20,7 +20,8 @@ export interface PlannedControl {
   label?: string;
 }
 
-const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range']);
+/** The kinds a PLAN may use — fewer than dashboards.ts accepts on a card. */
+export const CONTROL_KINDS: ReadonlySet<string> = new Set(['dropdown', 'multi', 'date_range']);
 
 /** Longest label a plan may put on a chip. A chip is a word, not a sentence. */
 const LABEL_MAX = 60;
@@ -84,3 +85,18 @@ export function validateControl(
   if (label) out.label = label;
   return out;
 }
+
+// ── The prompt that describes a control ────────────────────────────────────
+//
+// Here, beside validateControl, for the reason analysisPlan.ts gives for its
+// own prompt — and this is that bug again: controls were validated above and
+// built by planBuild.ts, and no draft ever had one, because nothing told the
+// model they existed. The kinds are written out FROM the set, so the two cannot
+// drift; scripts/test-planRows.ts checks the rest.
+export const CONTROLS_PROMPT =
+  'A <control> is a filter chip above the sheet: the reader picks from one column and the tiles are filtered ' +
+  'by it:\n' +
+  `  { "dataset":"<dataset name>", "kind":"${Array.from(CONTROL_KINDS).join('|')}", "column":"<column>", ` +
+  '"label":"<short title>" }\n' +
+  'Add one to three per sheet when a column has few distinct values ("dropdown" picks one of them, "multi" ' +
+  'several) or the data has a date column ("date_range"); otherwise leave "controls" as [].\n';
