@@ -1,5 +1,6 @@
 // The "Details" popovers (catalogDetails.ts): description, tags and owner for a
-// record; display name, description, example and sensitivity for a column.
+// record; display name, description, example and sensitivity for a column —
+// and, read-only, its "Also called" names, which the Columns tab edits.
 // No Save button — a field saves on blur and on Enter, and closing the
 // popover commits whatever was being typed. The server stamps who and when.
 
@@ -171,6 +172,13 @@ export function ColumnDetails({ projectId, datasetId, column, doc, example, trig
       </div>
       <div className={s.popFields}>
         <Input label="Display name" value={display.v} placeholder={column} autoFocus onChange={(e) => display.setV(e.target.value)} onBlur={display.flush} />
+        {!!doc.aliases?.length && (
+          <div className={s.popField}>
+            <span className={s.popLabel}>Also called</span>
+            <span>{doc.aliases.join(', ')}</span>
+            <span className={s.stamp}>Other names people use for this column. Change them on the Columns tab.</span>
+          </div>
+        )}
         <Textarea label="Description" rows={3} value={desc.v} placeholder="What does one value in this column mean?" onChange={(e) => desc.setV(e.target.value)} onBlur={desc.flush} />
         <Input label="Example" value={ex.v} placeholder={example || 'A typical value'} onChange={(e) => ex.setV(e.target.value)} onBlur={ex.flush} />
         <RadioGroup

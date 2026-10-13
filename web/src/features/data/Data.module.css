@@ -711,6 +711,16 @@ a.lineChip:hover {
   outline-offset: 1px;
   background: var(--surface-1);
 }
+/* A viewer's cell: the note reads as text and offers nothing to change. */
+.cellInput:read-only {
+  border-color: transparent;
+  background: none;
+  cursor: default;
+  resize: none;
+}
+.cellInput[aria-invalid='true'] {
+  border-color: var(--error);
+}
 
 /* ── Captures tab ───────────────────────────────────────────────────── */
 .capList {

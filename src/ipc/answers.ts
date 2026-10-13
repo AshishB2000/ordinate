@@ -28,7 +28,8 @@ import type { VizEncoding } from '../analysis/visuals';
 import type { ParsedColumn } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';
 import { tileCaption } from '../analysis/captions';
-import { displayNames } from '../app/catalog';
+import { displayNames, load as loadCatalog } from '../app/catalog';
+import { taughtNames } from '../app/columnNames';
 import { askCopilot } from '../ai/analyze';
 import {
   ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, sanitizeStoredSpec, specFilterSteps, splitCandidates,
@@ -197,10 +198,18 @@ async function narrate(built: Built, question: string, guard: Guard): Promise<{ 
 
 // ── The three entry points ───────────────────────────────────────────────────
 
-async function specDatasets(projectId: string): Promise<SpecDataset[]> {
+/**
+ * Every dataset a spec may name: its columns, and what people call them — the
+ * display names and "Also called" names the facts told the model to use, so a
+ * spec written in those words resolves. ONE catalog read for the project;
+ * records only, so a Live dataset is listed like any other.
+ */
+export async function specDatasets(projectId: string): Promise<SpecDataset[]> {
   const list = await datasets.listDatasets(projectId);
   const metas = await Promise.all(list.map((d) => datasets.getDatasetMeta(projectId, d.id)));
-  return metas.filter((m): m is NonNullable<typeof m> => !!m).map((m) => ({ id: m.id, name: m.name, columns: m.columns }));
+  const docs = (await loadCatalog(projectId)).columns;
+  return metas.filter((m): m is NonNullable<typeof m> => !!m)
+    .map((m) => ({ id: m.id, name: m.name, columns: m.columns, names: taughtNames(m.columns, docs[m.id]) }));
 }
 
 async function specMetrics(projectId: string): Promise<SpecMetric[]> {

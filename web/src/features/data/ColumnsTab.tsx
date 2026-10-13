@@ -2,20 +2,95 @@
 // docs as a table edited in place. A cell reads as text until it is focused
 // and saves on blur or Enter; sensitivity saves on pick. Display names and
 // descriptions show wherever the column is named (the grid's header tooltip).
+// "Also called" is the other names people ask for the column by: the Assistant
+// resolves a question written in one (src/ai/answerSpec.ts), and the server
+// refuses a name another column already answers to — said at the field.
+// A viewer of the project reads every note and changes none.
 
-import { useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { DatasetColumns } from '../../api/datasets';
 import { Select } from '../../ui/Select';
 import { SkeletonTable } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { useColumnDocs, useStats, useWrite, type ColumnDoc } from './api';
 import { useLiveSchema } from './liveApi';
+import { useCanEdit } from '../projects/api';
 import { SENSITIVITY } from './Details';
 import s from './Data.module.css';
 
 type Patch = Pick<ColumnDoc, 'displayName' | 'description' | 'example' | 'sensitivity'>;
 
-function Cell({ value, placeholder, label, multiline, onSave }: { value: string; placeholder: string; label: string; multiline?: boolean; onSave: (v: string) => void }) {
+/** The server's bounds on an "Also called" list (src/app/columnNames.ts), said at the field instead of sent to be refused. */
+const MAX_NAMES = 8;
+const MAX_NAME_LEN = 60;
+const ALSO_CALLED_HELP = 'Other names people use for this column. The Assistant understands them in questions.';
+
+const namesOf = (text: string): string[] => text.split(',').map((n) => n.trim()).filter(Boolean);
+
+/**
+ * A column's "Also called" names: one comma-separated line, saved on blur or
+ * Enter like every cell here. What it shows after a save is what the SERVER
+ * stored (trimmed, repeats gone), and a refusal — a name another column
+ * already answers to — is the server's sentence under the field, which keeps
+ * what was typed so it can be put right.
+ */
+function AlsoCalled({ projectId, datasetId, column, names, helpId, readOnly }: { projectId: string; datasetId: string; column: string; names: string[]; helpId: string; readOnly: boolean }) {
+  const [saved, setSaved] = useState(names.join(', '));
+  const [v, setV] = useState(saved);
+  const [problem, setProblem] = useState('');
+  /** The line last sent: Enter and then the blur it causes are one save, and a refused line is not sent again as it stands. */
+  const sent = useRef<string | null>(null);
+  const errorId = useId();
+  const save = useWrite('catalog:setColumn', ['catalog:columns'], {
+    quiet: true, // the refusal belongs at the field, not in a toast
+    onDone: (r: { ok?: boolean; error?: string; column?: ColumnDoc }) => {
+      if (!r.ok || !r.column) return setProblem(r.error || 'These names could not be saved.');
+      const stored = (r.column.aliases ?? []).join(', ');
+      setSaved(stored);
+      setV(stored);
+      setProblem('');
+    },
+  });
+  const commit = () => {
+    const next = namesOf(v);
+    const line = next.join(', ');
+    if (line === saved) {
+      sent.current = null;
+      setV(saved);
+      return setProblem('');
+    }
+    if (line === sent.current && !save.isError) return;
+    if (next.length > MAX_NAMES) return setProblem(`A column can have at most ${MAX_NAMES} other names.`);
+    if (next.some((n) => n.length > MAX_NAME_LEN)) return setProblem(`A name can be at most ${MAX_NAME_LEN} characters.`);
+    sent.current = line;
+    save.mutate({ projectId, datasetId, column, patch: { aliases: next } });
+  };
+  return (
+    <>
+      <input
+        className={s.cellInput}
+        type="text"
+        value={v}
+        readOnly={readOnly}
+        placeholder={readOnly ? '—' : 'Add names'}
+        aria-label={`Also called, for ${column}`}
+        aria-describedby={problem ? `${helpId} ${errorId}` : helpId}
+        aria-invalid={problem ? true : undefined}
+        aria-busy={save.isPending || undefined}
+        onChange={(e) => setV(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), commit())}
+      />
+      {problem && (
+        <span className={s.rowError} id={errorId} role="alert">
+          {problem}
+        </span>
+      )}
+    </>
+  );
+}
+
+function Cell({ value, placeholder, label, multiline, readOnly, onSave }: { value: string; placeholder: string; label: string; multiline?: boolean; readOnly?: boolean; onSave: (v: string) => void }) {
   const [v, setV] = useState(value);
   const [saved, setSaved] = useState(value);
   const commit = () => {
@@ -28,6 +103,7 @@ function Cell({ value, placeholder, label, multiline, onSave }: { value: string;
     className: s.cellInput,
     value: v,
     placeholder,
+    readOnly,
     'aria-label': label,
     onBlur: commit,
   };
@@ -44,6 +120,9 @@ export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: 
   const stats = useStats(projectId, live ? '' : datasetId, !live);
   const schema = useLiveSchema(projectId, datasetId, !!live);
   const save = useWrite('catalog:setColumn', ['catalog:columns']);
+  // The notes are an editor's to change; a viewer reads them (false until the roles are known).
+  const canEdit = useCanEdit(projectId);
+  const helpId = useId();
   if (header.columns.length === 0) {
     return (
       <EmptyState icon="table" heading={3} title="No columns">
@@ -51,7 +130,7 @@ export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: 
       </EmptyState>
     );
   }
-  if (docs.isPending) return <SkeletonTable cols={6} rows={Math.min(8, header.columns.length)} label="Loading the column notes" />;
+  if (docs.isPending) return <SkeletonTable cols={7} rows={Math.min(8, header.columns.length)} label="Loading the column notes" />;
   if (docs.isError) return <ErrorState heading={3} title="The column notes could not be loaded" message={docs.error.message} onRetry={() => void docs.refetch()} />;
   const all = docs.data;
   const doc = (name: string): ColumnDoc => (Object.prototype.hasOwnProperty.call(all, name) ? all[name] : {});
@@ -62,6 +141,9 @@ export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: 
         Descriptions show as tooltips wherever a column is named, and a display name replaces the raw one in pickers. Mark a
         column personal or financial so exports and reports can say so.
       </p>
+      <p className={s.lead} id={helpId}>
+        <span className={s.strong}>Also called</span> — {ALSO_CALLED_HELP} Separate names with commas.
+      </p>
       <div className={s.card}>
         <table className={`${s.table} ${s.docTable}`}>
           <thead>
@@ -69,6 +151,7 @@ export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: 
               <th scope="col">Column</th>
               <th scope="col">Type</th>
               <th scope="col">Display name</th>
+              <th scope="col">Also called</th>
               <th scope="col">Description</th>
               <th scope="col">Example</th>
               <th scope="col">Sensitivity</th>
@@ -85,17 +168,21 @@ export function ColumnsTab({ projectId, datasetId, header, live }: { projectId: 
                     <span className={s.typeChip}>{c.type}</span>
                   </td>
                   <td>
-                    <Cell value={d.displayName ?? ''} placeholder={c.name} label={`Display name of ${c.name}`} onSave={(v) => patch(c.name, { displayName: v })} />
+                    <Cell readOnly={!canEdit} value={d.displayName ?? ''} placeholder={c.name} label={`Display name of ${c.name}`} onSave={(v) => patch(c.name, { displayName: v })} />
                   </td>
                   <td>
-                    <Cell multiline value={d.description ?? ''} placeholder="Add a description" label={`Description of ${c.name}`} onSave={(v) => patch(c.name, { description: v })} />
+                    <AlsoCalled projectId={projectId} datasetId={datasetId} column={c.name} names={d.aliases ?? []} helpId={helpId} readOnly={!canEdit} />
                   </td>
                   <td>
-                    <Cell value={d.example ?? ''} placeholder={common || '—'} label={`Example of ${c.name}`} onSave={(v) => patch(c.name, { example: v })} />
+                    <Cell multiline readOnly={!canEdit} value={d.description ?? ''} placeholder={canEdit ? 'Add a description' : '—'} label={`Description of ${c.name}`} onSave={(v) => patch(c.name, { description: v })} />
+                  </td>
+                  <td>
+                    <Cell readOnly={!canEdit} value={d.example ?? ''} placeholder={common || '—'} label={`Example of ${c.name}`} onSave={(v) => patch(c.name, { example: v })} />
                   </td>
                   <td>
                     <Select
                       size="sm"
+                      disabled={!canEdit}
                       aria-label={`Sensitivity of ${c.name}`}
                       value={d.sensitivity ?? 'none'}
                       options={SENSITIVITY}

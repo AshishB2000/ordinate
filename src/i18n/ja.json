@@ -110,6 +110,7 @@
   "cohortRender.weighted_by_cohort_size_over_the": "各期間に到達したコホートについて、コホートのサイズで重み付け",
   "cohortRender.without_an_entity_or_a_readable": "エンティティまたは読み取れる日付のない{excluded}{excluded2, plural, other {行}}は除外されました。",
   "cohortRender.without_an_entity_or_a_readable_2": "エンティティまたは読み取れるタイムスタンプのない{excluded}{excluded2, plural, other {行}}は除外されました。",
+  "columnNameMessages.is_already_what_people_call": null,
   "common.alert": "アラート",
   "common.at_risk": "リスクあり",
   "common.attainment": "達成率",

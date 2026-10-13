@@ -1,6 +1,7 @@
 import { ipcMain } from './bus';
 import * as catalog from '../app/catalog';
 import * as catalogIndex from '../app/catalogIndex';
+import * as datasets from '../data/datasets';
 
 // Catalog IPC — descriptions, tags, owners and column docs (src/app/catalog.ts)
 // plus the cross-record reads (src/app/catalogIndex.ts). Every id is
@@ -30,7 +31,9 @@ export function register(): void {
 
   ipcMain.handle('catalog:setColumn', async (_e, { projectId, datasetId, column, patch }: any = {}) => {
     try {
-      const doc = await catalog.setColumn(str(projectId), str(datasetId), str(column), patch || {});
+      // "Also called" names are checked against the dataset's CURRENT columns — the record's, never its rows.
+      const meta = patch && patch.aliases !== undefined ? await datasets.getDatasetMeta(str(projectId), str(datasetId)) : null;
+      const doc = await catalog.setColumn(str(projectId), str(datasetId), str(column), patch || {}, meta ? meta.columns.map((c) => c.name) : undefined);
       return doc ? { ok: true, column: doc } : { ok: false, error: 'Could not save the column notes.' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not save the column notes.' };

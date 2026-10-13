@@ -201,6 +201,41 @@ async function main(): Promise<void> {
   ok('visual facts: labels from a sensitive column are withheld, the figures kept',
     !vGuarded.text.includes('grace@example.com') && vGuarded.text.includes('(withheld)=200') && /Labels from email are withheld/.test(vGuarded.text), vGuarded.text);
 
+  // "Also called" names (the catalog's `aliases`) are names a person wrote, not
+  // values of the column: every block that prints a display name prints them
+  // too, in ONE format, and a mark still withholds the values.
+  const notes: typeof import('../src/ai/columnNotes') = require('../src/ai/columnNotes');
+  const liveFacts: typeof import('../src/ai/liveFacts') = require('../src/ai/liveFacts');
+  const named = { ...docs, email: { sensitivity: 'personal', displayName: 'Contact', aliases: ['mail', 'e-mail'] }, spend: { aliases: ['sales'] } };
+  const said = notes.columnNameBits(named.email).join('; ');
+  const taught = copilot.datasetFacts(people!, pSums, [], [], [], named);
+  ok('names: the notes print the also-called names beside the display name',
+    said === 'called "Contact"; also called "mail", "e-mail"'
+    && taught.text.includes(`- email: ${said}; personal data; sample values withheld`) && taught.text.includes('- spend: also called "sales"'), taught.text);
+  ok('names: …and the marked column\'s VALUES are still withheld',
+    !['grace@example.com', 'alan@example.com', '4111111111111111'].some((v) => taught.text.includes(v)) && taught.text.includes('(Values of email, card are withheld'));
+  ok('names: the number ledger is entry for entry what it was without them',
+    JSON.stringify(taught.ledger) === JSON.stringify(guarded.ledger) && taught.ledger.length > 10);
+  ok('names: a note left under a column the dataset no longer has is not printed (the resolver would not know it either)',
+    copilot.datasetFacts(people!, pSums, [], [], [], { ...named, old_email: { displayName: 'Old mail', aliases: ['inbox'] } }).text === taught.text
+    && liveFacts.liveDatasetFacts({ name: 'People', columns: people!.columns, withheld: new Set(), docs: { old_email: { displayName: 'Old mail', aliases: ['inbox'] } } }).text
+      === liveFacts.liveDatasetFacts({ name: 'People', columns: people!.columns, withheld: new Set(), docs: {} }).text);
+  ok('names: no names, no change — the block is byte for byte the one before aliases existed',
+    copilot.datasetFacts(people!, pSums, [], [], [], { email: { sensitivity: 'personal', aliases: [] }, card: { sensitivity: 'financial' } }).text === guarded.text);
+  const vNamed = copilot.visualFacts(
+    { name: 'Spend by email', chartType: 'column', datasetId: people!.id,
+      encoding: { category: 'email', values: [{ column: 'spend', aggregation: 'sum' as const }] } } as any,
+    'People',
+    { data: { labels: ['grace@example.com'], series: [{ name: 'sum(spend)', values: [200] }] }, recommendedShape: 'categorical', warnings: [] } as any,
+    named,
+  );
+  const pNamed = copilot.projectFacts('P', { datasets: ['People'], visuals: [], dashboards: [] },
+    [{ name: 'People', columns: people!.columns, docs: named }]);
+  const lNamed = liveFacts.liveDatasetFacts({ name: 'People', columns: people!.columns, withheld: new Set(['email']), docs: named });
+  ok('names: the visual, project and Live facts say the same names in the same words',
+    [vNamed, pNamed, lNamed].every((f) => f.text.includes(said) && f.text.includes('also called "sales"')) && !vNamed.text.includes('grace@example.com'),
+    [vNamed.text, pNamed.text, lNamed.text].join('\n---\n'));
+
   // The explain / suggest prompt (ai/datasetPrompt.ts) follows the same rule.
   const prompt: typeof import('../src/ai/datasetPrompt') = require('../src/ai/datasetPrompt');
   const promptText = prompt.buildDatasetSummaryText(people!, pSums, [], people!.rows, new Set(['email', 'card']));
