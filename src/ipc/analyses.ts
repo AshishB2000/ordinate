@@ -3,6 +3,7 @@ import * as analysis from '../analysis/analysis';
 import { listInsights } from './insights';
 import { draftDashboard, dispatch, parseFirstObject, type NeutralMsg } from '../ai/analyze';
 import * as plan from '../analysis/analysisPlan';
+import { buildFactsText } from '../analysis/planFacts';
 import * as planPreview from '../analysis/planPreview';
 import * as planBuild from '../analysis/planBuild';
 import { buildStarterPlan } from '../analysis/starterPlan';
@@ -201,8 +202,8 @@ export async function draftAnalysisPlan(
       };
     }
 
-    // App-computed, row-free, secret-free. See analysisPlan.buildFactsText.
-    const res = await draftDashboard(plan.buildFactsText(ctx, opts.intent));
+    // App-computed, row-free, secret-free. See planFacts.buildFactsText.
+    const res = await draftDashboard(buildFactsText(ctx, opts.intent));
     if (!res.ok) {
       if (res.errorType === 'not_ready') return { ok: false, notReady: true };
       return { ok: false, error: res.message || 'Could not draft an analysis' };

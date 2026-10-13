@@ -37,6 +37,7 @@ import { sanitizeParameters } from './params';
 import type { Parameter } from './params';
 import { METRIC_AGGS } from './dashboards';
 import { CHART_TYPE_IDS } from './analysisPlan';
+import { fillMapRegions } from './geoHits';
 import type { PlanDataset } from './analysisPlan';
 
 /** Aggregations that need a `number` column — the same set `validatePlan` uses,
@@ -288,6 +289,13 @@ function encodingError(enc: VizEncoding, ds: PlanDataset, at: string): string | 
   return null;
 }
 
+/** validatePlan's map rule, for a tile an edit adds or re-encodes: its regions
+ *  from the column's own values (./geoHits), or no map. */
+function mapError(chartType: string, enc: VizEncoding, ds: PlanDataset, at: string): string | null {
+  const noRegions = fillMapRegions(chartType, enc, ds);
+  return noRegions ? `${at} dropped: ${noRegions}.` : null;
+}
+
 /** Filters on columns that do not exist lose the FILTER, not the op — the same
  *  severity `validatePlan` gives them. */
 function keepFilters(
@@ -469,7 +477,7 @@ function opAddTile(
     return null;
   }
   const enc = visuals.sanitizeEncoding(raw.encoding);
-  const err = encodingError(enc, ds, at);
+  const err = encodingError(enc, ds, at) || mapError(chartType, enc, ds, at);
   if (err) {
     dropped.push({ kind: 'encoding', where, message: err });
     return null;
@@ -535,7 +543,7 @@ function opReplaceEncoding(
   }
   if (raw.encoding !== undefined) {
     const enc = visuals.sanitizeEncoding(raw.encoding);
-    const err = encodingError(enc, ds, at);
+    const err = encodingError(enc, ds, at) || mapError(out.chartType ?? tile.chartType ?? '', enc, ds, at);
     if (err) {
       dropped.push({ kind: 'encoding', where, message: err });
       return null;

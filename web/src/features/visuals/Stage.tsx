@@ -74,7 +74,7 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
     <section className={s.stage} aria-label="Chart">
       <div className={s.stageHead}>
         {fit && recommended.length > 0 && (
-          <ChartPicker recommended={recommended} pool={b.liveDataset ? LIVE_POOL : PICKER_POOL} data={fit} selected={current} extras={extras} onSelect={b.pickType} onExtras={setExtras} />
+          <ChartPicker recommended={recommended} pool={b.liveDataset ? LIVE_POOL : PICKER_POOL} data={fit} mappable={b.mappable} selected={current} extras={extras} onSelect={b.pickType} onExtras={setExtras} />
         )}
         <div className={s.slot}>
           {drawable && (

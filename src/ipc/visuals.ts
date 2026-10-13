@@ -57,6 +57,7 @@ import { liveChart, liveMetaOf } from './liveRoute';
 import type { LiveFailureCode } from '../engine/live/liveQuery';
 import { hasMetricMeasure, planMetricMeasures } from '../analysis/metricMeasures';
 import { metricMeasureData } from './vizMetricMeasures';
+import { withGeoSuggest } from '../analysis/geoHits';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -395,6 +396,8 @@ export type VizDataReply =
       fx?: FxInfo;
       /** How fresh the figures are — stamped by `visual:data` itself, never cached (data/figureAsOf). */
       asOf?: AsOf;
+      /** The labels are places and the encoding names no regions: the level a map of it would use (analysis/geoHits). */
+      geoSuggest?: { level: 'us_state' | 'country' };
     }
   // `code`: a Live dataset's typed failure (./liveRoute) — refused, unavailable, failed, timed out.
   | { ok: false; error: string; tooLarge?: true; code?: LiveFailureCode; reason?: string };
@@ -613,7 +616,7 @@ export function register() {
       // The Analytics pane's overlays, resolved on the finished reply under the
       // same scope — AFTER the share policy, so an overlay can only name what
       // the shaped chart still shows.
-      const reply = await withEvents(await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), flt, values), projectId, datasetId, flt); // r8:events
+      const reply = withGeoSuggest(await withEvents(await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), flt, values), projectId, datasetId, flt), enc); // r8:events
       // A parameter that cannot be made well-typed is a VALIDATION message the
       // tile shows — never a silently empty chart. Dated last (L0.2), inside the
       // as-of scope, so a snapshot view says the snapshot's time.

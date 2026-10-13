@@ -22,6 +22,7 @@ import * as visuals from '../analysis/visuals';
 import * as versions from '../app/versions';
 import { loadPlanContext, validatePlan } from '../analysis/analysisPlan';
 import type { PlanContext, PlanDrop, PlannedVisual } from '../analysis/analysisPlan';
+import { geoHitsFor, isRegionMap } from '../analysis/geoHits';
 import { buildPlan } from '../analysis/planBuild';
 import { resolveFilterParams } from '../analysis/params';
 import { vizDataFor } from '../ipc/visuals';
@@ -33,14 +34,17 @@ import * as sharePolicy from '../app/sharePolicy';
 /**
  * One chart spec through `validatePlan`, as a one-visual plan over a context of
  * just its dataset. The context carries no column stats: those are for the
- * model's FACTS block, and validation never reads them.
+ * model's FACTS block, and validation never reads them. A MAP spec is the one
+ * that costs a read: its regions come from the category column's own values
+ * (analysis/geoHits), so the dataset is sampled — for a map, and only then.
  */
 export async function checkVisual(projectId: string, datasetRef: string, raw: Record<string, unknown>): Promise<PlannedVisual> {
   const ds = pick(await datasets.listDatasets(projectId), datasetRef, 'dataset');
   const meta = await datasets.getDatasetMeta(projectId, ds.id);
   if (!meta) throw new AutomationError('not_found', `Dataset "${datasetRef}" could not be read.`);
+  const geoHits = isRegionMap(raw.chartType) ? await geoHitsFor(await datasets.residentSource(projectId, ds.id)) : undefined;
   const ctx: PlanContext = {
-    datasets: [{ id: meta.id, name: meta.name, rowCount: meta.rowCount, columns: meta.columns, resident: meta.resident }],
+    datasets: [{ id: meta.id, name: meta.name, rowCount: meta.rowCount, columns: meta.columns, resident: meta.resident, geoHits }],
     visuals: [],
   };
   const { plan, dropped } = validatePlan({ name: 'automation', sheets: [{ name: 'S', visuals: [{ ...raw, datasetId: ds.id }] }] }, ctx);

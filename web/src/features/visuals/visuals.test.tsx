@@ -211,6 +211,58 @@ describe('the builder', () => {
     expect(screen.getByRole('radio', { name: /Pivot table/ }).getAttribute('aria-checked')).toBe('true');
   });
 
+  // A category of places with no map regions chosen: the server says which level a map of it would use.
+  const PLACES = [{ name: 'state', type: 'text' }, { name: 'population', type: 'number' }];
+  const STATES = { labels: ['Ohio', 'Texas', 'Utah'], series: [{ name: 'sum of population', values: [1, 2, 3] }] };
+  const BY_STATE = { category: 'state', values: [{ column: 'population', aggregation: 'sum' }] };
+  const mapped = { ...TABLE_REPLY, recommendedShape: 'map_choropleth', data: { ...STATES, geo: { level: 'us_state', items: STATES.labels.map((name, i) => ({ name, value: i + 1 })) } } };
+  /** The server's two answers: a map once the encoding names regions, else the plain chart (with or without the suggestion). */
+  const places = (suggest: boolean) => ({
+    'dataset:columns': { body: { id: DID, name: 'Orders', rowCount: 3, columns: PLACES } },
+    'visual:preview': (payload: unknown) => ({
+      body: (payload as { encoding: { geo?: unknown } }).encoding.geo
+        ? mapped
+        : { ...TABLE_REPLY, recommendedShape: 'categorical', data: STATES, ...(suggest ? { geoSuggest: { level: 'us_state' } } : {}) },
+    }),
+  });
+  const previews = (calls: { channel: string; payload: unknown }[]) =>
+    calls.filter((c) => c.channel === 'visual:preview').map((c) => (c.payload as { encoding: Record<string, unknown> }).encoding);
+
+  it('offers the map chips when the category holds places, and picking one sets the regions', async () => {
+    const calls = serve(base(places(true)));
+    renderApp(`/visuals/${PID}/new?dataset=${DID}`);
+    const chip = await screen.findByRole('radio', { name: /Region map/ });
+    expect(previews(calls).every((e) => e.geo === undefined)).toBe(true); // offered, not applied
+    // "+ More": the bubble map is offered too — no "Needs …" on it.
+    fireEvent.click(screen.getByRole('button', { name: 'More chart types' }));
+    expect((await screen.findByRole('button', { name: /Bubble map/ })).getAttribute('title')).toBeNull();
+    expect(screen.getByRole('button', { name: /Hexbin/ }).getAttribute('title')).toMatch(/^Needs latitude and longitude/);
+
+    fireEvent.click(chip);
+    await waitFor(() => expect(previews(calls).at(-1)).toEqual({ ...BY_STATE, geo: { level: 'us_state' } }));
+    // The next reply is a real map: its chip is the chosen one, and "Map regions" shows the level.
+    await waitFor(() => expect(screen.getByRole('radio', { name: /Region map/ }).getAttribute('aria-checked')).toBe('true'));
+    expect(screen.getByRole('combobox', { name: 'Map regions' }).textContent).toContain('US states');
+  });
+
+  it('…and keeps the maps dimmed when the server suggests nothing (negative control)', async () => {
+    serve(base(places(false)));
+    renderApp(`/visuals/${PID}/new?dataset=${DID}`);
+    expect(await screen.findByRole('radio', { name: /Column/ })).toBeTruthy();
+    expect(screen.queryByRole('radio', { name: /Region map/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'More chart types' }));
+    expect((await screen.findByRole('button', { name: /Region map/ })).getAttribute('title')).toBe('Needs place or region data');
+  });
+
+  it('gives a saved map that was never told its regions the suggested level when it is opened', async () => {
+    const calls = serve(
+      base({ ...places(true), 'visual:get': { body: { ...summary({ chartType: 'map_choropleth' }), encoding: BY_STATE, overrides: {}, filters: [] } } }),
+    );
+    renderApp(`/visuals/${PID}/${VID}`);
+    await waitFor(() => expect(previews(calls).at(-1)).toEqual({ ...BY_STATE, geo: { level: 'us_state' } }));
+    await waitFor(() => expect(screen.getByRole('radio', { name: /Region map/ }).getAttribute('aria-checked')).toBe('true'));
+  });
+
   it('says so when the visual is gone', async () => {
     serve(base({ 'visual:get': { body: null } }));
     renderApp(`/visuals/${PID}/${VID}`);

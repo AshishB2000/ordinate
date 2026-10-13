@@ -19,6 +19,7 @@ import { saveVisual, updateVisual, usePreview, useRefreshVisuals, type Encoding,
 import { chartCanRender, countNumericSeries, eligibleChartTypes } from './eligibility';
 import { facetControlsData } from './facets/FacetGrid';
 import { liveFilters } from './filters/filterText';
+import { geoFor } from './MapRegions';
 import { useColorEdits, useColorMap, usePersistDeal } from './format/colorMap';
 import { categoryType, suggestName, type Column } from './model';
 import { engineKind, engineName, switchEncoding } from '../analytics/grids/gridEncoding';
@@ -36,6 +37,12 @@ export interface Initial {
   /** The dataset is Live (L2.6): pivot, cohort and funnel are off, and the stage says so instead of asking. */
   live?: boolean;
 }
+
+/** The maps a level of regions draws (mapKinds.geoMapFits): what a suggested level can become. */
+const isRegionMap = (type: string): boolean => type === 'map_choropleth' || type === 'map_bubble';
+
+/** `e` with the suggested level as its map regions — unless it names some already, or nothing is suggested. */
+const withRegions = (e: Encoding, level: string | undefined, cols: readonly Column[]): Encoding => (level && !e.geo ? { ...e, geo: geoFor(level, cols, []) } : e);
 
 /** `value`, settled for `ms`. */
 function useSettled<T>(value: T, ms: number): T {
@@ -103,6 +110,22 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
   const engine = engineKind(current);
   const label = initial.name || (engine && engineName(engine, eff)) || suggestName(eff, current);
 
+  // The category holds places but no map regions are chosen (the reply's `geoSuggest`): the map chips are
+  // offered all the same, and picking one is what sets the regions. `current` above stays on what the
+  // reply in hand can draw, so the chart on screen holds until the map's own reply arrives.
+  // ponytail: the level is the last reply's — a category changed inside the 160 ms settle keeps the old one until its own reply lands.
+  const level = fit ? reply?.geoSuggest?.level : undefined;
+  const offered = level ? [...recommended, 'map_choropleth'] : recommended;
+  // A saved map that was never told its regions gets them the same way when it is opened — once, so
+  // "Map regions: Off" stays off afterwards.
+  const unmapped = useRef(isRegionMap(initial.chartType) && !initial.encoding.geo);
+  const hasRegions = !!enc.geo;
+  useEffect(() => {
+    if (!unmapped.current || (!level && !hasRegions)) return;
+    unmapped.current = false;
+    if (isRegionMap(chartType)) setEnc((e) => withRegions(e, level, columns));
+  }, [level, hasRegions, chartType, columns]);
+
   // The project's colours: the category / split columns this chart reads (not a related dataset's).
   const colorMap = useColorMap(projectId);
   const edits = useColorEdits(projectId);
@@ -118,7 +141,8 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
     // A calendar is one cell per DAY: an auto-grained axis would leave a handful of lonely cells.
     if (t === 'calendar' && isDate && enc.grain !== 'day') setEnc({ ...enc, grain: 'day' });
     // Entering or leaving a pivot / cohort / funnel changes what the encoding IS (vizBuilder's onSelect).
-    const next = switchEncoding(enc, current || chartType, t, columns);
+    const switched = switchEncoding(enc, current || chartType, t, columns);
+    const next = isRegionMap(t) ? withRegions(switched, level, columns) : switched;
     if (next !== enc) setEnc(next);
     setChartType(t);
   };
@@ -171,7 +195,7 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
 
   return {
     enc, setEnc, chartType, setChartType, overrides, patch, filters, setFilters, live, overlays, setOverlays,
-    eff, isDate, complete, preview, reply, data, fit, hasGeo, recommended, current, label, pickType, save, explain,
+    eff, isDate, complete, preview, reply, data, fit, hasGeo, mappable: hasGeo || !!level, recommended: offered, current, label, pickType, save, explain,
     drawn, scope, measures: measureNames(eff), visualId, datasetId, asOf, setAsOf, liveDataset: !!initial.live, offType,
     canEdit: can('editor'),
     formatAs,
