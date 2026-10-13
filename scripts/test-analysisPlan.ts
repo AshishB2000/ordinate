@@ -53,6 +53,7 @@ process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 
 // ponytail: compiled siblings of the real modules.
 const plan: typeof import('../src/analysis/analysisPlan') = require('../src/analysis/analysisPlan');
+const planFacts: typeof import('../src/analysis/planFacts') = require('../src/analysis/planFacts');
 const planPreview: typeof import('../src/analysis/planPreview') = require('../src/analysis/planPreview');
 const planBuild: typeof import('../src/analysis/planBuild') = require('../src/analysis/planBuild');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
@@ -295,7 +296,7 @@ async function checkThreeDrops(): Promise<void> {
 // ── §4 The FACTS block: no rows, no secrets ────────────────────────────────
 async function checkFacts(): Promise<void> {
   const ctx = await plan.loadPlanContext(projectId);
-  const facts = plan.buildFactsText(ctx);
+  const facts = planFacts.buildFactsText(ctx);
 
   ok('facts: names every dataset', facts.includes('"Sales"') && facts.includes('"Huge"'));
   ok('facts: names every column with its declared type',
@@ -338,7 +339,7 @@ async function checkScopeAndIntent(): Promise<void> {
   ok('scope: a datasetId narrows the context to that dataset',
      one.datasets.length === 1 && one.datasets[0].id === salesId,
      JSON.stringify(one.datasets.map((d) => d.name)));
-  const scopedFacts = plan.buildFactsText(one);
+  const scopedFacts = planFacts.buildFactsText(one);
   ok('scope: the FACTS block names the chosen dataset', scopedFacts.includes('"Sales"'));
   ok('scope: and does NOT name the others', !scopedFacts.includes('"Huge"'));
   // Visuals ride with their dataset — offering one built on an excluded dataset
@@ -352,9 +353,9 @@ async function checkScopeAndIntent(): Promise<void> {
      nothing.datasets.length === 0, String(nothing.datasets.length));
 
   // The intent is the one untrusted string in the prompt.
-  const plain = plan.buildFactsText(all);
-  const withIntent = plan.buildFactsText(all, 'Revenue by region, flag concentration risk.');
-  ok('intent: absent by default', plain === plan.buildFactsText(all, ''));
+  const plain = planFacts.buildFactsText(all);
+  const withIntent = planFacts.buildFactsText(all, 'Revenue by region, flag concentration risk.');
+  ok('intent: absent by default', plain === planFacts.buildFactsText(all, ''));
   ok('intent: appears when given', withIntent.includes('Revenue by region, flag concentration risk.'));
   ok('intent: is fenced and labelled a REQUEST, not a fact',
      withIntent.includes('<<<USER REQUEST') && /REQUEST/.test(withIntent));
@@ -365,7 +366,7 @@ async function checkScopeAndIntent(): Promise<void> {
 
   // Length cap: an intent cannot bury the FACTS it is supposed to live inside.
   const huge = 'x'.repeat(9000);
-  const capped = plan.buildFactsText(all, huge);
+  const capped = planFacts.buildFactsText(all, huge);
   ok('intent: is length-capped', !capped.includes('x'.repeat(2001)),
      `${capped.length - plain.length} chars added for a 9,000-char intent`);
 

@@ -84,6 +84,8 @@ export interface Preview extends VizData {
   category?: { kind?: string; grain?: string; binned?: boolean; note?: string };
   sample?: { note: string; by?: string };
   overlay?: { caption?: string; pct?: number };
+  /** The labels are places and no map regions are chosen: the level a map of this would use (the server's call). */
+  geoSuggest?: { level: 'us_state' | 'country' };
 }
 
 type Fail = { ok: false; error: string };

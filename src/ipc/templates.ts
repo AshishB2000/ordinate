@@ -1,9 +1,6 @@
 import { ipcMain } from './bus';
-import * as datasets from '../data/datasets';
-import { sampleRowsResident } from '../engine/statsResident';
-import { loadPlanContext, type PlanDataset } from '../analysis/analysisPlan';
-import { resolveGeoHits } from '../analysis/geoResolve';
-import { mapRoles, type GeoHits, type RoleMapping, type DefinedMeasure } from '../analysis/templateRoles';
+import { loadPlanContext } from '../analysis/analysisPlan';
+import { mapRoles, type RoleMapping, type DefinedMeasure } from '../analysis/templateRoles';
 import * as metrics from '../analysis/metrics';
 import { TEMPLATES, templateById } from '../analysis/templates';
 import * as userTemplates from '../app/userTemplateStore'; // r7:templates
@@ -22,33 +19,7 @@ import * as userTemplates from '../app/userTemplateStore'; // r7:templates
 //
 // Nothing in this file computes a figure and nothing hydrates a table: the role
 // mapping reads DatasetMeta plus the resident per-column summaries, and the geo
-// signal reads GEO_SAMPLE_ROWS rows off the stored Parquet with a LIMIT.
-
-/**
- * Rows read to decide whether a text column holds PLACES.
- *
- * Small on purpose. The question is "do these values resolve to a geography",
- * which a few dozen distinct values answer as well as a million do — and
- * `sampleRowsResident` is ordered, so the answer is the same on every run.
- */
-const GEO_SAMPLE_ROWS = 200;
-
-/** Text columns' sample values, for the geo signal only. Never returned to the
- *  renderer — a sample value is a cell out of the table. */
-export async function geoHitsFor(projectId: string, ds: PlanDataset): Promise<GeoHits> {
-  const textCols = ds.columns
-    .map((c, i) => ({ c, i }))
-    .filter((x) => x.c.type === 'text');
-  if (textCols.length === 0) return {};
-  const src = await datasets.residentSource(projectId, ds.id);
-  // A non-resident dataset contributes no geo signal, for the same reason
-  // loadPlanContext gives it no summaries: it is never worth a hydrate.
-  const rows = src ? await sampleRowsResident(src, GEO_SAMPLE_ROWS) : null;
-  if (!rows) return {};
-  const samples: Record<string, (string | number | null)[]> = {};
-  for (const { c, i } of textCols) samples[c.name] = rows.map((r) => r[i] ?? null);
-  return resolveGeoHits(samples);
-}
+// signal is the one loadPlanContext already sampled (analysis/geoHits.ts).
 
 /**
  * The reason a card is dimmed, or '' when it can be built.
@@ -74,7 +45,7 @@ export function register() {
       const ctx = await loadPlanContext(projectId, typeof datasetId === 'string' ? datasetId : undefined);
       const ds = ctx.datasets[0];
       if (!ds) return { ok: false, error: 'Import a dataset first — a template builds from one.' };
-      const geoHits = await geoHitsFor(projectId, ds);
+      const geoHits = ds.geoHits || {};
       // The project's own names for its numbers. A template's measure role
       // takes the matching metric's column rather than whichever numeric column
       // scored highest — the user already said which one is Revenue. Formula
@@ -145,10 +116,9 @@ export function register() {
       const missing = t.roles.filter((r) => r.required && !clean[r.id]).map((r) => r.label);
       if (missing.length) return { ok: false, error: reasonFor(missing) + '.' };
 
-      const geoHits = await geoHitsFor(projectId, ds);
       const plan = t.build(ds, clean, {
         name: typeof name === 'string' && name.trim() ? name.trim() : undefined,
-        geoHits,
+        geoHits: ds.geoHits,
       });
       return { ok: true, plan };
     } catch (err: any) {

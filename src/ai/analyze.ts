@@ -746,7 +746,7 @@ export async function suggestCalcField(
 // src/formula.ts, validates every encoding against the REAL column types, drops
 // and reports what does not survive, and computes every figure itself at render.
 //
-// `inventoryText` is the app-computed FACTS block (analysisPlan.buildFactsText):
+// `inventoryText` is the app-computed FACTS block (planFacts.buildFactsText):
 // dataset/column names, declared types and per-column stats — and no rows.
 export async function draftDashboard(
   inventoryText: string,

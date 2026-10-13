@@ -18,6 +18,7 @@ export function ChartPicker({
   recommended,
   pool,
   data,
+  mappable,
   selected,
   extras,
   onSelect,
@@ -26,6 +27,8 @@ export function ChartPicker({
   recommended: readonly string[];
   pool: readonly string[];
   data: Data;
+  /** The data can be mapped: it carries geo, or its category holds places and picking a map sets the regions. */
+  mappable?: boolean;
   selected: string;
   /** Types pulled in from "Other charts" — chips of their own. */
   extras: readonly string[];
@@ -33,7 +36,7 @@ export function ChartPicker({
   onExtras: (next: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const hasGeo = !!data.geo;
+  const hasGeo = !!data.geo || !!mappable;
   const fits = (t: string) => chartCanRender(t, data, hasGeo);
   const suited = new Set(recommended);
   // A restored exploratory type (a saved gauge over categorical data) reads as a chip too.
