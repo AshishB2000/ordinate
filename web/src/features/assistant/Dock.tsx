@@ -246,7 +246,7 @@ export default function DockPanel() {
     void qc.invalidateQueries({ queryKey: ['copilot:history', pid] });
   }
   const empty = turns.length === 0 && !pending;
-  const prompts = empty && usable ? starterPrompts((datasets.data ?? []).map((d) => d.name), context.name) : [];
+  const prompts = empty && usable ? starterPrompts((datasets.data ?? []).map((d) => d.name), context.name, context.kind) : [];
   const placeholder = !pid
     ? 'Open a project to ask a question…'
     : !ready
