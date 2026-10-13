@@ -14,9 +14,10 @@
 // stub is asked with it, and the answer STREAMS into the pending bubble token
 // by token over this tab's event stream; then a plan whose import step is fed
 // by an upload (T0.4 — the server has no file picker) runs to the
-// app-computed KPI; and a reply that proposes a dashboard drafts it, shows the
-// review, and creates it on the click. Zero console errors throughout; screens
-// in both themes.
+// app-computed KPI; and a reply that proposes a dashboard ASKS FIRST — the
+// brief (kind and look), then the model's own questions, once — drafts it from
+// the answers, shows the review, and creates it on the click, in the look that
+// was picked. Zero console errors throughout; screens in both themes.
 
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -51,8 +52,17 @@ const DRAFT = {
     texts: [],
   }],
 };
+/** What the model asks back when the draft prompt lets it (the clarify clause) — structure, no figure. */
+const QUESTIONS = {
+  questions: [
+    { ask: 'Which measure matters most?', options: ['Revenue', 'Number of orders'] },
+    { ask: 'How should the regions be compared?', options: ['Side by side', 'As a share of the total', 'Ranked'] },
+  ],
+};
 /** What `analysis:draft` asked the model, last. */
 let draftAsk = '';
+/** Every draft call, in order: was the model allowed to ask, and the facts it was sent. */
+const draftCalls: { asking: boolean; facts: string }[] = [];
 
 /** The models the stub asked with, in order. */
 const askedModels: string[] = [];
@@ -60,7 +70,7 @@ const askedModels: string[] = [];
 /** What the model adds to ANSWER when the project has no data: the dock shows the three ways in. */
 const GET_DATA = '\n@@ACTION {"kind":"import","intent":"bring data in"}';
 
-/** The provider stub: lists two models, a connectivity test gets "OK", a draft gets DRAFT, a streamed ask gets ANSWER and GET_DATA (or a plan or a dashboard proposal when asked for one). */
+/** The provider stub: lists two models, a connectivity test gets "OK", a draft gets QUESTIONS when its prompt allows them and DRAFT when it does not, a streamed ask gets ANSWER and GET_DATA (or a plan or a dashboard proposal when asked for one). */
 const stub = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c: Buffer) => (body += c.toString()));
@@ -74,10 +84,16 @@ const stub = http.createServer((req, res) => {
     askedModels.push(String(json.model));
     const asked = JSON.stringify(json.messages?.at(-1)?.content ?? '');
     if (!json.stream) {
-      const drafting = JSON.stringify(json.system ?? '').includes('ANALYSIS PLAN');
-      if (drafting) draftAsk = asked;
+      const system = JSON.stringify(json.system ?? '');
+      const drafting = system.includes('ANALYSIS PLAN');
+      // Only the clarify clause spells the questions shape: the plain draft prompt has no way to ask.
+      const asking = drafting && system.includes('\\"questions\\"');
+      if (drafting) {
+        draftAsk = asked;
+        draftCalls.push({ asking, facts: asked });
+      }
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ content: [{ type: 'text', text: drafting ? JSON.stringify(DRAFT) : 'OK' }], stop_reason: 'end_turn' }));
+      res.end(JSON.stringify({ content: [{ type: 'text', text: asking ? JSON.stringify(QUESTIONS) : drafting ? JSON.stringify(DRAFT) : 'OK' }], stop_reason: 'end_turn' }));
       return;
     }
     const parts = asked.includes('a plan')
@@ -303,22 +319,87 @@ if (!dbUrl) {
     await dock.getByRole('button', { name: 'Conversations — New conversation' }).waitFor();
     assert.equal(await dock.getByText(ANSWER.join(''), { exact: true }).count(), 0, 'the deleted conversation\'s turns are gone from the dock');
 
-    // ── A dashboard: drafted from what was asked, reviewed, created on the click ──
+    // ── A dashboard: it asks first, drafts from the answers, is reviewed, and is created on the click ──
     await page.reload();
     await settled(page);
     await box.fill('Build a regional dashboard');
     await box.press('Enter');
+    /** The dialog on screen, in both themes (it is this panel's state: a reload would drop it). */
+    const shots = async (name: string) => {
+      for (const theme of ['light', 'dark'] as const) {
+        await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+        await page.waitForTimeout(300);
+        await page.screenshot({ path: path.join(SCREENS, `${name}-${theme}.png`), fullPage: true });
+      }
+    };
+
+    // The brief — kind and look — is there at once: no model has been asked to draft.
+    const brief = page.getByRole('dialog', { name: 'Draft a dashboard' });
+    const kinds = brief.getByRole('radiogroup', { name: 'Kind' });
+    await kinds.waitFor();
+    assert.equal(draftCalls.length, 0, 'the brief asks no model');
+    assert.deepEqual(await kinds.getByRole('radio').evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value)), ['explore', 'overview', 'report']);
+    assert.equal(await kinds.getByRole('radio', { name: /^Explore/ }).isChecked(), true, 'Explore is the default kind');
+    assert.equal(await brief.getByRole('radio', { name: /^Workspace default/ }).isChecked(), true, 'the workspace default is the default look');
+    // A real radio group: one arrow key moves the pick to the next kind.
+    await kinds.getByRole('radio', { name: /^Explore/ }).focus();
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await kinds.getByRole('radio', { name: /^Overview/ }).isChecked(), true, 'the arrow keys move within the group');
+    await brief.getByRole('radio', { name: /^Dark/ }).check();
+    await shots('dock-draft-brief');
+    await brief.getByRole('button', { name: 'Draft dashboard' }).click();
+
+    // The model's own questions: answer one, leave one.
+    const ask = page.getByRole('dialog', { name: 'A few questions first' });
+    const measure = ask.getByRole('radiogroup', { name: 'Which measure matters most?' });
+    await measure.waitFor();
+    assert.equal(await ask.getByRole('radio').count(), 5, 'two questions, with two and three options');
+    assert.equal(await ask.getByRole('button', { name: 'Continue' }).isDisabled(), true, 'nothing is answered for the user');
+    await ask.getByRole('button', { name: 'Skip — just build it' }).waitFor();
+    await measure.getByRole('radio', { name: 'Revenue' }).check();
+    await shots('dock-draft-questions');
+    await ask.getByRole('button', { name: 'Continue' }).click();
+
     const review = page.getByRole('dialog', { name: 'Assistant draft — review before creating' });
     await review.getByText('Revenue by region', { exact: true }).waitFor();
     await review.locator('canvas').first().waitFor(); // the app drew it, from its own figures
+    assert.deepEqual(draftCalls.map((c) => c.asking), [true, false], 'it asked once: the call that carried the answers could not ask again');
     assert.match(draftAsk, /revenue by region/, 'the draft was asked for what the reply proposed');
-    for (const theme of ['light', 'dark'] as const) {
-      await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
-      await page.waitForTimeout(300);
-      await page.screenshot({ path: path.join(SCREENS, `dock-draft-${theme}.png`), fullPage: true });
-    }
+    assert.match(draftAsk, /OVERVIEW dashboard/, 'the kind picked in the brief is in the facts, as the app\'s sentence');
+    assert.match(draftAsk, /Which measure matters most\? → Revenue/, 'the answer is in the facts');
+    assert.doesNotMatch(draftAsk, /How should the regions be compared/, 'a question left unanswered is not sent');
+    assert.doesNotMatch(draftCalls.map((c) => c.facts).join('\n'), /dark/i, 'the look never goes to the model');
+    await shots('dock-draft');
     await review.getByRole('button', { name: 'Create dashboard' }).click();
     await page.waitForURL(/\/analyses\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
     await page.getByText('Revenue by region', { exact: true }).first().waitFor(); // the dashboard it built, open
+    // …in the look the brief picked, which went to the build and nowhere else.
+    const [, projectId, id] = /\/analyses\/([0-9a-f-]{36})\/([0-9a-f-]{36})$/.exec(page.url()) ?? [];
+    const opened = await page.request.post(`${server.base}/api/rpc/analysis:open`, { headers: { 'x-csrf-token': csrf }, data: { args: [{ projectId, id }] } });
+    assert.equal(((await opened.json()) as { analysis?: { style?: { theme?: string } } }).analysis?.style?.theme, 'dark', 'the dashboard is saved in the look that was picked');
+
+    // ── The wizard's Assistant step shows the same brief, so the flow does not ask for it again ──
+    await page.goto(`/analyses?project=${projectId}`);
+    await settled(page);
+    await page.getByRole('button', { name: 'Create dashboard' }).click();
+    const wiz = page.getByRole('dialog', { name: 'Create dashboard' });
+    await wiz.getByRole('button', { name: 'Next' }).click(); // the project's one dataset is already chosen
+    await wiz.getByRole('radio', { name: /Let the Assistant design it/ }).click();
+    await wiz.getByRole('button', { name: 'Next' }).click();
+    await wiz.getByRole('textbox', { name: 'Describe the dashboard' }).fill('Revenue by region');
+    await wiz.getByRole('radio', { name: /^Report/ }).check();
+    assert.equal(await wiz.getByRole('radio', { name: /^Workspace default/ }).isChecked(), true);
+    await shots('analyses-wizard-brief');
+    const before = draftCalls.length;
+    await wiz.getByRole('button', { name: 'Draft with the Assistant' }).click();
+    // Straight to the model's questions — and "Skip" drafts with none of them answered.
+    await page.getByRole('dialog', { name: 'A few questions first' }).getByRole('button', { name: 'Skip — just build it' }).click();
+    await review.getByText('Revenue by region', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('dialog', { name: 'Draft a dashboard' }).count(), 0, 'the brief was the wizard\'s: the flow showed none of its own');
+    assert.deepEqual(draftCalls.slice(before).map((c) => c.asking), [true, false], 'asked once here too');
+    assert.match(draftAsk, /chose a REPORT/, 'the wizard\'s kind is in the facts');
+    assert.doesNotMatch(draftAsk, /USER ANSWERS/, 'Skip sends no answers');
+    await review.getByRole('button', { name: 'Discard' }).click();
+    await review.waitFor({ state: 'detached' });
   });
 }

@@ -14,6 +14,7 @@ import * as datasets from '../data/datasets';
 import * as visuals from './visuals';
 import * as analysis from './analysis';
 import * as dashboards from './dashboards';
+import * as config from '../app/config';
 import type { PlanDrop, PlannedCalcField, PlannedVisual } from './analysisPlan';
 import { loadPlanContext, validatePlan } from './analysisPlan';
 import { arrangeSheet } from './planLayout';
@@ -154,13 +155,24 @@ export async function buildPlanRecords(projectId: string, raw: unknown): Promise
  * owns — main writing it behind the editor's back would be clobbered by the next
  * debounced save. They call `buildPlanRecords` and let the renderer place the
  * cards, which is the same rule dockEdit.ts already follows for edit deltas.
+ *
+ * `style` is the LOOK the user picked before the draft: a preset ID, never a
+ * style object, and never something a model was shown or wrote. Without one —
+ * or with anything that is not a preset — the dashboard starts in the
+ * workspace's default (Settings → "New dashboards start as"), exactly as
+ * `analysis:create` and planExec.runDashboard start theirs.
  */
 export async function buildPlan(
   projectId: string,
   raw: unknown,
+  style?: unknown,
 ): Promise<BuildResult | { ok: false; error: string }> {
   const r = await buildPlanRecords(projectId, raw);
-  const saved = await analysis.saveAnalysis(projectId, { name: r.name, sheets: r.sheets });
+  // hasOwn, not `in`: "constructor" is not a look.
+  const preset = typeof style === 'string' && Object.hasOwn(dashboards.DASHBOARD_STYLE_PRESETS, style)
+    ? (style as dashboards.DashboardStylePreset)
+    : config.get().branding.dashboardStyle;
+  const saved = await analysis.saveAnalysis(projectId, { name: r.name, sheets: r.sheets, style: dashboards.DASHBOARD_STYLE_PRESETS[preset] });
   if (!saved) return { ok: false, error: 'Could not create the dashboard' };
   return {
     ok: true,

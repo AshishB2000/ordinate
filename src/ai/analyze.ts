@@ -749,11 +749,11 @@ export async function suggestCalcField(
 // `inventoryText` is the app-computed FACTS block (planFacts.buildFactsText):
 // dataset/column names, declared types and per-column stats — and no rows.
 export async function draftDashboard(
-  inventoryText: string,
+  inventoryText: string, system = DRAFT_DASHBOARD_SYSTEM_PROMPT, // + planClarify's clause, on the asking call only
 ): Promise<{ ok: true; structure: unknown } | TypedError> {
   if (!(await execConfig.executionReady())) return notReady();
   const messages: NeutralMsg[] = [{ role: 'user', text: inventoryText }];
-  const { rawText, error } = await dispatch(DRAFT_DASHBOARD_SYSTEM_PROMPT, messages);
+  const { rawText, error } = await dispatch(system, messages);
   if (error) return error;
   const parsed = parseFirstObject(rawText);
   if (!parsed) return errBadReply();

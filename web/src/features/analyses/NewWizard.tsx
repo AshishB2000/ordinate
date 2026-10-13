@@ -20,7 +20,8 @@ import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
 import { useAiStatus } from '../assistant/api';
 import { AiNotReady } from '../assistant/AiNotReady';
-import { failure, type Analysis, type BuildReply, type DraftReply, type PlanPreview, type Sheet, type StarterKind, type TemplateList } from './api';
+import { failure, type Analysis, type BuildReply, type Sheet, type StarterKind, type TemplateList } from './api';
+import { DEFAULT_BRIEF, DraftBrief } from './DraftBrief';
 import { DraftFlow } from './DraftReview';
 import { MapColumns, TemplateGallery } from './TemplateStep';
 import s from './Wizard.module.css';
@@ -76,7 +77,8 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
   const [plan, setPlan] = useState<Record<string, unknown> | null>(null);
   const [intent, setIntent] = useState('');
   const [busy, setBusy] = useState(false);
-  const [draft, setDraft] = useState<PlanPreview | null>(null);
+  const [brief, setBrief] = useState(DEFAULT_BRIEF);
+  const [drafting, setDrafting] = useState(false);
 
   // Tracks the dataset until the user types their own name.
   const shownName = nameTouched ? name : selected ? `${selected.name.trim()} dashboard` : '';
@@ -146,27 +148,6 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
     }
   };
 
-  // The AI route: the wizard stays busy while the model works, then the review takes over.
-  const runDraft = async () => {
-    setBusy(true);
-    let r: DraftReply;
-    try {
-      r = (await rpc('analysis:draft', { projectId, ...(selectedId ? { datasetId: selectedId } : {}), ...(intent.trim() ? { intent: intent.trim() } : {}) })) as DraftReply;
-    } catch (err) {
-      r = { ok: false, error: failure(err, 'Could not draft a dashboard.') };
-    }
-    setBusy(false);
-    if (!r.ok && r.notReady) {
-      // The model went away since the wizard opened: back to the step that still builds one.
-      void key.refetch();
-      setStart('blank');
-      setStep(2);
-      return;
-    }
-    if (!r.ok) return toast(r.error || 'Could not draft a dashboard.', { kind: 'error' });
-    setDraft(r);
-  };
-
   const next = async () => {
     if (step === 1) return setStep(2);
     if (step === 2) {
@@ -174,10 +155,24 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
       return createFrom(start);
     }
     if (onTemplate) return createFromTemplate();
-    return runDraft();
+    // The AI route: the draft flow takes over, with everything this step settled.
+    return setDrafting(true);
   };
 
-  if (draft) return <DraftFlow projectId={projectId} draft={draft} preferredName={nameTouched ? chosenName : ''} onClose={onClose} />;
+  // It asks the model itself (and the user, if the model has questions), and owns
+  // every state that can follow — a failure with its retry, and no model at all.
+  if (drafting) {
+    return (
+      <DraftFlow
+        projectId={projectId}
+        datasetId={selectedId ?? undefined}
+        intent={intent.trim()}
+        brief={brief}
+        preferredName={nameTouched ? chosenName : ''}
+        onClose={onClose}
+      />
+    );
+  }
 
   const sub =
     step === 1
@@ -188,7 +183,7 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
           ? 'Check which column plays which part. Every figure below is computed from your data.'
           : 'Describe the dashboard and the Assistant will draft it. You review everything before it is created.';
   const nextLabel =
-    step === 1 ? 'Next' : step === 2 ? (hasStep3 ? 'Next' : 'Create dashboard') : onTemplate ? 'Create dashboard' : busy ? 'Thinking…' : 'Draft with the Assistant';
+    step === 1 ? 'Next' : step === 2 ? (hasStep3 ? 'Next' : 'Create dashboard') : onTemplate ? 'Create dashboard' : 'Draft with the Assistant';
 
   const rail = [
     { n: 1, label: 'Choose data' },
@@ -412,6 +407,9 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
                 {ex}
               </button>
             ))}
+          </div>
+          <div className={s.aiBrief}>
+            <DraftBrief value={brief} onChange={setBrief} />
           </div>
         </div>
       )}

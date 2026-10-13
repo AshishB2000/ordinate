@@ -332,6 +332,10 @@
   flex-wrap: wrap;
   gap: var(--sp-8);
 }
+/* The brief (DraftBrief.tsx) is a group of its own under the description. */
+.aiBrief {
+  margin-top: var(--sp-8);
+}
 .chip {
   padding: var(--sp-4) var(--sp-12);
   border: 1px solid var(--border);

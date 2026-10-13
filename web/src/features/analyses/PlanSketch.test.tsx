@@ -7,7 +7,7 @@ import { render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import type { PlanPreview } from './api';
-import { DraftFlow } from './DraftReview';
+import { Review } from './DraftReview';
 import { PlanSketch } from './PlanSketch';
 
 type Layout = NonNullable<PlanPreview['sheets'][number]['layout']>;
@@ -82,7 +82,7 @@ describe('the layout sketch', () => {
     render(
       <MemoryRouter>
         <QueryClientProvider client={new QueryClient()}>
-          <DraftFlow projectId="11111111-1111-4111-8111-111111111111" draft={draft} onClose={() => {}} />
+          <Review projectId="11111111-1111-4111-8111-111111111111" draft={draft} />
         </QueryClientProvider>
       </MemoryRouter>,
     );

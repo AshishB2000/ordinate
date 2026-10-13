@@ -61,7 +61,8 @@ export function useStyleVars(raw: Record<string, unknown>): CSSProperties {
   }, [v.themeId, v.accentHex, themes.data]);
 }
 
-const PRESETS: { value: NonNullable<DashStyle['theme']>; label: string; hint: string }[] = [
+/** The themes a dashboard can be given, in the words the Style dialog — and the draft's brief (analyses/DraftBrief.tsx) — show them in. */
+export const PRESETS: { value: NonNullable<DashStyle['theme']>; label: string; hint: string }[] = [
   { value: 'auto', label: 'Auto', hint: 'Follows the app' },
   { value: 'clean', label: 'Light', hint: 'Always light' },
   { value: 'executive', label: 'Executive', hint: 'Slate, serif figures' },

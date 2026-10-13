@@ -19,13 +19,15 @@ const DID = '22222222-2222-4222-8222-222222222222';
 const AID = '33333333-3333-4333-8333-333333333333';
 const CARD = { id: 'c1', type: 'visual', layout: { x: 0, y: 0, w: 8, h: 6 }, visualId: 'v1' };
 
-/** A server with one dataset and no model; records every RPC and what it was asked. */
-function serve() {
+/** A server with one dataset and no model (or, with `ai`, one that drafts); records every RPC and what it was asked. */
+function serve(ai = false) {
   const calls: { channel: string; payload: Record<string, unknown> }[] = [];
   const replies: Record<string, unknown> = {
     '/api/auth/me': { user: { email: 'dev@local', role: 'admin' }, org: 'default', mode: 'dev', canSignOut: false },
     'dataset:list': [{ id: DID, name: 'Orders', sourceKind: 'csv', rowCount: 120, columnCount: 3, updatedAt: '2026-10-01T10:00:00Z' }],
-    'ai:status': { ready: false, reason: 'no_model', models: [], mine: null, keyStore: null },
+    'ai:status': ai ? { ready: true, models: [], mine: null, keyStore: null } : { ready: false, reason: 'no_model', models: [], mine: null, keyStore: null },
+    'analysis:draft': { ok: true, name: 'Orders', sheets: [{ name: 'Overview', visuals: [] }], plan: { name: 'Orders' } },
+    'analysis:buildPlan': { ok: true, analysis: { id: AID } },
     'template:list': { ok: true, datasetId: DID, datasetName: 'Orders', columns: [], templates: [] },
     'analysis:create': { id: AID, name: 'Orders dashboard', sheets: [{ id: 's1', name: 'Sheet 1', cards: [] }] },
     'analysis:starterCards': { ok: true, cards: [CARD] },
@@ -45,8 +47,8 @@ function serve() {
 }
 
 /** The wizard on "Start from", with the Orders dataset already chosen. */
-async function open() {
-  const calls = serve();
+async function open(ai = false) {
+  const calls = serve(ai);
   const onClose = vi.fn();
   render(
     <MemoryRouter>
@@ -85,6 +87,30 @@ describe('the wizard’s layouts', () => {
     const saved = calls.find((c) => c.channel === 'analysis:update')?.payload as { id: string; sheets: { cards: unknown[] }[] };
     expect(saved.id).toBe(AID);
     expect(saved.sheets[0].cards).toEqual([CARD]);
+  });
+
+  it('the Assistant’s step shows the brief under the description, and hands both to the draft', async () => {
+    const { calls, layouts } = await open(true);
+    const ai = within(layouts).getByRole('radio', { name: /^Let the Assistant design it/ }) as HTMLButtonElement;
+    await waitFor(() => expect(ai.disabled).toBe(false));
+    fireEvent.click(ai);
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Describe the dashboard' }), { target: { value: '  revenue by region  ' } });
+    // The same brief the draft flow shows, on its defaults — asked here, so not asked again.
+    expect((screen.getByRole('radio', { name: /^Explore/ }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('radio', { name: /^Workspace default/ }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole('radio', { name: /^Overview/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /^Executive/ }));
+    expect(calls.some((c) => c.channel === 'analysis:draft')).toBe(false); // the wizard no longer asks the model itself
+
+    fireEvent.click(screen.getByRole('button', { name: 'Draft with the Assistant' }));
+    const review = await screen.findByRole('dialog', { name: 'Assistant draft — review before creating' });
+    expect(screen.queryByRole('dialog', { name: 'Draft a dashboard' })).toBeNull();
+    expect(screen.queryByRole('radiogroup', { name: 'Kind' })).toBeNull();
+    expect(calls.filter((c) => c.channel === 'analysis:draft').map((c) => c.payload)).toEqual([{ projectId: PID, datasetId: DID, intent: 'revenue by region', kind: 'overview', clarify: true }]);
+    // The name follows the dataset until it is typed, so the draft's own name stands.
+    fireEvent.click(within(review).getByRole('button', { name: 'Create dashboard' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'analysis:buildPlan')?.payload).toEqual({ projectId: PID, plan: { name: 'Orders' }, style: 'executive' }));
   });
 
   // Negative control: a start that is not a starter asks for none.
