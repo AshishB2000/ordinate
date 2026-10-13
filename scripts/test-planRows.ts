@@ -520,26 +520,12 @@ async function checkPreviewAndBuild(): Promise<void> {
   ok('preview: the flat arrays still read as before', names(preview.sheets[0].metrics) === 'A,B,C'
     && names(preview.sheets[0].visuals) === 'Hero,Left,Right' && names(preview.sheets[0].texts) === 'Intro');
 
-  // What buildPlan HANDS the store is spied on: saveAnalysis switches a new
-  // sheet on by itself, and a draft must not be on only by that default.
-  const realSaveAnalysis = analysisStore.saveAnalysis;
-  let handed: any[] = [];
-  (analysisStore as any).saveAnalysis = async (pid: string, input: any) => {
-    handed = input.sheets;
-    return realSaveAnalysis(pid, input);
-  };
-  let built: Awaited<ReturnType<typeof planBuild.buildPlan>>;
-  try {
-    built = await planBuild.buildPlan(projectId, preview.plan);
-  } finally {
-    (analysisStore as any).saveAnalysis = realSaveAnalysis;
-  }
+  const built = await planBuild.buildPlan(projectId, preview.plan);
   ok('build: succeeded', built.ok === true);
   if (!built.ok) return;
   const [story, flat] = built.analysis.sheets as any[];
-  ok('build: buildPlan itself asks for click-to-filter on every sheet',
-    handed.length === 2 && handed.every((s) => s.clickFilter === true), JSON.stringify(handed.map((s) => s.clickFilter)));
-  ok('build: and it is on for every sheet of the saved dashboard',
+  // saveAnalysis switches every new sheet on; a drafted dashboard is one of them.
+  ok('build: click-to-filter is on for every sheet of the saved dashboard',
     built.analysis.sheets.length === 2 && built.analysis.sheets.every((s) => s.clickFilter === true));
 
   // The ORDER of the cards is not the arrangement: controls, metrics, visuals,

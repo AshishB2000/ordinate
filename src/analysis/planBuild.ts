@@ -160,13 +160,7 @@ export async function buildPlan(
   raw: unknown,
 ): Promise<BuildResult | { ok: false; error: string }> {
   const r = await buildPlanRecords(projectId, raw);
-  // CLICK-TO-FILTER ON, for every sheet: a drafted dashboard should answer a
-  // click on a bar the day it is made. Here and not in buildPlanRecords — the
-  // starters hand cards to a sheet that is already open, and that sheet's
-  // switch is its author's. (saveAnalysis defaults a new sheet the same way;
-  // it is said here so the draft does not depend on that default.)
-  const sheets = r.sheets.map((s) => ({ ...s, clickFilter: true }));
-  const saved = await analysis.saveAnalysis(projectId, { name: r.name, sheets });
+  const saved = await analysis.saveAnalysis(projectId, { name: r.name, sheets: r.sheets });
   if (!saved) return { ok: false, error: 'Could not create the dashboard' };
   return {
     ok: true,
