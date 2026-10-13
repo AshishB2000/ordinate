@@ -26,7 +26,7 @@ export type PlanRow =
   | { type: 'kpis'; metrics: PlannedMetric[] }
   /** One chart at full width, or two side by side. */
   | { type: 'charts'; visuals: PlannedVisual[] }
-  /** One wide chart with two or three KPIs stacked in the rail beside it. */
+  /** One wide chart with two to four KPIs stacked in the rail beside it. */
   | { type: 'spotlight'; visual: PlannedVisual; metrics: PlannedMetric[] }
   /** One wide chart with a note beside it. */
   | { type: 'annotated'; visual: PlannedVisual; text: PlannedText }
@@ -51,9 +51,11 @@ export interface RowValidators {
 export const MAX_ROWS = 12;
 const CHARTS_PER_ROW = 2;
 /** A spotlight's rail. One KPI beside a chart six rows tall is a hole with a
- *  number in it; four would be tiles too short to read. */
+ *  number in it. Four is what a KPI strip holds, so a strip's worth fits the
+ *  rail whole — planLayout makes the row taller for the fourth rather than
+ *  leaving it alone on a strip of its own. */
 const RAIL_MIN = 2;
-const RAIL_MAX = 3;
+const RAIL_MAX = 4;
 
 /**
  * THE ONE SHAPING RULE. A row's type says how its items sit together; whatever
@@ -65,7 +67,7 @@ const RAIL_MAX = 3;
  *   charts with five visuals            → charts, charts, charts
  *   spotlight whose visual was dropped  → kpis
  *   spotlight with one metric           → kpis, charts
- *   spotlight with five metrics         → spotlight (three in the rail), kpis
+ *   spotlight with five metrics         → spotlight (four in the rail), kpis
  *   annotated without its visual        → note
  *   annotated without its text          → charts
  *   any row with nothing left in it     → nothing
@@ -133,7 +135,7 @@ export type RowPreset = 'spotlight' | 'lead';
  * order, so the lists handed in ARE the flattening of what comes back.
  *
  * It only says which row each tile is MEANT for. `shapeRows` decides what a row
- * can hold — one KPI is no rail, a fourth spills onto a strip, charts go two to
+ * can hold — one KPI is no rail, a fifth spills onto a strip, charts go two to
  * a row — so a short sheet needs no case here: with no chart there is only the
  * strip, and with nothing at all there are no rows and the sheet stays flat.
  */
@@ -268,7 +270,7 @@ export function validateRows(
 export const ROWS_PROMPT =
   'A sheet is a stack of ROWS, read top to bottom. Each <row> is ONE of:\n' +
   '  { "type":"charts", "visuals":[ <visual> ] }   one chart at full width — list two to set them side by side\n' +
-  '  { "type":"spotlight", "visual":<visual>, "metrics":[ <kpi>, <kpi> ] }   one wide chart with two or three ' +
+  '  { "type":"spotlight", "visual":<visual>, "metrics":[ <kpi>, <kpi> ] }   one wide chart with two to four ' +
   'KPIs stacked beside it\n' +
   '  { "type":"annotated", "visual":<visual>, "text":<note> }   one wide chart with a note beside it\n' +
   '  { "type":"kpis", "metrics":[ <kpi>, ... ] }   a strip of KPI tiles, four to a line\n' +

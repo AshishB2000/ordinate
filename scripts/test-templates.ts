@@ -352,6 +352,8 @@ const at = (sheet: Sheet, i: number): string => {
 
 const KPI_STRIP = 'metric@0,6,3,2 metric@3,6,3,2 metric@6,6,3,2 metric@9,6,3,2';
 const RAIL = 'metric@8,0,4,2 metric@8,2,4,2 metric@8,4,4,2';
+/** Four KPIs: the same tiles, one more, beside a chart 8 tall. */
+const RAIL4 = `${RAIL} metric@8,6,4,2`;
 /** id → [the headline chart, the rows, every tile]. */
 const SHAPED: Record<string, [string, string, string]> = {
   // Chart first: the headline at full width, the strip beneath it, the rest two-up.
@@ -359,15 +361,15 @@ const SHAPED: Record<string, [string, string, string]> = {
     `visual@0,0,12,6 ${KPI_STRIP} visual@0,8,6,6 visual@6,8,6,6 visual@0,14,12,6`],
   inventory: ['column', 'charts,kpis,charts',
     `visual@0,0,12,6 ${KPI_STRIP} visual@0,8,6,6 visual@6,8,6,6`],
-  // Spotlight: the headline with three KPIs in the rail beside it. Marketing has
-  // a fourth, which follows on a strip of its own.
-  marketing: ['funnel', 'spotlight,kpis,charts,charts',
-    `visual@0,0,8,6 ${RAIL} metric@0,6,3,2 visual@0,8,6,6 visual@6,8,6,6 visual@0,14,12,6`],
+  // Spotlight: the headline with the KPIs in the rail beside it — Customer's
+  // three, Marketing's four (and a chart as tall as the four of them).
+  marketing: ['funnel', 'spotlight,charts,charts',
+    `visual@0,0,8,8 ${RAIL4} visual@0,8,6,6 visual@6,8,6,6 visual@0,14,12,6`],
   customer: ['bar', 'spotlight,charts,charts',
     `visual@0,0,8,6 ${RAIL} visual@0,6,6,6 visual@6,6,6,6 visual@0,12,12,6`],
   // The two starters that are arrangements of KPIs + chart, on the sample data.
-  spotlight: ['column', 'spotlight,kpis,charts',
-    `visual@0,0,8,6 ${RAIL} metric@0,6,3,2 visual@0,8,12,6`],
+  spotlight: ['column', 'spotlight,charts',
+    `visual@0,0,8,8 ${RAIL4} visual@0,8,12,6`],
   lead: ['column', 'charts,kpis,charts',
     `visual@0,0,12,6 ${KPI_STRIP} visual@0,8,12,6`],
 };
@@ -378,7 +380,7 @@ for (const [id, [headline, rows, tiles]] of Object.entries(SHAPED)) {
   // template whose first chart is something else would lead with the wrong one.
   ok(`${id}: its FIRST chart is its headline, and that is the one the shape leads with`,
      built.visuals[0].chartType === headline && (templateById(id) as DashboardTemplate).thumb === headline
-     && at(built, 0) === (rows.startsWith('spotlight') ? '0,0,8,6' : '0,0,12,6'),
+     && at(built, 0) === (!rows.startsWith('spotlight') ? '0,0,12,6' : tiles.includes(RAIL4) ? '0,0,8,8' : '0,0,8,6'),
      `${built.visuals[0].chartType} at ${at(built, 0)}`);
   ok(`${id}: every tile sits where the shape puts it`, placed(built) === tiles, placed(built));
   ok(`${id}: …and the validator keeps that arrangement as written`,

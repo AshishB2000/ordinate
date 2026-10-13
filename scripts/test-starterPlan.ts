@@ -243,14 +243,14 @@ const RETAIL: Col[] = [
   ok('lead: a full-width chart, the strip beneath it, then a full-width chart',
     placed(lead) === 'visual@0,0,12,6 metric@0,6,3,2 metric@3,6,3,2 metric@6,6,3,2 visual@0,8,12,6', placed(lead));
 
-  // FOUR KPIs. A rail holds three (planRows), so the fourth follows on a strip
-  // of its own — shapeRows' rule, not one written a second time here.
+  // FOUR KPIs — what a starter picks at most. A rail holds four (planRows), and
+  // the chart beside them is as tall as the four of them.
   const four = starter.buildStarterPlan('spotlight', ds(RETAIL, { region: 5 })).sheets[0];
-  ok('spotlight: four KPIs put three in the rail and the fourth on a strip',
-    rowTypes(four) === 'spotlight,kpis,charts'
-    && placed(four) === 'visual@0,0,8,6 metric@8,0,4,2 metric@8,2,4,2 metric@8,4,4,2 metric@0,6,3,2 visual@0,8,12,6',
+  ok('spotlight: four KPIs all sit in the rail, beside a chart as tall as they are',
+    rowTypes(four) === 'spotlight,charts'
+    && placed(four) === 'visual@0,0,8,8 metric@8,0,4,2 metric@8,2,4,2 metric@8,4,4,2 metric@8,6,4,2 visual@0,8,12,6',
     `${rowTypes(four)} · ${placed(four)}`);
-  ok('spotlight: …in the strip\'s own order, so the flat list is still the rows\' flattening',
+  ok('spotlight: …in the strip\'s own order, so the flat list is the rows\' flattening',
     four.metrics.map((m) => m.column).join(',') === 'revenue,profit,units,unit_price',
     four.metrics.map((m) => m.column).join(','));
   // TWO KPIs fill the rail at half its height each.
@@ -357,6 +357,40 @@ const RETAIL: Col[] = [
         `${rowTypes(before)} · ${placed(before)} → ${rowTypes(after)} · ${placed(after)}`);
     }
   }
+}
+
+// ── A column of PLACES too wide for bars gets a map ─────────────────────────
+// The shape of a real file: 50 states, a rank, two populations, a rate. No text
+// column is narrow enough to be an axis, so every starter was a KPI strip with
+// no chart at all — led by the sum of the ranks.
+{
+  const STATES: Col[] = [
+    { name: 'Rank', type: 'number' }, { name: 'US State', type: 'text' },
+    { name: 'Population 2024', type: 'number' }, { name: 'Population 2023', type: 'number' },
+    { name: 'Growth Rate', type: 'number' },
+  ];
+  const places = { ...ds(STATES, { 'US State': 50 }), geoHits: { 'US State': { level: 'us_state', hitRate: 1 } } };
+  const sheet = starter.buildStarterPlan('kpis', places).sheets[0];
+  ok('places: a rank is not a measure — it is neither a KPI nor what the chart plots',
+    sheet.metrics.map((m) => m.column).join(',') === 'Population 2024,Population 2023,Growth Rate',
+    sheet.metrics.map((m) => m.column).join(','));
+  ok('places: the wide place column is the axis, drawn as a region map that names its regions',
+    sheet.visuals.length === 1 && sheet.visuals[0].chartType === 'map_choropleth'
+    && sheet.visuals[0].encoding.category === 'US State' && sheet.visuals[0].encoding.geo?.level === 'us_state'
+    && sheet.visuals[0].encoding.values[0].column === 'Population 2024',
+    JSON.stringify(sheet.visuals));
+  const res = plan.validatePlan(starter.buildStarterPlan('spotlight', places), ctxFor(places));
+  ok('places: the spotlight starter validates with nothing dropped, the map beside its KPIs',
+    res.dropped.length === 0 && placed(res.plan.sheets[0]) === 'visual@0,0,8,6 metric@8,0,4,2 metric@8,2,4,2 metric@8,4,4,2',
+    `${JSON.stringify(res.dropped.map((x: any) => x.message))} · ${placed(res.plan.sheets[0])}`);
+  // NEGATIVE CONTROLS. A column that is wide but not places still gets no chart,
+  // and a dataset with a narrow category keeps its bars even when it has places.
+  ok('places: a wide column that is NOT places is still no axis',
+    starter.buildStarterPlan('kpis', ds(STATES, { 'US State': 50 })).sheets[0].visuals.length === 0);
+  const both = { ...ds([...STATES, { name: 'Region', type: 'text' }], { 'US State': 50, Region: 4 }), geoHits: { 'US State': { level: 'us_state', hitRate: 1 } } };
+  ok('places: a narrow category still wins — bars by Region, as before',
+    starter.buildStarterPlan('kpis', both).sheets[0].visuals.map((v) => `${v.chartType}:${v.encoding.category}`).join(',') === 'column:Region',
+    JSON.stringify(starter.buildStarterPlan('kpis', both).sheets[0].visuals.map((v) => v.chartType)));
 }
 
 if (failureCount()) {
