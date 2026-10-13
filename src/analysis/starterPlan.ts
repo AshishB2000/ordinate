@@ -22,6 +22,7 @@ import { compile } from '../formula/formula';
 import type { AnalysisPlan, PlanDataset, PlanSheet, PlannedCalcField, PlannedMetric, PlannedVisual } from './analysisPlan';
 import { presetRows } from './planRows';
 import type { ColumnSummary } from '../data/datasetStats';
+import type { ResolvedGeoLevel } from './geoResolve';
 import type { ParsedColumn } from '../data/parse';
 import type { VizEncoding } from './visuals';
 
@@ -59,10 +60,10 @@ const AVERAGED_WORDS = new Set([
   'price', 'rate', 'discount', 'margin', 'ratio', 'pct', 'percent', 'percentage',
   'score', 'age', 'days', 'duration', 'latency', 'avg', 'average', 'mean', 'median',
 ]);
-/** Numbers that are identifiers or coordinates, not measures at all. */
+/** Numbers that are identifiers, positions or coordinates, not measures at all. */
 export const NOT_A_MEASURE_WORDS = new Set([
   'id', 'code', 'zip', 'postcode', 'year', 'month', 'day', 'week', 'quarter',
-  'lat', 'lon', 'lng', 'latitude', 'longitude',
+  'lat', 'lon', 'lng', 'latitude', 'longitude', 'rank',
 ]);
 
 /** `avg` when a sum would be meaningless, `sum` otherwise. */
@@ -97,6 +98,23 @@ const MAX_CATEGORY_DISTINCT = 20;
  *  `eligibleChartTypes` is a classic <script> with no exports and main cannot
  *  require it at all. */
 const CHART_TYPE = 'column';
+
+/**
+ * A column of PLACES too wide to be a bar axis — fifty states, two hundred
+ * countries. That is not a barcode, it is a map: the one chart that reads
+ * better the more regions it has. `geoHits` is the sample loadPlanContext
+ * already took (analysis/geoHits), so this asks nothing new of the data.
+ *
+ * Only consulted when no column is narrow enough for bars, so every dataset
+ * that drew bars still draws the same bars.
+ */
+function placeColumn(ds: PlanDataset): { name: string; level: ResolvedGeoLevel } | undefined {
+  for (const c of ds.columns) {
+    const hit = c.type === 'text' ? ds.geoHits?.[c.name] : undefined;
+    if (hit) return { name: c.name, level: hit.level };
+  }
+  return undefined;
+}
 
 function summaryOf(ds: PlanDataset, name: string): ColumnSummary | undefined {
   // BY NAME, never by index. Nothing states that `summaries[]` is index-aligned
@@ -167,17 +185,19 @@ function monthField(ds: PlanDataset, dateCol: string): PlannedCalcField | null {
   return compile(expression).ok ? { datasetId: ds.id, name, expression } : null;
 }
 
-function chart(ds: PlanDataset, category: string, measure: string, label: string): PlannedVisual {
+function chart(ds: PlanDataset, category: string, measure: string, label: string, regions?: ResolvedGeoLevel): PlannedVisual {
   // Same rule as the KPI strip: a chart of summed unit prices is as wrong as a
   // KPI of them, and on a dataset whose only measure is a rate that is exactly
   // what the starter would have drawn.
   const agg = aggregationFor(measure);
   const encoding: VizEncoding = { category, values: [{ column: measure, aggregation: agg }] };
+  // A map is drawn from `encoding.geo` and nothing else, so it is named here.
+  if (regions) encoding.geo = { level: regions };
   return {
     kind: 'new',
     datasetId: ds.id,
     name: label,
-    chartType: CHART_TYPE,
+    chartType: regions ? 'map_choropleth' : CHART_TYPE,
     encoding,
     filters: [],
   };
@@ -187,9 +207,10 @@ function chart(ds: PlanDataset, category: string, measure: string, label: string
  * Build one of the starter layouts for `ds`.
  *
  * Degenerate datasets still produce a VALID plan rather than nothing: with no
- * numeric column there are no KPIs and no chart, with no text column the date
- * column stands in as the category, and with neither the sheet is the KPI row
- * alone. validatePlan reports whatever that leaves out.
+ * numeric column there are no KPIs and no chart, with no text column narrow
+ * enough for bars a column of places is mapped or the date column stands in as
+ * the category, and with none of those the sheet is the KPI row alone.
+ * validatePlan reports whatever that leaves out.
  *
  * `'spotlight'` and `'lead'` are `'kpis'` with rows. The two that existed before
  * rows did stay FLAT, so they are packed exactly as they always were — the
@@ -201,8 +222,11 @@ export function buildStarterPlan(kind: StarterKind, ds: PlanDataset, opts: { nam
   const dateCol = ds.columns.find((c) => c.type === 'date');
   const month = dateCol ? monthField(ds, dateCol.name) : null;
 
-  // With no text column at all, a date reads as a category perfectly well.
-  const axes = cats.length ? cats.map((c) => c.name) : (dateCol ? [dateCol.name] : []);
+  // With no text column narrow enough for bars, a column of places is a map
+  // (see placeColumn); failing that, a date reads as a category perfectly well.
+  const place = cats.length ? undefined : placeColumn(ds);
+  const axes = cats.length ? cats.map((c) => c.name) : place ? [place.name] : (dateCol ? [dateCol.name] : []);
+  const regionsOf = (category: string): ResolvedGeoLevel | undefined => (place && category === place.name ? place.level : undefined);
   const measure = kpis.length ? kpis[0].name : '';
 
   const calculatedFields: PlannedCalcField[] = [];
@@ -215,7 +239,7 @@ export function buildStarterPlan(kind: StarterKind, ds: PlanDataset, opts: { nam
       metrics.push({ datasetId: ds.id, column: c.name, aggregation: aggregationFor(c.name), label: c.name });
     }
     if (measure && axes.length) {
-      visuals.push(chart(ds, axes[0], measure, `${measure} by ${axes[0]}`));
+      visuals.push(chart(ds, axes[0], measure, `${measure} by ${axes[0]}`, regionsOf(axes[0])));
     }
     // The second chart is the point of having a date column: the same measure
     // over time, next to the same measure by category.
@@ -235,7 +259,7 @@ export function buildStarterPlan(kind: StarterKind, ds: PlanDataset, opts: { nam
     for (const rung of ladder.slice(0, 2)) {
       if (rung.needsMonth && month) calculatedFields.push(month);
       const label = rung.needsMonth ? `${rung.measure} by month` : `${rung.measure} by ${rung.category}`;
-      visuals.push(chart(ds, rung.category, rung.measure, label));
+      visuals.push(chart(ds, rung.category, rung.measure, label, regionsOf(rung.category)));
     }
     texts.push({ heading: 'Notes', text: 'Add your notes here.' });
   }

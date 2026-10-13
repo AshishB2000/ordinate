@@ -202,8 +202,8 @@ function checkRules(): void {
   {
     const { sheet } = validated([{ type: 'spotlight', visual: V('hero'), metrics: [M('a'), M('b'), M('c'), M('d'), M('e')] }]);
     const rows: any[] = sheet.rows || [];
-    ok('spotlight: three in the rail, the rest in a following kpis row',
-      typesOf(sheet) === 'spotlight,kpis' && names(rows[0].metrics) === 'a,b,c' && names(rows[1].metrics) === 'd,e',
+    ok('spotlight: four in the rail, the rest in a following kpis row',
+      typesOf(sheet) === 'spotlight,kpis' && names(rows[0].metrics) === 'a,b,c,d' && names(rows[1].metrics) === 'e',
       JSON.stringify(rows));
     ok('spotlight: the flat metrics keep their order', names(sheet.metrics) === 'a,b,c,d,e');
   }
@@ -448,6 +448,14 @@ function checkGeometry(): void {
   ok('rows: a rail of two is 4x3 each, of three 4x2 each; a kpis strip is 3x2 and wraps after four',
     line(at.metrics) === '8,12,4,3 | 8,15,4,3 | 8,18,4,2 | 8,20,4,2 | 8,22,4,2 | '
       + '0,30,3,2 | 3,30,3,2 | 6,30,3,2 | 9,30,3,2 | 0,32,3,2', line(at.metrics));
+  {
+    // FOUR KPIs make the row taller, never the tiles shorter: a 4x2 tile is the
+    // smallest a KPI is drawn at anywhere, so the chart beside them grows to 8.
+    const four = planLayout.arrangeSheet(validated([{ type: 'spotlight', visual: V(), metrics: [M(), M(), M(), M()] }, { type: 'note', text: T() }]).sheet);
+    ok('rows: a rail of four is 4x2 each beside a chart 8 tall, and the next row starts under both',
+      line(four.visuals) === '0,0,8,8' && line(four.metrics) === '8,0,4,2 | 8,2,4,2 | 8,4,4,2 | 8,6,4,2' && line(four.texts) === '0,8,12,2',
+      `${line(four.visuals)} · ${line(four.metrics)} · ${line(four.texts)}`);
+  }
   ok('rows: the note beside a chart is 4x6, a note of its own 12x2',
     line(at.texts) === '8,24,4,6 | 0,34,12,2', line(at.texts));
 }

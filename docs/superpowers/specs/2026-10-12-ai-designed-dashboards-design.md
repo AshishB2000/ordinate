@@ -105,7 +105,7 @@ Decisions made in this conversation:
 ```
 kpis        [K][K][K][K]          3×2 each, wraps at four (today's strip)
 charts      [     C     ]         one visual 12×6, or two at 6×6
-spotlight   [   C    ][K]         visual 8×6 + 2–3 KPIs stacked in a 4-wide rail (4×3 or 4×2)
+spotlight   [   C    ][K]         visual 8 wide + 2–4 KPIs stacked in a 4-wide rail (a fourth makes the row 8 tall)
 annotated   [   C    ][note]      visual 8×6 + text 4×6
 note        [   note    ]         text 12×2
 ```

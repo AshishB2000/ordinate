@@ -122,10 +122,13 @@ export function arrangeSheet(sheet: Arrangeable): SheetLayout {
       row.visuals.forEach((_v, i) => out.visuals.push({ x: i * w, y, w, h: CHART_H }));
       y += CHART_H;
     } else if (row.type === 'spotlight') {
-      out.visuals.push({ x: 0, y, w: WIDE_W, h: CHART_H });
-      const h = CHART_H / row.metrics.length; // two or three, so 3 or 2 — never a fraction
+      // Two KPIs split the chart's height and three fill it. A fourth makes the
+      // ROW taller, never the tiles shorter: KPI_H is the smallest a KPI is drawn.
+      const n = row.metrics.length; // two to four — shapeRows guarantees it
+      const h = n === 2 ? CHART_H / 2 : KPI_H;
+      out.visuals.push({ x: 0, y, w: WIDE_W, h: n * h });
       row.metrics.forEach((_m, i) => out.metrics.push({ x: WIDE_W, y: y + i * h, w: cols - WIDE_W, h }));
-      y += CHART_H;
+      y += n * h;
     } else if (row.type === 'annotated') {
       out.visuals.push({ x: 0, y, w: WIDE_W, h: CHART_H });
       out.texts.push({ x: WIDE_W, y, w: cols - WIDE_W, h: CHART_H });
