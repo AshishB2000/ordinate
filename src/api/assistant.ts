@@ -16,6 +16,8 @@ const Provider = z.enum(AI_PROVIDERS);
 const Steps = z.array(z.looseObject({ kind: z.string().max(40) })).max(50);
 /** A stored answer spec; src/ai/answerSpec.ts `sanitizeStoredSpec` whitelists the rest. */
 const AnswerSpec = z.looseObject({ datasetId: Uuid });
+/** A name an answer can offer to remember (src/ai/answerSuggest.ts `sanitizeLearn` checks it against the spec). */
+const Learn = z.strictObject({ said: z.string().max(80), column: z.string().min(1).max(256) });
 /** What the dock is looking at — src/ipc/copilot.ts `buildFacts` resolves it inside the project. */
 const Context = z.strictObject({
   kind: z.enum(['', 'dataset', 'visual', 'capture', 'analysis', 'stats', 'drivers', 'scorecard', 'scenario']),
@@ -76,7 +78,7 @@ export const assistant = {
     project: byProjectId,
   }),
 
-  'answer:card': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, spec: AnswerSpec }), project: byProjectId }),
+  'answer:card': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, spec: AnswerSpec, learn: Learn.optional() }), project: byProjectId }),
   'answer:explain': rpc({
     access: 'read',
     input: z.strictObject({ projectId: Uuid, visualId: Uuid.optional(), tile: z.looseObject({ datasetId: Uuid }).optional() }),
@@ -84,9 +86,12 @@ export const assistant = {
   }),
   'answer:rerun': rpc({
     access: 'read',
-    input: z.strictObject({ projectId: Uuid, threadId: Uuid.optional(), spec: AnswerSpec, label: z.string().max(200).optional() }),
+    input: z.strictObject({ projectId: Uuid, threadId: Uuid.optional(), spec: AnswerSpec, label: z.string().max(200).optional(), learn: Learn.optional() }),
     project: byProjectId,
   }),
+  // "Save as visual" on an answer card: it writes a Visual, so it is `write`. The spec is all a client
+  // sends — the encoding and the filter steps are rebuilt from it on the server (src/ipc/answerSave.ts).
+  'answer:saveVisual': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, spec: AnswerSpec }), project: byProjectId }),
 
   'plan:check': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, steps: Steps }), project: byProjectId }),
   'plan:start': rpc({

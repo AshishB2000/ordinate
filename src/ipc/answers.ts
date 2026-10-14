@@ -25,17 +25,21 @@ import * as metrics from '../analysis/metrics';
 import { buildVizData } from '../analysis/vizData';
 import type { ChartData } from '../analysis/vizData';
 import type { VizEncoding } from '../analysis/visuals';
-import type { ParsedColumn } from '../data/parse';
-import type { Cell, FilterStep } from '../data/transforms';
+import type { FilterStep } from '../data/transforms';
 import { tileCaption } from '../analysis/captions';
 import { displayNames, load as loadCatalog } from '../app/catalog';
-import { taughtNames } from '../app/columnNames';
+import { shownNames, taughtNames } from '../app/columnNames';
 import { askCopilot } from '../ai/analyze';
 import {
-  ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, sanitizeStoredSpec, specFilterSteps, splitCandidates,
+  ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, resolveColumn, sanitizeStoredSpec, specFilterSteps, splitCandidates,
   validateAnswerSpec,
 } from '../ai/answerSpec';
 import type { AnswerChip, AnswerSpec, SpecDataset, SpecMetric } from '../ai/answerSpec';
+import { canonicaliseTextFilters, heldValues, matchValues, nearestValueFixes } from '../ai/answerValues';
+import { sanitizeLearn, suggestFixes } from '../ai/answerSuggest';
+import type { AnswerLearn, AnswerSuggest } from '../ai/answerSuggest';
+import { noRowsMatch, valueMatched } from '../ai/answerMessages';
+import { saveCardAsVisual } from './answerSave';
 import { isRefine, refineSpec, sameChart } from '../ai/answerRefine';
 import { previousAnswerBlock } from '../ai/previousAnswer';
 import { withheldColumns } from '../app/sharePolicy';
@@ -71,7 +75,14 @@ export interface AnswerCard {
   notes: string[];
   /** How fresh the figures are (L0.2, data/figureAsOf) — the card's caption, and a line of the facts. */
   asOf?: AsOf;
+  /** No rows, because a filter value is not in its column: the sentence, and the stored values it may have meant (ai/answerValues). */
+  noMatch?: { text: string; options: AnswerChip[] };
+  /** The name its turn can remember (`learnState`), when the card was asked with one. */
+  learn?: CardLearn;
 }
+
+/** A name to remember, as the card shows it: the column's shown name, and 'known' once the project's names already mean that column. */
+export interface CardLearn extends AnswerLearn { label: string; state: 'offer' | 'known' }
 
 export interface Built {
   card: AnswerCard;
@@ -80,37 +91,15 @@ export interface Built {
   provenance: copilot.CopilotProvenance;
 }
 
-/** `code`: a Live dataset's typed failure (./liveAnswers) — the card says why, never an empty chart. */
-export type Failure = { ok: false; reason: string; code?: LiveFailureCode };
+/**
+ * `code`: a Live dataset's typed failure (./liveAnswers) — the card says why, never an empty chart.
+ * `suggest`: a refused spec named something that does not exist, and this is what it may have meant.
+ */
+export type Failure = { ok: false; reason: string; code?: LiveFailureCode; suggest?: AnswerSuggest };
 
 const OK_AUDIT: NumberAudit = { ok: true, violations: [] };
 
 // ── Computing a card ─────────────────────────────────────────────────────────
-
-/**
- * A text filter value → the cell text the data actually holds, matched without
- * regard to case or surrounding space. "west" asked for is "West" stored; a
- * filter that matched nothing because of a capital letter would be an empty
- * chart that looks like an answer.
- */
-function canonicaliseTextFilters(steps: FilterStep[], columns: ParsedColumn[], rows: Cell[][]): void {
-  for (const s of steps) {
-    const ci = columns.findIndex((c) => c.name === s.column);
-    if (ci < 0 || columns[ci].type !== 'text') continue;
-    if (!['=', '!=', 'in', 'not in'].includes(s.op)) continue;
-    const byKey = new Map<string, string>();
-    for (const r of rows) {
-      const v = r ? r[ci] : null;
-      if (v === null || v === undefined) continue;
-      const t = String(v);
-      const k = t.trim().toLowerCase();
-      if (!byKey.has(k)) byKey.set(k, t);
-    }
-    const fix = (v: Cell): Cell => (typeof v === 'string' ? byKey.get(v.trim().toLowerCase()) ?? v : v);
-    if (s.value !== undefined) s.value = fix(s.value);
-    if (s.values) s.values = s.values.map(fix);
-  }
-}
 
 /**
  * Largest first, and at most `top` of them. An answer about categories reads
@@ -133,23 +122,34 @@ function ranked(data: ChartData, top?: number): ChartData {
   };
 }
 
-export async function computeCard(projectId: string, spec: AnswerSpec): Promise<Built | Failure> {
+/**
+ * The card a spec draws. `loose` is for a spec that was just WRITTEN — by a
+ * model, or by a chip built from one: a filter value the column does not hold
+ * is then matched to the one stored value it means (ai/answerValues), and the
+ * card's own `spec` is the matched one, which is what the turn stores. A stored
+ * spec is drawn as it stands, so a reload and an explained tile show what they
+ * showed.
+ */
+export async function computeCard(projectId: string, asked: AnswerSpec, loose = false): Promise<Built | Failure> {
   // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here.
-  const live = await liveCardFor(projectId, spec);
+  const live = await liveCardFor(projectId, asked);
   if (live) return live;
-  await ensureFresh(projectId, [spec.datasetId]); // L3.1 fresh on ask: before the rows are read
+  await ensureFresh(projectId, [asked.datasetId]); // L3.1 fresh on ask: before the rows are read
   // ponytail: hydrates the dataset (periods, value matching and split chips all
   // read cells); a resident distinct-values query when answers over 1M rows feel slow.
-  const ds = await datasets.getDataset(projectId, spec.datasetId);
+  const ds = await datasets.getDataset(projectId, asked.datasetId);
   if (!ds) return { ok: false, reason: 'The dataset this answer was built on no longer exists.' };
   const has = (n: string): boolean => ds.columns.some((c) => c.name === n);
-  const used = [spec.category, ...spec.measures.map((m) => m.column), ...spec.filters.map((f) => f.column)]
-    .concat(spec.series ? [spec.series] : []);
+  const used = [asked.category, ...asked.measures.map((m) => m.column), ...asked.filters.map((f) => f.column)]
+    .concat(asked.series ? [asked.series] : []);
   const missing = used.find((n) => !has(n));
   if (missing) return { ok: false, reason: `"${missing}" is no longer a column of ${ds.name}.` };
 
+  // What the filtered text columns hold: read once, for the loose match, the case fix and the empty answer's suggestions.
+  const held = heldValues(asked.filters, ds.columns, ds.rows);
+  const spec = loose ? matchValues(asked, held) : asked;
   const { steps, labels: filterLabels } = specFilterSteps(spec, ds.columns, ds.rows);
-  canonicaliseTextFilters(steps, ds.columns, ds.rows);
+  canonicaliseTextFilters(steps, held);
   const encoding: VizEncoding = { category: spec.category, values: spec.measures };
   if (spec.series) encoding.series = spec.series;
   if (spec.grain) encoding.grain = spec.grain;
@@ -176,8 +176,11 @@ export async function computeCard(projectId: string, spec: AnswerSpec): Promise<
     title: spec.title, datasetName: ds.name, describe: describeAnswer(spec), data,
     categoryIsDate: isDate, additive, filterLabels, saidFilterLabels, caption, ...(asOf ? { asOf: utcLabel(asOf.at) } : {}),
   });
-  const notes = viz.warnings.slice();
+  // What the app did to a value comes first: it changes what the chart is about. The CARD's line, never the facts'.
+  const notes = (spec.matched ?? []).map((m) => valueMatched(m.said, m.value, m.column)).concat(viz.warnings);
   if (viz.category && viz.category.note) notes.push(viz.category.note);
+  // Nothing to draw because a value is not in its column: the nearest stored ones, never a marked column's.
+  const near = data.labels.length ? null : nearestValueFixes(spec, held, withheld);
 
   return {
     card: {
@@ -185,6 +188,7 @@ export async function computeCard(projectId: string, spec: AnswerSpec): Promise<
       headline: facts.headline, bullets: facts.bullets,
       chips: answerChips(spec, { columns: ds.columns, splitCandidates: splitCandidates(ds.columns, ds.rows, spec.category) }),
       filterLabels, steps, notes, ...(asOf ? { asOf } : {}),
+      ...(near ? { noMatch: { text: noRowsMatch(near.column, near.op, near.said), options: near.options } } : {}),
     },
     factsText: facts.text,
     ledger: facts.ledger,
@@ -218,7 +222,7 @@ export async function specDatasets(projectId: string): Promise<SpecDataset[]> {
   const metas = await Promise.all(list.map((d) => datasets.getDatasetMeta(projectId, d.id)));
   const docs = (await loadCatalog(projectId)).columns;
   return metas.filter((m): m is NonNullable<typeof m> => !!m)
-    .map((m) => ({ id: m.id, name: m.name, columns: m.columns, names: taughtNames(m.columns, docs[m.id]) }));
+    .map((m) => ({ id: m.id, name: m.name, columns: m.columns, names: taughtNames(m.columns, docs[m.id]), shown: shownNames(m.columns, docs[m.id]) }));
 }
 
 async function specMetrics(projectId: string): Promise<SpecMetric[]> {
@@ -306,17 +310,27 @@ export async function answerFromAction(
   // The answer a refine is laid over — none for a new subject, or once its dataset is gone.
   const base = previous && on && isRefine(action.spec) ? previous : null;
   const raw = base && on ? refineSpec(base, action.spec, on, defined) : action.spec;
-  const v = validateAnswerSpec(raw, all, {
-    defaultDatasetId: defaultDatasetId ?? on?.id, metrics: defined, title: action.intent || question,
-  });
-  if (!v.ok) return v;
+  const opts = { defaultDatasetId: defaultDatasetId ?? on?.id, title: action.intent || question };
+  const v = validateAnswerSpec(raw, all, { ...opts, metrics: defined });
+  if (!v.ok) {
+    // A name that does not exist: what it may have meant, picked by the app from the names alone
+    // (ai/answerSuggest) and laid over the same raw spec — the MERGED one, so a follow-up's option
+    // keeps its carried filters. An option that is the previous chart again is not one.
+    const options = v.miss ? suggestFixes(raw, v.miss, all, defined, opts).filter((o) => !base || !sameChart(base, o.spec)) : [];
+    return v.miss && options.length
+      ? { ok: false, reason: v.reason, suggest: { part: v.miss.part, said: v.miss.said, options } }
+      : { ok: false, reason: v.reason };
+  }
   if (base && sameChart(base, v.spec)) return { ok: false, reason: 'The follow-up changed nothing the app could apply.' };
-  const built = await computeCard(projectId, v.spec);
+  const built = await computeCard(projectId, v.spec, true);
   if ('ok' in built) return built;
+  // …also when it only became the previous chart once a value was matched to the one it already filtered to.
+  if (base && sameChart(base, built.card.spec)) return { ok: false, reason: 'The follow-up changed nothing the app could apply.' };
   const n = await narrate(built,
     `Narrate this chart answer to the question "${question}" in two or three sentences, citing only figures from the facts.`,
     guard);
-  return { ok: true, text: n.text, audit: n.audit, ledger: built.ledger, provenance: built.provenance, spec: v.spec };
+  // The card's own spec: the validated one, with any filter value the app matched to what the data holds.
+  return { ok: true, text: n.text, audit: n.audit, ledger: built.ledger, provenance: built.provenance, spec: built.card.spec };
 }
 
 /** A saved chart (or a dashboard tile's live one) → the spec its card is built from. */
@@ -337,23 +351,41 @@ export function tileSpec(t: { datasetId: string; encoding: VizEncoding; filters:
 }
 
 async function appendAnswer(
-  projectId: string, threadId: string | undefined, userText: string, text: string, built: Built, spec: AnswerSpec,
+  projectId: string, threadId: string | undefined, userText: string, text: string, built: Built, spec: AnswerSpec, learn?: AnswerLearn,
 ): Promise<{ turns: copilot.CopilotTurn[]; threadId: string | null }> {
   let target = threadId || (await copilot.latestThreadId(projectId)) || undefined;
   if (!target) target = (await copilot.createThread(projectId))?.id;
   await copilot.appendTurn(projectId, { role: 'user', text: userText }, target);
-  const turns = await copilot.appendTurn(projectId, { role: 'assistant', text, provenance: built.provenance, answer: spec }, target);
+  const turns = await copilot.appendTurn(projectId, { role: 'assistant', text, provenance: built.provenance, answer: spec, ...(learn ? { learn } : {}) }, target);
   return { turns: turns || [], threadId: target || null };
 }
 
+/**
+ * Whether a name is still to remember, worked out now — never stored, so a name
+ * taught in the Columns tab, or by anyone's card, shows here at once. Metadata
+ * and the catalog only: a Live dataset is never hydrated. Nothing when the
+ * column is gone.
+ */
+async function learnState(projectId: string, datasetId: string, learn: AnswerLearn): Promise<CardLearn | undefined> {
+  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  if (!meta || !meta.columns.some((c) => c.name === learn.column)) return undefined;
+  const docs = (await loadCatalog(projectId)).columns[datasetId];
+  const known = resolveColumn(learn.said, meta.columns, taughtNames(meta.columns, docs))?.name === learn.column;
+  return { ...learn, label: shownNames(meta.columns, docs)[learn.column] || learn.column, state: known ? 'known' : 'offer' };
+}
+
 export function register(guard: Guard): void {
-  // Draw one card from a stored spec. Called on every render of an answer turn.
-  ipcMain.handle('answer:card', async (_e, { projectId, spec }: any = {}) => {
+  // Draw one card from a stored spec. Called on every render of an answer turn;
+  // `learn` is its turn's name to remember, if it has one.
+  ipcMain.handle('answer:card', async (_e, { projectId, spec, learn }: any = {}) => {
     try {
       const s = sanitizeStoredSpec(spec);
       if (!s) return { ok: false, reason: 'This answer could not be read.' };
       const built = await computeCard(projectId, s);
-      return 'ok' in built ? built : built.card;
+      if ('ok' in built) return built;
+      const said = sanitizeLearn(learn, s);
+      const taught = said ? await learnState(projectId, s.datasetId, said) : undefined;
+      return taught ? { ...built.card, learn: taught } : built.card;
     } catch (err: any) {
       return { ok: false, reason: err?.message || 'Could not build the answer' };
     }
@@ -392,23 +424,40 @@ export function register(guard: Guard): void {
     }
   });
 
-  // A follow-up chip: the chip's own spec, recomputed by the app — no model call
-  // decides the chart, and one narrates it only when configured.
-  ipcMain.handle('answer:rerun', async (_e, { projectId, threadId, spec, label }: any = {}) => {
+  // A follow-up chip, or a "Did you mean" option: the chip's own spec, recomputed
+  // by the app — no model call decides the chart, and one narrates it only when
+  // configured. An option built from a refused spec still carries the filter
+  // values as they were said, so they are matched here as an answer's are. An
+  // option that put a column in place of a name sends `learn`, kept on the new
+  // turn only for a column its answer uses (ai/answerSuggest `sanitizeLearn`).
+  ipcMain.handle('answer:rerun', async (_e, { projectId, threadId, spec, label, learn }: any = {}) => {
     try {
       const s = sanitizeStoredSpec(spec);
       if (!s) return { ok: false, reason: 'This follow-up could not be read.' };
-      const built = await computeCard(projectId, s);
+      const built = await computeCard(projectId, s, true);
       if ('ok' in built) return built;
       const userText = typeof label === 'string' && label.trim() ? label.trim().slice(0, 120) : s.title;
       const n = await narrate(built,
         `Narrate this chart answer ("${s.title}") in two or three sentences, citing only figures from the facts.`,
         guard);
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
-      const r = await appendAnswer(projectId, tid, userText, n.text, built, s);
+      const r = await appendAnswer(projectId, tid, userText, n.text, built, built.card.spec, sanitizeLearn(learn, built.card.spec));
       return { ok: true, turns: r.turns, threadId: r.threadId };
     } catch (err: any) {
       return { ok: false, reason: err?.message || 'Could not run the follow-up' };
+    }
+  });
+
+  // "Save as visual": the card is rebuilt HERE from the spec — its encoding and its
+  // filter steps are the server's, never a client's — and saved as it was drawn (./answerSave).
+  ipcMain.handle('answer:saveVisual', async (_e, { projectId, spec }: any = {}) => {
+    try {
+      const s = sanitizeStoredSpec(spec);
+      if (!s) return { ok: false, reason: 'This answer could not be read.' };
+      const built = await computeCard(projectId, s);
+      return 'ok' in built ? built : await saveCardAsVisual(projectId, built.card);
+    } catch (err: any) {
+      return { ok: false, reason: err?.message || 'Could not save the visual' };
     }
   });
 }

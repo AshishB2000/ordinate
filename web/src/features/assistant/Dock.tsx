@@ -22,6 +22,7 @@ import { toast } from '../../ui/Toast';
 import { ask, mineModel, newThread, UNTITLED, useAiStatus, useHistory, type ActivityStep, type SuggestedAction, type Turn } from './api';
 import { AiNotReady } from './AiNotReady';
 import { Composer } from './Composer';
+import type { Learn } from './DidYouMean';
 import { DockMenu, modelLabel, ThreadMenu, TOGGLE_ID } from './DockParts';
 import { History } from './History';
 import { pickDockProject, setDockOpen, takePendingQuestion, useDockContext, useDockProject, usePendingQuestion, type DockContext } from './dockState';
@@ -236,9 +237,9 @@ export default function DockPanel() {
     else setHint(r.error || 'Could not answer that. Try again.');
   }
 
-  async function followUp(spec: Record<string, unknown>, label: string): Promise<void> {
+  async function followUp(spec: Record<string, unknown>, label: string, learn?: Learn): Promise<void> {
     if (!pid) return;
-    const r = (await rpc('answer:rerun', { projectId: pid, ...(shownThread ? { threadId: shownThread } : {}), spec: spec as { datasetId: string }, label }).catch(() => null)) as
+    const r = (await rpc('answer:rerun', { projectId: pid, ...(shownThread ? { threadId: shownThread } : {}), spec: spec as { datasetId: string }, label, ...(learn ? { learn } : {}) }).catch(() => null)) as
       | { ok: true; turns: Turn[]; threadId: string | null }
       | { ok: false; reason?: string }
       | null;

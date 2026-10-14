@@ -196,6 +196,8 @@ async function loadWarehouseTable(table: string): Promise<void> {
     ['answer card', 'answer:card', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
     ['answer: explain a tile', 'answer:explain', { projectId: P, tile: { datasetId: d, encoding: enc, filters: [], chartType: 'bar', name: 'Sales by region' } }],
     ['answer: rerun', 'answer:rerun', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
+    // "Save as visual" rebuilds the card it saves — the warehouse's on a Live dataset — with a top-N and a value filter to resolve.
+    ['answer: save as visual', 'answer:saveVisual', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [{ column: 'region', op: '!=', value: 'R1' }], top: 3 } }],
     // drivers, segments, scenarios
     ['key drivers', 'drivers:explain', { projectId: P, request: { datasetId: d, metric: { column: 'sales', aggregation: 'sum' }, compare: { mode: 'latest', column: 'day' }, dimension: 'region' } }],
     ['key drivers from a chart point', 'drivers:explainPoint', { projectId: P, datasetId: d, encoding: { category: 'day', values: [{ column: 'sales', aggregation: 'sum' }], grain: 'month' }, point: {} }],
@@ -221,7 +223,8 @@ async function loadWarehouseTable(table: string): Promise<void> {
    * be dated by the warehouse (`asOf.mode: 'live'`), never by the record.
    */
   const ROUTED = new Set(['chart (visual:data)', 'chart batch', 'chart preview', 'KPI tile (dashboard:metric)', 'dashboard tiles',
-    'metric preview', 'metric values', 'metric check (the measure editor)', 'answer card', 'answer: explain a tile', 'answer: rerun', 'alert test: threshold']);
+    'metric preview', 'metric values', 'metric check (the measure editor)', 'answer card', 'answer: explain a tile', 'answer: rerun', 'answer: save as visual',
+    'alert test: threshold']);
   /** Every `ok` in a reply (a batch answers per item): all true, and every dated one dated live. */
   const answered = (v: unknown): boolean => {
     if (Array.isArray(v)) return v.length > 0 && v.every(answered);

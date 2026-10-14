@@ -539,6 +539,13 @@ async function computeVizData(
   };
 }
 
+/** THE door a new visual is saved through: the store's own whitelist, then its first version. Null = no such project or dataset. */
+export async function saveNewVisual(projectId: string, input: Parameters<typeof visuals.saveVisual>[1]): Promise<visuals.Visual | null> {
+  const saved = await visuals.saveVisual(projectId, input);
+  if (saved) await versions.record(projectId, 'visual', saved);
+  return saved;
+}
+
 export function register() {
   ipcMain.handle('visual:list', async (_e, { projectId }: any = {}) => visuals.listVisuals(projectId));
 
@@ -546,9 +553,8 @@ export function register() {
 
   ipcMain.handle('visual:save', async (_e, { projectId, datasetId, name, chartType, encoding, overrides, filters, analytics }: any = {}) => {
     try {
-      const saved = await visuals.saveVisual(projectId, { name, datasetId, chartType, encoding, overrides, filters, analytics });
+      const saved = await saveNewVisual(projectId, { name, datasetId, chartType, encoding, overrides, filters, analytics });
       if (!saved) return { ok: false, error: 'Invalid project/dataset, or it no longer exists' };
-      await versions.record(projectId, 'visual', saved);
       return saved;
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to save the visual' };

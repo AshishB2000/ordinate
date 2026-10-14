@@ -27,6 +27,9 @@ import { dateBucket, dateBucketLabel, isDateGrain, parseDateCell } from '../anal
 import type { CivilDate, DateGrain } from '../analysis/categoryKey';
 // Pure, like this file: the rules for what people call a column, `squash` among them.
 import { squash, taughtColumn } from '../app/columnNames';
+// Pure too, and it takes only this file's TYPES back: what a loosely matched filter value remembers.
+import { sanitizeMatched } from './answerValues';
+import type { ValueMatch } from './answerValues';
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -52,6 +55,8 @@ export interface AnswerSpec {
   grain?: DateGrain;
   /** The question restated — the card's title. App-trimmed, never a figure source. */
   title: string;
+  /** Filter values the app matched loosely to the one the data holds, for the card's note (./answerValues). */
+  matched?: ValueMatch[];
 }
 
 /** What validation needs to know about a dataset: names and declared types only. */
@@ -61,6 +66,8 @@ export interface SpecDataset {
   columns: ParsedColumn[];
   /** column → what people call it: its display name and "Also called" names (app/columnNames `taughtNames`). */
   names?: Record<string, string[]>;
+  /** column → its display name, where it has one: what a suggestion is labelled with (app/columnNames `shownNames`). */
+  shown?: Record<string, string>;
 }
 
 /** A defined metric the spec may name instead of a column. Formula metrics cannot chart. */
@@ -74,7 +81,14 @@ export interface SpecMetric {
   hasFilters?: boolean;
 }
 
-export type SpecResult = { ok: true; spec: AnswerSpec } | { ok: false; reason: string };
+/**
+ * What a refused spec could not find, when it was a NAME — never a cap, a bad
+ * aggregation or a bad value. `said` is the model's word; `index` is which
+ * measure or filter. ./answerSuggest offers what it may have meant.
+ */
+export interface SpecMiss { part: 'dataset' | 'category' | 'measure' | 'series' | 'filter'; said: string; datasetId?: string; index?: number }
+
+export type SpecResult = { ok: true; spec: AnswerSpec } | { ok: false; reason: string; miss?: SpecMiss };
 
 const MAX_TOP = 50;
 const MAX_TITLE = 120;
@@ -149,26 +163,37 @@ function splitCall(s: string): [string | null, string] {
   return m ? [m[1], m[2]] : [null, s];
 }
 
+/** A raw measure as written — "sum(revenue)", or {column | name | metric, aggregation | agg} — as its name and aggregation. */
+export function readMeasure(raw: unknown): { column: unknown; agg: unknown } | null {
+  if (typeof raw === 'string') {
+    const [agg, column] = splitCall(raw);
+    return { column, agg };
+  }
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  return { column: o.column ?? o.name ?? o.metric, agg: o.aggregation ?? o.agg };
+}
+
+/** A name that resolved to nothing, as a resolver hands it back. */
+interface Unknown { unknown: unknown }
+
+/** The refusal for a name nothing answers to — typed (`SpecMiss`) when a name was actually said. */
+function unknownName(part: SpecMiss['part'], what: string, said: unknown, datasetId?: string, index?: number): SpecResult {
+  const reason = `Unknown ${what} "${String(said)}".`;
+  if (typeof said !== 'string' || !said.trim()) return { ok: false, reason };
+  return { ok: false, reason, miss: { part, said, ...(datasetId ? { datasetId } : {}), ...(index === undefined ? {} : { index }) } };
+}
+
 function resolveMeasure(
   raw: unknown,
   columns: ParsedColumn[],
   metrics: SpecMetric[],
   datasetId: string,
   names?: Record<string, string[]>,
-): VizMeasure | string {
-  let colName: unknown;
-  let aggRaw: unknown;
-  if (typeof raw === 'string') {
-    const [a, c] = splitCall(raw);
-    aggRaw = a;
-    colName = c;
-  } else if (raw && typeof raw === 'object') {
-    const o = raw as Record<string, unknown>;
-    colName = o.column ?? o.name ?? o.metric;
-    aggRaw = o.aggregation ?? o.agg;
-  } else {
-    return 'A measure must name a column.';
-  }
+): VizMeasure | string | Unknown {
+  const read = readMeasure(raw);
+  if (!read) return 'A measure must name a column.';
+  const { column: colName, agg: aggRaw } = read;
 
   let col = resolveColumn(colName, columns);
   if (!col) {
@@ -181,9 +206,12 @@ function resolveMeasure(
       return { column: resolveColumn(m.column, columns)!.name, aggregation: agg, metricId: m.id };
     }
     // A name the user gave a METRIC is that metric, usable here or not — never
-    // a column that is also called that, which would be a different number.
-    if (!m) col = resolveColumn(colName, columns, names);
-    if (!col) return `Unknown measure column "${String(colName)}".`;
+    // a column that is also called that, which would be a different number. So it is
+    // no unknown NAME either: "Did you mean" would offer exactly that column.
+    if (m) return `Unknown measure column "${String(colName)}".`;
+    col = resolveColumn(colName, columns, names);
+    // A metric of that name on ANOTHER dataset is that metric too: refused plainly, never offered as a column here.
+    if (!col) return metrics.some((x) => x.name.trim().toLowerCase() === name) ? `Unknown measure column "${String(colName)}".` : { unknown: colName };
   }
 
   let agg = aggRaw === undefined || aggRaw === null || aggRaw === '' ? null : parseAgg(aggRaw);
@@ -217,11 +245,11 @@ function coerce(v: unknown, col: ParsedColumn): Cell | undefined {
   return undefined;
 }
 
-function resolveFilter(raw: unknown, columns: ParsedColumn[], names?: Record<string, string[]>): AnswerFilter | string {
+function resolveFilter(raw: unknown, columns: ParsedColumn[], names?: Record<string, string[]>): AnswerFilter | string | Unknown {
   if (!raw || typeof raw !== 'object') return 'A filter must be an object.';
   const o = raw as Record<string, unknown>;
   const col = resolveColumn(o.column, columns, names);
-  if (!col) return `Unknown filter column "${String(o.column)}".`;
+  if (!col) return { unknown: o.column };
 
   if (o.period !== undefined) {
     const p = typeof o.period === 'string' ? o.period.trim().toLowerCase() : '';
@@ -284,25 +312,26 @@ export function validateAnswerSpec(
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, reason: 'The answer has no spec.' };
   const o = raw as Record<string, unknown>;
   const ds = resolveDataset(o.dataset ?? o.datasetId, datasets, opts.defaultDatasetId);
-  if (!ds) return { ok: false, reason: `Unknown dataset "${String(o.dataset ?? '')}".` };
+  if (!ds) return unknownName('dataset', 'dataset', o.dataset ?? '');
 
   const cat = resolveColumn(o.category, ds.columns, ds.names);
-  if (!cat) return { ok: false, reason: `Unknown category column "${String(o.category)}".` };
+  if (!cat) return unknownName('category', 'category column', o.category, ds.id);
 
   const measuresRaw = Array.isArray(o.measures) ? o.measures : o.measure !== undefined ? [o.measure] : [];
   if (!measuresRaw.length) return { ok: false, reason: 'The answer names no measure.' };
   if (measuresRaw.length > MAX_MEASURES) return { ok: false, reason: `At most ${MAX_MEASURES} measures.` };
   const measures: VizMeasure[] = [];
-  for (const m of measuresRaw) {
+  for (const [i, m] of measuresRaw.entries()) {
     const r = resolveMeasure(m, ds.columns, opts.metrics || [], ds.id, ds.names);
     if (typeof r === 'string') return { ok: false, reason: r };
+    if ('unknown' in r) return unknownName('measure', 'measure column', r.unknown, ds.id, i);
     measures.push(r);
   }
 
   let series: string | undefined;
   if (o.series !== undefined && o.series !== null && o.series !== '') {
     const s = resolveColumn(o.series, ds.columns, ds.names);
-    if (!s) return { ok: false, reason: `Unknown split column "${String(o.series)}".` };
+    if (!s) return unknownName('series', 'split column', o.series, ds.id);
     if (s.name === cat.name) return { ok: false, reason: 'The split cannot be the category.' };
     series = s.name;
   }
@@ -310,9 +339,10 @@ export function validateAnswerSpec(
   const filtersRaw = Array.isArray(o.filters) ? o.filters : [];
   if (filtersRaw.length > MAX_FILTERS) return { ok: false, reason: `At most ${MAX_FILTERS} filters.` };
   const filters: AnswerFilter[] = [];
-  for (const f of filtersRaw) {
+  for (const [i, f] of filtersRaw.entries()) {
     const r = resolveFilter(f, ds.columns, ds.names);
     if (typeof r === 'string') return { ok: false, reason: r };
+    if ('unknown' in r) return unknownName('filter', 'filter column', r.unknown, ds.id, i);
     filters.push(r);
   }
 
@@ -398,6 +428,8 @@ export function sanitizeStoredSpec(raw: unknown): AnswerSpec | undefined {
   if (typeof o.series === 'string' && o.series) spec.series = o.series;
   if (Number.isInteger(o.top) && o.top > 0) spec.top = Math.min(o.top, MAX_TOP);
   if (isDateGrain(o.grain)) spec.grain = o.grain;
+  const matched = sanitizeMatched(o.matched, filters);
+  if (matched.length) spec.matched = matched;
   return spec;
 }
 
@@ -516,6 +548,8 @@ export function specFilterSteps(
 export interface AnswerChip {
   label: string;
   spec: AnswerSpec;
+  /** A "Did you mean" option that put a COLUMN where a name missed: that column, so the answer it runs can offer to remember the name (./answerSuggest). */
+  column?: string;
 }
 
 /**

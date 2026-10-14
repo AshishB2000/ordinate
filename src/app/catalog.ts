@@ -33,9 +33,9 @@ import * as appPaths from './paths';
 import { isValidId } from './ids';
 import * as recordFs from './recordFs';
 import { ctx, serverDataDir } from '../server/context';
-import { aliasCollision, sanitizeAliases } from './columnNames';
+import { aliasCollision, MAX_ALIASES, sanitizeAliases } from './columnNames';
 import type { NamedColumn } from './columnNames';
-import { alreadyCalled } from './columnNameMessages';
+import { alreadyCalled, tooManyNames } from './columnNameMessages';
 
 // ── Kinds ────────────────────────────────────────────────────────────────────
 // A dashboard is stored as an Analysis record, so its kind is 'analysis' — the
@@ -316,7 +316,8 @@ export async function getColumns(projectId: string, datasetId: string): Promise<
   return own(file.columns, datasetId) ? file.columns[datasetId] : dict();
 }
 
-export interface ColumnPatch { description?: unknown; displayName?: unknown; aliases?: unknown; example?: unknown; sensitivity?: unknown }
+/** `addAlias`: ONE name appended to `aliases` inside the write — "Remember" on an answer card. Ignored beside `aliases`. */
+export interface ColumnPatch { description?: unknown; displayName?: unknown; aliases?: unknown; addAlias?: unknown; example?: unknown; sensitivity?: unknown }
 
 /**
  * Merge the fields PRESENT in `patch` (`aliases` replaces the list).
@@ -339,15 +340,16 @@ export async function setColumn(
     if (!own(file.columns, datasetId)) file.columns[datasetId] = dict();
     const cols = file.columns[datasetId];
     const cur = own(cols, column) ? cols[column] : sanitizeColumnDoc({}, column);
-    const aliases = p.aliases !== undefined ? sanitizeAliases(p.aliases, column) : cur.aliases;
+    const asked = p.aliases !== undefined ? p.aliases : p.addAlias !== undefined ? appended(cur, p.addAlias, column) : undefined;
+    const aliases = asked !== undefined ? sanitizeAliases(asked, column) : cur.aliases;
     const displayName = p.displayName !== undefined ? clip(p.displayName, MAX_DISPLAY) : cur.displayName;
     const renamed = !!displayName && displayName !== cur.displayName;
-    if (p.aliases !== undefined || renamed) {
+    if (asked !== undefined || renamed) {
       const others: NamedColumn[] = (datasetColumns || Object.keys(cols)).filter((name) => name !== column)
         .map((name) => ({ name, ...(own(cols, name) ? { displayName: cols[name].displayName, aliases: cols[name].aliases } : {}) }));
       // Thrown inside the write, before the file is touched: nothing of this patch is saved.
       const refuse = (said: string, by: NamedColumn): never => { throw new Error(alreadyCalled(said, by.displayName || by.name)); };
-      const hit = p.aliases !== undefined ? aliasCollision(aliases, others) : null;
+      const hit = asked !== undefined ? aliasCollision(aliases, others) : null;
       if (hit) refuse(hit.alias, hit.column);
       const called = renamed ? others.find((o) => aliasCollision([displayName], [{ name: '', aliases: o.aliases }])) : undefined;
       if (called) refuse(displayName, called);
@@ -366,6 +368,18 @@ export async function setColumn(
     cols[column] = next;
     return next;
   });
+}
+
+/**
+ * The "Also called" list with ONE more name: the list as it is when the name is
+ * already on it (in any case), is the column's own, or is not one name. A full
+ * list THROWS the sentence to show — never cut silently, as a typed list is.
+ */
+function appended(cur: ColumnDoc, alias: unknown, column: string): string[] {
+  const one = sanitizeAliases(typeof alias === 'string' && !alias.includes(',') ? alias : '', column);
+  if (one.length !== 1 || cur.aliases.some((a) => a.toLowerCase() === one[0].toLowerCase())) return cur.aliases;
+  if (cur.aliases.length >= MAX_ALIASES) throw new Error(tooManyNames(cur.displayName || column));
+  return [...cur.aliases, one[0]];
 }
 
 /**
