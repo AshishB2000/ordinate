@@ -9,6 +9,11 @@
 //
 // The card says how fresh its figures are (`asOf`, L0.2) beside the dataset's
 // name — the time the narration was given too.
+//
+// An answer with NO ROWS because a filter value is not in its column is not a
+// dead end: the server's sentence says which value, and "Did you mean" offers
+// the nearest stored ones (`noMatch`) in place of an empty chart. A good answer
+// can be kept: "Save as visual" (./SaveAsVisual), for a member who may edit.
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -22,6 +27,8 @@ import { AsOfCaption } from '../../ui/AsOf';
 import type { AsOf } from '../../ui/asOfView';
 import { LiveRefusal } from '../live/LiveOff';
 import { liveRefusalOf } from '../live/refusal';
+import { DidYouMean, type MeantOption } from './DidYouMean';
+import { SaveAsVisual } from './SaveAsVisual';
 import s from './AnswerCard.module.css';
 
 interface Card {
@@ -37,6 +44,8 @@ interface Card {
   filterLabels: string[];
   notes: string[];
   asOf?: AsOf;
+  /** No rows, because a filter value is not in its column: the server's sentence and the stored values it may have meant. */
+  noMatch?: { text: string; options: MeantOption[] };
 }
 type Reply = Card | { ok: false; reason?: string };
 
@@ -110,16 +119,24 @@ export function AnswerCard({
           ))}
         </div>
       )}
-      <div className={s.chart}>
-        <Chart type={card.chartType} data={card.data} label={card.title} />
-      </div>
-      {card.caption && <div className={s.caption}>{card.caption}</div>}
+      {card.noMatch ? (
+        // Nothing to draw, and the server knows why: its sentence and its options stand where the chart would.
+        <div className={s.noMatch} data-testid="answer-no-match">
+          <div className={s.noMatchText}>{card.noMatch.text}</div>
+          <DidYouMean options={card.noMatch.options} onPick={onFollowUp} />
+        </div>
+      ) : (
+        <div className={s.chart}>
+          <Chart type={card.chartType} data={card.data} label={card.title} />
+        </div>
+      )}
+      {card.caption && !card.noMatch && <div className={s.caption}>{card.caption}</div>}
       {card.notes.map((n) => (
         <div key={n} className={s.note}>
           {n}
         </div>
       ))}
-      {!narrated && card.bullets.length > 0 && (
+      {!narrated && !card.noMatch && card.bullets.length > 0 && (
         <ul className={s.facts}>
           {card.bullets.map((b) => (
             <li key={b}>{b}</li>
@@ -131,12 +148,16 @@ export function AnswerCard({
           <DataTable data={card.data} label={card.title} />
         </div>
       )}
-      <div className={s.actions}>
-        <Button size="sm" variant="ghost" aria-expanded={table} onClick={() => setTable(!table)}>
-          {table ? 'Hide table' : 'Show table'}
-        </Button>
-      </div>
-      {card.chips.length > 0 && (
+      {/* An empty answer has no table to show and nothing worth keeping or splitting. */}
+      {!card.noMatch && (
+        <div className={s.actions}>
+          <Button size="sm" variant="ghost" aria-expanded={table} onClick={() => setTable(!table)}>
+            {table ? 'Hide table' : 'Show table'}
+          </Button>
+          <SaveAsVisual projectId={projectId} spec={spec} />
+        </div>
+      )}
+      {!card.noMatch && card.chips.length > 0 && (
         <div className={s.chips}>
           {card.chips.map((c) => (
             <button

@@ -32,6 +32,9 @@ import { DEFAULT_CALENDAR } from './dateIntel';
 import type { CalendarPrefs } from './dateIntel';
 import { matchDate } from './filterDates';
 import type { DateMatch } from './filterDates';
+// The matcher itself — keys, and what exact / prefix / one-edit mean — is shared with the Assistant's answers.
+import { keyMatches, normPhrase, normText, trimEdges } from './valueMatch';
+import type { MatchLevel } from './valueMatch';
 
 export interface CatalogDimension { column: string; datasetId?: string; type: string; values: string[] }
 export interface CatalogMeasure { column: string; type: 'number'; max?: number | null }
@@ -93,17 +96,6 @@ const OP_SIGN: Record<string, string> = { '>': '>', '>=': '≥', '<': '<', '<=':
 
 // ── Words ───────────────────────────────────────────────────────────────────
 
-const EDGE = /^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu;
-
-/** Lower case, accents and edge punctuation stripped: "Québec," → "quebec". */
-export function normText(s: string): string {
-  return String(s).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(EDGE, '');
-}
-
-function normPhrase(s: string): string {
-  return String(s).split(/\s+/).map(normText).filter(Boolean).join(' ');
-}
-
 /** A column name as a phrase: "unit_price" and "unit price" read alike. */
 function colKey(s: string): string {
   return normPhrase(String(s).replace(/[_\-.]+/g, ' '));
@@ -123,15 +115,6 @@ function tokenize(text: string): Word[] {
     out.push({ raw, norm: op ? raw : normText(raw), start, end: start + raw.length, op });
   }
   return out;
-}
-
-/** Levenshtein distance ≤ 1, without building the matrix. */
-function withinOne(a: string, b: string): boolean {
-  if (Math.abs(a.length - b.length) > 1) return false;
-  let i = 0;
-  while (i < a.length && i < b.length && a[i] === b[i]) i++;
-  if (a.length === b.length) return a.slice(i + 1) === b.slice(i + 1);
-  return a.length > b.length ? a.slice(i + 1) === b.slice(i) : a.slice(i) === b.slice(i + 1);
 }
 
 // ── The catalog, indexed ────────────────────────────────────────────────────
@@ -182,7 +165,7 @@ export function candId(column: string, value?: string): string {
   return value === undefined ? column : column + '\n' + value;
 }
 
-type Level = 'exact' | 'prefix' | 'fuzzy';
+type Level = MatchLevel;
 interface ValueMatch { used: number; cands: Cand[] }
 
 function phraseAt(W: Word[], i: number, n: number): string {
@@ -200,18 +183,14 @@ function matchValue(W: Word[], i: number, level: Level, ix: Index, hint: number 
       // A stop-word matches a value only when typed in the value's own case:
       // "in" is a word, "IN" is Indiana.
       if (n === 1 && (STOP.has(phrase) || NEG.has(phrase))) {
-        const typed = W[i].raw.replace(EDGE, '');
+        const typed = trimEdges(W[i].raw);
         cands = cands.filter((c) => c.value.trim() === typed);
       }
     } else {
       if (!/\p{L}/u.test(phrase) || (n === 1 && GRAMMAR.has(phrase))) continue;
-      if (level === 'prefix') {
-        if (phrase.length < 2) continue;
-        cands = ix.all.filter((c) => c.key.length > phrase.length && c.key.startsWith(phrase));
-      } else {
-        if (phrase.length < 4) continue;
-        cands = ix.all.filter((c) => c.key !== phrase && withinOne(phrase, c.key));
-      }
+      // A typed word is looser than an answer's value: 2 characters for a prefix, 4 for one edit.
+      if (phrase.length < (level === 'prefix' ? 2 : 4)) continue;
+      cands = ix.all.filter((c) => keyMatches(level, phrase, c.key));
     }
     if (hint !== null) {
       const inHint = cands.filter((c) => c.dim === hint);

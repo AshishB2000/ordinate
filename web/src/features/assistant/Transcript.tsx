@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { Icon } from '../../ui/icons/Icon';
 import { AnswerCard } from './AnswerCard';
 import type { ActivityStep, Provenance, Turn } from './api';
+import { DidYouMean } from './DidYouMean';
 import s from './Dock.module.css';
 
 /** "kind: name · dataset: x · columns: a, b… · stats app-computed" — a footnote, not pills. */
@@ -85,6 +86,8 @@ export function Transcript({
             <AnswerCard projectId={projectId} spec={t.answer} narrated={t.text.trim() !== ''} onFollowUp={onFollowUp} />
           )}
           {(t.role === 'user' || !t.answer || t.text.trim() !== '') && <div className={s.bubble}>{t.text}</div>}
+          {/* A refused chart is not a dead end: what the app thinks was meant, one click each. */}
+          {t.role === 'assistant' && t.suggest && <DidYouMean options={t.suggest.options} said={t.suggest.said} onPick={onFollowUp} />}
           {t.role === 'assistant' && t.provenance && <div className={s.provenance}>{provenanceLine(t.provenance)}</div>}
         </div>
       ))}

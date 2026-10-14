@@ -87,6 +87,9 @@ export const assistant = {
     input: z.strictObject({ projectId: Uuid, threadId: Uuid.optional(), spec: AnswerSpec, label: z.string().max(200).optional() }),
     project: byProjectId,
   }),
+  // "Save as visual" on an answer card: it writes a Visual, so it is `write`. The spec is all a client
+  // sends — the encoding and the filter steps are rebuilt from it on the server (src/ipc/answerSave.ts).
+  'answer:saveVisual': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, spec: AnswerSpec }), project: byProjectId }),
 
   'plan:check': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, steps: Steps }), project: byProjectId }),
   'plan:start': rpc({

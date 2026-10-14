@@ -24,6 +24,10 @@
 // The context follows the screen (both modes): beside a saved visual the
 // header names that visual from the page's own `visual:get` and a question
 // carries `{ kind: 'visual', id }` (the half CI runs: it has no database);
+// there too, with no model, an Explain card is saved as a visual (the button,
+// then the link to the visual's own page, at the dock's 340px) and an answer
+// with no rows offers the stored values its filter may have meant ("Did you
+// mean"), one of which runs as the app's own chart;
 // beside the open dashboard a question carries `{ kind: 'analysis', id }`, and
 // the facts the model is sent are that dashboard's, its KPI the app's own sum.
 
@@ -45,7 +49,7 @@ async function openDock(page: Page): Promise<void> {
 
 const dbUrl = process.env.DATABASE_URL;
 if (!dbUrl) {
-  const { e2e, screens, settled } = await import('./fixtures.ts');
+  const { e2e, screens, settled, SCREENS } = await import('./fixtures.ts');
   e2e('dock: opens from the top bar onto the not-set-up state (no database → no key field)', async ({ page }) => {
     await page.goto('/');
     await settled(page);
@@ -120,6 +124,68 @@ if (!dbUrl) {
     await page.getByRole('textbox', { name: 'Ask the Assistant' }).waitFor();
     await page.getByRole('radiogroup').first().waitFor(); // the builder is up, on a draft
     assert.equal(await chip.textContent(), 'whole project');
+  });
+
+  // An answer is kept, and an empty one is not a dead end — with no model: "Explain" draws the card from the app's facts.
+  e2e('dock: an Explain card is saved as a visual; an answer with no rows offers the values the data holds', async ({ page, server }) => {
+    const pid = server.sample.projectId;
+    await page.goto(`/visuals/${pid}`);
+    await settled(page);
+    await page.getByRole('button', { name: 'More actions for Revenue by category' }).click();
+    await page.getByRole('menuitem', { name: 'Explain' }).click();
+    const dock = page.getByRole('complementary', { name: 'Assistant' });
+    const card = dock.getByTestId('answer-card').last();
+    await card.locator('canvas').waitFor();
+    assert.equal(Math.round((await dock.boundingBox())?.width ?? 0), 340, 'the dock at its default width');
+    /** The card in both themes, switched in place: a saved card is this panel's state, which a reload would drop. */
+    const shots = async (name: string) => {
+      for (const theme of ['light', 'dark'] as const) {
+        await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+        await page.waitForTimeout(300); // the colour transition
+        await card.scrollIntoViewIfNeeded();
+        await page.screenshot({ path: path.join(SCREENS, `${name}-${theme}.png`), fullPage: true });
+      }
+    };
+    const save = card.getByRole('button', { name: 'Save as visual' });
+    await save.waitFor(); // this member may edit (dev sign-in is an admin)
+    await shots('dock-save-visual');
+    const sent = page.waitForRequest((r) => decodeURIComponent(new URL(r.url()).pathname) === '/api/rpc/answer:saveVisual');
+    await save.click();
+    assert.deepEqual(Object.keys(((await sent).postDataJSON() as { args: [Record<string, unknown>] }).args[0]), ['projectId', 'spec'], 'the browser sends the spec and nothing else');
+    const open = card.getByRole('link', { name: 'Open in Visuals' });
+    await open.waitFor();
+    const href = (await open.getAttribute('href')) ?? '';
+    assert.match(href, new RegExp(`^/visuals/${pid}/[0-9a-f-]{36}$`));
+    await shots('dock-saved-visual');
+
+    // A visual of the project now, made by the server from the card: its title, its type, its encoding.
+    const csrf = (await page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';
+    const call = async (channel: string, input: unknown) =>
+      (await (await page.request.post(`${server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': csrf }, data: { args: [input] } })).json()) as Record<string, unknown>;
+    const kept = (await call('visual:get', { projectId: pid, id: href.split('/').pop() })) as { name: string; chartType: string; datasetId: string; encoding: { category: string } };
+    assert.deepEqual([kept.name, kept.chartType, kept.encoding.category], ['Revenue by category', 'column', 'category']);
+    await open.click();
+    await page.waitForURL(`**${href}`);
+    await page.waitForFunction(() => document.querySelector('[data-chart-type] canvas')); // its own page draws it
+
+    // A tile whose filter names a value no row holds ("New"), explained: no chart, the server's sentence, and
+    // the stored values it may have meant. A click runs one — the app's chart, no model.
+    const explained = await call('answer:explain', {
+      projectId: pid,
+      tile: { datasetId: kept.datasetId, encoding: { category: 'category', values: [{ column: 'revenue', aggregation: 'sum' }] }, filters: [{ type: 'filter', column: 'state', op: '=', value: 'New' }], chartType: 'column', name: 'Revenue in New' },
+    });
+    assert.equal(explained.ok, true, JSON.stringify(explained));
+    await page.goto(`/visuals/${pid}`);
+    await settled(page);
+    const empty = dock.getByTestId('answer-no-match');
+    await empty.getByText('No rows match state = "New".', { exact: true }).waitFor();
+    const meant = empty.getByRole('group', { name: 'Did you mean' }).getByRole('button');
+    assert.deepEqual((await meant.allTextContents()).sort(), ['New Jersey', 'New York'], 'the stored values "New" begins');
+    await screens(page, 'dock-did-you-mean');
+    await empty.getByRole('button', { name: 'New York' }).click();
+    const ran = dock.getByTestId('answer-card').last();
+    await ran.getByText('state = New York', { exact: true }).waitFor();
+    await ran.locator('canvas').waitFor();
   });
 } else {
   const dbName = `ordinate_e2e_dock_${process.pid}_${Date.now()}`;

@@ -115,3 +115,16 @@ export function taughtNames(
   }
   return out;
 }
+
+/** column → its display name, for the columns the dataset HAS NOW that have one: what a column is shown as. */
+export function shownNames(
+  columns: Array<{ name: string }>,
+  docs: Record<string, Pick<NamedColumn, 'displayName'>> | undefined,
+): Record<string, string> {
+  const out = Object.create(null) as Record<string, string>;
+  for (const c of columns) {
+    const shown = docs && Object.prototype.hasOwnProperty.call(docs, c.name) ? docs[c.name].displayName : '';
+    if (shown) out[c.name] = shown;
+  }
+  return out;
+}

@@ -30,6 +30,8 @@ import * as projects from '../app/projects';
 import type { LedgerEntry } from './numberAudit';
 import { sanitizeStoredSpec } from './answerSpec';
 import type { AnswerSpec } from './answerSpec';
+import { sanitizeSuggest } from './answerSuggest';
+import type { AnswerSuggest } from './answerSuggest';
 import * as recordFs from '../app/recordFs';
 import { ctx, serverDataDir } from '../server/context';
 
@@ -57,6 +59,8 @@ export interface CopilotTurn {
    * dashboard's metric cards, so a refreshed dataset moves the answer with it.
    */
   answer?: AnswerSpec;
+  /** "Did you mean": what a REFUSED chart may have meant, each option a complete spec (./answerSuggest). Never beside `answer`. */
+  suggest?: AnswerSuggest;
 }
 
 // One conversation. `id` is a randomUUID — a renderer key, never a path component.
@@ -94,6 +98,7 @@ export interface NewCopilotTurn {
   text: string;
   provenance?: CopilotProvenance;
   answer?: AnswerSpec;
+  suggest?: AnswerSuggest;
 }
 
 // A compact FACTS block + its provenance — what a context builder returns.
@@ -206,6 +211,8 @@ function normalizeTurns(raw: any): CopilotTurn[] {
     if (prov) turn.provenance = prov;
     const answer = role === 'assistant' ? sanitizeStoredSpec(t.answer) : undefined;
     if (answer) turn.answer = answer;
+    const suggest = role === 'assistant' && !answer ? sanitizeSuggest(t.suggest) : undefined;
+    if (suggest) turn.suggest = suggest;
     turns.push(turn);
   }
   // Defensive cap on load too, in case a file predates a lower MAX_TURNS.
@@ -418,6 +425,8 @@ export async function appendTurn(
   if (prov) record.provenance = prov;
   const answer = role === 'assistant' ? sanitizeStoredSpec(turn && turn.answer) : undefined;
   if (answer) record.answer = answer;
+  const suggest = role === 'assistant' && !answer ? sanitizeSuggest(turn && turn.suggest) : undefined;
+  if (suggest) record.suggest = suggest;
 
   const threads = await loadThreads(projectId);
   const own = mine(threads);
