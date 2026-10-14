@@ -138,7 +138,7 @@ const AGG_ALIASES: Record<string, VizAggregation> = {
   max: 'max', maximum: 'max', highest: 'max',
 };
 
-function parseAgg(raw: unknown): VizAggregation | null {
+export function parseAgg(raw: unknown): VizAggregation | null {
   if (typeof raw !== 'string') return null;
   return AGG_ALIASES[raw.trim().toLowerCase()] || null;
 }
@@ -330,6 +330,8 @@ export function validateAnswerSpec(
   if (series) spec.series = series;
   const top = typeof o.top === 'number' ? o.top : typeof o.limit === 'number' ? o.limit : NaN;
   if (Number.isInteger(top) && top > 0 && cat.type !== 'date') spec.top = Math.min(top, MAX_TOP);
+  // A date axis's roll-up, when the spec carries one: a refined answer keeps its chart's (./answerRefine).
+  if (isDateGrain(o.grain) && cat.type === 'date') spec.grain = o.grain;
   return { ok: true, spec };
 }
 

@@ -17,12 +17,25 @@ import type { ChartData } from '../analysis/vizData';
 import { compact } from '../analysis/captions';
 import { harvestAppNumbers } from './numberAudit';
 import type { LedgerEntry, LedgerUnit } from './numberAudit';
-import type { AnswerSpec } from './answerSpec';
+import type { AnswerFilter, AnswerSpec } from './answerSpec';
+import { WITHHELD } from './columnNotes';
 
 /** The spec in words — "sum of revenue by region, split by tier" — for `AnswerFactsInput.describe`. */
 export function describeAnswer(spec: AnswerSpec): string {
   const ms = spec.measures.map((m) => `${m.aggregation} of ${m.column}`).join(', ');
   return `${ms} by ${spec.category}${spec.series ? `, split by ${spec.series}` : ''}`;
+}
+
+/**
+ * The spec's filters as a MODEL may read them: the value compared with on a
+ * column marked personal or financial is "(withheld)" (./columnNotes), whoever
+ * wrote it — a follow-up carries a stored filter into a turn where neither the
+ * person nor the model said it. Labelled from these, the facts name the filter
+ * and never its value; the card a person sees is labelled from the real ones.
+ */
+export function withheldFilters(filters: AnswerFilter[], withheld: ReadonlySet<string>): AnswerFilter[] {
+  return filters.map((f) => ('period' in f || !withheld.has(f.column) || (f.value === undefined && !f.values)
+    ? f : { column: f.column, op: f.op, value: WITHHELD }));
 }
 
 const GUARD_LINE =
@@ -39,8 +52,14 @@ export interface AnswerFactsInput {
   categoryIsDate: boolean;
   /** Sum and count add up; an average or a max does not, so no total or share. */
   additive: boolean;
-  /** One per filter in force, e.g. "order_date: 2024-Q4". */
+  /** One per filter in force, e.g. "order_date: 2024-Q4" — as the card shows them. */
   filterLabels: string[];
+  /**
+   * The same filters as the facts TEXT says them, when a model may not read
+   * them all: the labels of `withheldFilters`. The bullets handed back for the
+   * card keep `filterLabels`; absent, the text says those too.
+   */
+  saidFilterLabels?: string[];
   caption: string;
   /**
    * When the rows are from, already worded ("Oct 9, 2026, 1:00 AM UTC" —
@@ -117,7 +136,8 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
 
   lines.push(`Answer: "${input.title}" — ${input.describe}, over dataset "${input.datasetName}".`);
   if (input.asOf) lines.push(`Data as of: ${input.asOf}.`);
-  if (input.filterLabels.length) lines.push(`Filtered to: ${input.filterLabels.join('; ')}.`);
+  const said = input.saidFilterLabels ?? input.filterLabels;
+  if (said.length) lines.push(`Filtered to: ${said.join('; ')}.`);
 
   const labels = Array.isArray(data.labels) ? data.labels : [];
   const series = Array.isArray(data.series) ? data.series : [];
@@ -126,6 +146,7 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
     bullets.push('No rows match this question, so there is nothing to chart.');
     const text = lines.join('\n');
     seal(ledger, text);
+    sealFilters(ledger, input);
     return { text, ledger, bullets, headline };
   }
 
@@ -199,15 +220,28 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
 
   bullets.push(`${labels.length} ${input.categoryIsDate ? 'periods' : 'categories'} shown.`);
   num(ledger, 'categories shown', labels.length, 'count');
-  if (input.filterLabels.length) bullets.push(`Filtered to ${input.filterLabels.join('; ')}.`);
 
   if (input.caption) lines.push('', `Caption shown under the chart (app-written): ${input.caption}`);
   lines.push('', 'Summary points (app-written):');
   bullets.forEach((b) => lines.push(`- ${b}`));
+  // The last point is the filters: in the text as a model may read them, on the card as they are.
+  if (said.length) lines.push(`- Filtered to ${said.join('; ')}.`);
+  if (input.filterLabels.length) bullets.push(`Filtered to ${input.filterLabels.join('; ')}.`);
 
   const text = lines.join('\n');
   seal(ledger, text);
+  sealFilters(ledger, input);
   return { text, ledger, bullets, headline };
+}
+
+/**
+ * Where the text says a filter as "(withheld)", the LEDGER still holds the real
+ * filters' figures. The ledger never goes to a model; it is what the number guard
+ * checks a narration against, and a threshold the person typed in their own
+ * question ("only above 900") is theirs to hear back without being accused.
+ */
+function sealFilters(ledger: LedgerEntry[], input: AnswerFactsInput): void {
+  if (input.saidFilterLabels && input.filterLabels.length) seal(ledger, `Filtered to: ${input.filterLabels.join('; ')}.`);
 }
 
 function fmtRaw(v: number | null | undefined): string {

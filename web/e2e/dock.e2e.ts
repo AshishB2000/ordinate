@@ -1,6 +1,6 @@
 // E2E (T2.12): the Assistant dock against the real server and a STUB model
-// provider on loopback (an Anthropic Messages API look-alike in this process —
-// no real network call is made).
+// provider on loopback (./dockStub.ts: an Anthropic Messages API look-alike in
+// this process — no real network call is made).
 //
 // Without DATABASE_URL: the dock opens from the top bar onto its designed
 // not-set-up state — "AI isn't set up", and for this admin the operator line
@@ -14,7 +14,9 @@
 // stub is asked with it, and the answer STREAMS into the pending bubble token
 // by token over this tab's event stream; then a plan whose import step is fed
 // by an upload (T0.4 — the server has no file picker) runs to the
-// app-computed KPI; and a reply that proposes a dashboard ASKS FIRST — the
+// app-computed KPI; a follow-up whose reply is a REFINE changes the answer on
+// screen, its card showing the filter it kept beside the one it added; and a
+// reply that proposes a dashboard ASKS FIRST — the
 // brief (kind and look), then the model's own questions, once — drafts it from
 // the answers, shows the review, and creates it on the click, in the look that
 // was picked. Zero console errors throughout; screens in both themes.
@@ -26,110 +28,15 @@
 // the facts the model is sent are that dashboard's, its KPI the app's own sum.
 
 import assert from 'node:assert/strict';
-import http from 'node:http';
 import path from 'node:path';
-import type { AddressInfo } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { after } from 'node:test';
 import pg from 'pg';
 import type { Page } from 'playwright';
+// The provider stub and what it was asked; the four it reassigns or appends to are read live.
+import { ANSWER, ASK_CHART, ASK_REFINE, ON_SCREEN, ON_SCREEN_ANSWER, askedModels, draftAsk, draftCalls, lastAsk, stubUrl } from './dockStub.ts';
 
 const ADMIN = 'boss@acme.test';
-const ANSWER = ['This project ', 'has no ', 'datasets yet — ', 'import a file ', 'to start.'];
-const PLAN = {
-  kind: 'plan',
-  intent: 'Import the sales file and track total revenue',
-  steps: [
-    { kind: 'import', file: 'sales.csv', name: 'Sales' },
-    { kind: 'metric', dataset: 'Sales', name: 'Total revenue', column: 'revenue', aggregation: 'sum' },
-  ],
-};
-
-/** What the model answers a "build me a dashboard" with (the action), and what it then drafts (structure only — no figure). */
-const DASHBOARD = '\n@@ACTION {"kind":"dashboard","intent":"revenue by region"}';
-const DRAFT = {
-  name: 'Regional revenue',
-  rationale: 'Revenue split by region, with the total beside it.',
-  calculatedFields: [],
-  sheets: [{
-    name: 'Overview',
-    metrics: [{ dataset: 'Sales', column: 'revenue', aggregation: 'sum', label: 'Total revenue' }],
-    visuals: [{ dataset: 'Sales', name: 'Revenue by region', chartType: 'column', encoding: { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] }, filters: [] }],
-    texts: [],
-  }],
-};
-/** What the model asks back when the draft prompt lets it (the clarify clause) — structure, no figure. */
-const QUESTIONS = {
-  questions: [
-    { ask: 'Which measure matters most?', options: ['Revenue', 'Number of orders'] },
-    { ask: 'How should the regions be compared?', options: ['Side by side', 'As a share of the total', 'Ranked'] },
-  ],
-};
-/** What `analysis:draft` asked the model, last. */
-let draftAsk = '';
-/** Every draft call, in order: was the model allowed to ask, and the facts it was sent. */
-const draftCalls: { asking: boolean; facts: string }[] = [];
-
-/** The models the stub asked with, in order. */
-const askedModels: string[] = [];
-/** The last streamed ask: the app's facts and the question, as the model was sent them. */
-let lastAsk = '';
-/** A question about the dashboard on screen, and what the model says to it (words only: a figure would be audited). */
-const ON_SCREEN = 'What is on this dashboard?';
-const ON_SCREEN_ANSWER = ['It has one sheet: ', 'revenue by region, ', 'with the total beside it.'];
-
-/** What the model adds to ANSWER when the project has no data: the dock shows the three ways in. */
-const GET_DATA = '\n@@ACTION {"kind":"import","intent":"bring data in"}';
-
-/** The provider stub: lists two models, a connectivity test gets "OK", a draft gets QUESTIONS when its prompt allows them and DRAFT when it does not, a streamed ask gets ANSWER and GET_DATA (or a plan or a dashboard proposal when asked for one). */
-const stub = http.createServer((req, res) => {
-  let body = '';
-  req.on('data', (c: Buffer) => (body += c.toString()));
-  req.on('end', () => {
-    if (req.method === 'GET' && req.url === '/v1/models') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ data: [{ id: 'claude-sonnet-stub', display_name: 'Claude Sonnet Stub', created_at: 2 }, { id: 'claude-haiku-stub', display_name: 'Claude Haiku Stub', created_at: 1 }] }));
-      return;
-    }
-    const json = JSON.parse(body || '{}') as { stream?: boolean; model?: string; system?: unknown; messages?: { content: unknown }[] };
-    askedModels.push(String(json.model));
-    const asked = JSON.stringify(json.messages?.at(-1)?.content ?? '');
-    if (!json.stream) {
-      const system = JSON.stringify(json.system ?? '');
-      const drafting = system.includes('ANALYSIS PLAN');
-      // Only the clarify clause spells the questions shape: the plain draft prompt has no way to ask.
-      const asking = drafting && system.includes('\\"questions\\"');
-      if (drafting) {
-        draftAsk = asked;
-        draftCalls.push({ asking, facts: asked });
-      }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ content: [{ type: 'text', text: asking ? JSON.stringify(QUESTIONS) : drafting ? JSON.stringify(DRAFT) : 'OK' }], stop_reason: 'end_turn' }));
-      return;
-    }
-    lastAsk = asked;
-    const parts = asked.includes(ON_SCREEN)
-      ? ON_SCREEN_ANSWER
-      : asked.includes('a plan')
-        ? ['Here is a plan you can run step by step.', `\n@@ACTION ${JSON.stringify(PLAN)}`]
-        : asked.includes('regional dashboard')
-          ? ['I will draft a dashboard of revenue by region.', DASHBOARD]
-          : [...ANSWER, GET_DATA];
-    res.writeHead(200, { 'content-type': 'text/event-stream' });
-    let i = 0;
-    const tick = setInterval(() => {
-      if (i < parts.length) {
-        res.write(`event: content_block_delta\ndata: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: parts[i++] } })}\n\n`);
-        return;
-      }
-      clearInterval(tick);
-      res.end('event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n\n');
-    }, 150);
-  });
-});
-await new Promise<void>((r) => stub.listen(0, '127.0.0.1', r));
-const stubUrl = `http://127.0.0.1:${(stub.address() as AddressInfo).port}`;
-after(() => stub.close());
 
 async function openDock(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Assistant', exact: true }).click();
@@ -350,6 +257,35 @@ if (!dbUrl) {
     await box.pressSequentially('it');
     await box.press('Enter');
     await dock.getByText(/^dataset: Sales · /).waitFor();
+
+    // ── A follow-up refines the answer on screen ────────────────────────────
+    // The first answer leaves one region out. The follow-up's reply is a REFINE
+    // that carries only the new filter: the model was told what the chart is, by
+    // name, and the app merged the change — so the second card shows BOTH filters.
+    await page.reload();
+    await settled(page);
+    await box.fill(ASK_CHART);
+    await box.press('Enter');
+    const answersShown = dock.getByTestId('answer-card');
+    await answersShown.first().getByText('region != North', { exact: true }).waitFor();
+    assert.doesNotMatch(lastAsk, /PREVIOUS ANSWER/, 'the first question of the chart is told of no previous answer');
+    await box.fill(ASK_REFINE);
+    await box.press('Enter');
+    const refined = answersShown.nth(1);
+    await refined.getByText('revenue > 900', { exact: true }).waitFor();
+    assert.equal(await refined.getByText('region != North', { exact: true }).count(), 1, 'the carried filter is still on the refined card');
+    assert.equal(await answersShown.first().getByText('revenue > 900', { exact: true }).count(), 0, 'the first card is the first answer, untouched');
+    // The app told the model what the chart was — names only — and the figure is the app's: only West is above 900.
+    assert.match(lastAsk, /PREVIOUS ANSWER[^]*dataset \\"Sales\\"; category \\"region\\"; measures sum\(revenue\); filters: \\"region\\" != \\"North\\"; chart column\./);
+    assert.doesNotMatch(lastAsk.slice(lastAsk.indexOf('PREVIOUS ANSWER')), /1[,.]?200|800/, 'no figure of the card is in the block');
+    await refined.getByText('Highest · West', { exact: true }).waitFor();
+    await refined.locator('canvas').waitFor();
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+      await refined.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(300); // the colour transition
+      await page.screenshot({ path: path.join(SCREENS, `dock-follow-up-${theme}.png`), fullPage: true });
+    }
 
     // ── Rename and delete a conversation ────────────────────────────────────
     // ⋯ renames the one on screen; the header then shows the STORED name, which a

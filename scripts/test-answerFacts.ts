@@ -84,6 +84,33 @@ ok('facts: an average states no total and no share', !/Total/.test(avg.text) && 
   && avg.headline.length === 1 && avg.headline[0].label === 'Highest · B');
 ok('facts: the filters in force are a bullet', avg.bullets.includes('Filtered to region in A, B.'));
 
+// A filter VALUE on a column marked personal or financial: the text a model reads says the filter and
+// withholds the value; the bullets handed back for the card, and the ledger's digits, keep to their own.
+const SECRET = 918273;
+const FILTERS: import('../src/ai/answerSpec').AnswerFilter[] = [
+  { column: 'region', op: 'in', values: ['A', 'B'] }, { column: 'salary', op: '>', value: SECRET },
+  { column: 'email', op: 'not in', values: ['a@x.test', 'b@x.test'] }, { column: 'email', op: 'not_empty' }, { column: 'born', period: 'last_year' },
+];
+const HIDE: ReadonlySet<string> = new Set(['salary', 'email', 'born']);
+const masked = F.withheldFilters(FILTERS, HIDE);
+ok('withheld: a marked column\'s value is replaced, its column and comparison kept; a filter with no value, a period and an unmarked column are untouched',
+  JSON.stringify(masked) === JSON.stringify([FILTERS[0], { column: 'salary', op: '>', value: '(withheld)' }, { column: 'email', op: 'not in', value: '(withheld)' }, FILTERS[3], FILTERS[4]])
+  && masked[0] === FILTERS[0] && F.withheldFilters(FILTERS, new Set()).every((f, i) => f === FILTERS[i]), JSON.stringify(masked));
+const shownLabels = ['region in A, B', `salary > ${SECRET}`];
+const saidLabels = ['region in A, B', 'salary > (withheld)'];
+const AVG = { title: 'Avg revenue', datasetName: 'd', describe: 'avg of revenue by region', data: { labels: ['A', 'B'], series: [{ name: 'avg of revenue', values: [10, 30] }] }, categoryIsDate: false, additive: false, caption: '' };
+const hidden = F.answerFacts({ ...AVG, filterLabels: shownLabels, saidFilterLabels: saidLabels });
+const open = F.answerFacts({ ...AVG, filterLabels: shownLabels });
+ok('withheld: the facts text says the filter without its value — its line and its summary point both',
+  !hidden.text.includes(String(SECRET)) && hidden.text.includes('\nFiltered to: region in A, B; salary > (withheld).\n') && hidden.text.endsWith('\n- Filtered to region in A, B; salary > (withheld).'), hidden.text);
+ok('withheld: …the card\'s bullets are the ones it has without the mark', JSON.stringify(hidden.bullets) === JSON.stringify(open.bullets) && hidden.bullets.includes(`Filtered to region in A, B; salary > ${SECRET}.`));
+// The LEDGER is the app's own record and never reaches a model: it keeps the real threshold, so a narration that
+// repeats what the person typed ("only above 900") is not accused — while the text a model reads never says it.
+ok('withheld: …the ledger still vouches for the real filter figure, exactly as without the mark', hidden.ledger.some((e) => e.value === SECRET) && open.ledger.some((e) => e.value === SECRET)
+  && !hidden.text.includes(String(SECRET)));
+ok('withheld: …and for nothing else (negative control)', !hidden.ledger.some((e) => e.value === SECRET + 1));
+ok('withheld: with no labels of its own the text says the card\'s (negative control)', open.text.includes(`salary > ${SECRET}`) && open.text.endsWith(`\n- Filtered to region in A, B; salary > ${SECRET}.`));
+
 const monthly = F.answerFacts({
   title: 'Revenue by month', datasetName: 'd', describe: 'sum of revenue by month',
   data: { labels: ['2024-10', '2024-11', '2024-12'], series: [{ name: 'sum of revenue', values: [200, 250, 225] }] },

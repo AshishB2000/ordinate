@@ -36,13 +36,17 @@ import {
   validateAnswerSpec,
 } from '../ai/answerSpec';
 import type { AnswerChip, AnswerSpec, SpecDataset, SpecMetric } from '../ai/answerSpec';
-import { answerFacts, describeAnswer } from '../ai/answerFacts';
+import { isRefine, refineSpec, sameChart } from '../ai/answerRefine';
+import { previousAnswerBlock } from '../ai/previousAnswer';
+import { withheldColumns } from '../app/sharePolicy';
+import { answerFacts, describeAnswer, withheldFilters } from '../ai/answerFacts';
 import type { Headline } from '../ai/answerFacts';
 import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
 import type { SuggestedAction } from '../ai/suggestedAction';
 import type { AsOf } from '../api/asOf';
 import { asOfFrom, utcLabel } from '../data/figureAsOf';
 import type { LiveFailureCode } from '../engine/live/liveQuery';
+import { answerNames } from '../engine/live/liveMissing';
 import { liveCardFor } from './liveAnswers';
 import { ensureFresh } from '../data/freshOnAsk';
 import { withPulls } from '../data/freshOnAskState';
@@ -163,9 +167,14 @@ export async function computeCard(projectId: string, spec: AnswerSpec): Promise<
   // The rows are already loaded, so their time comes off the same record — no second read.
   const read = asOfFrom([ds]);
   const asOf = read ? withPulls(read, projectId, [ds.id]) : read; // "· refreshing…" while a pull goes on (L3.1)
+  // What a MODEL reads of the filters: the value on a column marked personal or financial is withheld
+  // (ai/answerFacts `withheldFilters`). The card's own labels, drawn for the person, are untouched.
+  const withheld = spec.filters.length ? await withheldColumns(projectId, ds.id) : new Set<string>();
+  const saidFilterLabels = spec.filters.some((f) => withheld.has(f.column))
+    ? specFilterSteps({ filters: withheldFilters(spec.filters, withheld) }, ds.columns, ds.rows).labels : undefined;
   const facts = answerFacts({
     title: spec.title, datasetName: ds.name, describe: describeAnswer(spec), data,
-    categoryIsDate: isDate, additive, filterLabels, caption, ...(asOf ? { asOf: utcLabel(asOf.at) } : {}),
+    categoryIsDate: isDate, additive, filterLabels, saidFilterLabels, caption, ...(asOf ? { asOf: utcLabel(asOf.at) } : {}),
   });
   const notes = viz.warnings.slice();
   if (viz.category && viz.category.note) notes.push(viz.category.note);
@@ -236,9 +245,46 @@ export interface AnswerTurn {
   spec: AnswerSpec;
 }
 
+/** The chart a follow-up continues: its stored spec, the block that tells the model about it, and that block's ledger. */
+export interface PreviousAnswer { spec: AnswerSpec; block: string; ledger: LedgerEntry[] }
+
+/**
+ * The most recent answer of a conversation, when a follow-up can still build on
+ * it: its dataset exists and the spec, restated in full, still validates against
+ * it — every column it uses is still there, with a type its measures and filters
+ * fit. Otherwise null, and the next question is asked as if nothing came before.
+ * Metadata and the catalog only: a Live dataset is never hydrated.
+ *
+ * "Still there" is by EXACT name, as `computeCard` reads it. A column renamed
+ * only in case or punctuation still resolves by the validator's looser rules,
+ * but the block, the marks that withhold a value and the merge all go by the
+ * stored name — under a stale one a marked value would be printed and a
+ * replaced filter kept.
+ */
+export async function previousAnswer(projectId: string, turns: copilot.CopilotTurn[]): Promise<PreviousAnswer | null> {
+  let spec: AnswerSpec | undefined;
+  for (let i = turns.length - 1; i >= 0 && !spec; i--) if (turns[i].role === 'assistant') spec = turns[i].answer;
+  const meta = spec ? await datasets.getDatasetMeta(projectId, spec.datasetId) : null;
+  if (!spec || !meta) return null;
+  if (answerNames(spec).some((n) => !meta.columns.some((c) => c.name === n))) return null;
+  const ds: SpecDataset = { id: meta.id, name: meta.name, columns: meta.columns };
+  if (!validateAnswerSpec(refineSpec(spec, {}, ds), [ds]).ok) return null;
+  const { text, ledger } = previousAnswerBlock(spec, meta.name, await withheldColumns(projectId, meta.id));
+  return { spec, block: text, ledger };
+}
+
 /**
  * The dock's `answer` action → a narrated, audited answer turn, or the reason
  * it could not be built (the caller keeps the prose answer and says why).
+ *
+ * `previous` is the answer a follow-up continues (`previousAnswer`). A spec
+ * marked `"refine": true` is merged onto it by the app (ai/answerRefine) and the
+ * MERGED spec is validated — refused with the validator's reason, never cut
+ * back to the patch alone. A refine the merge could apply nothing of (a key it
+ * does not read) is refused too: the previous chart again, under the
+ * follow-up's title, is a wrong answer that looks right. Any other spec is a
+ * new subject; it keeps nothing of the previous answer but its dataset, and
+ * that only as the default after the screen's own.
  */
 export async function answerFromAction(
   projectId: string,
@@ -246,6 +292,7 @@ export async function answerFromAction(
   action: SuggestedAction,
   question: string,
   guard: Guard,
+  previous?: AnswerSpec,
 ): Promise<({ ok: true } & AnswerTurn) | Failure> {
   let defaultDatasetId: string | undefined;
   if (context && context.kind === 'dataset' && context.id) defaultDatasetId = context.id;
@@ -253,10 +300,17 @@ export async function answerFromAction(
     const v = await visuals.getVisual(projectId, context.id);
     if (v) defaultDatasetId = v.datasetId;
   }
-  const v = validateAnswerSpec(action.spec, await specDatasets(projectId), {
-    defaultDatasetId, metrics: await specMetrics(projectId), title: action.intent || question,
+  const all = await specDatasets(projectId);
+  const defined = await specMetrics(projectId);
+  const on = previous ? all.find((d) => d.id === previous.datasetId) : undefined;
+  // The answer a refine is laid over — none for a new subject, or once its dataset is gone.
+  const base = previous && on && isRefine(action.spec) ? previous : null;
+  const raw = base && on ? refineSpec(base, action.spec, on, defined) : action.spec;
+  const v = validateAnswerSpec(raw, all, {
+    defaultDatasetId: defaultDatasetId ?? on?.id, metrics: defined, title: action.intent || question,
   });
   if (!v.ok) return v;
+  if (base && sameChart(base, v.spec)) return { ok: false, reason: 'The follow-up changed nothing the app could apply.' };
   const built = await computeCard(projectId, v.spec);
   if ('ok' in built) return built;
   const n = await narrate(built,

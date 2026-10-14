@@ -36,6 +36,7 @@ const comp: typeof import('../src/engine/live/compile') = require('../src/engine
 const dialects: typeof import('../src/engine/live/dialects') = require('../src/engine/live/dialects');
 const { duckdbDialect } = require('../src/engine/live/dialects/duckdb') as typeof import('../src/engine/live/dialects/duckdb');
 const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
+const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
 const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 const visualsIpc: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
@@ -161,6 +162,18 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
     ok('the live card says when the warehouse answered, in its facts', /Data as of: .* UTC\./.test(builtLive.factsText) && builtLive.card.asOf?.mode === 'live');
   }
 
+  // A filter VALUE on a column marked personal: the card a person sees says it, the facts a model narrates from do not.
+  const KEPT_OUT = 'zq-canary-live';
+  const markedSpec: AnswerSpec = { ...aSpec, filters: [{ column: 'cat', op: '!=', value: KEPT_OUT }] };
+  await H.as(ORG_A, () => catalog.setColumn(P, L, 'cat', { sensitivity: 'personal' }));
+  const hiddenLive = await H.as(ORG_A, () => answers.computeCard(P, markedSpec));
+  await H.as(ORG_A, () => catalog.setColumn(P, L, 'cat', { sensitivity: 'none' }));
+  const shownLive = await H.as(ORG_A, () => answers.computeCard(P, markedSpec));
+  ok('a filter value on a marked column: on the live card, withheld from the facts its narration reads',
+    !('ok' in hiddenLive) && hiddenLive.card.filterLabels[0] === `cat != ${KEPT_OUT}` && hiddenLive.factsText.includes('\nFiltered to: cat != (withheld).\n')
+    && !hiddenLive.factsText.includes(KEPT_OUT), show(hiddenLive).slice(0, 400));
+  ok('NEGATIVE CONTROL: unmarked, the same facts say it', !('ok' in shownLive) && shownLive.factsText.includes(`\nFiltered to: cat != ${KEPT_OUT}.\n`), show(shownLive).slice(0, 400));
+
   // ── 3. The Assistant's facts ───────────────────────────────────────────────
   const realViz = visualsIpc.vizDataFor;
   const drawn: string[] = [];
@@ -225,6 +238,18 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   // ── 4. Explain, the Summary card, an alert ─────────────────────────────────
   const explained = (await post('answer:explain', { projectId: P, tile: { datasetId: L, encoding: { category: 'region', values: [M('amt', 'sum')] }, filters: [], chartType: 'bar', name: 'Live by region' } })).value;
   ok('answer:explain on a Live tile: a conversation with its card (no model: the bullets stand)', explained.ok === true && typeof explained.threadId === 'string', show(explained));
+  // A follow-up on a Live answer: found from metadata alone, its refine merged by the app, the merged spec asked
+  // of the warehouse. THE SPY below covers both — neither the lookup nor the merged card may hydrate.
+  const liveSpec = answers.tileSpec({ datasetId: L, encoding: { category: 'region', values: [M('amt', 'sum')] }, filters: [], chartType: 'bar', name: 'Live by region' });
+  const liveTurn = { id: '1', role: 'assistant' as const, text: '', createdAt: '', ...(liveSpec ? { answer: liveSpec } : {}) };
+  const prev = await H.as(ORG_A, () => answers.previousAnswer(P, [liveTurn]));
+  const narrowedTo = prev ? await H.as(ORG_A, () => answers.answerFromAction(P, {}, {
+    kind: 'answer', intent: 'north only', spec: { refine: true, filters: [{ column: 'region', op: '=', value: 'north' }] },
+  }, 'north only', copilotIpc.guardAnswer, prev.spec)) : null;
+  ok('a follow-up on a Live answer: told of it by name, merged, and answered by the warehouse — one more filter, the same dataset',
+    !!prev && /^PREVIOUS ANSWER[^\n]*\ndataset "[^"]+"; category "region"; measures sum\(amt\); chart bar\.$/.test(prev.block)
+    && !!narrowedTo && narrowedTo.ok === true && narrowedTo.spec.datasetId === L && show(narrowedTo.spec.filters) === show([{ column: 'region', op: '=', value: 'north' }]),
+    show([prev, narrowedTo]).slice(0, 400));
   const summary = (await post('summary:compute', { projectId: P, pages: [{ cards: [{ id: '0b8d3c2e-9a4f-4e1b-8c7d-6f5e4d3c2b1a', type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 }, metric: { datasetId: L, column: 'qty', aggregation: 'sum', label: 'Live qty' } }] }] })).value;
   ok('summary:compute: the Live KPI\'s sentence, from the warehouse\'s figure', summary.ok === true && (summary.sentences as Reply[]).some((x) => x.kind === 'kpi' && String(x.text).includes('Live qty')), show(summary));
 
