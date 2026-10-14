@@ -104,7 +104,11 @@ const open = F.answerFacts({ ...AVG, filterLabels: shownLabels });
 ok('withheld: the facts text says the filter without its value — its line and its summary point both',
   !hidden.text.includes(String(SECRET)) && hidden.text.includes('\nFiltered to: region in A, B; salary > (withheld).\n') && hidden.text.endsWith('\n- Filtered to region in A, B; salary > (withheld).'), hidden.text);
 ok('withheld: …the card\'s bullets are the ones it has without the mark', JSON.stringify(hidden.bullets) === JSON.stringify(open.bullets) && hidden.bullets.includes(`Filtered to region in A, B; salary > ${SECRET}.`));
-ok('withheld: …and the value is not a figure a narration may cite', !hidden.ledger.some((e) => e.value === SECRET) && open.ledger.some((e) => e.value === SECRET));
+// The LEDGER is the app's own record and never reaches a model: it keeps the real threshold, so a narration that
+// repeats what the person typed ("only above 900") is not accused — while the text a model reads never says it.
+ok('withheld: …the ledger still vouches for the real filter figure, exactly as without the mark', hidden.ledger.some((e) => e.value === SECRET) && open.ledger.some((e) => e.value === SECRET)
+  && !hidden.text.includes(String(SECRET)));
+ok('withheld: …and for nothing else (negative control)', !hidden.ledger.some((e) => e.value === SECRET + 1));
 ok('withheld: with no labels of its own the text says the card\'s (negative control)', open.text.includes(`salary > ${SECRET}`) && open.text.endsWith(`\n- Filtered to region in A, B; salary > ${SECRET}.`));
 
 const monthly = F.answerFacts({

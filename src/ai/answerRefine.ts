@@ -123,5 +123,7 @@ const CHART_KEYS = ['datasetId', 'category', 'measures', 'column', 'aggregation'
  */
 export function sameChart(a: AnswerSpec, b: AnswerSpec): boolean {
   // The key list is JSON.stringify's own: it keeps these keys, in this order, at every depth.
-  return JSON.stringify(a, CHART_KEYS) === JSON.stringify(b, CHART_KEYS);
+  // Filters in any order: the merge moves a restated filter to the end, and that alone changes no chart.
+  const said = (s: AnswerSpec): string => JSON.stringify({ ...s, filters: s.filters.map((f) => JSON.stringify(f, CHART_KEYS)).sort() }, CHART_KEYS);
+  return said(a) === said(b);
 }

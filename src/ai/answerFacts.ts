@@ -146,6 +146,7 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
     bullets.push('No rows match this question, so there is nothing to chart.');
     const text = lines.join('\n');
     seal(ledger, text);
+    sealFilters(ledger, input);
     return { text, ledger, bullets, headline };
   }
 
@@ -229,7 +230,18 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
 
   const text = lines.join('\n');
   seal(ledger, text);
+  sealFilters(ledger, input);
   return { text, ledger, bullets, headline };
+}
+
+/**
+ * Where the text says a filter as "(withheld)", the LEDGER still holds the real
+ * filters' figures. The ledger never goes to a model; it is what the number guard
+ * checks a narration against, and a threshold the person typed in their own
+ * question ("only above 900") is theirs to hear back without being accused.
+ */
+function sealFilters(ledger: LedgerEntry[], input: AnswerFactsInput): void {
+  if (input.saidFilterLabels && input.filterLabels.length) seal(ledger, `Filtered to: ${input.filterLabels.join('; ')}.`);
 }
 
 function fmtRaw(v: number | null | undefined): string {

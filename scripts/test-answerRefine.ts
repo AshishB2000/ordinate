@@ -176,6 +176,9 @@ const reordered = { title: 'another name', grain: Q.grain, top: Q.top, chartType
   category: Q.category, datasetId: Q.datasetId } as unknown as AnswerSpec;
 ok('sameChart: a patch in a key the merge does not read comes out as the previous chart', again.ok && R.sameChart(Q, again.spec), JSON.stringify(again));
 ok('sameChart: the title, a measure\'s metric link and the order of keys apart, it is the same chart', R.sameChart(Q, reordered) && !sameLeaves(Q, reordered));
+ok('sameChart: the same filters in another order are the same chart; one value apart they are not', Q.filters.length >= 2
+  && R.sameChart(Q, { ...Q, filters: [...Q.filters].reverse() })
+  && !R.sameChart(Q, { ...Q, filters: [...Q.filters].reverse().slice(1) }), JSON.stringify(Q.filters));
 ok('sameChart: …and any setting apart it is not (negative control)', [
   { ...Q, top: 3 }, { ...Q, series: 'segment' }, { ...Q, chartType: 'pie' }, { ...Q, category: 'segment' }, { ...Q, filters: Q.filters.slice(1) },
   { ...Q, filters: [Q.filters[0], { column: 'segment', op: '=', value: 'SMB' }] }, { ...Q, measures: [{ column: 'revenue', aggregation: 'avg' }] }, { ...Q, datasetId: OTHER.id },
