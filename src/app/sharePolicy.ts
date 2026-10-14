@@ -132,7 +132,7 @@ export async function assistantColumnDocs(projectId: string, datasetId: string):
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   for (const [name, level] of await markedLevels(projectId, datasetId, meta ? meta.steps : [])) {
     if (!Object.prototype.hasOwnProperty.call(docs, name)) {
-      docs[name] = { description: '', displayName: '', example: '', sensitivity: level, updatedBy: '', updatedAt: '' };
+      docs[name] = { description: '', displayName: '', aliases: [], example: '', sensitivity: level, updatedBy: '', updatedAt: '' };
     }
   }
   return docs;

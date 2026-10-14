@@ -110,6 +110,7 @@
   "cohortRender.weighted_by_cohort_size_over_the": "Ponderado por el tamaño de la cohorte, sobre las cohortes que han alcanzado cada periodo",
   "cohortRender.without_an_entity_or_a_readable": "{excluded2, plural, one {Se excluyó {excluded} fila sin entidad o sin fecha legible.} other {Se excluyeron {excluded} filas sin entidad o sin fecha legible.}}",
   "cohortRender.without_an_entity_or_a_readable_2": "{excluded2, plural, one {Se excluyó {excluded} fila sin entidad o sin marca de tiempo legible.} other {Se excluyeron {excluded} filas sin entidad o sin marca de tiempo legible.}}",
+  "columnNameMessages.is_already_what_people_call": null,
   "common.alert": "Alerta",
   "common.at_risk": "En riesgo",
   "common.attainment": "Cumplimiento",

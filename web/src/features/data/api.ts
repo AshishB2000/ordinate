@@ -136,6 +136,8 @@ export interface Doc {
 export interface ColumnDoc {
   description?: string;
   displayName?: string;
+  /** "Also called": the other names people ask for the column by, as the server stored them. */
+  aliases?: string[];
   example?: string;
   sensitivity?: 'none' | 'personal' | 'financial';
   updatedBy?: string;

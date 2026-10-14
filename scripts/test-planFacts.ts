@@ -193,6 +193,14 @@ function checkNotes(): void {
   ok('notes: a display name and a description read as the chat reads them',
     lines.includes('- region: called "Territory"; Where the order shipped'));
   ok('notes: a marked column says so', lines.includes('- email: personal data; sample values withheld'));
+  // "Also called" names ride in the same note, in the chat's words — and held like any user text (one line).
+  const named = { displayName: 'Territory', aliases: ['area', 'sales region'], description: 'Where the order shipped' };
+  const chatNamed: string[] = [];
+  copilotFacts.columnNoteLines(chatNamed, { region: named }, SALES_COLS);
+  const draftNamed = planFacts.buildFactsText(CTX, INTENT, { columnDocs: { [SALES]: { region: { ...named, aliases: ['area', 'sales\nregion', ''] } } } });
+  ok('notes: also-called names are in the draft\'s note exactly as the chat writes them, a line break in one flattened',
+    chatNamed[2] === '- region: called "Territory"; also called "area", "sales region"; Where the order shipped'
+    && linesOf(draftNamed).includes(chatNamed[2]), draftNamed);
   ok('notes: a note on a column the dataset no longer has is left out', !text.includes('no longer has'));
   const at = (line: string): number => lines.indexOf(line);
   ok('notes: each dataset\'s notes sit under its own name',
