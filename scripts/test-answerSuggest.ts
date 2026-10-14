@@ -177,6 +177,11 @@ for (const m of UNCHARTABLE) {
   ok(`metrics: "${m.name}", defined but not chartable, is refused as it always was and reports no miss`,
     !r.ok && r.reason === `Unknown measure column "${m.name}".` && !('miss' in r), show(r));
 }
+// …and the same when the metric is defined on ANOTHER dataset: still that metric, never this dataset's bare column.
+const ELSEWHERE: SpecMetric[] = [{ ...UNCHARTABLE[0], datasetId: D2 }];
+const elsewhere = A.validateAnswerSpec({ ...BASE, measures: ['Enterprise profit'] }, ALL, { ...TITLE, metrics: ELSEWHERE });
+ok('metrics: a metric of that name on another dataset is refused plainly too, with no miss to offer a column from',
+  !elsewhere.ok && elsewhere.reason === 'Unknown measure column "Enterprise profit".' && !('miss' in elsewhere), show(elsewhere));
 ok('metrics: …undefined, the same words are a miss that offers the column (negative control)',
   labels({ ...BASE, measures: ['Enterprise profit'] }) === 'profit' && labels({ ...BASE, measures: ['Profit ratio'] }) === 'profit');
 ok('every option passes the stored-spec whitelist as it is',[...sales, ...summed, ...filtered, ...ds1, ...byMetric].every((o) => sameLeaves(A.sanitizeStoredSpec(o.spec), o.spec)));

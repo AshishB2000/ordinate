@@ -210,7 +210,8 @@ function resolveMeasure(
     // no unknown NAME either: "Did you mean" would offer exactly that column.
     if (m) return `Unknown measure column "${String(colName)}".`;
     col = resolveColumn(colName, columns, names);
-    if (!col) return { unknown: colName };
+    // A metric of that name on ANOTHER dataset is that metric too: refused plainly, never offered as a column here.
+    if (!col) return metrics.some((x) => x.name.trim().toLowerCase() === name) ? `Unknown measure column "${String(colName)}".` : { unknown: colName };
   }
 
   let agg = aggRaw === undefined || aggRaw === null || aggRaw === '' ? null : parseAgg(aggRaw);

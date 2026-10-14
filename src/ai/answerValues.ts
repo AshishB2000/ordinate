@@ -93,6 +93,11 @@ export function canonicaliseTextFilters(steps: FilterStep[], held: Held): void {
  */
 export function matchValues(spec: AnswerSpec, held: Held): AnswerSpec {
   const matched: ValueMatch[] = [];
+  // Bounded WORK, not only bounded columns: at most this many loose lookups per spec, each against at
+  // most LOOSE_MAX_DISTINCT values (~1 ms). A long `in` list — a client may send any spec to
+  // answer:rerun — leaves the rest as said instead of holding the event loop, and every value the
+  // app does rewrite still gets its "Matched …" note (`matched` never passes MAX_MATCHED).
+  let budget = MAX_MATCHED - (spec.matched?.length ?? 0);
   const filters = spec.filters.map((f): AnswerFilter => {
     if ('period' in f || !MATCH_OPS.has(f.op)) return f;
     const column = f.column;
@@ -100,7 +105,8 @@ export function matchValues(spec: AnswerSpec, held: Held): AnswerSpec {
     if (!byKey || byKey.size > LOOSE_MAX_DISTINCT) return f;
     let keys: ValueKeys | undefined; // the column read once, and only if a value needs it
     const fix = (v: Cell): Cell => {
-      if (typeof v !== 'string' || byKey.has(exactKey(v))) return v;
+      if (typeof v !== 'string' || byKey.has(exactKey(v)) || budget <= 0) return v;
+      budget -= 1;
       keys ??= valueKeys(byKey.values());
       const near = oneNearValue(v, keys);
       if (!near) return v;

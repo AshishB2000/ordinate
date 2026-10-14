@@ -154,6 +154,22 @@ V.matchValues(allHeld, V.heldValues(allHeld.filters, COLS, ROWS));
 (M as { valueKeys: typeof realKeys }).valueKeys = realKeys;
 ok('cost: five values to look up read the column into keys ONCE; values all held, never (negative control)', onceForFive === 1 && indexed === 0, `${onceForFive} ${indexed}`);
 
+// The WORK is bounded, not only the column: a long `in` list (any spec can be sent to answer:rerun) gets at most
+// 16 loose lookups; the rest stay as said, and every value rewritten has its note.
+const realNear = M.oneNearValue;
+let looked = 0;
+(M as { oneNearValue: typeof realNear }).oneNearValue = (said, keys) => { looked++; return realNear(said, keys); };
+const flood = spec([{ column: 'category', op: 'in', values: Array.from({ length: 5000 }, (_, i) => `nothing-like-it-${i}`) }]);
+V.matchValues(flood, V.heldValues(flood.filters, COLS, ROWS));
+const floodLooks = looked;
+looked = 0;
+const prefixes = spec([{ column: 'category', op: 'in', values: [...Array.from({ length: 20 }, (_, i) => `zz-${i}`), 'tech'] }]);
+const cut = V.matchValues(prefixes, V.heldValues(prefixes.filters, COLS, ROWS));
+(M as { oneNearValue: typeof realNear }).oneNearValue = realNear;
+ok('cost: 5,000 values no column holds cost at most 16 loose lookups', floodLooks === 16, String(floodLooks));
+ok('cost: …past the budget a value stays as said, and nothing is rewritten without its note (negative control)',
+  looked === 16 && 'values' in cut.filters[0] && cut.filters[0].values?.includes('tech') === true && (cut.matched ?? []).length === 0, show([looked, cut.matched]));
+
 const twice = matchedSpec([{ column: 'category', op: '=', value: 'tech' }]);
 ok('match: a matched spec matched again is itself — a reload changes nothing', V.matchValues(twice, V.heldValues(twice.filters, COLS, ROWS)) === twice);
 const long = matchedSpec([{ column: 'category', op: '=', value: 'tech' + ' '.repeat(200) + '!' }]);
