@@ -50,7 +50,8 @@ ok('levels: each pair lands where it should', show(PAIRS.map(([p, k]) => LEVELS.
 const STORED = ['Furniture', 'Technology', 'Office Supplies', 'Technical', 'technology ', 'Tech'];
 const near = (said: string, stored = STORED) => M.nearValues(said, stored).map((n) => `${n.level}:${n.value}`);
 ok('near: nearest level first, the stored order inside a level', show(near('tech')) === '["exact:Tech","prefix:Technology","prefix:Technical"]', show(near('tech')));
-ok('near: two spellings of one key are ONE value — the first met', near('technology').join() === 'exact:Technology,contains:Tech', show(near('technology')));
+ok('near: the same text in another case or with outer space is ONE value — the first met', near('technology').join() === 'exact:Technology,contains:Tech', show(near('technology')));
+ok('near: …but two texts behind one key are two values, both offered', near('tech', ['Technology', 'Technology.', 'technology']).join() === 'prefix:Technology,prefix:Technology.', show(near('tech', ['Technology', 'Technology.', 'technology'])));
 ok('near: a value is offered at one level only', near('office').join() === 'prefix:Office Supplies' && near('supplies').join() === 'contains:Office Supplies');
 ok('near: under 3 characters only an exact value matches', show(near('te')) === '[]' && near('te', ['TE', 'Tea']).join() === 'exact:TE');
 ok('near: a stored value under 3 characters is never a loose match', show(near('nsw', ['NS', 'N'])) === '[]');
@@ -67,6 +68,13 @@ ok('one: exact still wins over a longer value that starts the same', one('tech',
 ok('one: two candidates → nothing (negative control)', one('tech', ['Technology', 'Technical']) === null && one('wast', ['West', 'East']) === null);
 ok('one: …and a looser level is not tried past an ambiguous nearer one', one('tech', ['Technology', 'Technical', 'Teck']) === null);
 ok('one: under 3 characters → nothing', one('te') === null && one('fu') === null);
+ok('one: two texts behind one key are two candidates → nothing (negative control)',
+  one('tech', ['Technology', 'Technology.']) === null && one('Tecnology', ['Technology', 'Technology.']) === null && one('smith', ['Smith, John', 'Smith John']) === null);
+ok('one: …either of them alone is taken', one('tech', ['Technology.']) === 'Technology.' && one('smith', ['Smith, John']) === 'Smith, John');
+ok('one: under 3 characters a key that lost its punctuation is no match — "A" is neither "A+" nor "A-"',
+  one('A', ['A+', 'A-']) === null && one('A', ['A+']) === null && one('C', ['C++', 'C#']) === null);
+ok('one: …the said text itself, in any case, still is (negative control)', one('a', ['A+', 'A', 'A-']) === 'A' && one('o+', ['O+', 'O-']) === 'O+');
+ok('one: the said text itself wins over another text behind its key', one('smith john', ['Smith, John', 'Smith John']) === 'Smith John' && one('québec', ['Quebec', 'Québec']) === 'Québec');
 ok('one: containment alone never decides', one('nology') === null && one('supplies') === null);
 ok('one: nothing near → nothing', one('hardware') === null);
 
@@ -125,6 +133,27 @@ const untouched = spec([
 ]);
 ok('match: a number column, `contains`, a period, a valueless filter, an unknown column, 2 characters, an empty value — none is touched (negative control)',
   V.matchValues(untouched, V.heldValues(untouched.filters, COLS, ROWS)) === untouched);
+// The ceiling: a column of more distinct values than LOOSE_MAX_DISTINCT is id-like, and every said value would read all of them.
+const sized = (n: number): import('../src/ai/answerValues').Held =>
+  new Map([['category', new Map([...Array.from({ length: n - 1 }, (_, i) => `Item ${i}`), 'Technology'].map((v): [string, string] => [v.toLowerCase(), v]))]]);
+const techSpec = spec([{ column: 'category', op: '=', value: 'tech' }]);
+ok('ceiling: over LOOSE_MAX_DISTINCT distinct values a column is neither matched loosely nor offered from',
+  V.matchValues(techSpec, sized(V.LOOSE_MAX_DISTINCT + 1)) === techSpec && V.nearestValueFixes(techSpec, sized(V.LOOSE_MAX_DISTINCT + 1), new Set()) === null);
+ok('ceiling: …at it, the same value is both (negative control)',
+  show(V.matchValues(techSpec, sized(V.LOOSE_MAX_DISTINCT)).filters) === show([{ column: 'category', op: '=', value: 'Technology' }]) && V.nearestValueFixes(techSpec, sized(V.LOOSE_MAX_DISTINCT), new Set())?.options[0].label === 'Technology');
+// The column is read into keys once per filter, however many of its values need a look — not once per value.
+const realKeys = M.valueKeys;
+let indexed = 0;
+(M as { valueKeys: typeof realKeys }).valueKeys = (stored) => { indexed++; return realKeys(stored); };
+const listed = spec([{ column: 'category', op: 'in', values: ['tech', 'furn', 'offic', 'hardware', 'Tecnology'] }]);
+V.matchValues(listed, V.heldValues(listed.filters, COLS, ROWS));
+const onceForFive = indexed;
+indexed = 0;
+const allHeld = spec([{ column: 'category', op: 'in', values: ['technology', 'Furniture'] }]);
+V.matchValues(allHeld, V.heldValues(allHeld.filters, COLS, ROWS));
+(M as { valueKeys: typeof realKeys }).valueKeys = realKeys;
+ok('cost: five values to look up read the column into keys ONCE; values all held, never (negative control)', onceForFive === 1 && indexed === 0, `${onceForFive} ${indexed}`);
+
 const twice = matchedSpec([{ column: 'category', op: '=', value: 'tech' }]);
 ok('match: a matched spec matched again is itself — a reload changes nothing', V.matchValues(twice, V.heldValues(twice.filters, COLS, ROWS)) === twice);
 const long = matchedSpec([{ column: 'category', op: '=', value: 'tech' + ' '.repeat(200) + '!' }]);
@@ -161,7 +190,7 @@ ok('empty: each option is the COMPLETE spec with that value in place — every o
   !!fx && fx.options.every((o, i) => show(o.spec) === show({ ...spec([]), filters: [{ column: 'region', op: '=', value: 'West' }, { column: 'category', op: '=', value: ['Technology', 'Technical', 'Biotechnology'][i] }] })), show(fx?.options));
 ok('empty: every option passes the stored-spec whitelist unchanged', !!fx && fx.options.every((o) => show(A.sanitizeStoredSpec(o.spec)) === show(o.spec)));
 const inList = fixes([{ column: 'category', op: 'in', values: ['Furniture', 'Tecnical'] }]);
-ok('empty: in a list, only the value that is not stored is replaced', !!inList && inList.said === 'Tecnical'
+ok('empty: in a list, only the value that is not stored is replaced', !!inList && inList.said === 'Tecnical' && inList.op === 'in' && fx?.op === '='
   && show(inList.options.map((o) => o.spec.filters[0])) === show([{ column: 'category', op: 'in', values: ['Furniture', 'Technical'] }]), show(inList));
 const four = new Map([['category', new Map(['Value 1', 'Value 2', 'Value 3', 'Value 4'].map((v): [string, string] => [v.toLowerCase(), v]))]]);
 ok('empty: at most three options (negative control: four values are near)',

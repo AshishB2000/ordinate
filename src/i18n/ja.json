@@ -25,6 +25,7 @@
   "alerts.to_since": "{label}は{vs}から{pct}{verb}し、{value}になりました。",
   "answerMessages.could_not_save_this_answer_as": null,
   "answerMessages.matched_to_in": null,
+  "answerMessages.no_rows_have_in": null,
   "answerMessages.no_rows_match": null,
   "calcMenu.moving_avg_2": " 移動平均",
   "calcMenu.moving_sum_2": " 移動合計",

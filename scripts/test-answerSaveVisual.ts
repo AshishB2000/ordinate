@@ -76,6 +76,11 @@ const sameFigures = (a: ChartData, b: ChartData): boolean => {
     if (!ds) throw new Error('fixture not saved');
     return { projectId, datasetId: ds.id };
   });
+  // A dataset with a category really called "Other" — a cell's text, not the fold of a long tail.
+  const kinds = await context.runInContext(ADMIN, 'seed', async () => (await datasets.saveDataset(seed.projectId, {
+    name: 'Kinds', sourceKind: 'csv', columns: [{ name: 'kind', type: 'text' }, { name: 'amount', type: 'number' }],
+    rows: [['Other', 100], ['Chairs', 50], ['Desks', 30], ['Lamps', 10], ['Rugs', 5]],
+  }))!.id);
   const P = seed.projectId;
   const appFor = (who: Identity) => appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA }), undefined, () => who);
   const admin = appFor(ADMIN);
@@ -145,6 +150,20 @@ const sameFigures = (a: ChartData, b: ChartData): boolean => {
 
   const split = await keep({ ...SPEC, series: 'category', chartType: 'stacked_column', filters: [{ column: 'order_date', period: 'last_quarter' }] });
   ok('differential: a split — every series and every figure', split.card.data.series.length === 3 && !!split.data && sameFigures(split.data.data, split.card.data) && split.visual.encoding.series === 'category', show([split.data?.data, split.card.data]));
+
+  const other = await keep({ datasetId: kinds, category: 'kind', measures: [{ column: 'amount', aggregation: 'sum' }], top: 2, chartType: 'column', title: 'Amount by kind', filters: [] });
+  ok('differential: a top-N that keeps a category really called "Other" — it is a cell\'s text, so the cut is saved and the visual holds the same two',
+    other.card.data.labels.join() === 'Other,Chairs' && !!other.data && sameFigures(other.data.data, other.card.data)
+    && show(other.visual.filters) === show([{ type: 'filter', column: 'kind', op: 'in', values: ['Other', 'Chairs'] }]), show([other.data?.data, other.card.data]));
+
+  // A stored spec is saved as it stands — the card the person saw — never matched loosely as an answer just written is.
+  const asIs = await keep({ ...SPEC, filters: [{ column: 'category', op: '!=', value: 'tech' }], matched: undefined });
+  ok('stored: a value a unique prefix would match is NOT matched on save — the card\'s step keeps "tech", and so does the visual',
+    asIs.card.ok && !('matched' in asIs.card.spec) && show(asIs.card.steps) === show([{ type: 'filter', column: 'category', op: '!=', value: 'tech' }])
+    && show(asIs.visual.filters) === show(asIs.card.steps) && !!asIs.data && sameFigures(asIs.data.data, asIs.card.data), show([asIs.card.steps, asIs.visual?.filters]));
+  const cardOf = async (filters: unknown[]): Promise<ChartData> => (await post('answer:card', { projectId: P, spec: { ...SPEC, filters, matched: undefined } })).value.data;
+  ok('stored: …so the visual counts every row, Technology\'s among them — the chart unfiltered, not the chart without Technology (negative control)',
+    !!asIs.data && sameFigures(asIs.data.data, await cardOf([])) && !sameFigures(asIs.data.data, await cardOf([{ column: 'category', op: '!=', value: 'Technology' }])));
 
   // ── 3. The server decides what is saved ───────────────────────────────────
   ok('server: the encoding is the spec\'s names', show(one.visual.encoding) === show({ category: 'region', values: MEASURES }), show(one.visual.encoding));

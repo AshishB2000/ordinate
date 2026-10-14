@@ -166,7 +166,20 @@ const METRICS: SpecMetric[] = [{ id: '33333333-3333-4333-8333-333333333333', nam
 const byMetric = suggest({ ...BASE, category: 'region', measures: [{ metric: 'Margin' }] }, ALL, METRICS);
 ok('metrics: a measure named by its metric still resolves in every option',
   byMetric.length === 2 && byMetric.every((o) => show(o.spec.measures) === show([{ column: 'profit', aggregation: 'avg', metricId: METRICS[0].id }])), show(byMetric));
-ok('every option passes the stored-spec whitelist as it is', [...sales, ...summed, ...filtered, ...ds1, ...byMetric].every((o) => sameLeaves(A.sanitizeStoredSpec(o.spec), o.spec)));
+// A metric the project DEFINED but that cannot chart (its own filters, or a formula): the name is known,
+// so it is no miss — offering the bare column would chart a different number under the metric's name.
+const UNCHARTABLE: SpecMetric[] = [
+  { id: '44444444-4444-4444-8444-444444444444', name: 'Enterprise profit', datasetId: D1, column: 'profit', aggregation: 'sum', hasFilters: true },
+  { id: '55555555-5555-4555-8555-555555555555', name: 'Profit ratio', datasetId: D1 },
+];
+for (const m of UNCHARTABLE) {
+  const r = A.validateAnswerSpec({ ...BASE, measures: [m.name] }, ALL, { ...TITLE, metrics: UNCHARTABLE });
+  ok(`metrics: "${m.name}", defined but not chartable, is refused as it always was and reports no miss`,
+    !r.ok && r.reason === `Unknown measure column "${m.name}".` && !('miss' in r), show(r));
+}
+ok('metrics: …undefined, the same words are a miss that offers the column (negative control)',
+  labels({ ...BASE, measures: ['Enterprise profit'] }) === 'profit' && labels({ ...BASE, measures: ['Profit ratio'] }) === 'profit');
+ok('every option passes the stored-spec whitelist as it is',[...sales, ...summed, ...filtered, ...ds1, ...byMetric].every((o) => sameLeaves(A.sanitizeStoredSpec(o.spec), o.spec)));
 ok('a spec that is not an object offers nothing', S.suggestFixes('sales by region', { part: 'measure', said: 'sales', datasetId: D1 }, ALL).length === 0);
 
 // ── 3. A refused follow-up ──────────────────────────────────────────────────

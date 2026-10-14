@@ -206,8 +206,10 @@ function resolveMeasure(
       return { column: resolveColumn(m.column, columns)!.name, aggregation: agg, metricId: m.id };
     }
     // A name the user gave a METRIC is that metric, usable here or not — never
-    // a column that is also called that, which would be a different number.
-    if (!m) col = resolveColumn(colName, columns, names);
+    // a column that is also called that, which would be a different number. So it is
+    // no unknown NAME either: "Did you mean" would offer exactly that column.
+    if (m) return `Unknown measure column "${String(colName)}".`;
+    col = resolveColumn(colName, columns, names);
     if (!col) return { unknown: colName };
   }
 

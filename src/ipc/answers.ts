@@ -183,7 +183,7 @@ export async function computeCard(projectId: string, asked: AnswerSpec, loose = 
       headline: facts.headline, bullets: facts.bullets,
       chips: answerChips(spec, { columns: ds.columns, splitCandidates: splitCandidates(ds.columns, ds.rows, spec.category) }),
       filterLabels, steps, notes, ...(asOf ? { asOf } : {}),
-      ...(near ? { noMatch: { text: noRowsMatch(near.column, near.said), options: near.options } } : {}),
+      ...(near ? { noMatch: { text: noRowsMatch(near.column, near.op, near.said), options: near.options } } : {}),
     },
     factsText: facts.text,
     ledger: facts.ledger,

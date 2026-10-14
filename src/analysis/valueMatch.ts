@@ -30,6 +30,9 @@ export function normPhrase(s: string): string {
   return String(s).split(/\s+/).map(normText).filter(Boolean).join(' ');
 }
 
+/** The same text ignoring case and surrounding space — what two stored values must differ by to be two. */
+export const exactKey = (s: string): string => s.trim().toLowerCase();
+
 /** Levenshtein distance ≤ 1, without building the matrix. */
 export function withinOne(a: string, b: string): boolean {
   if (Math.abs(a.length - b.length) > 1) return false;
@@ -61,29 +64,51 @@ export const MIN_LOOSE = 3;
 export interface NearValue { value: string; level: Nearness }
 
 /**
- * The stored values a said one may mean, nearest level first and in the order
- * given within a level. Stored values that share a key are one value — the
- * first spelling met — so "West" and "west " are not two candidates. A level
- * past `exact` needs MIN_LOOSE characters on both sides.
+ * A column's stored values by key, each key with EVERY distinct value behind it
+ * ("Technology" and "Technology." are two, "West" and "west " one — the first
+ * spelling met). Built once per column and handed to `nearValues` for each said
+ * value, so a list of them does not normalise the column again for each.
  */
-export function nearValues(said: string, stored: Iterable<string>): NearValue[] {
+export interface ValueKeys { readonly byKey: ReadonlyMap<string, readonly string[]> }
+
+export function valueKeys(stored: Iterable<string>): ValueKeys {
+  const byKey = new Map<string, string[]>();
+  const seen = new Set<string>();
+  for (const v of stored) {
+    const same = exactKey(v);
+    if (seen.has(same)) continue;
+    seen.add(same);
+    const key = normPhrase(v);
+    if (!key) continue;
+    const behind = byKey.get(key);
+    if (behind) behind.push(v);
+    else byKey.set(key, [v]);
+  }
+  return { byKey };
+}
+
+/**
+ * The stored values a said one may mean, nearest level first and in the order
+ * given within a level. A level past `exact` needs MIN_LOOSE characters on both
+ * sides. So does `exact` itself unless a stored value IS the said text (in any
+ * case): a key strips punctuation, and "A" is not "A+" — nor "A-".
+ */
+export function nearValues(said: string, stored: Iterable<string> | ValueKeys): NearValue[] {
   const phrase = normPhrase(said);
   if (!phrase) return [];
-  const byKey = new Map<string, string>();
-  for (const v of stored) {
-    const key = normPhrase(v);
-    if (key && !byKey.has(key)) byKey.set(key, v);
+  const { byKey } = 'byKey' in stored ? stored : valueKeys(stored);
+  const short = phrase.length < MIN_LOOSE;
+  const asSaid = exactKey(said);
+  const at: NearValue[][] = NEAREST_FIRST.map(() => []);
+  for (const [key, values] of byKey) {
+    const i = NEAREST_FIRST.findIndex((level) =>
+      (level === 'exact' || (!short && key.length >= MIN_LOOSE)) && keyMatches(level, phrase, key));
+    if (i < 0) continue;
+    const same = values.filter((v) => exactKey(v) === asSaid);
+    const taken = i === 0 && (same.length || short) ? same : values;
+    for (const value of taken) at[i].push({ value, level: NEAREST_FIRST[i] });
   }
-  const out: NearValue[] = [];
-  for (const level of NEAREST_FIRST) {
-    if (level !== 'exact' && phrase.length < MIN_LOOSE) break;
-    for (const [key, value] of byKey) {
-      if ((level !== 'exact' && key.length < MIN_LOOSE) || !keyMatches(level, phrase, key)) continue;
-      out.push({ value, level });
-      byKey.delete(key); // taken: a later level never offers it again
-    }
-  }
-  return out;
+  return at.flat();
 }
 
 /**
@@ -91,7 +116,7 @@ export function nearValues(said: string, stored: Iterable<string>): NearValue[] 
  * anything matches must hold exactly one value, and `contains` never decides.
  * Two candidates are a guess, and a guess is not taken.
  */
-export function oneNearValue(said: string, stored: Iterable<string>): NearValue | null {
+export function oneNearValue(said: string, stored: Iterable<string> | ValueKeys): NearValue | null {
   const near = nearValues(said, stored);
   if (!near.length || near[0].level === 'contains') return null;
   return near.length > 1 && near[1].level === near[0].level ? null : near[0];

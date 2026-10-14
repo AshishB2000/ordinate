@@ -245,6 +245,17 @@ async function main(): Promise<void> {
     && sameData(cEast, await card(await whole({ ...BY_REGION, filters: [{ column: 'region', op: '=', value: 'East' }] }, 'revenue by region'))), show(cEast.data));
   ok('empty: a card WITH rows offers none (negative control)', !('noMatch' in c1) && !('noMatch' in cExact));
 
+  // A STORED spec is drawn as it stands (`answer:card`, as a reload and an explained tile draw it): a value
+  // a unique prefix would match, asked, is not matched here — the card is empty and OFFERS it.
+  const sTech = await whole({ ...BY_REGION, filters: [{ column: 'category', op: '=', value: 'tech' }] }, 'revenue by region');
+  const cTech = await card(sTech);
+  ok('stored: answer:card never matches loosely — "tech" stays "tech", no note, and the empty card offers Technology (negative control: asked, it was matched)',
+    cTech.ok && cTech.data.labels.length === 0 && sameLeaves(cTech.spec, sTech) && !('matched' in cTech.spec) && cTech.notes.length === 0
+    && show(cTech.steps.map((s) => s.value)) === '["tech"]' && cTech.noMatch?.options[0].label === 'Technology' && show(a1.filters) === show([{ column: 'category', op: '=', value: 'Technology' }]), show(cTech));
+  const cIn = await card(await whole({ ...BY_REGION, filters: [{ column: 'category', op: 'in', values: ['Furnitur'] }] }, 'revenue by region'));
+  ok('empty: a value of an `in` list is said as one of a list, not as `=`',
+    cIn.ok && cIn.noMatch?.text === 'No rows have "Furnitur" in category.' && cIn.noMatch.options[0].label === 'Furniture', show(cIn.noMatch));
+
   const cFar = await card(await whole({ ...BY_REGION, filters: [{ column: 'region', op: '=', value: 'Atlantis' }] }, 'revenue by region'));
   ok('empty: none for a value nothing is near', cFar.ok && cFar.data.labels.length === 0 && !('noMatch' in cFar), show(cFar.noMatch));
   const emailSpec = await whole({ ...BY_REGION, filters: [{ column: 'email', op: '=', value: 'x.test' }] }, 'revenue by region');

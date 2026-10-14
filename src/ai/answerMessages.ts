@@ -8,8 +8,9 @@ export function valueMatched(said: string, value: string, column: string): strin
   return t('answerMessages.matched_to_in', { said, value, column });
 }
 
-/** A chart with no rows because a filter value is not in its column — the line above the card's "Did you mean". */
-export function noRowsMatch(column: string, said: string): string {
+/** A chart with no rows because a filter value is not in its column — the line above the card's "Did you mean". `in`: one value of a list. */
+export function noRowsMatch(column: string, op: '=' | 'in', said: string): string {
+  if (op === 'in') return t('answerMessages.no_rows_have_in', { said, column });
   return t('answerMessages.no_rows_match', { column, said });
 }
 

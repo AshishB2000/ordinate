@@ -10,15 +10,18 @@
 //     against the data's own latest date (the card's steps), not as a moving
 //     period — a saved visual's own `period` filter follows the calendar's
 //     today, which is a different period from the one the card drew;
-//   - a top-N is saved as a filter to the N categories the card kept, because a
-//     saved visual has no top-N of its own;
+//   - a top-N on a text axis is saved as a filter to the N categories the card
+//     kept, because a saved visual has no top-N of its own (a number axis's bins
+//     cannot be one filter: there every bin is saved, ranked);
 //   - a loosely matched filter value is saved as the stored value it matched.
-// Ranked largest first, as the card is, unless the axis is a date.
+// Ranked largest first, as the card is, unless the axis is a date — the same
+// figures, though the Visuals page ranks by the total across a split and does
+// not reorder a funnel, a waterfall or a line at all (web/src/charts/build.ts).
 
 import * as datasets from '../data/datasets';
 import type { VizEncoding } from '../analysis/visuals';
 import type { FilterStep } from '../data/transforms';
-import { OTHER_LABEL } from '../analysis/categoryKey';
+import { OTHER_LABEL, OTHER_NOTE } from '../analysis/categoryKey';
 import { answerNotSaved } from '../ai/answerMessages';
 import { saveNewVisual } from './visuals';
 import type { AnswerCard } from './answers';
@@ -38,9 +41,12 @@ export async function saveCardAsVisual(projectId: string, card: AnswerCard): Pro
   const filters: FilterStep[] = card.steps.slice();
   const kept = card.data.labels.map(String);
   // The cut, as a filter. Only where a label IS a cell's text: not a number axis (its labels are
-  // bins) and not when the tail was folded into "Other", which no cell holds — there every
-  // category is saved, ranked, rather than a filter that would drop a bar the card drew.
-  if (spec.top && axis === 'text' && kept.length >= spec.top && !kept.includes(OTHER_LABEL)) {
+  // bins, so a top-N there saves every bin, ranked) and not when the card kept the bar the tail
+  // was FOLDED into (its note says so), which no cell holds — there every category is saved,
+  // ranked, rather than a filter that would drop a bar the card drew. A category that is really
+  // called "Other" is a cell's text like any other.
+  const folded = card.notes.includes(OTHER_NOTE) && kept.includes(OTHER_LABEL);
+  if (spec.top && axis === 'text' && kept.length >= spec.top && !folded) {
     filters.push({ type: 'filter', column: spec.category, op: 'in', values: kept });
   }
 

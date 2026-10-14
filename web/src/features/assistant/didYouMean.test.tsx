@@ -207,7 +207,24 @@ describe('Save as visual', () => {
     await act(async () => reply({ ok: true, visual: { id: VID, name: 'Sales by region' } }));
     const link = await within(card).findByRole('link', { name: 'Open in Visuals' });
     expect(link.getAttribute('href')).toBe(`/visuals/${PID}/${VID}`);
+    expect(document.activeElement).toBe(link); // the focus the button had goes to what replaced it
     expect(within(card).queryByRole('button', { name: /Save as visual|Saving/ })).toBeNull();
+  });
+
+  it('remembers the save when the dock is closed and opened again — the same answer is never offered twice', async () => {
+    const calls = serve({ ...shell([user('u1', 'sales by region'), ANSWERED]), 'answer:saveVisual': { ok: true, visual: { id: VID, name: 'Sales by region' } } });
+    renderApp('/');
+    let card = await within(await openDock()).findByTestId('answer-card');
+    fireEvent.click(await within(card).findByRole('button', { name: 'Save as visual' }));
+    await within(card).findByRole('link', { name: 'Open in Visuals' });
+    act(() => setDockOpen(false));
+    expect(screen.queryByTestId('answer-card')).toBeNull(); // closed: every card unmounted
+    card = await within(await openDock()).findByTestId('answer-card');
+    const link = await within(card).findByRole('link', { name: 'Open in Visuals' });
+    expect(link.getAttribute('href')).toBe(`/visuals/${PID}/${VID}`);
+    expect(document.activeElement).not.toBe(link); // a remount does not take the focus
+    expect(within(card).queryByRole('button', { name: 'Save as visual' })).toBeNull();
+    expect(calls.filter((c) => c.channel === 'answer:saveVisual')).toHaveLength(1);
   });
 
   it('a refusal says why, and the button stays to try again', async () => {

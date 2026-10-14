@@ -25,6 +25,7 @@
   "alerts.to_since": "{label} {verb} {pct} hasta {value} desde {vs}.",
   "answerMessages.could_not_save_this_answer_as": null,
   "answerMessages.matched_to_in": null,
+  "answerMessages.no_rows_have_in": null,
   "answerMessages.no_rows_match": null,
   "calcMenu.moving_avg_2": " media móvil",
   "calcMenu.moving_sum_2": " suma móvil",
