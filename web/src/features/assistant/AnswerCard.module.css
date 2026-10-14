@@ -149,6 +149,14 @@
   color: var(--error);
   overflow-wrap: anywhere;
 }
+/* A name the project now knows (./RememberName): its own line under the buttons. */
+.learnt {
+  flex-basis: 100%;
+  font-size: var(--t-11);
+  line-height: var(--lh-snug);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
 .chips {
   display: flex;
   flex-wrap: wrap;

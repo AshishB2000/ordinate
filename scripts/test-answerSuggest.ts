@@ -209,7 +209,11 @@ const big = S.sanitizeSuggest(wire({ part: 'filter', said: `  ${'s'.repeat(200)}
 ].map((o, i) => ({ ...o, label: i === 0 ? `Net\n   sales ${'x'.repeat(200)}` : o.label, more: true })) }));
 ok('store: at most three options, `said` and a label one line of 80 characters, unknown keys gone (negative control: five options, 200 characters)',
   !!big && big.options.length === 3 && big.said === 's'.repeat(80) && big.options[0].label === `Net sales ${'x'.repeat(70)}`
-  && show(Object.keys(big)) === '["part","said","options"]' && big.options.every((o) => show(Object.keys(o)) === '["label","spec"]'), show(big));
+  && show(Object.keys(big)) === '["part","said","options"]' && big.options.every((o) => show(Object.keys(o)) === '["label","spec","column"]'), show(big));
+const named = (part: string, column: unknown) => S.sanitizeSuggest(wire({ part, said: 'sales', options: [{ ...sales[0], column }] }))?.options[0];
+ok('store: an option keeps the column it put in place of a name — never for a dataset, never a column that is not a name (negative controls)',
+  named('measure', 'net_sales')?.column === 'net_sales' && !('column' in named('dataset', 'net_sales')!)
+  && !('column' in named('measure', 7)!) && !('column' in named('measure', '')!) && !('column' in named('measure', 'x'.repeat(257))!));
 const mixed = S.sanitizeSuggest(wire({ part: 'category', said: 'x', options: [
   null, 'net_sales', { label: 'no spec' }, { label: 'bad spec', spec: { category: 'region_name' } }, { label: 7, spec: sales[0].spec },
   { label: '   ', spec: sales[0].spec }, { label: 'kept', spec: { ...sales[0].spec, junk: true } },

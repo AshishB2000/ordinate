@@ -31,13 +31,13 @@ import { displayNames, load as loadCatalog } from '../app/catalog';
 import { shownNames, taughtNames } from '../app/columnNames';
 import { askCopilot } from '../ai/analyze';
 import {
-  ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, sanitizeStoredSpec, specFilterSteps, splitCandidates,
+  ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, resolveColumn, sanitizeStoredSpec, specFilterSteps, splitCandidates,
   validateAnswerSpec,
 } from '../ai/answerSpec';
 import type { AnswerChip, AnswerSpec, SpecDataset, SpecMetric } from '../ai/answerSpec';
 import { canonicaliseTextFilters, heldValues, matchValues, nearestValueFixes } from '../ai/answerValues';
-import { suggestFixes } from '../ai/answerSuggest';
-import type { AnswerSuggest } from '../ai/answerSuggest';
+import { sanitizeLearn, suggestFixes } from '../ai/answerSuggest';
+import type { AnswerLearn, AnswerSuggest } from '../ai/answerSuggest';
 import { noRowsMatch, valueMatched } from '../ai/answerMessages';
 import { saveCardAsVisual } from './answerSave';
 import { isRefine, refineSpec, sameChart } from '../ai/answerRefine';
@@ -77,7 +77,12 @@ export interface AnswerCard {
   asOf?: AsOf;
   /** No rows, because a filter value is not in its column: the sentence, and the stored values it may have meant (ai/answerValues). */
   noMatch?: { text: string; options: AnswerChip[] };
+  /** The name its turn can remember (`learnState`), when the card was asked with one. */
+  learn?: CardLearn;
 }
+
+/** A name to remember, as the card shows it: the column's shown name, and 'known' once the project's names already mean that column. */
+export interface CardLearn extends AnswerLearn { label: string; state: 'offer' | 'known' }
 
 export interface Built {
   card: AnswerCard;
@@ -346,23 +351,41 @@ export function tileSpec(t: { datasetId: string; encoding: VizEncoding; filters:
 }
 
 async function appendAnswer(
-  projectId: string, threadId: string | undefined, userText: string, text: string, built: Built, spec: AnswerSpec,
+  projectId: string, threadId: string | undefined, userText: string, text: string, built: Built, spec: AnswerSpec, learn?: AnswerLearn,
 ): Promise<{ turns: copilot.CopilotTurn[]; threadId: string | null }> {
   let target = threadId || (await copilot.latestThreadId(projectId)) || undefined;
   if (!target) target = (await copilot.createThread(projectId))?.id;
   await copilot.appendTurn(projectId, { role: 'user', text: userText }, target);
-  const turns = await copilot.appendTurn(projectId, { role: 'assistant', text, provenance: built.provenance, answer: spec }, target);
+  const turns = await copilot.appendTurn(projectId, { role: 'assistant', text, provenance: built.provenance, answer: spec, ...(learn ? { learn } : {}) }, target);
   return { turns: turns || [], threadId: target || null };
 }
 
+/**
+ * Whether a name is still to remember, worked out now — never stored, so a name
+ * taught in the Columns tab, or by anyone's card, shows here at once. Metadata
+ * and the catalog only: a Live dataset is never hydrated. Nothing when the
+ * column is gone.
+ */
+async function learnState(projectId: string, datasetId: string, learn: AnswerLearn): Promise<CardLearn | undefined> {
+  const meta = await datasets.getDatasetMeta(projectId, datasetId);
+  if (!meta || !meta.columns.some((c) => c.name === learn.column)) return undefined;
+  const docs = (await loadCatalog(projectId)).columns[datasetId];
+  const known = resolveColumn(learn.said, meta.columns, taughtNames(meta.columns, docs))?.name === learn.column;
+  return { ...learn, label: shownNames(meta.columns, docs)[learn.column] || learn.column, state: known ? 'known' : 'offer' };
+}
+
 export function register(guard: Guard): void {
-  // Draw one card from a stored spec. Called on every render of an answer turn.
-  ipcMain.handle('answer:card', async (_e, { projectId, spec }: any = {}) => {
+  // Draw one card from a stored spec. Called on every render of an answer turn;
+  // `learn` is its turn's name to remember, if it has one.
+  ipcMain.handle('answer:card', async (_e, { projectId, spec, learn }: any = {}) => {
     try {
       const s = sanitizeStoredSpec(spec);
       if (!s) return { ok: false, reason: 'This answer could not be read.' };
       const built = await computeCard(projectId, s);
-      return 'ok' in built ? built : built.card;
+      if ('ok' in built) return built;
+      const said = sanitizeLearn(learn, s);
+      const taught = said ? await learnState(projectId, s.datasetId, said) : undefined;
+      return taught ? { ...built.card, learn: taught } : built.card;
     } catch (err: any) {
       return { ok: false, reason: err?.message || 'Could not build the answer' };
     }
@@ -404,8 +427,10 @@ export function register(guard: Guard): void {
   // A follow-up chip, or a "Did you mean" option: the chip's own spec, recomputed
   // by the app — no model call decides the chart, and one narrates it only when
   // configured. An option built from a refused spec still carries the filter
-  // values as they were said, so they are matched here as an answer's are.
-  ipcMain.handle('answer:rerun', async (_e, { projectId, threadId, spec, label }: any = {}) => {
+  // values as they were said, so they are matched here as an answer's are. An
+  // option that put a column in place of a name sends `learn`, kept on the new
+  // turn only for a column its answer uses (ai/answerSuggest `sanitizeLearn`).
+  ipcMain.handle('answer:rerun', async (_e, { projectId, threadId, spec, label, learn }: any = {}) => {
     try {
       const s = sanitizeStoredSpec(spec);
       if (!s) return { ok: false, reason: 'This follow-up could not be read.' };
@@ -416,7 +441,7 @@ export function register(guard: Guard): void {
         `Narrate this chart answer ("${s.title}") in two or three sentences, citing only figures from the facts.`,
         guard);
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
-      const r = await appendAnswer(projectId, tid, userText, n.text, built, built.card.spec);
+      const r = await appendAnswer(projectId, tid, userText, n.text, built, built.card.spec, sanitizeLearn(learn, built.card.spec));
       return { ok: true, turns: r.turns, threadId: r.threadId };
     } catch (err: any) {
       return { ok: false, reason: err?.message || 'Could not run the follow-up' };

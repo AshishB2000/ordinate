@@ -60,7 +60,9 @@ export interface Turn {
   /** A stored answer spec: the card is recomputed from it on every render (`answer:card`). */
   answer?: { datasetId: string; title?: string } & Record<string, unknown>;
   /** A refused chart's "Did you mean": the server's options, each a complete spec `answer:rerun` takes (src/ai/answerSuggest.ts). */
-  suggest?: { part: string; said: string; options: { label: string; spec: Record<string, unknown> }[] };
+  suggest?: { part: string; said: string; options: { label: string; spec: Record<string, unknown>; column?: string }[] };
+  /** An answer run from a "Did you mean" column: the name that was said, which its card can offer to remember. */
+  learn?: { said: string; column: string };
 }
 
 export interface ThreadSummary {

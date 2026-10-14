@@ -40,6 +40,18 @@ export function register(): void {
     }
   });
 
+  // One more name for a column the dataset HAS NOW (its record, never its rows), appended inside the write.
+  ipcMain.handle('catalog:addAlias', async (_e, { projectId, datasetId, column, alias }: any = {}) => {
+    try {
+      const meta = await datasets.getDatasetMeta(str(projectId), str(datasetId));
+      if (!meta || !meta.columns.some((c) => c.name === column)) return { ok: false, error: 'That column is no longer in the dataset.' };
+      const doc = await catalog.setColumn(str(projectId), str(datasetId), str(column), { addAlias: str(alias) }, meta.columns.map((c) => c.name));
+      return doc ? { ok: true, column: doc } : { ok: false, error: 'Could not save the name.' };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Could not save the name.' };
+    }
+  });
+
   ipcMain.handle('catalog:tags', async (_e, { projectId }: any = {}) =>
     ({ ok: true, ...(await catalogIndex.tagIndex(str(projectId))) }));
 

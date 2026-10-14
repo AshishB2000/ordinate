@@ -548,6 +548,8 @@ export function specFilterSteps(
 export interface AnswerChip {
   label: string;
   spec: AnswerSpec;
+  /** A "Did you mean" option that put a COLUMN where a name missed: that column, so the answer it runs can offer to remember the name (./answerSuggest). */
+  column?: string;
 }
 
 /**

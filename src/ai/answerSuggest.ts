@@ -11,13 +11,21 @@
 // The app picks the candidates, by NAME alone: no value of any column is read
 // and nothing here goes to a model.
 
-import { squash } from '../app/columnNames';
+import { sanitizeAliases, squash } from '../app/columnNames';
 import { withinOne } from '../analysis/valueMatch';
 import { readMeasure, sanitizeStoredSpec, validateAnswerSpec } from './answerSpec';
-import type { AnswerChip, SpecDataset, SpecMetric, SpecMiss } from './answerSpec';
+import type { AnswerChip, AnswerSpec, SpecDataset, SpecMetric, SpecMiss } from './answerSpec';
 
 /** What a refused turn stores: the part that missed, what was said for it, and the options offered. */
 export interface AnswerSuggest { part: SpecMiss['part']; said: string; options: AnswerChip[] }
+
+/**
+ * A name an answer turn can offer to remember: what was said, and the column a
+ * "Did you mean" option put in its place. Stored on the turn that option ran
+ * (`answer:rerun`); whether it is still to offer is worked out when the card is
+ * drawn, never stored.
+ */
+export interface AnswerLearn { said: string; column: string }
 
 export const MAX_OPTIONS = 3;
 /** `said` and a label are shown to a person, never used to resolve anything: one line, cut here. */
@@ -25,6 +33,8 @@ const MAX_TEXT = 80;
 /** A name shorter than this is near too many others to say which was meant. */
 const MIN_NAME = 3;
 const PARTS: ReadonlySet<string> = new Set<SpecMiss['part']>(['dataset', 'category', 'measure', 'series', 'filter']);
+/** A column name, as the catalog files one (app/catalog MAX_COLUMN_NAME). */
+const MAX_COLUMN = 256;
 
 const words = (s: string): string[] => s.split(/[^\p{L}\p{M}\p{N}]+/u).map(squash).filter((w) => w.length >= MIN_NAME);
 
@@ -108,7 +118,7 @@ export function suggestFixes(
   for (const { c } of ranked) {
     if (out.length >= MAX_OPTIONS) break;
     const v = validateAnswerSpec(substitute(raw, miss, c.put), datasets, { ...opts, metrics });
-    if (v.ok) out.push({ label: oneLine(c.label), spec: v.spec });
+    if (v.ok) out.push({ label: oneLine(c.label), spec: v.spec, ...(miss.part === 'dataset' ? {} : { column: c.put }) });
   }
   return out;
 }
@@ -128,9 +138,26 @@ export function sanitizeSuggest(raw: unknown): AnswerSuggest | undefined {
   const options: AnswerChip[] = [];
   for (const item of Array.isArray(o.options) ? (o.options as unknown[]) : []) {
     if (options.length >= MAX_OPTIONS || !item || typeof item !== 'object') continue;
-    const { label, spec } = item as Record<string, unknown>;
+    const { label, spec, column } = item as Record<string, unknown>;
     const clean = sanitizeStoredSpec(spec);
-    if (clean && typeof label === 'string' && oneLine(label)) options.push({ label: oneLine(label), spec: clean });
+    if (!clean || typeof label !== 'string' || !oneLine(label)) continue;
+    const named = o.part !== 'dataset' && typeof column === 'string' && column && column.length <= MAX_COLUMN;
+    options.push({ label: oneLine(label), spec: clean, ...(named ? { column } : {}) });
   }
   return options.length ? { part: o.part as SpecMiss['part'], said: oneLine(o.said), options } : undefined;
+}
+
+/**
+ * A name to remember, re-read — from a client (`answer:rerun`) or a stored turn:
+ * kept only when `column` is one the answer uses and `said` is ONE name the
+ * catalog would store exactly as said (app/columnNames `sanitizeAliases`: one
+ * line, no comma, at most 60 characters, not the column's own name).
+ */
+export function sanitizeLearn(raw: unknown, spec: AnswerSpec): AnswerLearn | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const { said, column } = raw as Record<string, unknown>;
+  if (typeof said !== 'string' || typeof column !== 'string') return undefined;
+  const uses = [spec.category, spec.series, ...spec.measures.map((m) => m.column), ...spec.filters.map((f) => f.column)];
+  const one = sanitizeAliases(said, column);
+  return uses.includes(column) && one.length === 1 && one[0] === said ? { said, column } : undefined;
 }

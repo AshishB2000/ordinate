@@ -6,7 +6,9 @@
 // no model decides anything.
 //
 // A label is a column's or a dataset's name, or a stored value; `said` is the
-// model's word. All of it is rendered as text.
+// model's word. All of it is rendered as text. An option that puts a COLUMN in
+// place of what was said hands that pair back with the pick, so the answer it
+// runs can offer to remember the name (./RememberName).
 
 import { useState } from 'react';
 import s from './DidYouMean.module.css';
@@ -14,6 +16,14 @@ import s from './DidYouMean.module.css';
 export interface MeantOption {
   label: string;
   spec: Record<string, unknown>;
+  /** The column this option puts where the name missed — none for a dataset or a value. */
+  column?: string;
+}
+
+/** What was said and the column picked for it — `answer:rerun`'s `learn`. */
+export interface Learn {
+  said: string;
+  column: string;
 }
 
 export function DidYouMean({
@@ -24,7 +34,7 @@ export function DidYouMean({
   options: readonly MeantOption[];
   /** What was said instead — named on each chip's tooltip and to a screen reader. */
   said?: string;
-  onPick: (spec: Record<string, unknown>, label: string) => Promise<void>;
+  onPick: (spec: Record<string, unknown>, label: string, learn?: Learn) => Promise<void>;
 }) {
   const [busy, setBusy] = useState<number | null>(null);
   if (options.length === 0) return null;
@@ -42,7 +52,7 @@ export function DidYouMean({
           aria-busy={busy === i || undefined}
           onClick={() => {
             setBusy(i);
-            void onPick(o.spec, o.label).finally(() => setBusy(null));
+            void onPick(o.spec, o.label, said && o.column ? { said, column: o.column } : undefined).finally(() => setBusy(null));
           }}
         >
           {o.label}

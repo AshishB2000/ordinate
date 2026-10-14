@@ -1,8 +1,9 @@
-// "Did you mean" and "Save as visual" — the two ways an answer stops being a
-// dead end or a throwaway. The row on its own (options, a click, nothing when
-// there are none, text only), then through the real dock: under a refused
-// reply, in an answer card with no rows, and the card's Save button for each
-// role and each outcome. Every option and every figure is the server's.
+// "Did you mean", "Save as visual" and "Remember" — the ways an answer stops
+// being a dead end, a throwaway, or a correction made again next time. The row
+// on its own (options, a click, nothing when there are none, text only), then
+// through the real dock: under a refused reply, in an answer card with no rows,
+// and the card's Save and Remember buttons for each role and each outcome.
+// Every option, every figure and whether a name is known is the server's.
 
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -86,7 +87,7 @@ describe('the "Did you mean" row', () => {
     expect(chips.map((b) => b.textContent)).toEqual(['net_sales', 'Sales Tax']);
     expect(chips[1].getAttribute('title')).toBe('Use Sales Tax instead of “sales”');
     fireEvent.click(chips[1]);
-    expect(onPick).toHaveBeenCalledWith(TAX, 'Sales Tax');
+    expect(onPick).toHaveBeenCalledWith(TAX, 'Sales Tax', undefined); // no column on the option: no name to remember
     expect(chips.every((b) => (b as HTMLButtonElement).disabled)).toBe(true);
     expect(chips[1].getAttribute('aria-busy')).toBe('true');
     await act(async () => settle());
@@ -238,5 +239,79 @@ describe('Save as visual', () => {
     fireEvent.click(within(card).getByRole('button', { name: 'Save as visual' }));
     await within(card).findByRole('link', { name: 'Open in Visuals' });
     expect(within(card).queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('Remember a name', () => {
+  const LEARN = { said: 'sales', column: 'net_sales' };
+  const TAUGHT = { ...ANSWERED, learn: LEARN };
+  /** The card as the server draws it: offered until the name is added, known after. */
+  const remembering = (role = 'editor', addAlias: (p: unknown) => unknown = () => ({ ok: true })) => {
+    let known = false;
+    return serve({
+      ...shell([user('u1', 'Net Sales'), TAUGHT], role),
+      'answer:card': () => ({ ...CARD, learn: { ...LEARN, label: 'Net Sales', state: known ? 'known' : 'offer' } }),
+      'catalog:addAlias': async (p: unknown) => {
+        const r = (await addAlias(p)) as { ok: boolean };
+        known = r.ok;
+        return r;
+      },
+    });
+  };
+
+  it('a "Did you mean" column sends what was said and the column picked; a dataset’s option sends no name', async () => {
+    const named = { ...REFUSED, suggest: { ...REFUSED.suggest, options: [{ label: 'Net Sales', spec: SPEC, column: 'net_sales' }, { label: 'Orders', spec: TAX }] } };
+    const calls = serve({ ...shell([user('u1', 'sales by region'), named]), 'answer:rerun': { ok: true, threadId: TID, turns: [user('u1', 'sales by region'), named] } });
+    renderApp('/');
+    const row = await within(await openDock()).findByRole('group', { name: 'Did you mean, instead of sales' });
+    fireEvent.click(within(row).getByRole('button', { name: 'Net Sales' }));
+    await waitFor(() => expect(calls.filter((c) => c.channel === 'answer:rerun')).toHaveLength(1));
+    fireEvent.click(within(row).getByRole('button', { name: 'Orders' }));
+    await waitFor(() => expect(calls.filter((c) => c.channel === 'answer:rerun')).toHaveLength(2));
+    const [first, second] = calls.filter((c) => c.channel === 'answer:rerun').map((c) => c.payload);
+    expect(first).toEqual({ projectId: PID, threadId: TID, spec: SPEC, label: 'Net Sales', learn: LEARN });
+    expect(second).toEqual({ projectId: PID, threadId: TID, spec: TAX, label: 'Orders' });
+  });
+
+  it('an editor is offered it; remembering sends ONE name, says so while it saves, then the card says it is known', async () => {
+    let reply = (_: unknown): void => undefined;
+    const calls = remembering('editor', () => new Promise((r) => (reply = r)));
+    renderApp('/');
+    const card = await within(await openDock()).findByTestId('answer-card');
+    expect(calls.find((c) => c.channel === 'answer:card')?.payload).toEqual({ projectId: PID, spec: SPEC, learn: LEARN });
+    fireEvent.click(await within(card).findByRole('button', { name: 'Remember “sales” as Net Sales' }));
+    const busy = await within(card).findByRole('button', { name: 'Remembering…' });
+    expect((busy as HTMLButtonElement).disabled).toBe(true);
+    expect(calls.find((c) => c.channel === 'catalog:addAlias')?.payload).toEqual({ projectId: PID, datasetId: DID, column: 'net_sales', alias: 'sales' });
+    await act(async () => reply({ ok: true }));
+    const known = await within(card).findByText(/now means/);
+    expect(known.textContent).toBe('“sales” now means Net Sales in this project.');
+    expect(known.getAttribute('role')).toBe('status');
+    expect(within(card).queryByRole('button', { name: /Remember/ })).toBeNull();
+    expect(calls.filter((c) => c.channel === 'catalog:addAlias')).toHaveLength(1);
+  });
+
+  it('a viewer is not offered it', async () => {
+    serve({ ...shell([user('u1', 'Net Sales'), TAUGHT], 'viewer'), 'answer:card': { ...CARD, learn: { ...LEARN, label: 'Net Sales', state: 'offer' } } });
+    renderApp('/');
+    const card = await within(await openDock()).findByTestId('answer-card');
+    await within(card).findByRole('button', { name: 'Show table' });
+    expect(within(card).queryByRole('button', { name: /Remember/ })).toBeNull();
+  });
+
+  it('a known name is read by anyone — viewer included', async () => {
+    serve({ ...shell([user('u1', 'Net Sales'), TAUGHT], 'viewer'), 'answer:card': { ...CARD, learn: { ...LEARN, label: 'Net Sales', state: 'known' } } });
+    renderApp('/');
+    const card = await within(await openDock()).findByTestId('answer-card');
+    expect((await within(card).findByText(/now means/)).textContent).toBe('“sales” now means Net Sales in this project.');
+  });
+
+  it('a refusal says why in the server’s words, and the button stays to try again', async () => {
+    remembering('editor', () => ({ ok: false, error: 'Net Sales already has 8 other names.' }));
+    renderApp('/');
+    const card = await within(await openDock()).findByTestId('answer-card');
+    fireEvent.click(await within(card).findByRole('button', { name: 'Remember “sales” as Net Sales' }));
+    expect((await within(card).findByRole('alert')).textContent).toBe('Net Sales already has 8 other names.');
+    expect(within(card).getByRole('button', { name: 'Remember “sales” as Net Sales' })).toBeTruthy();
   });
 });

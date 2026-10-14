@@ -30,8 +30,8 @@ import * as projects from '../app/projects';
 import type { LedgerEntry } from './numberAudit';
 import { sanitizeStoredSpec } from './answerSpec';
 import type { AnswerSpec } from './answerSpec';
-import { sanitizeSuggest } from './answerSuggest';
-import type { AnswerSuggest } from './answerSuggest';
+import { sanitizeLearn, sanitizeSuggest } from './answerSuggest';
+import type { AnswerLearn, AnswerSuggest } from './answerSuggest';
 import * as recordFs from '../app/recordFs';
 import { ctx, serverDataDir } from '../server/context';
 
@@ -61,6 +61,8 @@ export interface CopilotTurn {
   answer?: AnswerSpec;
   /** "Did you mean": what a REFUSED chart may have meant, each option a complete spec (./answerSuggest). Never beside `answer`. */
   suggest?: AnswerSuggest;
+  /** The name an answer run from a "Did you mean" option can offer to remember (./answerSuggest `sanitizeLearn`). Only beside `answer`. */
+  learn?: AnswerLearn;
 }
 
 // One conversation. `id` is a randomUUID — a renderer key, never a path component.
@@ -99,6 +101,7 @@ export interface NewCopilotTurn {
   provenance?: CopilotProvenance;
   answer?: AnswerSpec;
   suggest?: AnswerSuggest;
+  learn?: AnswerLearn;
 }
 
 // A compact FACTS block + its provenance — what a context builder returns.
@@ -213,6 +216,8 @@ function normalizeTurns(raw: any): CopilotTurn[] {
     if (answer) turn.answer = answer;
     const suggest = role === 'assistant' && !answer ? sanitizeSuggest(t.suggest) : undefined;
     if (suggest) turn.suggest = suggest;
+    const learn = answer ? sanitizeLearn(t.learn, answer) : undefined;
+    if (learn) turn.learn = learn;
     turns.push(turn);
   }
   // Defensive cap on load too, in case a file predates a lower MAX_TURNS.
@@ -427,6 +432,8 @@ export async function appendTurn(
   if (answer) record.answer = answer;
   const suggest = role === 'assistant' && !answer ? sanitizeSuggest(turn && turn.suggest) : undefined;
   if (suggest) record.suggest = suggest;
+  const learn = answer ? sanitizeLearn(turn && turn.learn, answer) : undefined;
+  if (learn) record.learn = learn;
 
   const threads = await loadThreads(projectId);
   const own = mine(threads);

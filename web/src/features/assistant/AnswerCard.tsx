@@ -14,6 +14,8 @@
 // dead end: the server's sentence says which value, and "Did you mean" offers
 // the nearest stored ones (`noMatch`) in place of an empty chart. A good answer
 // can be kept: "Save as visual" (./SaveAsVisual), for a member who may edit.
+// An answer run from a "Did you mean" column carries the name that was said
+// (`learn`), and the card offers to remember it (./RememberName).
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -28,6 +30,7 @@ import type { AsOf } from '../../ui/asOfView';
 import { LiveRefusal } from '../live/LiveOff';
 import { liveRefusalOf } from '../live/refusal';
 import { DidYouMean, type MeantOption } from './DidYouMean';
+import { RememberName, type CardLearn } from './RememberName';
 import { SaveAsVisual } from './SaveAsVisual';
 import s from './AnswerCard.module.css';
 
@@ -46,23 +49,28 @@ interface Card {
   asOf?: AsOf;
   /** No rows, because a filter value is not in its column: the server's sentence and the stored values it may have meant. */
   noMatch?: { text: string; options: MeantOption[] };
+  /** The name its turn can remember, and whether the project already knows it. */
+  learn?: CardLearn;
 }
 type Reply = Card | { ok: false; reason?: string };
 
 export function AnswerCard({
   projectId,
   spec,
+  learn,
   narrated,
   onFollowUp,
 }: {
   projectId: string;
   spec: { datasetId: string; title?: string } & Record<string, unknown>;
+  /** The turn's name to remember (`Turn.learn`); the card's reply says whether it still is one. */
+  learn?: { said: string; column: string };
   narrated: boolean;
   onFollowUp: (spec: Record<string, unknown>, label: string) => Promise<void>;
 }) {
   const q = useQuery({
-    queryKey: ['answer:card', projectId, JSON.stringify(spec)],
-    queryFn: async () => (await rpc('answer:card', { projectId, spec })) as Reply,
+    queryKey: ['answer:card', projectId, JSON.stringify(spec), learn?.said, learn?.column],
+    queryFn: async () => (await rpc('answer:card', { projectId, spec, ...(learn ? { learn } : {}) })) as Reply,
   });
   const [table, setTable] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -155,6 +163,7 @@ export function AnswerCard({
             {table ? 'Hide table' : 'Show table'}
           </Button>
           <SaveAsVisual projectId={projectId} spec={spec} />
+          {card.learn && <RememberName projectId={projectId} datasetId={spec.datasetId} learn={card.learn} onTaught={() => q.refetch()} />}
         </div>
       )}
       {!card.noMatch && card.chips.length > 0 && (

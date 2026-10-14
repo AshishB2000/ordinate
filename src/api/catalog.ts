@@ -34,4 +34,11 @@ export const catalog = {
     input: z.strictObject({ projectId: Uuid, datasetId: Uuid, column: z.string().min(1).max(256), patch: ColumnPatch }),
     project: byProjectId,
   }),
+  // "Remember" on an Assistant answer card: ONE more "Also called" name, appended inside the catalog's
+  // write — the same rules as the Columns tab's field, and a full list refused with a sentence.
+  'catalog:addAlias': rpc({
+    access: 'write',
+    input: z.strictObject({ projectId: Uuid, datasetId: Uuid, column: z.string().min(1).max(256), alias: z.string().trim().min(1).max(60) }),
+    project: byProjectId,
+  }),
 } as const;

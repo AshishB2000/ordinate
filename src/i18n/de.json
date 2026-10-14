@@ -114,6 +114,7 @@
   "cohortRender.weighted_by_cohort_size_over_the": "Gewichtet nach Kohortengröße, über die Kohorten, die den jeweiligen Zeitraum erreicht haben",
   "cohortRender.without_an_entity_or_a_readable": "{excluded} {excluded2, plural, one {Zeile} other {Zeilen}} ohne Entität oder lesbares Datum ausgelassen.",
   "cohortRender.without_an_entity_or_a_readable_2": "{excluded} {excluded2, plural, one {Zeile} other {Zeilen}} ohne Entität oder lesbaren Zeitstempel ausgelassen.",
+  "columnNameMessages.already_has_other_names": null,
   "columnNameMessages.is_already_what_people_call": null,
   "common.alert": "Warnung",
   "common.at_risk": "Gefährdet",
