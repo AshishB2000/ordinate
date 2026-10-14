@@ -110,6 +110,7 @@
   "cohortRender.weighted_by_cohort_size_over_the": "Pondérée par la taille de la cohorte, sur les cohortes ayant atteint chaque période",
   "cohortRender.without_an_entity_or_a_readable": "{excluded} {excluded2, plural, one {ligne exclue} other {lignes exclues} } : entité absente ou date illisible.",
   "cohortRender.without_an_entity_or_a_readable_2": "{excluded} {excluded2, plural, one {ligne exclue} other {lignes exclues} } : entité absente ou horodatage illisible.",
+  "columnNameMessages.is_already_what_people_call": null,
   "common.alert": "Alerte",
   "common.at_risk": "À risque",
   "common.attainment": "Atteinte",

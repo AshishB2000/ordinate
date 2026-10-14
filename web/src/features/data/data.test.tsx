@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderApp } from '../../test-utils';
+import { Toaster } from '../../ui/Toast';
+import { ColumnsTab } from './ColumnsTab';
+import { ColumnDetails } from './Details';
 import { everyWord, freshness, fromControl, pctText, SCHEDULES } from './format';
 import { cadenceOptions } from './cadence';
 import { laneLayout } from './RelationshipsTab';
@@ -207,6 +211,179 @@ describe('Live datasets (L2.1)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete the copy and go Live' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'dataset:setMode')?.payload).toEqual({ projectId: P, datasetId: D, mode: 'live', confirmDrop: true }));
   }, 30_000);
+});
+
+describe('Columns tab: "Also called"', () => {
+  const HEADER = { id: D, name: 'Orders', rowCount: 3, columns: [{ name: 'gross', type: 'number' as const }, { name: 'net_amount', type: 'number' as const }] };
+  const SET = 'catalog:setColumn';
+  const TAKEN = '"gross" is already what people call Gross Sales.';
+  const routes = (more: Record<string, Reply> = {}): Record<string, Reply> => ({
+    'catalog:columns': { body: { columns: { gross: { displayName: 'Gross Sales' }, net_amount: { displayName: 'Net Amount', aliases: ['sales'] } } } },
+    'dataset:stats': { body: { ok: true, summaries: [], issues: [], filledPct: [] } },
+    ...more,
+  });
+  function renderTab(table: Record<string, Reply>) {
+    const calls = serve(table);
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <ColumnsTab projectId={P} datasetId={D} header={HEADER} />
+        <Toaster />
+      </QueryClientProvider>,
+    );
+    return calls;
+  }
+  const field = async (column: string) => (await screen.findByRole('textbox', { name: `Also called, for ${column}` })) as HTMLInputElement;
+  const saves = (calls: { channel: string; payload: unknown }[]) => calls.filter((c) => c.channel === SET).map((c) => c.payload);
+
+  it('saves what was typed as a list of names and shows back what the server stored', async () => {
+    const calls = renderTab(routes({ [SET]: { body: { ok: true, column: { displayName: 'Net Amount', aliases: ['Revenue', 'sales'] } } } }));
+    const input = await field('net_amount');
+    expect(input.value).toBe('sales');
+    expect((await field('gross')).value).toBe(''); // a column nobody has named yet: an empty field, not an error
+    expect(document.getElementById(input.getAttribute('aria-describedby') ?? '')?.textContent)
+      .toBe('Also called — Other names people use for this column. The Assistant understands them in questions. Separate names with commas.');
+    await waitFor(() => expect(input.readOnly).toBe(false)); // the roles arrived: an editor
+    fireEvent.change(input, { target: { value: ' Revenue,  sales ,, revenue' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.blur(input); // Enter and the blur after it are ONE save
+    await waitFor(() => expect(input.value).toBe('Revenue, sales'));
+    expect(saves(calls)).toEqual([{ projectId: P, datasetId: D, column: 'net_amount', patch: { aliases: ['Revenue', 'sales', 'revenue'] } }]);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('says the server\'s refusal at the field, keeps what was typed, and does not send it again', async () => {
+    const calls = renderTab(routes({ [SET]: { body: { ok: false, error: TAKEN } } }));
+    const input = await field('net_amount');
+    await waitFor(() => expect(input.readOnly).toBe(false));
+    fireEvent.change(input, { target: { value: 'sales, gross' } });
+    fireEvent.blur(input);
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe(TAKEN);
+    expect(screen.getAllByText(TAKEN)).toHaveLength(1); // at the field only — no toast beside it
+    expect(input.value).toBe('sales, gross');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(input.getAttribute('aria-describedby')).toContain(alert.id);
+    fireEvent.blur(input);
+    expect(saves(calls)).toHaveLength(1);
+    // Put right (back to what is stored): the sentence goes, and nothing is sent.
+    fireEvent.change(input, { target: { value: 'sales' } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(saves(calls)).toHaveLength(1);
+  });
+
+  it('sends a refused line again once the field is come back to — the other column may have let the name go', async () => {
+    const table = routes({ [SET]: { body: { ok: false, error: TAKEN } } });
+    const calls = renderTab(table);
+    const input = await field('net_amount');
+    await waitFor(() => expect(input.readOnly).toBe(false));
+    fireEvent.change(input, { target: { value: 'sales, gross' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await screen.findByRole('alert');
+    fireEvent.blur(input); // leaving for the other column: the refused line is not sent a second time
+    expect(saves(calls)).toHaveLength(1);
+    table[SET] = { body: { ok: true, column: { aliases: ['sales', 'gross'] } } }; // gross is no longer called that
+    fireEvent.focus(input);
+    fireEvent.keyDown(input, { key: 'Enter' }); // the very line that was refused, untouched
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(saves(calls)).toHaveLength(2);
+    expect(input.value).toBe('sales, gross');
+    expect(input.title).toBe('sales, gross'); // a list longer than the cell is still readable, by a viewer too
+  });
+
+  it('does not write the server\'s reply over what was typed while it saved', async () => {
+    renderTab(routes({ [SET]: { body: { ok: true, column: { aliases: ['top line'] } } } }));
+    const input = await field('gross');
+    await waitFor(() => expect(input.readOnly).toBe(false));
+    // Hold the reply until more has been typed.
+    const answer = globalThis.fetch;
+    let release = () => {};
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (url.includes('setColumn')) await new Promise<void>((go) => (release = go));
+      return answer(url, init);
+    });
+    fireEvent.change(input, { target: { value: 'top line' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(input.getAttribute('aria-busy')).toBe('true'));
+    fireEvent.change(input, { target: { value: 'top line, turn' } });
+    release();
+    await waitFor(() => expect(input.getAttribute('aria-busy')).toBeNull());
+    expect(input.value).toBe('top line, turn');
+  });
+
+  it('a display name another column is also called: the sentence is said, and the cell goes back to what is stored', async () => {
+    const REFUSED = '"Sales" is already what people call Net Amount.';
+    const calls = renderTab(routes({ [SET]: { body: { ok: false, error: REFUSED } } }));
+    const input = (await screen.findByRole('textbox', { name: 'Display name of gross' })) as HTMLInputElement;
+    await waitFor(() => expect(input.readOnly).toBe(false));
+    fireEvent.change(input, { target: { value: 'Sales' } });
+    fireEvent.blur(input);
+    expect(await screen.findByText(REFUSED)).toBeTruthy();
+    await waitFor(() => expect(input.value).toBe('Gross Sales'));
+    fireEvent.change(input, { target: { value: 'Sales' } }); // typed again, it is asked again — never taken for saved
+    fireEvent.blur(input);
+    await waitFor(() => expect(saves(calls)).toHaveLength(2));
+  });
+
+  it('says the limits at the field instead of sending a list the server would refuse', async () => {
+    const calls = renderTab(routes());
+    const input = await field('gross');
+    await waitFor(() => expect(input.readOnly).toBe(false));
+    fireEvent.change(input, { target: { value: 'a, b, c, d, e, f, g, h, i' } });
+    fireEvent.blur(input);
+    expect((await screen.findByRole('alert')).textContent).toBe('A column can have at most 8 other names.');
+    fireEvent.change(input, { target: { value: 'x'.repeat(61) } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('A name can be at most 60 characters.'));
+    expect(saves(calls)).toHaveLength(0);
+  });
+
+  it('shows a viewer the names, and every note, with nothing to change', async () => {
+    const calls = renderTab(routes({ 'projects:roles': { body: { [P]: 'viewer' } } }));
+    const input = await field('net_amount');
+    await waitFor(() => expect(calls.some((c) => c.channel === 'projects:roles')).toBe(true));
+    await act(async () => {}); // the roles reply settles: still a viewer
+    expect(input.value).toBe('sales');
+    for (const name of ['Also called, for net_amount', 'Also called, for gross', 'Display name of net_amount', 'Description of net_amount', 'Example of net_amount']) {
+      expect((screen.getByRole('textbox', { name }) as HTMLInputElement).readOnly).toBe(true);
+    }
+    expect((screen.getByRole('combobox', { name: 'Sensitivity of net_amount' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((await field('gross')).placeholder).toBe('—'); // no invitation to add one
+    fireEvent.blur(input);
+    expect(saves(calls)).toHaveLength(0);
+  });
+
+  it('the column Details popover, which edits the display name, shows the names beside it — to read, not to edit', async () => {
+    serve({});
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ColumnDetails projectId={P} datasetId={D} column="net_amount" doc={{ displayName: 'Net Amount', aliases: ['sales', 'revenue'] }} trigger={<button type="button">Notes</button>} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Notes' }));
+    const pop = await screen.findByRole('dialog', { name: 'Details for column net_amount' });
+    expect((within(pop).getByRole('textbox', { name: 'Display name' }) as HTMLInputElement).value).toBe('Net Amount');
+    expect(within(pop).getByText('sales, revenue')).toBeTruthy();
+    expect(within(pop).queryByRole('textbox', { name: /Also called/ })).toBeNull();
+  });
+
+  it('the Details popover puts a refused display name back, with a description saved in the same breath', async () => {
+    const calls = serve({ [SET]: { body: { ok: false, error: '"Sales" is already what people call gross.' } } });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ColumnDetails projectId={P} datasetId={D} column="net_amount" doc={{ displayName: 'Net Amount' }} trigger={<button type="button">Notes</button>} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Notes' }));
+    const pop = await screen.findByRole('dialog', { name: 'Details for column net_amount' });
+    const name = within(pop).getByRole('textbox', { name: 'Display name' }) as HTMLInputElement;
+    fireEvent.change(name, { target: { value: 'Sales' } });
+    fireEvent.blur(name);
+    fireEvent.change(within(pop).getByRole('textbox', { name: 'Description' }), { target: { value: 'After discounts' } });
+    fireEvent.blur(within(pop).getByRole('textbox', { name: 'Description' })); // a second write before the first is answered
+    await waitFor(() => expect(name.value).toBe('Net Amount'));
+    expect(saves(calls)).toHaveLength(2);
+  });
 });
 
 describe('Data helpers', () => {

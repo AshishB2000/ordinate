@@ -13,6 +13,8 @@ const DocPatch = z.strictObject({
 const ColumnPatch = z.strictObject({
   description: z.string().max(2_000).optional(),
   displayName: z.string().max(120).optional(),
+  // "Also called": replaces the list. A name another column answers to is refused with a sentence (app/columnNames.ts).
+  aliases: z.array(z.string().max(60)).max(8).optional(),
   example: z.string().max(200).optional(),
   sensitivity: z.enum(['none', 'personal', 'financial']).optional(),
 });

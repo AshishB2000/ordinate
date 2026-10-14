@@ -176,7 +176,7 @@ export function liveDatasetFacts(input: LiveFactsInput): CopilotFacts {
   if (budget.unlisted) lines.push(`(Sample values of ${budget.unlisted} more columns are not listed, to keep this short.)`);
   const hidden = input.columns.filter((c) => input.withheld.has(c.name) && byName.get(c.name)?.values?.length).map((c) => c.name);
   if (hidden.length) lines.push(`(Values of ${hidden.join(', ')} are withheld — marked, or detected, as personal or financial data.)`);
-  columnNoteLines(lines, input.docs || {});
+  columnNoteLines(lines, input.docs || {}, input.columns.map((c) => c.name)); // current columns only, as the resolver reads them
   metricLines(lines, ledger, input.metrics || []);
   lines.push('');
   lines.push('No row-level figures are available for a Live dataset. A question answerable from these columns can be answered ' +

@@ -9,7 +9,7 @@
 //   { schemaVersion: 1,
 //     tags:    { sales: { color: 3 } },
 //     records: { 'dataset:<uuid>': { description, tags, owner, updatedBy, updatedAt } },
-//     columns: { '<datasetId>': { discount: { description, displayName, example,
+//     columns: { '<datasetId>': { discount: { description, displayName, aliases, example,
 //                                             sensitivity, updatedBy, updatedAt } } } }
 //
 // A METRIC's description is the one exception: the Metric record already has
@@ -33,6 +33,9 @@ import * as appPaths from './paths';
 import { isValidId } from './ids';
 import * as recordFs from './recordFs';
 import { ctx, serverDataDir } from '../server/context';
+import { aliasCollision, sanitizeAliases } from './columnNames';
+import type { NamedColumn } from './columnNames';
+import { alreadyCalled } from './columnNameMessages';
 
 // ── Kinds ────────────────────────────────────────────────────────────────────
 // A dashboard is stored as an Analysis record, so its kind is 'analysis' — the
@@ -56,6 +59,8 @@ export interface ColumnDoc {
   description: string;
   /** What captions and pickers call the column. Empty = its own name. */
   displayName: string;
+  /** "Also called": the other names people ask for it by (./columnNames.ts). */
+  aliases: string[];
   example: string;
   sensitivity: Sensitivity;
   updatedBy: string;
@@ -169,11 +174,13 @@ function sanitizeRecordDoc(raw: any): RecordDoc {
   };
 }
 
-function sanitizeColumnDoc(raw: any): ColumnDoc {
+/** `column` is the name the doc is filed under: an alias equal to it says nothing. A doc from before aliases reads as []. */
+function sanitizeColumnDoc(raw: any, column: string): ColumnDoc {
   const r = raw && typeof raw === 'object' ? raw : {};
   return {
     description: clip(r.description, MAX_DESCRIPTION),
     displayName: clip(r.displayName, MAX_DISPLAY),
+    aliases: sanitizeAliases(r.aliases, column),
     example: clip(r.example, MAX_EXAMPLE),
     sensitivity: SENSITIVITIES.has(r.sensitivity) ? r.sensitivity : 'none',
     updatedBy: clip(r.updatedBy, MAX_OWNER),
@@ -204,7 +211,7 @@ export function sanitizeCatalog(raw: any): CatalogFile {
     if (!isValidId(dsId) || !columns[dsId] || typeof columns[dsId] !== 'object') continue;
     const cols = dict<ColumnDoc>();
     for (const name of Object.keys(columns[dsId])) {
-      if (name && name.length <= MAX_COLUMN_NAME) cols[name] = sanitizeColumnDoc(columns[dsId][name]);
+      if (name && name.length <= MAX_COLUMN_NAME) cols[name] = sanitizeColumnDoc(columns[dsId][name], name);
     }
     out.columns[dsId] = cols;
   }
@@ -309,10 +316,21 @@ export async function getColumns(projectId: string, datasetId: string): Promise<
   return own(file.columns, datasetId) ? file.columns[datasetId] : dict();
 }
 
-export interface ColumnPatch { description?: unknown; displayName?: unknown; example?: unknown; sensitivity?: unknown }
+export interface ColumnPatch { description?: unknown; displayName?: unknown; aliases?: unknown; example?: unknown; sensitivity?: unknown }
 
+/**
+ * Merge the fields PRESENT in `patch` (`aliases` replaces the list).
+ *
+ * THROWS, saving nothing of the patch, when one of its aliases is a name
+ * another column of the dataset already answers to (columnNames.aliasCollision)
+ * — the message is the sentence to show at the field. So does a NEW display
+ * name that another column is "also called": the other door to a name that
+ * means two columns. (A display name may still repeat another column's name or
+ * caption, as it could before aliases existed.) `datasetColumns` is the
+ * dataset's current column names; without it the documented columns stand in.
+ */
 export async function setColumn(
-  projectId: string, datasetId: string, column: string, patch: ColumnPatch,
+  projectId: string, datasetId: string, column: string, patch: ColumnPatch, datasetColumns?: string[],
 ): Promise<ColumnDoc | null> {
   if (!isValidId(projectId) || !isValidId(datasetId)) return null;
   if (typeof column !== 'string' || !column || column.length > MAX_COLUMN_NAME) return null;
@@ -320,10 +338,24 @@ export async function setColumn(
   return mutate(projectId, (file) => {
     if (!own(file.columns, datasetId)) file.columns[datasetId] = dict();
     const cols = file.columns[datasetId];
-    const cur = own(cols, column) ? cols[column] : sanitizeColumnDoc({});
+    const cur = own(cols, column) ? cols[column] : sanitizeColumnDoc({}, column);
+    const aliases = p.aliases !== undefined ? sanitizeAliases(p.aliases, column) : cur.aliases;
+    const displayName = p.displayName !== undefined ? clip(p.displayName, MAX_DISPLAY) : cur.displayName;
+    const renamed = !!displayName && displayName !== cur.displayName;
+    if (p.aliases !== undefined || renamed) {
+      const others: NamedColumn[] = (datasetColumns || Object.keys(cols)).filter((name) => name !== column)
+        .map((name) => ({ name, ...(own(cols, name) ? { displayName: cols[name].displayName, aliases: cols[name].aliases } : {}) }));
+      // Thrown inside the write, before the file is touched: nothing of this patch is saved.
+      const refuse = (said: string, by: NamedColumn): never => { throw new Error(alreadyCalled(said, by.displayName || by.name)); };
+      const hit = p.aliases !== undefined ? aliasCollision(aliases, others) : null;
+      if (hit) refuse(hit.alias, hit.column);
+      const called = renamed ? others.find((o) => aliasCollision([displayName], [{ name: '', aliases: o.aliases }])) : undefined;
+      if (called) refuse(displayName, called);
+    }
     const next: ColumnDoc = {
       description: p.description !== undefined ? clip(p.description, MAX_DESCRIPTION) : cur.description,
-      displayName: p.displayName !== undefined ? clip(p.displayName, MAX_DISPLAY) : cur.displayName,
+      displayName,
+      aliases,
       example: p.example !== undefined ? clip(p.example, MAX_EXAMPLE) : cur.example,
       sensitivity: p.sensitivity !== undefined
         ? (SENSITIVITIES.has(String(p.sensitivity)) ? p.sensitivity as Sensitivity : 'none')

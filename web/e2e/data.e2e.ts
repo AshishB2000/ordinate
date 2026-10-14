@@ -10,7 +10,8 @@
 //   2. The dataset page: the filter banner, sort and hide from a column menu,
 //      the column profile (server figures), the lineage drawer.
 //   3. Quality: add a rule with its live preview, run the checks, show the
-//      failing rows. Columns: a description saved in place.
+//      failing rows. Columns: a description saved in place; an "Also called"
+//      name refused at the field, another saved and still there after a reload.
 //   4. Catalog: details saved from the popover; Relationships: a relationship
 //      from the suggested key, drawn and listed with its match rate.
 //   5. Empty states (a new project) and the import placeholder.
@@ -208,6 +209,28 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
   await page.getByRole('textbox', { name: 'Description of region' }).fill('Sales region the order shipped to');
   await page.keyboard.press('Enter');
   await saved;
+  // "Also called": a name another column already answers to is refused at the field, in the server's words —
+  // `category` has no note of its own, so it is the dataset's columns the server checked, not the notes.
+  await page.getByRole('textbox', { name: 'Also called, for state' }).fill('Category');
+  await page.keyboard.press('Enter');
+  await page.getByRole('alert').filter({ hasText: '"Category" is already what people call category.' }).waitFor();
+  // The refusal lives in memory and screens() reloads, so it is shot in place, in both themes.
+  const theme = await page.evaluate(() => document.documentElement.dataset.theme ?? 'light');
+  for (const t of ['light', 'dark'] as const) {
+    await page.evaluate((v) => (document.documentElement.dataset.theme = v), t);
+    await page.screenshot({ path: path.join(SCREENS, `dataset-columns-refused-${t}.png`), fullPage: true, animations: 'disabled' }); // the theme's colour transitions, finished
+  }
+  await page.evaluate((v) => (document.documentElement.dataset.theme = v), theme);
+  // …and free ones are saved, shown as the server stored them, and still there after a reload (in both themes).
+  const named = page.waitForResponse((r) => r.url().endsWith('/api/rpc/catalog%3AsetColumn') && r.status() === 200);
+  await page.getByRole('textbox', { name: 'Also called, for region' }).fill(' Territory,  sales   area , territory');
+  await page.keyboard.press('Enter');
+  await named;
+  const alsoCalled = () => page.waitForFunction(() => document.querySelector<HTMLInputElement>('input[aria-label="Also called, for region"]')?.value === 'Territory, sales area');
+  await alsoCalled();
+  await screens(page, 'dataset-columns');
+  await alsoCalled();
+  assert.equal(await page.getByRole('textbox', { name: 'Also called, for state' }).inputValue(), '', 'the refused name was never saved');
 
   // ── 4. Catalog and relationships ────────────────────────────────────────
   await page.goto(`/data/${pid}?tab=catalog`);

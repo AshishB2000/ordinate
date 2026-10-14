@@ -25,6 +25,13 @@ import { CALC_KIND_NAMES, isPercentKind } from '../analysis/tableCalc';
 import type { CalcSeries } from '../analysis/tableCalc';
 import type { LedgerEntry, LedgerUnit } from './numberAudit';
 import type { CopilotFacts } from './copilot';
+import { WITHHELD, columnNameBits, columnNoteLines, withheldColumns } from './columnNotes';
+import type { FactColumnDoc } from './columnNotes';
+
+// The column-notes block lives in ./columnNotes (this file is near its size
+// cap); re-exported so its readers keep one import.
+export { WITHHELD, columnNoteLines };
+export type { FactColumnDoc };
 
 // ── Context facts (PURE — no fs/DOM/model) ──────────────────────────────────────
 //
@@ -125,49 +132,6 @@ export function metricLines(lines: string[], ledger: LedgerEntry[], metrics: Fac
   });
 }
 
-/** A column's catalog notes, as the Assistant needs them (src/app/catalog.ts). */
-export interface FactColumnDoc { description?: string; displayName?: string; sensitivity?: string }
-
-/**
- * The user's OWN notes on columns — what a column means, what they call it,
- * whether it is personal or financial — so an answer uses their words. Words,
- * not figures: a digit a note happens to contain reaches the ledger through
- * sealLedger, exactly like a digit in a dataset name.
- */
-export function columnNoteLines(lines: string[], docs: Record<string, FactColumnDoc>, only?: string[]): void {
-  const notes: string[] = [];
-  for (const name of Object.keys(docs || {})) {
-    if (only && only.indexOf(name) < 0) continue;
-    const d = docs[name] || {};
-    const bits: string[] = [];
-    if (d.displayName) bits.push(`called "${d.displayName}"`);
-    if (d.description) bits.push(d.description);
-    if (d.sensitivity && d.sensitivity !== 'none') bits.push(`${d.sensitivity} data; sample values withheld`);
-    if (bits.length) notes.push(`- ${name}: ${bits.join('; ')}`);
-  }
-  if (!notes.length) return;
-  lines.push('');
-  lines.push('Column notes (written by the user) — use these names and meanings for these columns:');
-  lines.push(...notes);
-}
-
-/** What a withheld value prints as. */
-export const WITHHELD = '(withheld)';
-
-/**
- * The columns whose VALUES the model is never shown: the ones the user marked
- * personal or financial. Their statistics (counts, min/max/mean) stay — those
- * are the app's aggregates, and the number ledger covers them unchanged — but
- * a sample cell, a most-common value or a chart label drawn from one is
- * replaced by WITHHELD, and the facts say so.
- */
-function withheldColumns(docs: Record<string, FactColumnDoc>): Set<string> {
-  return new Set(Object.keys(docs || {}).filter((k) => {
-    const s = docs[k] && docs[k].sensitivity;
-    return s === 'personal' || s === 'financial';
-  }));
-}
-
 // Dataset: columns + types + app-computed stats (min/max/mean/count |
 // distinct/mostCommon) + quality issues + up to N sample rows. This is the
 // generalized twin of ai/datasetPrompt.buildDatasetSummaryText (same shape) with the
@@ -224,7 +188,8 @@ export function datasetFacts(
       if (s.mostCommon) num(ledger, `${s.name} most common count`, s.mostCommon.count, 'count', SRC);
     }
   });
-  columnNoteLines(lines, columnDocs);
+  // Only the columns the dataset HAS: a note left under an old name by a rename names nothing a spec could use.
+  columnNoteLines(lines, columnDocs, ds.columns.map((c) => c.name));
   metricLines(lines, ledger, metrics);
   if (issues.length > 0) {
     lines.push('');
@@ -575,8 +540,7 @@ export function projectFacts(
         const d = (s.docs || {})[col];
         const extra = s.notes && Object.prototype.hasOwnProperty.call(s.notes, col) ? s.notes[col] : '';
         if (!d) return extra;
-        const bits = [d.displayName ? `called "${d.displayName}"` : '', d.description ? d.description.slice(0, 120) : '']
-          .filter(Boolean);
+        const bits = [...columnNameBits(d), d.description ? d.description.slice(0, 120) : ''].filter(Boolean);
         return (bits.length ? '; ' + bits.join('; ') : '') + extra;
       };
       lines.push(`- ${s.name}: ${s.columns.map((c) => `${c.name} (${c.type}${note(c.name)})`).join(', ') || '(no columns)'}`);

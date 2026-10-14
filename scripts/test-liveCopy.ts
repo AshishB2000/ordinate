@@ -63,8 +63,16 @@ const EDITOR: Identity = { user: { email: 'eve@acme.test', role: 'editor' }, org
     });
     const extract = await H.datasets.saveDataset(projectId, { name: 'Already a copy', sourceKind: 'csv', columns: fakeMod.ORDERS_COLUMNS, rows: [['North', 1, '2024-01-01']] });
     if (!orphan || !extract) throw new Error('fixture not saved');
-    await catalog.setColumn(projectId, orders.liveId, 'region', { sensitivity: 'personal', description: 'Where the order shipped' });
+    await catalog.setColumn(projectId, orders.liveId, 'region', { sensitivity: 'personal', description: 'Where the order shipped', aliases: ['territory'] });
+    // Taught before the warehouse had a `day` column (no column list here, so nothing refuses it): the copy must leave it out.
+    await catalog.setColumn(projectId, orders.liveId, 'amount', { sensitivity: 'financial', aliases: ['takings', 'Day'] });
     await catalog.setColumn(projectId, orders.liveId, 'gone_column', { description: 'Not in the warehouse any more' });
+    await catalog.setColumn(projectId, orders.liveId, 'day', { description: 'When it was booked' });
+    // A catalog edited by hand: amount's caption is a name region is also called, which no write would have saved.
+    const file = path.join(H.DATA, 'orgs', 'acme', 'userData', 'projects', projectId, 'catalog.json');
+    const edited = JSON.parse(fs.readFileSync(file, 'utf8'));
+    edited.columns[orders.liveId].amount.displayName = 'Territory';
+    fs.writeFileSync(file, JSON.stringify(edited));
     return { projectId, orders, broken, metadata, pub, orphan: orphan.id, extract: extract.id };
   });
   const P = seed.projectId;
@@ -124,6 +132,12 @@ const EDITOR: Identity = { user: { email: 'eve@acme.test', role: 'editor' }, org
   ok('copy: the Live dataset\'s column notes come with it — the personal mark too',
     notes.value?.columns?.region?.sensitivity === 'personal' && notes.value.columns.region.description === 'Where the order shipped', notes.body);
   ok('copy: …only for columns the copy has', !('gone_column' in (notes.value?.columns ?? {})), notes.body);
+  ok('copy: the "Also called" names come with it', JSON.stringify(notes.value?.columns?.region?.aliases) === '["territory"]', notes.body);
+  ok('copy: a list that now collides with a column is left out — and the financial mark is NOT lost with it',
+    notes.value?.columns?.amount?.sensitivity === 'financial' && JSON.stringify(notes.value.columns.amount.aliases) === '[]', notes.body);
+  ok('copy: a caption another column is also called is left out too — the mark stays, and so do the notes of the columns after it',
+    notes.value?.columns?.amount?.displayName === '' && notes.value.columns.amount.sensitivity === 'financial'
+    && notes.value.columns.day?.description === 'When it was booked', notes.body);
   ok('Live: its record is byte-identical after the copy', raw(seed.orders.liveId) === liveBefore);
   ok('Live: still Live, still no Parquet', JSON.parse(raw(seed.orders.liveId)).mode === 'live' && !hasParquet(seed.orders.liveId));
   ok('Live: no live question was spent (runBound never called — an import reads through run)', fake.calls.length === 0, String(fake.calls.length));

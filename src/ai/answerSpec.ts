@@ -25,6 +25,8 @@ import type { FilterOp } from '../data/filterOps';
 import type { VizAggregation, VizMeasure } from '../analysis/visuals';
 import { dateBucket, dateBucketLabel, isDateGrain, parseDateCell } from '../analysis/categoryKey';
 import type { CivilDate, DateGrain } from '../analysis/categoryKey';
+// Pure, like this file: the rules for what people call a column, `squash` among them.
+import { squash, taughtColumn } from '../app/columnNames';
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -57,6 +59,8 @@ export interface SpecDataset {
   id: string;
   name: string;
   columns: ParsedColumn[];
+  /** column → what people call it: its display name and "Also called" names (app/columnNames `taughtNames`). */
+  names?: Record<string, string[]>;
 }
 
 /** A defined metric the spec may name instead of a column. Formula metrics cannot chart. */
@@ -101,19 +105,19 @@ const NUMERIC_AGGS: ReadonlySet<string> = new Set(['sum', 'avg', 'min', 'max']);
 
 // ── Name resolution ──────────────────────────────────────────────────────────
 
-/** Case, spaces, underscores and punctuation are not part of a column's identity to a reader. */
-function squash(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
-
 /**
  * A model-written column name → the dataset's real column name, or null.
  *
  * Exact first, then case-insensitive, then "squashed" ("Order date" →
  * order_date). Each looser pass must be UNAMBIGUOUS: two columns that squash to
  * the same key resolve to neither, because picking one is a guess.
+ *
+ * Only then the names people TAUGHT (`names`: a column's display name and its
+ * "Also called" list — app/columnNames `taughtColumn`), under the same rule. So
+ * a real column name always beats another column's taught name, and two real
+ * columns the name cannot tell apart are never settled by a third's alias.
  */
-export function resolveColumn(name: unknown, columns: ParsedColumn[]): ParsedColumn | null {
+export function resolveColumn(name: unknown, columns: ParsedColumn[], names?: Record<string, string[]>): ParsedColumn | null {
   if (typeof name !== 'string' || !name.trim()) return null;
   const n = name.trim();
   const exact = columns.find((c) => c.name === n);
@@ -121,9 +125,9 @@ export function resolveColumn(name: unknown, columns: ParsedColumn[]): ParsedCol
   const lower = columns.filter((c) => c.name.toLowerCase() === n.toLowerCase());
   if (lower.length === 1) return lower[0];
   const key = squash(n);
-  if (!key) return null;
-  const loose = columns.filter((c) => squash(c.name) === key);
-  return loose.length === 1 ? loose[0] : null;
+  const loose = key ? columns.filter((c) => squash(c.name) === key) : [];
+  if (loose.length || !names) return loose.length === 1 ? loose[0] : null;
+  return taughtColumn(n, columns, names);
 }
 
 const AGG_ALIASES: Record<string, VizAggregation> = {
@@ -150,6 +154,7 @@ function resolveMeasure(
   columns: ParsedColumn[],
   metrics: SpecMetric[],
   datasetId: string,
+  names?: Record<string, string[]>,
 ): VizMeasure | string {
   let colName: unknown;
   let aggRaw: unknown;
@@ -165,7 +170,7 @@ function resolveMeasure(
     return 'A measure must name a column.';
   }
 
-  const col = resolveColumn(colName, columns);
+  let col = resolveColumn(colName, columns);
   if (!col) {
     // A defined metric by NAME — the project's own vocabulary. Only a simple
     // column metric on THIS dataset can become a chart measure.
@@ -175,7 +180,10 @@ function resolveMeasure(
       const agg = parseAgg(m.aggregation) || 'sum';
       return { column: resolveColumn(m.column, columns)!.name, aggregation: agg, metricId: m.id };
     }
-    return `Unknown measure column "${String(colName)}".`;
+    // A name the user gave a METRIC is that metric, usable here or not — never
+    // a column that is also called that, which would be a different number.
+    if (!m) col = resolveColumn(colName, columns, names);
+    if (!col) return `Unknown measure column "${String(colName)}".`;
   }
 
   let agg = aggRaw === undefined || aggRaw === null || aggRaw === '' ? null : parseAgg(aggRaw);
@@ -209,10 +217,10 @@ function coerce(v: unknown, col: ParsedColumn): Cell | undefined {
   return undefined;
 }
 
-function resolveFilter(raw: unknown, columns: ParsedColumn[]): AnswerFilter | string {
+function resolveFilter(raw: unknown, columns: ParsedColumn[], names?: Record<string, string[]>): AnswerFilter | string {
   if (!raw || typeof raw !== 'object') return 'A filter must be an object.';
   const o = raw as Record<string, unknown>;
-  const col = resolveColumn(o.column, columns);
+  const col = resolveColumn(o.column, columns, names);
   if (!col) return `Unknown filter column "${String(o.column)}".`;
 
   if (o.period !== undefined) {
@@ -246,7 +254,8 @@ function resolveDataset(raw: unknown, datasets: SpecDataset[], defaultId?: strin
     if (byId) return byId;
     const byName = datasets.filter((d) => d.name.trim().toLowerCase() === r.toLowerCase());
     if (byName.length === 1) return byName[0];
-    const loose = datasets.filter((d) => squash(d.name) === squash(r));
+    const key = squash(r); // '' (a name of symbols only) matches nothing, as for a column
+    const loose = key ? datasets.filter((d) => squash(d.name) === key) : [];
     if (loose.length === 1) return loose[0];
     return null;
   }
@@ -277,7 +286,7 @@ export function validateAnswerSpec(
   const ds = resolveDataset(o.dataset ?? o.datasetId, datasets, opts.defaultDatasetId);
   if (!ds) return { ok: false, reason: `Unknown dataset "${String(o.dataset ?? '')}".` };
 
-  const cat = resolveColumn(o.category, ds.columns);
+  const cat = resolveColumn(o.category, ds.columns, ds.names);
   if (!cat) return { ok: false, reason: `Unknown category column "${String(o.category)}".` };
 
   const measuresRaw = Array.isArray(o.measures) ? o.measures : o.measure !== undefined ? [o.measure] : [];
@@ -285,14 +294,14 @@ export function validateAnswerSpec(
   if (measuresRaw.length > MAX_MEASURES) return { ok: false, reason: `At most ${MAX_MEASURES} measures.` };
   const measures: VizMeasure[] = [];
   for (const m of measuresRaw) {
-    const r = resolveMeasure(m, ds.columns, opts.metrics || [], ds.id);
+    const r = resolveMeasure(m, ds.columns, opts.metrics || [], ds.id, ds.names);
     if (typeof r === 'string') return { ok: false, reason: r };
     measures.push(r);
   }
 
   let series: string | undefined;
   if (o.series !== undefined && o.series !== null && o.series !== '') {
-    const s = resolveColumn(o.series, ds.columns);
+    const s = resolveColumn(o.series, ds.columns, ds.names);
     if (!s) return { ok: false, reason: `Unknown split column "${String(o.series)}".` };
     if (s.name === cat.name) return { ok: false, reason: 'The split cannot be the category.' };
     series = s.name;
@@ -302,7 +311,7 @@ export function validateAnswerSpec(
   if (filtersRaw.length > MAX_FILTERS) return { ok: false, reason: `At most ${MAX_FILTERS} filters.` };
   const filters: AnswerFilter[] = [];
   for (const f of filtersRaw) {
-    const r = resolveFilter(f, ds.columns);
+    const r = resolveFilter(f, ds.columns, ds.names);
     if (typeof r === 'string') return { ok: false, reason: r };
     filters.push(r);
   }

@@ -690,6 +690,15 @@ a.lineChip:hover {
 .docTable td {
   min-width: 120px;
 }
+/* The description is the one long note: it keeps room for a sentence when the row is full. */
+.docTable td:has(textarea) {
+  min-width: 264px;
+}
+/* A refusal wraps inside its cell; it does not widen the column and shift the others. */
+.docTable .rowError {
+  width: 0;
+  min-width: 100%;
+}
 .cellInput {
   width: 100%;
   min-height: 28px;
@@ -710,6 +719,16 @@ a.lineChip:hover {
   outline: var(--focus-ring-w) solid var(--focus-ring);
   outline-offset: 1px;
   background: var(--surface-1);
+}
+/* A viewer's cell: the note reads as text and offers nothing to change. */
+.cellInput:read-only {
+  border-color: transparent;
+  background: none;
+  cursor: default;
+  resize: none;
+}
+.cellInput[aria-invalid='true'] {
+  border-color: var(--error);
 }
 
 /* ── Captures tab ───────────────────────────────────────────────────── */

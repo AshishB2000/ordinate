@@ -55,6 +55,93 @@ const ambiguous: ParsedColumn[] = [{ name: 'Order Date', type: 'date' }, { name:
 ok('resolve: two columns squashing to one key resolve to NEITHER', A.resolveColumn('orderdate', ambiguous) === null);
 ok('resolve: …but an exact name still wins', A.resolveColumn('order_date', ambiguous)?.name === 'order_date');
 
+// ── 1b. The names people call a column (display name + "Also called") ───────
+// DIFFERENTIAL: a spec written in taught names must validate to the very spec
+// the real column names give — compared leaf by leaf, never against a
+// hand-written expectation.
+
+const NAMES: Record<string, string[]> = {
+  region: ['Territory', 'sales area'],
+  category: ['Product line', 'department'],
+  revenue: ['Net Amount', 'sales', 'turnover'],
+  order_date: ['Booked on', 'when'],
+};
+const TAUGHT = { ...DS, names: NAMES };
+function sameLeaves(a: unknown, b: unknown): boolean {
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return Object.is(a, b);
+  const ka = Object.keys(a);
+  return Array.isArray(a) === Array.isArray(b) && ka.length === Object.keys(b).length
+    && ka.every((k) => k in b && sameLeaves((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+const said = (category: string, measure: unknown, series: string, when: string, where: string) => ({
+  dataset: DS.id, category, measures: [measure], series,
+  filters: [{ column: when, period: 'last_quarter' }, { column: where, op: 'in', values: ['West'] }],
+});
+const real = A.validateAnswerSpec(said('region', { column: 'revenue', aggregation: 'sum' }, 'category', 'order_date', 'region'), [TAUGHT, OTHER]);
+ok('names: the reference (real column names) validates', real.ok, JSON.stringify(real));
+const spellings: [string, unknown][] = [
+  ['display names', said('Territory', { column: 'Net Amount', aggregation: 'sum' }, 'Product line', 'Booked on', 'Territory')],
+  ['"Also called" names', said('sales area', 'sum(sales)', 'department', 'when', 'sales area')],
+  ['an alias in another case and spacing', said('SALES_AREA', { column: 'Turn-Over', aggregation: 'total' }, ' Department ', 'WHEN', 'Sales-Area')],
+];
+for (const [label, spec] of spellings) {
+  const got = A.validateAnswerSpec(spec, [TAUGHT, OTHER]);
+  ok(`names: a spec written in ${label} is the spec the real names give (category, measure, split, filters)`,
+    real.ok && got.ok && sameLeaves(got.spec, real.spec), JSON.stringify(got));
+  // NEGATIVE CONTROL, and "no names → exactly as before": the same words, untaught, are refused by name.
+  const untaught = A.validateAnswerSpec(spec, [DS, OTHER]);
+  ok(`names: …and without the taught names it is refused, quoting what was said (${label})`,
+    !untaught.ok && /^Unknown category column "/.test(untaught.reason) && untaught.reason.includes(String((spec as { category: string }).category)), JSON.stringify(untaught));
+}
+ok('names: sameLeaves tells two specs apart (the comparison is not vacuous)',
+  real.ok && !sameLeaves(real.spec, { ...real.spec, category: 'category' }) && !sameLeaves(real.spec, { ...real.spec, filters: [] }));
+
+const shared = A.validateAnswerSpec({ dataset: DS.id, category: 'region', measures: ['Money'] },
+  [{ ...DS, names: { revenue: ['money'], profit: ['Money'] } }]);
+ok('names: a name two columns answer to resolves to NEITHER, and the reason quotes it',
+  !shared.ok && shared.reason === 'Unknown measure column "Money".', JSON.stringify(shared));
+const steal = { revenue: ['profit', 'Sub-Category', 'region'] };
+ok('names: a real column name beats another column\'s alias — exact, in another case, and squashed',
+  A.resolveColumn('profit', COLS, steal)?.name === 'profit' && A.resolveColumn('REGION', COLS, steal)?.name === 'region'
+  && A.resolveColumn('sub category', COLS, steal)?.name === 'Sub Category');
+ok('names: a name filed under something that is not a column resolves to nothing',
+  A.resolveColumn('takings', COLS, { old_revenue: ['takings'] }) === null
+  && A.resolveColumn('takings', COLS, { revenue: ['takings'] })?.name === 'revenue');
+ok('names: two real columns the said name cannot tell apart are not settled by a third column\'s alias',
+  A.resolveColumn('orderdate', [...ambiguous, { name: 'shipped', type: 'date' }], { shipped: ['orderdate'] }) === null);
+ok('names: a name with no letters or digits to squash still matches as written, and only once',
+  A.resolveColumn('売上', COLS, { revenue: ['売上'] })?.name === 'revenue'
+  && A.resolveColumn('売上', COLS, { revenue: ['売上'], profit: ['売上'] }) === null);
+// A name in another script is matched on its OWN letters, never on the Latin letters or digits beside them.
+const IDS: ParsedColumn[] = [{ name: 'id', type: 'text' }, { name: 'customer_id', type: 'text' }, { name: 'rev', type: 'number' }, { name: '売上2024', type: 'number' }];
+const ID_NAMES = { customer_id: ['顧客ID'], rev: ['売上 (USD)'] };
+ok('names: an untaught name in another script is nobody\'s — not the column that shares its Latin letters or digits',
+  A.resolveColumn('注文ID', IDS, ID_NAMES) === null && A.resolveColumn('利益 (USD)', IDS, ID_NAMES) === null && A.resolveColumn('利益2024', IDS) === null);
+ok('names: …and a taught or real one is still found in another width, case or spacing (negative control)',
+  A.resolveColumn('顧客ID', IDS, ID_NAMES)?.name === 'customer_id' && A.resolveColumn('売上（usd）', IDS, ID_NAMES)?.name === 'rev'
+  && A.resolveColumn('売上 ２０２４', IDS)?.name === '売上2024' && A.resolveColumn('ID', IDS, ID_NAMES)?.name === 'id');
+const profitSaid = A.validateAnswerSpec({ category: 'region', measures: [{ column: '利益 (USD)', aggregation: 'sum' }] },
+  [{ ...DS, names: { revenue: ['売上 (USD)'] } }]);
+ok('names: a spec in an untaught name is refused, never charted as the column whose name shares "(USD)"',
+  !profitSaid.ok && profitSaid.reason === 'Unknown measure column "利益 (USD)".', JSON.stringify(profitSaid));
+ok('dataset: an unknown name in another script is not the one dataset whose name is also not Latin',
+  !A.validateAnswerSpec({ dataset: '利益', category: 'region', measures: ['revenue'] }, [{ ...DS, name: '売上' }, OTHER]).ok
+  && !A.validateAnswerSpec({ dataset: '📉', category: 'region', measures: ['revenue'] }, [{ ...DS, name: '📈' }, OTHER]).ok
+  && A.validateAnswerSpec({ dataset: '売上2024', category: 'region', measures: ['revenue'] }, [{ ...DS, name: '売上 2024' }, OTHER]).ok);
+ok('names: a column called "constructor" or "__proto__" has no taught names unless someone taught one',
+  A.resolveColumn('ctor', [{ name: 'constructor', type: 'text' }, { name: '__proto__', type: 'text' }], {}) === null);
+const asBefore = ['revenue', 'Revenue', 'order date', 'sub_category', 'Order-Date', 'margin', '', 42, null];
+ok('names: what a real name resolves to never depends on the taught names (same column object, every case above)',
+  asBefore.every((n) => Object.is(A.resolveColumn(n, COLS), A.resolveColumn(n, COLS, NAMES)) && Object.is(A.resolveColumn(n, COLS), A.resolveColumn(n, COLS, {}))));
+const TAKINGS = { id: '55555555-5555-4555-8555-555555555555', name: 'Takings', datasetId: DS.id, column: 'revenue', aggregation: 'avg' };
+const metricWins = A.validateAnswerSpec({ dataset: DS.id, category: 'region', measures: ['takings'] },
+  [{ ...DS, names: { profit: ['takings'] } }], { metrics: [TAKINGS] });
+ok('names: a defined metric\'s name is the metric, not a column also called that',
+  metricWins.ok && metricWins.spec.measures[0].metricId === TAKINGS.id && metricWins.spec.measures[0].column === 'revenue', JSON.stringify(metricWins));
+ok('names: …and a metric that cannot be charted is still refused, never swapped for that column',
+  !A.validateAnswerSpec({ dataset: DS.id, category: 'region', measures: ['takings'] },
+    [{ ...DS, names: { profit: ['takings'] } }], { metrics: [{ ...TAKINGS, hasFilters: true }] }).ok);
+
 // ── 2. Spec validation ──────────────────────────────────────────────────────
 
 const v = (spec: unknown, opts: any = {}) => A.validateAnswerSpec(spec, [DS, OTHER], opts);

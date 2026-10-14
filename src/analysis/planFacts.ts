@@ -88,7 +88,8 @@ function userNoteLines(ctx: PlanContext, extras: PlanFactExtras): string[] {
     const capped: Record<string, FactColumnDoc> = {};
     for (const name of Object.keys(docs)) {
       const doc = docs[name] || {};
-      capped[name] = { displayName: note(doc.displayName), description: note(doc.description), sensitivity: note(doc.sensitivity) };
+      const aliases = (Array.isArray(doc.aliases) ? doc.aliases : []).map(note).filter(Boolean);
+      capped[name] = { displayName: note(doc.displayName), aliases, description: note(doc.description), sensitivity: note(doc.sensitivity) };
     }
     // ONE format for a column note: the chat's. It writes a blank line and its
     // own heading first; the notes are what follows, grouped here by dataset.
