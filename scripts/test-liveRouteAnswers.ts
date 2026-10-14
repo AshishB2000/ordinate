@@ -13,7 +13,10 @@
 //   copilot    a chart's facts come through `vizDataFor` (a spy on it), a Live
 //              dataset's are its schema (never "0 rows"), a dashboard's Live KPI
 //              card and a Live defined metric are the warehouse's figures — and,
-//              the warehouse down, n/a and left out, the others still listed
+//              the warehouse down, n/a and left out, the others still listed;
+//              under the dashboard's saved filter the card is `analysis:tiles`'
+//              figure; beside a scenario over a Live metric a question is still
+//              answered, from the project
 //   more       answer:explain, the Summary card, an alert rule — and a failing
 //              warehouse skips that rule while the others are evaluated
 //   spy        `datasets.getDataset` is never asked for the Live dataset
@@ -39,6 +42,7 @@ const visuals: typeof import('../src/analysis/visuals') = require('../src/analys
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
 const metricsStore: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+const scenarios: typeof import('../src/analysis/scenarios') = require('../src/analysis/scenarios');
 
 const { fake, queryCache, ORG_A } = H;
 const show = (v: unknown): string => JSON.stringify(v);
@@ -190,6 +194,32 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   ok('copilot: the defined metrics carry a Live one\'s warehouse figure', upFacts.includes('Live revenue') && upFacts.includes('Copy revenue'), upFacts);
   ok('…its warehouse down: that metric is left out (never a guess), the others are still listed, the KPI card n/a', !downFacts.value.includes('Live revenue')
     && downFacts.value.includes('Copy revenue') && downFacts.value.includes('- Live qty: n/a'), downFacts.value);
+
+  // The dashboard's saved filter reaches a Live KPI too (it was dropped): the facts' figure is `analysis:tiles`' own
+  // reply to the item the open page sends for that card, under that filter — from the warehouse, never a hydration.
+  const north = [{ type: 'filter', column: 'region', op: 'in', values: ['North'] }];
+  const narrowed = await H.as(ORG_A, () => analysis.saveAnalysis(P, {
+    name: 'Live KPIs, one region', filters: north, sheets: [{ name: 'One', cards: [{ type: 'metric', metric: { datasetId: L, column: 'qty', aggregation: 'sum', label: 'Live qty' }, layout: { x: 0, y: 0, w: 3, h: 2 } }] }],
+  } as unknown as Parameters<typeof analysis.saveAnalysis>[1]));
+  const tileOf = async (filters: unknown[]): Promise<Reply> => (await post('analysis:tiles', { projectId: P, params: [], items: [{ kind: 'metric', datasetId: L, column: 'qty', aggregation: 'sum', filters }] })).value[0];
+  const [tNorth, tAll] = [await tileOf(north), await tileOf([])];
+  const nFacts = narrowed ? (await H.as(ORG_A, () => copilotIpc.buildFacts(P, { kind: 'analysis', id: narrowed.id }))).text : '';
+  const liveQty = (text: string): number => Number((/^- Live qty: (.+)$/m.exec(text) || [])[1]);
+  ok('copilot: under a dashboard\'s saved filter a Live KPI card is analysis:tiles\' figure, and the facts name the filter\'s column', tNorth.ok === true && typeof tNorth.value === 'number'
+    && Object.is(liveQty(nFacts), tNorth.value) && nFacts.includes('saved filters, on: "region".'), show([tNorth, nFacts]));
+  ok('NEGATIVE CONTROL: the unfiltered tile is another figure — the one the unfiltered dashboard\'s facts carry, with no filter named', tAll.ok === true && !Object.is(tAll.value, tNorth.value)
+    && Object.is(liveQty(upFacts), tAll.value) && !upFacts.includes('saved filters'), show([tAll, tNorth, upFacts]));
+
+  // A scenario over a Live metric is refused whole (L2.6, test-liveSafetyNet). The dock beside one still answers —
+  // from the project, with no scenario figure — instead of refusing every question while that page is open.
+  const whatIf = async (metric: string): Promise<string> => H.as(ORG_A, async () => {
+    const m = (await metricsStore.listMetrics(P)).find((x) => x.name === metric);
+    const sc = m ? await scenarios.saveScenario(P, { name: 'What if', baseMetricIds: [m.id], drivers: [] }) : null;
+    return sc ? (await copilotIpc.buildFacts(P, { kind: 'scenario', id: sc.id })).text : '';
+  });
+  const [liveIf, copyIf] = [await whatIf('Live revenue'), await whatIf('Copy revenue')];
+  ok('copilot: beside a scenario over a Live metric a question is answered from the project, with no scenario figure', liveIf !== '' && !liveIf.includes('Scenario: "What if"'), liveIf);
+  ok('NEGATIVE CONTROL: a scenario over the copy is the scenario\'s own facts', copyIf.includes('Scenario: "What if"'), copyIf);
 
   // ── 4. Explain, the Summary card, an alert ─────────────────────────────────
   const explained = (await post('answer:explain', { projectId: P, tile: { datasetId: L, encoding: { category: 'region', values: [M('amt', 'sum')] }, filters: [], chartType: 'bar', name: 'Live by region' } })).value;

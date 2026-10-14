@@ -11,7 +11,7 @@ const SAMPLE_PROMPTS = ['Which region had the worst month?', 'Revenue by categor
 const ABOUT = new Map<string, (name: string) => string[]>([
   ['visual', (n) => [`What does ${n} show?`, `What stands out in ${n}?`, `Summarise ${n} in plain terms`]],
   ['analysis', (n) => [`What does ${n} show?`, `What are the key figures in ${n}?`, `Summarise ${n} in plain terms`]],
-  ['scorecard', (n) => [`What is off track in ${n}?`, `What changed since the last period in ${n}?`, `Summarise ${n} in plain terms`]],
+  ['scorecard', (n) => [`What is off track in ${n}?`, `What changed in ${n}?`, `Summarise ${n} in plain terms`]],
   ['scenario', (n) => [`What changes most in ${n}?`, `Which driver matters most in ${n}?`, `Summarise ${n} in plain terms`]],
 ]);
 

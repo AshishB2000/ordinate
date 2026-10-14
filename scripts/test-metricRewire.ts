@@ -383,33 +383,46 @@ async function main(): Promise<void> {
       Object.is(skipped.value ?? null, reference(large, 'sales', 'sum')));
   }
 
-  // ── 7. The per-call dataset cache is not defeated ──────────────────────────
-  // computeMetricCards (src/ipc/copilot.ts) resolves a dataset ONCE per call.
-  // Exercised through its surviving consumer, buildFacts({kind:'analysis'}):
-  // three metric cards over ONE dataset must hydrate it exactly once. This walk
-  // always hydrates — unlike dashboard:metric it does not take the resident
-  // branch — so the count is 1 regardless of the bridge or the row count.
+  // ── 7. A dashboard's facts take the same door ───────────────────────────────
+  // buildFacts({kind:'analysis'}) answers each KPI through computeCardMetric
+  // (src/ipc/copilotCards.ts) — the function the handler above runs — so the
+  // figure the Assistant narrates is the tile's, and the facts take the tile's
+  // BRANCH: a table at or over the threshold is never hydrated (three cards on
+  // one were one whole-file read before, 1.2 s at 1M rows), a small one is
+  // folded in JS, once per card at most.
   {
-    const cards = (datasetId: string) => [0, 1, 2].map((i) => ({
+    const SPECS: [string, MetricAggregation][] = [['sales', 'sum'], ['sales', 'avg'], ['note', 'count']];
+    const cards = (datasetId: string) => SPECS.map(([column, aggregation], i) => ({
       type: 'metric',
       layout: { x: (i * 3) % 12, y: 0, w: 3, h: 2 },
-      metric: { datasetId, column: i === 2 ? 'note' : 'sales', aggregation: i === 1 ? 'avg' : i === 2 ? 'count' : 'sum' },
+      metric: { datasetId, column, aggregation, label: `card ${i}` },
     }));
+    /** The "- card i: value" lines of a facts block, in card order. */
+    const figures = (text: string): (number | null)[] =>
+      SPECS.map((_, i) => (new RegExp(`^- card ${i}: (.+)$`, 'm').exec(text) || [])[1]).map((v) => (v === undefined || v === 'n/a' ? null : Number(v)));
+    const agree = async (f: Fixture, text: string): Promise<boolean> => {
+      const got = figures(text);
+      const want = await Promise.all(SPECS.map(async ([column, aggregation]) => (await viaIpc(f, column, aggregation)).value ?? null));
+      return got.length === 3 && got.every((v, i) => v !== null && Object.is(v, want[i]));
+    };
 
     const aSmall = await analysis.saveAnalysis(proj.id, {
       name: 'small cards', sheets: [{ name: 'Page 1', cards: cards(small.id) }],
     });
     resetSpy();
     const rSmall = await ipcCopilot.buildFacts(proj.id, { kind: 'analysis', id: aSmall!.id });
-    ok('3 metric cards on one small dataset hydrate it exactly once', hydrations === 1);
+    ok('3 metric cards on one small dataset fold it in JS, once per card', hydrations === 3);
     ok('analysis facts still answer with app-computed numbers', rSmall.provenance.kind === 'analysis');
+    ok('the small dataset’s facts are the handler’s figures', await agree(small, rSmall.text));
 
     const aLarge = await analysis.saveAnalysis(proj.id, {
       name: 'large cards', sheets: [{ name: 'Page 1', cards: cards(large.id) }],
     });
     resetSpy();
-    await ipcCopilot.buildFacts(proj.id, { kind: 'analysis', id: aLarge!.id });
-    ok('3 metric cards on one large dataset also hydrate it exactly once', hydrations === 1);
+    const rLarge = await ipcCopilot.buildFacts(proj.id, { kind: 'analysis', id: aLarge!.id });
+    ok(resident ? '3 metric cards on one large dataset never hydrate it' : '3 metric cards on one large dataset hydrate it with no bridge',
+      hydrations === (resident ? 0 : 3));
+    ok('the large dataset’s facts are the handler’s figures', await agree(large, rLarge.text));
   }
 }
 

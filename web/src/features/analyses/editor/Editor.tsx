@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
-import type { Analysis, ControlValue, Step, VisualDef } from '../api';
+import type { Analysis, ControlValue, OpenReply, Step, VisualDef } from '../api';
 import { mergeFilters } from '../VisualTile';
 import { AddDialogs, type Adding } from './AddDialogs';
 import { Canvas } from './Canvas';
@@ -53,7 +53,11 @@ function useAutosave(projectId: string, id: string, doc: Doc, version: number): 
       (r) => {
         const ok = !!(r && (r as { ok?: boolean }).ok);
         setState(ok ? 'saved' : 'error');
-        if (ok) void client.invalidateQueries({ queryKey: ['analysis:gallery', projectId] });
+        if (!ok) return;
+        void client.invalidateQueries({ queryKey: ['analysis:gallery', projectId] });
+        // The name as saved, for whoever reads this page's record without owning it (the Assistant's header). The
+        // editor took its document at mount and reads the record no further, so this reseeds nothing.
+        client.setQueryData<OpenReply>(['analysis:open', projectId, id], (o) => (o?.ok ? { ...o, analysis: { ...o.analysis, name: d.name } } : o));
       },
       () => setState('error'),
     );

@@ -26,6 +26,7 @@ import { useAdoptProject } from '../../projects/current';
 import { failure, STATUS_WORD, type ScorePeriod, type Scorecard, type ScoreResult, type ScoreRow } from '../api';
 import { Detail } from './Detail';
 import { Dot } from './Dot';
+import { MAX_BACK, periodsBack } from './period';
 import { RowsEditor } from './RowsEditor';
 import s from './Scorecard.module.css';
 
@@ -160,7 +161,10 @@ function Table({ res, selected, onOpen, onAdd }: { res: ScoreResult; selected: s
 function Page({ projectId, sc, startEditing }: { projectId: string; sc: Scorecard; startEditing: boolean }) {
   const client = useQueryClient();
   const navigate = useNavigate();
-  const [offset, setOffset] = useState(0);
+  // The period on screen lives in the URL (./period.ts): `replace`, so stepping through periods is not a trail of Back presses.
+  const [params, setParams] = useSearchParams();
+  const offset = periodsBack(params);
+  const setOffset = (n: number) => setParams((p) => (n > 0 ? p.set('back', String(n)) : p.delete('back'), p), { replace: true });
   const [detail, setDetail] = useState('');
   const [editing, setEditing] = useState(startEditing);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -258,12 +262,12 @@ function Page({ projectId, sc, startEditing }: { projectId: string; sc: Scorecar
               { value: 'year', label: 'Yearly' },
             ]}
           />
-          <IconButton icon="chevron-left" label="Previous period" onClick={() => setOffset((o) => o + 1)} />
+          <IconButton icon="chevron-left" label="Previous period" disabled={offset >= MAX_BACK} onClick={() => setOffset(offset + 1)} />
           <span className={s.periodLabel} aria-live="polite">
             <strong>{res?.window.label ?? ''}</strong>
             <span>{res ? `${res.window.from} – ${res.window.to}` : ''}</span>
           </span>
-          <IconButton icon="chevron-right" label="Next period" disabled={offset <= 0} onClick={() => setOffset((o) => Math.max(0, o - 1))} />
+          <IconButton icon="chevron-right" label="Next period" disabled={offset <= 0} onClick={() => setOffset(offset - 1)} />
         </div>
         {counts && (
           <div className={s.summary} aria-label="Status summary">

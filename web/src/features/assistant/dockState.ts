@@ -21,6 +21,7 @@ import { notifyManager, useQueryClient, type QueryKey } from '@tanstack/react-qu
 import { useDatasetColumns } from '../../api/datasets';
 import { useProjects, type Project } from '../../api/projects';
 import { useCapture } from '../import/api';
+import { periodsBack } from '../reports/scorecards/period';
 import type { Ask } from './api';
 import { routeProject, routeScreen, type RouteScreen } from './dockRoute';
 
@@ -164,7 +165,7 @@ function useCached(key: QueryKey | null): unknown {
 
 /** The dock's context from the route on screen. */
 export function useDockContext(projectId: string | null): DockContext {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const at = routeScreen(pathname);
   const on = at && at.projectId === projectId ? at : null;
   const source = on ? nameIn(on) : null;
@@ -175,9 +176,12 @@ export function useDockContext(projectId: string | null): DockContext {
   const ownPage = on?.kind === 'dataset' && matchPath('/data/:projectId/:datasetId', pathname) ? on.id : undefined;
   const cols = useDatasetColumns(projectId ?? undefined, ownPage);
   useCapture(projectId ?? '', on?.kind === 'capture' ? on.id : undefined);
-  if (!on || !source) return WHOLE;
+  // No such screen — or its page looked and the thing is not there (deleted, refused): the server answers from the whole project then.
+  if (!on || !source || cached === null || prop(cached, 'ok') === false) return WHOLE;
   // Until its page has loaded it (or when that failed) the thing is named by its kind.
   const found = cols.data?.name || source.name(cached);
   const name = typeof found === 'string' ? found : '';
-  return { kind: on.kind, id: on.id, label: `${on.kind} · ${name || `open ${on.kind}`}`, name };
+  // A scorecard stepped back to an earlier period is asked about for THAT period (the page keeps it in the URL).
+  const offset = on.kind === 'scorecard' ? periodsBack(new URLSearchParams(search)) : 0;
+  return { kind: on.kind, id: on.id, label: `${on.kind} · ${name || `open ${on.kind}`}`, name, ...(offset ? { offset } : {}) };
 }

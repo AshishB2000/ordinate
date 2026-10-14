@@ -410,6 +410,7 @@ export function analysisFacts(
   computed: { label: string; value: number | null }[],
   tiles: AnalysisTile[] = [],
   metrics: FactMetric[] = [],
+  filteredBy: string[] = [],
 ): CopilotFacts {
   const sheets = Array.isArray(a.sheets) ? a.sheets : [];
   const lines: string[] = [GUARD_LINE, ''];
@@ -420,6 +421,9 @@ export function analysisFacts(
   );
   num(ledger, 'sheet count', sheets.length, 'count', 'dashboard');
   num(ledger, 'card count', countCards(sheets), 'count', 'dashboard');
+  // The dashboard's saved filters, which every figure the caller computed is under — by COLUMN NAME only: a
+  // filter's value can be a value of a column the Assistant must not see.
+  if (filteredBy.length) lines.push(`Every figure below is under this dashboard's saved filters, on: ${filteredBy.map((c) => `"${c}"`).join(', ')}.`);
   // Per-sheet roster, ADDITIVE to the shared body below — "what's on sheet 2" is
   // unanswerable from a flat card list, and a dashboard is authored sheet by sheet.
   if (sheets.length === 0) {

@@ -20,9 +20,10 @@
 // was picked. Zero console errors throughout; screens in both themes.
 //
 // The context follows the screen (both modes): beside a saved visual the
-// header names that visual from the page's own `visual:get`; beside the open
-// dashboard a question carries `{ kind: 'analysis', id }`, and the facts the
-// model is sent are that dashboard's, its KPI the app's own sum.
+// header names that visual from the page's own `visual:get` and a question
+// carries `{ kind: 'visual', id }` (the half CI runs: it has no database);
+// beside the open dashboard a question carries `{ kind: 'analysis', id }`, and
+// the facts the model is sent are that dashboard's, its KPI the app's own sum.
 
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -177,11 +178,17 @@ if (!dbUrl) {
     await openDock(page); // remembered: the dock is open on every load from here
     const csrf = (await page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';
     const listed = await page.request.post(`${server.base}/api/rpc/visual:list`, { headers: { 'x-csrf-token': csrf }, data: { args: [{ projectId: pid }] } });
-    const visual = ((await listed.json()) as { id: string; name: string }[])[0];
+    // By name, never by position: the sample's first visual is a map, and a map fetches OpenStreetMap tiles (maps.e2e.ts answers them locally).
+    const visual = ((await listed.json()) as { id: string; name: string }[]).find((v) => v.name === 'Revenue by category');
+    assert.ok(visual, 'the sample project has the visual "Revenue by category"');
     let gets = 0;
     page.on('request', (r) => {
       if (decodeURIComponent(new URL(r.url()).pathname) === '/api/rpc/visual:get') gets += 1;
     });
+    // This server has no model (no database to keep a key in). `ai:status` is answered as ready at the browser's edge,
+    // so the composer sends and the REQUEST can be read: what a question here is about. The server's reply stays its own.
+    const ready = JSON.stringify({ ready: true, models: [{ provider: 'anthropic', model: 'stub', label: 'Stub', isDefault: true }], mine: { provider: 'anthropic', model: 'stub' }, copilotEnabled: true, keyStore: null });
+    await page.route('**/api/rpc/ai%3Astatus', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: ready }));
     await page.goto(`/visuals/${pid}/${visual.id}`);
     await page.waitForFunction(() => document.querySelector('[data-chart-type] canvas')); // the builder has drawn it
     const chip = page.getByTestId('dock-context');
@@ -190,7 +197,17 @@ if (!dbUrl) {
     // The name is the page's own read of the visual: the dock, open from the first paint, asked for nothing.
     assert.equal(gets, 1, `visual:get was asked ${gets} times`);
     console.log(`rpc  ${String(rpc.loads.at(-1)?.rpcs).padStart(2)}  a saved visual, the dock open`);
+    // Its own starter questions, by name; the screenshots show them under the header.
+    const dock = page.getByRole('complementary', { name: 'Assistant' });
+    await dock.getByRole('button', { name: `What does ${visual.name} show?` }).waitFor();
     await screens(page, 'dock-on-visual');
+    const box = page.getByRole('textbox', { name: 'Ask the Assistant' });
+    const sent = page.waitForRequest((r) => decodeURIComponent(new URL(r.url()).pathname) === '/api/rpc/copilot:ask');
+    await box.fill('What stands out?');
+    await box.press('Enter');
+    const about = ((await sent).postDataJSON() as { args: [{ projectId: string; context: unknown }] }).args[0];
+    assert.deepEqual([about.projectId, about.context], [pid, { kind: 'visual', id: visual.id }], 'a question beside a saved visual is about that visual');
+    await page.unroute('**/api/rpc/ai%3Astatus');
     // Negative control: a new visual is nothing saved yet — the whole project, and still this one.
     await page.goto(`/visuals/${pid}/new`);
     await page.getByRole('textbox', { name: 'Ask the Assistant' }).waitFor();

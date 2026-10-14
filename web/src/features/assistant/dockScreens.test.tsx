@@ -178,6 +178,96 @@ describe('the dock beside a real page', () => {
     expect(chip().textContent).toBe(sc.name);
   });
 
+  it('a dataset’s workbench: named from the project’s dataset list the dock itself reads, and asked about as that dataset', async () => {
+    const calls = serve(SHELL);
+    act(() => setDockOpen(true));
+    renderApp(`/analytics/${P}/${D}/stats`);
+    const box = (await screen.findByRole('textbox', { name: 'Ask the Assistant' })) as HTMLTextAreaElement;
+    await waitFor(() => expect(chip().textContent).toBe('Orders'));
+    expect(chip().getAttribute('title')).toBe('Answers are based on dataset · Orders');
+    await waitFor(() => expect(box.disabled).toBe(false));
+    fireEvent.change(box, { target: { value: 'What stands out?' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect((calls.find((c) => c.channel === 'copilot:ask')?.payload as { context: unknown } | undefined)?.context).toEqual({ kind: 'dataset', id: D }));
+  });
+
+  it('a scorecard stepped back: the question is about the period on screen, which the URL keeps', async () => {
+    const sc = SCREENS[2];
+    const calls = serve({ ...SHELL, ...sc.routes });
+    const offsets = () => calls.filter((c) => c.channel === 'scorecard:compute').map((c) => (c.payload as { offset: number }).offset);
+    act(() => setDockOpen(true));
+    const router = renderApp(`${sc.path}?back=2`);
+    const box = (await screen.findByRole('textbox', { name: 'Ask the Assistant' })) as HTMLTextAreaElement;
+    // The page opens on the period its URL names…
+    await waitFor(() => expect(offsets()).toEqual([2]));
+    // …and one step further back is in the URL too (so a reload, and the dock, see what the page shows).
+    fireEvent.click(await screen.findByRole('button', { name: 'Previous period' }));
+    await waitFor(() => expect(offsets()).toEqual([2, 3]));
+    expect(router.state.location.search).toBe('?back=3');
+    await waitFor(() => expect(box.disabled).toBe(false));
+    fireEvent.change(box, { target: { value: 'What is off track?' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect((calls.find((c) => c.channel === 'copilot:ask')?.payload as { context: unknown } | undefined)?.context).toEqual({ kind: 'scorecard', id: X, offset: 3 }));
+    // Negative control: back at the current period the URL says nothing, and neither does the question.
+    for (let i = 0; i < 3; i += 1) fireEvent.click(screen.getByRole('button', { name: 'Next period' }));
+    await waitFor(() => expect(router.state.location.search).toBe(''));
+    fireEvent.change(box, { target: { value: 'And now?' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect(calls.filter((c) => c.channel === 'copilot:ask').length).toBe(2));
+    expect((calls.filter((c) => c.channel === 'copilot:ask')[1].payload as { context: unknown }).context).toEqual({ kind: 'scorecard', id: X });
+  });
+
+  it('a dashboard renamed in its editor: the dock names it as saved, and the page’s query is not asked again', async () => {
+    const sc = SCREENS[1];
+    const calls = serve({ ...SHELL, ...sc.routes, 'analysis:update': { ok: true } });
+    act(() => setDockOpen(true));
+    renderApp(sc.path);
+    await waitFor(() => expect(chip().textContent).toBe(sc.name));
+    fireEvent.click(await screen.findByTitle('Click to rename'));
+    const dialog = await screen.findByRole('dialog', { name: 'Rename dashboard' });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Q4 review' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    // Once the autosave has landed, the chip, its tooltip and the starter questions say what the page header says.
+    await waitFor(() => expect(chip().textContent).toBe('Q4 review'));
+    expect(chip().getAttribute('title')).toBe('Answers are based on analysis · Q4 review');
+    expect((await screen.findByRole('button', { name: 'What does Q4 review show?' })).textContent).toBe('What does Q4 review show?');
+    expect(calls.find((c) => c.channel === 'analysis:update')?.payload).toMatchObject({ projectId: P, id: X, name: 'Q4 review' });
+    // The editor still owns the document: nothing reopened it, and the edit is still on screen.
+    expect(calls.filter((c) => c.channel === 'analysis:open').length).toBe(1);
+    expect(screen.getByTitle('Click to rename').textContent).toBe('Q4 review');
+  });
+
+  it('a plan proposed in one project is never checked or run in another: it stays behind when the route changes project', async () => {
+    const sc = SCREENS[0];
+    const step = { kind: 'metric', name: 'Revenue' };
+    const calls = serve({
+      ...SHELL,
+      ...sc.routes,
+      'copilot:ask': { ok: true, answer: 'Here is a plan.', threadId: null, turns: [], suggestedAction: { kind: 'plan', intent: 'Build it', steps: [step] } },
+      'plan:check': { ok: true, steps: [step], dropped: 0, lines: [{ text: 'Create the metric Revenue', icon: 'circle' }], checks: [{ ok: true }] },
+    });
+    const projectOf = (channel: string) => calls.filter((c) => c.channel === channel).map((c) => (c.payload as { projectId: string }).projectId);
+    act(() => setDockOpen(true));
+    const router = renderApp(sc.path);
+    const box = (await screen.findByRole('textbox', { name: 'Ask the Assistant' })) as HTMLTextAreaElement;
+    await waitFor(() => expect(box.disabled).toBe(false));
+    fireEvent.change(box, { target: { value: 'Plan it' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await screen.findByRole('button', { name: 'Run all' });
+    expect(projectOf('plan:check')).toEqual([P]);
+
+    // A link into the other project: the dock follows the route, and the plan does not come with it.
+    await act(() => router.navigate(`/visuals/${RECENT}/${X}`));
+    await waitFor(() => expect(projectOf('copilot:history')).toContain(RECENT));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Run all' })).toBeNull());
+    expect(projectOf('plan:check')).toEqual([P]);
+    // Nor does it come back as a fresh proposal on the way home.
+    await act(() => router.navigate(sc.path));
+    await waitFor(() => expect(chip().textContent).toBe(sc.name));
+    expect(screen.queryByRole('button', { name: 'Run all' })).toBeNull();
+    expect(projectOf('plan:check')).toEqual([P]);
+  });
+
   // Negative controls: a draft and a tool keep the route's project, and are about the whole of it.
   for (const path of [`/visuals/${P}/new?dataset=${D}`, `/analytics/scenarios/${P}/compare`]) {
     it(`${path.split('/').slice(-1)[0].split('?')[0]}: the whole project — the route’s`, async () => {

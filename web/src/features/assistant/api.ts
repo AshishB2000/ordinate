@@ -86,8 +86,8 @@ export type AskReply =
   | { ok: true; answer: string; turns: Turn[]; threadId: string | null; suggestedAction?: SuggestedAction }
   | { ok: false; notReady?: boolean; error?: string };
 
-/** What the dock is looking at — resolved inside the project by the server (buildFacts). */
-export type Ask = { kind: RpcInput<'copilot:ask'>['context']['kind']; id?: string };
+/** What the dock is looking at — resolved inside the project by the server (buildFacts). `offset`: a scorecard's period, in periods back. */
+export type Ask = { kind: RpcInput<'copilot:ask'>['context']['kind']; id?: string; offset?: number };
 
 /** One hook for every AI surface: the dock, Home, Analyses, Visuals, captures. */
 export function useAiStatus(enabled = true) {
@@ -171,7 +171,7 @@ export async function deleteThread(projectId: string, threadId: string): Promise
 export async function ask(projectId: string, context: Ask, question: string, threadId: string, askId: string): Promise<AskReply> {
   return (await rpc('copilot:ask', {
     projectId,
-    context: { kind: context.kind, ...(context.id ? { id: context.id } : {}) },
+    context: { kind: context.kind, ...(context.id ? { id: context.id } : {}), ...(context.offset ? { offset: context.offset } : {}) },
     question,
     ...(threadId ? { threadId } : {}),
     askId,

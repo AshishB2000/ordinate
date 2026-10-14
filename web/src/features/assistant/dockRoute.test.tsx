@@ -141,17 +141,33 @@ describe('the dock’s project and context', () => {
       expect(cold.client.getQueryCache().find({ queryKey: key })?.getObserversCount()).toBe(0);
       cold.unmount();
     }
-    // Negative controls: a reply that carries no name (a refusal, a missing record, another dataset's row) names nothing.
-    for (const [pattern, key, data] of [
-      ['/analyses/:projectId/:analysisId', ['analysis:open', P, X], { ok: false }],
-      ['/visuals/:projectId/:visualId', ['visual:get', P, X], null],
-      ['/data/:projectId/:datasetId/prepare', ['dataset:list', P], [{ id: RECENT, name: 'Other' }]],
-      ['/scorecards/:projectId/:scorecardId', ['scorecard:get', P, X], { id: X, name: 42 }],
-    ] as [string, QueryKey, unknown][]) {
+    // Negative controls: a reply that carries no name names nothing. Where the page's own read says the thing is NOT
+    // THERE (a refusal, a missing record), the dock is about the whole project — which is what the server will answer from.
+    for (const [pattern, key, data, kind] of [
+      ['/analyses/:projectId/:analysisId', ['analysis:open', P, X], { ok: false }, ''],
+      ['/visuals/:projectId/:visualId', ['visual:get', P, X], null, ''],
+      ['/scorecards/:projectId/:scorecardId', ['scorecard:get', P, X], null, ''],
+      ['/analytics/scenarios/:projectId/:scenarioId', ['scenario:get', P, X], null, ''],
+      ['/data/:projectId/:datasetId/prepare', ['dataset:list', P], [{ id: RECENT, name: 'Other' }], 'dataset'],
+      ['/scorecards/:projectId/:scorecardId', ['scorecard:get', P, X], { id: X, name: 42 }, 'scorecard'],
+    ] as [string, QueryKey, unknown, string][]) {
       const { result, unmount } = dockAt(fill(pattern), [[key, data]]);
-      expect([pattern, result.current.context.name]).toEqual([pattern, '']);
+      expect([pattern, result.current.context.name, result.current.context.kind, result.current.project.id]).toEqual([pattern, '', kind, P]);
       unmount();
     }
+  });
+
+  it('carry the period a scorecard’s URL shows, and nothing a URL should not decide', () => {
+    const at = (search: string, pattern = '/scorecards/:projectId/:scorecardId') => {
+      const { result, unmount } = dockAt(fill(pattern) + search);
+      const { offset } = result.current.context;
+      unmount();
+      return offset;
+    };
+    expect([at('?back=1'), at('?back=12'), at('?edit=1&back=600')]).toEqual([1, 12, 600]);
+    // Negative controls: the current period, a count the server would refuse, a word — and another kind of screen.
+    for (const search of ['', '?back=0', '?back=-1', '?back=601', '?back=1.5', '?back=soon', '?back=']) expect([search, at(search)]).toEqual([search, undefined]);
+    expect(at('?back=2', '/visuals/:projectId/:visualId')).toBeUndefined();
   });
 
   it('keep the observer a dataset’s own page and a capture’s always had on the page’s query', async () => {
@@ -214,6 +230,11 @@ describe('starter prompts for the thing on screen', () => {
       expect(starterPrompts(datasets, '', kind)).toEqual(starterPrompts(datasets));
     }
     expect(starterPrompts(datasets, 'Company goals', 'scorecard')[0]).toBe('What is off track in Company goals?');
+    // A chip is one line of the dock: about 44 characters at its default 340px (measured), cut with an ellipsis. So the
+    // words around the name stay within 30, and a name of a dozen letters is still on screen, whole.
+    for (const kind of ['visual', 'analysis', 'scorecard', 'scenario']) {
+      for (const p of starterPrompts(datasets, '§', kind)) expect([p, p.replace('§', '').length <= 30]).toEqual([p, true]);
+    }
     // Negative controls: a dataset, a capture and the whole project keep the dataset questions.
     for (const kind of ['dataset', 'capture', '']) expect(starterPrompts(datasets, 'Costs', kind)).toEqual(starterPrompts(datasets, 'Costs'));
     expect(starterPrompts(datasets, 'Costs', 'dataset')).toEqual(['What stands out in Costs?', 'How do Costs and Sales compare?', 'Summarise Costs in plain terms']);

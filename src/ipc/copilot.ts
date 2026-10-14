@@ -6,12 +6,10 @@ import * as copilot from '../ai/copilot';
 import * as projects from '../app/projects';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
-import * as dashboards from '../analysis/dashboards';
 import * as analysis from '../analysis/analysis';
 import { computeColumnSummary, findQualityIssues } from '../data/datasetStats';
 import type { VizDataResult } from '../analysis/vizData';
 import { withTableCalcs } from '../analysis/tableCalc';
-import { computeMetric } from '../analysis/metricValue';
 import { askCopilot } from '../ai/analyze';
 import { auditNumbers } from '../ai/numberAudit';
 import { listInsights } from './insights';
@@ -33,8 +31,9 @@ import * as captureDataset from '../data/captureDataset';
 import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
 import * as answers from './answers';
 import { vizDataFor } from './visuals';
-import { computeCardMetric } from './dashboards';
-import { isLiveFigureError, liveMetaOf } from './liveRoute';
+import { isLiveFigureError } from './liveRoute';
+import { isLiveDatasetError } from '../data/liveDataset';
+import { metricCardFigures, savedScope, type SavedScope } from './copilotCards';
 // The catalog's column docs, with a sensitivity mark carried across a later
 // rename — so a withheld column stays withheld under its new name.
 import { assistantColumnDocs as catalogColumns } from '../app/sharePolicy';
@@ -129,20 +128,21 @@ export function guardAnswer(text: string, ledger: LedgerEntry[]): { text: string
  * every metric in the project (the dashboard branch, whose cards may span
  * several). Each figure comes back from the ordinary resolver, so it is the
  * same number the card shows, formatted the same way — and both go into the
- * facts ledger at the call site.
+ * facts ledger at the call site. `scope`: the dashboard's saved filters and
+ * parameters, so a metric reads here as its KPI card does on that dashboard.
  *
  * Never throws: a project whose metrics cannot be read simply hands the model
  * no metric vocabulary, which is exactly the state every project was in before
  * this layer existed.
  */
-async function factMetrics(projectId: string, datasetId?: string): Promise<FactMetric[]> {
+async function factMetrics(projectId: string, datasetId?: string, scope?: SavedScope): Promise<FactMetric[]> {
   try {
     const list = await metrics.listMetrics(projectId);
     const out: FactMetric[] = [];
     for (const s of list) {
       if (datasetId && s.datasetId !== datasetId) continue;
       // A Live metric its warehouse could not give is left out (L2.4) — never a guess, and never the others with it.
-      const r = await resolveMetric(projectId, s.id).catch((err: unknown) => {
+      const r = await resolveMetric(projectId, s.id, scope).catch((err: unknown) => {
         if (isLiveFigureError(err)) return null;
         throw err;
       });
@@ -152,49 +152,6 @@ async function factMetrics(projectId: string, datasetId?: string): Promise<FactM
     return out;
   } catch (_) {
     return [];
-  }
-}
-
-// One app-computed number per metric card (metricValue.computeMetric) over a
-// dashboard's pages OR an analysis's sheets — the same Page[] shape either way.
-// Each referenced dataset is cached, so twelve cards over one dataset load it
-// once. A missing dataset yields null for that card, never a throw.
-async function computeMetricCards(
-  projectId: string,
-  pages: dashboards.Page[],
-): Promise<{ label: string; value: number | null }[]> {
-  const dsCache = new Map<string, Awaited<ReturnType<typeof datasets.getDataset>>>();
-  const liveCache = new Map<string, boolean>();
-  const computed: { label: string; value: number | null }[] = [];
-  for (const page of pages || []) {
-    for (const card of page.cards || []) {
-      if (card.type !== 'metric' || !card.metric) continue;
-      const m = card.metric;
-      if (!liveCache.has(m.datasetId)) liveCache.set(m.datasetId, !!(await liveMetaOf(projectId, m.datasetId)));
-      if (liveCache.get(m.datasetId)) {
-        // A Live card's number is the warehouse's, as the tile shows it (L2.4); one it cannot give is n/a, never a guess.
-        computed.push({ label: m.label || `${m.aggregation}(${m.column})`, value: await liveCardValue(projectId, m) });
-        continue;
-      }
-      let ds = dsCache.get(m.datasetId);
-      if (ds === undefined) {
-        ds = await datasets.getDataset(projectId, m.datasetId);
-        dsCache.set(m.datasetId, ds);
-      }
-      const value = ds ? computeMetric(ds.columns, ds.rows, { column: m.column, aggregation: m.aggregation }) : null;
-      computed.push({ label: m.label || `${m.aggregation}(${m.column})`, value });
-    }
-  }
-  return computed;
-}
-
-/** A Live metric card's figure through the KPI door, or null when the warehouse could not give one. */
-async function liveCardValue(projectId: string, m: NonNullable<dashboards.Card['metric']>): Promise<number | null> {
-  try {
-    return (await computeCardMetric(projectId, m.datasetId, { column: m.column, aggregation: m.aggregation })).value;
-  } catch (err) {
-    if (isLiveFigureError(err)) return null;
-    throw err;
   }
 }
 
@@ -304,14 +261,18 @@ export async function buildFacts(
       // is a real step; names and aggregations only, never a value.
       const tiles = await analysis.listAnalysisTiles(projectId, a);
       emit({ kind: 'read', label: 'Read ' + plural(tiles.length, 'tile'), count: tiles.length });
-      const cards = await computeMetricCards(projectId, a.sheets);
+      // Every figure as the dashboard shows it: under its saved filters and parameters (./copilotCards), each
+      // KPI through its tile's doors, a defined metric as a card of it would read here — one number per name.
+      const scope = savedScope(a);
+      const cards = await metricCardFigures(projectId, a, scope);
       emit({ kind: 'compute', label: 'Computed ' + plural(cards.length, 'metric'), count: cards.length });
-      const defined = await factMetrics(projectId);
+      const defined = await factMetrics(projectId, undefined, scope);
       if (defined.length) {
         emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
       }
-      // Statistics tiles (src/ipc/stats.ts): their results, recomputed, as facts.
-      return withStatsTiles(projectId, a.sheets, copilot.analysisFacts(a, cards, tiles, defined));
+      // Statistics tiles (src/ipc/stats.ts): their results, recomputed under the same filters, as facts.
+      const filteredBy = [...new Set(scope.filters.map((f) => f.column))];
+      return withStatsTiles(projectId, a.sheets, copilot.analysisFacts(a, cards, tiles, defined, filteredBy), scope.filters);
     }
   }
 
@@ -359,9 +320,16 @@ export async function buildFacts(
     const sc = await scenarios.getScenario(projectId, id);
     if (sc) {
       emit({ kind: 'read', label: 'Read ' + sc.name });
-      const res = await computeScenario(projectId, sc);
-      emit({ kind: 'compute', label: 'Recomputed ' + plural(res.metrics.length, 'metric') + ' under ' + plural(res.drivers.length, 'driver'), count: res.metrics.length });
-      return scenarioFacts(res);
+      // Scenarios are off for a Live dataset (L2.6) and its page says so: no scenario figure here either, and the
+      // question is still answered — from the project, below — rather than every one refused while this page is open.
+      const res = await computeScenario(projectId, sc).catch((err: unknown) => {
+        if (isLiveDatasetError(err)) return null;
+        throw err;
+      });
+      if (res) {
+        emit({ kind: 'compute', label: 'Recomputed ' + plural(res.metrics.length, 'metric') + ' under ' + plural(res.drivers.length, 'driver'), count: res.metrics.length });
+        return scenarioFacts(res);
+      }
     }
   }
 
