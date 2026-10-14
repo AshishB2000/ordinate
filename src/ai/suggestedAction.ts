@@ -195,6 +195,11 @@ const ACTION_PROMPT =
   '= != > < >= <= contains in (for "in", give "values":[…]); for a relative date use ' +
   '{"column":"<date column>","period":"last_month|last_quarter|last_year"}; for "X vs Y" filter the ' +
   'category with "in". "top" keeps the N largest. The spec NEVER contains a computed number. ' +
+  'When the FACTS end with a PREVIOUS ANSWER and the question CONTINUES it — adds or changes a filter, ' +
+  'the split, a measure, the chart type, the period or the top-N — the spec is {"refine":true,…} carrying ' +
+  'ONLY what changes: the app keeps the rest, so do not repeat it. A filter in it replaces the one on the ' +
+  'same column; "dropFilters":["<column>"] removes filters; "series":null removes the split; the intent ' +
+  'restates the whole question as it now stands. A new subject is a full spec without "refine". ' +
   'When the kind is "answer", your prose is ONE short sentence saying what the chart shows, with no ' +
   'figures at all — the app computes and displays them. When the kind is "import", the app shows ' +
   'the Import, Paste and Connect buttons under your reply: your prose is ONE short sentence, and it ' +

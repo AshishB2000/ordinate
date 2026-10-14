@@ -36,6 +36,9 @@ import {
   validateAnswerSpec,
 } from '../ai/answerSpec';
 import type { AnswerChip, AnswerSpec, SpecDataset, SpecMetric } from '../ai/answerSpec';
+import { isRefine, refineSpec } from '../ai/answerRefine';
+import { previousAnswerBlock } from '../ai/previousAnswer';
+import { withheldColumns } from '../app/sharePolicy';
 import { answerFacts, describeAnswer } from '../ai/answerFacts';
 import type { Headline } from '../ai/answerFacts';
 import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
@@ -236,9 +239,37 @@ export interface AnswerTurn {
   spec: AnswerSpec;
 }
 
+/** The chart a follow-up continues: its stored spec, the block that tells the model about it, and that block's ledger. */
+export interface PreviousAnswer { spec: AnswerSpec; block: string; ledger: LedgerEntry[] }
+
+/**
+ * The most recent answer of a conversation, when a follow-up can still build on
+ * it: its dataset exists and the spec, restated in full, still validates against
+ * it — every column it uses is still there, with a type its measures and filters
+ * fit. Otherwise null, and the next question is asked as if nothing came before.
+ * Metadata and the catalog only: a Live dataset is never hydrated.
+ */
+export async function previousAnswer(projectId: string, turns: copilot.CopilotTurn[]): Promise<PreviousAnswer | null> {
+  let spec: AnswerSpec | undefined;
+  for (let i = turns.length - 1; i >= 0 && !spec; i--) if (turns[i].role === 'assistant') spec = turns[i].answer;
+  const meta = spec ? await datasets.getDatasetMeta(projectId, spec.datasetId) : null;
+  if (!spec || !meta) return null;
+  const ds: SpecDataset = { id: meta.id, name: meta.name, columns: meta.columns };
+  if (!validateAnswerSpec(refineSpec(spec, {}, ds), [ds]).ok) return null;
+  const { text, ledger } = previousAnswerBlock(spec, meta.name, await withheldColumns(projectId, meta.id));
+  return { spec, block: text, ledger };
+}
+
 /**
  * The dock's `answer` action → a narrated, audited answer turn, or the reason
  * it could not be built (the caller keeps the prose answer and says why).
+ *
+ * `previous` is the answer a follow-up continues (`previousAnswer`). A spec
+ * marked `"refine": true` is merged onto it by the app (ai/answerRefine) and the
+ * MERGED spec is validated — refused with the validator's reason, never cut
+ * back to the patch alone. Any other spec is a new subject; it keeps nothing of
+ * the previous answer but its dataset, and that only as the default after the
+ * screen's own.
  */
 export async function answerFromAction(
   projectId: string,
@@ -246,6 +277,7 @@ export async function answerFromAction(
   action: SuggestedAction,
   question: string,
   guard: Guard,
+  previous?: AnswerSpec,
 ): Promise<({ ok: true } & AnswerTurn) | Failure> {
   let defaultDatasetId: string | undefined;
   if (context && context.kind === 'dataset' && context.id) defaultDatasetId = context.id;
@@ -253,8 +285,12 @@ export async function answerFromAction(
     const v = await visuals.getVisual(projectId, context.id);
     if (v) defaultDatasetId = v.datasetId;
   }
-  const v = validateAnswerSpec(action.spec, await specDatasets(projectId), {
-    defaultDatasetId, metrics: await specMetrics(projectId), title: action.intent || question,
+  const all = await specDatasets(projectId);
+  const defined = await specMetrics(projectId);
+  const on = previous ? all.find((d) => d.id === previous.datasetId) : undefined;
+  const raw = previous && on && isRefine(action.spec) ? refineSpec(previous, action.spec, on, defined) : action.spec;
+  const v = validateAnswerSpec(raw, all, {
+    defaultDatasetId: defaultDatasetId ?? on?.id, metrics: defined, title: action.intent || question,
   });
   if (!v.ok) return v;
   const built = await computeCard(projectId, v.spec);

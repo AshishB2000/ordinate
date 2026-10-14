@@ -225,6 +225,18 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   // ── 4. Explain, the Summary card, an alert ─────────────────────────────────
   const explained = (await post('answer:explain', { projectId: P, tile: { datasetId: L, encoding: { category: 'region', values: [M('amt', 'sum')] }, filters: [], chartType: 'bar', name: 'Live by region' } })).value;
   ok('answer:explain on a Live tile: a conversation with its card (no model: the bullets stand)', explained.ok === true && typeof explained.threadId === 'string', show(explained));
+  // A follow-up on a Live answer: found from metadata alone, its refine merged by the app, the merged spec asked
+  // of the warehouse. THE SPY below covers both — neither the lookup nor the merged card may hydrate.
+  const liveSpec = answers.tileSpec({ datasetId: L, encoding: { category: 'region', values: [M('amt', 'sum')] }, filters: [], chartType: 'bar', name: 'Live by region' });
+  const liveTurn = { id: '1', role: 'assistant' as const, text: '', createdAt: '', ...(liveSpec ? { answer: liveSpec } : {}) };
+  const prev = await H.as(ORG_A, () => answers.previousAnswer(P, [liveTurn]));
+  const narrowedTo = prev ? await H.as(ORG_A, () => answers.answerFromAction(P, {}, {
+    kind: 'answer', intent: 'north only', spec: { refine: true, filters: [{ column: 'region', op: '=', value: 'north' }] },
+  }, 'north only', copilotIpc.guardAnswer, prev.spec)) : null;
+  ok('a follow-up on a Live answer: told of it by name, merged, and answered by the warehouse — one more filter, the same dataset',
+    !!prev && /^PREVIOUS ANSWER[^\n]*\ndataset "[^"]+"; category "region"; measures sum\(amt\); chart bar\.$/.test(prev.block)
+    && !!narrowedTo && narrowedTo.ok === true && narrowedTo.spec.datasetId === L && show(narrowedTo.spec.filters) === show([{ column: 'region', op: '=', value: 'north' }]),
+    show([prev, narrowedTo]).slice(0, 400));
   const summary = (await post('summary:compute', { projectId: P, pages: [{ cards: [{ id: '0b8d3c2e-9a4f-4e1b-8c7d-6f5e4d3c2b1a', type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 }, metric: { datasetId: L, column: 'qty', aggregation: 'sum', label: 'Live qty' } }] }] })).value;
   ok('summary:compute: the Live KPI\'s sentence, from the warehouse\'s figure', summary.ok === true && (summary.sentences as Reply[]).some((x) => x.kind === 'kpi' && String(x.text).includes('Live qty')), show(summary));
 

@@ -475,12 +475,18 @@ export function register() {
         : undefined;
 
       const tid = typeof threadId === 'string' && threadId ? threadId : undefined;
-      const prior = (await copilot.loadHistory(projectId, tid)).map((t) => ({ role: t.role, text: t.text }));
+      const turns = await copilot.loadHistory(projectId, tid);
+      const prior = turns.map((t) => ({ role: t.role, text: t.text }));
       const facts = await buildFacts(projectId, context || {}, emit);
+      // The chart a follow-up continues (./answers `previousAnswer`): the model is
+      // told what it is by NAME, beside the facts, and the app merges what changes.
+      // The block's own digits (a top-N, a filter value) join this turn's ledger.
+      const prev = await answers.previousAnswer(projectId, turns);
+      const ledger = prev ? facts.ledger.concat(prev.ledger) : facts.ledger;
       // The single, real model call — the ONLY 'model' step, bracketing the one
       // narration this app makes. No agent loop, so there is nothing else to say.
       emit({ kind: 'model', label: 'Asked the model to narrate' });
-      const res = await askCopilot(prior, facts.text, q, onDelta);
+      const res = await askCopilot(prior, prev ? `${facts.text}\n\n${prev.block}` : facts.text, q, onDelta);
 
       if (res.ok) {
         // Pin the target thread BEFORE the first append. Two reasons: the question
@@ -497,19 +503,24 @@ export function register() {
         let answer: Awaited<ReturnType<typeof answers.answerFromAction>> | null = null;
         if (res.suggestedAction && res.suggestedAction.kind === 'answer') {
           emit({ kind: 'compute', label: 'Built the answer chart' });
-          answer = await answers.answerFromAction(projectId, context || {}, res.suggestedAction, q, guardAnswer);
+          answer = await answers.answerFromAction(projectId, context || {}, res.suggestedAction, q, guardAnswer, prev?.spec);
         }
 
         // The guard runs BEFORE persistence, so the stored turn carries the note
         // and a reloaded conversation shows it too. `answer` below is the guarded
-        // text for the same reason — one string, seen everywhere.
-        const guarded = answer && answer.ok
+        // text for the same reason — one string, seen everywhere. It reads the
+        // MODEL's prose only: "(No chart: At most 8 filters.)" is the app's own
+        // sentence, and its 8 is not a figure anyone invented.
+        const audited = answer && answer.ok
           ? { text: answer.text, audit: answer.audit }
-          : guardAnswer(answer ? `${res.text}\n\n(No chart: ${answer.reason})` : res.text, facts.ledger);
+          : guardAnswer(res.text, ledger);
+        const guarded = answer && !answer.ok
+          ? { text: `${audited.text}\n\n(No chart: ${answer.reason})`, audit: audited.audit }
+          : audited;
         const built = answer && answer.ok ? answer : null;
 
         await copilot.appendTurn(projectId, { role: 'user', text: q }, target);
-        const turns = await copilot.appendTurn(projectId, {
+        const stored = await copilot.appendTurn(projectId, {
           role: 'assistant',
           text: guarded.text,
           provenance: built ? built.provenance : facts.provenance,
@@ -522,13 +533,13 @@ export function register() {
         // from disk truth as prose only, which is the existing rule.
         return {
           ok: true, answer: guarded.text, provenance: facts.provenance,
-          turns: turns || [], threadId: target || null,
+          turns: stored || [], threadId: target || null,
           // An answer is fully handled here, so it proposes nothing further.
           suggestedAction: answer ? { kind: 'none', intent: '' } : res.suggestedAction || { kind: 'none', intent: '' },
           // App-side records, for tests and the fidelity gate. The renderer shows
           // neither: the ledger is internal, and the audit's finding is already
           // in `answer`. Nothing new reaches a user in this PR.
-          ledger: built ? built.ledger : facts.ledger,
+          ledger: built ? built.ledger : ledger,
           numberAudit: guarded.audit,
         };
       }

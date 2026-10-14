@@ -335,6 +335,29 @@ ok('prompt: tells the model the preset field is style-only',
 ok('prompt: still carries the never-invent-a-number rule the answer depends on',
   /NEVER invent, round, or recompute any number/.test(CHAT_SYSTEM_PROMPT));
 
+// The REFINE rule: a follow-up says what changes, in the keys the merge reads
+// (src/ai/answerRefine.ts) and under the name the block gives the previous
+// answer (src/ai/previousAnswer.ts). Rename a key or the block's heading
+// without the prompt and the model keeps writing a patch the app takes for a
+// whole spec — a follow-up that is refused for "no category", every time.
+const refine: typeof import('../src/ai/answerRefine') = require('../src/ai/answerRefine');
+const previous: typeof import('../src/ai/previousAnswer') = require('../src/ai/previousAnswer');
+ok('prompt: spells the refine flag and the drop list exactly as the merge reads them',
+  CHAT_SYSTEM_PROMPT.includes(`{"${refine.REFINE_KEY}":true`) && CHAT_SYSTEM_PROMPT.includes(`"${refine.DROP_FILTERS_KEY}":["<column>"]`)
+  && CHAT_SYSTEM_PROMPT.includes('"series":null') && CHAT_SYSTEM_PROMPT.includes(`without "${refine.REFINE_KEY}"`));
+ok('prompt: calls the previous answer what its block is headed', CHAT_SYSTEM_PROMPT.includes(previous.PREVIOUS_ANSWER)
+  && previous.previousAnswerBlock({ datasetId: '', category: 'a', measures: [], filters: [], chartType: 'column', title: '' }, 'd', new Set()).text.startsWith(previous.PREVIOUS_ANSWER));
+ok('prompt: says what a follow-up may change — a filter, the split, a measure, the chart type, the period, the top-N',
+  /CONTINUES it — adds or changes a filter, the split, a measure, the chart type, the period or the top-N/.test(CHAT_SYSTEM_PROMPT)
+  && /ONLY what changes/.test(CHAT_SYSTEM_PROMPT));
+const patchLine = sa.splitAction('Only online now.\n' + ACTION_MARKER
+  + ` {"kind":"answer","intent":"x","spec":{"${refine.REFINE_KEY}":true,"${refine.DROP_FILTERS_KEY}":["region"],"series":null}}`);
+ok('prompt: a patch written the way it says survives the action line, and the merge takes it for a refine',
+  patchLine.text === 'Only online now.' && patchLine.action.kind === 'answer' && refine.isRefine(patchLine.action.spec)
+  && (patchLine.action.spec as { series: unknown }).series === null, JSON.stringify(patchLine));
+ok('prompt: …where the full spec it shows is not one (negative control)',
+  !refine.isRefine({ dataset: 'd', category: 'c', measures: [] }) && !refine.isRefine({ [refine.REFINE_KEY]: 'true' }));
+
 if (failureCount()) {
   console.error('\n' + failureCount() + ' suggestedAction check(s) FAILED');
   process.exit(1);

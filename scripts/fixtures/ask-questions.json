@@ -1,0 +1,145 @@
+{
+  "about": "Questions asked of the bundled sample dataset, each with the raw answer spec a good model would write for it (the `spec` of an `answer` action: names only, never a figure). A `followUp` continues its question: `spec` is the refine patch the model writes, `full` is the same question written out in full. scripts/test-askQuestions.ts checks every spec against the sample's real columns and every follow-up's merged spec against its `full`; a later model evaluation runs against this file.",
+  "dataset": "Retail orders",
+  "questions": [
+    {
+      "id": "revenue-by-region",
+      "question": "revenue by region",
+      "spec": { "dataset": "Retail orders", "category": "region", "measures": [{ "column": "revenue", "aggregation": "sum" }] }
+    },
+    {
+      "id": "top-subcategories-by-profit",
+      "question": "top 5 sub-categories by profit",
+      "spec": { "dataset": "Retail orders", "category": "sub_category", "measures": [{ "column": "profit", "aggregation": "sum" }], "top": 5 }
+    },
+    {
+      "id": "ship-days-by-state",
+      "question": "which 10 states take longest to ship, on average?",
+      "spec": { "dataset": "Retail orders", "category": "state", "measures": [{ "column": "ship_days", "aggregation": "avg" }], "top": 10 }
+    },
+    {
+      "id": "west-vs-east",
+      "question": "how did West do vs East on revenue?",
+      "spec": {
+        "dataset": "Retail orders", "category": "region", "measures": [{ "column": "revenue", "aggregation": "sum" }],
+        "filters": [{ "column": "region", "op": "in", "values": ["West", "East"] }]
+      }
+    },
+    {
+      "id": "revenue-over-time",
+      "question": "show revenue over time",
+      "spec": { "dataset": "Retail orders", "category": "order_date", "measures": [{ "column": "revenue", "aggregation": "sum" }] }
+    },
+    {
+      "id": "orders-per-segment",
+      "question": "how many orders per customer segment?",
+      "spec": { "dataset": "Retail orders", "category": "customer_segment", "measures": [{ "column": "order_date", "aggregation": "count" }] }
+    },
+    {
+      "id": "revenue-and-profit-by-category",
+      "question": "revenue and profit by category",
+      "spec": {
+        "dataset": "Retail orders", "category": "category",
+        "measures": [{ "column": "revenue", "aggregation": "sum" }, { "column": "profit", "aggregation": "sum" }]
+      }
+    },
+    {
+      "id": "furniture-share-by-region",
+      "question": "furniture revenue by region as a pie",
+      "spec": {
+        "dataset": "Retail orders", "category": "region", "measures": [{ "column": "revenue", "aggregation": "sum" }],
+        "filters": [{ "column": "category", "op": "=", "value": "Furniture" }], "chartType": "pie"
+      }
+    },
+    {
+      "id": "discount-on-large-orders",
+      "question": "average discount by sub-category for orders over 500 in revenue",
+      "spec": {
+        "dataset": "Retail orders", "category": "sub_category", "measures": [{ "column": "discount", "aggregation": "avg" }],
+        "filters": [{ "column": "revenue", "op": ">", "value": 500 }]
+      }
+    },
+    {
+      "id": "highest-unit-price-by-category",
+      "question": "what is the highest unit price in each category last month?",
+      "spec": {
+        "dataset": "Retail orders", "category": "category", "measures": [{ "column": "unit_price", "aggregation": "max" }],
+        "filters": [{ "column": "order_date", "period": "last_month" }]
+      }
+    },
+    {
+      "id": "revenue-by-region-last-quarter",
+      "question": "revenue by region last quarter",
+      "spec": {
+        "dataset": "Retail orders", "category": "region", "measures": [{ "column": "revenue", "aggregation": "sum" }],
+        "filters": [{ "column": "order_date", "period": "last_quarter" }]
+      },
+      "followUp": {
+        "question": "now only corporate customers",
+        "spec": { "refine": true, "filters": [{ "column": "customer_segment", "op": "=", "value": "Corporate" }] },
+        "full": {
+          "dataset": "Retail orders", "category": "region", "measures": [{ "column": "revenue", "aggregation": "sum" }],
+          "filters": [{ "column": "order_date", "period": "last_quarter" }, { "column": "customer_segment", "op": "=", "value": "Corporate" }]
+        }
+      }
+    },
+    {
+      "id": "top-states-by-revenue",
+      "question": "top 5 states by revenue",
+      "spec": { "dataset": "Retail orders", "category": "state", "measures": [{ "column": "revenue", "aggregation": "sum" }], "top": 5 },
+      "followUp": {
+        "question": "make that the top 10, as a bar chart",
+        "spec": { "refine": true, "top": 10, "chartType": "bar" },
+        "full": { "dataset": "Retail orders", "category": "state", "measures": [{ "column": "revenue", "aggregation": "sum" }], "top": 10, "chartType": "bar" }
+      }
+    },
+    {
+      "id": "consumer-profit-by-category",
+      "question": "profit by category for consumers",
+      "spec": {
+        "dataset": "Retail orders", "category": "category", "measures": [{ "column": "profit", "aggregation": "sum" }],
+        "filters": [{ "column": "customer_segment", "op": "=", "value": "Consumer" }]
+      },
+      "followUp": {
+        "question": "what about home office instead?",
+        "spec": { "refine": true, "filters": [{ "column": "customer_segment", "op": "=", "value": "Home Office" }] },
+        "full": {
+          "dataset": "Retail orders", "category": "category", "measures": [{ "column": "profit", "aggregation": "sum" }],
+          "filters": [{ "column": "customer_segment", "op": "=", "value": "Home Office" }]
+        }
+      }
+    },
+    {
+      "id": "units-by-region-last-year",
+      "question": "units sold by region last year",
+      "spec": {
+        "dataset": "Retail orders", "category": "region", "measures": [{ "column": "units", "aggregation": "sum" }],
+        "filters": [{ "column": "order_date", "period": "last_year" }]
+      },
+      "followUp": {
+        "question": "split that by category",
+        "spec": { "refine": true, "series": "category" },
+        "full": {
+          "dataset": "Retail orders", "category": "region", "measures": [{ "column": "units", "aggregation": "sum" }], "series": "category",
+          "filters": [{ "column": "order_date", "period": "last_year" }]
+        }
+      }
+    },
+    {
+      "id": "west-states-by-category",
+      "question": "revenue by state in the West last quarter, split by category",
+      "spec": {
+        "dataset": "Retail orders", "category": "state", "measures": [{ "column": "revenue", "aggregation": "sum" }], "series": "category",
+        "filters": [{ "column": "region", "op": "=", "value": "West" }, { "column": "order_date", "period": "last_quarter" }]
+      },
+      "followUp": {
+        "question": "for the whole of last year, every region, and without the split",
+        "spec": { "refine": true, "series": null, "dropFilters": ["region"], "filters": [{ "column": "order_date", "period": "last_year" }] },
+        "full": {
+          "dataset": "Retail orders", "category": "state", "measures": [{ "column": "revenue", "aggregation": "sum" }],
+          "filters": [{ "column": "order_date", "period": "last_year" }]
+        }
+      }
+    }
+  ]
+}
