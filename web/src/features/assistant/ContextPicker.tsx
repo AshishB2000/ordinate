@@ -18,7 +18,7 @@ import s from './DockList.module.css';
 type Kind = 'dataset' | 'visual' | 'analysis';
 
 /** The glyph a context wears, in the picker and on the composer's chip. */
-export const CONTEXT_ICON: Record<string, IconName> = { dataset: 'table', visual: 'chart-bar', analysis: 'layout-dashboard' };
+export const CONTEXT_ICON: Record<string, IconName> = { dataset: 'table', visual: 'chart-bar', analysis: 'layout-dashboard', scorecard: 'target', scenario: 'sliders', capture: 'camera' };
 
 const refTo = (kind: Kind, m: Mentionable): DockContext => ({ kind, id: m.id, label: `${kind} · ${m.name}`, name: m.name });
 

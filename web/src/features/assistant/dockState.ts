@@ -8,18 +8,22 @@
 // CONTEXT is read off the URL, never off "whatever was last open": an entity is
 // in scope only while its own route is on screen, and everything else is the
 // whole project — the rule dkContextRef was rewritten around, which a route
-// gives for free. Screens that port later add their routes here.
+// gives for free. Which routes, and the id checks: ./dockRoute.ts.
 //
 // PROJECT: the URL's when it names one; otherwise the one picked in the dock,
-// else the most recently opened. ponytail: the shell has no current project
-// yet — this becomes T2.2's project switcher's value when it lands.
+// else the most recently opened. ponytail: off a project's own pages the dock
+// does not follow the project switcher (features/projects/current) — read it
+// here if the two should ever agree there too.
 
-import { useSyncExternalStore } from 'react';
-import { useMatch } from 'react-router';
+import { useCallback, useSyncExternalStore } from 'react';
+import { matchPath, useLocation } from 'react-router';
+import { notifyManager, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { useDatasetColumns } from '../../api/datasets';
 import { useProjects, type Project } from '../../api/projects';
 import { useCapture } from '../import/api';
+import { periodsBack } from '../reports/scorecards/period';
 import type { Ask } from './api';
+import { routeProject, routeScreen, type RouteScreen } from './dockRoute';
 
 const OPEN_KEY = 'ordinate.dock';
 const PROJECT_KEY = 'ordinate.dockProject';
@@ -111,10 +115,7 @@ export interface DockProject {
 
 export function useDockProject(enabled: boolean): DockProject {
   const chosen = useSyncExternalStore(subscribe, () => picked);
-  // A capture's page names its project one segment later: /data/captures/<project>/<capture>.
-  const capture = useMatch('/data/captures/:projectId/:captureId')?.params.projectId ?? null;
-  const data = useMatch('/data/:projectId/*')?.params.projectId ?? null;
-  const route = capture ?? data;
+  const route = routeProject(useLocation().pathname);
   const q = useProjects();
   const list = enabled ? (q.data ?? []) : [];
   const id = route ?? (chosen && list.some((p) => p.id === chosen) ? chosen : (newest(list)?.id ?? null));
@@ -130,22 +131,57 @@ export interface DockContext extends Ask {
 
 const WHOLE: DockContext = { kind: '', label: 'whole project', name: '' };
 
+const prop = (o: unknown, key: string): unknown => (typeof o === 'object' && o !== null ? (o as Record<string, unknown>)[key] : undefined);
+
+/**
+ * Where the name of the thing on screen already is: the query its own page
+ * reads — for a dataset, the project's list, which the dock itself reads
+ * (Dock.tsx). So naming the context costs no call; dockScreens.test.tsx opens
+ * each page and counts.
+ */
+function nameIn({ kind, projectId, id }: RouteScreen): { key: QueryKey; name(data: unknown): unknown } {
+  switch (kind) {
+    case 'dataset':
+      return { key: ['dataset:list', projectId], name: (d) => prop(Array.isArray(d) ? d.find((x) => prop(x, 'id') === id) : null, 'name') };
+    case 'visual':
+      return { key: ['visual:get', projectId, id], name: (d) => prop(d, 'name') };
+    case 'analysis':
+      return { key: ['analysis:open', projectId, id], name: (d) => prop(prop(d, 'analysis'), 'name') };
+    case 'scorecard':
+      return { key: ['scorecard:get', projectId, id], name: (d) => prop(d, 'name') };
+    case 'scenario':
+      return { key: ['scenario:get', projectId, id], name: (d) => prop(d, 'name') };
+    case 'capture':
+      return { key: ['captureDataset:get', projectId, id], name: (d) => prop(d, 'title') };
+  }
+}
+
+/** A cache entry as it stands: read, never asked for (an observer here refetches it every time the dock opens beside a loaded page). */
+function useCached(key: QueryKey | null): unknown {
+  const client = useQueryClient();
+  const watch = useCallback((changed: () => void) => client.getQueryCache().subscribe(notifyManager.batchCalls(changed)), [client]);
+  return useSyncExternalStore(watch, () => (key ? client.getQueryData(key) : undefined));
+}
+
 /** The dock's context from the route on screen. */
 export function useDockContext(projectId: string | null): DockContext {
-  const ds = useMatch('/data/:projectId/:datasetId');
-  const datasetId = ds && ds.params.projectId === projectId ? (ds.params.datasetId ?? null) : null;
-  // The same query (and cache entry) the dataset page's grid header reads.
-  const cols = useDatasetColumns(projectId ?? undefined, datasetId ?? undefined);
-  // A capture's page: a question is about that capture (copilot:ask reads its
-  // table and computes its statistics). The same query the page itself reads.
-  const cap = useMatch('/data/captures/:projectId/:captureId');
-  const captureId = cap && cap.params.projectId === projectId ? cap.params.captureId : undefined;
-  const capture = useCapture(projectId ?? '', captureId);
-  if (captureId) {
-    const title = capture.data?.ok ? capture.data.title : '';
-    return { kind: 'capture', id: captureId, label: `capture · ${title || 'open capture'}`, name: title };
-  }
-  if (!datasetId) return WHOLE;
-  const name = cols.data?.name || 'open dataset';
-  return { kind: 'dataset', id: datasetId, label: `dataset · ${name}`, name: cols.data?.name ?? '' };
+  const { pathname, search } = useLocation();
+  const at = routeScreen(pathname);
+  const on = at && at.projectId === projectId ? at : null;
+  const source = on ? nameIn(on) : null;
+  const cached = useCached(source ? source.key : null);
+  // A dataset's own page and a capture's keep the observer they always had on the page's query: remembered open
+  // across a load, the dock asks a moment before the page does and the page rides that one call. (Measured on
+  // the dataset page: without it the page's later `dataset:list` no longer overlaps the dock's, one call more.)
+  const ownPage = on?.kind === 'dataset' && matchPath('/data/:projectId/:datasetId', pathname) ? on.id : undefined;
+  const cols = useDatasetColumns(projectId ?? undefined, ownPage);
+  useCapture(projectId ?? '', on?.kind === 'capture' ? on.id : undefined);
+  // No such screen — or its page looked and the thing is not there (deleted, refused): the server answers from the whole project then.
+  if (!on || !source || cached === null || prop(cached, 'ok') === false) return WHOLE;
+  // Until its page has loaded it (or when that failed) the thing is named by its kind.
+  const found = cols.data?.name || source.name(cached);
+  const name = typeof found === 'string' ? found : '';
+  // A scorecard stepped back to an earlier period is asked about for THAT period (the page keeps it in the URL).
+  const offset = on.kind === 'scorecard' ? periodsBack(new URLSearchParams(search)) : 0;
+  return { kind: on.kind, id: on.id, label: `${on.kind} · ${name || `open ${on.kind}`}`, name, ...(offset ? { offset } : {}) };
 }

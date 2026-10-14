@@ -37,9 +37,10 @@ const DraftFlow = lazy(() => import('../analyses/DraftReview').then((m) => ({ de
 const MIN_WIDTH = 300;
 const DEFAULT_WIDTH = 340;
 
-/** A plan proposal on screen; `key` keeps a started one mounted across turns. */
+/** A plan proposal on screen, for the project it was written from; `key` keeps a started one mounted across turns. */
 interface PlanSlot {
   key: string;
+  projectId: string;
   action: PlanAction;
   threadId: string;
 }
@@ -152,6 +153,15 @@ export default function DockPanel() {
     (input.current && !input.current.disabled ? input.current : panel.current)?.focus();
   }, [handed, decided]);
 
+  // The dock moved to another project (the route named one, or the picker did): what the last turn left on
+  // screen — a proposed plan, the Get-data links, an error — was about the project it was asked in.
+  useEffect(() => {
+    setPlans((ps) => ps.filter((p) => p.projectId === pid));
+    setGetData(false);
+    setHint('');
+    setLastSteps(null);
+  }, [pid]);
+
   // Keep the newest turn in view.
   useEffect(() => {
     const el = stage.current;
@@ -211,7 +221,7 @@ export default function DockPanel() {
       setLastSteps(steps.length && answered ? { turnId: answered.id, steps } : null);
       const action: SuggestedAction | undefined = r.suggestedAction;
       if (action && action.kind === 'plan' && Array.isArray(action.steps)) {
-        setPlans((ps) => [...ps, { key: askId, action: { intent: action.intent, steps: action.steps ?? [], droppedSteps: action.droppedSteps }, threadId: r.threadId ?? '' }]);
+        setPlans((ps) => [...ps, { key: askId, projectId: pid, action: { intent: action.intent, steps: action.steps ?? [], droppedSteps: action.droppedSteps }, threadId: r.threadId ?? '' }]);
       }
       setGetData(action?.kind === 'import');
       if (action?.kind === 'dashboard') {
@@ -246,7 +256,7 @@ export default function DockPanel() {
     void qc.invalidateQueries({ queryKey: ['copilot:history', pid] });
   }
   const empty = turns.length === 0 && !pending;
-  const prompts = empty && usable ? starterPrompts((datasets.data ?? []).map((d) => d.name), context.name) : [];
+  const prompts = empty && usable ? starterPrompts((datasets.data ?? []).map((d) => d.name), context.name, context.kind) : [];
   const placeholder = !pid
     ? 'Open a project to ask a question…'
     : !ready
@@ -318,15 +328,17 @@ export default function DockPanel() {
               <Link className={buttonClass('secondary', 'sm')} to={`/connections/${pid}`}>Connect a source</Link>
             </div>
           )}
-          {pid &&
-            plans.map((p) => (
+          {/* Only in the project it was proposed for: an answer landing after the route moved on is not this project's to run. */}
+          {plans
+            .filter((p) => p.projectId === pid)
+            .map((p) => (
               <PlanCard
                 key={p.key}
-                projectId={pid}
+                projectId={p.projectId}
                 threadId={p.threadId}
                 action={p.action}
                 onDone={() => setPlans((ps) => ps.filter((x) => x.key !== p.key))}
-                onLogged={() => void qc.invalidateQueries({ queryKey: ['copilot:history', pid] })}
+                onLogged={() => void qc.invalidateQueries({ queryKey: ['copilot:history', p.projectId] })}
               />
             ))}
         </div>

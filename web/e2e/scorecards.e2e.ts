@@ -62,11 +62,13 @@ e2e('scorecards: new → targets → server-computed rows and roll-ups → previ
   const label = await page.locator('[aria-live="polite"] strong').innerText();
   await screens(page, 'scorecard-page');
 
-  // ── Step back a period: the server recomputes ─────────────────────────
+  // ── Step back a period: the server recomputes, and the URL says which period is on screen ──
   await page.getByRole('button', { name: 'Previous period' }).click();
   await page.waitForFunction((l) => document.querySelector('[aria-live="polite"] strong')?.textContent !== l, label);
+  assert.equal(new URL(page.url()).search, '?back=1', 'the period stepped back to is in the URL (a reload, and the Assistant, read it there)');
   await page.getByRole('button', { name: 'Next period' }).click();
   await page.waitForFunction((l) => document.querySelector('[aria-live="polite"] strong')?.textContent === l, label);
+  assert.equal(new URL(page.url()).search, '', 'the current period is the bare URL');
 
   // ── A row's detail ────────────────────────────────────────────────────
   await page.locator('tr[data-metric-id]').filter({ hasText: 'Revenue' }).first().click();

@@ -201,15 +201,15 @@ export async function statsPanelFacts(projectId: string, raw: unknown): Promise<
   return statsFacts([{ spec, result: out.value }], out.datasetName);
 }
 
-/** Append the facts of every "stats" tile on a dashboard's sheets to its facts. */
-export async function withStatsTiles(projectId: string, pages: dashboards.Page[], base: CopilotFacts): Promise<CopilotFacts> {
+/** Append the facts of every "stats" tile on a dashboard's sheets to its facts — each under `filters`, the sheet's, as `stats:tile` computes it. */
+export async function withStatsTiles(projectId: string, pages: dashboards.Page[], base: CopilotFacts, filters: FilterStep[] = []): Promise<CopilotFacts> {
   const items: StatsFactItem[] = [];
   let name = '';
   for (const page of pages || []) {
     for (const card of page.cards || []) {
       if (card.type !== 'stats' || !card.stats) continue;
       if (await withheld(projectId, card.stats)) continue;
-      const out = await compute<StatsResult>(projectId, card.stats).catch(() => null);
+      const out = await compute<StatsResult>(projectId, card.stats, { filters }).catch(() => null);
       if (out && out.ok) { items.push({ spec: card.stats, result: out.value }); name = name || out.datasetName; }
     }
   }

@@ -79,11 +79,13 @@ import { liveCardMetric, liveCodeOf, liveMetaOf } from './liveRoute';
 // simply never makes. §1's threshold advice was correct for the numbers §1 was
 // comparing and does not survive contact with the hydration this handler pays.
 //
-// The one place the (a2) comparison does apply is `computeMetricCards`, which
-// hydrates a dataset ONCE and answers every card on it from that table: N cards
-// cost `hydrate + 0.06N` ms in JS against `0.5N` ms resident. Measured at 4
-// cards on one dataset, JS wins below ~1,000 rows (1.7 ms vs 1.9 ms at 1,000)
-// and loses from there (10.9 vs 2.6 at 10k, 1,183 vs 15 at 1M).
+// The one place the (a2) comparison did apply was the Assistant's dashboard
+// facts (`computeMetricCards`), which hydrated a dataset ONCE and answered every
+// card on it from that table: N cards cost `hydrate + 0.06N` ms in JS against
+// `0.5N` ms resident. Measured at 4 cards on one dataset, JS wins below ~1,000
+// rows (1.7 ms vs 1.9 ms at 1,000) and loses from there (10.9 vs 2.6 at 10k,
+// 1,183 vs 15 at 1M). (Those facts take `computeCardMetric` below now —
+// ./copilotCards.ts — so they are the tile's figure and the tile's cost.)
 //
 // 1,000 is therefore the threshold, and it is deliberately low. Below it both
 // paths finish inside ~2 ms, the difference is unobservable, and the tie goes to

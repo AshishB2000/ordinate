@@ -18,6 +18,12 @@
 // brief (kind and look), then the model's own questions, once — drafts it from
 // the answers, shows the review, and creates it on the click, in the look that
 // was picked. Zero console errors throughout; screens in both themes.
+//
+// The context follows the screen (both modes): beside a saved visual the
+// header names that visual from the page's own `visual:get` and a question
+// carries `{ kind: 'visual', id }` (the half CI runs: it has no database);
+// beside the open dashboard a question carries `{ kind: 'analysis', id }`, and
+// the facts the model is sent are that dashboard's, its KPI the app's own sum.
 
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -66,6 +72,11 @@ const draftCalls: { asking: boolean; facts: string }[] = [];
 
 /** The models the stub asked with, in order. */
 const askedModels: string[] = [];
+/** The last streamed ask: the app's facts and the question, as the model was sent them. */
+let lastAsk = '';
+/** A question about the dashboard on screen, and what the model says to it (words only: a figure would be audited). */
+const ON_SCREEN = 'What is on this dashboard?';
+const ON_SCREEN_ANSWER = ['It has one sheet: ', 'revenue by region, ', 'with the total beside it.'];
 
 /** What the model adds to ANSWER when the project has no data: the dock shows the three ways in. */
 const GET_DATA = '\n@@ACTION {"kind":"import","intent":"bring data in"}';
@@ -96,11 +107,14 @@ const stub = http.createServer((req, res) => {
       res.end(JSON.stringify({ content: [{ type: 'text', text: asking ? JSON.stringify(QUESTIONS) : drafting ? JSON.stringify(DRAFT) : 'OK' }], stop_reason: 'end_turn' }));
       return;
     }
-    const parts = asked.includes('a plan')
-      ? ['Here is a plan you can run step by step.', `\n@@ACTION ${JSON.stringify(PLAN)}`]
-      : asked.includes('regional dashboard')
-        ? ['I will draft a dashboard of revenue by region.', DASHBOARD]
-        : [...ANSWER, GET_DATA];
+    lastAsk = asked;
+    const parts = asked.includes(ON_SCREEN)
+      ? ON_SCREEN_ANSWER
+      : asked.includes('a plan')
+        ? ['Here is a plan you can run step by step.', `\n@@ACTION ${JSON.stringify(PLAN)}`]
+        : asked.includes('regional dashboard')
+          ? ['I will draft a dashboard of revenue by region.', DASHBOARD]
+          : [...ANSWER, GET_DATA];
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     let i = 0;
     const tick = setInterval(() => {
@@ -154,6 +168,51 @@ if (!dbUrl) {
     await page.keyboard.press('Escape');
     await page.getByRole('complementary', { name: 'Assistant' }).waitFor({ state: 'detached' });
     assert.equal(await page.evaluate(() => document.activeElement?.id), 'dock-toggle');
+  });
+
+  // The context follows the screen (dockRoute.ts). No model is needed to see what a question WOULD be about.
+  e2e('dock: beside a saved visual the header names it; a new draft is the whole project', async ({ page, server, rpc }) => {
+    const pid = server.sample.projectId;
+    await page.goto('/');
+    await settled(page);
+    await openDock(page); // remembered: the dock is open on every load from here
+    const csrf = (await page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';
+    const listed = await page.request.post(`${server.base}/api/rpc/visual:list`, { headers: { 'x-csrf-token': csrf }, data: { args: [{ projectId: pid }] } });
+    // By name, never by position: the sample's first visual is a map, and a map fetches OpenStreetMap tiles (maps.e2e.ts answers them locally).
+    const visual = ((await listed.json()) as { id: string; name: string }[]).find((v) => v.name === 'Revenue by category');
+    assert.ok(visual, 'the sample project has the visual "Revenue by category"');
+    let gets = 0;
+    page.on('request', (r) => {
+      if (decodeURIComponent(new URL(r.url()).pathname) === '/api/rpc/visual:get') gets += 1;
+    });
+    // This server has no model (no database to keep a key in). `ai:status` is answered as ready at the browser's edge,
+    // so the composer sends and the REQUEST can be read: what a question here is about. The server's reply stays its own.
+    const ready = JSON.stringify({ ready: true, models: [{ provider: 'anthropic', model: 'stub', label: 'Stub', isDefault: true }], mine: { provider: 'anthropic', model: 'stub' }, copilotEnabled: true, keyStore: null });
+    await page.route('**/api/rpc/ai%3Astatus', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: ready }));
+    await page.goto(`/visuals/${pid}/${visual.id}`);
+    await page.waitForFunction(() => document.querySelector('[data-chart-type] canvas')); // the builder has drawn it
+    const chip = page.getByTestId('dock-context');
+    await page.waitForFunction((name) => document.querySelector('[data-testid="dock-context"]')?.textContent === name, visual.name);
+    assert.equal(await chip.getAttribute('title'), `Answers are based on visual · ${visual.name}`);
+    // The name is the page's own read of the visual: the dock, open from the first paint, asked for nothing.
+    assert.equal(gets, 1, `visual:get was asked ${gets} times`);
+    console.log(`rpc  ${String(rpc.loads.at(-1)?.rpcs).padStart(2)}  a saved visual, the dock open`);
+    // Its own starter questions, by name; the screenshots show them under the header.
+    const dock = page.getByRole('complementary', { name: 'Assistant' });
+    await dock.getByRole('button', { name: `What does ${visual.name} show?` }).waitFor();
+    await screens(page, 'dock-on-visual');
+    const box = page.getByRole('textbox', { name: 'Ask the Assistant' });
+    const sent = page.waitForRequest((r) => decodeURIComponent(new URL(r.url()).pathname) === '/api/rpc/copilot:ask');
+    await box.fill('What stands out?');
+    await box.press('Enter');
+    const about = ((await sent).postDataJSON() as { args: [{ projectId: string; context: unknown }] }).args[0];
+    assert.deepEqual([about.projectId, about.context], [pid, { kind: 'visual', id: visual.id }], 'a question beside a saved visual is about that visual');
+    await page.unroute('**/api/rpc/ai%3Astatus');
+    // Negative control: a new visual is nothing saved yet — the whole project, and still this one.
+    await page.goto(`/visuals/${pid}/new`);
+    await page.getByRole('textbox', { name: 'Ask the Assistant' }).waitFor();
+    await page.getByRole('radiogroup').first().waitFor(); // the builder is up, on a draft
+    assert.equal(await chip.textContent(), 'whole project');
   });
 } else {
   const dbName = `ordinate_e2e_dock_${process.pid}_${Date.now()}`;
@@ -377,6 +436,23 @@ if (!dbUrl) {
     const [, projectId, id] = /\/analyses\/([0-9a-f-]{36})\/([0-9a-f-]{36})$/.exec(page.url()) ?? [];
     const opened = await page.request.post(`${server.base}/api/rpc/analysis:open`, { headers: { 'x-csrf-token': csrf }, data: { args: [{ projectId, id }] } });
     assert.equal(((await opened.json()) as { analysis?: { style?: { theme?: string } } }).analysis?.style?.theme, 'dark', 'the dashboard is saved in the look that was picked');
+
+    // ── The context follows the screen: beside the open dashboard, a question is about IT ──
+    // The header names it (the page's own analysis:open), the ask carries its kind and id, and
+    // the facts the model is sent are that dashboard's — its KPI the app's own sum.
+    const chip = page.getByTestId('dock-context');
+    assert.equal(await chip.textContent(), 'Regional revenue');
+    assert.equal(await chip.getAttribute('title'), 'Answers are based on analysis · Regional revenue');
+    const sent = page.waitForRequest((r) => decodeURIComponent(new URL(r.url()).pathname) === '/api/rpc/copilot:ask');
+    await box.fill(ON_SCREEN);
+    await box.press('Enter');
+    const about = ((await sent).postDataJSON() as { args: [{ projectId: string; context: unknown }] }).args[0];
+    assert.deepEqual([about.projectId, about.context], [projectId, { kind: 'analysis', id }], 'the ask is about the dashboard on screen');
+    await dock.getByText(ON_SCREEN_ANSWER.join(''), { exact: true }).waitFor();
+    await dock.getByText(/^analysis: Regional revenue · /).waitFor();
+    assert.match(lastAsk, /Dashboard: \\"Regional revenue\\"/, 'the model was sent this dashboard\'s facts');
+    assert.match(lastAsk, /Total revenue: 2,?500\b/, 'with its KPI: the app\'s sum of revenue');
+    await shots('dock-on-analysis');
 
     // ── The wizard's Assistant step shows the same brief, so the flow does not ask for it again ──
     await page.goto(`/analyses?project=${projectId}`);
