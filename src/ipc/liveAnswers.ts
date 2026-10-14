@@ -29,7 +29,8 @@ import { tileCaption } from '../analysis/captions';
 import { displayNames } from '../app/catalog';
 import { ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, specFilterSteps } from '../ai/answerSpec';
 import type { AnswerFilter, AnswerSpec } from '../ai/answerSpec';
-import { answerFacts, describeAnswer } from '../ai/answerFacts';
+import { answerFacts, describeAnswer, withheldFilters } from '../ai/answerFacts';
+import { withheldColumns } from '../app/sharePolicy';
 import { liveAnswer, liveLookup } from '../engine/live/liveQuery';
 import type { LiveFailure } from '../engine/live/liveQuery';
 import type { PeriodRange } from '../engine/live/evaluate';
@@ -169,8 +170,11 @@ export async function liveCardFor(projectId: string, spec: AnswerSpec): Promise<
   const caption = tileCaption({ chartType, data, names: await displayNames(projectId, meta.id).catch(() => ({})) });
   const additive = spec.measures.every((m) => m.aggregation === 'sum' || m.aggregation === 'count');
   const filterLabels = cardLabels(spec, meta.columns, r.filterLabels);
+  // As computeCard: a model reads no filter value of a column marked personal or financial; the card's labels stand.
+  const said = spec.filters.length ? withheldFilters(spec.filters, await withheldColumns(projectId, meta.id)) : spec.filters;
   const facts = answerFacts({
-    title: spec.title, datasetName: meta.name, describe: describeAnswer(spec), data, categoryIsDate: isDate, additive, filterLabels, caption, asOf: utcLabel(r.asOf.at),
+    title: spec.title, datasetName: meta.name, describe: describeAnswer(spec), data, categoryIsDate: isDate, additive, filterLabels,
+    saidFilterLabels: cardLabels({ ...spec, filters: said }, meta.columns, r.filterLabels), caption, asOf: utcLabel(r.asOf.at),
   });
   return {
     card: {

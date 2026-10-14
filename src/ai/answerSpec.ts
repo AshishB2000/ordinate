@@ -138,7 +138,7 @@ const AGG_ALIASES: Record<string, VizAggregation> = {
   max: 'max', maximum: 'max', highest: 'max',
 };
 
-function parseAgg(raw: unknown): VizAggregation | null {
+export function parseAgg(raw: unknown): VizAggregation | null {
   if (typeof raw !== 'string') return null;
   return AGG_ALIASES[raw.trim().toLowerCase()] || null;
 }

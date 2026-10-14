@@ -11,8 +11,9 @@
 // so a model that re-typed nothing can drop nothing.
 
 import type { VizMeasure } from '../analysis/visuals';
-import { defaultAnswerChart, resolveColumn } from './answerSpec';
+import { ANSWER_CHART_TYPES, defaultAnswerChart, parseAgg, resolveColumn } from './answerSpec';
 import type { AnswerSpec, SpecDataset, SpecMetric } from './answerSpec';
+import { WITHHELD } from './columnNotes';
 
 /** The patch's own two keys, as the prompt spells them (scripts/test-suggestedAction.ts ties the two). */
 export const REFINE_KEY = 'refine';
@@ -28,12 +29,16 @@ export function isRefine(raw: unknown): boolean {
  *
  *   - the dataset is ALWAYS the previous one, whatever the patch names;
  *   - `category`, `measures` (or `measure`), `chartType` and `top` (or `limit`)
- *     replace when the patch carries them; `"top": null` removes the cut;
- *   - `series` replaces, and `"series": null` removes the split;
+ *     replace when the patch carries them; `"top": null` removes the cut. A
+ *     `top` that is not a number, or a chart type the app does not draw, is not
+ *     a change the app can read, so the previous one stays — never nothing;
+ *   - `series` replaces, and `"series": null` removes the split. A category
+ *     moved onto the split's own column takes the split with it;
  *   - a filter in the patch replaces EVERY previous filter on the same column —
  *     the column found by the validator's own name rules, taught names included,
  *     so "Segment" and "segment" are one column — and is added otherwise. A
- *     period on a date column is the same rule: it replaces the period before it;
+ *     period on a date column is the same rule: it replaces the period before it.
+ *     One filter given bare, outside a list, is still that filter;
  *   - `dropFilters` removes the previous filters on the columns it names.
  *
  * A chart type nobody chose — the default for the previous shape — is left for
@@ -42,7 +47,9 @@ export function isRefine(raw: unknown): boolean {
  *
  * `metrics` lets a carried measure keep its link to a defined metric: it is
  * named the way the validator resolves one, and only when that gives the very
- * measure back. Otherwise it is carried as its column and aggregation.
+ * measure back — the same column AND aggregation, which a metric edited since
+ * no longer is. Otherwise it is carried as its column and aggregation: what the
+ * chart on screen plots.
  */
 export function refineSpec(previous: AnswerSpec, patch: unknown, dataset: SpecDataset, metrics: SpecMetric[] = []): unknown {
   const p = patch && typeof patch === 'object' && !Array.isArray(patch) ? (patch as Record<string, unknown>) : {};
@@ -50,12 +57,13 @@ export function refineSpec(previous: AnswerSpec, patch: unknown, dataset: SpecDa
 
   const carried = (m: VizMeasure): unknown => {
     const metric = m.metricId ? metrics.find((x) => x.id === m.metricId) : undefined;
-    const byName = !!metric && !metric.hasFilters && metric.column === m.column && !resolveColumn(metric.name, dataset.columns)
+    const byName = !!metric && !metric.hasFilters && metric.column === m.column && (parseAgg(metric.aggregation) || 'sum') === m.aggregation
+      && !resolveColumn(metric.name, dataset.columns)
       && metrics.find((x) => x.datasetId === dataset.id && x.name.trim().toLowerCase() === metric.name.trim().toLowerCase()) === metric;
     return byName ? { metric: metric.name } : { column: m.column, aggregation: m.aggregation };
   };
 
-  const added: unknown[] = Array.isArray(p.filters) ? p.filters : [];
+  const added: unknown[] = [];
   const gone = new Set<string>();
   // A drop the dataset has no column for is handed on as a filter on that name:
   // the validator then refuses it by the name that was said, like any other.
@@ -65,9 +73,22 @@ export function refineSpec(previous: AnswerSpec, patch: unknown, dataset: SpecDa
     if (name) gone.add(name);
     else unknownDrops.push({ column: said });
   }
-  for (const f of added) {
-    const name = f && typeof f === 'object' ? real((f as { column?: unknown }).column) : null;
+  for (const f of ([] as unknown[]).concat(p.filters ?? [])) {
+    const o = f && typeof f === 'object' ? (f as Record<string, unknown>) : {};
+    const name = real(o.column);
+    // The block prints the value on a personal or financial column as "(withheld)"
+    // (./previousAnswer), so a filter that says the token back names a value the
+    // model never read. The same comparison as a stored filter is that filter
+    // restated, and the stored one stays. Any other is handed on with no value at
+    // all: the validator refuses it, where the token charted as a value would be
+    // an empty chart that looks like an answer.
+    if (name && ([] as unknown[]).concat(o.value ?? [], o.values ?? []).includes(WITHHELD)) {
+      const op = String(o.op ?? '=').trim().toLowerCase();
+      if (!previous.filters.some((x) => x.column === name && !('period' in x) && x.op === op)) added.push({ column: o.column, op: o.op });
+      continue;
+    }
     if (name) gone.add(name);
+    added.push(f);
   }
 
   const merged: Record<string, unknown> = {
@@ -76,16 +97,31 @@ export function refineSpec(previous: AnswerSpec, patch: unknown, dataset: SpecDa
     measures: p.measures ?? (p.measure != null ? [p.measure] : previous.measures.map(carried)),
     filters: [...previous.filters.filter((f) => !gone.has(f.column)), ...added, ...unknownDrops],
   };
-  const series = p.series !== undefined ? p.series : previous.series;
+  const sameAxis = p.category == null || real(p.category) === previous.category;
+  const splitIsAxis = !sameAxis && !!previous.series && real(p.category) === previous.series;
+  const series = p.series !== undefined ? p.series : splitIsAxis ? null : previous.series;
   if (series != null) merged.series = series;
-  const top = p.top !== undefined ? p.top : p.limit !== undefined ? p.limit : previous.top;
+  const cut = [p.top, p.limit].find((t) => typeof t === 'number' || t === null);
+  const top = cut !== undefined ? cut : previous.top;
   if (top != null) merged.top = top;
 
   const typeOf = (name: string): string => dataset.columns.find((c) => c.name === name)?.type ?? 'text';
   const chosen = previous.chartType !== defaultAnswerChart(typeOf(previous.category), !!previous.series);
-  if (p.chartType != null) merged.chartType = p.chartType;
+  if (typeof p.chartType === 'string' && ANSWER_CHART_TYPES.has(p.chartType.trim())) merged.chartType = p.chartType;
   else if (chosen) merged.chartType = previous.chartType;
   // The date axis keeps its roll-up while it is still the axis.
-  if (previous.grain && p.category == null) merged.grain = previous.grain;
+  if (previous.grain && sameAxis) merged.grain = previous.grain;
   return merged;
+}
+
+const CHART_KEYS = ['datasetId', 'category', 'measures', 'column', 'aggregation', 'series', 'filters', 'op', 'value', 'values', 'period', 'yearsBack', 'chartType', 'top', 'grain'];
+
+/**
+ * Two specs that draw the same chart: everything but the title, and a measure's
+ * link to its metric (which plots nothing). A refine that comes out of the merge
+ * as the previous answer again changed nothing the app could apply.
+ */
+export function sameChart(a: AnswerSpec, b: AnswerSpec): boolean {
+  // The key list is JSON.stringify's own: it keeps these keys, in this order, at every depth.
+  return JSON.stringify(a, CHART_KEYS) === JSON.stringify(b, CHART_KEYS);
 }

@@ -3,18 +3,23 @@
 //
 //   1. Ask, then a follow-up whose action is {refine: true, filters: […]}: the
 //      model call for the follow-up carried the PREVIOUS ANSWER block (names
-//      only — no figure of the card, no value of a column marked personal), and
-//      the stored turn's spec holds the old filters AND the new one on the same
-//      dataset. The card's figures are the ones every filter together gives.
+//      only — no figure of the card), and the stored turn's spec holds the old
+//      filters AND the new one on the same dataset. The card's figures are the
+//      ones every filter together gives. CANARY: a value filtered on a column
+//      marked personal is in NO model call of either turn — the ask or the
+//      narration of its card — while the card a person sees still says it.
 //   2. NEGATIVE CONTROL: in a NEW conversation the same action gets no block and
 //      is an ordinary spec — refused for what it lacks.
 //   3. A new subject keeps nothing but the dataset, and that only after the
 //      screen's own.
 //   4. A merge the validator refuses is refused — never cut back to the patch —
-//      and the app's own reason is not read as a figure the model invented.
-//   5. The block's settings and the number audit, on a reply that is kept.
+//      and the app's own reason is not read as a figure the model invented,
+//      where a figure the model wrote into a name the reason quotes back is.
+//   5. The block's settings and the number audit, on a reply that is kept. An
+//      ask that names no conversation is told of no previous answer. A refine
+//      that changes nothing is refused; "(withheld)" said back replaces no value.
 //   6. No block when there is nothing to continue: no answer yet, the dataset
-//      gone, a column gone or retyped. The lookup never reads a row.
+//      gone, a column gone, retyped or renamed. The lookup never reads a row.
 //
 //   npm run build:ts && node scripts/test-askFollowUp.js
 
@@ -124,16 +129,23 @@ async function main(): Promise<void> {
   ok('follow-up: the block names the dataset, the columns and the filters in force',
     /dataset "Orders"; category "region"; measures sum\(revenue\); filters: "order_date" in last_quarter, "segment" = "Enterprise", "email" != /.test(block), block);
 
-  // CANARY: the whole text of that call — replayed turns, facts, block, question.
-  const everything = JSON.stringify(followUp);
-  ok('canary: the value filtered on a personal column is nowhere in the follow-up\'s ask', !everything.includes(CANARY) && !everything.includes('canary'), everything);
+  // CANARY: the whole text of EVERY model call of both turns — each turn asks, then
+  // narrates its card — replayed turns, facts, block, question.
+  const everything = JSON.stringify(sent);
+  ok('canary: the value filtered on a personal column is in no model call — neither turn\'s ask, nor the narration of either card',
+    sent.length === 4 && !everything.includes(CANARY) && !everything.includes('canary'), everything);
   ok('canary: …the filter is there with its value withheld', block.includes(`"email" != ${notes.WITHHELD}`), block);
+  const SAID = `order_date: 2024-Q4; segment = Enterprise; email != ${notes.WITHHELD}; channel = online.`;
+  ok('canary: …and the narration reads the same filter the same way, beside the filters it may read',
+    sent[3].facts.includes(`\nFiltered to: ${SAID}\n`) && sent[3].facts.endsWith(`\n- Filtered to ${SAID}`), sent[3].facts);
   ok('canary: …and the app still has it — the merge kept the value on the server (negative control)',
     JSON.stringify(a1).includes(CANARY) && JSON.stringify(a2).includes(CANARY));
   await catalog.setColumn(pid, ds.id, 'email', { sensitivity: 'none' });
   const unmarked = await answers.previousAnswer(pid, r1.turns);
+  const unmarkedCard = await answers.computeCard(pid, a2);
   await catalog.setColumn(pid, ds.id, 'email', { sensitivity: 'personal' });
   ok('canary: unmarked, the same block prints it (negative control — the mark is what withholds it)', !!unmarked && unmarked.block.includes(CANARY));
+  ok('canary: …and so do the facts a narration reads (negative control)', !('ok' in unmarkedCard) && unmarkedCard.factsText.includes(`email != ${CANARY};`));
 
   // NAMES ONLY: no figure of the card the user is looking at.
   const figures: number[] = [...card1.data.series.flatMap((s: { values: number[] }) => s.values), ...card1.headline.map((h: { value: number }) => h.value)];
@@ -158,6 +170,8 @@ async function main(): Promise<void> {
     && card2.filterLabels[3] === 'channel = online', JSON.stringify(card2.filterLabels));
   ok('card: a carried filter on the personal column reads as an ordinary filter on it does',
     card1.filterLabels[2] === `email != ${CANARY}` && Object.is(card2.filterLabels[2], card1.filterLabels[2]), JSON.stringify(card1.filterLabels));
+  ok('card: …in its summary point too — what a model may read is withheld, what the person sees is not',
+    card2.bullets[card2.bullets.length - 1] === `Filtered to ${card2.filterLabels.join('; ')}.`, JSON.stringify(card2.bullets));
   const ref = vizData.buildVizData(COLS, ROWS, { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] }, [
     { type: 'filter', column: 'order_date', op: '>=', value: '2024-10-01' }, { type: 'filter', column: 'order_date', op: '<=', value: '2024-12-31' },
     { type: 'filter', column: 'segment', op: '=', value: 'Enterprise' }, { type: 'filter', column: 'email', op: '!=', value: CANARY },
@@ -227,7 +241,21 @@ async function main(): Promise<void> {
   replies.push(answerWith('nine filters', NINTH, 'Revenue grew 12.4%.'));
   const c2 = await call('copilot:ask', { projectId: pid, context: {}, question: 'only online', threadId: full8 });
   ok('refused: …while a figure the model DID invent beside it is still caught (negative control)',
-    lastOf(c2).text === 'Revenue grew 12.4%.\n\nContains a figure the app did not compute: 12.4%\n\n(No chart: At most 8 filters.)', lastOf(c2).text);
+    lastOf(c2).text === 'Revenue grew 12.4%.\n\n(No chart: At most 8 filters.)\n\nContains a figure the app did not compute: 12.4%', lastOf(c2).text);
+  // The reason is the app's sentence, but what it QUOTES is what the model wrote — a figure put in a name is the model's figure.
+  const NOTE = '\n\nContains a figure the app did not compute: ';
+  const echo = async (spec: unknown, threadId: string): Promise<any> => {
+    replies.push(answerWith('a figure in a name', spec));
+    return call('copilot:ask', { projectId: pid, context: {}, question: 'and the total?', threadId });
+  };
+  const e1 = await echo({ dataset: 'Orders', category: 'Total revenue was 1,234,567', measures: ['revenue'] }, fresh);
+  ok('refused: a figure the model wrote into a name the reason quotes back is read by the guard',
+    lastOf(e1).text === `Here it is.\n\n(No chart: Unknown category column "Total revenue was 1,234,567".)${NOTE}1,234,567` && e1.numberAudit.ok === false, lastOf(e1).text);
+  const e2 = await echo({ dataset: 'Orders', category: 'a" 48,210 "b', measures: ['revenue'] }, fresh);
+  ok('refused: …also when the name closes the quote around it', lastOf(e2).text.endsWith(`${NOTE}48,210`) && e2.numberAudit.ok === false, lastOf(e2).text);
+  const e3 = await echo({ refine: true, dropFilters: ['Revenue grew 12.4% to 48,210'] }, r1.threadId);
+  ok('refused: …and through a follow-up\'s drop list',
+    lastOf(e3).text === `Here it is.\n\n(No chart: Unknown filter column "Revenue grew 12.4% to 48,210".)${NOTE}12.4%, 48,210`, lastOf(e3).text);
 
   // ── 5. The block's settings and the number audit ──────────────────────────
   const settings = await thread(await whole({
@@ -246,6 +274,50 @@ async function main(): Promise<void> {
   const g3 = await call('copilot:ask', { projectId: pid, context: {}, question: 'and the total?', threadId: settings });
   ok('audit: a made-up figure beside the settings is still caught',
     JSON.stringify(g3.numberAudit.violations.map((v: { token: string }) => v.token)) === '["48,210"]' && / did not compute: 48,210$/.test(lastOf(g3).text), lastOf(g3).text);
+
+  // An ask that names NO conversation (a report's narrative page asks this way) still has the
+  // caller's latest one replayed, as it always had — but nobody is looking at that chart.
+  ok('no thread: the latest conversation is the one with the settings (so a block WOULD be there to give)', (await copilotStore.latestThreadId(pid)) === settings);
+  for (const [what, threadId] of [['names no conversation', undefined], ['names one that is not the caller\'s', '99999999-9999-4999-8999-999999999999']] as const) {
+    replies.push(narration(REPEAT));
+    const from = sent.length;
+    const bare = await call('copilot:ask', { projectId: pid, context: {}, question: 'write two paragraphs', ...(threadId ? { threadId } : {}) });
+    ok(`no thread: an ask that ${what} is told of no previous answer, and its settings vouch for nothing`,
+      bare.ok && !sent[from].facts.includes(B.PREVIOUS_ANSWER) && !bare.ledger.some((e: { source: string }) => e.source === 'previousAnswer')
+      && bare.numberAudit.ok === false, sent[from].facts);
+  }
+
+  // ── 5b. A refine the app could apply nothing of ───────────────────────────
+  const spoken = await thread(a1);
+  replies.push(answerWith('enterprise revenue by region last quarter, by channel', { refine: true, split: 'channel' }, 'Splitting it.'));
+  const z1 = await call('copilot:ask', { projectId: pid, context: {}, question: 'split that by channel', threadId: spoken });
+  ok('no-op: a refine that changes nothing is refused — never the previous chart again under the follow-up\'s title',
+    z1.ok && !lastOf(z1).answer && lastOf(z1).text === 'Splitting it.\n\n(No chart: The follow-up changed nothing the app could apply.)', lastOf(z1).text);
+  replies.push(answerWith('enterprise revenue by region last quarter, by channel', { refine: true, series: 'channel' }), narration('Online leads.'));
+  const z2 = await call('copilot:ask', { projectId: pid, context: {}, question: 'split that by channel', threadId: spoken });
+  ok('no-op: …where the same follow-up in a key the merge reads is drawn (negative control)', lastOf(z2).answer?.series === 'channel', JSON.stringify(lastOf(z2)));
+
+  // ── 5c. The withheld token said back ──────────────────────────────────────
+  const held = await thread(a1);
+  replies.push(answerWith('enterprise revenue by region last quarter, west only', {
+    refine: true, filters: [{ column: 'email', op: '!=', value: notes.WITHHELD }, { column: 'region', op: '=', value: 'West' }],
+  }), narration('West only.'));
+  const w1 = await call('copilot:ask', { projectId: pid, context: {}, question: 'now only west', threadId: held });
+  const aw: AnswerSpec = lastOf(w1).answer;
+  ok('echo: a model that restates the filter it was shown as "(withheld)" does not replace its value',
+    w1.ok && !!aw && sameLeaves(aw.filters, [...a1.filters, { column: 'region', op: '=', value: 'West' }]), JSON.stringify(aw));
+  const cardW = aw ? await call('answer:card', { projectId: pid, spec: aw }) : null;
+  const refW = vizData.buildVizData(COLS, ROWS, { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] }, [
+    { type: 'filter', column: 'order_date', op: '>=', value: '2024-10-01' }, { type: 'filter', column: 'order_date', op: '<=', value: '2024-12-31' },
+    { type: 'filter', column: 'segment', op: '=', value: 'Enterprise' }, { type: 'filter', column: 'email', op: '!=', value: CANARY },
+    { type: 'filter', column: 'region', op: '=', value: 'West' },
+  ]);
+  const withCanaryRow = vizData.buildVizData(COLS, ROWS, { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] }, [
+    { type: 'filter', column: 'order_date', op: '>=', value: '2024-10-01' }, { type: 'filter', column: 'segment', op: '=', value: 'Enterprise' }, { type: 'filter', column: 'region', op: '=', value: 'West' },
+  ]);
+  ok('echo: …so the figure still leaves that customer out (Object.is with buildVizData; with them in it is another number)',
+    !!cardW && cardW.ok && cardW.data.labels.join() === 'West' && Object.is(cardW.data.series[0].values[0], refW.data.series[0].values[0])
+    && !Object.is(refW.data.series[0].values[0], withCanaryRow.data.series[0].values[0]), JSON.stringify(cardW && cardW.data));
 
   // ── 6. Nothing to continue ────────────────────────────────────────────────
   const turnsOf = (...specs: (AnswerSpec | undefined)[]): import('../src/ai/copilot').CopilotTurn[] =>
@@ -269,6 +341,17 @@ async function main(): Promise<void> {
   }
   ok('lookup: no block when a column no longer fits what the answer does with it (a sum over text)',
     (await answers.previousAnswer(pid, turnsOf({ ...a1, measures: [{ column: 'channel', aggregation: 'sum' }] }))) === null);
+  // A column renamed only in case or punctuation still RESOLVES by the loose name rules — but the mark, the
+  // merge and the card all go by the exact name, and under the old one a marked value would be printed.
+  const renamed: [string, AnswerSpec][] = [
+    ['a filter', { ...a1, filters: [a1.filters[0], a1.filters[1], { column: 'E-Mail', op: '!=', value: CANARY }] }],
+    ['the category', { ...a1, category: 'Region' }],
+    ['a measure', { ...a1, measures: [{ column: 'Revenue', aggregation: 'sum' }] }],
+    ['the split', { ...a1, series: 'CHANNEL' }],
+  ];
+  for (const [what, spec] of renamed) {
+    ok(`lookup: no block when ${what} goes by a name that is no longer the column's exact one`, (await answers.previousAnswer(pid, turnsOf(spec))) === null);
+  }
   ok('lookup: it read no rows — metadata and the catalog only', hydrated === 0, String(hydrated));
   (datasets as any).getDataset = realGet;
 

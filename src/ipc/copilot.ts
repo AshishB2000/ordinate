@@ -11,7 +11,7 @@ import { computeColumnSummary, findQualityIssues } from '../data/datasetStats';
 import type { VizDataResult } from '../analysis/vizData';
 import { withTableCalcs } from '../analysis/tableCalc';
 import { askCopilot } from '../ai/analyze';
-import { auditNumbers } from '../ai/numberAudit';
+import { auditNumbers, harvestAppNumbers } from '../ai/numberAudit';
 import { listInsights } from './insights';
 import * as metrics from '../analysis/metrics';
 import { resolveMetric } from './metrics';
@@ -119,6 +119,16 @@ export function guardAnswer(text: string, ledger: LedgerEntry[]): { text: string
     );
   }
   return { text: text + '\n\n' + GUARD_NOTE + tokens, audit };
+}
+
+/**
+ * The digits of the app's OWN words in a refusal ("At most 8 filters."), for the
+ * ledger that turn is audited against. Everything from the first quote to the
+ * last is left out: a reason quotes the name it could not resolve, that name is
+ * the model's, and harvesting it would let a model vouch for its own figure.
+ */
+function reasonLedger(reason: string): LedgerEntry[] {
+  return harvestAppNumbers(reason.replace(/"[\s\S]*"/, '')).map((h) => ({ label: 'a limit the app states in a refusal', value: h.value, unit: h.unit, source: 'refusal' }));
 }
 
 /**
@@ -481,7 +491,11 @@ export function register() {
       // The chart a follow-up continues (./answers `previousAnswer`): the model is
       // told what it is by NAME, beside the facts, and the app merges what changes.
       // The block's own digits (a top-N, a filter value) join this turn's ledger.
-      const prev = await answers.previousAnswer(projectId, turns);
+      // Only for an ask that NAMES its conversation, and finds it: one that names
+      // none (a report's narrative page, ./reportsServer) still has the caller's
+      // latest replayed, but nobody is looking at that chart and nothing continues it.
+      const named = !!tid && (await copilot.listThreads(projectId)).some((t) => t.id === tid);
+      const prev = named ? await answers.previousAnswer(projectId, turns) : null;
       const ledger = prev ? facts.ledger.concat(prev.ledger) : facts.ledger;
       // The single, real model call — the ONLY 'model' step, bracketing the one
       // narration this app makes. No agent loop, so there is nothing else to say.
@@ -508,15 +522,16 @@ export function register() {
 
         // The guard runs BEFORE persistence, so the stored turn carries the note
         // and a reloaded conversation shows it too. `answer` below is the guarded
-        // text for the same reason — one string, seen everywhere. It reads the
-        // MODEL's prose only: "(No chart: At most 8 filters.)" is the app's own
-        // sentence, and its 8 is not a figure anyone invented.
-        const audited = answer && answer.ok
+        // text for the same reason — one string, seen everywhere. A refused answer
+        // is read whole, its reason included: the reason is the app's sentence, so
+        // its own digits ("At most 8 filters.") are no figure anyone invented — but
+        // what it QUOTES may be the model's words (Unknown dataset "…"), and a
+        // figure written into a name is a figure the model wrote.
+        const refused = answer && !answer.ok ? answer.reason : null;
+        const guarded = answer && answer.ok
           ? { text: answer.text, audit: answer.audit }
-          : guardAnswer(res.text, ledger);
-        const guarded = answer && !answer.ok
-          ? { text: `${audited.text}\n\n(No chart: ${answer.reason})`, audit: audited.audit }
-          : audited;
+          : refused === null ? guardAnswer(res.text, ledger)
+            : guardAnswer(`${res.text}\n\n(No chart: ${refused})`, ledger.concat(reasonLedger(refused)));
         const built = answer && answer.ok ? answer : null;
 
         await copilot.appendTurn(projectId, { role: 'user', text: q }, target);

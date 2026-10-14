@@ -20,11 +20,14 @@ import type { LedgerEntry } from './numberAudit';
 /** The block's first words — what ./suggestedAction's prompt calls it. */
 export const PREVIOUS_ANSWER = 'PREVIOUS ANSWER';
 
-const quoted = (s: string): string => `"${s}"`;
+/** A name or a text value as the block says it. A quote inside is escaped: left bare it would close the name, and what follows would read as fields the answer does not have. */
+const quoted = (s: string): string => JSON.stringify(s);
+
+const valuesOf = (f: Exclude<AnswerFilter, { period: unknown }>): Cell[] => (f.values ? f.values : f.value !== undefined ? [f.value] : []);
 
 function filterWords(f: AnswerFilter, withheld: ReadonlySet<string>): string {
   if ('period' in f) return `${quoted(f.column)} in ${f.period}` + (f.yearsBack ? `, yearsBack ${f.yearsBack}` : '');
-  const values: Cell[] = f.values ? f.values : f.value !== undefined ? [f.value] : [];
+  const values = valuesOf(f);
   if (!values.length) return `${quoted(f.column)} ${f.op}`;
   const said = withheld.has(f.column)
     ? WITHHELD
@@ -38,10 +41,17 @@ function filterWords(f: AnswerFilter, withheld: ReadonlySet<string>): string {
  * A top-N, a numeric filter value or a digit in a name is a SETTING the block
  * states, not a figure the app computed — but a reply that repeats it ("still
  * the top 5, above 100") must not be accused of inventing one, and a false
- * accusation costs more than the guard is worth (./numberAudit). So every
- * number the block PRINTS enters the ledger, the way a card's "Filtered to"
- * line already does; a withheld value is not printed, so it is not entered.
- * Any figure the block does not print is still caught.
+ * accusation costs more than the guard is worth (./numberAudit). So the
+ * numbers the block states enter the ledger; a withheld value is not printed,
+ * so it is not entered. Any figure the block does not state is still caught.
+ *
+ * The settings are entered as the NUMBERS they are, not read back off the
+ * text: there a threshold of 2000 passes for a year and is never entered, so
+ * "2,000" in a reply would be accused. A negative one is also entered without
+ * its sign ("losing more than 50"). Only words are harvested — the dataset's
+ * and the columns' own names, and the TEXT filter values, which a person or a
+ * model wrote: a digit in one may be said back ("Tier 2"), but none of them
+ * vouches for a percentage, the one figure the audit is strict about.
  */
 export function previousAnswerBlock(
   spec: AnswerSpec,
@@ -59,10 +69,20 @@ export function previousAnswerBlock(
   parts.push(`chart ${spec.chartType}`);
   const text = `${PREVIOUS_ANSWER} (the chart the user is looking at; names only):\n${parts.join('; ')}.`;
 
-  const entry = (value: number, unit: LedgerEntry['unit']): LedgerEntry =>
-    ({ label: 'a setting of the previous answer, not a computed figure', value, unit, source: 'previousAnswer' });
-  const ledger = harvestAppNumbers(text).map((h) => entry(h.value, h.unit));
-  // "top 5" reads as a list position to the harvest, so the cut is entered by hand.
-  if (spec.top) ledger.push(entry(spec.top, 'count'));
+  const settings: number[] = spec.top ? [spec.top] : [];
+  const words: string[] = [datasetName, spec.category, spec.series ?? '', ...spec.measures.map((m) => m.column)];
+  for (const f of spec.filters) {
+    words.push(f.column);
+    if ('period' in f) {
+      if (f.yearsBack) settings.push(f.yearsBack);
+    } else if (!withheld.has(f.column)) {
+      for (const v of valuesOf(f)) {
+        if (typeof v === 'number') settings.push(v, ...(v < 0 ? [-v] : []));
+        else if (typeof v === 'string') words.push(v);
+      }
+    }
+  }
+  const ledger = [...settings, ...words.flatMap((w) => harvestAppNumbers(w).map((h) => h.value))].map((value): LedgerEntry =>
+    ({ label: 'a setting of the previous answer, not a computed figure', value, unit: 'number', source: 'previousAnswer' }));
   return { text, ledger };
 }

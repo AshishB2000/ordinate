@@ -36,6 +36,7 @@ const comp: typeof import('../src/engine/live/compile') = require('../src/engine
 const dialects: typeof import('../src/engine/live/dialects') = require('../src/engine/live/dialects');
 const { duckdbDialect } = require('../src/engine/live/dialects/duckdb') as typeof import('../src/engine/live/dialects/duckdb');
 const answers: typeof import('../src/ipc/answers') = require('../src/ipc/answers');
+const catalog: typeof import('../src/app/catalog') = require('../src/app/catalog');
 const copilotIpc: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 const visualsIpc: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
@@ -160,6 +161,18 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
     ok('NEGATIVE CONTROL: an invented number is still caught, and said', !made.audit.ok && made.text.includes('Contains a figure the app did not compute: 987654.321'), show(made));
     ok('the live card says when the warehouse answered, in its facts', /Data as of: .* UTC\./.test(builtLive.factsText) && builtLive.card.asOf?.mode === 'live');
   }
+
+  // A filter VALUE on a column marked personal: the card a person sees says it, the facts a model narrates from do not.
+  const KEPT_OUT = 'zq-canary-live';
+  const markedSpec: AnswerSpec = { ...aSpec, filters: [{ column: 'cat', op: '!=', value: KEPT_OUT }] };
+  await H.as(ORG_A, () => catalog.setColumn(P, L, 'cat', { sensitivity: 'personal' }));
+  const hiddenLive = await H.as(ORG_A, () => answers.computeCard(P, markedSpec));
+  await H.as(ORG_A, () => catalog.setColumn(P, L, 'cat', { sensitivity: 'none' }));
+  const shownLive = await H.as(ORG_A, () => answers.computeCard(P, markedSpec));
+  ok('a filter value on a marked column: on the live card, withheld from the facts its narration reads',
+    !('ok' in hiddenLive) && hiddenLive.card.filterLabels[0] === `cat != ${KEPT_OUT}` && hiddenLive.factsText.includes('\nFiltered to: cat != (withheld).\n')
+    && !hiddenLive.factsText.includes(KEPT_OUT), show(hiddenLive).slice(0, 400));
+  ok('NEGATIVE CONTROL: unmarked, the same facts say it', !('ok' in shownLive) && shownLive.factsText.includes(`\nFiltered to: cat != ${KEPT_OUT}.\n`), show(shownLive).slice(0, 400));
 
   // ── 3. The Assistant's facts ───────────────────────────────────────────────
   const realViz = visualsIpc.vizDataFor;
