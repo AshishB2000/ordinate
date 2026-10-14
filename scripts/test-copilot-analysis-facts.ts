@@ -28,6 +28,7 @@ const analysis: typeof import('../src/analysis/analysis') = require('../src/anal
 const copilot: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
 const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
 const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+const fxStore: typeof import('../src/app/fxStore') = require('../src/app/fxStore');
 // The tile's side of the comparison: `analysis:tiles` and the handlers it batches, read from the RPC registry.
 const { handlers }: typeof import('../src/server/rpc') = require('../src/server/rpc');
 const analysesIpc: typeof import('../src/ipc/analysesServer') = require('../src/ipc/analysesServer');
@@ -212,6 +213,34 @@ async function main(): Promise<void> {
   const shownGone = await tiles(west);
   ok('a KPI whose metric was deleted is analysis:tiles’ fallback: its stored column, still filtered', shownGone[1].ok && Object.is(fellBack[1], shownGone[1].value) && Object.is(fellBack[1], shownWest[0].value),
     JSON.stringify([fellBack, shownGone]));
+
+  // ── 4. …in the dashboard's own currency ─────────────────────────────────────
+  // A dashboard's currency is saved state (fx settings) the page sends with every
+  // tile; the facts' money is in it too. DIFFERENTIAL against `analysis:tiles`
+  // asked as the page asks, with that currency.
+  const sales = await datasets.saveDataset(proj.id, {
+    name: 'Sales',
+    sourceKind: 'csv',
+    columns: [{ name: 'date', type: 'date' as const }, { name: 'amount', type: 'number' as const }],
+    rows: [['2024-03-01', 100], ['2024-03-02', 200]],
+  });
+  await fxStore.setProjectFx(proj.id, { target: 'USD' });
+  await fxStore.setColumnCurrency(proj.id, sales!.id, 'amount', { kind: 'fixed', code: 'EUR', date: 'date' });
+  const money = [{ type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 }, metric: { datasetId: sales!.id, column: 'amount', aggregation: 'sum', label: 'Amount' } }];
+  const inGbp = await analysis.saveAnalysis(proj.id, { name: 'In pounds', sheets: [{ name: 'S1', cards: money }] });
+  const inTarget = await analysis.saveAnalysis(proj.id, { name: 'In the project currency', sheets: [{ name: 'S1', cards: money }] });
+  await fxStore.setDashboardCurrency(proj.id, inGbp!.id, 'GBP');
+  const moneyTile = async (currency?: string): Promise<Tile> => (await (handlers.get('analysis:tiles') as (e: unknown, p: unknown) => Promise<Tile[]>)({}, {
+    projectId: proj.id, params: [], ...(currency ? { currency } : {}),
+    items: [{ kind: 'metric', datasetId: sales!.id, column: 'amount', aggregation: 'sum', filters: [] }],
+  }))[0];
+  const [gbpTile, usdTile] = [await moneyTile('GBP'), await moneyTile()];
+  ok('the fixture tells the two currencies apart', gbpTile.ok && usdTile.ok && typeof gbpTile.value === 'number' && !Object.is(gbpTile.value, usdTile.value), JSON.stringify([gbpTile, usdTile]));
+  const gbpGot = metricValues((await ipcCopilot.buildFacts(proj.id, { kind: 'analysis', id: inGbp!.id })).text);
+  ok('a KPI on a dashboard with its own currency is analysis:tiles’ figure in that currency', Object.is(gbpGot[0], gbpTile.value), `${gbpGot[0]} vs ${gbpTile.value}`);
+  // NEGATIVE CONTROL: the same card on a dashboard with no currency of its own follows the project's.
+  const usdGot = metricValues((await ipcCopilot.buildFacts(proj.id, { kind: 'analysis', id: inTarget!.id })).text);
+  ok('NEGATIVE CONTROL: a dashboard with no currency of its own reads in the project’s', Object.is(usdGot[0], usdTile.value), `${usdGot[0]} vs ${usdTile.value}`);
 }
 
 main()

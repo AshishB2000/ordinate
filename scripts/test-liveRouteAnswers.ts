@@ -43,6 +43,7 @@ const analysis: typeof import('../src/analysis/analysis') = require('../src/anal
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
 const metricsStore: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const scenarios: typeof import('../src/analysis/scenarios') = require('../src/analysis/scenarios');
+const relationships: typeof import('../src/analysis/relationships') = require('../src/analysis/relationships');
 
 const { fake, queryCache, ORG_A } = H;
 const show = (v: unknown): string => JSON.stringify(v);
@@ -245,6 +246,30 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
   fake.hook = null;
 
   ok('THE SPY: nothing here asked getDataset for the Live dataset', !hydrated.slice(from).includes(L), show(hydrated.slice(from)));
+
+  // AFTER the spy, because this case IS the safety net: a saved filter that reaches the Live dataset through a
+  // relationship makes the join ask for its table, and getDataset refuses. The tile answers that ONE card
+  // `live_dataset`, so the facts say n/a for it — the dock beside that dashboard still answers.
+  const joined = await H.as(ORG_A, async () => {
+    const side = await H.datasets.saveDataset(P, { name: 'Targets', sourceKind: 'csv', columns: [{ name: 'region', type: 'text' as const }, { name: 'units', type: 'number' as const }], rows: [['North', 5], ['South', 7]] });
+    if (!side) return null;
+    await relationships.saveRelationship(P, { from: { datasetId: side.id, column: 'region' }, to: { datasetId: L, column: 'region' }, cardinality: 'many_to_one' });
+    const card = { type: 'metric', metric: { datasetId: side.id, column: 'units', aggregation: 'sum', label: 'Units' }, layout: { x: 0, y: 0, w: 3, h: 2 } };
+    const save = (name: string, filters: unknown[]) => analysis.saveAnalysis(P, { name, filters, sheets: [{ name: 'One', cards: [card] }] } as unknown as Parameters<typeof analysis.saveAnalysis>[1]);
+    // `amt` is a column only the Live side has: the filter is answered by the join.
+    return { side: side.id, across: await save('Across the join', [{ type: 'filter', column: 'amt', op: '>', value: 0 }]), plain: await save('No filter', []) };
+  });
+  if (joined && joined.across && joined.plain) {
+    const acrossFilter = [{ type: 'filter', column: 'amt', op: '>', value: 0 }];
+    const refused = (await post('analysis:tiles', { projectId: P, params: [], items: [{ kind: 'metric', datasetId: joined.side, column: 'units', aggregation: 'sum', filters: acrossFilter }] })).value[0];
+    const acrossFacts = await H.as(ORG_A, () => copilotIpc.buildFacts(P, { kind: 'analysis', id: joined.across!.id })).then((f) => f.text, (err: unknown) => `THREW ${String(err)}`);
+    const plainFacts = (await H.as(ORG_A, () => copilotIpc.buildFacts(P, { kind: 'analysis', id: joined.plain!.id }))).text;
+    ok('copilot: a card its tile refuses as live_dataset is n/a in the facts, and the question is still answered', refused.ok === false && refused.code === 'live_dataset'
+      && acrossFacts.includes('- Units: n/a'), show([refused, acrossFacts]));
+    ok('NEGATIVE CONTROL: without that filter the same card has its figure', /^- Units: 12$/m.test(plainFacts), plainFacts);
+  } else {
+    ok('the joined fixture saved', false);
+  }
   await close();
   finish();
 })().catch((err: unknown) => {

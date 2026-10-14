@@ -33,7 +33,7 @@ import * as answers from './answers';
 import { vizDataFor } from './visuals';
 import { isLiveFigureError } from './liveRoute';
 import { isLiveDatasetError } from '../data/liveDataset';
-import { metricCardFigures, savedScope, type SavedScope } from './copilotCards';
+import { inDashboardCurrency, metricCardFigures, savedScope, type SavedScope } from './copilotCards';
 // The catalog's column docs, with a sensitivity mark carried across a later
 // rename — so a withheld column stays withheld under its new name.
 import { assistantColumnDocs as catalogColumns } from '../app/sharePolicy';
@@ -264,9 +264,12 @@ export async function buildFacts(
       // Every figure as the dashboard shows it: under its saved filters and parameters (./copilotCards), each
       // KPI through its tile's doors, a defined metric as a card of it would read here — one number per name.
       const scope = savedScope(a);
-      const cards = await metricCardFigures(projectId, a, scope);
+      // …and in the dashboard's own currency, as the page asks every tile.
+      const { cards, defined } = await inDashboardCurrency(projectId, a.id, async () => ({
+        cards: await metricCardFigures(projectId, a, scope),
+        defined: await factMetrics(projectId, undefined, scope),
+      }));
       emit({ kind: 'compute', label: 'Computed ' + plural(cards.length, 'metric'), count: cards.length });
-      const defined = await factMetrics(projectId, undefined, scope);
       if (defined.length) {
         emit({ kind: 'compute', label: 'Resolved ' + plural(defined.length, 'metric'), count: defined.length });
       }

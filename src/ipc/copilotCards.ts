@@ -3,7 +3,8 @@
 // Each metric card's ONE number, as its tile shows it on the dashboard AS SAVED:
 // under the dashboard-wide filters, every filter control at its default and the
 // parameters at their saved values (savedViews.viewScope — what the page is
-// computed under when it is opened), and through the doors `analysis:tiles`
+// computed under when it is opened), in the dashboard's own currency when it
+// has one (inDashboardCurrency), and through the doors `analysis:tiles`
 // answers through, in its order. A card that names a saved metric is that metric
 // (resolveMetric, as `metric:value`); one with no metric — none named, deleted,
 // or no figure to give — is its own column and aggregation (computeCardMetric,
@@ -17,8 +18,11 @@ import type { Analysis } from '../analysis/analysis';
 import { sanitizeDashboardFilters } from '../analysis/dashboards';
 import { paramValues, resolveFilterParams, type ParamValues } from '../analysis/params';
 import { viewScope } from '../analysis/savedViews';
+import { getFx } from '../app/fxStore';
+import { isLiveDatasetError } from '../data/liveDataset';
 import type { FilterStep } from '../data/transforms';
 import { computeCardMetric } from './dashboards';
+import { fxScope } from './fxQuery';
 import { isLiveFigureError } from './liveRoute';
 import { resolveMetric } from './metrics';
 
@@ -34,12 +38,27 @@ export function savedScope(a: Analysis): SavedScope {
   return { filters: resolveFilterParams(sanitizeDashboardFilters(scope.filters), params).steps, params };
 }
 
-/** A door's answer — or null where a Live figure could not be given: n/a, never a guess (L2.4). Anything else is a real failure. */
+/**
+ * Run `fn` in the dashboard's OWN currency (fx settings, `fx:dashboard`), as the
+ * open page asks every tile — saved state, like its filters. A dashboard with
+ * none follows the project's target, as `fxScope` does for no code.
+ */
+export async function inDashboardCurrency<T>(projectId: string, analysisId: string, fn: () => Promise<T>): Promise<T> {
+  return fxScope((await getFx(projectId)).dashboards[analysisId], fn);
+}
+
+/**
+ * A door's answer — or null where this ONE card has no figure to give: a Live
+ * figure its warehouse could not give (L2.4), or a card the tile itself refuses
+ * with `live_dataset` (a saved filter that reaches a Live dataset through a
+ * relationship). n/a for that card, never a guess, and never the whole
+ * dashboard's questions refused with it. Anything else is a real failure.
+ */
 async function orNone<T>(asked: Promise<T>): Promise<T | null> {
   try {
     return await asked;
   } catch (err) {
-    if (isLiveFigureError(err)) return null;
+    if (isLiveFigureError(err) || isLiveDatasetError(err)) return null;
     throw err;
   }
 }
