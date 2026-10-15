@@ -145,3 +145,9 @@ export function pointNoDimension(min: string, max: string): string {
 export function pointNotSplittable(): string {
   return t('driverPointMessages.this_measure_does_not_add_up');
 }
+
+/** Explain-a-change over the latest periods (ipc/drivers.ts) when the column has
+ *  fewer than two CLOSED ones — a month the data has not finished is not compared. */
+export function fewerThanTwoPeriods(column: string): string {
+  return t('driverPointMessages.has_fewer_than_two_complete_periods', { column });
+}
