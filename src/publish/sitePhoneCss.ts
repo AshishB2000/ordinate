@@ -34,6 +34,7 @@ export function phoneCss(max: number): string {
     .pub-filters-open { position: relative; display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; height: 36px; margin: 4px 0; padding: 0 12px;
       border: 1px solid var(--border-2); border-radius: 999px; background: var(--surface); color: var(--text-strong); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
     .pub-filters-open::after { content: ''; position: absolute; inset: -4px 0; }
+    .pub-icon { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .pub-filters-open:has(.pub-filters-badge:not([hidden])) { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); }
     .pub-filters-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px;
       border-radius: 999px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }

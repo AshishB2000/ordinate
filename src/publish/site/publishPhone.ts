@@ -161,3 +161,28 @@ function ppStrip(cards: HTMLElement[], order: number): HTMLElement {
   later();
   return strip;
 }
+
+/** A chart on a phone: the legend under the plot, where it does not take a narrow chart's width; axis labels level and thinned. */
+function ppPhoneChart(cfg: any): void {
+  const o = cfg.options || {};
+  if (o.plugins && o.plugins.legend) o.plugins.legend.position = 'bottom';
+  for (const k of ['x', 'y']) {
+    const sc = o.scales && o.scales[k];
+    if (sc && sc.type !== 'linear' && sc.type !== 'logarithmic') sc.ticks = { ...(sc.ticks || {}), autoSkip: true, maxRotation: 0, maxTicksLimit: 6 };
+  }
+}
+
+/** The app's filter glyph (web/src/ui/icons/paths.ts `filter`), drawn in the button's own colour. */
+function ppFilterIcon(): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '16');
+  svg.setAttribute('height', '16');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('class', 'pub-icon');
+  const p = document.createElementNS(ns, 'path');
+  p.setAttribute('d', 'M22 3H2l8 9.5V19l4 2v-8.5Z');
+  svg.appendChild(p);
+  return svg;
+}

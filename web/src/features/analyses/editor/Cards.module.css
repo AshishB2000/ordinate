@@ -297,3 +297,38 @@
   width: 44px;
   height: 44px;
 }
+/* A KPI on a phone is a tile in a strip two to a screen: its name a small
+   label on top, the figure under it, the ⋯ in the corner — no rule, no
+   repeated name under the figure, no freshness (the header says it once). */
+:global([data-phone]) [data-kind='metric'] > .head {
+  flex-basis: 36px;
+  height: 36px;
+  padding: var(--sp-4) 0 0 var(--sp-12);
+  border-bottom: 0;
+}
+:global([data-phone]) [data-kind='metric'] .title {
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+:global([data-phone]) [data-kind='metric'] .asOf,
+:global([data-phone]) [data-kind='metric'] .ctrls > :not(:last-child) {
+  display: none;
+}
+:global([data-phone]) [data-kind='metric'] .ctrls button {
+  margin: -4px 0;
+}
+:global([data-phone]) [data-kind='metric'] > .body {
+  padding: 0 var(--sp-12) var(--sp-12);
+}
+:global([data-phone]) [data-kind='metric'] .metric {
+  justify-content: flex-end;
+}
+:global([data-phone]) [data-kind='metric'] .value {
+  font-size: 24px;
+}
+:global([data-phone]) [data-kind='metric'] .metricLabel {
+  display: none;
+}

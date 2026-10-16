@@ -247,7 +247,7 @@ export function VisualCard({
       const add = { metaKey: true, ctrlKey: false };
       if (on) out.push({ label: `Remove “${at.shown}” from the filter`, hint: 'The other cards stop narrowing to it', icon: 'x', run: () => onMark(at.value, series, add) });
       else {
-        out.push({ label: `Filter the dashboard to “${at.shown}”`, hint: `The other cards show ${col}: ${at.shown}`, icon: 'target', run: () => onMark(at.value, series) });
+        out.push({ label: `Filter to “${at.shown}”`, hint: `Every other card shows ${col}: ${at.shown}`, icon: 'target', run: () => onMark(at.value, series) });
         if (now.length) out.push({ label: `Add “${at.shown}” to the filter`, hint: `Keeps ${now.length === 1 ? 'the value' : `the ${now.length} values`} already picked`, icon: 'plus', run: () => onMark(at.value, series, add) });
       }
     }

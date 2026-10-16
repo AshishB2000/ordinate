@@ -122,6 +122,8 @@ export interface Session {
 export interface E2eOptions {
   /** Max RPCs per page load (default 25). */
   readonly rpcBudget?: number;
+  /** A device instead of the 1440×900 desktop: a phone is `{ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true }`. */
+  readonly device?: { viewport: { width: number; height: number }; hasTouch?: boolean; isMobile?: boolean };
 }
 
 // One server and one browser per spec file (node:test runs each file in its
@@ -177,6 +179,7 @@ export async function openSession(opts: E2eOptions = {}): Promise<Session & { cl
   const context = await browser.newContext({
     baseURL: srv.base,
     viewport: { width: 1440, height: 900 },
+    ...opts.device,
     ...(contextHeaders ? { extraHTTPHeaders: contextHeaders } : {}),
   });
   const page = await context.newPage();

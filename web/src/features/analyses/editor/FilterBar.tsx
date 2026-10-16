@@ -17,6 +17,7 @@ import { allControls } from './doc';
 import s from './FilterBar.module.css';
 import { ResetControls } from '../../dashboards/ControlsExtras';
 import { FiltersSheet } from '../../dashboards/phone/FiltersSheet';
+import { isPhoneReader } from '../../dashboards/phone/phoneBlocks';
 
 /** The sheet's control cards in the order their author built them (a sorted COPY). */
 export function barControls(cards: readonly Card[]): Card[] {
@@ -100,8 +101,8 @@ export function Chip({ card }: { card: Card }) {
         <ControlWidget projectId={ed.projectId} control={control} value={ed.controlValue(card.id)} onChange={(v) => ed.setControl(card.id, v)} />
       )}
       {active && <IconButton icon="x" size="sm" label={`Clear ${label}`} onClick={clear} />}
-      {/* Edit, the default and Remove change the dashboard: a viewer sets the control's value, and that is all. */}
-      {!ed.readOnly && <Menu label={`Actions for ${label}`} align="end" trigger={<IconButton icon="more-horizontal" size="sm" label={`Actions for ${label}`} />} items={items} />}
+      {/* Edit, the default and Remove change the dashboard: a viewer sets the control's value, and that is all — as does anyone reading it on a phone. */}
+      {!ed.readOnly && !isPhoneReader(ed) && <Menu label={`Actions for ${label}`} align="end" trigger={<IconButton icon="more-horizontal" size="sm" label={`Actions for ${label}`} />} items={items} />}
       {editing && !isParam && (
         <ControlDialog
           projectId={ed.projectId}

@@ -49,6 +49,19 @@ Desktop and tablet do not change by one pixel: everything is behind the existing
 | Reduced motion | Sheet slide, dot fill and smooth scrolling all go: `scroll-behavior: auto`, no animations (base.css's global block plus explicit `@media (prefers-reduced-motion)` in the new modules and the published CSS). | |
 | Touch targets | Every control the phone header, sheets, card heads and dots draw is ≥ 44 × 44 px. Card heads on a phone lose `touch-action: none` (a drag handle on desktop; on a phone it froze the page's scroll under a finger that landed on a title). | |
 | Migration / server | None. No contract, no channel, no figure: the phone is presentation over answers the server already sends. | |
+| A KPI tile | Its name a small uppercase label on top, the figure (24 px) under it, ⋯ in the corner; no rule, no repeated name, no comment button (Comments are in the header's ⋯). | Two to a 375 px screen leaves ~126 px of text: "$686.2K" fits, a title row with two buttons did not. |
+| Card freshness | The header says "As of …" once; a card repeats it only when its own figure is stale (the warning tone). | A caption on every card was ellipsized to "As…" at phone width. |
+| Published cards have no id | `pkPhoneBlocks` names cards by their **index** in the sheet. | `sanitize.ts` whitelists what a page may carry (a security control); adding ids was not worth touching it. |
+
+### A root cause found on the way
+
+Every **viewer** (read-only role) saw the desktop grid on every screen, a phone's included — the
+complaint behind this feature. `Editor.tsx SheetHost` measured "the bench less the rail" by
+subtracting the bench's first child; a viewer has no rail, so the first child was the sheet itself
+and the measured width was 0 → `pickSize(0)` = desktop. Fixed: the rail is subtracted only when it is
+there (an editor's rail hidden on a phone keeps its 48 px counted, so hiding it cannot flip the size
+back). Consequence, deliberate: a viewer in a 600–899 px window now gets the **tablet** layout an
+author derived or arranged for that size, as an editor always has. Desktop (≥ 900 px) is unchanged.
 
 ## Pieces
 
@@ -76,23 +89,42 @@ In the app (`web/`):
 Published (`src/publish/`):
 
 - `site/publishCore.ts` — `pkPhoneBlocks(cards)`: the phone order (phone cell y, x; hidden out;
-  no cell → after, in desktop order) folded into KPI strips. Pure, node-tested.
-- `site/publishClient.ts` — the phone bar (title, published stamp, Filters + badge), the strips
-  (cards hidden from the grid on a phone, shown in the strip), each card's phone order and height
-  as custom properties, the filter sheet's scrim + handle + swipe, the tap sheet, legend below on a
-  phone (redrawn when the breakpoint is crossed).
-- `siteHtml.ts` — the phone CSS, inside the existing phone media query only.
+  no cell → after, in desktop order) folded into KPI strips, cards named by index. Pure.
+- `site/publishPhone.ts` (new inlined script, `SiteAssets.phoneJs`, between core and client) —
+  what CSS cannot build: `ppSheet` (a tapped point's bottom sheet), `ppSwipe`, `ppStrip` (the
+  strip and its dots), `ppStamp` ("Published …"), `ppPhoneChart` (legend below, level and thinned
+  axis labels), the filter glyph. `PP_PHONE_MQ` is the stylesheet's breakpoint to the pixel.
+- `site/publishClient.ts` — the title row (`display: contents` wider than a phone), the Filters
+  button + badge, the filter sheet's scrim, handle, Reset / Done and swipe; each tile's phone order
+  and height as custom properties; the strips; a tap asks before it filters; crossing the
+  breakpoint redraws.
+- `sitePhoneCss.ts` (new) — the phone rules, all inside the phone media query; `siteHtml.sizeCss`
+  adds them and only ever hides the new elements outside it (`test-publishSite` checks, with a
+  negative control).
+
+## Verification
+
+- Desktop unchanged: the dashboards e2e run on `develop` (b692356a) and on this branch at
+  1440 × 900, every screenshot pixel-compared. Published pages: **0 pixels** differ. In the app the
+  only differences are the clock ("As of 8:44 PM"), the random marks the click-filter test hits,
+  and whether the map tile had loaded when the shot was taken — no layout moved.
+- The pinned phone preview (analyses e2e) still passes with its Filters sheet now a bottom sheet.
 
 ## Tests
 
-- Vitest: `phoneBlocks.test.ts` (reading order with spans, gaps, overlapping rows, groups; KPI runs;
-  hidden cards; an edited phone order), `Sheet.test.tsx` (title/description, Esc, swipe past the
-  threshold closes, a short drag springs back, footer buttons), `KpiStrip.test.tsx`,
-  `PointSheet.test.tsx`.
-- Node: `scripts/test-publishSite.ts` gains `pkPhoneBlocks` cases (same shapes) and the CSS guard
-  that every phone rule sits inside the phone media query (negative control: a rule outside fails).
-- e2e `web/e2e/phone.e2e.ts` at 375 × 812, touch: the in-app viewer (header, strip swipe + dots,
-  stacked charts, Filters sheet, point sheet, map gestures, legend), the `/p/` page (bar, strip,
-  sheet, tap sheet), light + dark screenshots of each; and **desktop unchanged**: at 1440 × 900 no
-  `data-phone`, the grid has 12 tracks, the shell's rail and top bar are there, and the published
-  page's grid has 12 tracks.
+- Vitest: `phone/phoneBlocks.test.ts` (reading order with spans, gaps, overlapping rows, groups;
+  KPI runs; hidden cards; an edited phone order; and DIFFERENTIAL — `pkPhoneBlocks` over the
+  server's `publishCells` against `phoneBlocks` over `resolve`, 200 seeded sheets),
+  `ui/Sheet.test.tsx` (name/description, Esc, Done, a swipe past the threshold closes, a short drag
+  springs back, a press on Close is not a drag), `phone/sheets.test.tsx` (the strip's page maths,
+  the strip region, the point sheet closes then runs).
+- Node: `scripts/test-publishSite.ts` gains `pkPhoneBlocks` cases, the client/stylesheet
+  breakpoint agreement, the script order, and the guard that outside the phone media query the new
+  elements are only ever hidden (with a negative control).
+- e2e `web/e2e/phone.e2e.ts` at 375 × 812, touch (`E2eOptions.device`, new): the in-app viewer
+  (chrome hidden, header, strip + dots + snap, stacked full-width charts at phone height, map
+  cooperative gestures, the Filters sheet + badge + swipe-to-close + Clear all, a tapped bar → point
+  sheet → filter chip, the drill as a bottom sheet), a wide table with its first column pinned, the
+  `/p/` page (sticky bar, strip, filter sheet + badge, a tapped bar asks first, a Dark style), and
+  **desktop unchanged** (no `data-phone`, 12 tracks, the shell, the published grid 12 tracks and
+  no strip). Screenshots: `web/e2e/__screens__/phone-*.png`.

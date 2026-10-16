@@ -41,27 +41,31 @@ function pkPayload(card: any, combo: number): any {
  * layout's order — each card's phone cell read row by row, then left to right;
  * a card hidden on a phone left out; a card with no phone cell after the rest,
  * in desktop order — with every run of consecutive KPI cards folded into one
- * swipeable strip. A lone KPI stays a card. The app folds the same way
- * (web/src/features/dashboards/phone/phoneBlocks.ts; its test compares the two).
+ * swipeable strip. A lone KPI stays a card. Cards are named by their INDEX in
+ * the sheet (a published card carries no id: sanitize.ts's whitelist). The app
+ * folds the same way (web/src/features/dashboards/phone/phoneBlocks.ts; its
+ * test compares the two).
  */
-function pkPhoneBlocks(cards: any[]): Array<{ kind: 'strip'; ids: string[] } | { kind: 'card'; id: string }> {
-  const at = (c: any): [number, number, number] => {
+function pkPhoneBlocks(cards: any[]): Array<{ kind: 'strip'; at: number[] } | { kind: 'card'; at: number }> {
+  const key = (c: any): [number, number, number] => {
     const p = c.sizes && c.sizes.phone;
     return p && !p.hidden ? [0, p.y, p.x] : [1, c.layout.y, c.layout.x];
   };
-  const shown = cards.filter((c) => !(c.sizes && c.sizes.phone && c.sizes.phone.hidden));
-  const order = shown.map((c, i) => ({ c, k: at(c), i })).sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1] || a.k[2] - b.k[2] || a.i - b.i);
-  const out: Array<{ kind: 'strip'; ids: string[] } | { kind: 'card'; id: string }> = [];
-  let run: string[] = [];
+  const order = cards
+    .map((c, i) => ({ c, k: key(c), i }))
+    .filter((e) => !(e.c.sizes && e.c.sizes.phone && e.c.sizes.phone.hidden))
+    .sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1] || a.k[2] - b.k[2] || a.i - b.i);
+  const out: Array<{ kind: 'strip'; at: number[] } | { kind: 'card'; at: number }> = [];
+  let run: number[] = [];
   const flush = (): void => {
-    if (run.length > 1) out.push({ kind: 'strip', ids: run });
-    else if (run.length) out.push({ kind: 'card', id: run[0] });
+    if (run.length > 1) out.push({ kind: 'strip', at: run });
+    else if (run.length) out.push({ kind: 'card', at: run[0] });
     run = [];
   };
-  for (const { c } of order) {
-    if (c.kind === 'metric') { run.push(c.id); continue; }
+  for (const { c, i } of order) {
+    if (c.kind === 'metric') { run.push(i); continue; }
     flush();
-    out.push({ kind: 'card', id: c.id });
+    out.push({ kind: 'card', at: i });
   }
   flush();
   return out;

@@ -47,7 +47,7 @@ function phoneLeaks(css: string): string[] {
     if (at < 0) break;
     let i = flat.indexOf('{', at) + 1;
     let depth = 1;
-    while (depth && i < flat.length) depth += flat[i] === '{' ? 1 : flat[i] === '}' ? -1 : 0, i++;
+    for (; depth && i < flat.length; i++) depth += flat[i] === '{' ? 1 : flat[i] === '}' ? -1 : 0;
     flat = flat.slice(0, at) + flat.slice(i);
   }
   const PHONE = /pub-(kpis|dashhead|scrim|filters-grab|filters-foot|sheet|dot|in-strip|filters-badge)/;
@@ -202,19 +202,20 @@ async function main(): Promise<void> {
   ok('core: a feature is placed by its first vertex', JSON.stringify(ctx.pkFirstPoint({ type: 'MultiPolygon', coordinates: [[[[1, 2], [3, 4]]]] })) === '[1,2]');
   // The phone (docs/phone-dashboards): tiles in the phone layout's order, KPI runs folded into strips.
   const cell = (x: number, y: number) => ({ phone: { x, y, w: 1, h: 2 } });
-  const blocks = (cards: any[]) => JSON.stringify(ctx.pkPhoneBlocks(cards)); // any: published cards
+  // A published card has no id (sanitize.ts): the fold names cards by their index in the sheet.
+  const blocks = (cards: any[]) => JSON.stringify(ctx.pkPhoneBlocks(cards.map(({ id: _id, ...c }) => c))); // any: published cards
   ok('phone: a run of KPIs is one strip, a chart after it a card',
     blocks([{ id: 'c', kind: 'chart', layout: { x: 0, y: 2 }, sizes: { phone: { x: 0, y: 4, w: 2, h: 6 } } },
       { id: 'a', kind: 'metric', layout: { x: 0, y: 0 }, sizes: cell(0, 0) }, { id: 'b', kind: 'metric', layout: { x: 3, y: 0 }, sizes: cell(1, 0) }])
-      === JSON.stringify([{ kind: 'strip', ids: ['a', 'b'] }, { kind: 'card', id: 'c' }]));
+      === JSON.stringify([{ kind: 'strip', at: [1, 2] }, { kind: 'card', at: 0 }]));
   ok('phone: a lone KPI stays a card; a chart between two KPIs splits them',
     blocks([{ id: 'a', kind: 'metric', layout: { x: 0, y: 0 }, sizes: cell(0, 0) }, { id: 'c', kind: 'chart', layout: { x: 0, y: 1 }, sizes: cell(0, 2) },
       { id: 'b', kind: 'metric', layout: { x: 0, y: 5 }, sizes: cell(0, 8) }])
-      === JSON.stringify([{ kind: 'card', id: 'a' }, { kind: 'card', id: 'c' }, { kind: 'card', id: 'b' }]));
+      === JSON.stringify([{ kind: 'card', at: 0 }, { kind: 'card', at: 1 }, { kind: 'card', at: 2 }]));
   ok('phone: the PHONE cell orders (an edited phone order wins over the desktop grid); hidden cards are left out; no cell goes last',
     blocks([{ id: 'late', kind: 'text', layout: { x: 0, y: 0 } }, { id: 'a', kind: 'chart', layout: { x: 0, y: 0 }, sizes: cell(0, 9) },
       { id: 'b', kind: 'chart', layout: { x: 0, y: 9 }, sizes: cell(0, 0) }, { id: 'gone', kind: 'metric', layout: { x: 0, y: 1 }, sizes: { phone: { hidden: true } } }])
-      === JSON.stringify([{ kind: 'card', id: 'b' }, { kind: 'card', id: 'a' }, { kind: 'card', id: 'late' }]));
+      === JSON.stringify([{ kind: 'card', at: 2 }, { kind: 'card', at: 1 }, { kind: 'card', at: 0 }]));
   ok('phone: an empty sheet folds to nothing', blocks([]) === '[]');
   const phoneMq = `(max-width: ${BREAKPOINTS.phone + 39}px)`;
   ok('phone: the client\'s breakpoint is the stylesheet\'s, to the pixel',

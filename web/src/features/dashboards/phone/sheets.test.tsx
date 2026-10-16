@@ -44,7 +44,7 @@ describe('PointSheet', () => {
         chart="Revenue by category"
         onClose={onClose}
         actions={[
-          { label: 'Filter the dashboard to “Furniture”', hint: 'The other cards show category: Furniture', icon: 'target', run: () => calls.push('filter') },
+          { label: 'Filter to “Furniture”', hint: 'Every other card shows category: Furniture', icon: 'target', run: () => calls.push('filter') },
           { label: 'Show the rows behind this point', icon: 'table', run: () => calls.push('rows') },
         ]}
       />,

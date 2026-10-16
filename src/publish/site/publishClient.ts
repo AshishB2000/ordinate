@@ -292,8 +292,8 @@ function pcChartBody(card: { chartType: string; category?: string }, payload: an
   holder.appendChild(canvas);
   if (typeof Chart === 'function') {
     const cfg = pkChartConfig(card.chartType, payload, pcRamp(), pcFmt);
-    // A phone: the legend under the plot, where it does not take a narrow chart's width (publishPhone.ts).
-    if (ppIsPhone() && cfg.options.plugins && cfg.options.plugins.legend) cfg.options.plugins.legend.position = 'bottom';
+    // A phone: the legend under the plot, fewer level axis labels (publishPhone.ts).
+    if (ppIsPhone()) ppPhoneChart(cfg);
     cfg.options.onClick = (_e: any, els: any[]) => {
       if (els && els.length && payload.labels) onPick(String(payload.labels[els[0].index]));
     };
@@ -433,6 +433,7 @@ function pcDashboard(page: any, root: HTMLElement): void {
     open.type = 'button';
     open.setAttribute('aria-controls', 'pub-filters');
     open.setAttribute('aria-expanded', 'false');
+    open.appendChild(ppFilterIcon());
     open.appendChild(pcEl('span', '', d.controls.length ? 'Filters' : 'Views'));
     open.appendChild(badge);
     // The sheet's top — a handle to swipe it down by and its name — and its foot, shown only while it is a sheet.
@@ -514,20 +515,17 @@ function pcDashboard(page: any, root: HTMLElement): void {
     // Controls moved to the filter bar, so the rows they sat on are empty: start
     // the grid at the first row a tile actually uses.
     const top = Math.min(...s.cards.map((c: any) => c.layout.y));
-    const els = new Map<string, HTMLElement>();
-    for (const card of s.cards) {
-      const el = pcCard(card, combo < 0 ? 0 : combo, page, pick, top);
-      els.set(card.id, el);
-      grid.appendChild(el);
-    }
+    const els: HTMLElement[] = s.cards.map((card: any) => grid.appendChild(pcCard(card, combo < 0 ? 0 : combo, page, pick, top)));
     // A phone reads the tiles in one column, in the phone layout's order, each run of KPIs one swipeable strip
     // (publishCore.ts pkPhoneBlocks). Every tile carries its place; the strips exist on every size and the
     // stylesheet shows them — and hides the KPIs they hold from the grid — only on a phone.
-    const byId = new Map<string, any>(s.cards.map((c: any) => [c.id, c]));
     pkPhoneBlocks(s.cards).forEach((b, k) => {
-      if (b.kind === 'card') return void els.get(b.id)?.style.setProperty('--pc-p-ord', String(k));
-      for (const id of b.ids) els.get(id)?.classList.add('pub-in-strip');
-      grid.appendChild(ppStrip(b.ids.map((id) => pcCard(byId.get(id), combo < 0 ? 0 : combo, page, pick, top)), k));
+      if (b.kind === 'card') {
+        els[b.at].style.setProperty('--pc-p-ord', String(k));
+        return;
+      }
+      for (const i of b.at) els[i].classList.add('pub-in-strip');
+      grid.appendChild(ppStrip(b.at.map((i) => pcCard(s.cards[i], combo < 0 ? 0 : combo, page, pick, top)), k));
     });
     const narrowed = picks.filter((v, i) => v !== defaults[i]).length;
     badge.textContent = narrowed ? String(narrowed) : '';

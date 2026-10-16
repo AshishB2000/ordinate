@@ -113,11 +113,12 @@ const ROOT = path.resolve(process.cwd(), '..');
 const require = createRequire(path.join(ROOT, 'package.json'));
 // any: the legacy layout module is untyped CommonJS
 const sizeLayout: any = require(path.join(ROOT, 'src', 'analysis', 'sizeLayout.js'));
-const core: { pkPhoneBlocks(cards: unknown[]): unknown } = (() => {
+type PkBlock = { kind: 'strip'; at: number[] } | { kind: 'card'; at: number };
+const core: { pkPhoneBlocks(cards: unknown[]): PkBlock[] } = (() => {
   const ctx = {};
   vm.createContext(ctx);
   vm.runInContext(readFileSync(path.join(ROOT, 'src', 'publish', 'site', 'publishCore.js'), 'utf8'), ctx);
-  return ctx as { pkPhoneBlocks(cards: unknown[]): unknown };
+  return ctx as { pkPhoneBlocks(cards: unknown[]): PkBlock[] };
 })();
 
 function rng(seed: number) {
@@ -154,8 +155,10 @@ describe('the published page folds the same way (differential)', () => {
     for (let seed = 1; seed <= 200; seed++) {
       const { cards, stored } = sheetOf(seed);
       const cells = sizeLayout.publishCells(cards, stored ? { phone: stored } : undefined);
-      const published = cards.map((c) => ({ id: c.id, kind: c.type === 'metric' ? 'metric' : 'chart', layout: c.layout, sizes: cells[c.id] }));
-      deepStrictEqual(JSON.parse(JSON.stringify(core.pkPhoneBlocks(published))), phoneBlocks(resolve(cards, stored, 'phone').items, cards), `seed ${seed}`);
+      // A published card has no id (sanitize.ts): the page's fold names cards by index; named back here to compare.
+      const published = cards.map((c) => ({ kind: c.type === 'metric' ? 'metric' : 'chart', layout: c.layout, sizes: cells[c.id] }));
+      const named = core.pkPhoneBlocks(published).map((b) => (b.kind === 'strip' ? { kind: 'strip', ids: b.at.map((i) => cards[i].id) } : { kind: 'card', id: cards[b.at].id }));
+      deepStrictEqual(JSON.parse(JSON.stringify(named)), phoneBlocks(resolve(cards, stored, 'phone').items, cards), `seed ${seed}`);
     }
   });
 });
