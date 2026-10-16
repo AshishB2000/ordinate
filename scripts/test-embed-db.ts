@@ -77,7 +77,6 @@ async function suite(adminUrl: string): Promise<void> {
     const boss = as('boss');
     const bob = as('bob');
     const alice = as('alice');
-    const carol = as('carol');
     const pid: string = (await boss.call('projects:create', { name: 'Customer portal' })).body.id;
     for (const [who, role] of [['alice', 'viewer'], ['bob', 'editor']]) await boss.call('project:share', { projectId: pid, member: { userId: await uid(who) }, role });
     const BOSS: B.Identity = { user: { email: 'boss@acme.test', role: 'admin' }, org: { id: 'acme' } };
