@@ -149,7 +149,13 @@ async function suite(adminUrl: string): Promise<void> {
     ok('preview: opened top-level (not in an iframe) → refused', top.status === 403 && /inside Ordinate/.test(top.text), `${top.status}`);
     const cross = await get(pvToken, { 'sec-fetch-dest': 'iframe', 'sec-fetch-site': 'cross-site' });
     ok('preview: framed by another site → refused', cross.status === 403);
-    const inApp = await get(pvToken, { 'sec-fetch-dest': 'iframe', 'sec-fetch-site': 'same-origin', referer: `${base}/admin?tab=embedding` });
+    const forged = await get(pvToken, { 'sec-fetch-dest': 'iframe', 'sec-fetch-site': 'same-origin' });
+    ok('preview: the right Sec-Fetch headers WITHOUT a signed-in member (curl) → refused', forged.status === 403 && /inside Ordinate/.test(forged.text), `${forged.status}`);
+    const stranger = await get(pvToken, { 'sec-fetch-dest': 'iframe', 'sec-fetch-site': 'same-origin', 'x-forwarded-email': 'carol@acme.test' });
+    ok('preview: a member without access to the project → not found', stranger.status === 404, `${stranger.status}`);
+    const hostPreview = await get(hostSign(SECRET, { pub: site.id, dash: s.aid, exp: now() + 300, prv: 1 }), { 'sec-fetch-dest': 'iframe', 'sec-fetch-site': 'same-origin', 'x-forwarded-email': 'boss@acme.test' });
+    ok('preview: a host signing `prv` with the org secret → refused (only the server can make a preview)', hostPreview.status === 403 && /not valid/.test(hostPreview.text), `${hostPreview.status}`);
+    const inApp = await get(pvToken, { 'sec-fetch-dest': 'iframe', 'sec-fetch-site': 'same-origin', referer: `${base}/admin?tab=embedding`, 'x-forwarded-email': 'bob@acme.test' });
     ok('preview: in a same-origin iframe → the page, frame-ancestors \'self\' only', inApp.status === 200 && inApp.csp === `${pageCsp(inApp.text)}; frame-ancestors 'self'` && inApp.xfo === null, `${inApp.status} ${inApp.csp.slice(-60)}`);
 
     const good = (extra: Record<string, unknown> = {}) => hostSign(SECRET, { pub: site.id, dash: s.aid, exp: now() + 600, ...extra });
@@ -188,7 +194,7 @@ async function suite(adminUrl: string): Promise<void> {
     await expect('alg none', `${b64({ alg: 'none', kid: 'acme' })}.${b64({ pub: site.id, exp: now() + 60 })}.`, 403, false);
     await expect('alg HS512', hostSign(SECRET, { pub: site.id, exp: now() + 60 }, { alg: 'HS512', kid: 'acme' }), 403, false);
     await expect('a bad signature', hostSign(SECRET + 'x', { pub: site.id, exp: now() + 60 }), 403, false, /not valid/);
-    await expect('an org that does not exist', hostSign(SECRET, { pub: site.id, exp: now() + 60 }, { alg: 'HS256', kid: 'globex' }), 403, false, /not available/);
+    await expect('an org that does not exist (the same answer as a bad signature: no probe tells them apart)', hostSign(SECRET, { pub: site.id, exp: now() + 60 }, { alg: 'HS256', kid: 'globex' }), 403, false, /not valid/);
     // Another org with its own secret: its signature holds, but the link is acme's — not found in globex.
     await pool.query(`INSERT INTO orgs (id, name) VALUES ('globex', 'Globex') ON CONFLICT DO NOTHING`);
     const GLOBEX = 'ord_embed_' + 'g'.repeat(43);

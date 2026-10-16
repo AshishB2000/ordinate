@@ -12,9 +12,11 @@
 //      audit row for every outcome, and refusals the org's own sites may frame
 //      (the host should see "expired", not a blank box);
 //   4. the claims (unknown claim, empty or widened lock, exp > 24 h → refused),
-//      embedding on for the org (or a server-signed preview token, served only
-//      to a same-origin iframe), the Referer, when there is one, from an
-//      allowed site or this one;
+//      embedding on for the org — or a PREVIEW token: signed with a key only
+//      this server derives (./token.ts previewKey), served only to a
+//      same-origin iframe of a signed-in member who may read the project, so
+//      a leaked preview URL is worth nothing outside the app; the Referer,
+//      when there is one, from an allowed site or this one;
 //   5. the published link in that org, the dashboard in the link, the project
 //      not deleted — then the page (src/publish/embedPage.ts), built under the
 //      locked filters as a published page's request (the Live cache floor).
@@ -24,11 +26,12 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
-import { runAsPublished, type Identity } from '../context';
+import { runAsPublished, type Identify, type Identity } from '../context';
+import { readable } from '../authz/index';
 import { audit, type Outcome } from '../authz/audit';
 import { pageCsp } from '../published';
 import { readSettings, secretOf } from './settings';
-import { readHeader, tokenFingerprint, verifyToken, MAX_TTL_SEC, type TokenRefusal } from './token';
+import { previewKey, readHeader, tokenFingerprint, verifyToken, MAX_TTL_SEC, type TokenRefusal } from './token';
 import { refusalCsp, refusalHtml } from './pages';
 import {
   embedExpired, embedFailed, embedInvalid, embedNotFound, embedOrigin, embedPreviewOnly, embedRateLimited, embedRepublish, embedTooLong, embedUnavailable,
@@ -51,6 +54,8 @@ export function maskEmbedTokens(s: string): string {
 
 export interface EmbedRouteOptions {
   readonly pool: () => Pool | null;
+  /** Who is signed in — asked only for a preview token, which needs a member's session. */
+  readonly identify: Identify;
   /** RATE_LIMIT_EMBED_PER_MINUTE: views per token. */
   readonly tokenPerMinute: number;
   /** RATE_LIMIT_EMBED_ORG_PER_MINUTE: views per org, every token. */
@@ -105,9 +110,20 @@ export function registerEmbedRoutes(app: FastifyInstance, opts: EmbedRouteOption
       return refuse(reply, 503, embedFailed(), []);
     }
     // An unknown org, no secret, a bad MAC: one answer, so no probe tells them apart.
-    if (!secret) return refuse(reply, 403, embedUnavailable(), []);
-    const v = verifyToken(token, secret, Math.floor(Date.now() / 1000));
+    if (!secret) return refuse(reply, 403, embedInvalid(), []);
+    const now = Math.floor(Date.now() / 1000);
+    let v = verifyToken(token, secret, now);
+    let previewSigned = false;
+    if (!v.ok && v.reason === 'signature') {
+      const p = verifyToken(token, previewKey(secret), now);
+      if (p.ok || p.reason !== 'signature') {
+        v = p;
+        previewSigned = true;
+      }
+    }
     if (!v.ok && (v.reason === 'bad' || v.reason === 'signature')) return refuse(reply, 403, embedInvalid(), []);
+    // The key and the `prv` claim must agree: a host cannot sign a preview, nor a preview pass as a host's link.
+    if (v.ok && (v.claims.prv === true) !== previewSigned) return refuse(reply, 403, embedInvalid(), []);
 
     // The signature held: the org is known, every outcome below is audited.
     const pool = opts.pool();
@@ -117,7 +133,7 @@ export function registerEmbedRoutes(app: FastifyInstance, opts: EmbedRouteOption
         org, actor: 'embed', action: 'embed_view', outcome, requestId: String(req.id),
         targets: claims ? [claims.pub, ...(claims.dash ? [claims.dash] : [])] : [],
       }).catch((err: unknown) => req.log.error({ err }, 'embed: audit write failed'));
-    const preview = claims?.prv === true;
+    const preview = previewSigned;
     const ancestors = preview ? [SELF] : settings.enabled ? settings.origins : [];
 
     keys.set(req, { token: tokenFingerprint(token), org });
@@ -136,7 +152,9 @@ export function registerEmbedRoutes(app: FastifyInstance, opts: EmbedRouteOption
       await record('denied');
       return refuse(reply, 403, embedUnavailable(), []);
     }
-    if (preview && !(req.headers['sec-fetch-dest'] === 'iframe' && req.headers['sec-fetch-site'] === 'same-origin')) {
+    // A preview: inside this app only — a same-origin iframe AND a signed-in member of this org (headers alone can be forged).
+    const viewer = preview ? await Promise.resolve(opts.identify(req.headers, req.socket.remoteAddress)).catch(() => null) : null;
+    if (preview && (!(req.headers['sec-fetch-dest'] === 'iframe' && req.headers['sec-fetch-site'] === 'same-origin') || !viewer || viewer.org.id !== org)) {
       await record('denied');
       return refuse(reply, 403, embedPreviewOnly(), ancestors);
     }
@@ -163,6 +181,8 @@ export function registerEmbedRoutes(app: FastifyInstance, opts: EmbedRouteOption
         const projects = require('../../app/projects') as typeof import('../../app/projects');
         const site = await hosted.getSite(c.pub);
         if (!site || !(await projects.getProject(site.projectId))) return { missing: 'gone' as const };
+        // A preview shows only what its viewer may read anyway.
+        if (viewer && !(await readable(pool, viewer))(site.projectId)) return { missing: 'gone' as const };
         const dash = c.dash ?? site.config.dashboardIds[0];
         if (!dash || !site.config.dashboardIds.includes(dash)) return { missing: 'gone' as const };
         const { embedHtml } = require('../../publish/embedPage') as typeof import('../../publish/embedPage');

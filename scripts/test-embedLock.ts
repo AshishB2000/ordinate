@@ -231,6 +231,24 @@ async function main(): Promise<void> {
     const old = await inOrg(() => embedPage.embedHtml(site, s.aid, claims));
     ok('definition: a link published before definitions were kept asks to be published again', 'missing' in old && old.missing === 'republish');
 
+    // ── Stored cross-row values: computed over every customer before any filter ──
+    const ledger = await context.runInContext(ALICE, 'ledger', async () => {
+      const d = await datasets.saveDataset(pid, { name: 'Ledger', sourceKind: 'csv', columns: [{ name: 'region', type: 'text' }, { name: 'amount', type: 'number' }], rows: REGIONS.map(([r, b]) => [r, b]) });
+      return d!.id;
+    });
+    const coveredWith = async (steps: unknown[]) => {
+      await context.runInContext(ALICE, 'steps', () => datasets.updateSteps(pid, ledger, steps));
+      return inOrg(() => lockMod.makeLock({ region: ['East'] })!.covers(pid, ledger));
+    };
+    ok('cross-row: a dataset with no prepare steps is covered (control)', await coveredWith([]));
+    ok('cross-row: a running total over every region is NOT covered — its East rows carry other regions\' sums',
+      !(await coveredWith([{ type: 'window', fn: 'running_sum', as: 'cum', column: 'amount' }])));
+    ok('cross-row: the same window partitioned by the locked column is covered (NEGATIVE CONTROL of the rule)',
+      await coveredWith([{ type: 'window', fn: 'running_sum', as: 'cum', column: 'amount', partitionBy: ['region'] }]));
+    ok('cross-row: a stored LOD field (a FIXED total) is NOT covered',
+      !(await coveredWith([{ type: 'calculated_field', name: 'all_total', expression: '{FIXED : SUM([amount])}' }])));
+    ok('cross-row: the steps really stored (the record names them)', ((await inOrg(() => datasets.getDatasetMeta(pid, ledger)))?.steps ?? []).length === 1);
+
     // ── No widening before anything is built ────────────────────────────
     let threw = 0;
     try { lockMod.makeLock({ region: [] }); } catch { threw++; }

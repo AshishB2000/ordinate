@@ -102,9 +102,12 @@ export interface PublishedView { name: string; sheet: number; picks: number[]; d
  * "one filter at a time" site, two filters moved) is left out rather than
  * shown on the wrong figures.
  */
-function publishedViews(a: analysis.Analysis, specs: ControlSpec[], plan: ComboPlan): PublishedView[] {
+function publishedViews(a: analysis.Analysis, specs: ControlSpec[], plan: ComboPlan, lock?: Lock | null): PublishedView[] {
   const out: PublishedView[] = [];
+  // Under an embed's lock a view that sets a control the bar left out is dropped: its NAME may be another customer's.
+  const left = lock ? a.sheets.flatMap((s) => s.cards).filter((c) => c && c.type === 'control' && !specs.some((x) => x.card.id === c.id)) : [];
   for (const v of a.views || []) {
+    if (left.some((c) => viewControlValue(v, c) !== null)) continue;
     const picks = specs.map((s, i) => viewPick(a, v, s, plan.domains[i]));
     // A pick the page does not carry (-1) leaves the view out: showing the
     // default figures under the view's name would be a wrong answer, not a near one.
@@ -546,6 +549,6 @@ export async function buildDashboard(
     sheets,
     geoLevels: [...geoLevels],
     boundaryIds: [...boundaryIds],
-    views: publishedViews(a, specs, plan),
+    views: publishedViews(a, specs, plan, lock),
   };
 }

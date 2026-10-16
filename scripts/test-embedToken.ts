@@ -9,7 +9,7 @@
 
 import { createHmac } from 'crypto';
 import { finish, ok } from './selfcheck';
-import { MAX_TTL_SEC, PREVIEW_TTL_SEC, readHeader, signToken, tokenFingerprint, verifyToken } from '../src/server/embed/token';
+import { MAX_TTL_SEC, PREVIEW_TTL_SEC, previewKey, readHeader, signToken, tokenFingerprint, verifyToken } from '../src/server/embed/token';
 import { normalizeOrigin } from '../src/server/embed/settings';
 
 const SECRET = 'ord_embed_' + 'k'.repeat(43);
@@ -99,6 +99,11 @@ ok('a null lock value refused', claims({ params: { Region: null } }) === 'claims
 ok('an object lock value refused', claims({ params: { Region: { op: 'not in', values: ['East'] } } }) === 'claims');
 ok('an over-long lock value refused', claims({ params: { Region: ['x'.repeat(201)] } }) === 'claims');
 ok('control: a 200-character lock value verifies', claims({ params: { Region: ['x'.repeat(200)] } }) === 'ok');
+ok('a blank lock value refused (it would match every row with no value)', claims({ params: { Region: ['  '] } }) === 'claims' && claims({ params: { Region: '' } }) === 'claims');
+ok('a __proto__ lock column refused', reason(`${b64(HEAD)}.${b64('{"pub":"' + PUB + '","exp":' + (NOW + 60) + ',"params":{"__proto__":["x"]}}')}`.replace(/$/, '.' + createHmac('sha256', SECRET).update(`${b64(HEAD)}.${b64('{"pub":"' + PUB + '","exp":' + (NOW + 60) + ',"params":{"__proto__":["x"]}}')}`).digest('base64url'))) === 'claims');
+ok('a constructor lock column is an ordinary column, held to its value', (() => { const r = verify(hostSign(HEAD, { ...base, params: { constructor: 'x' } })); return r.ok && Object.getPrototypeOf(r.claims.params) === null && JSON.stringify(Object.entries(r.claims.params)) === JSON.stringify([['constructor', ['x']]]); })());
+ok('preview key: derived, not the secret, and a token signed with it fails the secret', previewKey(SECRET) !== SECRET && previewKey(SECRET) === previewKey(SECRET)
+  && reason(signToken(ORG, { ...base, prv: 1 }, previewKey(SECRET))) === 'signature' && verifyToken(signToken(ORG, { ...base, prv: 1 }, previewKey(SECRET)), previewKey(SECRET), NOW).ok);
 ok('a parameter reference in a lock refused', claims({ params: { Region: '[[region]]' } }) === 'claims');
 ok('too many lock columns refused', claims({ params: Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`c${i}`, 'v'])) }) === 'claims');
 ok('too many lock values refused', claims({ params: { Region: Array.from({ length: 101 }, (_, i) => `v${i}`) } }) === 'claims');

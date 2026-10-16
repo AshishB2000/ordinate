@@ -88,7 +88,8 @@ function lockValues(v: unknown): LockValue[] | null {
   const out: LockValue[] = [];
   for (const x of list) {
     // `[[name]]` is a dashboard parameter reference (analysis/params.ts): a lock value is a literal, never bound to one.
-    if (typeof x === 'string' && x.length <= MAX_VALUE_LEN && !x.includes('[[')) out.push(x);
+    // A blank value would match every row with no value (`'' = null` in the pipeline): refused, never "no customer".
+    if (typeof x === 'string' && x.length <= MAX_VALUE_LEN && x.trim() !== '' && !x.includes('[[')) out.push(x);
     else if (typeof x === 'number' && Number.isFinite(x)) out.push(x);
     else return null;
   }
@@ -114,13 +115,14 @@ export function parseClaims(raw: unknown, now: number): EmbedClaims | TokenRefus
       if (!hide.includes(x as Hide)) hide.push(x as Hide);
     }
   }
-  const params: Record<string, LockValue[]> = {};
+  // No prototype: a `__proto__` or `constructor` column is an ordinary key here (and refused below).
+  const params: Record<string, LockValue[]> = Object.create(null) as Record<string, LockValue[]>;
   if (o.params !== undefined) {
     if (!o.params || typeof o.params !== 'object' || Array.isArray(o.params)) return 'claims';
     const cols = Object.keys(o.params);
     if (cols.length > MAX_LOCK_COLUMNS) return 'claims';
     for (const col of cols) {
-      if (!col || col.length > MAX_COLUMN_LEN || !own(o.params, col)) return 'claims';
+      if (!col || col.length > MAX_COLUMN_LEN || col === '__proto__' || !own(o.params, col)) return 'claims';
       const vals = lockValues((o.params as Record<string, unknown>)[col]);
       if (!vals) return 'claims'; // empty, too many, or not a string / finite number: never a widened filter
       params[col] = vals;
@@ -160,6 +162,15 @@ export function verifyToken(token: string, secret: string, now: number): Verifie
   }
   const claims = parseClaims(raw, now);
   return typeof claims === 'string' ? { ok: false, reason: claims } : { ok: true, claims };
+}
+
+/**
+ * The key a PREVIEW token is signed with: derived from the org's secret, so
+ * only this server can make one — a host holding the secret signs with the
+ * secret itself, and a token whose `prv` claim and key disagree is refused.
+ */
+export function previewKey(secret: string): string {
+  return 'prv:' + createHmac('sha256', Buffer.from(secret, 'utf8')).update('ordinate-embed-preview:v1', 'utf8').digest('base64url');
 }
 
 /** Sign `payload` for `org` — the server's own preview tokens, and the tests. The host's backend does the same (the snippets). */

@@ -10,7 +10,7 @@ import { ctx } from '../server/context';
 import { getDefs, getSite, type HostedSite } from '../publish/hosted';
 import type { PublishedDef } from '../publish/dashboardData';
 import { canStore, hasSecret, MAX_ORIGINS, readSettings, rotateSecret, saveSettings, secretOf } from '../server/embed/settings';
-import { MAX_LOCK_COLUMNS, MAX_TTL_SEC, PREVIEW_TTL_SEC, signToken } from '../server/embed/token';
+import { MAX_LOCK_COLUMNS, MAX_TTL_SEC, PREVIEW_TTL_SEC, previewKey, signToken } from '../server/embed/token';
 import { embedNeedsSecret, embedNeedsStore, embedNotFound, embedRepublish } from '../server/embedMessages';
 
 const org = (): string => ctx().org.id;
@@ -82,7 +82,7 @@ export function register(): void {
       ...(i.params && Object.keys(i.params).length ? { params: i.params } : {}),
       ...(i.theme ? { theme: i.theme } : {}),
       ...(i.hide && i.hide.length ? { hide: i.hide } : {}),
-    }, secret);
+    }, previewKey(secret)); // a key only this server derives: a host's secret cannot make a preview
     return { ok: true, url: `/embed/${token}`, expiresAt: new Date(exp * 1000).toISOString() };
   });
 }

@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { byProjectId, rpc, Uuid } from './contract';
 
 const Origin = z.string().trim().min(1).max(255);
-const LockValue = z.union([z.string().max(200), z.number()]);
+const LockValue = z.union([z.string().trim().min(1).max(200).refine((v) => !v.includes('[['), 'parameter reference'), z.number()]);
 
 export const embed = {
   'embed:settings': rpc({ access: 'admin', org: true, audit: 'denials', input: z.undefined() }),
@@ -28,7 +28,7 @@ export const embed = {
       projectId: Uuid,
       siteId: Uuid,
       dashboardId: Uuid,
-      params: z.record(z.string().min(1).max(200), z.array(LockValue).min(1).max(100)).optional(),
+      params: z.record(z.string().min(1).max(200), z.array(LockValue).min(1).max(100)).refine((o) => Object.keys(o).length <= 8, 'at most 8 locks').optional(),
       theme: z.enum(['light', 'dark']).optional(),
       hide: z.array(z.enum(['title', 'filters'])).max(2).optional(),
     }),

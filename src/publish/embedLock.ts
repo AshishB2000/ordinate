@@ -14,7 +14,12 @@
 //     come from a related dataset, or whose measure is a saved formula metric
 //     (both read another dataset); a KPI over a formula metric; and the
 //     Summary card (its facts — insights, quality, alerts — are about the
-//     whole dataset);
+//     whole dataset); and a tile over a dataset whose prepare steps STORE a
+//     value computed across rows — a LOD field, a window (running total, rank,
+//     share of total), a segment — since that value was computed over every
+//     customer's rows before any filter (only the main chart path recomputes a
+//     LOD under context filters; statistics, currency and parameter replay read
+//     the stored value);
 //   - the filter bar's options are data too: a control on a locked column
 //     offers the locked values; a text dropdown on another column offers only
 //     the values that exist under the lock; anything else is left out.
@@ -28,7 +33,8 @@ import { isLive } from '../data/liveDataset';
 import { hasMetricMeasure } from '../analysis/metricMeasures';
 import { OTHER_LABEL } from '../analysis/categoryKey';
 import { paramRefs } from '../analysis/params';
-import type { FilterStep } from '../data/transforms';
+import { lodFields } from '../analysis/lodQuery';
+import type { FilterStep, TransformStep } from '../data/transforms';
 import type { VizEncoding } from '../analysis/visuals';
 import type { CardControl } from '../analysis/dashboards';
 import { vizDataFor } from '../ipc/visuals';
@@ -53,6 +59,23 @@ export function lockStep(column: string, values: readonly LockValue[]): FilterSt
 }
 
 /** The lock for one build, or null when the token locks nothing. */
+/**
+ * Does a dataset's prepare pipeline store a value computed across rows — so
+ * over every customer? A window partitioned by every locked column stays
+ * inside one customer's rows and is fine.
+ */
+export function storesCrossRow(steps: readonly TransformStep[] | undefined, locked: readonly string[]): boolean {
+  const list = Array.isArray(steps) ? steps : [];
+  const crosses = (s: TransformStep): boolean => {
+    const t = s.type as string;
+    if (t === 'segment') return true;
+    if (t !== 'window') return false;
+    const by = (s as unknown as { partitionBy?: string[] }).partitionBy ?? [];
+    return !locked.every((c) => by.includes(c));
+  };
+  return list.some((s) => !!s && crosses(s)) || lodFields(list as TransformStep[]).length > 0;
+}
+
 export function makeLock(values: Readonly<Record<string, readonly LockValue[]>>): Lock | null {
   const cols = Object.keys(values);
   if (!cols.length) return null;
@@ -69,7 +92,7 @@ export function makeLock(values: Readonly<Record<string, readonly LockValue[]>>)
       let hit = seen.get(key);
       if (!hit) {
         hit = datasets.getDatasetMeta(projectId, datasetId).then(
-          (meta) => !!meta && cols.every((c) => meta.columns.some((x) => x.name === c)),
+          (meta) => !!meta && cols.every((c) => meta.columns.some((x) => x.name === c)) && !storesCrossRow((meta as { steps?: TransformStep[] }).steps, cols),
           () => false,
         );
         seen.set(key, hit);
@@ -101,7 +124,7 @@ export async function metricAllowed(lock: Lock, projectId: string, m: { datasetI
  * first. A string is the reason it is left out of the filter bar.
  */
 export async function lockedOptions(lock: Lock, projectId: string, control: CardControl, max: number): Promise<string[] | string> {
-  const locked = lock.values[control.column];
+  const locked = Object.prototype.hasOwnProperty.call(lock.values, control.column) ? lock.values[control.column] : undefined;
   if (locked) return [...new Set(locked.map(String))].slice(0, max);
   if (!(await lock.covers(projectId, control.datasetId))) return embedControlLocked();
   const meta = await datasets.getDatasetMeta(projectId, control.datasetId);
