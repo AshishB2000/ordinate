@@ -299,6 +299,24 @@
   background: linear-gradient(135deg, var(--accent-soft), var(--surface));
   border: 1px dashed var(--accent-line);
 }
+/* A screenshot with two tiles outlined on it: what the rebuild reads. */
+.b_shot {
+  grid-column: 1 / -1;
+  grid-row: span 3;
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-2);
+  background: var(--surface);
+}
+.b_shot::before,
+.b_shot::after {
+  content: '';
+  border: 1.5px solid var(--accent);
+  border-radius: 2px;
+  background: var(--accent-soft);
+}
 .startAi .startT svg {
   color: var(--accent);
 }

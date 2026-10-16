@@ -67,6 +67,7 @@ export default function DockPanel() {
   const [hint, setHint] = useState('');
   const [plans, setPlans] = useState<PlanSlot[]>([]);
   const [getData, setGetData] = useState(false); // the last reply proposed bringing data in
+  const [rebuildOffer, setRebuildOffer] = useState(false); // …or rebuilding a dashboard from another tool's screenshot
   // The last reply proposed a dashboard: drafted from what was asked, reviewed, and created only on the click.
   const [draft, setDraft] = useState<{ projectId: string; datasetId?: string; intent: string } | null>(null);
   const [text, setText] = useState('');
@@ -159,6 +160,7 @@ export default function DockPanel() {
   useEffect(() => {
     setPlans((ps) => ps.filter((p) => p.projectId === pid));
     setGetData(false);
+    setRebuildOffer(false);
     setHint('');
     setLastSteps(null);
   }, [pid]);
@@ -167,7 +169,7 @@ export default function DockPanel() {
   useEffect(() => {
     const el = stage.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [turns.length, pending, plans.length, getData]);
+  }, [turns.length, pending, plans.length, getData, rebuildOffer]);
 
   const setTurns = useCallback(
     (next: Turn[], tid: string | null) => {
@@ -183,6 +185,7 @@ export default function DockPanel() {
     setThreadId(id);
     setLastSteps(null);
     setGetData(false);
+    setRebuildOffer(false);
     setPlans((ps) => ps.filter((p) => p.key.startsWith('live:')));
   }
 
@@ -207,6 +210,7 @@ export default function DockPanel() {
     setHint('');
     setText('');
     setGetData(false);
+    setRebuildOffer(false);
     setPlans((ps) => ps.filter((p) => p.key.startsWith('live:'))); // last turn's proposal is superseded
     let r: Awaited<ReturnType<typeof ask>>;
     try {
@@ -225,6 +229,7 @@ export default function DockPanel() {
         setPlans((ps) => [...ps, { key: askId, projectId: pid, action: { intent: action.intent, steps: action.steps ?? [], droppedSteps: action.droppedSteps }, threadId: r.threadId ?? '' }]);
       }
       setGetData(action?.kind === 'import');
+      setRebuildOffer(action?.kind === 'rebuild');
       if (action?.kind === 'dashboard') {
         // ponytail: one turn's intent; fold a thread's earlier dashboard asks in if follow-ups should refine one plan.
         setDraft({ projectId: pid, ...(context.kind === 'dataset' && context.id ? { datasetId: context.id } : {}), intent: (action.intent || q).slice(0, 2000) });
@@ -327,6 +332,13 @@ export default function DockPanel() {
               <Link className={buttonClass('primary', 'sm')} to={`/data/import?project=${pid}`}>Import a file</Link>
               <Link className={buttonClass('secondary', 'sm')} to={`/data/import?project=${pid}&source=paste`}>Paste data</Link>
               <Link className={buttonClass('secondary', 'sm')} to={`/connections/${pid}`}>Connect a source</Link>
+            </div>
+          )}
+          {pid && rebuildOffer && !pending && (
+            <div className={s.getData} data-testid="dock-rebuild">
+              <Link className={buttonClass('primary', 'sm')} to={`/analyses/${pid}/rebuild${context.kind === 'dataset' && context.id ? `?dataset=${context.id}` : ''}`}>
+                Rebuild from a screenshot
+              </Link>
             </div>
           )}
           {/* Only in the project it was proposed for: an answer landing after the route moved on is not this project's to run. */}

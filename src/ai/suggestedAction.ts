@@ -68,8 +68,8 @@ const ACTION_MARKER_SRC = '@@ACTION';
 export const MAX_INTENT = 400;
 
 /** The whitelist. Anything not on it becomes 'none'. */
-export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'answer' | 'story' | 'plan' | 'import' | 'none';
-const KIND_LIST = ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'answer', 'story', 'plan', 'import', 'none'] as const;
+export type SuggestedActionKind = 'dashboard' | 'edit' | 'chart' | 'step' | 'calc' | 'style' | 'answer' | 'story' | 'plan' | 'import' | 'rebuild' | 'none';
+const KIND_LIST = ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'answer', 'story', 'plan', 'import', 'rebuild', 'none'] as const;
 
 /** The most JSON an answer's spec may carry. A spec names a dataset, a few
  *  columns and a few filter values; anything longer is not a spec. */
@@ -168,7 +168,7 @@ export const NO_ACTION: SuggestedAction = { kind: 'none', intent: '' };
 const ACTION_PROMPT =
   '\n\nAFTER your answer, output ONE final line, exactly:\n' +
   ACTION_MARKER + ' {"kind":"<kind>","intent":"<intent>"}\n' +
-  'where <kind> is one of: dashboard, story, edit, chart, step, calc, style, answer, import, plan, none. Use "dashboard" when the ' +
+  'where <kind> is one of: dashboard, story, edit, chart, step, calc, style, answer, import, rebuild, plan, none. Use "dashboard" when the ' +
   'user is asking to BUILD or CREATE a NEW dashboard, report or overview; "story" when they want a WRITTEN ' +
   'piece instead — a story, write-up, narrative or brief to be read top to bottom, with charts in it; "edit" when the FACTS ' +
   'show a dashboard is already open and they are asking to CHANGE it — add, remove, move, retype ' +
@@ -178,7 +178,9 @@ const ACTION_PROMPT =
   'already have to LOOK different (darker, denser, more executive or more formal) rather than ' +
   'to contain anything new; "import" when they want to bring data in — upload, import, paste or ' +
   'connect a source — and ask for nothing else, or when they ask about data the FACTS show the ' +
-  'project does not have yet; and "none" for an ordinary question. <intent> is a ' +
+  'project does not have yet; "rebuild" when they want to recreate, copy or migrate a dashboard they ' +
+  'have in ANOTHER tool (Tableau, Power BI, Looker, Metabase, a screenshot of one) — the app opens the page ' +
+  'where they drop its screenshot, so your prose is ONE short sentence; and "none" for an ordinary question. <intent> is a ' +
   'short restatement of what they want built, in their own terms, or "" when kind is none. ' +
   'For "style" ONLY, the line carries one extra field:\n' +
   ACTION_MARKER + ' {"kind":"style","intent":"<intent>","preset":"<preset>"}\n' +

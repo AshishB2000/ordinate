@@ -100,6 +100,8 @@ export async function matchReading(projectId: string, datasetId: string, rawRead
     return {
       ok: true,
       name: preview.name,
+      // The dropdowns' choices: names and DECLARED types, never a value.
+      columns: ds.columns.map((c) => ({ name: c.name, type: c.type })),
       tiles: out,
       layout,
       controls: (sheet?.controls ?? []).length,

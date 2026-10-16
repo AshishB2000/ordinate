@@ -87,6 +87,8 @@ export const pages: RouteObject[] = [
   page('/analytics/:projectId/events', () => import('../features/analytics/events/EventsPage')),
   // One capture's own page: the screenshot beside the analysis the model and the app made of it.
   page('/data/captures/:projectId/:captureId', () => import('../features/import/CapturePage')),
+  // Rebuild another BI tool's dashboard from its screenshot, on the project's own data.
+  page('/analyses/:projectId/rebuild', () => import('../features/analyses/rebuild/RebuildPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.
