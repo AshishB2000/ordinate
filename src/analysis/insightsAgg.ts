@@ -12,8 +12,9 @@
 //   · GROUPS ARE RAW CELLS, first-seen order. No date bucketing in SQL and no
 //     binning — the same "a period is a distinct value of the date column" rule
 //     `anomalies.periodChangeAnomaly` already ships. Rolling DAYS UP TO MONTHS
-//     (`periodPlan`) happens in TypeScript over the labels both aggregators
-//     return, so the roll-up cannot be a place they disagree either.
+//     (`periodPlan`), and deciding which months have CLOSED, happens in
+//     TypeScript over the labels both aggregators return, so neither can be a
+//     place they disagree.
 //   · EMPTY IS null OR '' OR whitespace, and an empty group is DROPPED on both
 //     sides (SQL returns it as '', JS never forms it).
 //   · SUM over no finite value is `null`, never 0.
@@ -154,27 +155,78 @@ export function orderPeriods(keys: string[]): string[] {
  *     `transforms.stepFilter`. Anything not ISO keeps its raw values and an `=`,
  *     because a prefix of an unknown date shape is a guess.
  *
+ * `periods` is every CLOSED period, oldest first — the only list a caller
+ * compares, charts or picks "the latest" from (see `openMonths`). A raw value
+ * is its own period and always closed: there is no span to finish.
+ *
  * ponytail: months only, never weeks or quarters. A quarter label ('2024-Q4')
  * is not a substring of a date, so it would need a real range filter — which is
  * the upgrade path if someone wants one.
  */
-export function periodPlan(labels: string[]): { of: (label: string) => string; op: '=' | 'contains' } {
-  const iso = labels.length > 0 && labels.every((l) => ISO_DATE_RE.test(l));
-  if (!iso || new Set(labels).size <= MAX_RAW_PERIODS) return { of: (l) => l, op: '=' };
-  return { of: (l) => l.slice(0, MONTH_LEN), op: 'contains' };
+export interface PeriodPlan {
+  of: (label: string) => string;
+  op: '=' | 'contains';
+  periods: string[];
 }
 
-/** Sum an aggregator's answer into periods. Null measures are dropped, as
- *  everywhere else: a period with nothing to sum is not a period with a 0. */
+export function periodPlan(labels: string[]): PeriodPlan {
+  const distinct = [...new Set(labels)];
+  const iso = distinct.length > 0 && distinct.every((l) => ISO_DATE_RE.test(l));
+  if (!iso || distinct.length <= MAX_RAW_PERIODS) return { of: (l) => l, op: '=', periods: orderPeriods(distinct) };
+  const of = (l: string): string => l.slice(0, MONTH_LEN);
+  const open = openMonths(distinct);
+  return { of, op: 'contains', periods: orderPeriods([...new Set(distinct.map(of))]).filter((m) => !open.has(m)) };
+}
+
+const DAY_MS = 86_400_000;
+/** Days since the epoch of an ISO label's date part (`y`, `m` 1-based, `d`). */
+const dayNum = (y: number, m: number, d: number): number => Date.UTC(y, m - 1, d) / DAY_MS;
+const dayOf = (l: string): number => dayNum(+l.slice(0, 4), +l.slice(5, 7), +l.slice(8, 10));
+
+/**
+ * The months at either END of the data that it has not finished — never the
+ * wall clock, only the data's own dates:
+ *
+ *   the step   = the widest gap between two consecutive dates in the data (1
+ *                for daily, 3 for weekdays, 7 weekly, ~31 for the 1st of each month);
+ *   the NEWEST month is open while newest + step still lands inside it — the
+ *                data's own cadence could yet add a date to it;
+ *   the OLDEST month is open while oldest − step still lands inside it — a
+ *                "last 45 days" export starts mid-month as surely as it ends there.
+ *
+ * So a dataset that ends on the 31st has closed its month, one that skips days
+ * now and then (the bundled sample ends Dec 30) closes on its own rhythm, and
+ * Feb 1–5 after a full January is open.
+ *
+ * ponytail: one long outage mid-data widens the step, so a short final month
+ * after it reads as closed — the old behaviour, never a whole month dropped.
+ * A per-month step is the upgrade if that bites.
+ */
+function openMonths(labels: string[]): Set<string> {
+  const dated = labels.map((l) => ({ l, day: dayOf(l) })).filter((x) => Number.isFinite(x.day)).sort((a, b) => a.day - b.day);
+  const open = new Set<string>();
+  if (dated.length === 0) return open;
+  let step = 0;
+  for (let i = 1; i < dated.length; i += 1) step = Math.max(step, dated[i].day - dated[i - 1].day);
+  const first = dated[0];
+  const last = dated[dated.length - 1];
+  if (last.day + step <= dayNum(+last.l.slice(0, 4), +last.l.slice(5, 7) + 1, 0)) open.add(last.l.slice(0, MONTH_LEN));
+  if (first.day - step >= dayNum(+first.l.slice(0, 4), +first.l.slice(5, 7), 1)) open.add(first.l.slice(0, MONTH_LEN));
+  return open;
+}
+
+/** Sum an aggregator's answer into the plan's (closed) periods. Null measures are
+ *  dropped, as everywhere else: a period with nothing to sum is not a period with a 0. */
 export function foldPeriods(
   agg: { labels: string[]; values: (number | null)[] },
-  plan: { of: (label: string) => string },
+  plan: PeriodPlan,
 ): Map<string, number> {
+  const closed = new Set(plan.periods);
   const by = new Map<string, number>();
   agg.labels.forEach((l, i) => {
     const v = agg.values[i];
-    if (typeof v !== 'number') return;
     const k = plan.of(l);
+    if (typeof v !== 'number' || !closed.has(k)) return;
     by.set(k, (by.get(k) ?? 0) + v);
   });
   return by;

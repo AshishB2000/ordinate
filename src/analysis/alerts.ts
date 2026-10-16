@@ -22,9 +22,12 @@
 // hour is a watch people turn off"), and `armed` is the whole of it: one boolean
 // carried on the rule saying "we have already said this".
 //
-// A CHANGE rule is deliberately NOT edge-triggered in that sense — it compares
-// two points in time, so every refresh that meets the condition is a genuinely
-// new fact ("it fell another 12% today"), not a repeat of yesterday's.
+// A CHANGE rule "since the last refresh" is deliberately NOT edge-triggered in
+// that sense — it compares two points in time, so every refresh that meets the
+// condition is a genuinely new fact ("it fell another 12% today"), not a repeat
+// of yesterday's. A change "since the previous period" is the opposite: the same
+// two periods answer every refresh until a new one closes, so it fires once per
+// period (`firedPeriod`).
 //
 // An ANOMALY rule delegates the whole question to ./anomalyWatch's key diff,
 // which is the edge-trigger it already implements.
@@ -104,6 +107,12 @@ export interface AlertRule {
    * re-arms it.
    */
   armed?: boolean;
+  /**
+   * Change edge state (vs:'previous_period'): the latest period the change last
+   * met its condition for. The two periods stay the same for a whole month of
+   * refreshes, so without it the rule fired on every one; with it, once per period.
+   */
+  firedPeriod?: string;
   /** The last `MAX_HISTORY` evaluated values, oldest first — the inbox sparkline. */
   history?: number[];
   /** Anomaly edge state, exactly ./anomalyWatch's `keep`. */
@@ -288,6 +297,7 @@ export function sanitizeRule(raw: any): AlertRule | null {
   const last = num(raw.lastValue);
   if (last != null) rule.lastValue = last;
   if (raw.armed === true) rule.armed = true;
+  if (str(raw.firedPeriod)) rule.firedPeriod = str(raw.firedPeriod);
   const history = sanitizeHistory(raw.history);
   if (history) rule.history = history;
   const keys = sanitizeKeys(raw.anomalyKeys);
@@ -457,6 +467,8 @@ export interface EvaluateInput {
    * metric recomputed over the prior period. Ignored by the other two compares.
    */
   previous?: number | null;
+  /** For vs:'previous_period': the latest period `previous` was compared against. */
+  period?: string;
   /** For an `anomaly` rule: this run's findings, already scoped to the column. */
   anomalies?: Anomaly[];
   now: number;
@@ -478,7 +490,7 @@ export interface EvaluateResult {
  * outputs, no clock and no id generator of its own.
  *
  * The returned rule is a COPY carrying the new edge state (`armed`,
- * `anomalyKeys`), the new `lastValue`/`lastEvaluatedAt` and one more point of
+ * `firedPeriod`, `anomalyKeys`), the new `lastValue`/`lastEvaluatedAt` and one more point of
  * `history`. Callers persist it whether or not anything fired — the history and
  * the re-arm are the whole reason a quiet evaluation still writes.
  *
@@ -507,7 +519,10 @@ export function evaluateRule(input: EvaluateInput): EvaluateResult {
     else delete next.armed;
   } else if (rule.compare === 'change') {
     previous = input.previous ?? null;
-    hit = changeHit(rule, value, previous);
+    const met = changeHit(rule, value, previous);
+    // The edge: once per latest period, however many refreshes re-ask it.
+    hit = met && (input.period == null || rule.firedPeriod !== input.period);
+    if (met && input.period != null) next.firedPeriod = input.period;
   } else {
     const diff = diffAnomalies(input.anomalies || [], rule.anomalyKeys);
     // Store the CURRENT set even when nothing is new — ./anomalyWatch's rule: a

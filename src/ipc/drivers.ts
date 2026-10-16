@@ -54,6 +54,7 @@ import { dateRangeSpan, duringClause, eventWhen, eventsDuring, periodSpan } from
 import { projectEvents } from '../analysis/eventStore';
 import { isoFromDays } from '../analysis/dateIntel';
 import { changeSentence } from '../analysis/driverPoint';
+import { fewerThanTwoPeriods } from '../analysis/driverPointMessages';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -265,7 +266,7 @@ async function level(
 
 async function latestScopes(projectId: string, spec: DriversSpec, column: string): Promise<PeriodScopes | { reason: string }> {
   const periods = await alertStore.recentPeriods(projectId, spec.datasetId, column);
-  if (!periods) return { reason: `"${column}" has fewer than two periods to compare.` };
+  if (!periods) return { reason: fewerThanTwoPeriods(column) };
   const [prev, now] = periods.keys;
   const path = pathSteps(spec.path);
   const step = (key: string): FilterStep => ({ type: 'filter', column, op: periods.op, value: key } as FilterStep);

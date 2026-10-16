@@ -92,13 +92,9 @@ interface Ctx {
 
 
 /**
- * Largest movers between the latest period and the one before it.
- *
- * ponytail: "latest COMPLETE period" is taken to be the last distinct value of
- * the date column. Deciding a period is half-elapsed needs a calendar this app
- * does not have; the ceiling is that a partial final month reads as a drop.
- * Upgrade path: roll up through `categoryKey.chooseGrain` and drop a final
- * bucket whose span has not closed.
+ * Largest movers between the latest CLOSED period and the one before it —
+ * `foldPeriods` only yields closed ones (`insightsAgg.periodPlan`), so a
+ * month the data has not finished is never compared with a whole one.
  */
 async function moverInsights(ctx: Ctx, dateCol: string, measure: string, catCol: string): Promise<Insight[]> {
   const raw = await ctx.agg(dateCol, measure);
