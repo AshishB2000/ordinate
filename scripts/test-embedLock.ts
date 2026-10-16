@@ -190,8 +190,8 @@ async function main(): Promise<void> {
     }
     const treeRows = (d: typeof locked) => (tile(d, C.tAmount.id).payloads[tile(d, C.tAmount.id).variants[0]] as { labels?: string[] }).labels ?? [];
     ok('metric tree: a plain metric\'s tree is drawn under the lock, its segments only the lock\'s channels',
-      !refused(locked, C.tAmount.id) && same(treeRows(locked).slice(1).sort(), ['Amount › Store', 'Amount › Web']), show(treeRows(locked)));
-    ok('metric tree: NEGATIVE CONTROL — unlocked, West\'s Partner is a segment', treeRows(unlocked).includes('Amount › Partner'), show(treeRows(unlocked)));
+      !refused(locked, C.tAmount.id) && same(treeRows(locked).slice(1).sort(), ['↳ Store', '↳ Web']), show(treeRows(locked)));
+    ok('metric tree: NEGATIVE CONTROL — unlocked, West\'s Partner is a segment', treeRows(unlocked).includes('↳ Partner'), show(treeRows(unlocked)));
 
     // ── Differential: every tile, every combination the embed carries ──
     const labelsOf = (d: typeof locked, key: string) => key === '' ? [] : key.split('.').map((n, i) => d.controls[i].label + '=' + d.controls[i].options[Number(n)]);

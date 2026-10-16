@@ -1,6 +1,6 @@
 // A METRIC TREE card on a published page (/p/) — MAIN PROCESS. The page has no
 // tree renderer, so the card publishes as a numbers table: one row per node,
-// root down ("Revenue", "Revenue › Orders", "Revenue › Orders › West"), its
+// root down as an outline ("Revenue", "↳ Orders", " ↳ West"), its
 // current and previous figure and its contribution to its parent's change,
 // under the server's headline. Recomputed per filter combination by the same
 // computeTree a dashboard draws.
@@ -61,15 +61,16 @@ export async function metricTreePayload(
   const cur: Array<number | null> = [];
   const prev: Array<number | null> = [];
   const contrib: Array<number | null> = [];
-  const walk = (n: TreeNodeOut, path: string): void => {
-    const label = path ? `${path} › ${n.name}` : n.name;
-    labels.push(label);
+  // An outline, not a path: "Revenue", "↳ Orders", " ↳ East" — the name a phone's narrow first column
+  // keeps is the node's own. Em spaces indent (HTML keeps them; it collapses ordinary spaces).
+  const walk = (n: TreeNodeOut, depth: number): void => {
+    labels.push(depth ? `${'\u2003'.repeat(depth - 1)}↳ ${n.name}` : n.name);
     cur.push(n.current);
     prev.push(n.previous);
     contrib.push(n.contribution ?? null);
-    for (const c of n.children) walk(c, label);
+    for (const c of n.children) walk(c, depth + 1);
   };
-  walk(r.root, '');
+  walk(r.root, 0);
   return {
     labels,
     series: [
