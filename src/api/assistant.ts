@@ -91,7 +91,13 @@ export const assistant = {
   }),
   // "Save as visual" on an answer card: it writes a Visual, so it is `write`. The spec is all a client
   // sends — the encoding and the filter steps are rebuilt from it on the server (src/ipc/answerSave.ts).
-  'answer:saveVisual': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, spec: AnswerSpec }), project: byProjectId }),
+  // `threadId` + `turnId`: the answer turn it was saved from, which keeps the visual's id (the caller's own threads only).
+  // A turn id is matched inside the thread's file, never used as a path; one stored before ids were UUIDs still matches.
+  'answer:saveVisual': rpc({
+    access: 'write',
+    input: z.strictObject({ projectId: Uuid, spec: AnswerSpec, threadId: Uuid.optional(), turnId: z.string().min(1).max(100).optional() }),
+    project: byProjectId,
+  }),
 
   'plan:check': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, steps: Steps }), project: byProjectId }),
   'plan:start': rpc({

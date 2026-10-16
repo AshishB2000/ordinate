@@ -48,6 +48,7 @@ const relationships: typeof import('../src/analysis/relationships') = require('.
 
 const { fake, queryCache, ORG_A } = H;
 const show = (v: unknown): string => JSON.stringify(v);
+const sameLabels = (a: unknown[], b: string[]): boolean => a.length === b.length && a.every((l, i) => String(l) === b[i]);
 const M = (column: string, aggregation: 'sum' | 'avg' | 'count' | 'min' | 'max') => ({ column, aggregation });
 const lookups = (): typeof fake.calls => fake.calls.filter((c) => c.sql.startsWith('SELECT DISTINCT'));
 
@@ -173,6 +174,31 @@ function caseLeak(d: CompileDialectId | SqlDialect, v: string): string | null {
     !('ok' in hiddenLive) && hiddenLive.card.filterLabels[0] === `cat != ${KEPT_OUT}` && hiddenLive.factsText.includes('\nFiltered to: cat != (withheld).\n')
     && !hiddenLive.factsText.includes(KEPT_OUT), show(hiddenLive).slice(0, 400));
   ok('NEGATIVE CONTROL: unmarked, the same facts say it', !('ok' in shownLive) && shownLive.factsText.includes(`\nFiltered to: cat != ${KEPT_OUT}.\n`), show(shownLive).slice(0, 400));
+
+  // A Live answer withholds what the Live FACTS withhold (src/ipc/liveProfile.ts `liveWithheld`): a column with a
+  // PENDING proposal too, not only a marked one — its filter value, and its labels when the chart is BY it.
+  const privacy: typeof import('../src/app/privacyStore') = require('../src/app/privacyStore');
+  const byCat: AnswerSpec = { ...aSpec, category: 'cat', filters: [{ column: 'cat', op: '!=', value: KEPT_OUT }] };
+  const proposed = await H.as(ORG_A, () => privacy.scanDataset(P, { id: L, columns: [{ name: 'cat', type: 'text' }], rows: [['a@x.test'], ['b@x.test'], ['c@x.test']] }));
+  const asTurn = [{ id: 't', role: 'assistant' as const, text: '', createdAt: '', answer: byCat }];
+  const pendingLive = await H.as(ORG_A, () => answers.computeCard(P, byCat));
+  const pendingBlock = await H.as(ORG_A, () => answers.previousAnswer(P, asTurn));
+  await H.as(ORG_A, () => privacy.decide(P, L, 'cat', 'none'));
+  const dismissedLive = await H.as(ORG_A, () => answers.computeCard(P, byCat));
+  const dismissedBlock = await H.as(ORG_A, () => answers.previousAnswer(P, asTurn));
+  const catLabels = !('ok' in dismissedLive) ? dismissedLive.card.data.labels.map(String) : [];
+  // The labels a text could not hold by chance (the fixture's hostile set has '', ' ' and '7' too).
+  const telling = catLabels.filter((l) => l.trim().length >= 3 && !/^\d+$/.test(l.trim()));
+  ok('pending: a proposal is on file for the column (the fixture holds)', proposed.some((p) => p.column === 'cat'), show(proposed));
+  ok('pending: a live chart BY a column proposed as personal withholds its labels and its filter value from the facts — the card keeps them',
+    !('ok' in pendingLive) && catLabels.length > 3 && telling.every((l) => !pendingLive.factsText.includes(l))
+    && pendingLive.factsText.split(`${'(withheld)'}=`).length - 1 === catLabels.length
+    && pendingLive.factsText.includes('(Labels from cat are withheld') && pendingLive.factsText.includes('cat != (withheld)') && !pendingLive.factsText.includes(KEPT_OUT)
+    && sameLabels(pendingLive.card.data.labels, catLabels), !('ok' in pendingLive) ? pendingLive.factsText : show(pendingLive));
+  ok('pending: a follow-up\'s PREVIOUS ANSWER block withholds the value too, and hands the merge that column',
+    !!pendingBlock && !pendingBlock.block.includes(KEPT_OUT) && pendingBlock.withheld.has('cat') && !!dismissedBlock && dismissedBlock.block.includes(KEPT_OUT) && !dismissedBlock.withheld.has('cat'),
+    show([pendingBlock?.block, dismissedBlock?.block]));
+  ok('NEGATIVE CONTROL: dismissed, the same facts say them', !('ok' in dismissedLive) && telling.length >= 3 && telling.every((l) => dismissedLive.factsText.includes(l)) && dismissedLive.factsText.includes(KEPT_OUT));
 
   // ── 3. The Assistant's facts ───────────────────────────────────────────────
   const realViz = visualsIpc.vizDataFor;

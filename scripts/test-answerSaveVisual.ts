@@ -193,6 +193,28 @@ const sameFigures = (a: ChartData, b: ChartData): boolean => {
   ok('refused: a column that is gone, in the card\'s own words', dropped.value.ok === false && dropped.value.reason === '"territory" is no longer a column of Orders.', dropped.body);
   ok('refused: nothing was saved by any of them', (await count()) === before, String(await count()));
 
+  // ── 5. The turn keeps what it was saved as ────────────────────────────────
+  // Saved naming its answer turn, the turn records the visual's id, so a reload links to it instead of saving twice.
+  const tid = (await post('copilot:newThread', { projectId: P })).value.thread.id;
+  const asked = (await post('answer:rerun', { projectId: P, threadId: tid, spec: SPEC, label: 'tech revenue by region' })).value;
+  const answerTurn = asked.turns[asked.turns.length - 1];
+  const history = async (): Promise<Array<{ id: string; savedVisualId?: string }>> => (await post('copilot:history', { projectId: P, threadId: tid })).value.turns;
+  const kept = await post('answer:saveVisual', { projectId: P, spec: answerTurn.answer, threadId: tid, turnId: answerTurn.id });
+  const marked = (await history()).find((t) => t.id === answerTurn.id);
+  ok('turn: saved naming its turn, the answer turn records the visual — and a reload reads it back',
+    kept.value.ok === true && marked?.savedVisualId === kept.value.visual.id, show(marked));
+  const another = await post('answer:saveVisual', { projectId: P, spec: { ...SPEC, category: 'category' }, threadId: tid, turnId: answerTurn.id });
+  ok('turn: a save of ANOTHER chart naming that turn is saved, but does not move the turn\'s link (negative control)',
+    another.value.ok === true && (await history()).find((t) => t.id === answerTurn.id)?.savedVisualId === kept.value.visual.id, show(another.value));
+  const userTurn = asked.turns[asked.turns.length - 2];
+  await post('answer:saveVisual', { projectId: P, spec: answerTurn.answer, threadId: tid, turnId: userTurn.id });
+  ok('turn: a user turn records nothing', !('savedVisualId' in ((await history()).find((t) => t.id === userTurn.id) ?? {})));
+  const copilotStore: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
+  const theirs = await context.runInContext(EDITOR, 'mark', () => copilotStore.markSaved(P, tid, answerTurn.id, answerTurn.answer, kept.value.visual.id));
+  ok('turn: another member cannot mark a conversation that is not theirs', theirs === false);
+  ok('contract: a turn id beside the spec is taken; a thread id must be a uuid',
+    contract.input.safeParse({ ...input, threadId: tid, turnId: 'any-stored-id' }).success && !contract.input.safeParse({ ...input, threadId: 'x', turnId: 'y' }).success);
+
   await admin.close();
   fs.rmSync(DATA, { recursive: true, force: true });
   finish();

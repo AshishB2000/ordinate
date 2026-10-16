@@ -517,7 +517,7 @@ export function register() {
         let answer: Awaited<ReturnType<typeof answers.answerFromAction>> | null = null;
         if (res.suggestedAction && res.suggestedAction.kind === 'answer') {
           emit({ kind: 'compute', label: 'Built the answer chart' });
-          answer = await answers.answerFromAction(projectId, context || {}, res.suggestedAction, q, guardAnswer, prev?.spec);
+          answer = await answers.answerFromAction(projectId, context || {}, res.suggestedAction, q, guardAnswer, prev?.spec, prev?.withheld);
         }
 
         // The guard runs BEFORE persistence, so the stored turn carries the note

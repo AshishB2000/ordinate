@@ -62,6 +62,12 @@ export interface AnswerFactsInput {
   saidFilterLabels?: string[];
   caption: string;
   /**
+   * Columns whose LABELS the facts text says as "(withheld)": the category or
+   * the split, marked personal or financial. Set by `cardFacts`, which hands the
+   * data in with those labels already replaced; this only says so in the text.
+   */
+  withheldLabels?: string[];
+  /**
    * When the rows are from, already worded ("Oct 9, 2026, 1:00 AM UTC" —
    * data/figureAsOf.utcLabel), so the narration can say "as of 1:00 AM" by
    * copying it. A time, not a figure: numberAudit masks it on both sides, so
@@ -138,6 +144,7 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
   if (input.asOf) lines.push(`Data as of: ${input.asOf}.`);
   const said = input.saidFilterLabels ?? input.filterLabels;
   if (said.length) lines.push(`Filtered to: ${said.join('; ')}.`);
+  if (input.withheldLabels?.length) lines.push(`(Labels from ${input.withheldLabels.join(' and ')} are withheld — marked personal or financial data.)`);
 
   const labels = Array.isArray(data.labels) ? data.labels : [];
   const series = Array.isArray(data.series) ? data.series : [];
@@ -232,6 +239,29 @@ export function answerFacts(input: AnswerFactsInput): AnswerFacts {
   seal(ledger, text);
   sealFilters(ledger, input);
   return { text, ledger, bullets, headline };
+}
+
+/**
+ * The facts of a card whose category or split may be a column marked personal
+ * or financial (`withheld`). A label drawn from one is a VALUE of it, so the
+ * TEXT a model reads — and the ledger its narration is audited against — come
+ * from the chart with those labels replaced by "(withheld)", as a visual's
+ * facts do (./copilotFacts), and with no caption, which is written from the
+ * labels. The bullets and headline a PERSON sees come from the real chart.
+ */
+export function cardFacts(input: AnswerFactsInput, spec: Pick<AnswerSpec, 'category' | 'series'>, withheld: ReadonlySet<string>): AnswerFacts {
+  const shown = answerFacts(input);
+  const hideCat = withheld.has(spec.category);
+  const hideSer = !!spec.series && withheld.has(spec.series);
+  if (!hideCat && !hideSer) return shown;
+  const { labels, series } = input.data;
+  const data: ChartData = {
+    labels: hideCat ? labels.map(() => WITHHELD) : labels,
+    series: hideSer ? series.map((x) => (x.role === 'overlay' ? x : { ...x, name: WITHHELD })) : series,
+  };
+  const withheldLabels = [hideCat ? spec.category : '', hideSer ? spec.series ?? '' : ''].filter(Boolean);
+  const said = answerFacts({ ...input, data, caption: '', withheldLabels });
+  return { ...said, bullets: shown.bullets, headline: shown.headline };
 }
 
 /**

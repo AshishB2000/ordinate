@@ -235,6 +235,12 @@ const OP_ALIASES: Record<string, FilterOp> = {
   is_empty: 'is_empty', not_empty: 'not_empty',
 };
 
+/** A raw filter's operator as the validator reads it: its aliases, and a bare list meaning `in`. Null: no operator it knows. */
+export function filterOp(o: Record<string, unknown>): FilterOp | null {
+  const key = typeof o.op === 'string' ? o.op.trim().toLowerCase() : Array.isArray(o.values) || Array.isArray(o.value) ? 'in' : '=';
+  return Object.prototype.hasOwnProperty.call(OP_ALIASES, key) ? OP_ALIASES[key] : null;
+}
+
 function coerce(v: unknown, col: ParsedColumn): Cell | undefined {
   if (v === null) return null;
   if (col.type === 'number') {
@@ -260,8 +266,7 @@ function resolveFilter(raw: unknown, columns: ParsedColumn[], names?: Record<str
     return yb ? { column: col.name, period: p as AnswerPeriod, yearsBack: yb } : { column: col.name, period: p as AnswerPeriod };
   }
 
-  const opKey = typeof o.op === 'string' ? o.op.trim().toLowerCase() : Array.isArray(o.values) || Array.isArray(o.value) ? 'in' : '=';
-  const op = OP_ALIASES[opKey];
+  const op = filterOp(o);
   if (!op || !FILTER_OPS.has(op)) return `Unknown filter operator "${String(o.op)}".`;
   if (VALUELESS_OPS.has(op)) return { column: col.name, op };
   if (LIST_OPS.has(op)) {

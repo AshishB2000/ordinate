@@ -4,11 +4,11 @@
 // src/ipc/answerSave.ts) — and once it is saved the button gives way to a link
 // to the visual's own page, which takes the focus the button had.
 //
-// What was saved is held in the query cache by project and spec, never
-// fetched: closing the dock or switching conversations unmounts every card, and
-// a card that forgot would offer to save the same answer again. ponytail: for
-// this page's life only — a reload forgets; the turn can record the visual's id
-// once the answer is "remembered".
+// What was saved is kept on the answer's TURN (the server records the visual's
+// id there when the save names the turn), so a reload links to it too; within
+// the page it is also held in the query cache by project and spec, so a card
+// remounted before the conversation is fetched again does not offer the same
+// save twice.
 //
 // Saving changes the project, so it is an editor's: a viewer is never offered
 // it (the server would refuse one anyway). False until the roles are known, so
@@ -29,7 +29,19 @@ type Reply = { ok: true; visual: { id: string; name: string } } | { ok: false; r
 
 const FAILED = 'Could not save this answer as a visual.';
 
-export function SaveAsVisual({ projectId, spec }: { projectId: string; spec: { datasetId: string } & Record<string, unknown> }) {
+export function SaveAsVisual({
+  projectId,
+  spec,
+  turn,
+  savedVisualId,
+}: {
+  projectId: string;
+  spec: { datasetId: string } & Record<string, unknown>;
+  /** The answer turn the card draws: the server records the saved visual on it. */
+  turn?: { threadId: string; turnId: string };
+  /** What the turn already records. */
+  savedVisualId?: string;
+}) {
   const canEdit = useCanEdit(projectId);
   const qc = useQueryClient();
   const key = ['answer:saved', projectId, JSON.stringify(spec)];
@@ -47,7 +59,7 @@ export function SaveAsVisual({ projectId, spec }: { projectId: string; spec: { d
   }, [state.kind]);
   if (!canEdit) return null;
 
-  const id = state.kind === 'saved' ? state.id : saved?.id;
+  const id = state.kind === 'saved' ? state.id : (saved?.id ?? savedVisualId);
   if (id) {
     return (
       <Link ref={link} className={buttonClass('ghost', 'sm')} to={`/visuals/${projectId}/${id}`} data-testid="answer-saved">
@@ -60,7 +72,7 @@ export function SaveAsVisual({ projectId, spec }: { projectId: string; spec: { d
   async function save(): Promise<void> {
     setState({ kind: 'saving' });
     try {
-      const r = (await rpc('answer:saveVisual', { projectId, spec })) as Reply;
+      const r = (await rpc('answer:saveVisual', { projectId, spec, ...(turn ?? {}) })) as Reply;
       if (!r.ok) return setState({ kind: 'error', message: r.reason || FAILED });
       qc.setQueryData<Saved>(key, { id: r.visual.id });
       setState({ kind: 'saved', id: r.visual.id });

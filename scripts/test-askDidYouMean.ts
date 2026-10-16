@@ -267,6 +267,29 @@ async function main(): Promise<void> {
   ok('empty: …unmarked, the same card offers three (negative control — the mark is what holds them back)',
     cUnmarked.ok && cUnmarked.noMatch?.options.map((o) => o.label).join() === 'a@x.test,b@x.test,c@x.test', show(cUnmarked.noMatch));
 
+  // ── 5. A chart BY a marked column ─────────────────────────────────────────
+  // Its labels are values of it: the narration reads "(withheld)" for each, as a visual's facts do. The card stands.
+  const byEmail = async (spec: Record<string, unknown>) => {
+    const at = sent.length;
+    const r = await ask({ dataset: 'Orders', measures: [{ column: 'net_sales', aggregation: 'sum' }], ...spec }, true, 'revenue by customer');
+    return { turn: lastOf(r), told: sent.slice(at) };
+  };
+  const cat = await byEmail({ category: 'email' });
+  const catCard = await card(cat.turn.answer);
+  ok('labels: a chart BY a marked column is narrated without one of its values — every label withheld, and said to be',
+    cat.told.length === 2 && !show(cat.told).includes('@x.test') && !show(cat.told).includes('canary')
+    && cat.told[1].facts.includes('(Labels from email are withheld — marked personal or financial data.)') && cat.told[1].facts.includes(`${notes.WITHHELD}=`), cat.told[1]?.facts);
+  ok('labels: …the card a person sees keeps them — chart, headline and bullets',
+    catCard.ok && catCard.data.labels.includes(CANARY) && catCard.headline.some((h) => h.label.includes('@x.test')) && catCard.bullets.some((b) => b.includes('@x.test')), show(catCard));
+  const split = await byEmail({ category: 'region', series: 'email', chartType: 'clustered_column' });
+  ok('labels: a SPLIT by a marked column withholds the series names, and keeps the axis',
+    split.told.length === 2 && !show(split.told).includes('@x.test') && split.told[1].facts.includes('West=') && split.told[1].facts.includes('(Labels from email are withheld'), split.told[1]?.facts);
+  await catalog.setColumn(pid, ds.id, 'email', { sensitivity: 'none' });
+  const open = await answers.computeCard(pid, cat.turn.answer);
+  await catalog.setColumn(pid, ds.id, 'email', { sensitivity: 'personal' });
+  ok('labels: unmarked, the same facts print them (negative control — the mark is what withholds them)',
+    !('ok' in open) && open.factsText.includes(CANARY) && !open.factsText.includes('are withheld'));
+
   ok('the stub was asked exactly as often as it had replies', replies.length === 0, String(replies.length));
   finish();
 }
