@@ -4,17 +4,17 @@
 // src/ipc/answerSave.ts) — and once it is saved the button gives way to a link
 // to the visual's own page, which takes the focus the button had.
 //
-// What was saved is kept on the answer's TURN (the server records the visual's
-// id there when the save names the turn), so a reload links to it too; within
-// the page it is also held in the query cache by project and spec, so a card
-// remounted before the conversation is fetched again does not offer the same
-// save twice.
+// What was saved is kept on the answer's TURN: the save names the turn, the
+// server records the visual's id there, and the conversation is fetched again.
+// The card hands that id back only while the visual exists (`answer:card`), so
+// a reload or a remount links to it, and a visual deleted since is offered to
+// save again rather than linked to nothing.
 //
 // Saving changes the project, so it is an editor's: a viewer is never offered
 // it (the server would refuse one anyway). False until the roles are known, so
 // the button never flashes for someone who may not use it.
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { rpc } from '../../api/client';
@@ -24,7 +24,6 @@ import { useCanEdit } from '../projects/api';
 import s from './AnswerCard.module.css';
 
 type State = { kind: 'idle' } | { kind: 'saving' } | { kind: 'saved'; id: string } | { kind: 'error'; message: string };
-type Saved = { id: string };
 type Reply = { ok: true; visual: { id: string; name: string } } | { ok: false; reason?: string };
 
 const FAILED = 'Could not save this answer as a visual.';
@@ -39,19 +38,11 @@ export function SaveAsVisual({
   spec: { datasetId: string } & Record<string, unknown>;
   /** The answer turn the card draws: the server records the saved visual on it. */
   turn?: { threadId: string; turnId: string };
-  /** What the turn already records. */
+  /** What the turn records, as the card confirmed it: the visual still exists. */
   savedVisualId?: string;
 }) {
   const canEdit = useCanEdit(projectId);
   const qc = useQueryClient();
-  const key = ['answer:saved', projectId, JSON.stringify(spec)];
-  const saved = useQuery({
-    queryKey: key,
-    queryFn: () => qc.getQueryData<Saved | null>(key) ?? null, // never fetched: only a save writes it
-    enabled: false,
-    staleTime: Infinity,
-    gcTime: Infinity,
-  }).data;
   const [state, setState] = useState<State>({ kind: 'idle' });
   const link = useRef<HTMLAnchorElement>(null);
   useEffect(() => {
@@ -59,7 +50,7 @@ export function SaveAsVisual({
   }, [state.kind]);
   if (!canEdit) return null;
 
-  const id = state.kind === 'saved' ? state.id : (saved?.id ?? savedVisualId);
+  const id = state.kind === 'saved' ? state.id : savedVisualId;
   if (id) {
     return (
       <Link ref={link} className={buttonClass('ghost', 'sm')} to={`/visuals/${projectId}/${id}`} data-testid="answer-saved">
@@ -74,9 +65,9 @@ export function SaveAsVisual({
     try {
       const r = (await rpc('answer:saveVisual', { projectId, spec, ...(turn ?? {}) })) as Reply;
       if (!r.ok) return setState({ kind: 'error', message: r.reason || FAILED });
-      qc.setQueryData<Saved>(key, { id: r.visual.id });
       setState({ kind: 'saved', id: r.visual.id });
       void qc.invalidateQueries({ queryKey: ['visual:list', projectId] }); // the Visuals gallery has one more
+      if (turn) void qc.invalidateQueries({ queryKey: ['copilot:history', projectId] }); // the turn records it now
     } catch (e) {
       setState({ kind: 'error', message: e instanceof Error && e.message ? e.message : FAILED });
     }

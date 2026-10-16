@@ -78,7 +78,11 @@ export const assistant = {
     project: byProjectId,
   }),
 
-  'answer:card': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, spec: AnswerSpec, learn: Learn.optional() }), project: byProjectId }),
+  'answer:card': rpc({
+    access: 'read',
+    input: z.strictObject({ projectId: Uuid, spec: AnswerSpec, learn: Learn.optional(), savedVisualId: Uuid.optional() }),
+    project: byProjectId,
+  }),
   'answer:explain': rpc({
     access: 'read',
     input: z.strictObject({ projectId: Uuid, visualId: Uuid.optional(), tile: z.looseObject({ datasetId: Uuid }).optional() }),

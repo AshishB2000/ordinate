@@ -59,6 +59,10 @@ export const ASK_REFINE = 'now only above 900';
 const CHART = `\n@@ACTION ${JSON.stringify({ kind: 'answer', intent: ASK_CHART, spec: { dataset: 'Sales', category: 'region', measures: [{ column: 'revenue', aggregation: 'sum' }], filters: [{ column: 'region', op: '!=', value: 'North' }] } })}`;
 const REFINE = `\n@@ACTION ${JSON.stringify({ kind: 'answer', intent: `${ASK_CHART}, large orders only`, spec: { refine: true, filters: [{ column: 'revenue', op: '>', value: 900 }] } })}`;
 
+/** A question whose chart the model writes with a name the data does not have ("net revenue" for revenue). */
+export const ASK_MISS = 'Total net revenue by region';
+const MISS = `\n@@ACTION ${JSON.stringify({ kind: 'answer', intent: ASK_MISS, spec: { dataset: 'Sales', category: 'region', measures: [{ column: 'net revenue', aggregation: 'sum' }] } })}`;
+
 /** The provider stub: lists two models, a connectivity test gets "OK", a draft gets QUESTIONS when its prompt allows them and DRAFT when it does not, a streamed ask gets ANSWER and GET_DATA (or a chart, its refine, a plan or a dashboard proposal when asked for one). */
 const stub = http.createServer((req, res) => {
   let body = '';
@@ -86,7 +90,9 @@ const stub = http.createServer((req, res) => {
       return;
     }
     lastAsk = asked;
-    const chart = asked.includes(ASK_REFINE) ? ['Narrowing it down.', REFINE] : asked.includes(ASK_CHART) ? ['Here is revenue by region.', CHART] : null;
+    // ASK_MISS first: a later ask carries the PREVIOUS ANSWER block, whose title may quote ASK_CHART.
+    const chart = asked.includes(ASK_MISS) ? ['Here is net revenue by region.', MISS]
+      : asked.includes(ASK_REFINE) ? ['Narrowing it down.', REFINE] : asked.includes(ASK_CHART) ? ['Here is revenue by region.', CHART] : null;
     const parts = chart ?? (asked.includes(ON_SCREEN)
       ? ON_SCREEN_ANSWER
       : asked.includes('a plan')

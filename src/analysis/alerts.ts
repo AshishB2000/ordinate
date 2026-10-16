@@ -559,6 +559,15 @@ export function evaluateRule(input: EvaluateInput): EvaluateResult {
 }
 
 /**
+ * The Test button on a "vs the previous period" rule whose column does not yet
+ * hold two COMPLETE periods (./alertStore `recentPeriods`, ./insightsAgg
+ * `periodPlan`): what it waits for is a period to close, not a refresh.
+ */
+export function notTwoPeriodsYet(column: string): string {
+  return t('alerts.nothing_to_compare_yet_has_fewer', { column });
+}
+
+/**
  * The Test button: would this rule fire RIGHT NOW, and with what numbers?
  *
  * Deliberately blind to `enabled`, quiet hours and the snooze — the question the

@@ -51,6 +51,8 @@ interface Card {
   noMatch?: { text: string; options: MeantOption[] };
   /** The name its turn can remember, and whether the project already knows it. */
   learn?: CardLearn;
+  /** The visual its turn records, handed back only while it exists. */
+  savedVisualId?: string;
 }
 type Reply = Card | { ok: false; reason?: string };
 
@@ -74,8 +76,11 @@ export function AnswerCard({
   onFollowUp: (spec: Record<string, unknown>, label: string) => Promise<void>;
 }) {
   const q = useQuery({
-    queryKey: ['answer:card', projectId, JSON.stringify(spec), learn?.said, learn?.column],
-    queryFn: async () => (await rpc('answer:card', { projectId, spec, ...(learn ? { learn } : {}) })) as Reply,
+    queryKey: ['answer:card', projectId, JSON.stringify(spec), learn?.said, learn?.column, savedVisualId],
+    queryFn: async () =>
+      (await rpc('answer:card', { projectId, spec, ...(learn ? { learn } : {}), ...(savedVisualId ? { savedVisualId } : {}) })) as Reply,
+    // The same card asked again with what its turn now records (a save): keep drawing it meanwhile.
+    placeholderData: (previous) => previous,
   });
   const [table, setTable] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -167,7 +172,7 @@ export function AnswerCard({
           <Button size="sm" variant="ghost" aria-expanded={table} onClick={() => setTable(!table)}>
             {table ? 'Hide table' : 'Show table'}
           </Button>
-          <SaveAsVisual projectId={projectId} spec={spec} turn={turn} savedVisualId={savedVisualId} />
+          <SaveAsVisual projectId={projectId} spec={spec} turn={turn} savedVisualId={card.savedVisualId} />
           {card.learn && <RememberName projectId={projectId} datasetId={spec.datasetId} learn={card.learn} onTaught={() => q.refetch()} />}
         </div>
       )}

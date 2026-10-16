@@ -214,7 +214,17 @@ describe('Save as visual', () => {
   });
 
   it('remembers the save when the dock is closed and opened again — the same answer is never offered twice', async () => {
-    const calls = serve({ ...shell([user('u1', 'sales by region'), ANSWERED]), 'answer:saveVisual': { ok: true, visual: { id: VID, name: 'Sales by region' } } });
+    // As the server keeps it: the save records the visual on the turn, and the card hands it back while it exists.
+    let turns: unknown[] = [user('u1', 'sales by region'), ANSWERED];
+    const calls = serve({
+      ...shell(turns),
+      'copilot:history': () => ({ ok: true, turns, threadId: TID }),
+      'answer:card': (p: unknown) => ({ ...CARD, ...((p as { savedVisualId?: string }).savedVisualId ? { savedVisualId: VID } : {}) }),
+      'answer:saveVisual': () => {
+        turns = [user('u1', 'sales by region'), { ...ANSWERED, savedVisualId: VID }];
+        return { ok: true, visual: { id: VID, name: 'Sales by region' } };
+      },
+    });
     renderApp('/');
     let card = await within(await openDock()).findByTestId('answer-card');
     fireEvent.click(await within(card).findByRole('button', { name: 'Save as visual' }));
@@ -230,13 +240,22 @@ describe('Save as visual', () => {
   });
 
   it('after a reload, an answer the turn records as saved links to its visual — no second save offered', async () => {
-    const calls = serve(shell([user('u1', 'sales by region'), { ...ANSWERED, savedVisualId: VID }]));
+    const calls = serve({ ...shell([user('u1', 'sales by region'), { ...ANSWERED, savedVisualId: VID }]), 'answer:card': { ...CARD, savedVisualId: VID } });
     renderApp('/');
     const card = await within(await openDock()).findByTestId('answer-card');
     const link = await within(card).findByRole('link', { name: 'Open in Visuals' });
     expect(link.getAttribute('href')).toBe(`/visuals/${PID}/${VID}`);
     expect(within(card).queryByRole('button', { name: 'Save as visual' })).toBeNull();
+    expect(calls.find((c) => c.channel === 'answer:card')?.payload).toEqual({ projectId: PID, spec: SPEC, savedVisualId: VID });
     expect(calls.filter((c) => c.channel === 'answer:saveVisual')).toHaveLength(0);
+  });
+
+  it('a visual deleted since is not linked: the card no longer confirms it, so Save is offered again', async () => {
+    serve(shell([user('u1', 'sales by region'), { ...ANSWERED, savedVisualId: VID }])); // the card reply carries no savedVisualId
+    renderApp('/');
+    const card = await within(await openDock()).findByTestId('answer-card');
+    await within(card).findByRole('button', { name: 'Save as visual' });
+    expect(within(card).queryByRole('link', { name: 'Open in Visuals' })).toBeNull();
   });
 
   it('a refusal says why, and the button stays to try again', async () => {
