@@ -136,8 +136,12 @@ export async function csrfToken(s: Pick<Session, 'page' | 'server'>): Promise<st
  * Linux runner has none — the app then shows its designed "This map needs
  * WebGL" state, which a map spec checks there instead of the drawn map.
  */
-export function hasWebGL2(page: Page): Promise<boolean> {
-  return page.evaluate(() => !!document.createElement('canvas').getContext('webgl2'));
+export async function hasWebGL2(page: Page): Promise<boolean> {
+  const has = await page.evaluate(() => !!document.createElement('canvas').getContext('webgl2'));
+  // Chromium is launched with SwiftShader for exactly this (launchBrowser): there a missing WebGL2 would
+  // let every map step pass on its fallback unchecked — the per-PR job's maps — so it fails instead.
+  if (!has && page.context().browser()?.browserType().name() === 'chromium') throw new Error('Chromium has no WebGL2: the maps would go unchecked.');
+  return has;
 }
 
 /** Waits for the routed page to finish: its heading is up and no skeleton is busy. */
