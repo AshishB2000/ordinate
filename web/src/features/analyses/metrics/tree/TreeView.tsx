@@ -136,16 +136,17 @@ export function TreeView({ root, label }: { root: TreeNode; label: string }) {
   const [focusKey, setFocusKey] = useState(root.key);
   const box = useRef<HTMLDivElement>(null);
   const setOpen = useCallback((key: string, v: boolean) => setOpenMap((m) => new Map(m).set(key, v)), []);
-  // The focused node may vanish (its parent closed, a new tree): the root takes the tab stop.
+  // The focused node may vanish (its parent closed, a new tree): the root takes the tab stop. Only
+  // RENDERED nodes count — a child of a closed node is in the data but has no element to tab to.
   const keys = useMemo(() => {
     const out = new Set<string>();
-    const walk = (n: TreeNode): void => {
+    const walk = (n: TreeNode, depth: number): void => {
       out.add(n.key);
-      n.children.forEach(walk);
+      if (open.get(n.key) ?? defaultOpen(n, depth)) n.children.forEach((c) => walk(c, depth + 1));
     };
-    walk(root);
+    walk(root, 0);
     return out;
-  }, [root]);
+  }, [root, open]);
   const current = keys.has(focusKey) ? focusKey : root.key;
   // A tree wider than its box opens centred on the root, not on its leftmost leaf.
   const scroller = useRef<HTMLDivElement>(null);

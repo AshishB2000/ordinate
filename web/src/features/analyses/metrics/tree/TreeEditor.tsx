@@ -65,7 +65,8 @@ function BreakdownForm({
   const options = data.metrics.filter((m) => !blocked.has(m.id)).map((m) => ({ value: m.id, label: m.name }));
   const apply = (x: Suggestion) => onApply({ relation: x.relation, children: x.children.map((c) => ({ id: uuid(), metricId: c.metricId, ...(c.negative ? { negative: true as const } : {}) })) });
   const rel = kind === 'split' ? null : kind;
-  const shown = rel === 'ratio' ? parts.slice(0, 2) : parts;
+  // A kind's own part limit: switching a Sum of six to a Product shows (and saves) four.
+  const shown = rel ? parts.slice(0, LIMITS[rel][1]) : parts;
   const chosen = shown.map((p) => p.metricId).filter(Boolean);
   const valid = kind === 'split' ? !!column : !!rel && chosen.length === shown.length && new Set(chosen).size === chosen.length && chosen.length >= LIMITS[rel][0];
 

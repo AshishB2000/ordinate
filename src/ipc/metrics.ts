@@ -299,11 +299,13 @@ async function distinctValues(projectId: string, datasetId: string, column: stri
 }
 
 /**
- * Every day a DATE column holds, as ISO dates, from the chart door at day
- * grain. Not `distinctValues`: that reads the first 200 values seen
+ * Every day a DATE column of bare ISO dates holds, from the chart door at day
+ * grain. Not `distinctValues` alone: that reads the first 200 values seen
  * (datasetPage.MAX_DISTINCT), so two years of daily rows ended the sparkline in
  * their seventh month. A Live dataset still refuses, typed (as above).
  */
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
 async function dayLabels(projectId: string, datasetId: string, column: string): Promise<string[] | null> {
   requireExtract(await datasets.getDatasetMeta(projectId, datasetId));
   const r = await vizDataFor(projectId, datasetId, { category: column, grain: 'day', values: [{ column, aggregation: 'count' }] }, []);
@@ -347,7 +349,10 @@ export async function resolveMetricSeries(
   if (!metric || !byColumn) return null;
   const meta = await datasets.getDatasetMeta(projectId, metric.datasetId);
   const isDate = !!meta && meta.columns.some((c) => c.name === byColumn && c.type === 'date');
-  const labels = isDate ? await dayLabels(projectId, metric.datasetId, byColumn) : await distinctValues(projectId, metric.datasetId, byColumn);
+  const raw = await distinctValues(projectId, metric.datasetId, byColumn);
+  // The door's day labels are ISO, and a point filters the RAW cell by text (`=` / `contains`): they are
+  // only the cells' own words when every cell is a bare ISO date. `1/5/2024` or a timestamp keeps the raw read.
+  const labels = isDate && raw && raw.length && raw.every((v) => ISO_DAY.test(v)) ? await dayLabels(projectId, metric.datasetId, byColumn) : raw;
   if (!labels || !labels.length) return null;
 
   const plan = periodPlan(labels);

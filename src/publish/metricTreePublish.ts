@@ -13,6 +13,7 @@ import type { ParamValues } from '../analysis/params';
 import * as metrics from '../analysis/metrics';
 import * as sharePolicy from '../app/sharePolicy';
 import { computeTree } from '../ipc/metricTree';
+import { isLiveFigureError } from '../ipc/liveRoute';
 import type { TreeNodeOut } from '../ipc/metricTree';
 import type { TreeNode } from '../analysis/metricTree';
 
@@ -28,7 +29,14 @@ export async function metricTreePayload(
   if (!m) return { error: 'Source removed' };
   const withheld = await sharePolicy.withheldColumns(projectId, m.datasetId);
   if (splitColumns(m.tree).some((c) => withheld.has(c))) return { hidden: sharePolicy.HIDDEN_BY_POLICY };
-  const r = await computeTree(projectId, m.id, { filters, compare: card.compare, params: [...params.values()] });
+  let r: Awaited<ReturnType<typeof computeTree>>;
+  try {
+    r = await computeTree(projectId, m.id, { filters, compare: card.compare, params: [...params.values()] });
+  } catch (err) {
+    // A Live figure its warehouse could not give (L2.4): this tile says so, as a KPI tile does — the page still publishes.
+    if (!isLiveFigureError(err)) throw err;
+    return { error: err.message };
+  }
   if (!r.ok) return { error: r.error };
   const labels: string[] = [];
   const cur: Array<number | null> = [];

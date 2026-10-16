@@ -36,6 +36,7 @@ const projects: typeof import('../src/app/projects') = require('../src/app/proje
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const metrics: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
 const residentQuery: typeof import('../src/engine/residentQuery') = require('../src/engine/residentQuery');
+const metricsIpc: typeof import('../src/ipc/metrics') = require('../src/ipc/metrics');
 
 type Metric = import('../src/analysis/metrics').Metric;
 type Out = import('../src/ipc/metricTree').TreeNodeOut;
@@ -164,6 +165,7 @@ function shapeChecks(): void {
 const COLS = [
   { name: 'day', type: 'date' }, { name: 'region', type: 'text' }, { name: 'channel', type: 'text' },
   { name: 'revenue', type: 'number' }, { name: 'cost', type: 'number' }, { name: 'units', type: 'number' },
+  { name: 'shipped', type: 'date' },
 ] as import('../src/data/parse').ParsedColumn[];
 const REGIONS = ['North', 'South', 'East', 'West', 'Central', 'Coast', 'Hills', 'Plains', ''];
 const CHANNELS = ['Online', 'Retail', 'Partner'];
@@ -181,7 +183,7 @@ function fixtureRows(): (string | number | null)[][] {
       const revenue = rnd() < 0.03 ? null : 10 + Math.floor(rnd() * 490);
       // A blank region is sometimes '' and sometimes no cell at all: one member either way.
       const region = REGIONS[Math.floor(rnd() * REGIONS.length)];
-      rows.push([day, region === '' && rnd() < 0.5 ? null : region, CHANNELS[Math.floor(rnd() * 3)], revenue, revenue === null ? 5 : Math.floor((revenue as number) * (0.4 + rnd() * 0.4)), 1 + Math.floor(rnd() * 5)]);
+      rows.push([day, region === '' && rnd() < 0.5 ? null : region, CHANNELS[Math.floor(rnd() * 3)], revenue, revenue === null ? 5 : Math.floor((revenue as number) * (0.4 + rnd() * 0.4)), 1 + Math.floor(rnd() * 5), day]);
     }
   }
   return rows;
@@ -349,6 +351,29 @@ async function endToEnd(): Promise<void> {
   const hidden = await pub.metricTreePayload(pid, { metricId: revenue.id }, feb, new Map());
   (sharePolicy as any).withheldColumns = realWithheld;
   ok('publish: a tree split by a withheld column is hidden whole', 'hidden' in hidden && !('labels' in hidden));
+
+  // A Live tree whose warehouse fails: the tile says so, the publish goes on (as a KPI tile's does).
+  const liveErr: typeof import('../src/engine/live/liveFigureError') = require('../src/engine/live/liveFigureError');
+  const realCompute = ipc.computeTree;
+  (ipc as any).computeTree = async () => { throw new liveErr.LiveFigureError({ ok: false, code: 'live_unavailable', error: 'The warehouse is unreachable.' } as any); };
+  const failed = await pub.metricTreePayload(pid, { metricId: revenue.id }, feb, new Map()).catch((e) => ({ threw: String(e) }));
+  (ipc as any).computeTree = realCompute;
+  ok('publish: a Live failure is this tile\'s error, never the whole publish\'s', 'error' in failed && !('threw' in failed), JSON.stringify(failed));
+
+  // A second date column: the tree follows the one the scope ranges over.
+  const shipped = await ipc.computeTree(pid, revenue.id, { filters: [{ type: 'filter', column: 'shipped', op: 'period', period: { preset: 'custom', from: '2024-02-01', to: '2024-02-29' } }], compare });
+  ok('a scope on the second date column: the period is that column\'s', shipped.ok && shipped.period.label === 'Feb 2024' && shipped.prior.label === 'Jan 2024'
+    // …and its sparkline runs along it with the period's bounds lifted (left in, it would be one month: no line).
+    && (shipped.root.spark?.length ?? 0) >= 2, JSON.stringify(shipped).slice(0, 200));
+
+  // metric:series on dates that are not bare ISO: points filter the RAW cell by text, so the raw values stay the labels.
+  const usDays: (string | number)[][] = [];
+  for (let d = 1; d <= 28; d += 1) for (let k = 0; k < 40; k += 1) usDays.push([`2/${d}/2024`, k]);
+  const us = await datasets.saveDataset(pid, { name: 'US dates', sourceKind: 'csv', columns: [{ name: 'day', type: 'date' }, { name: 'n', type: 'number' }] as any, rows: usDays });
+  const usCount = us ? await save('US rows', { column: 'day', aggregation: 'count' }, undefined, us.id) : null;
+  const usSeries = usCount ? await metricsIpc.resolveMetricSeries(pid, usCount.id, 'day') : null;
+  ok('series over M/D/YYYY dates: every point counts its own rows, never a zero from a filter that matched nothing',
+    !!usSeries && usSeries.values.length > 0 && usSeries.values.every((v) => v === 40), JSON.stringify(usSeries?.values));
 
   const gone = await ipc.computeTree(pid, U(404), {});
   ok('an unknown metric is refused in words', !gone.ok && /no longer exists/.test(gone.error));

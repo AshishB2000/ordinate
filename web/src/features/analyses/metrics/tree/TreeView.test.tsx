@@ -135,6 +135,20 @@ describe('TreeView', () => {
     expect(items().filter((el) => el.tabIndex === 0).map((el) => el.getAttribute('data-key'))).toEqual(['r/o:"West"']);
   });
 
+  it('closing a node from its chevron keeps the tree in the tab order, focus on that node', () => {
+    render(<TreeView root={sample()} label="t" />);
+    const root = screen.getAllByRole('treeitem')[0];
+    root.focus();
+    fireEvent.keyDown(root, { key: 'ArrowDown' });
+    expect(document.activeElement?.getAttribute('data-key')).toBe('r/o');
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse Revenue' }));
+    const stops = screen.getAllByRole('treeitem').filter((el) => el.tabIndex === 0);
+    expect(stops.map((el) => el.getAttribute('data-key'))).toEqual(['r']);
+    expect(document.activeElement?.getAttribute('data-key')).toBe('r');
+    fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowRight' });
+    expect(screen.getByText('Orders')).toBeTruthy();
+  });
+
   it('a note says why a node has no contributions', () => {
     const t = sample();
     t.children[1].note = 'Avg order value has no figure in one of the periods, so its parts cannot be weighed.';

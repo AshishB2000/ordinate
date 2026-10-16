@@ -135,6 +135,8 @@ export function NodeCard({
             aria-label={open ? `Collapse ${node.name}` : `Expand ${node.name}`}
             onClick={(e) => {
               e.stopPropagation();
+              // The node keeps the keyboard: focus returns to its treeitem, where the arrows work.
+              e.currentTarget.closest<HTMLElement>('[role="treeitem"]')?.focus();
               onToggle();
             }}
           >

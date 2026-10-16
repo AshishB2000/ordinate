@@ -6,7 +6,21 @@
 import { z } from 'zod';
 import { byProjectId, rpc, Steps, Uuid } from './contract';
 
-/** One node: analysis/metricTree.sanitizeTree owns the limits (depth, parts, cycles). */
+/**
+ * One node: analysis/metricTree.sanitizeTree owns the limits (depth, parts,
+ * cycles). Spelled out level by level rather than z.lazy, so a body nested a
+ * thousand deep is refused by its shape, never walked: the root and four levels
+ * of parts (TREE_MAX_DEPTH), and nothing below.
+ */
+const nodeAt = (depth: number): z.ZodType<TreeNodeInput> =>
+  z.strictObject({
+    id: Uuid.optional(),
+    metricId: Uuid.optional(),
+    negative: z.boolean().optional(),
+    relation: z.enum(['sum', 'product', 'ratio']).optional(),
+    split: z.string().max(512).optional(),
+    children: depth > 0 ? z.array(nodeAt(depth - 1)).max(8).optional() : z.never().optional(),
+  });
 export interface TreeNodeInput {
   id?: string;
   metricId?: string;
@@ -15,16 +29,7 @@ export interface TreeNodeInput {
   children?: TreeNodeInput[];
   split?: string;
 }
-const TreeNode: z.ZodType<TreeNodeInput> = z.lazy(() =>
-  z.strictObject({
-    id: Uuid.optional(),
-    metricId: Uuid.optional(),
-    negative: z.boolean().optional(),
-    relation: z.enum(['sum', 'product', 'ratio']).optional(),
-    children: z.array(TreeNode).max(8).optional(),
-    split: z.string().max(512).optional(),
-  }),
-);
+const TreeNode = nodeAt(4);
 const Compare = z.strictObject({
   mode: z.enum(['previous_period', 'previous_year', 'custom']),
   from: z.string().max(40).optional(),

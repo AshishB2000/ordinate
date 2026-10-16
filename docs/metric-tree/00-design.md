@@ -81,7 +81,8 @@ Screens (`web/e2e/__screens__/`): `metric-tree-start-*`, `metric-tree-*`, `metri
 | D13 | Dashboard card under "As of" | The card shows the tree for today's periods with a note, like a KPI's Compare (no delta under As of). | Same rule as `kpiCompare`. |
 | D14 | Published page (`/p/`) | The card publishes as a numbers table (one row per node, "Revenue › Orders › West"; current, previous, contribution) under the headline — `src/publish/metricTreePublish.ts`. A tree split by a column the share policy withholds is hidden whole. | The publish site has no tree renderer; a table carries every figure and passes the bundle whitelist. |
 | D15 | Currency | The tree's figures are in the data's own currency (no `fxScope`). | Every figure and contribution in one unit; a dashboard currency would need the contribution formatted in the converted unit too. ponytail: convert when a dashboard with a currency asks. |
-| D16 | `metric:series` dates | Fixed at the root: a DATE breakout now reads its days from the chart door (day grain), not the 200-value distinct read, which ended the sample's sparkline in mid-2023. Live still refuses there. | The tree's default period and every sparkline (the Metrics table's too) end on the newest closed month. |
+| D16 | `metric:series` dates | Fixed at the root: a DATE breakout whose cells are bare ISO dates now reads its days from the chart door (day grain), not the 200-value distinct read, which ended the sample's sparkline in mid-2023. Any other date text (`1/5/2024`, a timestamp) keeps the raw read, because each point filters the raw cell by text. Live still refuses there. |
+| D17 | Which date column | The one the scope already ranges over (a dashboard filtered on its ship date); else the dataset's first date column. The period, its comparison and every sparkline use it. | One column for every figure on the page. | The tree's default period and every sparkline (the Metrics table's too) end on the newest closed month. |
 
 ## The math (`src/analysis/metricTreeMath.ts`, pure)
 
@@ -149,7 +150,8 @@ net (`scripts/test-liveSafetyNet.ts`) calls `metricTree:compute` on a Live metri
 ## Surfaces
 
 - RPC (`src/api/metricTree.ts`): `metricTree:compute` (read), `metricTree:save` (write),
-  `metricTree:suggest` (read). Tile kind `metricTree` in `analysis:tiles`.
+  `metricTree:suggest` (read), `metricTree:addToDashboard` (write). The tree's zod shape is spelled
+  out five levels deep (no `z.lazy`), so a deeply nested body is refused by shape, never walked. Tile kind `metricTree` in `analysis:tiles`.
 - `src/ipc/metricTree.ts` (handlers), `src/ipc/metricTreeSplit.ts` (the split through the door),
   `src/ipc/metricTreeCard.ts` (`metricTree:addToDashboard`), `src/publish/metricTreePublish.ts`,
   `src/analysis/metricTree.ts` (shape, sanitizer, suggestions), `metricTreeMath.ts`,

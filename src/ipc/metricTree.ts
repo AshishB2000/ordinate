@@ -308,13 +308,16 @@ export async function computeTree(projectId: string, metricId: string, input: Co
   const root = await metrics.getMetric(projectId, metricId);
   if (!root) return { ok: false, error: msg.metricGone() };
   const meta = await datasets.getDatasetMeta(projectId, root.datasetId);
-  const dateColumn = meta?.columns.find((c) => c.type === 'date')?.name;
-  if (!meta || !dateColumn) return { ok: false, error: msg.noDateColumn(root.name), code: 'no_date' };
+  if (!meta) return { ok: false, error: msg.noDateColumn(root.name), code: 'no_date' };
 
   const tree = input.tree !== undefined ? sanitizeTree(input.tree, root.id) : (root.tree ?? null);
   const compare = sanitizeCompare(input.compare) ?? { mode: 'previous_period' as const };
   const params = paramValues(input.params);
   let filters = resolveFilterParams(sanitizeDashboardFilters(input.filters), params).steps;
+  // The date the scope already ranges over (a dashboard filtered on its ship date), else the first:
+  // the period, its comparison and every sparkline run along the same column.
+  const dateColumn = (!input.period && scopeRange(filters, meta.columns)?.column) || meta.columns.find((c) => c.type === 'date')?.name;
+  if (!dateColumn) return { ok: false, error: msg.noDateColumn(root.name), code: 'no_date' };
   const ctx: Ctx = {
     projectId, root, columns: meta.columns, dateColumn, current: [], previous: [], undated: withoutDateBounds(filters, dateColumn),
     compare, rawParams: input.params, byId: new Map([[root.id, root]]),
