@@ -5,21 +5,30 @@
 Open **Data → Metrics**, pick **Revenue**, choose **Open tree**. The page shows one picture:
 
 ```
-                         ┌──────────────────────────┐
-                         │ Revenue          $182K   │
-                         │ was $164K · +$18.4K +11% │
-                         │ ╱╲╱‾‾╲╱ (12 months)      │
-                         └────────────┬─────────────┘
-                     ┏━━━━━━━━━━━━━━━━┻───────────────────┐   ← the branch that explains most is thicker and tinted
-          ┌──────────┴──────────┐               ┌─────────┴───────────┐
-          │ Orders        1,214 │               │ Avg order value $150 │
-          │ +142 +13%           │               │ −$2.10 −1.4%         │
-          │ explains +$21.1K    │               │ explains −$2.7K      │
-          │ 115% of the change  │               │ −15% of the change   │
-          └──────────┬──────────┘               └──────────────────────┘
-        ┏━━━━━━━━━━━━┻━━━┯━━━━━━━━━━┯━━━━━━━━━┓  split by region
-      West ▲ +$12K   East +$5K    Central +$3K   South +$1K
+                         ┌──────────────────────────────┐
+                         ▌ Revenue              ╱╲╱‾╲╱   │   ← the lead branch: tinted card, thick connector
+                         ▌ $322.7K                       │
+                         ▌ +$33.7K +11.7%   was $288.9K  │
+                         ▌ ƒ = Orders × Avg order value  │
+                         └──────────────┬───────────────┘
+                   ┏━━━━━━━━━━━━━━━━━━━━┻──────────────────────┐
+         ┌─────────┸──────────┐                     ┌──────────┴──────────┐
+         ▌ Orders   320  ╱‾╲╱ │                     │ Avg order value     │
+         ▌ +71 +28.5% was 249 │                     │ $1,008.35  −$152.01 │
+         ▌ +$77K   228% of Δ  │                     │ −$43.2K  −128% of Δ │
+         ▌ ▤ by region        │                     └─────────────────────┘
+         └─────────┰──────────┘
+         ┌─────────┸──────────────┐   a split is a ranked list under its parent
+         ▌ East  ╱╲╱      83      │
+         ▌ ███████░░ +23     32%  │
+         ▌ was 60 · +23 (+38.3%)  │
+         │ West  ╱╲╱      98      │
+         │ ███████░░ +23     32%  │
+         │ …                      │
+         └────────────────────────┘
 ```
+
+Screens (`web/e2e/__screens__/`): `metric-tree-start-*`, `metric-tree-*`, `metric-tree-card-*` (light and dark), `metric-tree-phone-light`.
 
 - **Period** (top bar): "Latest month in the data" by default (the newest *closed* month — the same
   month the Metrics table's sparkline ends on), or Latest quarter / Last month / Last quarter /
@@ -29,8 +38,10 @@ Open **Data → Metrics**, pick **Revenue**, choose **Open tree**. The page show
   Orders explains 115% of it, led by West."*
 - Each **node card**: name, current figure, previous figure, change (absolute and %), a 12-month
   sparkline, and — for every node below the root — its **contribution** to its parent's change
-  (signed, in the parent's units, and as a share of the parent's change). Segments of a ratio
-  metric also show **mix** and **rate**.
+  (signed, in the parent's units, and as a share of the parent's change, with a bar drawn to the
+  widest sibling). A **split** draws its segments as a ranked list under the parent — the same
+  figures per row, compact — so a 7-segment split does not push the tree past its canvas.
+  Segments of a ratio metric also show **mix** and **rate**.
 - The **lead branch** — at each level, the child that pushed hardest in the direction the parent
   moved — is tinted (green when that is good news by the metric's direction, red when bad, accent
   when the metric has no direction) with a thicker connector, from the root down.
@@ -46,7 +57,10 @@ Open **Data → Metrics**, pick **Revenue**, choose **Open tree**. The page show
   sheet's other filters. Published (`/p/`), the card is a numbers table of the tree with the
   headline as its caption.
 - Empty, loading (skeleton tree) and error states, light and dark; a Live metric works (figures
-  through the Live doors) with no sparklines.
+  through the Live doors) with no sparklines. On a phone the tree is an indented outline (no
+  sideways scroll); on a desktop a tree wider than its canvas scrolls, opening centred on the root.
+- **Where it's used**: a metric that is a part of another's tree, or drawn by a tree card, says so
+  in the Metrics table and in its delete confirm (`metricUsage`).
 
 ## Decisions (made here, not asked — the user was away)
 
@@ -58,13 +72,16 @@ Open **Data → Metrics**, pick **Revenue**, choose **Open tree**. The page show
 | D4 | Product/ratio decomposition | **Shapley value** of the relation (below), not LMDI. | Exact additivity in real arithmetic with **no** special case for zero or a sign change; LMDI (log-mean) is undefined at both and would need the fallback anyway. |
 | D5 | Parts that don't add up | Contributions are computed from the children; the gap to the parent's real change is shown as its own row, "Not explained by its parts". | The tree never redistributes a residual into a child — that would be an invented contribution. |
 | D6 | Dimension split values | One **chart-door** (`vizDataFor`) call per period over the metric's driver operands (`driverShape`), so a Live dataset works and the resident fast path is used. | "Figures go through the doors." |
-| D7 | Split contribution | additive metric → the segment's own change; ratio metric (Margin %, AOV, any avg) → the midpoint **mix + rate** effect of `drivers.memberEffects` (the key-drivers math, reused). `min`/`max` → values and changes, no contributions, with a sentence. | The same identity Key drivers already uses and tests. |
-| D8 | Segments shown | Top 6 by \|contribution\|, then "Other (n)" (its contribution = Σ of the rest; its value recomputed from the summed operands). A column with more than 50 values is refused (the chart door folds past 50, and folds per period). | Readable cards; no misaligned buckets. |
+| D7 | Split contribution | additive metric → the segment's own change; ratio metric (Margin %, AOV, any avg) → the midpoint **mix + rate** effect of `drivers.memberEffects` (the key-drivers math, reused). `min`/`max` → no segments, the driver-shape sentence on the node ("cannot be split by member"). | The same identity Key drivers already uses and tests. |
+| D8 | Segments shown | Top 6 by \|contribution\| (7 when exactly 7), then "Other (n)" (its contribution = Σ of the rest; its value recomputed from the summed operands), as a ranked list. Blank — a null, an empty or a whitespace cell — is ONE segment, "(blank)", as in key drivers (the door groups null and '' apart under one label; their figures add). A column with more than 50 values is refused (the chart door folds past 50, and per period); the editor offers only text columns with 2–50 values when the Parquet can say. | Readable; no misaligned buckets; one meaning of blank. |
 | D9 | Default period | Latest closed month in the data (last label of the root's monthly series). A Live metric (no series) defaults to "Last month". | The sample (2023–24) has nothing in "last month"; data-derived is what a reader expects. |
 | D10 | Lead branch | At each node, the child with the largest `contribution × sign(parent change)`; ties → editor order. None when the parent did not change. | "Explains most of the change" — the direction the parent actually went. |
 | D11 | Percent-format metrics | Change in **points** ("+1.2 pts"), no % change — as `metric:compare` already does. | One convention app-wide. |
 | D12 | Assistant | The server writes the headline from engine figures (catalog sentences, `t()`); no model call. A model narration is out of scope for v1. | The sentence is already the narration, and no figure can come from a model. |
 | D13 | Dashboard card under "As of" | The card shows the tree for today's periods with a note, like a KPI's Compare (no delta under As of). | Same rule as `kpiCompare`. |
+| D14 | Published page (`/p/`) | The card publishes as a numbers table (one row per node, "Revenue › Orders › West"; current, previous, contribution) under the headline — `src/publish/metricTreePublish.ts`. A tree split by a column the share policy withholds is hidden whole. | The publish site has no tree renderer; a table carries every figure and passes the bundle whitelist. |
+| D15 | Currency | The tree's figures are in the data's own currency (no `fxScope`). | Every figure and contribution in one unit; a dashboard currency would need the contribution formatted in the converted unit too. ponytail: convert when a dashboard with a currency asks. |
+| D16 | `metric:series` dates | Fixed at the root: a DATE breakout now reads its days from the chart door (day grain), not the 200-value distinct read, which ended the sample's sparkline in mid-2023. Live still refuses there. | The tree's default period and every sparkline (the Metrics table's too) end on the newest closed month. |
 
 ## The math (`src/analysis/metricTreeMath.ts`, pure)
 
@@ -134,11 +151,15 @@ net (`scripts/test-liveSafetyNet.ts`) calls `metricTree:compute` on a Live metri
 - RPC (`src/api/metricTree.ts`): `metricTree:compute` (read), `metricTree:save` (write),
   `metricTree:suggest` (read). Tile kind `metricTree` in `analysis:tiles`.
 - `src/ipc/metricTree.ts` (handlers), `src/ipc/metricTreeSplit.ts` (the split through the door),
+  `src/ipc/metricTreeCard.ts` (`metricTree:addToDashboard`), `src/publish/metricTreePublish.ts`,
   `src/analysis/metricTree.ts` (shape, sanitizer, suggestions), `metricTreeMath.ts`,
   `metricTreeMessages.ts` (catalog sentences), `metricTreeJs.ts` (the pure-JS reference).
+- Dashboard card type `metricTree` (`src/analysis/dashboards.ts` `sanitizeCard`: the metric's id
+  and an optional compare), 12 × 11 on the grid.
 - Web: `web/src/features/analyses/metrics/tree/` — `MetricTreePage` (route
-  `/data/metrics/:projectId/:metricId/tree`), `TreeView` (shared with the card), `TreeEditor`,
-  `MetricTree.module.css`. Card: `MetricTreeBody`.
+  `/data/metrics/:projectId/:metricId/tree`), `TreeView` + `NodeCard` (shared with the card),
+  `TreeEditor`, `AddTreeToDashboard`, `MetricTreeCard` (the card body, its Properties, its Add
+  dialog). The Metrics table links each row to its tree.
 
 ## Tests
 

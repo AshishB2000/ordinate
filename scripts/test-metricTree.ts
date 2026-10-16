@@ -329,6 +329,23 @@ async function endToEnd(): Promise<void> {
   const lastYear = await ipc.computeTree(pid, revenue.id, { filters: feb, compare: { mode: 'previous_year' } });
   ok('nothing a year earlier: the headline says so, no invented change', lastYear.ok && /has no figure to compare/.test(lastYear.headline) && lastYear.root.change === null);
 
+  // Where a metric is used counts the trees it is a part of (the delete confirm's sentence).
+  const usage = await (require('../src/analysis/metricUsage') as typeof import('../src/analysis/metricUsage')).metricUsage(pid, orders.id);
+  ok('usage: a part of a tree is "used by" that metric', usage.refs.some((x) => x.kind === 'metric' && x.id === revenue.id), JSON.stringify(usage));
+
+  // Published (/p/): a numbers table of the tree under its headline; hidden whole when a split column is withheld.
+  const pub: typeof import('../src/publish/metricTreePublish') = require('../src/publish/metricTreePublish');
+  const sharePolicy: typeof import('../src/app/sharePolicy') = require('../src/app/sharePolicy');
+  const table = await pub.metricTreePayload(pid, { metricId: revenue.id }, feb, new Map()) as { labels?: string[]; series?: { label: string; values: unknown[] }[]; caption?: string };
+  ok('publish: one row per node, root down, named by its path', table.labels?.[0] === 'Revenue' && table.labels?.[1] === 'Revenue › Orders' && /^Revenue › Orders › /.test(table.labels?.[2] ?? ''), JSON.stringify(table.labels));
+  ok('publish: the periods\' figures and the contributions, numbers only, under the headline',
+    table.series?.map((x) => x.label).join() === 'Feb 2024,Jan 2024,Contribution' && table.series.every((x) => x.values.every((v) => v === null || typeof v === 'number')) && /^Revenue (rose|fell) /.test(table.caption ?? ''));
+  const realWithheld = sharePolicy.withheldColumns;
+  (sharePolicy as any).withheldColumns = async () => new Set(['region']);
+  const hidden = await pub.metricTreePayload(pid, { metricId: revenue.id }, feb, new Map());
+  (sharePolicy as any).withheldColumns = realWithheld;
+  ok('publish: a tree split by a withheld column is hidden whole', 'hidden' in hidden && !('labels' in hidden));
+
   const gone = await ipc.computeTree(pid, U(404), {});
   ok('an unknown metric is refused in words', !gone.ok && /no longer exists/.test(gone.error));
   const cleared = await ipc.saveTree(pid, avgPrice.id, null);
