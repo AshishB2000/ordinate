@@ -26,7 +26,7 @@
 //   npm run build:ts && node scripts/test-statsResident.js
 
 export {}; // module scope — sibling test scripts share top-level names
-import { ok, failureCount } from './selfcheck';
+import { ok, failureCount, finish } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -564,5 +564,5 @@ void main()
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best effort */ }
     if (failureCount()) { console.error('\n' + failureCount() + ' stats-resident check(s) FAILED'); process.exit(1); }
     console.log('\nAll stats-resident checks passed.');
-    process.exit(0); // the DuckDB worker keeps the loop alive otherwise
+    finish();
   });

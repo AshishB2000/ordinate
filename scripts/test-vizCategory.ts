@@ -21,7 +21,7 @@
 //   npm run build:ts && node scripts/test-vizCategory.js
 
 export {}; // module scope — sibling test scripts share top-level names
-import { ok, failureCount } from './selfcheck';
+import { ok, failureCount, finish } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -513,7 +513,7 @@ main()
       process.exit(1);
     }
     console.log('\nAll vizCategory checks passed.');
-    process.exit(0);
+    finish();
   })
   .catch((err) => {
     console.error('FAIL vizCategory: ' + (err && err.stack ? err.stack : String(err)));

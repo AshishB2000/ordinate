@@ -134,6 +134,7 @@
 import * as path from 'path';
 import { Worker, isMainThread } from 'worker_threads';
 import type { MessagePort } from 'worker_threads';
+import { closeEvery, closeWorker, track } from './duckdbClose';
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -369,9 +370,10 @@ export async function execAsync(sql: string): Promise<void> {
 }
 
 /**
- * Terminate the worker and release the shared buffers. Idempotent: calling it
- * twice, or before the bridge ever started, is a no-op. A later `query()` starts
- * a fresh worker (and, for an in-memory database, a fresh empty catalog).
+ * Close the worker (through its own queue, ./duckdbClose.ts) and release the
+ * shared buffers. Idempotent: calling it twice, or before the bridge ever
+ * started, is a no-op. A later `query()` starts a fresh worker (and, for an
+ * in-memory database, a fresh empty catalog).
  *
  * In-flight async calls are SETTLED, not abandoned: each rejects with
  * `unavailable`. A promise that can never settle is a leak the caller cannot
@@ -386,59 +388,19 @@ export function shutdown(): void {
   dataView = null;
   state = 'idle';
   failReason = '';
-  const busy = inFlight.size > 0;
   settleAllPending(new DuckDBError('unavailable', 'DuckDB bridge was shut down while the call was in flight'));
-  if (w) closeWorker(w, busy);
+  if (w) closeWorker(w);
 }
 
-/** The bridge's worker while a call is in flight — exiting around it aborts (closeWorker); selfcheck.finish waits. */
-export const busyWorker = (): Worker | null => (inFlight.size > 0 ? worker : null);
-
 /**
- * Stop a worker. `terminate()` when it is idle; ASK IT TO EXIT when a call may
- * still be running.
- *
- * ⚠ `Worker.terminate()` while an `@duckdb/node-api` native call is in flight
- *   ABORTS THE PROCESS — `libc++abi: terminating due to uncaught exception of
- *   type Napi::Error`, not a catchable JS error. Reproduced in ~15 lines with
- *   nothing from this module involved: a bare worker that opens an instance,
- *   starts `connection.run(...)`, and is terminated before it resolves. The
- *   binding's completion callback lands in a torn-down N-API environment.
- *   This was unreachable before the async path existed, because a sync caller
- *   holds the main thread for the whole query and so cannot call `shutdown()`
- *   during one. `queryAsync` makes it reachable, so it has to be handled.
- * The fix uses the machinery already there: the close request goes through the
- * worker's serialized queue, so it runs only after every queued call has
- * settled, at which point exiting is safe. There is deliberately NO terminate
- * backstop — a worker wedged badly enough to ignore the request is exactly the
- * worker that terminating would abort on. It is left orphaned and unref'ed, so
- * it holds nothing open and dies with the process. Leaking one thread in a
- * pathological case beats aborting the app.
- * Consequence worth knowing: a FILE-backed database restarted immediately after
- * a busy shutdown may briefly race the old worker for the file lock. The app
- * uses ':memory:' plus `read_parquet`, so this is theoretical today.
+ * Close every DuckDB worker on this thread — the bridge's and the per-org
+ * pool's — through its own queue, and resolve once each has EXITED. The last
+ * thing before `process.exit` (selfcheck `finish`): exiting around a live
+ * worker, even an idle one, aborts the process (./duckdbClose.ts).
  */
-function closeWorker(w: Worker, busy: boolean): void {
-  if (!busy) {
-    void w.terminate();
-    return;
-  }
-  try {
-    w.postMessage({ kind: 'close' });
-  } catch {
-    void w.terminate(); // port already gone ⇒ nothing native can be in flight
-    return;
-  }
-  // Hold the event loop open until it actually goes. An `unref`ed orphan is NOT
-  // enough: tearing the PROCESS down around a live native call aborts it exactly
-  // as `terminate()` does (same reproduction, just triggered by exit instead).
-  // We asked it to leave; we wait for it to leave. The wait is bounded by the
-  // in-flight query, and by the same ceiling any single call already has — past
-  // that the worker is wedged, and waiting longer buys nothing.
-  w.ref();
-  const giveUp = setTimeout(() => w.unref(), CALL_TIMEOUT_MS);
-  giveUp.unref();
-  w.once('exit', () => clearTimeout(giveUp));
+export function closeAll(): Promise<void> {
+  shutdown();
+  return closeEvery();
 }
 
 /**
@@ -534,9 +496,8 @@ function fail(reason: string): void {
   dataSab = null;
   dataView = null;
   state = 'failed';
-  const busy = inFlight.size > 0;
   settleAllPending(new DuckDBError('unavailable', 'DuckDB is not available: ' + reason));
-  if (w) closeWorker(w, busy);
+  if (w) closeWorker(w);
 }
 
 /**
@@ -580,6 +541,7 @@ function spawn(): void {
     workerData: { control, payload, dbPath: opts.dbPath, maxBytes: opts.maxBytes },
   });
   worker = w;
+  track(w);
   // Never let the worker keep the process alive, and never
   // let an 'error'/'exit' event become an uncaught exception. These handlers run
   // only when the event loop turns, i.e. never while a sync call is blocked —

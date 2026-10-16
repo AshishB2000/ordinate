@@ -74,8 +74,10 @@ SPA (`web/dist`) and the API from one origin. Metadata in Postgres; Parquet on `
   `src/server/main.ts`): `memory_limit`, `threads`, `temp_directory` in the org, `allowed_directories`
   = the org root (+ its S3 prefix), then `enable_external_access=false`, `lock_configuration=true`.
   LRU past `DUCKDB_MAX_WORKERS`, idle eviction, per-query timeout; the request's abort signal
-  interrupts. Close a worker through its own queue — **never `terminate()`** (aborts the process
-  mid native call). Compute-pool threads borrow the caller's org worker, never run their own DuckDB.
+  interrupts. Close a worker through its own queue — **never `terminate()`**, and never exit the
+  process around one: both abort it (`Napi::Error`) mid native call, and sometimes even when the
+  worker is idle (`src/engine/duckdbClose.ts`). Compute-pool threads borrow the caller's org worker,
+  never run their own DuckDB.
 - **Never block the event loop.** `src/engine/duckdb.ts` keeps a synchronous `query()`/`exec()`
   (Atomics.wait) for workers and self-checks, but `src/server/main.ts` calls
   `forbidSyncOnMainThread()` and `scripts/test-asyncReach.ts` proves nothing reachable from
@@ -250,8 +252,10 @@ a `v*` tag) has never been cut — releasing is the user's call. Every env var i
 
 - **Self-check files**, no framework: `npm test` is `node --test "scripts/test-*.js"`, so **adding a
   suite needs no wiring** (and no count is written here). Suites report through `scripts/selfcheck.ts`
-  (`ok`/`failureCount`/`finish`). Gate runs: no `DATABASE_URL`, with one, and the CI env (password
-  Postgres + MinIO). A scratch-DB pg Pool needs an `'error'` listener (57P01 at teardown).
+  (`ok`/`failureCount`/`finish`) and end on `finish()`, never a bare `process.exit(0)`: it closes
+  every DuckDB worker first (`test-selfcheckExit`). Gate runs: no `DATABASE_URL`, with one, and the
+  CI env (password Postgres + MinIO). A scratch-DB pg Pool needs an `'error'` listener (57P01 at
+  teardown).
 - **Differential tests are the house style.** Two implementations means asserting they agree with
   `Object.is`, not against hand-written values; several spy on `datasets.getDataset` to prove the
   table was never hydrated. Where the reference was deleted (the desktop renderer) the test compares

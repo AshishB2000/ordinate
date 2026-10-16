@@ -119,7 +119,9 @@ function syncInWorker(): Promise<unknown> {
     `d.shutdown(); parentPort.postMessage(out);`;
   const w = new Worker(src, { eval: true });
   return new Promise((resolve, reject) => {
-    w.once('message', (m) => { resolve(m); void w.terminate(); });
+    // No terminate(): it would tear down the thread's own DuckDB worker (src/engine/duckdbClose.ts).
+    // d.shutdown() closed that through its queue, and the thread ends once it has gone.
+    w.once('message', resolve);
     w.once('error', reject);
   });
 }

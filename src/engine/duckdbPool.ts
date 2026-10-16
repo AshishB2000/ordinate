@@ -41,7 +41,7 @@
 // `idleMs` is closed; idle means no call waiting on its start, queued, in flight
 // or leased — a call handed a worker before its close always runs. Closing is
 // ALWAYS the worker's own queued exit, never `terminate()` (that aborts the
-// process mid-native-call — src/engine/duckdb.ts `closeWorker`). Views and per-run relations live in the worker that ran them:
+// process mid-native-call — src/engine/duckdbClose.ts). Views and per-run relations live in the worker that ran them:
 // `datasetView.ensureView` and the queries that read it run in the same org's
 // worker because both go through `ctx()`; `withRelationAsync` is SQL text,
 // inlined into the query, so it travels with it. Eviction drops an org's views;
@@ -56,6 +56,7 @@ import * as path from 'path';
 import { MessageChannel, Worker } from 'worker_threads';
 import * as duck from './duckdb';
 import { DuckClient } from './duckdbClient';
+import { track } from './duckdbClose';
 import { ORG_RE } from '../app/paths';
 import { ctx } from '../server/context';
 import type { S3Env } from '../server/env';
@@ -193,6 +194,7 @@ export class DuckPool {
         setup: org === PROBE_KEY ? lockedSetup(this.cfg, [], undefined, this.cfg.s3 ? workerSetup(this.cfg.s3, null) : []) : orgSetup(this.cfg, org),
       },
     });
+    track(worker); // the process exits only after it has (duck.closeAll)
     const client = new DuckClient(worker, this.cfg.queryTimeoutMs);
     const ready = new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new duck.DuckDBError('unavailable', 'DuckDB worker did not start')), STARTUP_TIMEOUT_MS);

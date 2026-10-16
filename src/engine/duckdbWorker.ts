@@ -231,7 +231,7 @@ async function handleAsync(msg: CallMessage, id: number, from: Sender): Promise<
  * call (measured: a 10^10-row scan stops in ~2 ms, `SELECT 42` answers after).
  * Still queued → skipped when its turn comes. Already finished → nothing.
  * Never `Worker.terminate()`: that aborts the process mid-native-call (see
- * `closeWorker` in src/engine/duckdb.ts).
+ * src/engine/duckdbClose.ts).
  */
 function interrupt(from: Sender, id: number): void {
   if (running && running.from === from && running.id === id) stopRunning();
@@ -322,7 +322,7 @@ if (parentPort) {
  * queue, so by the time it executes every queued call has settled and no native
  * DuckDB call is outstanding — which is exactly the condition `terminate()`
  * cannot guarantee, and violating it aborts the whole process. See the note on
- * `closeWorker` in src/duckdb.ts for the reproduction.
+ * src/engine/duckdbClose.ts for the measurements.
  */
 async function closeNow(): Promise<void> {
   connection = null;

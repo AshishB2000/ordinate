@@ -28,17 +28,17 @@ export function failureCount(): number {
 
 /**
  * Exit the process with the suite's verdict. The last line every suite ends on.
- * A bare exit around a live @duckdb/node-api call aborts the process
- * (`Napi::Error`, src/engine/duckdb.ts closeWorker), so when the bridge is
- * loaded and busy this asks it to close and exits once its worker has gone.
+ * A bare exit around a DuckDB worker — busy, and sometimes even idle — aborts
+ * the process (`Napi::Error`, src/engine/duckdbClose.ts), so when the
+ * bridge is loaded this closes every DuckDB worker (the bridge's and the
+ * per-org pool's) through its own queue and exits once all have gone.
  * The bridge is read from the require cache, so this module loads nothing.
  */
 export function finish(): void {
   const code = failures ? 1 : 0;
+  process.exitCode = code; // the verdict even if the process ends on its own (a wedged worker let go)
   const duck = require.cache[require.resolve('../src/engine/duckdb')]?.exports as typeof import('../src/engine/duckdb') | undefined;
-  const busy = duck?.busyWorker();
-  if (!duck || !busy) process.exit(code);
-  busy.once('exit', () => process.exit(code));
+  if (!duck) process.exit(code);
+  void duck.closeAll().then(() => process.exit(code));
   setTimeout(() => process.exit(code), 120_000).unref(); // a wedged worker never says it left
-  duck.shutdown();
 }

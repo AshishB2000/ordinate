@@ -21,9 +21,9 @@
 import * as duck from '../src/engine/duckdb';
 import * as side from '../src/engine/duckdbSidecar';
 
-import { ok, failureCount } from './selfcheck';
+import { ok, failureCount, finish } from './selfcheck';
 
-function done(): never {
+function done(): void {
   try {
     side.shutdown();
   } catch {
@@ -39,14 +39,14 @@ function done(): never {
     process.exit(1);
   }
   console.log('\nAll duckdbSidecar checks passed');
-  process.exit(0);
+  finish();
 }
 
 if (!side.isAvailable()) {
   // Same contract as duckdb.ts: unavailable is a legitimate answer, not a crash.
   console.log('ok   sidecar reports unavailable without throwing (DuckDB binding absent)');
   console.log('\nAll duckdbSidecar checks passed (engine absent — differential skipped)');
-  process.exit(0);
+  process.exit(0); // nothing of DuckDB has started on this thread, and the checks below must not run
 }
 ok('sidecar starts and reports available', true);
 ok('duckdb.ts bridge also available (required for the comparison)', duck.isAvailable());
