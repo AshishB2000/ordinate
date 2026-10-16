@@ -253,11 +253,13 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
   const dlg = page.getByRole('dialog', { name: 'New relationship' });
   await dlg.getByRole('combobox', { name: 'Many side' }).click();
   await page.getByRole('option', { name: 'Retail orders' }).click();
-  // The first list closed and took the pick before the second opens: Firefox drops a click on the
-  // next trigger while the first one's content is still animating out.
   await page.getByRole('listbox').waitFor({ state: 'detached' });
   await dlg.getByRole('combobox', { name: 'Many side' }).filter({ hasText: 'Retail orders' }).waitFor();
-  await dlg.getByRole('combobox', { name: 'One side' }).click();
+  // Opened from the keyboard: a Radix select opens on pointer-down and lays its list over the trigger,
+  // and in Firefox that same click's pointer-up can land on an item and pick it — the list is gone
+  // before "Regions" can be chosen. Enter opens it with nothing under the pointer.
+  await dlg.getByRole('combobox', { name: 'One side' }).focus();
+  await page.keyboard.press('Enter');
   await page.getByRole('option', { name: 'Regions' }).click();
   await dlg.getByRole('radio', { name: /region → region/ }).waitFor();
   assert.equal(await dlg.getByRole('radio', { name: /region → region/ }).getAttribute('aria-checked'), 'true', 'the best key arrives selected');
