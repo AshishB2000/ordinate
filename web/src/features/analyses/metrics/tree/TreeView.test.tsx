@@ -86,10 +86,11 @@ describe('TreeView', () => {
     expect(screen.getByText('by region')).toBeTruthy();
   });
 
-  it('marks the lead branch — and only it', () => {
+  it('marks the lead branch — and only it; a split\'s segments are rows of a list', () => {
     const { container } = render(<TreeView root={sample()} label="t" />);
-    const lead = Array.from(container.querySelectorAll('[role="treeitem"]')).filter((el) => el.querySelector(':scope > [data-card]')?.className.includes('leadCard'));
+    const lead = Array.from(container.querySelectorAll('[role="treeitem"]')).filter((el) => /lead(Card|Row)/.test(el.querySelector(':scope > [data-card]')?.className ?? ''));
     expect(lead.map((el) => el.getAttribute('data-key'))).toEqual(['r', 'r/o', 'r/o:"West"']);
+    expect(container.querySelector('[data-key="r/o:\\"West\\""] > [data-card]')?.className).toMatch(/segRow/);
   });
 
   it('collapses and expands a node from its chevron', async () => {
