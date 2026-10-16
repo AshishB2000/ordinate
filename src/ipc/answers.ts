@@ -81,6 +81,8 @@ export interface AnswerCard {
   noMatch?: { text: string; options: AnswerChip[] };
   /** The name its turn can remember (`learnState`), when the card was asked with one. */
   learn?: CardLearn;
+  /** The Visual its turn records it was saved as — only while that visual still exists. */
+  savedVisualId?: string;
 }
 
 /** A name to remember, as the card shows it: the column's shown name, and 'known' once the project's names already mean that column. */
@@ -388,8 +390,10 @@ async function learnState(projectId: string, datasetId: string, learn: AnswerLea
 
 export function register(guard: Guard): void {
   // Draw one card from a stored spec. Called on every render of an answer turn;
-  // `learn` is its turn's name to remember, if it has one.
-  ipcMain.handle('answer:card', async (_e, { projectId, spec, learn }: any = {}) => {
+  // `learn` is its turn's name to remember, and `savedVisualId` the visual it was
+  // saved as — handed back only while that visual exists, so a deleted one is
+  // offered to save again instead of a link to nothing.
+  ipcMain.handle('answer:card', async (_e, { projectId, spec, learn, savedVisualId }: any = {}) => {
     try {
       const s = sanitizeStoredSpec(spec);
       if (!s) return { ok: false, reason: 'This answer could not be read.' };
@@ -397,7 +401,8 @@ export function register(guard: Guard): void {
       if ('ok' in built) return built;
       const said = sanitizeLearn(learn, s);
       const taught = said ? await learnState(projectId, s.datasetId, said) : undefined;
-      return taught ? { ...built.card, learn: taught } : built.card;
+      const kept = typeof savedVisualId === 'string' && (await visuals.getVisual(projectId, savedVisualId)) ? savedVisualId : undefined;
+      return { ...built.card, ...(taught ? { learn: taught } : {}), ...(kept ? { savedVisualId: kept } : {}) };
     } catch (err: any) {
       return { ok: false, reason: err?.message || 'Could not build the answer' };
     }

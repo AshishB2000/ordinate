@@ -447,7 +447,12 @@ export async function testRule(projectId: string, raw: any): Promise<{
 }> {
   const rule = alerts.sanitizeRule({ ...(raw || {}), id: raw?.id && UUID_RE.test(String(raw.id)) ? raw.id : randomUUID() });
   if (!rule) return { ok: false, fire: false, message: '', value: null, previous: null };
-  const { value, previous } = await metricFor(projectId, rule);
+  const read = await metricFor(projectId, rule);
+  const { value, previous } = read;
+  // By period, no read at all means fewer than two complete periods — say that, not "from the next refresh on".
+  if (rule.compare === 'change' && rule.change?.vs === 'previous_period' && rule.change.periodColumn && read.period === undefined) {
+    return { ok: true, fire: false, message: alerts.notTwoPeriodsYet(rule.change.periodColumn), value, previous };
+  }
   const anomalies = rule.compare === 'anomaly' ? await anomaliesFor(projectId, rule) : undefined;
   // `wouldFire` ignores the stored anomaly keys on purpose here: the question is
   // "does this dataset have anomalies", not "are any of them new since a run the

@@ -17,6 +17,7 @@
   "alerts.is": "{label} is {value} — {op} {value2}.",
   "alerts.new": "{newAnomalies} new {newAnomalies, plural, one {anomaly} other {anomalies}}{where}.",
   "alerts.nothing_to_compare_against_yet_this": "Nothing to compare {value} against yet — this can fire from the next refresh on.",
+  "alerts.nothing_to_compare_yet_has_fewer": "Nothing to compare yet — {column} has fewer than two complete periods. This can fire once the next one closes.",
   "alerts.the_previous_period": "the previous period",
   "alerts.the_previous_refresh": "the previous refresh",
   "alerts.to_since": "{label} {verb} {pct} to {value} since {vs}.",

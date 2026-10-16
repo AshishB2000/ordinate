@@ -38,7 +38,7 @@ import { after } from 'node:test';
 import pg from 'pg';
 import type { Page } from 'playwright';
 // The provider stub and what it was asked; the four it reassigns or appends to are read live.
-import { ANSWER, ASK_CHART, ASK_REFINE, ON_SCREEN, ON_SCREEN_ANSWER, askedModels, draftAsk, draftCalls, lastAsk, stubUrl } from './dockStub.ts';
+import { ANSWER, ASK_CHART, ASK_MISS, ASK_REFINE, ON_SCREEN, ON_SCREEN_ANSWER, askedModels, draftAsk, draftCalls, lastAsk, stubUrl } from './dockStub.ts';
 
 const ADMIN = 'boss@acme.test';
 
@@ -362,6 +362,30 @@ if (!dbUrl) {
       await page.waitForTimeout(300); // the colour transition
       await page.screenshot({ path: path.join(SCREENS, `dock-follow-up-${theme}.png`), fullPage: true });
     }
+
+    // ── A name corrected once holds ─────────────────────────────────────────
+    // The model writes "net revenue"; the data calls it revenue. The refused reply offers it, the answer
+    // that option runs offers to remember the name, and the same question then charts outright.
+    const cardsBefore = await answersShown.count();
+    await box.fill(ASK_MISS);
+    await box.press('Enter');
+    const meant = dock.getByRole('group', { name: 'Did you mean, instead of net revenue' });
+    await meant.getByRole('button', { name: 'revenue', exact: true }).click();
+    const corrected = answersShown.nth(cardsBefore);
+    const remember = corrected.getByRole('button', { name: 'Remember “net revenue” as revenue' });
+    await remember.waitFor();
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+      await corrected.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(300); // the colour transition
+      await page.screenshot({ path: path.join(SCREENS, `dock-remember-${theme}.png`), fullPage: true });
+    }
+    await remember.click();
+    await corrected.getByText('“net revenue” now means revenue in this project.', { exact: true }).waitFor();
+    await box.fill(ASK_MISS);
+    await box.press('Enter');
+    await answersShown.nth(cardsBefore + 1).locator('canvas').waitFor();
+    assert.equal(await dock.getByRole('group', { name: /^Did you mean/ }).count(), 1, 'asked again, the same words chart outright — no second "Did you mean"');
 
     // ── Rename and delete a conversation ────────────────────────────────────
     // ⋯ renames the one on screen; the header then shows the STORED name, which a

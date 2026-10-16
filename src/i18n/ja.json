@@ -20,6 +20,7 @@
   "alerts.is": "{label}は{value}です — {value2}{op}。",
   "alerts.new": "{newAnomalies}{newAnomalies, plural, other {件の新しい異常}}{where}。",
   "alerts.nothing_to_compare_against_yet_this": "{value}と比較する対象がまだありません。次回の更新から発動できます。",
+  "alerts.nothing_to_compare_yet_has_fewer": null,
   "alerts.the_previous_period": "前の期間",
   "alerts.the_previous_refresh": "前回の更新",
   "alerts.to_since": "{label}は{vs}から{pct}{verb}し、{value}になりました。",

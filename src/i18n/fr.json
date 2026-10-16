@@ -20,6 +20,7 @@
   "alerts.is": "{label} vaut {value} — {op} {value2}.",
   "alerts.new": "{newAnomalies} {newAnomalies, plural, one {nouvelle anomalie} other {nouvelles anomalies}}{where}.",
   "alerts.nothing_to_compare_against_yet_this": "Rien à quoi comparer {value} pour l’instant — l’alerte pourra se déclencher dès la prochaine actualisation.",
+  "alerts.nothing_to_compare_yet_has_fewer": null,
   "alerts.the_previous_period": "la période précédente",
   "alerts.the_previous_refresh": "l’actualisation précédente",
   "alerts.to_since": "{label} {verb} {pct} pour atteindre {value} depuis {vs}.",

@@ -212,6 +212,11 @@ const sameFigures = (a: ChartData, b: ChartData): boolean => {
   const copilotStore: typeof import('../src/ai/copilot') = require('../src/ai/copilot');
   const theirs = await context.runInContext(EDITOR, 'mark', () => copilotStore.markSaved(P, tid, answerTurn.id, answerTurn.answer, kept.value.visual.id));
   ok('turn: another member cannot mark a conversation that is not theirs', theirs === false);
+  const confirmed = async (id: string): Promise<unknown> => (await post('answer:card', { projectId: P, spec: answerTurn.answer, savedVisualId: id })).value.savedVisualId;
+  ok('card: hands back the visual its turn records while it exists — and nothing for an id that is no visual',
+    (await confirmed(kept.value.visual.id)) === kept.value.visual.id && (await confirmed('7d1f3c2a-0b6e-4f5a-9c8d-1e2f3a4b5c6d')) === undefined);
+  const deleted = await post('visual:delete', { projectId: P, id: kept.value.visual.id });
+  ok('card: …and nothing once that visual is deleted, so the card offers to save again', deleted.status === 200 && (await confirmed(kept.value.visual.id)) === undefined, deleted.body);
   ok('contract: a turn id beside the spec is taken; a thread id must be a uuid',
     contract.input.safeParse({ ...input, threadId: tid, turnId: 'any-stored-id' }).success && !contract.input.safeParse({ ...input, threadId: 'x', turnId: 'y' }).success);
 
