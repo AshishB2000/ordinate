@@ -40,6 +40,8 @@ import { ai } from './ai';
 
 import { subscriptions } from './subscriptions';
 
+import { rebuild } from './rebuild';
+
 export const contracts = {
   ...projects,
   ...datasets,
@@ -79,6 +81,8 @@ export const contracts = {
   ...ai,
 
   ...subscriptions,
+
+  ...rebuild,
 } as const;
 
 export type Channel = keyof typeof contracts;

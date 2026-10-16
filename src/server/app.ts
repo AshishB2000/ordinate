@@ -506,4 +506,6 @@ export function registerHandlers(): void {
   (require('../ipc/incremental') as typeof import('../ipc/incremental')).register();
   // Subscriptions: scheduled sends to Slack / Teams, and the org's channels.
   (require('./subscriptions/rpc') as typeof import('./subscriptions/rpc')).register();
+  // Rebuild a dashboard from a screenshot of another BI tool (docs/rebuild-from-screenshot/).
+  (require('../ipc/rebuild') as typeof import('../ipc/rebuild')).register();
 }

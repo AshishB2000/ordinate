@@ -4,9 +4,9 @@
 // The browser only reads what was ASKED for — no layout is worked out here.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import { NewWizard } from './NewWizard';
 
 afterEach(() => {
@@ -46,6 +46,12 @@ function serve(ai = false) {
   return calls;
 }
 
+/** Where the wizard sent the browser. */
+function Where() {
+  const at = useLocation();
+  return <output data-testid="where">{at.pathname + at.search}</output>;
+}
+
 /** The wizard on "Start from", with the Orders dataset already chosen. */
 async function open(ai = false) {
   const calls = serve(ai);
@@ -54,6 +60,7 @@ async function open(ai = false) {
     <MemoryRouter>
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
         <NewWizard projectId={PID} datasetId={DID} initialStep={2} onClose={onClose} />
+        <Where />
       </QueryClientProvider>
     </MemoryRouter>,
   );
@@ -67,9 +74,9 @@ async function open(ai = false) {
 }
 
 describe('the wizard’s layouts', () => {
-  it('offers the blank sheet, the four starters and the Assistant, in that order', async () => {
+  it('offers the blank sheet, the four starters, the Assistant and the screenshot rebuild, in that order', async () => {
     const { layouts } = await open();
-    const titles = ['Blank sheet', 'KPIs + chart', 'Two-up', 'Spotlight', 'Chart first', 'Let the Assistant design it'];
+    const titles = ['Blank sheet', 'KPIs + chart', 'Two-up', 'Spotlight', 'Chart first', 'Let the Assistant design it', 'Rebuild from a screenshot'];
     // A card reads as its title and then its one-line body.
     const cards = within(layouts).getAllByRole('radio').map((r) => r.textContent ?? '');
     expect(cards.map((text, i) => (text.startsWith(titles[i]) ? titles[i] : text))).toEqual(titles);
@@ -111,6 +118,19 @@ describe('the wizard’s layouts', () => {
     // The name follows the dataset until it is typed, so the draft's own name stands.
     fireEvent.click(within(review).getByRole('button', { name: 'Create dashboard' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'analysis:buildPlan')?.payload).toEqual({ projectId: PID, plan: { name: 'Orders' }, style: 'executive' }));
+  });
+
+  it('the screenshot rebuild needs a model, and opens its own page on the chosen dataset', async () => {
+    const off = await open();
+    expect((within(off.layouts).getByRole('radio', { name: /^Rebuild from a screenshot/ }) as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+    const { layouts, calls } = await open(true);
+    const card = within(layouts).getByRole('radio', { name: /^Rebuild from a screenshot/ }) as HTMLButtonElement;
+    await waitFor(() => expect(card.disabled).toBe(false));
+    fireEvent.click(card);
+    fireEvent.click(screen.getByRole('button', { name: 'Choose a screenshot' }));
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe(`/analyses/${PID}/rebuild?dataset=${DID}`));
+    expect(calls.some((c) => c.channel === 'analysis:create' || c.channel === 'rebuild:read')).toBe(false); // nothing is created or read yet
   });
 
   // Negative control: a start that is not a starter asks for none.

@@ -380,6 +380,23 @@ describe('the dock', () => {
     expect(await href('Connect a source')).toBe(`/connections/${PID}`);
   });
 
+  it('a reply that proposes rebuilding another tool’s dashboard links to the screenshot page in this project', async () => {
+    const turns = [
+      { id: 't1', role: 'user', text: 'rebuild my Tableau dashboard here', createdAt: '' },
+      { id: 't2', role: 'assistant', text: 'Drop a screenshot of it and I will rebuild it on your data.', createdAt: '' },
+    ];
+    serve({ ...base(ADMIN, true), 'copilot:ask': { body: { ok: true, answer: turns[1].text, threadId: null, turns, suggestedAction: { kind: 'rebuild', intent: 'rebuild my Tableau dashboard' } } } });
+    renderApp('/');
+    const dock = await openDock();
+    const box = within(dock).getByRole('textbox', { name: 'Ask the Assistant' }) as HTMLTextAreaElement;
+    await waitFor(() => expect(box.disabled).toBe(false));
+    expect(within(dock).queryByTestId('dock-rebuild')).toBeNull(); // negative control: nothing proposed yet
+    fireEvent.change(box, { target: { value: 'rebuild my Tableau dashboard here' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect((await within(dock).findByRole('link', { name: 'Rebuild from a screenshot' })).getAttribute('href')).toBe(`/analyses/${PID}/rebuild`);
+    expect(within(dock).queryByTestId('dock-get-data')).toBeNull();
+  });
+
   it('a reply that proposes a dashboard asks kind and look first, then drafts it from what was asked and opens the review', async () => {
     const turns = [
       { id: 't1', role: 'user', text: 'build a dashboard for this', createdAt: '' },

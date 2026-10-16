@@ -308,7 +308,7 @@ ok('filter: an action-SHAPED line with an off-whitelist kind is released, not ea
 
 ok('prompt: names the exact marker the parser looks for',
   CHAT_SYSTEM_PROMPT.indexOf(ACTION_MARKER) >= 0);
-for (const kind of ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'import', 'none']) {
+for (const kind of ['dashboard', 'edit', 'chart', 'step', 'calc', 'style', 'import', 'rebuild', 'none']) {
   // 'style' is the one kind that is invalid without a second field, so its
   // round-trip probe carries a preset — the parser rejecting a bare style
   // action is the documented behaviour, not a drift between prompt and parser.

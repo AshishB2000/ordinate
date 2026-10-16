@@ -26,9 +26,11 @@ import { DraftFlow } from './DraftReview';
 import { MapColumns, TemplateGallery } from './TemplateStep';
 import s from './Wizard.module.css';
 
-type Start = 'blank' | StarterKind | 'ai' | 'template';
+type Start = 'blank' | StarterKind | 'ai' | 'template' | 'rebuild';
 /** The starts the server builds from the dataset's own columns (`analysis:starterCards`). */
-const isStarter = (start: Start): start is StarterKind => start !== 'blank' && start !== 'ai' && start !== 'template';
+const isStarter = (start: Start): start is StarterKind => start !== 'blank' && start !== 'ai' && start !== 'template' && start !== 'rebuild';
+/** The starts that need a model. */
+const needsAi = (start: Start): boolean => start === 'ai' || start === 'rebuild';
 
 // `art` is the card's wireframe, one block per token (Wizard.module.css `.b_*`).
 const STARTS: { id: Start; title: string; body: string; art: string[] }[] = [
@@ -38,6 +40,7 @@ const STARTS: { id: Start; title: string; body: string; art: string[] }[] = [
   { id: 'spotlight', title: 'Spotlight', body: 'One wide chart, with the KPIs stacked beside it.', art: ['spot'] },
   { id: 'lead', title: 'Chart first', body: 'A full-width chart on top, with the KPI strip beneath it.', art: ['wide', 'strip'] },
   { id: 'ai', title: 'Let the Assistant design it', body: 'Describe what you want and a model proposes the sheets. You review it first.', art: ['ai'] },
+  { id: 'rebuild', title: 'Rebuild from a screenshot', body: 'Drop a screenshot of a Tableau, Power BI, Looker or Metabase dashboard. It is rebuilt on this data.', art: ['shot'] },
 ];
 
 const EXAMPLES = [
@@ -151,6 +154,11 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
   const next = async () => {
     if (step === 1) return setStep(2);
     if (step === 2) {
+      if (start === 'rebuild' && selectedId) {
+        // Its own page: the screenshot needs the width a dialog does not have.
+        onClose();
+        return void navigate(`/analyses/${projectId}/rebuild?dataset=${selectedId}${nameTouched ? `&name=${encodeURIComponent(chosenName)}` : ''}`);
+      }
       if (hasStep3) return setStep(3);
       return createFrom(start);
     }
@@ -183,7 +191,7 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
           ? 'Check which column plays which part. Every figure below is computed from your data.'
           : 'Describe the dashboard and the Assistant will draft it. You review everything before it is created.';
   const nextLabel =
-    step === 1 ? 'Next' : step === 2 ? (hasStep3 ? 'Next' : 'Create dashboard') : onTemplate ? 'Create dashboard' : 'Draft with the Assistant';
+    step === 1 ? 'Next' : step === 2 ? (hasStep3 ? 'Next' : start === 'rebuild' ? 'Choose a screenshot' : 'Create dashboard') : onTemplate ? 'Create dashboard' : 'Draft with the Assistant';
 
   const rail = [
     { n: 1, label: 'Choose data' },
@@ -336,8 +344,8 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
                   type="button"
                   role="radio"
                   aria-checked={on}
-                  disabled={o.id === 'ai' && !aiReady}
-                  className={[s.start, on && s.selected, o.id === 'ai' && s.startAi].filter(Boolean).join(' ')}
+                  disabled={needsAi(o.id) && !aiReady}
+                  className={[s.start, on && s.selected, needsAi(o.id) && s.startAi, o.id === 'rebuild' && s.startWide].filter(Boolean).join(' ')}
                   onClick={() => {
                     setStart(o.id);
                     setTpl('');
@@ -350,6 +358,7 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
                   </span>
                   <span className={s.startT}>
                     {o.id === 'ai' && <Icon name="sparkles" />}
+                    {o.id === 'rebuild' && <Icon name="camera" />}
                     {o.title}
                   </span>
                   <span className={s.startP}>{o.body}</span>
