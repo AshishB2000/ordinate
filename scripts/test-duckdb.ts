@@ -591,7 +591,7 @@ void (async () => {
     duckdb.shutdown(); // mid-flight, deliberately
     const shutMs = nowMs() - tShut;
     // A busy shutdown asks the worker to exit rather than terminating it (which
-    // aborts the process — see closeWorker in src/duckdb.ts). Asking must not
+    // aborts the process — see src/engine/duckdbClose.ts). Asking must not
     // mean waiting: shutdown() stays synchronous and instant.
     ok('shutdown: stays instant even with a ~200 ms query in flight', shutMs < 20);
     const settled = await Promise.allSettled(pending);

@@ -10,7 +10,7 @@
 //   npm run build:ts && node scripts/test-inputHistory.js
 
 export {}; // module scope — sibling test scripts share top-level names
-import { ok, failureCount } from './selfcheck';
+import { ok, failureCount, finish } from './selfcheck';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -180,5 +180,5 @@ main()
   .finally(() => {
     try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) { /* temp */ }
     if (failureCount()) { console.error('\n' + failureCount() + ' input-history check(s) FAILED'); process.exit(1); }
-    process.exit(0); // the DuckDB worker keeps the loop alive otherwise
+    finish();
   });
