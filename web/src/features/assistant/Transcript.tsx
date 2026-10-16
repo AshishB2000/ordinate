@@ -68,6 +68,7 @@ export function Transcript({
   pending,
   lastSteps,
   projectId,
+  threadId,
   onFollowUp,
 }: {
   turns: readonly Turn[];
@@ -75,6 +76,8 @@ export function Transcript({
   /** The last finished ask's activity, shown collapsed above the answer it prepared. */
   lastSteps: { turnId: string; steps: readonly ActivityStep[] } | null;
   projectId: string;
+  /** The conversation on screen ('' before it has one): a saved answer is recorded on its turn. */
+  threadId: string;
   onFollowUp: (spec: Record<string, unknown>, label: string, learn?: Learn) => Promise<void>;
 }) {
   return (
@@ -83,7 +86,15 @@ export function Transcript({
         <div key={t.id} className={`${s.msg} ${t.role === 'assistant' ? s.assistant : s.user} ${i === 0 ? s.stageTop : ''}`} data-role={t.role}>
           {lastSteps && t.id === lastSteps.turnId && !pending && <ActivitySummary steps={lastSteps.steps} />}
           {t.role === 'assistant' && t.answer && (
-            <AnswerCard projectId={projectId} spec={t.answer} learn={t.learn} narrated={t.text.trim() !== ''} onFollowUp={onFollowUp} />
+            <AnswerCard
+              projectId={projectId}
+              spec={t.answer}
+              learn={t.learn}
+              turn={threadId ? { threadId, turnId: t.id } : undefined}
+              savedVisualId={t.savedVisualId}
+              narrated={t.text.trim() !== ''}
+              onFollowUp={onFollowUp}
+            />
           )}
           {(t.role === 'user' || !t.answer || t.text.trim() !== '') && <div className={s.bubble}>{t.text}</div>}
           {/* A refused chart is not a dead end: what the app thinks was meant, one click each. */}

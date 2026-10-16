@@ -204,7 +204,8 @@ describe('Save as visual', () => {
     const busy = await within(card).findByRole('button', { name: 'Saving…' });
     expect((busy as HTMLButtonElement).disabled).toBe(true);
     expect(busy.getAttribute('aria-busy')).toBe('true');
-    expect(calls.find((c) => c.channel === 'answer:saveVisual')?.payload).toEqual({ projectId: PID, spec: SPEC });
+    // The spec, and which turn it is — so the server records the visual there. Never steps or an encoding.
+    expect(calls.find((c) => c.channel === 'answer:saveVisual')?.payload).toEqual({ projectId: PID, spec: SPEC, threadId: TID, turnId: 'a2' });
     await act(async () => reply({ ok: true, visual: { id: VID, name: 'Sales by region' } }));
     const link = await within(card).findByRole('link', { name: 'Open in Visuals' });
     expect(link.getAttribute('href')).toBe(`/visuals/${PID}/${VID}`);
@@ -226,6 +227,16 @@ describe('Save as visual', () => {
     expect(document.activeElement).not.toBe(link); // a remount does not take the focus
     expect(within(card).queryByRole('button', { name: 'Save as visual' })).toBeNull();
     expect(calls.filter((c) => c.channel === 'answer:saveVisual')).toHaveLength(1);
+  });
+
+  it('after a reload, an answer the turn records as saved links to its visual — no second save offered', async () => {
+    const calls = serve(shell([user('u1', 'sales by region'), { ...ANSWERED, savedVisualId: VID }]));
+    renderApp('/');
+    const card = await within(await openDock()).findByTestId('answer-card');
+    const link = await within(card).findByRole('link', { name: 'Open in Visuals' });
+    expect(link.getAttribute('href')).toBe(`/visuals/${PID}/${VID}`);
+    expect(within(card).queryByRole('button', { name: 'Save as visual' })).toBeNull();
+    expect(calls.filter((c) => c.channel === 'answer:saveVisual')).toHaveLength(0);
   });
 
   it('a refusal says why, and the button stays to try again', async () => {

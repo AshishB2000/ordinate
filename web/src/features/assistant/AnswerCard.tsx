@@ -58,6 +58,8 @@ export function AnswerCard({
   projectId,
   spec,
   learn,
+  turn,
+  savedVisualId,
   narrated,
   onFollowUp,
 }: {
@@ -65,6 +67,9 @@ export function AnswerCard({
   spec: { datasetId: string; title?: string } & Record<string, unknown>;
   /** The turn's name to remember (`Turn.learn`); the card's reply says whether it still is one. */
   learn?: { said: string; column: string };
+  /** The stored turn this card draws, and the Visual it was saved as — for "Save as visual" (./SaveAsVisual). */
+  turn?: { threadId: string; turnId: string };
+  savedVisualId?: string;
   narrated: boolean;
   onFollowUp: (spec: Record<string, unknown>, label: string) => Promise<void>;
 }) {
@@ -162,7 +167,7 @@ export function AnswerCard({
           <Button size="sm" variant="ghost" aria-expanded={table} onClick={() => setTable(!table)}>
             {table ? 'Hide table' : 'Show table'}
           </Button>
-          <SaveAsVisual projectId={projectId} spec={spec} />
+          <SaveAsVisual projectId={projectId} spec={spec} turn={turn} savedVisualId={savedVisualId} />
           {card.learn && <RememberName projectId={projectId} datasetId={spec.datasetId} learn={card.learn} onTaught={() => q.refetch()} />}
         </div>
       )}

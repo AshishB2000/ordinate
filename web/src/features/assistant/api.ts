@@ -63,6 +63,8 @@ export interface Turn {
   suggest?: { part: string; said: string; options: { label: string; spec: Record<string, unknown>; column?: string }[] };
   /** An answer run from a "Did you mean" column: the name that was said, which its card can offer to remember. */
   learn?: { said: string; column: string };
+  /** The Visual this answer was saved as ("Save as visual"): its card links there instead of offering to save again. */
+  savedVisualId?: string;
 }
 
 export interface ThreadSummary {

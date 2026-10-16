@@ -29,6 +29,7 @@ import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import type { LedgerEntry } from './numberAudit';
 import { sanitizeStoredSpec } from './answerSpec';
+import { sameChart } from './answerRefine';
 import type { AnswerSpec } from './answerSpec';
 import { sanitizeLearn, sanitizeSuggest } from './answerSuggest';
 import type { AnswerLearn, AnswerSuggest } from './answerSuggest';
@@ -63,6 +64,8 @@ export interface CopilotTurn {
   suggest?: AnswerSuggest;
   /** The name an answer run from a "Did you mean" option can offer to remember (./answerSuggest `sanitizeLearn`). Only beside `answer`. */
   learn?: AnswerLearn;
+  /** The Visual this answer was saved as ("Save as visual", `markSaved`), so a reload links to it instead of saving again. Only beside `answer`. */
+  savedVisualId?: string;
 }
 
 // One conversation. `id` is a randomUUID — a renderer key, never a path component.
@@ -218,6 +221,7 @@ function normalizeTurns(raw: any): CopilotTurn[] {
     if (suggest) turn.suggest = suggest;
     const learn = answer ? sanitizeLearn(t.learn, answer) : undefined;
     if (learn) turn.learn = learn;
+    if (answer && isValidId(t.savedVisualId)) turn.savedVisualId = t.savedVisualId;
     turns.push(turn);
   }
   // Defensive cap on load too, in case a file predates a lower MAX_TURNS.
@@ -480,6 +484,19 @@ export async function renameThread(projectId: string, threadId: string, title: s
   target.title = clampTitle(title);
   await writeThreads(projectId, threads);
   return { id: target.id, title: target.title, updatedAt: target.updatedAt, turnCount: target.turns.length };
+}
+
+// "Save as visual", kept on the answer turn it was saved from: a reload then links to the visual
+// instead of offering to save the same answer twice. Only on one of the CALLER's threads, on an
+// assistant turn whose stored answer draws the very chart that was saved. False: nothing marked.
+export async function markSaved(projectId: string, threadId: string, turnId: string, spec: AnswerSpec, visualId: string): Promise<boolean> {
+  if (!isValidId(projectId) || !isValidId(visualId)) return false;
+  const threads = await loadThreads(projectId);
+  const turn = mine(threads).find((t) => t.id === threadId)?.turns.find((x) => x.id === turnId);
+  if (!turn || turn.role !== 'assistant' || !turn.answer || !sameChart(turn.answer, spec)) return false;
+  turn.savedVisualId = visualId;
+  await writeThreads(projectId, threads);
+  return true;
 }
 
 // Delete ONE of the caller's conversations, turns and all. False when there is

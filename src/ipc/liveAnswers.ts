@@ -29,8 +29,8 @@ import { tileCaption } from '../analysis/captions';
 import { displayNames } from '../app/catalog';
 import { ANSWER_CHART_TYPES, answerChips, defaultAnswerChart, specFilterSteps } from '../ai/answerSpec';
 import type { AnswerFilter, AnswerSpec } from '../ai/answerSpec';
-import { answerFacts, describeAnswer, withheldFilters } from '../ai/answerFacts';
-import { withheldColumns } from '../app/sharePolicy';
+import { cardFacts, describeAnswer, withheldFilters } from '../ai/answerFacts';
+import { liveWithheld } from './liveProfile';
 import { liveAnswer, liveLookup } from '../engine/live/liveQuery';
 import type { LiveFailure } from '../engine/live/liveQuery';
 import type { PeriodRange } from '../engine/live/evaluate';
@@ -170,12 +170,14 @@ export async function liveCardFor(projectId: string, spec: AnswerSpec): Promise<
   const caption = tileCaption({ chartType, data, names: await displayNames(projectId, meta.id).catch(() => ({})) });
   const additive = spec.measures.every((m) => m.aggregation === 'sum' || m.aggregation === 'count');
   const filterLabels = cardLabels(spec, meta.columns, r.filterLabels);
-  // As computeCard: a model reads no filter value of a column marked personal or financial; the card's labels stand.
-  const said = spec.filters.length ? withheldFilters(spec.filters, await withheldColumns(projectId, meta.id)) : spec.filters;
-  const facts = answerFacts({
+  // As computeCard: a model reads no filter value and no label of a withheld column; the card's labels stand.
+  // Withheld here is the Live facts' own set (./liveProfile): marked, pending or detected.
+  const withheld = await liveWithheld(projectId, meta.id, meta);
+  const said = withheldFilters(spec.filters, withheld);
+  const facts = cardFacts({
     title: spec.title, datasetName: meta.name, describe: describeAnswer(spec), data, categoryIsDate: isDate, additive, filterLabels,
     saidFilterLabels: cardLabels({ ...spec, filters: said }, meta.columns, r.filterLabels), caption, asOf: utcLabel(r.asOf.at),
-  });
+  }, spec, withheld);
   return {
     card: {
       ok: true, spec, title: spec.title, chartType, datasetName: meta.name, data, caption,
