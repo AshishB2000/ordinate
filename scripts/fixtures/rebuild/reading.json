@@ -1,0 +1,17 @@
+{
+  "title": "Superstore Overview — $2.4M",
+  "tool": "Tableau",
+  "tiles": [
+    { "kind": "text", "title": "Sales dashboard: 12.5% growth", "box": [2, 2, 60, 6] },
+    { "kind": "filter", "title": "Region", "box": [76, 2, 22, 6], "dimension": "Region", "filterKind": "multi" },
+    { "kind": "kpi", "title": "Total Sales $2.4M", "box": [2, 10, 22, 12], "measures": [{ "field": "Sales", "aggregation": "sum" }], "value": 2400000 },
+    { "kind": "kpi", "title": "Profit", "box": [26, 10, 22, 12], "measures": [{ "field": "Profit", "aggregation": "sum" }], "value": "286,397" },
+    { "kind": "kpi", "title": "Orders", "box": [50, 10, 22, 12], "measures": [{ "field": "Number of Records", "aggregation": "count" }], "figure": 9994 },
+    { "kind": "filter", "title": "Order Date", "box": [76, 10, 22, 6], "dimension": "Order Date", "filterKind": "date_range" },
+    { "kind": "chart", "chart": "horizontal bar", "title": "Sales by Region", "box": [2, 25, 47, 35], "dimension": "Region", "measures": [{ "field": "Sales", "aggregation": "sum" }], "data": [["West", 725457], ["East", 678781]] },
+    { "kind": "chart", "chart": "line", "title": "Monthly Sales", "box": [51, 25, 47, 35], "dimension": "Order Date", "measures": [{ "field": "Sales", "aggregation": "sum" }], "series": "Segment" },
+    { "kind": "chart", "chart": "sunburst", "title": "Category mix", "box": [2, 62, 47, 35], "dimension": "Category", "measures": [{ "field": "Sales" }] },
+    { "kind": "chart", "chart": "bar", "title": "Profit by Product ID", "box": [51, 62, 47, 35], "dimension": "Region", "measures": [{ "field": "Product ID", "aggregation": "sum" }] },
+    { "kind": "banana", "title": "not a tile" }
+  ]
+}
