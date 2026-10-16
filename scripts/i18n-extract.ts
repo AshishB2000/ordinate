@@ -365,6 +365,7 @@ export const MAIN_FILES = [
   'src/analysis/subscriptionText.ts',
   'src/app/columnNameMessages.ts',
   'src/ai/answerMessages.ts',
+  'src/analysis/versionDiffMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

@@ -62,7 +62,7 @@ const OP_WORDS: Record<string, string> = {
  *  three the sentence stops being a sentence. */
 const MAX_LISTED = 3;
 
-function describeFilter(s: FilterStep): string {
+export function describeFilter(s: FilterStep): string {
   if (s.op === 'period') return s.period ? `${s.column} in ${describePeriod(s.period, getCalendar()).toLowerCase()}` : s.column;
   const op = OP_WORDS[s.op] || s.op;
   if (VALUELESS_OPS.has(s.op)) return `${s.column} ${op}`;

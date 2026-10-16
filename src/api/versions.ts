@@ -16,5 +16,12 @@ export const versions = {
   // preload: invoke('versions:get', { projectId, type, id, key }) — one version's content.
   'versions:get': rpc({ access: 'read', input: z.strictObject({ ...Of, key: Key }), project: byProjectId }),
   // preload: invoke('versions:restore', { projectId, type, id, key })
+  // Compare two versions (docs/version-diff): `from`/`to` are version keys; the
+  // newest version is "current". `diff` is structure only; `figures` computes the
+  // KPI cards whose figure may have moved, on current data, through their own door.
+  // preload: invoke('versions:diff', { projectId, type, id, from, to })
+  'versions:diff': rpc({ access: 'read', input: z.strictObject({ ...Of, from: Key, to: Key }), project: byProjectId }),
+  // preload: invoke('versions:figures', { projectId, type, id, from, to })
+  'versions:figures': rpc({ access: 'read', input: z.strictObject({ ...Of, from: Key, to: Key }), project: byProjectId }),
   'versions:restore': rpc({ access: 'write', input: z.strictObject({ ...Of, key: Key }), project: byProjectId }),
 } as const;
