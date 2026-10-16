@@ -38,7 +38,7 @@ export function VersionFigures({ projectId, type, id, from, to, rows, fromLabel,
   let body;
   if (q.isPending) {
     body = (
-      <div className={s.figRows} aria-busy="true" aria-label="Working out the figures">
+      <div className={s.figRows} role="status" aria-busy="true" aria-label="Working out the figures">
         {Array.from({ length: Math.min(rows, 6) }, (_, i) => (
           <div key={i} className={s.figRow}>
             <Skeleton className={s.skCell} />
@@ -54,6 +54,12 @@ export function VersionFigures({ projectId, type, id, from, to, rows, fromLabel,
   } else {
     body = (
       <table className={s.figTable}>
+        <colgroup>
+          <col />
+          <col />
+          <col />
+          <col />
+        </colgroup>
         <thead>
           <tr>
             <th scope="col">Card</th>

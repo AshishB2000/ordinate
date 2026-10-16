@@ -179,7 +179,7 @@
 }
 /* A compare's tiles (VersionCompare): after the type rules, so a status wins. */
 .tile[data-status='same'] {
-  opacity: 0.5;
+  opacity: 0.75;
 }
 .tile[data-status='added'] {
   fill: var(--ok-soft);

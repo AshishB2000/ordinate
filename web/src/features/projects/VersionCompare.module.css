@@ -122,6 +122,7 @@
   gap: var(--sp-8);
 }
 .sectionHead h3 {
+  margin: 0;
   color: var(--text-dim);
   font-size: var(--t-11);
   font-weight: 600;
@@ -178,6 +179,7 @@
   gap: var(--sp-8);
 }
 .sheetName {
+  margin: 0;
   color: var(--text);
   font-size: var(--t-12);
   font-weight: 600;
@@ -226,7 +228,14 @@
 .figTable {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: var(--t-13);
+}
+.figTable col:nth-child(1) {
+  width: 40%;
+}
+.figTable col:nth-child(3) {
+  width: 32px;
 }
 .figTable thead th {
   padding: 0 var(--sp-8) var(--sp-4);
@@ -266,9 +275,10 @@
   color: var(--muted);
   font-weight: 400;
 }
-.figArrow {
-  width: 20px;
+.figTable .figArrow {
+  padding-top: 13px;
   color: var(--text-dim);
+  text-align: center;
 }
 .figNone {
   color: var(--muted);
@@ -297,6 +307,9 @@
 }
 
 /* ── Changes ───────────────────────────────────────────────────────────── */
+.group + .group {
+  margin-top: var(--sp-4);
+}
 .group {
   display: flex;
   flex-direction: column;
@@ -305,6 +318,7 @@
 }
 .groupTitle {
   display: flex;
+  margin: 0;
   align-items: center;
   gap: var(--sp-8);
   color: var(--text);
