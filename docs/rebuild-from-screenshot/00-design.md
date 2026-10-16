@@ -45,7 +45,10 @@ before anything reaches the browser; a figure-shaped token in a title ("Total sa
 | Geometry | The model gives each tile a box in percent of the image. App code groups boxes into **bands** (vertical overlap) and writes each band as plan **rows** (`kpis`, `charts`, `spotlight`, `annotated`, `note`). | The plan vocabulary has no x/y by design (`planRows.ts`); `planLayout.arrangeSheet` computes the grid. Three charts in one band become a two-up row and a one-up row — the closest the vocabulary says. |
 | Chart types | The prompt lists Ordinate's ids; a small synonym table maps BI words (`horizontal bar`, `doughnut`, `crosstab`, `filled map`, `big number`…). Anything else → the tile says so and waits for a pick. | Never coerce silently (the `validatePlan` rule). |
 | Per-tile verdict | Each tile is validated **alone** by `validatePlan` (a one-tile plan), so its reason is the validator's own sentence; then the whole plan is validated and previewed. | One validator, no second opinion. |
-| Confidence | Name similarity 1 = *Exact*, ≥ 0.75 *Likely*, ≥ 0.5 *Guess*, below = unmapped. | Three words read faster than a percentage. |
+| Confidence | Name similarity 1 = *Exact*, ≥ 0.75 *Likely*, ≥ 0.5 *Guess*, below = unmapped. Similarity is 0.7 × how much of the screenshot's words the column covers + 0.3 × the reverse; a synonym token counts 0.8. | Three words read faster than a percentage. The weighting is what makes "Segment" find `customer_segment` before a synonym (`category`) — the first e2e run matched it wrong with a symmetric score. |
+| A heading that repeats the dashboard's title | Left out (dropped, with why) — it names the dashboard; "Restore" keeps it as a note. | A Power BI title bar otherwise becomes a full-width note with no body. |
+| Changing a value's aggregation before a column is picked | Re-matches by name with the new aggregation (`column: null` only clears a *split*). | "Sum of State" refused → pick Count → `state` is found, as a user expects. |
+| The screenshot on the page | A `data:` URL in page state. | The CSP is `img-src 'self' data:` — a `blob:` URL is refused, and the CSP is a security control, not something this feature loosens. |
 | Assistant entry | A new action kind `rebuild` (whitelisted in `suggestedAction.ts`); the dock opens the page. | The dock has no image attachment; the page is where the drop zone is. |
 
 ## Server
@@ -91,8 +94,27 @@ before anything reaches the browser; a figure-shaped token in a title ("Total sa
   resident dataset's matching.
 - Vitest `RebuildPage.test.tsx` — the check screen: tiles, confidence cues, dropdown change re-asks,
   drop/restore, not-ready.
-- e2e `web/e2e/rebuild.e2e.ts` — stub model on loopback, upload, check screen, change a field, create,
-  the dashboard opens; light + dark screenshots.
+- `scripts/test-rebuildLive.ts` — `rebuild:match` on a **Live** dataset over the real RPC route: every KPI
+  figure equals `dashboard:metric` on the same Live dataset (Object.is) and the extract's; the chart preview
+  equals `visual:data`; the Live dataset is never hydrated (negative control on the spy). `rebuild:match`
+  is not in `test-liveSafetyNet`'s refuse-or-answer list, as `analysis:previewPlan` is not: it is a
+  preview over the routed doors, and this suite proves it answers from the warehouse.
+- e2e `web/e2e/rebuild.e2e.ts` — two tests. (1) A Power BI dashboard drawn on a canvas, figures painted on
+  it, read through a stub provider on loopback (the request carries the image); the KPI on the check
+  screen is `formatCompact` of the revenue summed from the sample CSV in the test — never the painted
+  `$2.30M`; a sum over `state` refused in the server's words, fixed by Count; a sunburst held, dropped;
+  the built dashboard shows the same figure. (2) Create dashboard → Start from → the card → the page on
+  the dataset picked in the wizard. Screens: `rebuild-drop`, `-reading`, `-check`, `-check-tiles`,
+  `-check-refused`, `-fixed`, `-built`, `-wizard` (light + dark).
+
+## Shared files touched
+
+`src/api/index.ts` (one import, one spread), `web/src/app/routes.tsx` (one page line),
+`src/server/app.ts` (one register line), `scripts/i18n-extract.ts` (one `MAIN_FILES` entry),
+`src/i18n/*.json` (generated keys; es/de/fr/ja drafted), `src/app/captureUpload.ts` (`PNG_MAGIC`
+exported), `src/ai/suggestedAction.ts` (the `rebuild` kind and its prompt sentence),
+`web/src/features/assistant/Dock.tsx` (the offer), `web/src/features/analyses/NewWizard.tsx` +
+`Wizard.module.css` (the card). No migration.
 
 ## Not in this change
 

@@ -224,3 +224,23 @@ e2e('rebuild: a dashboard screenshot → read on the server → matched to your 
   await settled(page);
   await screens(page, 'rebuild-built');
 });
+
+e2e('rebuild: the way in from Create dashboard → Start from, on the dataset picked there', async ({ page, server }) => {
+  connectModel(server.dataDir);
+  const pid = server.sample.projectId;
+  const before = model.calls;
+  await page.goto(`/analyses?project=${pid}&new=1`);
+  const wizard = page.getByRole('dialog', { name: 'Create dashboard' });
+  await wizard.getByRole('radio', { name: /Retail orders/ }).click();
+  await wizard.getByRole('button', { name: 'Next' }).click();
+  const card = wizard.getByRole('radiogroup', { name: 'Layouts' }).getByRole('radio', { name: /^Rebuild from a screenshot/ });
+  await card.click();
+  await card.scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]'));
+  await screensInPlace(page, 'rebuild-wizard');
+  await wizard.getByRole('button', { name: 'Choose a screenshot' }).click();
+  await page.getByRole('heading', { level: 1, name: 'Rebuild a dashboard from a screenshot' }).waitFor();
+  assert.match(new URL(page.url()).search, /^\?dataset=[0-9a-f-]{36}$/);
+  await page.getByRole('combobox', { name: 'Build it on' }).getByText('Retail orders').waitFor();
+  assert.equal(model.calls, before, 'opening the page asks no model');
+});

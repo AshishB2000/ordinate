@@ -345,7 +345,7 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
                   role="radio"
                   aria-checked={on}
                   disabled={needsAi(o.id) && !aiReady}
-                  className={[s.start, on && s.selected, needsAi(o.id) && s.startAi].filter(Boolean).join(' ')}
+                  className={[s.start, on && s.selected, needsAi(o.id) && s.startAi, o.id === 'rebuild' && s.startWide].filter(Boolean).join(' ')}
                   onClick={() => {
                     setStart(o.id);
                     setTpl('');

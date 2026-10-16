@@ -299,6 +299,23 @@
   background: linear-gradient(135deg, var(--accent-soft), var(--surface));
   border: 1px dashed var(--accent-line);
 }
+/* The rebuild card closes the list across the full width: its art beside its words. */
+.startWide {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  column-gap: var(--sp-16);
+  row-gap: var(--sp-4);
+  align-items: start;
+}
+.startWide .art {
+  grid-row: 1 / span 2;
+}
+.startWide .startT {
+  align-self: end;
+  padding-top: var(--sp-16);
+}
 /* A screenshot with two tiles outlined on it: what the rebuild reads. */
 .b_shot {
   grid-column: 1 / -1;

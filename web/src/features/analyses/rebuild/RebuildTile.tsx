@@ -15,7 +15,7 @@ import { Icon, type IconName } from '../../../ui/icons/Icon';
 import { DrawnVisual } from '../VisualTile';
 import { AGG_LABEL } from '../api';
 import type { Agg, Column, MatchedTile, Override, TileField } from './api';
-import s from './Rebuild.module.css';
+import s from './RebuildTile.module.css';
 
 /** The chart types offered: the ones a category and its measures fully describe. */
 const CHART_CHOICES: VizId[] = [
