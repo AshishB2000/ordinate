@@ -156,6 +156,11 @@ export function sizeCss(): string {
 `;
 }
 
+// The page's icon, inline (a 1×1 transparent GIF). Without one a browser asks
+// the server for /favicon.ico, which `img-src data:` refuses — Firefox applies
+// the page's CSP to that request and logs the refusal in every visitor's console.
+const ICON = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
 function sha256(text: string): string {
   return "'sha256-" + createHash('sha256').update(text, 'utf8').digest('base64') + "'";
 }
@@ -200,6 +205,7 @@ export function pageHtml(page: Record<string, any>, assets: SiteAssets, title: s
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="Ordinate">
 <title>${safeTitle}</title>
+<link rel="icon" href="${ICON}">
 <style>${css}</style>
 </head>
 <body>

@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import type { Page } from 'playwright';
-import { e2e, SCREENS, screens, settled } from './fixtures.ts';
+import { e2e, hasWebGL2, SCREENS, screens, settled } from './fixtures.ts';
 
 async function screensInPlace(page: Page, name: string): Promise<void> {
   for (const theme of ['light', 'dark'] as const) {
@@ -71,8 +71,10 @@ e2e('reports: empty → new from a dashboard → preview (sheet, map) → settin
   // The map tile: drawn off-screen, read back, DOM markers composited — a real picture, not a blank box.
   await pages.locator('ol').getByRole('button', { name: /Profit by state/ }).click();
   await previewed(page, 'Profit by state');
-  const mapPng = await sheet.locator('img').first().getAttribute('src');
-  assert.ok(mapPng && mapPng.startsWith('data:image/png') && mapPng.length > 5000, `the map picture: ${mapPng?.length} chars`);
+  if (await hasWebGL2(page)) {
+    const mapPng = await sheet.locator('img').first().getAttribute('src');
+    assert.ok(mapPng && mapPng.startsWith('data:image/png') && mapPng.length > 5000, `the map picture: ${mapPng?.length} chars`);
+  } else await sheet.getByText('The map could not be drawn for the file.').waitFor(); // no WebGL2 (the nightly's headless Firefox)
   const caption = page.getByLabel('Caption');
   const app = await caption.inputValue();
   assert.ok(app.length > 10, `the app's caption for the map: ${app}`);

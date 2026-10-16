@@ -14,7 +14,7 @@
 import assert from 'node:assert/strict';
 import { crc32, deflateSync } from 'node:zlib';
 import type { Page } from 'playwright';
-import { e2e, screens, settled } from './fixtures.ts';
+import { e2e, hasWebGL2, screens, settled } from './fixtures.ts';
 
 const KINDS = ['region', 'bubble', 'offline', 'points', 'hexbin', 'flow'] as const;
 const OSM = /^https:\/\/[abc]\.tile\.openstreetmap\.org\//;
@@ -56,6 +56,15 @@ async function allReady(page: Page): Promise<void> {
   await page.waitForFunction((n) => document.querySelectorAll('[data-map-status="ready"][aria-busy="false"]').length === n, KINDS.length, { timeout: 60_000 });
 }
 
+/** No WebGL2 in this engine (fixtures.hasWebGL2): every map shows the designed state instead, and nothing more can be drawn. */
+async function noWebGL(page: Page): Promise<boolean> {
+  if (await hasWebGL2(page)) return false;
+  await page.waitForFunction((n) => document.querySelectorAll('[data-map-status="nowebgl"]').length === n, KINDS.length);
+  assert.equal(await page.getByText('This map needs WebGL').count(), KINDS.length);
+  console.log('no WebGL2 in this browser: every map says "This map needs WebGL"; nothing drawn to check');
+  return true;
+}
+
 /** How many distinct colours the map's WebGL canvas holds (sampled, quantised) — 1–2 means blank. */
 async function canvasColours(page: Page, id: string): Promise<number> {
   return card(page, id)
@@ -82,6 +91,7 @@ e2e('every map kind renders from the server, painted and labelled', async (s) =>
 
   await page.goto('/dev/maps');
   await settled(page);
+  if (await noWebGL(page)) return;
   await allReady(page);
 
   const stat = async (id: string, name: string) => Number(await figure(page, id).getAttribute(`data-${name}`));
@@ -136,6 +146,7 @@ e2e('the radius control resolves a place and narrows the point map', async (s) =
   await serveTiles(page);
   await page.goto('/dev/maps');
   await settled(page);
+  if (await noWebGL(page)) return;
   await allReady(page);
   const before = Number(await figure(page, 'points').getAttribute('data-clusters'));
   assert.ok(before > 0);

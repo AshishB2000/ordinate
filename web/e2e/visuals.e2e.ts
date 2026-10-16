@@ -18,7 +18,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import type { Page, Response } from 'playwright';
-import { e2e, screens, SCREENS, settled, type Session } from './fixtures.ts';
+import { copiedText, csrfToken, e2e, grantClipboard, hasWebGL2, screens, SCREENS, settled, watchCopies, type Session } from './fixtures.ts';
 
 /** Both themes WITHOUT a reload: an open dialog, or an unsaved draft, would not survive `screens`. */
 async function shots(page: Page, name: string): Promise<void> {
@@ -31,26 +31,29 @@ async function shots(page: Page, name: string): Promise<void> {
 }
 
 async function post(s: Session, channel: string, payload?: unknown) {
-  let csrf = (await s.page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value;
-  if (!csrf) {
-    await s.page.goto('/');
-    csrf = (await s.page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';
-  }
+  const csrf = await csrfToken(s);
   return s.page.request.post(`${s.server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': csrf }, data: { args: payload === undefined ? [] : [payload] } });
 }
 
-/** Canvas pixels with any alpha, per canvas under `sel`. */
-function ink(page: Page, sel: string): Promise<number[]> {
-  return page.evaluate(
-    (q) =>
-      [...document.querySelectorAll<HTMLCanvasElement>(q)].map((c) => {
+/**
+ * Waits until at least `count` canvases under `sel` hold more than `min` pixels
+ * with any alpha. It waits for the ink itself: a canvas has its size before
+ * Chart.js draws into it (PR #290 read 0,0 off two thumbnails that already had
+ * a width).
+ */
+async function inked(page: Page, sel: string, min: number, count = 1): Promise<void> {
+  await page.waitForFunction(
+    ([q, least, n]) => {
+      const each = [...document.querySelectorAll<HTMLCanvasElement>(q)].map((c) => {
         if (!c.width || !c.height) return 0;
         const px = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
-        let n = 0;
-        for (let i = 3; i < px.length; i += 4) if (px[i]) n++;
-        return n;
-      }),
-    sel,
+        let k = 0;
+        for (let i = 3; i < px.length; i += 4) if (px[i]) k++;
+        return k;
+      });
+      return each.filter((k) => k > least).length >= n;
+    },
+    [sel, min, count] as const,
   );
 }
 
@@ -73,11 +76,7 @@ e2e('visuals: the gallery with live thumbnails, and the builder on a saved visua
   // Thumbnails: both charts inked, the map's mini-map drawn.
   await page.waitForFunction(() => document.querySelectorAll('[data-visual-id] canvas').length >= 3);
   await page.waitForFunction(() => document.querySelector('[data-visual-id] [data-drawn="true"]'));
-  await page.waitForFunction(() =>
-    [...document.querySelectorAll<HTMLCanvasElement>('[data-visual-id] span > canvas')].filter((c) => c.width > 0).length >= 2,
-  );
-  const thumbInk = await ink(page, '[data-visual-id] span > canvas');
-  assert.ok(thumbInk.filter((n) => n > 200).length >= 2, `two chart thumbnails have ink: ${thumbInk.join(',')}`);
+  await inked(page, '[data-visual-id] span > canvas', 200, 2); // both chart thumbnails have ink
   const galleryLoad = s.rpc.loads.at(-1)!;
   assert.ok(galleryLoad.rpcs <= 6, `the gallery costs ${galleryLoad.rpcs} RPCs (thumbnails batched)`);
   await screens(page, 'visuals-gallery');
@@ -89,8 +88,7 @@ e2e('visuals: the gallery with live thumbnails, and the builder on a saved visua
   const area = page.locator('[data-chart-type]');
   await page.waitForFunction(() => document.querySelector('[data-chart-type="column"] canvas'));
   assert.equal(await page.getByRole('radio', { name: /^Column$/ }).getAttribute('aria-checked'), 'true');
-  await page.waitForTimeout(400);
-  assert.ok((await ink(page, '[data-chart-type] canvas'))[0] > 1000, 'the column chart has ink');
+  await inked(page, '[data-chart-type] canvas', 1000); // the column chart has ink
 
   // An aggregation edit recomputes on the server.
   const recomputed = rpcReply(page, 'visual:preview');
@@ -119,11 +117,12 @@ e2e('visuals: the gallery with live thumbnails, and the builder on a saved visua
   });
   await page.getByRole('button', { name: 'Download chart (PNG)' }).click();
   assert.ok((await page.evaluate(() => (window as unknown as { __png?: string }).__png ?? '')).startsWith('data:image/png;base64,'));
-  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await grantClipboard(page);
+  await watchCopies(page);
   await page.getByRole('button', { name: 'Chart options' }).click();
   await page.getByRole('button', { name: 'Copy data' }).click();
   await page.getByText('Data copied to clipboard').waitFor();
-  const tsv = await page.evaluate(() => navigator.clipboard.readText());
+  const tsv = await copiedText(page);
   assert.ok(/^Label\tavg of revenue\n/.test(tsv) && tsv.split('\n').length === 4, `TSV: ${tsv}`);
   await screens(page, 'visuals-builder');
 
@@ -180,7 +179,8 @@ e2e('visuals: a new visual from the dialog, a region map, and the card menu', as
   const regionMap = page.getByRole('radio', { name: /^Region map$/ });
   await regionMap.waitFor();
   await regionMap.click();
-  await page.locator('[data-chart-type="map_choropleth"] canvas').first().waitFor();
+  const choropleth = page.locator('[data-chart-type="map_choropleth"]');
+  await (await hasWebGL2(page) ? choropleth.locator('canvas').first() : choropleth.getByText('This map needs WebGL')).waitFor();
 
   await page.getByRole('button', { name: 'Save visual' }).click();
   const named = page.getByRole('dialog', { name: 'Name this visual' });
@@ -371,8 +371,7 @@ e2e('visuals: a calculated measure, written in the builder, becomes the chart’
     const want = totals.data.series[0].values[i] / totals.data.series[1].values[i];
     assert.ok(Math.abs(drawn.data.series[0].values[i] - want) <= Math.abs(want) * 1e-12, `${label}: ${drawn.data.series[0].values[i]} vs ${want}`);
   });
-  await page.waitForTimeout(400);
-  assert.ok((await ink(page, '[data-chart-type] canvas'))[0] > 1000, 'the chart drew the calculated measure');
+  await inked(page, '[data-chart-type] canvas', 1000); // the chart drew the calculated measure
   await shots(page, 'visuals-calc-chart');
 
   // The pencil reopens it; the sample is shared, so the metric made here goes again.
