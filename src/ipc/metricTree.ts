@@ -244,7 +244,8 @@ async function metricNode(ctx: Ctx, spec: TreeNode, path: string): Promise<TreeN
       const kids = await Promise.all(res.segments.map(async (s): Promise<TreeNodeOut> => {
         const segChange = fin(s.current) && fin(s.previous) ? s.current - s.previous : null;
         const segPct = pctOf(s.current, s.previous, m.format);
-        const filter = { type: 'filter', column: spec.split as string, op: '=', value: s.key } as FilterStep;
+        // The blank segment is every empty cell — null, '' or whitespace — as its figures were.
+        const filter = (s.key === '' ? { type: 'filter', column: spec.split, op: 'is_empty' } : { type: 'filter', column: spec.split, op: '=', value: s.key }) as FilterStep;
         return {
           key: `${key}:${s.key === OTHER_KEY ? 'other' : JSON.stringify(s.key)}`, kind: 'segment', name: s.label,
           current: s.current, previous: s.previous, change: segChange, pct: segPct,
@@ -408,7 +409,6 @@ export function register(): void {
     if (!self) return { ok: false, error: msg.metricGone() };
     const list = (await metrics.listMetrics(projectId)).filter((m) => m.datasetId === self.datasetId);
     const plain = list.map((m) => ({ id: m.id, name: m.name, datasetId: m.datasetId, ...('formula' in m.definition ? { formula: m.definition.formula } : {}) }));
-    const meta = await datasets.getDatasetMeta(projectId, self.datasetId);
     // Per metric: any node of the tree may be broken down, and each gets its own.
     const suggestions: Record<string, ReturnType<typeof suggestBreakdowns>> = {};
     for (const m of plain) {

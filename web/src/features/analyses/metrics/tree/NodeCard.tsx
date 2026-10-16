@@ -27,12 +27,66 @@ export function nodeLabel(n: TreeNode): string {
   return parts.join(', ');
 }
 
+/** The share bar's length: the server's share, drawn against the widest sibling (at least 100%). */
+function barWidth(share: number | null | undefined, scale: number): number | null {
+  return typeof share === 'number' && Number.isFinite(share) ? (Math.abs(share) / scale) * 100 : null;
+}
+
+/** A segment (or the residual) of a split: one compact row of the ranked list under its parent. */
+function SegmentRow({ node, parentDirection, shareScale }: { node: TreeNode; parentDirection?: TreeNode['direction']; shareScale: number }) {
+  const changeTone = toneOf(node.direction, node.change);
+  const contribTone = toneOf(parentDirection, node.contribution);
+  const width = barWidth(node.share, shareScale);
+  const residual = node.kind === 'residual';
+  const cls = [s.segRow, node.lead && s.leadRow, node.lead && TONE[contribTone], residual && s.segResidual].filter(Boolean).join(' ');
+  return (
+    <div className={cls} data-card="">
+      <div className={s.segHead}>
+        {residual ? <Icon name="info" size={12} /> : <span className={s.segDot} aria-hidden="true" />}
+        <span className={s.segName} title={node.name}>
+          {node.name}
+        </span>
+        {node.spark && (
+          <span className={`${s.segSpark} ${TONE[changeTone]}`}>
+            <Sparkline values={node.spark} label={`${node.name}, the last ${node.spark.length} months`} />
+          </span>
+        )}
+        {!residual && <span className={s.segValue}>{node.display}</span>}
+      </div>
+      <div className={s.segBar}>
+        <span className={s.shareTrack} aria-hidden="true">
+          {width !== null && <span className={`${s.shareBar} ${TONE[contribTone]}`} style={{ width: `${width}%` }} />}
+        </span>
+        <span className={`${s.segContrib} ${TONE[contribTone]}`}>{node.contributionDisplay}</span>
+        <span className={s.segShare}>{node.shareDisplay}</span>
+      </div>
+      {!residual && (
+        <div className={s.segMeta}>
+          was {node.previousDisplay}
+          {node.changeDisplay !== '—' && (
+            <>
+              {' · '}
+              <span className={TONE[changeTone]}>
+                {node.changeDisplay}
+                {node.pctDisplay && ` (${node.pctDisplay})`}
+              </span>
+            </>
+          )}
+          {node.mixDisplay && ` · mix ${node.mixDisplay} · rate ${node.rateDisplay}`}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function NodeCard({
   node,
   parentDirection,
   root,
   open,
   onToggle,
+  row,
+  shareScale = 100,
 }: {
   node: TreeNode;
   /** The parent's direction: a contribution is good or bad news for the PARENT. */
@@ -40,10 +94,15 @@ export function NodeCard({
   root?: boolean;
   open: boolean;
   onToggle?: () => void;
+  /** Draw as a row of a split's ranked list. */
+  row?: boolean;
+  /** The widest sibling share (≥ 100): every bar under one parent is drawn to one scale. */
+  shareScale?: number;
 }) {
+  if (row) return <SegmentRow node={node} parentDirection={parentDirection} shareScale={shareScale} />;
   const changeTone = toneOf(node.direction, node.change);
   const contribTone = toneOf(parentDirection, node.contribution);
-  const share = typeof node.share === 'number' && Number.isFinite(node.share) ? Math.min(100, Math.abs(node.share)) : null;
+  const share = barWidth(node.share, shareScale);
   const cls = [s.card, root && s.rootCard, node.lead && s.leadCard, node.lead && TONE[root ? changeTone : contribTone], node.kind === 'segment' && s.segment].filter(Boolean).join(' ');
 
   if (node.kind === 'residual') {

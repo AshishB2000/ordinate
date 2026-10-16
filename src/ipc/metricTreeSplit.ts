@@ -88,7 +88,9 @@ async function operandsBy(
     if (!reply.ok) return { ok: false, error: reply.error, ...(reply.code ? { code: reply.code } : {}) };
     if (reply.category?.note) return { ok: false, error: msg.splitTooMany(column, SPLIT_MAX_VALUES) };
     reply.data.labels.forEach((label, row) => {
-      const key = String(label);
+      // Blank is ONE member, as in key drivers (driversJs.memberKey): the door groups a null and an
+      // empty cell apart, under the same '' label, so their figures add here.
+      const key = String(label ?? '').trim() === '' ? '' : String(label);
       let vals = by.get(key);
       if (!vals) {
         vals = new Array<number | null>(shape.operands.length).fill(null);
@@ -97,7 +99,9 @@ async function operandsBy(
       }
       q.ops.forEach((op, j) => {
         const v = reply.data.series[j]?.values[row];
-        (vals as Array<number | null>)[op] = typeof v === 'number' && Number.isFinite(v) ? v : null;
+        if (typeof v !== 'number' || !Number.isFinite(v)) return;
+        const at = (vals as Array<number | null>)[op];
+        (vals as Array<number | null>)[op] = at === null ? v : at + v;
       });
     });
   }

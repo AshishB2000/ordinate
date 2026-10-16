@@ -77,6 +77,8 @@ function Subtree({
   open,
   setOpen,
   focusKey,
+  inList,
+  shareScale,
 }: {
   node: TreeNode;
   depth: number;
@@ -84,13 +86,19 @@ function Subtree({
   open: Map<string, boolean>;
   setOpen: (key: string, v: boolean) => void;
   focusKey: string;
+  /** A row of its parent's split list. */
+  inList?: boolean;
+  shareScale?: number;
 }) {
   const row = useRef<HTMLDivElement>(null);
   const kids = node.children;
   const isOpen = kids.length > 0 && (open.get(node.key) ?? defaultOpen(node, depth));
+  // A split's segments are a ranked list under their parent; a formula's parts branch sideways.
+  const list = node.breakdown?.kind === 'split';
+  const scale = Math.max(100, ...kids.map((k) => (typeof k.share === 'number' && Number.isFinite(k.share) ? Math.abs(k.share) : 0)));
   return (
     <div
-      className={s.subtree}
+      className={inList ? `${s.subtree} ${s.inList}` : s.subtree}
       role="treeitem"
       aria-level={depth + 1}
       aria-expanded={kids.length ? isOpen : undefined}
@@ -99,12 +107,20 @@ function Subtree({
       data-key={node.key}
       data-subtree=""
     >
-      <NodeCard node={node} parentDirection={parent?.direction} root={depth === 0} open={isOpen} onToggle={kids.length ? () => setOpen(node.key, !isOpen) : undefined} />
+      <NodeCard
+        node={node}
+        parentDirection={parent?.direction}
+        root={depth === 0}
+        open={isOpen}
+        onToggle={kids.length ? () => setOpen(node.key, !isOpen) : undefined}
+        row={inList}
+        shareScale={shareScale}
+      />
       {isOpen && (
         <>
-          <div className={s.children} role="group" ref={row}>
+          <div className={list ? s.segList : s.children} role="group" ref={row}>
             {kids.map((k) => (
-              <Subtree key={k.key} node={k} depth={depth + 1} parent={node} open={open} setOpen={setOpen} focusKey={focusKey} />
+              <Subtree key={k.key} node={k} depth={depth + 1} parent={node} open={open} setOpen={setOpen} focusKey={focusKey} inList={list} shareScale={scale} />
             ))}
           </div>
           {/* After the row, so its ref is attached when this measures; CSS `order` draws it above. */}

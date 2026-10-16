@@ -179,7 +179,9 @@ function fixtureRows(): (string | number | null)[][] {
     const n = 24 + Math.floor(rnd() * 12) + (day >= '2024-02-01' ? 6 : 0);
     for (let k = 0; k < n; k += 1) {
       const revenue = rnd() < 0.03 ? null : 10 + Math.floor(rnd() * 490);
-      rows.push([day, REGIONS[Math.floor(rnd() * REGIONS.length)], CHANNELS[Math.floor(rnd() * 3)], revenue, revenue === null ? 5 : Math.floor((revenue as number) * (0.4 + rnd() * 0.4)), 1 + Math.floor(rnd() * 5)]);
+      // A blank region is sometimes '' and sometimes no cell at all: one member either way.
+      const region = REGIONS[Math.floor(rnd() * REGIONS.length)];
+      rows.push([day, region === '' && rnd() < 0.5 ? null : region, CHANNELS[Math.floor(rnd() * 3)], revenue, revenue === null ? 5 : Math.floor((revenue as number) * (0.4 + rnd() * 0.4)), 1 + Math.floor(rnd() * 5)]);
     }
   }
   return rows;
@@ -297,7 +299,6 @@ async function endToEnd(): Promise<void> {
     ok('headline: the change, then what explains it', /^Revenue (rose|fell) \$[\d,.K]+ \([\d.]+%\) vs previous period\. .+ explains −?\d+% of it, led by .+\.$/.test(r.headline), r.headline);
     const seg = r.root.children[0].children;
     ok('split: nine regions → six, then "Other (3)" whose figure is recomputed', seg.length === 7 && seg[6].name === 'Other (3)' && typeof seg[6].current === 'number', seg.map((x) => x.name).join());
-    ok('split: a blank member reads "(blank)"', [...seg.map((x) => x.name)].some((x) => x === '(blank)' || /^Other/.test(x)));
     ok('displays: signed, in the parent\'s units', /^[+−]\$/.test(r.root.children[0].contributionDisplay ?? '') && /^[+−][\d,]+$/.test(seg[0].contributionDisplay ?? ''), `${r.root.children[0].contributionDisplay} ${seg[0].contributionDisplay}`);
     ok('sparklines: 12 closed months at most, gaps stay gaps', !!r.root.spark && r.root.spark.length <= 12 && r.root.spark.length >= 2);
   }
