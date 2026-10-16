@@ -108,7 +108,8 @@ const pctOf = (cur: number | null, prev: number | null, format: MetricFormat): n
 
 // ── The period ───────────────────────────────────────────────────────────────
 
-const MONTH_RE = /^\d{4}-\d{2}$/;
+/** A series label's month: `2024-12` (more than 24 days of data) or a day `2024-12-15` (fewer). */
+const MONTH_RE = /^\d{4}-\d{2}(-\d{2})?$/;
 
 /** The calendar months [first, last] as ISO dates. */
 function monthsRange(first: string, last: string): { from: string; to: string } {
@@ -118,9 +119,9 @@ function monthsRange(first: string, last: string): { from: string; to: string } 
   return { from: `${first}-01`, to: isoFromDays(end - 1) };
 }
 
-/** The newest closed month's (or its whole quarter's) dates, from the root's monthly series. */
+/** The newest closed month's (or its whole quarter's) dates, from the root's series labels (months, or days when there are few). */
 export function latestRange(months: string[], quarter: boolean): { from: string; to: string } | null {
-  const closed = months.filter((l) => MONTH_RE.test(l));
+  const closed = months.filter((l) => MONTH_RE.test(l)).map((l) => l.slice(0, 7));
   const last = closed[closed.length - 1];
   if (!last) return null;
   if (!quarter) return monthsRange(last, last);

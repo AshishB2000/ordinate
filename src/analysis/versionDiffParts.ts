@@ -7,6 +7,7 @@ import { canonical } from './recordDiff';
 import { describeDefinitionShort, describeFilter } from './metricFormat';
 import type { FilterStep } from '../data/transforms';
 import type { MetricDefinition } from './metrics';
+import * as M from './versionDiffMessages';
 
 // ponytail: version records are stored JSON of five shapes, read field by field
 export type Rec = Record<string, any>;
@@ -18,10 +19,10 @@ export type ChangeKind =
   | 'card.added' | 'card.removed' | 'card.movedSheet' | 'card.movedRow' | 'card.movedWithin' | 'card.resized'
   | 'card.type' | 'card.renamed' | 'card.visualSwapped' | 'card.chartType' | 'card.encoding' | 'card.visualFilters'
   | 'card.actions' | 'card.measure' | 'card.savedMetric' | 'card.dataset' | 'card.format' | 'card.compare'
-  | 'card.calc' | 'card.scenario' | 'card.text' | 'card.control' | 'card.settings'
+  | 'card.calc' | 'card.scenario' | 'card.text' | 'card.control' | 'card.settings' | 'card.treeRoot'
   | 'visual.chartType' | 'visual.category' | 'visual.series' | 'visual.measureAdded' | 'visual.measureRemoved'
   | 'visual.grain' | 'visual.bins' | 'visual.geo' | 'visual.pivot' | 'visual.styling'
-  | 'metric.definition' | 'metric.format' | 'metric.direction'
+  | 'metric.definition' | 'metric.format' | 'metric.direction' | 'metric.tree'
   | 'report.format' | 'report.dashboard' | 'report.pagesAdded' | 'report.pagesRemoved' | 'report.pagesIncluded'
   | 'report.pagesExcluded' | 'report.pagesEdited' | 'report.pagesReordered' | 'report.cover' | 'report.paper'
   | 'report.schedule' | 'report.includeFilters' | 'report.narrative'
@@ -154,6 +155,19 @@ function diffMetric(a: Rec, b: Rec, out: Change[]): void {
   const db = String(b.description || '');
   if (da !== db) rec('description', {}, wordDiff(da, db));
   if ((a.direction || '') !== (b.direction || '')) rec('metric.direction');
+  // Its tree (docs/metric-tree): described by shape — the parts are other records, named on their own.
+  if (!same(a.tree ?? null, b.tree ?? null)) rec('metric.tree', { from: treeShape(a.tree), to: treeShape(b.tree) });
+}
+
+/** "a product of 2 metrics (1 broken down further)", "a split by region", "no breakdown". */
+function treeShape(t: unknown): string {
+  const n: Rec = t && typeof t === 'object' ? (t as Rec) : {};
+  if (typeof n.split === 'string' && n.split) return M.treeSplit(n.split);
+  const kids = arr(n.children);
+  if (!kids.length) return M.treeNone();
+  const shape = n.relation === 'ratio' ? M.treeRatio() : n.relation === 'product' ? M.treeProduct(kids.length) : M.treeSum(kids.length);
+  const deeper = kids.filter((k) => (typeof k.split === 'string' && k.split) || arr(k.children).length).length;
+  return deeper ? M.treeDeeper(shape, deeper) : shape;
 }
 
 function diffReport(a: Rec, b: Rec, out: Change[]): void {

@@ -50,7 +50,8 @@ type Any = any; // any: stored-record fixtures and handler replies, read field b
 const show = (v: unknown): string => JSON.stringify(v).slice(0, 500);
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 const kinds = (d: { changes: { kind: string }[] }): string => d.changes.map((c) => c.kind).join(',');
-const titleOf = (c: Any): string => (c.type === 'metric' ? c.metric.label : c.type === 'text' ? c.heading || 'Text' : c.type === 'visual' ? 'Revenue by region' : c.type);
+const titleOf = (c: Any): string => (c.type === 'metric' ? c.metric.label : c.type === 'text' ? c.heading || 'Text' : c.type === 'visual' ? 'Revenue by region'
+  : c.type === 'metricTree' ? (c.metricTree.metricId === ID(30) ? 'Revenue tree' : 'Profit tree') : c.type);
 
 const ID = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const DS = ID(900);
@@ -196,6 +197,34 @@ function structure(): void {
     parts.wordDiff('a '.repeat(500), 'b '.repeat(3)).length === 2);
 }
 
+/** Metric trees (docs/metric-tree): a tree card's change and a metric's own tree, in words — never a field dump. */
+function trees(): void {
+  const a = base();
+  a.sheets[0].cards.push({ id: ID(15), type: 'metricTree', layout: { x: 0, y: 6, w: 12, h: 11 }, metricTree: { metricId: ID(30) } });
+  const root = clone(a);
+  root.sheets[0].cards[4].metricTree.metricId = ID(31);
+  let d = vd.diffVersions('dashboard', a, root, titleOf);
+  ok('a tree card on another metric → ONE card.treeRoot, not a rename or a settings dump', kinds(d) === 'card.treeRoot' && d.counts.changed === 1, kinds(d));
+  ok('…worded "Metric tree: root changed from “Revenue tree” to “Profit tree”"', ipcDiff.sentence(d.changes[0]) === 'Metric tree: root changed from “Revenue tree” to “Profit tree”', ipcDiff.sentence(d.changes[0]));
+  const cmp = clone(a);
+  cmp.sheets[0].cards[4].metricTree.compare = { mode: 'previous_year' };
+  d = vd.diffVersions('dashboard', a, cmp, titleOf);
+  ok('the tree card\'s own Compare → card.compare, titled by its metric', kinds(d) === 'card.compare' && ipcDiff.sentence(d.changes[0]) === 'Revenue tree: comparison period changed', ipcDiff.sentence(d.changes[0]));
+  const other = clone(a);
+  other.sheets[0].cards[4].note = 'x';
+  d = vd.diffVersions('dashboard', a, other, titleOf);
+  ok('NEGATIVE CONTROL: a field the tree branch does not word still shows as a settings change', kinds(d) === 'card.settings', kinds(d));
+
+  const m = { name: 'Revenue', definition: { column: 'amount', aggregation: 'sum' }, filters: [], format: { kind: 'number', decimals: 0, compact: false } };
+  const product = { id: ID(40), metricId: ID(30), relation: 'product', children: [{ id: ID(41), metricId: ID(32), split: 'region' }, { id: ID(42), metricId: ID(33) }] };
+  d = vd.diffVersions('metric', m, { ...m, tree: product }, titleOf);
+  ok('a metric that gains a tree → metric.tree, described by its shape', kinds(d) === 'metric.tree' && ipcDiff.sentence(d.changes[0]) === 'Tree changed from no breakdown to a product of 2 metrics (1 broken down further)', ipcDiff.sentence(d.changes[0]));
+  d = vd.diffVersions('metric', { ...m, tree: product }, { ...m, tree: { id: ID(40), metricId: ID(30), split: 'channel' } }, titleOf);
+  ok('…a product replaced by a split', ipcDiff.sentence(d.changes[0]) === 'Tree changed from a product of 2 metrics (1 broken down further) to a split by channel', ipcDiff.sentence(d.changes[0]));
+  d = vd.diffVersions('metric', { ...m, tree: product }, { ...m, tree: clone(product) }, titleOf);
+  ok('NEGATIVE CONTROL: the same tree is no change', d.changes.length === 0, kinds(d));
+}
+
 async function engine(): Promise<void> {
   const pid = (await projects.createProject('Version diff')).id;
   const cols = [{ name: 'region', type: 'text' }, { name: 'amount', type: 'number' }] as Any;
@@ -269,6 +298,10 @@ async function engine(): Promise<void> {
   const mIn = { projectId: pid, type: 'metric', id: m.id, from: mv1!.key, to: mv2!.key };
   const mdiff = await handlers.get('versions:diff')!({}, mIn);
   ok('a metric version: "Definition changed from …"', mdiff.ok && mdiff.changes[0].kind === 'metric.definition' && mdiff.figures === 1, show(mdiff));
+  // Its tree, through the handler and the catalog.
+  const mv3 = await versions.record(pid, 'metric', { ...m, definition: { column: 'amount', aggregation: 'max' }, tree: { id: ID(50), metricId: m.id, split: 'region' } });
+  const tdiff = await handlers.get('versions:diff')!({}, { projectId: pid, type: 'metric', id: m.id, from: mv2!.key, to: mv3!.key });
+  ok('a metric version whose tree changed: "Tree changed from no breakdown to a split by region"', tdiff.ok && tdiff.changes.length === 1 && tdiff.changes[0].text === 'Tree changed from no breakdown to a split by region', show(tdiff));
   const mf = await handlers.get('versions:figures')!({}, mIn);
   const pa = await ipcMetrics.previewDefinition(pid, ds, { column: 'amount', aggregation: 'sum' }, [], m.format);
   const pb = await ipcMetrics.previewDefinition(pid, ds, { column: 'amount', aggregation: 'max' }, [], m.format);
@@ -280,6 +313,7 @@ async function main(): Promise<void> {
   ok('both channels are registered', handlers.has('versions:diff') && handlers.has('versions:figures'));
   await projects.init();
   structure();
+  trees();
   await engine();
 }
 

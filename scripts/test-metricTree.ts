@@ -331,7 +331,9 @@ async function endToEnd(): Promise<void> {
   const quarter = await ipc.computeTree(pid, revenue.id, { period: { key: 'latest_quarter' } });
   ok('latest quarter: the newest whole quarter that has closed (Q4 2023)', quarter.ok && quarter.period.from === '2023-10-01' && quarter.period.to === '2023-12-31', quarter.ok ? JSON.stringify(quarter.period) : '');
   ok('latestRange: a month and its closed quarter', JSON.stringify(ipc.latestRange(['2024-01', '2024-02', '2024-03'], true)) === '{"from":"2024-01-01","to":"2024-03-31"}'
-    && JSON.stringify(ipc.latestRange(['2024-04'], true)) === '{"from":"2024-01-01","to":"2024-03-31"}' && ipc.latestRange([], false) === null);
+    && JSON.stringify(ipc.latestRange(['2024-04'], true)) === '{"from":"2024-01-01","to":"2024-03-31"}' && ipc.latestRange([], false) === null
+    // A dataset with 24 or fewer distinct days labels its series by day: the newest day's month.
+    && JSON.stringify(ipc.latestRange(['2025-05-15', '2025-06-15'], false)) === '{"from":"2025-06-01","to":"2025-06-30"}');
   const lastYear = await ipc.computeTree(pid, revenue.id, { filters: feb, compare: { mode: 'previous_year' } });
   ok('nothing a year earlier: the headline says so, no invented change', lastYear.ok && /has no figure to compare/.test(lastYear.headline) && lastYear.root.change === null);
 
@@ -377,6 +379,13 @@ async function endToEnd(): Promise<void> {
 
   const gone = await ipc.computeTree(pid, U(404), {});
   ok('an unknown metric is refused in words', !gone.ok && /no longer exists/.test(gone.error));
+  // Versions: a tree edit is a version of the metric, and restoring one without a tree clears it.
+  const versions: typeof import('../src/app/versions') = require('../src/app/versions');
+  const vList = await versions.list(pid, 'metric', avgPrice.id);
+  ok('versions: saving a tree records a version that says so', vList.length >= 1, JSON.stringify(vList).slice(0, 200));
+  const recordDiff: typeof import('../src/analysis/recordDiff') = require('../src/analysis/recordDiff');
+  ok('versions: a tree-only edit is a change ("changed its tree")', !recordDiff.sameContent('metric', { ...avgPrice, tree: undefined }, avgPrice));
+
   const cleared = await ipc.saveTree(pid, avgPrice.id, null);
   ok('save null clears the tree', cleared.ok && cleared.metric.tree === undefined);
 }

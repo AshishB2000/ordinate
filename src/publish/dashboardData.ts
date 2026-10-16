@@ -38,7 +38,7 @@ import { resolveMetric } from '../ipc/metrics';
 import { computeStatsTile } from '../ipc/stats';
 import { computeSummary } from '../ipc/summary';
 import { statsTitle } from '../analysis/stats/present';
-import { metricTreePayload } from './metricTreePublish';
+import { metricTreePayload, treeAllowed } from './metricTreePublish';
 import { planCombos, parseKey, comboKey, MAX_OPTIONS_PER_CONTROL } from './combos';
 import { viewControlValue, viewParamValue, viewPageIndex } from '../analysis/savedViews'; // r10:views
 import type { SavedView } from '../analysis/savedViews';
@@ -501,7 +501,12 @@ export async function buildDashboard(
         continue;
       }
       if (card.type === 'metricTree' && card.metricTree) {
-        // A metric tree (./metricTreePublish): a numbers table of the tree per combination.
+        // A metric tree (./metricTreePublish): a numbers table of the tree per combination. Under a
+        // lock, only a tree of plain metrics over covered datasets is drawn (treeAllowed).
+        if (lock && !(await treeAllowed(lock, projectId, card.metricTree.metricId))) {
+          cards.push(refuse(base, 'Metric tree'));
+          continue;
+        }
         for (const scope of scopes) {
           if (ctx.checkCancelled) ctx.checkCancelled();
           base.variants.push(intern(store, await metricTreePayload(projectId, card.metricTree, resolveFilterParams(scope.filters, scope.params).steps, scope.params)));
