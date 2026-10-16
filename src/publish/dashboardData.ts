@@ -43,6 +43,8 @@ import { viewControlValue, viewParamValue, viewPageIndex } from '../analysis/sav
 import type { SavedView } from '../analysis/savedViews';
 import type { ComboPlan, ControlDomain } from './combos';
 import { sanitizeRadiusValue } from '../analysis/geo/radius';
+import { lockedOptions, metricAllowed, visualAllowed, type Lock } from './embedLock';
+import { embedTileLocked } from '../server/embedMessages';
 
 export interface PublishedControl {
   id: string;
@@ -136,6 +138,23 @@ export interface BuildProgress {
  * `visual:data` shape and returns it (labels masked, say) or `{ hidden }`
  * when the tile must not be published at all.
  */
+/**
+ * What an EMBED builds under (src/publish/embedPage.ts): the dashboard as it
+ * was PUBLISHED (its record and visuals, kept with the link) instead of the
+ * editable one, and the token's locked filters (./embedLock.ts). Absent for
+ * a publish or an export.
+ */
+export interface BuildScope {
+  def?: PublishedDef;
+  lock?: Lock | null;
+}
+
+/** A dashboard's definition as it was published: the record and every visual its cards name. */
+export interface PublishedDef {
+  analysis: analysis.Analysis;
+  visuals: Record<string, Visual>;
+}
+
 export type Outgoing = (datasetId: string, encoding: VizEncoding, data: VizDataResult['data']) => Promise<VizDataResult['data'] | { hidden: string }>;
 
 /**
@@ -199,13 +218,14 @@ async function distinct(projectId: string, datasetId: string, column: string): P
   return ds ? distinctValuesPageJs(ds.columns, ds.rows, column, req).values.map((v) => String(v)) : [];
 }
 
-async function controlSpec(projectId: string, card: Card, a: analysis.Analysis, unlisted: Unlisted[]): Promise<ControlSpec | null> {
+async function controlSpec(projectId: string, card: Card, a: analysis.Analysis, unlisted: Unlisted[], lock?: Lock | null): Promise<ControlSpec | null> {
   const control = card.control;
   if (!control) return null;
   const id = card.id;
   const label = control.label || control.column || 'Filter';
   if (control.kind === 'dropdown' || control.kind === 'multi') {
-    const values = await distinct(projectId, control.datasetId, control.column);
+    // Under an embed's lock the options are data too: only what exists inside it (./embedLock.ts).
+    const values = lock ? await lockedOptions(lock, projectId, control, MAX_OPTIONS_PER_CONTROL) : await distinct(projectId, control.datasetId, control.column);
     if (typeof values === 'string') { unlisted.push({ control: label, reason: values }); return null; } // left out, and the plan says why — never an empty "All"
     const def = control.default as any; // ControlValue union, narrowed by kind here
     const want = control.kind === 'dropdown' ? def && def.value : def && Array.isArray(def.values) ? def.values[0] : undefined;
@@ -263,12 +283,12 @@ async function controlSpec(projectId: string, card: Card, a: analysis.Analysis, 
 
 export interface Unlisted { control: string; reason: string } // a control a page cannot offer (a Live column with no list of values), and why
 /** Every control card on every sheet, in reading order; the ones left out go onto `unlisted`. */
-async function controlSpecs(projectId: string, a: analysis.Analysis, unlisted: Unlisted[]): Promise<ControlSpec[]> {
+async function controlSpecs(projectId: string, a: analysis.Analysis, unlisted: Unlisted[], lock?: Lock | null): Promise<ControlSpec[]> {
   const out: ControlSpec[] = [];
   for (const sheet of a.sheets) {
     for (const card of sheet.cards) {
       if (!card || card.type !== 'control') continue;
-      const spec = await controlSpec(projectId, card, a, unlisted);
+      const spec = await controlSpec(projectId, card, a, unlisted, lock);
       if (spec) out.push(spec);
     }
   }
@@ -276,21 +296,25 @@ async function controlSpecs(projectId: string, a: analysis.Analysis, unlisted: U
 }
 
 /** The plan without computing a single tile — for the dialog's summary line. */
-export async function planDashboard(projectId: string, analysisId: string, maxCombos: number) {
-  const a = await analysis.getAnalysis(projectId, analysisId);
+export async function planDashboard(projectId: string, analysisId: string, maxCombos: number, scope: BuildScope = {}) {
+  const a = scope.def ? (scope.def.analysis.id === analysisId ? scope.def.analysis : null) : await analysis.getAnalysis(projectId, analysisId);
   if (!a) return null;
   const unlisted: Unlisted[] = [];
-  const specs = await controlSpecs(projectId, a, unlisted);
+  const specs = await controlSpecs(projectId, a, unlisted, scope.lock);
   const plan = planCombos(specs.map((s) => s.domain), maxCombos);
   const tiles = a.sheets.reduce((n, s) => n + s.cards.filter((c) => c && c.type !== 'control').length, 0);
   return { id: a.id, name: a.name, plan, tiles, analysis: a, specs, unlisted };
 }
 
-/** The filters and parameter values one combination stands for. */
-function comboScope(a: analysis.Analysis, specs: ControlSpec[], plan: ComboPlan, key: string): { filters: FilterStep[]; params: ParamValues } {
+/**
+ * The filters and parameter values one combination stands for. An embed's
+ * locked steps come FIRST and are literal values (no parameter reference —
+ * makeLock refuses one), so binding parameters can never drop or change them.
+ */
+function comboScope(a: analysis.Analysis, specs: ControlSpec[], plan: ComboPlan, key: string, lock?: Lock | null): { filters: FilterStep[]; params: ParamValues } {
   const picks = parseKey(key);
   const params = paramValues((a.parameters || []).map((p) => ({ name: p.name, kind: p.kind, value: p.value, min: p.min, max: p.max })));
-  const filters: FilterStep[] = Array.isArray(a.filters) ? a.filters.slice() : [];
+  const filters: FilterStep[] = [...(lock ? lock.steps : []), ...(Array.isArray(a.filters) ? a.filters : [])];
   specs.forEach((s, i) => {
     // The plan may have TRIMMED this control's options; map back by label.
     const label = plan.domains[i] ? plan.domains[i].options[picks[i] ?? 0] : undefined;
@@ -319,9 +343,11 @@ function intern(store: { payloads: unknown[]; seen: Map<string, number> }, paylo
   return store.payloads.length - 1;
 }
 
-async function resolveVisual(projectId: string, card: Card): Promise<Pick<Visual, 'datasetId' | 'name' | 'chartType' | 'encoding' | 'filters' | 'overrides'> | null> {
+async function resolveVisual(projectId: string, card: Card, def?: PublishedDef): Promise<Pick<Visual, 'datasetId' | 'name' | 'chartType' | 'encoding' | 'filters' | 'overrides'> | null> {
   if (card.visual && card.visual.datasetId) return card.visual;
   if (!card.visualId) return null;
+  // The published definition never falls back to the editable visual: what was not published is not shown.
+  if (def) return Object.prototype.hasOwnProperty.call(def.visuals, card.visualId) ? def.visuals[card.visualId] : null;
   return visuals.getVisual(projectId, card.visualId);
 }
 
@@ -335,9 +361,10 @@ export async function buildDashboard(
   maxCombos: number,
   ctx: BuildProgress = {},
   outgoing?: Outgoing,
-  opts: { defaultOnly?: boolean } = {},
+  opts: { defaultOnly?: boolean } & BuildScope = {},
 ): Promise<PublishedDashboard | null> {
-  const planned = await planDashboard(projectId, analysisId, maxCombos);
+  const planned = await planDashboard(projectId, analysisId, maxCombos, opts);
+  const lock = opts.lock ?? null;
   if (!planned) return null;
   const { analysis: a, specs } = planned;
   // `defaultOnly`: just the state the dashboard opens on — the size estimate
@@ -347,7 +374,10 @@ export async function buildDashboard(
   const boundaryIds = new Set<string>();
   const total = Math.max(1, planned.tiles * plan.keys.length);
   let done = 0;
-  const scopes = plan.keys.map((k) => comboScope(a, specs, plan, k));
+  const scopes = plan.keys.map((k) => comboScope(a, specs, plan, k, lock));
+  // A tile that cannot honour the lock is refused, never drawn unscoped (./embedLock.ts).
+  const refuse = (base: { id: string; layout: PublishedCard['layout']; variants: number[]; payloads: unknown[] }, title: string): PublishedCard =>
+    ({ ...base, kind: 'broken', title, reason: embedTileLocked() });
 
   const sheets: PublishedDashboard['sheets'] = [];
   for (const sheet of a.sheets) {
@@ -365,13 +395,18 @@ export async function buildDashboard(
         continue;
       }
       if (card.type === 'visual') {
-        const v = await resolveVisual(projectId, card);
+        const v = await resolveVisual(projectId, card, opts.def);
         if (!v) {
           cards.push({ ...base, kind: 'broken', title: 'Visual', reason: 'This visual was deleted.' });
           done += plan.keys.length;
           continue;
         }
         const enc = sanitizeEncoding(v.encoding);
+        if (lock && !(await visualAllowed(lock, projectId, v.datasetId, enc))) {
+          cards.push(refuse(base, substituteText(v.name || 'Visual', defaults)));
+          done += plan.keys.length;
+          continue;
+        }
         if (enc.geo) {
           if (enc.geo.level === 'custom' && enc.geo.boundaryId) boundaryIds.add(enc.geo.boundaryId);
           else geoLevels.add(enc.geo.level);
@@ -397,6 +432,11 @@ export async function buildDashboard(
       if (card.type === 'metric' && card.metric) {
         const m = card.metric;
         let title = m.label || `${m.aggregation} of ${m.column}`;
+        if (lock && !(await metricAllowed(lock, projectId, m))) {
+          cards.push(refuse(base, title));
+          done += plan.keys.length;
+          continue;
+        }
         for (const scope of scopes) {
           if (ctx.checkCancelled) ctx.checkCancelled();
           const bound = resolveFilterParams(scope.filters, scope.params);
@@ -432,6 +472,11 @@ export async function buildDashboard(
         // A statistics tile (src/ipc/stats.ts), recomputed per combination and
         // published as a chart or a numbers-only table — through the share policy.
         let chartType = card.stats.view === 'chart' ? '' : 'table';
+        if (lock && !(await lock.covers(projectId, card.stats.datasetId))) {
+          cards.push(refuse(base, statsTitle(card.stats)));
+          done += plan.keys.length;
+          continue;
+        }
         for (const scope of scopes) {
           if (ctx.checkCancelled) ctx.checkCancelled();
           const bound = resolveFilterParams(scope.filters, scope.params);
@@ -452,6 +497,12 @@ export async function buildDashboard(
         continue;
       }
       if (card.type === 'summary') {
+        // Its facts (insights, quality, alerts) are about whole datasets: never under a lock.
+        if (lock) {
+          cards.push(refuse(base, 'Summary'));
+          done += plan.keys.length;
+          continue;
+        }
         // The Summary card (src/ipc/summary.ts), recomputed per combination —
         // minus any sentence quoting a column the share policy withholds.
         for (const scope of scopes) {

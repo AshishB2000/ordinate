@@ -36,6 +36,8 @@ import { registerMcpRoute } from '../automation/serverMcp';
 import { registerGeoRoutes } from './geo';
 import { registerRequestMetrics } from './metrics';
 import { registerPublishedRoutes } from './published';
+import { maskEmbedTokens, maskEmbedUrl, registerEmbedRoutes } from './embed/route';
+import { useEmbedDb } from './embed/settings';
 import { isLiveDatasetError, LIVE_DATASET_CODE, liveRefusalsRaised, tagLiveRefusals } from '../data/liveDataset';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
@@ -125,7 +127,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       serializers: {
         req: (req: FastifyRequest) => ({
           method: req.method,
-          url: maskHookUrl(maskFileToken(req.url.split('?')[0])),
+          url: maskEmbedUrl(maskHookUrl(maskFileToken(req.url.split('?')[0]))),
           host: req.host,
           remoteAddress: req.ip,
           remotePort: req.socket?.remotePort,
@@ -135,7 +137,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // text, which no serializer sees — a refresh URL's token never gets there.
       hooks: {
         logMethod(args, method) {
-          return method.apply(this, args.map((a: unknown) => (typeof a === 'string' ? maskHookTokens(a) : a)) as typeof args);
+          return method.apply(this, args.map((a: unknown) => (typeof a === 'string' ? maskEmbedTokens(maskHookTokens(a)) : a)) as typeof args);
         },
       },
       ...(logStream ? { stream: logStream } : {}),
@@ -189,6 +191,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       if (cfg.masterKey) useSecretStore(createSecretStore(pool, cfg.masterKey));
       // AI provider keys go to the encrypted secrets store (T5.3) — with no master key, nowhere (T2.12).
       useAiKeys(pool, cfg.masterKey);
+      // Embedding (docs/embed): the org's switch and origins in org_settings, its signing secret in the store — none without a master key.
+      useEmbedDb(pool, cfg.masterKey ? createSecretStore(pool, cfg.masterKey) : null);
       // The org's settings document is a row every pod reads, not a file on this pod's disk (0014).
       orgConfig.useOrgConfig(pool, cfg.dataDir);
       await orgConfig.fresh(cfg.auth.org);
@@ -220,6 +224,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       useLiveUsageDb(null);
       if (cfg.storage.s3) (require('../engine/storage') as typeof import('../engine/storage')).useStorageDb(null);
       useSecretStore(null);
+      useEmbedDb(null, null);
       useAiKeys(null, null);
       (require('./subscriptions/job') as typeof import('./subscriptions/job')).unwireSubscriptions();
       orgConfig.useOrgConfig(null);
@@ -253,7 +258,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     // A published site (/p/…, ./published.ts) decides its own access: members, or anyone when public.
     // So does a refresh URL (`self`, ./hooks/route.ts): its token is the credential.
     const route = req.routeOptions.url;
-    if (api ? route?.startsWith('/api/auth/') || routeAccess(req.method, route) === 'self' : !isPageNavigation(req.method, path, req.headers.accept) || path.startsWith('/p/')) {
+    // So does an embed (/embed/<token>, ./embed/route.ts): the signed token is the credential; no cookie reaches a third-party iframe.
+    if (api ? route?.startsWith('/api/auth/') || routeAccess(req.method, route) === 'self' : !isPageNavigation(req.method, path, req.headers.accept) || path.startsWith('/p/') || path.startsWith('/embed/')) {
       return done();
     }
     Promise.resolve(identify(req.headers, req.socket.remoteAddress)).then(async (who) => {
@@ -418,6 +424,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // Published dashboards at /p/<publishId>/ (T2.9): signed-in members of the org, or anyone when the site is public.
   registerPublishedRoutes(app, identify, () => pool);
 
+  // Signed embedding at /embed/<token> (docs/embed): off until an org admin turns it on; the only route another site may frame.
+  registerEmbedRoutes(app, { pool: () => pool, tokenPerMinute: cfg.limits.embedPerMinute, orgPerMinute: cfg.limits.embedOrgPerMinute });
+
   app.addHook('onClose', async () => shutdown());
 
   // The web app, when it has been built (`npm --prefix web run build`). In dev
@@ -496,6 +505,8 @@ export function registerHandlers(): void {
   (require('../ipc/snapshots') as typeof import('../ipc/snapshots')).register({ headless: true });
   // Dashboards, sharing, alerts, comments (T2.9): publish to a URL, export, the summary card, the As-of picker.
   (require('../ipc/publishServer') as typeof import('../ipc/publishServer')).register(() => dbPool);
+  // Signed embedding (docs/embed): the org's settings and secret, a dashboard's lockable columns, a preview link.
+  (require('../ipc/embed') as typeof import('../ipc/embed')).register();
   for (const mod of ['../ipc/comments', '../ipc/summary', '../ipc/dashboardsServer', '../ipc/fx']) (require(mod) as { register: () => void }).register();
   (require('../ipc/alerts') as typeof import('../ipc/alerts')).register();
   // Live datasets (docs/live-data/00-plan.md L2.1): the mode switch.

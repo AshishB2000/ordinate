@@ -346,6 +346,11 @@ export function sanitizePage(raw: unknown): Obj {
     ...(theme ? { theme } : {}),
     geo,
   };
+  // An embedded page (src/publish/embedPage.ts): which of the page's own chrome to leave out — two switches, nothing else.
+  if (o.embed && typeof o.embed === 'object') {
+    const e = obj(o.embed);
+    out.embed = { hideTitle: e.hideTitle === true, hideFilters: e.hideFilters === true };
+  }
   if (o.kind === 'story') {
     const s = obj(o.story);
     out.kind = 'story';
