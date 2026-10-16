@@ -80,6 +80,8 @@ from these tables, or when a table names one that no code reads.
 | `RATE_LIMIT_LOGIN_PER_MINUTE` | Sign-in starts plus IdP callbacks, per client IP. Calls of [refresh URLs](live-data.md#refresh-url) get a bucket of their own of the same size. | `60` | — | no |
 | `RATE_LIMIT_RPC_PER_MINUTE` | RPC and `/api/mcp` calls per signed-in user, across all their tabs and tokens. | `1200` | — | no |
 | `RATE_LIMIT_RPC_IP_PER_MINUTE` | RPC and `/api/mcp` calls per client IP. | `3000` | — | no |
+| `RATE_LIMIT_EMBED_PER_MINUTE` | Views of one [embed](embedding.md) link (one signed token), per pod. Embed views per client IP also share a bucket the size of `RATE_LIMIT_RPC_IP_PER_MINUTE`. | `120` | — | no |
+| `RATE_LIMIT_EMBED_ORG_PER_MINUTE` | [Embed](embedding.md) views per organization, every token together, per pod. | `1200` | — | no |
 | `SSRF_ALLOW` | Comma-separated CIDRs that connectors, URL sources and AI gateways may reach even though they are private, loopback or link-local. Everything else in those ranges, including cloud metadata, is refused before a socket opens. List your internal database subnets here. `0.0.0.0/0` turns the guard off. | unset: no private range allowed | a connector reads a database inside your VPC | no |
 
 ## Warehouses and live data
