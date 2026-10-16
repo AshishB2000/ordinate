@@ -24,6 +24,7 @@ const KEYS: Record<string, [QueryKey, QueryKey]> = {
   'visual:thumbs': [['visual:thumbs', P, 'v1', '2026-01-01'], ['visual:thumbs', Q, 'v1', '2026-01-01']],
   'analysis:tile': [['analysis:tile', P, [], {}, { kind: 'metric', datasetId: D, column: 'amount', aggregation: 'sum' }], ['analysis:tile', P, [], {}, { kind: 'metric', datasetId: E, column: 'amount', aggregation: 'sum' }]],
   'metric:values': [['metric:values', P, ['m1'], [], []], ['metric:values', Q, ['m1'], [], []]],
+  'versions:figures': [['versions:figures', P, 'dashboard', 'a1', 'k1', 'k2'], ['versions:figures', Q, 'dashboard', 'a1', 'k1', 'k2']],
   'summary:compute': [['summary:compute', { projectId: P, pages: [] }], ['summary:compute', { projectId: Q, pages: [] }]],
   'dashboard:asOfStamps': [['dashboard:asOfStamps', P, [D], []], ['dashboard:asOfStamps', P, [E], []]],
   'answer:card': [['answer:card', P, JSON.stringify({ datasetId: D, category: 'region' })], ['answer:card', P, JSON.stringify({ datasetId: E, category: 'region' })]],
