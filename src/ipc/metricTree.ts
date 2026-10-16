@@ -232,7 +232,12 @@ async function metricNode(ctx: Ctx, spec: TreeNode, path: string): Promise<TreeN
     node.breakdown = { kind: spec.relation, text: (spec.relation === 'sum' && spec.children[0].negative ? '−' : '') + names.join('') };
     const res = contributions(spec.relation, kids.map((k, i) => ({ previous: k.previous, current: k.current, negative: !!spec.children?.[i].negative })));
     if (res.ok) credit(node, kids, res.contributions, m.format);
-    else node.note = res.why === 'missing' ? msg.partMissing(kids.find((k) => k.current === null || k.previous === null)?.name ?? m.name) : msg.zeroDenominator(m.name);
+    else if (res.why === 'zero_denominator') node.note = msg.zeroDenominator(m.name);
+    else {
+      // The part with no figure says why itself when it is gone or elsewhere; the parent names it.
+      const missing = kids.find((k) => k.current === null || k.previous === null);
+      node.note = missing && missing.metricId ? msg.partMissing(missing.name) : msg.partGone();
+    }
     node.children = kids;
   } else if (spec.split) {
     node.breakdown = { kind: 'split', text: msg.splitBy(spec.split) };

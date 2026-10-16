@@ -11,6 +11,7 @@ import { Dialog, DialogClose } from '../../../../ui/Dialog';
 import { Select } from '../../../../ui/Select';
 import { EmptyState, ErrorState } from '../../../../ui/States';
 import { Icon } from '../../../../ui/icons/Icon';
+import { usable } from '../../../dashboards/CompareBar';
 import { LiveRefusal } from '../../../live/LiveOff';
 import { liveRefusalOf } from '../../../live/refusal';
 import { useTile, type Card, type TileRequest } from '../../api';
@@ -31,7 +32,8 @@ const treeOf = (card: Card): TreeCard | undefined => card.metricTree as TreeCard
 export function MetricTreeBody({ card }: { card: Card }) {
   const ed = useEditor();
   const spec = treeOf(card);
-  const compare = ed.view.compare ?? spec?.compare;
+  // The sheet's Compare when it is usable (a custom one needs both dates), else the card's own.
+  const compare = usable(ed.view.compare) ?? spec?.compare;
   const req = useMemo<TileRequest | undefined>(
     () => (spec ? { kind: 'metricTree', metricId: spec.metricId, filters: ed.filters, ...(compare ? { compare } : {}) } : undefined),
     [spec, ed.filters, compare],

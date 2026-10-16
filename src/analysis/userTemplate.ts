@@ -168,7 +168,9 @@ export function captureTemplate(input: CaptureInput): CaptureResult {
     const cards: Obj[] = [];
     for (const rc of Array.isArray(page.cards) ? page.cards : []) {
       const c = { ...obj(rc) };
+      // A Metric tree card names one project's metric (its tree is on that record): it does not travel.
       const keep = c.type === 'visual' ? visualOk(String(c.visualId || ''))
+        : c.type === 'metricTree' ? false
         : c.type === 'metric' || c.type === 'control' || c.type === 'stats' ? onDs(c) : true;
       if (!keep) { skipped += 1; continue; }
       delete c.action;

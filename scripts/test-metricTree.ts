@@ -314,6 +314,10 @@ async function endToEnd(): Promise<void> {
     wrong.ok && wrong.root.children.some((c) => c.kind === 'residual' && c.name === 'Not explained by its parts' && typeof c.contribution === 'number'));
   ok('a preview is never saved', (await metrics.getMetric(pid, revenue.id))?.tree?.children?.[1].metricId === aov.id);
 
+  const holed = await ipc.computeTree(pid, revenue.id, { filters: feb, compare, tree: { relation: 'product', children: [{ metricId: orders.id }, { metricId: U(404) }] } });
+  ok('a deleted part: the part and its parent say so, and nothing is weighed',
+    holed.ok && /was deleted/.test(holed.root.note ?? '') && /was deleted/.test(holed.root.children[1].note ?? '') && holed.root.children.every((c) => c.contribution === undefined), holed.ok ? holed.root.note : '');
+
   const mx = await ipc.computeTree(pid, top.id, { filters: feb, compare, tree: { split: 'region' } });
   ok('a max does not split: a sentence on the node, no segments', mx.ok && mx.root.children.length === 0 && /cannot be split by member/.test(mx.root.note ?? ''), mx.ok ? mx.root.note : '');
   const notText = await ipc.computeTree(pid, revenue.id, { filters: feb, compare, tree: { split: 'units' } });
