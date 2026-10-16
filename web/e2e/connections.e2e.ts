@@ -22,7 +22,7 @@ import path from 'node:path';
 import { after } from 'node:test';
 import pg from 'pg';
 import type { Page, Response } from 'playwright';
-import { configureServer, e2e, SCREENS, screens, settled, type Session } from './fixtures.ts';
+import { configureServer, csrfToken, e2e, SCREENS, screens, settled, type Session } from './fixtures.ts';
 
 const ADMIN = 'owner@acme.test';
 const CANARY = `Canary/pw+${Math.random().toString(36).slice(2)}=x y`;
@@ -94,13 +94,9 @@ function report(s: Session): void {
   for (const l of s.rpc.loads) console.log(`rpc  ${String(l.rpcs).padStart(2)}  ${new URL(l.url).pathname}${new URL(l.url).search}`);
 }
 
-/** An RPC from the spec itself, with the CSRF pair the web client sends (T6.2); the cookie comes with a page load. */
+/** An RPC from the spec itself, with the CSRF pair the web client sends (T6.2). */
 async function post(s: Session, channel: string, payload?: unknown) {
-  let csrf = (await s.page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value;
-  if (!csrf) {
-    await s.page.goto('/');
-    csrf = (await s.page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';
-  }
+  const csrf = await csrfToken(s);
   return s.page.request.post(`${s.server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': csrf }, data: { args: payload === undefined ? [] : [payload] } });
 }
 

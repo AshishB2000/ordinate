@@ -122,7 +122,8 @@ e2e('live: a refresh from another page moves an open dashboard, no reload, and e
   await page.clock.install({ time: Date.now() + 2 * 86_400_000 }); // time still flows: charts animate
   await screens(page, 'freshness-old');
   const old = page.getByRole('group', { name: 'Feed total card' }).getByTestId('as-of');
-  assert.match((await old.textContent()) ?? '', /^As of [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2}\s?[AP]M$/);
+  // "Oct 8, 1:00 AM", or "Oct 8 at 1:00 AM" from a newer ICU (WebKit on macOS 27): the engine's own joiner.
+  assert.match((await old.textContent()) ?? '', /^As of [A-Z][a-z]{2} \d{1,2}(,| at) \d{1,2}:\d{2}\s?[AP]M$/);
   assert.equal(await old.locator('svg').count(), 1, 'the old caption carries the alert icon');
   assert.match((await old.getAttribute('title')) ?? '', /more than a day old$/);
 });

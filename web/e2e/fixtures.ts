@@ -32,27 +32,62 @@ export async function launchBrowser(): Promise<Browser> {
   // Maps need WebGL2. Headless Chromium has no GPU and draws through SwiftShader,
   // which newer Chromium only allows for WebGL with this flag (T1.3).
   const args = name === 'chromium' ? ['--enable-unsafe-swiftshader'] : [];
-  return types[name as keyof typeof types].launch({ executablePath, args });
+  // Firefox has no clipboard permission to grant (grantClipboard); its testing pref lets a page
+  // read back what it copied without the paste prompt no one is there to click.
+  const firefoxUserPrefs = name === 'firefox' ? { 'dom.events.testing.asyncClipboard': true } : undefined;
+  return types[name as keyof typeof types].launch({ executablePath, args, firefoxUserPrefs });
 }
+
+// WebKit's console line for a refused stylesheet. It carries no source (line 0
+// even when the app's own script added the <style>), so it cannot be told apart;
+// the securitypolicyviolation event WebKit fires with it can, and is what counts.
+const WEBKIT_SHEET_REFUSED = "Refused to apply a stylesheet because its hash, its nonce, or 'unsafe-inline' does not appear in the style-src directive";
 
 /** Starts collecting what must never happen on a page. The returned function lists it so far. */
 export async function failOnConsoleError(page: Page): Promise<() => string[]> {
+  const webkit = page.context().browser()?.browserType().name() === 'webkit';
   const problems: string[] = [];
   page.on('console', (m) => {
     if (m.type() !== 'error') return;
+    if (webkit && m.text().startsWith(WEBKIT_SHEET_REFUSED)) return; // reported by the event below
     const at = m.location();
     problems.push(`console error: ${m.text()}${at.url ? ` (${at.url}:${at.lineNumber})` : ''}`);
   });
-  page.on('pageerror', (e) => problems.push(`page error: ${e.message}`));
+  page.on('pageerror', (e) => {
+    // A load the departing page starts while a goto or reload is under way (a timer's batch, a
+    // component mounting) is refused by WebKit, which reports it as an error of that page:
+    // "Fetch API cannot load http://<this server>/… due to access control checks." No access check
+    // applies to a same-origin request, so on this origin it can only be that. A cross-origin
+    // refusal (a map tile without CORS) names another host, and still fails the test.
+    if (webkit && /^(Fetch API|EventSource) cannot load https?$/.test(e.name) && e.message.startsWith(`/${new URL(page.url()).host}/`) && e.message.endsWith(' due to access control checks.')) return;
+    problems.push(`page error: ${e.message}`);
+  });
   // Firefox and WebKit do not always log a CSP refusal to the console; the event is the reliable signal.
   await page.exposeFunction('__e2eCsp', (v: string) => problems.push(`CSP violation: ${v}`));
-  await page.addInitScript(() => {
+  await page.addInitScript((webkit) => {
     const report = (window as unknown as { __e2eCsp(v: string): void }).__e2eCsp;
-    document.addEventListener('securitypolicyviolation', (e) =>
-      report(`${e.violatedDirective} blocked ${e.blockedURI || '(inline)'} at ${e.sourceFile}:${e.lineNumber}`),
-    );
-  });
+    document.addEventListener('securitypolicyviolation', (e) => {
+      // Playwright's own, not the app's: on WebKit every page.screenshot() appends and at once
+      // removes a `<style>body {}</style>` from its utility world to resync animations
+      // (playwright-core inPagePrepareForScreenshots, WKPage.shouldToggleStyleSheetToSyncAnimations).
+      // style-src 'self' rightly refuses it. Only that one has no source file (the driver evaluated
+      // it; the page loaded no script for it) AND is gone when the event fires (target = document).
+      // The app's own inline <style> names its script; the negative control's is still attached.
+      if (webkit && e.violatedDirective === 'style-src-elem' && e.blockedURI === 'inline' && !e.sourceFile && e.target === document) return;
+      report(`${e.violatedDirective} blocked ${e.blockedURI || '(inline)'} at ${e.sourceFile}:${e.lineNumber}`);
+    });
+  }, webkit);
   return () => [...problems];
+}
+
+/**
+ * Lets the page read back what it copied. The permission names are per engine:
+ * WebKit knows only clipboard-read, Firefox neither (launchBrowser sets its
+ * testing pref instead) — granting an unknown name throws.
+ */
+export async function grantClipboard(page: Page, origin?: string): Promise<void> {
+  const names = { chromium: ['clipboard-read', 'clipboard-write'], webkit: ['clipboard-read'] }[page.context().browser()?.browserType().name() ?? ''];
+  if (names) await page.context().grantPermissions(names, origin ? { origin } : undefined);
 }
 
 export interface RpcLoad {
@@ -79,6 +114,30 @@ export function rpcBudget(page: Page, n = 25): { loads: readonly RpcLoad[]; prob
     loads,
     problems: () => loads.filter((l) => l.rpcs > n).map((l) => `RPC budget: ${l.rpcs} RPCs on ${l.url} (budget ${n})`),
   };
+}
+
+/**
+ * The CSRF token (T6.2) for an RPC a spec sends itself. Any /api/ reply sets
+ * the cookie. Not a page load: the spec's next goto would cut it off mid-load,
+ * and WebKit reports every cut-off request (the event stream, a lazy chunk's
+ * CSS) as a page error.
+ */
+export async function csrfToken(s: Pick<Session, 'page' | 'server'>): Promise<string> {
+  const cookie = async () => (await s.page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value;
+  const have = await cookie();
+  if (have) return have;
+  await s.page.request.get(`${s.server.base}/api/auth/me`);
+  return (await cookie()) ?? '';
+}
+
+/**
+ * Whether the engine gives the page WebGL2, which MapLibre needs (the app asks
+ * the same in maps/maplibre.ts). Headless Firefox on the nightly's GPU-less
+ * Linux runner has none — the app then shows its designed "This map needs
+ * WebGL" state, which a map spec checks there instead of the drawn map.
+ */
+export function hasWebGL2(page: Page): Promise<boolean> {
+  return page.evaluate(() => !!document.createElement('canvas').getContext('webgl2'));
 }
 
 /** Waits for the routed page to finish: its heading is up and no skeleton is busy. */

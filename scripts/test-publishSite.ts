@@ -119,6 +119,8 @@ async function main(): Promise<void> {
     inline.length === pinned.length && inline.every((s) => pinned.includes(hashOf(s))));
   const style = /<style>([\s\S]*?)<\/style>/.exec(html);
   ok('csp: the one stylesheet is pinned too', !!style && html.includes('style-src ' + hashOf(style[1])));
+  ok('page: its icon is inline, so no browser asks for /favicon.ico (img-src data: would refuse it)',
+    /<link rel="icon" href="data:image\/[^"]+">/.test(html));
   ok('page: no external reference — no src/href/url()/@import to http(s)',
     !/(src|href)\s*=\s*["']?https?:/i.test(html) && !/url\(\s*["']?https?:/i.test(html) && !/@import/i.test(html));
   // Tags only: the inlined scripts' own TEXT may mention `<script src=` in a

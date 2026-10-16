@@ -12,7 +12,7 @@
 
 import assert from 'node:assert/strict';
 import type { Page } from 'playwright';
-import { e2e, screens, settled, type Session } from './fixtures.ts';
+import { csrfToken, e2e, screens, settled, type Session } from './fixtures.ts';
 
 function report(s: Session): void {
   for (const l of s.rpc.loads) console.log(`rpc  ${String(l.rpcs).padStart(2)}  ${new URL(l.url).pathname}`);
@@ -20,11 +20,7 @@ function report(s: Session): void {
 
 /** An RPC from the spec itself, with the CSRF pair the web client sends (T6.2). */
 async function post(s: Session, channel: string, payload?: unknown): Promise<unknown> {
-  let csrf = (await s.page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value;
-  if (!csrf) {
-    await s.page.goto('/');
-    csrf = (await s.page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';
-  }
+  const csrf = await csrfToken(s);
   const r = await s.page.request.post(`${s.server.base}/api/rpc/${channel}`, { headers: { 'x-csrf-token': csrf }, data: { args: payload === undefined ? [] : [payload] } });
   assert.equal(r.status(), 200, `${channel}: ${await r.text()}`);
   return r.json();

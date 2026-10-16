@@ -29,7 +29,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import type { Page } from 'playwright';
-import { e2e, SCREENS, screens, settled } from './fixtures.ts';
+import { e2e, grantClipboard, hasWebGL2, SCREENS, screens, settled } from './fixtures.ts';
 
 /** One screenshot per theme WITHOUT a reload (a dialog or a mode stays up). */
 async function screensInPlace(page: Page, name: string): Promise<void> {
@@ -148,7 +148,7 @@ e2e('viewer: present, style, alert me, the inbox, comments', async ({ page, serv
 
 e2e('cards: markdown text, the summary, a pivot copied and exported, a navigate action and Back', async ({ page, server }) => {
   const pid = server.sample.projectId;
-  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: server.base });
+  await grantClipboard(page, server.base);
   await page.goto(`/analyses?project=${pid}`);
   await settled(page);
   const datasets = (await call(page, 'dataset:list', { projectId: pid })) as { id: string; name: string }[];
@@ -330,15 +330,19 @@ e2e('runtime: reset controls, quick filters, map selection, a drill, comment doo
   await page.getByRole('button', { name: 'Undo Set category filter' }).click();
 
   // ── A click on a map region joins the selection (cv-mark-click) ─────────
-  const map = page.getByRole('group', { name: 'Profit by state card' }).locator('canvas').first();
-  await map.waitFor();
-  await page.waitForTimeout(1500); // the map's first paint
-  const strip = page.getByRole('region', { name: 'Selection' });
-  const hit = await clickUntil(page, (await map.boundingBox())!, async () => (await strip.count()) > 0);
-  assert.ok(hit, 'a click on a region puts it in the selection strip');
-  await strip.getByText(/^state = /).waitFor();
-  await screensInPlace(page, 'dashboards-runtime');
-  await strip.getByRole('button', { name: /^Remove selection/ }).click();
+  // (An engine without WebGL2 — the nightly's headless Firefox — shows the designed state instead.)
+  const mapCard = page.getByRole('group', { name: 'Profit by state card' });
+  if (await hasWebGL2(page)) {
+    const map = mapCard.locator('canvas').first();
+    await map.waitFor();
+    await page.waitForTimeout(1500); // the map's first paint
+    const strip = page.getByRole('region', { name: 'Selection' });
+    const hit = await clickUntil(page, (await map.boundingBox())!, async () => (await strip.count()) > 0);
+    assert.ok(hit, 'a click on a region puts it in the selection strip');
+    await strip.getByText(/^state = /).waitFor();
+    await screensInPlace(page, 'dashboards-runtime');
+    await strip.getByRole('button', { name: /^Remove selection/ }).click();
+  } else await mapCard.getByText('This map needs WebGL').waitFor();
 
   // ── A plain click on a bar shows the rows behind it (wireDrillClick) ───
   const bars = page.getByRole('group', { name: 'Revenue by category card' }).locator('canvas').first();
