@@ -17,9 +17,7 @@ import { rpc } from '../../../api/client';
 import { useDatasets } from '../../../api/datasets';
 import { EmptyState, ErrorState, Page, PageSkeleton } from '../../../app/blocks';
 import { Button, buttonClass } from '../../../ui/Button';
-import { Input } from '../../../ui/Field';
 import { Select } from '../../../ui/Select';
-import { SkeletonBlock } from '../../../ui/Skeleton';
 import { toast } from '../../../ui/Toast';
 import { Icon } from '../../../ui/icons/Icon';
 import { useAiStatus } from '../../assistant/api';
@@ -39,6 +37,16 @@ const HOW = [
   ['columns', 'Ordinate matches your columns', 'By name and by type: a sum needs a number column. You can change any match.'],
   ['layout-dashboard', 'Your data fills it', 'Every KPI and chart is computed from your dataset, then it opens as a dashboard you own.'],
 ] as const;
+
+/** A blob as a data: URL — the one image source the CSP allows besides the app's own. */
+function dataUrlOf(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(r.error ?? new Error('The screenshot could not be shown.'));
+    r.readAsDataURL(blob);
+  });
+}
 
 function Reading() {
   const [at, setAt] = useState(0);
@@ -62,7 +70,7 @@ function Reading() {
           </li>
         ))}
       </ol>
-      <SkeletonBlock label="Reading" />
+      <p className={s.muted}>Only the layout is read. The numbers on the screenshot are never used — every figure comes from your data.</p>
     </section>
   );
 }
@@ -90,9 +98,6 @@ export default function RebuildPage() {
   const [building, setBuilding] = useState(false);
   const match = useMatch(projectId, datasetId, reading, overrides);
 
-  // The object URL is the page's own copy of the screenshot; nothing is stored on the server.
-  useEffect(() => () => void (shot && URL.revokeObjectURL(shot)), [shot]);
-
   const take = async (file: Blob) => {
     setFailed(null);
     setReading(null);
@@ -100,7 +105,7 @@ export default function RebuildPage() {
     setBusy(true);
     try {
       const img = await readyImage(file);
-      setShot(URL.createObjectURL(img.png));
+      setShot(await dataUrlOf(img.png)); // the page's own copy (CSP: img-src data:); nothing is stored on the server
       const r = await readScreenshot(projectId, img.png);
       if (r.ok) setReading(r.reading);
       else if ('notReady' in r) void client.invalidateQueries({ queryKey: ['ai:status'] });
@@ -250,7 +255,7 @@ export default function RebuildPage() {
         <div className={s.left}>
           {shot ? (
             <section className={s.shotCard} aria-label="Screenshot">
-              <RebuildShot src={shot} tiles={[]} lit={null} onLight={() => {}} />
+              <RebuildShot src={shot} tiles={[]} lit={null} onLight={() => {}} scanning={busy} />
             </section>
           ) : (
             <DropZone

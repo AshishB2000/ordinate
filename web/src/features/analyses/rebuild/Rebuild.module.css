@@ -92,6 +92,31 @@
   background: var(--surface-2);
   overflow: hidden;
 }
+/* While the model reads: a soft band sweeps down the screenshot. */
+.shotFrame[data-scanning]::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 28%;
+  background: linear-gradient(180deg, transparent, var(--accent-soft) 70%, var(--accent-line));
+  border-bottom: 2px solid var(--accent);
+  animation: scan 2.2s var(--ease) infinite;
+  pointer-events: none;
+}
+@keyframes scan {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(360%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shotFrame[data-scanning]::after {
+    animation: none;
+    opacity: 0.5;
+  }
+}
 .shotImg {
   display: block;
   width: 100%;
@@ -539,7 +564,8 @@
 }
 .role {
   flex: 0 0 auto;
-  width: 76px;
+  width: 84px;
+  white-space: nowrap;
   font-size: var(--t-11);
   font-weight: 600;
   letter-spacing: var(--tr-label);
@@ -558,7 +584,7 @@
 }
 .field {
   display: grid;
-  grid-template-columns: 76px minmax(80px, 1fr) 16px minmax(0, 2fr) 80px;
+  grid-template-columns: 84px minmax(80px, 1fr) 16px minmax(0, 2.4fr) 84px;
   align-items: center;
   gap: var(--sp-8);
 }
@@ -581,12 +607,17 @@
   gap: var(--sp-8);
   min-width: 0;
 }
-.agg {
-  flex: 0 0 104px;
-}
-.colPick {
-  flex: 1;
+/* Each Select sits in its field wrapper: the column takes the room, the aggregation a fixed width. */
+.pick > * {
+  flex: 1 1 0;
   min-width: 0;
+}
+.pick > *:not(:last-child) {
+  flex: 0 0 112px;
+}
+.agg,
+.colPick {
+  width: 100%;
 }
 .conf {
   display: flex;

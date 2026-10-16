@@ -34,7 +34,7 @@ export function sanitizeOverrides(raw: unknown): TileOverride[] {
   for (const o of Array.isArray(raw) ? raw.slice(0, MAX_TILES) : []) {
     if (!o || typeof o !== 'object' || !Number.isInteger(o.id)) continue;
     const ov: TileOverride = { id: o.id };
-    if (o.dropped === true) ov.dropped = true;
+    if (typeof o.dropped === 'boolean') ov.dropped = o.dropped;
     if (typeof o.chartType === 'string') ov.chartType = o.chartType.slice(0, 40);
     if (typeof o.title === 'string') ov.title = o.title.slice(0, 80);
     if (o.fields && typeof o.fields === 'object') {

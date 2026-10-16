@@ -322,6 +322,7 @@
   "rebuildMessages.the_screenshot_names_no_category_for": "Der Screenshot nennt keine Kategorie für dieses Diagramm. Wählen Sie eine Spalte.",
   "rebuildMessages.the_screenshot_names_no_field_for": "Der Screenshot nennt kein Feld für diesen Filter. Wählen Sie eine Spalte.",
   "rebuildMessages.the_screenshot_names_no_measure_for": "Der Screenshot nennt keine Kennzahl für diese Kachel. Wählen Sie eine Spalte.",
+  "rebuildMessages.this_is_the_dashboard_s_own": "Das ist der eigene Titel des Dashboards. Er benennt das Dashboard, statt eine Kachel zu belegen. Stellen Sie ihn wieder her, um ihn als Notiz zu behalten.",
   "rebuildMessages.this_note_has_no_heading_to": "Diese Notiz hat keine Überschrift, die bleiben könnte.",
   "refreshHookMessages.a_connection_can_have_at_most": "Eine Verbindung kann höchstens {max} Aktualisierungs-URLs haben. Widerrufen Sie zuerst eine, die Sie nicht mehr verwenden.",
   "refreshHookMessages.a_dataset_can_have_at_most": null,

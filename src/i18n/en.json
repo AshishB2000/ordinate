@@ -319,6 +319,7 @@
   "rebuildMessages.the_screenshot_names_no_category_for": "The screenshot names no category for this chart. Pick a column.",
   "rebuildMessages.the_screenshot_names_no_field_for": "The screenshot names no field for this filter. Pick a column.",
   "rebuildMessages.the_screenshot_names_no_measure_for": "The screenshot names no measure for this tile. Pick a column.",
+  "rebuildMessages.this_is_the_dashboard_s_own": "This is the dashboard's own title, so it names the dashboard instead of taking a tile. Restore it to keep it as a note.",
   "rebuildMessages.this_note_has_no_heading_to": "This note has no heading to keep.",
   "refreshHookMessages.a_connection_can_have_at_most": "A connection can have at most {max} refresh URLs. Revoke one you no longer use first.",
   "refreshHookMessages.a_dataset_can_have_at_most": "A dataset can have at most {max} refresh URLs. Revoke one you no longer use first.",

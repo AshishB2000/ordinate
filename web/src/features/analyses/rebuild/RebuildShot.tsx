@@ -14,9 +14,9 @@ export interface ShotTile {
   title: string;
 }
 
-export function RebuildShot({ src, tiles, lit, onLight }: { src: string; tiles: ShotTile[]; lit: number | null; onLight: (id: number | null) => void }) {
+export function RebuildShot({ src, tiles, lit, onLight, scanning }: { src: string; tiles: ShotTile[]; lit: number | null; onLight: (id: number | null) => void; scanning?: boolean }) {
   return (
-    <figure className={s.shotFrame}>
+    <figure className={s.shotFrame} data-scanning={scanning || undefined}>
       <img className={s.shotImg} src={src} alt="The dashboard screenshot" draggable={false} />
       {tiles.map((t) =>
         t.box ? (

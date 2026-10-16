@@ -75,7 +75,11 @@ function FieldRow({ f, tileId, columns, onPick }: { f: TileField; tileId: number
         />
       </span>
       <span className={s.conf}>{conf ? <Badge tone={conf[1]}>{conf[0]}</Badge> : f.role === 'split' ? null : <Badge tone="warn">No match</Badge>}</span>
-      {f.note && <p className={s.fieldNote}>{f.note}</p>}
+      {f.note && (
+        <p className={s.fieldNote} role="note">
+          {f.note}
+        </p>
+      )}
     </li>
   );
 }
@@ -178,6 +182,7 @@ export function RebuildTile({
           {tile.status === 'dropped' ? 'Restore' : 'Drop'}
         </Button>
       </header>
+      {tile.status === 'dropped' && tile.reason && <p className={s.muted}>{tile.reason}</p>}
       {tile.status !== 'dropped' && (
         <>
           {typed && (
@@ -192,7 +197,7 @@ export function RebuildTile({
                 onValueChange={(v) => set({ chartType: v })}
                 className={s.typePick}
               />
-              {tile.said && tile.said !== typeValue && <span className={s.readAs}>Read as “{tile.said}”</span>}
+              {tile.said && tile.said.replace(/[\s-]+/g, '_') !== typeValue && <span className={s.readAs}>Read as “{tile.said}”</span>}
             </div>
           )}
           {tile.fields.length > 0 && (
@@ -208,7 +213,8 @@ export function RebuildTile({
               ))}
             </ul>
           )}
-          {tile.status === 'unmapped' && tile.reason && (
+          {/* Said once: a field's own note already says it where the fix is. */}
+          {tile.status === 'unmapped' && tile.reason && !tile.fields.some((f) => f.note === tile.reason) && (
             <p className={s.reason} role="note">
               <Icon name="alert" size={16} />
               {tile.reason}

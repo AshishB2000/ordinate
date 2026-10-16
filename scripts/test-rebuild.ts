@@ -115,6 +115,9 @@ function checkMatcher(): void {
   const count = m('Product ID', COLS, 'value', 'count');
   ok('match: count takes the same text column', count.column === 'Product ID');
   ok('match: a date range only takes a date', m('Region', COLS, 'date_filter').column === null && m('Order Date', COLS, 'date_filter').column === 'Order Date');
+  const segs: ParsedColumn[] = [{ name: 'category', type: 'text' }, { name: 'customer_segment', type: 'text' }];
+  ok('match: a column holding the said word beats a synonym of it', m('Segment', segs, 'category').column === 'customer_segment');
+  ok('match: "Order Date" prefers order_date to date', m('Order Date', [{ name: 'date', type: 'date' }, { name: 'order_date', type: 'date' }], 'category').column === 'order_date');
   ok('match: nothing close is no match', m('Shipping Mode', COLS, 'category').column === null);
   ok('match: "Number of Records" counts rows', m('Records', COLS, 'value', 'count').column === 'Region');
   ok('splitAggregation reads the aggregation off a name', JSON.stringify(match.splitAggregation('Sum of Profit')) === '{"field":"Profit","aggregation":"sum"}'
@@ -168,6 +171,8 @@ function checkPlan(): void {
   ok('REFUSED: the user\'s sum over a text column is not built either', f(7).status === 'unmapped' && /needs a number column, but "Region" is text/.test(f(7).reason ?? ''), f(7).reason);
   ok('override: a dropped tile is dropped', f(1).status === 'dropped');
   ok('override: a split cleared is left out, the chart still ready', f(8).status === 'ready' && f(8).fields.find((x) => x.key === 'split')?.column === null);
+  const recount = rplan.rebuild(reading, ds, ctx, [{ id: 10, fields: { value0: { column: null, aggregation: 'count' } } }]).tiles[9];
+  ok('override: a new aggregation with no column re-matches by name', recount.status === 'ready' && recount.fields[1].column === 'Product ID' && recount.fields[1].aggregation === 'count', JSON.stringify(recount.fields));
   ok('override: a chart type off the list is ignored, not trusted', rplan.rebuild(reading, ds, ctx, [{ id: 9, chartType: 'sunburst' }]).tiles[8].status === 'unmapped');
   ok('override: a column the dataset lacks is refused', rplan.rebuild(reading, ds, ctx, [{ id: 7, fields: { category: { column: 'Nope' } } }]).tiles[6].status === 'unmapped');
   ok('override: a KPI turned into a chart becomes one', rplan.rebuild(reading, ds, ctx, [{ id: 3, chartType: 'column', fields: { category: { column: 'Region' } } }]).tiles[2].kind === 'chart');
@@ -176,6 +181,12 @@ function checkPlan(): void {
   const mapped = rplan.rebuild(reading, { ...ds, geoHits: {} }, { ...ctx, datasets: [{ ...ds, geoHits: {} }] }, [{ id: 9, chartType: 'map_choropleth' }]).tiles[8];
   ok('checkTile: a tile the validator drops is shown with its sentence, never built', mapped.status === 'unmapped' && !!mapped.reason && !/dropped/.test(mapped.reason), mapped.reason);
 
+  // A heading that repeats the dashboard's title names the dashboard; it is not also a note — unless restored.
+  const titled = { ...reading, title: 'Sales Dashboard — growth' };
+  const heading = rplan.rebuild(titled, ds, ctx).tiles[0];
+  ok('title: the heading that is the dashboard\'s title is left out, with why', heading.status === 'dropped' && !!heading.reason, JSON.stringify(heading));
+  ok('title: restored (dropped:false), it is a note again', rplan.rebuild(titled, ds, ctx, [{ id: 1, dropped: false }]).tiles[0].status === 'ready');
+  ok('sanitizeOverrides keeps an explicit restore', JSON.stringify(rebuildIpc.sanitizeOverrides([{ id: 1, dropped: false }])) === '[{"id":1,"dropped":false}]');
   ok('bands: a tile without a box follows, on its own', JSON.stringify(rplan.bands([{ box: null, n: 1 }, { box: { x: 50, y: 0, w: 40, h: 10 }, n: 2 }, { box: { x: 0, y: 2, w: 40, h: 10 }, n: 3 }]).map((b) => b.map((t) => t.n))) === '[[3,2],[1]]');
 }
 

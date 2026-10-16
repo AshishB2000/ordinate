@@ -52,7 +52,7 @@ const SYNONYMS: string[][] = [
   ['profit', 'margin', 'earning'],
   ['cost', 'expense', 'spend'],
   ['region', 'area', 'territory', 'zone', 'market'],
-  ['category', 'segment', 'type', 'group', 'class'],
+  ['category', 'type', 'group', 'class'],
   ['country', 'nation'],
   ['state', 'province'],
   ['order', 'transaction', 'purchase'],
@@ -87,9 +87,11 @@ export function scoreName(said: string, column: string): number {
   const b = tokens(column);
   if (!a.length || !b.length) return 0;
   if (a.join('') === b.join('')) return 1;
-  const best = (xs: string[], ys: string[]): number => xs.reduce((n, x) => n + Math.max(...ys.map((y) => tokenScore(x, y))), 0);
-  // Both ways round, so "Order Date" → "date" is not as good as "Order Date" → "order_date".
-  return Math.min(0.95, (best(a, b) + best(b, a)) / (a.length + b.length));
+  const cover = (xs: string[], ys: string[]): number => xs.reduce((n, x) => n + Math.max(...ys.map((y) => tokenScore(x, y))), 0) / xs.length;
+  // Mostly: how much of what the screenshot SAYS the column covers — "Segment" is
+  // customer_segment before it is a synonym of anything. Then the other way round,
+  // so "Order Date" → "date" is not as good as "Order Date" → "order_date".
+  return Math.min(0.95, 0.7 * cover(a, b) + 0.3 * cover(b, a));
 }
 
 /** May a column of this declared type play this role with this aggregation? */

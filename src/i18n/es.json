@@ -322,6 +322,7 @@
   "rebuildMessages.the_screenshot_names_no_category_for": "La captura no indica ninguna categoría para este gráfico. Elija una columna.",
   "rebuildMessages.the_screenshot_names_no_field_for": "La captura no indica ningún campo para este filtro. Elija una columna.",
   "rebuildMessages.the_screenshot_names_no_measure_for": "La captura no indica ninguna medida para este elemento. Elija una columna.",
+  "rebuildMessages.this_is_the_dashboard_s_own": "Este es el título del propio panel, así que da nombre al panel en lugar de ocupar un elemento. Restáurelo para conservarlo como nota.",
   "rebuildMessages.this_note_has_no_heading_to": "Esta nota no tiene un título que conservar.",
   "refreshHookMessages.a_connection_can_have_at_most": "Una conexión puede tener como máximo {max} URL de actualización. Revoca primero una que ya no uses.",
   "refreshHookMessages.a_dataset_can_have_at_most": null,

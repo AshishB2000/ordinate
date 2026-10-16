@@ -16,7 +16,7 @@ import type { ParsedColumn } from '../data/parse';
 import type { Box, Reading, ReadTile } from '../ai/rebuildRead';
 import { validatePlan, type PlanContext, type PlanDataset } from './analysisPlan';
 import { CHART_TYPE_IDS } from './analysisPlan';
-import { chartTypeOf, fits, matchField, splitAggregation, type Confidence, type FieldRole, type MatchAgg } from './rebuildMatch';
+import { chartTypeOf, fits, matchField, splitAggregation, tokens, type Confidence, type FieldRole, type MatchAgg } from './rebuildMatch';
 import * as m from './rebuildMessages';
 
 export type RebuiltKind = 'kpi' | 'chart' | 'filter' | 'text';
@@ -54,11 +54,12 @@ export interface RebuiltTile {
 /** The user's corrections to one tile, from the check screen. Re-checked here, every one. */
 export interface TileOverride {
   id: number;
+  /** `false` keeps a tile the app would leave out on its own (a heading that repeats the dashboard's title). */
   dropped?: boolean;
   /** An Ordinate chart id, or 'kpi'. */
   chartType?: string;
   title?: string;
-  /** By TileField.key. A null column clears the field (a split left out). */
+  /** By TileField.key. A null column leaves a split out; on any other field it keeps matching by name, with the aggregation given. */
   fields?: Record<string, { column: string | null; aggregation?: MatchAgg }>;
 }
 
@@ -80,8 +81,9 @@ function resolveField(
   const refuse = (column: string, type: ParsedColumn['type']): TileField => ({
     ...base, note: role === 'date_filter' ? m.needsDate(column, type) : m.needsNumber(AGG_WORD[aggregation ?? 'sum'], column, type),
   });
-  if (override) {
-    if (override.column === null) return base;
+  // A null column clears a split; anywhere else it means "match by name" (an aggregation changed, nothing picked yet).
+  if (override && override.column === null && role === 'split') return base;
+  if (override && override.column !== null) {
     const col = columns.find((c) => c.name === override.column);
     if (!col) return { ...base, note: m.noColumnLike(override.column) };
     if (!fits(col.type, role, aggregation)) return refuse(col.name, col.type);
@@ -101,8 +103,10 @@ function kindOf(t: ReadTile, chartType: string | null): RebuiltKind {
   return 'chart';
 }
 
-/** A tile's fields and status against one dataset, with the user's corrections applied. */
-export function rebuildTile(t: ReadTile, columns: ParsedColumn[], o: TileOverride | undefined): RebuiltTile {
+const same = (a: string, b: string): boolean => tokens(a).join(' ') === tokens(b).join(' ');
+
+/** A tile's fields and status against one dataset, with the user's corrections applied. `dashboardTitle` is the reading's. */
+export function rebuildTile(t: ReadTile, columns: ParsedColumn[], o: TileOverride | undefined, dashboardTitle = ''): RebuiltTile {
   const picked = o?.chartType && (o.chartType === 'kpi' || CHART_TYPE_IDS.has(o.chartType)) ? o.chartType : '';
   const read = t.kind === 'kpi' ? 'kpi' : chartTypeOf(t.chart || (t.kind === 'table' ? 'table' : ''));
   const typed = t.kind === 'filter' || t.kind === 'text' ? null : picked || read;
@@ -135,6 +139,10 @@ export function rebuildTile(t: ReadTile, columns: ParsedColumn[], o: TileOverrid
   }
 
   if (o?.dropped) tile.status = 'dropped';
+  else if (o?.dropped === undefined && kind === 'text' && title && dashboardTitle && same(title, dashboardTitle)) {
+    // The screenshot's own heading: it names the dashboard, so it is not also a note — unless the user restores it.
+    Object.assign(tile, { status: 'dropped', reason: m.namesTheDashboard() });
+  }
   else if (kind === 'text' && !title) Object.assign(tile, { status: 'unmapped', reason: m.noHeading() });
   else if (kind === 'chart' && !tile.chartType) Object.assign(tile, { status: 'unmapped', reason: tile.said ? m.unknownChart(tile.said) : m.noChartType() });
   else {
@@ -258,6 +266,6 @@ export function toPlan(reading: Reading, tiles: RebuiltTile[], ds: PlanDataset):
 /** The whole check: every tile matched, corrected and checked, and the plan of the ready ones. */
 export function rebuild(reading: Reading, ds: PlanDataset, ctx: PlanContext, overrides: TileOverride[] = []): { tiles: RebuiltTile[]; plan: Record<string, unknown>; order: PlaceOrder } {
   const byId = new Map(overrides.map((o) => [o.id, o]));
-  const tiles = reading.tiles.map((t) => checkTile(rebuildTile(t, ds.columns, byId.get(t.id)), ds, ctx));
+  const tiles = reading.tiles.map((t) => checkTile(rebuildTile(t, ds.columns, byId.get(t.id), reading.title), ds, ctx));
   return { tiles, ...toPlan(reading, tiles, ds) };
 }

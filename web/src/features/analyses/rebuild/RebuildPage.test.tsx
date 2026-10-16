@@ -5,7 +5,7 @@
 // an override, the dropdowns offer only the columns a field may take, and
 // "Create dashboard" builds the server's plan through analysis:buildPlan.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderApp } from '../../../test-utils';
 
@@ -81,9 +81,6 @@ function serve({ ai = true, read = { ok: true, reading: READING } as unknown } =
   return calls;
 }
 
-beforeEach(() => {
-  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:shot', revokeObjectURL: () => {} }));
-});
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();

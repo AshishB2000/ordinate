@@ -46,6 +46,11 @@ export function noHeading(): string {
   return t('rebuildMessages.this_note_has_no_heading_to');
 }
 
+/** A heading tile that repeats the dashboard's title: left out, as the dashboard's name says it. */
+export function namesTheDashboard(): string {
+  return t('rebuildMessages.this_is_the_dashboard_s_own');
+}
+
 /** A split (legend) field with no column like it: the chart is built without the split. */
 export function splitLeftOut(said: string): string {
   return t('rebuildMessages.no_column_like_so_the_chart', { said });
