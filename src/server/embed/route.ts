@@ -34,7 +34,8 @@ import {
   embedExpired, embedFailed, embedInvalid, embedNotFound, embedOrigin, embedPreviewOnly, embedRateLimited, embedRepublish, embedTooLong, embedUnavailable,
 } from '../embedMessages';
 
-export const EMBED_ROUTE = '/embed/:token';
+// A wildcard, not `:token`: a token is longer than Fastify's 100-character parameter cap (readHeader bounds it).
+export const EMBED_ROUTE = '/embed/*';
 const MINUTE = 60_000;
 const SELF = "'self'";
 
@@ -86,9 +87,10 @@ export function registerEmbedRoutes(app: FastifyInstance, opts: EmbedRouteOption
     return reply.code(code).header('content-security-policy', refusalCsp(ancestors)).type('text/html; charset=utf-8').send(refusalHtml(message));
   };
 
-  app.get<{ Params: { token: string } }>(EMBED_ROUTE, async (req, reply) => {
+  app.get<{ Params: { '*': string } }>(EMBED_ROUTE, async (req, reply) => {
     reply.header('cache-control', 'no-store').header('x-robots-tag', 'noindex');
-    const token = req.params.token;
+    reply.removeHeader('set-cookie'); // the CSRF cookie every page gets (../csrf.ts): an embed sets none, and has no form
+    const token = req.params['*'];
     const head = readHeader(token);
     if (!head) return refuse(reply, 403, embedInvalid(), []);
     const { org } = head;
