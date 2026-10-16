@@ -7,6 +7,7 @@ import * as reportSpec from '../analysis/reportSpec';
 import * as datasets from '../data/datasets';
 import * as inputStore from '../data/inputTable/store';
 import { safetyBackup } from './backups';
+import * as versionDiff from './versionDiff';
 
 // Version history IPC — list a record's saves, read one, restore one.
 //
@@ -56,6 +57,7 @@ export async function writeBack(projectId: string, type: string, id: string, rec
 }
 
 export function register(): void {
+  versionDiff.register();
   ipcMain.handle('versions:list', async (_e, { projectId, type, id }: any = {}) =>
     versions.list(String(projectId || ''), String(type || ''), String(id || '')));
 

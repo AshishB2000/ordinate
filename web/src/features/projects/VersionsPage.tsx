@@ -7,7 +7,7 @@
 // restoring the version before it.
 
 import { useState } from 'react';
-import { useParams } from 'react-router';
+import { useParams, useSearchParams } from 'react-router';
 import { Page } from '../../app/blocks';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
@@ -17,6 +17,7 @@ import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { fmtDay, fmtTime, fmtWhen, plural, useCan, useChange, useVersion, useVersions, type VersionMeta, type VersionType } from './api';
 import { useAdoptProject } from './current';
+import { VersionCompare } from './VersionCompare';
 import { LayoutThumb, VersionPreview } from './VersionPreview';
 import s from './Versions.module.css';
 
@@ -52,6 +53,7 @@ function Row({ v, current, selected, type, onPick }: { v: VersionMeta; current: 
         <span className={s.rowTop}>
           <span className={s.when}>{fmtTime(v.savedAt)}</span>
           {current && <span className={s.badge}>Current</span>}
+          {v.by && <span className={s.by}>{v.by}</span>}
         </span>
         <span className={s.summary}>{v.summary}</span>
         {v.restoredFrom && (
@@ -69,8 +71,15 @@ function History({ projectId, type, id }: { projectId: string; type: VersionType
   const list = useVersions(projectId, type, id);
   const can = useCan(projectId);
   const [sel, setSel] = useState<string | null>(null);
+  // A compare is in the address (?compare=<from>&to=<to>), so it survives a reload and can be linked.
+  const [search, setSearch] = useSearchParams();
   const versions = list.data ?? [];
   const newest = versions[0];
+  const cmpFrom = search.get('compare');
+  const comparing = !!cmpFrom && !!newest;
+  const cmpTo = search.get('to') || newest?.key || '';
+  const compare = (from: string, to: string) => setSearch(to === newest?.key ? { compare: from } : { compare: from, to }, { replace: true });
+  const closeCompare = () => setSearch({}, { replace: true });
   const picked = versions.find((v) => v.key === sel) ?? newest;
   const latest = useVersion(projectId, type, id, newest?.key);
   const preview = useVersion(projectId, type, id, picked?.key);
@@ -111,7 +120,13 @@ function History({ projectId, type, id }: { projectId: string; type: VersionType
           return (
             <div key={v.key} className={s.item}>
               {(i === 0 || fmtDay(versions[i - 1].savedAt) !== d) && <h3 className={s.day}>{d}</h3>}
-              <Row v={v} current={i === 0} selected={v === picked} type={type} onPick={() => setSel(i === 0 ? null : v.key)} />
+              <Row
+                v={v}
+                current={i === 0}
+                selected={comparing ? v.key === cmpFrom : v === picked}
+                type={type}
+                onPick={() => (comparing ? compare(v.key, cmpTo) : setSel(i === 0 ? null : v.key))}
+              />
             </div>
           );
         })}
@@ -124,7 +139,9 @@ function History({ projectId, type, id }: { projectId: string; type: VersionType
       content = <ErrorState compact heading={3} title="That version could not be read" message={preview.error.message} onRetry={() => void preview.refetch()} />;
     } else if (!preview.data) content = <ErrorState compact heading={3} title="That version could not be read" message="It may have been removed with its record." />;
     else content = <VersionPreview type={type} record={preview.data.record} meta={picked} />;
-    right = (
+    right = comparing ? (
+      <VersionCompare projectId={projectId} type={type} id={id} versions={versions} from={cmpFrom} to={cmpTo} onPick={compare} onClose={closeCompare} />
+    ) : (
       <>
         <div className={`${s.banner} ${viewingOld ? '' : s.bannerCurrent}`} role="status">
           <span className={s.bannerIc}>
@@ -139,6 +156,9 @@ function History({ projectId, type, id }: { projectId: string; type: VersionType
           </span>
           {viewingOld && picked && (
             <span className={s.bannerActions}>
+              <Button size="sm" variant="secondary" icon="columns" onClick={() => compare(picked.key, newest.key)}>
+                Compare with current
+              </Button>
               {can('editor') && (
                 <Button
                   size="sm"
@@ -170,7 +190,7 @@ function History({ projectId, type, id }: { projectId: string; type: VersionType
           </div>
           {left}
         </section>
-        <section className={s.preview} aria-label="Version preview">
+        <section className={s.preview} aria-label={comparing ? 'Version compare' : 'Version preview'}>
           {right}
         </section>
       </div>

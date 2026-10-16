@@ -27,6 +27,7 @@ import { projectDir, isValidId } from './recordKinds';
 import type { FileRecordType } from './recordKinds';
 import { contentOf, sameContent, summarize } from '../analysis/recordDiff';
 import * as recordFs from './recordFs';
+import { ctx } from '../server/context';
 
 export const MAX_VERSIONS = 50;
 
@@ -38,6 +39,8 @@ export interface VersionFile {
   summary: string;
   /** Set on the save a Restore wrote: the savedAt of the version it brought back. */
   restoredFrom?: string;
+  /** Who saved it: the signed-in user's email. Absent on versions saved before it was kept (docs/version-diff). */
+  by?: string;
   // ponytail: content of one of five record shapes; its own store re-sanitizes on restore
   record: Record<string, any>;
 }
@@ -47,6 +50,7 @@ export interface VersionMeta {
   savedAt: string;
   summary: string;
   restoredFrom?: string;
+  by?: string;
   /** Dashboards only: the first sheet's tiles as {x,y,w,h,type} — enough to
    *  draw a thumbnail of the layout without shipping every card. */
   thumb?: Array<{ x: number; y: number; w: number; h: number; type: string }>;
@@ -109,6 +113,7 @@ export function record(
 ): Promise<VersionMeta | null> {
   const dir = recordDir(projectId, type, rec && rec.id);
   if (!dir) return Promise.resolve(null);
+  if (opts.by === undefined) opts = { ...opts, by: savedBy() };
   // One record's saves are written one at a time: two overlapping autosaves
   // would otherwise both diff against the same "newest" and both prune.
   const run = (queues.get(dir) || Promise.resolve(null)).then(() => write(dir, type, rec, opts));
@@ -119,8 +124,19 @@ export function record(
 
 const queues = new Map<string, Promise<VersionMeta | null>>();
 
+/** The signed-in user saving, or undefined outside a request and under the desktop context. */
+function savedBy(): string | undefined {
+  try {
+    const email = ctx().user.email;
+    return email && email !== 'desktop' ? email : undefined;
+  } catch (_) {
+    return undefined;
+  }
+}
+
 export interface RecordOpts {
   restoredFrom?: string;
+  by?: string;
   now?: Date;
   /**
    * The record as it stood BEFORE this save. Used once: a record that has no
@@ -145,6 +161,7 @@ async function write(
     if (!existing.length && opts.before && !sameContent(type, opts.before, rec)) {
       const at = Date.parse(opts.before.updatedAt);
       const base = Number.isFinite(at) && at < (opts.now || new Date()).getTime() ? new Date(at) : new Date((opts.now || new Date()).getTime() - 1);
+      // The pre-edit state was not saved by this caller: it carries no author.
       await write(dir, type, opts.before, { now: base });
       existing = await keys(dir);
     }
@@ -161,6 +178,7 @@ async function write(
     const summary = summarize(type, newest ? newest.record : null, content);
     const file: VersionFile = { savedAt, summary, record: content };
     if (opts.restoredFrom) file.restoredFrom = opts.restoredFrom;
+    if (opts.by) file.by = opts.by;
 
     await fs.promises.mkdir(dir, { recursive: true });
     const target = path.join(dir, key + '.json');
@@ -183,6 +201,7 @@ async function write(
 function toMeta(type: string, key: string, f: VersionFile): VersionMeta {
   const meta: VersionMeta = { key, savedAt: f.savedAt, summary: f.summary };
   if (f.restoredFrom) meta.restoredFrom = f.restoredFrom;
+  if (f.by) meta.by = f.by;
   if (type === 'dashboard') {
     const first = Array.isArray(f.record.sheets) ? f.record.sheets[0] : null;
     const cards = first && Array.isArray(first.cards) ? first.cards : [];

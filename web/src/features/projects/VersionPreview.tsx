@@ -42,9 +42,15 @@ export function stepWords(st: Rec): string {
   }
 }
 
-/** A dashboard version's first sheet, drawn from the snapshot: each tile a rounded rect on the 12-column grid. */
-export function LayoutThumb({ tiles, width = 64, height = 44 }: { tiles: NonNullable<VersionMeta['thumb']>; width?: number; height?: number }) {
-  const rows = Math.max(8, ...tiles.map((t) => t.y + t.h));
+type ThumbTile = NonNullable<VersionMeta['thumb']>[number] & { status?: string };
+
+/**
+ * A dashboard version's sheet, drawn from the snapshot: each tile a rounded rect
+ * on the 12-column grid. A compare (VersionCompare) passes each tile's `status`
+ * (drawn as `data-status`) and one `rows` for both sides, so the two line up.
+ */
+export function LayoutThumb({ tiles, width = 64, height = 44, rows: minRows = 8 }: { tiles: readonly ThumbTile[]; width?: number; height?: number; rows?: number }) {
+  const rows = Math.max(minRows, ...tiles.map((t) => t.y + t.h));
   const cw = (width - 4) / 12;
   const rh = (height - 4) / rows;
   return (
@@ -59,6 +65,7 @@ export function LayoutThumb({ tiles, width = 64, height = 44 }: { tiles: NonNull
           rx={1.5}
           className={s.tile}
           data-type={t.type || 'visual'}
+          data-status={t.status}
         />
       ))}
     </svg>
