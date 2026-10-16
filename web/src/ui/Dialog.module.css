@@ -156,3 +156,58 @@
   padding: var(--sp-4);
   margin: calc(-1 * var(--sp-4));
 }
+
+/* ── a phone: the drawer is a bottom sheet (docs/phone-dashboards) ──
+   Full width, rising from the bottom edge, its head the grab zone, its last
+   row above the home indicator. The handle exists only here. */
+.handle {
+  display: none;
+}
+@keyframes riseIn {
+  from {
+    transform: translateY(100%);
+  }
+}
+@media (max-width: 599px) {
+  .drawer,
+  .wide {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 88vh;
+    max-height: 88dvh;
+    padding: var(--sp-8) var(--sp-16) max(var(--sp-16), env(safe-area-inset-bottom));
+    border-bottom: 0;
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    transition: transform var(--dur-panel) var(--ease-out);
+  }
+  .drawer[data-state='open'] {
+    animation: riseIn var(--dur-panel) var(--ease-out);
+  }
+  .handle {
+    display: block;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 5px;
+    margin: 0 auto var(--sp-12);
+    border-radius: var(--r-full);
+    background: var(--border-2);
+  }
+  .drawer > .head {
+    touch-action: none;
+  }
+  .drawer > .head button {
+    width: 44px;
+    height: 44px;
+  }
+}
+@media (max-width: 599px) and (prefers-reduced-motion: reduce) {
+  .drawer[data-state='open'] {
+    animation: none;
+  }
+  .drawer {
+    transition: none;
+  }
+}

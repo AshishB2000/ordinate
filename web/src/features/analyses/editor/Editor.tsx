@@ -23,6 +23,8 @@ import { Rail } from './Rail';
 import s from './Editor.module.css';
 import { useViewer } from '../../dashboards/useViewer';
 import { DashboardChrome, styleClass, useStyleVars } from '../../dashboards/DashboardChrome';
+import { isPhoneReader } from '../../dashboards/phone/phoneBlocks';
+import { PhoneHead } from '../../dashboards/phone/PhoneHead';
 
 /** The autosave debounce (dashboards.ts): a drag fires several edits; one write. */
 const SAVE_MS = 600;
@@ -121,6 +123,8 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly 
   const cards = sheetOf(doc, sheetIndex).cards;
   const autoSize = pickSize(width);
   const size = pinned ?? autoSize;
+  // A phone-wide dashboard nobody pinned is READ on a phone (docs/phone-dashboards): its own header, no tools.
+  const phone = isPhoneReader({ size, pinned });
 
   const setPane = useCallback((p: Pane) => {
     setPaneRaw(p);
@@ -133,12 +137,12 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly 
 
   const select = useCallback(
     (id: string | null) => {
-      if (readOnly) return; // nothing to select a card FOR
+      if (readOnly || phone) return; // nothing to select a card FOR
       setSelected(id);
       // Selecting a card OPENS Properties — editing the card is why it was clicked.
       if (id) setPane('props');
     },
-    [setPane, readOnly],
+    [setPane, readOnly, phone],
   );
 
   const paramValue = useCallback(
@@ -254,12 +258,12 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly 
 
   return (
     <EditorCtx.Provider value={api}>
-      <div className={`${s.editor} ${styleClass(doc.style, view.presenting)}`} style={styleVars} data-print-root="">
+      <div className={`${s.editor} ${styleClass(doc.style, view.presenting)}`} style={styleVars} data-print-root="" data-phone={phone ? '' : undefined}>
         <DashboardChrome />
-        {!view.presenting && <Head />}
+        {!view.presenting && (phone ? <PhoneHead /> : <Head />)}
         <div className={s.bench}>
-          {!view.presenting && !readOnly && <Rail />}
-          <SheetHost onWidth={setWidth}>
+          {!view.presenting && !readOnly && !phone && <Rail />}
+          <SheetHost onWidth={setWidth} reserve={phone && !readOnly ? RAIL_W : 0}>
             <Canvas />
           </SheetHost>
         </div>
@@ -269,13 +273,18 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly 
   );
 }
 
+/** The rail's width (Editor.module.css .rail). */
+const RAIL_W = 48;
+
 /**
  * The sheet's column. The DASHBOARD's width — not the window's — picks the
  * layout size (layoutSizes.ts lyEditorWidth): the sheet plus an open flyout,
  * which is a tool laid over the pane for a moment and must not flip the
- * layout being edited. So: the bench, less the rail.
+ * layout being edited. So: the bench, less the rail. An editor's rail steps
+ * aside on a phone; `reserve` keeps its width counted, or hiding it would
+ * widen the sheet across the phone line and bring it straight back.
  */
-function SheetHost({ onWidth, children }: { onWidth: (w: number) => void; children: ReactNode }) {
+function SheetHost({ onWidth, reserve, children }: { onWidth: (w: number) => void; reserve: number; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -285,14 +294,19 @@ function SheetHost({ onWidth, children }: { onWidth: (w: number) => void; childr
     const ro = new ResizeObserver(() => {
       // A frame later: re-rendering inside the callback is how a ResizeObserver loop starts.
       cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => onWidth(bench.clientWidth - ((bench.firstElementChild as HTMLElement | null)?.offsetWidth ?? 0)));
+      // The rail is the bench's first child when there is one. A viewer has none — the first child is this sheet, and
+      // subtracting it measured every viewer's dashboard 0 wide: the desktop grid on any screen, a phone's included.
+      raf = requestAnimationFrame(() => {
+        const first = bench.firstElementChild as HTMLElement | null;
+        onWidth(bench.clientWidth - (first && first !== el ? first.offsetWidth : reserve));
+      });
     });
     ro.observe(bench);
     return () => {
       ro.disconnect();
       cancelAnimationFrame(raf);
     };
-  }, [onWidth]);
+  }, [onWidth, reserve]);
   return (
     <div ref={ref} className={s.sheet}>
       {children}

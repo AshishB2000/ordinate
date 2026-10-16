@@ -27,6 +27,8 @@ import { pinsOn } from './CommentsPanel';
 import { presentRow } from './DashboardChrome';
 import { pivotToCsv, pivotToTsv, saveText } from './pivotExport';
 import { actionMenu, actionsOf, TooltipVisual, useRunAction } from './tileActions';
+import { isPhoneReader } from './phone/phoneBlocks';
+import { PointSheet, type PointAction } from './phone/PointSheet';
 import s from './Dashboards.module.css';
 
 /** What a drill from a tile reads: the SAME filters that drew it, and the clicked mark (or none: every row). */
@@ -180,7 +182,19 @@ export function clickColumns(ed: EditorApi, def: VisualDef): { column: string; s
 }
 
 /** A visual card's drawing with its tile actions: a click action owns the click (cross-filter after). */
-export function VisualCard({ ed, card, def, asTable, onMark }: { ed: EditorApi; card: Card; def: VisualDef; asTable: boolean; onMark?: (v: string | number) => void }) {
+export function VisualCard({
+  ed,
+  card,
+  def,
+  asTable,
+  onMark,
+}: {
+  ed: EditorApi;
+  card: Card;
+  def: VisualDef;
+  asTable: boolean;
+  onMark?: (v: string | number, series?: string, e?: { metaKey: boolean; ctrlKey: boolean }) => void;
+}) {
   const run = useRunAction(ed);
   const actions = actionsOf(card);
   const clicks = actions.filter((a) => a.trigger === 'click' && a.kind !== 'tooltip_visual');
@@ -205,6 +219,10 @@ export function VisualCard({ ed, card, def, asTable, onMark }: { ed: EditorApi; 
     () => (cmp !== 'null' && CHART_OVERLAY_TYPES.has(def.chartType) ? { ...shown, encoding: { ...shown.encoding, compare: JSON.parse(cmp) as unknown } } : shown),
     [shown, def.chartType, cmp],
   );
+  // A phone: the legend goes under the chart, where a narrow plot does not lose its width to it.
+  const phone = isPhoneReader(ed);
+  const drawnHere = useMemo(() => (phone ? { ...compared, overrides: { ...compared.overrides, legendPosition: 'bottom' } } : compared), [compared, phone]);
+  const [tap, setTap] = useState<{ point: ChartPoint; time: boolean; value: string | number; shown: string } | null>(null);
   // A plain click: the tile's own actions, else click-to-filter, else the rows behind the mark (dashGrid.ts wireDrillClick).
   const [drill, setDrill] = useState<DrillTarget | null>(null);
   // A right-click on a bar or a point: its context menu, then a panel. Apart from the left click above.
@@ -218,6 +236,26 @@ export function VisualCard({ ed, card, def, asTable, onMark }: { ed: EditorApi; 
         ...(pointMenu.time && explainable(def) ? [{ label: 'Explain this change', icon: 'activity', onSelect: () => setExplain(explainTarget(ed, card.id, def, pointMenu.point)) } as MenuEntry] : []),
       ]
     : [];
+  // A tap on a phone: what the desktop's click and right-click would do, offered in a sheet (docs/phone-dashboards).
+  const tapActions = (at: NonNullable<typeof tap>): PointAction[] => {
+    const out: PointAction[] = [];
+    const col = def.encoding.category;
+    const series = def.encoding.series && at.point.series ? at.point.series : undefined;
+    if (onMark && col) {
+      const now = picked(col) ?? [];
+      const on = now.some((v) => String(v) === String(at.value));
+      const add = { metaKey: true, ctrlKey: false };
+      if (on) out.push({ label: `Remove “${at.shown}” from the filter`, hint: 'The other cards stop narrowing to it', icon: 'x', run: () => onMark(at.value, series, add) });
+      else {
+        out.push({ label: `Filter the dashboard to “${at.shown}”`, hint: `The other cards show ${col}: ${at.shown}`, icon: 'target', run: () => onMark(at.value, series) });
+        if (now.length) out.push({ label: `Add “${at.shown}” to the filter`, hint: `Keeps ${now.length === 1 ? 'the value' : `the ${now.length} values`} already picked`, icon: 'plus', run: () => onMark(at.value, series, add) });
+      }
+    }
+    out.push({ label: 'Show the rows behind this point', hint: 'Every row that adds up to it', icon: 'table', run: () => rowsAt(at.point) });
+    if (at.time && explainable(def)) out.push({ label: 'Explain this change', hint: 'What drove it since the period before', icon: 'activity', run: () => setExplain(explainTarget(ed, card.id, def, at.point)) });
+    out.push({ label: 'Comment on this point', icon: 'message-square', run: () => ed.view.openComments({ kind: 'card', id: card.id, point: { label: at.point.bucket, ...(at.point.series ? { series: at.point.series } : {}) } }) });
+    return out;
+  };
   const mark = clicks.length
     ? (v: string | number) => clicks.forEach((a) => run(a, card, def, v))
     : (onMark ?? ((v: string | number, series?: string) => setDrill(drillTarget(ed, card.id, def, { category: v, ...(def.encoding.series && series ? { series } : {}) }))));
@@ -225,7 +263,7 @@ export function VisualCard({ ed, card, def, asTable, onMark }: { ed: EditorApi; 
     <>
       <VisualTileBody
         projectId={ed.projectId}
-        def={compared}
+        def={drawnHere}
         filters={filters}
         params={ed.params}
         asTable={asTable}
@@ -243,7 +281,10 @@ export function VisualCard({ ed, card, def, asTable, onMark }: { ed: EditorApi; 
         // The drill names a mark as the SERVER labelled it ("2025-03", not the axis's "Mar 2025"): a dated bar resolves to its dates.
         serverMark={!onMark && !clicks.length}
         onMarkMenu={(point, e, time) => setPointMenu({ x: e.clientX, y: e.clientY, point, time })}
+        // The author's own click actions still run on a tap: they chose what a click does.
+        onMarkTap={phone && !clicks.length ? (point, time, value, shown) => setTap({ point, time, value, shown }) : undefined}
       />
+      {tap && <PointSheet title={tap.point.series ? `${tap.shown} · ${tap.point.series}` : tap.shown} chart={def.name || 'Chart'} actions={tapActions(tap)} onClose={() => setTap(null)} />}
       <PointMenu key={pointMenu ? `${pointMenu.x}:${pointMenu.y}` : ''} at={pointMenu} items={pointItems} label="Chart point actions" onClose={() => setPointMenu(null)} />
       {explain && <ExplainPanel target={explain} onClose={() => setExplain(null)} />}
       {drill && <DrillPanel target={drill} onClose={() => setDrill(null)} />}

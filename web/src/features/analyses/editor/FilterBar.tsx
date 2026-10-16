@@ -5,7 +5,6 @@
 
 import { useState } from 'react';
 import { Button, IconButton } from '../../../ui/Button';
-import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Menu } from '../../../ui/Menu';
 import { Icon } from '../../../ui/icons/Icon';
 import type { Card, Parameter } from '../api';
@@ -17,6 +16,7 @@ import { controlActive } from './filters';
 import { allControls } from './doc';
 import s from './FilterBar.module.css';
 import { ResetControls } from '../../dashboards/ControlsExtras';
+import { FiltersSheet } from '../../dashboards/phone/FiltersSheet';
 
 /** The sheet's control cards in the order their author built them (a sorted COPY). */
 export function barControls(cards: readonly Card[]): Card[] {
@@ -36,7 +36,7 @@ export function removeControl(ed: ReturnType<typeof useEditor>, card: Card) {
   ed.setControl(card.id, undefined);
 }
 
-function Chip({ card }: { card: Card }) {
+export function Chip({ card }: { card: Card }) {
   const ed = useEditor();
   const control = card.control as NonNullable<Card['control']>;
   const [editing, setEditing] = useState(false);
@@ -163,8 +163,10 @@ export function FilterBar() {
       ))}
     </div>
   );
-  // On a phone the chips fold into one "Filters (N)" button and a sheet (layoutFilters.ts).
+  // On a phone the chips fold into one "Filters (N)" button and a bottom sheet (layoutFilters.ts). The reader on an
+  // actual phone has that button in the dashboard's own header (dashboards/phone/PhoneHead); this is the pinned preview's.
   if (ed.size === 'phone') {
+    if (!ed.pinned) return null;
     const n = chips.length;
     return (
       <div className={`${s.bar} ${s.sheetBar}`} role="group" aria-label="Filters">
@@ -178,25 +180,7 @@ export function FilterBar() {
         >
           Filters ({n}){on > 0 && <span className={s.badge}>{on} on</span>}
         </Button>
-        <Dialog
-          open={sheetOpen}
-          onOpenChange={setSheetOpen}
-          size="sm"
-          title="Filters"
-          description={`${n} on this page · ${on ? `narrowing the figures (${on})` : 'showing everything'}`}
-          footer={
-            <>
-              <Button variant="ghost" disabled={!on} onClick={clearAll}>
-                Clear all
-              </Button>
-              <DialogClose asChild>
-                <Button variant="primary">Done</Button>
-              </DialogClose>
-            </>
-          }
-        >
-          {list}
-        </Dialog>
+        <FiltersSheet ed={ed} open={sheetOpen} onOpenChange={setSheetOpen} view={false} />
       </div>
     );
   }

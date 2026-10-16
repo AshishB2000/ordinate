@@ -292,6 +292,8 @@ function pcChartBody(card: { chartType: string; category?: string }, payload: an
   holder.appendChild(canvas);
   if (typeof Chart === 'function') {
     const cfg = pkChartConfig(card.chartType, payload, pcRamp(), pcFmt);
+    // A phone: the legend under the plot, where it does not take a narrow chart's width (publishPhone.ts).
+    if (ppIsPhone() && cfg.options.plugins && cfg.options.plugins.legend) cfg.options.plugins.legend.position = 'bottom';
     cfg.options.onClick = (_e: any, els: any[]) => {
       if (els && els.length && payload.labels) onPick(String(payload.labels[els[0].index]));
     };
@@ -300,7 +302,7 @@ function pcChartBody(card: { chartType: string; category?: string }, payload: an
   return holder;
 }
 
-function pcCard(card: any, combo: number, page: any, onPick: (column: string, label: string) => void, top = 0): HTMLElement {
+function pcCard(card: any, combo: number, page: any, onPick: (column: string, label: string, chart?: string) => void, top = 0): HTMLElement {
   const el = pcEl('section', 'pub-card pub-card--' + card.kind);
   // All three sizes' cells as custom properties; the page's CSS breakpoints
   // pick which pair `grid-column` / `grid-row` read (src/publish/siteHtml.ts).
@@ -315,6 +317,9 @@ function pcCard(card: any, combo: number, page: any, onPick: (column: string, la
     el.style.setProperty(`--pc-${tag}-col`, `${cell.x + 1} / span ${cell.w}`);
     el.style.setProperty(`--pc-${tag}-row`, `${cell.y + 1} / span ${cell.h}`);
   }
+  // A phone stacks the tiles in one column (sizeCss): a chart keeps its phone cell's rows as its height.
+  const ph = card.sizes && card.sizes.phone;
+  if (ph && !ph.hidden) el.style.setProperty('--pc-p-h', String(ph.h));
   if (card.kind === 'text') {
     if (card.heading) el.appendChild(pcEl('h3', 'pub-text-h', card.heading));
     for (const para of String(card.text || '').split(/\n{2,}/)) if (para.trim()) el.appendChild(pcEl('p', 'pub-text-p', para));
@@ -343,7 +348,7 @@ function pcCard(card: any, combo: number, page: any, onPick: (column: string, la
     box.appendChild(pcEl('div', 'pub-kpi-value', payload.display || '—'));
     el.appendChild(box);
   } else {
-    el.appendChild(pcChartBody(card, payload, page, (label) => onPick(card.category || '', label)));
+    el.appendChild(pcChartBody(card, payload, page, (label) => onPick(card.category || '', label, card.title)));
   }
   // A KPI's sentence only restates its figure; charts get theirs.
   if (payload.caption && card.kind !== 'metric') el.appendChild(pcEl('p', 'pub-caption', payload.caption));
@@ -357,11 +362,21 @@ function pcDashboard(page: any, root: HTMLElement): void {
   const defaults: number[] = d.controls.map((c: any) => c.defaultIndex);
   let picks = defaults.slice();
   let sheet = 0;
-  root.appendChild(pcEl('h1', 'pub-title', d.name));
+  // The title row. On a phone it is the page's sticky bar — the name, when it was published, Filters with a badge;
+  // anywhere wider the wrapper is `display: contents` and only the title shows (sizeCss).
+  const head = pcEl('div', 'pub-dashhead');
+  const ident = pcEl('div', 'pub-dashhead-ident');
+  ident.appendChild(pcEl('h1', 'pub-title', d.name));
+  const stamp = ppStamp(page);
+  if (stamp) ident.appendChild(pcEl('p', 'pub-dashhead-stamp', stamp));
+  head.appendChild(ident);
+  root.appendChild(head);
   const bar = pcEl('div', 'pub-filters');
   bar.setAttribute('role', 'group');
   bar.setAttribute('aria-label', 'Filters');
   const selects: HTMLSelectElement[] = [];
+  // How many filters narrow the page now — the phone's Filters button wears it.
+  const badge = pcEl('span', 'pub-filters-badge');
   // r10:views — the dashboard's saved views: each one sets every filter and the sheet.
   const views: any[] = Array.isArray(d.views) ? d.views : [];
   const viewSel = document.createElement('select');
@@ -414,23 +429,41 @@ function pcDashboard(page: any, root: HTMLElement): void {
     // a sheet. Which of the two shows is the stylesheet's call; this only
     // toggles the sheet open and shut.
     bar.id = 'pub-filters';
-    const open = pcEl('button', 'pub-filters-open', d.controls.length ? `Filters (${d.controls.length})` : 'Views') as HTMLButtonElement;
+    const open = pcEl('button', 'pub-filters-open') as HTMLButtonElement;
     open.type = 'button';
     open.setAttribute('aria-controls', 'pub-filters');
     open.setAttribute('aria-expanded', 'false');
+    open.appendChild(pcEl('span', '', d.controls.length ? 'Filters' : 'Views'));
+    open.appendChild(badge);
+    // The sheet's top — a handle to swipe it down by and its name — and its foot, shown only while it is a sheet.
+    const grab = pcEl('div', 'pub-filters-grab');
+    grab.appendChild(pcEl('span', 'pub-sheet-handle'));
+    grab.appendChild(pcEl('p', 'pub-sheet-title', 'Filters'));
+    bar.insertBefore(grab, bar.firstChild);
+    const foot = pcEl('div', 'pub-filters-foot');
+    const reset = pcEl('button', 'pub-filters-reset', 'Reset') as HTMLButtonElement;
+    reset.type = 'button';
+    reset.addEventListener('click', () => { picks = defaults.slice(); viewSel.value = ''; draw(); });
     const done = pcEl('button', 'pub-filters-done', 'Done') as HTMLButtonElement;
     done.type = 'button';
+    foot.append(reset, done);
+    const scrim = pcEl('div', 'pub-scrim pub-filters-scrim');
     const setOpen = (on: boolean): void => {
       bar.classList.toggle('is-open', on);
+      scrim.classList.toggle('is-open', on);
       open.setAttribute('aria-expanded', String(on));
+      if (on) { bar.setAttribute('role', 'dialog'); bar.setAttribute('aria-modal', 'true'); } else { bar.setAttribute('role', 'group'); bar.removeAttribute('aria-modal'); }
       if (on) (bar.querySelector('select') as HTMLElement | null)?.focus();
       else open.focus();
     };
     open.addEventListener('click', () => setOpen(!bar.classList.contains('is-open')));
     done.addEventListener('click', () => setOpen(false));
+    scrim.addEventListener('click', () => setOpen(false));
     bar.addEventListener('keydown', (e) => { if (e.key === 'Escape' && bar.classList.contains('is-open')) setOpen(false); });
-    bar.appendChild(done);
-    root.appendChild(open);
+    ppSwipe(grab, bar, () => setOpen(false));
+    bar.appendChild(foot);
+    head.appendChild(open);
+    root.appendChild(scrim);
     root.appendChild(bar);
     if (d.mode === 'single') root.appendChild(pcEl('p', 'pub-hint', 'This published copy changes one filter at a time.'));
   }
@@ -450,14 +483,24 @@ function pcDashboard(page: any, root: HTMLElement): void {
   root.appendChild(grid);
 
   // A click on a chart label selects that value in a control on the same column.
-  const pick = (column: string, label: string): void => {
+  const pick = (column: string, label: string, chart?: string): void => {
     const i = d.controls.findIndex((c: any) => c.column === column && c.kind !== 'parameter' && c.kind !== 'date_range');
     if (i < 0) return;
     const j = d.controls[i].options.indexOf(label);
     if (j < 0) return;
-    picks = pkNextPicks(d.mode, defaults, picks, i, picks[i] === j ? 0 : j);
-    viewSel.value = '';
-    draw();
+    const apply = (): void => {
+      picks = pkNextPicks(d.mode, defaults, picks, i, picks[i] === j ? 0 : j);
+      viewSel.value = '';
+      draw();
+    };
+    // A phone: a tap asks first, in a sheet (docs/phone-dashboards) — a tooltip and a filter on one tap is a surprise.
+    if (!ppIsPhone()) return apply();
+    const on = picks[i] === j;
+    ppSheet(label, chart || '', [{
+      label: on ? 'Clear the ' + d.controls[i].label + ' filter' : 'Filter this page to “' + label + '”',
+      hint: on ? 'Every card shows all of ' + d.controls[i].label + ' again' : 'Every card shows ' + d.controls[i].label + ': ' + label,
+      run: apply,
+    }]);
   };
 
   function draw(): void {
@@ -471,10 +514,32 @@ function pcDashboard(page: any, root: HTMLElement): void {
     // Controls moved to the filter bar, so the rows they sat on are empty: start
     // the grid at the first row a tile actually uses.
     const top = Math.min(...s.cards.map((c: any) => c.layout.y));
-    for (const card of s.cards) grid.appendChild(pcCard(card, combo < 0 ? 0 : combo, page, pick, top));
+    const els = new Map<string, HTMLElement>();
+    for (const card of s.cards) {
+      const el = pcCard(card, combo < 0 ? 0 : combo, page, pick, top);
+      els.set(card.id, el);
+      grid.appendChild(el);
+    }
+    // A phone reads the tiles in one column, in the phone layout's order, each run of KPIs one swipeable strip
+    // (publishCore.ts pkPhoneBlocks). Every tile carries its place; the strips exist on every size and the
+    // stylesheet shows them — and hides the KPIs they hold from the grid — only on a phone.
+    const byId = new Map<string, any>(s.cards.map((c: any) => [c.id, c]));
+    pkPhoneBlocks(s.cards).forEach((b, k) => {
+      if (b.kind === 'card') return void els.get(b.id)?.style.setProperty('--pc-p-ord', String(k));
+      for (const id of b.ids) els.get(id)?.classList.add('pub-in-strip');
+      grid.appendChild(ppStrip(b.ids.map((id) => pcCard(byId.get(id), combo < 0 ? 0 : combo, page, pick, top)), k));
+    });
+    const narrowed = picks.filter((v, i) => v !== defaults[i]).length;
+    badge.textContent = narrowed ? String(narrowed) : '';
+    badge.hidden = !narrowed;
     document.body.dataset.combo = String(combo);
   }
   draw();
+  // Crossing the phone line redraws: a chart's legend moves under it, or back beside it.
+  if (typeof matchMedia === 'function') {
+    const mq = matchMedia(PP_PHONE_MQ);
+    if (typeof mq.addEventListener === 'function') mq.addEventListener('change', draw);
+  }
 }
 
 // ── Story ────────────────────────────────────────────────────────────────────

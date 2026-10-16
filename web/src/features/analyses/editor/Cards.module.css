@@ -279,3 +279,21 @@
 .slim[data-kind='divider'] {
   background: transparent;
 }
+
+/* Read on a phone (docs/phone-dashboards): the head is a title, not a drag
+   handle — a finger landing on it scrolls the page — and its controls are
+   always shown (there is no hover) at a 44px target. */
+:global([data-phone]) .head {
+  flex-basis: 44px;
+  height: 44px;
+  touch-action: auto;
+  cursor: default;
+  user-select: auto;
+}
+:global([data-phone]) .ctrls {
+  opacity: 1;
+}
+:global([data-phone]) .ctrls button {
+  width: 44px;
+  height: 44px;
+}

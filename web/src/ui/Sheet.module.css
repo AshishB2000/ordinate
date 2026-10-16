@@ -1,0 +1,134 @@
+/* The bottom sheet (./Sheet.tsx). It rises from the bottom edge, carries a
+   grab handle, keeps its last control above the home indicator, and is never
+   wider than a phone held sideways (a desktop author's phone preview opens it
+   too). Every control in it is at least 44px tall. */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.45);
+  animation: fadeIn var(--dur-panel) var(--ease-out);
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes rise {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 560px);
+  max-height: 88vh;
+  max-height: 88dvh;
+  margin: 0 auto;
+  padding: 0 var(--sp-16) max(var(--sp-16), env(safe-area-inset-bottom));
+  border: 1px solid var(--border-hairline);
+  border-bottom: 0;
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  background: var(--surface-float);
+  box-shadow: 0 -16px 48px -16px rgba(15, 23, 42, 0.35);
+  color: var(--text);
+  transition: transform var(--dur-panel) var(--ease-out);
+}
+.sheet[data-state='open'] {
+  animation: rise var(--dur-panel) var(--ease-out);
+}
+.sheet:focus {
+  outline: none;
+}
+
+/* The grab zone: the handle and the head move the sheet under a finger. */
+.grab {
+  flex: 0 0 auto;
+  padding-top: var(--sp-8);
+  touch-action: none;
+  cursor: grab;
+}
+.handle {
+  display: block;
+  width: 36px;
+  height: 5px;
+  margin: 0 auto var(--sp-4);
+  border-radius: var(--r-full);
+  background: var(--border-2);
+}
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  padding-bottom: var(--sp-12);
+}
+.ident {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-top: var(--sp-8);
+}
+.title {
+  margin: 0;
+  font-size: var(--t-15);
+  line-height: var(--lh-snug);
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.description {
+  margin: 0;
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.close {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  margin-right: calc(-1 * var(--sp-8));
+}
+
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  /* Room for a focus ring at the edge, as Dialog's body. */
+  padding: var(--sp-4);
+  margin: 0 calc(-1 * var(--sp-4));
+}
+.footer {
+  flex: 0 0 auto;
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: var(--sp-8);
+  padding-top: var(--sp-16);
+}
+.footer > * {
+  min-height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scrim,
+  .sheet[data-state='open'] {
+    animation: none;
+  }
+  .sheet {
+    transition: none;
+  }
+}

@@ -31,7 +31,30 @@ const visuals: typeof import('../src/analysis/visuals') = require('../src/analys
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const pub: typeof import('../src/publish/publish') = require('../src/publish/publish');
 const { sanitizePage } = require('../src/publish/sanitize') as typeof import('../src/publish/sanitize');
-const { pageHtml, scriptHashes } = require('../src/publish/siteHtml') as typeof import('../src/publish/siteHtml');
+const { pageHtml, scriptHashes, sizeCss } = require('../src/publish/siteHtml') as typeof import('../src/publish/siteHtml');
+const { BREAKPOINTS } = require('../src/analysis/sizeLayout') as { BREAKPOINTS: { phone: number } };
+
+/**
+ * The phone's new elements, wherever a rule is NOT inside a media query: only
+ * ever hidden (or a wrapper that draws nothing), so no window wider than a
+ * phone can see one (docs/phone-dashboards). The offending rules, or none.
+ */
+function phoneLeaks(css: string): string[] {
+  let flat = css;
+  // Drop every @media block (one level of nesting: a block of rules).
+  for (;;) {
+    const at = flat.indexOf('@media');
+    if (at < 0) break;
+    let i = flat.indexOf('{', at) + 1;
+    let depth = 1;
+    while (depth && i < flat.length) depth += flat[i] === '{' ? 1 : flat[i] === '}' ? -1 : 0, i++;
+    flat = flat.slice(0, at) + flat.slice(i);
+  }
+  const PHONE = /pub-(kpis|dashhead|scrim|filters-grab|filters-foot|sheet|dot|in-strip|filters-badge)/;
+  return [...flat.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+    .filter((m) => PHONE.test(m[1]) && !/^\s*display:\s*(none|contents);\s*$/.test(m[2]))
+    .map((m) => m[0].trim());
+}
 const { vizDataFor } = require('../src/ipc/visuals') as typeof import('../src/ipc/visuals');
 const { sanitizeEncoding } = visuals;
 
@@ -177,6 +200,29 @@ async function main(): Promise<void> {
   ok('core: Albers USA covers the states and leaves territories off the map',
     ctx.pkUsaCovers(-74, 40.7) && ctx.pkUsaCovers(-150, 61) && ctx.pkUsaCovers(-157.8, 21.3) && !ctx.pkUsaCovers(-66.5, 18.2));
   ok('core: a feature is placed by its first vertex', JSON.stringify(ctx.pkFirstPoint({ type: 'MultiPolygon', coordinates: [[[[1, 2], [3, 4]]]] })) === '[1,2]');
+  // The phone (docs/phone-dashboards): tiles in the phone layout's order, KPI runs folded into strips.
+  const cell = (x: number, y: number) => ({ phone: { x, y, w: 1, h: 2 } });
+  const blocks = (cards: any[]) => JSON.stringify(ctx.pkPhoneBlocks(cards)); // any: published cards
+  ok('phone: a run of KPIs is one strip, a chart after it a card',
+    blocks([{ id: 'c', kind: 'chart', layout: { x: 0, y: 2 }, sizes: { phone: { x: 0, y: 4, w: 2, h: 6 } } },
+      { id: 'a', kind: 'metric', layout: { x: 0, y: 0 }, sizes: cell(0, 0) }, { id: 'b', kind: 'metric', layout: { x: 3, y: 0 }, sizes: cell(1, 0) }])
+      === JSON.stringify([{ kind: 'strip', ids: ['a', 'b'] }, { kind: 'card', id: 'c' }]));
+  ok('phone: a lone KPI stays a card; a chart between two KPIs splits them',
+    blocks([{ id: 'a', kind: 'metric', layout: { x: 0, y: 0 }, sizes: cell(0, 0) }, { id: 'c', kind: 'chart', layout: { x: 0, y: 1 }, sizes: cell(0, 2) },
+      { id: 'b', kind: 'metric', layout: { x: 0, y: 5 }, sizes: cell(0, 8) }])
+      === JSON.stringify([{ kind: 'card', id: 'a' }, { kind: 'card', id: 'c' }, { kind: 'card', id: 'b' }]));
+  ok('phone: the PHONE cell orders (an edited phone order wins over the desktop grid); hidden cards are left out; no cell goes last',
+    blocks([{ id: 'late', kind: 'text', layout: { x: 0, y: 0 } }, { id: 'a', kind: 'chart', layout: { x: 0, y: 0 }, sizes: cell(0, 9) },
+      { id: 'b', kind: 'chart', layout: { x: 0, y: 9 }, sizes: cell(0, 0) }, { id: 'gone', kind: 'metric', layout: { x: 0, y: 1 }, sizes: { phone: { hidden: true } } }])
+      === JSON.stringify([{ kind: 'card', id: 'b' }, { kind: 'card', id: 'a' }, { kind: 'card', id: 'late' }]));
+  ok('phone: an empty sheet folds to nothing', blocks([]) === '[]');
+  const phoneMq = `(max-width: ${BREAKPOINTS.phone + 39}px)`;
+  ok('phone: the client\'s breakpoint is the stylesheet\'s, to the pixel',
+    assets.phoneJs.includes(`'${phoneMq}'`) && sizeCss().includes(`@media ${phoneMq}`) && !assets.phoneJs.includes(`(max-width: ${BREAKPOINTS.phone + 40}px)`));
+  ok('phone: outside the phone media query its elements are only ever hidden', phoneLeaks(sizeCss()).length === 0, phoneLeaks(sizeCss()).join(' | '));
+  ok('phone: …and the check sees a leak (negative control)', phoneLeaks('.pub-kpis { display: flex; } @media (max-width: 1px) { .pub-sheet { color: red; } }').length === 1);
+  ok('phone: the page inlines the phone script before the client that calls it',
+    inline.indexOf(assets.phoneJs) > inline.indexOf(assets.coreJs) && inline.indexOf(assets.phoneJs) < inline.indexOf(assets.clientJs) && assets.phoneJs.length > 1000);
   ok('core: a polygon becomes an SVG path', /^M[\d.-]+,[\d.-]+L/.test(ctx.pkPathD({ type: 'Polygon', coordinates: [[[0, 0], [10, 0], [10, 10]]] }, ctx.pkWorld, 100, 0, 0)));
 
   // ── 4. A real publish ───────────────────────────────────────────────────────
