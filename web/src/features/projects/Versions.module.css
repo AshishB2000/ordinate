@@ -129,6 +129,14 @@
   font-size: var(--t-12);
   line-height: var(--lh-body);
 }
+.by {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: var(--t-11);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .restored {
   display: inline-flex;
   align-items: center;
@@ -168,6 +176,31 @@
 }
 .tile[data-type='control'] {
   fill: var(--warn-soft);
+}
+/* A compare's tiles (VersionCompare): after the type rules, so a status wins. */
+.tile[data-status='same'] {
+  opacity: 0.5;
+}
+.tile[data-status='added'] {
+  fill: var(--ok-soft);
+  stroke: var(--ok);
+  stroke-width: 1;
+}
+.tile[data-status='removed'] {
+  fill: var(--error-soft);
+  stroke: var(--error);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+}
+.tile[data-status='changed'] {
+  fill: var(--warn-soft);
+  stroke: var(--warn);
+  stroke-width: 1;
+}
+.tile[data-status='moved'] {
+  fill: var(--accent-soft);
+  stroke: var(--accent);
+  stroke-width: 1;
 }
 
 /* The banner over the preview: which version, and the two ways out. */

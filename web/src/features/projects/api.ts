@@ -62,6 +62,8 @@ export interface VersionMeta {
   savedAt: string;
   summary: string;
   restoredFrom?: string;
+  /** Who saved it (absent on saves from before it was kept). */
+  by?: string;
   /** Dashboards: the first sheet's tiles on the 12-column grid. */
   thumb?: { x: number; y: number; w: number; h: number; type: string }[];
 }
@@ -143,6 +145,80 @@ export function useVersion(projectId: string, type: VersionType, id: string, key
   return useQuery({
     queryKey: ['versions:get', projectId, type, id, key],
     queryFn: key ? async () => (await rpc('versions:get', { projectId, type, id, key })) as VersionFile | null : skipToken,
+  });
+}
+
+export type TileStatus = 'same' | 'added' | 'removed' | 'changed' | 'moved';
+export interface DiffTile {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  type: string;
+  status: TileStatus;
+}
+export interface DiffChange {
+  group: 'record' | 'sheets' | 'filters' | 'cards';
+  kind: string;
+  /** The server's sentence (the catalog's). */
+  text: string;
+  cardId?: string;
+  words?: { op: 'same' | 'add' | 'del'; text: string }[];
+}
+export interface DiffSide {
+  key: string;
+  savedAt: string;
+  by?: string;
+}
+
+/** `versions:diff` (src/ipc/versionDiff.ts): what changed between two saves, worded by the server. */
+export interface VersionDiff {
+  from: DiffSide;
+  to: DiffSide;
+  summary: string;
+  counts: { changed: number; added: number; removed: number; moved: number; filters: number; other: number };
+  changes: DiffChange[];
+  sheets: { id: string; name: string; before: DiffTile[] | null; after: DiffTile[] | null; changed: boolean }[];
+  /** How many figure rows `versions:figures` will answer with. */
+  figures: number;
+}
+
+/** One side of a figure row: the engine's figure, already formatted, or why there is none. */
+export type FigureSide = { ok: true; value: number | null; display: string } | { ok: false; error: string; code?: string };
+export interface FigureRow {
+  cardId: string;
+  title: string;
+  reason: string;
+  before: FigureSide | null;
+  after: FigureSide | null;
+  /** The server's verdict: did the figure change? */
+  moved: boolean;
+}
+
+type Failed = { ok: false; error?: string };
+const failure = (r: unknown): r is Failed => !!r && typeof r === 'object' && (r as Failed).ok === false;
+
+export function useVersionDiff(projectId: string, type: VersionType, id: string, from: string | undefined, to: string | undefined) {
+  return useQuery({
+    queryKey: ['versions:diff', projectId, type, id, from, to],
+    queryFn: from && to ? async () => {
+      const r = await rpc('versions:diff', { projectId, type, id, from, to });
+      if (failure(r)) throw new Error(r.error || 'The two versions could not be compared.');
+      return r as VersionDiff;
+    } : skipToken,
+  });
+}
+
+/** Asked only once the diff says there are figures: they compute, the diff does not. */
+export function useVersionFigures(projectId: string, type: VersionType, id: string, from: string | undefined, to: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['versions:figures', projectId, type, id, from, to],
+    queryFn: from && to && enabled ? async () => {
+      const r = await rpc('versions:figures', { projectId, type, id, from, to });
+      if (failure(r)) throw new Error(r.error || 'The figures could not be worked out.');
+      return (r as { figures: FigureRow[] }).figures;
+    } : skipToken,
   });
 }
 

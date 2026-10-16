@@ -61,6 +61,8 @@ export const READS: Readonly<Record<string, (k: QueryKey, r: Refreshed) => boole
   'analysis:tile': (k, r) => sameProject(k, r) && isRec(k[4]) && (k[4].datasetId === r.datasetId || (isRec(k[4].spec) && k[4].spec.datasetId === r.datasetId)),
   // ['metric:values', projectId, ids, filters, params]
   'metric:values': sameProject,
+  // ['versions:figures', projectId, type, id, from, to] — a version compare's KPI figures (docs/version-diff).
+  'versions:figures': sameProject,
   // ['summary:compute', req] — the Summary card, over a whole sheet.
   'summary:compute': (k, r) => isRec(k[1]) && k[1].projectId === r.projectId,
   // ['dashboard:asOfStamps', projectId, datasetIds, metricIds] — snapshot times and the sheet's freshness.
