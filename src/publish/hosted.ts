@@ -8,6 +8,8 @@
 //
 //   userData/published/<id>/manifest.json   who, when, what, who may open it
 //   userData/published/<id>/<file>.json     { html } — one per page, index.html too
+//   userData/published/<id>/defs.json       each dashboard's record and visuals AS PUBLISHED —
+//                                           what an embed is built from (src/publish/embedPage.ts)
 //
 // `published/` is a record root (src/app/recordFs.ts): with Postgres each file
 // is a row of the org, so every pod serves every site; without it, files on
@@ -24,6 +26,8 @@ import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
 import { ctx, runInContext, serverDataDir } from '../server/context';
 import { buildPages, policyOutgoing, sanitizePublishConfig, type PublishConfig, type PublishProgress } from './publish';
+import type { PublishedDef } from './dashboardData';
+import type { Visual } from '../analysis/visuals';
 
 export type Access = 'org' | 'link';
 
@@ -84,6 +88,31 @@ export async function getPage(id: string, file: string): Promise<string | null> 
   return p && typeof p.html === 'string' ? p.html : null;
 }
 
+/** Each dashboard of site `id` as it was published, by id; null for a site published before definitions were kept. */
+export async function getDefs(id: string): Promise<Record<string, PublishedDef> | null> {
+  if (!isValidId(id)) return null;
+  const d = await readJson<{ dashboards?: Record<string, PublishedDef> }>(path.join(dir(id), 'defs.json'));
+  return d && d.dashboards && typeof d.dashboards === 'object' ? d.dashboards : null;
+}
+
+/** The published definition of every dashboard in `ids`: the record, and each visual a card names. */
+async function definitions(projectId: string, ids: readonly string[]): Promise<Record<string, PublishedDef>> {
+  const out: Record<string, PublishedDef> = {};
+  for (const id of ids) {
+    const a = await analysis.getAnalysis(projectId, id);
+    if (!a) continue;
+    const vis: Record<string, Visual> = {};
+    for (const card of a.sheets.flatMap((p) => p.cards)) {
+      const vid = card && (card as { visualId?: string }).visualId;
+      if (!vid || vis[vid]) continue;
+      const v = await visuals.getVisual(projectId, vid);
+      if (v) vis[vid] = v;
+    }
+    out[id] = { analysis: a, visuals: vis };
+  }
+  return out;
+}
+
 /** Every site published from `projectId`, newest first. */
 export async function listSites(projectId: string): Promise<HostedSite[]> {
   let ids: string[] = [];
@@ -114,9 +143,12 @@ export async function publishHosted(
   const prev = opts.id ? await getSite(opts.id) : null;
   if (opts.id && !prev) throw new Error('That published link no longer exists.');
   const id = prev ? prev.id : randomUUID();
+  // ponytail: read just before the pages build; an edit landing in that window can reach the /p/ page but not the embed. One read for both if it matters.
+  const defs = await definitions(config.projectId, config.dashboardIds);
   const { pages, index, combos } = await buildPages(config, opts.progress ?? {}, policyOutgoing(config.projectId, 'publish'));
   const files = [{ file: 'index.html', html: index }, ...pages.map((p) => ({ file: p.file, html: p.html }))];
   for (const f of files) await writeJson(path.join(dir(id), `${f.file}.json`), { html: f.html });
+  await writeJson(path.join(dir(id), 'defs.json'), { dashboards: defs });
   const site: HostedSite = {
     id,
     projectId: config.projectId,

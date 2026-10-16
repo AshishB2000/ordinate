@@ -51,7 +51,7 @@ export interface AuditRow {
 
 export interface AuditFilter {
   actor?: string;
-  action?: 'rpc' | 'login' | 'logout' | 'logout_everywhere' | 'password_change' | 'hook_refresh' | 'scheduled_refresh';
+  action?: 'rpc' | 'login' | 'logout' | 'logout_everywhere' | 'password_change' | 'hook_refresh' | 'scheduled_refresh' | 'embed_view';
   channel?: string;
   projectId?: string;
   from?: string;

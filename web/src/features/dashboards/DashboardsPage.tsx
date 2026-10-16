@@ -18,11 +18,14 @@ import { ProjectGate } from '../import/ProjectGate';
 import { useCanEdit } from '../projects/api';
 import { reason, siteUrl, usePublishActions, useSites, type HostedSite } from './api';
 import { PublishDialog } from './PublishDialog';
+import { EmbedDialog } from './EmbedDialog';
 import p from './Publish.module.css';
 
 const size = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 
-function SiteRow({ site, projectId, publicLinks, onRepublish, canEdit }: { site: HostedSite; projectId: string; publicLinks: boolean; onRepublish: () => void; canEdit: boolean }) {
+function SiteRow({ site, projectId, publicLinks, onRepublish, onEmbed, canEdit }: {
+  site: HostedSite; projectId: string; publicLinks: boolean; onRepublish: () => void; onEmbed: () => void; canEdit: boolean;
+}) {
   const { access, unpublish } = usePublishActions(projectId);
   const [armed, setArmed] = useState(false);
   const url = siteUrl(site.id);
@@ -68,6 +71,8 @@ function SiteRow({ site, projectId, publicLinks, onRepublish, canEdit }: { site:
               trigger={<IconButton icon="more-horizontal" size="sm" label={`${name} options`} />}
               items={[
                 { label: 'Open', icon: 'external-link', onSelect: () => window.open(url, '_blank', 'noopener,noreferrer') },
+                // A signed embed in another site (docs/embed): only a link that holds a dashboard.
+                ...(site.config.dashboardIds.length ? [{ label: 'Embed…', icon: 'code' as const, onSelect: onEmbed }] : []),
                 site.access === 'link'
                   ? { label: 'Only your organisation', icon: 'lock', onSelect: () => access.mutate({ id: site.id, access: 'org' }, { onError: fail }) }
                   : { label: 'Anyone with the link', icon: 'globe', disabled: !publicLinks, onSelect: () => access.mutate({ id: site.id, access: 'link' }, { onError: fail }) },
@@ -101,6 +106,7 @@ function Published({ projectId }: { projectId: string }) {
   const q = useSites(projectId);
   const canEdit = useCanEdit(projectId);
   const [dialog, setDialog] = useState<{ site?: HostedSite } | null>(() => (preselect ? {} : null));
+  const [embed, setEmbed] = useState<HostedSite | null>(null);
   const close = () => {
     setDialog(null);
     if (preselect) {
@@ -145,10 +151,11 @@ function Published({ projectId }: { projectId: string }) {
       ) : (
         <ul className={p.sites} aria-label="Published links">
           {q.data.sites.map((site) => (
-            <SiteRow key={site.id} site={site} projectId={projectId} publicLinks={publicLinks} canEdit={canEdit} onRepublish={() => setDialog({ site })} />
+            <SiteRow key={site.id} site={site} projectId={projectId} publicLinks={publicLinks} canEdit={canEdit} onRepublish={() => setDialog({ site })} onEmbed={() => setEmbed(site)} />
           ))}
         </ul>
       )}
+      {embed && canEdit && <EmbedDialog projectId={projectId} site={embed} onClose={() => setEmbed(null)} />}
       {dialog && canEdit && <PublishDialog projectId={projectId} site={dialog.site} preselect={preselect} publicLinks={publicLinks} onClose={close} onPublished={() => undefined} />}
     </Page>
   );

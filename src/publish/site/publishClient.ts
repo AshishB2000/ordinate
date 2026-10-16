@@ -362,13 +362,17 @@ function pcDashboard(page: any, root: HTMLElement): void {
   const defaults: number[] = d.controls.map((c: any) => c.defaultIndex);
   let picks = defaults.slice();
   let sheet = 0;
+  // An embedded page (src/publish/embedPage.ts) may leave out its title and its filter bar; the figures are the same.
+  const embed = page.embed || {};
   // The title row. On a phone it is the page's sticky bar — the name, when it was published, Filters with a badge;
   // anywhere wider the wrapper is `display: contents` and only the title shows (sizeCss).
   const head = pcEl('div', 'pub-dashhead');
   const ident = pcEl('div', 'pub-dashhead-ident');
-  ident.appendChild(pcEl('h1', 'pub-title', d.name));
-  const stamp = ppStamp(page);
-  if (stamp) ident.appendChild(pcEl('p', 'pub-dashhead-stamp', stamp));
+  if (!embed.hideTitle) {
+    ident.appendChild(pcEl('h1', 'pub-title', d.name));
+    const stamp = ppStamp(page);
+    if (stamp) ident.appendChild(pcEl('p', 'pub-dashhead-stamp', stamp));
+  }
   head.appendChild(ident);
   root.appendChild(head);
   const bar = pcEl('div', 'pub-filters');
@@ -424,7 +428,7 @@ function pcDashboard(page: any, root: HTMLElement): void {
     lab.appendChild(sel);
     bar.appendChild(lab);
   });
-  if (d.controls.length || views.length) {
+  if ((d.controls.length || views.length) && !embed.hideFilters) {
     // On a phone the bar folds into one "Filters (N)" button that opens it as
     // a sheet. Which of the two shows is the stylesheet's call; this only
     // toggles the sheet open and shut.
@@ -685,7 +689,9 @@ function pcScorecard(page: any, root: HTMLElement): void {
   let page: any;
   try { page = JSON.parse(data.textContent || '{}'); } catch (_) { return; }
   try { if (typeof OrdFormat === 'object' && page.formats) OrdFormat.setFormatPrefs(page.formats); } catch (_) { /* defaults */ }
-  document.body.appendChild(pcHeader(page));
+  // An embed has no site around it: no header, no nav.
+  if (!page.embed) document.body.appendChild(pcHeader(page));
+  else document.body.classList.add('pub-embedded');
   const root = pcEl('main', 'pub-root');
   document.body.appendChild(root);
   if (page.kind === 'story') pcStory(page, root);

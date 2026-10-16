@@ -22,6 +22,7 @@ const ACTIONS = [
   { value: 'password_change', label: 'Password changes' },
   { value: 'hook_refresh', label: 'Refresh URL calls' },
   { value: 'scheduled_refresh', label: 'Scheduled refreshes' },
+  { value: 'embed_view', label: 'Embed views' },
 ];
 const OUTCOMES = [
   { value: '', label: 'Any outcome' },
@@ -38,6 +39,7 @@ const EVENT: Record<string, string> = {
   password_change: 'Changed password',
   hook_refresh: 'Refresh URL called',
   scheduled_refresh: 'Scheduled refresh',
+  embed_view: 'Embedded dashboard viewed',
 };
 
 /** A `<input type="date">` day as the ISO instant its LOCAL midnight is, `days` later. */

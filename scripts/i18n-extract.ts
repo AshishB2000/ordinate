@@ -367,6 +367,7 @@ export const MAIN_FILES = [
   'src/ai/answerMessages.ts',
   'src/analysis/versionDiffMessages.ts',
   'src/analysis/rebuildMessages.ts',
+  'src/server/embedMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

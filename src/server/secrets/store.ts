@@ -20,7 +20,7 @@
 import { createCipheriv, createDecipheriv, createHash, createSecretKey, randomBytes, randomUUID, type KeyObject } from 'crypto';
 import type { Pool } from 'pg';
 
-export const SECRET_KINDS = ['connection.password', 'connection.token', 'ai.apiKey', 'channel.webhook'] as const;
+export const SECRET_KINDS = ['connection.password', 'connection.token', 'ai.apiKey', 'channel.webhook', 'embed.signing'] as const;
 export type SecretKind = (typeof SECRET_KINDS)[number];
 
 export interface SecretStore {

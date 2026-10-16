@@ -7,6 +7,9 @@
 //                                                        per user        RATE_LIMIT_RPC_PER_MINUTE (1200)
 //   MCP       POST /api/mcp                              the RPC buckets above (T6.3): a tool call
 //                                                        runs the same handlers, so it spends the same budget
+//   embed     GET /embed/<token>                         per client IP   RATE_LIMIT_RPC_IP_PER_MINUTE, its own bucket,
+//                                                        before any query; per token and per org in ./embed/route.ts
+//                                                        (RATE_LIMIT_EMBED_PER_MINUTE, RATE_LIMIT_EMBED_ORG_PER_MINUTE)
 //   hooks     /api/hooks/refresh/<token>                 per client IP   RATE_LIMIT_LOGIN_PER_MINUTE, its own
 //                                                        bucket (live data L0.5): a credential presented without
 //                                                        a session, like a sign-in. Each URL is also held to one
@@ -35,6 +38,7 @@ import { PASSWORD_ROUTES } from './auth/password';
 import { ctx } from './context';
 import type { LimitsEnv } from './env';
 import { HOOK_ROUTE } from './hooks/store';
+import { EMBED_ROUTE } from './embed/route';
 
 const MINUTE = 60_000;
 export const RPC_ROUTE = '/api/rpc/:channel';
@@ -81,6 +85,7 @@ export function registerLimits(app: FastifyInstance, cfg: LimitsEnv, proxies: Bl
   let rpcIp: Limiter | null = null;
   let rpcUser: Limiter | null = null;
   let hookIp: Limiter | null = null;
+  let embedIp: Limiter | null = null;
 
   app.addHook('onRequest', async (req, reply) => {
     const route = req.routeOptions.url ?? '';
@@ -90,6 +95,9 @@ export function registerLimits(app: FastifyInstance, cfg: LimitsEnv, proxies: Bl
     } else if (route === RPC_ROUTE || (route === MCP_ROUTE && req.method === 'POST')) {
       rpcIp ??= app.createRateLimit({ max: cfg.rpcIpPerMinute, timeWindow: MINUTE, keyGenerator: ipKey('rpc:') });
       await refused(rpcIp, req, reply);
+    } else if (route === EMBED_ROUTE) {
+      embedIp ??= app.createRateLimit({ max: cfg.rpcIpPerMinute, timeWindow: MINUTE, keyGenerator: ipKey('embed:') });
+      await refused(embedIp, req, reply);
     } else if (route === HOOK_ROUTE) {
       hookIp ??= app.createRateLimit({ max: cfg.loginPerMinute, timeWindow: MINUTE, keyGenerator: ipKey('hook:') });
       await refused(hookIp, req, reply);

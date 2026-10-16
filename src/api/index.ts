@@ -41,6 +41,7 @@ import { ai } from './ai';
 import { subscriptions } from './subscriptions';
 
 import { rebuild } from './rebuild';
+import { embed } from './embed';
 
 export const contracts = {
   ...projects,
@@ -83,6 +84,7 @@ export const contracts = {
   ...subscriptions,
 
   ...rebuild,
+  ...embed,
 } as const;
 
 export type Channel = keyof typeof contracts;

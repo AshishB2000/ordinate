@@ -55,7 +55,8 @@ export default defineConfig({
     // server sees the browser's Host (:5173), the same host its Origin names;
     // otherwise the CSRF check (src/server/csrf.ts) refuses every POST with
     // 403 `origin`. e2e/devproxy.e2e.ts proves it.
-    proxy: { '/api': { target: 'http://127.0.0.1:8080', changeOrigin: false } },
+    // /embed too (docs/embed): the in-app preview frames /embed/<token> on this origin.
+    proxy: { '/api': { target: 'http://127.0.0.1:8080', changeOrigin: false }, '/embed': { target: 'http://127.0.0.1:8080', changeOrigin: false } },
     // web/ plus the one server file the client shares: the wire codec.
     // …and the desktop icon set, which a test diffs the generated icons against
     // (its directory: a `?raw` id only passes the check as a child path).

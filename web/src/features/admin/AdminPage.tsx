@@ -29,10 +29,11 @@ import { BackupsTab } from '../settings/BackupsTab';
 import { LiveUsageTab } from './LiveUsageTab';
 import { AiTab } from './AiTab';
 import { ChannelsTab } from './ChannelsTab';
+import { EmbeddingTab } from './EmbeddingTab';
 import { Icon } from '../../ui/icons/Icon';
 import s from './Admin.module.css';
 
-const ACCOUNT_TABS = ['people', 'teams', 'projects', 'audit', 'settings'] as const;
+const ACCOUNT_TABS = ['people', 'teams', 'projects', 'audit', 'settings', 'embedding'] as const;
 const ORG_TABS = ['workspace', 'ai', 'themes', 'backups', 'live', 'channels'] as const;
 type TabId = (typeof ACCOUNT_TABS)[number] | (typeof ORG_TABS)[number];
 
@@ -104,6 +105,9 @@ export default function AdminPage() {
               <Tab value="settings" icon="settings">
                 Settings
               </Tab>
+              <Tab value="embedding" icon="code">
+                Embedding
+              </Tab>
             </>
           )}
           <Tab value="workspace" icon="sliders">
@@ -141,6 +145,9 @@ export default function AdminPage() {
             </TabPanel>
             <TabPanel value="settings">
               <SettingsTab />
+            </TabPanel>
+            <TabPanel value="embedding">
+              <EmbeddingTab />
             </TabPanel>
           </>
         )}

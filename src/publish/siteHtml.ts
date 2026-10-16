@@ -43,6 +43,7 @@ const SITE_CSS = `
   .pub-nav-link:hover { background: var(--surface-2); color: var(--text-strong); }
   .pub-nav-link[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
   .pub-root { max-width: 1240px; margin: 0 auto; padding: 24px 20px 48px; }
+  .pub-embedded { min-height: 0; } .pub-embedded .pub-root { padding: 16px 20px 20px; }
   .pub-title { font-size: 24px; font-weight: 700; margin: 0 0 16px; color: var(--text-strong); }
   .pub-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin: 0 0 8px; padding: 12px;
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--card-radius); }
