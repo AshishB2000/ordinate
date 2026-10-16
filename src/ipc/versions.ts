@@ -35,6 +35,8 @@ export async function writeBack(projectId: string, type: string, id: string, rec
       // '' clears a description the restored version did not have.
       description: rec.description === undefined ? '' : rec.description,
       direction: rec.direction === undefined ? null : rec.direction,
+      // The metric tree (docs/metric-tree): a version without one restores to none.
+      tree: rec.tree === undefined ? null : rec.tree,
     });
   }
   if (type === 'report') {

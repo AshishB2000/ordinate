@@ -15,13 +15,14 @@ import { Input, Textarea } from '../../../ui/Field';
 import { ParamDialog } from '../ParamDialog';
 import { AddKpiDialog } from './AddKpi';
 import { AddVisualDialog } from './AddVisual';
+import { AddTreeCardDialog } from '../metrics/tree/MetricTreeCard';
 import { addGroup } from './arrange';
 import { useEditor } from './context';
 import { ControlDialog } from './ControlDialog';
 import { uuid } from './doc';
 import { findSlot } from './geometry';
 
-export type Adding = 'visual' | 'kpi' | 'text' | 'control' | 'param' | null;
+export type Adding = 'visual' | 'kpi' | 'text' | 'control' | 'param' | 'tree' | null;
 
 function TextDialog({ onClose }: { onClose: () => void }) {
   const ed = useEditor();
@@ -146,6 +147,7 @@ export function AddDialogs({ adding, onClose, onSwitch }: { adding: Adding; onCl
   if (adding === 'visual') return <AddVisualDialog onClose={onClose} />;
   if (adding === 'kpi') return <AddKpiDialog onClose={onClose} />;
   if (adding === 'text') return <TextDialog onClose={onClose} />;
+  if (adding === 'tree') return <AddTreeCardDialog onClose={onClose} />;
   if (adding === 'control') {
     return (
       <ControlDialog

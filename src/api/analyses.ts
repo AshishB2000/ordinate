@@ -60,6 +60,13 @@ const Tile = z.discriminatedUnion('kind', [
     spec: z.looseObject({ kind: z.enum(['correlation', 'regression', 'groups', 'distribution']), datasetId: Uuid }),
     filters: Steps.optional(),
   }),
+  // A metric tree card (docs/metric-tree): the metric's saved tree under the sheet's filters, by metricTree:compute.
+  z.strictObject({
+    kind: z.literal('metricTree'),
+    metricId: Uuid,
+    compare: Compare.optional(),
+    filters: Steps.optional(),
+  }),
 ]);
 
 export const analyses = {

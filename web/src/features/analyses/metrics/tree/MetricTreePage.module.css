@@ -1,0 +1,84 @@
+/* The metric tree page: back link, the period toolbar, the server's headline,
+   and the canvas the tree is drawn on. */
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  margin-top: calc(-1 * var(--sp-16));
+  font-size: var(--t-12);
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.back:hover { color: var(--text); }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+
+.grow { flex: 1; }
+
+.headline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-12) var(--sp-16);
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+}
+
+.periods { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+
+.periodChip {
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-12);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.vs { font-size: var(--t-12); color: var(--muted); }
+
+.sentence {
+  margin: 0;
+  flex: 1;
+  min-width: 240px;
+  font-size: var(--t-15);
+  line-height: var(--lh-snug);
+  color: var(--text-strong);
+}
+
+.canvas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-24);
+  padding: var(--sp-24) var(--sp-16);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  background:
+    radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0) 0 0 / 20px 20px,
+    var(--bg);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.fetching { opacity: 0.6; }
+
+.starts { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-8); }
+
+.wait { margin: 0; color: var(--muted); }
+
+.addForm { display: flex; flex-direction: column; gap: var(--sp-12); }
+
+@media (max-width: 640px) {
+  .canvas { padding: var(--sp-12); background: var(--bg); }
+  .grow { display: none; }
+}

@@ -5,14 +5,16 @@
 //                 Object.is, value by value — the same tile of the same
 //                 PUBLISHED dashboard with `region = East` as a dashboard
 //                 filter: charts (vizDataFor), KPIs (computeCardMetric and a
-//                 saved metric through resolveMetric), a statistics tile, and
+//                 saved metric through resolveMetric), a statistics tile, a
+//                 metric tree of plain metrics (every node and segment), and
 //                 every filter-bar combination the embed carries
 //   options       the filter bar offers only what exists under the lock: the
 //                 locked column's own values, a text column's values inside
 //                 East (West's only channel is not listed); a control over a
 //                 dataset without the column is left out
 //   fail closed   a chart, a KPI and a statistics tile over a dataset WITHOUT
-//                 `region`, a KPI over a formula metric and the Summary card
+//                 `region`, a KPI over a formula metric, the Summary card and
+//                 a metric tree with a formula in it or over that dataset
 //                 are refused, not drawn — NEGATIVE CONTROL: unlocked, the same
 //                 tiles draw (the pipeline would have skipped the filter)
 //   no leak       nothing of North, South or West — a label, a figure, an
@@ -98,6 +100,12 @@ async function seed(projectId: string) {
     const teams = await visuals.saveVisual(projectId, { name: 'Targets by team', datasetId: targets.id, chartType: 'bar', encoding: enc('team', 'target', 'sum'), filters: [] } as never);
     const revenue = await metrics.saveMetric(projectId, { name: 'Revenue', datasetId: orders.id, definition: { column: 'amount', aggregation: 'sum' }, format: { kind: 'number', decimals: 0 } } as never);
     const ratio = await metrics.saveMetric(projectId, { name: 'Ratio', datasetId: orders.id, definition: { formula: '[Revenue] / 2' }, format: { kind: 'number', decimals: 0 } } as never);
+    // Metric trees (docs/metric-tree): a plain metric split by channel may be drawn under the lock; a tree
+    // with a formula in it, or over a dataset without the locked column, is refused.
+    const amount = await metrics.saveMetric(projectId, { name: 'Amount', datasetId: orders.id, definition: { column: 'amount', aggregation: 'sum' }, format: { kind: 'number', decimals: 0 }, tree: { split: 'channel' } } as never);
+    const ratioTree = ratio ? await metrics.updateMetric(projectId, ratio.id, { tree: { split: 'channel' } }) : null;
+    const targetTree = await metrics.saveMetric(projectId, { name: 'Target total', datasetId: targets.id, definition: { column: 'target', aggregation: 'sum' }, format: { kind: 'number', decimals: 0 }, tree: { split: 'team' } } as never);
+    if (!amount?.tree || !ratioTree?.tree || !targetTree?.tree) throw new Error('seed trees');
     if (!byRegion || !byChannel || !byMonth || !table || !teams || !revenue) throw new Error('seed visuals');
     let x = 0;
     const card = (type: string, extra: object) => ({ id: crypto.randomUUID(), type, layout: { x: (x++ % 4) * 3, y: Math.floor(x / 4) * 4, w: 3, h: 4 }, ...extra });
@@ -118,6 +126,9 @@ async function seed(projectId: string) {
       stats: card('stats', { stats: { kind: 'distribution', datasetId: orders.id, columns: ['amount'], view: 'table' } }),
       statsTeams: card('stats', { stats: { kind: 'distribution', datasetId: targets.id, columns: ['target'], view: 'table' } }),
       summary: card('summary', {}),
+      tAmount: card('metricTree', { metricTree: { metricId: amount.id } }),
+      tRatio: card('metricTree', { metricTree: { metricId: ratioTree.id } }),
+      tTarget: card('metricTree', { metricTree: { metricId: targetTree.id } }),
       text: card('text', { heading: 'Notes', text: 'Figures by region.' }),
     };
     const a = await analysis.saveAnalysis(projectId, { name: 'Customer board', sheets: [{ name: 'Overview', cards: Object.values(cards) }] });
@@ -173,6 +184,14 @@ async function main(): Promise<void> {
       ok(`fail closed: NEGATIVE CONTROL — unlocked, ${label} is drawn`, !refused(unlocked, id), show(tile(unlocked, id)));
     }
     if (s.formulaMetric) ok('fail closed: a KPI over a formula metric is refused under the lock', refused(locked, C.kRatio.id), show(tile(locked, C.kRatio.id)));
+    for (const [label, id] of [['a metric tree with a formula in it', C.tRatio.id], ['a metric tree over Targets', C.tTarget.id]] as const) {
+      ok(`fail closed: ${label} is refused under the lock`, refused(locked, id), show(tile(locked, id)));
+      ok(`fail closed: NEGATIVE CONTROL — unlocked, ${label} is drawn`, !refused(unlocked, id), show(tile(unlocked, id)));
+    }
+    const treeRows = (d: typeof locked) => (tile(d, C.tAmount.id).payloads[tile(d, C.tAmount.id).variants[0]] as { labels?: string[] }).labels ?? [];
+    ok('metric tree: a plain metric\'s tree is drawn under the lock, its segments only the lock\'s channels',
+      !refused(locked, C.tAmount.id) && same(treeRows(locked).slice(1).sort(), ['↳ Store', '↳ Web']), show(treeRows(locked)));
+    ok('metric tree: NEGATIVE CONTROL — unlocked, West\'s Partner is a segment', treeRows(unlocked).includes('↳ Partner'), show(treeRows(unlocked)));
 
     // ── Differential: every tile, every combination the embed carries ──
     const labelsOf = (d: typeof locked, key: string) => key === '' ? [] : key.split('.').map((n, i) => d.controls[i].label + '=' + d.controls[i].options[Number(n)]);
@@ -184,14 +203,14 @@ async function main(): Promise<void> {
       const rk = refKeyOf.get(want);
       if (rk === undefined) { mismatches.push(`no reference combination for ${want}`); continue; }
       const ri = reference.keys.indexOf(rk);
-      for (const id of [C.vRegion.id, C.vChannel.id, C.vMonth.id, C.vTable.id, C.kSum.id, C.kRevenue.id, C.stats.id]) {
+      for (const id of [C.vRegion.id, C.vChannel.id, C.vMonth.id, C.vTable.id, C.kSum.id, C.kRevenue.id, C.stats.id, C.tAmount.id]) {
         const a = tile(locked, id);
         const b = tile(reference, id);
         compared++;
         if (!same(a.payloads[a.variants[ki]], b.payloads[b.variants[ri]])) mismatches.push(`${id} @ ${want}: ${show(a.payloads[a.variants[ki]])} vs ${show(b.payloads[b.variants[ri]])}`);
       }
     }
-    ok(`differential: ${compared} tile answers under the lock equal the dashboard filtered to East (Object.is)`, compared >= 6 * 7 && mismatches.length === 0, mismatches.slice(0, 3).join(' ; '));
+    ok(`differential: ${compared} tile answers under the lock equal the dashboard filtered to East (Object.is)`, compared >= 6 * 8 && mismatches.length === 0, mismatches.slice(0, 3).join(' ; '));
     const total = (d: typeof locked) => (tile(d, C.kSum.id).payloads[tile(d, C.kSum.id).variants[0]] as { value: number }).value;
     const east = REGIONS.filter(([r]) => r === 'East').reduce((n, [, b]) => n + [1, 2, 3, 4, 5, 6].reduce((m, mo) => m + CHANNEL.East.reduce((k, _c, i) => k + b + mo * 10 + i, 0), 0), 0);
     ok('the KPI under the lock is East\'s total', Object.is(total(locked), east), `${total(locked)} vs ${east}`);

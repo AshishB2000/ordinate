@@ -89,6 +89,8 @@ export const pages: RouteObject[] = [
   page('/data/captures/:projectId/:captureId', () => import('../features/import/CapturePage')),
   // Rebuild another BI tool's dashboard from its screenshot, on the project's own data.
   page('/analyses/:projectId/rebuild', () => import('../features/analyses/rebuild/RebuildPage')),
+  // A metric's tree (docs/metric-tree): why it moved, broken into its parts.
+  page('/data/metrics/:projectId/:metricId/tree', () => import('../features/analyses/metrics/tree/MetricTreePage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

@@ -126,7 +126,7 @@ function cardChanges(a: Rec, b: Rec, title: string, titleOf: TitleOf, out: Chang
   const ta = titleOf(a);
   const tb = titleOf(b);
   if (a.type !== b.type) { push('card.type', { from: String(a.type || ''), to: String(b.type || '') }); return; }
-  if (ta !== tb && b.type !== 'visual') push('card.renamed', { from: ta, to: tb });
+  if (ta !== tb && b.type !== 'visual' && b.type !== 'metricTree') push('card.renamed', { from: ta, to: tb });
   if (b.type === 'visual') {
     if ((a.visualId || '') !== (b.visualId || '')) push('card.visualSwapped', { from: ta, to: tb });
     const va: Rec = a.visual || {};
@@ -151,9 +151,15 @@ function cardChanges(a: Rec, b: Rec, title: string, titleOf: TitleOf, out: Chang
     if (xa !== xb) push('card.text', {}, wordDiff(xa, xb));
   } else if (b.type === 'control') {
     if (!same(a.control, b.control)) push('card.control');
+  } else if (b.type === 'metricTree') {
+    // A Metric tree card is its metric (the tree lives on that record) and its own Compare.
+    const xa: Rec = a.metricTree || {};
+    const xb: Rec = b.metricTree || {};
+    if ((xa.metricId || '') !== (xb.metricId || '')) push('card.treeRoot', { from: ta, to: tb });
+    if (!same(xa.compare, xb.compare)) push('card.compare');
   }
   // Anything the branches above did not word (an image, a tab, a stats spec, a new field).
-  const worded = new Set(['type', 'visualId', 'visual', 'actions', 'metric', 'text', 'heading', 'control']);
+  const worded = new Set(['type', 'visualId', 'visual', 'actions', 'metric', 'text', 'heading', 'control', 'metricTree']);
   const rest = (c: Rec): Rec => Object.fromEntries(Object.entries(body(c)).filter(([k]) => !worded.has(k)));
   if (!same(rest(a), rest(b))) push('card.settings');
 }

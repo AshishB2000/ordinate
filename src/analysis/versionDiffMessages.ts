@@ -358,3 +358,46 @@ export function versionGone(): string {
 export function figureFailed(): string {
   return t('versionDiffMessages.this_figure_could_not_be_worked');
 }
+
+// ── Metric trees (docs/metric-tree) ──────────────────────────────────────────
+
+export function treeCardTitle(metric: string): string {
+  return `${metric} tree`;
+}
+
+export function treeCardDeleted(): string {
+  return t('versionDiffMessages.metric_tree_its_metric_was_deleted');
+}
+
+export function cardTreeRoot(from: string, to: string): string {
+  return t('versionDiffMessages.metric_tree_root_changed_from_to', { from, to });
+}
+
+/** A metric's own tree, before and after: `shape` words below. */
+export function metricTreeChanged(from: string, to: string): string {
+  return t('versionDiffMessages.tree_changed_from_to', { from, to });
+}
+
+export function treeNone(): string {
+  return t('versionDiffMessages.no_breakdown');
+}
+
+export function treeSplit(column: string): string {
+  return t('versionDiffMessages.a_split_by', { column });
+}
+
+export function treeSum(count: number): string {
+  return t('versionDiffMessages.a_sum_of_metrics', { count });
+}
+
+export function treeProduct(count: number): string {
+  return t('versionDiffMessages.a_product_of_metrics', { count });
+}
+
+export function treeRatio(): string {
+  return t('versionDiffMessages.a_ratio_of_two_metrics');
+}
+
+export function treeDeeper(shape: string, count: number): string {
+  return t('versionDiffMessages.broken_down_further', { shape, count });
+}

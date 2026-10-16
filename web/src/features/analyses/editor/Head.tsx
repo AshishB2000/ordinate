@@ -248,6 +248,7 @@ export function Head() {
                 { label: 'Container', icon: 'layout-dashboard', onSelect: () => addKind('container') },
                 { label: 'Tabs', icon: 'columns', onSelect: () => addKind('tabs') },
                 { label: 'Summary', icon: 'sparkles', onSelect: () => addSummary(ed) },
+                { label: 'Metric tree…', icon: 'lineage', onSelect: () => ed.openAdd('tree') },
               ]}
             />
           </div>

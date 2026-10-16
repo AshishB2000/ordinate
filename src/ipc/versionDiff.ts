@@ -64,16 +64,32 @@ function cardsOf(rec: Rec): Rec[] {
 /** Names a card the way the reader knows it: a visual by its Visual record's current name. */
 async function titler(projectId: string, records: Rec[]): Promise<TitleOf> {
   const ids = new Set<string>();
-  for (const r of records) for (const c of cardsOf(r)) if (c.type === 'visual' && typeof c.visualId === 'string') ids.add(c.visualId);
+  const trees = new Set<string>();
+  for (const r of records) {
+    for (const c of cardsOf(r)) {
+      if (c.type === 'visual' && typeof c.visualId === 'string') ids.add(c.visualId);
+      if (c.type === 'metricTree' && c.metricTree && typeof c.metricTree.metricId === 'string') trees.add(c.metricTree.metricId);
+    }
+  }
   const names = new Map<string, string>();
   for (const id of ids) {
     const v = await visuals.getVisual(projectId, id).catch(() => null);
     if (v) names.set(id, v.name);
   }
+  // A Metric tree card is titled by its metric: "Revenue tree".
+  const metricNames = new Map<string, string>();
+  for (const id of trees) {
+    const m = await metricsStore.getMetric(projectId, id).catch(() => null);
+    if (m) metricNames.set(id, m.name);
+  }
   return (c: Rec): string => {
     if (c.type === 'visual') return names.get(String(c.visualId || '')) || (c.visual && typeof c.visual.name === 'string' && c.visual.name) || M.deletedVisual();
     if (c.type === 'metric' && c.metric) return String(c.metric.label || `${c.metric.aggregation}(${c.metric.column})`);
     if (c.type === 'text' && typeof c.heading === 'string' && c.heading.trim()) return c.heading.trim();
+    if (c.type === 'metricTree' && c.metricTree) {
+      const name = metricNames.get(String(c.metricTree.metricId || ''));
+      return name ? M.treeCardTitle(name) : M.treeCardDeleted();
+    }
     if (c.type === 'control' && c.control) return String(c.control.label || c.control.column || '') || M.untitledCard(String(c.type));
     return M.untitledCard(String(c.type || ''));
   };
@@ -118,6 +134,7 @@ export function sentence(c: Change): string {
     case 'card.text': return M.cardText(s('title'));
     case 'card.control': return M.cardControl(s('title'));
     case 'card.settings': return M.cardSettings(s('title'));
+    case 'card.treeRoot': return M.cardTreeRoot(s('from'), s('to'));
     case 'visual.chartType': return M.chartChanged(chartName(p.from), chartName(p.to));
     case 'visual.category': return M.categoryChanged(s('from'), s('to'));
     case 'visual.series': return M.splitChanged(s('from'), s('to'));
@@ -131,6 +148,7 @@ export function sentence(c: Change): string {
     case 'metric.definition': return M.definitionChanged(s('from'), s('to'));
     case 'metric.format': return M.metricFormatChanged();
     case 'metric.direction': return M.directionChanged();
+    case 'metric.tree': return M.metricTreeChanged(s('from'), s('to'));
     case 'report.format': return M.reportFormat(s('from'), s('to'));
     case 'report.dashboard': return M.reportDashboard();
     case 'report.pagesAdded': return M.pagesAdded(n('n'));

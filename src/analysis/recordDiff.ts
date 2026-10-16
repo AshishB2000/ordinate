@@ -26,7 +26,7 @@ export type DiffType = 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report';
 const CONTENT_KEYS: Record<DiffType, string[]> = {
   dashboard: ['name', 'sheets', 'filters', 'style'],
   visual: ['name', 'chartType', 'encoding', 'overrides', 'filters'],
-  metric: ['name', 'definition', 'filters', 'format', 'description', 'direction'],
+  metric: ['name', 'definition', 'filters', 'format', 'description', 'direction', 'tree'],
   report: ['name', 'analysisId', 'format', 'pages', 'cover', 'paper', 'includeFilters', 'narrative', 'schedule'],
   // A dataset's version is its PREPARE PIPELINE. The table is data, not a
   // definition — restoring a version never touches the source Parquet. The one
@@ -175,6 +175,7 @@ function diffMetric(a: Rec, b: Rec, parts: string[]): void {
   if (!same(a.format, b.format)) parts.push('changed the format');
   if ((a.description || '') !== (b.description || '')) parts.push('edited the description');
   if ((a.direction || '') !== (b.direction || '')) parts.push('changed which way is good');
+  if (!same(a.tree ?? null, b.tree ?? null)) parts.push('changed its tree');
 }
 
 function diffReport(a: Rec, b: Rec, parts: string[]): void {

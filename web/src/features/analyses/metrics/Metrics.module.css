@@ -67,6 +67,24 @@
   text-align: left;
   cursor: pointer;
 }
+.treeLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: var(--sp-8);
+  padding: 1px 6px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--t-11);
+  font-weight: 600;
+  cursor: pointer;
+  vertical-align: 1px;
+}
+.treeLink:hover { background: var(--accent-line); }
+.treeLink:focus-visible { outline: var(--focus-ring-w) solid var(--focus-ring); outline-offset: 1px; }
 .name:hover {
   color: var(--accent);
   text-decoration: underline;

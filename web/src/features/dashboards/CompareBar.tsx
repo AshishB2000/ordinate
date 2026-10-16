@@ -39,16 +39,17 @@ const ISO = /^\d{4}-\d{2}-\d{2}$/;
 /** A custom comparison is asked only once it has both dates (the server needs both). */
 export const usable = (c: Compare | null): Compare | null => (c && (c.mode !== 'custom' || (ISO.test(c.from ?? '') && ISO.test(c.to ?? ''))) ? c : null);
 
-export function CompareControl({ value, onChange }: { value: Compare | null; onChange: (c: Compare | null) => void }) {
+/** `required`: a surface that always compares (the metric tree) — no "off". */
+export function CompareControl({ value, onChange, required, label = 'Compare this dashboard with' }: { value: Compare | null; onChange: (c: Compare | null) => void; required?: boolean; label?: string }) {
   return (
     <>
       <Select
         size="sm"
-        aria-label="Compare this dashboard with"
-        className={value ? s.asOfOn : undefined}
+        aria-label={label}
+        className={value && !required ? s.asOfOn : undefined}
         value={value?.mode ?? ''}
         onValueChange={(mode) => onChange(mode ? { mode: mode as Compare['mode'] } : null)}
-        options={[{ value: '', label: 'Compare: off' }, ...MODES]}
+        options={required ? MODES : [{ value: '', label: 'Compare: off' }, ...MODES]}
       />
       {value?.mode === 'custom' && (
         <>

@@ -27,6 +27,7 @@ import * as metrics from './metrics';
 import { listReports } from './reportSpec';
 import { compileMetricFormula } from './metricFormula';
 import { isFormulaDefinition } from './metrics';
+import { treeMetricIds } from './metricTree';
 
 export type MetricUsageKind = 'card' | 'visual' | 'alert' | 'report' | 'metric';
 
@@ -89,11 +90,14 @@ export async function metricUsage(projectId: string, metricId: string): Promise<
       if (!a) continue;
       a.sheets.forEach((sheet, sheetIndex) => {
         for (const card of sheet.cards || []) {
-          if (card.type !== 'metric' || !card.metric || card.metric.metricId !== metricId) continue;
+          // A KPI showing the metric, or a Metric tree card drawing its tree (docs/metric-tree).
+          const kpi = card.type === 'metric' && !!card.metric && card.metric.metricId === metricId;
+          const tree = card.type === 'metricTree' && card.metricTree?.metricId === metricId;
+          if (!kpi && !tree) continue;
           usingAnalyses.add(a.id);
           refs.push({
             kind: 'card',
-            name: card.metric.label || a.name,
+            name: (kpi && card.metric?.label) || a.name,
             id: a.id,
             sheetIndex,
           });
@@ -137,7 +141,14 @@ export async function metricUsage(projectId: string, metricId: string): Promise<
     const name = self ? self.name.toLowerCase() : '';
     if (name) {
       for (const s of await metrics.listMetrics(projectId)) {
-        if (s.id === metricId || !isFormulaDefinition(s.definition)) continue;
+        if (s.id === metricId) continue;
+        // A part of another metric's tree: deleting it leaves a hole in that tree.
+        const tree = s.hasTree ? (await metrics.getMetric(projectId, s.id))?.tree : undefined;
+        if (tree && treeMetricIds(tree).includes(metricId)) {
+          refs.push({ kind: 'metric', name: s.name, id: s.id });
+          continue;
+        }
+        if (!isFormulaDefinition(s.definition)) continue;
         // Compiled, not string-matched: `[Revenue]` inside a quoted string or a
         // metric called "Revenue growth" are both substring hits and neither is
         // a reference.

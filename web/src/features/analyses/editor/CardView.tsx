@@ -21,6 +21,7 @@ import { MetricBody, metricLabel } from './MetricCard';
 import s from './Cards.module.css';
 import { TextBody } from '../../dashboards/Markdown';
 import { SummaryBody } from '../../dashboards/SummaryBody';
+import { MetricTreeBody } from '../metrics/tree/MetricTreeCard';
 import { CommentButton } from '../../dashboards/CommentsPanel';
 import { clickColumns, VisualCard, WatchedBell } from '../../dashboards/CardRuntime';
 import { TileAsOfSlot } from './tileAsOf';
@@ -33,6 +34,7 @@ const KIND_TITLE: Record<string, string> = {
   stats: 'Statistics',
   summary: 'Summary',
   text: 'Text',
+  metricTree: 'Metric tree',
 };
 
 /** The title a card's head shows (dashCardTitle / cardKindTitle). */
@@ -82,6 +84,7 @@ function Body({ card, asTable }: { card: Card; asTable: boolean }) {
   // Markdown with {{tokens}} — a parameter, else a saved metric's figure (textCard.ts, T2.9).
   if (card.type === 'text') return <TextBody projectId={ed.projectId} text={card.text ?? ''} params={ed.params} filters={ed.filters} />;
   if (card.type === 'summary') return <SummaryBody ed={ed} cardId={card.id} />;
+  if (card.type === 'metricTree') return <MetricTreeBody card={card} />;
   if (card.type === 'divider') return card.divider?.style === 'spacer' ? null : <hr className={s.divider} />;
   if (card.type === 'container' || card.type === 'tabs') {
     const tab = card.type === 'tabs' ? activeTab(card, ed.groupTab.get(card.id)) : undefined;
