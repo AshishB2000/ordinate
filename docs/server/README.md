@@ -26,6 +26,7 @@ flowchart LR
 | Look up a setting | [configuration.md](configuration.md): every environment variable the server reads |
 | Connect a warehouse or use Live data | [live-data.md](live-data.md): Live datasets and cache age, Snowflake's and BigQuery's read-only roles, what a query can cost, the refresh URL |
 | Send dashboards to Slack or Teams | [subscriptions.md](subscriptions.md): the webhooks to create, what leaves the server, failures and pauses |
+| Show dashboards inside your portal or app | [embedding.md](embedding.md): signed embed links, locked filters per customer, the allowed sites, rotating the secret |
 | Plan capacity | [sizing.md](sizing.md): measured numbers and starting points |
 | Protect the data | [backup-restore.md](backup-restore.md): Postgres, the bucket, the master key |
 | Move between versions | [upgrade.md](upgrade.md): releases, migrations, rollbacks |

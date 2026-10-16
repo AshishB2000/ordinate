@@ -30,13 +30,16 @@ export function EmbedSnippets({ input }: { input: SnippetInput }) {
       </TabList>
       {(['node', 'python'] as const).map((k) => (
         <TabPanel key={k} value={k}>
-          <div className={s.snippetWrap}>
-            <pre className={s.snippet} data-testid={`snippet-${k}`}>
+          <div className={s.codeBox}>
+            <div className={s.codeHead}>
+              <span className={s.codeFile}>{k === 'node' ? 'embed-url.js' : 'embed_url.py'}</span>
+              <Button size="sm" variant="ghost" icon="copy" onClick={() => copy(code[k], 'The code')} aria-label={`Copy the ${k === 'node' ? 'Node' : 'Python'} code`}>
+                Copy
+              </Button>
+            </div>
+            <pre className={s.code} data-testid={`snippet-${k}`}>
               {code[k]}
             </pre>
-            <Button size="sm" variant="ghost" icon="copy" className={s.copySnippet} onClick={() => copy(code[k], 'The code')} aria-label={`Copy the ${k === 'node' ? 'Node' : 'Python'} code`}>
-              Copy
-            </Button>
           </div>
         </TabPanel>
       ))}

@@ -236,15 +236,43 @@
   font-size: var(--t-12);
 }
 
-/* ── Snippets ─────────────────────────────────────────────────────── */
-.snippetWrap {
-  position: relative;
+/* ── Snippets: a file header with Copy, then the code ─────────────── */
+.codeBox {
   margin-top: var(--sp-8);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--inset);
+  overflow: hidden;
 }
+.codeHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  padding: var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-12);
+  border-bottom: 1px solid var(--border-hairline);
+  background: var(--surface-1);
+}
+.codeFile {
+  font-family: var(--font-mono);
+  font-size: var(--t-11);
+  color: var(--muted);
+}
+.code {
+  margin: 0;
+  padding: var(--sp-12);
+  max-height: 360px;
+  font-family: var(--font-mono);
+  font-size: var(--t-12);
+  line-height: var(--lh-snug);
+  color: var(--text);
+  white-space: pre;
+  overflow: auto;
+}
+
 .snippet {
   margin: 0;
   padding: var(--sp-12);
-  padding-right: 88px;
   max-height: 360px;
   background: var(--inset);
   border: 1px solid var(--border-hairline);
@@ -255,11 +283,6 @@
   color: var(--text);
   white-space: pre;
   overflow: auto;
-}
-.copySnippet {
-  position: absolute;
-  top: var(--sp-8);
-  right: var(--sp-8);
 }
 
 /* ── Locks ────────────────────────────────────────────────────────── */
@@ -360,6 +383,23 @@
 .previewMeta {
   color: var(--muted);
   font-size: var(--t-12);
+}
+
+/* Admin's preview: the controls in a narrow column, the frame beside them. */
+.previewCols {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: var(--sp-24);
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .previewCols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.previewCols .options {
+  flex-direction: column;
+  align-items: stretch;
 }
 
 /* ── The link's dialog ────────────────────────────────────────────── */

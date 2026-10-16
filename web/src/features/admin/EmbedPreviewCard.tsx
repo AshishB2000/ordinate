@@ -30,7 +30,7 @@ export function EmbedPreviewCard({ canPreview }: { canPreview: boolean }) {
     : null;
   const siteOptions = (sites.data?.sites ?? []).filter((x) => x.config.dashboardIds.length).map((x) => ({ value: x.id, label: x.title || x.pages.map((p) => p.name).join(', ') || 'Published link' }));
   return (
-    <div className={s.card}>
+    <section className={s.card} aria-label="Preview embed">
       <div className={s.cardHead}>
         <h3 className={s.cardTitle}>
           <Icon name="eye" size={16} /> Preview embed
@@ -40,35 +40,51 @@ export function EmbedPreviewCard({ canPreview }: { canPreview: boolean }) {
         Sign a ten-minute preview with the org’s secret and see exactly what a host page would show — before you turn embedding on.
         {!canPreview && ' Generate a signing secret first.'}
       </p>
-      <div className={s.options}>
-        <Select
-          aria-label="Project"
-          placeholder={projects.isPending ? 'Loading projects…' : 'Pick a project'}
-          value={projectId}
-          onValueChange={(v) => { setProjectId(v); setSiteId(null); setDashId(null); setChoice(NO_CHOICE); }}
-          options={(projects.data ?? []).filter((p) => !p.archived).map((p) => ({ value: p.id, label: p.name }))}
-          disabled={!canPreview}
-        />
-        <Select
-          aria-label="Published link"
-          placeholder={!projectId ? 'Then a published link' : sites.isPending ? 'Loading links…' : siteOptions.length ? 'Pick a published link' : 'Nothing published yet'}
-          value={siteId}
-          onValueChange={(v) => { setSiteId(v); setDashId(null); setChoice(NO_CHOICE); }}
-          options={siteOptions}
-          disabled={!projectId || !siteOptions.length}
-        />
-        {dashboards.length > 1 && <Select aria-label="Dashboard" value={dash} onValueChange={(v) => { setDashId(v); setChoice(NO_CHOICE); }} options={dashboards} />}
-      </div>
-      {site && dash && (
-        <div className={s.dialogCols}>
-          <div className={s.col}>
-            <EmbedOptions query={query} value={choice} onChange={setChoice} />
-          </div>
-          <div className={s.col}>
-            <EmbedPreview target={target} host="https://your-portal.example/…" />
-          </div>
+      <div className={s.previewCols}>
+        <div className={s.col}>
+          <section className={s.stack} aria-label="What to preview">
+            <h4 className={s.sectionTitle}>Dashboard</h4>
+            <Select
+              aria-label="Project"
+              placeholder={projects.isPending ? 'Loading projects…' : 'Pick a project'}
+              value={projectId}
+              onValueChange={(v) => {
+                setProjectId(v);
+                setSiteId(null);
+                setDashId(null);
+                setChoice(NO_CHOICE);
+              }}
+              options={(projects.data ?? []).filter((p) => !p.archived).map((p) => ({ value: p.id, label: p.name }))}
+              disabled={!canPreview}
+            />
+            <Select
+              aria-label="Published link"
+              placeholder={!projectId ? 'Then a published link' : sites.isPending ? 'Loading links…' : siteOptions.length ? 'Pick a published link' : 'Nothing published yet'}
+              value={siteId}
+              onValueChange={(v) => {
+                setSiteId(v);
+                setDashId(null);
+                setChoice(NO_CHOICE);
+              }}
+              options={siteOptions}
+              disabled={!projectId || !siteOptions.length}
+            />
+            {dashboards.length > 1 && (
+              <Select
+                aria-label="Dashboard"
+                value={dash}
+                onValueChange={(v) => {
+                  setDashId(v);
+                  setChoice(NO_CHOICE);
+                }}
+                options={dashboards}
+              />
+            )}
+          </section>
+          {site && dash && <EmbedOptions query={query} value={choice} onChange={setChoice} />}
         </div>
-      )}
-    </div>
+        <EmbedPreview target={target} host="https://your-portal.example/…" />
+      </div>
+    </section>
   );
 }

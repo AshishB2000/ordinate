@@ -19,7 +19,7 @@ import { paramsOf, useEmbedStatus, type EmbedStatus } from '../embed/api';
 import { EmbedOptions, NO_CHOICE, useLockColumns, type EmbedChoice } from '../embed/EmbedOptions';
 import { EmbedPreview } from '../embed/EmbedPreview';
 import { copy, EmbedSnippets } from '../embed/EmbedSnippets';
-import { claimsOf } from '../embed/snippets';
+import { claimsOf, pretty } from '../embed/snippets';
 import { useTargets, type HostedSite } from './api';
 import a from '../admin/Admin.module.css';
 import s from '../embed/Embed.module.css';
@@ -54,7 +54,7 @@ function Body({ projectId, site, status }: { projectId: string; site: HostedSite
     server: window.location.origin, org: status.org, pub: site.id, dash: dashId, params,
     ...(choice.theme ? { theme: choice.theme } : {}), hide: choice.hide,
   };
-  const claims = JSON.stringify({ ...claimsOf(input), exp: '<now + 10 minutes, in seconds>' }, null, 2);
+  const claims = pretty({ ...claimsOf(input), exp: '<now + 10 minutes, in seconds>' }, 2);
   const pattern = `${window.location.origin}/embed/`;
   return (
     <div className={s.stack}>

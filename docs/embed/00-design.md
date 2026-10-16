@@ -57,7 +57,7 @@ that shows each customer only their own rows — through an `<iframe>` whose URL
 | Preview | `embed:preview` (project **write**, i.e. who may publish) signs a 10-minute token with `prv: 1` and the org's secret, whether or not embedding is on. A preview token is served only to a same-origin iframe (`Sec-Fetch-Dest: iframe` and `Sec-Fetch-Site: same-origin`), with `frame-ancestors 'self'`. | An editor can check an embed before an admin turns it on, without being able to hand an outsider a working link. |
 | Live datasets | Built under `runAsPublished`, so the `/p/` floor `LIVE_MIN_CACHE_AGE_PUBLIC_SEC` holds, plus the daily limit, plus the 5-minute page cache. | A busy customer portal must not be a warehouse poll. |
 | Rate limits | Per IP (the RPC per-IP budget, before any DB query), per token (`RATE_LIMIT_EMBED_PER_MINUTE`, 120) and per org (`RATE_LIMIT_EMBED_ORG_PER_MINUTE`, 1,200), per pod (R8). Over → 429 page. | |
-| Audit | `audit_log.action = 'embed_view'`, actor `embed`, targets = link and dashboard ids, outcome ok / denied / error, for every request whose MAC held. A request whose MAC failed names no trustworthy org and is not audited (it is counted on `/metrics`). | |
+| Audit | `audit_log.action = 'embed_view'`, actor `embed`, targets = link and dashboard ids, outcome ok / denied / error, for every request whose MAC held. A request whose MAC failed names no trustworthy org and is not audited (it is counted on `/metrics` by route and status). | |
 | Logs | The token is masked in the request log (`/embed/<masked>`) and in Fastify's own messages. The secret is in no reply but the one that creates it, never in a log line (canary test). | |
 
 ## Token reference
