@@ -151,12 +151,22 @@ if (!dbUrl) {
     await shots('dock-save-visual');
     const sent = page.waitForRequest((r) => decodeURIComponent(new URL(r.url()).pathname) === '/api/rpc/answer:saveVisual');
     await save.click();
-    assert.deepEqual(Object.keys(((await sent).postDataJSON() as { args: [Record<string, unknown>] }).args[0]), ['projectId', 'spec'], 'the browser sends the spec and nothing else');
+    assert.deepEqual(
+      Object.keys(((await sent).postDataJSON() as { args: [Record<string, unknown>] }).args[0]),
+      ['projectId', 'spec', 'threadId', 'turnId'],
+      'the browser sends the spec and which turn it is — nothing else',
+    );
     const open = card.getByRole('link', { name: 'Open in Visuals' });
     await open.waitFor();
     const href = (await open.getAttribute('href')) ?? '';
     assert.match(href, new RegExp(`^/visuals/${pid}/[0-9a-f-]{36}$`));
     await shots('dock-saved-visual');
+    // A reload forgets the page, not the save: the turn records the visual, so the card links to it again.
+    await page.reload();
+    await settled(page);
+    const again = dock.getByTestId('answer-card').last().getByRole('link', { name: 'Open in Visuals' });
+    await again.waitFor();
+    assert.equal(await again.getAttribute('href'), href, 'after a reload the card links to the same visual');
 
     // A visual of the project now, made by the server from the card: its title, its type, its encoding.
     const csrf = (await page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';

@@ -321,7 +321,7 @@ export default function DockPanel() {
           {empty && ready && enabled && mine && status.data && !history.isPending && (
             <div className={`${s.powered} ${s.stageTop}`}>{`Powered by ${modelLabel({ ...mine, isDefault: false }, status.data.models)}`}</div>
           )}
-          {pid && <Transcript turns={turns} pending={pending} lastSteps={lastSteps} projectId={pid} onFollowUp={followUp} />}
+          {pid && <Transcript turns={turns} pending={pending} lastSteps={lastSteps} projectId={pid} threadId={shownThread} onFollowUp={followUp} />}
           {pid && getData && !pending && (
             <div className={s.getData} data-testid="dock-get-data">
               <Link className={buttonClass('primary', 'sm')} to={`/data/import?project=${pid}`}>Import a file</Link>

@@ -11,13 +11,16 @@
 // so a model that re-typed nothing can drop nothing.
 
 import type { VizMeasure } from '../analysis/visuals';
-import { ANSWER_CHART_TYPES, defaultAnswerChart, parseAgg, resolveColumn } from './answerSpec';
+import { ANSWER_CHART_TYPES, defaultAnswerChart, filterOp, parseAgg, resolveColumn } from './answerSpec';
 import type { AnswerSpec, SpecDataset, SpecMetric } from './answerSpec';
 import { WITHHELD } from './columnNotes';
 
 /** The patch's own two keys, as the prompt spells them (scripts/test-suggestedAction.ts ties the two). */
 export const REFINE_KEY = 'refine';
 export const DROP_FILTERS_KEY = 'dropFilters';
+
+/** The operators that leave values out — what adds up on a withheld column (`refineSpec`). */
+const EXCLUDE: ReadonlySet<string> = new Set(['!=', 'not in']);
 
 /** A spec that asks to continue the previous answer: `"refine": true`, exactly. */
 export function isRefine(raw: unknown): boolean {
@@ -39,7 +42,13 @@ export function isRefine(raw: unknown): boolean {
  *     so "Segment" and "segment" are one column — and is added otherwise. A
  *     period on a date column is the same rule: it replaces the period before it.
  *     One filter given bare, outside a list, is still that filter;
- *   - `dropFilters` removes the previous filters on the columns it names.
+ *   - `dropFilters` removes the previous filters on the columns it names;
+ *   - EXCEPT on a column in `withheld` (marked personal or financial: the model
+ *     was shown "(withheld)" for its values, so it cannot restate them): there
+ *     an exclusion beside a stored exclusion ADDS to it — "also leave out
+ *     b@x.test" — merged into one `not in` list. Leaving a value out it was not
+ *     asked to would be a chart that looks right; one left out too many is on
+ *     the card, and `dropFilters` takes the whole list away.
  *
  * A chart type nobody chose — the default for the previous shape — is left for
  * the validator to choose again, so a split added to a column chart is drawn as
@@ -51,7 +60,9 @@ export function isRefine(raw: unknown): boolean {
  * no longer is. Otherwise it is carried as its column and aggregation: what the
  * chart on screen plots.
  */
-export function refineSpec(previous: AnswerSpec, patch: unknown, dataset: SpecDataset, metrics: SpecMetric[] = []): unknown {
+export function refineSpec(
+  previous: AnswerSpec, patch: unknown, dataset: SpecDataset, metrics: SpecMetric[] = [], withheld: ReadonlySet<string> = new Set(),
+): unknown {
   const p = patch && typeof patch === 'object' && !Array.isArray(patch) ? (patch as Record<string, unknown>) : {};
   const real = (said: unknown): string | null => resolveColumn(said, dataset.columns, dataset.names)?.name ?? null;
 
@@ -87,7 +98,14 @@ export function refineSpec(previous: AnswerSpec, patch: unknown, dataset: SpecDa
       if (!previous.filters.some((x) => x.column === name && !('period' in x) && x.op === op)) added.push({ column: o.column, op: o.op });
       continue;
     }
+    const excluded = name && withheld.has(name) && EXCLUDE.has(filterOp(o) ?? '')
+      ? previous.filters.flatMap((x) => (x.column === name && !('period' in x) && EXCLUDE.has(x.op) ? (x.values ?? [x.value]) : [])) : [];
     if (name) gone.add(name);
+    if (excluded.length) {
+      const more = ([] as unknown[]).concat(Array.isArray(o.values) ? o.values : Array.isArray(o.value) ? o.value : [o.value]);
+      added.push({ column: o.column, op: 'not in', values: [...new Set([...excluded, ...more])] });
+      continue;
+    }
     added.push(f);
   }
 

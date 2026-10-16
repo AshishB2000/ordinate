@@ -37,7 +37,7 @@ import { sanitizeDashboardFilters } from './dashboards';
 import { detectAnomalies } from './anomalies';
 import { detectAnomaliesResident } from '../engine/anomaliesResident';
 import { distinctAllJs, distinctAllResident } from '../engine/distinctAll';
-import { periodPlan, orderPeriods } from './insightsAgg';
+import { periodPlan } from './insightsAgg';
 import type { FilterStep } from '../data/transforms';
 import * as recordFs from '../app/recordFs';
 import { isLiveDatasetError } from '../data/liveDataset';
@@ -140,6 +140,7 @@ export async function saveRule(projectId: string, raw: any): Promise<AlertRule |
     file.rules[i] = {
       ...clean,
       armed: prev.armed,
+      firedPeriod: prev.firedPeriod,
       anomalyKeys: prev.anomalyKeys,
       history: prev.history,
       lastValue: prev.lastValue,
@@ -152,6 +153,7 @@ export async function saveRule(projectId: string, raw: any): Promise<AlertRule |
         || JSON.stringify(prev.change) !== JSON.stringify(clean.change)
         || prev.compare !== clean.compare) {
       delete file.rules[i].armed;
+      delete file.rules[i].firedPeriod;
     }
   } else {
     if (file.rules.length >= alerts.MAX_RULES) return null;
@@ -264,7 +266,7 @@ export async function markSeen(projectId: string, eventId?: string): Promise<boo
 export async function metricFor(
   projectId: string,
   rule: AlertRule,
-): Promise<{ value: number | null; previous: number | null }> {
+): Promise<{ value: number | null; previous: number | null; period?: string }> {
   const filters = (rule.metric.filters || []) as FilterStep[];
   const spec = { column: rule.metric.column, aggregation: rule.metric.aggregation };
   if (rule.compare === 'anomaly') return { value: null, previous: null };
@@ -278,7 +280,7 @@ export async function metricFor(
         filters.concat([{ type: 'filter', column: rule.change!.periodColumn!, op: periods.op, value: key }] as FilterStep[]));
       return res.ok ? res.value : null;
     };
-    return { value: await at(nowKey), previous: await at(prevKey) };
+    return { value: await at(nowKey), previous: await at(prevKey), period: nowKey };
   }
 
   const res = await computeCardMetric(projectId, rule.datasetId, spec, filters);
@@ -292,14 +294,15 @@ export async function metricFor(
  *
  * Periods are exactly what `insightsAgg` already defines them to be — distinct
  * values of the column, rolled up to year-months once there are too many raw
- * ones — because two definitions of "the previous period" in one app is one too
+ * ones, and only CLOSED ones (a month the data has not finished is not "the
+ * latest period") — because two definitions of "the previous period" in one app is one too
  * many. `periodPlan` also hands back the operator that makes the roll-up exact
  * (`contains '2024-12'` on an ISO date), which is what keeps this equal to what
  * the Insights cards would say.
  *
- * Returns null when there are fewer than two periods: there is nothing to
- * compare against, and a rule that fired on a dataset's first day would be a
- * lie about a change.
+ * Returns null when there are fewer than two closed periods: there is nothing
+ * to compare against, and a rule that fired on a dataset's first day — or on
+ * five days of a month against the whole month before — would be a lie about a change.
  */
 export async function recentPeriods(
   projectId: string,
@@ -309,7 +312,7 @@ export async function recentPeriods(
   const labels = await distinctValues(projectId, datasetId, column);
   if (!labels || labels.length < 2) return null;
   const plan = periodPlan(labels);
-  const rolled = orderPeriods(Array.from(new Set(labels.map((l) => plan.of(l)))));
+  const rolled = plan.periods;
   if (rolled.length < 2) return null;
   return { keys: [rolled[rolled.length - 2], rolled[rolled.length - 1]], op: plan.op };
 }
@@ -399,7 +402,7 @@ export async function evaluateProject(
     // A disabled rule is not evaluated at all — not evaluated and then dropped.
     // Its history would otherwise keep growing while it was supposed to be off.
     if (!rule.enabled) continue;
-    let read: { value: number | null; previous: number | null };
+    let read: Awaited<ReturnType<typeof metricFor>>;
     try {
       read = await metricFor(projectId, rule);
     } catch (err) {
@@ -408,11 +411,12 @@ export async function evaluateProject(
       if (isLiveFigureError(err)) continue;
       throw err;
     }
-    const { value, previous } = read;
+    const { value, previous, period } = read;
     const res = alerts.evaluateRule({
       rule,
       value,
       previous,
+      period,
       anomalies: rule.compare === 'anomaly' ? await anomaliesFor(projectId, rule) : undefined,
       now,
       eventId: randomUUID(),

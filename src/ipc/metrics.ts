@@ -39,7 +39,7 @@ import type { ParamValues } from '../analysis/params';
 import { sanitizeDashboardFilters } from '../analysis/dashboards';
 import * as datasets from '../data/datasets';
 import { readDistinctPage, distinctValuesPageJs } from '../engine/datasetPage';
-import { periodPlan, orderPeriods } from '../analysis/insightsAgg';
+import { periodPlan } from '../analysis/insightsAgg';
 import type { FilterStep } from '../data/transforms';
 import { relatedColumnNames } from './relationships';
 import * as versions from '../app/versions';
@@ -320,7 +320,8 @@ export interface MetricSeries {
  *
  * Periods come from `insightsAgg.periodPlan`, so "by month" means exactly what
  * the Insights cards and the alert evaluator already mean by it — a third
- * definition of a period is two too many. A non-date column rolls up to itself,
+ * definition of a period is two too many. That includes ending at the latest
+ * CLOSED month: a half-finished one would plot as a collapse. A non-date column rolls up to itself,
  * which makes this "by region" without a second code path.
  */
 export async function resolveMetricSeries(
@@ -335,7 +336,7 @@ export async function resolveMetricSeries(
   if (!labels || !labels.length) return null;
 
   const plan = periodPlan(labels);
-  const keys = orderPeriods(Array.from(new Set(labels.map((l) => plan.of(l))))).slice(-SERIES_MAX_POINTS);
+  const keys = plan.periods.slice(-SERIES_MAX_POINTS);
   if (!keys.length) return null;
 
   const base = Array.isArray(scope.filters) ? scope.filters : [];

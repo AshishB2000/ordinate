@@ -177,6 +177,7 @@
   "driverPointMessages.fell_in_vs_from_to_2": "{metric} a baissé de {change} en {period} par rapport à {baseline} (de {from} à {to})",
   "driverPointMessages.fell_on_vs_from_to": "{metric} a baissé de {pct} % le {period} par rapport au {baseline} (de {from} à {to})",
   "driverPointMessages.fell_on_vs_from_to_2": "{metric} a baissé de {change} le {period} par rapport au {baseline} (de {from} à {to})",
+  "driverPointMessages.has_fewer_than_two_complete_periods": null,
   "driverPointMessages.is_the_first_period_on_this": "{period} est la première période de ce graphique : il n’y a rien avant pour comparer. Choisissez une période ultérieure.",
   "driverPointMessages.no_column_has_between_and_distinct": "Aucune colonne n’a entre {min} et {max} valeurs distinctes sur ces deux périodes : il n’y a donc rien pour ventiler la variation.",
   "driverPointMessages.one_of_the_two_periods_has": "L’une des deux périodes n’a aucun chiffre avec les filtres de ce graphique : il n’y a donc aucune variation à expliquer.",

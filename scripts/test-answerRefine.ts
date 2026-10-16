@@ -313,6 +313,28 @@ const replaced = refined(must(X_RAW), { refine: true, filters: [{ column: 'email
 ok('echo: …where a real value replaces the stored one, as any filter does (negative control)',
   replaced.ok && sameLeaves(replaced.spec, must({ ...P_RAW, filters: [SEGMENT, { column: 'email', op: '!=', value: 'b@x.test' }] })), JSON.stringify(replaced));
 
+// On a MARKED column the model never read the stored value, so "also leave out b@x.test" cannot restate it:
+// there a new exclusion beside a stored one adds to it. (Unmarked, above, it replaces — the negative control.)
+const EMAIL = new Set(['email']);
+const hiddenRefine = (previous: AnswerSpec, patch: unknown) => A.validateAnswerSpec(R.refineSpec(previous, patch, DS, [], EMAIL), ALL, TITLE);
+const both = hiddenRefine(must(X_RAW), { refine: true, filters: [{ column: 'email', op: '!=', value: 'b@x.test' }] });
+ok('withheld: a second exclusion on a marked column ADDS to the first — one `not in` of both, the stored value kept',
+  both.ok && sameLeaves(both.spec, must({ ...P_RAW, filters: [SEGMENT, { column: 'email', op: 'not in', values: [CANARY, 'b@x.test'] }] })), JSON.stringify(both));
+const listed = hiddenRefine(must({ ...P_RAW, filters: [SEGMENT, { column: 'email', op: 'not in', values: [CANARY, 'c@x.test'] }] }),
+  { refine: true, filters: [{ column: 'Email', op: 'not_in', values: ['b@x.test', 'c@x.test'] }] });
+ok('withheld: …a list onto a list, by any spelling of the column and the operator, each value once',
+  listed.ok && sameLeaves(listed.spec, must({ ...P_RAW, filters: [SEGMENT, { column: 'email', op: 'not in', values: [CANARY, 'c@x.test', 'b@x.test'] }] })), JSON.stringify(listed));
+const only = hiddenRefine(must(X_RAW), { refine: true, filters: [{ column: 'email', op: '=', value: 'b@x.test' }] });
+ok('withheld: an INCLUSION still replaces — "only b" says the whole of what is wanted',
+  only.ok && sameLeaves(only.spec, must({ ...P_RAW, filters: [SEGMENT, { column: 'email', op: '=', value: 'b@x.test' }] })), JSON.stringify(only));
+const added = hiddenRefine(must(P_RAW), { refine: true, filters: [{ column: 'email', op: '!=', value: 'b@x.test' }] });
+ok('withheld: with no stored exclusion there is nothing to add to — the filter as said',
+  added.ok && sameLeaves(added.spec, must({ ...P_RAW, filters: [...P_RAW.filters, { column: 'email', op: '!=', value: 'b@x.test' }] })), JSON.stringify(added));
+const dropped = hiddenRefine(must(X_RAW), { refine: true, dropFilters: ['email'] });
+ok('withheld: dropFilters still takes the exclusion away whole', dropped.ok && sameLeaves(dropped.spec, must({ ...P_RAW, filters: [SEGMENT] })), JSON.stringify(dropped));
+const echoHidden = hiddenRefine(must(X_RAW), { refine: true, filters: [{ column: 'email', op: '!=', value: notes.WITHHELD }] });
+ok('withheld: the token said back is still the stored filter restated, not a value to add', echoHidden.ok && sameLeaves(echoHidden.spec, must(X_RAW)), JSON.stringify(echoHidden));
+
 // The block's numbers and the number audit.
 const settings = B.previousAnswerBlock(must({ ...Q_RAW, filters: [{ column: 'revenue', op: '>', value: 100 }, { column: 'order_date', period: 'last_quarter', yearsBack: 2 }] }), 'Orders 365', NONE);
 const cited = (text: string, ledger: import('../src/ai/numberAudit').LedgerEntry[]): string[] => audit.auditNumbers(text, ledger).violations.map((v) => v.token);

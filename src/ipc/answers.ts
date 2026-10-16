@@ -43,7 +43,7 @@ import { saveCardAsVisual } from './answerSave';
 import { isRefine, refineSpec, sameChart } from '../ai/answerRefine';
 import { previousAnswerBlock } from '../ai/previousAnswer';
 import { withheldColumns } from '../app/sharePolicy';
-import { answerFacts, describeAnswer, withheldFilters } from '../ai/answerFacts';
+import { cardFacts, describeAnswer, withheldFilters } from '../ai/answerFacts';
 import type { Headline } from '../ai/answerFacts';
 import type { LedgerEntry, NumberAudit } from '../ai/numberAudit';
 import type { SuggestedAction } from '../ai/suggestedAction';
@@ -52,6 +52,8 @@ import { asOfFrom, utcLabel } from '../data/figureAsOf';
 import type { LiveFailureCode } from '../engine/live/liveQuery';
 import { answerNames } from '../engine/live/liveMissing';
 import { liveCardFor } from './liveAnswers';
+import { liveWithheld } from './liveProfile';
+import { isLive } from '../data/liveDataset';
 import { ensureFresh } from '../data/freshOnAsk';
 import { withPulls } from '../data/freshOnAskState';
 
@@ -167,15 +169,16 @@ export async function computeCard(projectId: string, asked: AnswerSpec, loose = 
   // The rows are already loaded, so their time comes off the same record — no second read.
   const read = asOfFrom([ds]);
   const asOf = read ? withPulls(read, projectId, [ds.id]) : read; // "· refreshing…" while a pull goes on (L3.1)
-  // What a MODEL reads of the filters: the value on a column marked personal or financial is withheld
-  // (ai/answerFacts `withheldFilters`). The card's own labels, drawn for the person, are untouched.
-  const withheld = spec.filters.length ? await withheldColumns(projectId, ds.id) : new Set<string>();
+  // What a MODEL reads: a filter's value, and a label of the category or the split, on a column marked
+  // personal or financial is withheld (ai/answerFacts `withheldFilters`, `cardFacts`). The card's own
+  // labels and bullets, drawn for the person, are untouched.
+  const withheld = await withheldColumns(projectId, ds.id);
   const saidFilterLabels = spec.filters.some((f) => withheld.has(f.column))
     ? specFilterSteps({ filters: withheldFilters(spec.filters, withheld) }, ds.columns, ds.rows).labels : undefined;
-  const facts = answerFacts({
+  const facts = cardFacts({
     title: spec.title, datasetName: ds.name, describe: describeAnswer(spec), data,
     categoryIsDate: isDate, additive, filterLabels, saidFilterLabels, caption, ...(asOf ? { asOf: utcLabel(asOf.at) } : {}),
-  });
+  }, spec, withheld);
   // What the app did to a value comes first: it changes what the chart is about. The CARD's line, never the facts'.
   const notes = (spec.matched ?? []).map((m) => valueMatched(m.said, m.value, m.column)).concat(viz.warnings);
   if (viz.category && viz.category.note) notes.push(viz.category.note);
@@ -249,8 +252,11 @@ export interface AnswerTurn {
   spec: AnswerSpec;
 }
 
-/** The chart a follow-up continues: its stored spec, the block that tells the model about it, and that block's ledger. */
-export interface PreviousAnswer { spec: AnswerSpec; block: string; ledger: LedgerEntry[] }
+/**
+ * The chart a follow-up continues: its stored spec, the block that tells the model about it, that block's
+ * ledger, and the columns whose values the block withheld — which the merge must then not drop unseen.
+ */
+export interface PreviousAnswer { spec: AnswerSpec; block: string; ledger: LedgerEntry[]; withheld: ReadonlySet<string> }
 
 /**
  * The most recent answer of a conversation, when a follow-up can still build on
@@ -273,8 +279,10 @@ export async function previousAnswer(projectId: string, turns: copilot.CopilotTu
   if (answerNames(spec).some((n) => !meta.columns.some((c) => c.name === n))) return null;
   const ds: SpecDataset = { id: meta.id, name: meta.name, columns: meta.columns };
   if (!validateAnswerSpec(refineSpec(spec, {}, ds), [ds]).ok) return null;
-  const { text, ledger } = previousAnswerBlock(spec, meta.name, await withheldColumns(projectId, meta.id));
-  return { spec, block: text, ledger };
+  // A Live dataset's set is its facts' own, stricter one (./liveProfile): pending and detected columns too.
+  const withheld = isLive(meta) ? await liveWithheld(projectId, meta.id, meta) : await withheldColumns(projectId, meta.id);
+  const { text, ledger } = previousAnswerBlock(spec, meta.name, withheld);
+  return { spec, block: text, ledger, withheld };
 }
 
 /**
@@ -289,6 +297,9 @@ export async function previousAnswer(projectId: string, turns: copilot.CopilotTu
  * follow-up's title, is a wrong answer that looks right. Any other spec is a
  * new subject; it keeps nothing of the previous answer but its dataset, and
  * that only as the default after the screen's own.
+ *
+ * `withheld` is the previous answer's (`PreviousAnswer.withheld`): the columns
+ * whose filter values the model was never shown, so could not restate.
  */
 export async function answerFromAction(
   projectId: string,
@@ -297,6 +308,7 @@ export async function answerFromAction(
   question: string,
   guard: Guard,
   previous?: AnswerSpec,
+  withheld?: ReadonlySet<string>,
 ): Promise<({ ok: true } & AnswerTurn) | Failure> {
   let defaultDatasetId: string | undefined;
   if (context && context.kind === 'dataset' && context.id) defaultDatasetId = context.id;
@@ -309,7 +321,7 @@ export async function answerFromAction(
   const on = previous ? all.find((d) => d.id === previous.datasetId) : undefined;
   // The answer a refine is laid over — none for a new subject, or once its dataset is gone.
   const base = previous && on && isRefine(action.spec) ? previous : null;
-  const raw = base && on ? refineSpec(base, action.spec, on, defined) : action.spec;
+  const raw = base && on ? refineSpec(base, action.spec, on, defined, withheld) : action.spec;
   const opts = { defaultDatasetId: defaultDatasetId ?? on?.id, title: action.intent || question };
   const v = validateAnswerSpec(raw, all, { ...opts, metrics: defined });
   if (!v.ok) {
@@ -450,12 +462,16 @@ export function register(guard: Guard): void {
 
   // "Save as visual": the card is rebuilt HERE from the spec — its encoding and its
   // filter steps are the server's, never a client's — and saved as it was drawn (./answerSave).
-  ipcMain.handle('answer:saveVisual', async (_e, { projectId, spec }: any = {}) => {
+  // `threadId` + `turnId` name the answer turn it came from, which then keeps the visual's id.
+  ipcMain.handle('answer:saveVisual', async (_e, { projectId, spec, threadId, turnId }: any = {}) => {
     try {
       const s = sanitizeStoredSpec(spec);
       if (!s) return { ok: false, reason: 'This answer could not be read.' };
       const built = await computeCard(projectId, s);
-      return 'ok' in built ? built : await saveCardAsVisual(projectId, built.card);
+      if ('ok' in built) return built;
+      const saved = await saveCardAsVisual(projectId, built.card);
+      if (saved.ok && typeof threadId === 'string' && typeof turnId === 'string') await copilot.markSaved(projectId, threadId, turnId, s, saved.visual.id);
+      return saved;
     } catch (err: any) {
       return { ok: false, reason: err?.message || 'Could not save the visual' };
     }

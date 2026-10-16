@@ -174,6 +174,7 @@
   "driverPointMessages.fell_in_vs_from_to_2": "{metric} fell {change} in {period} vs {baseline} (from {from} to {to})",
   "driverPointMessages.fell_on_vs_from_to": "{metric} fell {pct}% on {period} vs {baseline} (from {from} to {to})",
   "driverPointMessages.fell_on_vs_from_to_2": "{metric} fell {change} on {period} vs {baseline} (from {from} to {to})",
+  "driverPointMessages.has_fewer_than_two_complete_periods": "\"{column}\" has fewer than two complete periods to compare.",
   "driverPointMessages.is_the_first_period_on_this": "{period} is the first period on this chart, so there is nothing before it to compare with. Choose a later period.",
   "driverPointMessages.no_column_has_between_and_distinct": "No column has between {min} and {max} distinct values in these two periods, so there is nothing to break the change down by.",
   "driverPointMessages.one_of_the_two_periods_has": "One of the two periods has no figure under this chart’s filters, so there is no change to explain.",
