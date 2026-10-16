@@ -191,6 +191,8 @@ async function loadWarehouseTable(table: string): Promise<void> {
     ['dashboard tiles', 'analysis:tiles', { projectId: P, items: [{ kind: 'visual', datasetId: d, encoding: enc }] }],
     ['metric preview', 'metric:preview', { projectId: P, datasetId: d, definition: { column: 'sales', aggregation: 'sum' } }],
     ['metric values', 'metric:values', { projectId: P, ids: [metricId] }],
+    // a metric tree (docs/metric-tree): its figures through the KPI Compare, a split through the chart door
+    ['metric tree, split by a column', 'metricTree:compute', { projectId: P, id: metricId, tree: { split: 'region' } }],
     ['metric check (the measure editor)', 'metric:check', { projectId: P, datasetId: d, expression: 'sum(sales) / sum(qty)', name: 'Per unit', chart: true }],
     // answers
     ['answer card', 'answer:card', { projectId: P, spec: { datasetId: d, category: 'region', measures: [{ column: 'sales', aggregation: 'sum' }], filters: [] } }],
@@ -223,7 +225,7 @@ async function loadWarehouseTable(table: string): Promise<void> {
    * be dated by the warehouse (`asOf.mode: 'live'`), never by the record.
    */
   const ROUTED = new Set(['chart (visual:data)', 'chart batch', 'chart preview', 'KPI tile (dashboard:metric)', 'dashboard tiles',
-    'metric preview', 'metric values', 'metric check (the measure editor)', 'answer card', 'answer: explain a tile', 'answer: rerun', 'answer: save as visual',
+    'metric preview', 'metric values', 'metric tree, split by a column', 'metric check (the measure editor)', 'answer card', 'answer: explain a tile', 'answer: rerun', 'answer: save as visual',
     'alert test: threshold']);
   /** Every `ok` in a reply (a batch answers per item): all true, and every dated one dated live. */
   const answered = (v: unknown): boolean => {

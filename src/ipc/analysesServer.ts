@@ -92,6 +92,9 @@ export function register(): void {
       }
       // A statistics card (statsTile.ts): the spec recomputed under the sheet's filters by stats:tile.
       if (it.kind === 'stats') return call(e, 'stats:tile', { projectId, spec: it.spec, filters: it.filters, params });
+      // A metric tree card: the whole tree under the sheet's filters (metricTree:compute). Under "As of" its
+      // periods are today's, as a KPI's Compare is (D13) — the card says so.
+      if (it.kind === 'metricTree') return call(e, 'metricTree:compute', { projectId, id: it.metricId, filters: it.filters, compare: it.compare, params });
       // A KPI that names a saved metric shows THE METRIC (its formula, its
       // format); one whose metric is gone falls back to its own stored
       // column and aggregation — dashFiltersUi.ts renderMetricCard's order.

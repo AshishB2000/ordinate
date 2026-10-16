@@ -6,12 +6,14 @@
 // so a viewer's visit never writes.
 
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
 import { EmptyState, ErrorState, Page } from '../../../app/blocks';
 import { Button, IconButton } from '../../../ui/Button';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Menu } from '../../../ui/Menu';
+import { Icon } from '../../../ui/icons/Icon';
 import { SkeletonTable } from '../../../ui/Skeleton';
 import { toast } from '../../../ui/Toast';
 import { useTags } from '../../data/api';
@@ -50,6 +52,7 @@ function Metrics({ projectId }: { projectId: string }) {
   const [editing, setEditing] = useState<MetricDraft | null>(null);
   const [deleting, setDeleting] = useState<MetricSummary | null>(null);
   const [seeding, setSeeding] = useState(false);
+  const navigate = useNavigate();
   const refresh = () => {
     void client.invalidateQueries({ queryKey: ['metric:table', projectId] });
     void client.invalidateQueries({ queryKey: ['metric:list', projectId] });
@@ -160,6 +163,11 @@ function Metrics({ projectId }: { projectId: string }) {
                     <button type="button" className={s.name} title={m.description || undefined} onClick={() => void open(m)}>
                       {m.name}
                     </button>
+                    {m.hasTree && (
+                      <button type="button" className={s.treeLink} onClick={() => void navigate(`/data/metrics/${projectId}/${m.id}/tree`)} aria-label={`Open ${m.name}’s tree`}>
+                        <Icon name="lineage" size={12} /> Tree
+                      </button>
+                    )}
                     <TagChips tags={tagged(m)} />
                   </td>
                   <td className={s.dim}>{m.datasetName ?? '(missing dataset)'}</td>
@@ -179,6 +187,7 @@ function Metrics({ projectId }: { projectId: string }) {
                       trigger={<IconButton icon="more-horizontal" size="sm" label={`Actions for ${m.name}`} />}
                       items={[
                         { label: 'Edit', icon: 'pencil', onSelect: () => void open(m) },
+                        { label: m.hasTree ? 'Open tree' : 'Break it down…', icon: 'lineage', onSelect: () => void navigate(`/data/metrics/${projectId}/${m.id}/tree`) },
                         { label: 'Duplicate', icon: 'copy', onSelect: () => void duplicate(m) },
                         { kind: 'separator' },
                         { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setDeleting(m) },

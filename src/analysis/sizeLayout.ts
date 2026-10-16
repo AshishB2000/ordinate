@@ -109,6 +109,7 @@
     switch (card.type) {
       case 'metric': return 2;
       case 'visual': case 'stats': return 6;
+      case 'metricTree': return 9;
       case 'image': return 4;
       case 'divider': case 'container': case 'tabs': return 1;
       case 'nav': return size === 'phone' ? 2 : 1;

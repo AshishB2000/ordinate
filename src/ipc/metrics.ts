@@ -52,7 +52,8 @@ import type { FxInfo } from '../analysis/fx';
 import { formatMetric } from '../app/format';
 import type { AsOf } from '../api/asOf';
 import { liveCodeOf } from './liveRoute';
-import { isLiveDatasetError } from '../data/liveDataset';
+import { isLiveDatasetError, requireExtract } from '../data/liveDataset';
+import { vizDataFor } from './visuals';
 
 /** How many distinct values of a breakout column are read before rolling up. */
 const SERIES_SCAN = 2000;
@@ -297,6 +298,18 @@ async function distinctValues(projectId: string, datasetId: string, column: stri
   }
 }
 
+/**
+ * Every day a DATE column holds, as ISO dates, from the chart door at day
+ * grain. Not `distinctValues`: that reads the first 200 values seen
+ * (datasetPage.MAX_DISTINCT), so two years of daily rows ended the sparkline in
+ * their seventh month. A Live dataset still refuses, typed (as above).
+ */
+async function dayLabels(projectId: string, datasetId: string, column: string): Promise<string[] | null> {
+  requireExtract(await datasets.getDatasetMeta(projectId, datasetId));
+  const r = await vizDataFor(projectId, datasetId, { category: column, grain: 'day', values: [{ column, aggregation: 'count' }] }, []);
+  return r.ok ? r.data.labels.map(String) : null;
+}
+
 export interface MetricSeries {
   labels: string[];
   values: (number | null)[];
@@ -328,15 +341,17 @@ export async function resolveMetricSeries(
   projectId: string,
   metricId: string,
   byColumn: string,
-  scope: { filters?: FilterStep[] } = {},
+  scope: { filters?: FilterStep[]; /** Fewer than SERIES_MAX_POINTS (the metric tree's 12 months). */ points?: number } = {},
 ): Promise<MetricSeries | null> {
   const metric = await metrics.getMetric(projectId, metricId);
   if (!metric || !byColumn) return null;
-  const labels = await distinctValues(projectId, metric.datasetId, byColumn);
+  const meta = await datasets.getDatasetMeta(projectId, metric.datasetId);
+  const isDate = !!meta && meta.columns.some((c) => c.name === byColumn && c.type === 'date');
+  const labels = isDate ? await dayLabels(projectId, metric.datasetId, byColumn) : await distinctValues(projectId, metric.datasetId, byColumn);
   if (!labels || !labels.length) return null;
 
   const plan = periodPlan(labels);
-  const keys = plan.periods.slice(-SERIES_MAX_POINTS);
+  const keys = plan.periods.slice(-Math.min(SERIES_MAX_POINTS, scope.points ?? SERIES_MAX_POINTS));
   if (!keys.length) return null;
 
   const base = Array.isArray(scope.filters) ? scope.filters : [];

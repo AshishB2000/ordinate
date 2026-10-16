@@ -26,6 +26,8 @@ export interface MetricSummary {
   format: MetricFormat;
   description?: string;
   direction?: 'up_good' | 'down_good';
+  /** It has a metric tree (./tree). */
+  hasTree?: true;
   updatedAt: string;
 }
 

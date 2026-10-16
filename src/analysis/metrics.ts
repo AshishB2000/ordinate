@@ -28,6 +28,8 @@ import { sanitizeSteps } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
 import type { MetricAggregation } from './metricValue';
 import * as recordFs from '../app/recordFs';
+import { sanitizeTree } from './metricTree';
+import type { TreeNode } from './metricTree';
 
 export type { MetricAggregation };
 
@@ -85,6 +87,8 @@ export interface Metric {
    * Absent means "no opinion", which is what every metric gets by default.
    */
   direction?: 'up_good' | 'down_good';
+  /** How it breaks down into parts — the metric tree (./metricTree). Absent = not broken down. */
+  tree?: TreeNode;
   createdAt: string;
   updatedAt: string;
   schemaVersion: 1;
@@ -98,6 +102,8 @@ export interface MetricSummary {
   format: MetricFormat;
   description?: string;
   direction?: 'up_good' | 'down_good';
+  /** Set when the metric has a tree (the Metrics table's "Open tree"). */
+  hasTree?: true;
   updatedAt: string;
 }
 
@@ -227,6 +233,8 @@ function normalize(data: any, projectId: string): Metric {
   const description = trimTo(data.description, MAX_DESCRIPTION);
   if (description) m.description = description;
   if (data.direction === 'up_good' || data.direction === 'down_good') m.direction = data.direction;
+  const tree = sanitizeTree(data.tree, m.id);
+  if (tree) m.tree = tree;
   return m;
 }
 
@@ -241,6 +249,7 @@ export function toSummary(m: Metric): MetricSummary {
   };
   if (m.description) s.description = m.description;
   if (m.direction) s.direction = m.direction;
+  if (m.tree) s.hasTree = true;
   return s;
 }
 
@@ -328,6 +337,8 @@ export interface MetricInput {
   format?: unknown;
   description?: unknown;
   direction?: unknown;
+  /** null clears it. */
+  tree?: unknown;
 }
 
 /**
@@ -389,6 +400,11 @@ export async function updateMetric(
   if (patch.direction !== undefined) {
     if (patch.direction === 'up_good' || patch.direction === 'down_good') updated.direction = patch.direction;
     else delete updated.direction;
+  }
+  if (patch.tree !== undefined) {
+    const tree = sanitizeTree(patch.tree, id);
+    if (tree) updated.tree = tree;
+    else delete updated.tree;
   }
 
   await fs.promises.mkdir(metricsDir(projectId), { recursive: true });

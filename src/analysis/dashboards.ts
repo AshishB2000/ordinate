@@ -76,7 +76,7 @@ export const sizeLayout = require('./sizeLayout') as {
   publishCells: (cards: Card[], layouts: PageLayouts | undefined) => Record<string, Partial<Record<'tablet' | 'phone', SizeCell | { hidden: true }>>>;
 };
 
-export type CardType = 'visual' | 'text' | 'metric' | 'control' | 'nav' | 'image' | 'divider' | 'container' | 'tabs' | 'stats' | 'summary';
+export type CardType = 'visual' | 'text' | 'metric' | 'control' | 'nav' | 'image' | 'divider' | 'container' | 'tabs' | 'stats' | 'summary' | 'metricTree';
 export type CardAction = 'delete-sample';
 export type MetricAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max';
 /**
@@ -211,6 +211,12 @@ export interface Card {
   tabs?: any; // type 'tabs' — the named tabs
   /** type 'stats' — the analysis SPEC only (analysis/stats/spec.ts); figures are recomputed on every render. */
   stats?: StatsSpec;
+  /**
+   * type 'metricTree' — a saved metric's tree (docs/metric-tree), drawn under
+   * the sheet's filters; `compare` is its own when the sheet's Compare is off.
+   * The tree itself lives on the metric, so editing it there updates every card.
+   */
+  metricTree?: { metricId: string; compare?: { mode: CompareMode; from?: string; to?: string } };
   /** The container / tabs card this card sits in, and which tab. Cards stay a flat list. */
   parentId?: string;
   tabId?: string;
@@ -238,7 +244,7 @@ function isValidId(id: unknown): id is string {
   return typeof id === 'string' && UUID_RE.test(id);
 }
 
-const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'control', ...cardModel.EXTRA_TYPES, 'stats', 'summary']);
+const CARD_TYPES: ReadonlySet<string> = new Set(['visual', 'text', 'metric', 'control', ...cardModel.EXTRA_TYPES, 'stats', 'summary', 'metricTree']);
 /** Exported so analysisPlan's metric validation clamps against THIS set rather
  *  than a fourth copy of it — dashboardDelta.ts already restates one, and it
  *  says so apologetically. One whitelist, one place to widen it. */
@@ -362,6 +368,16 @@ export function sanitizeCard(raw: unknown): Card | null {
   // The Summary card stores nothing: its sentences are recomputed from the
   // sheet's own tiles on every render (src/ipc/summary.ts).
   if (type === 'summary') return card;
+
+  if (type === 'metricTree') {
+    // The metric's id only (its tree is on the metric record); no metric, nothing to draw.
+    const t = o.metricTree && typeof o.metricTree === 'object' ? (o.metricTree as Record<string, unknown>) : null;
+    if (!t || !isValidId(t.metricId)) return null;
+    card.metricTree = { metricId: t.metricId };
+    const compare = sanitizeCompare(t.compare);
+    if (compare) card.metricTree.compare = compare;
+    return card;
+  }
 
   if (type === 'stats') {
     // A statistics tile stores its SPEC, whitelisted field by field; a card

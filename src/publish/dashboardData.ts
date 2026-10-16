@@ -38,6 +38,7 @@ import { resolveMetric } from '../ipc/metrics';
 import { computeStatsTile } from '../ipc/stats';
 import { computeSummary } from '../ipc/summary';
 import { statsTitle } from '../analysis/stats/present';
+import { metricTreePayload } from './metricTreePublish';
 import { planCombos, parseKey, comboKey, MAX_OPTIONS_PER_CONTROL } from './combos';
 import { viewControlValue, viewParamValue, viewPageIndex } from '../analysis/savedViews'; // r10:views
 import type { SavedView } from '../analysis/savedViews';
@@ -497,6 +498,16 @@ export async function buildDashboard(
           if (ctx.progress) ctx.progress(done / total, `${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tile answers`);
         }
         cards.push({ ...base, kind: 'chart', title: statsTitle(card.stats), chartType: chartType || 'column' });
+        continue;
+      }
+      if (card.type === 'metricTree' && card.metricTree) {
+        // A metric tree (./metricTreePublish): a numbers table of the tree per combination.
+        for (const scope of scopes) {
+          if (ctx.checkCancelled) ctx.checkCancelled();
+          base.variants.push(intern(store, await metricTreePayload(projectId, card.metricTree, resolveFilterParams(scope.filters, scope.params).steps, scope.params)));
+          done++;
+        }
+        cards.push({ ...base, kind: 'chart', title: 'Metric tree', chartType: 'table' });
         continue;
       }
       if (card.type === 'summary') {

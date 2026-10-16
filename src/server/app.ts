@@ -519,4 +519,6 @@ export function registerHandlers(): void {
   (require('./subscriptions/rpc') as typeof import('./subscriptions/rpc')).register();
   // Rebuild a dashboard from a screenshot of another BI tool (docs/rebuild-from-screenshot/).
   (require('../ipc/rebuild') as typeof import('../ipc/rebuild')).register();
+  // Metric trees (docs/metric-tree): a metric broken into its parts, its change attributed to them.
+  (require('../ipc/metricTree') as typeof import('../ipc/metricTree')).register();
 }
