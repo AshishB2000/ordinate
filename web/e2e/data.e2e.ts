@@ -255,9 +255,10 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
   await page.getByRole('option', { name: 'Retail orders' }).click();
   await page.getByRole('listbox').waitFor({ state: 'detached' });
   await dlg.getByRole('combobox', { name: 'Many side' }).filter({ hasText: 'Retail orders' }).waitFor();
-  // Opened from the keyboard: a Radix select opens on pointer-down and lays its list over the trigger,
-  // and in Firefox that same click's pointer-up can land on an item and pick it — the list is gone
-  // before "Regions" can be chosen. Enter opens it with nothing under the pointer.
+  // Opened from the keyboard. On the nightly's Firefox a click here twice left no "Regions" to pick,
+  // while a traced run (every pointer event and the list's state, 50 ms to 1 s after the click)
+  // showed the same click opening the list with Regions offered — so a person is not affected, and
+  // the race is the test's: the dialog is still applying the first pick's suggested keys. Enter does not race.
   await dlg.getByRole('combobox', { name: 'One side' }).focus();
   await page.keyboard.press('Enter');
   await page.getByRole('option', { name: 'Regions' }).click();
