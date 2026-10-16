@@ -29,7 +29,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import type { Page } from 'playwright';
-import { e2e, grantClipboard, hasWebGL2, SCREENS, screens, settled } from './fixtures.ts';
+import { copiedText, e2e, grantClipboard, hasWebGL2, SCREENS, screens, settled, watchCopies } from './fixtures.ts';
 
 /** One screenshot per theme WITHOUT a reload (a dialog or a mode stays up). */
 async function screensInPlace(page: Page, name: string): Promise<void> {
@@ -203,10 +203,11 @@ e2e('cards: markdown text, the summary, a pivot copied and exported, a navigate 
   const pv = page.getByRole('group', { name: 'Revenue pivot card' });
   await pv.getByRole('table').first().waitFor();
   await screens(page, 'dashboards-cards');
+  await watchCopies(page);
   await page.getByRole('button', { name: 'Revenue pivot card actions' }).click();
   await page.getByRole('menuitem', { name: 'Copy as table' }).click();
   await page.getByText('Table copied').waitFor();
-  const tsv = await page.evaluate(() => navigator.clipboard.readText());
+  const tsv = await copiedText(page);
   assert.match(tsv, /\tTotal\n/, tsv.slice(0, 120));
   assert.match(tsv, /\nTotal\t/);
   await page.getByRole('button', { name: 'Revenue pivot card actions' }).click();

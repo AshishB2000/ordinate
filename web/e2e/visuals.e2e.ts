@@ -18,7 +18,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import type { Page, Response } from 'playwright';
-import { csrfToken, e2e, grantClipboard, hasWebGL2, screens, SCREENS, settled, type Session } from './fixtures.ts';
+import { copiedText, csrfToken, e2e, grantClipboard, hasWebGL2, screens, SCREENS, settled, watchCopies, type Session } from './fixtures.ts';
 
 /** Both themes WITHOUT a reload: an open dialog, or an unsaved draft, would not survive `screens`. */
 async function shots(page: Page, name: string): Promise<void> {
@@ -118,10 +118,11 @@ e2e('visuals: the gallery with live thumbnails, and the builder on a saved visua
   await page.getByRole('button', { name: 'Download chart (PNG)' }).click();
   assert.ok((await page.evaluate(() => (window as unknown as { __png?: string }).__png ?? '')).startsWith('data:image/png;base64,'));
   await grantClipboard(page);
+  await watchCopies(page);
   await page.getByRole('button', { name: 'Chart options' }).click();
   await page.getByRole('button', { name: 'Copy data' }).click();
   await page.getByText('Data copied to clipboard').waitFor();
-  const tsv = await page.evaluate(() => navigator.clipboard.readText());
+  const tsv = await copiedText(page);
   assert.ok(/^Label\tavg of revenue\n/.test(tsv) && tsv.split('\n').length === 4, `TSV: ${tsv}`);
   await screens(page, 'visuals-builder');
 

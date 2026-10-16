@@ -253,6 +253,10 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
   const dlg = page.getByRole('dialog', { name: 'New relationship' });
   await dlg.getByRole('combobox', { name: 'Many side' }).click();
   await page.getByRole('option', { name: 'Retail orders' }).click();
+  // The first list closed and took the pick before the second opens: Firefox drops a click on the
+  // next trigger while the first one's content is still animating out.
+  await page.getByRole('listbox').waitFor({ state: 'detached' });
+  await dlg.getByRole('combobox', { name: 'Many side' }).filter({ hasText: 'Retail orders' }).waitFor();
   await dlg.getByRole('combobox', { name: 'One side' }).click();
   await page.getByRole('option', { name: 'Regions' }).click();
   await dlg.getByRole('radio', { name: /region → region/ }).waitFor();

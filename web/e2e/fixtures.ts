@@ -117,6 +117,35 @@ export function rpcBudget(page: Page, n = 25): { loads: readonly RpcLoad[]; prob
 }
 
 /**
+ * Records what the page hands `navigator.clipboard.writeText` from now on (and still writes it).
+ * Call it right before the click that copies: a navigation drops it. Every copy in the app goes
+ * through writeText.
+ */
+export async function watchCopies(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const clip = navigator.clipboard;
+    const write = clip.writeText.bind(clip);
+    clip.writeText = (text: string) => {
+      (window as unknown as { __copied?: string }).__copied = text;
+      return write(text);
+    };
+  });
+}
+
+/**
+ * What the page last copied. Chromium and Firefox read the clipboard itself back; WebKit on the
+ * Linux runner refuses `readText()` with no real user gesture, permission or not, so there it is
+ * the text the page handed writeText (`watchCopies`) — the copy itself still had to succeed, which
+ * the app's own "copied" toast says.
+ */
+export async function copiedText(page: Page): Promise<string> {
+  if (page.context().browser()?.browserType().name() === 'webkit') {
+    return page.evaluate(() => (window as unknown as { __copied?: string }).__copied ?? '');
+  }
+  return page.evaluate(() => navigator.clipboard.readText());
+}
+
+/**
  * The CSRF token (T6.2) for an RPC a spec sends itself. Any /api/ reply sets
  * the cookie. Not a page load: the spec's next goto would cut it off mid-load,
  * and WebKit reports every cut-off request (the event stream, a lazy chunk's
