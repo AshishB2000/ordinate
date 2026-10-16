@@ -202,6 +202,7 @@ export function readAssets(): SiteAssets {
     formatJs: read('src', 'app', 'format.js'),
     geoMatchJs: read('src', 'analysis', 'geoMatch.js'),
     coreJs: read('src', 'publish', 'site', 'publishCore.js'),
+    phoneJs: read('src', 'publish', 'site', 'publishPhone.js'),
     clientJs: read('src', 'publish', 'site', 'publishClient.js'),
   };
 }

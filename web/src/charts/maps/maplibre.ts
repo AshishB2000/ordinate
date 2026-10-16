@@ -65,9 +65,16 @@ function styleFor(water: string | null): ML.StyleSpecification {
   };
 }
 
+/**
+ * A touch screen: one finger scrolls the PAGE past a map, two move the map (MapLibre's cooperative gestures,
+ * docs/phone-dashboards) — a map as wide as a phone must never trap its scroll.
+ */
+const coarse = (): boolean => typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+
 /** A north-up map (no rotate or pitch — the desktop's Leaflet heritage, and stable exports). */
 export function createMap(ml: MapLibre, container: HTMLElement, offlineWater: string | null): MlMap {
   const map = new ml.Map({
+    cooperativeGestures: coarse(),
     container,
     style: styleFor(offlineWater),
     center: [0, 20],

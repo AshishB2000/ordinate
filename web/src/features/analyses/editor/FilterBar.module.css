@@ -172,3 +172,60 @@
   outline: var(--focus-ring-w) solid var(--focus-ring);
   outline-offset: 2px;
 }
+
+/* In a phone's Filters sheet (dashboards/phone/FiltersSheet): one control per
+   row, the label over a full-width widget, every target 44px. 16px text in the
+   fields: a phone zooms the page into any smaller one on focus. */
+.stacked {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: var(--sp-8);
+}
+.stacked .chip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sp-8) var(--sp-4);
+  padding: var(--sp-12);
+  border-radius: var(--r-lg);
+}
+.stacked .chip > .label {
+  grid-column: 1 / -1;
+  font-size: var(--t-11);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.stacked .chip > :not(.label) {
+  min-width: 0;
+}
+.stacked .chip > :nth-child(2) {
+  grid-column: 1;
+}
+.stacked .select,
+.stacked .num,
+.stacked .text,
+.stacked .date,
+.stacked .search,
+.stacked .multiBtn {
+  width: 100%;
+  max-width: none;
+  height: 44px;
+  font-size: 16px;
+}
+.stacked .dates {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+.stacked .slider {
+  display: flex;
+}
+.stacked .slider input {
+  flex: 1 1 auto;
+  width: auto;
+  height: 44px;
+}
+.stacked .chip button {
+  min-width: 44px;
+  min-height: 44px;
+}

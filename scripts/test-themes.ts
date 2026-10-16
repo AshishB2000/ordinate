@@ -220,7 +220,7 @@ async function main(): Promise<void> {
 
   // Publish: a published page goes through the same whitelist.
   const page = sanitizePage({ site: {}, kind: 'dashboard', dashboard: { name: 'D' }, theme: hostile });
-  const assets = { chartJs: '', formatJs: '', geoMatchJs: '', coreJs: '', clientJs: '' };
+  const assets = { chartJs: '', formatJs: '', geoMatchJs: '', coreJs: '', phoneJs: '', clientJs: '' };
   const pub = pageHtml(page, assets, 'D');
   // any: sanitizePage returns its loose Obj record; `theme` is sanitizeBundle's.
   ok('publish: a published page carries the theme, validated',

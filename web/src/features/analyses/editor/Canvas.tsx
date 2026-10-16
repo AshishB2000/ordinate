@@ -25,6 +25,9 @@ import { useCardRuntime } from '../../dashboards/CardRuntime';
 import { SelectionStrip } from '../../dashboards/tileActions';
 import { CompareSummary } from '../../dashboards/CompareBar';
 import { ClickFilterBar } from '../../dashboards/ClickFilters';
+import { isPhoneReader, phoneBlocks } from '../../dashboards/phone/phoneBlocks';
+import { KpiStrip } from '../../dashboards/phone/KpiStrip';
+import ph from '../../dashboards/phone/Phone.module.css';
 
 /** Desktop: move / resize. A small size: drag the head to reorder, the bottom edge to change height (layoutEdit.ts). */
 type Mode = GestureMode | 'reorder' | 'height';
@@ -46,6 +49,13 @@ function px(el: HTMLElement, name: string, dflt: number): number {
   return Number.isFinite(v) ? v : dflt;
 }
 
+/** A card's box on a phone: KPIs a fixed tile, drawings the phone cell's rows, prose as tall as it reads. */
+function phoneClass(card: Card): string {
+  if (card.type === 'metric') return ph.kpi;
+  if (card.type === 'visual' || card.type === 'stats' || card.type === 'image') return ph.fixed;
+  return card.type === 'text' || card.type === 'summary' ? `${ph.auto} ${ph.prose}` : ph.auto;
+}
+
 export function Canvas() {
   const ed = useEditor();
   const gridRef = useRef<HTMLDivElement>(null);
@@ -65,8 +75,10 @@ export function Canvas() {
   const page = ed.doc.sheets[ed.sheet];
   const cards = page.cards;
   const small = ed.size !== 'desktop';
-  // Present, or a viewer's read-only editor: the sheet reads, nothing on it moves.
-  const locked = ed.view.presenting || ed.readOnly;
+  // Read on a phone (docs/phone-dashboards): the phone layout as one column, KPI runs as swipeable strips.
+  const phone = isPhoneReader(ed);
+  // Present, a viewer's read-only editor, or a phone: the sheet reads, nothing on it moves.
+  const locked = ed.view.presenting || ed.readOnly || phone;
   const tabOf = (g: string) => ed.groupTab.get(g);
 
   // What the VIEW hides now: a folded container's cards, an inactive tab's (layoutKinds.ts).
@@ -288,6 +300,61 @@ export function Canvas() {
   const byId = new Map(cards.map((c) => [c.id, c]));
   const tiles = placed.items.map((it) => byId.get(it.id) as Card).filter((c) => c && c.type !== 'control' && !viewHidden.has(c.id));
   const frame = !!ed.pinned && small;
+  const renderCard = (card: Card) => {
+    const it = cell.get(card.id) as Layout;
+    const lift = folds.reduce((n, f) => n + (card.layout.y >= f.bottom ? f.rows : 0), 0);
+    const foldedGroup = !small && card.type === 'container' && !!card.container?.collapsible && ed.folded.has(card.id);
+    const style: CSSProperties = phone
+      ? ({ '--h': String(Math.min(it.h, MAX_H)) } as CSSProperties)
+      : { gridColumn: `${it.x + 1} / span ${it.w}`, gridRow: `${it.y + 1 - lift} / span ${foldedGroup ? 1 : Math.min(it.h, small ? MAX_H : it.h)}` };
+    const cls = [
+      s.card,
+      phone && phoneClass(card),
+      isGroup(card) && s.group,
+      card.type === 'container' && s[`bg_${card.container?.background ?? 'subtle'}`],
+      card.parentId && s.inGroup,
+      card.parentId && s[`pad_${byId.get(card.parentId)?.container?.padding ?? 'md'}`],
+      drop?.target === card.id && (drop.after ? s.dropAfter : s.dropBefore),
+      drop?.target === card.id && drop.across && s.dropX,
+      drop?.id === card.id && s.dragging,
+      ed.selected === card.id && s.selected,
+      ed.multi.has(card.id) && s.multi,
+      ghost?.id === card.id && s.dragging,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    return (
+      <CardView
+        key={card.id}
+        card={card}
+        className={cls}
+        style={style}
+        menu={menuFor(card)}
+        onHide={small && !locked ? { label: `Hide on ${SIZE_LABEL[ed.size].toLowerCase()}`, run: () => hide(card.id, true) } : undefined}
+        asTable={tables.has(card.id)}
+        onKeyDown={onKey(card)}
+        onHeadPointerDown={(e) => begin(e, card, 'move')}
+        handles={
+          locked ? null : small ? (
+            <span className={`${s.handle} ${s.h_s}`} aria-hidden="true" onPointerDown={(e) => {
+              e.stopPropagation();
+              begin(e, card, 's');
+            }} />
+          ) : (
+            <>
+              {(['e', 's', 'se'] as const).map((m) => (
+                <span key={m} className={`${s.handle} ${s[`h_${m}`]}`} aria-hidden="true" onPointerDown={(e) => {
+                  e.stopPropagation();
+                  begin(e, card, m);
+                }} />
+              ))}
+            </>
+          )
+        }
+      />
+    );
+  };
+
   const gridStyle = { '--cols': String(placed.cols), ...runtime.gridVars(placed.items) } as CSSProperties;
 
   return (
@@ -304,6 +371,24 @@ export function Canvas() {
       )}
       {tiles.length === 0 && placed.hidden.length === 0 ? (
         <EmptySheet />
+      ) : phone ? (
+        <div ref={gridRef} data-sheet-grid="" data-phone-stack="" className={ph.stack}>
+          {tiles.length === 0 && (
+            <p className={s.allHidden}>
+              <Icon name="eye-off" size={16} />
+              Every card on this sheet is hidden on a phone. Open it on a wider screen to see them.
+            </p>
+          )}
+          {phoneBlocks(tiles, cards).map((b) =>
+            b.kind === 'strip' ? (
+              <KpiStrip key={b.ids[0]} count={b.ids.length}>
+                {b.ids.map((id) => renderCard(byId.get(id) as Card))}
+              </KpiStrip>
+            ) : (
+              renderCard(byId.get(b.id) as Card)
+            ),
+          )}
+        </div>
       ) : (
         <div className={frame ? s.frame : s.unframed} style={frame ? ({ '--frame-w': `${FRAME_WIDTH[ed.size]}px` } as CSSProperties) : undefined}>
           <div
@@ -322,57 +407,7 @@ export function Canvas() {
                 Every card is hidden on {SIZE_LABEL[ed.size].toLowerCase()}. Show one from the list below, or reset this size.
               </p>
             )}
-            {tiles.map((card) => {
-              const it = cell.get(card.id) as Layout;
-              const lift = folds.reduce((n, f) => n + (card.layout.y >= f.bottom ? f.rows : 0), 0);
-              const foldedGroup = !small && card.type === 'container' && !!card.container?.collapsible && ed.folded.has(card.id);
-              const style: CSSProperties = { gridColumn: `${it.x + 1} / span ${it.w}`, gridRow: `${it.y + 1 - lift} / span ${foldedGroup ? 1 : Math.min(it.h, small ? MAX_H : it.h)}` };
-              const cls = [
-                s.card,
-                isGroup(card) && s.group,
-                card.type === 'container' && s[`bg_${card.container?.background ?? 'subtle'}`],
-                card.parentId && s.inGroup,
-                card.parentId && s[`pad_${byId.get(card.parentId)?.container?.padding ?? 'md'}`],
-                drop?.target === card.id && (drop.after ? s.dropAfter : s.dropBefore),
-                drop?.target === card.id && drop.across && s.dropX,
-                drop?.id === card.id && s.dragging,
-                ed.selected === card.id && s.selected,
-                ed.multi.has(card.id) && s.multi,
-                ghost?.id === card.id && s.dragging,
-              ]
-                .filter(Boolean)
-                .join(' ');
-              return (
-                <CardView
-                  key={card.id}
-                  card={card}
-                  className={cls}
-                  style={style}
-                  menu={menuFor(card)}
-                  onHide={small && !locked ? { label: `Hide on ${SIZE_LABEL[ed.size].toLowerCase()}`, run: () => hide(card.id, true) } : undefined}
-                  asTable={tables.has(card.id)}
-                  onKeyDown={onKey(card)}
-                  onHeadPointerDown={(e) => begin(e, card, 'move')}
-                  handles={
-                    locked ? null : small ? (
-                      <span className={`${s.handle} ${s.h_s}`} aria-hidden="true" onPointerDown={(e) => {
-                        e.stopPropagation();
-                        begin(e, card, 's');
-                      }} />
-                    ) : (
-                      <>
-                        {(['e', 's', 'se'] as const).map((m) => (
-                          <span key={m} className={`${s.handle} ${s[`h_${m}`]}`} aria-hidden="true" onPointerDown={(e) => {
-                            e.stopPropagation();
-                            begin(e, card, m);
-                          }} />
-                        ))}
-                      </>
-                    )
-                  }
-                />
-              );
-            })}
+            {tiles.map((card) => renderCard(card))}
             {ghost && (
               <>
                 <div className={s.ghost} style={{ gridColumn: `${ghost.layout.x + 1} / span ${ghost.layout.w}`, gridRow: `${ghost.layout.y + 1} / span ${ghost.layout.h}` }} aria-hidden="true" />

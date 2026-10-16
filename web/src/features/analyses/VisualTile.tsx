@@ -145,6 +145,7 @@ export function VisualTileBody({
   onMapMark,
   serverMark,
   onMarkMenu,
+  onMarkTap,
 }: {
   projectId: string;
   def: VisualDef;
@@ -172,6 +173,13 @@ export function VisualTileBody({
    * server names it, and whether the server bucketed the axis by date. Its own path — `onMark` is the left click's.
    */
   onMarkMenu?: (point: ChartPoint, e: React.MouseEvent, time: boolean) => void;
+  /**
+   * A phone (docs/phone-dashboards): a tap on a mark asks what to do with it instead of doing it. The point as the
+   * server names it, whether the axis is time, the category as click-to-filter wants it (the server's own label), and
+   * the label as the axis draws it ("Mar 2025" for "2025-03-01").
+   * Wins over `onMark`.
+   */
+  onMarkTap?: (point: ChartPoint, time: boolean, value: string | number, shown: string) => void;
 }) {
   const chart = useRef<ChartHandle | null>(null);
   const req = useMemo(
@@ -203,11 +211,23 @@ export function VisualTileBody({
     return <ErrorState compact heading={3} title="No data for this chart" message={message} onRetry={() => void q.refetch()} />;
   }
   const labels: readonly unknown[] | undefined = q.data.data.labels;
+  // "time": the SERVER bucketed the axis by date (its `category.kind`).
+  const time = q.data.category?.kind === 'date';
   const click =
-    onMark || onPinAt
+    onMark || onPinAt || onMarkTap
       ? (e: React.MouseEvent) => {
           // A click on empty canvas, a map or a table is not a filter (no Chart.js mark).
           const m = markAt(chart.current, e.nativeEvent);
+          if (onMarkTap) {
+            // A bar or a line names its point by the axis — the nearest one, as a fingertip is wider than a point; a
+            // pie, a scatter or a treemap by the mark that was hit.
+            const p = pointAt(chart.current, e.nativeEvent, labels ?? []) ?? (m ? { bucket: String(serverLabel(labels, m.category)), ...(m.series ? { series: m.series } : {}) } : null);
+            if (!p) return;
+            const i = labels ? labels.findIndex((l) => String(l) === p.bucket) : -1;
+            const raw = i >= 0 ? labels?.[i] : undefined;
+            const shown = i >= 0 ? String(asMonthLabels(labels as unknown[])[i]) : p.bucket;
+            return onMarkTap(p, time, typeof raw === 'number' ? raw : p.bucket, shown);
+          }
           if (!m) return;
           if (onPinAt && (e.altKey || (!filterMark && (e.metaKey || e.ctrlKey)))) return onPinAt(m.category, m.series);
           onMark?.(filterMark || serverMark ? serverLabel(labels, m.category) : m.category, m.series, e);
@@ -221,13 +241,12 @@ export function VisualTileBody({
           const p = pointAt(chart.current, e.nativeEvent, tile.data.labels ?? []);
           if (!p) return;
           e.preventDefault();
-          // "time": the SERVER bucketed the axis by date (its `category.kind`).
-          onMarkMenu(p, e, tile.category?.kind === 'date');
+          onMarkMenu(p, e, time);
         }
       : undefined;
   return (
     <div
-      className={onMark ? `${s.drawn} ${s.crossFilter}` : s.drawn}
+      className={onMark || onMarkTap ? `${s.drawn} ${s.crossFilter}` : s.drawn}
       onClick={click}
       onContextMenu={menu}
       onMouseMove={onHover ? (e) => onHover(markAt(chart.current, e.nativeEvent)?.category ?? null, e) : undefined}

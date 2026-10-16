@@ -2,16 +2,19 @@
 // everything behind is inert to assistive tech (aria-hidden) and to the
 // pointer, Escape or a press on the scrim closes, focus returns to whatever
 // opened it. A Dialog is centred (hub.css `.ws-modal`); a Drawer is a sheet
-// on the right edge (sidePanel.ts's surface, as an overlay).
+// on the right edge (sidePanel.ts's surface, as an overlay) — and, in a window
+// under 600px, a bottom sheet with a grab handle you swipe down
+// (docs/phone-dashboards; the switch is CSS, the swipe asks the same query).
 //
 // The scrim is OUR div, not Radix's <Dialog.Overlay>: Overlay wraps itself in
 // react-remove-scroll, which injects a <style> element the CSP refuses. The
 // cost is that the page behind can still scroll under the scrim (the page
 // body is a fixed frame here — only <main> scrolls — so it rarely shows).
 
-import type { ReactElement, ReactNode } from 'react';
+import { useRef, type ReactElement, type ReactNode } from 'react';
 import * as D from '@radix-ui/react-dialog';
 import { IconButton } from './Button';
+import { useSwipeDown } from './useSwipeDown';
 import s from './Dialog.module.css';
 
 interface Common {
@@ -26,9 +29,13 @@ interface Common {
   footer?: ReactNode;
 }
 
-function Head({ title, description }: { title: string; description?: ReactNode }) {
+/** The window width under which a Drawer is a bottom sheet (Dialog.module.css's media query). */
+export const PHONE_QUERY = '(max-width: 599px)';
+const narrow = () => typeof window.matchMedia === 'function' && window.matchMedia(PHONE_QUERY).matches;
+
+function Head({ title, description, swipe }: { title: string; description?: ReactNode; swipe?: ReturnType<typeof useSwipeDown> }) {
   return (
-    <div className={s.head}>
+    <div className={s.head} {...swipe}>
       <div className={s.ident}>
         <D.Title className={s.title}>{title}</D.Title>
         {description && <D.Description className={s.description}>{description}</D.Description>}
@@ -79,16 +86,20 @@ export function Drawer({
   footer,
   wide,
 }: Common & { wide?: boolean }) {
+  const panel = useRef<HTMLDivElement>(null);
+  const swipe = useSwipeDown(panel, () => onOpenChange?.(false), narrow);
   return (
     <D.Root open={open} onOpenChange={onOpenChange}>
       {trigger && <D.Trigger asChild>{trigger}</D.Trigger>}
       <D.Portal>
         <div className={`${s.scrim} ${s.scrimLight}`} />
         <D.Content
+          ref={panel}
           className={`${s.drawer} ${wide ? s.wide : ''}`}
           {...(description ? {} : { 'aria-describedby': undefined })}
         >
-          <Head title={title} description={description} />
+          <span className={s.handle} aria-hidden="true" />
+          <Head title={title} description={description} swipe={swipe} />
           <div className={s.drawerBody}>{children}</div>
           {footer && <div className={s.footer}>{footer}</div>}
         </D.Content>

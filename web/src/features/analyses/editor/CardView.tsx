@@ -9,7 +9,7 @@ import { IconButton, buttonClass } from '../../../ui/Button';
 import { Menu, type MenuEntry } from '../../../ui/Menu';
 import { Icon } from '../../../ui/icons/Icon';
 import { AsOfCaption } from '../../../ui/AsOf';
-import type { AsOf } from '../../../ui/asOfView';
+import { asOfView, type AsOf } from '../../../ui/asOfView';
 import type { Card } from '../api';
 import { vizLabel } from '../VisualTile';
 import { builderFor } from './AddVisual';
@@ -24,6 +24,7 @@ import { SummaryBody } from '../../dashboards/SummaryBody';
 import { CommentButton } from '../../dashboards/CommentsPanel';
 import { clickColumns, VisualCard, WatchedBell } from '../../dashboards/CardRuntime';
 import { TileAsOfSlot } from './tileAsOf';
+import { isPhoneReader } from '../../dashboards/phone/phoneBlocks';
 
 const KIND_TITLE: Record<string, string> = {
   nav: 'Navigation',
@@ -163,6 +164,9 @@ export function CardView({
 }) {
   const ed = useEditor();
   const title = cardTitle(card, ed);
+  // On a phone a card is read, never arranged or edited: its head keeps the comments and the menu.
+  const phone = isPhoneReader(ed);
+  const lean = ed.readOnly || phone;
   const folded = card.type === 'container' && !!card.container?.collapsible && ed.folded.has(card.id);
   const visualId = card.type === 'visual' ? card.visualId : undefined;
   // How fresh the body's figure is (L0.2): reported by the body, shown beside the title.
@@ -170,7 +174,7 @@ export function CardView({
   return (
     <div
       // A one-row navigation or divider card has no room for a head: it floats in the corner (authoring.css).
-      className={[className, (card.type === 'nav' || card.type === 'divider') && s.slim, ed.readOnly && s.readOnly].filter(Boolean).join(' ')}
+      className={[className, (card.type === 'nav' || card.type === 'divider') && s.slim, lean && s.readOnly].filter(Boolean).join(' ')}
       style={style}
       data-card-id={card.id}
       data-kind={card.type}
@@ -205,21 +209,22 @@ export function CardView({
           />
         )}
         <Title card={card} title={title} />
-        {asOf && <AsOfCaption asOf={asOf} className={s.asOf} />}
+        {/* A phone's header says how fresh the dashboard is once; a card says it again only when its own figure is stale. */}
+        {asOf && (!phone || asOfView(asOf)?.tone === 'warn') && <AsOfCaption asOf={asOf} className={s.asOf} />}
         {/* Present: a reading view, no card controls (dashShare.ts). */}
         {!ed.view.presenting && (
         <span className={s.ctrls} onPointerDown={(e) => e.stopPropagation()}>
           {/* A viewer keeps what reads: the comments, and the menu's table view, rows and export. */}
-          {!ed.readOnly && card.type === 'metric' && <WatchedBell ed={ed} card={card} />}
+          {!lean && card.type === 'metric' && <WatchedBell ed={ed} card={card} />}
           {card.type !== 'control' && card.type !== 'divider' && <CommentButton ed={ed} card={card} />}
           {onHide && <IconButton icon="eye-off" size="sm" label={`${onHide.label}: ${title}`} onClick={onHide.run} />}
-          {!ed.readOnly && visualId && (
+          {!lean && visualId && (
             <Link className={buttonClass('ghost', 'sm', s.edit)} to={builderFor(ed.projectId, visualId)} title="Edit this visual in the Visuals builder">
               <Icon name="pencil" size={12} />
               <span>Edit</span>
             </Link>
           )}
-          {!ed.readOnly && (
+          {!lean && (
             <IconButton
               icon="sliders"
               size="sm"

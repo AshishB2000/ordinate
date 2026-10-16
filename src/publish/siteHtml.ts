@@ -19,6 +19,7 @@ import { createHash } from 'crypto';
 import { styleBlock, styleClasses, embedJson } from '../analysis/dashboardExport';
 import { sanitizeStyle, sizeLayout } from '../analysis/dashboards';
 import type { DashboardStyle } from '../analysis/dashboards';
+import { phoneCss } from './sitePhoneCss';
 
 /** The app's own scripts, read off disk by the caller (./publish.ts). */
 export interface SiteAssets {
@@ -26,6 +27,8 @@ export interface SiteAssets {
   formatJs: string;
   geoMatchJs: string;
   coreJs: string;
+  /** The phone pieces CSS cannot build: a swipeable sheet, the KPI strip's dots (docs/phone-dashboards). */
+  phoneJs: string;
   clientJs: string;
 }
 
@@ -134,6 +137,8 @@ export function sizeCss(): string {
   return `
   .pub-grid > .pub-card { grid-column: var(--pc-d-col, auto); grid-row: var(--pc-d-row, auto); }
   .pub-filters-open, .pub-filters-done { display: none; }
+  .pub-dashhead, .pub-dashhead-ident { display: contents; }
+  .pub-dashhead-stamp, .pub-kpis, .pub-scrim, .pub-filters-grab, .pub-filters-foot { display: none; }
   @media (min-width: ${phoneMax + 1}px) and (max-width: ${tabletMax}px) {
     .pub-grid { grid-template-columns: repeat(${cols.tablet}, minmax(0, 1fr)); }
     .pub-grid > .pub-card { grid-column: var(--pc-t-col, 1 / -1); grid-row: var(--pc-t-row, auto); }
@@ -143,17 +148,8 @@ export function sizeCss(): string {
     .pub-grid { grid-template-columns: repeat(${cols.phone}, minmax(0, 1fr)); }
     .pub-grid > .pub-card { grid-column: var(--pc-p-col, 1 / -1); grid-row: var(--pc-p-row, auto); }
     .pub-grid > .pub-hide-p { display: none; }
-    .pub-filters-open { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; font-weight: 600;
-      padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border-2); background: var(--surface);
-      color: var(--text-strong); cursor: pointer; }
-    .pub-filters { display: none; }
-    .pub-filters.is-open { display: flex; flex-direction: column; align-items: stretch; position: fixed; left: 0; right: 0; bottom: 0;
-      z-index: 5; margin: 0; max-height: 75vh; overflow-y: auto; border-radius: 16px 16px 0 0; box-shadow: 0 -12px 32px rgba(0,0,0,.25); }
-    .pub-filters.is-open .pub-filter { min-width: 0; }
-    .pub-filters.is-open .pub-filters-done { display: inline-flex; justify-content: center; font: inherit; font-size: 14px; font-weight: 600;
-      padding: 10px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
   }
-`;
+` + phoneCss(phoneMax);
 }
 
 // The page's icon, inline (a 1×1 transparent GIF). Without one a browser asks
@@ -186,6 +182,7 @@ export function pageHtml(page: Record<string, any>, assets: SiteAssets, title: s
     assets.geoMatchJs,
     'var matchGeoItem = module.exports.matchGeoItem; var normalizeName = module.exports.normalizeName; var featureNameSet = module.exports.featureNameSet;',
     assets.coreJs,
+    assets.phoneJs,
     assets.clientJs,
   ].map(scriptSafe);
   const csp = [
@@ -202,7 +199,7 @@ export function pageHtml(page: Record<string, any>, assets: SiteAssets, title: s
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="generator" content="Ordinate">
 <title>${safeTitle}</title>
 <link rel="icon" href="${ICON}">

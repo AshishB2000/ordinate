@@ -196,18 +196,21 @@ export function presentRow(rows: number, height: number, gap: number): number | 
   return px >= PRESENT_MIN_ROW ? px : null;
 }
 
-/** As of + the dashboard's currency — shown only when there is something to pick. */
-export function ViewControls() {
-  const ed = useEditor();
+/** The dashboard's datasets and their snapshot times; `latest` is how fresh "Latest" is — the stalest dataset (L0.2). */
+export function useDashFreshness(ed: EditorApi) {
   const cards = ed.doc.sheets.flatMap((p) => p.cards);
   const datasetIds = [...new Set(cards.flatMap((c) => [c.metric?.datasetId, c.visualId ? ed.visuals.get(c.visualId)?.datasetId : undefined]).filter((x): x is string => !!x))];
   const metricIds = [...new Set(cards.map((c) => c.metric?.metricId).filter((x): x is string => !!x))];
   const stamps = useAsOfStamps(ed.projectId, datasetIds, metricIds);
+  return { datasetIds, items: stamps.data?.items ?? [], latest: asOfView(stamps.data?.latest) };
+}
+
+/** As of + the dashboard's currency — shown only when there is something to pick. */
+export function ViewControls() {
+  const ed = useEditor();
+  const { datasetIds, items, latest } = useDashFreshness(ed);
   const fx = useFx(ed.projectId);
   const setCurrency = useSetDashboardCurrency(ed.projectId);
-  const items = stamps.data?.items ?? [];
-  // "Latest" says how fresh latest is: the sheet's stalest dataset (L0.2).
-  const latest = asOfView(stamps.data?.latest);
   const declared = fx.data ? Object.values(fx.data.settings.columns ?? {}).some((c) => c && Object.keys(c).length) : false;
   return (
     <>

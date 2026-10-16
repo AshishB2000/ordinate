@@ -251,3 +251,14 @@
     flex: 1 1 auto;
   }
 }
+
+/* A dashboard read on a phone (docs/phone-dashboards) owns the screen: its own
+   header has the way back, so the top bar and the rail step aside. Only under
+   600px, where the dashboard is phone-wide whether or not they are there — so
+   hiding them can never widen it back across the line. */
+@media (max-width: 599px) {
+  .win:has([data-phone]) > .topbar,
+  .win:has([data-phone]) .rail {
+    display: none;
+  }
+}

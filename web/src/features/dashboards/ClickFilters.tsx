@@ -16,6 +16,7 @@ import type { EditorApi } from '../analyses/editor/context';
 import type { ClickFilter } from '../analyses/editor/filters';
 import { IS_MAC } from '../palette/registry';
 import { clickColumns } from './CardRuntime';
+import { isPhoneReader } from './phone/phoneBlocks';
 import s from './ClickFilters.module.css';
 
 /** How many values a chip spells out before "+N". */
@@ -33,11 +34,14 @@ export function clickValues(c: ClickFilter, all = false): string {
 
 export function ClickFilterBar({ ed }: { ed: EditorApi }) {
   const clicks = ed.view.clicks;
+  // A phone has no pointer to hold steady and no ⌘ key: no reserved row, no keyboard hints; a tap's sheet says what it does.
+  const phone = isPhoneReader(ed);
   const visualOf = (cardId: string) => {
     const card = ed.cards.find((x) => x.id === cardId);
     return card?.type === 'visual' && card.visualId ? ed.visuals.get(card.visualId) : undefined;
   };
   if (!clicks.length) {
+    if (phone) return null;
     const clickable = ed.cards.some((c) => {
       const def = visualOf(c.id);
       return !!def && clickColumns(ed, def) !== null;
@@ -83,9 +87,11 @@ export function ClickFilterBar({ ed }: { ed: EditorApi }) {
       <Button size="sm" variant="ghost" onClick={() => ed.view.clearClicks()}>
         Clear
       </Button>
-      <span className={s.hint}>
-        <Kbd>Esc</Kbd> clears · <Kbd>{MOD}</Kbd>-click adds
-      </span>
+      {!phone && (
+        <span className={s.hint}>
+          <Kbd>Esc</Kbd> clears · <Kbd>{MOD}</Kbd>-click adds
+        </span>
+      )}
     </div>
   );
 }

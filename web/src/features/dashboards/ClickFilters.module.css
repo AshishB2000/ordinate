@@ -96,3 +96,18 @@
     display: none;
   }
 }
+
+/* Read on a phone (docs/phone-dashboards): chips a finger can take away. */
+:global([data-phone]) .chip {
+  position: relative;
+  max-width: 100%;
+  height: 36px;
+}
+:global([data-phone]) .chip::after {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+:global([data-phone]) .bar > button {
+  min-height: 44px;
+}
