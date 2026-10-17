@@ -38,7 +38,7 @@ describe('a dashboard tile over a Live dataset', () => {
     draw({ ok: false, code: 'live_refused', reason: 'pivot', error: SENTENCE });
     expect(await screen.findByText(SENTENCE)).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Off for this Live dataset' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Make a copy' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Make a copy' })).toBeTruthy(); // an editor's, once the role is known
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 

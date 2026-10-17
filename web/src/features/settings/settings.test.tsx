@@ -129,8 +129,12 @@ describe('My settings', () => {
     renderApp('/settings?tab=privacy');
     const exportsSeg = await screen.findByRole('radiogroup', { name: 'Exports' });
     expect(within(exportsSeg).getByRole('radio', { name: 'Drop' }).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByRole('button', { name: 'Mark as personal' }).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByText(/Looks like email addresses/)).toBeTruthy();
+    // The proposal is shown; marking it, and scanning, are an editor's — not offered, not disabled.
+    expect(await screen.findByText(/Looks like email addresses/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Mark as personal' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Not sensitive' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Check 1 dataset/ })).toBeNull();
+    expect(screen.getByText(/can be checked by an editor of this project/)).toBeTruthy();
   });
 
   it('Privacy: the project admin sets Drop on exports and marks a proposal', async () => {

@@ -128,6 +128,8 @@ const base = (extra: Record<string, Reply> = {}) => ({
   'prepare:get': { body: STATE },
   'dataset:list': { body: [{ id: DID, name: 'Retail orders', sourceKind: 'csv', rowCount: 4232, columnCount: 3, updatedAt: '' }] },
   'dataset:page': { body: { ok: true, rows: [], total: 0, offset: 0 } },
+  // Prepare is an editor's page: it asks for the role before anything else.
+  'projects:roles': { body: { [PID]: 'editor' } },
   ...extra,
 });
 const URL_ = `/data/${PID}/${DID}/prepare`;

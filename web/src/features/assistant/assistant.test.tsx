@@ -53,6 +53,8 @@ const base = (me: unknown, ready: boolean): Record<string, Reply> => ({
   'ai:status': { body: status(ready) },
   'copilot:history': { body: { ok: true, turns: [], threadId: null } },
   'dataset:list': { body: [{ id: 'd1', name: 'Retail orders' }] },
+  // The dock's offers to bring data in, rebuild or run a plan are an editor's of the project.
+  'projects:roles': { body: { [PID]: 'admin' } },
 });
 
 async function openDock() {
@@ -378,6 +380,27 @@ describe('the dock', () => {
     expect(await href('Import a file')).toBe(`/data/import?project=${PID}`);
     expect(await href('Paste data')).toBe(`/data/import?project=${PID}&source=paste`);
     expect(await href('Connect a source')).toBe(`/connections/${PID}`);
+  });
+
+  it('a project viewer gets the answer to that reply, without the ways in (they would write)', async () => {
+    const turns = [
+      { id: 't1', role: 'user', text: 'upload data', createdAt: '' },
+      { id: 't2', role: 'assistant', text: 'Pick a file and I will take it from there.', createdAt: '' },
+    ];
+    serve({
+      ...base(ADMIN, true),
+      'projects:roles': { body: { [PID]: 'viewer' } },
+      'copilot:ask': { body: { ok: true, answer: turns[1].text, threadId: null, turns, suggestedAction: { kind: 'import', intent: 'upload data' } } },
+    });
+    renderApp('/');
+    const dock = await openDock();
+    const box = within(dock).getByRole('textbox', { name: 'Ask the Assistant' }) as HTMLTextAreaElement;
+    await waitFor(() => expect(box.disabled).toBe(false));
+    fireEvent.change(box, { target: { value: 'upload data' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(await within(dock).findByText(turns[1].text)).toBeTruthy();
+    expect(within(dock).queryByTestId('dock-get-data')).toBeNull();
+    expect(within(dock).queryByRole('link', { name: 'Import a file' })).toBeNull();
   });
 
   it('a reply that proposes rebuilding another tool’s dashboard links to the screenshot page in this project', async () => {

@@ -213,12 +213,34 @@ describe('Home', () => {
     await waitFor(() => expect(calls.find((c) => c.channel === 'onboarding:set')?.payload).toEqual({ collapsed: true }));
   });
 
-  it('gives a viewer the checklist without the controls that change the org\'s card', async () => {
-    stubServer({}, 'viewer');
+  it('gives an org viewer no checklist, no pill and no onboarding:status call; an org admin gets the card and "Set up"', async () => {
+    let calls = stubServer({ 'onboarding:status': { show: true, collapsed: true, steps: [], doneCount: 1, total: 4 } }, 'viewer');
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Recent' });
+    await waitFor(() => expect(screen.getByTestId('home-greet').textContent).toMatch(/Dev$/));
+    expect(screen.queryByRole('region', { name: 'Get started' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Get started:/ })).toBeNull();
+    expect(calls.some((c) => c.channel === 'onboarding:status')).toBe(false);
+    // Negative control: an org editor's Home asks for it and shows the folded pill; an admin's card offers "Set up".
+    cleanup();
+    calls = stubServer({ 'onboarding:status': { show: true, collapsed: true, steps: [], doneCount: 1, total: 4 } }, 'editor');
+    renderApp('/');
+    expect(await screen.findByRole('button', { name: /^Get started: 1 of 4/ })).toBeTruthy();
+    expect(calls.some((c) => c.channel === 'onboarding:status')).toBe(true);
+    cleanup();
+    stubServer({});
     renderApp('/');
     const card = await screen.findByRole('region', { name: 'Get started' });
-    await waitFor(() => expect(screen.getByTestId('home-greet').textContent).toMatch(/Dev$/));
-    expect(within(card).queryByRole('button', { name: 'Hide Get started' })).toBeNull();
+    expect(within(card).getByRole('link', { name: 'Set up' }).getAttribute('href')).toBe('/admin?tab=ai');
+  });
+
+  it('keeps the org admin\'s "Set up" from an org editor', async () => {
+    stubServer({}, 'editor');
+    renderApp('/');
+    const card = await screen.findByRole('region', { name: 'Get started' });
+    expect(within(card).queryByRole('link', { name: 'Set up' })).toBeNull();
+    expect(within(card).getByText('An org admin’s step')).toBeTruthy();
+    expect(within(card).getByRole('link', { name: 'Open the builder' })).toBeTruthy();
   });
 
   it('designs the empty states: no project, no work, no pins', async () => {

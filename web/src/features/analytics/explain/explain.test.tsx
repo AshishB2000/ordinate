@@ -204,7 +204,7 @@ describe('ExplainPanel', () => {
     show(target());
     expect(await screen.findByRole('heading', { name: 'Off for this Live dataset' })).toBeTruthy();
     expect(screen.getByText(sentence)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Make a copy' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Make a copy' })).toBeTruthy(); // an editor's, once the role is known
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 

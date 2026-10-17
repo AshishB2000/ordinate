@@ -145,7 +145,10 @@ export function DriversView({
 }: {
   projectId: string;
   request: DriversRequest;
-  /** A viewer's panel: nothing that saves ("Add as a waterfall tile" writes a visual). The project's role decides it too. */
+  /**
+   * A viewer's panel: nothing that saves ("Add as a waterfall tile" writes a visual). A caller that
+   * knows (a dashboard) says so; left out, the project's role decides — asked only then.
+   */
   readOnly?: boolean;
   /** More footer actions for the answer on screen (a door's "Open in Analytics"). */
   actions?: (r: DriversResult) => ReactNode;
@@ -154,7 +157,8 @@ export function DriversView({
   const [asked, setAsked] = useState<{ base: DriversRequest; next: DriversRequest }>({ base: request, next: request });
   const current = asked.base === request ? asked.next : request;
   const q = useDrivers(projectId, current);
-  const canEdit = useCanEdit(projectId);
+  const canEdit = useCanEdit(projectId, readOnly === undefined);
+  const viewOnly = readOnly ?? !canEdit;
   const again = (r: DriversResult, patch: Partial<DriversRequest>) => {
     const next: DriversRequest = { ...r.spec, ...(request.params ? { params: request.params } : {}), ...patch };
     if (patch.path) delete next.dimension; // a new level picks its own best dimension
@@ -303,7 +307,7 @@ export function DriversView({
         </span>
         <div className={s.footActs}>
           {actions?.(r)}
-          {!readOnly && canEdit && (
+          {!viewOnly && (
             <Button icon="layout-dashboard" disabled={!sel} onClick={() => void addTile()}>
               Add as a waterfall tile
             </Button>
