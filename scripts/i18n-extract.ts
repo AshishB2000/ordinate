@@ -370,6 +370,7 @@ export const MAIN_FILES = [
   'src/server/embedMessages.ts',
   'src/analysis/metricTreeMessages.ts',
   'src/app/recordLockMessages.ts',
+  'src/analysis/savedViewMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

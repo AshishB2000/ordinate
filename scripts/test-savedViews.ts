@@ -1,6 +1,6 @@
 // Saved views — the pure half (src/analysis/savedViews.ts): what a stored view
-// may hold, the edits to a view list, which view a dashboard opens on, the
-// filters a view stands for, and the ordinate:// deep link.
+// may hold, the edits to a view list, which view a dashboard opens on, and the
+// filters a view stands for.
 //
 // Expected values are written out by hand. The renderer's gather/apply is the
 // smoke's (scripts/r10Views.ts); what this pins is that a captured state
@@ -12,13 +12,12 @@ export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import {
   sanitizeViewState, sanitizeViews, sanitizeDefaultViewId, openingView, applyViewOp,
-  viewScope, viewPageIndex, parseDeepLink, viewLink, MAX_VIEWS,
+  viewScope, viewPageIndex, MAX_VIEWS,
 } from '../src/analysis/savedViews';
 import type { ViewScope } from '../src/analysis/savedViews';
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
-const DASH = '11111111-1111-4111-8111-111111111111';
 const P1 = '22222222-2222-4222-8222-222222222221';
 const P2 = '22222222-2222-4222-8222-222222222222';
 const REGION = '33333333-3333-4333-8333-333333333331';
@@ -168,31 +167,5 @@ ok('scope: no view → the author\'s defaults (Region = East)', same(none.filter
   { type: 'filter', column: 'status', op: '=', value: 'Shipped' },
   { type: 'filter', column: 'region', op: '=', value: 'East' },
 ]) && none.params[0].value === 100, JSON.stringify(none));
-
-// ── Deep links ───────────────────────────────────────────────────────────────
-ok('link: dashboard only', same(parseDeepLink(`ordinate://dashboard/${DASH}`), { dashboardId: DASH }));
-ok('link: dashboard and view', same(parseDeepLink(`ordinate://dashboard/${DASH}?view=${V1}`), { dashboardId: DASH, viewId: V1 }));
-ok('link: unknown parameters are ignored', same(parseDeepLink(`ordinate://dashboard/${DASH}?utm=mail&view=${V1}&x=1#top`), { dashboardId: DASH, viewId: V1 }));
-ok('link: a trailing slash is fine', same(parseDeepLink(`ordinate://dashboard/${DASH}/`), { dashboardId: DASH }));
-ok('link: ids are case-folded', same(parseDeepLink(`ORDINATE://dashboard/${DASH.toUpperCase()}?view=${V1.toUpperCase()}`), { dashboardId: DASH, viewId: V1 }));
-ok('link: viewLink writes what parseDeepLink reads', same(parseDeepLink(viewLink(DASH, V1)), { dashboardId: DASH, viewId: V1 }));
-const refused: Array<[string, unknown]> = [
-  ['another scheme', `https://dashboard/${DASH}`],
-  ['another host', `ordinate://visual/${DASH}`],
-  ['no id', 'ordinate://dashboard/'],
-  ['a second segment', `ordinate://dashboard/${DASH}/edit`],
-  ['path traversal', `ordinate://dashboard/../${DASH}`],
-  ['an encoded traversal', 'ordinate://dashboard/%2e%2e%2fsecrets'],
-  ['a non-UUID id', 'ordinate://dashboard/retail-overview'],
-  ['a non-UUID view', `ordinate://dashboard/${DASH}?view=west`],
-  ['view given twice', `ordinate://dashboard/${DASH}?view=${V1}&view=${V2}`],
-  ['a port', `ordinate://dashboard:8080/${DASH}`],
-  ['credentials', `ordinate://me:pw@dashboard/${DASH}`],
-  ['no slashes', `ordinate:dashboard/${DASH}`],
-  ['not a URL', 'not a url'],
-  ['not a string', { href: `ordinate://dashboard/${DASH}` }],
-  ['too long', `ordinate://dashboard/${DASH}?pad=${'x'.repeat(600)}`],
-];
-for (const [why, url] of refused) ok(`link: refused — ${why}`, parseDeepLink(url) === null, JSON.stringify(parseDeepLink(url)));
 
 finish();

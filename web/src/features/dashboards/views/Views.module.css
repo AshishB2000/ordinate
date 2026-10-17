@@ -1,0 +1,9 @@
+/* The Views menu's trigger: the view on screen by name, cut to one short line. */
+.name {
+  display: inline-block;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}

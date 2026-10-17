@@ -7,8 +7,6 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Badge } from '../../../ui/Badge';
 import { Button, IconButton, buttonClass } from '../../../ui/Button';
-import { Dialog, DialogClose } from '../../../ui/Dialog';
-import { Input } from '../../../ui/Field';
 import { Menu } from '../../../ui/Menu';
 import { toast } from '../../../ui/Toast';
 import { Icon } from '../../../ui/icons/Icon';
@@ -16,45 +14,12 @@ import { LineageDrawer } from '../../data/LineageDrawer';
 import { useAddImage, useAddKind, useAddNav } from './AddDialogs';
 import { useEditor } from './context';
 import { nextSheetName, uuid } from './doc';
+import { NameDialog } from './NameDialog';
 import { SizeSwitch } from './SizeNote';
 import s from './Editor.module.css';
 import { StyleDialog, SubscribeButton, ViewControls, exportHtml } from '../../dashboards/DashboardChrome';
 import { addSummary } from '../../dashboards/SummaryBody';
-
-function NameDialog({ title, initial, onSave, onClose }: { title: string; initial: string; onSave: (v: string) => void; onClose: () => void }) {
-  const [v, setV] = useState(initial);
-  const save = () => {
-    if (v.trim()) onSave(v.trim());
-    onClose();
-  };
-  return (
-    <Dialog
-      open
-      onOpenChange={(o) => !o && onClose()}
-      size="sm"
-      title={title}
-      footer={
-        <>
-          <DialogClose asChild>
-            <Button variant="ghost">Cancel</Button>
-          </DialogClose>
-          <Button variant="primary" onClick={save}>
-            Save
-          </Button>
-        </>
-      }
-    >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          save();
-        }}
-      >
-        <Input label="Name" value={v} onChange={(e) => setV(e.target.value)} autoFocus maxLength={200} />
-      </form>
-    </Dialog>
-  );
-}
+import { ViewsMenu } from '../../dashboards/views/ViewsMenu';
 
 function SaveChip() {
   const { save } = useEditor();
@@ -187,6 +152,7 @@ export function Head() {
             <IconButton icon="redo" size="sm" label={future.length ? `Redo ${future[0].label}` : 'Nothing to redo'} disabled={!future.length} onClick={ed.redo} />
           </>
         )}
+        <ViewsMenu />
         <ViewControls />
         <SizeSwitch />
         <IconButton icon="message-square" size="sm" label="Comments on this dashboard" onClick={() => ed.view.openComments('all')} />

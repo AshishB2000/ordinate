@@ -322,6 +322,14 @@ export async function updateAnalysis(
   return updated;
 }
 
+/**
+ * Run `fn` holding this dashboard's record (recordFs.locked: no other holder of it, on any pod, runs
+ * meanwhile) — a saved-view edit's read-modify-write. An invalid id holds nothing: get/update refuse it.
+ */
+export function lockedAnalysis<T>(projectId: string, id: string, fn: () => Promise<T>): Promise<T> {
+  return isValidId(projectId) && isValidId(id) ? recordFs.locked(analysisFilePath(projectId, id), fn) : fn();
+}
+
 // Delete an analysis file. Returns true on success (force → missing is success).
 export async function deleteAnalysis(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;

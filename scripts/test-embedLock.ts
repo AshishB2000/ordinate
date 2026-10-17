@@ -25,6 +25,9 @@
 //                 builder with no definition reads the edit)
 //   no widening   an empty lock, a lock naming a parameter, are refused before
 //                 anything is built; the lock steps are context filters, first
+//   views         a saved view is offered only when its picks exist inside the
+//                 lock — no other view's name, and no date option from a
+//                 dropped view; NEGATIVE CONTROL: unlocked, all are offered
 //
 //   npm run build:ts && node scripts/test-embedLock.js
 
@@ -133,6 +136,13 @@ async function seed(projectId: string) {
     };
     const a = await analysis.saveAnalysis(projectId, { name: 'Customer board', sheets: [{ name: 'Overview', cards: Object.values(cards) }] });
     if (!a) throw new Error('seed analysis');
+    // Saved views: one inside the East lock, one only West's channel answers, one on a control the locked bar leaves out.
+    const view = (name: string, controls: object) => ({ id: crypto.randomUUID(), name, state: { controls } });
+    await analysis.updateAnalysis(projectId, a.id, { views: [
+      view('East focus', { [cards.region.id]: { value: 'East' } }),
+      view('Partner deals', { [cards.channel.id]: { value: 'Partner' } }),
+      view('Alpha team', { [cards.team.id]: { value: 'Alpha' } }),
+    ] });
     return { orders: orders.id, targets: targets.id, aid: a.id, cards, formulaMetric: !!ratio };
   });
 }
@@ -231,6 +241,22 @@ async function main(): Promise<void> {
     const open = await inOrg(() => embedPage.embedHtml(site, s.aid, { ...claims, params: {} }));
     const openBlock = 'html' in open ? JSON.stringify(dataBlock(open.html)) : '';
     ok('no leak: NEGATIVE CONTROL — the unlocked embed has them', /West/.test(openBlock) && openBlock.includes('Partner') && westFigure.test(noIds(openBlock)));
+
+    // ── Saved views under the lock ──────────────────────────────────────
+    const viewNames = (b: any) => (b?.dashboard?.views ?? []).map((v: { name: string }) => v.name); // any: the page's JSON
+    ok('views: under the lock only the East view is offered', same(viewNames(block), ['East focus']), show(viewNames(block)));
+    ok('views: no other view\'s name anywhere in the embed', !/Partner deals|Alpha team/.test(html));
+    ok('views: NEGATIVE CONTROL — unlocked, all three are offered', same(viewNames('html' in open ? dataBlock(open.html) : null), ['East focus', 'Partner deals', 'Alpha team']));
+    // A view's date range is an option only off a lock: a dropped view's range must not reach the locked bar.
+    const DAY = crypto.randomUUID();
+    const withDates = { ...def, analysis: {
+      ...def.analysis,
+      sheets: [{ ...def.analysis.sheets[0], cards: [...def.analysis.sheets[0].cards, { id: DAY, type: 'control', layout: { x: 0, y: 60, w: 3, h: 2 }, control: { kind: 'date_range', label: 'Day', datasetId: s.orders, column: 'day' } }] }],
+      views: (def.analysis.views ?? []).map((v) => v.name === 'Partner deals' ? { ...v, state: { ...v.state, controls: { ...v.state.controls, [DAY]: { from: '2025-03-01', to: '2025-03-31' } } } } : v),
+    } } as typeof def;
+    const dayOptions = async (l: typeof lock) => (await inOrg(() => dd.planDashboard(pid, s.aid, 64, { def: withDates, lock: l })))!.specs.find((x) => x.domain.label === 'Day')!.domain.options;
+    ok('views: under the lock no date option comes from a dropped view', !(await dayOptions(lock)).includes('2025-03-01 – 2025-03-31'), show(await dayOptions(lock)));
+    ok('views: NEGATIVE CONTROL — unlocked, that view\'s range is a date option', (await dayOptions(null)).includes('2025-03-01 – 2025-03-31'));
     ok('page: the embed has no site header to link out of (nav empty), and says it is embedded', Array.isArray(block.site.nav) && block.site.nav.length === 0 && block.embed && block.embed.hideTitle === false);
     const dark = await inOrg(() => embedPage.embedHtml(site, s.aid, { ...claims, theme: 'dark', hide: ['title', 'filters'] }));
     const darkBlock = 'html' in dark ? dataBlock(dark.html) : null;

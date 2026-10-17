@@ -17,7 +17,9 @@
 //   applyViewOp          — create / rename / update / delete / set default.
 //   openingView          — which view a dashboard opens on.
 //   viewScope            — the filters and parameters a view stands for (reports).
-//   parseDeepLink        — `ordinate://dashboard/<id>?view=<viewId>`.
+//
+// A view's link is the dashboard's own URL with `?view=<viewId>`
+// (web/src/features/dashboards/views); the edits arrive through `analysis:view`.
 //
 // Not captured, because it does not exist as dashboard state: a chart ZOOM range
 // (no chart zooms on a dashboard yet) and the DRILL panel's rows (a transient
@@ -30,6 +32,8 @@ import { sanitizeParamValue } from './params';
 import type { Parameter, ParamValue } from './params';
 import { controlSteps } from './dashboardFilters';
 import type { FilterStep } from '../data/transforms';
+import { formatNumber } from '../app/format';
+import * as say from './savedViewMessages';
 
 export const MAX_VIEWS = 50;
 export const MAX_VIEW_NAME = 80;
@@ -174,14 +178,16 @@ export function sanitizeDefaultViewId(raw: unknown, views: SavedView[]): string 
 }
 
 /**
- * The view a dashboard opens on: the one asked for (a deep link, a ⌘K row),
+ * The view a dashboard opens on: the one asked for (a `?view=` link, a ⌘K row),
  * else the default, else none. An id that names no view falls back to the
  * default rather than failing — a link to a deleted view still opens the board.
+ * Ids are compared case-folded: a UUID typed in capitals is the same id.
  */
 export function openingView(views: SavedView[], defaultViewId: string, requested?: string | null): SavedView | null {
   const list = Array.isArray(views) ? views : [];
-  return (requested ? list.find((v) => v.id === requested) : undefined)
-    || list.find((v) => v.id === defaultViewId)
+  const is = (id: unknown) => (v: SavedView) => typeof id === 'string' && v.id.toLowerCase() === id.toLowerCase();
+  return (requested ? list.find(is(requested)) : undefined)
+    || (defaultViewId ? list.find(is(defaultViewId)) : undefined)
     || null;
 }
 
@@ -213,9 +219,9 @@ export function applyViewOp(
 
   if (kind === 'create') {
     const name = cleanViewName(o.name);
-    if (!name) return { ok: false, error: 'Give the view a name.' };
-    if (views.length >= MAX_VIEWS) return { ok: false, error: `A dashboard keeps at most ${MAX_VIEWS} views.` };
-    if (taken(name, '')) return { ok: false, error: `There is already a view called “${name}”.` };
+    if (!name) return { ok: false, error: say.viewNameMissing() };
+    if (views.length >= MAX_VIEWS) return { ok: false, error: say.viewLimit(formatNumber(MAX_VIEWS)) };
+    if (taken(name, '')) return { ok: false, error: say.viewNameTaken(name) };
     const view: SavedView = { id: newId(), name, state: sanitizeViewState(o.state, scope), createdAt: now, updatedAt: now };
     views.push(view);
     return { ok: true, views, defaultViewId, viewId: view.id };
@@ -223,12 +229,12 @@ export function applyViewOp(
   if (kind === 'default' && o.viewId === '') return { ok: true, views, defaultViewId: '', viewId: '' };
 
   const at = views.findIndex((v) => v.id === o.viewId);
-  if (at < 0) return { ok: false, error: 'That view no longer exists.' };
+  if (at < 0) return { ok: false, error: say.viewGone() };
   const id = views[at].id;
   if (kind === 'rename') {
     const name = cleanViewName(o.name);
-    if (!name) return { ok: false, error: 'Give the view a name.' };
-    if (taken(name, id)) return { ok: false, error: `There is already a view called “${name}”.` };
+    if (!name) return { ok: false, error: say.viewNameMissing() };
+    if (taken(name, id)) return { ok: false, error: say.viewNameTaken(name) };
     views[at] = { ...views[at], name, updatedAt: now };
   } else if (kind === 'update') {
     views[at] = { ...views[at], state: sanitizeViewState(o.state, scope), updatedAt: now };
@@ -238,7 +244,7 @@ export function applyViewOp(
   } else if (kind === 'default') {
     defaultViewId = id;
   } else {
-    return { ok: false, error: 'Unknown view action.' };
+    return { ok: false, error: say.viewUnknownOp() };
   }
   return { ok: true, views, defaultViewId, viewId: id };
 }
@@ -280,34 +286,4 @@ export function viewScope(
 export function viewPageIndex(view: SavedView | null, sheets: Page[]): number {
   const i = view && view.state.page ? (sheets || []).findIndex((p) => p.id === view.state.page) : -1;
   return i < 0 ? 0 : i;
-}
-
-// ── Deep links ───────────────────────────────────────────────────────────────
-
-export interface DeepLink { dashboardId: string; viewId?: string }
-
-/**
- * `ordinate://dashboard/<uuid>` or `ordinate://dashboard/<uuid>?view=<uuid>`.
- * Anything else is null: another scheme or host, a second path segment, a
- * port or credentials, a non-UUID id, or `view` given twice. Unknown query
- * parameters are ignored, so a link a later version adds to still opens here.
- */
-export function parseDeepLink(raw: unknown): DeepLink | null {
-  if (typeof raw !== 'string' || raw.length > 512) return null;
-  // The raw shape first: URL parsing would quietly resolve `dashboard/../<id>`.
-  if (!/^ordinate:\/\/[^/?#]+\/[^/?#]+\/?([?#].*)?$/i.test(raw)) return null;
-  let u: URL;
-  try { u = new URL(raw); } catch (_) { return null; }
-  if (u.protocol !== 'ordinate:' || u.hostname.toLowerCase() !== 'dashboard') return null;
-  if (u.username || u.password || u.port) return null;
-  const m = /^\/([^/]+)\/?$/.exec(u.pathname);
-  if (!m || !isId(m[1])) return null;
-  const views = u.searchParams.getAll('view');
-  if (views.length > 1 || (views.length === 1 && !isId(views[0]))) return null;
-  return views.length ? { dashboardId: m[1].toLowerCase(), viewId: views[0].toLowerCase() } : { dashboardId: m[1].toLowerCase() };
-}
-
-/** The link a "Copy link" puts on the clipboard. */
-export function viewLink(dashboardId: string, viewId?: string): string {
-  return `ordinate://dashboard/${dashboardId}` + (viewId ? `?view=${viewId}` : '');
 }

@@ -86,7 +86,9 @@ The page is built from the dashboard **as it was published**: a tile added after
 in any embed until you publish again. A link published before this feature existed asks to be
 published again. Figures are computed when the page is asked for and cached for five minutes per
 (link, locks, theme); Live datasets keep the public cache floor `LIVE_MIN_CACHE_AGE_PUBLIC_SEC`.
-The filter bar of an embed carries at most 64 combinations.
+The filter bar of an embed carries at most 64 combinations. A dashboard's saved views are offered
+under a lock only when every value they pick exists inside it; a view that names another value,
+or a filter the bar leaves out, is not in the page — not even its name.
 
 ## The browser's side
 

@@ -1340,3 +1340,16 @@ source Postgres with a canary password that only a `trust` pg_hba (as in CI) acc
   unsynced fixture say "Not synced yet" with no console error, Sync schema turns one into its menu
   and the number column into "Values not listed", the menu filters the Live KPI; 13 RPCs on open;
   screens `live-control-not-synced`, `live-control-not-listed`, both themes.
+
+## 2026-10-17 — Live pickers accept a typed value (docs/dashboard-filters)
+
+- **Built.** A dashboard's dropdown and multi-select are one searchable popover now
+  (`ValuePicker.tsx`, docs/dashboard-filters/00-design.md). Over a Live column its values are the
+  schema sync's sample, and it says so: "Values from a sample of N rows." Text the sample does not
+  list exactly can be used as typed — a **Use “text”** row (a dropdown takes it, a multi appends it);
+  the warehouse filters on it like any pick. The `<NoList>` panel (never synced, not sampled, not
+  listed) gets the same typed-value box for all three reasons, for editors and viewers alike. An
+  extract never offers Use: its search is exhaustive. Typed text is sent as typed, not trimmed.
+- **Tests.** Vitest `valuePicker.test` (the sample line and Use on a Live reply — NEGATIVE CONTROL: an
+  extract never offers Use), `controlNoList.test` (a typed value used on a `notListed` column, as a
+  viewer); e2e `liveTiles.e2e` moved to the popover.
