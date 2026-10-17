@@ -19,6 +19,7 @@ import { captureStart } from './composerModel';
 import { FileSource, PasteSource } from './FileSources';
 import { InputColumnsDialog } from './InputColumnsDialog';
 import { ProjectGate } from './ProjectGate';
+import { EditorsOnly } from '../projects/EditorsOnly';
 import { ScreenshotSource } from './ScreenshotSource';
 import { Button } from '../../ui/Button';
 import s from './Import.module.css';
@@ -157,7 +158,18 @@ function Importer({ projectId }: { projectId: string }) {
 export default function ImportPage() {
   return (
     <ProjectGate title="Bring data in" why="A new dataset is saved in a project.">
-      {(projectId) => <Importer key={projectId} projectId={projectId} />}
+      {(projectId) => (
+        <EditorsOnly
+          projectId={projectId}
+          page="Bring data in"
+          icon="upload"
+          title="Bringing data in is for editors"
+          body="Uploading a file, pasting rows, reading a screenshot and defining an input table each save a new dataset, so they are for editors of this project; its datasets are in Data."
+          back={{ to: `/data/${projectId}`, label: 'Open Data' }}
+        >
+          <Importer key={projectId} projectId={projectId} />
+        </EditorsOnly>
+      )}
     </ProjectGate>
   );
 }

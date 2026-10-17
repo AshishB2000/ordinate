@@ -23,6 +23,7 @@ import { formatNumber } from '../../../../src/app/format.ts';
 import * as edits from '../../../../src/data/inputTable/edits.ts';
 import { rpc } from '../../api/client';
 import { distinctValues } from '../live/distinct';
+import { EditorsOnly } from '../projects/EditorsOnly';
 import { EmptyState, ErrorState, Page, PageSkeleton } from '../../app/blocks';
 import { buttonClass } from '../../ui/Button';
 import { DataGrid, type CellFlag, type GridRange } from '../../ui/DataGrid/DataGrid';
@@ -307,6 +308,22 @@ function Editor({ projectId, initial }: { projectId: string; initial: TableView 
 
 export default function InputTablePage() {
   const { projectId = '', datasetId = '' } = useParams();
+  // Every keystroke here is saved: a viewer is told so before input:load is asked anything.
+  return (
+    <EditorsOnly
+      projectId={projectId}
+      page="Input table"
+      icon="table"
+      title="Typing into an input table is for editors"
+      body="Every cell typed here is saved for everyone who uses the table, so editing it is for editors of this project; its rows are on the dataset's page."
+      back={{ to: `/data/${projectId}/${datasetId}`, label: 'Open the dataset' }}
+    >
+      <InputTable projectId={projectId} datasetId={datasetId} />
+    </EditorsOnly>
+  );
+}
+
+function InputTable({ projectId, datasetId }: { projectId: string; datasetId: string }) {
   const q = useQuery({
     queryKey: ['input:load', projectId, datasetId],
     queryFn: async () => (await rpc('input:load', { projectId, id: datasetId })) as TableReply,

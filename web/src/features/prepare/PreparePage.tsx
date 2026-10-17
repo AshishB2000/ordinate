@@ -30,12 +30,29 @@ import { STEP_TYPES, TEXT_STEPS } from './steps';
 import { SuggestedSteps, useSuggestCalc, useSuggestSteps } from './Suggest';
 import { TextProfile } from './TextProfile';
 import { useAdoptProject } from '../projects/current';
+import { EditorsOnly } from '../projects/EditorsOnly';
 import { LiveOffPage, useIsLive } from '../live/LiveOff';
 import s from './Prepare.module.css';
 
 export default function PreparePage() {
   const { projectId, datasetId } = useParams();
   useAdoptProject(projectId); // the URL names the project: the switcher follows it
+  // Every edit here is a write: a viewer is told so before prepare:get is asked anything.
+  return (
+    <EditorsOnly
+      projectId={projectId ?? ''}
+      page="Prepare"
+      icon="sliders"
+      title="Preparing data is for editors"
+      body="Each step here rewrites the dataset for everyone who uses it, so preparing it is for editors of this project; its rows are on the dataset's page."
+      back={{ to: `/data/${projectId ?? ''}/${datasetId ?? ''}`, label: 'Open the dataset' }}
+    >
+      <PrepareOrLive projectId={projectId} datasetId={datasetId} />
+    </EditorsOnly>
+  );
+}
+
+function PrepareOrLive({ projectId, datasetId }: { projectId: string | undefined; datasetId: string | undefined }) {
   // A Live dataset keeps no rows to prepare (L2.6): say so, and offer a copy — before asking prepare:get, which would refuse.
   const live = useIsLive(projectId, datasetId);
   if (live.pending) return <PageSkeleton />;

@@ -14,6 +14,7 @@ import { Menu } from '../../ui/Menu';
 import { SkeletonRows, SkeletonTable } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
+import { useCanEdit } from '../projects/api';
 import { useQualityRules, useStats, useWrite, type ColumnSummary, type Quality, type Rule, type RuleDraft, type Stats } from './api';
 import { ago, figure, formatNumber, rowsText } from './format';
 import { RuleEditor } from './RuleEditor';
@@ -77,6 +78,8 @@ function Rules({ projectId, datasetId, header, stats }: { projectId: string; dat
   const [, setParams] = useSearchParams();
   const [editing, setEditing] = useState<Rule | 'new' | null>(null);
   const [deleting, setDeleting] = useState<Rule | null>(null);
+  // Running, adding, editing and deleting rules are writes: a viewer reads the results and the failing rows.
+  const canEdit = useCanEdit(projectId);
   const refresh = ['quality:list', 'dataset:list'];
   const run = useWrite('quality:run', refresh, { onDone: (r) => r.ok && toast('Checks finished.', { kind: 'success' }) });
   const add = useWrite('quality:save', refresh);
@@ -114,16 +117,18 @@ function Rules({ projectId, datasetId, header, stats }: { projectId: string; dat
             )}
           </p>
         </div>
-        <div className={qs.qActs}>
-          {rules.length > 0 && (
-            <Button size="sm" icon="refresh" loading={run.isPending} onClick={() => run.mutate({ projectId, datasetId })}>
-              {run.isPending ? 'Checking…' : 'Run checks'}
+        {canEdit && (
+          <div className={qs.qActs}>
+            {rules.length > 0 && (
+              <Button size="sm" icon="refresh" loading={run.isPending} onClick={() => run.mutate({ projectId, datasetId })}>
+                {run.isPending ? 'Checking…' : 'Run checks'}
+              </Button>
+            )}
+            <Button size="sm" variant="primary" icon="plus" onClick={() => setEditing('new')}>
+              Add rule
             </Button>
-          )}
-          <Button size="sm" variant="primary" icon="plus" onClick={() => setEditing('new')}>
-            Add rule
-          </Button>
-        </div>
+          </div>
+        )}
       </div>
       {rules.length === 0 ? (
         <EmptyState
@@ -132,12 +137,15 @@ function Rules({ projectId, datasetId, header, stats }: { projectId: string; dat
           icon="check"
           title="No rules yet"
           actions={
-            <Button size="sm" variant="primary" onClick={() => setEditing('new')}>
-              Add rule
-            </Button>
+            canEdit && (
+              <Button size="sm" variant="primary" onClick={() => setEditing('new')}>
+                Add rule
+              </Button>
+            )
           }
         >
           Rules check this dataset on every save and every refresh, and a failing one puts a red dot on it everywhere it is listed.
+          {!canEdit && ' An editor of this project can add one. You have view-only access.'}
         </EmptyState>
       ) : (
         <div className={s.card}>
@@ -189,15 +197,17 @@ function Rules({ projectId, datasetId, header, stats }: { projectId: string; dat
                             Show failing rows
                           </Button>
                         )}
-                        <Menu
-                          align="end"
-                          trigger={<IconButton icon="more-horizontal" size="sm" label={`Actions for ${ruleWords(r, names)}`} />}
-                          items={[
-                            { label: 'Edit rule', icon: 'pencil', onSelect: () => setEditing(r) },
-                            { kind: 'separator' },
-                            { label: 'Delete rule', icon: 'trash', danger: true, onSelect: () => setDeleting(r) },
-                          ]}
-                        />
+                        {canEdit && (
+                          <Menu
+                            align="end"
+                            trigger={<IconButton icon="more-horizontal" size="sm" label={`Actions for ${ruleWords(r, names)}`} />}
+                            items={[
+                              { label: 'Edit rule', icon: 'pencil', onSelect: () => setEditing(r) },
+                              { kind: 'separator' },
+                              { label: 'Delete rule', icon: 'trash', danger: true, onSelect: () => setDeleting(r) },
+                            ]}
+                          />
+                        )}
                       </span>
                     </td>
                   </tr>
@@ -207,7 +217,7 @@ function Rules({ projectId, datasetId, header, stats }: { projectId: string; dat
           </table>
         </div>
       )}
-      {rules.length === 0 && sugg.length > 0 && (
+      {canEdit && rules.length === 0 && sugg.length > 0 && (
         <div className={qs.qSuggest}>
           <span className={s.meta}>Suggested from this data</span>
           {sugg.map((r) => (

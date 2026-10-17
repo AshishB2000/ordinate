@@ -10,6 +10,7 @@ import { Panel } from '../../ui/Panel';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
+import { useCanEdit } from '../projects/api';
 import { useProfile, type ColumnDoc, type Profile } from './api';
 import { ColumnDetails } from './Details';
 import { figure, formatNumber, rowsText } from './format';
@@ -77,6 +78,8 @@ export function ProfilePanel({ projectId, datasetId, column, doc, onClose, onFil
   onRename: () => void;
 }) {
   const q = useProfile(projectId, datasetId, column);
+  // Charting the column opens the visual builder and Rename rewrites the dataset: both an editor's. Filtering is the viewer's own.
+  const canEdit = useCanEdit(projectId);
   const p = q.data;
   const facts: [string, string][] = p
     ? [
@@ -100,18 +103,22 @@ export function ProfilePanel({ projectId, datasetId, column, doc, onClose, onFil
       className={g.profile}
       footer={
         <div className={g.profileActions}>
-          <Link className={buttonClass('secondary', 'sm')} to={`/visuals?project=${projectId}&datasetId=${datasetId}&column=${encodeURIComponent(column)}`}>
-            Chart this column
-          </Link>
+          {canEdit && (
+            <Link className={buttonClass('secondary', 'sm')} to={`/visuals?project=${projectId}&datasetId=${datasetId}&column=${encodeURIComponent(column)}`}>
+              Chart this column
+            </Link>
+          )}
           <Button
             size="sm"
             onClick={() => (p?.mostCommon ? onFilter(p.mostCommon) : toast('This column has no repeated value to filter on.'))}
           >
             Filter rows on this
           </Button>
-          <Button size="sm" onClick={onRename}>
-            Rename
-          </Button>
+          {canEdit && (
+            <Button size="sm" onClick={onRename}>
+              Rename
+            </Button>
+          )}
           <ColumnDetails
             projectId={projectId}
             datasetId={datasetId}

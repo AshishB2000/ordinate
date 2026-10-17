@@ -270,7 +270,7 @@ export function EncodingForm({
         />
       </div>
 
-      <MapRegions projectId={projectId} cols={cols} geo={encoding.geo} onChange={(geo) => set({ geo })} />
+      <MapRegions projectId={projectId} cols={cols} geo={encoding.geo} canEdit={canEdit} onChange={(geo) => set({ geo })} />
 
       {calc?.full ? (
         <MetricEditor

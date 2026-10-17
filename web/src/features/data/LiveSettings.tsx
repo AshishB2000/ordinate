@@ -77,11 +77,12 @@ export function CacheAgePicker({ projectId, datasetId, name, maxCacheAgeSec }: {
   );
 }
 
-/** "Refresh now": the next figure asks the warehouse, whatever the cache holds. */
+/** "Refresh now": the next figure asks the warehouse, whatever the cache holds. An editor's: a viewer is not offered it. */
 export function RefreshNow({ projectId, datasetId }: { projectId: string; datasetId: string }) {
   const reset = useResetCache(projectId, datasetId);
   const [said, setSaid] = useState<{ text: string; error?: boolean } | null>(null);
   const can = useCan(projectId);
+  if (!can('editor')) return null;
   const run = () =>
     reset.mutate(undefined, {
       onSuccess: (r) => setSaid(r.ok ? { text: 'Cache reset — the next figure asks the warehouse.' } : { text: r.error || 'The cache could not be reset.', error: true }),
@@ -89,7 +90,7 @@ export function RefreshNow({ projectId, datasetId }: { projectId: string; datase
     });
   return (
     <>
-      <Button size="sm" icon="refresh" loading={reset.isPending} disabled={!can('editor')} title="Reset the cache: every chart, KPI tile and answer asks the warehouse again" onClick={run}>
+      <Button size="sm" icon="refresh" loading={reset.isPending} title="Reset the cache: every chart, KPI tile and answer asks the warehouse again" onClick={run}>
         Refresh now
       </Button>
       {said && (

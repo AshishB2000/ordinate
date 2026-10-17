@@ -14,6 +14,7 @@ import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Input } from '../../ui/Field';
 import { Icon, type IconName } from '../../ui/icons/Icon';
 import { Popover } from '../../ui/Popover';
+import { useCanEdit } from '../projects/api';
 import { failingRowsSource, useColumnDocs, useQualityRules, useWrite, type ColumnType } from './api';
 import { ProfilePanel } from './ProfilePanel';
 import { ruleWords } from './ruleWords';
@@ -72,8 +73,8 @@ function RenameDialog({ projectId, datasetId, columns, index, onClose }: {
 
 type Act = 'profile' | 'asc' | 'desc' | 'unsort' | 'rename' | 'hide' | ColumnType;
 
-/** A column's actions: profile, sort, rename, its type, hide. Opened from its header. */
-function ColumnMenu({ column, profiled, sorted, run }: { column: GridColumn; profiled: boolean; sorted: boolean; run: (a: Act) => void }) {
+/** A column's actions: profile, sort, rename, its type, hide. Opened from its header. A viewer sees the type, not a way to change it. */
+function ColumnMenu({ column, profiled, sorted, canEdit, run }: { column: GridColumn; profiled: boolean; sorted: boolean; canEdit: boolean; run: (a: Act) => void }) {
   const item = (act: Act, icon: IconName, label: string) => (
     <Button key={act} variant="ghost" size="sm" icon={icon} className={g.menuItem} onClick={() => run(act)}>
       {label}
@@ -87,10 +88,11 @@ function ColumnMenu({ column, profiled, sorted, run }: { column: GridColumn; pro
       {item('desc', 'arrow-down', 'Sort descending')}
       {sorted && item('unsort', 'x', 'Clear sort')}
       <hr className={g.menuSep} />
-      {item('rename', 'pencil', 'Rename…')}
+      {canEdit && item('rename', 'pencil', 'Rename…')}
       <RadioGroup
         label="Column type"
         orientation="horizontal"
+        disabled={!canEdit}
         value={column.type}
         options={[
           { value: 'text', label: 'Text' },
@@ -121,6 +123,7 @@ export function DataTab({ projectId, datasetId, header }: { projectId: string; d
   const docs = useColumnDocs(projectId, datasetId);
   const rules = useQualityRules(projectId, datasetId);
   const retype = useWrite('dataset:update', ['dataset:columns', 'dataset:stats', 'dataset:profile', 'dataset:list']);
+  const canEdit = useCanEdit(projectId);
 
   // A search is a full scan on the server: one query per pause, not per keystroke.
   useEffect(() => {
@@ -290,6 +293,7 @@ export function DataTab({ projectId, datasetId, header }: { projectId: string; d
             column={menuOf}
             profiled={profile === menuOf.name}
             sorted={sort?.column === menuOf.name}
+            canEdit={canEdit}
             run={(act) => {
               setMenu(null);
               const at = menuOf.at ?? 0;

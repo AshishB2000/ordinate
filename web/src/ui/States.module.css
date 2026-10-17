@@ -56,6 +56,10 @@
   gap: var(--sp-8);
   margin-top: var(--sp-16);
 }
+/* An action a viewer is not offered renders null: no empty row under the copy. */
+.actions:empty {
+  display: none;
+}
 
 /* Small hosts: no card chrome on chrome, a 34px mark, 12px copy. */
 .compact {

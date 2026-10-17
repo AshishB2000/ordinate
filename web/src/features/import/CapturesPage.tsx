@@ -3,19 +3,22 @@
 // grid. A capture is a project record: a card opens its own page (the
 // screenshot beside the analysis), "Save as dataset" opens its table in the
 // composer, and a new one is uploaded or pasted right here — the model reads
-// it and its page opens.
+// it and its page opens. A viewer opens and reads captures: uploading, saving
+// and deleting are an editor's, and the reader (whose paste listener would
+// upload) is never mounted for them.
 
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
-import { ErrorState, Page } from '../../app/blocks';
+import { EmptyState, ErrorState, Page } from '../../app/blocks';
 import { Badge } from '../../ui/Badge';
 import { Button, buttonClass } from '../../ui/Button';
 import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Skeleton } from '../../ui/Skeleton';
 import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
+import { useCanEdit } from '../projects/api';
 import { useCaptures, type CaptureSummary } from './api';
 import { ProjectGate } from './ProjectGate';
 import { ScreenshotSource } from './ScreenshotSource';
@@ -23,7 +26,8 @@ import s from './Captures.module.css';
 
 const when = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
-function Card({ c, projectId, onDelete }: { c: CaptureSummary; projectId: string; onDelete: () => void }) {
+/** `onDelete` absent: a viewer's card — it opens, it is not saved or deleted from here. */
+function Card({ c, projectId, onDelete }: { c: CaptureSummary; projectId: string; onDelete?: () => void }) {
   const save = `/data/import?project=${projectId}&capture=${encodeURIComponent(c.id)}`;
   return (
     <li className={s.capCard}>
@@ -47,20 +51,26 @@ function Card({ c, projectId, onDelete }: { c: CaptureSummary; projectId: string
           <Badge tone="accent">Dataset</Badge>
         </span>
       )}
-      <div className={s.capActs}>
-        {c.datasetId ? (
-          <Link className={buttonClass('secondary', 'sm')} to={`/data/${projectId}/${c.datasetId}`}>
-            Open dataset
-          </Link>
-        ) : (
-          <Link className={buttonClass('secondary', 'sm')} to={save}>
-            Save as dataset
-          </Link>
-        )}
-        <Button size="sm" variant="ghost" icon="trash" onClick={onDelete} aria-label={`Delete ${c.title || 'capture'}`}>
-          Delete
-        </Button>
-      </div>
+      {(c.datasetId || onDelete) && (
+        <div className={s.capActs}>
+          {c.datasetId ? (
+            <Link className={buttonClass('secondary', 'sm')} to={`/data/${projectId}/${c.datasetId}`}>
+              Open dataset
+            </Link>
+          ) : (
+            onDelete && (
+              <Link className={buttonClass('secondary', 'sm')} to={save}>
+                Save as dataset
+              </Link>
+            )
+          )}
+          {onDelete && (
+            <Button size="sm" variant="ghost" icon="trash" onClick={onDelete} aria-label={`Delete ${c.title || 'capture'}`}>
+              Delete
+            </Button>
+          )}
+        </div>
+      )}
     </li>
   );
 }
@@ -71,6 +81,7 @@ function Captures({ projectId }: { projectId: string }) {
   const [deleting, setDeleting] = useState<CaptureSummary | null>(null);
   const navigate = useNavigate();
   const [uploading, setUploading] = useState(false);
+  const canEdit = useCanEdit(projectId);
   // The drop zone, the model's progress and its typed errors — here, not on Bring data in.
   const reader = (
     <section className={s.capUpload} aria-label="Upload a screenshot">
@@ -103,20 +114,27 @@ function Captures({ projectId }: { projectId: string }) {
   } else if (q.isError) {
     body = <ErrorState title="Captures could not be loaded" message={q.error.message} onRetry={() => void q.refetch()} />;
   } else if (q.data.length === 0) {
-    // No captures yet: the way to make the first one IS the empty state.
-    body = reader;
+    // No captures yet: for an editor the way to make the first one IS the empty state.
+    body = canEdit ? (
+      reader
+    ) : (
+      <EmptyState icon="camera" title="No captures in this project">
+        A capture is a screenshot of a table — a report, a dashboard, a page — read into rows. An editor of this project can upload one. You have view-only
+        access.
+      </EmptyState>
+    );
   } else {
     body = (
       <ul className={s.capGrid} aria-label="Captures">
         {q.data.map((c) => (
-          <Card key={c.id} c={c} projectId={projectId} onDelete={() => setDeleting(c)} />
+          <Card key={c.id} c={c} projectId={projectId} onDelete={canEdit ? () => setDeleting(c) : undefined} />
         ))}
       </ul>
     );
   }
   return (
     <Page title="Captures" sub="Screenshots the model has read in this project.">
-      {q.data && q.data.length > 0 && (
+      {canEdit && q.data && q.data.length > 0 && (
         <>
           <div className={s.capBar}>
             <Button variant={uploading ? 'secondary' : 'primary'} icon={uploading ? 'x' : 'camera'} aria-expanded={uploading} onClick={() => setUploading(!uploading)}>

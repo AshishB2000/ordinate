@@ -14,6 +14,7 @@ import { Select } from '../../../ui/Select';
 import { SkeletonTable } from '../../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../../ui/States';
 import { toast } from '../../../ui/Toast';
+import { useCanEdit } from '../../projects/api';
 import { restore, setKeep, useSnapshotRefresh, useSnapshots, when, whenAll, type SnapshotItem, type SnapshotList } from './api';
 import { SnapshotDiff } from './SnapshotDiff';
 import s from './Snapshots.module.css';
@@ -21,7 +22,7 @@ import s from './Snapshots.module.css';
 const KEEP_CHOICES = [0, 3, 5, 10, 20, 50, 100];
 const rowsText = (n: number) => `${formatNumber(n)} ${n === 1 ? 'row' : 'rows'}`;
 
-function KeepSelect({ projectId, datasetId, keep, onDone }: { projectId: string; datasetId: string; keep: number; onDone: () => void }) {
+function KeepSelect({ projectId, datasetId, keep, readOnly, onDone }: { projectId: string; datasetId: string; keep: number; readOnly: boolean; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const choices = KEEP_CHOICES.includes(keep) ? KEEP_CHOICES : [...KEEP_CHOICES, keep].sort((a, b) => a - b);
   const change = async (n: number) => {
@@ -41,7 +42,7 @@ function KeepSelect({ projectId, datasetId, keep, onDone }: { projectId: string;
       <Select
         label="Keep"
         size="sm"
-        disabled={busy}
+        disabled={busy || readOnly}
         value={String(keep)}
         options={choices.map((n) => ({ value: String(n), label: n === 0 ? 'none (off)' : `the last ${n}` }))}
         onValueChange={(v) => void change(Number(v))}
@@ -91,7 +92,8 @@ function RestoreDialog({ projectId, datasetId, item, onClose, onDone }: { projec
   );
 }
 
-function Table({ list, open, onCompare, onRestore }: { list: SnapshotList; open: string | null; onCompare: (s: SnapshotItem) => void; onRestore: (s: SnapshotItem) => void }) {
+/** `onRestore` absent: a viewer compares, never restores. */
+function Table({ list, open, onCompare, onRestore }: { list: SnapshotList; open: string | null; onCompare: (s: SnapshotItem) => void; onRestore?: (s: SnapshotItem) => void }) {
   const labels = whenAll([list.current.at, ...list.items.map((x) => x.at)]);
   return (
     <div className={s.tableWrap}>
@@ -134,9 +136,11 @@ function Table({ list, open, onCompare, onRestore }: { list: SnapshotList; open:
                   <Button size="sm" icon="layers" onClick={() => onCompare(it)} aria-pressed={open === it.stamp}>
                     Compare
                   </Button>
-                  <Button size="sm" icon="rotate-ccw" onClick={() => onRestore(it)}>
-                    Restore…
-                  </Button>
+                  {onRestore && (
+                    <Button size="sm" icon="rotate-ccw" onClick={() => onRestore(it)}>
+                      Restore…
+                    </Button>
+                  )}
                 </div>
               </td>
             </tr>
@@ -152,6 +156,8 @@ export function SnapshotsTab({ projectId, datasetId }: { projectId: string; data
   const refresh = useSnapshotRefresh(projectId, datasetId);
   const [compare, setCompare] = useState<SnapshotItem | null>(null);
   const [restoring, setRestoring] = useState<SnapshotItem | null>(null);
+  // Restoring and how many are kept change the dataset: an editor's. Comparing is anyone's.
+  const canEdit = useCanEdit(projectId);
 
   if (q.isPending) return <SkeletonTable rows={4} cols={4} label="Loading the snapshots" />;
   if (q.isError) return <ErrorState title="Could not read the snapshots" message={q.error.message} onRetry={() => void q.refetch()} heading={3} />;
@@ -168,7 +174,7 @@ export function SnapshotsTab({ projectId, datasetId }: { projectId: string; data
               : 'A copy of the table, kept each time a refresh replaces it'}
           </p>
         </div>
-        {(list.eligible || list.items.length > 0) && <KeepSelect projectId={projectId} datasetId={datasetId} keep={list.keep} onDone={refresh} />}
+        {(list.eligible || list.items.length > 0) && <KeepSelect projectId={projectId} datasetId={datasetId} keep={list.keep} readOnly={!canEdit} onDone={refresh} />}
       </div>
       {!list.eligible && (
         <div className={s.notice} role="note">
@@ -176,16 +182,18 @@ export function SnapshotsTab({ projectId, datasetId }: { projectId: string; data
           <div>
             <strong>Only datasets with a schedule or a connection keep snapshots.</strong>
             <span>
-              {list.refreshable
-                ? ' Turn on Auto-refresh above to keep a copy each time this dataset refreshes.'
-                : ' This dataset has no source to refresh from, so it never changes on its own.'}
+              {!list.refreshable
+                ? ' This dataset has no source to refresh from, so it never changes on its own.'
+                : canEdit
+                  ? ' Turn on Auto-refresh above to keep a copy each time this dataset refreshes.'
+                  : ' An editor of this project can turn on Auto-refresh to keep a copy each time it refreshes.'}
             </span>
           </div>
         </div>
       )}
       {list.items.length > 0 ? (
         <>
-          <Table list={list} open={shown?.stamp ?? null} onCompare={(x) => setCompare(shown?.stamp === x.stamp ? null : x)} onRestore={setRestoring} />
+          <Table list={list} open={shown?.stamp ?? null} onCompare={(x) => setCompare(shown?.stamp === x.stamp ? null : x)} onRestore={canEdit ? setRestoring : undefined} />
           {shown && <SnapshotDiff projectId={projectId} datasetId={datasetId} item={shown} current={list.current} onClose={() => setCompare(null)} />}
         </>
       ) : (
@@ -193,7 +201,9 @@ export function SnapshotsTab({ projectId, datasetId }: { projectId: string; data
           <EmptyState icon="history" title="Snapshots start with the next refresh" heading={3}>
             {list.keep > 0
               ? `When a refresh replaces this table, the table it replaces is kept here — the last ${list.keep}, oldest dropped first. Compare any of them with now, or restore one.`
-              : 'Keeping is off for this dataset. Choose how many to keep above to start.'}
+              : canEdit
+                ? 'Keeping is off for this dataset. Choose how many to keep above to start.'
+                : 'Keeping is off for this dataset.'}
           </EmptyState>
         )
       )}
