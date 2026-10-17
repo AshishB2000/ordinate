@@ -148,6 +148,8 @@ async function inProcess(pool: Pool): Promise<void> {
   const unstar = doc({ starredBy: {} });
   ok('patch: a member\'s list removed is removed, another member\'s kept', JSON.stringify(JSON.parse(orgConfig.applyPatch(merged, orgConfig.diffDoc(base, unstar))).starredBy) === JSON.stringify({ sam: ['analysis:s'] }));
   ok('patch: no base means the whole document', orgConfig.applyPatch(merged, orgConfig.diffDoc(undefined, fmt)) === fmt);
+  const proto = JSON.parse(orgConfig.applyPatch(base, orgConfig.diffDoc(base, '{"starredBy":{"ann":["analysis:a"],"__proto__":["analysis:p"]}}')));
+  ok('patch: a member called __proto__ is a key like any other, never a prototype', Object.getOwnPropertyNames(proto.starredBy).includes('__proto__') && Object.getPrototypeOf(proto.starredBy) === Object.prototype);
 
   const adminUrl = process.env.DATABASE_URL;
   if (!adminUrl) {

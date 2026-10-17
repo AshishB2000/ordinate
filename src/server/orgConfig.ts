@@ -93,13 +93,15 @@ export type Patch = { whole: string } | { set: Record<string, unknown>; gone: st
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+// Null-prototype: a member key is an email, and `__proto__` must stay a key, never a prototype.
+const dict = (from: Record<string, unknown> = {}): Record<string, unknown> => Object.assign(Object.create(null) as Record<string, unknown>, from);
 
 /** `body` against the `base` it was made from. Both are `config.storable` documents. */
 export function diffDoc(base: string | undefined, body: string): Patch {
   if (base === undefined) return { whole: body };
   const a = obj(JSON.parse(base));
   const b = obj(JSON.parse(body));
-  const patch = { set: {} as Record<string, unknown>, gone: [] as string[], starredBy: {} as Record<string, unknown> };
+  const patch = { set: dict(), gone: [] as string[], starredBy: dict() };
   for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
     if (k === 'starredBy') {
       const [x, y] = [obj(a[k]), obj(b[k])];
@@ -115,17 +117,17 @@ export function diffDoc(base: string | undefined, body: string): Patch {
 /** The row's document as it is now, with this write's patch on top. */
 export function applyPatch(current: string, patch: Patch): string {
   if ('whole' in patch) return patch.whole;
-  const doc = { ...obj(JSON.parse(current)), ...patch.set };
-  for (const k of patch.gone) delete doc[k];
+  const next = Object.assign(dict(obj(JSON.parse(current))), patch.set);
+  for (const k of patch.gone) delete next[k];
   if (Object.keys(patch.starredBy).length) {
-    const sb = { ...obj(doc.starredBy) };
+    const sb = dict(obj(next.starredBy));
     for (const [m, v] of Object.entries(patch.starredBy)) {
       if (v === null) delete sb[m];
       else sb[m] = v;
     }
-    doc.starredBy = sb;
+    next.starredBy = sb;
   }
-  return JSON.stringify(doc);
+  return JSON.stringify(next);
 }
 
 async function check(pool: Pool, org: string, d: OrgDoc): Promise<void> {

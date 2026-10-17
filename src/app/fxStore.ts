@@ -29,8 +29,9 @@ function fxFile(projectId: string): string {
 // getFx runs for every figure (ipc/fxQuery.ts), so the settings are cached —
 // for at most FRESH_MS, keyed by the file (which carries the org): another
 // pod's declaration is seen within a second, as orgConfig's settings are.
+// The READ is cached, so a dashboard's tiles asking at once share one.
 const FRESH_MS = 1_000;
-const cache = new Map<string, { settings: FxSettings; at: number }>();
+const cache = new Map<string, { settings: Promise<FxSettings>; at: number }>();
 
 async function readFx(file: string): Promise<FxSettings> {
   try {
@@ -40,12 +41,12 @@ async function readFx(file: string): Promise<FxSettings> {
   }
 }
 
-export async function getFx(projectId: string): Promise<FxSettings> {
-  if (!isValidId(projectId)) return sanitizeSettings(null);
+export function getFx(projectId: string): Promise<FxSettings> {
+  if (!isValidId(projectId)) return Promise.resolve(sanitizeSettings(null));
   const file = fxFile(projectId);
   const hit = cache.get(file);
   if (hit && Date.now() - hit.at < FRESH_MS) return hit.settings;
-  const settings = await readFx(file);
+  const settings = readFx(file); // never rejects
   cache.set(file, { settings, at: Date.now() });
   return settings;
 }
@@ -68,7 +69,7 @@ function edit(projectId: string, fn: (s: FxSettings) => void): Promise<FxSetting
     await recordFs.rename(tmp, file);
     return clean;
   }).then((clean) => {
-    if (clean) cache.set(file, { settings: clean, at: Date.now() }); // after COMMIT: a rolled-back save is never served
+    if (clean) cache.set(file, { settings: Promise.resolve(clean), at: Date.now() }); // after COMMIT: a rolled-back save is never served
     return clean;
   });
 }

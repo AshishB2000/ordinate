@@ -81,11 +81,15 @@ async function writeState(state: ThemeState): Promise<void> {
 }
 
 // Every read-modify-write holds themes.json (recordFs.locked, every pod): two
-// quick saves from the editor must not interleave and drop one. A failed or
-// refused hold is the store's `{ ok: false, error }`. Reads take no lock: the
-// public embed and publish paths read themes on every page.
+// quick saves from the editor must not interleave and drop one. A refused or
+// rolled-back hold is the store's `{ ok: false, error }` with the lock's own
+// sentence; any other failure still rejects, as before. Reads take no lock:
+// the public embed and publish paths read themes on every page.
 function held<T extends { ok: boolean; error?: string }>(fn: () => Promise<T>): Promise<T | { ok: false; error: string }> {
-  return recordFs.locked(storeFile(), fn).catch((err: Error) => ({ ok: false as const, error: err.message }));
+  return recordFs.locked(storeFile(), fn).catch((err: Error & { code?: string }) => {
+    if (err.code === 'ERECORDBUSY' || err.code === 'ERECORDROLLEDBACK') return { ok: false as const, error: err.message };
+    throw err;
+  });
 }
 
 export function listThemes(): Promise<ThemeState> {
