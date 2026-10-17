@@ -130,8 +130,8 @@
   align-items: center;
   flex: 0 0 auto;
   width: 100%;
-  min-height: var(--menu-row);
-  padding: var(--sp-4) var(--sp-8);
+  min-height: 28px;
+  padding: 0 var(--sp-8);
   border: 0;
   border-radius: var(--r-sm);
   background: none;

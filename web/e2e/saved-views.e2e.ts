@@ -66,9 +66,25 @@ e2e('saved views: a picker over 725 dates, search, date pills, save → link →
   const dayStep = { type: 'filter', column: 'order_date', op: '=', value: '2024-12-30' };
   const want = await call(page, 'dashboard:metric', { projectId: pid, datasetId: ds.id, column: 'revenue', aggregation: 'sum', filters: [dayStep] });
   const all = await call(page, 'dashboard:metric', { projectId: pid, datasetId: ds.id, column: 'revenue', aggregation: 'sum' });
-  assert.ok(want.ok && want.display && want.display !== all.display, JSON.stringify(want));
+  assert.ok(want.ok && typeof want.value === 'number' && want.value !== all.value, JSON.stringify(want));
   const dash = `/analyses/${pid}/${board.id}`;
   const kpi = page.getByRole('group', { name: 'Revenue card' });
+  const money = /^\$?[\d.,]+\s?[KMB]?$/;
+  /** The KPI's figure as drawn, once it is the server's `v` (the card formats it: "9.8K" for 9802.23). */
+  const kpiShows = async (v: number): Promise<string> => {
+    const scale: Record<string, number> = { '': 1, K: 1e3, M: 1e6, B: 1e9 };
+    const near = (t: string) => {
+      const m = /^\$?([\d.,]+)\s?([KMB]?)$/.exec(t);
+      return !!m && Math.abs(Number(m[1].replace(/,/g, '')) * scale[m[2]] - v) <= Math.abs(v) * 0.01;
+    };
+    await kpi.getByText(money).first().waitFor({ timeout: 15_000 }).catch(async (err: Error) => {
+      throw new Error(`the KPI card says “${await kpi.innerText().catch(() => '?')}”: ${err.message}`);
+    });
+    for (let i = 0; i < 100 && !near((await kpi.getByText(money).first().textContent()) ?? ''); i++) await page.waitForTimeout(100);
+    const t = (await kpi.getByText(money).first().textContent()) ?? '';
+    assert.ok(near(t), `the KPI shows ${t}, the server's figure is ${v}`);
+    return t;
+  };
   const budget = (what: string) => {
     const n = rpc.loads.at(-1)?.rpcs ?? 0;
     console.log(`rpc: ${what} ${n}`);
@@ -78,7 +94,7 @@ e2e('saved views: a picker over 725 dates, search, date pills, save → link →
   // ── The value picker ─────────────────────────────────────────────────
   await page.goto(dash);
   await page.getByRole('heading', { level: 1, name: 'Year end' }).waitFor();
-  await kpi.getByText(all.display).waitFor();
+  const allText = await kpiShows(all.value);
   await settled(page);
   budget('dashboard open');
   await page.getByRole('button', { name: 'Day: All' }).click();
@@ -88,7 +104,8 @@ e2e('saved views: a picker over 725 dates, search, date pills, save → link →
   await screensInPlace(page, 'dashboard-value-picker');
   await page.getByRole('searchbox', { name: 'Search values' }).fill('2024-12-30');
   await values.getByRole('button', { name: '2024-12-30', exact: true }).click();
-  await kpi.getByText(want.display).waitFor();
+  const dayText = await kpiShows(want.value);
+  assert.notEqual(dayText, allText);
   await page.getByRole('button', { name: 'Day: 2024-12-30' }).waitFor();
   // The same picker previews the default inside the Edit control dialog: a popover over the modal.
   await page.getByRole('button', { name: 'Actions for Day' }).click();
@@ -104,7 +121,7 @@ e2e('saved views: a picker over 725 dates, search, date pills, save → link →
 
   // ── The date control: the server's pills and names ───────────────────
   await page.goto(dash);
-  await kpi.getByText(all.display).waitFor();
+  await kpi.getByText(allText, { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Period: All dates' }).click();
   const periods = page.getByRole('dialog', { name: 'Period' });
   const pill = periods.getByRole('button', { name: 'Last 30 days' });
@@ -120,11 +137,11 @@ e2e('saved views: a picker over 725 dates, search, date pills, save → link →
 
   // ── Save a view, copy its link, open the link ───────────────────────
   await page.goto(dash);
-  await kpi.getByText(all.display).waitFor();
+  await kpi.getByText(allText, { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Day: All' }).click();
   await page.getByRole('searchbox', { name: 'Search values' }).fill('2024-12-30');
   await values.getByRole('button', { name: '2024-12-30', exact: true }).click();
-  await kpi.getByText(want.display).waitFor();
+  await kpi.getByText(dayText, { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Views' }).click();
   await page.getByRole('menuitem', { name: 'Save as a new view…' }).click();
   const naming = page.getByRole('dialog', { name: 'Save as a new view' });
@@ -143,7 +160,7 @@ e2e('saved views: a picker over 725 dates, search, date pills, save → link →
   assert.equal(link, `${server.base}${dash}?view=${viewId}`);
   budget('save a view');
   await page.goto(link);
-  await kpi.getByText(want.display).waitFor();
+  await kpi.getByText(dayText, { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Day: 2024-12-30' }).waitFor();
   await settled(page);
   budget('the view’s link');
@@ -159,15 +176,18 @@ e2e('saved views: a picker over 725 dates, search, date pills, save → link →
   // ── A phone: the Filters sheet's "Saved view" ───────────────────────
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(dash);
-  await kpi.getByText(all.display).waitFor();
+  await kpi.getByText(allText, { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Filters' }).click();
   const sheet = page.getByRole('dialog', { name: 'Filters' });
   await sheet.getByRole('combobox', { name: 'Saved view' }).click();
   await page.getByRole('option', { name: 'Last trading day' }).click();
-  await kpi.getByText(want.display).waitFor();
   await page.waitForURL(new RegExp(`\\?view=${viewId}$`));
+  await sheet.getByRole('combobox', { name: 'Saved view' }).getByText('Last trading day').waitFor();
   await screensInPlace(page, 'phone-views', false);
   await sheet.getByRole('button', { name: 'Done' }).click();
+  await sheet.waitFor({ state: 'detached' });
+  // The sheet is modal: the page behind it is hidden from the accessibility tree until it closes.
+  await kpi.getByText(dayText, { exact: true }).waitFor();
   budget('phone');
   await page.setViewportSize({ width: 1440, height: 900 });
 
@@ -179,7 +199,7 @@ e2e('saved views: a picker over 725 dates, search, date pills, save → link →
   await page.getByRole('menuitemradio', { name: 'Last trading day (default)' }).waitFor();
   await page.keyboard.press('Escape');
   await page.goto(dash);
-  await kpi.getByText(want.display).waitFor();
+  await kpi.getByText(dayText, { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Views: Last trading day' }).waitFor();
   budget('default view');
 
@@ -198,17 +218,24 @@ e2e('saved views: a picker over 725 dates, search, date pills, save → link →
   const pubView = page.locator('select.pub-view-select');
   assert.deepEqual(await pubView.locator('option').allTextContents(), ['Custom', 'Last trading day']);
   assert.equal(await pubView.locator('option:checked').textContent(), 'Last trading day', 'the default view is on');
-  await page.getByText(want.display).first().waitFor();
-  for (const scheme of ['light', 'dark'] as const) {
-    await page.emulateMedia({ colorScheme: scheme });
-    await page.waitForTimeout(300);
-    await page.screenshot({ path: path.join(SCREENS, `published-view-${scheme}.png`), fullPage: true });
-  }
-  await page.emulateMedia({ colorScheme: 'light' });
+  await page.getByText(dayText, { exact: true }).first().waitFor();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(SCREENS, 'published-view-light.png'), fullPage: true });
+  // A published page wears its dashboard's style, not the app's theme: the dark one is the board styled Dark, published again.
+  await page.goto(`/analyses?project=${pid}`);
+  await settled(page);
+  await call(page, 'analysis:update', { projectId: pid, id: board.id, style: { theme: 'dark', chosen: true } });
+  const dark = await call(page, 'publish:run', { projectId: pid, dashboardIds: [board.id], id: run.site.id });
+  assert.equal(dark.ok, true, JSON.stringify(dark).slice(0, 300));
+  await page.goto(`/p/${dark.site.id}/${dark.site.pages[0].file}`);
+  await page.waitForFunction(() => document.body.dataset.ready === 'true');
+  assert.equal(await pubView.locator('option:checked').textContent(), 'Last trading day');
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(SCREENS, 'published-view-dark.png'), fullPage: true });
 
   // ── Delete: the address drops it ────────────────────────────────────
   await page.goto(`${dash}?view=${viewId}`);
-  await kpi.getByText(want.display).waitFor();
+  await kpi.getByText(dayText, { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Views: Last trading day' }).click();
   await page.getByRole('menuitem', { name: 'Delete…' }).click();
   const confirm = page.getByRole('dialog', { name: 'Delete “Last trading day”?' });
