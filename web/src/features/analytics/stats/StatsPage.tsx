@@ -19,6 +19,7 @@ import { EmptyState } from '../../../ui/States';
 import { SkeletonBlock } from '../../../ui/Skeleton';
 import { Tab, TabList, Tabs } from '../../../ui/Tabs';
 import { toast } from '../../../ui/Toast';
+import { useCanEdit } from '../../projects/api';
 import { DatasetRoute, WorkbenchHead } from '../Workbench';
 import { call, useStatsRun, type GroupsResult, type StatsKind, type StatsSpec } from '../api';
 import { AddToDashboard } from './AddToDashboard';
@@ -86,6 +87,8 @@ function Workbench({ projectId, datasetId, ds }: { projectId: string; datasetId:
   }, [big, stale, tab, spec, ran]);
 
   const q = useStatsRun(projectId, ran?.spec ?? null, ran?.nonce ?? 0);
+  // Saving the fit as a calculated field rewrites the dataset: an editor's.
+  const canEdit = useCanEdit(projectId);
   const reply = q.data;
   const result = reply && reply.ok ? reply.result : null;
 
@@ -147,9 +150,11 @@ function Workbench({ projectId, datasetId, ds }: { projectId: string; datasetId:
         r={result}
         figures={reply.figures}
         actions={actions(
-          <Button size="sm" variant="primary" icon="function" title={`Add predicted_${result.fit.target} to this dataset as a calculated field`} onClick={() => void saveFormula()}>
-            {`Save as predicted_${result.fit.target}`}
-          </Button>,
+          canEdit && (
+            <Button size="sm" variant="primary" icon="function" title={`Add predicted_${result.fit.target} to this dataset as a calculated field`} onClick={() => void saveFormula()}>
+              {`Save as predicted_${result.fit.target}`}
+            </Button>
+          ),
         )}
       />
     );

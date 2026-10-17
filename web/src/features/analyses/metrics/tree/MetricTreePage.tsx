@@ -1,7 +1,9 @@
 // /data/metrics/:projectId/:metricId/tree — "why did this number move", one
 // picture (docs/metric-tree/00-design.md). A period and the same Compare a
 // dashboard uses; the server's headline; the tree. Every figure, share and
-// sentence is metricTree:compute's — this page places them.
+// sentence is metricTree:compute's — this page places them. A viewer picks the
+// period and Compare; building, editing and adding a tree are an editor's, so a
+// viewer's tree-less metric asks the server for no suggestions.
 
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
@@ -17,6 +19,7 @@ import { CompareControl, usable } from '../../../dashboards/CompareBar';
 import type { Compare } from '../../../dashboards/useViewer';
 import { LiveRefusal } from '../../../live/LiveOff';
 import { liveRefusalOf } from '../../../live/refusal';
+import { useRoles } from '../../../projects/api';
 import { saveTree, useSuggest, useTree, type ComputeInput, type PeriodKey, type TreeSpec } from './api';
 import { AddTreeToDashboard } from './AddTreeToDashboard';
 import { TreeEditor, describe } from './TreeEditor';
@@ -87,6 +90,10 @@ function TreePage({ projectId, metricId }: { projectId: string; metricId: string
   const [period, setPeriod] = useState<{ key: PeriodKey; from?: string; to?: string }>({ key: 'latest_month' });
   const [compare, setCompare] = useState<Compare>({ mode: 'previous_period' });
   const [editing, setEditing] = useState(false);
+  // The empty tree's offers depend on the role: nothing is mounted for it until the role is known.
+  const roles = useRoles();
+  const role = roles.data?.[projectId];
+  const canEdit = role === 'editor' || role === 'admin';
   const cmp = usable(compare);
   const periodReady = period.key !== 'custom' || (ISO.test(period.from ?? '') && ISO.test(period.to ?? ''));
   const input: ComputeInput | null = cmp && periodReady ? { projectId, id: metricId, period, compare: cmp } : null;
@@ -102,14 +109,21 @@ function TreePage({ projectId, metricId }: { projectId: string; metricId: string
 
   let body;
   if (!input) body = <p className={s.wait}>Pick both dates to compare.</p>;
-  else if (q.isPending) body = <TreeSkeleton />;
+  else if (q.isPending || roles.isPending) body = <TreeSkeleton />;
   else if (q.isError && live) body = <LiveRefusal projectId={projectId} message={live} />;
   else if (q.isError) body = <ErrorState title="The tree could not be computed" message={q.error.message} onRetry={() => void q.refetch()} />;
   else if (data) {
     body = (
       <div className={q.isFetching ? `${s.canvas} ${s.fetching}` : s.canvas} aria-busy={q.isFetching || undefined}>
         <TreeView key={JSON.stringify(data.tree)} root={data.root} label={`${data.root.name}, ${data.period.label} ${data.compareLabel}`} />
-        {!data.tree && <StartHere projectId={projectId} metricId={metricId} name={data.root.name} onEdit={() => setEditing(true)} onSaved={refresh} />}
+        {!data.tree &&
+          (canEdit ? (
+            <StartHere projectId={projectId} metricId={metricId} name={data.root.name} onEdit={() => setEditing(true)} onSaved={refresh} />
+          ) : (
+            <EmptyState compact icon="lineage" title="No tree yet" heading={2}>
+              {`A tree shows which parts moved ${data.root.name}, each with its share of the change. An editor of this project can break it down. You have view-only access.`}
+            </EmptyState>
+          ))}
       </div>
     );
   }
@@ -129,9 +143,11 @@ function TreePage({ projectId, metricId }: { projectId: string; metricId: string
         )}
         <CompareControl required label="Compare the period with" value={compare} onChange={(c) => c && setCompare(c)} />
         <span className={s.grow} />
-        <Button icon="pencil" disabled={!data} onClick={() => setEditing(true)}>
-          Edit tree
-        </Button>
+        {canEdit && (
+          <Button icon="pencil" disabled={!data} onClick={() => setEditing(true)}>
+            Edit tree
+          </Button>
+        )}
         <AddTreeToDashboard projectId={projectId} metricId={metricId} disabled={!data?.tree} />
       </div>
       {data && input && (
@@ -145,7 +161,7 @@ function TreePage({ projectId, metricId }: { projectId: string; metricId: string
         </section>
       )}
       {body}
-      {editing && data && (
+      {editing && canEdit && data && (
         <TreeEditor projectId={projectId} metricId={metricId} metricName={data.root.name} initial={data.tree} open={editing} onOpenChange={setEditing} onSaved={refresh} />
       )}
     </Page>

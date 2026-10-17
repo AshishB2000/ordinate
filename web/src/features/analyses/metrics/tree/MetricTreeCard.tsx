@@ -67,12 +67,16 @@ export function MetricTreeBody({ card }: { card: Card }) {
           icon="lineage"
           title={`${t.root.name} has no tree yet`}
           actions={
-            <Link className={buttonClass('secondary', 'sm')} to={`/data/metrics/${ed.projectId}/${spec.metricId}/tree`}>
-              Break it down
-            </Link>
+            !ed.readOnly && (
+              <Link className={buttonClass('secondary', 'sm')} to={`/data/metrics/${ed.projectId}/${spec.metricId}/tree`}>
+                Break it down
+              </Link>
+            )
           }
         >
-          Break the metric into its parts on its tree page; this card follows.
+          {ed.readOnly
+            ? 'An editor of this project can break the metric into its parts; this card follows.'
+            : 'Break the metric into its parts on its tree page; this card follows.'}
         </EmptyState>
       )}
     </div>
