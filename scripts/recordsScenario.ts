@@ -7,7 +7,8 @@
 // The clock is frozen (advanced by hand between steps) and randomUUID counts,
 // so both runs mint the same ids and timestamps: their transcripts — every
 // call's result — and their final record state must be IDENTICAL. Prints one
-// JSON line: { steps: [[label, result]], records: {path: text}, files: [...] }.
+// JSON line: { steps: [[label, result]], records: {path: text}, blobs: {path:
+// base64}, files: [...] } — blobs are the stored images (src/app/blobStore.ts).
 
 export {}; // module scope — sibling scripts share top-level names
 import * as fs from 'fs';
@@ -42,6 +43,7 @@ const tick = (): void => { now += 60_000; };
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
 const appPaths: typeof import('../src/app/paths') = require('../src/app/paths');
+const blobStore: typeof import('../src/app/blobStore') = require('../src/app/blobStore');
 
 const steps: Array<[string, unknown]> = [];
 async function step(label: string, fn: () => unknown): Promise<any> { // ponytail: any — each store's own result type
@@ -86,6 +88,8 @@ async function scenario(): Promise<void> {
   const templates: typeof import('../src/app/userTemplateStore') = require('../src/app/userTemplateStore');
   const { captureTemplate }: typeof import('../src/analysis/userTemplate') = require('../src/analysis/userTemplate');
   const bundle: typeof import('../src/app/bundle') = require('../src/app/bundle');
+  const branding: typeof import('../src/app/branding') = require('../src/app/branding');
+  const assets: typeof import('../src/app/projectAssets') = require('../src/app/projectAssets');
 
   // projects
   await step('projects.init', () => projects.init());
@@ -196,6 +200,17 @@ async function scenario(): Promise<void> {
   await step('boundaries.list', () => boundaries.listBoundaries(pid));
   await step('boundaries.get', () => boundaries.getBoundary(pid, B.id));
 
+  // stored images: the workspace logo and Image-card pictures (one in the project deleted below)
+  const u32 = (n: number): Buffer => { const b = Buffer.alloc(4); b.writeUInt32BE(n); return b; };
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), u32(13), Buffer.from('IHDR'), u32(2), u32(1), Buffer.alloc(5)]);
+  const picked = path.join(dataDir, 'picked.png');
+  fs.writeFileSync(picked, PNG);
+  await step('branding.saveLogo', () => branding.saveLogo(appPaths.userData(), 'workspace', PNG));
+  await step('branding.readLogo', () => branding.readLogoDataUrl(appPaths.userData(), 'workspace'));
+  const IMG = await step('assets.importImage', () => assets.importImage(pid, picked));
+  await step('assets.importImage scratch project', () => assets.importImage(Q.id, picked));
+  await step('assets.read', () => assets.readImageDataUrl(pid, IMG.id, IMG.ext));
+
   // org-level records: capture history, themes, user templates
   await step('history.saveThread', () => history.saveThread({ id: '1700000000000', projectId: pid, title: 'First', createdAt: 'a', updatedAt: 'b', cropPath: null, messages: [{ role: 'user', text: 'hi' }] }));
   await step('history.setDatasetId', () => history.setDatasetId('1700000000000', D.id));
@@ -251,10 +266,11 @@ async function scenario(): Promise<void> {
   ]);
 }
 
-/** Every record path → its text (DB rows or JSON files), and every other file under userData → its size. */
-async function snapshot(pool: Pool | null): Promise<{ records: Record<string, string>; files: string[] }> {
+/** Every record path → its text (DB rows or JSON files), every stored image → base64, and every other file under userData → its size. */
+async function snapshot(pool: Pool | null): Promise<{ records: Record<string, string>; blobs: Record<string, string>; files: string[] }> {
   const root = appPaths.userData();
   const records: Record<string, string> = {};
+  const blobs: Record<string, string> = {};
   const files: string[] = [];
   const walk = (dir: string): void => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -262,12 +278,14 @@ async function snapshot(pool: Pool | null): Promise<{ records: Record<string, st
       const rel = path.relative(root, p).split(path.sep).join('/');
       if (e.isDirectory()) walk(p);
       else if (recordFs.isRecordPath(rel)) records[rel] = fs.readFileSync(p, 'utf8');
+      else if (blobStore.isBlobPath(rel)) blobs[rel] = fs.readFileSync(p).toString('base64');
       else files.push(rel + ' ' + fs.statSync(p).size);
     }
   };
   walk(root);
   if (pool) {
     if (Object.keys(records).length) records['!! record files on disk under the DB backend'] = Object.keys(records).join();
+    if (Object.keys(blobs).length) blobs['!! image files on disk under the DB backend'] = Object.keys(blobs).join();
     // As the app reads them: the RLS org set, so this also holds for a non-superuser role.
     const c = await pool.connect();
     try {
@@ -275,11 +293,13 @@ async function snapshot(pool: Pool | null): Promise<{ records: Record<string, st
       const r = await c.query('SELECT path, body FROM records WHERE org_id = $1', [ORG]);
       await c.query('COMMIT');
       for (const row of r.rows) records[row.path] = row.body;
+      const b = await c.query(`BEGIN; SELECT set_config('ordinate.org', '${ORG}', true); SELECT path, bytes FROM blobs WHERE org_id = '${ORG}'; COMMIT`);
+      for (const row of (b as unknown as Array<{ rows: Array<{ path: string; bytes: Buffer }> }>)[2].rows) blobs[row.path] = row.bytes.toString('base64');
     } finally {
       c.release();
     }
   }
-  return { records, files: files.sort() };
+  return { records, blobs, files: files.sort() };
 }
 
 (async () => {
@@ -288,6 +308,7 @@ async function snapshot(pool: Pool | null): Promise<{ records: Record<string, st
   if (backend === 'pg') {
     pool = new Pool({ connectionString: dbUrl, max: 4 });
     recordFs.useRecordDb(pool);
+    blobStore.useBlobDb(pool);
   }
   const who = { user: { email: 'diff@test', role: 'admin' as const }, org: { id: ORG } };
   const out = await context.runInContext(who, 'diff', async () => {

@@ -5,13 +5,17 @@
 // BYTES, not its name: PNG and JPEG by magic number, SVG by its root element,
 // and an SVG that carries script or event handlers is refused outright even
 // though an <img> would not run it — the file outlives the tag it was added for.
-// The renderer only ever receives a `data:` URL, never a path.
+// The renderer only ever receives a `data:` URL, never a path. The bytes go
+// through ./blobStore.ts (a row of `blobs` on a server with DATABASE_URL) and
+// are checked again on every read: a file that is not what its name says is
+// served as missing.
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as appPaths from './paths';
 import { isValidId } from './ids';
+import { readBlob, writeBlob } from './blobStore';
 
 export const MAX_ASSET_BYTES = 5 * 1024 * 1024;
 export type AssetExt = 'png' | 'jpg' | 'svg';
@@ -28,6 +32,11 @@ export function sniffImage(buf: Buffer): AssetExt | null {
 /** An SVG that could do something when opened on its own. */
 export function unsafeSvg(text: string): boolean {
   return /<script|<foreignObject|javascript:|\son[a-z]+\s*=|<iframe|<embed|<object/i.test(text);
+}
+
+/** Are these bytes the `ext` they are stored as — and, for an SVG, script-free? */
+export function validAsset(buf: Buffer, ext: string): boolean {
+  return sniffImage(buf) === ext && !(ext === 'svg' && unsafeSvg(buf.toString('utf8')));
 }
 
 /** Width / height from the header bytes, for the card's aspect lock. Null when unknown. */
@@ -77,12 +86,7 @@ export async function importImage(projectId: string, file: string): Promise<Stor
   if (!ext) return { error: 'Only PNG, JPG and SVG images can be added.' };
   if (ext === 'svg' && unsafeSvg(buf.toString('utf8'))) return { error: 'That SVG contains script, so it was not added.' };
   const id = randomUUID();
-  const dir = assetsDir(projectId);
-  await fs.promises.mkdir(dir, { recursive: true });
-  const dest = path.join(dir, `${id}.${ext}`);
-  const tmp = dest + '.' + randomUUID() + '.tmp';
-  await fs.promises.writeFile(tmp, buf);
-  await fs.promises.rename(tmp, dest);
+  await writeBlob(path.join(assetsDir(projectId), `${id}.${ext}`), buf);
   const size = imageSize(buf, ext);
   return size && size.h > 0 ? { id, ext, aspect: size.w / size.h } : { id, ext };
 }
@@ -90,10 +94,6 @@ export async function importImage(projectId: string, file: string): Promise<Stor
 /** The asset as a `data:` URL for an <img>, or null. */
 export async function readImageDataUrl(projectId: string, id: string, ext: string): Promise<string | null> {
   if (!isValidId(projectId) || !isValidId(id) || !(ext in MIME)) return null;
-  try {
-    const buf = await fs.promises.readFile(path.join(assetsDir(projectId), `${id}.${ext}`));
-    return `data:${MIME[ext as AssetExt]};base64,${buf.toString('base64')}`;
-  } catch (_) {
-    return null;
-  }
+  const buf = await readBlob(path.join(assetsDir(projectId), `${id}.${ext}`));
+  return buf && validAsset(buf, ext) ? `data:${MIME[ext as AssetExt]};base64,${buf.toString('base64')}` : null;
 }

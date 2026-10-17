@@ -121,7 +121,7 @@ export function register(deps: CaptureDeps = {}) {
   // GET route if captures ever hold more than screenshots.
   ipcMain.handle('captureDataset:image', async (_e, { projectId, captureId }: any = {}) => {
     const thread = await captureUpload.loadOwn(String(projectId), String(captureId)).catch(() => null);
-    const png = thread ? await history.loadCrop(thread.id) : null;
+    const png = thread ? await history.loadCrop(thread.id, thread) : null;
     return png ? { ok: true, dataUrl: 'data:image/png;base64,' + png.toString('base64') } : { ok: false };
   });
   ipcMain.handle('captureDataset:delete', async (_e, { projectId, captureId }: any = {}) => {
