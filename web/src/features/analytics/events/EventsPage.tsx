@@ -16,6 +16,7 @@ import { Icon } from '../../../ui/icons/Icon';
 import { SkeletonRows } from '../../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../../ui/States';
 import { toast } from '../../../ui/Toast';
+import { useCanEdit } from '../../projects/api';
 import { useAdoptProject } from '../../projects/current';
 import { deleteEvent, importCsv, kindName, KINDS, MAX_CSV, setCalendars, useEvents, useEventsRefresh, type ProjectEvent } from './api';
 import { EventEditor } from './EventEditor';
@@ -30,7 +31,13 @@ function scopeText(e: ProjectEvent, name: (id: string) => string): string {
   return parts.length ? parts.join(' · ') : 'All charts';
 }
 
-function Calendars({ projectId, on, available, onDone }: { projectId: string; on: string[]; available: Array<{ code: string; name: string; note: string; perYear: number }>; onDone: () => void }) {
+function Calendars({ projectId, on, available, readOnly, onDone }: {
+  projectId: string;
+  on: string[];
+  available: Array<{ code: string; name: string; note: string; perYear: number }>;
+  readOnly: boolean;
+  onDone: () => void;
+}) {
   // The switch moves at once and holds while the server stores it; a refusal puts it back.
   const [pending, setPending] = useState<string[] | null>(null);
   const shown = pending ?? on;
@@ -56,7 +63,7 @@ function Calendars({ projectId, on, available, onDone }: { projectId: string; on
           label={c.name}
           hint={`${c.code} · about ${formatNumber(c.perYear)} a year`}
           title={c.note || undefined}
-          disabled={pending !== null}
+          disabled={pending !== null || readOnly}
           checked={shown.includes(c.code)}
           onCheckedChange={(want) => void toggle(c.code, want, c.name)}
         />
@@ -75,6 +82,8 @@ export default function EventsPage() {
   const [editing, setEditing] = useState<ProjectEvent | null | 'new'>(null);
   const [deleting, setDeleting] = useState<ProjectEvent | null>(null);
   const file = useRef<HTMLInputElement>(null);
+  // Adding, importing, editing and deleting events, and the calendars, are an editor's: a viewer reads them.
+  const canEdit = useCanEdit(projectId);
 
   const remove = async (e: ProjectEvent) => {
     setDeleting(null);
@@ -124,24 +133,28 @@ export default function EventsPage() {
           <p className={a.sub}>Launches, campaigns, incidents and holidays — marked on every chart with a date axis, and named when a figure changes during one.</p>
         </div>
         <div className={a.actions}>
-          <Button variant="primary" icon="plus" onClick={() => setEditing('new')}>
-            New event
-          </Button>
-          <Button icon="upload" onClick={() => file.current?.click()}>
-            Import CSV
-          </Button>
-          <input
-            ref={file}
-            type="file"
-            accept=".csv,text/csv"
-            hidden
-            aria-label="Events CSV file"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = '';
-              void onFile(f);
-            }}
-          />
+          {canEdit && (
+            <>
+              <Button variant="primary" icon="plus" onClick={() => setEditing('new')}>
+                New event
+              </Button>
+              <Button icon="upload" onClick={() => file.current?.click()}>
+                Import CSV
+              </Button>
+              <input
+                ref={file}
+                type="file"
+                accept=".csv,text/csv"
+                hidden
+                aria-label="Events CSV file"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = '';
+                  void onFile(f);
+                }}
+              />
+            </>
+          )}
           <Link className={buttonClass('secondary')} to={`/analytics?project=${projectId}`}>
             <Icon name="x" />
             Analytics
@@ -160,17 +173,21 @@ export default function EventsPage() {
               icon="calendar"
               title="No events yet"
               actions={
-                <>
-                  <Button variant="primary" onClick={() => setEditing('new')}>
-                    New event
-                  </Button>
-                  <Button variant="ghost" onClick={() => file.current?.click()}>
-                    Import CSV
-                  </Button>
-                </>
+                canEdit && (
+                  <>
+                    <Button variant="primary" onClick={() => setEditing('new')}>
+                      New event
+                    </Button>
+                    <Button variant="ghost" onClick={() => file.current?.click()}>
+                      Import CSV
+                    </Button>
+                  </>
+                )
               }
             >
-              Add a launch, a campaign or an outage and every chart with a date axis marks it — a line for a day, a band for a range. When a figure changes during one, Insights and Key drivers say so.
+              {canEdit
+                ? 'Add a launch, a campaign or an outage and every chart with a date axis marks it — a line for a day, a band for a range. When a figure changes during one, Insights and Key drivers say so.'
+                : 'A launch, a campaign or an outage is marked on every chart with a date axis — a line for a day, a band for a range. An editor of this project can add one. You have view-only access.'}
             </EmptyState>
           ) : (
             <>
@@ -206,9 +223,13 @@ export default function EventsPage() {
                         <th scope="row">
                           <span className={s.name}>
                             <KindMark kind={e.kind} />
-                            <button type="button" className={s.title} title="Edit this event" onClick={() => setEditing(e)}>
-                              {e.title}
-                            </button>
+                            {canEdit ? (
+                              <button type="button" className={s.title} title="Edit this event" onClick={() => setEditing(e)}>
+                                {e.title}
+                              </button>
+                            ) : (
+                              <span className={s.titleText}>{e.title}</span>
+                            )}
                           </span>
                         </th>
                         <td>
@@ -222,8 +243,12 @@ export default function EventsPage() {
                           {scope}
                         </td>
                         <td className={s.rowActions}>
-                          <IconButton icon="pencil" size="sm" label={`Edit ${e.title}`} onClick={() => setEditing(e)} />
-                          <IconButton icon="trash" size="sm" label={`Delete ${e.title}`} onClick={() => setDeleting(e)} />
+                          {canEdit && (
+                            <>
+                              <IconButton icon="pencil" size="sm" label={`Edit ${e.title}`} onClick={() => setEditing(e)} />
+                              <IconButton icon="trash" size="sm" label={`Delete ${e.title}`} onClick={() => setDeleting(e)} />
+                            </>
+                          )}
                         </td>
                       </tr>
                     );
@@ -237,9 +262,12 @@ export default function EventsPage() {
         <aside className={s.side} aria-label="Calendars and import">
           <section className={s.card}>
             <h2 className={s.cardH}>Holiday calendars</h2>
-            <p className={s.cardP}>Public holidays, 2015 to 2035, bundled with the app. Switch one on and its holidays mark every date axis in this project.</p>
-            {q.data ? <Calendars projectId={projectId} on={q.data.calendars} available={q.data.available} onDone={refresh} /> : <SkeletonRows rows={3} label="Loading calendars" />}
+            <p className={s.cardP}>
+              Public holidays, 2015 to 2035, bundled with the app. {canEdit ? 'Switch one on and its holidays' : 'The holidays of a calendar switched on'} mark every date axis in this project.
+            </p>
+            {q.data ? <Calendars projectId={projectId} on={q.data.calendars} available={q.data.available} readOnly={!canEdit} onDone={refresh} /> : <SkeletonRows rows={3} label="Loading calendars" />}
           </section>
+          {canEdit && (
           <section className={s.card}>
             <h2 className={s.cardH}>Importing a CSV</h2>
             <p className={s.cardP}>
@@ -247,6 +275,7 @@ export default function EventsPage() {
             </p>
             <pre className={s.sample}>{'date,end,title,kind\n2024-11-25,2024-12-31,Holiday campaign,campaign\n2024-03-04,,v2 launch,launch'}</pre>
           </section>
+          )}
         </aside>
       </div>
 

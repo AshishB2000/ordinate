@@ -11,6 +11,7 @@ import { buttonClass, IconButton } from '../../../ui/Button';
 import { Menu } from '../../../ui/Menu';
 import { SkeletonRows } from '../../../ui/Skeleton';
 import { Icon } from '../../../ui/icons/Icon';
+import { useCanEdit } from '../../projects/api';
 import { useAdoptProject } from '../../projects/current';
 import { useScenarios, type ScenarioSummary } from '../api';
 import { DeleteScenario, DriverChips, NewScenario, TornadoArt, duplicateScenario } from './ScenarioParts';
@@ -25,6 +26,8 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 function Card({ sc, projectId, onDelete, refresh }: { sc: ScenarioSummary; projectId: string; onDelete: () => void; refresh: () => void }) {
   const nav = useNavigate();
+  // Duplicate and Delete write: a viewer opens and compares.
+  const canEdit = useCanEdit(projectId);
   const open = `/analytics/scenarios/${projectId}/${sc.id}`;
   return (
     <li className={s.card}>
@@ -45,9 +48,13 @@ function Card({ sc, projectId, onDelete, refresh }: { sc: ScenarioSummary; proje
           items={[
             { label: 'Open', icon: 'external-link', onSelect: () => void nav(open) },
             { label: 'Compare…', icon: 'columns', onSelect: () => void nav(`/analytics/scenarios/${projectId}/compare?ids=${sc.id}`) },
-            { label: 'Duplicate', icon: 'copy', onSelect: () => void duplicateScenario(projectId, sc.id, refresh) },
-            { kind: 'separator' },
-            { label: 'Delete', icon: 'trash', danger: true, onSelect: onDelete },
+            ...(canEdit
+              ? [
+                  { label: 'Duplicate', icon: 'copy' as const, onSelect: () => void duplicateScenario(projectId, sc.id, refresh) },
+                  { kind: 'separator' as const },
+                  { label: 'Delete', icon: 'trash' as const, danger: true, onSelect: onDelete },
+                ]
+              : []),
           ]}
         />
       </span>
@@ -60,6 +67,7 @@ function List({ projectId }: { projectId: string }) {
   const client = useQueryClient();
   const [doomed, setDoomed] = useState<ScenarioSummary | null>(null);
   const refresh = () => void client.invalidateQueries({ queryKey: ['scenario:list', projectId] });
+  const canEdit = useCanEdit(projectId);
   const list = q.data ?? [];
   return (
     <Page title="Scenarios" sub="What-if: drivers move a metric’s inputs, never the stored data. Open one to tune it, or compare up to four side by side.">
@@ -73,6 +81,7 @@ function List({ projectId }: { projectId: string }) {
           <h2 className={s.emptyH}>No scenarios yet</h2>
           <p className={s.emptyP}>
             A scenario asks “what if?” of your metrics. Add drivers — a price up five percent, one region’s volume down three, a discount set to zero — and every metric is recomputed beside its baseline, with a chart of which driver moves it most. The stored data never changes.
+            {!canEdit && ' An editor of this project can create one. You have view-only access.'}
           </p>
           <ul className={s.examples} aria-label="Example drivers">
             <li className={s.chip}>unit_price +5%</li>

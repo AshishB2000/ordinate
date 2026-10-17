@@ -116,6 +116,10 @@
   cursor: pointer;
   text-align: left;
 }
+.titleText {
+  font-weight: 600;
+  color: var(--text-strong);
+}
 .title:hover {
   color: var(--accent);
   text-decoration: underline;

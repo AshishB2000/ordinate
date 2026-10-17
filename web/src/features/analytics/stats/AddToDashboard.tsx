@@ -1,7 +1,8 @@
 // "Add to dashboard" (statsTile.ts swAddToDashboard): pick a dashboard — or
 // name a new one — and how the card shows the result. The card stores only the
 // spec; the server merges it into the dashboard's last sheet
-// (`stats:addToDashboard`) and every render recomputes it.
+// (`stats:addToDashboard`) and every render recomputes it. It writes a
+// dashboard, so a viewer is not offered it.
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -11,6 +12,7 @@ import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Input } from '../../../ui/Field';
 import { Select } from '../../../ui/Select';
 import { toast } from '../../../ui/Toast';
+import { useCanEdit } from '../../projects/api';
 import { call, type StatsSpec } from '../api';
 import { Seg } from './StatsControls';
 import s from './Stats.module.css';
@@ -29,6 +31,7 @@ export function AddToDashboard({ projectId, spec }: { projectId: string; spec: S
     queryFn: async () => (await rpc('stats:dashboards', { projectId })) as Array<{ id: string; name: string }>,
     enabled: open,
   });
+  const canEdit = useCanEdit(projectId);
   const list = boards.data ?? [];
   const picked = choice ?? (list[0]?.id || NEW);
 
@@ -49,6 +52,7 @@ export function AddToDashboard({ projectId, spec }: { projectId: string; spec: S
     toast(`Added to ${res.name}`, { kind: 'success' });
   }
 
+  if (!canEdit) return null;
   return (
     <Dialog
       open={open}

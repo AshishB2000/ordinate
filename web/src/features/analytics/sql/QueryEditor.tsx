@@ -50,7 +50,8 @@ export function QueryEditor({
   saving: boolean;
   onRun: () => void;
   onExplain: () => void;
-  onSave: () => void;
+  /** Absent for a viewer: saving the result as a dataset is an editor's. */
+  onSave?: () => void;
 }) {
   const mirror = useRef<HTMLPreElement>(null);
   const place = useCaret(input);
@@ -186,10 +187,14 @@ export function QueryEditor({
         <Button size="sm" icon="circle-check" loading={busy === 'explain'} disabled={busy !== null && busy !== 'explain'} onClick={onExplain}>
           Explain
         </Button>
-        <span className={w.gap} />
-        <Button size="sm" icon="download" disabled={!canSave} loading={saving} onClick={onSave} title={canSave ? undefined : 'Run the query first — a saved dataset is the result you saw.'}>
-          {saving ? 'Fetching rows…' : 'Save as dataset'}
-        </Button>
+        {onSave && (
+          <>
+            <span className={w.gap} />
+            <Button size="sm" icon="download" disabled={!canSave} loading={saving} onClick={onSave} title={canSave ? undefined : 'Run the query first — a saved dataset is the result you saw.'}>
+              {saving ? 'Fetching rows…' : 'Save as dataset'}
+            </Button>
+          </>
+        )}
       </div>
       <p className={w.hint}>
         <Kbd>⌘/Ctrl</Kbd> <Kbd>↩</Kbd> runs · Run previews 500 rows · <code className={s.code}>[[name]]</code> makes a parameter · Esc then Tab leaves the editor

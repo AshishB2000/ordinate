@@ -12,6 +12,7 @@ import { Button, buttonClass } from '../../../ui/Button';
 import { Select } from '../../../ui/Select';
 import { EmptyState } from '../../../ui/States';
 import { toast } from '../../../ui/Toast';
+import { useCanEdit } from '../../projects/api';
 import { Icon } from '../../../ui/icons/Icon';
 import { call, type RfmResult, type SegmentsInfo } from '../api';
 import { fmtNum, fmtShare } from '../format';
@@ -113,6 +114,8 @@ function SaveDataset({ projectId, datasetId, spec, customers }: { projectId: str
   const [err, setErr] = useState('');
   const [saved, setSaved] = useState<{ id: string; name: string; rowCount: number } | null>(null);
   const client = useQueryClient();
+  // It saves a new dataset: an editor's.
+  const canEdit = useCanEdit(projectId);
   async function save() {
     setBusy(true);
     setErr('');
@@ -129,6 +132,7 @@ function SaveDataset({ projectId, datasetId, spec, customers }: { projectId: str
     void client.invalidateQueries({ queryKey: ['dataset:list', projectId] });
     toast(`Saved ${res.dataset.name}`, { kind: 'success' });
   }
+  if (!canEdit) return null;
   return (
     <Card
       id="sg-h-rfm-save"
