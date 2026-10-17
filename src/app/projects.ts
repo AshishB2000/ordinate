@@ -83,6 +83,15 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
   await recordFs.rename(tmp, file); // atomic on same fs
 }
 
+/**
+ * Run `fn` holding project `id`'s project.json (recordFs.locked, every pod):
+ * every read-modify-write of the project's own fields goes through here. An
+ * invalid id holds nothing — every caller answers null for one anyway.
+ */
+export function withProjectLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  return isValidId(id) ? recordFs.locked(projectFilePath(id), fn) : fn();
+}
+
 // Basic shape validation for a parsed project.json (skips corrupt files).
 function isValidProject(data: any): data is Project {
   return Boolean(data) && typeof data.id === 'string' && data.id.length > 0;
@@ -152,39 +161,45 @@ function colorMapField(raw: unknown): { colorMap?: ColorMap } {
  * Replace the project's colour map (sanitized; an empty map removes the key).
  * Like the insight list, a VIEW preference over the whole project, so
  * `updatedAt` — and Recent's order — stays put. Returns the stored map, or
- * null for a missing project. Callers that read-modify-write serialize
- * themselves (src/ipc/format.ts).
+ * null for a missing project. Callers that read-modify-write the map hold
+ * the project themselves (src/ipc/format.ts, withProjectLock).
  */
 export async function setColorMap(id: string, map: unknown): Promise<ColorMap | null> {
-  if (!isValidId(id)) return null;
-  const existing = await getProject(id);
-  if (!existing) return null;
-  const next: Project = { ...existing };
-  delete next.colorMap;
-  Object.assign(next, colorMapField(map));
-  await writeJsonAtomic(projectFilePath(id), next);
-  return next.colorMap || sanitizeColorMap(null);
+  return withProjectLock(id, async () => {
+    if (!isValidId(id)) return null;
+    const existing = await getProject(id);
+    if (!existing) return null;
+    const next: Project = { ...existing };
+    delete next.colorMap;
+    Object.assign(next, colorMapField(map));
+    await writeJsonAtomic(projectFilePath(id), next);
+    return next.colorMap || sanitizeColorMap(null);
+  });
 }
 
 /** Archive or un-archive. Like the insight list, NOT an edit of the project's
  *  content, so `updatedAt` (and Recent's order) stays put. */
 export async function setArchived(id: string, archived: boolean): Promise<Project | null> {
-  const existing = await getProject(id);
-  if (!existing) return null;
-  const next: Project = { ...existing };
-  if (archived) next.archivedAt = new Date().toISOString();
-  else delete next.archivedAt;
-  await writeJsonAtomic(projectFilePath(id), next);
-  return next;
+  return withProjectLock(id, async () => {
+    const existing = await getProject(id);
+    if (!existing) return null;
+    const next: Project = { ...existing };
+    if (archived) next.archivedAt = new Date().toISOString();
+    else delete next.archivedAt;
+    await writeJsonAtomic(projectFilePath(id), next);
+    return next;
+  });
 }
 
 /** Stamp "opened now". Best effort: a failed write costs a stale "opened …". */
 export async function touchOpened(id: string): Promise<void> {
-  const existing = await getProject(id);
-  if (!existing) return;
-  try {
-    await writeJsonAtomic(projectFilePath(id), { ...existing, lastOpenedAt: new Date().toISOString() });
-  } catch (_) { /* best effort */ }
+  return withProjectLock(id, async () => {
+    const existing = await getProject(id);
+    if (!existing) return;
+    try {
+      await writeJsonAtomic(projectFilePath(id), { ...existing, lastOpenedAt: new Date().toISOString() });
+    } catch (_) { /* best effort */ }
+  }).catch(() => undefined);
 }
 
 // Off-disk input: keep only plain non-empty strings, deduped and capped. A
@@ -212,15 +227,17 @@ export async function setInsightDismissed(
   insightId: string,
   dismissed: boolean,
 ): Promise<string[] | null> {
-  if (!isValidId(id) || typeof insightId !== 'string' || !insightId) return null;
-  const existing = await getProject(id);
-  if (!existing) return null;
-  const current = existing.dismissedInsights || [];
-  const next = dismissed
-    ? (current.includes(insightId) ? current : [...current, insightId].slice(-MAX_DISMISSED))
-    : current.filter((x) => x !== insightId);
-  await writeJsonAtomic(projectFilePath(id), { ...existing, dismissedInsights: next });
-  return next;
+  return withProjectLock(id, async () => {
+    if (!isValidId(id) || typeof insightId !== 'string' || !insightId) return null;
+    const existing = await getProject(id);
+    if (!existing) return null;
+    const current = existing.dismissedInsights || [];
+    const next = dismissed
+      ? (current.includes(insightId) ? current : [...current, insightId].slice(-MAX_DISMISSED))
+      : current.filter((x) => x !== insightId);
+    await writeJsonAtomic(projectFilePath(id), { ...existing, dismissedInsights: next });
+    return next;
+  });
 }
 
 // Load a single project. Returns null if missing or corrupt.
@@ -256,16 +273,18 @@ export async function createProject(name: string): Promise<Project> {
 // Rename a project (bumps updatedAt). Returns the updated project, or null if
 // the project doesn't exist.
 export async function renameProject(id: string, name: string): Promise<Project | null> {
-  if (!isValidId(id)) return null;
-  const existing = await getProject(id);
-  if (!existing) return null;
-  const updated: Project = {
-    ...existing,
-    name: (typeof name === 'string' && name.trim()) ? name.trim() : 'Untitled project',
-    updatedAt: new Date().toISOString(),
-  };
-  await writeJsonAtomic(projectFilePath(id), updated);
-  return updated;
+  return withProjectLock(id, async () => {
+    if (!isValidId(id)) return null;
+    const existing = await getProject(id);
+    if (!existing) return null;
+    const updated: Project = {
+      ...existing,
+      name: (typeof name === 'string' && name.trim()) ? name.trim() : 'Untitled project',
+      updatedAt: new Date().toISOString(),
+    };
+    await writeJsonAtomic(projectFilePath(id), updated);
+    return updated;
+  });
 }
 
 // Delete a project's directory (recursive). Returns true on success. A synced

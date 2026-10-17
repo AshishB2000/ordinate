@@ -364,6 +364,8 @@
   "rebuildMessages.the_screenshot_names_no_measure_for": "Der Screenshot nennt keine Kennzahl für diese Kachel. Wählen Sie eine Spalte.",
   "rebuildMessages.this_is_the_dashboard_s_own": "Das ist der eigene Titel des Dashboards. Er benennt das Dashboard, statt eine Kachel zu belegen. Stellen Sie ihn wieder her, um ihn als Notiz zu behalten.",
   "rebuildMessages.this_note_has_no_heading_to": "Diese Notiz hat keine Überschrift, die bleiben könnte.",
+  "recordLockMessages.this_could_not_be_saved_try": null,
+  "recordLockMessages.this_is_being_saved_by_someone": null,
   "refreshHookMessages.a_connection_can_have_at_most": "Eine Verbindung kann höchstens {max} Aktualisierungs-URLs haben. Widerrufen Sie zuerst eine, die Sie nicht mehr verwenden.",
   "refreshHookMessages.a_dataset_can_have_at_most": null,
   "refreshHookMessages.has_no_source_to_refresh_from": null,

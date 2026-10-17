@@ -364,6 +364,8 @@
   "rebuildMessages.the_screenshot_names_no_measure_for": "La capture n’indique aucune mesure pour cette tuile. Choisissez une colonne.",
   "rebuildMessages.this_is_the_dashboard_s_own": "C’est le titre du tableau de bord : il nomme le tableau de bord au lieu d’occuper une tuile. Restaurez-le pour le garder comme note.",
   "rebuildMessages.this_note_has_no_heading_to": "Cette note n’a pas de titre à conserver.",
+  "recordLockMessages.this_could_not_be_saved_try": null,
+  "recordLockMessages.this_is_being_saved_by_someone": null,
   "refreshHookMessages.a_connection_can_have_at_most": "Une connexion peut avoir au plus {max} URL d’actualisation. Révoquez d’abord celle que vous n’utilisez plus.",
   "refreshHookMessages.a_dataset_can_have_at_most": null,
   "refreshHookMessages.has_no_source_to_refresh_from": null,

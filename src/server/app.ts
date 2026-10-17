@@ -400,6 +400,12 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         await record('error', decision.projectId);
         return reply.code(409).send({ error: LIVE_DATASET_CODE, code: LIVE_DATASET_CODE, message: err.message });
       }
+      if ((err as { code?: unknown } | null)?.code === 'ERECORDBUSY') {
+        // Another save held the record past the lock wait (src/app/recordFs.ts):
+        // a typed 409 with the catalog's sentence, never Postgres's text.
+        await record('error', decision.projectId);
+        return reply.code(409).send({ error: 'record_busy', code: 'record_busy', message: (err as Error).message });
+      }
       if (isLiveFigureError(err)) {
         // L2.4: a Live KPI the warehouse could not give, thrown past a handler that
         // did not catch it — typed the same way, its catalog sentence only (R-L6).

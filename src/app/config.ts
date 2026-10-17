@@ -253,10 +253,13 @@ let cacheFile = '';
 
 // A server with a database keeps the document in Postgres, not on this pod's
 // disk (src/server/orgConfig.ts). `stamp` moves when another pod's change
-// arrives, and the parsed copy here is dropped.
-export interface Backing { read(): string | undefined; write(body: string): void; stamp(): number }
+// arrives, and the parsed copy here is dropped. `write` is given the document
+// this one was loaded from (`base`, storable form), so it can store only what
+// THIS write changed on top of another pod's change; undefined = the whole document.
+export interface Backing { read(): string | undefined; write(body: string, base?: string): void; stamp(): number }
 let backing: Backing | null = null;
 let cacheStamp = 0;
+let cacheBase: string | undefined;
 
 export function useBacking(b: Backing | null): void {
   backing = b;
@@ -465,6 +468,8 @@ function migrate(cfg: any): Config {
 // only writer that does) and must flush it. Not an invitation: everything else
 // goes through save().
 export function persist(cfg: Config): void {
+  // The document `cfg` was loaded from — taken before this write replaces the cache.
+  const base = backing && cache && cacheFile === configPath() && cacheStamp === backing.stamp() ? cacheBase : undefined;
   cache = cfg;
   cacheFile = configPath();
   // Every write passes here, reset-to-defaults included, so the calendar the
@@ -474,8 +479,10 @@ export function persist(cfg: Config): void {
   setFormatPrefs(cfg.formats);
   setLanguage(cfg.language);
   if (backing) {
-    backing.write(storable(cfg));
+    const body = storable(cfg);
+    backing.write(body, base);
     cacheStamp = backing.stamp();
+    cacheBase = body;
     return;
   }
   // Atomic write (temp sibling → rename), mirroring the BI stores. config.json
@@ -518,6 +525,7 @@ export function load(): Config {
   if (onDisk.connectionSecrets && typeof onDisk.connectionSecrets === 'object') merged.connectionSecrets = onDisk.connectionSecrets;
   cache = migrate(merged);
   cacheFile = p;
+  cacheBase = backing ? storable(cache) : undefined;
   setCalendar(cache.formats);
   setFormatPrefs(cache.formats);
   setLanguage(cache.language);

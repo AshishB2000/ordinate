@@ -57,6 +57,8 @@ export const PAGE_RE = /^(index|[a-z0-9][a-z0-9-]{0,80})\.html$/;
 
 const root = (): string => path.join(appPaths.userData(), 'published');
 const dir = (id: string): string => path.join(root(), id);
+/** The site's manifest — also its lock (recordFs.locked): every write of the site holds it. */
+const manifestPath = (id: string): string => path.join(dir(id), 'manifest.json');
 
 async function writeJson(file: string, body: unknown): Promise<void> {
   // The stores' own rule (analysis.ts): the directory on disk, which a Postgres row does not need but never minds.
@@ -77,7 +79,7 @@ async function readJson<T>(file: string): Promise<T | null> {
 /** The manifest of site `id` in the caller's org, or null. */
 export async function getSite(id: string): Promise<HostedSite | null> {
   if (!isValidId(id)) return null;
-  const m = await readJson<HostedSite>(path.join(dir(id), 'manifest.json'));
+  const m = await readJson<HostedSite>(manifestPath(id));
   return m && m.id === id ? m : null;
 }
 
@@ -145,46 +147,59 @@ export async function publishHosted(
   const id = prev ? prev.id : randomUUID();
   // ponytail: read just before the pages build; an edit landing in that window can reach the /p/ page but not the embed. One read for both if it matters.
   const defs = await definitions(config.projectId, config.dashboardIds);
+  // Built OUTSIDE the lock (every figure is computed here); only the switch below holds the site.
   const { pages, index, combos } = await buildPages(config, opts.progress ?? {}, policyOutgoing(config.projectId, 'publish'));
   const files = [{ file: 'index.html', html: index }, ...pages.map((p) => ({ file: p.file, html: p.html }))];
-  for (const f of files) await writeJson(path.join(dir(id), `${f.file}.json`), { html: f.html });
-  await writeJson(path.join(dir(id), 'defs.json'), { dashboards: defs });
-  const site: HostedSite = {
-    id,
-    projectId: config.projectId,
-    title: config.options.title || '',
-    access: opts.access ?? prev?.access ?? 'org',
-    publishedBy: by,
-    publishedAt: new Date().toISOString(),
-    bytes: files.reduce((n, f) => n + Buffer.byteLength(f.html), 0),
-    combos,
-    pages: pages.map((p) => ({ file: p.file, kind: p.kind, name: p.name })),
-    config: { dashboardIds: config.dashboardIds, storyIds: config.storyIds, scorecardIds: config.scorecardIds, options: config.options, ...(config.brands ? { brands: config.brands } : {}) },
-  };
-  await writeJson(path.join(dir(id), 'manifest.json'), site);
-  const keep = new Set(files.map((f) => `${f.file}.json`));
-  for (const old of prev ? ['index.html', ...prev.pages.map((p) => p.file)] : []) {
-    if (!keep.has(`${old}.json`)) await recordFs.rm(path.join(dir(id), `${old}.json`), { force: true });
-  }
-  return site;
+  return recordFs.locked(manifestPath(id), async () => {
+    // Read again under the lock: a site taken down meanwhile stays down, and
+    // who may open it is the owner's latest word, not what the build started with.
+    const now = prev ? await getSite(id) : null;
+    if (prev && !now) throw new Error('That published link no longer exists.');
+    for (const f of files) await writeJson(path.join(dir(id), `${f.file}.json`), { html: f.html });
+    await writeJson(path.join(dir(id), 'defs.json'), { dashboards: defs });
+    const site: HostedSite = {
+      id,
+      projectId: config.projectId,
+      title: config.options.title || '',
+      access: opts.access ?? now?.access ?? 'org',
+      publishedBy: by,
+      publishedAt: new Date().toISOString(),
+      bytes: files.reduce((n, f) => n + Buffer.byteLength(f.html), 0),
+      combos,
+      pages: pages.map((p) => ({ file: p.file, kind: p.kind, name: p.name })),
+      config: { dashboardIds: config.dashboardIds, storyIds: config.storyIds, scorecardIds: config.scorecardIds, options: config.options, ...(config.brands ? { brands: config.brands } : {}) },
+    };
+    await writeJson(manifestPath(id), site);
+    const keep = new Set(files.map((f) => `${f.file}.json`));
+    for (const old of now ? ['index.html', ...now.pages.map((p) => p.file)] : []) {
+      if (!keep.has(`${old}.json`)) await recordFs.rm(path.join(dir(id), `${old}.json`), { force: true });
+    }
+    return site;
+  });
 }
 
 /** Change who may open a site. */
 export async function setAccess(id: string, access: Access): Promise<HostedSite | null> {
-  const site = await getSite(id);
-  if (!site) return null;
-  const next = { ...site, access };
-  await writeJson(path.join(dir(id), 'manifest.json'), next);
-  return next;
+  if (!isValidId(id)) return null;
+  return recordFs.locked(manifestPath(id), async () => {
+    const site = await getSite(id);
+    if (!site) return null;
+    const next = { ...site, access };
+    await writeJson(manifestPath(id), next);
+    return next;
+  });
 }
 
 /** Take a site down: the manifest first (the link stops at once), then its pages. */
 export async function removeSite(id: string): Promise<boolean> {
-  const site = await getSite(id);
-  if (!site) return false;
-  await recordFs.rm(path.join(dir(id), 'manifest.json'), { force: true });
-  await recordFs.rm(dir(id), { recursive: true, force: true });
-  return true;
+  if (!isValidId(id)) return false;
+  return recordFs.locked(manifestPath(id), async () => {
+    const site = await getSite(id);
+    if (!site) return false;
+    await recordFs.rm(manifestPath(id), { force: true });
+    await recordFs.rm(dir(id), { recursive: true, force: true });
+    return true;
+  });
 }
 
 // ── Re-publish after a refresh (the desktop's publish.ts scheduleRepublish) ──

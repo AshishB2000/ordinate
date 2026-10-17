@@ -114,15 +114,15 @@ export function record(
   const dir = recordDir(projectId, type, rec && rec.id);
   if (!dir) return Promise.resolve(null);
   if (opts.by === undefined) opts = { ...opts, by: savedBy() };
-  // One record's saves are written one at a time: two overlapping autosaves
-  // would otherwise both diff against the same "newest" and both prune.
-  const run = (queues.get(dir) || Promise.resolve(null)).then(() => write(dir, type, rec, opts));
-  queues.set(dir, run);
-  void run.then(() => { if (queues.get(dir) === run) queues.delete(dir); });
-  return run;
+  // One record's saves are written one at a time, on every pod (the history
+  // dir's lock): two overlapping autosaves would otherwise both diff against
+  // the same "newest" and both prune. Inside a store's own hold (an input-table
+  // save) this is a SAVEPOINT, so a failure here never undoes that save.
+  return recordFs.locked(dir, () => write(dir, type, rec, opts)).catch((err: Error) => {
+    console.error('[versions] could not record a version:', err && err.message);
+    return null;
+  });
 }
-
-const queues = new Map<string, Promise<VersionMeta | null>>();
 
 /** The signed-in user saving, or undefined outside a request and under the desktop context. */
 function savedBy(): string | undefined {

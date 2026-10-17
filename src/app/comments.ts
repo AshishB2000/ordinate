@@ -24,8 +24,9 @@
 // (half-downloaded) is left alone for that round. There is no watcher: the
 // other machine's changes arrive on the next read — a panel, a dashboard, Home.
 //
-// Every operation on one project runs in order through `serial`, so an add
-// racing a list in the same process can never write over each other.
+// Every change runs inside recordFs.locked on comments.json — one at a time per
+// project, on every pod. A list reads without it unless it has conflict copies
+// (or a corrupt file) to fold, which is a write.
 
 import * as fs from 'fs';
 import * as os from 'os';
@@ -116,13 +117,15 @@ async function conflictCopies(projectId: string): Promise<string[]> {
   return names.filter((n) => DROPBOX.test(n) || ICLOUD.test(n)).sort().map((n) => path.join(dir, n));
 }
 
+const localFile = (projectId: string): string => path.join(projectDir(projectId), FILE);
+
 /**
  * Reconcile `mine` (what this process holds now) with every conflict copy the
  * sync service left, write the merge where it differs, then remove the copies
  * it folded in. Returns the merged list.
  */
 async function persist(projectId: string, mine: Comment[], onDisk: Comment[] | null): Promise<Comment[]> {
-  const local = path.join(projectDir(projectId), FILE);
+  const local = localFile(projectId);
   let merged = mine;
   const folded: string[] = [];
   for (const copy of await conflictCopies(projectId)) {
@@ -139,7 +142,7 @@ async function persist(projectId: string, mine: Comment[], onDisk: Comment[] | n
 }
 
 async function loadLocal(projectId: string): Promise<Comment[]> {
-  const local = path.join(projectDir(projectId), FILE);
+  const local = localFile(projectId);
   const read = await readFile(local);
   if (read.state === 'corrupt') {
     // Keep what cannot be read, out of the way, before anything overwrites it.
@@ -148,52 +151,39 @@ async function loadLocal(projectId: string): Promise<Comment[]> {
   return read.comments;
 }
 
-// ── serial per project ───────────────────────────────────────────────────────
-
-const queues = new Map<string, Promise<unknown>>();
-
-function serial<T>(projectId: string, job: () => Promise<T>): Promise<T> {
-  const prev = queues.get(projectId) || Promise.resolve();
-  const run = prev.then(job, job);
-  queues.set(projectId, run.catch(() => undefined));
-  return run;
-}
-
 // ── operations ───────────────────────────────────────────────────────────────
 
 /** Every live thread of a project, with any sync conflict copies folded in. */
-export function list(projectId: string): Promise<Result> {
-  if (!projectDir(projectId)) return Promise.resolve({ ok: false, error: 'Unknown project.' });
-  return serial(projectId, async () => {
-    try {
+export async function list(projectId: string): Promise<Result> {
+  if (!projectDir(projectId)) return { ok: false, error: 'Unknown project.' };
+  try {
+    const read = await readFile(localFile(projectId));
+    if (read.state !== 'corrupt' && !(await conflictCopies(projectId)).length) return { ok: true, comments: model.visible(read.comments) };
+    return await recordFs.locked(localFile(projectId), async () => {
       const mine = await loadLocal(projectId);
       const merged = await persist(projectId, mine, mine);
       return { ok: true as const, comments: model.visible(merged) };
-    } catch (err: any) {
-      return { ok: false as const, error: (err && err.message) || 'Could not read comments.' };
-    }
-  });
+    });
+  } catch (err: any) {
+    return { ok: false as const, error: (err && err.message) || 'Could not read comments.' };
+  }
 }
 
 /**
- * Load, apply one change, write — in one serial step. `change` returns the new
+ * Load, apply one change, write — in one locked step. `change` returns the new
  * list, or a string saying why nothing changed.
  */
 function mutate(projectId: string, change: (all: Comment[], now: string) => Comment[] | string): Promise<Result> {
   if (!projectDir(projectId)) return Promise.resolve({ ok: false, error: 'Unknown project.' });
-  return serial(projectId, async () => {
-    try {
-      const mine = await loadLocal(projectId);
-      // Fold the other machine in FIRST, so a change is applied to the latest thread.
-      const base = await persist(projectId, mine, mine);
-      const next = change(base, new Date().toISOString());
-      if (typeof next === 'string') return { ok: false as const, error: next };
-      const merged = await persist(projectId, next, base);
-      return { ok: true as const, comments: model.visible(merged) };
-    } catch (err: any) {
-      return { ok: false as const, error: (err && err.message) || 'Could not save the comment.' };
-    }
-  });
+  return recordFs.locked(localFile(projectId), async (): Promise<Result> => {
+    const mine = await loadLocal(projectId);
+    // Fold the other machine in FIRST, so a change is applied to the latest thread.
+    const base = await persist(projectId, mine, mine);
+    const next = change(base, new Date().toISOString());
+    if (typeof next === 'string') return { ok: false, error: next };
+    const merged = await persist(projectId, next, base);
+    return { ok: true, comments: model.visible(merged) };
+  }).catch((err: Error) => ({ ok: false as const, error: (err && err.message) || 'Could not save the comment.' }));
 }
 
 /** Apply `fn` to thread `id`; a null from `fn` means the change does not apply. */

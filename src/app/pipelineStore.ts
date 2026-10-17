@@ -130,14 +130,11 @@ export async function load(projectId: string): Promise<PipelineState> {
   }
 }
 
-const queues = new Map<string, Promise<unknown>>();
-
-/** Read, change, write — one at a time per project. Resolves to the new state, or null. */
+/** Read, change, write under the file's lock (every pod). Resolves to the new state, or null — never rejects. */
 export function update(projectId: string, fn: (s: PipelineState) => void): Promise<PipelineState | null> {
   const f = file(projectId);
   if (!f) return Promise.resolve(null);
-  const prev = queues.get(projectId) || Promise.resolve();
-  const next = prev.catch(() => null).then(async () => {
+  return recordFs.locked(f, async () => {
     const s = await load(projectId);
     fn(s);
     const clean = sanitizeState(s);
@@ -145,9 +142,6 @@ export function update(projectId: string, fn: (s: PipelineState) => void): Promi
     await writeJsonAtomic(f, clean);
     return clean;
   }).catch(() => null);
-  queues.set(projectId, next);
-  void next.then(() => { if (queues.get(projectId) === next) queues.delete(projectId); });
-  return next;
 }
 
 /** Add runs, newest first, keeping the last MAX_RUNS per node. */
