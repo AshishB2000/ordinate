@@ -348,17 +348,17 @@ export default function DockPanel() {
           {/* Only in the project it was proposed for: an answer landing after the route moved on is not this project's to run. */}
           {canEdit &&
             plans
-            .filter((p) => p.projectId === pid)
-            .map((p) => (
-              <PlanCard
-                key={p.key}
-                projectId={p.projectId}
-                threadId={p.threadId}
-                action={p.action}
-                onDone={() => setPlans((ps) => ps.filter((x) => x.key !== p.key))}
-                onLogged={() => void qc.invalidateQueries({ queryKey: ['copilot:history', p.projectId] })}
-              />
-            ))}
+              .filter((p) => p.projectId === pid)
+              .map((p) => (
+                <PlanCard
+                  key={p.key}
+                  projectId={p.projectId}
+                  threadId={p.threadId}
+                  action={p.action}
+                  onDone={() => setPlans((ps) => ps.filter((x) => x.key !== p.key))}
+                  onLogged={() => void qc.invalidateQueries({ queryKey: ['copilot:history', p.projectId] })}
+                />
+              ))}
         </div>
         {prompts.length > 0 && (
           <div className={s.suggests}>

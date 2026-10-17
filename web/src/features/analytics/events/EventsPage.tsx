@@ -268,13 +268,13 @@ export default function EventsPage() {
             {q.data ? <Calendars projectId={projectId} on={q.data.calendars} available={q.data.available} readOnly={!canEdit} onDone={refresh} /> : <SkeletonRows rows={3} label="Loading calendars" />}
           </section>
           {canEdit && (
-          <section className={s.card}>
-            <h2 className={s.cardH}>Importing a CSV</h2>
-            <p className={s.cardP}>
-              One row per event. <b>date</b> and <b>title</b> are required; <b>end</b> makes it a range and <b>kind</b> is launch, campaign, incident, holiday or other.
-            </p>
-            <pre className={s.sample}>{'date,end,title,kind\n2024-11-25,2024-12-31,Holiday campaign,campaign\n2024-03-04,,v2 launch,launch'}</pre>
-          </section>
+            <section className={s.card}>
+              <h2 className={s.cardH}>Importing a CSV</h2>
+              <p className={s.cardP}>
+                One row per event. <b>date</b> and <b>title</b> are required; <b>end</b> makes it a range and <b>kind</b> is launch, campaign, incident, holiday or other.
+              </p>
+              <pre className={s.sample}>{'date,end,title,kind\n2024-11-25,2024-12-31,Holiday campaign,campaign\n2024-03-04,,v2 launch,launch'}</pre>
+            </section>
           )}
         </aside>
       </div>
