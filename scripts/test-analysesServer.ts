@@ -402,6 +402,8 @@ async function partTwo(adminUrl: string): Promise<void> {
       ['analysis:create', () => ({ projectId: pid, name: 'New' }), 'write'],
       ['analysis:update', () => ({ projectId: pid, id: s.aid, name: 'Board' }), 'write'],
       ['analysis:rename', () => ({ projectId: pid, id: s.aid, name: 'Board' }), 'write'],
+      // Saved views are shared: a viewer applies them, only an editor saves one.
+      ['analysis:view', () => ({ projectId: pid, id: s.aid, op: { op: 'default', viewId: '' } }), 'write'],
       ['analysis:buildPlan', () => ({ projectId: pid, plan }), 'write'],
       ['analysis:starterCards', () => ({ projectId: pid, kind: 'kpis', datasetId: s.ds }), 'write'],
       ['metric:ensureDefaults', () => ({ projectId: pid }), 'write'],

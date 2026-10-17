@@ -229,8 +229,17 @@ async function controlSpec(projectId: string, card: Card, a: analysis.Analysis, 
   const label = control.label || control.column || 'Filter';
   if (control.kind === 'dropdown' || control.kind === 'multi') {
     // Under an embed's lock the options are data too: only what exists inside it (./embedLock.ts).
-    const values = lock ? await lockedOptions(lock, projectId, control, MAX_OPTIONS_PER_CONTROL) : await distinct(projectId, control.datasetId, control.column);
+    let values = lock ? await lockedOptions(lock, projectId, control, MAX_OPTIONS_PER_CONTROL) : await distinct(projectId, control.datasetId, control.column);
     if (typeof values === 'string') { unlisted.push({ control: label, reason: values }); return null; } // left out, and the plan says why — never an empty "All"
+    if (!lock) {
+      // Each saved view's value here (its pick, else the author's default) leads the list, so a view picking value
+      // #100 of a long column is still on the page and survives the plan's trim. Never under a lock: a view is not
+      // evidence of what exists inside it. No views → the list as it was.
+      const picks = (a.views || []).map((v) => viewControlValue(v, card) as any); // any: ControlValue union, narrowed by kind here
+      const front = [...new Set(picks.map((p) => (!p ? undefined : control.kind === 'dropdown' ? p.value : Array.isArray(p.values) && p.values.length === 1 ? p.values[0] : undefined))
+        .filter((p): p is string => typeof p === 'string' && p !== ''))];
+      values = [...front, ...values.filter((v) => !front.includes(v))];
+    }
     const def = control.default as any; // ControlValue union, narrowed by kind here
     const want = control.kind === 'dropdown' ? def && def.value : def && Array.isArray(def.values) ? def.values[0] : undefined;
     const idx = typeof want === 'string' ? values.indexOf(want) : -1;
@@ -243,15 +252,25 @@ async function controlSpec(projectId: string, card: Card, a: analysis.Analysis, 
   if (control.kind === 'date_range') {
     const opts = DATE_OPTIONS.slice();
     const def = control.default as any; // ControlValue union
+    const text = (st: any): string => st.preset && st.preset !== 'custom' // any: ControlValue union
+      ? describePeriod({ preset: st.preset as PeriodPreset, n: st.n }, getCalendar())
+      : [st.from, st.to].filter(Boolean).join(' – ');
+    // Off a lock, each saved view's range leads the presets, once (by state and by label) — as a dropdown's picks do.
+    if (!lock) {
+      const front: typeof opts = [];
+      for (const v of a.views || []) {
+        const st = viewControlValue(v, card) as any; // any: ControlValue union
+        const label = st && (st.preset || st.from || st.to) ? text(st) : '';
+        if (label && ![...front, ...opts].some((o) => JSON.stringify(o.state) === JSON.stringify(st) || o.label === label)) front.push({ state: st, label });
+      }
+      opts.unshift(...front);
+    }
     let defaultIndex = 0;
     if (def && (def.preset || def.from || def.to)) {
       const same = opts.findIndex((o) => JSON.stringify(o.state) === JSON.stringify(def));
       if (same >= 0) defaultIndex = same + 1;
       else {
-        const text = def.preset && def.preset !== 'custom'
-          ? describePeriod({ preset: def.preset as PeriodPreset, n: def.n }, getCalendar())
-          : [def.from, def.to].filter(Boolean).join(' – ');
-        opts.unshift({ state: def, label: text || 'Default range' });
+        opts.unshift({ state: def, label: text(def) || 'Default range' });
         defaultIndex = 1;
       }
     }

@@ -102,6 +102,26 @@ export const analyses = {
     project: byProjectId,
   }),
   'analysis:delete': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
+  // One edit to a dashboard's SAVED VIEWS (savedViews.ts applyViewOp) — shared by
+  // everyone who reads it, so `write`; a viewer lists and applies them from
+  // `analysis:open`. Never part of `analysis:update`: the autosave sends the whole
+  // document and would overwrite a view saved meanwhile. The state is
+  // re-sanitized against the record; no version is recorded.
+  'analysis:view': rpc({
+    access: 'write',
+    input: z.strictObject({
+      projectId: Uuid,
+      id: Uuid,
+      op: z.discriminatedUnion('op', [
+        z.strictObject({ op: z.literal('create'), name: Name, state: z.looseObject({}) }),
+        z.strictObject({ op: z.literal('rename'), viewId: Uuid, name: Name }),
+        z.strictObject({ op: z.literal('update'), viewId: Uuid, state: z.looseObject({}) }),
+        z.strictObject({ op: z.literal('delete'), viewId: Uuid }),
+        z.strictObject({ op: z.literal('default'), viewId: z.union([Uuid, z.literal('')]) }),
+      ]),
+    }),
+    project: byProjectId,
+  }),
   // The AI draft: FACTS in (no rows, no secrets), a validated, previewed plan
   // out; nothing is saved. Asking is `read`, as the dock's copilot:ask is;
   // building what it proposed (`analysis:buildPlan`) is `write`.
