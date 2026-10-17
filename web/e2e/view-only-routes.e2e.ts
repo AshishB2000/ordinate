@@ -25,7 +25,7 @@ import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
 import type { Page, Request } from 'playwright';
-import { details, editableFields, ROUTES, uncovered, WRITE, writeChannels, writeControls, type RouteCase } from './viewerRoutes.ts';
+import { details, editableFields, ROUTES, uncovered, WRITE, writeChannels, writeControls, type Control, type RouteCase } from './viewerRoutes.ts';
 import { seedViewer, type ViewerSeed } from './seed-viewer.ts';
 
 const ROUTES_SRC = readFileSync(new URL('../src/app/routes.tsx', import.meta.url), 'utf8');
@@ -104,6 +104,7 @@ if (!adminUrl) {
   }
 
   async function visit(page: Page, net: ReturnType<typeof watch>, r: RouteCase, s: ViewerSeed) {
+    await page.setViewportSize(r.phone ? { width: 375, height: 812 } : { width: 1440, height: 900 });
     await page.goto(r.url(s));
     await settled(page);
     await net.quiet();
@@ -128,7 +129,8 @@ if (!adminUrl) {
     await page.request.get(`${server.base}/api/auth/me`, { headers: { 'x-forwarded-email': ADMIN } });
     const csrf = (await page.context().cookies()).find((c) => c.name === 'ordinate_csrf')?.value ?? '';
     seed = await seedViewer(rpcAs(page, server.base, csrf), ADMIN, { viewer: VIEWER, editor: EDITOR });
-    const control = (r: RouteCase) => page.getByRole(r.editor!.role, { name: r.editor!.name, exact: typeof r.editor!.name === 'string' });
+    const locate = (c: Control) => page.getByRole(c.role, { name: c.name, exact: typeof c.name === 'string' });
+    const control = (r: RouteCase) => locate(r.editor!);
 
     // ── (b) the viewer ─────────────────────────────────────────────────────
     who = VIEWER;
@@ -149,8 +151,13 @@ if (!adminUrl) {
         assert.deepEqual(fields, [], `${at}: a viewer can edit a stored value`);
         assert.equal(editorOnly, 0, `${at}: a viewer sees the editor's “${String(r.editor?.name)}”`);
       }
+      for (const c of r.viewer ?? []) {
+        const kept = locate(c).first();
+        await kept.waitFor();
+        assert.equal(await kept.isEnabled(), true, `${at}: a viewer's “${String(c.name)}” is disabled`);
+      }
       assert.equal(await page.getByText(VIEW_ONLY).count(), 0, `${at}: a view-only refusal`);
-      if (scope) await page.keyboard.press('Escape');
+      if (r.open) await page.keyboard.press('Escape');
       if (SHOTS[r.pattern] && !DISCOVER) await screens(page, `view-only-routes-${SHOTS[r.pattern]}`);
     }
     const wrote = net.sent.filter((c) => WRITES.has(c));
@@ -180,7 +187,7 @@ if (!adminUrl) {
         // A known write, recorded the way the viewer's would have been: the editor documents the dataset.
         await scope.getByRole('textbox', { name: 'Description' }).fill('Orders, one row per line item.');
       }
-      if (scope) {
+      if (r.open) {
         await page.keyboard.press('Escape');
         await net.quiet();
       }

@@ -10,7 +10,8 @@
 //   a second dataset, a relationship between the two, a quality rule on the
 //   first; a visual deleted afterwards (the Trash) and one updated twice (its
 //   versions); the sample dashboard (its KPIs); a metric with a tree; a story,
-//   a scorecard, a scenario, an event, an input table, an alert rule; and a
+//   a scorecard, a scenario, an event, an input table, an alert rule; a saved
+//   view on the sample dashboard (its Views menu, the phone's Saved view); and a
 //   Live dataset over the harness's fake warehouse (the server runs with
 //   ORDINATE_TEST_LIVE_FAKE=1 — withLiveDataset()).
 //
@@ -31,6 +32,8 @@ export interface ViewerSeed {
   connId: string;
   inputId: string;
   aid: string;
+  /** A saved view on the sample dashboard. */
+  viewId: string;
   vid: string;
   deletedVid: string;
   metricId: string;
@@ -79,6 +82,11 @@ export async function seedViewer(rpc: Rpc, admin: string, members: { viewer: str
   const vid = idOf(await rpc(admin, 'visual:save', chart('Revenue by region')), 'visual.id', 'id');
   await rpc(admin, 'visual:update', { projectId: pid, id: vid, name: 'Revenue by region (v2)' });
   await rpc(admin, 'visual:update', { projectId: pid, id: vid, name: 'Revenue by region' });
+
+  // A saved view on the sample dashboard: shared, so every member's Views menu lists it.
+  const view = await rpc(admin, 'analysis:view', { projectId: pid, id: aid, op: { op: 'create', name: 'West only', state: {} } });
+  assert.equal(view.ok, true, JSON.stringify(view).slice(0, 300));
+  const viewId: string = view.viewId;
 
   // A metric with a tree (the sample's Revenue = Orders × Avg order value).
   const metrics = (await rpc(admin, 'metric:list', { projectId: pid })).metrics as { id: string; name: string }[];
@@ -141,5 +149,5 @@ export async function seedViewer(rpc: Rpc, admin: string, members: { viewer: str
   assert.deepEqual(await rpc(members.viewer, 'projects:roles'), { [pid]: 'viewer' });
   assert.deepEqual(await rpc(members.editor, 'projects:roles'), { [pid]: 'editor' });
 
-  return { pid, did, did2, liveId, connId, inputId: input.id, aid, vid, deletedVid, metricId, storyId, scorecardId, scenarioId };
+  return { pid, did, did2, liveId, connId, inputId: input.id, aid, viewId, vid, deletedVid, metricId, storyId, scorecardId, scenarioId };
 }

@@ -12,7 +12,7 @@ import type { Locator, Page } from 'playwright';
 import type { ViewerSeed } from './seed-viewer.ts';
 
 export interface Control {
-  role: 'button' | 'link' | 'heading' | 'textbox' | 'region' | 'navigation' | 'grid' | 'list';
+  role: 'button' | 'link' | 'heading' | 'textbox' | 'region' | 'navigation' | 'grid' | 'list' | 'menuitem' | 'menuitemradio' | 'combobox';
   name: string | RegExp;
 }
 
@@ -32,6 +32,10 @@ export interface RouteCase {
   open?: (page: Page) => Promise<Locator | undefined>;
   /** Names the WRITE pattern matches that change only the viewer's own screen (a what-if, a filter, a spec) — never stored. */
   explore?: readonly string[];
+  /** What a viewer must still be offered here, enabled: the reading and exploring a hidden write must not take with it. */
+  viewer?: readonly Control[];
+  /** Walked at 375×812, where the screen is the phone's. */
+  phone?: true;
 }
 
 /** Routes not walked, and why. */
@@ -51,9 +55,9 @@ export function uncovered(routesSrc: string, routes: readonly RouteCase[] = ROUT
   return [...routesSrc.matchAll(/\bpage\(\s*'([^']+)'/g)].map((m) => m[1]!).filter((p) => !listed.has(p));
 }
 
-/** An accessible name that writes, or opens an editor-only flow — anchored to the name's start. */
+/** An accessible name that writes, or opens an editor-only flow — anchored to the name's start. Update and Set as default: a saved view's. */
 export const WRITE =
-  /^(New|Add|Create|Save|Delete|Remove|Rename|Edit|Duplicate|Restore|Import|Upload|Publish|Run checks|Snooze|Mark( all)? seen|Mark as|Make a copy|Copy the data|Sync|Reset|Refresh|Build|Break|Suggest|Set up|Metrics & targets|Chart this column|Pin a filter)\b/;
+  /^(New|Add|Create|Save|Delete|Remove|Rename|Edit|Duplicate|Restore|Import|Upload|Publish|Run checks|Snooze|Mark( all)? seen|Mark as|Make a copy|Copy the data|Sync|Reset|Refresh|Build|Break|Suggest|Set up|Set as default|Stop being the default|Update|Metrics & targets|Chart this column|Pin a filter)\b/;
 
 const ACTION_ROLES = /^(button|link|menuitem|menuitemcheckbox|menuitemradio)$/;
 
@@ -124,6 +128,20 @@ const catalogDetails = async (page: Page) => {
   return pop;
 };
 
+/** The dashboard's Views menu, open. */
+const viewsMenu = async (page: Page) => {
+  await page.getByRole('button', { name: /^Views/ }).click();
+  await page.getByRole('menuitem', { name: 'Copy link' }).waitFor();
+  return undefined;
+};
+
+/** The phone's Filters sheet, open: its Saved view pick. */
+const filtersSheet = async (page: Page) => {
+  await page.getByRole('button', { name: /^Filters/ }).click();
+  await page.getByRole('dialog', { name: 'Filters' }).getByRole('combobox', { name: 'Saved view' }).waitFor();
+  return undefined;
+};
+
 const olderVersion = async (page: Page) => {
   await page.getByRole('region', { name: 'Saved versions' }).getByRole('button').nth(1).click();
   await page.getByRole('button', { name: 'Compare with current' }).waitFor();
@@ -181,6 +199,23 @@ export const ROUTES: readonly RouteCase[] = [
   { pattern: '/analytics/scenarios/:projectId/compare', url: (s) => `/analytics/scenarios/${s.pid}/compare?ids=${s.scenarioId}` },
   { pattern: '/analytics/scenarios/:projectId/:scenarioId', url: (s) => `/analytics/scenarios/${s.pid}/${s.scenarioId}`, editor: { role: 'textbox', name: 'Scenario name' }, explore: SCENARIO },
   { pattern: '/analyses/:projectId/:analysisId', url: (s) => `/analyses/${s.pid}/${s.aid}`, editor: { role: 'button', name: 'Add sheet' } },
+  // Saved views are shared: a viewer lists, applies and links them; saving, updating, renaming, the default and deleting are an editor's.
+  {
+    pattern: '/analyses/:projectId/:analysisId',
+    url: (s) => `/analyses/${s.pid}/${s.aid}`,
+    open: viewsMenu,
+    editor: { role: 'menuitem', name: 'Save as a new view…' },
+    viewer: [{ role: 'menuitem', name: 'Copy link' }, { role: 'menuitemradio', name: 'As authored' }, { role: 'menuitemradio', name: /^West only/ }],
+  },
+  {
+    pattern: '/analyses/:projectId/:analysisId',
+    url: (s) => `/analyses/${s.pid}/${s.aid}?view=${s.viewId}`,
+    open: viewsMenu,
+    editor: { role: 'menuitem', name: 'Rename…' },
+    viewer: [{ role: 'menuitem', name: 'Copy link' }, { role: 'menuitemradio', name: /^West only/ }],
+  },
+  // On a phone the dashboard is read by everyone; the Filters sheet's Saved view applies one.
+  { pattern: '/analyses/:projectId/:analysisId', url: (s) => `/analyses/${s.pid}/${s.aid}`, phone: true, open: filtersSheet, viewer: [{ role: 'combobox', name: 'Saved view' }] },
   { pattern: '/data/metrics', url: (s) => `/data/metrics?project=${s.pid}`, editor: { role: 'button', name: 'New metric' } },
   { pattern: '/stories/:projectId/:storyId', url: (s) => `/stories/${s.pid}/${s.storyId}`, editor: { role: 'textbox', name: 'Story name' } },
   { pattern: '/scorecards/:projectId/:scorecardId', url: (s) => `/scorecards/${s.pid}/${s.scorecardId}`, editor: { role: 'button', name: 'Metrics & targets' } },
