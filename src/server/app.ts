@@ -20,6 +20,8 @@ import { registerLimits, RPC_ROUTE, RpcTimeout, untilAborted } from './limits';
 import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
 import { useRecordDb } from '../app/recordFs';
+import { useBlobDb } from '../app/blobStore';
+import { useMaskSaltStore } from '../app/privacyStore';
 import { useSecretStore } from '../app/configSecrets';
 import { createSecretStore } from './secrets/store';
 import { useAiKeys } from './aiKeys';
@@ -181,6 +183,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // only; recordFs ignores the pool under the desktop (T5.1). Before the
       // runner: a job's handler reads records like a request does.
       useRecordDb(pool);
+      useBlobDb(pool); // logos and Image-card pictures too (0018): nothing durable on this pod's disk
       // One refresh of a dataset at a time across pods (L0.4): an advisory lock per (org, dataset).
       useRefreshLockDb(pool);
       // Live warehouse statements counted per org per day across pods (L2.7): the daily limit holds org-wide.
@@ -189,6 +192,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // per-org config.json. Without a master key there is no store, and a
       // connection secret is refused (src/app/configSecrets.ts).
       if (cfg.masterKey) useSecretStore(createSecretStore(pool, cfg.masterKey));
+      // Each project's masking key is a secret every pod reads. No master key (never in prod): this pod's file.
+      useMaskSaltStore(cfg.masterKey ? createSecretStore(pool, cfg.masterKey) : null);
+      if (!cfg.masterKey) app.log.warn('no ORDINATE_MASTER_KEY: each pod keeps its own masking keys, so hash steps differ between pods');
       // AI provider keys go to the encrypted secrets store (T5.3) — with no master key, nowhere (T2.12).
       useAiKeys(pool, cfg.masterKey);
       // Embedding (docs/embed): the org's switch and origins in org_settings, its signing secret in the store — none without a master key.
@@ -220,6 +226,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     });
     app.addHook('onClose', async () => {
       useRecordDb(null);
+      useBlobDb(null);
+      useMaskSaltStore(null);
       useRefreshLockDb(null);
       useLiveUsageDb(null);
       if (cfg.storage.s3) (require('../engine/storage') as typeof import('../engine/storage')).useStorageDb(null);

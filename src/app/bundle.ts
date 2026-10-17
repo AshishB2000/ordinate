@@ -34,6 +34,7 @@ import * as projects from './projects';
 import { projectDir, projectsBase, isValidId } from './recordKinds';
 import { bundleThemesEntry, importBundleThemes } from './themeStore';
 import * as recordFs from './recordFs';
+import { listBlobs, readBlob, writeBlob } from './blobStore';
 import { bundleTemplatesEntry, importBundleTemplates } from './userTemplateStore'; // r7:templates
 
 export const BUNDLE_FORMAT = 'ordinate-project';
@@ -348,13 +349,16 @@ export async function exportProject(
   if (!project || !dir) return null;
   const counts: Record<string, number> = {};
   const entries: ZipEntry[] = [];
-  const files = (await walk(dir)).sort();
+  // Image-card pictures are rows on a server with DATABASE_URL (./blobStore.ts), not files the walk sees.
+  const files = [...new Set([...(await walk(dir)), ...(await listBlobs(path.join(dir, 'assets'))).map((n) => 'assets/' + n)])].sort();
   for (let i = 0; i < files.length; i++) {
     const rel = files[i];
     const rule = ruleFor(rel);
     if (!rule || rel === 'manifest.json') continue; // the trash, copilot.json, temp files…
     if (opts.checkCancelled) opts.checkCancelled();
-    entries.push({ name: rel, data: await recordFs.readFile(path.join(dir, rel)) });
+    const data = rel.startsWith('assets/') ? await readBlob(path.join(dir, rel)) : await recordFs.readFile(path.join(dir, rel));
+    if (!data) continue; // a picture over its cap is not served, so it does not travel either
+    entries.push({ name: rel, data });
     if (opts.onProgress) opts.onProgress(0.3 * ((i + 1) / files.length), 'Reading files');
     if (rule.count) counts[rule.count] = (counts[rule.count] || 0) + 1;
   }
@@ -391,7 +395,7 @@ async function idsInUse(): Promise<Set<string>> {
   try { pids = (await recordFs.readdir(projectsBase())).filter((n) => isValidId(n)); } catch (_) { pids = []; }
   for (const pid of pids) {
     used.add(pid.toLowerCase());
-    for (const rel of await walk(path.join(projectsBase(), pid))) {
+    for (const rel of [...(await walk(path.join(projectsBase(), pid))), ...(await listBlobs(path.join(projectsBase(), pid, 'assets')))]) {
       for (const m of rel.match(UUID_G) || []) used.add(m.toLowerCase());
     }
     try {
@@ -488,6 +492,7 @@ export async function importBundle(bytes: Buffer, opts: BundleProgress & { name?
       const rel = swap(e.name);
       if (!ruleFor(rel)) throw new Error('A remapped name left the whitelist.'); // cannot happen; guard anyway
       const target = path.join(dir, ...rel.split('/'));
+      if (rel.startsWith('assets/')) { await writeBlob(target, e.data); continue; } // a row, on a server with DATABASE_URL
       await fs.promises.mkdir(path.dirname(target), { recursive: true });
       const data = rel.endsWith('.json') ? Buffer.from(swap(e.data.toString('utf8')), 'utf8') : e.data;
       const tmp = target + '.' + randomUUID() + '.tmp';

@@ -19,7 +19,7 @@ holds across pods.
   lock. **fx** settings were a never-expiring cache, so another pod's declaration was never seen
   until a restart.
 - **Org settings** upserted the whole document, so one member's star overwrote another pod's
-  format change (first-run pass F14).
+  format change (first-run pass F15).
 - **Published sites.** A refresh-driven re-publish read the manifest before building and wrote it
   after: it reverted an owner's "members only" to "anyone with the link", and brought removed
   sites back.

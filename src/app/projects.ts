@@ -12,6 +12,7 @@ import * as appPaths from './paths';
 import { sanitizeColorMap } from '../analysis/colorMap';
 import type { ColorMap } from '../analysis/colorMap';
 import * as recordFs from './recordFs';
+import { removeBlobsUnder } from './blobStore';
 
 export interface Project {
   id: string;
@@ -294,6 +295,7 @@ export async function deleteProject(id: string): Promise<boolean> {
     const st = await fs.promises.lstat(projectDir(id)).catch(() => null);
     if (st && st.isSymbolicLink()) await recordFs.unlink(projectDir(id));
     else await recordFs.rm(projectDir(id), { recursive: true, force: true });
+    await removeBlobsUnder(projectDir(id)); // its Image-card pictures (./blobStore.ts)
     return true;
   } catch (_) {
     return false;

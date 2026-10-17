@@ -105,6 +105,35 @@ The limits:
   format version. An older server refuses such a file as "from a newer version".
 - **Skipping releases** (0.2 → 0.5) is fine. Missing migrations apply in order, in one transaction.
 
+## Logos, pictures and masking keys move into Postgres (`0018_blobs`)
+
+Earlier releases kept three things as files under `DATA_DIR` on the pod that made them: the
+workspace and dashboard logos, Image-card pictures, and each project's masking key (`salt.key`, the
+key hash steps use). With the Helm chart's `emptyDir`, every pod had its own copy or none.
+
+**Rolling out.**
+
+- Logos and pictures become rows of `blobs`. A file an earlier release left on a pod's disk is copied
+  into its row the first time that pod reads it, and the file stays in place. Until then, pods that
+  never had the file still do not show it. Open Settings → Branding and each dashboard with a custom
+  logo once per pod that took uploads, or upload them again.
+- With `ORDINATE_MASTER_KEY`, each masking key becomes an encrypted secret. The first pod to need a
+  project's key stores its own `salt.key`, or a new key if it has none. On an install with two or
+  more pods, each pod had its own key. Whichever pod reads first wins, and the other pods' datasets
+  are hashed again under that key the next time they refresh or their steps change.
+- A damaged `salt.key` is never replaced. Hash steps in that project refuse with an error, where they
+  used to skip and keep the raw column, until the file is deleted. Deleting it mints a new key, which
+  changes every token in that project.
+- Upload logos and pictures after the rollout ends. One uploaded to an old pod in the middle of it is
+  a file on that pod's disk.
+
+**Rolling back.**
+
+- The older release reads files only. Logos and pictures uploaded since the upgrade are rows it
+  cannot see. Files from before the upgrade are still on disk, so those come back.
+- A masking key stored since the upgrade is invisible to the older release. It mints a new file key,
+  so hash tokens change, and its hash steps skip again instead of refusing.
+
 ## Compose
 
 From a checkout:

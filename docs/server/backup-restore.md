@@ -6,12 +6,14 @@ Ordinate keeps its state in three places. A complete backup covers all three:
 
 | What | Where | Holds |
 |---|---|---|
-| **Postgres** (`DATABASE_URL`) | your RDS / Cloud SQL / Compose volume | Users, roles, teams, project grants, sessions, API tokens, the audit log, jobs. Every record: projects, dataset metadata, visuals, dashboards, pipelines, versions, trash. Encrypted secrets: connection passwords and AI keys. The table **version pointers**. |
+| **Postgres** (`DATABASE_URL`) | your RDS / Cloud SQL / Compose volume | Users, roles, teams, project grants, sessions, API tokens, the audit log, jobs. Every record: projects, dataset metadata, visuals, dashboards, pipelines, versions, trash, capture history (each capture's screenshot is inside its record). Logos and Image-card pictures (`blobs`). Encrypted secrets (`secrets`): connection passwords, AI keys and each project's masking key. The table **version pointers**. |
 | **Object storage** (`STORAGE_URL=s3://…`) or the `DATA_DIR` volume | your bucket or volume | The Parquet tables: immutable objects `…/orgs/<org>/<project>/<id>.<version>.parquet` on S3, or files under `DATA_DIR` without S3. |
-| **`ORDINATE_MASTER_KEY`** | your Secret / Secrets Manager / `.env` | The key that unwraps every stored secret. A database backup without it restores everything except connection passwords and AI keys, which are then unreadable and must be re-entered. |
+| **`ORDINATE_MASTER_KEY`** | your Secret / Secrets Manager / `.env` | The key that unwraps every stored secret. A database backup without it restores everything except the secrets: connection passwords and AI keys are then unreadable and must be re-entered, and a project's hash (mask) steps refuse to run until the key is back. A masking key cannot be re-entered: a hash made under a lost key is never reproduced. |
 
-You do not need to back up the pods, the image or, in S3 mode, the `/data` volume. It is a cache
-plus temp files, rebuilt on demand.
+You do not need to back up the pods, the image or, in S3 mode, the `/data` volume: with
+`DATABASE_URL` set nothing durable lives there. It is a cache plus temp files, rebuilt on demand. A
+logo, picture or masking-key file an earlier version left on it is copied into Postgres the first
+time it is read, and left in place for a rollback ([upgrade notes](upgrade.md)).
 
 ## Consistency between Postgres and the bucket
 
@@ -31,8 +33,8 @@ no record has named it for `STORAGE_GC_GRACE_MINUTES` (60 by default). It runs e
 **Managed Postgres:** use the provider's automated backups and point-in-time recovery (RDS, Cloud
 SQL, Azure Flexible Server). Physical snapshots are unaffected by what follows.
 
-**Logical dumps (`pg_dump`) need a role that bypasses row-level security.** `records` and
-`storage_objects` have **forced** RLS, keyed on a per-transaction setting the app makes. The app's
+**Logical dumps (`pg_dump`) need a role that bypasses row-level security.** `records`,
+`storage_objects`, `org_config` and `blobs` have **forced** RLS, keyed on a per-transaction setting the app makes. The app's
 own role, an ordinary role that owns the database, is held to it on purpose. Measured on Postgres 17
 (T7.3):
 

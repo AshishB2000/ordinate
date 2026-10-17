@@ -34,10 +34,16 @@
 //      before any user SQL runs, and a failed lock refuses to run at all — on
 //      the server, the org worker's own lock (duckdbPool), set before it answers;
 //   2. one statement (`sqlHarden.statementCount`), and it must start like a read;
-//   3. `readOnlyError` refuses file-reading table functions, a string (or a
-//      path-shaped quoted name) in table position — DuckDB's replacement scan
-//      reads `FROM 'x.csv'` as a file — and the Mosaic catalog views;
-//   4. the subquery wrapper above.
+//   3. `readOnlyError`, a lexer PRE-FILTER: file-reading table functions, a
+//      string (or a path-shaped quoted name) in table position — DuckDB's
+//      replacement scan reads `FROM 'x.csv'` as a file — and the Mosaic views;
+//   4. `astRelationError`, the allow-list over DuckDB's own parse of the wrapped
+//      user text (`json_serialize_sql`, parse only — never EXPLAIN, whose binder
+//      opens the file): every FROM item must be a dataset, a CTE in scope or a
+//      value generator, so SUMMARIZE/PIVOT/SHOW…, catalog views and engine
+//      table functions are refused. Once, in `compile()`, which every executor
+//      (and the `sql` origin save) goes through;
+//   5. the subquery wrapper above.
 // Every value in the user's `[[params]]` is BOUND (analysis/params.ts — the one
 // resolver every parameter host shares), never spliced.
 
@@ -57,7 +63,7 @@ import { lexSql } from './sqlLex';
 import { bindSqlParams, sanitizeSqlParams } from '../analysis/params';
 import type { SqlBindValue, SqlParam } from '../analysis/params';
 import { assignViewNames, extractDeps, slugify } from './sqlNames';
-import { readOnlyError } from './sqlGate';
+import { readOnlyError, astRelationError, ONLY_DATASETS } from './sqlGate';
 import { requireExtract } from '../data/liveDataset';
 // One API surface for callers and the self-check.
 export { assignViewNames, extractDeps, slugify } from './sqlNames';
@@ -241,6 +247,16 @@ async function compile(projectId: unknown, sql: unknown, params: unknown, views:
   if (guard) return { error: guard };
 
   const deps = [...new Set([...boundViews.flatMap((v) => extractDeps(v.sql, cat)), ...extractDeps(bound.sql, cat)])];
+  // The AST's datasets are the ones the prelude below defines, never the whole
+  // catalog: a name no CTE defines would fall through to DuckDB's own lookup.
+  const defined = new Set<string>();
+  for (const id of deps) {
+    const e = cat.find((x) => x.id === id) as CatalogEntry;
+    if (e.alias) defined.add(foldKey(e.alias));
+    defined.add(e.slug);
+  }
+  const why = await astGate(boundViews, bound.sql, defined);
+  if (why) return { error: why };
   const ctes: string[] = [];
   for (const id of deps) {
     const e = cat.find((x) => x.id === id) as CatalogEntry;
@@ -268,23 +284,40 @@ async function compile(projectId: unknown, sql: unknown, params: unknown, views:
 }
 
 /**
+ * The allow-list over DuckDB's parse of each text exactly as it is wrapped —
+ * each view, then the statement — in ONE round trip, the texts bound, never
+ * spliced. View i sees the datasets and the views before it (a forward name
+ * would fall through to the catalog); the statement sees them all. An engine
+ * failure here throws to the caller's catch like any query's.
+ */
+async function astGate(views: Array<{ name: string; sql: string }>, sql: string, datasetNames: ReadonlySet<string>): Promise<string | null> {
+  const texts = [...views.map((v) => v.sql), sql].map((t) => `SELECT * FROM (\n${stripSemicolons(t)}\n) AS _q`);
+  const row = (await duck.queryAsync(`SELECT ${texts.map((_, i) => `json_serialize_sql(CAST(? AS VARCHAR)) AS j${i}`).join(', ')}`, texts))[0];
+  const known = new Set(datasetNames);
+  for (let i = 0; i < texts.length; i += 1) {
+    let why: string | null;
+    try {
+      why = astRelationError(JSON.parse(String(row[`j${i}`])), known);
+    } catch {
+      why = ONLY_DATASETS; // unreadable, or too deep to walk: refused, never run
+    }
+    if (why) return i < views.length ? `${views[i].name}: ${why}` : why;
+    if (i < views.length) known.add(foldKey(views[i].name));
+  }
+  return null;
+}
+
+/**
  * The datasets a statement reads, resolved HERE from the gated text — what a
  * `sql` origin's `deps` must be. A browser's list is never trusted (T2.11): a
- * save re-derives it, so a forged list cannot reach lineage. Runs nothing.
+ * save re-derives it, so a forged list cannot reach lineage. The deps are still
+ * the lexer's lineage (`extractDeps`), but the text goes through `compile()`,
+ * gate and all, so a statement no executor would run is never stored. Runs no
+ * query — only the gate's parse.
  */
 export async function sqlDeps(projectId: unknown, sql: unknown, params: unknown): Promise<{ deps: string[] } | { error: string }> {
-  if (!isValidId(projectId)) return { error: 'Invalid project id' };
-  if (typeof sql !== 'string' || !sql.trim()) return { error: 'Write a query first.' };
-  const bound = bindSqlParams(sql, params);
-  if ('error' in bound) return bound;
-  const cat = await projectCatalog(projectId);
-  const known = new Set<string>();
-  for (const e of cat) {
-    if (e.alias) known.add(foldKey(e.alias));
-    known.add(e.slug);
-  }
-  const guard = readOnlyError(bound.sql, known);
-  return guard ? { error: guard } : { deps: extractDeps(bound.sql, cat) };
+  const c = await compile(projectId, sql, params);
+  return 'error' in c ? c : { deps: c.deps };
 }
 
 async function describe(c: Compiled): Promise<DescribedColumn[]> {

@@ -9,7 +9,8 @@
 //     templates, trash, bundle export — once on JSON files and once on
 //     Postgres, each in a fresh process with a frozen clock and counted ids.
 //     Every call's result and the final record state must be identical, and
-//     the Postgres run must leave no record file on disk.
+//     the Postgres run must leave no record file on disk. So must the stored
+//     images (src/app/blobStore.ts): the logo and the pictures, files vs rows.
 //  3. Tenancy: org B, holding org A's ids, reads/updates/deletes nothing of
 //     A's through the stores (app-level `org_id = $1`; the test role is a
 //     superuser, so RLS is not what stops it) — and, as an ordinary role
@@ -61,6 +62,7 @@ function run(args: string[]): Promise<{ code: number; out: string; err: string }
 interface Pass {
   steps: Array<[string, unknown]>;
   records: Record<string, string>;
+  blobs: Record<string, string>;
   files: string[];
 }
 
@@ -88,6 +90,10 @@ async function differential(url: string): Promise<void> {
   ok(`differential: the final ${keys.length} records are byte-identical (files vs rows)`,
     isDeepStrictEqual(J.records, P.records) && keys.length >= 20,
     [...new Set([...keys, ...Object.keys(P.records)])].filter((k) => J.records[k] !== P.records[k]).join('\n'));
+  const images = Object.keys(J.blobs).sort();
+  ok(`differential: the same ${images.length} stored images, byte-identical (files vs rows), none on the Postgres run's disk`,
+    isDeepStrictEqual(J.blobs, P.blobs) && images.length === 2 && images.includes('branding/logo.png'),
+    JSON.stringify({ json: images, pg: Object.keys(P.blobs).sort() }));
   ok('differential: the same non-record files (Parquet) on disk, same sizes', isDeepStrictEqual(J.files, P.files) && J.files.some((f) => f.includes('.parquet')),
     JSON.stringify({ json: J.files, pg: P.files }));
 }

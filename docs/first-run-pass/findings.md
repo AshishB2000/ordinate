@@ -25,13 +25,11 @@ create-dashboard wizard, Admin → AI's not-set-up states, the admins-only page 
 | F11 | Low | On a Live dataset, a dashboard dropdown over a column with no sampled values answers 409 until Sync schema. | Separate change. |
 | F12 | High (multi-pod) | **An org's settings were a file on each pod's disk.** Formats, branding, starred items and first-run guidance were `config.json` under `DATA_DIR`, which with S3 storage is a pod's own scratch disk: pods disagreed, and a restarted pod lost them. | `org_config` (0014) through `src/server/orgConfig.ts`. |
 | F13 | — | `npm run build:web` failed on macOS: `ui/AsOf.tsx` and `ui/asOf.ts` differ only by case. | Renamed to `asOfView.ts` (#251). |
-| F14 | Medium (multi-pod) | **Two pods changing settings in the same second: the later write won, for the whole document** — one member's star could overwrite another pod's format change. | Each write stores only what it changed (per top-level key, per member's starred list), applied to the row as it is now under `SELECT … FOR UPDATE` (`orgConfig.diffDoc`/`applyPatch`, [record locks](../record-locks/00-design.md)). 20 members starring alternately on two pods: 10 lists kept before, 20 after. |
+| F14 | High (multi-pod) | **Logos, pictures and masking keys were files on a pod's disk.** The logo and Image-card pictures (`branding/`, `projects/<id>/assets/`) and each project's masking key (`salt.key`) lived under `DATA_DIR`, as F12's settings had: the org said a logo existed and every other pod dropped it, export and import lost pictures across pods, and each pod hashed masked columns under its own key. A missing key also failed open: the hash step kept the raw column. | `blobs` (0018) through `src/app/blobStore.ts`, the key as a `privacy.salt` secret, and a hash step that refuses without its key. `test-blobs-pods`: equal on every pod, 158 ms from upload on one pod to read on another. |
+| F15 | Medium (multi-pod) | **Two pods changing settings in the same second: the later write won, for the whole document** — one member's star could overwrite another pod's format change. | Each write stores only what it changed (per top-level key, per member's starred list), applied to the row as it is now under `SELECT … FOR UPDATE` (`orgConfig.diffDoc`/`applyPatch`, [record locks](../record-locks/00-design.md)). 20 members starring alternately on two pods: 10 lists kept before, 20 after. |
 
 ## Still open
 
-- **Logos and dashboard images are files on a pod's disk** (`branding/` and `projects/<id>/assets/`
-  under `DATA_DIR`). With S3 storage and the chart's `emptyDir` they have the same problem F12 had:
-  per pod, and gone after a restart. Not fixed here.
 - **Viewer gating is not complete below the top-level screens**: the dataset Details drawer, the
   Quality / Columns / Snapshots sub-tabs, Prepare and Import reached by URL, story and scorecard
   detail pages, the analytics workbenches, Metrics and input tables still show their controls to a

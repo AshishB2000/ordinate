@@ -75,6 +75,15 @@ the desktop installers.
   (`?view=`); ⌘K opens a view in place, a phone picks one in its Filters sheet, and a published
   page offers it. See [`docs/dashboard-filters/`](docs/dashboard-filters/00-design.md).
 
+### Security — since the move to the web
+
+- **SQL over datasets is checked against DuckDB's own reading of the query.** A query could reach
+  another project's data in the same org through SUMMARIZE, DESCRIBE, PIVOT and similar words, or
+  read the engine's own catalog. Stored SQL datasets and notebook cells that use PIVOT without `IN`,
+  a catalog view, or a table function other than `range`, `generate_series`, `unnest`,
+  `json_each`, `json_tree`, `repeat` and `repeat_row` are now refused, so their refresh will fail:
+  list the PIVOT values (`ON col IN (…)`) or query the project's datasets instead.
+
 ### Fixed — since the move to the web
 
 - **Two saves of one record no longer lose one, on any number of pods.** Comments, alert rules and
@@ -292,6 +301,18 @@ the desktop installers.
   collide and one would silently drop the other, from a dedup key that ignored the values being
   filtered on. Fixed before it could bite a real user: it only started mattering once a control card
   could itself emit an `in` filter.
+- Logos, Image-card pictures and each project's masking key no longer live on one pod's disk. With
+  two or more pods (the Helm default) a logo showed on the pod that took the upload and nowhere
+  else, and export, import and restore lost pictures. Images are now rows of `blobs` in Postgres
+  (migration `0018_blobs`) and the masking key is an encrypted secret. Files an earlier release left
+  are copied in on first read ([upgrade notes](docs/server/upgrade.md)).
+- **Hash (mask) steps now refuse instead of skipping** when the project's masking key cannot be read
+  (a damaged key file, a key store that is down, or the wrong master key). They used to keep the raw
+  column and only warn.
+- Installs with two or more pods had a different masking key on each pod, so the same value hashed
+  differently depending on which pod ran the step. The first pod to read a project's key now stores
+  it for all of them, and datasets hashed on the other pods are hashed again under it on their next
+  refresh or step change.
 
 ## [0.1.0] — 2026-07-XX <!-- TODO(ashish): set release date -->
 
