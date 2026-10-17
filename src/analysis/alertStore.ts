@@ -52,7 +52,8 @@ export interface AlertFile {
   digest: boolean;
 }
 
-const EMPTY: AlertFile = { rules: [], events: [], digest: false };
+// A NEW file each time: a shared one's arrays would carry one project's first rule into the next.
+const empty = (): AlertFile => ({ rules: [], events: [], digest: false });
 
 // ── Disk ─────────────────────────────────────────────────────────────────────
 
@@ -78,12 +79,12 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
  * call site.
  */
 export async function load(projectId: string): Promise<AlertFile> {
-  if (!UUID_RE.test(String(projectId || ''))) return { ...EMPTY };
+  if (!UUID_RE.test(String(projectId || ''))) return empty();
   let raw: any;
   try {
     raw = JSON.parse(await recordFs.readFile(alertsFile(projectId), 'utf8'));
   } catch (_) {
-    return { ...EMPTY }; // missing, unreadable or corrupt — never fatal
+    return empty(); // missing, unreadable or corrupt — never fatal
   }
   const rules: AlertRule[] = [];
   for (const r of Array.isArray(raw?.rules) ? raw.rules : []) {
@@ -126,7 +127,7 @@ async function save(projectId: string, file: AlertFile): Promise<boolean> {
  * evaluateProject computes first and only applies here.
  */
 function withAlerts<T>(projectId: string, fallback: T, fn: (file: AlertFile) => Promise<T>): Promise<T> {
-  if (!UUID_RE.test(String(projectId || ''))) return fn({ ...EMPTY, rules: [], events: [] }); // nothing to hold: load and save refuse it too
+  if (!UUID_RE.test(String(projectId || ''))) return fn(empty()); // nothing to hold: load and save refuse it too
   return recordFs.locked(alertsFile(projectId), async () => fn(await load(projectId))).catch((err: Error) => {
     console.error('[alerts] Could not update alerts.json:', err && err.message);
     return fallback;
