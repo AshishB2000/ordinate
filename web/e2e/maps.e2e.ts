@@ -12,31 +12,12 @@
 //   npm --prefix web run e2e
 
 import assert from 'node:assert/strict';
-import { crc32, deflateSync } from 'node:zlib';
 import type { Page } from 'playwright';
-import { e2e, hasWebGL2, screens, settled } from './fixtures.ts';
+import { e2e, hasWebGL2, screens, settled, tilePng } from './fixtures.ts';
 
 const KINDS = ['region', 'bubble', 'offline', 'points', 'hexbin', 'flow'] as const;
 const OSM = /^https:\/\/[abc]\.tile\.openstreetmap\.org\//;
 
-/** A flat 256×256 PNG — a stand-in tile. */
-function tilePng(rgb: [number, number, number]): Buffer {
-  const chunk = (type: string, data: Buffer) => {
-    const head = Buffer.alloc(8);
-    head.writeUInt32BE(data.length, 0);
-    head.write(type, 4, 'ascii');
-    const crc = Buffer.alloc(4);
-    crc.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), data])) >>> 0, 0);
-    return Buffer.concat([head, data, crc]);
-  };
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(256, 0);
-  ihdr.writeUInt32BE(256, 4);
-  ihdr.set([8, 2, 0, 0, 0], 8); // 8-bit RGB
-  const row = Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: 256 }, () => rgb).flat())]);
-  const raw = Buffer.concat(Array.from({ length: 256 }, () => row));
-  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
-}
 const TILE = tilePng([226, 232, 236]);
 
 async function serveTiles(page: Page): Promise<string[]> {

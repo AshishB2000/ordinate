@@ -43,8 +43,7 @@ const adminUrl = process.env.DATABASE_URL;
 const DISCOVER = process.env.WALK_DISCOVER === '1';
 const VIEW_ONLY = /view-only access to this project\. Ask a project admin to make you an editor/;
 const OSM = /^https:\/\/[abc]\.tile\.openstreetmap\.org\//;
-/** A 1×1 grey PNG for every map tile: the walk reads controls, not maps. */
-const TILE = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN89+7dfwAJYwPNvCvTxwAAAABJRU5ErkJggg==', 'base64');
+
 
 if (!adminUrl) {
   void test('view-only routes: the walk', { skip: 'DATABASE_URL is unset (set it to a Postgres this spec may CREATE DATABASE on)' }, () => {});
@@ -56,7 +55,8 @@ if (!adminUrl) {
   await root.connect();
   await root.query(`CREATE DATABASE ${dbName}`);
 
-  const { e2e, settled, screens, configureServer, withLiveDataset } = await import('./fixtures.ts');
+  const { e2e, settled, screens, configureServer, withLiveDataset, tilePng } = await import('./fixtures.ts');
+  const TILE = tilePng([226, 232, 236]); // every map tile, offline: the walk reads controls, not maps
   withLiveDataset(); // the fake warehouse answers the walk's Live dataset
   configureServer({ env: { DATABASE_URL: scratch.toString(), AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ADMIN_EMAIL: ADMIN } });
   after(async () => {
