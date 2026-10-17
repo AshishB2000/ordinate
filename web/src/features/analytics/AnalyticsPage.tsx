@@ -105,7 +105,9 @@ function Hub({ projectId }: { projectId: string }) {
                 </Link>
               </li>
             ))}
+            {/* Each opens a NEW visual on the builder: an editor's (a viewer opens saved ones from Visuals). */}
             {id &&
+              canEdit &&
               DATASET_DOORS.map((w) => (
                 <li key={w.key} className={s.hubCard}>
                   <span className={s.hubIcon} aria-hidden="true">
