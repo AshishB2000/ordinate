@@ -154,7 +154,8 @@ async function wired(url: string, w: Wire): Promise<void> {
   await pending;
   ok(`wiring ${w.store}: held while a raw session holds ${w.rel.replace(/[0-9a-f-]{36}/g, '<id>')}, lands right after its COMMIT (${landed - released} ms)`,
     held && landed - t0 >= 300 && landed - released < 1_500, `held=${held} after=${landed - released}`);
-  ok(`wiring ${w.store} CONTROL: the same call elsewhere is not delayed (${otherMs} ms)`, otherMs < 300);
+  // Held, it would wait the whole lock wait (15 s): 2 s is a margin for a busy runner, not a blur.
+  ok(`wiring ${w.store} CONTROL: the same call elsewhere is not delayed (${otherMs} ms)`, otherMs < 2_000);
 }
 
 async function parent(url: string): Promise<void> {

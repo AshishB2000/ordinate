@@ -159,7 +159,7 @@ async function dbLeg(url: string, admin: Client): Promise<void> {
     const r = await add;
     ok('db (e): comments.add is held while a raw session holds its advisory key (≥ 300 ms)', pending && landed - t0 >= 300 && r.ok, `${landed - t0} ms`);
     ok(`db (e): …and lands right after the raw COMMIT (${landed - released} ms)`, landed - released < 1_000);
-    ok(`db (e) CONTROL: another project's add is not delayed (${freeMs} ms)`, free.ok && freeMs < 300);
+    ok(`db (e) CONTROL: another project's add is not delayed (${freeMs} ms)`, free.ok && freeMs < 2_000); // held, it would wait 15 s
     const raw2 = await rawHold(url, `records:acme:projects/${p.id}/comments.json`);
     recordFs._setLockWaitMs(200);
     const refused = await as('acme', () => comments.add(p.id, { kind: 'dataset', id: p.id }, 'refused'));
