@@ -3,7 +3,9 @@
 // period, a twelve-period trend, its owner and its latest alert or comment
 // count, grouped with a roll-up (scorecardPage.ts). NOTHING HERE COMPUTES A
 // FIGURE: `scorecard:compute` returns every value, status, tally and display
-// string; stepping the period asks again. A row opens its detail.
+// string; stepping the period asks again. A row opens its detail. A viewer
+// steps through periods and opens rows; the name, the period, the metrics and
+// the options are an editor's.
 
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -11,6 +13,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
 import { ErrorState, PageSkeleton } from '../../../app/blocks';
 import { ago } from '../../../app/when';
+import { Badge } from '../../../ui/Badge';
 import { Button, IconButton, buttonClass } from '../../../ui/Button';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Menu } from '../../../ui/Menu';
@@ -22,6 +25,7 @@ import { Icon } from '../../../ui/icons/Icon';
 import { Sparkline } from '../../analyses/metrics/Sparkline';
 import { LiveRefusalLine } from '../../live/LiveOff';
 import { liveRefusalOf } from '../../live/refusal';
+import { useCanEdit } from '../../projects/api';
 import { useAdoptProject } from '../../projects/current';
 import { failure, STATUS_WORD, type ScorePeriod, type Scorecard, type ScoreResult, type ScoreRow } from '../api';
 import { Detail } from './Detail';
@@ -103,11 +107,24 @@ export function Row({ r, selected, onOpen }: { r: ScoreRow; selected: boolean; o
   );
 }
 
-function Table({ res, selected, onOpen, onAdd }: { res: ScoreResult; selected: string; onOpen: (id: string) => void; onAdd: () => void }) {
+/** `onAdd` absent: a viewer's table — its empty state says who adds the metrics. */
+function Table({ res, selected, onOpen, onAdd }: { res: ScoreResult; selected: string; onOpen: (id: string) => void; onAdd?: () => void }) {
   if (!res.rows.length) {
     return (
-      <EmptyState icon="target" title="No metrics on this scorecard yet" actions={<Button variant="primary" onClick={onAdd}>Add metrics</Button>}>
-        Add the metrics you want to track, then give each a target.
+      <EmptyState
+        icon="target"
+        title="No metrics on this scorecard yet"
+        actions={
+          onAdd && (
+            <Button variant="primary" onClick={onAdd}>
+              Add metrics
+            </Button>
+          )
+        }
+      >
+        {onAdd
+          ? 'Add the metrics you want to track, then give each a target.'
+          : 'An editor of this project can add the metrics to track and give each a target. You have view-only access.'}
       </EmptyState>
     );
   }
@@ -169,6 +186,7 @@ function Page({ projectId, sc, startEditing }: { projectId: string; sc: Scorecar
   const [editing, setEditing] = useState(startEditing);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [name, setName] = useState(sc.name);
+  const canEdit = useCanEdit(projectId);
   const q = useQuery({
     queryKey: ['scorecard:compute', projectId, sc.id, offset, sc.updatedAt],
     queryFn: async () => {
@@ -217,39 +235,49 @@ function Page({ projectId, sc, startEditing }: { projectId: string; sc: Scorecar
           <Icon name="arrow-left" />
           <span>Scorecards</span>
         </Link>
-        <h1 className={s.nameH}>
-          <input
-          className={s.nameInput}
-          aria-label="Scorecard name"
-          value={name}
-          maxLength={200}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={() => name.trim() && name.trim() !== sc.name && void update({ name: name.trim() })}
-          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-        />
-        </h1>
-        <div className={s.headActions}>
-          <Button icon="pencil" onClick={() => setEditing(true)}>
-            Metrics & targets
-          </Button>
-          <Menu
-            label="Scorecard options"
-            align="end"
-            trigger={<IconButton icon="more-horizontal" label="Scorecard options" />}
-            items={[
-              { label: 'Create report…', icon: 'file-text', onSelect: () => void createReport() },
-              { label: 'Duplicate', icon: 'copy', onSelect: () => void duplicate() },
-              { kind: 'separator' },
-              { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setConfirmDelete(true) },
-            ]}
-          />
-        </div>
+        {canEdit ? (
+          <h1 className={s.nameH}>
+            <input
+              className={s.nameInput}
+              aria-label="Scorecard name"
+              value={name}
+              maxLength={200}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => name.trim() && name.trim() !== sc.name && void update({ name: name.trim() })}
+              onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+            />
+          </h1>
+        ) : (
+          <>
+            <h1 className={`${s.nameH} ${s.nameText}`}>{sc.name}</h1>
+            <Badge icon="eye">View only</Badge>
+          </>
+        )}
+        {canEdit && (
+          <div className={s.headActions}>
+            <Button icon="pencil" onClick={() => setEditing(true)}>
+              Metrics & targets
+            </Button>
+            <Menu
+              label="Scorecard options"
+              align="end"
+              trigger={<IconButton icon="more-horizontal" label="Scorecard options" />}
+              items={[
+                { label: 'Create report…', icon: 'file-text', onSelect: () => void createReport() },
+                { label: 'Duplicate', icon: 'copy', onSelect: () => void duplicate() },
+                { kind: 'separator' },
+                { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setConfirmDelete(true) },
+              ]}
+            />
+          </div>
+        )}
       </header>
       <div className={s.toolbar}>
         <div className={s.periodPick}>
           <Select
             aria-label="Period"
             size="sm"
+            disabled={!canEdit}
             value={sc.period}
             onValueChange={(p) => {
               setOffset(0);
@@ -289,12 +317,12 @@ function Page({ projectId, sc, startEditing }: { projectId: string; sc: Scorecar
           ) : q.isError ? (
             <ErrorState title="Could not compute the scorecard" message={q.error.message} onRetry={() => void q.refetch()} />
           ) : (
-            <Table res={q.data} selected={detail} onOpen={setDetail} onAdd={() => setEditing(true)} />
+            <Table res={q.data} selected={detail} onOpen={setDetail} onAdd={canEdit ? () => setEditing(true) : undefined} />
           )}
         </section>
         {detail && <Detail projectId={projectId} scorecardId={sc.id} metricId={detail} offset={offset} onClose={() => setDetail('')} />}
       </div>
-      {editing && (
+      {editing && canEdit && (
         <RowsEditor
           projectId={projectId}
           sc={sc}

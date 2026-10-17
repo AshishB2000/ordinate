@@ -3,18 +3,22 @@
 // Saving is a debounced autosave, undo/redo the dashboards' stack (⌘Z / ⇧⌘Z),
 // and there is always an empty text line at the end to type into. Every chart
 // and metric is the server's, fetched for the whole page in one call.
+// A viewer reads the same page: no tail line, no editor, and nothing that saves
+// (commit, undo/redo and ⌘Z return early) — hiding the buttons is half of it.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
-import { ErrorState, PageSkeleton } from '../../../app/blocks';
+import { EmptyState, ErrorState, PageSkeleton } from '../../../app/blocks';
+import { Badge } from '../../../ui/Badge';
 import { Button, IconButton, buttonClass } from '../../../ui/Button';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Menu } from '../../../ui/Menu';
 import { toast } from '../../../ui/Toast';
 import { Icon } from '../../../ui/icons/Icon';
 import { storyOutline } from '../../../../../src/analysis/storyText.ts';
+import { useRoles } from '../../projects/api';
 import { useAdoptProject } from '../../projects/current';
 import { failure, type MetricFigure, type Step, type Story, type StoryBlock, type VisualFigure } from '../api';
 import { exportStory } from '../export/generate';
@@ -48,12 +52,13 @@ function figureBlocks(blocks: StoryBlock[]): FigureReq[] {
   );
 }
 
-function Editor({ projectId, story, focusEnd }: { projectId: string; story: Story; focusEnd: boolean }) {
+function Editor({ projectId, story, focusEnd, readOnly }: { projectId: string; story: Story; focusEnd: boolean; readOnly: boolean }) {
   const client = useQueryClient();
   const navigate = useNavigate();
-  const [snap, setSnap] = useState<Snap>(() => ({ name: story.name, blocks: withTail(story.blocks) }));
+  const [snap, setSnap] = useState<Snap>(() => ({ name: story.name, blocks: readOnly ? story.blocks : withTail(story.blocks) }));
   const [hist, setHist] = useState<History<Snap>>(() => historyNew(snap));
-  const [editing, setEditing] = useState(() => (focusEnd ? snap.blocks[snap.blocks.length - 1].id : ''));
+  // A viewer's story has no tail line: an empty one has no last block to focus.
+  const [editing, setEditing] = useState(() => (focusEnd && !readOnly ? snap.blocks[snap.blocks.length - 1].id : ''));
   const [status, setStatus] = useState('');
   const [pending, setPending] = useState<Pending>(null);
   const [presenting, setPresenting] = useState(false);
@@ -81,6 +86,7 @@ function Editor({ projectId, story, focusEnd }: { projectId: string; story: Stor
   useEffect(() => () => void flush(), [flush]);
 
   const commit = (next: Snap, label: string, coalesce = false) => {
+    if (readOnly) return;
     const tailed = { ...next, blocks: withTail(next.blocks) };
     setSnap(tailed);
     latest.current = tailed;
@@ -92,6 +98,7 @@ function Editor({ projectId, story, focusEnd }: { projectId: string; story: Stor
   };
   const setBlocks = (blocks: StoryBlock[], label: string, coalesce = false) => commit({ ...snap, blocks }, label, coalesce);
   const step = (dir: 'undo' | 'redo') => {
+    if (readOnly) return;
     const r = dir === 'undo' ? historyUndo(hist) : historyRedo(hist);
     if (!r) return;
     setHist(r.h);
@@ -105,7 +112,7 @@ function Editor({ projectId, story, focusEnd }: { projectId: string; story: Stor
   };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z' || presenting) return;
+      if (readOnly || !(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z' || presenting) return;
       if ((e.target as HTMLElement)?.tagName === 'TEXTAREA' || (e.target as HTMLElement)?.tagName === 'INPUT') return; // the field's own undo
       e.preventDefault();
       step(e.shiftKey ? 'redo' : 'undo');
@@ -186,21 +193,36 @@ function Editor({ projectId, story, focusEnd }: { projectId: string; story: Stor
           <Icon name="arrow-left" />
           <span>Stories</span>
         </Link>
-        <h1 className={s.nameH}>
-          <input
-          className={s.nameInput}
-          aria-label="Story name"
-          value={snap.name}
-          maxLength={200}
-          onChange={(e) => commit({ ...snap, name: e.target.value }, 'Rename', true)}
-          onBlur={() => !snap.name.trim() && commit({ ...snap, name: 'Untitled story' }, 'Rename')}
-          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-        />
-        </h1>
-        <span className={s.status} role="status">{status}</span>
+        {readOnly ? (
+          <>
+            <h1 className={`${s.nameH} ${s.nameText}`}>{snap.name}</h1>
+            <Badge icon="eye">View only</Badge>
+          </>
+        ) : (
+          <>
+            <h1 className={s.nameH}>
+              <input
+                className={s.nameInput}
+                aria-label="Story name"
+                value={snap.name}
+                maxLength={200}
+                onChange={(e) => commit({ ...snap, name: e.target.value }, 'Rename', true)}
+                onBlur={() => !snap.name.trim() && commit({ ...snap, name: 'Untitled story' }, 'Rename')}
+                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+              />
+            </h1>
+            <span className={s.status} role="status">
+              {status}
+            </span>
+          </>
+        )}
         <div className={s.headActions}>
-          <IconButton icon="undo" label={undoLabel(hist) ? `Undo ${undoLabel(hist).toLowerCase()}` : 'Nothing to undo'} disabled={!undoLabel(hist)} onClick={() => step('undo')} />
-          <IconButton icon="redo" label={redoLabel(hist) ? `Redo ${redoLabel(hist).toLowerCase()}` : 'Nothing to redo'} disabled={!redoLabel(hist)} onClick={() => step('redo')} />
+          {!readOnly && (
+            <>
+              <IconButton icon="undo" label={undoLabel(hist) ? `Undo ${undoLabel(hist).toLowerCase()}` : 'Nothing to undo'} disabled={!undoLabel(hist)} onClick={() => step('undo')} />
+              <IconButton icon="redo" label={redoLabel(hist) ? `Redo ${redoLabel(hist).toLowerCase()}` : 'Nothing to redo'} disabled={!redoLabel(hist)} onClick={() => step('redo')} />
+            </>
+          )}
           <Button icon="maximize" onClick={() => void flush().then(() => setPresenting(true))}>
             Present
           </Button>
@@ -208,7 +230,9 @@ function Editor({ projectId, story, focusEnd }: { projectId: string; story: Stor
             Export PDF
           </Button>
           <CommentDoor projectId={projectId} kind="story" id={story.id} />
-          <Menu label="Story options" align="end" trigger={<IconButton icon="more-horizontal" label="Story options" />} items={[{ label: 'Delete story', icon: 'trash', danger: true, onSelect: () => setConfirmDelete(true) }]} />
+          {!readOnly && (
+            <Menu label="Story options" align="end" trigger={<IconButton icon="more-horizontal" label="Story options" />} items={[{ label: 'Delete story', icon: 'trash', danger: true, onSelect: () => setConfirmDelete(true) }]} />
+          )}
         </div>
       </header>
       <div className={s.layout}>
@@ -225,10 +249,15 @@ function Editor({ projectId, story, focusEnd }: { projectId: string; story: Stor
               ))}
             </ul>
           ) : (
-            <p className={s.outlineEmpty}>Headings you write (# or ##) appear here.</p>
+            <p className={s.outlineEmpty}>{readOnly ? 'This story has no headings.' : 'Headings you write (# or ##) appear here.'}</p>
           )}
         </nav>
         <article className={s.doc} aria-label={snap.name}>
+          {readOnly && !snap.blocks.some((b) => b.kind !== 'text' || b.text.trim()) && (
+            <EmptyState icon="file-text" title="This story is empty">
+              An editor of this project can add text, charts and metrics to it. You have view-only access.
+            </EmptyState>
+          )}
           {snap.blocks.map((b, i) => (
             <div
               key={b.id}
@@ -262,6 +291,7 @@ function Editor({ projectId, story, focusEnd }: { projectId: string; story: Stor
                 index={i}
                 count={snap.blocks.length}
                 editing={editing === b.id}
+                readOnly={readOnly}
                 figure={figures.data?.[b.id]}
                 figuresPending={figures.isPending || figures.isFetching}
                 onChange={(nb, label, coalesce) => setBlocks(snap.blocks.map((x) => (x.id === b.id ? nb : x)), label, coalesce)}
@@ -355,6 +385,8 @@ export default function StoryPageRoute() {
   const { projectId = '', storyId = '' } = useParams();
   const [params] = useSearchParams();
   useAdoptProject(projectId);
+  // The role decides the page's first state (the tail line, the focus): never mount the editor before it is known.
+  const roles = useRoles();
   const q = useQuery({
     queryKey: ['story:get', projectId, storyId],
     queryFn: async () => (await rpc('story:get', { projectId, id: storyId })) as Story | null,
@@ -362,7 +394,7 @@ export default function StoryPageRoute() {
     refetchOnWindowFocus: false,
     gcTime: 0,
   });
-  if (q.isPending) return <PageSkeleton />;
+  if (q.isPending || roles.isPending) return <PageSkeleton />;
   if (q.isError || !q.data) {
     return (
       <div className={s.storyPage}>
@@ -370,5 +402,6 @@ export default function StoryPageRoute() {
       </div>
     );
   }
-  return <Editor key={storyId} projectId={projectId} story={q.data} focusEnd={params.get('focus') === 'end'} />;
+  const role = roles.data?.[projectId];
+  return <Editor key={storyId} projectId={projectId} story={q.data} focusEnd={params.get('focus') === 'end'} readOnly={role !== 'editor' && role !== 'admin'} />;
 }
