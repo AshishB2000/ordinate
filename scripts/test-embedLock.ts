@@ -223,12 +223,14 @@ async function main(): Promise<void> {
     const html = 'html' in page ? page.html : '';
     const block = dataBlock(html);
     const westFigure = /\b40(1|2|3|4|5|6)\d\b/; // West's amounts: 4017 … 4067
+    // A v4 UUID's third group is 4xxx, so `-4023-` in a random id matched the figure ~1.5% of runs.
+    const noIds = (s: string): string => s.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '');
     ok('page: built, a dashboard page with its pinned CSP', !!block && block.kind === 'dashboard' && /script-src 'sha256-/.test(html));
     ok('no leak: no other region\'s name anywhere in the page', !/North|South|West/.test(JSON.stringify(block)), (JSON.stringify(block).match(/.{40}(North|South|West).{40}/) || [''])[0]);
-    ok('no leak: no West figure, no Partner option', !westFigure.test(JSON.stringify(block)) && !JSON.stringify(block).includes('Partner'));
+    ok('no leak: no West figure, no Partner option', !westFigure.test(noIds(JSON.stringify(block))) && !JSON.stringify(block).includes('Partner'), (noIds(JSON.stringify(block)).match(/.{30}\b40[1-6]\d\b.{30}/) || [''])[0]);
     const open = await inOrg(() => embedPage.embedHtml(site, s.aid, { ...claims, params: {} }));
     const openBlock = 'html' in open ? JSON.stringify(dataBlock(open.html)) : '';
-    ok('no leak: NEGATIVE CONTROL — the unlocked embed has them', /West/.test(openBlock) && openBlock.includes('Partner'));
+    ok('no leak: NEGATIVE CONTROL — the unlocked embed has them', /West/.test(openBlock) && openBlock.includes('Partner') && westFigure.test(noIds(openBlock)));
     ok('page: the embed has no site header to link out of (nav empty), and says it is embedded', Array.isArray(block.site.nav) && block.site.nav.length === 0 && block.embed && block.embed.hideTitle === false);
     const dark = await inOrg(() => embedPage.embedHtml(site, s.aid, { ...claims, theme: 'dark', hide: ['title', 'filters'] }));
     const darkBlock = 'html' in dark ? dataBlock(dark.html) : null;
