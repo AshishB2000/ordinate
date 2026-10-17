@@ -92,8 +92,51 @@ export interface Analysis {
   filters: Step[];
   style: Record<string, unknown>;
   parameters: Parameter[];
+  /** Saved views and the one the dashboard opens on ('' = none). Edited only through `analysis:view`. */
+  views?: SavedView[];
+  defaultViewId?: string;
   updatedAt: string;
 }
+
+// ── Saved views (src/analysis/savedViews.ts) ─────────────────────────────
+// Mirrored by hand: that module pulls in `crypto` (through dashboards.ts) and
+// never ships to the browser. Only Vitest loads its compiled JS, to compare.
+
+/** A reader's state of a dashboard, as a view stores it. */
+export type ViewState = {
+  /** The page (sheet) id; '' = the first. */
+  page: string;
+  /** Control card id → its selection; null = "All". */
+  controls: Record<string, ControlValue | null>;
+  /** Parameter id → its value; absent = the saved default. */
+  params: Record<string, unknown>;
+  /** The sheet-wide selection. */
+  selection: Step[];
+  /** Per-tile narrowing: card id → steps. */
+  tiles: Record<string, Step[]>;
+  /** Tabs card id → its open tab. */
+  groupTabs: Record<string, string>;
+  /** A snapshot time (ISO), or null for Latest. */
+  asOf: string | null;
+};
+
+export interface SavedView {
+  id: string;
+  name: string;
+  state: ViewState;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** One `analysis:view` edit, without the state the client gathers for create/update. */
+export type ViewOp =
+  | { op: 'create'; name: string }
+  | { op: 'rename'; viewId: string; name: string }
+  | { op: 'update'; viewId: string }
+  | { op: 'delete'; viewId: string }
+  | { op: 'default'; viewId: string };
+
+export type ViewOpReply = { ok: true; views: SavedView[]; defaultViewId: string; viewId: string } | { ok: false; error: string };
 
 export interface GalleryItem {
   id: string;

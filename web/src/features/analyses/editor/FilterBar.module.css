@@ -69,11 +69,22 @@
   width: 140px;
 }
 .multiBtn {
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  max-width: 220px;
   white-space: nowrap;
   cursor: pointer;
+}
+.multiBtn > svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+/* The chip's words: one line, cut with an ellipsis (a flex item needs its own box for that). */
+.chipText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* A Live column with no list of values: a control's own box, the Live mark, and which case it is. */
 .noList {
@@ -113,15 +124,52 @@
   font-size: var(--t-11);
   color: var(--muted);
 }
-.dates {
-  display: inline-flex;
+/* A value in a dropdown's popover (ValuePicker): the whole row is the button, the current pick marked. */
+.pick {
+  display: flex;
   align-items: center;
-  gap: var(--sp-4);
-  color: var(--muted);
-}
-.relative {
-  font-size: var(--t-12);
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: var(--menu-row);
+  padding: var(--sp-4) var(--sp-8);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
   color: var(--text);
+  font: inherit;
+  font-size: var(--t-12);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.pick:hover {
+  background: var(--surface-2);
+}
+.pick[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--text-strong);
+  font-weight: 600;
+}
+.pick:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+/* A Live column: typed text the sample does not list, used as it is. */
+.use {
+  color: var(--accent);
+  font-weight: 600;
+}
+.typed {
+  display: flex;
+  gap: var(--sp-8);
+}
+/* A date range's popover: the period picker, phone-wide at most. */
+.datePanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  width: min(340px, calc(100vw - 32px));
+  padding: var(--sp-12);
 }
 .slider {
   display: inline-flex;
@@ -213,9 +261,9 @@
   height: 44px;
   font-size: 16px;
 }
-.stacked .dates {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+.stacked .multiBtn .chipText {
+  flex: 1 1 auto;
+  text-align: left;
 }
 .stacked .slider {
   display: flex;
@@ -228,4 +276,16 @@
 .stacked .chip button {
   min-width: 44px;
   min-height: 44px;
+}
+
+/* Touch: the popovers' search box, value rows and date fields are thumb-sized,
+   and 16px text keeps a phone from zooming into a field on focus. */
+@media (pointer: coarse) {
+  .search,
+  .pick,
+  .datePanel input,
+  .datePanel button {
+    min-height: 44px;
+    font-size: 16px;
+  }
 }

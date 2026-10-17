@@ -1,13 +1,14 @@
 // A dashboard control over a Live column with no list of values (docs/live-data/
 // log.md, L2.6's leftover): the widget says which case it is and, in its panel,
 // the server's sentence; an editor gets "Sync schema" where a sync can list the
-// values, a viewer the sentence only. Never an empty menu.
+// values, a viewer the sentence only. Never an empty menu. Either way a value
+// can be typed in and used (docs/dashboard-filters): the warehouse filters on it.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LiveRefusalError } from '../../live/refusal';
-import type { Card } from '../api';
+import type { Card, ControlValue } from '../api';
 import { ControlWidget, noListOf } from './ControlWidget';
 
 afterEach(() => {
@@ -27,7 +28,7 @@ const SYNCED = { ok: true, status: 'synced', columns: 3, added: [], removed: [],
 type Control = NonNullable<Card['control']>;
 
 /** Draws one control; `distinct` answers each `dataset:distinct` in turn (the last one repeats). Returns the channels called. */
-function draw(kind: 'dropdown' | 'multi', distinct: unknown[], role: 'admin' | 'viewer' = 'admin', sync: unknown = SYNCED, status = 200): string[] {
+function draw(kind: 'dropdown' | 'multi', distinct: unknown[], role: 'admin' | 'viewer' = 'admin', sync: unknown = SYNCED, status = 200, onChange: (v: ControlValue | undefined) => void = () => undefined): string[] {
   const calls: string[] = [];
   let asked = 0;
   vi.stubGlobal(
@@ -43,7 +44,7 @@ function draw(kind: 'dropdown' | 'multi', distinct: unknown[], role: 'admin' | '
   const control = { kind, datasetId: D, column: 'region', label: 'Region' } as Control;
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <ControlWidget projectId={P} control={control} value={undefined} onChange={() => undefined} />
+      <ControlWidget projectId={P} control={control} value={undefined} onChange={onChange} />
     </QueryClientProvider>,
   );
   return calls;
@@ -54,12 +55,13 @@ describe('a control over a Live column with no list of values', () => {
     const calls = draw('dropdown', [refusal('notSynced', NOT_SYNCED), LIST]);
     const chip = await screen.findByRole('button', { name: 'Region: not synced yet' });
     expect(chip.textContent).toBe('Not synced yet');
-    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Region: All' })).toBeNull();
     fireEvent.click(chip);
     expect(await screen.findByText(NOT_SYNCED)).toBeTruthy();
     fireEvent.click(await screen.findByRole('button', { name: 'Sync schema' }));
-    const menu = await screen.findByRole('combobox', { name: 'Region' });
-    await waitFor(() => expect([...menu.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['All', 'North', 'South']));
+    fireEvent.click(await screen.findByRole('button', { name: 'Region: All' }));
+    const list = await screen.findByRole('group', { name: 'Region values' });
+    await waitFor(() => expect(within(list).getAllByRole('button').map((o) => o.textContent)).toEqual(['All', 'North', 'South']));
     expect(calls.filter((c) => c === 'dataset:syncLiveSchema')).toHaveLength(1);
     expect(calls.filter((c) => c === 'dataset:distinct')).toHaveLength(2);
   });
@@ -92,17 +94,33 @@ describe('a control over a Live column with no list of values', () => {
     expect(screen.queryByRole('button', { name: 'Sync schema' })).toBeNull();
   });
 
-  it('NEGATIVE CONTROL: a listed column is the ordinary menu, and nothing is retried', async () => {
+  it('a value can be typed in and used, whichever the case', async () => {
+    const used: Array<ControlValue | undefined> = [];
+    draw('dropdown', [refusal('notListed', NOT_LISTED)], 'viewer', SYNCED, 200, (v) => used.push(v));
+    fireEvent.click(await screen.findByRole('button', { name: 'Region: values not listed' }));
+    const box = await screen.findByRole('textbox', { name: 'Type a Region value' });
+    expect(box.getAttribute('maxlength')).toBe('200');
+    fireEvent.change(box, { target: { value: 'Northeast' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Use' }));
+    expect(used).toEqual([{ value: 'Northeast' }]);
+  });
+
+  it('NEGATIVE CONTROL: a listed column is the ordinary picker, and nothing is retried', async () => {
     const calls = draw('dropdown', [LIST]);
-    const menu = await screen.findByRole('combobox', { name: 'Region' });
-    await waitFor(() => expect(menu.querySelectorAll('option')).toHaveLength(3));
+    fireEvent.click(await screen.findByRole('button', { name: 'Region: All' }));
+    const list = await screen.findByRole('group', { name: 'Region values' });
+    await waitFor(() => expect(within(list).getAllByRole('button')).toHaveLength(3));
     expect(document.querySelector('[data-no-list]')).toBeNull();
     expect(calls.filter((c) => c === 'dataset:distinct')).toHaveLength(1);
   });
 
-  it('NEGATIVE CONTROL: any other failure stays the menu’s own "values unavailable"', async () => {
+  it('NEGATIVE CONTROL: any other failure stays the picker’s own "could not be loaded"', async () => {
     draw('dropdown', [{ error: 'handler failed' }], 'admin', SYNCED, 500);
-    expect(await screen.findByRole('option', { name: 'All (values unavailable)' })).toBeTruthy();
+    const chip = await screen.findByRole('button', { name: 'Region: All' });
+    await waitFor(() => expect(chip.getAttribute('aria-invalid')).toBe('true'));
+    fireEvent.click(chip);
+    expect(await screen.findByText(/The values could not be loaded\./)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
     expect(document.querySelector('[data-no-list]')).toBeNull();
   });
 

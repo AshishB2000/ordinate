@@ -18,6 +18,7 @@ import { builderFor } from './AddVisual';
 import { removeCards } from './arrange';
 import { useEditor } from './context';
 import { KIND_LABEL } from './ControlDialog';
+import { usePeriodLabel } from './DateControl';
 import type { Doc } from './doc';
 import { removeTab } from './geometry';
 import { ImageProps, InteractionProps, NavProps, StatsProps } from './KindProps';
@@ -41,13 +42,13 @@ function useCardEdit(card: Card) {
     );
 }
 
-function describeDefault(control: NonNullable<Card['control']>): string {
+/** The default in words; `period` is a date default's (the server's name for a relative one, see DateControl). */
+function describeDefault(control: NonNullable<Card['control']>, period: string): string {
   const d = control.default;
   if (!d) return 'none';
   if ('values' in d) return d.values.length ? `${d.values.length} value(s)` : 'none';
   if ('value' in d) return d.value || 'none';
-  if ('preset' in d) return d.preset.replace(/_/g, ' ');
-  return [d.from, d.to].filter(Boolean).join(' – ') || 'none';
+  return period;
 }
 
 function ControlProps({ card }: { card: Card }) {
@@ -57,6 +58,7 @@ function ControlProps({ card }: { card: Card }) {
   const sets = useDatasets(ed.projectId);
   const cols = useDatasetColumns(ed.projectId, control.datasetId || undefined);
   const live = ed.controlValue(card.id);
+  const period = usePeriodLabel(control.kind === 'date_range' ? control.default : undefined);
   // A date range lists the date columns first (authoringProps.ts anFillColumns).
   const colList = [...(cols.data?.columns ?? [])].sort((a, b) => (control.kind === 'date_range' ? Number(b.type === 'date') - Number(a.type === 'date') : 0));
   if (control.kind === 'parameter') {
@@ -99,7 +101,7 @@ function ControlProps({ card }: { card: Card }) {
           ed.setControl(card.id, undefined);
         }}
       />
-      <p className={s.note}>Default: {describeDefault(control)}</p>
+      <p className={s.note}>Default: {describeDefault(control, period)}</p>
       <div className={s.row}>
         <Button size="sm" disabled={!live} onClick={() => set('Set control default', (c) => void (c.control && live && (c.control.default = live)))}>
           Use current selection as default

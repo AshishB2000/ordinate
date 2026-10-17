@@ -67,6 +67,15 @@ export interface Viewer {
   setPresenting(on: boolean): void;
   comments: CommentTarget;
   openComments(t: CommentTarget): void;
+  /** A saved view applied (views/viewState.ts): its selection, narrowing and As of replace the reader's; click-filters go. */
+  restore(selection: Step[], narrowed: ReadonlyMap<string, Step[]>, asOf: string | null): void;
+}
+
+/** What the dashboard opens on before the reader does anything: a saved view's part of the viewer state. */
+export interface Opening {
+  selection: Step[];
+  narrowed: ReadonlyMap<string, Step[]>;
+  asOf: string | null;
 }
 
 /** One step's identity — two clicks on the same mark are the same step (dashSelKey). */
@@ -99,14 +108,27 @@ function takeNavigation(analysisId: string): Pending | null {
   }
 }
 
-export function useViewer(projectId: string, analysisId: string): Viewer & { arrivedSheet?: string } {
+/** `steps` after `base`, a step already on staying once (addSelection's merge). */
+const merged = (base: Step[], steps: Step[]): Step[] => {
+  const keys = new Set(steps.map(stepKey));
+  return [...base.filter((x) => !keys.has(stepKey(x))), ...steps];
+};
+
+export function useViewer(projectId: string, analysisId: string, opening?: Opening | null): Viewer & { arrivedSheet?: string } {
   const [arrived] = useState(() => takeNavigation(analysisId));
-  const [selection, setSelection] = useState<Step[]>(() => arrived?.carry ?? []);
-  const [narrowed, setNarrowed] = useState<ReadonlyMap<string, Step[]>>(() => new Map());
+  // The opening view's selection first, then a navigation's carry.
+  const [selection, setSelection] = useState<Step[]>(() => merged(opening?.selection ?? [], arrived?.carry ?? []));
+  const [narrowed, setNarrowed] = useState<ReadonlyMap<string, Step[]>>(() => opening?.narrowed ?? new Map());
   const [clicks, setClicks] = useState<readonly ClickFilter[]>([]);
   const clickMark = useCallback((origin: string, mark: ClickMark, additive: boolean) => setClicks((c) => toggleClickFilter(c, origin, mark, additive)), []);
   const clearClicks = useCallback((one?: ClickFilter) => setClicks((c) => (one ? c.filter((x) => !(x.origin === one.origin && x.column === one.column)) : c.length ? [] : c)), []);
-  const [asOf, setAsOf] = useState<string | null>(null);
+  const [asOf, setAsOf] = useState<string | null>(() => opening?.asOf ?? null);
+  const restore = useCallback((sel: Step[], tiles: ReadonlyMap<string, Step[]>, at: string | null) => {
+    setSelection(sel);
+    setNarrowed(tiles);
+    setAsOf(at);
+    setClicks([]);
+  }, []);
   const [compare, setCompare] = useState<Compare | null>(null);
   const [presenting, setPresenting] = useState(false);
   // `?comment=<kind>:<id>` (Home's "Recent comments"): the thread opens on arrival.
@@ -147,11 +169,7 @@ export function useViewer(projectId: string, analysisId: string): Viewer & { arr
         setSelection([]);
         setNarrowed(new Map());
       },
-      addSelection: (steps: Step[]) =>
-        setSelection((sel) => {
-          const keys = new Set(steps.map(stepKey));
-          return [...sel.filter((x) => !keys.has(stepKey(x))), ...steps];
-        }),
+      addSelection: (steps: Step[]) => setSelection((sel) => merged(sel, steps)),
       tileSteps: (cardId: string) => narrowed.get(cardId) ?? [],
       narrowed,
       narrow,
@@ -175,7 +193,8 @@ export function useViewer(projectId: string, analysisId: string): Viewer & { arr
       setPresenting,
       comments,
       openComments,
+      restore,
     }),
-    [selection, toggleSelection, narrowed, narrow, clicks, clickMark, clearClicks, arrived, asOf, currency, compare, presenting, comments],
+    [selection, toggleSelection, narrowed, narrow, clicks, clickMark, clearClicks, arrived, asOf, currency, compare, presenting, comments, restore],
   );
 }

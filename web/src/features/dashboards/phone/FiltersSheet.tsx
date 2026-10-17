@@ -1,11 +1,14 @@
 // A dashboard's filters on a phone (docs/phone-dashboards): the sheet's
 // controls, one full-width row each, and — for the reader, whose header has no
 // room for them — the view settings (As of, Compare, Currency) under them.
+// A dashboard with saved views opens with a "Saved view" pick (apply only:
+// saving one is the desktop header's Views menu).
 // Clear all and Done at the bottom; swipe, Esc or the scrim closes. The
 // selections are the reader's view state, exactly as the desktop's chips.
 
 import { Button } from '../../../ui/Button';
 import { DialogClose } from '../../../ui/Dialog';
+import { Select } from '../../../ui/Select';
 import { Sheet } from '../../../ui/Sheet';
 import type { Card } from '../../analyses/api';
 import type { EditorApi } from '../../analyses/editor/context';
@@ -13,6 +16,7 @@ import { barControls, Chip } from '../../analyses/editor/FilterBar';
 import { controlActive } from '../../analyses/editor/filters';
 import { ResetControls } from '../ControlsExtras';
 import { ViewControls } from '../DashboardChrome';
+import { AUTHORED, viewOptions } from '../views/viewState';
 import fb from '../../analyses/editor/FilterBar.module.css';
 import s from './Phone.module.css';
 
@@ -62,6 +66,16 @@ export function FiltersSheet({ ed, open, onOpenChange, view }: { ed: EditorApi; 
         </>
       }
     >
+      {ed.views.list.length > 0 && (
+        <section className={s.section} aria-label="Saved view">
+          <Select
+            label="Saved view"
+            value={ed.views.applied || AUTHORED}
+            options={viewOptions(ed.views.list, ed.views.defaultId)}
+            onValueChange={(id) => ed.views.apply(id === AUTHORED ? '' : id)}
+          />
+        </section>
+      )}
       {n > 0 && (
         <section className={s.section} aria-label="Controls">
           <div className={`${fb.chips} ${fb.stacked}`}>
