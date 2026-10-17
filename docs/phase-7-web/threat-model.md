@@ -96,6 +96,7 @@ scope here; it is deleted at cutover (T8.1). The operator/software split is plan
 | A connection secret adopted by another project | Import re-ids every connection; deleting a project drops its connections' secrets (T6.3 F2) | `test-securityReview` F2 |
 | A crafted bundle / backup reading server files | No `file` origin survives on the server (T6.3 F1); bundle entries whitelisted by path, ids remapped, CRC + size caps | `test-securityReview` F1, `test-projects-server`, `test-settings-server` |
 | Project data pushed to members without a grant | Tick pushes (`alerts:fired`, `hub:dataset-refreshed`) go to the project's readers only (T6.3 F5) | `test-securityReview` F5 |
+| A viewer saves, renames or deletes a shared saved view (it reaches `/p/`, embeds, subscriptions and reports) | `analysis:view` is project `write`: a viewer is refused 403 before the handler. Its state is re-sanitized against the record (`savedViews.ts` `sanitizeViewState`: each pick clamped to its card's kind, unknown keys dropped) and no version is recorded; `analysis:update` still refuses `views` (the autosave cannot overwrite them) | `test-analysesServer` Part 2 (`analysis:view`: viewer deny, editor and admin allow, no handler reached), `test-savedViewsServer` (a multi pick on a dropdown is stripped; an unknown op or a stray field → 400) |
 
 ### 4.3 Browser-side attacks (T6.2, T0.6)
 
@@ -192,6 +193,7 @@ origin may frame, and the token is its whole credential: no cookie, no sign-in. 
 | **A stored cross-row value scoped to nobody** (a FIXED LOD, a running total, a segment computed over every customer, then filtered) | A tile over a dataset whose prepare steps store such a value is refused under a lock (a window partitioned by every locked column is fine) | `test-embedLock` (window, LOD refused; partitioned window covered — NEGATIVE CONTROL of the rule) |
 | **A warehouse bill or a flood** from a busy portal | Per-IP (before any query), per-token and per-org rate limits (`RATE_LIMIT_EMBED_*`, per pod — R8); one build per (org, link, publish time, locks, theme) cached 5 min and shared by concurrent views; built as a published request, so Live figures keep the `/p/` floor `LIVE_MIN_CACHE_AGE_PUBLIC_SEC` and the daily limit; ≤ 64 filter combinations | `test-embed-db` (429 per token and per org) |
 | **No trace of who viewed what** | Every view whose MAC holds is an audit row `embed_view` (0017_embed.sql), actor `embed`, the link and dashboard ids, ok / denied / error | `test-embed-db` (rows for ok and denied; ids, no token) |
+| **A saved view leaks another customer's values** (its name, or a value it picks, offered in the filter bar) | Under a lock a view is offered only when every pick exists inside the lock and it sets no control the bar left out; a view's picks and date ranges become filter-bar options only OFF a lock — a view is not evidence of what exists inside one (`dashboardData.ts` `controlSpec`, `publishedViews`) | `test-embedLock` (only the East view is offered; no other view's name anywhere in the page; no date option from a dropped view — NEGATIVE CONTROL: unlocked, all three views and the range) |
 
 ## 5. T6.3 review — findings
 
