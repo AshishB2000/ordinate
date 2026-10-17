@@ -13,7 +13,10 @@
 //                  glob, read_text) and another org's Parquet are refused —
 //                  by the gate, AND with the gate sabotaged by the org
 //                  worker's engine lock alone (control: the same sabotage
-//                  reads the caller's OWN org file, so the sabotage is real)
+//                  reads the caller's OWN org file, so the sabotage is real);
+//                  another PROJECT's Parquet in the same org, the catalog and
+//                  the engine's table functions are refused by the gate alone
+//                  (control: both gates stubbed, that file reads)
 //   scope          another org's caller → 403; a malformed input → 400
 //   Part 2 (DATABASE_URL): every channel × viewer / editor / admin grants on a
 //                  scratch database — exactly the roles its access names, and a
@@ -76,6 +79,18 @@ async function seedSample(as: Identity): Promise<{ pid: string; ds: string; parq
   });
 }
 
+/** A SECOND project in the same org, one row 'CANARY-A2'; its Parquet path. The org lock allows that file. */
+async function seedCanary(as: Identity): Promise<string> {
+  return context.runInContext(as, 'seed-a2', async () => {
+    const projects: typeof import('../src/app/projects') = require('../src/app/projects');
+    const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
+    const record: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+    const p = await projects.createProject('Second project');
+    const d = await datasets.saveDataset(p.id, { name: 'Secret', sourceKind: 'csv', columns: [{ name: 'note', type: 'text' }], rows: [['CANARY-A2']] });
+    return record.parquetPath(p.id, d!.id);
+  });
+}
+
 const SELECT = 'select region, sum(revenue) as revenue from retail_orders group by 1 order by 2 desc';
 
 async function partOne(): Promise<void> {
@@ -122,9 +137,54 @@ async function partOne(): Promise<void> {
     const crossDs = await call('sql:run', { projectId: pid, sql: 'select * from retail_orders_2' });
     ok('another project\'s dataset is not a table here', crossDs.status === 200 && crossDs.body.ok === false, JSON.stringify(crossDs.body));
 
+    // ── The project boundary INSIDE the org: the engine lock allows this file ──
+    // So only the gate stands between a viewer (or a token through MCP) and it.
+    const a2 = await seedCanary(who('org-a'));
+    const sameOrg = [
+      `select * from (summarize '${a2}')`,
+      `select * from (describe '${a2}')`,
+      `select * from (show "${a2}")`,
+      `select * from (unpivot '${a2}' on c0 into name k value v)`,
+      `select * from (pivot '${a2}' on c0 in ('x') using count(*))`,
+      `from (pivot_wider "${a2}" on c0 in ('x') using count(*))`,
+      `select * from (pivot_longer '${a2}' on c0 into name k value v)`,
+      `select * from (table '${a2}')`,
+      `select * from only "${a2}"`,
+      `with a as (select * from "${a2}"), "${a2}" as (select 1) select * from a`,
+      'select * from pg_settings',
+      'with pg_settings as (select * from pg_settings) select * from pg_settings',
+      'select * from (show all tables)',
+      'select * from (show databases)',
+      'select * from enable_profiling()',
+      'select current_query() as q from retail_orders limit 1',
+    ];
+    const leaked = (r: Reply): boolean => { const t = JSON.stringify(r.body); return t.includes('CANARY-A2') || t.includes(DATA); };
+    for (const q of sameOrg) {
+      for (const ch of ['sql:run', 'sql:explain']) {
+        const r = await call(ch, { projectId: pid, sql: q });
+        ok(`same-org ${ch} refuses: ${q.split(a2).join('<A2>').slice(0, 70)}`, r.status === 200 && r.body.ok === false && !leaked(r), JSON.stringify(r.body).slice(0, 200));
+      }
+    }
+    const prepA2 = await call('sql:prepareSave', { projectId: pid, sql: `select * from (table '${a2}')` });
+    ok('same-org sql:prepareSave refuses, nothing staged', prepA2.status === 200 && prepA2.body.ok === false && !leaked(prepA2), JSON.stringify(prepA2.body).slice(0, 200));
+    // NEGATIVE CONTROL: both gates stubbed, the same text READS the canary — so
+    // the refusals above are the gate's, and the lock alone would not stop them.
+    const realLexer = sqlGate.readOnlyError;
+    const realAst = sqlGate.astRelationError;
+    (sqlGate as { readOnlyError: typeof realLexer }).readOnlyError = () => null;
+    (sqlGate as { astRelationError: typeof realAst }).astRelationError = () => null;
+    try {
+      const canary = await call('sql:run', { projectId: pid, sql: `select * from (table '${a2}')` });
+      ok('control: with both gates stubbed, the same-org file READS (the gate is what blocks it)', canary.status === 200 && canary.body.ok && canary.body.rows[0][0] === 'CANARY-A2', JSON.stringify(canary.body).slice(0, 200));
+    } finally {
+      (sqlGate as { readOnlyError: typeof realLexer }).readOnlyError = realLexer;
+      (sqlGate as { astRelationError: typeof realAst }).astRelationError = realAst;
+    }
+
     // Defence in depth: sabotage the gate, so the statement reaches the org worker as written.
     const realGate = sqlGate.readOnlyError;
     (sqlGate as { readOnlyError: typeof realGate }).readOnlyError = () => null;
+    (sqlGate as { astRelationError: typeof realAst }).astRelationError = () => null;
     try {
       const own = await call('sql:run', { projectId: pid, sql: `select count(*) as n from read_parquet('${a.parquet}')` });
       ok('control: with the gate off, the caller\'s OWN org file reads (the sabotage is real)', own.status === 200 && own.body.ok && own.body.rows[0][0] === 5000, JSON.stringify(own.body));
@@ -136,6 +196,7 @@ async function partOne(): Promise<void> {
       ok('engine lock alone: a second statement is still refused', set.status === 200 && set.body.ok === false, JSON.stringify(set.body));
     } finally {
       (sqlGate as { readOnlyError: typeof realGate }).readOnlyError = realGate;
+      (sqlGate as { astRelationError: typeof realAst }).astRelationError = realAst;
     }
 
     // ── Save as dataset: prepareSave stages, the composer saves with the sql origin ──
@@ -169,6 +230,12 @@ async function partOne(): Promise<void> {
       sourceKind: 'sql', origin: { kind: 'sql', sql: "select * from read_csv('/etc/passwd')", deps: [ds] },
     });
     ok('dataset:composeSave: an origin statement the gate refuses is not stored', smuggled.status === 200 && smuggled.body.ok === false && /Only this project/.test(smuggled.body.error), JSON.stringify(smuggled.body));
+    const prep4 = await call('sql:prepareSave', { projectId: pid, sql: SELECT });
+    const pastLexer = await call('dataset:composeSave', {
+      projectId: pid, name: 'Past the lexer', base: { inline: { name: 'q', stagedId: prep4.body.stagedId } }, joins: [], steps: [],
+      sourceKind: 'sql', origin: { kind: 'sql', sql: 'select * from pg_settings', deps: [ds] },
+    });
+    ok('dataset:composeSave: an origin only the AST refuses is not stored either (the save runs compile())', pastLexer.status === 200 && pastLexer.body.ok === false && /Only this project/.test(pastLexer.body.error), JSON.stringify(pastLexer.body));
     const badOrigin = await call('dataset:composeSave', { projectId: pid, name: 'x', base: { inline: { name: 'q', stagedId: prep.body.stagedId } }, joins: [], steps: [], origin: { kind: 'url', url: 'http://x' } });
     ok('dataset:composeSave: another origin kind from a browser → 400', badOrigin.status === 400, badOrigin.status);
 
