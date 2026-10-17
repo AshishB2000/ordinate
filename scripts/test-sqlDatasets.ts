@@ -150,6 +150,88 @@ const U = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(1
   ok("gate: the shared catalog's Mosaic views are off limits",
     refused('select * from ds_00000000_0000_4000_8000_000000000001'));
   ok("gate: E'…' escapes cannot hide a call from the lexer", refused("select E'\\'' || read_text('x') --'"));
+  ok('gate: a quoted path after SUMMARIZE / UNPIVOT / TABLE / ONLY is in table position',
+    refused("select * from (summarize 'x.parquet')") && refused("from (unpivot '/d/x.parquet' on a into name k value v)")
+      && refused("select * from (table '/d/x')") && refused("select * from only '/d/x'"));
+  ok('gate: …but a column named show, followed by a literal, is not', !refused("select show, 'a/b.csv' from t"));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4b. The allow-list over DuckDB's parse (astRelationError), on hand-built nodes
+//     shaped like json_serialize_sql's — the real parse is exercised in main()
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  const gate: typeof import('../src/engine/sqlGate') = require('../src/engine/sqlGate');
+  type N = Record<string, unknown>;
+  const fn = (name: string, extra: N = {}): N => ({ class: 'FUNCTION', type: 'FUNCTION', function_name: name, schema: '', catalog: '', children: [], ...extra });
+  const base = (table_name: string, schema_name = '', catalog_name = ''): N => ({ type: 'BASE_TABLE', table_name, schema_name, catalog_name });
+  const EMPTY: N = { type: 'EMPTY' };
+  const sel = (from: unknown, ctes: Array<[string, N]> = [], select_list: unknown[] = []): N =>
+    ({ type: 'SELECT_NODE', cte_map: { map: ctes.map(([key, node]) => ({ key, value: { query: { node } } })) }, select_list, from_table: from });
+  const sub = (node: N): N => ({ type: 'SUBQUERY', subquery: { node } });
+  const ast = (node: N): N => ({ error: false, statements: [{ node }] });
+  const known = new Set(['retail_orders', 'sales.csv']);
+  const why = (node: N): string | null => gate.astRelationError(ast(node), known);
+  const ONLY = gate.ONLY_DATASETS;
+
+  // error:true refuses in every case, with three sentences
+  ok('ast: a parser error is the user\'s own syntax error, cleaned',
+    gate.astRelationError({ error: true, error_type: 'parser', error_message: 'syntax error at or near "1"\n\nLINE 2: x' }, known) === 'Parser Error: syntax error at or near "1"');
+  ok('ast: "not implemented" (PIVOT without IN) names the fix',
+    /PIVOT needs its values listed/.test(gate.astRelationError({ error: true, error_type: 'not implemented', error_message: 'Only SELECT statements…' }, known) || ''));
+  ok('ast: any other error, a non-object, or a missing flag is the refusal',
+    gate.astRelationError({ error: true, error_type: 'binder' }, known) === ONLY && gate.astRelationError(null, known) === ONLY
+      && gate.astRelationError({ statements: [{ node: sel(EMPTY) }] }, known) === ONLY);
+  ok('ast: more than one statement is refused', gate.astRelationError({ error: false, statements: [{ node: sel(EMPTY) }, { node: sel(EMPTY) }] }, known) === ONLY);
+
+  // the table-ref allow-list
+  ok('ast: a dataset, VALUES, no FROM, a subquery, a join and a pivot pass',
+    why(sel(base('retail_orders'))) === null && why(sel({ type: 'EXPRESSION_LIST', values: [] })) === null && why(sel(EMPTY)) === null
+      && why(sel(sub(sel(base('retail_orders'))))) === null
+      && why(sel({ type: 'JOIN', left: base('retail_orders'), right: base('Sales.csv'), condition: null })) === null
+      && why(sel({ type: 'PIVOT', source: base('retail_orders'), aggregates: [fn('sum')] })) === null);
+  ok('ast: DESCRIBE/SUMMARIZE of a query passes, the query itself checked',
+    why(sel({ type: 'SHOW_REF', query: sel(base('retail_orders')) })) === null && why(sel({ type: 'SHOW_REF', query: sel(base('pg_settings')) })) === ONLY);
+  ok('ast: SHOW TABLES / DATABASES (a SHOW_REF with no query) is refused', why(sel({ type: 'SHOW_REF', table_name: '"tables"', query: null })) === ONLY);
+  ok('ast: an unknown or planner-only ref type is refused, and so is a missing FROM item',
+    why(sel({ type: 'COLUMN_DATA' })) === ONLY && why(sel({ type: 'SOMETHING_NEW' })) === ONLY && why(sel(null)) === ONLY);
+  ok('ast: a refused ref is found inside a join, a pivot source and a WHERE subquery',
+    why(sel({ type: 'JOIN', left: base('retail_orders'), right: base('pg_settings') })) === ONLY
+      && why(sel({ type: 'PIVOT', source: base('/d/x.parquet') })) === ONLY
+      && why({ ...sel(base('retail_orders')), where_clause: { class: 'SUBQUERY', type: 'SUBQUERY', subquery: { node: sel(base('duckdb_settings')) } } }) === ONLY);
+
+  // BASE_TABLE
+  ok('ast: a schema- or catalog-qualified name is refused, even a dataset\'s',
+    why(sel(base('retail_orders', 'main'))) === ONLY && why(sel(base('schemata', 'information_schema'))) === ONLY && why(sel(base('t', '', 'memory'))) === ONLY);
+  ok('ast: a path, URL or glob is refused unless it IS a dataset name',
+    why(sel(base('/d/orgs/x/p/a.parquet'))) === ONLY && why(sel(base('s3://b/k'))) === ONLY && why(sel(base('d*'))) === ONLY
+      && why(sel(base('SALES.csv'))) === null);
+  ok('ast: a bare catalog view name is refused', why(sel(base('pg_settings'))) === ONLY && why(sel(base('sqlite_master'))) === ONLY);
+
+  // CTEs by scope
+  ok('ast: a CTE in scope passes', why(sel(base('recent'), [['Recent', sel(base('retail_orders'))]])) === null);
+  ok('ast: a CTE body may read an EARLIER key', why(sel(base('b'), [['a', sel(EMPTY)], ['b', sel(base('a'))]])) === null);
+  ok('ast: a forward reference is refused (DuckDB reads the catalog there)',
+    why(sel(base('s'), [['s', sel(base('pg_settings'))], ['pg_settings', sel(EMPTY)]])) === ONLY);
+  ok('ast: a non-recursive CTE naming itself is refused (its own body reads the catalog)',
+    why(sel(base('pg_settings'), [['pg_settings', sel(base('pg_settings'))]])) === ONLY);
+  ok('ast: a RECURSIVE_CTE_NODE of the same name may read itself',
+    why(sel(base('r'), [['r', { type: 'RECURSIVE_CTE_NODE', cte_name: 'r', left: sel(EMPTY), right: sel(base('r')) }]])) === null
+      && why(sel(base('r'), [['r', { type: 'RECURSIVE_CTE_NODE', cte_name: 'q', left: sel(EMPTY), right: sel(base('r')) }]])) === ONLY);
+  ok('ast: an inner CTE is not in scope outside its query; an outer one is inside',
+    why(sel({ type: 'JOIN', left: sub(sel(base('x'), [['x', sel(EMPTY)]])), right: base('x') })) === ONLY
+      && why(sel(sub(sel(base('x'))), [['x', sel(EMPTY)]])) === null);
+
+  // TABLE_FUNCTION and scalar FUNCTION
+  const tf = (name: string, schema = ''): N => ({ type: 'TABLE_FUNCTION', function: fn(name, { schema }) });
+  ok('ast: the value-generating table functions pass',
+    ['range', 'GENERATE_SERIES', 'unnest', 'json_each', 'json_tree', 'repeat', 'repeat_row'].every((f) => why(sel(tf(f))) === null));
+  ok('ast: every other table function is refused, and a qualified allowed one',
+    ['read_parquet', 'enable_profiling', 'enable_logging', 'disable_peg_parser', 'checkpoint', 'duckdb_settings', 'sql_auto_complete']
+      .every((f) => why(sel(tf(f))) === ONLY) && why(sel(tf('range', 'main'))) === ONLY);
+  ok('ast: current_query(), pg_get_viewdef() and file scalars are refused anywhere; upper() is not',
+    why(sel(EMPTY, [], [fn('current_query')])) === ONLY && why(sel(EMPTY, [], [fn('PG_GET_VIEWDEF')])) === ONLY
+      && why(sel(EMPTY, [], [fn('lower', { children: [fn('current_setting')] })])) === ONLY && why(sel(EMPTY, [], [fn('upper')])) === null);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -286,6 +368,87 @@ async function main(): Promise<void> {
   }
   const inSub = await sq.runSql(pid, 'with x as (select 1) insert into t select * from x');
   ok('read-only: DML hidden behind a WITH is a syntax error in the wrapper', inSub.ok === false);
+
+  // ── The project boundary: another project's Parquet, the catalog, the engine ──
+  // Every category, through the real runner — then again with the lexer stubbed,
+  // so each is proven refused by DuckDB's own parse, not only the pre-filter.
+  const gateMod: typeof import('../src/engine/sqlGate') = require('../src/engine/sqlGate');
+  const fp = (await datasets.residentSource(other!.id, foreign!.id))!.parquetPath;
+  const bypass: Array<[string, string]> = [
+    ['SUMMARIZE a path', `select * from (summarize '${fp}')`],
+    ['DESCRIBE a path', `select * from (describe '${fp}')`],
+    ['SHOW a path', `select * from (show "${fp}")`],
+    ['UNPIVOT a path', `select * from (unpivot '${fp}' on region into name k value v)`],
+    ['PIVOT … IN a path', `select * from (pivot '${fp}' on region in ('mars') using count(*))`],
+    ['PIVOT_WIDER a path', `from (pivot_wider "${fp}" on region in ('mars') using count(*))`],
+    ['PIVOT_LONGER a path', `select * from (pivot_longer '${fp}' on region into name k value v)`],
+    ['TABLE a path', `select * from (table '${fp}')`],
+    ['FROM ONLY a path', `select * from only "${fp}"`],
+    ['a path behind a forward-referenced CTE', `with a as (select * from "${fp}"), "${fp}" as (select 1) select * from a`],
+    ['a catalog view by bare name', 'select * from pg_settings'],
+    ['a catalog view, qualified', 'select * from information_schema.schemata'],
+    ['a catalog view behind a forward-referenced CTE', 'with s as (select * from pg_settings), pg_settings as (select 1 as name) select * from s'],
+    ['a catalog view behind a self-named CTE', 'with pg_settings as (select * from pg_settings) select * from pg_settings'],
+    ['a catalog view in a WHERE subquery', 'select * from retail_orders where exists (select 1 from duckdb_settings())'],
+    ['SHOW TABLES', 'select * from (show tables)'],
+    ['SHOW ALL TABLES', 'select * from (show all tables)'],
+    ['SHOW DATABASES', 'from (show databases)'],
+    ['enable_profiling()', 'select * from enable_profiling()'],
+    ['enable_logging()', 'select * from enable_logging()'],
+    ['disable_peg_parser()', 'select * from disable_peg_parser()'],
+    ['checkpoint()', 'select * from checkpoint()'],
+    ['current_query()', 'select current_query() as q'],
+    ['pg_get_viewdef()', "select pg_get_viewdef('pg_settings') as q"],
+  ];
+  const leaks = (r: unknown): boolean => /mars|orgs|parquet|gregorian/i.test(JSON.stringify(r));
+  const realLexer = gateMod.readOnlyError;
+  for (const pass of ['the gate', 'the AST alone (lexer stubbed)']) {
+    if (pass !== 'the gate') (gateMod as { readOnlyError: typeof realLexer }).readOnlyError = () => null;
+    try {
+      for (const [label, sql] of bypass) {
+        const r = await sq.runSql(pid, sql);
+        ok(`boundary: ${label} is refused by ${pass}, nothing leaks`, r.ok === false && !leaks(r), JSON.stringify(r).slice(0, 200));
+      }
+      const nb = await sq.runSql(pid, 'select * from v', [], 10, [{ name: 'v', sql: `select * from (summarize '${fp}')` }]);
+      ok(`boundary: a notebook view is gated too (${pass}), named in the refusal`, nb.ok === false && /^v: /.test(nb.error) && !leaks(nb), JSON.stringify(nb));
+      const nbFwd = await sq.runSql(pid, 'select * from w', [], 10, [
+        { name: 'v', sql: 'select * from pg_settings' }, { name: 'pg_settings', sql: 'select 1 as name' }, { name: 'w', sql: 'select * from v' },
+      ]);
+      ok(`boundary: a view sees only the views before it (${pass})`, nbFwd.ok === false && /^v: /.test(nbFwd.error) && !leaks(nbFwd), JSON.stringify(nbFwd));
+      const exRefused = await sq.explainSql(pid, `select * from (describe '${fp}')`, []);
+      ok(`boundary: sql:explain refuses too (${pass})`, exRefused.ok === false && !leaks(exRefused), JSON.stringify(exRefused));
+    } finally {
+      (gateMod as { readOnlyError: typeof realLexer }).readOnlyError = realLexer;
+    }
+  }
+  // NEGATIVE CONTROL: both gates stubbed, the same text reads the other project's
+  // row — so the refusals above are the gate's, not a broken path or a lock.
+  const realAst = gateMod.astRelationError;
+  (gateMod as { readOnlyError: typeof realLexer }).readOnlyError = () => null;
+  (gateMod as { astRelationError: typeof realAst }).astRelationError = () => null;
+  try {
+    const canary = await sq.runSql(pid, `select * from (table '${fp}')`); // stored columns are positional (c0)
+    ok('control: with both gates stubbed, another project\'s row reads', canary.ok && canary.rows[0][0] === 'mars', JSON.stringify(canary));
+  } finally {
+    (gateMod as { readOnlyError: typeof realLexer }).readOnlyError = realLexer;
+    (gateMod as { astRelationError: typeof realAst }).astRelationError = realAst;
+  }
+
+  // The twins over the project's OWN dataset still answer.
+  const sum = await sq.runSql(pid, 'select column_name, count from (summarize retail_orders)');
+  ok('twin: SUMMARIZE a dataset', sum.ok && sum.rows.length === 3 && sum.rows.every((r) => r[1] === 9), JSON.stringify(sum));
+  const desc = await sq.runSql(pid, 'from (describe retail_orders)');
+  ok('twin: DESCRIBE a dataset', desc.ok && desc.rows.map((r) => r[0]).join() === 'region,revenue,code', JSON.stringify(desc));
+  const unp = await sq.runSql(pid, 'select count(*) from (unpivot retail_orders on region, code into name k value v)');
+  ok('twin: UNPIVOT a dataset', unp.ok && unp.rows[0][0] === 17, JSON.stringify(unp)); // 9 × 2, less the one NULL region
+  const piv = await sq.runSql(pid, "select north from (pivot retail_orders on region in ('north') using sum(revenue)) where code = '007'");
+  ok('twin: PIVOT … IN over a dataset', piv.ok && piv.rows[0][0] === 150.5, JSON.stringify(piv));
+  const nested = await sq.runSql(pid, 'with a as (with b as (select region from retail_orders) select * from b) select count(*) from a');
+  ok('twin: a nested WITH', nested.ok && nested.rows[0][0] === 9, JSON.stringify(nested));
+  const noIn = await sq.runSql(pid, 'select * from (pivot retail_orders on region using sum(revenue))');
+  ok('PIVOT without IN is refused with the sentence that names the fix', noIn.ok === false && /PIVOT needs its values listed/.test(noIn.error), JSON.stringify(noIn));
+  const typo = await sq.runSql(pid, 'select region from retail_orders where');
+  ok('a typo is the syntax error, not the dataset refusal', typo.ok === false && /syntax error/.test(typo.error) && !/Only this project/.test(typo.error), JSON.stringify(typo));
 
   // ── Preview and cap ──
   const pv = await sq.runSql(pid, 'select * from range(600)');
