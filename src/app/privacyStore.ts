@@ -8,7 +8,10 @@
 //                in a dataset record or its steps, not in an IPC reply, not in a
 //                bundle (bundle.ts whitelists what travels and this is not on
 //                it), not in a log line. Everything that needs it calls getSalt
-//                here, in main.
+//                here, in main. On a server with a key store (DATABASE_URL and
+//                ORDINATE_MASTER_KEY) it is not a file: it is the encrypted secret
+//                ('privacy.salt', project id), the same on every pod and every
+//                fresh disk — a file an earlier version left seeds it.
 //   policy.json  the Share policy — what exports, reports, publish and bundles
 //                do with a sensitive column: 'mask' (default), 'drop' or
 //                'include'. Sanitised on every read.
@@ -32,6 +35,8 @@ import type { SensitivityProposal, SensitiveKind } from '../data/sensitivity';
 import type { ParsedColumn } from '../data/parse';
 import type { Cell, TransformStep } from '../data/transforms';
 import * as recordFs from './recordFs';
+import { ctx, orgKey, serverDataDir } from '../server/context';
+import type { MintingSecretStore } from '../server/secrets/store';
 
 export type ShareAction = 'mask' | 'drop' | 'include';
 export type SharePath = 'export' | 'report' | 'publish' | 'bundle';
@@ -92,6 +97,62 @@ export function saltPath(projectId: string): string {
   return dir ? path.join(dir, 'salt.key') : '';
 }
 
+/** A hash step needs the project's masking key and it cannot be read: the step refuses rather than pass values through. */
+export class MaskKeyUnavailableError extends Error {
+  constructor() {
+    super('This project\'s masking key is not available, so its hash steps cannot run. Ask an admin to check the server\'s key store.');
+    this.name = 'MaskKeyUnavailableError';
+  }
+}
+
+// The server's encrypted store (app.ts), when it has one: the salt is a secret
+// there, not a file on this pod's disk. Null: the file, below.
+let saltStore: MintingSecretStore | null = null;
+
+export function useMaskSaltStore(store: MintingSecretStore | null): void {
+  saltStore = store;
+  saltCache.clear();
+}
+
+const storeOn = (): MintingSecretStore | null => (serverDataDir() !== null ? saltStore : null);
+const saltChain = (projectId: string): string => orgKey(saltPath(projectId));
+
+/** Store `salt` unless one is stored; the stored one. Inside the project's salt chain. */
+async function seedLocked(store: MintingSecretStore, projectId: string, salt: string): Promise<string | null> {
+  const got = await store.putIfAbsent(ctx().org.id, 'privacy.salt', projectId, salt);
+  if (!SALT_RE.test(got)) return null;
+  saltCache.set(saltPath(projectId), got);
+  return got;
+}
+
+/** The store's salt; on none, this pod's legacy file seeds it, or one is minted. null on any failure — never a new key then. */
+async function storedSalt(store: MintingSecretStore, projectId: string): Promise<string | null> {
+  try {
+    const have = await store.get(ctx().org.id, 'privacy.salt', projectId);
+    if (have !== null) {
+      if (!SALT_RE.test(have)) return null;
+      saltCache.set(saltPath(projectId), have);
+      return have;
+    }
+    let legacy: string | null = null;
+    try {
+      legacy = (await fs.promises.readFile(saltPath(projectId), 'utf8')).trim();
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
+    if (legacy !== null && !SALT_RE.test(legacy)) {
+      // As below: a damaged key is not replaced — every token hashed under it would change meaning.
+      console.error('[privacy] the masking key file is damaged; hash steps refuse until it is removed. Project', projectId);
+      return null;
+    }
+    if (legacy === null && !(await recordFs.exists(projectDir(projectId)))) return null;
+    return await seedLocked(store, projectId, legacy ?? randomBytes(32).toString('hex'));
+  } catch (_) {
+    console.error('[privacy] the masking key could not be read from the key store. Project', projectId);
+    return null;
+  }
+}
+
 /**
  * The project's masking key, created on first use. null for an invalid id or a
  * project that does not exist — a key is never minted for a folder nobody owns.
@@ -100,9 +161,11 @@ export async function getSalt(projectId: string): Promise<string | null> {
   if (!isValidId(projectId)) return null;
   const hit = saltCache.get(saltPath(projectId));
   if (hit) return hit;
-  return serial('salt:' + projectId, async () => {
+  return serial(saltChain(projectId), async () => {
     const again = saltCache.get(saltPath(projectId));
     if (again) return again;
+    const store = storeOn();
+    if (store) return storedSalt(store, projectId);
     const file = saltPath(projectId);
     try {
       const s = (await recordFs.readFile(file, 'utf8')).trim();
@@ -111,8 +174,8 @@ export async function getSalt(projectId: string): Promise<string | null> {
         return s;
       }
       // A damaged key is NOT silently replaced: every token hashed under it
-      // would change meaning. The hash step skips with its warning instead.
-      console.error('[privacy] the masking key is damaged; hash steps will be skipped until it is removed');
+      // would change meaning. The hash step refuses instead.
+      console.error('[privacy] the masking key is damaged; hash steps will refuse until it is removed');
       return null;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') return null;
@@ -143,10 +206,29 @@ export async function getSalt(projectId: string): Promise<string | null> {
   });
 }
 
-/** The salt when `steps` hash something; undefined otherwise, so no key is minted for nothing. */
+/** import-desktop: a desktop project's key becomes the stored one, unless one is stored already. The stored one, or null. */
+export async function seedSalt(projectId: string, salt: string): Promise<string | null> {
+  const store = storeOn();
+  if (!store || !isValidId(projectId) || !SALT_RE.test(salt)) return null;
+  return serial(saltChain(projectId), () => seedLocked(store, projectId, salt));
+}
+
+/** A deleted project's key goes with it. (On disk it went with the folder.) */
+export async function dropSalt(projectId: string): Promise<void> {
+  if (!isValidId(projectId)) return;
+  const store = storeOn();
+  await serial(saltChain(projectId), async () => {
+    saltCache.delete(saltPath(projectId));
+    if (store) await store.delete(ctx().org.id, 'privacy.salt', projectId);
+  });
+}
+
+/** The salt when `steps` hash something; undefined otherwise, so no key is minted for nothing. Throws when it is needed and unavailable. */
 export async function saltForSteps(projectId: string, steps: TransformStep[] | undefined): Promise<string | undefined> {
   if (!Array.isArray(steps) || !steps.some((s) => s && s.type === 'mask_hash')) return undefined;
-  return (await getSalt(projectId)) || undefined;
+  const salt = await getSalt(projectId);
+  if (!salt) throw new MaskKeyUnavailableError();
+  return salt;
 }
 
 // ── The share policy ─────────────────────────────────────────────────────────

@@ -60,6 +60,7 @@ export function headerOf(ds: { id: string; name: string; rowCount: number; colum
   return { id: ds.id, name: ds.name, rowCount: ds.rowCount, columns: ds.columns.map((c) => ({ name: c.name, type: c.type })) };
 }
 import { forClient } from './stepReply';
+import { MaskKeyUnavailableError } from '../app/privacyStore';
 
 // Datasets (file-based data sources) IPC — pick+parse/paste/save/list/get/delete.
 // All are ipcMain.handle (request/response). Native open dialog runs in MAIN;
@@ -237,7 +238,12 @@ async function currentSteps(projectId: string, datasetId: string): Promise<trans
 // (src/ai/planExec.ts), whose prepare steps land through it too.
 export async function commitSteps(projectId: string, datasetId: string, steps: unknown) {
   const prior = await datasets.getDatasetMeta(projectId, datasetId);
-  const res = await datasets.updateSteps(projectId, datasetId, steps);
+  // A hash step whose masking key cannot be read refuses (privacyStore): say so, not a bare 500.
+  const res = await datasets.updateSteps(projectId, datasetId, steps).catch((err: unknown) => {
+    if (err instanceof MaskKeyUnavailableError) return { refused: err.message };
+    throw err;
+  });
+  if (res && 'refused' in res) return { ok: false as const, error: res.refused };
   if (!res) return { ok: false as const, error: 'Dataset not found' };
   await runQualityChecks(projectId, datasetId);
   void refreshDependents(projectId, datasetId); // the rows SQL datasets read just changed

@@ -171,6 +171,28 @@ async function main(): Promise<void> {
   await datasets.updateSteps(proj.id, saved!.id, [{ type: 'trim' }]);
   const reverted = await datasets.getDataset(proj.id, saved!.id);
   ok('removing the mask steps restores the raw values', col(reverted!, 'email')[0] === 'jane@example.com' && col(reverted!, 'card')[0] === '4111111111111111');
+
+  // Fail closed: a damaged key refuses the hash step instead of keeping the raw
+  // column (the block above, with a valid key, is the control).
+  const proj2 = await projects.createProject('Damaged key');
+  const ds2 = await datasets.saveDataset(proj2.id, { name: 'People', sourceKind: 'csv', columns, rows });
+  await datasets.updateSteps(proj2.id, ds2!.id, [{ type: 'trim' }]);
+  fs.mkdirSync(path.dirname(privacyStore.saltPath(proj2.id)), { recursive: true });
+  fs.writeFileSync(privacyStore.saltPath(proj2.id), 'not-a-key');
+  const recordFile = path.join(tmpUserData, 'projects', proj2.id, 'datasets', ds2!.id + '.json');
+  const before = fs.readFileSync(recordFile, 'utf8');
+  let thrown: unknown = null;
+  try {
+    await datasets.updateSteps(proj2.id, ds2!.id, [{ type: 'trim' }, { type: 'mask_hash', column: 'email' }]);
+  } catch (err) {
+    thrown = err;
+  }
+  ok('a damaged key: updateSteps THROWS MaskKeyUnavailableError, never keeps the raw column', thrown instanceof privacyStore.MaskKeyUnavailableError, String(thrown));
+  ok('…and the record is unchanged', fs.readFileSync(recordFile, 'utf8') === before);
+  ok('…and the damaged key is not replaced', fs.readFileSync(privacyStore.saltPath(proj2.id), 'utf8') === 'not-a-key');
+  const { commitSteps }: typeof import('../src/ipc/datasets') = require('../src/ipc/datasets');
+  const reply = await commitSteps(proj2.id, ds2!.id, [{ type: 'trim' }, { type: 'mask_hash', column: 'email' }]);
+  ok('…and the steps channel answers with the sentence, not a bare 500', reply.ok === false && /masking key is not available/.test(reply.error), JSON.stringify(reply));
 }
 
 main()

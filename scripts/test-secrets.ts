@@ -217,6 +217,14 @@ function run(args: string[], env: Record<string, string>): Promise<{ code: numbe
     const raceOk = (await Promise.all(Array.from({ length: 8 }, (_, i) => A.get('race', 'ai.apiKey', `p${i}`)))).every((v, i) => v === `v${i}`);
     ok('store: 8 concurrent first puts from 2 stores → one data key, every value readable', nRace === 1 && raceOk, nRace);
 
+    // putIfAbsent (a project's masking key, src/app/privacyStore.ts): two pods minting at once keep ONE.
+    const saltRef = randomUUID();
+    const minted = await Promise.all([A.putIfAbsent(ORG, 'privacy.salt', saltRef, 'a'.repeat(64)), B2.putIfAbsent(ORG, 'privacy.salt', saltRef, 'b'.repeat(64))]);
+    const nSalt = (await pool.query(`SELECT count(*)::int AS n FROM secrets WHERE kind = 'privacy.salt' AND ref = $1`, [saltRef])).rows[0].n as number;
+    ok('store: two concurrent putIfAbsent → one row, and both callers get its one value', nSalt === 1 && minted[0] === minted[1] && /^(a{64}|b{64})$/.test(minted[0]), JSON.stringify({ nSalt, same: minted[0] === minted[1] }));
+    ok('store: putIfAbsent never replaces what is stored', (await A.putIfAbsent(ORG, 'privacy.salt', saltRef, 'c'.repeat(64))) === minted[0]);
+    await rejects('store: putIfAbsent checks like put', A.putIfAbsent(ORG, 'privacy.salt', saltRef, ''), /non-empty/);
+
     // ── AAD binding: a row moved to another org or ref does not decrypt ──
     await A.put(ORG2, 'ai.apiKey', 'anthropic', 'org2-own');
     const copy = (org: string, ref: string, keyFrom: string): Promise<unknown> => pool.query(
@@ -313,6 +321,7 @@ function run(args: string[], env: Record<string, string>): Promise<{ code: numbe
     const valuesB = await Promise.all(allRefs.map((r) => B.get(r.org_id, r.kind, r.ref)));
     ok(`rotate: all ${allRefs.length} secrets read the same under the new key`, valuesB.every((v, i) => v === valuesA[i] && v !== null), JSON.stringify(valuesB.map((v) => v?.length)));
     const after = (await pool.query<{ ciphertext: Buffer; iv: Buffer; tag: Buffer }>('SELECT ciphertext, iv, tag FROM secrets ORDER BY org_id, kind, ref')).rows;
+    ok('rotate: a minted masking key still reads, the same value, under the new key', (await B.get(ORG, 'privacy.salt', saltRef)) === minted[0]);
     ok('rotate: secret payloads were not re-encrypted (byte-identical rows)', after.length === before.length && after.every((r, i) => r.ciphertext.equals(before[i].ciphertext) && r.iv.equals(before[i].iv) && r.tag.equals(before[i].tag)));
     await rejects('rotate: the old master key no longer reads a secret', A.get(ORG, 'connection.password', connId), /wrapped by master key/);
     const rotatedRow = (await pool.query<import('../src/server/secrets/store').DataKeyRow>('SELECT * FROM secret_data_keys WHERE org_id = $1', [ORG])).rows[0];
