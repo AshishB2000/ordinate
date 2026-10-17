@@ -36,13 +36,24 @@
 // Directories are implicit: a directory exists when the disk has it or any
 // row lives under it, and a listing is the union of both (disk Parquet beside
 // DB JSON), record-shaped disk files excluded — the rows are the truth.
+//
+// LOCKED READ-MODIFY-WRITE. Load, change and save a record inside
+// `locked(path, fn)`: (org, path) is held for all of `fn`, across pods. An
+// in-process queue first (on files, the whole lock); with the DB, then one
+// pooled client — BEGIN, RLS org, lock_timeout, pg_advisory_xact_lock — pinned
+// in an AsyncLocalStorage, so every statement here inside `fn` is in that
+// transaction and a swallowed failure rejects `locked`. A held key runs
+// straight through; a nested key is a SAVEPOINT; order: dataset record, then
+// its history dir. Never await DuckDB or a warehouse in `fn` when it can be
+// computed first, nor start `void` work there. docs/record-locks/00-design.md.
 
 import { AsyncLocalStorage } from 'async_hooks';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { Pool, QueryResult } from 'pg';
+import type { Pool, PoolClient, QueryResult } from 'pg';
 import * as appPaths from './paths';
-import { ctx, serverDataDir } from '../server/context';
+import { ctx, orgKey, serverDataDir } from '../server/context';
+import { recordBusy, recordNotSaved } from './recordLockMessages';
 
 /** What a listing with `withFileTypes` returns — `fs.Dirent` satisfies it. */
 export interface Dirent {
@@ -115,11 +126,12 @@ function enoent(syscall: string, p: string): NodeJS.ErrnoException {
 // rows. Inside `withReadMemo` a record is read once; any write through this
 // module (either backend) forgets everything read so far. Not for code that reads a record,
 // waits, and writes it back: it would write over a change made meanwhile.
-const memo = new AsyncLocalStorage<Map<string, Promise<unknown>>>();
+// Inside `locked` the store is null: no memo, there or below.
+const memo = new AsyncLocalStorage<Map<string, Promise<unknown>> | null>();
 
-/** Runs `fn` reading each record from Postgres at most once. Nested calls share the outer memo. */
+/** Runs `fn` reading each record from Postgres at most once. Nested calls share the outer memo; inside `locked`, none. */
 export function withReadMemo<T>(fn: () => Promise<T>): Promise<T> {
-  return memo.getStore() ? fn() : memo.run(new Map(), fn);
+  return memo.getStore() !== undefined ? fn() : memo.run(new Map(), fn);
 }
 
 /** A write happened: nothing read before it may be served again. */
@@ -144,8 +156,17 @@ export function memoRead<T>(key: string, read: () => Promise<T>): Promise<T> {
   return got;
 }
 
-/** One statement for `a.org`, in a transaction that sets the RLS org. `$1` is always the org. */
+/** One statement for `a.org`, in a transaction that sets the RLS org — or, inside `locked`, the hold's. `$1` is always the org. */
 async function sql(a: At, text: string, params: unknown[] = []): Promise<QueryResult> {
+  const h = holds.getStore();
+  if (h && h.open && h.client && h.org === a.org && h.pool === a.pool) {
+    try {
+      return await h.client.query(text, [a.org, ...params]);
+    } catch (err) {
+      h.failed = true; // the transaction is aborted now, whoever catches this
+      throw err;
+    }
+  }
   const c = await a.pool.connect();
   let broken: Error | undefined;
   try {
@@ -159,6 +180,126 @@ async function sql(a: At, text: string, params: unknown[] = []): Promise<QueryRe
     throw err;
   } finally {
     c.release(broken);
+  }
+}
+
+// ── locked(): one read-modify-write at a time per (org, path) ───────────────
+
+const LOCK_WAIT_MS = 15_000;
+const MAX_DB_HOLDS = 4;
+let lockWaitMs = LOCK_WAIT_MS;
+
+/** Test hook: how long a save waits for its lock before it is refused (0 = the default). */
+export function _setLockWaitMs(ms: number): void { lockWaitMs = ms > 0 ? ms : LOCK_WAIT_MS; }
+
+// `keys`: orgKey(path) of everything this chain holds. `client` (with its pool and org): the pinned
+// transaction, DB mode only. `failed`: a statement on it failed since the last savepoint.
+interface Hold { keys: Set<string>; client: PoolClient | null; pool: Pool | null; org: string; open: boolean; failed: boolean; savepoints: number }
+const holds = new AsyncLocalStorage<Hold>();
+
+const busy = (cause?: unknown): Error => Object.assign(new Error(recordBusy()), { code: 'ERECORDBUSY', cause });
+const notSaved = (): Error => Object.assign(new Error(recordNotSaved()), { code: 'ERECORDROLLEDBACK' });
+const pgBusy = (e: unknown): boolean => ['55P03', '40P01'].includes((e as { code?: string } | null)?.code ?? '');
+const lockKey = (a: At): string => 'records:' + a.org + ':' + a.rel;
+const left = (deadline: number): number => Math.max(1, deadline - Date.now());
+
+// The in-process queue per key: each holder's turn is a promise the next one waits on.
+const queues = new Map<string, Promise<void>>();
+async function queue(key: string, deadline: number): Promise<() => void> {
+  const prev = queues.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const turn = new Promise<void>((r) => (release = r));
+  const tail = prev.then(() => turn);
+  queues.set(key, tail);
+  void tail.then(() => { if (queues.get(key) === tail) queues.delete(key); });
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<'late'>((r) => { timer = setTimeout(() => r('late'), left(deadline)); });
+  const got = await Promise.race([prev, late]);
+  clearTimeout(timer);
+  if (got === 'late') { release(); throw busy(); } // gave up: our turn passes straight on when it comes
+  return release;
+}
+
+// This pod's DB holds, taken inside the queue and before connect.
+let dbHolds = 0;
+const slotWaiters: Array<() => void> = [];
+function slot(deadline: number): Promise<void> {
+  if (dbHolds < MAX_DB_HOLDS) { dbHolds++; return Promise.resolve(); }
+  return new Promise((resolve, reject) => {
+    const grant = (): void => { clearTimeout(timer); dbHolds++; resolve(); };
+    const timer = setTimeout(() => { slotWaiters.splice(slotWaiters.indexOf(grant), 1); reject(busy()); }, left(deadline));
+    slotWaiters.push(grant);
+  });
+}
+
+/** Run `fn` holding `p` for this org: no other `locked(p)`, on any pod, runs until it settles. ERECORDBUSY past the wait. */
+export async function locked<T>(p: string, fn: () => Promise<T>): Promise<T> {
+  const key = orgKey(path.resolve(p));
+  const h = holds.getStore();
+  const held = h && h.open ? h : undefined;
+  if (held && held.keys.has(key)) return fn();
+  const a = at(p);
+  if (held && held.client && a && a.org === held.org && a.pool === held.pool) return nested(held, key, a, fn);
+  const deadline = Date.now() + lockWaitMs;
+  const release = await queue(key, deadline);
+  const hold: Hold = { keys: new Set([...(held ? held.keys : []), key]), client: null, pool: null, org: '', open: true, failed: false, savepoints: 0 };
+  const around = memo.getStore();
+  try {
+    if (!a) return await holds.run(hold, () => memo.run(null, fn));
+    await slot(deadline);
+    try {
+      return await inTransaction(hold, a, deadline, fn);
+    } finally {
+      dbHolds--;
+      slotWaiters.shift()?.();
+    }
+  } catch (err) {
+    throw pgBusy(err) ? busy(err) : err;
+  } finally {
+    hold.open = false;
+    around?.clear(); // an outer read memo saw the record before this wrote it
+    release();
+  }
+}
+
+async function inTransaction<T>(hold: Hold, a: At, deadline: number, fn: () => Promise<T>): Promise<T> {
+  const c = await a.pool.connect();
+  Object.assign(hold, { client: c, pool: a.pool, org: a.org });
+  let broken: Error | undefined;
+  try {
+    // a.org passed ORG_RE and the timeout is an integer: neither can close its literal.
+    await c.query(`BEGIN; SELECT set_config('ordinate.org', '${a.org}', true); SET LOCAL lock_timeout = ${left(deadline)}`);
+    await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [lockKey(a)]);
+    const out = await holds.run(hold, () => memo.run(null, fn));
+    // An aborted transaction answers COMMIT with ROLLBACK, and no error.
+    if ((await c.query('COMMIT')).command !== 'COMMIT') throw notSaved();
+    return out;
+  } catch (err) {
+    await c.query('ROLLBACK').catch((e: Error) => { broken = e; });
+    throw err;
+  } finally {
+    hold.open = false; // before the client goes back: nothing may run on it after this
+    c.release(broken);
+  }
+}
+
+/** A second key inside a DB hold: its advisory lock in a SAVEPOINT, so a failure here rolls back only this part. */
+async function nested<T>(hold: Hold, key: string, a: At, fn: () => Promise<T>): Promise<T> {
+  const c = hold.client as PoolClient;
+  const sp = `ordinate_${++hold.savepoints}`;
+  await c.query(`SAVEPOINT ${sp}`);
+  hold.keys.add(key);
+  try {
+    await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [lockKey(a)]);
+    const out = await fn();
+    if (hold.failed) throw notSaved(); // swallowed inside: undo this part, keep the outer save
+    await c.query(`RELEASE SAVEPOINT ${sp}`);
+    return out;
+  } catch (err) {
+    hold.failed = !(await c.query(`ROLLBACK TO SAVEPOINT ${sp}`).then(() => true, () => false));
+    throw pgBusy(err) ? busy(err) : err;
+  } finally {
+    hold.keys.delete(key);
   }
 }
 
