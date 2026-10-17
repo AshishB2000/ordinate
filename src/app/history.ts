@@ -58,6 +58,7 @@ export async function saveCrop(id: string | number, dataUrl: string): Promise<st
 // pod's; on another pod (or after its disk was wiped) the same PNG is in the
 // thread record, as the model's first message — pass the thread when the
 // caller has it, so a 20 MB record is not parsed twice. PNG bytes only.
+// any: the thread envelope, loose as saveThread stores it (legacy messages too).
 export async function loadCrop(id: string | number, thread?: any): Promise<Buffer | null> {
   if (!isValidId(id)) return null;
   const file = await recordFs.readFile(cropFilePath(id)).catch(() => null);

@@ -190,6 +190,9 @@ async function main(): Promise<void> {
   ok('a damaged key: updateSteps THROWS MaskKeyUnavailableError, never keeps the raw column', thrown instanceof privacyStore.MaskKeyUnavailableError, String(thrown));
   ok('…and the record is unchanged', fs.readFileSync(recordFile, 'utf8') === before);
   ok('…and the damaged key is not replaced', fs.readFileSync(privacyStore.saltPath(proj2.id), 'utf8') === 'not-a-key');
+  const { commitSteps }: typeof import('../src/ipc/datasets') = require('../src/ipc/datasets');
+  const reply = await commitSteps(proj2.id, ds2!.id, [{ type: 'trim' }, { type: 'mask_hash', column: 'email' }]);
+  ok('…and the steps channel answers with the sentence, not a bare 500', reply.ok === false && /masking key is not available/.test(reply.error), JSON.stringify(reply));
 }
 
 main()
