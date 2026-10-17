@@ -21,7 +21,7 @@
 // after that batch. So a paste is one undo step in the grid and one entry in
 // History, and a batch that changed nothing is no version (versions.ts).
 //
-// Saves of one table run one at a time, in the order they were issued.
+// Saves of one table run one at a time, in the order they were issued, on every pod.
 
 import * as datasets from '../datasets';
 import type { Dataset } from '../datasets';
@@ -41,6 +41,8 @@ import { applyPipelineAsync, ruleMemos } from '../regexOffThread';
 import { regexWorkerOnly } from '../regexMemo';
 import type { CheckContext, Checked, Issue } from './validate';
 import { refTableFor } from './lookup';
+import { datasetFilePath } from '../datasetRecord';
+import * as recordFs from '../../app/recordFs';
 
 /** Batches one save may carry — far more than a person makes between two blurs. */
 const MAX_BATCHES = 500;
@@ -75,15 +77,14 @@ export interface TableView {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const chains = new Map<string, Promise<unknown>>();
-
-function serial<T>(id: string, run: () => Promise<T>): Promise<T> {
-  const prev = chains.get(id) || Promise.resolve();
-  const p = prev.then(run, run);
-  const tail = p.catch(() => undefined);
-  chains.set(id, tail);
-  void tail.then(() => { if (chains.get(id) === tail) chains.delete(id); });
-  return p;
+/**
+ * One save of a table at a time, on every pod: the dataset record's lock — the
+ * same key `writeQuality` takes, so a quality run and a grid save never write
+ * back what the other read. The versions it records nest inside (record, then
+ * history dir: the one lock order).
+ */
+function withTable<T>(projectId: string, id: string, run: () => Promise<T>): Promise<T> {
+  return recordFs.locked(datasetFilePath(projectId, id), run);
 }
 
 /** The table the grid edits: its definitions, and its cells with refused text back in place. */
@@ -260,7 +261,7 @@ export async function validateInput(projectId: string, id: string, rawRows: unkn
 /** Save the batches made since the last save: replay, validate, write once, one version each. */
 export function saveInputBatches(projectId: string, id: string, batches: unknown): Promise<TableView | Fail> {
   if (!isValidId(projectId) || !isValidId(id)) return Promise.resolve(fail('That table could not be found'));
-  return serial(id, async () => {
+  return withTable(projectId, id, async () => {
     if (!Array.isArray(batches) || batches.length === 0) return fail('Nothing to save');
     if (batches.length > MAX_BATCHES) return fail('Too many edits in one save — reload the table');
     const existing = await inputDataset(projectId, id);
@@ -294,7 +295,7 @@ export function saveInputBatches(projectId: string, id: string, batches: unknown
  */
 export function setInputColumns(projectId: string, id: string, rawColumns: unknown, from: unknown): Promise<TableView | Fail> {
   if (!isValidId(projectId) || !isValidId(id)) return Promise.resolve(fail('That table could not be found'));
-  return serial(id, async () => {
+  return withTable(projectId, id, async () => {
     const check = checkColumns(rawColumns);
     if (!check.ok) return check;
     const existing = await inputDataset(projectId, id);
@@ -319,7 +320,7 @@ export function setInputColumns(projectId: string, id: string, rawColumns: unkno
 /** Version history's Restore: the table and pipeline as a version kept them. */
 export function replaceInputTable(projectId: string, id: string, table: unknown, rawSteps: unknown): Promise<Dataset | null> {
   if (!isValidId(projectId) || !isValidId(id)) return Promise.resolve(null);
-  return serial(id, async () => {
+  return withTable(projectId, id, async () => {
     const existing = await inputDataset(projectId, id);
     if ('ok' in existing) return null;
     const t = table && typeof table === 'object' ? (table as Record<string, unknown>) : {};

@@ -19,7 +19,8 @@
 //
 // Conventions from catalog.ts: UUID-check every id before it reaches a path,
 // atomic temp-sibling-then-rename writes, a corrupt file reads as EMPTY, and
-// every read-modify-write of one file is serialised per project.
+// every read-modify-write of policy.json or review.json holds that file
+// (recordFs.locked, every pod); the salt keeps its own chain below.
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -175,7 +176,7 @@ export async function getPolicy(projectId: string): Promise<SharePolicy> {
 export async function setPolicy(projectId: string, patch: unknown): Promise<SharePolicy | null> {
   if (!isValidId(projectId)) return null;
   try { await recordFs.access(projectDir(projectId)); } catch (_) { return null; }
-  return serial('policy:' + projectId, async () => {
+  return recordFs.locked(policyPath(projectId), async () => {
     const cur = await getPolicy(projectId);
     const next = sanitizePolicy({ ...cur, ...(patch && typeof patch === 'object' ? patch : {}) });
     await writeAtomic(policyPath(projectId), JSON.stringify(next, null, 2));
@@ -230,7 +231,7 @@ async function loadReview(projectId: string): Promise<ReviewFile> {
 }
 
 async function mutateReview<T>(projectId: string, fn: (file: ReviewFile) => T): Promise<T> {
-  return serial('review:' + projectId, async () => {
+  return recordFs.locked(reviewPath(projectId), async () => {
     const file = await loadReview(projectId);
     const result = fn(file);
     await writeAtomic(reviewPath(projectId), JSON.stringify({ schemaVersion: 1, datasets: file }, null, 2));
