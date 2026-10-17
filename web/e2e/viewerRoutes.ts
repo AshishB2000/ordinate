@@ -96,9 +96,30 @@ export function writeChannels(): Set<string> {
 /** A popover or dialog the click opened, by its accessible name. */
 const opened = (page: Page, name: string | RegExp) => page.getByRole('dialog', { name }).last();
 
-const details = async (page: Page) => {
+/** The dataset's Details popover: its description, tags and owner. */
+export const details = async (page: Page) => {
   await page.getByRole('button', { name: 'Details', exact: true }).click();
   const pop = opened(page, 'Dataset details');
+  await pop.getByRole('textbox', { name: 'Description' }).waitFor();
+  return pop;
+};
+
+const columns = async (page: Page) => {
+  const table = page.getByRole('tabpanel', { name: 'Columns' });
+  await table.getByRole('combobox', { name: 'Sensitivity of region' }).waitFor();
+  return table;
+};
+
+const columnDetails = async (page: Page) => {
+  await page.getByRole('button', { name: /^Column details/ }).click();
+  const pop = opened(page, 'Details for column region');
+  await pop.getByRole('textbox', { name: 'Description' }).waitFor();
+  return pop;
+};
+
+const catalogDetails = async (page: Page) => {
+  await page.getByRole('button', { name: /^Details for / }).first().click();
+  const pop = opened(page, /details$/);
   await pop.getByRole('textbox', { name: 'Description' }).waitFor();
   return pop;
 };
@@ -123,6 +144,12 @@ export const ROUTES: readonly RouteCase[] = [
   { pattern: '/reports', url: (s) => `/reports?project=${s.pid}`, editor: { role: 'button', name: 'New report' } },
   { pattern: '/settings', url: (s) => `/settings?tab=privacy&project=${s.pid}`, editor: { role: 'button', name: /^Check \d+ datasets? for sensitive columns$/ } },
   { pattern: '/data/:projectId/:datasetId', url: (s) => `/data/${s.pid}/${s.did}`, editor: { role: 'link', name: 'Prepare' }, open: details },
+  // Its tabs and its column profile: the same route, where most of a dataset's writes live.
+  { pattern: '/data/:projectId/:datasetId', url: (s) => `/data/${s.pid}/${s.did}?tab=quality`, editor: { role: 'button', name: 'Run checks' } },
+  { pattern: '/data/:projectId/:datasetId', url: (s) => `/data/${s.pid}/${s.did}?tab=columns`, open: columns },
+  { pattern: '/data/:projectId/:datasetId', url: (s) => `/data/${s.pid}/${s.did}?tab=insights` },
+  { pattern: '/data/:projectId/:datasetId', url: (s) => `/data/${s.pid}/${s.did}?tab=snapshots` },
+  { pattern: '/data/:projectId/:datasetId', url: (s) => `/data/${s.pid}/${s.did}?profile=region`, editor: { role: 'button', name: 'Rename' }, open: columnDetails },
   // The same route over a Live dataset: its notice, settings and schema.
   { pattern: '/data/:projectId/:datasetId', url: (s) => `/data/${s.pid}/${s.liveId}`, editor: { role: 'button', name: 'Copy the data instead' } },
   { pattern: '/data/:projectId/:datasetId', url: (s) => `/data/${s.pid}/${s.liveId}?tab=schema`, editor: { role: 'button', name: 'Sync schema' } },
@@ -136,6 +163,9 @@ export const ROUTES: readonly RouteCase[] = [
   { pattern: '/data/captures', url: (s) => `/data/captures?project=${s.pid}`, editor: { role: 'heading', name: 'Reading a screenshot needs AI' } },
   { pattern: '/data/input/:projectId/:datasetId', url: (s) => `/data/input/${s.pid}/${s.inputId}`, editor: { role: 'grid', name: /Targets/ } },
   { pattern: '/data/:projectId', url: (s) => `/data/${s.pid}`, editor: { role: 'link', name: 'Import file' } },
+  { pattern: '/data/:projectId', url: (s) => `/data/${s.pid}?tab=captures`, editor: { role: 'link', name: 'Upload a screenshot' } },
+  { pattern: '/data/:projectId', url: (s) => `/data/${s.pid}?tab=catalog`, open: catalogDetails },
+  { pattern: '/data/:projectId', url: (s) => `/data/${s.pid}?tab=relationships`, editor: { role: 'button', name: 'New relationship' } },
   { pattern: '/visuals/:projectId', url: (s) => `/visuals/${s.pid}`, editor: { role: 'button', name: 'New visual' } },
   { pattern: '/visuals/:projectId/new', url: (s) => `/visuals/${s.pid}/new?dataset=${s.did}`, editor: { role: 'button', name: 'Save visual' }, explore: BUILDER },
   { pattern: '/visuals/:projectId/:visualId', url: (s) => `/visuals/${s.pid}/${s.vid}`, editor: { role: 'button', name: 'Save visual' }, explore: BUILDER },

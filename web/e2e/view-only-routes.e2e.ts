@@ -24,8 +24,8 @@ import { readFileSync } from 'node:fs';
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
-import type { Page } from 'playwright';
-import { editableFields, ROUTES, uncovered, WRITE, writeChannels, writeControls, type RouteCase } from './viewerRoutes.ts';
+import type { Page, Request } from 'playwright';
+import { details, editableFields, ROUTES, uncovered, WRITE, writeChannels, writeControls, type RouteCase } from './viewerRoutes.ts';
 import { seedViewer, type ViewerSeed } from './seed-viewer.ts';
 
 const ROUTES_SRC = readFileSync(new URL('../src/app/routes.tsx', import.meta.url), 'utf8');
@@ -73,27 +73,31 @@ if (!adminUrl) {
     '/data/metrics/:projectId/:metricId/tree': 'tree',
   };
 
-  /** RPCs in flight, so a check waits until the page has stopped asking (roles, then what they unlock). */
+  /**
+   * RPCs in flight, so a check waits until the page has stopped asking (roles, then what they unlock). A request open
+   * for 8 s is left behind: one the app abandoned mid-redirect can go unreported by the browser, and waiting on it
+   * would hang the walk; nothing that slow decides which controls a screen draws.
+   */
   function watch(page: Page) {
-    let inflight = 0;
+    const inflight = new Map<Request, number>();
     const sent: string[] = [];
     const channel = (url: string) => decodeURIComponent(/\/api\/rpc\/([^?]+)/.exec(url)?.[1] ?? '');
     page.on('request', (r) => {
       const c = channel(r.url());
       if (!c) return;
-      inflight += 1;
+      inflight.set(r, Date.now());
       sent.push(c);
     });
-    const done = (r: { url(): string }) => channel(r.url()) && (inflight = Math.max(0, inflight - 1));
-    page.on('requestfinished', done);
-    page.on('requestfailed', done);
+    page.on('requestfinished', (r) => inflight.delete(r));
+    page.on('requestfailed', (r) => inflight.delete(r));
+    const open = () => [...inflight.values()].filter((at) => Date.now() - at < 8_000).length;
     return {
       sent,
+      /** Quiet: no RPC open for 600 ms. */
       async quiet() {
-        let still = 0;
-        while (still < 4) {
+        for (let still = 0; still < 4; ) {
           await page.waitForTimeout(150);
-          still = inflight === 0 ? still + 1 : 0;
+          still = open() === 0 ? still + 1 : 0;
         }
       },
     };
@@ -170,10 +174,13 @@ if (!adminUrl) {
         // Where the editor's control is a write by name, the detector must count it here (it is not blind on this page).
         if (typeof r.editor.name === 'string' && WRITE.test(r.editor.name)) assert.ok(controls.length > 0, `${at}: the editor's write controls are counted`);
       }
-      if (scope) {
-        if (!DISCOVER) assert.ok(fields.includes('Description'), `${at}: Description is editable for an editor (negative control): ${fields.join(', ')}`);
+      if (scope && !DISCOVER) assert.ok(fields.length > 0, `${at}: the stored values are editable for an editor (negative control)`);
+      if (scope && r.open === details) {
+        assert.ok(fields.includes('Description'), `${at}: Description is editable in the Details popover: ${fields.join(', ')}`);
         // A known write, recorded the way the viewer's would have been: the editor documents the dataset.
         await scope.getByRole('textbox', { name: 'Description' }).fill('Orders, one row per line item.');
+      }
+      if (scope) {
         await page.keyboard.press('Escape');
         await net.quiet();
       }
