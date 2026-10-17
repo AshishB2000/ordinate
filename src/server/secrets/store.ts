@@ -1,5 +1,6 @@
-// Secrets at rest (T5.3): connection passwords/tokens, AI keys and the webhook
-// URLs of Slack / Teams channels (src/app/channels.ts), encrypted in Postgres. The desktop keeps its documented plaintext config.json
+// Secrets at rest (T5.3): connection passwords/tokens, AI keys, the webhook
+// URLs of Slack / Teams channels (src/app/channels.ts), embed signing secrets and
+// each project's masking key (src/app/privacyStore.ts), encrypted in Postgres. The desktop keeps its documented plaintext config.json
 // (src/app/configSecrets.ts); this is the server's store.
 //
 // ENVELOPE. Each org has ONE random 32-byte data key (`secret_data_keys`),
@@ -20,7 +21,8 @@
 import { createCipheriv, createDecipheriv, createHash, createSecretKey, randomBytes, randomUUID, type KeyObject } from 'crypto';
 import type { Pool } from 'pg';
 
-export const SECRET_KINDS = ['connection.password', 'connection.token', 'ai.apiKey', 'channel.webhook', 'embed.signing'] as const;
+// Bound into every row's AAD: a kind is never renamed, only appended.
+export const SECRET_KINDS = ['connection.password', 'connection.token', 'ai.apiKey', 'channel.webhook', 'embed.signing', 'privacy.salt'] as const;
 export type SecretKind = (typeof SECRET_KINDS)[number];
 
 export interface SecretStore {
@@ -31,6 +33,12 @@ export interface SecretStore {
   /** True when a row was removed. */
   delete(orgId: string, kind: SecretKind, ref: string): Promise<boolean>;
 }
+
+/** The real store's extra: a value minted once, whichever pod asks first. Not on SecretStore, so its fakes need not grow it. */
+export type MintingSecretStore = SecretStore & {
+  /** Insert unless one is stored; returns the value that IS stored — this one, or the one that got there first. */
+  putIfAbsent(orgId: string, kind: SecretKind, ref: string, value: string): Promise<string>;
+};
 
 /** Every failure in this layer. The message never carries a secret, a key or a ciphertext. */
 export class SecretError extends Error {
@@ -112,7 +120,7 @@ function check(orgId: unknown, kind: unknown, ref: unknown): void {
 
 const KEY_COLS = 'id, org_id, master_kid, wrapped, iv, tag';
 
-export function createSecretStore(pool: Pool, master: KeyObject): SecretStore {
+export function createSecretStore(pool: Pool, master: KeyObject): MintingSecretStore {
   const kid = kidOf(master);
 
   async function orgKey(orgId: string): Promise<{ id: string; key: KeyObject }> {
@@ -134,7 +142,19 @@ export function createSecretStore(pool: Pool, master: KeyObject): SecretStore {
     return { id: row.id, key: unwrapDataKey(master, row, orgId) };
   }
 
-  return {
+  /** `value` sealed for (org, kind, ref) under the org's data key, after the same checks as every write. */
+  async function sealed(orgId: string, kind: SecretKind, ref: string, value: string): Promise<unknown[]> {
+    check(orgId, kind, ref);
+    if (typeof value !== 'string' || value === '' || Buffer.byteLength(value) > MAX_VALUE_BYTES) {
+      throw new SecretError(`secret value must be a non-empty string of at most ${MAX_VALUE_BYTES} bytes`);
+    }
+    const { id, key } = await orgKey(orgId);
+    const s = seal(key, Buffer.from(value, 'utf8'), secretAad(orgId, kind, ref));
+    return [orgId, kind, ref, id, s.ct, s.iv, s.tag];
+  }
+  const INSERT = 'INSERT INTO secrets (org_id, kind, ref, key_id, ciphertext, iv, tag) VALUES ($1, $2, $3, $4, $5, $6, $7)';
+
+  const store: MintingSecretStore = {
     async get(orgId, kind, ref) {
       check(orgId, kind, ref);
       const r = await pool.query<DataKeyRow & { s_iv: Buffer; s_ct: Buffer; s_tag: Buffer }>(
@@ -156,18 +176,19 @@ export function createSecretStore(pool: Pool, master: KeyObject): SecretStore {
     },
 
     async put(orgId, kind, ref, value) {
-      check(orgId, kind, ref);
-      if (typeof value !== 'string' || value === '' || Buffer.byteLength(value) > MAX_VALUE_BYTES) {
-        throw new SecretError(`secret value must be a non-empty string of at most ${MAX_VALUE_BYTES} bytes`);
-      }
-      const { id, key } = await orgKey(orgId);
-      const s = seal(key, Buffer.from(value, 'utf8'), secretAad(orgId, kind, ref));
       await pool.query(
-        `INSERT INTO secrets (org_id, kind, ref, key_id, ciphertext, iv, tag) VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (org_id, kind, ref) DO UPDATE
+        `${INSERT} ON CONFLICT (org_id, kind, ref) DO UPDATE
            SET key_id = EXCLUDED.key_id, ciphertext = EXCLUDED.ciphertext, iv = EXCLUDED.iv, tag = EXCLUDED.tag, updated_at = now()`,
-        [orgId, kind, ref, id, s.ct, s.iv, s.tag],
+        await sealed(orgId, kind, ref, value),
       );
+    },
+
+    async putIfAbsent(orgId, kind, ref, value) {
+      // Two pods may mint at once: ON CONFLICT keeps the first, and both read it back.
+      await pool.query(`${INSERT} ON CONFLICT (org_id, kind, ref) DO NOTHING`, await sealed(orgId, kind, ref, value));
+      const got = await store.get(orgId, kind, ref);
+      if (got === null) throw new SecretError('secret was not stored');
+      return got;
     },
 
     async delete(orgId, kind, ref) {
@@ -176,4 +197,5 @@ export function createSecretStore(pool: Pool, master: KeyObject): SecretStore {
       return (r.rowCount ?? 0) > 0;
     },
   };
+  return store;
 }

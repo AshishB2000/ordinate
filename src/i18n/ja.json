@@ -364,6 +364,8 @@
   "rebuildMessages.the_screenshot_names_no_measure_for": "スクリーンショットにこのタイルの指標がありません。列を選んでください。",
   "rebuildMessages.this_is_the_dashboard_s_own": "これはダッシュボード自体のタイトルなので、タイルではなくダッシュボードの名前になります。メモとして残すには元に戻してください。",
   "rebuildMessages.this_note_has_no_heading_to": "このメモには残す見出しがありません。",
+  "recordLockMessages.this_could_not_be_saved_try": null,
+  "recordLockMessages.this_is_being_saved_by_someone": null,
   "refreshHookMessages.a_connection_can_have_at_most": "1つの接続に設定できる更新URLは最大{max}個です。先に、使わなくなったものを取り消してください。",
   "refreshHookMessages.a_dataset_can_have_at_most": null,
   "refreshHookMessages.has_no_source_to_refresh_from": null,

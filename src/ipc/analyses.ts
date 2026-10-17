@@ -112,18 +112,26 @@ export function register() {
     }
   });
 
-  // A saved-view edit: read, apply, write the list back. Not a version — a view
-  // is a reader's state, and the sheets and name are left byte for byte.
-  // ponytail: last write wins between two view ops on one record; an `updated_at`
-  // compare-and-swap is the upgrade if two editors ever race here.
-  ipcMain.handle('analysis:view', async (_e, { projectId, id, op }: any = {}) => {
-    const a = await analysis.getAnalysis(projectId, id);
-    if (!a) return { ok: false, error: dashboardGone() };
-    const r = applyViewOp(a, op, a, new Date().toISOString(), randomUUID);
-    if (!r.ok) return r;
-    const saved = await analysis.updateAnalysis(projectId, id, { views: r.views, defaultViewId: r.defaultViewId });
-    return saved ? { ok: true, views: saved.views, defaultViewId: saved.defaultViewId, viewId: r.viewId } : { ok: false, error: dashboardGone() };
-  });
+  // A saved-view edit: read, apply, write the list back, holding the record
+  // (recordFs.locked, every pod), so two view edits never drop one. Not a
+  // version — a view is a reader's state; the sheets and name are left byte for
+  // byte. A hold that could not be had is the lock's own sentence.
+  // ponytail: the autosave (`analysis:update`) takes no lock — whole documents
+  // stay last-writer-wins (docs/record-locks); one editor's client queues its
+  // saves behind its view ops, but another editor's save can still write back
+  // the list it read. An `updated_at` compare-and-swap is the upgrade.
+  ipcMain.handle('analysis:view', async (_e, { projectId, id, op }: any = {}) =>
+    analysis.lockedAnalysis(projectId, id, async () => {
+      const a = await analysis.getAnalysis(projectId, id);
+      if (!a) return { ok: false, error: dashboardGone() };
+      const r = applyViewOp(a, op, a, new Date().toISOString(), randomUUID);
+      if (!r.ok) return r;
+      const saved = await analysis.updateAnalysis(projectId, id, { views: r.views, defaultViewId: r.defaultViewId });
+      return saved ? { ok: true, views: saved.views, defaultViewId: saved.defaultViewId, viewId: r.viewId } : { ok: false, error: dashboardGone() };
+    }).catch((err: Error & { code?: string }) => {
+      if (err.code === 'ERECORDBUSY' || err.code === 'ERECORDROLLEDBACK') return { ok: false, error: err.message };
+      throw err;
+    }));
 
   ipcMain.handle('analysis:delete', async (_e, { projectId, id }: any = {}) =>
     trash.trashRecord(projectId, 'dashboard', id)); // to the Trash, restorable for 30 days

@@ -106,17 +106,9 @@ async function writeIndex(projectId: string, id: string, idx: Index): Promise<vo
   await recordFs.rename(tmp, file);
 }
 
-// Index writes for one dataset run one at a time: a keep landing while the
-// retention is being changed must not write back the item list it read first.
-const locks = new Map<string, Promise<unknown>>();
-function serial<T>(key: string, fn: () => Promise<T>): Promise<T> {
-  const prev = locks.get(key) || Promise.resolve();
-  const p = prev.then(fn, fn);
-  const tail = p.catch(() => { /* reported to this caller */ });
-  locks.set(key, tail);
-  void tail.then(() => { if (locks.get(key) === tail) locks.delete(key); });
-  return p;
-}
+// Index writes for one dataset hold its index (recordFs.locked, every pod): a
+// keep landing while the retention is being changed must not write back the
+// item list it read first.
 
 async function dirNames(projectId: string): Promise<string[]> {
   try {
@@ -207,7 +199,7 @@ async function begin(projectId: string, rec: Keepable): Promise<Pending | null> 
   const meta: SnapshotMeta = { rowCount: rec.rowCount, columns: rec.columns.map((c) => ({ name: c.name, type: c.type })) };
   if (hasSource && rec.source) meta.sourceColumns = rec.source.columns.map((c) => ({ name: c.name, type: c.type }));
 
-  const commit = (): Promise<void> => serial(projectId + '/' + id, async () => {
+  const commit = (): Promise<void> => recordFs.locked(indexPath(projectId, id), async () => {
     for (const [tmp, fin] of moves) await recordFs.rename(tmp, fin);
     if (!hasSource) await recordFs.rm(path.join(dir, names.sourceName(id, stamp)), { force: true });
     const idx = await readIndex(projectId, id);
@@ -282,7 +274,7 @@ export async function getKeep(projectId: string, id: string): Promise<number> {
 /** Change the retention and prune to it at once. Returns the stamps removed. */
 export async function setKeep(projectId: string, id: string, keep: unknown): Promise<{ keep: number; removed: string[] } | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
-  return serial(projectId + '/' + id, async () => {
+  return recordFs.locked(indexPath(projectId, id), async () => {
     const idx = await readIndex(projectId, id);
     idx.keep = names.sanitizeKeep(keep);
     const removed = await pruneLocked(projectId, id, idx);

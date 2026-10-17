@@ -14,17 +14,20 @@
 //                 the request if one failed — a setting is never reported
 //                 saved when it is not.
 //
-// Two pods changing settings inside the same second: the later write wins, for
-// the whole document. ponytail: a NOTIFY on write (./jobs/bus.ts) makes the
-// other pods re-read at once; a per-field merge if whole-document
-// last-writer-wins ever loses someone's change.
+// Two pods changing settings inside the same second: each write stores only
+// what IT changed — `storable(cfg)` diffed against the document `cfg` was loaded
+// from, per top-level key and per member inside `starredBy` (diffDoc) — applied
+// to the row as it is now, in one transaction (`SELECT … FOR UPDATE`). So one
+// member's star never overwrites another pod's format change. Two pods changing
+// the SAME top-level key still last-writer-wins on it. ponytail: a NOTIFY on
+// write (./jobs/bus.ts) makes the other pods re-read at once.
 //
 // An org with no row yet and a `config.json` on this pod's disk (an install
 // from before this table): the file is the first document, imported once.
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { Pool, QueryResult } from 'pg';
+import type { Pool, PoolClient, QueryResult } from 'pg';
 import * as config from '../app/config';
 import { ORG_RE } from '../app/paths';
 import { ctx } from './context';
@@ -60,22 +63,71 @@ const doc = (org: string): OrgDoc => {
   return d;
 };
 
-/** One statement for `org`, in a transaction that sets the RLS org. `$1` is always the org. */
-async function sql(pool: Pool, org: string, text: string, params: unknown[] = []): Promise<QueryResult> {
+/** `fn` in one transaction for `org` (the RLS org set), as live/usageStore.ts runs its own. */
+async function within<T>(pool: Pool, org: string, fn: (c: PoolClient) => Promise<T>): Promise<T> {
   if (!ORG_RE.test(org)) throw new Error('invalid org id');
   const c = await pool.connect();
   let broken: Error | undefined;
   try {
     await c.query(`BEGIN; SELECT set_config('ordinate.org', '${org}', true)`); // org passed ORG_RE: it cannot close this literal
-    const r = await c.query(text, [org, ...params]);
+    const out = await fn(c);
     await c.query('COMMIT');
-    return r;
+    return out;
   } catch (err) {
     await c.query('ROLLBACK').catch((e: Error) => { broken = e; });
     throw err;
   } finally {
     c.release(broken);
   }
+}
+
+/** One statement for `org`. `$1` is always the org. */
+function sql(pool: Pool, org: string, text: string, params: unknown[] = []): Promise<QueryResult> {
+  return within(pool, org, (c) => c.query(text, [org, ...params]));
+}
+
+// ── What one write changed ──────────────────────────────────────────────────
+
+/** A write's own change: top-level keys set or gone, and `starredBy` per member (null = gone). `whole`: no base, replace. */
+export type Patch = { whole: string } | { set: Record<string, unknown>; gone: string[]; starredBy: Record<string, unknown> };
+
+const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+// Null-prototype: a member key is an email, and `__proto__` must stay a key, never a prototype.
+const dict = (from: Record<string, unknown> = {}): Record<string, unknown> => Object.assign(Object.create(null) as Record<string, unknown>, from);
+
+/** `body` against the `base` it was made from. Both are `config.storable` documents. */
+export function diffDoc(base: string | undefined, body: string): Patch {
+  if (base === undefined) return { whole: body };
+  const a = obj(JSON.parse(base));
+  const b = obj(JSON.parse(body));
+  const patch = { set: dict(), gone: [] as string[], starredBy: dict() };
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (k === 'starredBy') {
+      const [x, y] = [obj(a[k]), obj(b[k])];
+      for (const m of new Set([...Object.keys(x), ...Object.keys(y)])) if (!same(x[m], y[m])) patch.starredBy[m] = Object.hasOwn(y, m) ? y[m] : null;
+    } else if (!same(a[k], b[k])) {
+      if (Object.hasOwn(b, k)) patch.set[k] = b[k];
+      else patch.gone.push(k);
+    }
+  }
+  return patch;
+}
+
+/** The row's document as it is now, with this write's patch on top. */
+export function applyPatch(current: string, patch: Patch): string {
+  if ('whole' in patch) return patch.whole;
+  const next = Object.assign(dict(obj(JSON.parse(current))), patch.set);
+  for (const k of patch.gone) delete next[k];
+  if (Object.keys(patch.starredBy).length) {
+    const sb = dict(obj(next.starredBy));
+    for (const [m, v] of Object.entries(patch.starredBy)) {
+      if (v === null) delete sb[m];
+      else sb[m] = v;
+    }
+    next.starredBy = sb;
+  }
+  return JSON.stringify(next);
 }
 
 async function check(pool: Pool, org: string, d: OrgDoc): Promise<void> {
@@ -142,23 +194,33 @@ export async function flushed(org: string): Promise<void> {
 const backing: config.Backing = {
   read: () => doc(ctx().org.id).body,
   stamp: () => doc(ctx().org.id).stamp,
-  write(body: string): void {
+  write(body: string, base?: string): void {
     const pool = db;
     const org = ctx().org.id;
     const d = doc(org);
     d.body = body;
     d.writes += 1;
     if (!pool) return;
+    const n = d.writes;
+    const patch = diffDoc(base, body);
     d.writing = d.writing.then(async () => {
       try {
-        const r = await sql(
-          pool, org,
-          `INSERT INTO org_config (org_id, body) VALUES ($1, $2)
-           ON CONFLICT (org_id) DO UPDATE SET body = EXCLUDED.body, version = org_config.version + 1, updated_at = now()
-           RETURNING version`,
-          [body],
-        );
-        d.version = Number(r.rows[0].version);
+        const out = await within(pool, org, async (c) => {
+          const made = await c.query('INSERT INTO org_config (org_id, body) VALUES ($1, $2) ON CONFLICT (org_id) DO NOTHING RETURNING version', [org, body]);
+          if (made.rows.length) return { body, version: Number(made.rows[0].version) };
+          const cur = await c.query('SELECT body FROM org_config WHERE org_id = $1 FOR UPDATE', [org]);
+          const now = cur.rows[0].body as string;
+          // Nobody else wrote since this document was read: exactly what was asked, byte for byte.
+          const merged = now === base ? body : applyPatch(now, patch);
+          const up = await c.query('UPDATE org_config SET body = $2, version = version + 1, updated_at = now() WHERE org_id = $1 RETURNING version', [org, merged]);
+          return { body: merged, version: Number(up.rows[0].version) };
+        });
+        d.version = out.version;
+        // Only the last queued write adopts the merged body: a later local one is newer still.
+        if (d.writes === n && out.body !== d.body) {
+          d.body = out.body;
+          d.stamp += 1;
+        }
       } catch (err) {
         d.failed = err instanceof Error ? err : new Error(String(err));
       }

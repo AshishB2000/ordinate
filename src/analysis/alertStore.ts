@@ -52,7 +52,8 @@ export interface AlertFile {
   digest: boolean;
 }
 
-const EMPTY: AlertFile = { rules: [], events: [], digest: false };
+// A NEW file each time: a shared one's arrays would carry one project's first rule into the next.
+const empty = (): AlertFile => ({ rules: [], events: [], digest: false });
 
 // ── Disk ─────────────────────────────────────────────────────────────────────
 
@@ -78,12 +79,12 @@ async function writeJsonAtomic(file: string, obj: unknown): Promise<void> {
  * call site.
  */
 export async function load(projectId: string): Promise<AlertFile> {
-  if (!UUID_RE.test(String(projectId || ''))) return { ...EMPTY };
+  if (!UUID_RE.test(String(projectId || ''))) return empty();
   let raw: any;
   try {
     raw = JSON.parse(await recordFs.readFile(alertsFile(projectId), 'utf8'));
   } catch (_) {
-    return { ...EMPTY }; // missing, unreadable or corrupt — never fatal
+    return empty(); // missing, unreadable or corrupt — never fatal
   }
   const rules: AlertRule[] = [];
   for (const r of Array.isArray(raw?.rules) ? raw.rules : []) {
@@ -118,6 +119,21 @@ async function save(projectId: string, file: AlertFile): Promise<boolean> {
   }
 }
 
+/**
+ * Load, change and save alerts.json under its lock (recordFs.locked, every pod):
+ * `fn` gets the file as it is now and saves it itself. A lock that cannot be
+ * had, or a save Postgres rolled back, answers `fallback` — each caller's own
+ * failure value. Never await a metric, the anomaly scan or a diagnosis in `fn`:
+ * evaluateProject computes first and only applies here.
+ */
+function withAlerts<T>(projectId: string, fallback: T, fn: (file: AlertFile) => Promise<T>): Promise<T> {
+  if (!UUID_RE.test(String(projectId || ''))) return fn(empty()); // nothing to hold: load and save refuse it too
+  return recordFs.locked(alertsFile(projectId), async () => fn(await load(projectId))).catch((err: Error) => {
+    console.error('[alerts] Could not update alerts.json:', err && err.message);
+    return fallback;
+  });
+}
+
 // ── Rules CRUD ───────────────────────────────────────────────────────────────
 
 /** Create or replace one rule. Returns the STORED rule (sanitized), or null. */
@@ -131,52 +147,54 @@ export async function saveRule(projectId: string, raw: any): Promise<AlertRule |
   }
   const clean = alerts.sanitizeRule(withId);
   if (!clean) return null;
-  const file = await load(projectId);
-  const i = file.rules.findIndex((r) => r.id === clean.id);
-  // An EDIT keeps the edge state (armed / anomalyKeys / history): changing a
-  // rule's name or its quiet hours must not make a standing breach fire again.
-  if (i >= 0) {
-    const prev = file.rules[i];
-    file.rules[i] = {
-      ...clean,
-      armed: prev.armed,
-      firedPeriod: prev.firedPeriod,
-      anomalyKeys: prev.anomalyKeys,
-      history: prev.history,
-      lastValue: prev.lastValue,
-      lastFiredAt: prev.lastFiredAt,
-      lastEvaluatedAt: prev.lastEvaluatedAt,
-    };
-    // …unless the CONDITION itself changed, in which case the old edge state is
-    // about a question nobody is asking any more.
-    if (JSON.stringify(prev.threshold) !== JSON.stringify(clean.threshold)
-        || JSON.stringify(prev.change) !== JSON.stringify(clean.change)
-        || prev.compare !== clean.compare) {
-      delete file.rules[i].armed;
-      delete file.rules[i].firedPeriod;
+  return withAlerts(projectId, null, async (file) => {
+    const i = file.rules.findIndex((r) => r.id === clean.id);
+    // An EDIT keeps the edge state (armed / anomalyKeys / history): changing a
+    // rule's name or its quiet hours must not make a standing breach fire again.
+    if (i >= 0) {
+      const prev = file.rules[i];
+      file.rules[i] = {
+        ...clean,
+        armed: prev.armed,
+        firedPeriod: prev.firedPeriod,
+        anomalyKeys: prev.anomalyKeys,
+        history: prev.history,
+        lastValue: prev.lastValue,
+        lastFiredAt: prev.lastFiredAt,
+        lastEvaluatedAt: prev.lastEvaluatedAt,
+      };
+      // …unless the CONDITION itself changed, in which case the old edge state is
+      // about a question nobody is asking any more.
+      if (JSON.stringify(prev.threshold) !== JSON.stringify(clean.threshold)
+          || JSON.stringify(prev.change) !== JSON.stringify(clean.change)
+          || prev.compare !== clean.compare) {
+        delete file.rules[i].armed;
+        delete file.rules[i].firedPeriod;
+      }
+    } else {
+      if (file.rules.length >= alerts.MAX_RULES) return null;
+      file.rules.push(clean);
     }
-  } else {
-    if (file.rules.length >= alerts.MAX_RULES) return null;
-    file.rules.push(clean);
-  }
-  if (!(await save(projectId, file))) return null;
-  return file.rules[i >= 0 ? i : file.rules.length - 1];
+    if (!(await save(projectId, file))) return null;
+    return file.rules[i >= 0 ? i : file.rules.length - 1];
+  });
 }
 
 /** Apply a small patch (enabled, quiet hours, snooze) without a round trip through the dialog. */
 export async function patchRule(projectId: string, ruleId: string, patch: any): Promise<AlertRule | null> {
-  const file = await load(projectId);
-  const i = file.rules.findIndex((r) => r.id === ruleId);
-  if (i < 0) return null;
-  const merged = alerts.sanitizeRule({ ...file.rules[i], ...(patch || {}) });
-  if (!merged) return null;
-  // `quietHours: null` is how the dialog CLEARS a window — sanitizeRule drops an
-  // unusable one, but a spread would otherwise keep the old value.
-  if (patch && patch.quietHours === null) delete merged.quietHours;
-  if (patch && patch.snoozedUntil === null) delete merged.snoozedUntil;
-  file.rules[i] = merged;
-  if (!(await save(projectId, file))) return null;
-  return merged;
+  return withAlerts(projectId, null, async (file) => {
+    const i = file.rules.findIndex((r) => r.id === ruleId);
+    if (i < 0) return null;
+    const merged = alerts.sanitizeRule({ ...file.rules[i], ...(patch || {}) });
+    if (!merged) return null;
+    // `quietHours: null` is how the dialog CLEARS a window — sanitizeRule drops an
+    // unusable one, but a spread would otherwise keep the old value.
+    if (patch && patch.quietHours === null) delete merged.quietHours;
+    if (patch && patch.snoozedUntil === null) delete merged.snoozedUntil;
+    file.rules[i] = merged;
+    if (!(await save(projectId, file))) return null;
+    return merged;
+  });
 }
 
 /** Put a rule from the Trash back, with its inbox events. False if one with
@@ -184,12 +202,13 @@ export async function patchRule(projectId: string, ruleId: string, patch: any): 
 // ponytail: the trashed rule as stored; saveRule's sanitizer already shaped it once
 export async function restoreRule(projectId: string, raw: any): Promise<boolean> {
   if (!raw || typeof raw.id !== 'string') return false;
-  const file = await load(projectId);
-  if (file.rules.some((r) => r.id === raw.id)) return false;
-  const { events, ...rule } = raw;
-  file.rules.push(rule as AlertRule);
-  if (Array.isArray(events)) file.events.push(...events);
-  return save(projectId, file);
+  return withAlerts(projectId, false, async (file) => {
+    if (file.rules.some((r) => r.id === raw.id)) return false;
+    const { events, ...rule } = raw;
+    file.rules.push(rule as AlertRule);
+    if (Array.isArray(events)) file.events.push(...events);
+    return save(projectId, file);
+  });
 }
 
 /**
@@ -197,32 +216,37 @@ export async function restoreRule(projectId: string, raw: any): Promise<boolean>
  * offers Snooze and Open on nothing.
  *
  * A WATCH-DERIVED rule also turns the dataset's "watch for anomalies" toggle
- * off. Without that, `syncWatchRules` would faithfully re-create the rule the
- * user just deleted on the very next refresh.
+ * off — FIRST, outside the lock (a dataset record write is not done under
+ * alerts.json's). Without that, `syncWatchRules` would faithfully re-create the
+ * rule the user just deleted on the very next refresh; done first, a sync in
+ * between removes the rule itself, and "already gone" is success.
  */
 export async function deleteRule(projectId: string, ruleId: string): Promise<boolean> {
-  const file = await load(projectId);
-  const rule = file.rules.find((r) => r.id === ruleId);
-  if (!rule) return false;
-  // A rule the user wrote goes to the Trash (src/app/trash.ts) with its inbox
-  // events; one mirrored from a dataset's watch toggle is not theirs to restore.
-  if (!rule.fromWatch) {
-    const events = file.events.filter((e) => e.ruleId === ruleId);
-    if (!(await trashStore.stash(projectId, 'alert', ruleId, { ...rule, events }))) return false;
+  const seen = (await load(projectId)).rules.find((r) => r.id === ruleId);
+  if (!seen) return false;
+  if (seen.fromWatch) {
+    try { await datasets.setAutoRefresh(projectId, seen.datasetId, { watch: false }); } catch (_) { /* best effort */ }
   }
-  file.rules = file.rules.filter((r) => r.id !== ruleId);
-  file.events = file.events.filter((e) => e.ruleId !== ruleId);
-  const ok = await save(projectId, file);
-  if (ok && rule.fromWatch) {
-    try { await datasets.setAutoRefresh(projectId, rule.datasetId, { watch: false }); } catch (_) { /* best effort */ }
-  }
-  return ok;
+  return withAlerts(projectId, false, async (file) => {
+    const rule = file.rules.find((r) => r.id === ruleId);
+    if (!rule) return true; // already gone: deleted meanwhile, or the sync took it with the watch
+    // A rule the user wrote goes to the Trash (src/app/trash.ts) with its inbox
+    // events; one mirrored from a dataset's watch toggle is not theirs to restore.
+    if (!rule.fromWatch) {
+      const events = file.events.filter((e) => e.ruleId === ruleId);
+      if (!(await trashStore.stash(projectId, 'alert', ruleId, { ...rule, events }))) return false;
+    }
+    file.rules = file.rules.filter((r) => r.id !== ruleId);
+    file.events = file.events.filter((e) => e.ruleId !== ruleId);
+    return save(projectId, file);
+  });
 }
 
 export async function setDigest(projectId: string, on: boolean): Promise<boolean> {
-  const file = await load(projectId);
-  file.digest = Boolean(on);
-  return save(projectId, file);
+  return withAlerts(projectId, false, async (file) => {
+    file.digest = Boolean(on);
+    return save(projectId, file);
+  });
 }
 
 /**
@@ -233,21 +257,23 @@ export async function setDigest(projectId: string, on: boolean): Promise<boolean
 export async function recordEvents(projectId: string, events: AlertEvent[]): Promise<boolean> {
   const clean = (Array.isArray(events) ? events : []).map(alerts.sanitizeEvent).filter((e): e is AlertEvent => e !== null);
   if (!clean.length) return true;
-  const file = await load(projectId);
-  file.events = clean.concat(file.events).slice(0, alerts.MAX_EVENTS);
-  return save(projectId, file);
+  return withAlerts(projectId, false, async (file) => {
+    file.events = clean.concat(file.events).slice(0, alerts.MAX_EVENTS);
+    return save(projectId, file);
+  });
 }
 
 /** Mark one event seen, or every event when `eventId` is omitted. */
 export async function markSeen(projectId: string, eventId?: string): Promise<boolean> {
-  const file = await load(projectId);
-  let touched = false;
-  file.events = file.events.map((e) => {
-    if (e.seen || (eventId && e.id !== eventId)) return e;
-    touched = true;
-    return { ...e, seen: true };
+  return withAlerts(projectId, false, async (file) => {
+    let touched = false;
+    file.events = file.events.map((e) => {
+      if (e.seen || (eventId && e.id !== eventId)) return e;
+      touched = true;
+      return { ...e, seen: true };
+    });
+    return touched ? save(projectId, file) : true;
   });
-  return touched ? save(projectId, file) : true;
 }
 
 // ── Reading the numbers ──────────────────────────────────────────────────────
@@ -386,6 +412,12 @@ async function diagnosisFor(projectId: string, rule: AlertRule): Promise<string 
  * Every rule's new state is written whether or not it fired: `history` feeds the
  * inbox sparkline and `armed` is what re-arms a threshold, so a quiet evaluation
  * is still a write. One save at the end, not one per rule.
+ *
+ * The figures are computed from a plain load, OUTSIDE any lock — a metric can be
+ * a warehouse round trip. Then, under the lock, each result is applied only if
+ * the stored rule is still exactly the rule it was computed from: a rule deleted,
+ * edited or evaluated by someone else meanwhile is left as it is now, and only
+ * the APPLIED events are returned — so two evaluators at once fire once.
  */
 export async function evaluateProject(
   projectId: string,
@@ -393,15 +425,14 @@ export async function evaluateProject(
   now = Date.now(),
 ): Promise<AlertEvent[]> {
   const file = await load(projectId);
-  const fired: AlertEvent[] = [];
-  let changed = false;
+  const results: Array<{ from: string; rule: AlertRule; event: AlertEvent | null }> = [];
 
-  for (let i = 0; i < file.rules.length; i += 1) {
-    const rule = file.rules[i];
+  for (const rule of file.rules) {
     if (datasetId && rule.datasetId !== datasetId) continue;
     // A disabled rule is not evaluated at all — not evaluated and then dropped.
     // Its history would otherwise keep growing while it was supposed to be off.
     if (!rule.enabled) continue;
+    const from = JSON.stringify(rule);
     let read: Awaited<ReturnType<typeof metricFor>>;
     try {
       read = await metricFor(projectId, rule);
@@ -421,18 +452,28 @@ export async function evaluateProject(
       now,
       eventId: randomUUID(),
     });
-    file.rules[i] = res.rule;
-    changed = true;
     if (res.event) {
       const why = await diagnosisFor(projectId, res.rule);
       if (why) res.event.diagnosis = why;
-      fired.push(res.event);
     }
+    results.push({ from, rule: res.rule, event: res.event || null });
   }
+  if (!results.length) return [];
 
-  if (fired.length) file.events = fired.concat(file.events).slice(0, alerts.MAX_EVENTS);
-  if (changed) await save(projectId, file);
-  return fired;
+  return withAlerts(projectId, [] as AlertEvent[], async (stored) => {
+    const fired: AlertEvent[] = [];
+    let changed = false;
+    for (const r of results) {
+      const i = stored.rules.findIndex((x) => x.id === r.rule.id);
+      if (i < 0 || JSON.stringify(stored.rules[i]) !== r.from) continue;
+      stored.rules[i] = r.rule;
+      changed = true;
+      if (r.event) fired.push(r.event);
+    }
+    if (fired.length) stored.events = fired.concat(stored.events).slice(0, alerts.MAX_EVENTS);
+    if (changed && !(await save(projectId, stored))) return [];
+    return fired;
+  });
 }
 
 /**
@@ -483,15 +524,22 @@ export async function testRule(projectId: string, raw: any): Promise<{
  * grows enough datasets for the scan to show up.
  */
 export async function syncWatchRules(projectId: string): Promise<void> {
-  let summaries;
+  let summaries: Awaited<ReturnType<typeof datasets.listDatasets>>;
   try {
     summaries = await datasets.listDatasets(projectId);
   } catch (_) {
     return;
   }
-  const file = await load(projectId);
-  let changed = false;
+  // Called on every bell open: the lock only when something would change.
+  if (!reconcileWatch(await load(projectId), summaries, true)) return;
+  await withAlerts(projectId, undefined, async (file) => {
+    if (reconcileWatch(file, summaries, false)) await save(projectId, file);
+  });
+}
 
+/** Bring `file`'s watch rules in step with the datasets' toggles. Whether anything changed; `dry` stops at the first change, minting nothing. */
+function reconcileWatch(file: AlertFile, summaries: Awaited<ReturnType<typeof datasets.listDatasets>>, dry: boolean): boolean {
+  let changed = false;
   const watched = new Map<string, string[] | undefined>();
   for (const s of summaries) {
     if (s.autoRefresh && s.autoRefresh.watch) watched.set(s.id, s.autoRefresh.lastAnomalyKeys);
@@ -505,6 +553,7 @@ export async function syncWatchRules(projectId: string): Promise<void> {
   for (const [id, keys] of watched) {
     if (file.rules.some((r) => r.fromWatch && r.datasetId === id)) continue;
     if (file.rules.length >= alerts.MAX_RULES) break;
+    if (dry) return true;
     const name = summaries.find((s) => s.id === id)?.name || 'this dataset';
     const rule = alerts.sanitizeRule({
       id: randomUUID(),
@@ -524,8 +573,7 @@ export async function syncWatchRules(projectId: string): Promise<void> {
     file.rules.push(rule);
     changed = true;
   }
-
-  if (changed) await save(projectId, file);
+  return changed;
 }
 
 /** Every project id, for the "evaluate everything" path. */

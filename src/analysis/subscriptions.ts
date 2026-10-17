@@ -238,36 +238,40 @@ export async function createSubscription(projectId: string, input: SubscriptionI
  * only when the stored owner can no longer run it (the caller takes it over).
  */
 export async function updateSubscription(projectId: string, id: string, input: SubscriptionInput, opts: { owner?: string; now?: Date } = {}): Promise<Subscription | null> {
-  const cur = await getSubscription(projectId, id);
-  if (!cur) return null;
-  const at = (opts.now ?? new Date()).toISOString();
-  const { viewId: _was, ...kept } = cur; // a cleared view must not survive the merge
-  const next: Subscription = { ...kept, ...definitionOf({ ...cur, ...input }), updatedAt: at };
-  if (opts.owner) next.owner = opts.owner.toLowerCase();
-  const rescheduled = JSON.stringify([next.schedule, next.timezone]) !== JSON.stringify([cur.schedule, cur.timezone]);
-  if (rescheduled || (next.enabled && !cur.enabled)) next.since = at;
-  // Switching it back on is the owner's answer to a pause: the count starts over.
-  if (next.enabled && (!cur.enabled || cur.run.paused)) next.run = { ...cur.run, failures: 0, paused: undefined };
-  await write(next);
-  return next;
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  return recordFs.locked(file(projectId, id), async () => {
+    const cur = await getSubscription(projectId, id);
+    if (!cur) return null; // gone meanwhile: never written back
+    const at = (opts.now ?? new Date()).toISOString();
+    const { viewId: _was, ...kept } = cur; // a cleared view must not survive the merge
+    const next: Subscription = { ...kept, ...definitionOf({ ...cur, ...input }), updatedAt: at };
+    if (opts.owner) next.owner = opts.owner.toLowerCase();
+    const rescheduled = JSON.stringify([next.schedule, next.timezone]) !== JSON.stringify([cur.schedule, cur.timezone]);
+    if (rescheduled || (next.enabled && !cur.enabled)) next.since = at;
+    // Switching it back on is the owner's answer to a pause: the count starts over.
+    if (next.enabled && (!cur.enabled || cur.run.paused)) next.run = { ...cur.run, failures: 0, paused: undefined };
+    await write(next);
+    return next;
+  });
 }
 
 /** The server's half: replace `run` (history capped), and switch off when a run says so. */
 export async function stampRun(projectId: string, id: string, change: (run: RunState) => RunState, disable = false): Promise<Subscription | null> {
-  const cur = await getSubscription(projectId, id);
-  if (!cur) return null;
-  const run = change(cur.run);
-  const next: Subscription = { ...cur, run: { ...run, history: run.history.slice(0, MAX_HISTORY) }, ...(disable ? { enabled: false } : {}) };
-  await write(next);
-  return next;
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  return recordFs.locked(file(projectId, id), async () => {
+    const cur = await getSubscription(projectId, id);
+    if (!cur) return null; // deleted while it ran: a stamp never brings it back
+    const run = change(cur.run);
+    const next: Subscription = { ...cur, run: { ...run, history: run.history.slice(0, MAX_HISTORY) }, ...(disable ? { enabled: false } : {}) };
+    await write(next);
+    return next;
+  });
 }
 
 export async function deleteSubscription(projectId: string, id: string): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
-  try {
+  return recordFs.locked(file(projectId, id), async () => {
     await recordFs.rm(file(projectId, id), { force: true });
     return true;
-  } catch {
-    return false;
-  }
+  }).catch(() => false);
 }

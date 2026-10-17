@@ -246,25 +246,17 @@ export async function load(projectId: string): Promise<CatalogFile> {
 }
 
 // Every write is read-modify-write of ONE file, and the Details popover saves
-// on blur AND on Enter — two overlapping writes would drop one edit. A
-// per-project promise chain serialises them.
+// on blur AND on Enter — two overlapping writes would drop one edit. The
+// file's lock (recordFs.locked, every pod) takes them one at a time.
 // ponytail: one lock per project file; per-record files if write volume ever matters.
-const chains = new Map<string, Promise<unknown>>();
-async function mutate<T>(projectId: string, fn: (file: CatalogFile) => T): Promise<T> {
-  const prev = chains.get(projectId) || Promise.resolve();
-  const next = prev.catch(() => undefined).then(async () => {
+function mutate<T>(projectId: string, fn: (file: CatalogFile) => T): Promise<T> {
+  return recordFs.locked(catalogPath(projectId), async () => {
     const file = await load(projectId);
     const result = fn(file);
     await fs.promises.mkdir(path.dirname(catalogPath(projectId)), { recursive: true });
     await writeJsonAtomic(catalogPath(projectId), file);
     return result;
   });
-  chains.set(projectId, next);
-  try {
-    return await next;
-  } finally {
-    if (chains.get(projectId) === next) chains.delete(projectId);
-  }
 }
 
 /** Who is editing, for `updatedBy`: the signed-in user on the server, else the OS account (which throws on some locked-down accounts). */

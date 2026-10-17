@@ -9,6 +9,7 @@ import * as projects from '../app/projects';
 import * as bundle from '../app/bundle';
 import * as jobs from '../app/jobs';
 import * as sharePolicy from '../app/sharePolicy';
+import { dropSalt } from '../app/privacyStore';
 import * as config from '../app/config';
 import { projectDir } from '../app/recordKinds';
 import { safetyBackup } from './backups';
@@ -76,6 +77,8 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
     const conns = await (require('../connectors/connections') as typeof import('../connectors/connections')).listConnections(id).catch(() => []);
     const ok = await projects.deleteProject(id);
     if (ok) for (const c of conns) await (require('../app/configSecrets') as typeof import('../app/configSecrets')).dropConnectionSecrets(c.id);
+    // …and its masking key, which the server keeps in the secrets store, not the folder.
+    if (ok) await dropSalt(id);
     // Server: who could open it goes with it (src/server/authz/share.ts).
     if (ok && serverDataDir() !== null) await (require('../server/authz/share') as typeof import('../server/authz/share')).dropGrants(id);
     return { ok };
