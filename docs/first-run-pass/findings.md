@@ -25,6 +25,7 @@ create-dashboard wizard, Admin → AI's not-set-up states, the admins-only page 
 | F11 | Low | On a Live dataset, a dashboard dropdown over a column with no sampled values answers 409 until Sync schema. | Separate change. |
 | F12 | High (multi-pod) | **An org's settings were a file on each pod's disk.** Formats, branding, starred items and first-run guidance were `config.json` under `DATA_DIR`, which with S3 storage is a pod's own scratch disk: pods disagreed, and a restarted pod lost them. | `org_config` (0014) through `src/server/orgConfig.ts`. |
 | F13 | — | `npm run build:web` failed on macOS: `ui/AsOf.tsx` and `ui/asOf.ts` differ only by case. | Renamed to `asOfView.ts` (#251). |
+| F14 | Medium (multi-pod) | **Two pods changing settings in the same second: the later write won, for the whole document** — one member's star could overwrite another pod's format change. | Each write stores only what it changed (per top-level key, per member's starred list), applied to the row as it is now under `SELECT … FOR UPDATE` (`orgConfig.diffDoc`/`applyPatch`, [record locks](../record-locks/00-design.md)). 20 members starring alternately on two pods: 10 lists kept before, 20 after. |
 
 ## Still open
 
@@ -37,6 +38,5 @@ create-dashboard wizard, Admin → AI's not-set-up states, the admins-only page 
   viewer. A click there now gets the view-only toast instead of silence.
 - **`sample:seed`'s in-flight guard is per pod**: two admins on two pods clicking in the same second
   would make two sample projects.
-- **Two pods changing settings in the same second**: the later write wins, for the whole document.
 - A project editor refused a project-admin action gets no toast (the safety net covers `write`
   channels only).

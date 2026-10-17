@@ -6,8 +6,8 @@
 // the dataset records, so declaring a currency never rewrites a table record
 // and a dataset refresh can never drop a declaration.
 //
-// Writes are read-modify-write, serialized per project, atomic (temp sibling
-// then rename). A corrupt or missing file reads as "nothing declared".
+// Writes are read-modify-write under recordFs.locked (every pod), atomic (temp
+// sibling then rename). A corrupt or missing file reads as "nothing declared".
 //
 // The SAMPLE rates (src/analysis/fxSample.json) are the fallback whenever no
 // rate dataset is configured or the configured one is gone. They are labelled
@@ -26,34 +26,39 @@ function fxFile(projectId: string): string {
   return path.join(appPaths.userData(), 'projects', projectId, 'fx.json');
 }
 
-// ponytail: in-memory cache invalidated by this module's own writes; a second
-// process (the --cli runner) editing fx.json is picked up on the next restart.
-const cache = new Map<string, FxSettings>();
-const queues = new Map<string, Promise<unknown>>();
+// getFx runs for every figure (ipc/fxQuery.ts), so the settings are cached —
+// for at most FRESH_MS, keyed by the file (which carries the org): another
+// pod's declaration is seen within a second, as orgConfig's settings are.
+// The READ is cached, so a dashboard's tiles asking at once share one.
+const FRESH_MS = 1_000;
+const cache = new Map<string, { settings: Promise<FxSettings>; at: number }>();
 
-export async function getFx(projectId: string): Promise<FxSettings> {
-  if (!isValidId(projectId)) return sanitizeSettings(null);
-  const hit = cache.get(fxFile(projectId));
-  if (hit) return hit;
-  let raw: unknown = null;
+async function readFx(file: string): Promise<FxSettings> {
   try {
-    raw = JSON.parse(await recordFs.readFile(fxFile(projectId), 'utf8'));
+    return sanitizeSettings(JSON.parse(await recordFs.readFile(file, 'utf8')));
   } catch (_) {
-    raw = null; // none yet, or unreadable: nothing declared
+    return sanitizeSettings(null); // none yet, or unreadable: nothing declared
   }
-  const s = sanitizeSettings(raw);
-  cache.set(fxFile(projectId), s);
-  return s;
 }
 
-/** Read-modify-write, one at a time per project. Resolves to what was stored. */
+export function getFx(projectId: string): Promise<FxSettings> {
+  if (!isValidId(projectId)) return Promise.resolve(sanitizeSettings(null));
+  const file = fxFile(projectId);
+  const hit = cache.get(file);
+  if (hit && Date.now() - hit.at < FRESH_MS) return hit.settings;
+  const settings = readFx(file); // never rejects
+  cache.set(file, { settings, at: Date.now() });
+  return settings;
+}
+
+/** Read-modify-write under the file's lock, from a fresh read. Resolves to what was stored. */
 function edit(projectId: string, fn: (s: FxSettings) => void): Promise<FxSettings | null> {
   if (!isValidId(projectId)) return Promise.resolve(null);
-  const run = async (): Promise<FxSettings | null> => {
-    const next = structuredClone(await getFx(projectId));
+  const file = fxFile(projectId);
+  return recordFs.locked(file, async (): Promise<FxSettings | null> => {
+    const next = await readFx(file);
     fn(next);
     const clean = sanitizeSettings(next);
-    const file = fxFile(projectId);
     try {
       await recordFs.access(path.dirname(file));
     } catch (_) {
@@ -62,14 +67,11 @@ function edit(projectId: string, fn: (s: FxSettings) => void): Promise<FxSetting
     const tmp = file + '.' + randomUUID() + '.tmp';
     await recordFs.writeFile(tmp, JSON.stringify(clean, null, 2), 'utf8');
     await recordFs.rename(tmp, file);
-    cache.set(file, clean);
     return clean;
-  };
-  const prev = queues.get(projectId) || Promise.resolve();
-  const p = prev.then(run, run);
-  queues.set(projectId, p);
-  void p.then(() => { if (queues.get(projectId) === p) queues.delete(projectId); }, () => undefined);
-  return p;
+  }).then((clean) => {
+    if (clean) cache.set(file, { settings: Promise.resolve(clean), at: Date.now() }); // after COMMIT: a rolled-back save is never served
+    return clean;
+  });
 }
 
 /** Target ('' = workspace currency) and/or the rate source (null = sample rates). */

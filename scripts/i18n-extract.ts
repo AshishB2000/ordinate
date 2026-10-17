@@ -369,6 +369,7 @@ export const MAIN_FILES = [
   'src/analysis/rebuildMessages.ts',
   'src/server/embedMessages.ts',
   'src/analysis/metricTreeMessages.ts',
+  'src/app/recordLockMessages.ts',
   'src/analysis/savedViewMessages.ts',
 ];
 

@@ -8,7 +8,7 @@
 //
 // Store conventions: every record goes through themeModel.sanitizeTheme on the
 // way in AND on the way out; ids are UUIDs checked before use; writes are atomic
-// (temp sibling, then rename) and serialised; a corrupt file reads as EMPTY —
+// (temp sibling, then rename) and locked (recordFs.locked); a corrupt file reads as EMPTY —
 // never fatal — and is kept aside as themes.json.corrupt before anything
 // overwrites it, so a hand-edit gone wrong is recoverable.
 //
@@ -80,22 +80,25 @@ async function writeState(state: ThemeState): Promise<void> {
   await recordFs.rename(tmp, file);
 }
 
-// Every read-modify-write goes through one chain: two quick saves from the
-// editor must not interleave and drop one.
-let chain: Promise<unknown> = Promise.resolve();
-function serial<T>(fn: () => Promise<T>): Promise<T> {
-  const next = chain.catch(() => undefined).then(fn);
-  chain = next;
-  return next;
+// Every read-modify-write holds themes.json (recordFs.locked, every pod): two
+// quick saves from the editor must not interleave and drop one. A refused or
+// rolled-back hold is the store's `{ ok: false, error }` with the lock's own
+// sentence; any other failure still rejects, as before. Reads take no lock:
+// the public embed and publish paths read themes on every page.
+function held<T extends { ok: boolean; error?: string }>(fn: () => Promise<T>): Promise<T | { ok: false; error: string }> {
+  return recordFs.locked(storeFile(), fn).catch((err: Error & { code?: string }) => {
+    if (err.code === 'ERECORDBUSY' || err.code === 'ERECORDROLLEDBACK') return { ok: false as const, error: err.message };
+    throw err;
+  });
 }
 
 export function listThemes(): Promise<ThemeState> {
-  return serial(readState);
+  return readState();
 }
 
 /** Create (no or unknown id) or replace a theme. Returns the stored record. */
 export function saveTheme(raw: unknown): Promise<{ ok: boolean; theme?: ThemeRecord; error?: string }> {
-  return serial(async () => {
+  return held(async () => {
     const rec = themeModel.sanitizeTheme(raw);
     if (!rec) return { ok: false, error: 'That is not a theme.' };
     const state = await readState();
@@ -109,8 +112,8 @@ export function saveTheme(raw: unknown): Promise<{ ok: boolean; theme?: ThemeRec
   });
 }
 
-export function deleteTheme(id: unknown): Promise<{ ok: boolean }> {
-  return serial(async () => {
+export function deleteTheme(id: unknown): Promise<{ ok: boolean; error?: string }> {
+  return held(async () => {
     if (!themeModel.isId(id)) return { ok: false };
     const state = await readState();
     const key = id.toLowerCase();
@@ -122,8 +125,8 @@ export function deleteTheme(id: unknown): Promise<{ ok: boolean }> {
 }
 
 /** '' clears the workspace default. An id that is not a stored theme is refused. */
-export function setDefaultTheme(id: unknown): Promise<{ ok: boolean }> {
-  return serial(async () => {
+export function setDefaultTheme(id: unknown): Promise<{ ok: boolean; error?: string }> {
+  return held(async () => {
     const state = await readState();
     const key = themeModel.sanitizeThemeId(id);
     if (id !== '' && !state.themes.some((t) => t.id === key)) return { ok: false };
@@ -170,7 +173,7 @@ export async function importBundleThemes(
   } catch (_) {
     return 0; // an unreadable themes.json costs the look, never the import
   }
-  return serial(async () => {
+  return recordFs.locked(storeFile(), async () => {
     const state = await readState();
     const have = new Set(state.themes.map((t) => t.id));
     const added = incoming.filter((t) => !have.has(t.id)).slice(0, Math.max(0, MAX_THEMES - state.themes.length));

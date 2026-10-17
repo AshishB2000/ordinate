@@ -125,21 +125,15 @@ export async function markRefresh(
   error: string | null,
 ): Promise<boolean> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
-  const file = datasetFilePath(projectId, id);
-  try {
-    const raw = JSON.parse(await recordFs.readFile(file, 'utf8'));
-    if (!raw || typeof raw !== 'object') return false;
+  return serialized(datasetFilePath(projectId, id), (raw) => {
     raw.lastRefreshStatus = status;
     raw.lastRefreshError = error;
     // Only a SUCCESS moves the clock. A failed refresh must not make stale data
     // look newly fetched — that is the exact wrong number this feature exists
     // to prevent.
     if (status === 'ok') raw.lastRefreshedAt = new Date().toISOString();
-    await writeJsonAtomic(file, raw);
     return true;
-  } catch (_) {
-    return false;
-  }
+  });
 }
 
 /**
@@ -159,6 +153,10 @@ export async function setAutoRefresh(
 ): Promise<AutoRefresh | null | false> {
   if (!isValidId(projectId) || !isValidId(id)) return false;
   const file = datasetFilePath(projectId, id);
+  return recordFs.locked(file, () => autoRefreshLocked(file, patch)).catch(() => false);
+}
+
+async function autoRefreshLocked(file: string, patch: Parameters<typeof setAutoRefresh>[2]): Promise<AutoRefresh | null | false> {
   try {
     const raw = JSON.parse(await recordFs.readFile(file, 'utf8'));
     if (!raw || typeof raw !== 'object') return false;
@@ -195,8 +193,8 @@ export async function setAutoRefresh(
 
 /**
  * Read-modify-write the record's `incremental` block (src/data/incremental.ts)
- * — METADATA ONLY, never the table, never `updatedAt`. Serialized per record
- * on the same chain as quality writes. `mutate` gets the sanitized block;
+ * — METADATA ONLY, never the table, never `updatedAt`. Under the record's lock,
+ * like every metadata writer here. `mutate` gets the sanitized block;
  * undefined removes it. Resolves with what was written, or false.
  */
 export function writeIncremental(
@@ -225,12 +223,6 @@ export function writeIncremental(
   });
 }
 
-// Quality writes to one record are serialized: a run finishing while a rule is
-// being saved must not write back the rule list it read before the save.
-// ponytail: in-process chain per record; the other metadata writers above are
-// last-writer-wins as they always were.
-const qualityLocks = new Map<string, Promise<unknown>>();
-
 /**
  * Read-modify-write the record's `quality` block — METADATA ONLY, and it does
  * NOT bump `updatedAt`: a check run says nothing new about the DATA, and
@@ -253,10 +245,15 @@ export function writeQuality(
   });
 }
 
-/** Read the raw record, let `apply` edit it, write it back — one at a time per file.
- *  Exported for the Live record's metadata writes (./liveDataset.ts, ./liveRecord.ts). */
+/**
+ * Read the raw record, let `apply` edit it, write it back — under the record's
+ * lock (recordFs.locked, every pod), so a quality run finishing while a rule is
+ * saved never writes back the list it read first. False when the record is
+ * missing or unreadable, or the save failed. Exported for the Live record's
+ * metadata writes (./liveDataset.ts, ./liveRecord.ts).
+ */
 export function serialized<T>(file: string, apply: (raw: Record<string, unknown>) => T): Promise<T | false> {
-  const run = async (): Promise<T | false> => {
+  return recordFs.locked(file, async (): Promise<T | false> => {
     try {
       const raw = JSON.parse(await recordFs.readFile(file, 'utf8'));
       if (!raw || typeof raw !== 'object') return false;
@@ -266,10 +263,5 @@ export function serialized<T>(file: string, apply: (raw: Record<string, unknown>
     } catch (_) {
       return false;
     }
-  };
-  const prev = qualityLocks.get(file) || Promise.resolve();
-  const p = prev.then(run, run);
-  qualityLocks.set(file, p);
-  void p.then(() => { if (qualityLocks.get(file) === p) qualityLocks.delete(file); });
-  return p;
+  }).catch(() => false);
 }

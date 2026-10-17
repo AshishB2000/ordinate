@@ -75,6 +75,19 @@ the desktop installers.
   (`?view=`); ⌘K opens a view in place, a phone picks one in its Filters sheet, and a published
   page offers it. See [`docs/dashboard-filters/`](docs/dashboard-filters/00-design.md).
 
+### Fixed — since the move to the web
+
+- **Two saves of one record no longer lose one, on any number of pods.** Comments, alert rules and
+  their inbox, catalog notes, currency settings, pipelines, privacy settings, themes, version
+  history, dataset metadata, snapshots, input tables, project settings and colours, subscriptions
+  and published sites each save under one lock per record, held across pods through Postgres. A
+  deleted alert rule no longer comes back when an evaluation that started before the delete
+  finishes, and two evaluations at once fire once. A re-publish after a refresh keeps the owner's
+  "members only" setting and no longer brings a removed site back. Two pods saving org settings in
+  the same second keep both changes. A save that waits more than 15 s says "try again". See
+  [`docs/record-locks/00-design.md`](docs/record-locks/00-design.md).
+- A new project's first alert rule could appear in the next new project's alerts.
+
 ### Added
 - **The app is no longer empty on first launch.** A bundled sample project — 5,000 rows of generated
   retail orders across two years, five regions and twenty-five US states — arrives with a dashboard

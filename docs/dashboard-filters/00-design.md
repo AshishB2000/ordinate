@@ -68,8 +68,11 @@
   defaults.
 - **Concurrency.** The client's `run()` writes any pending document edit first, and the autosave and
   every view op wait in ONE queue (`useAutosave`'s `queue`), so a document save never re-reads the
-  record mid view op and writes the old list back. Across clients, the server wraps the op in
-  `recordFs.locked` on the analysis record; a `ponytail:` comment names an `updated_at`
+  record mid view op and writes the old list back. Across clients, the server holds the analysis
+  record for each view op (`recordFs.locked`, every pod — `analysis.lockedAnalysis`), so two view
+  edits never drop one; a lock that cannot be had answers with the lock's own sentence. The autosave
+  takes no lock — whole documents stay last-writer-wins (docs/record-locks) — so another editor's
+  save can still write back the list it read; a `ponytail:` comment names an `updated_at`
   compare-and-swap as the upgrade.
 - **`/p/` stays a precomputed snapshot.** No search, no "of N" line (a total would leak counts under
   a lock), no `/p/?view=` deep link. Off a lock only, each view's value for a dropdown (its pick, else
@@ -103,7 +106,8 @@
 - `scripts/test-savedViewsServer.ts` (new): the lifecycle over HTTP; every failure sentence word for
   word; an unknown op, a stray field and a non-UUID id are 400; a view op leaves the sheets and name
   byte for byte and records no version; an `analysis:update` after it keeps the views — NEGATIVE
-  CONTROL: a multi-shaped pick on a dropdown is stripped; publish: a view picking value #100 of a
+  CONTROL: a multi-shaped pick on a dropdown is stripped; two view edits at once both land —
+  NEGATIVE CONTROL: the same two through the store without the hold lose one; publish: a view picking value #100 of a
   300-value column makes it an option once though two views pick it, and it survives an
   8-combination trim; DIFFERENTIAL: with no views the options are `dataset:distinct`'s list.
 - `test-embedLock`: three views (East, West's only channel, a control the locked bar leaves out):

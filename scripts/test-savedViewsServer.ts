@@ -5,6 +5,8 @@
 //               delete, each reply the list as stored
 //   refusals    every failure sentence, word for word the catalog's; an unknown
 //               op or a stray field is a 400 at the edge
+//   lock        two view edits at once both land (recordFs.locked on the
+//               record); NEGATIVE CONTROL: the same edits unheld lose one
 //   isolation   a view op leaves the sheets and the name byte for byte and
 //               records no version; an analysis:update afterwards keeps the
 //               views. NEGATIVE CONTROL: a multi-shaped pick on a dropdown card
@@ -153,6 +155,22 @@ async function main(): Promise<void> {
     ok('DIFFERENTIAL: with no views the options are All + the column\'s first values, in its order',
       none.length === distinct.values.length + 1 && none.every((o, i) => Object.is(o, i === 0 ? 'All' : distinct.values[i - 1])), show(none.slice(0, 4)));
     ok('DIFFERENTIAL: with no views the date options are the presets alone', !(await optionsOf('Day')).includes('2025-02-01 – 2025-02-28'));
+
+    // Two view edits at once both land: each holds the record (recordFs.locked) for its read-modify-write.
+    const names = async () => ((await open()).views as Array<{ name: string }>).map((v) => v.name).sort();
+    const both = await Promise.all([view({ op: 'create', name: 'One', state: {} }), view({ op: 'create', name: 'Two', state: {} })]);
+    ok('lock: two view edits at once both land', both.every((r) => r.body.ok === true) && same(await names(), ['One', 'Two']), show(await names()));
+    // NEGATIVE CONTROL: the same two edits through the store WITHOUT the hold — both read the list first, one write is lost.
+    const savedViews: typeof import('../src/analysis/savedViews') = require('../src/analysis/savedViews');
+    const unheld = (name: string) => context.runInContext(ALICE, 'race', async () => {
+      const a = await analysis.getAnalysis(pid, aid);
+      await new Promise((r) => setTimeout(r, 20)); // the other edit reads meanwhile
+      const r = savedViews.applyViewOp(a!, { op: 'create', name, state: {} }, a!, new Date().toISOString(), () => crypto.randomUUID());
+      if (r.ok) await analysis.updateAnalysis(pid, aid, { views: r.views, defaultViewId: r.defaultViewId });
+    });
+    await Promise.all([unheld('Three'), unheld('Four')]);
+    const raced = await names();
+    ok('lock: NEGATIVE CONTROL — unheld, one of two simultaneous edits is lost', raced.length === 3 && raced.includes('One') && raced.includes('Two'), show(raced));
 
     // The 51st view.
     await context.runInContext(ALICE, 'fill', () => analysis.updateAnalysis(pid, aid, {
