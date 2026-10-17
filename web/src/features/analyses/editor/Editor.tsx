@@ -89,7 +89,7 @@ function useAutosave(projectId: string, id: string, doc: Doc, version: number): 
   useEffect(() => {
     if (version === 0) return;
     if (pending.current) clearTimeout(pending.current);
-    pending.current = setTimeout(write, SAVE_MS);
+    pending.current = setTimeout(() => void write(), SAVE_MS);
     setState('saving');
   }, [version, write]);
 

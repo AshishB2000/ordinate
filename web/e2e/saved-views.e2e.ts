@@ -90,6 +90,16 @@ e2e('saved views: a picker over 725 dates, search, date pills, save → link →
   await values.getByRole('button', { name: '2024-12-30', exact: true }).click();
   await kpi.getByText(want.display).waitFor();
   await page.getByRole('button', { name: 'Day: 2024-12-30' }).waitFor();
+  // The same picker previews the default inside the Edit control dialog: a popover over the modal.
+  await page.getByRole('button', { name: 'Actions for Day' }).click();
+  await page.getByRole('menuitem', { name: 'Edit…' }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit control' });
+  await edit.getByRole('button', { name: 'Day: All' }).click();
+  await page.getByRole('searchbox', { name: 'Search values' }).fill('2024-12-30');
+  await values.getByRole('button', { name: '2024-12-30', exact: true }).click();
+  await edit.getByRole('button', { name: 'Day: 2024-12-30' }).waitFor();
+  await edit.getByRole('button', { name: 'Cancel' }).click();
+  await edit.waitFor({ state: 'detached' });
   budget('picker');
 
   // ── The date control: the server's pills and names ───────────────────

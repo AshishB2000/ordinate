@@ -33,13 +33,16 @@ type Control = NonNullable<Card['control']>;
 /** The server's longest search (the `dataset:distinct` contract). */
 const MAX_SEARCH = 200;
 
-/** A column's distinct values; the query key `freshness.ts` invalidates when the dataset refreshes. The last list stays up while the next loads. */
+/**
+ * A column's distinct values; the query key `freshness.ts` invalidates when the dataset refreshes. While a search
+ * loads, the last list of THIS column stays up (another column's — the control dialog switching — never does).
+ */
 export function useDistinct(projectId: string, datasetId: string, column: string, search = '') {
   return useQuery({
     queryKey: ['dataset:distinct', projectId, datasetId, column, search],
     enabled: !!datasetId && !!column,
     queryFn: () => distinctValues({ projectId, datasetId, column, limit: 200, ...(search ? { search } : {}) }),
-    placeholderData: (prev) => prev,
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[2] === datasetId && prevQuery.queryKey[3] === column ? prev : undefined),
   });
 }
 
