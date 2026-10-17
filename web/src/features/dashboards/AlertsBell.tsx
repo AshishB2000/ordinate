@@ -3,6 +3,9 @@
 // alert arrives as an `alerts:fired` push (to members who may read the
 // project, T6.3) and the list re-reads. Every figure in a message is the
 // server's sentence; the sparkline draws the rule's own stored history.
+// Snoozing, marking seen and changing a rule are writes: a viewer reads the
+// inbox and the rules. The bell is on every page, so it asks for the role only
+// once it is opened.
 
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -21,6 +24,7 @@ import { openDockWith } from '../assistant/dockState';
 import { Drawer } from '../../ui/Dialog';
 import { DriversView } from '../analytics/drivers/DriversView';
 import type { DriversRequest } from '../analytics/api';
+import { useCanEdit } from '../projects/api';
 import { useCurrentProject } from '../projects/current';
 import { reason, useAlerts, useAlertsLive, useAlertWrite, type AlertEvent, type AlertRule } from './api';
 import { usePausedNotice } from '../subscriptions/notices';
@@ -48,7 +52,7 @@ const condition = (r: AlertRule): string => {
 };
 const HOURS = Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${String(h).padStart(2, '0')}:00` }));
 
-function RulesDialog({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+function RulesDialog({ projectId, readOnly, onClose }: { projectId: string; readOnly: boolean; onClose: () => void }) {
   const q = useAlerts(projectId);
   const write = useAlertWrite(projectId);
   const [armed, setArmed] = useState<string | null>(null);
@@ -74,12 +78,13 @@ function RulesDialog({ projectId, onClose }: { projectId: string; onClose: () =>
         <ErrorState compact heading={3} title="Could not read alerts" message={q.error.message} onRetry={() => void q.refetch()} />
       ) : !q.data.rules.length ? (
         <EmptyState compact heading={3} icon="bell" title="No alert rules yet">
-          Open a KPI card’s actions menu and choose “Alert me…”.
+          {readOnly ? 'An editor of this project can set one from a KPI card. You have view-only access.' : 'Open a KPI card’s actions menu and choose “Alert me…”.'}
         </EmptyState>
       ) : (
         <>
           <Checkbox
             label="One digest notification per refresh"
+            disabled={readOnly}
             checked={q.data.digest}
             onCheckedChange={(on) => write.mutate({ channel: 'alerts:setDigest', input: { projectId, on } }, { onError: fail })}
           />
@@ -93,16 +98,18 @@ function RulesDialog({ projectId, onClose }: { projectId: string; onClose: () =>
                 <th scope="col">Last value</th>
                 <th scope="col">Last fired</th>
                 <th scope="col">Quiet hours</th>
-                <th scope="col">
-                  <span className={s.srOnly}>Delete</span>
-                </th>
+                {!readOnly && (
+                  <th scope="col">
+                    <span className={s.srOnly}>Delete</span>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
               {q.data.rules.map((r) => (
                 <tr key={r.id}>
                   <td>
-                    <input type="checkbox" role="switch" className={s.switchCell} aria-label={`Enable ${r.name}`} checked={r.enabled} onChange={(e) => patch(r.id, { enabled: e.target.checked })} />
+                    <input type="checkbox" role="switch" className={s.switchCell} aria-label={`Enable ${r.name}`} disabled={readOnly} checked={r.enabled} onChange={(e) => patch(r.id, { enabled: e.target.checked })} />
                   </td>
                   <td className={s.ruleName}>{r.name}</td>
                   <td>{r.metric.column ? `${r.metric.aggregation}(${r.metric.column})` : 'whole dataset'}</td>
@@ -111,25 +118,27 @@ function RulesDialog({ projectId, onClose }: { projectId: string; onClose: () =>
                   <td>{r.lastFiredAt ? ago(r.lastFiredAt) : 'never'}</td>
                   <td>
                     <div className={s.quiet}>
-                      <Select size="sm" aria-label={`Quiet from, ${r.name}`} value={r.quietHours ? String(r.quietHours.from) : null} placeholder="—" options={HOURS}
+                      <Select size="sm" disabled={readOnly} aria-label={`Quiet from, ${r.name}`} value={r.quietHours ? String(r.quietHours.from) : null} placeholder="—" options={HOURS}
                         onValueChange={(v) => patch(r.id, { quietHours: { from: Number(v), to: r.quietHours?.to ?? (Number(v) + 8) % 24 } })} />
-                      <Select size="sm" aria-label={`Quiet until, ${r.name}`} value={r.quietHours ? String(r.quietHours.to) : null} placeholder="—" options={HOURS}
+                      <Select size="sm" disabled={readOnly} aria-label={`Quiet until, ${r.name}`} value={r.quietHours ? String(r.quietHours.to) : null} placeholder="—" options={HOURS}
                         onValueChange={(v) => patch(r.id, { quietHours: { from: r.quietHours?.from ?? 22, to: Number(v) } })} />
-                      {r.quietHours && <IconButton icon="x" size="sm" label={`No quiet hours for ${r.name}`} onClick={() => patch(r.id, { quietHours: null })} />}
+                      {r.quietHours && !readOnly && <IconButton icon="x" size="sm" label={`No quiet hours for ${r.name}`} onClick={() => patch(r.id, { quietHours: null })} />}
                     </div>
                   </td>
-                  <td>
-                    <IconButton
-                      icon="trash"
-                      size="sm"
-                      label={armed === r.id ? `Delete “${r.name}”? Its past alerts go with it` : `Delete ${r.name}`}
-                      onClick={() => {
-                        if (armed !== r.id) return setArmed(r.id);
-                        write.mutate({ channel: 'alerts:delete', input: { projectId, ruleId: r.id } }, { onError: fail });
-                        setArmed(null);
-                      }}
-                    />
-                  </td>
+                  {!readOnly && (
+                    <td>
+                      <IconButton
+                        icon="trash"
+                        size="sm"
+                        label={armed === r.id ? `Delete “${r.name}”? Its past alerts go with it` : `Delete ${r.name}`}
+                        onClick={() => {
+                          if (armed !== r.id) return setArmed(r.id);
+                          write.mutate({ channel: 'alerts:delete', input: { projectId, ruleId: r.id } }, { onError: fail });
+                          setArmed(null);
+                        }}
+                      />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -140,7 +149,7 @@ function RulesDialog({ projectId, onClose }: { projectId: string; onClose: () =>
   );
 }
 
-function EventRow({ e, rule, projectId, onClose }: { e: AlertEvent; rule?: AlertRule; projectId: string; onClose: () => void }) {
+function EventRow({ e, rule, projectId, canEdit, onClose }: { e: AlertEvent; rule?: AlertRule; projectId: string; canEdit: boolean; onClose: () => void }) {
   const write = useAlertWrite(projectId);
   const fail = (err: unknown) => toast(reason(err, 'Could not change the alert.'), { kind: 'error' });
   // Explain: the dock asks the alert's own sentence, as the desktop's explainEvent seeds it
@@ -190,7 +199,7 @@ function EventRow({ e, rule, projectId, onClose }: { e: AlertEvent; rule?: Alert
             {why.request ? <DriversView projectId={projectId} request={why.request} /> : why.error ? <p className={s.alTestBad}>{why.error}</p> : <SkeletonRows rows={4} label="Breaking the change down" />}
           </Drawer>
         )}
-        {rule && (
+        {rule && canEdit && (
           <button
             type="button"
             className={s.linkBtn}
@@ -199,7 +208,7 @@ function EventRow({ e, rule, projectId, onClose }: { e: AlertEvent; rule?: Alert
             Snooze 24h
           </button>
         )}
-        {!e.seen && (
+        {!e.seen && canEdit && (
           <button type="button" className={s.linkBtn} onClick={() => write.mutate({ channel: 'alerts:markSeen', input: { projectId, eventId: e.id } }, { onError: fail })}>
             Mark seen
           </button>
@@ -223,6 +232,8 @@ export function AlertsBell() {
   useAlertsLive(projectId, () => setWanted(true));
   const write = useAlertWrite(projectId ?? '');
   const [rules, setRules] = useState(false);
+  // Asked only once the inbox or the rules are open: a closed bell costs no page a projects:roles call.
+  const canEdit = useCanEdit(projectId, open || rules);
   const unseen = q.data?.unseen ?? 0;
   const label = unseen ? `Alerts: ${unseen} unseen` : 'Alerts';
   return (
@@ -242,7 +253,7 @@ export function AlertsBell() {
       >
         <div className={s.inboxHead}>
           <span className={s.inboxTitle}>Alerts</span>
-          {unseen > 0 && projectId && (
+          {unseen > 0 && projectId && canEdit && (
             <Button size="sm" variant="ghost" onClick={() => write.mutate({ channel: 'alerts:markSeen', input: { projectId } })}>
               Mark all seen
             </Button>
@@ -255,7 +266,9 @@ export function AlertsBell() {
             <ErrorState compact heading={3} title="Could not read alerts" message={q.error.message} onRetry={() => void q.refetch()} />
           ) : !q.data.rules.length ? (
             <EmptyState compact heading={3} icon="bell" title="No alerts yet">
-              Open a KPI card’s actions menu and choose “Alert me…” to watch a number.
+              {canEdit
+                ? 'Open a KPI card’s actions menu and choose “Alert me…” to watch a number.'
+                : 'An editor of this project can set one from a KPI card. You have view-only access.'}
             </EmptyState>
           ) : !q.data.events.length ? (
             <EmptyState compact heading={3} icon="circle-check" title="Nothing has fired">
@@ -264,7 +277,7 @@ export function AlertsBell() {
           ) : (
             <ul className={s.events} aria-label="Fired alerts">
               {q.data.events.slice(0, 50).map((e) => (
-                <EventRow key={e.id} e={e} rule={q.data.rules.find((r) => r.id === e.ruleId)} projectId={projectId as string} onClose={() => setOpen(false)} />
+                <EventRow key={e.id} e={e} rule={q.data.rules.find((r) => r.id === e.ruleId)} projectId={projectId as string} canEdit={canEdit} onClose={() => setOpen(false)} />
               ))}
             </ul>
           )}
@@ -279,11 +292,11 @@ export function AlertsBell() {
               setRules(true);
             }}
           >
-            Manage rules
+            {canEdit ? 'Manage rules' : 'Rules'}
           </Button>
         </div>
       </Popover>
-      {rules && projectId && <RulesDialog projectId={projectId} onClose={() => setRules(false)} />}
+      {rules && projectId && <RulesDialog projectId={projectId} readOnly={!canEdit} onClose={() => setRules(false)} />}
     </>
   );
 }

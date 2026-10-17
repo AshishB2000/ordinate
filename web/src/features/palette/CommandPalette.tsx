@@ -17,6 +17,7 @@ import { useRecent } from '../../api/home';
 import { itemHref, TYPE_LABEL } from '../home/homeText';
 import { useMe } from '../auth/api';
 import { setDockOpen, useDockOpen } from '../assistant/dockState';
+import { useCanEdit } from '../projects/api';
 import { useCurrentProject } from '../projects/current';
 import { Icon, type IconName } from '../../ui/icons/Icon';
 import { appCommands } from './appCommands';
@@ -235,6 +236,9 @@ export function CommandPalette() {
   const [theme, setTheme] = useThemePref();
   const dockOpen = useDockOpen();
   const role = me.data?.user?.role;
+  // The Create commands are an editor's of the current project. Asked once the palette opens: it is on every page.
+  const { projectId } = useCurrentProject();
+  const canEdit = useCanEdit(projectId, open);
 
   useCommands(
     useMemo(
@@ -242,6 +246,7 @@ export function CommandPalette() {
         appCommands({
           go: (to) => void navigate(to),
           role,
+          canEdit,
           theme,
           setTheme,
           dockOpen,
@@ -249,7 +254,7 @@ export function CommandPalette() {
           togglePalette: () => setOpen((o) => !o),
           openShortcuts: () => setSheet(true),
         }),
-      [navigate, role, theme, setTheme, dockOpen],
+      [navigate, role, canEdit, theme, setTheme, dockOpen],
     ),
   );
 

@@ -134,6 +134,13 @@
   background: var(--accent-soft);
   color: var(--accent);
 }
+.adminNote {
+  display: inline-flex;
+  align-items: center;
+  height: var(--ctl-sm);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
 .doneLabel {
   display: inline-flex;
   align-items: center;
