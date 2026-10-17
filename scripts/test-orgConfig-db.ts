@@ -14,7 +14,13 @@
 //      key or password in it never reaches the table (canary);
 //   4. the row is the org's own (RLS, as an ordinary role);
 //   5. a write that fails is not reported saved — NEGATIVE CONTROL for the
-//      flush before the reply.
+//      flush before the reply;
+//   6. a write stores only what IT changed (orgConfig diffDoc/applyPatch): pure,
+//      both changes kept and no key in a merged body — CONTROL: a whole-document
+//      replace loses the star; in process, a write from a stale document after
+//      another pod moved the row keeps both — SQL CONTROL: the old
+//      unconditional upsert drops a star; and 20 members starring alternately
+//      on two pods, neither re-reading, keep all 20 lists.
 //
 // Needs a Postgres it may CREATE DATABASE on; without DATABASE_URL it prints
 // one skip line. Every run makes its own scratch database and drops it.
@@ -32,8 +38,11 @@ const os: typeof import('os') = require('os');
 const path: typeof import('path') = require('path');
 const { spawn }: typeof import('child_process') = require('child_process');
 const { randomBytes }: typeof import('crypto') = require('crypto');
+const { isDeepStrictEqual }: typeof import('util') = require('util');
 const wire: typeof import('../src/server/wire') = require('../src/server/wire');
 const config: typeof import('../src/app/config') = require('../src/app/config');
+const orgConfig: typeof import('../src/server/orgConfig') = require('../src/server/orgConfig');
+const context: typeof import('../src/server/context') = require('../src/server/context');
 
 const MAIN = path.join(__dirname, '..', 'src', 'server', 'main.js');
 const CANARY = 'c4nary-org-config-must-never-hold-this';
@@ -79,6 +88,38 @@ async function eventually<T>(read: () => Promise<T>, want: T): Promise<T> {
   return got;
 }
 
+/** This process as a pod of org 'merge': config.ts over orgConfig, no fresh() between writes. */
+async function inProcess(pool: Pool): Promise<void> {
+  const dir = tmp('inproc');
+  context.enterServerMode(dir);
+  orgConfig.useOrgConfig(pool, dir);
+  const as = <T>(fn: () => T): T => context.runInContext({ user: { email: 'boss@merge.test', role: 'admin' }, org: { id: 'merge' } }, 'merge', fn);
+  const row = async (): Promise<Record<string, any>> => JSON.parse((await pool.query<{ body: string }>(`SELECT body FROM org_config WHERE org_id = 'merge'`)).rows[0].body); // any: the settings document
+  try {
+    await as(() => orgConfig.fresh('merge'));
+    as(() => config.setStarredFor('ann', ['analysis:a']));
+    await as(() => orgConfig.flushed('merge'));
+    const stale = JSON.stringify(await row()); // what a pod that missed what follows still holds
+    // Another pod moves the row: a format change, its own whole write.
+    const other = await row();
+    other.formats = { ...other.formats, currency: 'EUR' };
+    await pool.query(`UPDATE org_config SET body = $1, version = version + 1 WHERE org_id = 'merge'`, [JSON.stringify(other)]);
+    // This pod has not re-read (no fresh()): its document still says USD.
+    as(() => config.setStarredFor('bob', ['analysis:b']));
+    await as(() => orgConfig.flushed('merge'));
+    const after = await row();
+    ok('in process: a write from a stale document keeps the other pod\'s change and adds its own', after.formats.currency === 'EUR' && after.starredBy.ann?.[0] === 'analysis:a' && after.starredBy.bob?.[0] === 'analysis:b', JSON.stringify({ c: after.formats.currency, s: after.starredBy }));
+    ok('…and this pod now answers the merged document without a re-read', as(() => config.get().formats.currency) === 'EUR' && as(() => config.starredFor('bob'))[0] === 'analysis:b');
+    // SQL CONTROL: the old flush, an unconditional upsert of the stale document.
+    await pool.query(`INSERT INTO org_config (org_id, body) VALUES ('merge', $1)
+      ON CONFLICT (org_id) DO UPDATE SET body = EXCLUDED.body, version = org_config.version + 1, updated_at = now()`, [stale]);
+    const lost = await row();
+    ok('SQL CONTROL: the old unconditional upsert of a stale document drops bob\'s star and the format change', !lost.starredBy.bob && lost.formats.currency !== 'EUR');
+  } finally {
+    orgConfig.useOrgConfig(null);
+  }
+}
+
 (async () => {
   // ── 0. What may leave the pod at all ───────────────────────────────────
   const planted = config.storable({
@@ -88,6 +129,25 @@ async function eventually<T>(read: () => Promise<T>, want: T): Promise<T> {
     connectionSecrets: { 'a-connection': { password: CANARY, token: CANARY } },
   } as never);
   ok('storable: keys and connection passwords are blanked, the rest kept', !planted.includes(CANARY) && JSON.parse(planted).byok.providers.anthropic.verified === true);
+
+  // ── 6a. The patch, pure ─────────────────────────────────────────────────
+  const doc = (over: Record<string, unknown>): string => config.storable({
+    formats: { currency: 'USD' }, starred: [], starredBy: { ann: ['analysis:a'] },
+    providers: { anthropic: { apiKey: CANARY, model: 'm' } }, connectionSecrets: { c: { password: CANARY } }, ...over,
+  } as never);
+  const base = doc({});
+  const fmt = doc({ formats: { currency: 'EUR' } }); // pod A: a format change
+  const star = doc({ starredBy: { ann: ['analysis:a'], sam: ['analysis:s'] } }); // pod B, from the same base: sam's star
+  const rowA = orgConfig.applyPatch(base, orgConfig.diffDoc(base, fmt));
+  const merged = orgConfig.applyPatch(rowA, orgConfig.diffDoc(base, star));
+  const m = JSON.parse(merged);
+  ok('patch: pod A\'s format change and pod B\'s star from the same base are both kept', m.formats.currency === 'EUR' && m.starredBy.sam?.[0] === 'analysis:s' && m.starredBy.ann?.[0] === 'analysis:a', merged.slice(0, 200));
+  ok('patch CONTROL: a whole-document replace of the same two writes loses the format change', JSON.parse(star).formats.currency === 'USD');
+  ok('patch CANARY: no key or password in any merged body', ![rowA, merged].some((b) => b.includes(CANARY)));
+  ok('patch: with no race the round trip is the write itself', isDeepStrictEqual(JSON.parse(rowA), JSON.parse(fmt)));
+  const unstar = doc({ starredBy: {} });
+  ok('patch: a member\'s list removed is removed, another member\'s kept', JSON.stringify(JSON.parse(orgConfig.applyPatch(merged, orgConfig.diffDoc(base, unstar))).starredBy) === JSON.stringify({ sam: ['analysis:s'] }));
+  ok('patch: no base means the whole document', orgConfig.applyPatch(merged, orgConfig.diffDoc(undefined, fmt)) === fmt);
 
   const adminUrl = process.env.DATABASE_URL;
   if (!adminUrl) {
@@ -141,6 +201,22 @@ async function eventually<T>(read: () => Promise<T>, want: T): Promise<T> {
     ok('sam\'s starred item, set on pod A, is there on pod B', (await eventually(() => starred(B, 'sam@acme.test'), JSON.stringify([pin]))) === JSON.stringify([pin]));
     ok('…and the boss\'s list is still empty', (await starred(B, BOSS)) === '[]');
 
+    // ── 6b. 20 members starring at once on two pods ──────────────────────
+    const members = Array.from({ length: 20 }, (_, i) => `m${i}@acme.test`);
+    for (const who of members) await call(A, who, 'projects:list'); // provisions each
+    const pinOf = (i: number): string => `analysis:${String(i).padStart(8, '0')}-1111-4111-8111-${'1'.repeat(12)}`;
+    // Both pods freshly read, then the stars alternate A, B, A, B… inside the one
+    // second neither re-reads: each pod writes from a document missing the other's.
+    await Promise.all([currency(A), currency(B)]);
+    const sets: Array<{ status: number }> = [];
+    for (const [i, who] of members.entries()) sets.push(await call(i % 2 ? B : A, who, 'starred:set', { ids: [pinOf(i)] }));
+    ok('20 members star, alternately on pods A and B: every write answered 200', sets.every((r) => r.status === 200), sets.map((r) => r.status).join());
+    const lists = JSON.parse((await pool.query<{ body: string }>(`SELECT body FROM org_config WHERE org_id = 'acme'`)).rows[0].body).starredBy as Record<string, string[]>;
+    const kept = members.filter((who, i) => JSON.stringify(lists[who]) === JSON.stringify([pinOf(i)])).length;
+    ok(`…and the row keeps all 20 lists (${kept})`, kept === 20, JSON.stringify(Object.keys(lists)));
+    const onB = await eventually(async () => (await Promise.all(members.map((who) => starred(B, who)))).filter((x, i) => x === JSON.stringify([pinOf(i)])).length, 20);
+    ok(`…and pod B answers all 20 (${onB})`, onB === 20);
+
     // ── 3. A config.json from before the table, imported once, without its secrets ──
     const dirL = tmp('legacy');
     fs.mkdirSync(path.join(dirL, 'orgs', 'legacy', 'userData'), { recursive: true });
@@ -183,6 +259,9 @@ async function eventually<T>(read: () => Promise<T>, want: T): Promise<T> {
       }
     };
     ok('RLS: an ordinary role sees its org\'s row only, and none with no org set', (await see('acme')) === 'acme' && (await see('legacy')) === 'legacy' && (await see(null)) === '', `${await see('acme')}|${await see('legacy')}|${await see(null)}`);
+
+    // ── 6c. In process: a stale document's write on a row another pod moved ──
+    await inProcess(pool);
 
     // ── 5. A write that fails is not reported saved ─────────────────────────
     ok('before the fault: a change is answered 200', (await call(A, BOSS, 'formats:set', { currency: 'CHF' })).status === 200);
