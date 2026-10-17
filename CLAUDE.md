@@ -85,8 +85,10 @@ SPA (`web/dist`) and the API from one origin. Metadata in Postgres; Parquet on `
 - **User regex never runs on the request thread**: `src/engine/regexPool.ts`/`regexWorker.ts`, 2 s
   deadline per call, thread replaced on overrun; a sync fold that meets a user regex without the
   worker's answers refuses rather than runs it.
-- **User SQL**: one read-only statement through `src/engine/sqlGate.ts` (a deny-list lexer — the
-  project boundary inside an org, threat model R2); the org lock is the org boundary.
+- **User SQL**: one read-only statement, gated once in `compile()` (`src/engine/sqlDatasets.ts`): an
+  allow-list over DuckDB's own parse (`json_serialize_sql` — datasets, CTEs in scope, value
+  generators), with the lexer as a pre-filter (`src/engine/sqlGate.ts`). It is the project boundary
+  inside an org (threat model R2, F9); the org lock is the org boundary.
 - Built, not adopted: `duckdbSidecar.ts`; `sqlGen`/`pipelineDuck` (no server path runs them).
 
 ### The resident-query layer

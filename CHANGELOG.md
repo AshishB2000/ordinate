@@ -68,6 +68,15 @@ the desktop installers.
   code at first start; you create the admin account in the browser and add people with temporary
   passwords. Switch to single sign-on before real use. See [`docs/server/sso.md`](docs/server/sso.md).
 
+### Security — since the move to the web
+
+- **SQL over datasets is checked against DuckDB's own reading of the query.** A query could reach
+  another project's data in the same org through SUMMARIZE, DESCRIBE, PIVOT and similar words, or
+  read the engine's own catalog. Stored SQL datasets and notebook cells that use PIVOT without `IN`,
+  a catalog view, or a table function other than `range`, `generate_series`, `unnest`,
+  `json_each`, `json_tree`, `repeat` and `repeat_row` are now refused, so their refresh will fail:
+  list the PIVOT values (`ON col IN (…)`) or query the project's datasets instead.
+
 ### Added
 - **The app is no longer empty on first launch.** A bundled sample project — 5,000 rows of generated
   retail orders across two years, five regions and twenty-five US states — arrives with a dashboard
