@@ -11,6 +11,7 @@ import { Button } from '../../../ui/Button';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Input } from '../../../ui/Field';
 import { toast } from '../../../ui/Toast';
+import { useCanEdit } from '../../projects/api';
 import { call, type Scenario, type ScenarioMetric } from '../api';
 import s from './Scenarios.module.css';
 
@@ -68,6 +69,7 @@ export function NewScenario({ projectId, label = 'New scenario', size = 'md' }: 
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
   const client = useQueryClient();
+  const canEdit = useCanEdit(projectId);
   async function create() {
     setBusy(true);
     let metrics: ScenarioMetric[] = [];
@@ -89,6 +91,8 @@ export function NewScenario({ projectId, label = 'New scenario', size = 'md' }: 
     void client.invalidateQueries({ queryKey: ['scenario:list', projectId] });
     void nav(`/analytics/scenarios/${projectId}/${res.scenario.id}`);
   }
+  // Creating a scenario is a write: a viewer opens and compares the saved ones.
+  if (!canEdit) return null;
   return (
     <Dialog
       open={open}

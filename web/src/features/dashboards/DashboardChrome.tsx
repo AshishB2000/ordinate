@@ -230,6 +230,8 @@ export function ViewControls() {
         <Select
           size="sm"
           aria-label="This dashboard’s currency"
+          // A stored value of the dashboard: a viewer reads it, an editor sets it.
+          disabled={ed.readOnly}
           value={ed.view.currency ?? ''}
           onValueChange={(code) =>
             setCurrency.mutate({ dashboardId: ed.analysisId, code: code || null }, { onError: (e) => toast(reason(e, 'Could not set the currency.'), { kind: 'error' }) })

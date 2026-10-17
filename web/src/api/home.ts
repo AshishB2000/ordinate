@@ -102,9 +102,11 @@ export function useOverview(projectId: string | undefined) {
 
 const ONBOARDING = ['onboarding:status'] as const;
 
-export function useOnboarding() {
+/** `enabled: false` asks nothing: the checklist is an org editor's, and a viewer's Home never asks for it. */
+export function useOnboarding(enabled = true) {
   return useQuery({
     queryKey: ONBOARDING,
+    enabled,
     queryFn: async (): Promise<Onboarding> => {
       const o = obj(await rpc('onboarding:status'));
       return {

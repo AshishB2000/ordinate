@@ -1,6 +1,7 @@
 // "Add to dashboard" for a metric tree: pick a dashboard — or name a new one.
 // The card stores the metric's id; its tree stays on the metric, so editing it
 // here updates every card (metricTree:addToDashboard merges it server side).
+// It writes a dashboard: a viewer is not offered it.
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -11,6 +12,7 @@ import { Dialog, DialogClose } from '../../../../ui/Dialog';
 import { Input } from '../../../../ui/Field';
 import { Select } from '../../../../ui/Select';
 import { toast } from '../../../../ui/Toast';
+import { useCanEdit } from '../../../projects/api';
 import s from './MetricTreePage.module.css';
 
 const NEW = '__new__';
@@ -26,6 +28,7 @@ export function AddTreeToDashboard({ projectId, metricId, disabled }: { projectI
     queryFn: async () => (await rpc('stats:dashboards', { projectId })) as Array<{ id: string; name: string }>,
     enabled: open,
   });
+  const canEdit = useCanEdit(projectId);
   const list = boards.data ?? [];
   const picked = choice ?? (list[0]?.id || NEW);
 
@@ -42,6 +45,7 @@ export function AddTreeToDashboard({ projectId, metricId, disabled }: { projectI
     toast(`Added to ${r.name}`, { kind: 'success', action: { label: 'Open it', onClick: () => void navigate(to) } });
   }
 
+  if (!canEdit) return null;
   return (
     <Dialog
       open={open}

@@ -191,7 +191,11 @@ if (!adminUrl) {
     const kpi = await tiles();
     await page.getByText('View only', { exact: true }).waitFor();
     assert.equal(await count(page, 'group', 'Add to the sheet'), 0, 'editor: no add row');
-    for (const name of ['Add sheet', 'Card properties', 'Nothing to undo', 'Nothing to redo', 'Revenue card actions']) assert.equal(await count(page, 'button', name), 0, `editor: no “${name}”`);
+    for (const name of ['Add sheet', 'Card properties', 'Nothing to undo', 'Nothing to redo']) assert.equal(await count(page, 'button', name), 0, `editor: no “${name}”`);
+    // The KPI's own menu only reads: its rows, never "Alert me…" (a rule is a write).
+    await page.getByRole('button', { name: 'Revenue card actions' }).click();
+    assert.deepEqual((await page.getByRole('menuitem').allTextContents()).map((t) => t.trim()), ['Show the rows'], 'the KPI menu reads');
+    await page.keyboard.press('Escape');
     assert.equal(await count(page, 'link', 'Edit'), 0, 'editor: no tile Edit');
     assert.equal(await page.getByRole('navigation', { name: 'Authoring panels' }).count(), 0, 'editor: no tool rail');
     // What reads stays: the sheet tab, Present, comments, the tile's own read-only menu.
@@ -220,7 +224,7 @@ if (!adminUrl) {
     const bars =(await page.getByRole('group', { name: 'Amount by region card' }).locator('canvas').first().boundingBox())!;
     let hit = false;
     for (let c = 1; c <= 14 && !hit; c++) {
-      await page.mouse.click(bars.x + (bars.width * c) / 15, bars.y + bars.height * 0.8);
+      await page.mouse.click(bars.x + (bars.width * c) / 15, bars.y + bars.height * 0.6);
       await page.waitForTimeout(150);
       hit = (await chip.count()) > 0;
     }
@@ -250,9 +254,10 @@ if (!adminUrl) {
     await page.setExtraHTTPHeaders({ 'x-forwarded-email': EDITOR });
 
     await open(`/?project=${pid}`);
-    await page.getByRole('button', { name: 'New', exact: true }).waitFor();
-    await page.getByRole('link', { name: 'CSV / Excel' }).waitFor();
-    assert.equal(await page.getByRole('link', { name: 'Paste data' }).getAttribute('href'), `/data/import?project=${pid}&source=paste`);
+    await page.getByRole('button', { name: 'New', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'CSV / Excel' }).waitFor();
+    await page.getByRole('menuitem', { name: 'Paste data' }).waitFor();
+    await page.keyboard.press('Escape');
 
     await open(`/data/${pid}`);
     await page.getByRole('link', { name: 'Import file' }).waitFor();

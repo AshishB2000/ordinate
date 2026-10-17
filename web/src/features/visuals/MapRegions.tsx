@@ -65,7 +65,14 @@ export function geoFor(level: string, cols: readonly Column[], boundaries: reado
   return geo;
 }
 
-export function MapRegions({ projectId, cols, geo, onChange }: { projectId: string; cols: readonly Column[]; geo: Geo | undefined; onChange: (g: Geo | undefined) => void }) {
+/** `canEdit`: importing boundaries saves them to the project — offered to an editor only. */
+export function MapRegions({ projectId, cols, geo, canEdit, onChange }: {
+  projectId: string;
+  cols: readonly Column[];
+  geo: Geo | undefined;
+  canEdit?: boolean;
+  onChange: (g: Geo | undefined) => void;
+}) {
   const qc = useQueryClient();
   const list = useBoundaries(projectId);
   const boundaries = list.data ?? [];
@@ -75,7 +82,7 @@ export function MapRegions({ projectId, cols, geo, onChange }: { projectId: stri
     ...LEVELS,
     ...(boundaries.length ? [{ value: '__group', label: 'Your boundaries', disabled: true }] : []),
     ...boundaries.map((b) => opt(`custom:${b.id}`, `${b.name} (${b.featureCount} regions)`)),
-    { value: IMPORT, label: 'Import boundaries…' },
+    ...(canEdit ? [{ value: IMPORT, label: 'Import boundaries…' }] : []),
   ];
 
   async function imported(f: File) {

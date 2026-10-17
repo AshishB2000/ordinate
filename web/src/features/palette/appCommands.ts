@@ -23,6 +23,8 @@ export interface AppCommandDeps {
   go: (to: string) => void;
   /** The caller's org role, or undefined while unknown. */
   role: string | undefined;
+  /** May the caller change the current project? The Create commands are an editor's: false hides them. */
+  canEdit: boolean;
   theme: ThemePref;
   setTheme: (p: ThemePref) => void;
   dockOpen: boolean;
@@ -35,6 +37,7 @@ const open = (url: string) => () => void window.open(url, '_blank', 'noopener,no
 
 export function appCommands(d: AppCommandDeps): Command[] {
   const isAdmin = () => d.role === 'admin';
+  const canEdit = () => d.canEdit;
   const nav: Command[] = NAV.map((n) => ({
     id: `nav.${n.to === '/' ? 'home' : n.to.slice(1)}`,
     title: `Go to ${n.label}`,
@@ -49,11 +52,11 @@ export function appCommands(d: AppCommandDeps): Command[] {
   const next = (p: ThemePref): ThemePref => (p === 'dark' ? 'light' : p === 'light' ? 'dark' : document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
   return [
     ...nav,
-    { id: 'create.import', title: 'New dataset from a file', group: 'Create', icon: 'upload', run: () => d.go('/data/import') },
-    { id: 'create.capture', title: 'New dataset from a screenshot', group: 'Create', icon: 'camera', run: () => d.go('/data/captures') },
-    { id: 'create.connect', title: 'New dataset from a connection', group: 'Create', icon: 'plug', run: () => d.go('/connections') },
+    { id: 'create.import', title: 'New dataset from a file', group: 'Create', icon: 'upload', when: canEdit, run: () => d.go('/data/import') },
+    { id: 'create.capture', title: 'New dataset from a screenshot', group: 'Create', icon: 'camera', when: canEdit, run: () => d.go('/data/captures') },
+    { id: 'create.connect', title: 'New dataset from a connection', group: 'Create', icon: 'plug', when: canEdit, run: () => d.go('/connections') },
     // The dashboard wizard (T2.8). The desktop's ⌘N is the browser's own new window here, so no chord.
-    { id: 'create.dashboard', title: 'New dashboard', group: 'Create', icon: 'layout-dashboard', run: () => d.go('/analyses?new=1') },
+    { id: 'create.dashboard', title: 'New dashboard', group: 'Create', icon: 'layout-dashboard', when: canEdit, run: () => d.go('/analyses?new=1') },
     {
       id: 'ai.toggle',
       title: d.dockOpen ? 'Close the Assistant' : 'Open the Assistant',

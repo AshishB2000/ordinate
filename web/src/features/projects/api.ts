@@ -100,16 +100,19 @@ export function useRoles(enabled = true) {
 
 const RANK: Record<Role, number> = { viewer: 1, editor: 2, admin: 3 };
 
-/** May the caller do what `need` names on `projectId`? False until the roles are known. */
-export function useCan(projectId: string | null | undefined) {
-  const roles = useRoles();
+/**
+ * May the caller do what `need` names on `projectId`? False until the roles are known.
+ * `enabled: false` asks the server nothing (a closed popover on every page): the answer stays false.
+ */
+export function useCan(projectId: string | null | undefined, enabled = true) {
+  const roles = useRoles(enabled);
   const role = projectId ? roles.data?.[projectId] : undefined;
   return (need: Role) => !!role && RANK[role] >= RANK[need];
 }
 
 /** May the caller change things in `projectId` (editor or admin)? False until the roles are known: a viewer never sees a control flash. */
-export function useCanEdit(projectId: string | null | undefined): boolean {
-  return useCan(projectId)('editor');
+export function useCanEdit(projectId: string | null | undefined, enabled = true): boolean {
+  return useCan(projectId, enabled)('editor');
 }
 
 export function useAccess(projectId: string | null) {

@@ -12,6 +12,7 @@ import { EmptyState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { MakeCopyButton } from '../live/LiveOff';
 import { LIVE_OFF_LIST } from '../live/offFeatures';
+import { useCanEdit } from '../projects/api';
 import { useWrite } from './api';
 import { formatNumber, rowsText } from './format';
 import s from './Data.module.css';
@@ -101,6 +102,8 @@ export function LiveNotice({ projectId, datasetId, maxCacheAgeSec }: { projectId
     onDone: (r: ModeReply) => r.ok !== false && toast('Copied — the rows are stored here now.', { kind: 'success' }),
   });
   const cache = cacheText(maxCacheAgeSec);
+  // Both copies save a dataset: an editor's. A viewer reads what works here and what needs a copy.
+  const canEdit = useCanEdit(projectId);
   return (
     <div className={l.notice}>
       <EmptyState
@@ -109,9 +112,11 @@ export function LiveNotice({ projectId, datasetId, maxCacheAgeSec }: { projectId
         actions={
           <>
             <MakeCopyButton projectId={projectId} datasetId={datasetId} />
-            <Button icon="download" loading={set.isPending} onClick={() => set.mutate({ projectId, datasetId, mode: 'extract' })}>
-              Copy the data instead
-            </Button>
+            {canEdit && (
+              <Button icon="download" loading={set.isPending} onClick={() => set.mutate({ projectId, datasetId, mode: 'extract' })}>
+                Copy the data instead
+              </Button>
+            )}
           </>
         }
       >
@@ -124,7 +129,11 @@ export function LiveNotice({ projectId, datasetId, maxCacheAgeSec }: { projectId
             <li key={what}>{what}</li>
           ))}
         </ul>
-        <p className={s.note}>“Make a copy” imports the same source as a new dataset that keeps its rows here; this one stays Live. “Copy the data instead” turns this dataset into the copy.</p>
+        <p className={s.note}>
+          {canEdit
+            ? '“Make a copy” imports the same source as a new dataset that keeps its rows here; this one stays Live. “Copy the data instead” turns this dataset into the copy.'
+            : 'An editor of this project can make a copy that keeps its rows here. You have view-only access.'}
+        </p>
       </section>
     </div>
   );

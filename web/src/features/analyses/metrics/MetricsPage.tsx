@@ -3,7 +3,8 @@
 // the revenue column". One row per metric: its definition in words, format,
 // current figure, trend and where it is used, every one of them the server's
 // (`metric:table`, one call). Seeding from the columns is an explicit button,
-// so a viewer's visit never writes.
+// so a viewer's visit never writes. A viewer reads the table and opens a
+// metric's tree; defining, editing, duplicating and deleting are an editor's.
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -19,6 +20,7 @@ import { toast } from '../../../ui/Toast';
 import { useTags } from '../../data/api';
 import { TagChips, TagFilterBar, tagsOf, useActiveTag } from '../../data/tags';
 import { ProjectGate } from '../../import/ProjectGate';
+import { useCanEdit } from '../../projects/api';
 import { toastMovedToTrash } from '../../projects/trashToast';
 import { failure } from '../api';
 import { formatBadge, type Metric, type MetricSummary, type Usage } from './api';
@@ -53,6 +55,7 @@ function Metrics({ projectId }: { projectId: string }) {
   const [deleting, setDeleting] = useState<MetricSummary | null>(null);
   const [seeding, setSeeding] = useState(false);
   const navigate = useNavigate();
+  const canEdit = useCanEdit(projectId);
   const refresh = () => {
     void client.invalidateQueries({ queryKey: ['metric:table', projectId] });
     void client.invalidateQueries({ queryKey: ['metric:list', projectId] });
@@ -113,18 +116,20 @@ function Metrics({ projectId }: { projectId: string }) {
         icon="target"
         title="No metrics yet"
         actions={
-          <>
-            <Button variant="primary" size="lg" onClick={() => void open(null)}>
-              New metric
-            </Button>
-            <Button variant="ghost" size="lg" icon="sparkles" loading={seeding} onClick={() => void seed()}>
-              Suggest metrics from my columns
-            </Button>
-          </>
+          canEdit && (
+            <>
+              <Button variant="primary" size="lg" onClick={() => void open(null)}>
+                New metric
+              </Button>
+              <Button variant="ghost" size="lg" icon="sparkles" loading={seeding} onClick={() => void seed()}>
+                Suggest metrics from my columns
+              </Button>
+            </>
+          )
         }
       >
-        A metric names a number once — Revenue, Margin %, Orders — so every KPI card, alert and chart that shows it agrees. Define it from a column or as a
-        formula of other metrics.
+        A metric names a number once — Revenue, Margin %, Orders — so every KPI card, alert and chart that shows it agrees.
+        {canEdit ? ' Define it from a column or as a formula of other metrics.' : ' An editor of this project can define one. You have view-only access.'}
       </EmptyState>
     );
   } else {
@@ -160,9 +165,15 @@ function Metrics({ projectId }: { projectId: string }) {
               return (
                 <tr key={m.id}>
                   <td>
-                    <button type="button" className={s.name} title={m.description || undefined} onClick={() => void open(m)}>
-                      {m.name}
-                    </button>
+                    {canEdit ? (
+                      <button type="button" className={s.name} title={m.description || undefined} onClick={() => void open(m)}>
+                        {m.name}
+                      </button>
+                    ) : (
+                      <span className={s.nameText} title={m.description || undefined}>
+                        {m.name}
+                      </span>
+                    )}
                     {m.hasTree && (
                       <button type="button" className={s.treeLink} onClick={() => void navigate(`/data/metrics/${projectId}/${m.id}/tree`)} aria-label={`Open ${m.name}’s tree`}>
                         <Icon name="lineage" size={12} /> Tree
@@ -181,18 +192,24 @@ function Metrics({ projectId }: { projectId: string }) {
                   <td>{row?.series && <Sparkline values={row.series} label={`${m.name} trend`} />}</td>
                   <td className={row?.usage?.total ? s.dim : s.unused}>{row?.usage ? (row.usage.total ? row.usage.summary : 'Not used yet') : '—'}</td>
                   <td className={s.actions}>
-                    <Menu
-                      label={`Actions for ${m.name}`}
-                      align="end"
-                      trigger={<IconButton icon="more-horizontal" size="sm" label={`Actions for ${m.name}`} />}
-                      items={[
-                        { label: 'Edit', icon: 'pencil', onSelect: () => void open(m) },
-                        { label: m.hasTree ? 'Open tree' : 'Break it down…', icon: 'lineage', onSelect: () => void navigate(`/data/metrics/${projectId}/${m.id}/tree`) },
-                        { label: 'Duplicate', icon: 'copy', onSelect: () => void duplicate(m) },
-                        { kind: 'separator' },
-                        { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setDeleting(m) },
-                      ]}
-                    />
+                    {(canEdit || m.hasTree) && (
+                      <Menu
+                        label={`Actions for ${m.name}`}
+                        align="end"
+                        trigger={<IconButton icon="more-horizontal" size="sm" label={`Actions for ${m.name}`} />}
+                        items={
+                          canEdit
+                            ? [
+                                { label: 'Edit', icon: 'pencil', onSelect: () => void open(m) },
+                                { label: m.hasTree ? 'Open tree' : 'Break it down…', icon: 'lineage', onSelect: () => void navigate(`/data/metrics/${projectId}/${m.id}/tree`) },
+                                { label: 'Duplicate', icon: 'copy', onSelect: () => void duplicate(m) },
+                                { kind: 'separator' },
+                                { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setDeleting(m) },
+                              ]
+                            : [{ label: 'Open tree', icon: 'lineage', onSelect: () => void navigate(`/data/metrics/${projectId}/${m.id}/tree`) }]
+                        }
+                      />
+                    )}
                   </td>
                 </tr>
               );
@@ -209,12 +226,14 @@ function Metrics({ projectId }: { projectId: string }) {
     <Page title="Metrics" sub="What this project's numbers mean, defined once.">
       <div className={s.head}>
         {count > 0 ? <span className={s.count}>{count === 1 ? '1 metric' : `${count} metrics`}</span> : <span />}
-        <Button variant="primary" icon="plus" onClick={() => void open(null)}>
-          New metric
-        </Button>
+        {canEdit && (
+          <Button variant="primary" icon="plus" onClick={() => void open(null)}>
+            New metric
+          </Button>
+        )}
       </div>
       {body}
-      {editing && <MetricEditor projectId={projectId} existing={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
+      {editing && canEdit && <MetricEditor projectId={projectId} existing={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
       <Dialog
         open={deleting !== null}
         onOpenChange={(o) => !o && setDeleting(null)}

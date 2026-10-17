@@ -2,8 +2,10 @@
 // its door. What is DONE comes from the server (src/app/onboarding.ts reads it
 // off the org's records), so the card never claims a step nobody took. It
 // folds into a "2 of 4" pill beside New, and goes for good when every step is
-// done or someone hides it. The card is the ORG's: folding and hiding it is an
-// editor's call (`onboarding:set` is write), so a viewer sees it without those.
+// done or someone hides it. The card is the ORG's and its steps are an
+// editor's (importing, building, creating), so it shows only to the org's
+// editors and admins — a viewer's Home neither shows it nor asks for it. The
+// Assistant step's "Set up" is the org admin's.
 
 import { Link } from 'react-router';
 import { useOnboarding, useSetOnboarding, type StepId } from '../../api/home';
@@ -44,17 +46,22 @@ const STEPS: Step[] = [
   },
 ];
 
-function useCanEdit(): boolean {
+/** The caller's ORG role: editor or admin. False until it is known. */
+function useOrgRole(): { editor: boolean; admin: boolean } {
   const role = useMe().data?.user?.role;
-  return role === 'admin' || role === 'editor';
+  return { editor: role === 'admin' || role === 'editor', admin: role === 'admin' };
+}
+export function useOrgEditor(): boolean {
+  return useOrgRole().editor;
 }
 
 /** The folded card: "Get started | 2 of 4", beside New. */
 export function GetStartedPill() {
-  const q = useOnboarding();
+  const editor = useOrgEditor();
+  const q = useOnboarding(editor);
   const set = useSetOnboarding();
   const d = q.data;
-  if (!d?.show || !d.collapsed) return null;
+  if (!editor || !d?.show || !d.collapsed) return null;
   const progress = `${d.doneCount} of ${d.total}`;
   return (
     <button
@@ -71,13 +78,13 @@ export function GetStartedPill() {
 }
 
 export function GetStarted() {
-  const q = useOnboarding();
+  const { editor, admin } = useOrgRole();
+  const q = useOnboarding(editor);
   const set = useSetOnboarding();
-  const canEdit = useCanEdit();
   const d = q.data;
   // Loading or failed: nothing — the card is guidance, not content, and Home
   // reads fine without it (the desktop hides it the same way).
-  if (!d?.show || d.collapsed) return null;
+  if (!editor || !d?.show || d.collapsed) return null;
   const done = new Set(d.steps.filter((x) => x.done).map((x) => x.id));
   const progress = `${d.doneCount} of ${d.total}`;
   const change = (patch: { collapsed?: boolean; dismissed?: true }, after?: () => void) =>
@@ -101,7 +108,7 @@ export function GetStarted() {
           <span className={s.count}>{progress}</span>
           <progress className={s.bar} value={d.doneCount} max={d.total || 1} aria-label={`Get started: ${progress} done`} />
         </div>
-        {canEdit && (
+        {editor && (
           <>
             <IconButton icon="chevron-up" size="sm" label="Fold the checklist into a progress pill" onClick={() => change({ collapsed: true })} />
             <IconButton
@@ -135,6 +142,8 @@ export function GetStarted() {
                   <Icon name="check" size={12} />
                   Done
                 </span>
+              ) : st.id === 'assistant' && !admin ? (
+                <span className={s.adminNote}>An org admin’s step</span>
               ) : (
                 <Link className={buttonClass('ghost', 'sm', s.action)} to={st.to}>
                   {st.action}

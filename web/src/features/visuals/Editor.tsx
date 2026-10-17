@@ -103,8 +103,8 @@ export function Editor({ projectId, datasets, columns, related, initial }: {
           >
             Profile
           </Button>
-          {/* Comments on this visual (T2.9 commentDoors.ts) — a saved visual only. */}
-          <CommentDoor projectId={projectId} kind="visual" id={visualId ?? undefined} disabledReason="Save this visual first, then comment on it" />
+          {/* Comments on this visual (T2.9 commentDoors.ts) — a saved visual only; a viewer cannot save one, so is not told to. */}
+          {(visualId || b.canEdit) && <CommentDoor projectId={projectId} kind="visual" id={visualId ?? undefined} disabledReason="Save this visual first, then comment on it" />}
           {visualId && (
             <Button size="sm" icon="history" title="Version history" onClick={() => void navigate(`/versions/${projectId}/visual/${visualId}`)}>
               History

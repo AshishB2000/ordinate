@@ -3,6 +3,7 @@
 // and, read-only, its "Also called" names, which the Columns tab edits.
 // No Save button — a field saves on blur and on Enter, and closing the
 // popover commits whatever was being typed. The server stamps who and when.
+// A viewer reads the same fields, read-only: nothing here is offered to them to change.
 
 import { useEffect, useRef, useState, type ReactElement, type RefObject } from 'react';
 import { Input, Textarea } from '../../ui/Field';
@@ -11,20 +12,25 @@ import { RadioGroup } from '../../ui/Choice';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { useQuery } from '@tanstack/react-query';
+import { useCanEdit } from '../projects/api';
 import { call, useTags, useWrite, type ColumnDoc, type Doc } from './api';
 import { ago } from './format';
-import { TagEditor } from './tags';
+import { TagChips, TagEditor } from './tags';
 import s from './Data.module.css';
 
 const KIND_WORD: Record<string, string> = {
   dataset: 'Dataset', visual: 'Visual', analysis: 'Dashboard', metric: 'Metric', report: 'Report', story: 'Story',
 };
 
-/** "Updated by ana@acme · 3m ago", or an honest "Not documented yet". */
-function Stamp({ by, at }: { by?: string; at?: string }) {
+/** "Updated by ana@acme · 3m ago", or an honest "Not documented yet" — the invitation to add some only for someone who can. */
+function Stamp({ by, at, readOnly }: { by?: string; at?: string; readOnly: boolean }) {
   return (
     <p className={s.stamp}>
-      {at ? `Updated by ${by || 'someone'} · ${ago(at)}` : 'Not documented yet — anything you add here is shown to everyone in this project.'}
+      {at
+        ? `Updated by ${by || 'someone'} · ${ago(at)}`
+        : readOnly
+          ? 'Not documented yet.'
+          : 'Not documented yet — anything you add here is shown to everyone in this project.'}
     </p>
   );
 }
@@ -47,7 +53,7 @@ function useCommitText(saved: string, commit: (v: string, refused: () => void) =
   return { v, setV, flush };
 }
 
-function RecordFields({ projectId, ref_, doc, flushRef }: { projectId: string; ref_: string; doc: Doc; flushRef: RefObject<() => void> }) {
+function RecordFields({ projectId, ref_, doc, flushRef, readOnly }: { projectId: string; ref_: string; doc: Doc; flushRef: RefObject<() => void>; readOnly: boolean }) {
   const tags = useTags(projectId);
   const [stamp, setStamp] = useState<{ by?: string; at?: string }>({ by: doc.updatedBy, at: doc.updatedAt });
   const [tagList, setTagList] = useState(doc.tags.map((t) => t.name));
@@ -69,7 +75,8 @@ function RecordFields({ projectId, ref_, doc, flushRef }: { projectId: string; r
         label="Description"
         rows={3}
         value={desc.v}
-        placeholder="What is this, and when should someone use it?"
+        readOnly={readOnly}
+        placeholder={readOnly ? '—' : 'What is this, and when should someone use it?'}
         onChange={(e) => desc.setV(e.target.value)}
         onBlur={desc.flush}
         onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), desc.flush())}
@@ -77,24 +84,29 @@ function RecordFields({ projectId, ref_, doc, flushRef }: { projectId: string; r
       />
       <div className={s.popField}>
         <span className={s.popLabel}>Tags</span>
-        <TagEditor
-          value={tagList}
-          index={tags.data}
-          onChange={(next) => {
-            setTagList(next);
-            save.mutate({ projectId, ref: ref_, patch: { tags: next } });
-          }}
-        />
+        {readOnly ? (
+          doc.tags.length ? <TagChips tags={doc.tags} max={doc.tags.length} /> : <span>—</span>
+        ) : (
+          <TagEditor
+            value={tagList}
+            index={tags.data}
+            onChange={(next) => {
+              setTagList(next);
+              save.mutate({ projectId, ref: ref_, patch: { tags: next } });
+            }}
+          />
+        )}
       </div>
       <Input
         label="Owner"
         value={owner.v}
-        placeholder="Who to ask about this"
+        readOnly={readOnly}
+        placeholder={readOnly ? '—' : 'Who to ask about this'}
         onChange={(e) => owner.setV(e.target.value)}
         onBlur={owner.flush}
         onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), owner.flush())}
       />
-      <Stamp by={stamp.by} at={stamp.at} />
+      <Stamp by={stamp.by} at={stamp.at} readOnly={readOnly} />
     </div>
   );
 }
@@ -102,6 +114,7 @@ function RecordFields({ projectId, ref_, doc, flushRef }: { projectId: string; r
 /** A record's Details popover on `trigger`. */
 export function RecordDetails({ projectId, kind, id, name, trigger }: { projectId: string; kind: string; id: string; name: string; trigger: ReactElement }) {
   const [open, setOpen] = useState(false);
+  const canEdit = useCanEdit(projectId);
   const ref_ = `${kind}:${id}`;
   const flushRef = useRef<() => void>(() => {});
   const q = useQuery({
@@ -133,7 +146,7 @@ export function RecordDetails({ projectId, kind, id, name, trigger }: { projectI
       ) : q.isError ? (
         <ErrorState compact heading={3} title="Could not read the details" message={q.error.message} onRetry={() => void q.refetch()} />
       ) : (
-        <RecordFields projectId={projectId} ref_={ref_} doc={q.data} flushRef={flushRef} />
+        <RecordFields projectId={projectId} ref_={ref_} doc={q.data} flushRef={flushRef} readOnly={!canEdit} />
       )}
     </Popover>
   );
@@ -155,6 +168,7 @@ export function ColumnDetails({ projectId, datasetId, column, doc, example, trig
   trigger: ReactElement;
 }) {
   const [open, setOpen] = useState(false);
+  const readOnly = !useCanEdit(projectId);
   const save = useWrite('catalog:setColumn', ['catalog:columns']);
   // Per write: closing the popover flushes three fields at once, and the refusal of one (a display name another column is also called) is its own.
   const patch = (p: Pick<ColumnDoc, 'displayName' | 'description' | 'example' | 'sensitivity'>, refused?: () => void) =>
@@ -178,24 +192,31 @@ export function ColumnDetails({ projectId, datasetId, column, doc, example, trig
         <span className={s.popName}>{column}</span>
       </div>
       <div className={s.popFields}>
-        <Input label="Display name" value={display.v} placeholder={column} autoFocus onChange={(e) => display.setV(e.target.value)} onBlur={display.flush} />
+        <Input label="Display name" value={display.v} readOnly={readOnly} placeholder={column} autoFocus onChange={(e) => display.setV(e.target.value)} onBlur={display.flush} />
         {!!doc.aliases?.length && (
           <div className={s.popField}>
             <span className={s.popLabel}>Also called</span>
             <span>{doc.aliases.join(', ')}</span>
-            <span className={s.stamp}>Other names people use for this column. Change them on the Columns tab.</span>
+            <span className={s.stamp}>Other names people use for this column.{!readOnly && ' Change them on the Columns tab.'}</span>
           </div>
         )}
-        <Textarea label="Description" rows={3} value={desc.v} placeholder="What does one value in this column mean?" onChange={(e) => desc.setV(e.target.value)} onBlur={desc.flush} />
-        <Input label="Example" value={ex.v} placeholder={example || 'A typical value'} onChange={(e) => ex.setV(e.target.value)} onBlur={ex.flush} />
+        <Textarea
+          label="Description"
+          rows={3}
+          value={desc.v}
+          readOnly={readOnly}
+          placeholder={readOnly ? '—' : 'What does one value in this column mean?'}
+          onChange={(e) => desc.setV(e.target.value)} onBlur={desc.flush} />
+        <Input label="Example" value={ex.v} readOnly={readOnly} placeholder={example || (readOnly ? '—' : 'A typical value')} onChange={(e) => ex.setV(e.target.value)} onBlur={ex.flush} />
         <RadioGroup
           label="Sensitivity"
           orientation="horizontal"
           value={doc.sensitivity ?? 'none'}
           options={SENSITIVITY}
+          disabled={readOnly}
           onValueChange={(v) => patch({ sensitivity: v as ColumnDoc['sensitivity'] })}
         />
-        <Stamp by={doc.updatedBy} at={doc.updatedAt} />
+        <Stamp by={doc.updatedBy} at={doc.updatedAt} readOnly={readOnly} />
       </div>
     </Popover>
   );

@@ -3,7 +3,9 @@
 // source; `/` on an empty line opens the block picker. A chart and its metrics
 // are LIVE figures the server computed (`story:figures`); a caption left empty
 // shows the app's own sentence as its placeholder, so clearing it brings the
-// app's back. A story stores ids, never numbers.
+// app's back. A story stores ids, never numbers. `readOnly` (a viewer): the
+// same document with nothing to click into — no gutter, no editor, captions as
+// figcaptions, pinned filters without a way to change them.
 
 import { useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
@@ -26,6 +28,8 @@ export interface BlockProps {
   index: number;
   count: number;
   editing: boolean;
+  /** A viewer's page: drawn, never edited. */
+  readOnly?: boolean;
   figure: VisualFigure | MetricFigure | undefined;
   figuresPending: boolean;
   onChange: (block: Block, label: string, coalesce?: boolean) => void;
@@ -118,6 +122,10 @@ function TextView({ block, props }: { block: Extract<Block, { kind: 'text' | 'ca
 }
 
 function Caption({ block, appCaption, props }: { block: Extract<Block, { kind: 'visual' | 'metric' | 'image' }>; appCaption: string; props: BlockProps }) {
+  if (props.readOnly) {
+    const text = block.caption || appCaption;
+    return text ? <figcaption className={s.figcaption}>{text}</figcaption> : null;
+  }
   return (
     <textarea
       className={s.caption}
@@ -146,17 +154,26 @@ function Body({ props }: { props: BlockProps }) {
   const { block, figure, figuresPending, projectId } = props;
   switch (block.kind) {
     case 'text':
+      if (props.readOnly) return block.text.trim() ? <Markdown src={block.text} /> : null;
       return props.editing ? <TextEditor block={block} props={props} /> : <TextView block={block} props={props} />;
     case 'callout':
       return (
         <div className={`${s.callout} ${s[`tone_${block.tone}`]}`}>
-          <IconButton
-            icon={TONE_ICON[block.tone]}
-            label="Change the callout style"
-            size="sm"
-            onClick={() => props.onChange({ ...block, tone: TONES[(TONES.indexOf(block.tone) + 1) % TONES.length] }, 'Callout style')}
-          />
-          <div className={s.calloutBody}>{props.editing ? <TextEditor block={block} props={props} /> : <TextView block={block} props={props} />}</div>
+          {props.readOnly ? (
+            <span className={s.calloutIcon} aria-hidden="true">
+              <Icon name={TONE_ICON[block.tone]} size={16} />
+            </span>
+          ) : (
+            <IconButton
+              icon={TONE_ICON[block.tone]}
+              label="Change the callout style"
+              size="sm"
+              onClick={() => props.onChange({ ...block, tone: TONES[(TONES.indexOf(block.tone) + 1) % TONES.length] }, 'Callout style')}
+            />
+          )}
+          <div className={s.calloutBody}>
+            {props.readOnly ? <Markdown src={block.text} /> : props.editing ? <TextEditor block={block} props={props} /> : <TextView block={block} props={props} />}
+          </div>
         </div>
       );
     case 'divider':
@@ -186,14 +203,18 @@ function Body({ props }: { props: BlockProps }) {
               {block.filters.map((f, i) => (
                 <span key={i} className={s.pin}>
                   {pinText(f)}
-                  <button type="button" className={s.pinX} aria-label={`Remove the filter ${pinText(f)}`} onClick={() => props.onChange({ ...block, filters: block.filters.filter((_, j) => j !== i) }, 'Remove filter')}>
-                    <Icon name="x" size={12} />
-                  </button>
+                  {!props.readOnly && (
+                    <button type="button" className={s.pinX} aria-label={`Remove the filter ${pinText(f)}`} onClick={() => props.onChange({ ...block, filters: block.filters.filter((_, j) => j !== i) }, 'Remove filter')}>
+                      <Icon name="x" size={12} />
+                    </button>
+                  )}
                 </span>
               ))}
-              <button type="button" className={s.pinAdd} onClick={props.onPin}>
-                <Icon name="filter" size={12} /> Pin a filter
-              </button>
+              {!props.readOnly && (
+                <button type="button" className={s.pinAdd} onClick={props.onPin}>
+                  <Icon name="filter" size={12} /> Pin a filter
+                </button>
+              )}
             </div>
           </div>
           <div className={s.chart}>
@@ -207,8 +228,10 @@ function Body({ props }: { props: BlockProps }) {
     case 'metrics_row': {
       const fig = figure as MetricFigure | undefined;
       const n = block.kind === 'metric' ? 1 : block.metricIds.length;
+      // A viewer's caption is a figcaption: its block is the figure.
+      const Wrap = props.readOnly ? 'figure' : 'div';
       return (
-        <div>
+        <Wrap className={props.readOnly ? s.metricFigure : undefined}>
           <div className={block.kind === 'metric' ? `${s.metrics} ${s.metricsOne}` : s.metrics}>
             {fig
               ? fig.figures.map((f, i) => (
@@ -224,7 +247,7 @@ function Body({ props }: { props: BlockProps }) {
                 ))}
           </div>
           {block.kind === 'metric' && <Caption block={block} appCaption={fig?.caption || ''} props={props} />}
-        </div>
+        </Wrap>
       );
     }
   }
@@ -233,6 +256,17 @@ function Body({ props }: { props: BlockProps }) {
 export function StoryBlockRow(props: BlockProps) {
   const { block, index, count } = props;
   const navigate = useNavigate();
+  if (props.readOnly) {
+    return (
+      <div className={`${s.block} ${s[`kind_${block.kind}`] || ''}`} id={`st-b-${block.id}`} data-block-id={block.id} data-kind={block.kind}>
+        {/* The gutter's column, empty: the document lines up with an editor's. */}
+        <div aria-hidden="true" />
+        <div className={s.blockBody}>
+          <Body props={props} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={`${s.block} ${s[`kind_${block.kind}`] || ''}`} id={`st-b-${block.id}`} data-block-id={block.id} data-kind={block.kind}>
       <div className={s.gutter}>

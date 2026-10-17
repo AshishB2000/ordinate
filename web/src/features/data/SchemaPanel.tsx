@@ -80,16 +80,11 @@ export function SchemaPanel({ projectId, datasetId }: { projectId: string; datas
           <p className={s.note}>{sampleLine(v)}</p>
           {v.note && <p className={l.warnNote}>{v.note}</p>}
         </div>
-        <Button
-          icon="refresh"
-          size="sm"
-          loading={busy}
-          disabled={!can('editor')}
-          title="Re-read the columns and profile a sample of the rows — one query, cost-guarded"
-          onClick={run}
-        >
-          {v.syncing && !sync.isPending ? 'Syncing…' : 'Sync schema'}
-        </Button>
+        {can('editor') && (
+          <Button icon="refresh" size="sm" loading={busy} title="Re-read the columns and profile a sample of the rows — one query, cost-guarded" onClick={run}>
+            {v.syncing && !sync.isPending ? 'Syncing…' : 'Sync schema'}
+          </Button>
+        )}
       </div>
       {said && (
         <p className={said.error ? s.rowError : s.rowNote} role="status">
@@ -99,7 +94,7 @@ export function SchemaPanel({ projectId, datasetId }: { projectId: string; datas
       {v.missing.length > 0 && <Missing missing={v.missing} />}
       {v.columns.length === 0 ? (
         <EmptyState icon="columns" heading={3} title="No columns">
-          The warehouse described no columns for this selection. Sync the schema to read it again.
+          The warehouse described no columns for this selection.{can('editor') ? ' Sync the schema to read it again.' : ''}
         </EmptyState>
       ) : (
         <div className={s.card}>

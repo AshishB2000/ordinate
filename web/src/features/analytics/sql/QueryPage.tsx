@@ -18,6 +18,7 @@ import { SkeletonTable } from '../../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../../ui/States';
 import { useCaret } from '../../../ui/useCaret';
 import { Composer, type ComposerStart } from '../../import/Composer';
+import { useCanEdit } from '../../projects/api';
 import { useAdoptProject } from '../../projects/current';
 import { explainSql, prepareSave, runSql, useDatasetQuery, useSchema, type RunResult } from './api';
 import { ParamsRow, QueryEditor } from './QueryEditor';
@@ -36,6 +37,7 @@ type Result =
 const plural = (n: number, one: string) => `${formatNumber(n)} ${one}${n === 1 ? '' : 's'}`;
 
 function Head({ projectId }: { projectId: string }) {
+  const canEdit = useCanEdit(projectId);
   return (
     <header className={a.head}>
       <div className={`${a.ident} ${s.identGrow}`}>
@@ -45,7 +47,11 @@ function Head({ projectId }: { projectId: string }) {
           </span>
           SQL query
         </h1>
-        <p className={a.sub}>Every dataset in this project is a table — join, filter and aggregate them, then save the result as a dataset that stays up to date.</p>
+        <p className={a.sub}>
+          {canEdit
+            ? 'Every dataset in this project is a table — join, filter and aggregate them, then save the result as a dataset that stays up to date.'
+            : 'Every dataset in this project is a table — join, filter and aggregate them.'}
+        </p>
       </div>
       <div className={a.actions}>
         <Link className={buttonClass('secondary', 'sm')} to={`/analytics?project=${projectId}`}>
@@ -71,6 +77,8 @@ function Workbench({ projectId }: { projectId: string }) {
   const [seen, setSeen] = useState(false); // the result on screen is for the text and values as they are
   const [saving, setSaving] = useState(false);
   const [composer, setComposer] = useState<ComposerStart | null>(null);
+  // Running and explaining are the viewer's own; saving the result as a dataset is an editor's.
+  const canEdit = useCanEdit(projectId);
   const datasets = schema.data ?? [];
   const placeholder = starter(datasets);
   const rows = result.kind === 'shown' ? result.r.rows : null;
@@ -177,17 +185,21 @@ function Workbench({ projectId }: { projectId: string }) {
         icon="code"
         title="Nothing to query yet"
         actions={
-          <>
-            <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
-              Import a file
-            </Link>
-            <Link className={buttonClass('ghost')} to={`/connections/${projectId}`}>
-              Connect data
-            </Link>
-          </>
+          canEdit && (
+            <>
+              <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
+                Import a file
+              </Link>
+              <Link className={buttonClass('ghost')} to={`/connections/${projectId}`}>
+                Connect data
+              </Link>
+            </>
+          )
         }
       >
-        Every dataset in this project becomes a table you can query with SQL — join them, filter them, aggregate them, and save the result as a dataset that stays up to date.
+        {canEdit
+          ? 'Every dataset in this project becomes a table you can query with SQL — join them, filter them, aggregate them, and save the result as a dataset that stays up to date.'
+          : 'Every dataset in this project becomes a table you can query with SQL. An editor of this project can import one. You have view-only access.'}
       </EmptyState>
     );
   }
@@ -209,7 +221,7 @@ function Workbench({ projectId }: { projectId: string }) {
           saving={saving}
           onRun={() => void go('run')}
           onExplain={() => void go('explain')}
-          onSave={() => void save()}
+          onSave={canEdit ? () => void save() : undefined}
         />
         <ParamsRow
           sql={sql}
@@ -225,7 +237,7 @@ function Workbench({ projectId }: { projectId: string }) {
             <span className={result.kind === 'error' ? `${w.note} ${s.statusErr}` : w.note} role="status">
               {status}
             </span>
-            {shown && <span className={`${w.note} ${s.noteEnd}`}>{`${plural(shown.columns.length, 'column')}${shown.truncated ? ' · showing the first 500 — Save as dataset keeps them all' : ''}`}</span>}
+            {shown && <span className={`${w.note} ${s.noteEnd}`}>{`${plural(shown.columns.length, 'column')}${shown.truncated ? ` · showing the first 500${canEdit ? ' — Save as dataset keeps them all' : ''}` : ''}`}</span>}
           </div>
           {explained && (
             <ul className={w.chips} aria-label="Columns it returns">
@@ -260,7 +272,7 @@ function Workbench({ projectId }: { projectId: string }) {
           ) : (
             !explained && (
               <EmptyState compact heading={3} icon="code" title="Write a query and Run">
-                Click a dataset or a column on the left to insert its name. The first 500 rows show here; Save as dataset keeps them all.
+                Click a dataset or a column on the left to insert its name. The first 500 rows show here{canEdit ? '; Save as dataset keeps them all.' : '.'}
               </EmptyState>
             )
           )}

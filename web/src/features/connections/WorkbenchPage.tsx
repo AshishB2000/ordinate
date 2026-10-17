@@ -34,8 +34,8 @@ import {
   type Logo,
   type SaveMode,
 } from './api';
+import { EditorsOnly } from '../projects/EditorsOnly';
 import { ConnLogo } from './ConnLogo';
-import { EditorsOnly } from './EditorsOnly';
 import { DetailsRail, type TestState } from './DetailsRail';
 import { Results, type ResultState, type Shown } from './Results';
 import { describeKey, SchemaTree } from './SchemaTree';
@@ -58,7 +58,14 @@ function useSettled(v: string, ms: number): string {
 export default function WorkbenchPage() {
   const { projectId = '' } = useParams();
   return (
-    <EditorsOnly projectId={projectId}>
+    <EditorsOnly
+      projectId={projectId}
+      page="Connections"
+      icon="plug"
+      title="Connections are for editors"
+      body="Connecting a source, querying it and saving its rows as a dataset are for editors of this project; the datasets a connection feeds are in Data."
+      back={{ to: `/data/${projectId}`, label: 'Open Data' }}
+    >
       <Opened />
     </EditorsOnly>
   );

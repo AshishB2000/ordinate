@@ -35,6 +35,18 @@
   font-size: var(--t-15);
   font-weight: 600;
 }
+/* A viewer's name: the input's type, as plain text. */
+.nameText {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0 var(--sp-8);
+  color: var(--text-strong);
+  font-size: var(--t-15);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .nameInput:hover {
   border-color: var(--border);
 }

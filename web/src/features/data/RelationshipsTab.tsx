@@ -15,6 +15,7 @@ import { Menu } from '../../ui/Menu';
 import { SkeletonBlock } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
+import { useCanEdit } from '../projects/api';
 import { useRelationships, useWrite, type Relationship } from './api';
 import { formatNumber, fromControl, pctText } from './format';
 import { RelationshipDialog } from './RelationshipDialog';
@@ -205,6 +206,8 @@ export function RelationshipsTab({ projectId }: { projectId: string }) {
   const [selected, setSelected] = useState('');
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<Relationship | null>(null);
+  // Adding and deleting a relationship are writes; a viewer reads the model and selects a row to see it on the diagram.
+  const canEdit = useCanEdit(projectId);
   const select = (id: string) => setSelected((cur) => (cur === id ? '' : id));
 
   if (rels.isPending || ds.isPending) return <SkeletonBlock label="Loading the data model" />;
@@ -218,9 +221,11 @@ export function RelationshipsTab({ projectId }: { projectId: string }) {
   return (
     <section className={s.section} aria-label="Relationships">
       <div className={s.listBar}>
-        <Button variant="primary" icon="plus" disabled={datasets.length < 2} onClick={() => setAdding(true)}>
-          New relationship
-        </Button>
+        {canEdit && (
+          <Button variant="primary" icon="plus" disabled={datasets.length < 2} onClick={() => setAdding(true)}>
+            New relationship
+          </Button>
+        )}
         <span className={s.muted}>{list.length === 1 ? '1 relationship' : `${formatNumber(list.length)} relationships`}</span>
         <p className={s.lead}>A relationship joins live, at query time: nothing is copied, and every visual can use columns from both sides.</p>
       </div>
@@ -230,18 +235,22 @@ export function RelationshipsTab({ projectId }: { projectId: string }) {
           heading={3}
           title="Relate two datasets"
           actions={
-            <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
-              Import file
-            </Link>
+            canEdit && (
+              <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
+                Import file
+              </Link>
+            )
           }
         >
-          A relationship needs two datasets — say orders and the regions they ship to. Import a second one to start a data model.
+          {canEdit
+            ? 'A relationship needs two datasets — say orders and the regions they ship to. Import a second one to start a data model.'
+            : 'A relationship needs two datasets — say orders and the regions they ship to. An editor of this project can import a second one. You have view-only access.'}
         </EmptyState>
       ) : (
         <Canvas datasets={datasets} rels={list} selected={selected} onSelect={select} />
       )}
       {list.length === 0 ? (
-        <p className={s.muted}>Relationships you add appear here with how many rows matched.</p>
+        <p className={s.muted}>{canEdit ? 'Relationships you add appear here with how many rows matched.' : 'No relationships yet.'}</p>
       ) : (
         <div className={s.card}>
           <table className={s.table}>
@@ -276,15 +285,17 @@ export function RelationshipsTab({ projectId }: { projectId: string }) {
                   </td>
                   <td className={`${s.num} ${r.verified.unmatchedFrom ? s.warnText : ''}`}>{formatNumber(r.verified.unmatchedFrom)}</td>
                   <td className={s.actions}>
-                    <Menu
-                      align="end"
-                      trigger={<IconButton icon="more-horizontal" size="sm" label={`Actions for ${name(r.from.datasetId)} to ${name(r.to.datasetId)}`} />}
-                      items={[
-                        { label: 'Show on diagram', icon: 'eye', onSelect: () => setSelected(r.id) },
-                        { kind: 'separator' },
-                        { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setDeleting(r) },
-                      ]}
-                    />
+                    {canEdit && (
+                      <Menu
+                        align="end"
+                        trigger={<IconButton icon="more-horizontal" size="sm" label={`Actions for ${name(r.from.datasetId)} to ${name(r.to.datasetId)}`} />}
+                        items={[
+                          { label: 'Show on diagram', icon: 'eye', onSelect: () => setSelected(r.id) },
+                          { kind: 'separator' },
+                          { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setDeleting(r) },
+                        ]}
+                      />
+                    )}
                   </td>
                 </tr>
               ))}

@@ -12,6 +12,7 @@ import { Button, buttonClass } from '../../../ui/Button';
 import { Input } from '../../../ui/Field';
 import { EmptyState } from '../../../ui/States';
 import { toast } from '../../../ui/Toast';
+import { useCanEdit } from '../../projects/api';
 import { Icon } from '../../../ui/icons/Icon';
 import { Plot, axes } from '../Plot';
 import { call, type FitReply } from '../api';
@@ -48,6 +49,8 @@ function SaveColumn({ projectId, datasetId, datasetName, fit }: { projectId: str
   const [done, setDone] = useState<{ column: string; steps: number } | null>(null);
   const [err, setErr] = useState('');
   const client = useQueryClient();
+  // It adds a Prepare step to the dataset: an editor's.
+  const canEdit = useCanEdit(projectId);
   async function save() {
     const name = column.trim();
     if (!name) {
@@ -69,6 +72,7 @@ function SaveColumn({ projectId, datasetId, datasetName, fit }: { projectId: str
     void client.invalidateQueries({ queryKey: ['dataset:columns', projectId, datasetId] });
     toast(`Added the “${res.column}” column to ${datasetName}`, { kind: 'success' });
   }
+  if (!canEdit) return null;
   return (
     <Card
       id="sg-h-save"

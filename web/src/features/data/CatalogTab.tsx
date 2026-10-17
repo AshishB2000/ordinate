@@ -12,6 +12,7 @@ import { Icon, type IconName } from '../../ui/icons/Icon';
 import { SkeletonTable } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { VIZ_LABELS } from '../../charts/vizLabels';
+import { useCanEdit } from '../projects/api';
 import { useCatalog, useTags, type CatalogRow } from './api';
 import { RecordDetails } from './Details';
 import { ago, formatNumber, fromControl, stamp } from './format';
@@ -104,6 +105,7 @@ export function CatalogTab({ projectId }: { projectId: string }) {
   const [text, setText] = useState('');
   const [kind, setKind] = useState('');
   const [tag, setTag] = useActiveTag();
+  const canEdit = useCanEdit(projectId);
 
   if (q.isPending) return <SkeletonTable cols={6} rows={6} label="Loading the catalog" />;
   if (q.isError) return <ErrorState heading={3} title="The catalog could not be loaded" message={q.error.message} onRetry={() => void q.refetch()} />;
@@ -115,13 +117,16 @@ export function CatalogTab({ projectId }: { projectId: string }) {
         heading={3}
         title="Nothing to catalog yet"
         actions={
-          <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
-            Import a dataset
-          </Link>
+          canEdit && (
+            <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
+              Import a dataset
+            </Link>
+          )
         }
       >
         Every dataset, visual, dashboard, metric and report in this project is listed here with its description, tags and
         owner — so anyone can find the right one and know who to ask.
+        {!canEdit && ' An editor of this project can import a dataset. You have view-only access.'}
       </EmptyState>
     );
   }

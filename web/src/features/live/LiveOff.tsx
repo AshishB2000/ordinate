@@ -22,7 +22,7 @@ import { Icon } from '../../ui/icons/Icon';
 import { EmptyState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { rowsText } from '../data/format';
-import { useCan } from '../projects/api';
+import { useCanEdit } from '../projects/api';
 import { LIVE_OFF, type LiveOffFeature } from './offFeatures';
 import s from './Live.module.css';
 
@@ -59,7 +59,7 @@ export function useMakeCopy(projectId: string, datasetId: string, open?: (copyId
   });
 }
 
-/** The action itself; an editor's (it saves a dataset), so a viewer is told who can. */
+/** The action itself; an editor's (it saves a dataset), so a viewer is not offered it — the sentence beside it says who can. */
 export function MakeCopyButton({ projectId, datasetId, open, variant = 'primary', size }: {
   projectId: string;
   datasetId: string;
@@ -68,16 +68,15 @@ export function MakeCopyButton({ projectId, datasetId, open, variant = 'primary'
   size?: 'sm' | 'md';
 }) {
   const copy = useMakeCopy(projectId, datasetId, open);
-  const can = useCan(projectId);
-  const allowed = can('editor');
+  const canEdit = useCanEdit(projectId);
+  if (!canEdit) return null;
   return (
     <Button
       variant={variant}
       size={size}
       icon="copy"
       loading={copy.isPending}
-      disabled={!allowed}
-      title={allowed ? 'Import the same source as a new dataset that keeps its rows here. This Live dataset stays as it is.' : 'An editor of this project can make a copy.'}
+      title="Import the same source as a new dataset that keeps its rows here. This Live dataset stays as it is."
       onClick={() => copy.mutate()}
     >
       Make a copy
@@ -94,6 +93,7 @@ export function LiveOff({ projectId, datasetId, feature, heading = 2, compact }:
   compact?: boolean;
 }) {
   const words = LIVE_OFF[feature];
+  const canEdit = useCanEdit(projectId);
   return (
     <div className={s.off} data-live-off={feature}>
       <EmptyState
@@ -103,7 +103,9 @@ export function LiveOff({ projectId, datasetId, feature, heading = 2, compact }:
         title={words.title}
         actions={<MakeCopyButton projectId={projectId} datasetId={datasetId} open={(id) => words.open(projectId, id)} size={compact ? 'sm' : 'md'} />}
       >
-        {`${words.why} Make a copy to use it — the copy keeps its rows here and refreshes on a schedule; this Live dataset stays as it is.`}
+        {canEdit
+          ? `${words.why} Make a copy to use it — the copy keeps its rows here and refreshes on a schedule; this Live dataset stays as it is.`
+          : `${words.why} An editor of this project can make a copy that keeps its rows here.`}
       </EmptyState>
     </div>
   );

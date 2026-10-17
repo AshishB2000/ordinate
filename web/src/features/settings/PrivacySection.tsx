@@ -4,7 +4,8 @@
 // already marked, and where the masking key lives. Detection and masking are
 // the server's (src/data/sensitivity.ts, src/app/sharePolicy.ts); the key
 // never reaches a browser. Controls are offered by role: any member reads, an
-// editor marks a column, a project admin changes the policy.
+// editor scans and marks a column (a viewer is not offered either), a project
+// admin changes the policy.
 
 import { useCurrentProject } from '../projects/current';
 import { useCan } from '../projects/api';
@@ -64,8 +65,8 @@ export function PrivacySection() {
   const marked = d.datasets.filter((x) => x.sensitive.length);
   const pendingN = pending.reduce((n, x) => n + x.pending.length, 0);
   const markedN = marked.reduce((n, x) => n + x.sensitive.length, 0);
-  const scanButton = (
-    <Button size="sm" icon="search" disabled={!editor} loading={scan.isPending} onClick={() => scan.mutate({ projectId })}>
+  const scanButton = editor && (
+    <Button size="sm" icon="search" loading={scan.isPending} onClick={() => scan.mutate({ projectId })}>
       Check {d.datasetCount} dataset{d.datasetCount === 1 ? '' : 's'} for sensitive columns
     </Button>
   );
@@ -89,17 +90,24 @@ export function PrivacySection() {
       </Group>
 
       {pendingN > 0 && (
-        <Group title={`To review · ${pendingN}`} desc="Columns that look personal or financial. Nothing is marked until someone says so.">
+        <Group
+          title={`To review · ${pendingN}`}
+          desc={`Columns that look personal or financial. Nothing is marked until someone says so${editor ? '' : ' — an editor of this project'}.`}
+        >
           {pending.flatMap((x) =>
             x.pending.map((p) => (
               <Row key={`${x.id}:${p.column}`} title={`${p.column} · ${x.name}`} desc={`${proposalTitle(p)}. ${p.reason}`}>
                 <Badge tone="warn">{LEVEL[p.level]}?</Badge>
-                <Button size="sm" variant="primary" disabled={!editor} onClick={() => decide.mutate({ projectId, datasetId: x.id, column: p.column, level: p.level })}>
-                  Mark as {p.level}
-                </Button>
-                <Button size="sm" disabled={!editor} onClick={() => decide.mutate({ projectId, datasetId: x.id, column: p.column, level: 'none' })}>
-                  Not sensitive
-                </Button>
+                {editor && (
+                  <>
+                    <Button size="sm" variant="primary" onClick={() => decide.mutate({ projectId, datasetId: x.id, column: p.column, level: p.level })}>
+                      Mark as {p.level}
+                    </Button>
+                    <Button size="sm" onClick={() => decide.mutate({ projectId, datasetId: x.id, column: p.column, level: 'none' })}>
+                      Not sensitive
+                    </Button>
+                  </>
+                )}
               </Row>
             )),
           )}
@@ -108,10 +116,12 @@ export function PrivacySection() {
 
       <Group title={markedN ? `Sensitive columns · ${markedN}` : 'Sensitive columns'} desc="Marked from a review, a column's details or Prepare. Every share path above applies to these.">
         {markedN === 0 ? (
-          <EmptyState icon="shield" title="No columns are marked sensitive yet" heading={3} compact actions={d.datasetCount ? scanButton : undefined}>
+          <EmptyState icon="shield" title="No columns are marked sensitive yet" heading={3} compact actions={(d.datasetCount && scanButton) || undefined}>
             {d.datasetCount
-              ? 'Ordinate flags likely personal and financial columns as data comes in. Datasets imported before that can be checked now.'
-              : 'Import a dataset and Ordinate will flag columns that look personal or financial.'}
+              ? `Ordinate flags likely personal and financial columns as data comes in. Datasets imported before that can be checked ${editor ? 'now' : 'by an editor of this project'}.`
+              : editor
+                ? 'Import a dataset and Ordinate will flag columns that look personal or financial.'
+                : 'When an editor of this project imports a dataset, Ordinate flags columns that look personal or financial.'}
           </EmptyState>
         ) : (
           <>
@@ -125,7 +135,7 @@ export function PrivacySection() {
                 ))}
               </Row>
             ))}
-            <div className={s.actionsRow}>{scanButton}</div>
+            {scanButton && <div className={s.actionsRow}>{scanButton}</div>}
           </>
         )}
       </Group>

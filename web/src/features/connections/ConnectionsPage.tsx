@@ -11,8 +11,8 @@ import { ErrorState, Page, PageSkeleton } from '../../app/blocks';
 import { Select } from '../../ui/Select';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { toast } from '../../ui/Toast';
+import { EditorsOnly } from '../projects/EditorsOnly';
 import { NoProject } from '../projects/NoProject';
-import { EditorsOnly } from './EditorsOnly';
 import { useCatalog, useConnections, useLogos, useRefreshLists, type Connection } from './api';
 import { ConnectionForm, initialDraft, type Draft } from './ConnectionForm';
 import { ConnectorPicker } from './ConnectorPicker';
@@ -47,7 +47,15 @@ export default function ConnectionsPage() {
   if (projectId && !projects.data.some((p) => p.id === projectId)) return <Navigate to="/connections" replace />;
   const id = projectId ?? projects.data[0].id;
   return (
-    <EditorsOnly projectId={id} above={<ProjectPick projectId={id} projects={projects.data} />}>
+    <EditorsOnly
+      projectId={id}
+      page={TITLE}
+      icon="plug"
+      title="Connections are for editors"
+      body="Connecting a source, querying it and saving its rows as a dataset are for editors of this project; the datasets a connection feeds are in Data."
+      back={{ to: `/data/${id}`, label: 'Open Data' }}
+      above={<ProjectPick projectId={id} projects={projects.data} />}
+    >
       <Connect projectId={id} projects={projects.data} />
     </EditorsOnly>
   );

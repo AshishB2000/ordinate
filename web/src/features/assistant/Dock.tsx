@@ -13,6 +13,7 @@ import { useDatasets } from '../../api/datasets';
 import { onServerEvent } from '../../api/events';
 import { rpc } from '../../api/client';
 import { useMe } from '../auth/api';
+import { useCanEdit } from '../projects/api';
 import { buttonClass, IconButton } from '../../ui/Button';
 import { Select } from '../../ui/Select';
 import { SkeletonRows } from '../../ui/Skeleton';
@@ -53,6 +54,9 @@ export default function DockPanel() {
   const isAdmin = me.data?.user?.role === 'admin';
   const project = useDockProject(true);
   const pid = project.id;
+  // A reply's offers to bring data in, rebuild, run a plan or draft a dashboard all write: an editor's.
+  // Gated where they render, not in send(): a viewer still asks, and still reads the answer.
+  const canEdit = useCanEdit(pid);
   // What `@` pinned, for the project it was pinned in; otherwise the context follows the screen.
   const [pin, setPin] = useState<{ projectId: string; context: DockContext } | null>(null);
   const onScreen = useDockContext(pid);
@@ -327,14 +331,14 @@ export default function DockPanel() {
             <div className={`${s.powered} ${s.stageTop}`}>{`Powered by ${modelLabel({ ...mine, isDefault: false }, status.data.models)}`}</div>
           )}
           {pid && <Transcript turns={turns} pending={pending} lastSteps={lastSteps} projectId={pid} threadId={shownThread} onFollowUp={followUp} />}
-          {pid && getData && !pending && (
+          {pid && canEdit && getData && !pending && (
             <div className={s.getData} data-testid="dock-get-data">
               <Link className={buttonClass('primary', 'sm')} to={`/data/import?project=${pid}`}>Import a file</Link>
               <Link className={buttonClass('secondary', 'sm')} to={`/data/import?project=${pid}&source=paste`}>Paste data</Link>
               <Link className={buttonClass('secondary', 'sm')} to={`/connections/${pid}`}>Connect a source</Link>
             </div>
           )}
-          {pid && rebuildOffer && !pending && (
+          {pid && canEdit && rebuildOffer && !pending && (
             <div className={s.getData} data-testid="dock-rebuild">
               <Link className={buttonClass('primary', 'sm')} to={`/analyses/${pid}/rebuild${context.kind === 'dataset' && context.id ? `?dataset=${context.id}` : ''}`}>
                 Rebuild from a screenshot
@@ -342,18 +346,19 @@ export default function DockPanel() {
             </div>
           )}
           {/* Only in the project it was proposed for: an answer landing after the route moved on is not this project's to run. */}
-          {plans
-            .filter((p) => p.projectId === pid)
-            .map((p) => (
-              <PlanCard
-                key={p.key}
-                projectId={p.projectId}
-                threadId={p.threadId}
-                action={p.action}
-                onDone={() => setPlans((ps) => ps.filter((x) => x.key !== p.key))}
-                onLogged={() => void qc.invalidateQueries({ queryKey: ['copilot:history', p.projectId] })}
-              />
-            ))}
+          {canEdit &&
+            plans
+              .filter((p) => p.projectId === pid)
+              .map((p) => (
+                <PlanCard
+                  key={p.key}
+                  projectId={p.projectId}
+                  threadId={p.threadId}
+                  action={p.action}
+                  onDone={() => setPlans((ps) => ps.filter((x) => x.key !== p.key))}
+                  onLogged={() => void qc.invalidateQueries({ queryKey: ['copilot:history', p.projectId] })}
+                />
+              ))}
         </div>
         {prompts.length > 0 && (
           <div className={s.suggests}>
@@ -392,7 +397,7 @@ export default function DockPanel() {
           }
         />
       </aside>
-      {draft && (
+      {canEdit && draft && (
         <Suspense fallback={null}>
           <DraftFlow projectId={draft.projectId} datasetId={draft.datasetId} intent={draft.intent} onClose={() => setDraft(null)} />
         </Suspense>
