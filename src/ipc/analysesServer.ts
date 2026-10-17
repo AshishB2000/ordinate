@@ -149,8 +149,6 @@ export function register(): void {
       up.done();
     }
   });
-  // ponytail: assets live on the pod's DATA_DIR like the workspace logo; a
-  // multi-pod deployment on S3 needs them moved beside the Parquet (T5.2).
   ipcMain.handle('asset:read', async (_e, { projectId, id, ext }: any = {}) => {
     const dataUrl = await readImageDataUrl(projectId, id, ext);
     return dataUrl ? { ok: true, dataUrl } : { ok: false, error: 'That image is missing from the project.' };

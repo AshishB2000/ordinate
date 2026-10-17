@@ -2,21 +2,21 @@
 // dashboards start in. MAIN PROCESS.
 //
 // The settings are three small values on config.json (sanitized below). The
-// LOGO is a file — userData/branding/logo.png|svg — because it is bytes, can
-// be half a megabyte, and has no business inside a JSON the whole app re-reads.
-// A dashboard can carry its own logo (Style panel → Logo → Custom), stored
-// beside it as branding/dash-<analysisId>.png|svg.
+// LOGO is bytes — branding/logo.png|svg through ./blobStore.ts, a row of
+// `blobs` on a server with DATABASE_URL, else a file under userData — because it
+// can be half a megabyte and has no business inside a JSON the whole app
+// re-reads. A dashboard can carry its own logo (Style panel → Logo → Custom),
+// stored beside it as branding/dash-<analysisId>.png|svg.
 //
 // Every logo is VALIDATED before it is written: a PNG by its eight signature
 // bytes, an SVG by being text that is an <svg> document with no script, no
 // event handler and no external reference. It is only ever shown through
 // <img> or embedded as a data: URL, where an SVG cannot run anything — the
 // checks are defence in depth for the day a caller uses it some other way.
-// Writes are atomic (temp sibling, then rename), like every store here.
+// They run again on every read, and the kind must match the name.
 
-import * as fs from 'fs';
 import * as path from 'path';
-import { randomUUID } from 'crypto';
+import { readBlob, removeBlob, writeBlob } from './blobStore';
 
 export type DashStylePreset = 'auto' | 'clean' | 'executive' | 'dense' | 'dark';
 export const DASH_STYLE_PRESET_IDS: readonly DashStylePreset[] = ['auto', 'clean', 'executive', 'dense', 'dark'];
@@ -103,23 +103,15 @@ export async function saveLogo(userData: string, scope: string, buf: Buffer): Pr
   if (!base) return { ok: false, error: 'Unknown logo scope.' };
   const check = validateLogo(buf);
   if (!check.ok) return check;
-  const dir = brandingDir(userData);
-  await fs.promises.mkdir(dir, { recursive: true });
-  const file = path.join(dir, `${base}.${check.kind}`);
-  const tmp = `${file}.${randomUUID()}.tmp`;
-  await fs.promises.writeFile(tmp, buf);
-  await fs.promises.rename(tmp, file);
-  const other = path.join(dir, `${base}.${check.kind === 'png' ? 'svg' : 'png'}`);
-  await fs.promises.rm(other, { force: true });
+  await writeBlob(path.join(brandingDir(userData), `${base}.${check.kind}`), buf);
+  await removeBlob(path.join(brandingDir(userData), `${base}.${check.kind === 'png' ? 'svg' : 'png'}`));
   return check;
 }
 
 export async function removeLogo(userData: string, scope: string): Promise<void> {
   const base = logoBase(scope);
   if (!base) return;
-  for (const ext of ['png', 'svg']) {
-    await fs.promises.rm(path.join(brandingDir(userData), `${base}.${ext}`), { force: true });
-  }
+  for (const ext of ['png', 'svg']) await removeBlob(path.join(brandingDir(userData), `${base}.${ext}`));
 }
 
 /** The stored logo as a data: URL — what an <img>, a report and an export embed — or null. */
@@ -127,10 +119,9 @@ export async function readLogoDataUrl(userData: string, scope: string): Promise<
   const base = logoBase(scope);
   if (!base) return null;
   for (const [ext, mime] of [['png', 'image/png'], ['svg', 'image/svg+xml']] as const) {
-    try {
-      const buf = await fs.promises.readFile(path.join(brandingDir(userData), `${base}.${ext}`));
-      if (validateLogo(buf).ok) return `data:${mime};base64,${buf.toString('base64')}`;
-    } catch (_) { /* not this kind */ }
+    const buf = await readBlob(path.join(brandingDir(userData), `${base}.${ext}`));
+    const check = buf ? validateLogo(buf) : null;
+    if (buf && check?.ok && check.kind === ext) return `data:${mime};base64,${buf.toString('base64')}`;
   }
   return null;
 }

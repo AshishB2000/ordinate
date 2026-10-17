@@ -8,6 +8,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as appPaths from './paths';
 import * as recordFs from './recordFs';
+import { sniffImage } from './projectAssets';
+
+const isPng = (buf: Buffer): boolean => sniffImage(buf) === 'png';
 
 function getHistoryDir(): string {
   return path.join(appPaths.userData(), 'history');
@@ -51,14 +54,20 @@ export async function saveCrop(id: string | number, dataUrl: string): Promise<st
 }
 
 // Read a thread's crop image, or null when there is none. The path is built
-// from the id, never from the cropPath the thread stores.
-export async function loadCrop(id: string | number): Promise<Buffer | null> {
+// from the id, never from the cropPath the thread stores. The file is this
+// pod's; on another pod (or after its disk was wiped) the same PNG is in the
+// thread record, as the model's first message — pass the thread when the
+// caller has it, so a 20 MB record is not parsed twice. PNG bytes only.
+export async function loadCrop(id: string | number, thread?: any): Promise<Buffer | null> {
   if (!isValidId(id)) return null;
-  try {
-    return await recordFs.readFile(cropFilePath(id));
-  } catch (_) {
-    return null;
-  }
+  const file = await recordFs.readFile(cropFilePath(id)).catch(() => null);
+  if (file) return isPng(file) ? file : null;
+  const t = thread ?? (await loadThread(id).catch(() => null));
+  const m = t && Array.isArray(t.messages) ? t.messages[0] : null;
+  const legacy = m && Array.isArray(m.content) ? m.content.find((b: any) => b && b.type === 'image' && b.source) : null;
+  const b64 = typeof m?.image === 'string' ? m.image : legacy?.source?.data;
+  const buf = typeof b64 === 'string' ? Buffer.from(b64, 'base64') : null;
+  return buf && isPng(buf) ? buf : null;
 }
 
 // Save (create or overwrite) a thread file.
