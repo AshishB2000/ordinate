@@ -4,7 +4,7 @@
 // project's visuals. One context, provided by Editor.tsx.
 
 import { createContext, useContext } from 'react';
-import type { Card, ControlValue, ParamPayload, Step, VisualDef } from '../api';
+import type { Card, ControlValue, ParamPayload, SavedView, Step, ViewState, VisualDef } from '../api';
 import type { Doc, History } from './doc';
 import type { Size } from './geometry';
 import type { Adding } from './AddDialogs';
@@ -12,6 +12,30 @@ import type { Viewer } from '../../dashboards/useViewer';
 
 export type Pane = 'data' | 'visuals' | 'filters' | 'props' | null;
 export type SaveState = 'saved' | 'saving' | 'error';
+
+/** The autosave, and the ONE queue every write to the record waits in — a view op never races a document save. */
+export interface Save {
+  state: SaveState;
+  retry(): void;
+  /** Write a pending edit now; resolves when every write queued so far has landed. */
+  flush(): Promise<void>;
+  /** Run `write` after every write queued so far. */
+  queue<T>(write: () => Promise<T>): Promise<T>;
+}
+
+/** The dashboard's saved views (dashboards/views): the list as stored, the one on screen, and how to change both. */
+export interface ViewsApi {
+  list: readonly SavedView[];
+  defaultId: string;
+  /** The view on screen, '' = as authored. */
+  applied: string;
+  /** Put a view on screen ('' = as authored) and name it in `?view=`. */
+  apply(id: string): void;
+  /** The open dashboard as a view (what Save and Update store). */
+  gather(): ViewState;
+  /** The list after a server edit; `applied` names the view on screen after it ('' = none). */
+  settle(list: SavedView[], defaultId: string, applied: string): void;
+}
 
 export interface EditorApi {
   projectId: string;
@@ -28,7 +52,7 @@ export interface EditorApi {
   edit(label: string, mutate: (d: Doc) => void, coalesce?: boolean): void;
   undo(): void;
   redo(): void;
-  save: { state: SaveState; retry(): void };
+  save: Save;
 
   sheet: number;
   setSheet(i: number): void;
@@ -70,6 +94,7 @@ export interface EditorApi {
   toggleFold(groupId: string): void;
   /** The reader's state (T2.9): selection, narrowing, As of, currency, Present, comments. */
   view: Viewer;
+  views: ViewsApi;
 }
 
 export const EditorCtx = createContext<EditorApi | null>(null);

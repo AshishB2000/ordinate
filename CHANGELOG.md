@@ -67,6 +67,13 @@ the desktop installers.
 - **Password sign-in for trying Ordinate out**, now the default. The server prints a one-time setup
   code at first start; you create the admin account in the browser and add people with temporary
   passwords. Switch to single sign-on before real use. See [`docs/server/sso.md`](docs/server/sso.md).
+- **Dashboard filters that reach every value, and saved views.** A dropdown or multi-select control
+  is a searchable popover: it says how many values there are past the first 200 and finds any of
+  them by searching on the server; over a Live dataset it names the sample and takes a typed value.
+  A date control is the period picker, named by the server ("Last 30 days"). The **Views** menu
+  saves what is on screen as a shared view (editors), and everyone can apply one or copy its link
+  (`?view=`); ⌘K opens a view in place, a phone picks one in its Filters sheet, and a published
+  page offers it. See [`docs/dashboard-filters/`](docs/dashboard-filters/00-design.md).
 
 ### Added
 - **The app is no longer empty on first launch.** A bundled sample project — 5,000 rows of generated

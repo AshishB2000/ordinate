@@ -29,12 +29,13 @@ interface Picker {
   current?: { spec: PeriodSpec; label: string; from?: string; to?: string; range?: string };
 }
 
-/** The picker's presets, and `spec` named and resolved — one server call, cached per spec. */
-export function usePeriodPicker(spec: PeriodSpec | null) {
+/** The picker's presets, and `spec` named and resolved — one server call, cached per spec. `enabled: false` asks nothing. */
+export function usePeriodPicker(spec: PeriodSpec | null, enabled = true) {
   return useQuery({
     queryKey: ['period:picker', spec],
     queryFn: async () => (await rpc('period:picker', spec ? { spec } : {})) as Picker,
     staleTime: 60_000,
+    enabled,
   });
 }
 

@@ -32,8 +32,8 @@ export const HIT_ICON: Record<SearchHit['kind'], IconName> = {
   alert: 'bell',
 };
 
-/** Where a hit opens. */
-export function hitHref(h: Pick<SearchHit, 'kind' | 'id' | 'projectId'>): string {
+/** Where a hit opens. A saved view opens its dashboard on it (`?view=`; parentId is the dashboard's). */
+export function hitHref(h: Pick<SearchHit, 'kind' | 'id' | 'projectId' | 'parentId'>): string {
   switch (h.kind) {
     case 'dataset':
       return `/data/${h.projectId}/${h.id}`;
@@ -42,8 +42,9 @@ export function hitHref(h: Pick<SearchHit, 'kind' | 'id' | 'projectId'>): string
     case 'visual':
       return '/visuals';
     case 'analysis':
+      return `/analyses/${h.projectId}/${h.id}`;
     case 'view':
-      return '/dashboards';
+      return h.parentId ? `/analyses/${h.projectId}/${h.parentId}?view=${h.id}` : '/analyses';
     case 'report':
     case 'story':
       return '/reports';

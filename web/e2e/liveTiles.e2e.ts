@@ -155,11 +155,15 @@ e2e('live: a dashboard control over a Live column says why it has no values, and
   await page.getByText(/has not been synced yet, so there is no list of values/).waitFor();
   await screensInPlace(page, 'live-control-not-synced');
 
-  // Sync schema (an editor's): the profile lands, the values are refetched, the control is a menu.
+  // Sync schema (an editor's): the profile lands, the values are refetched, the control is a picker of the sample.
   await page.getByRole('button', { name: 'Sync schema' }).click();
-  const menu = page.getByRole('combobox', { name: 'Region' });
+  const menu = page.getByRole('button', { name: 'Region: All' });
   await menu.waitFor({ timeout: 30_000 });
-  assert.deepEqual((await menu.locator('option').allTextContents()).sort(), ['All', 'East', 'North', 'South', 'West']);
+  await menu.click();
+  const values = page.getByRole('group', { name: 'Region values' });
+  await page.getByText(/^Values from a sample of [\d,]+ rows\.$/).waitFor();
+  assert.deepEqual((await values.getByRole('button').allTextContents()).sort(), ['All', 'East', 'North', 'South', 'West']);
+  await page.keyboard.press('Escape');
   // A number column is never listed: it says so, and offers no sync that would not help.
   const amount = page.getByRole('button', { name: 'Amount: values not listed' });
   await amount.waitFor();
@@ -172,6 +176,7 @@ e2e('live: a dashboard control over a Live column says why it has no values, and
   // The menu filters the Live KPI through the warehouse.
   const kpi = page.getByRole('group', { name: 'Live total card' });
   const all = await kpi.textContent();
-  await menu.selectOption('North');
+  await menu.click();
+  await values.getByRole('button', { name: 'North', exact: true }).click();
   await page.waitForFunction((before) => document.querySelector('[role="group"][aria-label="Live total card"]')?.textContent !== before, all);
 });

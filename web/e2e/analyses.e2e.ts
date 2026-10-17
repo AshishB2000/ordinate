@@ -172,7 +172,8 @@ e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, 
   await page.getByRole('option', { name: 'region (text)' }).click();
   await cDlg.getByRole('button', { name: 'Add' }).click();
   const chip = page.getByRole('group', { name: 'Filters' });
-  await chip.getByRole('combobox', { name: 'region' }).selectOption('East');
+  await chip.getByRole('button', { name: 'region: All' }).click();
+  await page.getByRole('group', { name: 'region values' }).getByRole('button', { name: 'East', exact: true }).click();
   await revenue.getByText('$5.2M').waitFor({ state: 'detached' });
   const narrowed = (await revenue.getByText(/^\$[\d.,]+[KMB]?$/).first().textContent()) ?? '';
   assert.match(narrowed, /^\$\d/, `a narrowed figure from the server, got ${narrowed}`);

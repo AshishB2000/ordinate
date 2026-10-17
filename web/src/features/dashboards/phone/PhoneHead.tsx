@@ -40,8 +40,9 @@ export function PhoneHead() {
   const [filters, setFilters] = useState(false);
   const { datasetIds, latest } = useDashFreshness(ed);
   const n = activeFilters(ed);
-  // Something to set: a control on this sheet, or the view (Compare needs a figure on the dashboard).
-  const hasFilters = barControls(ed.cards).length > 0 || datasetIds.length > 0;
+  // Something to set: a control on this sheet, the view (Compare needs a figure on the dashboard), a saved view.
+  // Saved views are picked in the Filters sheet too.
+  const hasFilters = barControls(ed.cards).length > 0 || datasetIds.length > 0 || ed.views.list.length > 0;
   const sheets = ed.doc.sheets;
   const stamp = ed.view.asOf ? `As of ${new Date(ed.view.asOf).toLocaleString()}` : latest?.text;
   return (

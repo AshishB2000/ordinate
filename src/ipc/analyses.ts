@@ -15,6 +15,9 @@ import * as config from '../app/config';
 import { DASHBOARD_STYLE_PRESETS } from '../analysis/dashboards';
 import * as versions from '../app/versions';
 import * as trash from '../app/trash';
+import { randomUUID } from 'crypto';
+import { applyViewOp } from '../analysis/savedViews';
+import { dashboardGone } from '../analysis/savedViewMessages';
 
 // Analyses IPC — list/get/create/rename/update/delete an Analysis (the AUTHORING
 // container), plus the AI layout draft channel `analysis:draft` (MOVED from the
@@ -107,6 +110,19 @@ export function register() {
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to update the analysis' };
     }
+  });
+
+  // A saved-view edit: read, apply, write the list back. Not a version — a view
+  // is a reader's state, and the sheets and name are left byte for byte.
+  // ponytail: last write wins between two view ops on one record; an `updated_at`
+  // compare-and-swap is the upgrade if two editors ever race here.
+  ipcMain.handle('analysis:view', async (_e, { projectId, id, op }: any = {}) => {
+    const a = await analysis.getAnalysis(projectId, id);
+    if (!a) return { ok: false, error: dashboardGone() };
+    const r = applyViewOp(a, op, a, new Date().toISOString(), randomUUID);
+    if (!r.ok) return r;
+    const saved = await analysis.updateAnalysis(projectId, id, { views: r.views, defaultViewId: r.defaultViewId });
+    return saved ? { ok: true, views: saved.views, defaultViewId: saved.defaultViewId, viewId: r.viewId } : { ok: false, error: dashboardGone() };
   });
 
   ipcMain.handle('analysis:delete', async (_e, { projectId, id }: any = {}) =>

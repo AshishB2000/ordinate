@@ -6,13 +6,14 @@
 // and parameter values, the size shown.
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
-import type { Analysis, ControlValue, OpenReply, Step, VisualDef } from '../api';
+import type { Analysis, OpenReply, SavedView, Step, VisualDef } from '../api';
 import { mergeFilters } from '../VisualTile';
 import { AddDialogs, type Adding } from './AddDialogs';
 import { Canvas } from './Canvas';
-import { EditorCtx, type EditorApi, type Pane, type SaveState } from './context';
+import { EditorCtx, type EditorApi, type Pane, type Save, type SaveState } from './context';
 import { allControls, fromAnalysis, initial, reduce, sheetOf, type Doc } from './doc';
 import { clickFilterSteps, controlSteps, paramPayload } from './filters';
 import type { FilterStep } from '../../visuals/api';
@@ -25,6 +26,7 @@ import { useViewer } from '../../dashboards/useViewer';
 import { DashboardChrome, styleClass, useStyleVars } from '../../dashboards/DashboardChrome';
 import { isPhoneReader } from '../../dashboards/phone/phoneBlocks';
 import { PhoneHead } from '../../dashboards/phone/PhoneHead';
+import { gatherView, openingView, seedFromView } from '../../dashboards/views/viewState';
 
 /** The autosave debounce (dashboards.ts): a drag fires several edits; one write. */
 const SAVE_MS = 600;
@@ -39,19 +41,30 @@ function storedPane(): Pane {
   }
 }
 
-/** Keeps the record and the server in step: one write per burst of edits, flushed on leave. */
-function useAutosave(projectId: string, id: string, doc: Doc, version: number): { state: SaveState; retry(): void } {
+/**
+ * Keeps the record and the server in step: one write per burst of edits, flushed on leave. Every write to the record —
+ * this document save and a saved-view edit (views/useSavedViews) — waits its turn in ONE queue: `analysis:update`
+ * re-reads the record it patches, so a save racing a view op could write the view list back as it was.
+ */
+function useAutosave(projectId: string, id: string, doc: Doc, version: number): Save {
   const [state, setState] = useState<SaveState>('saved');
   const latest = useRef(doc);
   latest.current = doc;
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
   const client = useQueryClient();
+
+  const queue = useCallback(<T,>(w: () => Promise<T>): Promise<T> => {
+    const p = chain.current.then(w);
+    chain.current = p.catch(() => undefined);
+    return p;
+  }, []);
 
   const write = useCallback(() => {
     pending.current = null;
     const d = latest.current;
     setState('saving');
-    rpc('analysis:update', { projectId, id, name: d.name, sheets: d.sheets, filters: d.filters, parameters: d.parameters, style: d.style }).then(
+    return queue(() => rpc('analysis:update', { projectId, id, name: d.name, sheets: d.sheets, filters: d.filters, parameters: d.parameters, style: d.style })).then(
       (r) => {
         const ok = !!(r && (r as { ok?: boolean }).ok);
         setState(ok ? 'saved' : 'error');
@@ -63,12 +76,20 @@ function useAutosave(projectId: string, id: string, doc: Doc, version: number): 
       },
       () => setState('error'),
     );
-  }, [client, projectId, id]);
+  }, [client, projectId, id, queue]);
+
+  const flush = useCallback(async () => {
+    if (pending.current) {
+      clearTimeout(pending.current);
+      void write();
+    }
+    await chain.current;
+  }, [write]);
 
   useEffect(() => {
     if (version === 0) return;
     if (pending.current) clearTimeout(pending.current);
-    pending.current = setTimeout(write, SAVE_MS);
+    pending.current = setTimeout(() => void write(), SAVE_MS);
     setState('saving');
   }, [version, write]);
 
@@ -82,40 +103,45 @@ function useAutosave(projectId: string, id: string, doc: Doc, version: number): 
       window.removeEventListener('beforeunload', warn);
       if (pending.current) {
         clearTimeout(pending.current);
-        write();
+        void write();
       }
     };
   }, [write]);
 
-  return { state, retry: write };
+  return { state, retry: () => void write(), flush, queue };
 }
 
 export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly = false }: { projectId: string; analysis: Analysis; visuals: VisualDef[]; readOnly?: boolean }) {
   const [history, dispatch] = useReducer(reduce, analysis, (a) => initial(fromAnalysis(a)));
   const doc = history.doc;
   const save = useAutosave(projectId, analysis.id, doc, history.version);
-  const view = useViewer(projectId, analysis.id);
+  // Saved views (dashboards/views): `?view=<id>`, else the default view, else the dashboard as authored.
+  const [search, setSearch] = useSearchParams();
+  const [opening] = useState(() => {
+    const v = openingView(analysis.views ?? [], analysis.defaultViewId ?? '', search.get('view'));
+    return { view: v, seed: seedFromView(v, analysis.sheets, analysis.parameters ?? []) };
+  });
+  const view = useViewer(projectId, analysis.id, opening.view ? opening.seed : null);
   const styleVars = useStyleVars(doc.style);
+  const [views, setViews] = useState(() => ({ list: analysis.views ?? [], defaultId: analysis.defaultViewId ?? '' }));
+  const [applied, setApplied] = useState(() => opening.view?.id ?? '');
 
-  // `?sheet=<id>`: a navigation card's page target opens on that sheet.
+  // A navigation's sheet, then `?sheet=<id>` (a navigation card's page target), beat the view's page.
   const [sheet, setSheetRaw] = useState(() => {
-    const want = view.arrivedSheet ?? new URLSearchParams(window.location.search).get('sheet');
-    return Math.max(0, analysis.sheets.findIndex((p) => p.id === want));
+    const want = view.arrivedSheet ?? search.get('sheet');
+    const at = analysis.sheets.findIndex((p) => p.id === want);
+    return at >= 0 ? at : Math.max(0, opening.seed.sheet);
   });
   const [selected, setSelected] = useState<string | null>(null);
   const [multi, setMulti] = useState<Set<string>>(() => new Set());
   const [pane, setPaneRaw] = useState<Pane>(storedPane);
   const [visuals, setVisuals] = useState(() => new Map(initialVisuals.map((v) => [v.id, v])));
-  // The author's defaults are where a control starts (dashGrid.ts seeds controlState from them).
-  const [controls, setControls] = useState(() => {
-    const m = new Map<string, ControlValue>();
-    for (const c of allControls(fromAnalysis(analysis))) if (c.control?.default) m.set(c.id, c.control.default);
-    return m;
-  });
-  const [paramLive, setParamLive] = useState(() => new Map<string, unknown>());
+  // The opening view's picks, else the author's defaults, are where a control starts (dashGrid.ts seeds controlState from them).
+  const [controls, setControls] = useState(() => opening.seed.controls);
+  const [paramLive, setParamLive] = useState(() => opening.seed.params);
   const [pinned, setPinned] = useState<Size | null>(null);
   const [width, setWidth] = useState(0);
-  const [groupTab, setGroupTabs] = useState(() => new Map<string, string>());
+  const [groupTab, setGroupTabs] = useState(() => opening.seed.groupTabs);
   const [folded, setFolded] = useState(() => new Set<string>());
   const [adding, setAdding] = useState<Adding>(null);
 
@@ -167,6 +193,34 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly 
     for (const c of view.clicks) if (!m.has(c.origin)) m.set(c.origin, mergeFilters(baseFilters, clickFilterSteps(view.clicks, c.origin)));
     return m;
   }, [baseFilters, view.clicks]);
+
+  /** Name the view on screen in the address, in place (no history entry). */
+  const nameInUrl = useCallback(
+    (id: string) =>
+      setSearch(
+        (p) => {
+          const next = new URLSearchParams(p);
+          if (id) next.set('view', id);
+          else next.delete('view');
+          return next;
+        },
+        { replace: true },
+      ),
+    [setSearch],
+  );
+  /** Put a view's state on screen; null is the dashboard as authored, on the sheet already open. */
+  const applyState = (v: SavedView | null) => {
+    const seed = seedFromView(v, doc.sheets, doc.parameters);
+    setControls(seed.controls);
+    setParamLive(seed.params);
+    setGroupTabs(seed.groupTabs);
+    if (seed.sheet >= 0) {
+      setSheetRaw(seed.sheet);
+      setSelected(null);
+      setMulti(new Set());
+    }
+    view.restore(seed.selection, seed.narrowed, seed.asOf);
+  };
 
   const api: EditorApi = {
     projectId,
@@ -229,6 +283,25 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly 
         return next;
       }),
     view,
+    views: {
+      list: views.list,
+      defaultId: views.defaultId,
+      applied,
+      apply: (id) => {
+        const v = id ? (openingView(views.list, '', id) ?? undefined) : null;
+        if (v === undefined) return;
+        applyState(v);
+        setApplied(v?.id ?? '');
+        nameInUrl(v?.id ?? '');
+      },
+      gather: () =>
+        gatherView({ sheets: doc.sheets, sheet: sheetIndex, controls, parameters: doc.parameters, params: paramLive, selection: view.selection, narrowed: view.narrowed, groupTabs: groupTab, asOf: view.asOf }),
+      settle: (list, defaultId, now) => {
+        setViews({ list, defaultId });
+        setApplied(now);
+        if (now !== applied) nameInUrl(now);
+      },
+    },
   };
 
   // ⌘Z / ⇧⌘Z (Ctrl on Windows/Linux) — never while typing in a field.
@@ -255,6 +328,14 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly 
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, []);
+
+  // `?view=` changed under an open dashboard (a ⌘K hit, Back / Forward): put that view on screen. One that names no
+  // view, or the view already on screen, changes nothing — and "As authored" leaves the address without one.
+  const wanted = search.get('view');
+  useEffect(() => {
+    const v = apiRef.current.views;
+    if (wanted && wanted.toLowerCase() !== v.applied.toLowerCase() && openingView(v.list, '', wanted)) v.apply(wanted);
+  }, [wanted]);
 
   return (
     <EditorCtx.Provider value={api}>
