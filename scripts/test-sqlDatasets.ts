@@ -421,6 +421,18 @@ async function main(): Promise<void> {
       (gateMod as { readOnlyError: typeof realLexer }).readOnlyError = realLexer;
     }
   }
+  // A dataset NAME is a dataset only where the prelude defines its CTE — the
+  // datasets the lexer's lineage found. A string the lexer skips names none, so a
+  // dataset called like another project's file must not excuse reading that file.
+  const decoy = await datasets.saveDataset(pid, { name: fp, sourceKind: 'paste', columns: [{ name: 'x', type: 'number' }], rows: [[1]] });
+  (gateMod as { readOnlyError: typeof realLexer }).readOnlyError = () => null;
+  try {
+    const viaName = await sq.runSql(pid, `select * from '${fp}'`);
+    ok('boundary: a dataset named like a path does not open that path (AST alone)', viaName.ok === false && !leaks(viaName), JSON.stringify(viaName).slice(0, 200));
+  } finally {
+    (gateMod as { readOnlyError: typeof realLexer }).readOnlyError = realLexer;
+    await datasets.deleteDataset(pid, decoy!.id);
+  }
   // NEGATIVE CONTROL: both gates stubbed, the same text reads the other project's
   // row — so the refusals above are the gate's, not a broken path or a lock.
   const realAst = gateMod.astRelationError;

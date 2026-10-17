@@ -238,7 +238,6 @@ async function compile(projectId: unknown, sql: unknown, params: unknown, views:
     if (e.alias) known.add(foldKey(e.alias));
     known.add(e.slug);
   }
-  const datasetNames = new Set(known);
   for (const v of boundViews) known.add(foldKey(v.name));
   for (const v of boundViews) {
     const g = readOnlyError(v.sql, known);
@@ -246,10 +245,18 @@ async function compile(projectId: unknown, sql: unknown, params: unknown, views:
   }
   const guard = readOnlyError(bound.sql, known);
   if (guard) return { error: guard };
-  const why = await astGate(boundViews, bound.sql, datasetNames);
-  if (why) return { error: why };
 
   const deps = [...new Set([...boundViews.flatMap((v) => extractDeps(v.sql, cat)), ...extractDeps(bound.sql, cat)])];
+  // The AST's datasets are the ones the prelude below defines, never the whole
+  // catalog: a name no CTE defines would fall through to DuckDB's own lookup.
+  const defined = new Set<string>();
+  for (const id of deps) {
+    const e = cat.find((x) => x.id === id) as CatalogEntry;
+    if (e.alias) defined.add(foldKey(e.alias));
+    defined.add(e.slug);
+  }
+  const why = await astGate(boundViews, bound.sql, defined);
+  if (why) return { error: why };
   const ctes: string[] = [];
   for (const id of deps) {
     const e = cat.find((x) => x.id === id) as CatalogEntry;
