@@ -6,10 +6,10 @@
 // and parameter values, the size shown.
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
-import type { Analysis, OpenReply, SavedView, Step, VisualDef } from '../api';
+import { failure, type Analysis, type OpenReply, type SavedView, type Step, type VisualDef } from '../api';
 import { mergeFilters } from '../VisualTile';
 import { AddDialogs, type Adding } from './AddDialogs';
 import { Canvas } from './Canvas';
@@ -27,6 +27,8 @@ import { DashboardChrome, styleClass, useStyleVars } from '../../dashboards/Dash
 import { isPhoneReader } from '../../dashboards/phone/phoneBlocks';
 import { PhoneHead } from '../../dashboards/phone/PhoneHead';
 import { gatherView, openingView, seedFromView } from '../../dashboards/views/viewState';
+import { ConflictBanner, LeaveGuard } from '../../editConflicts/ConflictBanner';
+import { useEditGuard } from '../../editConflicts/useEditGuard';
 
 /** The autosave debounce (dashboards.ts): a drag fires several edits; one write. */
 const SAVE_MS = 600;
@@ -43,60 +45,77 @@ function storedPane(): Pane {
 
 /**
  * Keeps the record and the server in step: one write per burst of edits, flushed on leave. Every write to the record —
- * this document save and a saved-view edit (views/useSavedViews) — waits its turn in ONE queue: `analysis:update`
- * re-reads the record it patches, so a save racing a view op could write the view list back as it was.
+ * this document save and a saved-view edit (views/useSavedViews) — waits its turn in ONE queue, the edit guard's
+ * (editConflicts/useEditGuard): `analysis:update` re-reads the record it patches, so a save racing a view op could write
+ * the view list back as it was. Each save sends the content tag the document was built on; when another tab or person
+ * saved first it is refused, and from then on nothing is sent (`paused`) until the dashboard is reloaded.
  */
-function useAutosave(projectId: string, id: string, doc: Doc, version: number): Save {
+function useAutosave(projectId: string, id: string, doc: Doc, version: number, tag: string | undefined): Save {
   const [state, setState] = useState<SaveState>('saved');
   const latest = useRef(doc);
   latest.current = doc;
+  // The document's version on screen, and the last one a save landed: different = edits the server does not have.
+  const shown = useRef(version);
+  shown.current = version;
+  const landed = useRef(0);
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const chain = useRef<Promise<unknown>>(Promise.resolve());
   const client = useQueryClient();
-
-  const queue = useCallback(<T,>(w: () => Promise<T>): Promise<T> => {
-    const p = chain.current.then(w);
-    chain.current = p.catch(() => undefined);
-    return p;
-  }, []);
+  // Stable callbacks; `changed` flips once.
+  const { save: guarded, queue, changed } = useEditGuard({ projectId, type: 'dashboard', id }, tag);
+  const stale = useRef(changed);
+  stale.current = changed;
+  const unsaved = useCallback(() => shown.current !== landed.current, []);
 
   const write = useCallback(() => {
     pending.current = null;
     const d = latest.current;
+    const v = shown.current;
     setState('saving');
-    return queue(() => rpc('analysis:update', { projectId, id, name: d.name, sheets: d.sheets, filters: d.filters, parameters: d.parameters, style: d.style })).then(
-      (r) => {
-        const ok = !!(r && (r as { ok?: boolean }).ok);
-        setState(ok ? 'saved' : 'error');
-        if (!ok) return;
-        void client.invalidateQueries({ queryKey: ['analysis:gallery', projectId] });
-        // The name as saved, for whoever reads this page's record without owning it (the Assistant's header). The
-        // editor took its document at mount and reads the record no further, so this reseeds nothing.
-        client.setQueryData<OpenReply>(['analysis:open', projectId, id], (o) => (o?.ok ? { ...o, analysis: { ...o.analysis, name: d.name } } : o));
-      },
-      () => setState('error'),
-    );
-  }, [client, projectId, id, queue]);
+    return guarded((base) => rpc('analysis:update', { projectId, id, base, name: d.name, sheets: d.sheets, filters: d.filters, parameters: d.parameters, style: d.style }))
+      .then(
+        (r) => {
+          if (r === null) return setState('paused'); // changed elsewhere: refused, or not sent
+          const ok = !!(r && (r as { ok?: boolean }).ok);
+          setState(ok ? 'saved' : 'error');
+          if (!ok) return;
+          landed.current = v;
+          void client.invalidateQueries({ queryKey: ['analysis:gallery', projectId] });
+          // The name as saved, for whoever reads this page's record without owning it (the Assistant's header). The
+          // editor took its document at mount and reads the record no further, so this reseeds nothing.
+          client.setQueryData<OpenReply>(['analysis:open', projectId, id], (o) => (o?.ok ? { ...o, analysis: { ...o.analysis, name: d.name } } : o));
+        },
+        () => setState('error'),
+      );
+  }, [client, projectId, id, guarded]);
 
   const flush = useCallback(async () => {
     if (pending.current) {
       clearTimeout(pending.current);
       void write();
     }
-    await chain.current;
-  }, [write]);
+    await queue(async () => undefined);
+  }, [write, queue]);
 
   useEffect(() => {
-    if (version === 0) return;
+    if (version === 0 || changed) return;
     if (pending.current) clearTimeout(pending.current);
     pending.current = setTimeout(() => void write(), SAVE_MS);
     setState('saving');
-  }, [version, write]);
+  }, [version, write, changed]);
 
-  // Leaving with an edit still waiting: write it now rather than drop it.
+  // Changed elsewhere (a refused save, a view reply, the server's push): stop — the edit still waiting is never sent.
+  useEffect(() => {
+    if (!changed) return;
+    if (pending.current) clearTimeout(pending.current);
+    pending.current = null;
+    setState('paused');
+  }, [changed]);
+
+  // Leaving with an edit still waiting: write it now rather than drop it — and once another save won (nothing more is
+  // written), say so before the edits this document holds are lost.
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
-      if (pending.current) e.preventDefault();
+      if (pending.current || (stale.current && unsaved())) e.preventDefault();
     };
     window.addEventListener('beforeunload', warn);
     return () => {
@@ -106,15 +125,25 @@ function useAutosave(projectId: string, id: string, doc: Doc, version: number): 
         void write();
       }
     };
-  }, [write]);
+  }, [write, unsaved]);
 
-  return { state, retry: () => void write(), flush, queue };
+  return { state, retry: () => void write(), flush, queue, changed, unsaved };
 }
 
-export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly = false }: { projectId: string; analysis: Analysis; visuals: VisualDef[]; readOnly?: boolean }) {
+export function Editor({ projectId, analysis, visuals: initialVisuals, tag, onReload, readOnly = false }: {
+  projectId: string;
+  analysis: Analysis;
+  visuals: VisualDef[];
+  /** The record's content tag from `analysis:open`: the autosave's first base (docs/edit-conflicts). */
+  tag?: string;
+  /** The banner's Reload: the host reads the record again and mounts a new editor (editConflicts/useReload). */
+  onReload?: () => void;
+  readOnly?: boolean;
+}) {
   const [history, dispatch] = useReducer(reduce, analysis, (a) => initial(fromAnalysis(a)));
   const doc = history.doc;
-  const save = useAutosave(projectId, analysis.id, doc, history.version);
+  const save = useAutosave(projectId, analysis.id, doc, history.version, tag);
+  const conflict = useConflictActions(projectId, analysis.id, doc, onReload);
   // Saved views (dashboards/views): `?view=<id>`, else the default view, else the dashboard as authored.
   const [search, setSearch] = useSearchParams();
   const [opening] = useState(() => {
@@ -342,6 +371,12 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly 
       <div className={`${s.editor} ${styleClass(doc.style, view.presenting)}`} style={styleVars} data-print-root="" data-phone={phone ? '' : undefined}>
         <DashboardChrome />
         {!view.presenting && (phone ? <PhoneHead /> : <Head />)}
+        {save.changed && !readOnly && (
+          <div className={s.conflict}>
+            <ConflictBanner noun="dashboard" onReload={conflict.reload} onCopy={conflict.copy} />
+            <LeaveGuard noun="dashboard" when={save.unsaved} />
+          </div>
+        )}
         <div className={s.bench}>
           {!view.presenting && !readOnly && !phone && <Rail />}
           <SheetHost onWidth={setWidth} reserve={phone && !readOnly ? RAIL_W : 0}>
@@ -352,6 +387,23 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, readOnly 
       </div>
     </EditorCtx.Provider>
   );
+}
+
+/** The banner's two ways on (editConflicts): drop my change and read the record again, or make my document a new dashboard. */
+function useConflictActions(projectId: string, id: string, doc: Doc, onReload?: () => void) {
+  const client = useQueryClient();
+  const navigate = useNavigate();
+  return {
+    reload: onReload ?? (() => void client.resetQueries({ queryKey: ['analysis:open', projectId, id] })),
+    copy: async () => {
+      const made = (await rpc('analysis:create', {
+        projectId, name: `${doc.name} (copy)`.slice(0, 200), sheets: doc.sheets, filters: doc.filters, parameters: doc.parameters, style: doc.style,
+      })) as Analysis | { ok: false; error: string };
+      if (!('id' in made)) throw new Error(failure(made, 'The copy could not be saved.'));
+      void client.invalidateQueries({ queryKey: ['analysis:gallery', projectId] });
+      await navigate(`/analyses/${projectId}/${made.id}`);
+    },
+  };
 }
 
 /** The rail's width (Editor.module.css .rail). */

@@ -74,6 +74,13 @@ the desktop installers.
   saves what is on screen as a shared view (editors), and everyone can apply one or copy its link
   (`?view=`); ⌘K opens a view in place, a phone picks one in its Filters sheet, and a published
   page offers it. See [`docs/dashboard-filters/`](docs/dashboard-filters/00-design.md).
+- **Explore: ask a question with no AI model.** Explore is a full-width question builder for
+  everyone, viewers included: pick a dataset, then a measure and its aggregate, what to group by
+  (and a date's grain), a split and filters — or start from a suggested question, each with a live
+  thumbnail. The answer is the server's chart and the same answer as a table; the question lives in
+  the URL, so Copy link shares it and Back undoes an edit. Editors can save it as a visual or open it
+  in the builder. With an AI model set up, an ask box hands plain words to the Assistant. See
+  [`docs/explore/`](docs/explore/00-design.md).
 - **Email for subscriptions and alerts.** An org admin makes an email list in Admin → Channels from
   the organization's people and teams (no typed addresses); a subscription or an alert sent to it
   reaches only those of them who can open the dashboard's project at that moment, through the one SMTP
@@ -103,6 +110,16 @@ the desktop installers.
   the same second keep both changes. A save that waits more than 15 s says "try again". See
   [`docs/record-locks/00-design.md`](docs/record-locks/00-design.md).
 - A new project's first alert rule could appear in the next new project's alerts.
+- **Two editors never overwrite each other.** Dashboards, visuals, metrics and metric trees, reports,
+  stories, scorecards and scenarios were last-writer-wins: two people on one dashboard, or one person
+  in two tabs, silently overwrote each other's work. Each editor now saves with a tag of the content
+  it opened; a save from a copy someone else has since changed is refused, and a banner offers
+  "Reload" or "Save mine as a copy" instead of overwriting. An open editor also learns at once when
+  another save lands. Saving a view, starring a visual, generating a report or scheduling it never
+  counts as a change. API and MCP callers that send no tag keep last-writer-wins. Version history now also keeps
+  a dashboard parameter's saved default, a visual's analytics overlays, and a report's discussion page
+  and view, and a restore puts them back. See
+  [`docs/edit-conflicts/00-design.md`](docs/edit-conflicts/00-design.md).
 
 ### Added
 - **The app is no longer empty on first launch.** A bundled sample project — 5,000 rows of generated

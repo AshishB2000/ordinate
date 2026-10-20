@@ -44,6 +44,7 @@ import * as reportSpec from '../analysis/reportSpec';
 import * as versions from '../app/versions';
 import { isLiveFigureError, liveCodeOf } from './liveRoute';
 import { isLiveDatasetError, LIVE_DATASET_CODE } from '../data/liveDataset';
+import { contentTag, recordReply } from '../app/editConflict';
 
 /**
  * Why a Live figure is missing — the fields a handler's `{ok: false, error, code, reason}`
@@ -435,14 +436,16 @@ export async function scorecardSnapshot(projectId: string, id: string, offset = 
 
 export function register(): void {
   ipcMain.handle('scorecard:list', async (_e, { projectId }: any = {}) => scorecards.listScorecards(String(projectId || '')));
-  ipcMain.handle('scorecard:get', async (_e, { projectId, id }: any = {}) => scorecards.getScorecard(String(projectId || ''), String(id || '')));
+  // `tag` on the scorecard: the page's base (src/app/editConflict.ts).
+  ipcMain.handle('scorecard:get', async (_e, { projectId, id }: any = {}) => recordReply(await scorecards.readScorecard(String(projectId || ''), String(id || ''))));
   ipcMain.handle('scorecard:create', async (_e, { projectId, name, period, rows, description }: any = {}) => {
     const sc = await scorecards.saveScorecard(String(projectId || ''), { name, period, rows, description });
     return sc ? { ok: true, scorecard: sc } : { ok: false, error: 'Could not create the scorecard.' };
   });
-  ipcMain.handle('scorecard:update', async (_e, { projectId, id, patch }: any = {}) => {
-    const sc = await scorecards.updateScorecard(String(projectId || ''), String(id || ''), patch || {});
-    return sc ? { ok: true, scorecard: sc } : { ok: false, error: 'Scorecard not found.' };
+  // `base`: a stale copy is 409 record_changed (thrown to the route); `tag` is the next base.
+  ipcMain.handle('scorecard:update', async (_e, { projectId, id, base, patch }: any = {}) => {
+    const sc = await scorecards.updateScorecard(String(projectId || ''), String(id || ''), patch || {}, base);
+    return sc ? { ok: true, scorecard: sc, tag: contentTag('scorecard', sc) } : { ok: false, error: 'Scorecard not found.' };
   });
   ipcMain.handle('scorecard:duplicate', async (_e, { projectId, id }: any = {}) => {
     const sc = await scorecards.duplicateScorecard(String(projectId || ''), String(id || ''));

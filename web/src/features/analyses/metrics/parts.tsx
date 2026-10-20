@@ -5,6 +5,7 @@
 // sentence back with the field it belongs beside.
 
 import { rpc } from '../../../api/client';
+import type { EditGuard } from '../../editConflicts/useEditGuard';
 import { Checkbox } from '../../../ui/Choice';
 import { Input } from '../../../ui/Field';
 import { Select } from '../../../ui/Select';
@@ -65,14 +66,21 @@ export interface MetricFields {
   direction: Direction;
 }
 
-export type SaveResult = { metric: Metric } | { error: string; field?: 'name' };
+/** `changed`: another tab or person saved the metric first — nothing was saved; the editor's banner says so. */
+export type SaveResult = { metric: Metric } | { error: string; field?: 'name' } | { changed: true };
+type Reply = { ok: boolean; metric?: Metric; error?: string; field?: 'name'; tag?: string };
 
-/** Create (no `editingId`) or update a metric. Never throws: a refusal comes back as its sentence. */
-export async function saveMetric(projectId: string, editingId: string, datasetId: string, fields: MetricFields): Promise<SaveResult> {
+/**
+ * Create (no `editingId`) or update a metric. An update goes through the editor's guard (editConflicts/useEditGuard),
+ * which sends the tag the editor opened with. Never throws: a refusal comes back as its sentence.
+ */
+export async function saveMetric(projectId: string, editingId: string, datasetId: string, fields: MetricFields, guard?: EditGuard): Promise<SaveResult> {
   try {
-    const r = (editingId
-      ? await rpc('metric:update', { projectId, id: editingId, patch: fields })
-      : await rpc('metric:save', { projectId, input: { ...fields, datasetId } })) as { ok: boolean; metric?: Metric; error?: string; field?: 'name' };
+    const update = (base?: string) => rpc('metric:update', { projectId, id: editingId, ...(base ? { base } : {}), patch: fields }) as Promise<Reply>;
+    const r = editingId
+      ? await (guard ? guard.save(update) : update())
+      : ((await rpc('metric:save', { projectId, input: { ...fields, datasetId } })) as Reply);
+    if (r === null) return { changed: true };
     if (r.ok && r.metric) return { metric: r.metric };
     return { error: r.error || 'Could not save the metric.', field: r.field };
   } catch (err) {

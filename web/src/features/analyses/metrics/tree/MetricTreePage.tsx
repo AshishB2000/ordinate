@@ -6,7 +6,7 @@
 // viewer's tree-less metric asks the server for no suggestions.
 
 import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Page } from '../../../../app/blocks';
 import { Button } from '../../../../ui/Button';
@@ -21,6 +21,7 @@ import { LiveRefusal } from '../../../live/LiveOff';
 import { liveRefusalOf } from '../../../live/refusal';
 import { useRoles } from '../../../projects/api';
 import { saveTree, useSuggest, useTree, type ComputeInput, type PeriodKey, type TreeSpec } from './api';
+import { isRecordChanged } from '../../../editConflicts/useEditGuard';
 import { AddTreeToDashboard } from './AddTreeToDashboard';
 import { TreeEditor, describe } from './TreeEditor';
 import { TreeSkeleton, TreeView } from './TreeView';
@@ -38,16 +39,28 @@ const PERIODS: { value: PeriodKey; label: string }[] = [
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 /** No tree yet: one-click breakdowns read from the formulas, a split, or the editor. */
-function StartHere({ projectId, metricId, name, onEdit, onSaved }: { projectId: string; metricId: string; name: string; onEdit: () => void; onSaved: () => void }) {
+function StartHere({ projectId, metricId, name, tag, onEdit, onSaved, onChanged }: {
+  projectId: string;
+  metricId: string;
+  name: string;
+  /** The metric's tag this "no tree yet" was read with: a one-click save sends it (docs/edit-conflicts). */
+  tag?: string;
+  onEdit: () => void;
+  onSaved: () => void;
+  /** Saved elsewhere meanwhile: nothing typed is lost — say so and read the metric again. */
+  onChanged: () => void;
+}) {
   const q = useSuggest(projectId, metricId);
   const [busy, setBusy] = useState(false);
   const metricName = (id: string) => q.data?.metrics.find((m) => m.id === id)?.name ?? '—';
   const apply = async (tree: TreeSpec) => {
     setBusy(true);
-    const err = await saveTree(projectId, metricId, tree);
+    let changed = false;
+    const r = await saveTree(projectId, metricId, tree, tag).catch((e: Error) => ((changed = isRecordChanged(e)), { error: e.message }));
     setBusy(false);
-    if (err) toast(err, { kind: 'error' });
-    else onSaved();
+    if (r.error) toast(r.error, { kind: 'error' });
+    if (changed) onChanged();
+    else if (!r.error) onSaved();
   };
   const ideas = q.data?.suggestions[metricId] ?? [];
   const columns = (q.data?.columns ?? []).slice(0, 4);
@@ -87,9 +100,12 @@ function StartHere({ projectId, metricId, name, onEdit, onSaved }: { projectId: 
 
 function TreePage({ projectId, metricId }: { projectId: string; metricId: string }) {
   const client = useQueryClient();
+  const navigate = useNavigate();
   const [period, setPeriod] = useState<{ key: PeriodKey; from?: string; to?: string }>({ key: 'latest_month' });
   const [compare, setCompare] = useState<Compare>({ mode: 'previous_period' });
   const [editing, setEditing] = useState(false);
+  // A new editor (the banner's Reload) on the tree as it is now.
+  const [editorGen, setEditorGen] = useState(0);
   // The empty tree's offers depend on the role: nothing is mounted for it until the role is known.
   const roles = useRoles();
   const role = roles.data?.[projectId];
@@ -118,7 +134,15 @@ function TreePage({ projectId, metricId }: { projectId: string; metricId: string
         <TreeView key={JSON.stringify(data.tree)} root={data.root} label={`${data.root.name}, ${data.period.label} ${data.compareLabel}`} />
         {!data.tree &&
           (canEdit ? (
-            <StartHere projectId={projectId} metricId={metricId} name={data.root.name} onEdit={() => setEditing(true)} onSaved={refresh} />
+            <StartHere
+              projectId={projectId}
+              metricId={metricId}
+              name={data.root.name}
+              tag={data.tag}
+              onEdit={() => setEditing(true)}
+              onSaved={refresh}
+              onChanged={() => void client.invalidateQueries({ queryKey: ['metricTree:compute'] })}
+            />
           ) : (
             <EmptyState compact icon="lineage" title="No tree yet" heading={2}>
               {`A tree shows which parts moved ${data.root.name}, each with its share of the change. An editor of this project can break it down. You have view-only access.`}
@@ -162,7 +186,19 @@ function TreePage({ projectId, metricId }: { projectId: string; metricId: string
       )}
       {body}
       {editing && canEdit && data && (
-        <TreeEditor projectId={projectId} metricId={metricId} metricName={data.root.name} initial={data.tree} open={editing} onOpenChange={setEditing} onSaved={refresh} />
+        <TreeEditor
+          key={editorGen}
+          projectId={projectId}
+          metricId={metricId}
+          metricName={data.root.name}
+          initial={data.tree}
+          tag={data.tag}
+          open={editing}
+          onOpenChange={setEditing}
+          onSaved={refresh}
+          onReload={() => void client.refetchQueries({ queryKey: ['metricTree:compute'] }).then(() => setEditorGen((g) => g + 1))}
+          onCopied={(id) => void navigate(`/data/metrics/${projectId}/${id}/tree`)}
+        />
       )}
     </Page>
   );

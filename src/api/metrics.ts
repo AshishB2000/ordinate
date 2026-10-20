@@ -4,7 +4,7 @@
 // string that renders one (`display`, `definitionText`) is the server's.
 
 import { z } from 'zod';
-import { byProjectId, rpc, Steps, Uuid } from './contract';
+import { Base, byProjectId, rpc, Steps, Uuid } from './contract';
 
 /** What a metric IS (analysis/metrics.ts sanitizes every field again). */
 const Definition = z.union([
@@ -48,6 +48,7 @@ export const metrics = {
     input: z.strictObject({
       projectId: Uuid,
       id: Uuid,
+      base: Base.optional(), // the editor's tag (contract.ts Base)
       // No datasetId: the store would ignore it, so the contract refuses it.
       patch: z.strictObject({ name: Fields.name.optional(), definition: Definition.optional(), filters: Fields.filters, format: Fields.format, description: Fields.description, direction: Fields.direction }),
     }),

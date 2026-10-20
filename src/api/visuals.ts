@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { byProjectId, FileToken, rpc, Uuid } from './contract';
+import { Base, byProjectId, FileToken, rpc, Uuid } from './contract';
 
 /** A column name as the dataset record holds it. */
 const Column = z.string().min(1).max(512);
@@ -139,9 +139,10 @@ export const visuals = {
   'visual:get': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
   'visual:save': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, datasetId: Uuid, ...Definition }), project: byProjectId }),
   // A patch: only what is sent changes. `favorite` alone is the gallery's star.
+  // `base`: the builder's tag (contract.ts Base); the star and a rename send none.
   'visual:update': rpc({
     access: 'write',
-    input: z.strictObject({ projectId: Uuid, id: Uuid, ...Patch, favorite: z.boolean().optional() }),
+    input: z.strictObject({ projectId: Uuid, id: Uuid, base: Base.optional(), ...Patch, favorite: z.boolean().optional() }),
     project: byProjectId,
   }),
   // To the project's Trash (30 days). The desktop's `permanent` (taking back an

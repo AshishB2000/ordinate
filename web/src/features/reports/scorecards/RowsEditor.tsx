@@ -13,6 +13,8 @@ import { toast } from '../../../ui/Toast';
 import { useMetricList } from '../../analyses/metrics/api';
 import { failure, type Scorecard, type ScorecardRowDef } from '../api';
 import { ChooseMetrics } from '../stories/Choosers';
+import { ConflictBanner } from '../../editConflicts/ConflictBanner';
+import type { EditGuard } from '../../editConflicts/useEditGuard';
 import s from './RowsEditor.module.css';
 
 export interface EditRow {
@@ -54,7 +56,17 @@ export function fromEditRow(e: EditRow): ScorecardRowDef {
   return row;
 }
 
-export function RowsEditor({ projectId, sc, onClose, onSaved }: { projectId: string; sc: Scorecard; onClose: () => void; onSaved: () => void }) {
+export function RowsEditor({ projectId, sc, guard, conflict, onClose, onSaved }: {
+  projectId: string;
+  sc: Scorecard;
+  /** The page's guard (docs/edit-conflicts): the rows save in its queue, with its base. */
+  guard: EditGuard;
+  /** The page's Reload, and its copy — given this dialog's rows. */
+  conflict: { reload: () => void; copy: (rows: ScorecardRowDef[]) => Promise<void> };
+  onClose: () => void;
+  /** The rows as saved. */
+  onSaved: (rows: ScorecardRowDef[]) => void;
+}) {
   const metrics = useMetricList(projectId);
   const byId = useMemo(() => new Map((metrics.data ?? []).map((m) => [m.id, m])), [metrics.data]);
   const [rows, setRows] = useState<EditRow[]>(() => sc.rows.map(toEditRow));
@@ -66,9 +78,11 @@ export function RowsEditor({ projectId, sc, onClose, onSaved }: { projectId: str
   const save = async () => {
     setSaving(true);
     try {
-      const r = (await rpc('scorecard:update', { projectId, id: sc.id, patch: { rows: rows.map(fromEditRow) } })) as { ok: boolean; error?: string };
+      const sent = rows.map(fromEditRow);
+      const r = (await guard.save((base) => rpc('scorecard:update', { projectId, id: sc.id, base, patch: { rows: sent } }))) as { ok: boolean; error?: string } | null;
+      if (!r) return setSaving(false); // changed elsewhere: the banner, above the rows
       if (!r.ok) throw new Error(failure(r, 'Could not save the scorecard.'));
-      onSaved();
+      onSaved(sent);
     } catch (err) {
       toast(failure(err, 'Could not save the scorecard.'), { kind: 'error' });
       setSaving(false);
@@ -91,12 +105,13 @@ export function RowsEditor({ projectId, sc, onClose, onSaved }: { projectId: str
             <DialogClose asChild>
               <Button variant="ghost">Cancel</Button>
             </DialogClose>
-            <Button variant="primary" loading={saving} onClick={() => void save()}>
+            <Button variant="primary" loading={saving} disabled={guard.changed} onClick={() => void save()}>
               Save
             </Button>
           </>
         }
       >
+        {guard.changed && <ConflictBanner compact noun="scorecard" onReload={conflict.reload} onCopy={() => conflict.copy(rows.map(fromEditRow))} />}
         {metrics.isPending ? (
           <SkeletonRows rows={4} label="Loading metrics" />
         ) : !rows.length ? (

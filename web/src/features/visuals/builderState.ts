@@ -24,6 +24,7 @@ import { useColorEdits, useColorMap, usePersistDeal } from './format/colorMap';
 import { categoryType, suggestName, type Column } from './model';
 import { engineKind, engineName, switchEncoding } from '../analytics/grids/gridEncoding';
 import { chartFeature, LIVE_OFF_CHARTS } from '../live/offFeatures';
+import { useEditGuard } from '../editConflicts/useEditGuard';
 
 export interface Initial {
   visualId?: string;
@@ -36,6 +37,8 @@ export interface Initial {
   analytics: Record<string, unknown>[];
   /** The dataset is Live (L2.6): pivot, cohort and funnel are off, and the stage says so instead of asking. */
   live?: boolean;
+  /** The saved visual's content tag: every save sends it (docs/edit-conflicts). */
+  tag?: string;
 }
 
 /** The maps a level of regions draws (mapKinds.geoMapFits): what a suggested level can become. */
@@ -82,6 +85,9 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
   // "As of" (snapshotAsOf.ts): view state only — never saved, back to Latest on every open.
   const [asOf, setAsOf] = useState<string | null>(null);
   const { visualId, datasetId } = initial;
+  // Both writes of a saved visual — the styling kept as it changes, and Save — go through one guard: in order, each
+  // with the tag the last one returned; once another tab or person saved first, neither is sent (the banner).
+  const guard = useEditGuard({ projectId, type: 'visual', id: visualId }, initial.tag);
   const persist = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(persist.current), []);
 
@@ -159,7 +165,10 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
     // A viewer may try a style on screen; nothing of theirs is written.
     if (visualId && can('editor')) {
       window.clearTimeout(persist.current);
-      persist.current = window.setTimeout(() => void updateVisual(projectId, visualId, { overrides: next }).then(() => refresh(visualId), () => undefined), 300);
+      persist.current = window.setTimeout(
+        () => void guard.save((base) => updateVisual(projectId, visualId, { overrides: next, base })).then((v) => v && refresh(visualId), () => undefined),
+        300,
+      );
     }
   };
 
@@ -172,15 +181,28 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
     if ((kind === 'percent' || kind === 'currency') && !overrides.numberFormat) setOverrides({ ...overrides, numberFormat: kind });
   };
 
-  const save = async (finalName: string) => {
+  const body = (name: string) => {
     const grain = isDate && !eff.grain && reply?.category?.grain ? { grain: reply.category.grain } : {};
-    const body = { name: finalName, chartType: current || chartType || 'column', encoding: { ...eff, ...grain }, overrides, filters: live, analytics: overlays };
-    if (visualId) await updateVisual(projectId, visualId, body);
-    else await saveVisual({ projectId, datasetId, ...body });
+    return { name, chartType: current || chartType || 'column', encoding: { ...eff, ...grain }, overrides, filters: live, analytics: overlays };
+  };
+  /** False: refused as changed elsewhere — nothing saved; the banner says so. */
+  const save = async (finalName: string): Promise<boolean> => {
+    window.clearTimeout(persist.current); // Save carries the styling too
+    if (visualId) {
+      if (!(await guard.save((base) => updateVisual(projectId, visualId, { ...body(finalName), base })))) return false;
+    } else await saveVisual({ projectId, datasetId, ...body(finalName) });
     refresh(visualId);
     void qc.invalidateQueries({ queryKey: ['visual:thumbs', projectId] });
     toast(`Saved “${finalName}”.`, { kind: 'success' });
     void navigate(`/visuals/${projectId}`);
+    return true;
+  };
+  const conflict = {
+    copy: async () => {
+      const made = await saveVisual({ projectId, datasetId, ...body(`${initial.name || label} (copy)`.slice(0, 200)) });
+      refresh(undefined);
+      await navigate(`/visuals/${projectId}/${made.id}`);
+    },
   };
 
   const explain = () =>
@@ -196,7 +218,7 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
   return {
     enc, setEnc, chartType, setChartType, overrides, patch, filters, setFilters, live, overlays, setOverlays,
     eff, isDate, complete, preview, reply, data, fit, hasGeo, mappable: hasGeo || !!level, recommended: offered, current, label, pickType, save, explain,
-    drawn, scope, measures: measureNames(eff), visualId, datasetId, asOf, setAsOf, liveDataset: !!initial.live, offType,
+    drawn, scope, measures: measureNames(eff), visualId, datasetId, asOf, setAsOf, liveDataset: !!initial.live, offType, changed: guard.changed, conflict,
     canEdit: can('editor'),
     formatAs,
   };

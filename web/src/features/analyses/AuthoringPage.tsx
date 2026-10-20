@@ -14,6 +14,7 @@ import { useRoles } from '../projects/api';
 import { useAdoptProject } from '../projects/current';
 import { useOpenAnalysis } from './api';
 import { Editor } from './editor/Editor';
+import { useReload } from '../editConflicts/useEditGuard';
 import s from './editor/Editor.module.css';
 
 function Loading() {
@@ -45,6 +46,8 @@ export default function AuthoringPage() {
   const { projectId = '', analysisId = '' } = useParams();
   useAdoptProject(projectId);
   const q = useOpenAnalysis(projectId, analysisId);
+  // After a conflict, Reload: the record read again, in a new editor.
+  const { gen, reload } = useReload(['analysis:open', projectId, analysisId]);
   // The caller's role decides whether this opens to edit or to read; wait for it, so the tools never flash.
   const roles = useRoles();
   const client = useQueryClient();
@@ -73,5 +76,15 @@ export default function AuthoringPage() {
     );
   }
   const role = roles.data?.[projectId];
-  return <Editor key={analysisId} projectId={projectId} analysis={q.data.analysis} visuals={q.data.visuals} readOnly={role !== 'editor' && role !== 'admin'} />;
+  return (
+    <Editor
+      key={`${analysisId}:${gen}`}
+      projectId={projectId}
+      analysis={q.data.analysis}
+      visuals={q.data.visuals}
+      tag={q.data.tag}
+      onReload={reload}
+      readOnly={role !== 'editor' && role !== 'admin'}
+    />
+  );
 }

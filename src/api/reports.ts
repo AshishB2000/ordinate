@@ -11,7 +11,7 @@
 // carries no `folder` from a browser.
 
 import { z } from 'zod';
-import { byProjectId, rpc, Steps, Uuid } from './contract';
+import { Base, byProjectId, rpc, Steps, Uuid } from './contract';
 
 const ById = z.strictObject({ projectId: Uuid, id: Uuid });
 const Name = z.string().max(200);
@@ -52,7 +52,8 @@ export const reports = {
   'reports:get': rpc({ access: 'read', input: ById, project: byProjectId }),
   // The page list is built by the server from the dashboard's sheets.
   'reports:create': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, analysisId: Uuid }), project: byProjectId }),
-  'reports:update': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid, patch: z.strictObject(ReportFields) }), project: byProjectId }),
+  // `base` on the three editors' updates: the tag their copy was built on (contract.ts Base).
+  'reports:update': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid, base: Base.optional(), patch: z.strictObject(ReportFields) }), project: byProjectId }),
   // To the project's Trash, restorable.
   'reports:delete': rpc({ access: 'write', input: ById, project: byProjectId }),
   'reports:duplicate': rpc({ access: 'write', input: ById, project: byProjectId }),
@@ -74,7 +75,7 @@ export const reports = {
   'story:list': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
   'story:get': rpc({ access: 'read', input: ById, project: byProjectId }),
   'story:create': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, name: Name.optional(), blocks: Blocks.optional() }), project: byProjectId }),
-  'story:update': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid, name: Name.optional(), blocks: Blocks.optional() }), project: byProjectId }),
+  'story:update': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid, base: Base.optional(), name: Name.optional(), blocks: Blocks.optional() }), project: byProjectId }),
   'story:delete': rpc({ access: 'write', input: ById, project: byProjectId }),
   // The Assistant's outline (structure only, saved nowhere) — asking is `read`; building it is `write`.
   'story:draft': rpc({
@@ -99,6 +100,7 @@ export const reports = {
     input: z.strictObject({
       projectId: Uuid,
       id: Uuid,
+      base: Base.optional(),
       patch: z.strictObject({ name: Name.optional(), period: Period.optional(), rows: Rows.optional(), description: z.string().max(2_000).optional() }),
     }),
     project: byProjectId,

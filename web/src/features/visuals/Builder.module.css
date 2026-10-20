@@ -408,3 +408,9 @@
   border-top: 2px dashed var(--chart-1, var(--accent));
   opacity: 0.5;
 }
+
+/* The edit-conflict banner (editConflicts/ConflictBanner), above the head. */
+.conflict {
+  flex: 0 0 auto;
+  margin-bottom: var(--sp-12);
+}

@@ -81,7 +81,8 @@ export function EncodingForm({
   const qc = useQueryClient();
   const metrics = useMetricList(projectId);
   // Which dialog is open: a new field for a slot (-1 = a new measure), or a metric to edit.
-  const [calc, setCalc] = useState<{ slot: number; editing?: MetricSummary; full?: Metric } | null>(null);
+  // `gen`: a new form on each open — the banner's Reload opens the metric again (docs/edit-conflicts).
+  const [calc, setCalc] = useState<{ slot: number; editing?: MetricSummary; full?: Metric; gen?: number } | null>(null);
   const set = (patch: Partial<Encoding>) => {
     const next: Encoding = { ...encoding, ...patch };
     for (const k of Object.keys(patch)) if (next[k] === undefined) delete next[k];
@@ -155,13 +156,13 @@ export function EncodingForm({
       toast(`Added the column “${made.name}” and grouped the chart by it.`, { kind: 'success' });
     }
   };
+  // Both editors read the record first: a simple metric's needs its filters, and either's save sends the tag it came with.
   const edit = (slot: number, metric: MetricSummary) => {
-    if (isFormula(metric.definition)) return setCalc({ slot, editing: metric });
-    // A simple metric opens in the Metrics tab's own editor, which needs the whole record (its filters).
     void rpc('metric:get', { projectId, id: metric.id }).then((r) => {
-      const res = r as { ok: boolean; metric?: Metric; error?: string };
-      if (res.ok && res.metric) setCalc({ slot, full: res.metric });
-      else toast(res.error || 'That metric could not be opened.', { kind: 'error' });
+      const res = r as { ok: boolean; metric?: Metric; error?: string; tag?: string };
+      if (!res.ok || !res.metric) return toast(res.error || 'That metric could not be opened.', { kind: 'error' });
+      if (isFormula(res.metric.definition)) setCalc({ slot, editing: { ...metric, ...res.metric, tag: res.tag }, gen: Date.now() });
+      else setCalc({ slot, full: { ...res.metric, tag: res.tag } });
     }, (err: Error) => toast(err.message, { kind: 'error' }));
   };
 
@@ -286,6 +287,7 @@ export function EncodingForm({
       ) : (
         calc && (
           <CalcDialog
+            key={calc.gen}
             projectId={projectId}
             datasetId={datasetId}
             columns={cols}
@@ -293,6 +295,7 @@ export function EncodingForm({
             live={!!live}
             chart
             editing={calc.editing}
+            onReload={calc.editing ? () => calc.editing && edit(calc.slot, calc.editing) : undefined}
             copyTo={(id) => `/visuals/${projectId}/new?dataset=${encodeURIComponent(id)}`}
             onCreated={(made) => created(calc.slot, made)}
             onClose={() => setCalc(null)}

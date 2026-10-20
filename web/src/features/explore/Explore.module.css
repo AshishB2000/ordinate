@@ -1,0 +1,359 @@
+/* Explore (docs/explore/00-design.md): a full-width workbench. The page's
+   title, the optional ask box, then a fields rail beside the question's four
+   wells, and under them the suggestions or the answer and its table. Under
+   900px the rail folds into a bottom sheet (#299's Sheet); under 600px the
+   wells stack and the chart is phone height. Tokens only (theme.css). */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  padding: var(--sp-24) var(--sp-32) var(--sp-48);
+  min-height: 100%;
+}
+@media (max-width: 900px) {
+  .page {
+    padding: var(--sp-16);
+  }
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.title {
+  margin: 0;
+  font-size: var(--t-20);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tighter);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.sub {
+  margin: 0;
+  max-width: 96ch;
+  color: var(--muted);
+}
+.subName {
+  font-weight: 600;
+  color: var(--text);
+}
+.liveTag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: 20px;
+  margin-left: var(--sp-8);
+  padding: 0 var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-11);
+  font-weight: 600;
+  vertical-align: 1px;
+}
+
+/* ── The ask box (an AI model is ready): one line, the page's full measure ── */
+.ask {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  height: 44px;
+  padding: 0 var(--sp-8) 0 var(--sp-16);
+  background: var(--surface-float);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-sm);
+  color: var(--accent);
+}
+.ask:focus-within {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.askInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: none;
+  outline: none;
+  color: var(--text);
+  font: inherit;
+}
+.askInput::placeholder {
+  color: var(--text-faint);
+}
+.askSend {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+.askSend:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── The bench: the rail (sticky while the answer scrolls) and the main column ── */
+.bench {
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr);
+  gap: var(--sp-16);
+  align-items: start;
+}
+.rail {
+  position: sticky;
+  top: var(--sp-16);
+  max-height: calc(100vh - 40px - var(--sp-32));
+  max-height: calc(100dvh - 40px - var(--sp-32));
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  padding: var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  scrollbar-width: thin;
+}
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .bench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rail {
+    display: none;
+  }
+}
+
+/* ── The field list (the rail, the phone's sheet, every well's picker) ── */
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.groupH {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0;
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.groupN {
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.fieldRows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.field {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  width: 100%;
+  min-height: 30px;
+  padding: 0 var(--sp-8) 0 var(--sp-4);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.field:hover {
+  background: var(--surface-2);
+}
+.field:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+.fieldIcon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-sm);
+  color: var(--kind);
+  background: color-mix(in srgb, var(--kind) 13%, transparent);
+}
+/* One hue per kind of field, from the chart palette: the same on a pill (./Question.module.css). */
+.field[data-kind='dimension'] {
+  --kind: var(--chart-1);
+}
+.field[data-kind='date'] {
+  --kind: var(--chart-4);
+}
+.field[data-kind='measure'] {
+  --kind: var(--chart-2);
+}
+.fieldName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fieldOn {
+  background: var(--accent-soft);
+  color: var(--text-strong);
+  font-weight: 500;
+}
+.fieldOn:hover {
+  background: var(--accent-line);
+}
+.fieldRole {
+  flex: 0 0 auto;
+  font-size: var(--t-11);
+  font-weight: 600;
+  color: var(--accent);
+}
+.fieldsNone {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+/* In the bottom sheet every row is a 44px touch target. */
+.sheetFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  padding-bottom: var(--sp-8);
+}
+.sheetFields .field {
+  min-height: 44px;
+}
+
+/* Half a question: what is missing, in the open. */
+.prompt {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.prompt > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+/* ── No data yet: what Explore does, and the doors ── */
+.blank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-48) var(--sp-24);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  text-align: center;
+}
+.blankArt {
+  display: flex;
+  gap: var(--sp-12);
+  margin-bottom: var(--sp-8);
+  color: var(--accent);
+}
+.blankGlyph {
+  display: flex;
+  opacity: 0.35;
+}
+.blankGlyph svg {
+  width: 30px;
+  height: 30px;
+}
+.blankFocus {
+  opacity: 1;
+}
+.blankH {
+  margin: 0;
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.blankP {
+  max-width: 62ch;
+  margin: 0;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.blankAsk {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-8);
+  margin: var(--sp-8) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.blankAsk li {
+  padding: var(--sp-4) var(--sp-12);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-full);
+  background: var(--inset);
+  color: var(--text);
+  font-size: var(--t-12);
+}
+.blankActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-8);
+  margin-top: var(--sp-16);
+}
+
+/* ── The skeleton (the workbench's own shape) ── */
+.skTitle {
+  display: block;
+  width: 120px;
+  height: 22px;
+}
+.skSub {
+  display: block;
+  width: min(560px, 80%);
+  height: 14px;
+}
+.skRow {
+  display: block;
+  height: 24px;
+}
+.skWells {
+  display: block;
+  height: 136px;
+  border-radius: var(--r-lg);
+}

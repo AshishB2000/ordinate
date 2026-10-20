@@ -42,6 +42,7 @@ import { maskEmbedTokens, maskEmbedUrl, registerEmbedRoutes } from './embed/rout
 import { useEmbedDb } from './embed/settings';
 import { isLiveDatasetError, LIVE_DATASET_CODE, liveRefusalsRaised, tagLiveRefusals } from '../data/liveDataset';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
+import { isRecordChanged } from '../app/editConflict';
 import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -407,6 +408,12 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         await record('error', decision.projectId);
         return reply.code(409).send({ error: 'record_busy', code: 'record_busy', message: (err as Error).message });
       }
+      if (isRecordChanged(err)) {
+        // A whole-document save from a stale copy (src/app/editConflict.ts): the record is
+        // untouched; the catalog's sentence and the current tag, never the record.
+        await record('error', decision.projectId);
+        return reply.code(409).send({ error: 'record_changed', code: 'record_changed', message: err.message, tag: err.tag });
+      }
       if (isLiveFigureError(err)) {
         // L2.4: a Live KPI the warehouse could not give, thrown past a handler that
         // did not catch it — typed the same way, its catalog sentence only (R-L6).
@@ -491,6 +498,8 @@ export function registerHandlers(): void {
   // The Visuals screen (T2.7): the builder's sampled preview, the gallery's thumbnails, the drill
   // panel and period picker, and the project colour map that Format → Colours edits.
   for (const mod of ['../ipc/vizSample', '../ipc/visualsServer', '../ipc/format']) (require(mod) as { register: () => void }).register();
+  // Explore (docs/explore): a dataset's fields and suggested questions; every figure it draws is `visual:data`'s.
+  (require('../ipc/explore') as typeof import('../ipc/explore')).register();
 
   // Prepare and pipelines (T2.6). Pipelines' cron rides the server's own tick job (./jobs/schedules.ts), so headless here.
   for (const mod of ['../ipc/preparePower', '../ipc/text', '../ipc/formula']) (require(mod) as { register: () => void }).register();
