@@ -140,8 +140,12 @@ Controls (each suite's negative control, run on every gate):
 
 - **Wrap the remaining collection stores**: copilot, eventStore, relationships, trashStore,
   channels, connections, userTemplateStore, `history.ts` `setDatasetId`, projectBoundaries.
-- **Whole-document editors** (analyses, visuals, metrics, stories, scorecards, scenarios,
-  notebooks) stay last-writer-wins. Next: an `updatedAt` compare-and-set.
+- ~~**Whole-document editors** stay last-writer-wins.~~ Done in
+  [`docs/edit-conflicts/`](../edit-conflicts/00-design.md): dashboards, visuals, metrics and their
+  trees, reports, stories, scorecards and scenarios compare a content tag (not `updatedAt`) inside
+  this lock — each store's update function holds the record — and refuse a stale copy with 409
+  `record_changed`. What stays last-writer-wins: a caller that sends no tag (MCP, automation), and
+  the notebook, which has had no save channel since T8.1.
 - **`src/data/datasets.ts`** (792 lines) is untouched. Refresh, `updateDataset` and `updateSteps`
   rewrite the record from a read taken before the fetch or pipeline, so they still drop locked
   metadata written meanwhile. Next: split `datasets.ts`, then lock only the record switch.

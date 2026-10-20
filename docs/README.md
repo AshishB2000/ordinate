@@ -18,6 +18,7 @@ New here? Start with the [README](../README.md). To run Ordinate, go to the
 | [`first-run-pass/`](first-run-pass/findings.md) | **The first-run pass**: a fresh install walked as an admin, an editor and a viewer; what was rough, what fixed it, and what is still open. |
 | [`analysis/`](analysis/00-model.md) | The analysis and dashboard record model (an analysis is the authoring surface; a dashboard is a by-value snapshot) and the authoring surface. Still the spec. |
 | [`automation.md`](automation.md) | The MCP endpoint and the command registry. Generated from `src/automation/registry.ts`; do not edit by hand. |
+| [`edit-conflicts/`](edit-conflicts/00-design.md) | **Edit conflicts**: every whole-document editor saves with a content tag, compared inside the record lock; a stale save is refused with a banner (Reload, or Save mine as a copy), and an open editor hears of another save at once. |
 
 ## History (the desktop era)
 

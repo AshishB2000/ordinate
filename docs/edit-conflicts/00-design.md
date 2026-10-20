@@ -49,13 +49,15 @@ save made from a stale copy. Nothing is merged and nothing is overwritten.
 | Piece | Where | Job |
 |---|---|---|
 | `contentTag(type, rec)` | `src/app/editConflict.ts` | sha256 of `canonical(contentOf(type, rec))` |
-| `checkBase(type, existing, base)` | same | absent `base` → nothing; a different tag → throws `ERECORDCHANGED` (`tag` = the current one) |
-| `lockedUpdate(file, type, base, load, apply)` | same | `recordFs.locked(file)`: load, `checkBase`, apply; after the commit, push `hub:record-saved` if the tag moved |
+| `checkBase(type, existing, base)` | same | `existing`'s tag; a `base` that differs → throws `ERECORDCHANGED` (`tag` = the current one); absent `base` → last-writer-wins |
+| `lockedUpdate(type, {projectId, id, file}, base, load, apply)` | same | `recordFs.locked(file)`: load, `checkBase`, apply; after the commit, push `hub:record-saved` if the tag moved. Each store's update function is this, on its own record path |
+| `tagged(type, rec)` | same | a reply that IS the record (`visual:get`, `story:get`, …) with its `tag` on it |
 | `recordChanged(type)` | `src/app/editConflictMessages.ts` | the catalog sentence, one per type |
 | the route | `src/server/app.ts` | an uncaught `ERECORDCHANGED` → `409 {error, code: 'record_changed', message, tag}` |
 | `Base` | `src/api/contract.ts` | `z.string().min(1).max(64)` — the optional `base` of eight contracts |
-| `useEditGuard` | `web/src/features/editConflicts/useEditGuard.ts` | the editor's base, its ONE save queue, the 409 → `changed`, the push |
-| `<ConflictBanner>` | `web/src/features/editConflicts/ConflictBanner.tsx` | the banner: per-type wording, Reload, Save mine as a copy (busy and failure states) |
+| `useEditGuard` | `web/src/features/editConflicts/useEditGuard.ts` | the editor's base, its ONE save queue, the 409 → `changed`, view replies checked, the push |
+| `useReload` | same | a page's Reload: refetch the record, then bump the editor's `key` so a NEW editor mounts on it |
+| `<ConflictBanner>` | `web/src/features/editConflicts/ConflictBanner.tsx` | the banner: per-type wording, Reload, Save mine as a copy (busy and failure states); `compact` inside a dialog; scrolls itself into view |
 
 ## Inventory (b5377dd2)
 
@@ -140,6 +142,46 @@ The compare only protects a save if every other writer of the record waits for t
   reader of the project cannot already read. Ceiling: delivery is not ordered against an open, so a
   push for a save made just before this tab opened can raise a false banner (Reload clears it); the
   409 stays the guarantee.
+
+### Built, editor by editor
+
+| Editor | Base from | Saves through the guard | Banner | Reload | Save mine as a copy |
+|---|---|---|---|---|---|
+| Dashboard (`analyses/editor/Editor.tsx`) | `analysis:open` `tag` | the autosave and the saved-view ops, one queue | under the head; the save chip says "Not saved" | `AuthoringPage` `useReload` | `analysis:create` (the contract now takes `style`) → the copy's editor |
+| Interactions checkboxes (`KindProps.tsx`) | the visual def's `tag` (`analysis:open`) | `visual:update` with `base` | a toast with the server's sentence (not this editor's record) | — | — |
+| Visual builder (`visuals/builderState.ts`) | `visual:get` `tag` | the styling autosave and Save | above the head; Save off | `BuilderPage` `useReload` | `visual:save` → `/visuals/<p>/<id>` |
+| Metric dialog (`metrics/MetricEditor.tsx`) | `metric:get` `tag` (each of its 3 hosts) | `saveMetric(…, guard)` | inside the dialog; Save off | the dialog re-reads and remounts its body | `metric:save` "(copy)" → the host's `onSaved` |
+| Measure dialog (`calc/MeasureForm.tsx`) | `metric:get` `tag` — "edit measure" now reads the record first (one more RPC on that click) | `saveMetric(…, guard)` | inside the dialog | `EncodingForm` reopens it (`gen` key) | `metric:save` "(copy)" |
+| Tree editor (`metrics/tree/TreeEditor.tsx`) | `metricTree:compute` `tag` at the editor's open | `saveTree(…, base)` | inside the dialog | the page refetches, new editor key | `metric:duplicate` + `metricTree:save` → the copy's tree page |
+| Tree one-click start (`MetricTreePage.tsx`) | the same `tag` | `saveTree(…, base)` | a toast, and the tree is read again — nothing typed is lost | — | — |
+| Report builder (`reports/builder/ReportBuilder.tsx`) | `reports:open` `tag` | Save, and Generate's save | under the head; Save off | `useReload` | `reports:duplicate` + `reports:update` → `/reports/<p>/<id>` |
+| Story (`reports/stories/StoryPage.tsx`) | `story:get` `tag` | the autosave — now one at a time | under the head; status "Not saved" | `useReload` | `story:create` → `/stories/<p>/<id>` |
+| Scorecard (`reports/scorecards/ScorecardPage.tsx`, `RowsEditor.tsx`) | `scorecard:get` `tag` | name, period and the rows dialog, one guard | under the head, and inside the rows dialog | `useReload` | `scorecard:create` (with the dialog's rows when it was refused) |
+| Scenario (`analytics/scenarios/ScenarioPage.tsx`) | `scenario:get` `tag` | the autosave — now one at a time | under the head | `useReload` | `scenario:create` → its page |
+
+Two caches had to follow the saves: `reports:open` and `scenario:get` are `staleTime: Infinity`, so
+reopening within five minutes started from the first read — with the guard, that is a stale base and
+a false banner on the first save. Each save now writes its reply (and tag) into the cached open.
+
+**Reload is a new editor, not a reset query.** Resetting the open query was enough in theory (the
+page shows its skeleton, then a new editor), but a fast reply lands before React renders the
+skeleton, and the old editor — its document and its paused guard — stays. `useReload` refetches and
+then bumps the editor's `key`.
+
+## Measured
+
+A 60-card dashboard, 200 sequential `updateAnalysis` per run, median of 5 runs, b5377dd2 (built from
+`git archive`) and this branch back to back, local Postgres 17 (scratchpad bench, not committed):
+
+| | b5377dd2 | this branch, no `base` | this branch, with `base` |
+|---|---|---|---|
+| Files | 0.57 ms | 0.77 ms | 0.82 ms |
+| Postgres | 0.96 ms | 1.13 ms | 1.17 ms |
+| One `contentTag` of that dashboard | — | 87 µs | 87 µs |
+
+A save pays ~0.2 ms: the record lock (a transaction and an advisory key on Postgres, the in-process
+queue on files) and two hashes (before and after; the reply's tag is a third). Against the 600 ms
+autosave debounce it is noise.
 
 ## Steps
 

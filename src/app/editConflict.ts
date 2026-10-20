@@ -34,11 +34,11 @@ export function contentTag(type: ContentType, rec: unknown): string {
   return createHash('sha256').update(canonical(contentOf(type, rec))).digest('base64url');
 }
 
-/** Refuse a `base` that is not `existing`'s tag. An absent base (undefined or null) is last-writer-wins. */
-export function checkBase(type: ContentType, existing: unknown, base: unknown): void {
-  if (base === undefined || base === null) return;
+/** `existing`'s tag, after refusing a `base` that is not it. An absent base (undefined or null) is last-writer-wins. */
+export function checkBase(type: ContentType, existing: unknown, base: unknown): string {
   const tag = contentTag(type, existing);
-  if (base !== tag) throw Object.assign(new Error(recordChanged(type)), { code: 'ERECORDCHANGED', tag });
+  if (base !== undefined && base !== null && base !== tag) throw Object.assign(new Error(recordChanged(type)), { code: 'ERECORDCHANGED', tag });
+  return tag;
 }
 
 /** A reply that IS the record (`visual:get`, `story:get`, …) with its tag on it; null stays null. */
@@ -67,8 +67,7 @@ export async function lockedUpdate<T>(
   const saved = await recordFs.locked(at.file, async () => {
     const existing = await load();
     if (!existing) return null;
-    checkBase(type, existing, base);
-    before = contentTag(type, existing);
+    before = checkBase(type, existing, base);
     return apply(existing);
   });
   if (saved) {
