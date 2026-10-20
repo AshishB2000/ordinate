@@ -10,7 +10,7 @@ import { AlertChannels } from './AlertChannels';
 import SubscribeDialog from './SubscribeDialog';
 import { SubscriptionList } from './SubscriptionList';
 import { timeZones } from './Steps';
-import { AID, CARDS, PID, SLACK, TEAMS, mount, preview, serve, subscription } from './testServer';
+import { AID, CARDS, MODEL, PID, SLACK, TEAMS, mount, preview, serve, subscription } from './testServer';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -151,6 +151,30 @@ describe('Subscribe dialog', () => {
     expect(within(teams).getByText('Retail overview (Teams cut)')).toBeTruthy();
     expect(within(dialog).getByText('3 KB of 28 KB')).toBeTruthy();
     expect(within(dialog).getByText(/Shortened to fit Teams/)).toBeTruthy();
+  });
+
+  it('the Email tab draws the server’s email model, with the note attributed — and is absent on a server without email', async () => {
+    const email = { model: { ...MODEL, note: 'Read the West row.', noteBy: 'ana@acme.test' }, bytes: 9100, size: '9 KB', notes: [], brand: 'Acme Analytics', reason: 'You receive this as a member of Sales leads in Ordinate.' };
+    openDialog({ 'subscription:preview': preview({ email }) });
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByTestId('preview-slack');
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Email' }));
+    const mail = within(dialog).getByTestId('preview-email');
+    expect(within(mail).getAllByText('Acme Analytics').length).toBe(2); // the sender line and the brand above the title
+    expect(within(mail).getByText('Note from ana@acme.test:')).toBeTruthy();
+    expect(within(mail).getByText('$5.2M')).toBeTruthy();
+    expect(within(mail).getByRole('columnheader', { name: 'Share of total' })).toBeTruthy();
+    expect(within(mail).getByRole('cell', { name: '40%' })).toBeTruthy();
+    expect(within(mail).getByText('You receive this as a member of Sales leads in Ordinate.')).toBeTruthy();
+    expect(within(dialog).getByText('9 KB')).toBeTruthy();
+  });
+
+  it('NEGATIVE CONTROL: with email null (no relay) there is no Email tab', async () => {
+    openDialog();
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByTestId('preview-slack');
+    expect(within(dialog).queryByRole('tab', { name: 'Email' })).toBeNull();
+    expect(within(dialog).getByRole('tab', { name: 'Teams' })).toBeTruthy();
   });
 
   it('What: lists the dashboard’s cards by title and type, and sends the ticked ones in the dashboard’s order', async () => {

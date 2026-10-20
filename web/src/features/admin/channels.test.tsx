@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { ChannelsTab } from './ChannelsTab';
-import { SLACK, TEAMS, mount, serve } from '../subscriptions/testServer';
+import { EMAIL, SLACK, TEAMS, mount, serve } from '../subscriptions/testServer';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -17,7 +17,7 @@ const URL_IN = 'https://hooks.slack.com/services/T000/B000/secret-token';
 
 describe('Admin → Channels', () => {
   it('shows a skeleton, then each channel with its platform — and whether a URL is stored, never the URL', async () => {
-    serve({ 'channel:list': channels([SLACK, { ...TEAMS, secretSet: false }]) });
+    serve({ 'channel:list': channels([SLACK, { ...TEAMS, secretSet: false, ready: false }]) });
     const { container } = mount(<ChannelsTab />);
     expect(screen.getByRole('status', { name: 'Loading channels' })).toBeTruthy();
     const row = (name: string) => screen.getByText(name).closest('tr') as HTMLElement;
@@ -125,6 +125,69 @@ describe('Admin → Channels', () => {
     expect(within(warning).getByText('Revenue below 1M')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Remove channel' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'channel:delete')?.payload).toEqual({ id: SLACK.id }));
+  });
+
+  describe('email', () => {
+    const PEOPLE = [
+      { id: 'u1', email: 'alice@acme.test', role: 'viewer', pending: false, disabled: false, createdAt: '', lastLoginAt: '2026-10-01', teams: 0 },
+      { id: 'u2', email: 'pam@acme.test', role: 'viewer', pending: true, disabled: false, createdAt: '', lastLoginAt: null, teams: 0 },
+      { id: 'u3', email: 'gone@acme.test', role: 'viewer', pending: false, disabled: true, createdAt: '', lastLoginAt: '2026-10-01', teams: 0 },
+    ];
+    const TEAMS_LIST = [{ id: 't1', name: 'East', createdAt: '', members: [{ id: 'u1', email: 'alice@acme.test' }] }];
+    const people = { 'admin:users': { body: PEOPLE }, 'admin:teams': { body: TEAMS_LIST } };
+
+    it('NEGATIVE CONTROL: without canEmail the Email platform is not offered', async () => {
+      serve({ 'channel:list': channels([]) });
+      mount(<ChannelsTab />);
+      fireEvent.click((await screen.findAllByRole('button', { name: /Add a channel/ }))[0]);
+      const dialog = await screen.findByRole('dialog', { name: 'Add a channel' });
+      expect(within(dialog).queryByRole('radio', { name: 'Email' })).toBeNull();
+      expect(within(dialog).getByRole('radio', { name: 'Slack' })).toBeTruthy();
+    });
+
+    it('adds an email list: people and a team picked from the org, never a typed address', async () => {
+      const calls = serve({ 'channel:list': channels([], { canEmail: true }), ...people, 'channel:save': { body: { ok: true, channel: EMAIL } } });
+      mount(<ChannelsTab />);
+      fireEvent.click((await screen.findAllByRole('button', { name: /Add a channel/ }))[0]);
+      const dialog = await screen.findByRole('dialog', { name: 'Add a channel' });
+      fireEvent.click(within(dialog).getByRole('radio', { name: 'Email' }));
+      expect(within(dialog).queryByLabelText('Webhook URL')).toBeNull();
+      expect(dialog.querySelector('input[type="email"]')).toBeNull();
+      expect(within(dialog).getByText(/reaches only those of them who can open its project at that moment/)).toBeTruthy();
+      const add = within(dialog).getByRole('button', { name: 'Add channel' }) as HTMLButtonElement;
+      fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Sales leads' } });
+      expect(add.disabled).toBe(true);
+      const alice = await within(dialog).findByRole('checkbox', { name: /alice@acme\.test/ });
+      expect(within(dialog).queryByRole('checkbox', { name: /gone@acme\.test/ })).toBeNull();
+      expect(within(dialog).getByText('Invited — receives once they have signed in')).toBeTruthy();
+      fireEvent.click(alice);
+      fireEvent.click(within(dialog).getByRole('checkbox', { name: /East/ }));
+      expect(within(dialog).getByText(/Names 1 person · 1 team\./)).toBeTruthy();
+      fireEvent.change(within(dialog).getByLabelText('Find people or teams'), { target: { value: 'pam' } });
+      expect(within(dialog).queryByRole('checkbox', { name: /alice@acme\.test/ })).toBeNull();
+      expect(add.disabled).toBe(false);
+      fireEvent.click(add);
+      await waitFor(() => expect(calls.find((c) => c.channel === 'channel:save')?.payload).toEqual({ name: 'Sales leads', kind: 'email', to: { userIds: ['u1'], teamIds: ['t1'] } }));
+    });
+
+    it('lists an email channel by whom it names, and sends a test email to the admin', async () => {
+      const calls = serve({ 'channel:list': channels([{ ...EMAIL, to: { userIds: ['u1', 'u2'], teamIds: ['t1'] } }], { canEmail: true }), 'channel:test': { body: { ok: true } } });
+      mount(<ChannelsTab />);
+      const row = (await screen.findByText('Sales leads')).closest('tr') as HTMLElement;
+      expect(within(row).getByText('Email')).toBeTruthy();
+      expect(within(row).getByText('2 people · 1 team')).toBeTruthy();
+      fireEvent.click(within(row).getByRole('button', { name: 'Send a test email' }));
+      expect(await screen.findByText('Test email sent to you')).toBeTruthy();
+      expect(calls.find((c) => c.channel === 'channel:test')?.payload).toEqual({ id: EMAIL.id });
+    });
+
+    it('an email channel on a server whose mail is off says so and cannot be tested', async () => {
+      serve({ 'channel:list': channels([{ ...EMAIL, ready: false, to: { userIds: ['u1'], teamIds: [] } }]) });
+      mount(<ChannelsTab />);
+      const row = (await screen.findByText('Sales leads')).closest('tr') as HTMLElement;
+      expect(within(row).getByText('Email off')).toBeTruthy();
+      expect((within(row).getByRole('button', { name: 'Send a test email' }) as HTMLButtonElement).disabled).toBe(true);
+    });
   });
 
   it('removing an unused channel says nothing posts to it', async () => {

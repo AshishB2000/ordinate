@@ -20,6 +20,9 @@
 .markTeams {
   background: var(--chart-1);
 }
+.markEmail {
+  background: var(--chart-7);
+}
 .chip {
   display: inline-flex;
   align-items: center;
@@ -335,4 +338,133 @@
   color: var(--accent-ink);
   font-weight: 650;
   font-size: var(--t-13);
+}
+
+/* ── Email: an inbox header, then the message card ────────────────── */
+.email {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.emailHead {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 var(--sp-4);
+  font-size: var(--t-12);
+  color: var(--text);
+}
+.emailSubject {
+  font-size: var(--t-15);
+  letter-spacing: var(--tr-tight);
+  font-weight: 650;
+  color: var(--text-strong);
+}
+.emailCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.emailBrand {
+  font-size: var(--t-11);
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.emailTitle {
+  margin-top: calc(-1 * var(--sp-8));
+  font-size: var(--t-20);
+  font-weight: 700;
+  letter-spacing: var(--tr-tighter);
+  line-height: var(--lh-tight);
+  color: var(--text-strong);
+}
+.emailNote {
+  padding: var(--sp-8) var(--sp-12);
+  border-left: 3px solid var(--border-2);
+  background: var(--surface-2);
+  white-space: pre-wrap;
+}
+.emailKpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-8);
+}
+@media (max-width: 520px) {
+  .emailKpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.emailKpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.emailFigure {
+  font-family: var(--font-numeric);
+  font-size: var(--t-20);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+  color: var(--text-strong);
+}
+.emailSection {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.emailHeading {
+  font-weight: 700;
+  color: var(--text-strong);
+}
+.emailTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}
+.emailTable th,
+.emailTable td {
+  padding: 5px var(--sp-8);
+  border-bottom: 1px solid var(--border-hairline);
+  text-align: right;
+}
+.emailTable th {
+  font-weight: 600;
+  color: var(--muted);
+}
+.emailTable td:not(:first-child) {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.emailTable th:first-child,
+.emailTable td:first-child {
+  text-align: left;
+}
+.emailButton {
+  align-self: flex-start;
+  padding: var(--sp-8) var(--sp-16);
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 650;
+  font-size: var(--t-13);
+}
+.emailFoot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--border-hairline);
+  font-size: var(--t-11);
+  color: var(--muted);
 }

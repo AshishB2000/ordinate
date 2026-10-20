@@ -72,3 +72,70 @@
   max-height: 200px;
   overflow-y: auto;
 }
+
+/* The email recipients picker: a filter, then teams and people side by side. */
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.pickerLegend {
+  padding: 0;
+  margin-bottom: var(--sp-4);
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.pickerLists {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: var(--sp-12);
+}
+@media (max-width: 720px) {
+  .pickerLists {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.pickerGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-width: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: var(--sp-8) var(--sp-12) var(--sp-12);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+.pickerHead {
+  position: sticky;
+  top: calc(-1 * var(--sp-8));
+  margin: 0;
+  padding: var(--sp-4) 0;
+  background: var(--surface-1);
+  font-size: var(--t-11);
+  font-weight: 650;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pickerEmpty {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.pickerSummary {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.pickerError {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--error);
+}
