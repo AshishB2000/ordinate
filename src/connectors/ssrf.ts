@@ -99,6 +99,34 @@ export function refusedRange(address: string): string | null {
   return null;
 }
 
+/**
+ * The ranges an OPERATOR-named host may resolve into — the SMTP relay in
+ * SMTP_HOST (docs/email/00-design.md §5), never a host a member or a record
+ * typed: an internal relay, or a sidecar on localhost, is normal. Passed to
+ * `checkHost` by src/server/mail/smtp.ts and nothing else.
+ */
+export const OPERATOR_HOST: ReadonlySet<string> = Object.freeze(new Set(['loopback', 'private network', 'carrier-grade NAT', 'unique-local IPv6', 'site-local IPv6']));
+
+/** Metadata services INSIDE ranges OPERATOR_HOST admits: Alibaba (CGNAT), AWS and GCP over IPv6 (ULA). */
+const METADATA = new BlockList();
+METADATA.addAddress('100.100.100.200', 'ipv4');
+for (const a of ['fd00:ec2::254', 'fd20:ce::254']) METADATA.addAddress(a, 'ipv6');
+
+/**
+ * Why `address` is refused for an operator-named host, or null. The hard-deny
+ * list — metadata, and every refused range not in `admit` — is asked FIRST and
+ * SSRF_ALLOW not at all: an SSRF_ALLOW a connector needs must not open cloud
+ * metadata to the relay.
+ */
+function operatorRefusal(address: string, admit: ReadonlySet<string>): string | null {
+  const family = isIP(address);
+  if (family === 0) return 'not an IP address';
+  const type = family === 6 ? 'ipv6' : 'ipv4';
+  if (METADATA.check(address, type)) return 'cloud metadata';
+  for (const [why, list] of family === 6 ? REFUSED_V6 : REFUSED_V4) if (list.check(address, type)) return admit.has(why) ? null : why;
+  return null;
+}
+
 export class SsrfError extends Error {
   constructor(message: string) {
     super(message);
@@ -122,9 +150,10 @@ const HINT = 'This server does not connect to internal addresses; an administrat
  * decimal/octal/hex IPv4 (`2130706433`, `0177.0.0.1`, `0x7f.1`) mean the same
  * here on every OS — macOS's resolver reads `0177.0.0.1` as 177.0.0.1, glibc's
  * as 127.0.0.1. Anything that is not a bare host (a port, a path, credentials,
- * a socket path) is refused rather than guessed at.
+ * a socket path) is refused rather than guessed at. `admit` (OPERATOR_HOST
+ * only): the relay's ranges, under the hard-deny rule of `operatorRefusal`.
  */
-export async function checkHost(raw: string): Promise<PinnedHost> {
+export async function checkHost(raw: string, admit?: ReadonlySet<string>): Promise<PinnedHost> {
   const typed = String(raw ?? '').trim();
   const bare = typed.replace(/^\[(.*)\]$/, '$1');
   let host = '';
@@ -148,10 +177,10 @@ export async function checkHost(raw: string): Promise<PinnedHost> {
   }
   if (addrs.length === 0) throw new SsrfError(`Could not resolve ${host}.`);
   for (const a of addrs) {
-    const why = refusedRange(a.address);
+    const why = admit ? operatorRefusal(a.address, admit) : refusedRange(a.address);
     if (why) {
       const shown = a.address === host ? host : `${host} (${a.address})`;
-      throw new SsrfError(`Refused: ${shown} is an internal address (${why}). ${HINT}`);
+      throw new SsrfError(`Refused: ${shown} is an internal address (${why}).${admit ? '' : ' ' + HINT}`);
     }
   }
   return Object.freeze({ host, address: addrs[0].address, family: addrs[0].family === 6 ? 6 : 4 });
