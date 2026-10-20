@@ -109,6 +109,8 @@ export interface OpenReport {
   sheets: Array<{ name: string; cards: Array<{ id: string; name: string; chartType: string }> }>;
   views: Array<{ id: string; name: string }>;
   missing: boolean;
+  /** The report's content tag: the builder's base (docs/edit-conflicts). */
+  tag?: string;
 }
 
 /** A refusal's words, or a thrown error's. */
@@ -150,6 +152,8 @@ export interface Story {
   name: string;
   blocks: StoryBlock[];
   updatedAt: string;
+  /** The content tag (`story:get`, `story:update`): the editor's base (docs/edit-conflicts). */
+  tag?: string;
 }
 export interface StorySummary {
   id: string;
@@ -185,6 +189,9 @@ export interface Scorecard {
   period: ScorePeriod;
   rows: ScorecardRowDef[];
   updatedAt: string;
+  description?: string;
+  /** The content tag (`scorecard:get`): the page's base (docs/edit-conflicts). */
+  tag?: string;
 }
 export interface ScorecardSummary {
   id: string;

@@ -28,6 +28,8 @@ import { liveRefusalOf } from '../../live/refusal';
 import { ScenarioSetup, type Draft } from './ScenarioSetup';
 import f from './Scenarios.module.css';
 import s from './ScenarioEditor.module.css';
+import { ConflictBanner } from '../../editConflicts/ConflictBanner';
+import { useEditGuard } from '../../editConflicts/useEditGuard';
 
 /** The value `v`, settled for `ms` (the draft a compute or a save is for). */
 function useSettled<T>(v: T, ms: number): T {
@@ -65,7 +67,9 @@ function Editor({ projectId, sc, readOnly }: { projectId: string; sc: Scenario; 
     placeholderData: keepPreviousData,
   });
 
-  // Save the draft shortly after the last change; leaving saves what is pending.
+  // Save the draft shortly after the last change; leaving saves what is pending. One save at a time, each with the
+  // tag the last returned (docs/edit-conflicts); once another tab or person saved first, nothing more is sent.
+  const guard = useEditGuard({ projectId, type: 'scenario', id: sc.id }, sc.tag);
   const saved = useRef(JSON.stringify(draft));
   const pending = useRef<Draft | null>(null);
   const flush = useRef(async () => {});
@@ -73,17 +77,29 @@ function Editor({ projectId, sc, readOnly }: { projectId: string; sc: Scenario; 
     const d = pending.current;
     if (!d) return;
     pending.current = null;
-    const res = await call<{ ok: true; scenario: Scenario }>(
-      rpc('scenario:update', { projectId, id: sc.id, patch: { name: d.name, baseMetricIds: d.baseMetricIds, drivers: d.drivers } }),
-      'Could not save.',
-    );
+    const sent = guard.save((base) => rpc('scenario:update', { projectId, id: sc.id, base, patch: { name: d.name, baseMetricIds: d.baseMetricIds, drivers: d.drivers } }));
+    const out = await sent.catch(() => undefined);
+    if (out === null) return setStatus('Not saved'); // changed elsewhere: the banner
+    const res = await call<{ ok: true; scenario: Scenario; tag?: string }>(Promise.resolve(out), 'Could not save.');
     if (res.ok) {
       saved.current = JSON.stringify(d);
-      // Reopening the scenario starts from what was saved, not the first read.
-      client.setQueryData(['scenario:get', projectId, sc.id], res.scenario);
+      // Reopening the scenario starts from what was saved (and its tag), not the first read.
+      client.setQueryData(['scenario:get', projectId, sc.id], { ...res.scenario, tag: res.tag });
     }
     setStatus(res.ok ? 'Saved' : 'Could not save');
     void client.invalidateQueries({ queryKey: ['scenario:list', projectId] });
+  };
+  const conflict = {
+    reload: () => void client.resetQueries({ queryKey: ['scenario:get', projectId, sc.id] }),
+    copy: async () => {
+      const r = await call<{ ok: true; scenario: Scenario }>(
+        rpc('scenario:create', { projectId, input: { name: `${draft.name || sc.name} (copy)`.slice(0, 200), baseMetricIds: draft.baseMetricIds, drivers: draft.drivers } }),
+        'The copy could not be saved.',
+      );
+      if (!r.ok) throw new Error(r.error);
+      void client.invalidateQueries({ queryKey: ['scenario:list', projectId] });
+      await nav(`/analytics/scenarios/${projectId}/${r.scenario.id}`);
+    },
   };
   useEffect(() => {
     if (readOnly || JSON.stringify(draft) === saved.current) return;
@@ -150,6 +166,7 @@ function Editor({ projectId, sc, readOnly }: { projectId: string; sc: Scenario; 
           )}
         </div>
       </div>
+      {guard.changed && !readOnly && <ConflictBanner noun="scenario" onReload={conflict.reload} onCopy={conflict.copy} />}
       <div className={s.main}>
         <ScenarioSetup
           projectId={projectId}

@@ -27,7 +27,9 @@ import { LiveRefusalLine } from '../../live/LiveOff';
 import { liveRefusalOf } from '../../live/refusal';
 import { useCanEdit } from '../../projects/api';
 import { useAdoptProject } from '../../projects/current';
-import { failure, STATUS_WORD, type ScorePeriod, type Scorecard, type ScoreResult, type ScoreRow } from '../api';
+import { failure, STATUS_WORD, type ScorePeriod, type Scorecard, type ScorecardRowDef, type ScoreResult, type ScoreRow } from '../api';
+import { ConflictBanner } from '../../editConflicts/ConflictBanner';
+import { useEditGuard } from '../../editConflicts/useEditGuard';
 import { Detail } from './Detail';
 import { Dot } from './Dot';
 import { MAX_BACK, periodsBack } from './period';
@@ -197,14 +199,30 @@ function Page({ projectId, sc, startEditing }: { projectId: string; sc: Scorecar
     placeholderData: (prev) => prev,
   });
   const reload = () => void client.invalidateQueries({ queryKey: ['scorecard:get', projectId, sc.id] });
+  // Every write — the name, the period, the rows dialog — sends the tag this page opened with, then the one each
+  // returns (docs/edit-conflicts). Once another tab or person saved first, nothing more is sent until Reload.
+  const guard = useEditGuard({ projectId, type: 'scorecard', id: sc.id }, sc.tag);
   const update = async (patch: { name?: string; period?: ScorePeriod }) => {
     try {
-      await rpc('scorecard:update', { projectId, id: sc.id, patch });
+      if (!(await guard.save((base) => rpc('scorecard:update', { projectId, id: sc.id, base, patch })))) return;
       reload();
       void client.invalidateQueries({ queryKey: ['scorecard:list', projectId] });
     } catch (err) {
       toast(failure(err, 'Could not save the scorecard.'), { kind: 'error' });
     }
+  };
+  const conflict = {
+    // The page's skeleton, then a new page on the scorecard as it is now.
+    reload: () => void client.resetQueries({ queryKey: ['scorecard:get', projectId, sc.id] }),
+    // This page's name and period, and the rows dialog's rows when it is the one refused.
+    copy: async (rows: ScorecardRowDef[] = sc.rows) => {
+      const r = (await rpc('scorecard:create', {
+        projectId, name: `${name.trim() || sc.name} (copy)`.slice(0, 200), period: sc.period, rows, ...(sc.description ? { description: sc.description } : {}),
+      })) as { ok: boolean; scorecard?: { id: string }; error?: string };
+      if (!r.ok || !r.scorecard) throw new Error(failure(r, 'The copy could not be saved.'));
+      void client.invalidateQueries({ queryKey: ['scorecard:list', projectId] });
+      await navigate(`/scorecards/${projectId}/${r.scorecard.id}`);
+    },
   };
   const createReport = async () => {
     try {
@@ -272,6 +290,11 @@ function Page({ projectId, sc, startEditing }: { projectId: string; sc: Scorecar
           </div>
         )}
       </header>
+      {guard.changed && canEdit && (
+        <div className={s.conflict}>
+          <ConflictBanner noun="scorecard" onReload={conflict.reload} onCopy={() => conflict.copy()} />
+        </div>
+      )}
       <div className={s.toolbar}>
         <div className={s.periodPick}>
           <Select
@@ -326,6 +349,8 @@ function Page({ projectId, sc, startEditing }: { projectId: string; sc: Scorecar
         <RowsEditor
           projectId={projectId}
           sc={sc}
+          guard={guard}
+          conflict={conflict}
           onClose={() => setEditing(false)}
           onSaved={() => {
             setEditing(false);

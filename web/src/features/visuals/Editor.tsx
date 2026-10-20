@@ -69,7 +69,7 @@ export function Editor({ projectId, datasets, columns, related, initial }: {
 
   return (
     <div className={s.builder}>
-      {b.changed && (
+      {b.changed && b.canEdit && (
         <div className={s.conflict}>
           <ConflictBanner noun="visual" onReload={b.conflict.reload} onCopy={b.conflict.copy} />
         </div>
