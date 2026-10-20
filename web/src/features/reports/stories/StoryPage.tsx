@@ -31,7 +31,7 @@ import { StoryBlockRow } from './StoryBlock';
 import s from './Story.module.css';
 import { CommentDoor } from '../../dashboards/CommentsPanel';
 import { ConflictBanner } from '../../editConflicts/ConflictBanner';
-import { useEditGuard, useReload } from '../../editConflicts/useEditGuard';
+import { useDropOnLeave, useEditGuard, useReload } from '../../editConflicts/useEditGuard';
 
 type Snap = { name: string; blocks: StoryBlock[] };
 type Pending = { kind: 'visual' | 'metric' | 'metrics_row'; place: (b: StoryBlock) => void } | { kind: 'pin'; blockId: string; datasetId: string } | null;
@@ -417,6 +417,7 @@ export default function StoryPageRoute() {
     gcTime: 0,
   });
   const { gen, reload } = useReload(['story:get', projectId, storyId]);
+  useDropOnLeave(['story:get', projectId, storyId]);
   if (q.isPending || roles.isPending) return <PageSkeleton />;
   if (q.isError || !q.data) {
     return (

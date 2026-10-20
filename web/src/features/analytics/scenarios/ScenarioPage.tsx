@@ -29,7 +29,7 @@ import { ScenarioSetup, type Draft } from './ScenarioSetup';
 import f from './Scenarios.module.css';
 import s from './ScenarioEditor.module.css';
 import { ConflictBanner } from '../../editConflicts/ConflictBanner';
-import { useEditGuard, useReload } from '../../editConflicts/useEditGuard';
+import { useDropOnLeave, useEditGuard, useReload } from '../../editConflicts/useEditGuard';
 
 /** The value `v`, settled for `ms` (the draft a compute or a save is for). */
 function useSettled<T>(v: T, ms: number): T {
@@ -83,7 +83,7 @@ function Editor({ projectId, sc, readOnly, onReload }: { projectId: string; sc: 
     const res = await call<{ ok: true; scenario: Scenario; tag?: string }>(Promise.resolve(out), 'Could not save.');
     if (res.ok) {
       saved.current = JSON.stringify(d);
-      // Reopening the scenario starts from what was saved (and its tag), not the first read.
+      // The page's record as saved (the dock names it from here); a reopen reads it fresh.
       client.setQueryData(['scenario:get', projectId, sc.id], { ...res.scenario, tag: res.tag });
     }
     setStatus(res.ok ? 'Saved' : 'Could not save');
@@ -216,8 +216,11 @@ export default function ScenarioPage() {
     queryFn: async () => (await rpc('scenario:get', { projectId: projectId as string, id: scenarioId as string })) as Scenario | null,
     enabled: !!projectId && !!scenarioId,
     staleTime: Infinity,
+    // A fresh read on every open: the draft and the tag its saves send come from one reply (docs/edit-conflicts).
+    gcTime: 0,
   });
   const { gen, reload } = useReload(['scenario:get', projectId, scenarioId]);
+  useDropOnLeave(['scenario:get', projectId, scenarioId]);
   if (!projectId || !scenarioId || q.isPending || roles.isPending) return <PageSkeleton />;
   if (q.isError) {
     return (

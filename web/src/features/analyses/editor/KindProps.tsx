@@ -14,6 +14,7 @@ import { Select } from '../../../ui/Select';
 import { toast } from '../../../ui/Toast';
 import { Icon } from '../../../ui/icons/Icon';
 import { failure, useGallery, type Card, type VisualDef } from '../api';
+import { isRecordChanged } from '../../editConflicts/useEditGuard';
 import { vizLabel } from '../VisualTile';
 import { useEditor } from './context';
 import type { Doc } from './doc';
@@ -181,14 +182,24 @@ export function InteractionProps({ def }: { def: VisualDef }) {
   const write = async (patch: Record<string, unknown>) => {
     setBusy(true);
     try {
-      // The visual's tag from analysis:open (docs/edit-conflicts): changed elsewhere since, the write is refused — a
-      // toast with the server's sentence, and the visual stays as that save left it. Not this editor's document: no banner.
+      // With the visual's tag from analysis:open (docs/edit-conflicts): changed elsewhere since, the write is refused.
       const r = (await rpc('visual:update', { projectId: ed.projectId, id: def.id, base: def.tag, overrides: { ...ov, ...patch } })) as { ok: boolean; visual?: VisualDef; error?: string; tag?: string };
       if (!r.ok || !r.visual) throw new Error(r.error || 'The visual could not be updated.');
       const v = r.visual;
       ed.addVisuals([{ ...def, overrides: v.overrides ?? {}, updatedAt: v.updatedAt, tag: r.tag }]);
     } catch (err) {
-      toast(failure(err, 'The visual could not be updated.'), { kind: 'error' });
+      if (!isRecordChanged(err)) {
+        toast(failure(err, 'The visual could not be updated.'), { kind: 'error' });
+        return;
+      }
+      // Not this editor's record, so no banner: take the visual as it is now — its settings and its tag — and say so;
+      // the next click works from there.
+      const now = (await rpc('visual:get', { projectId: ed.projectId, id: def.id }).catch(() => null)) as (VisualDef & { tag?: string }) | null;
+      if (now) {
+        const { id, name, datasetId, chartType, encoding, overrides, filters, analytics, updatedAt, tag } = now;
+        ed.addVisuals([{ id, name, datasetId, chartType, encoding, overrides: overrides ?? {}, filters, ...(analytics?.length ? { analytics } : {}), updatedAt, tag }]);
+      }
+      toast('This visual was changed in another tab or by someone else. Its settings here are now the current ones — make the change again.', { kind: 'error' });
     } finally {
       setBusy(false);
     }

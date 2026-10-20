@@ -29,7 +29,7 @@ import { useCanEdit } from '../../projects/api';
 import { useAdoptProject } from '../../projects/current';
 import { failure, STATUS_WORD, type ScorePeriod, type Scorecard, type ScorecardRowDef, type ScoreResult, type ScoreRow } from '../api';
 import { ConflictBanner } from '../../editConflicts/ConflictBanner';
-import { useEditGuard, useReload } from '../../editConflicts/useEditGuard';
+import { useDropOnLeave, useEditGuard, useReload } from '../../editConflicts/useEditGuard';
 import { Detail } from './Detail';
 import { Dot } from './Dot';
 import { MAX_BACK, periodsBack } from './period';
@@ -202,6 +202,10 @@ function Page({ projectId, sc, startEditing, onReload }: { projectId: string; sc
   // Every write — the name, the period, the rows dialog — sends the tag this page opened with, then the one each
   // returns (docs/edit-conflicts). Once another tab or person saved first, nothing more is sent until Reload.
   const guard = useEditGuard({ projectId, type: 'scorecard', id: sc.id }, sc.tag);
+  // This page's document — the name (above), the period and the rows as last picked here, saved or refused: what a
+  // copy is made from. The server's `sc` is what was read.
+  const [period, setPeriod] = useState<ScorePeriod>(sc.period);
+  const [rows, setRows] = useState<ScorecardRowDef[]>(sc.rows);
   const update = async (patch: { name?: string; period?: ScorePeriod }) => {
     try {
       if (!(await guard.save((base) => rpc('scorecard:update', { projectId, id: sc.id, base, patch })))) return;
@@ -213,10 +217,10 @@ function Page({ projectId, sc, startEditing, onReload }: { projectId: string; sc
   };
   const conflict = {
     reload: onReload,
-    // This page's name and period, and the rows dialog's rows when it is the one refused.
-    copy: async (rows: ScorecardRowDef[] = sc.rows) => {
+    // This page's document; the rows dialog's rows when it is the one refused.
+    copy: async (picked: ScorecardRowDef[] = rows) => {
       const r = (await rpc('scorecard:create', {
-        projectId, name: `${name.trim() || sc.name} (copy)`.slice(0, 200), period: sc.period, rows, ...(sc.description ? { description: sc.description } : {}),
+        projectId, name: `${name.trim() || sc.name} (copy)`.slice(0, 200), period, rows: picked, ...(sc.description ? { description: sc.description } : {}),
       })) as { ok: boolean; scorecard?: { id: string }; error?: string };
       if (!r.ok || !r.scorecard) throw new Error(failure(r, 'The copy could not be saved.'));
       void client.invalidateQueries({ queryKey: ['scorecard:list', projectId] });
@@ -300,9 +304,10 @@ function Page({ projectId, sc, startEditing, onReload }: { projectId: string; sc
             aria-label="Period"
             size="sm"
             disabled={!canEdit}
-            value={sc.period}
+            value={period}
             onValueChange={(p) => {
               setOffset(0);
+              setPeriod(p as ScorePeriod);
               void update({ period: p as ScorePeriod });
             }}
             options={[
@@ -347,11 +352,12 @@ function Page({ projectId, sc, startEditing, onReload }: { projectId: string; sc
       {editing && canEdit && (
         <RowsEditor
           projectId={projectId}
-          sc={sc}
+          sc={{ ...sc, rows }}
           guard={guard}
           conflict={conflict}
           onClose={() => setEditing(false)}
-          onSaved={() => {
+          onSaved={(saved) => {
+            setRows(saved);
             setEditing(false);
             reload();
           }}
@@ -390,8 +396,14 @@ export default function ScorecardPage() {
   const q = useQuery({
     queryKey: ['scorecard:get', projectId, scorecardId],
     queryFn: async () => (await rpc('scorecard:get', { projectId, id: scorecardId })) as Scorecard | null,
+    // A fresh read on every open, never a cached copy shown first: the page and the tag its saves send come from one
+    // reply (docs/edit-conflicts). Its own saves refetch it (`reload`).
+    staleTime: Infinity,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
   });
   const { gen, reload } = useReload(['scorecard:get', projectId, scorecardId]);
+  useDropOnLeave(['scorecard:get', projectId, scorecardId]);
   if (q.isPending) return <PageSkeleton />;
   if (q.isError || !q.data) {
     return (

@@ -127,11 +127,16 @@ export function useReports(projectId: string) {
   });
 }
 
+/**
+ * `reports:open` — the builder's record and its tag, from a fresh read on every open (`gcTime: 0`: no copy outlives the
+ * page), so what is on screen and the base its saves send are always one reply's (docs/edit-conflicts).
+ */
 export function useOpenReport(projectId: string, id: string) {
   return useQuery({
     queryKey: ['reports:open', projectId, id],
     queryFn: async () => (await rpc('reports:open', { projectId, id })) as OpenReport | { ok: false; error: string },
     staleTime: Infinity,
+    gcTime: 0,
     refetchOnWindowFocus: false,
   });
 }

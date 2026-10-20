@@ -64,7 +64,8 @@ export function RowsEditor({ projectId, sc, guard, conflict, onClose, onSaved }:
   /** The page's Reload, and its copy — given this dialog's rows. */
   conflict: { reload: () => void; copy: (rows: ScorecardRowDef[]) => Promise<void> };
   onClose: () => void;
-  onSaved: () => void;
+  /** The rows as saved. */
+  onSaved: (rows: ScorecardRowDef[]) => void;
 }) {
   const metrics = useMetricList(projectId);
   const byId = useMemo(() => new Map((metrics.data ?? []).map((m) => [m.id, m])), [metrics.data]);
@@ -77,10 +78,11 @@ export function RowsEditor({ projectId, sc, guard, conflict, onClose, onSaved }:
   const save = async () => {
     setSaving(true);
     try {
-      const r = (await guard.save((base) => rpc('scorecard:update', { projectId, id: sc.id, base, patch: { rows: rows.map(fromEditRow) } }))) as { ok: boolean; error?: string } | null;
+      const sent = rows.map(fromEditRow);
+      const r = (await guard.save((base) => rpc('scorecard:update', { projectId, id: sc.id, base, patch: { rows: sent } }))) as { ok: boolean; error?: string } | null;
       if (!r) return setSaving(false); // changed elsewhere: the banner, above the rows
       if (!r.ok) throw new Error(failure(r, 'Could not save the scorecard.'));
-      onSaved();
+      onSaved(sent);
     } catch (err) {
       toast(failure(err, 'Could not save the scorecard.'), { kind: 'error' });
       setSaving(false);

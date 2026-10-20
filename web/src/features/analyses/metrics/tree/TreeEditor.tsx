@@ -261,7 +261,7 @@ export function TreeEditor({
   onCopied?: (id: string) => void;
 }) {
   const q = useSuggest(projectId, metricId);
-  const guard = useEditGuard({ projectId, type: 'metric', id: metricId }, tag);
+  const guard = useEditGuard({ projectId, type: 'metricTree', id: metricId }, tag);
   const start = useMemo<TreeSpec>(() => initial ?? { id: uuid(), metricId }, [initial, metricId]);
   const [draft, setDraft] = useState<TreeSpec>(start);
   const [editing, setEditing] = useState<string | null>(initial ? null : start.id);

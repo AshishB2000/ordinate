@@ -7,13 +7,13 @@
 // server's `hub:record-saved` push sets it sooner, when another save moved the
 // record's tag.
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { RpcError } from '../../api/client';
 import { useServerEvent } from '../../api/events';
 
-/** The record types an editor saves whole — the server's `ContentType` (a metric tree is its metric). */
-export type GuardType = 'dashboard' | 'visual' | 'metric' | 'report' | 'story' | 'scorecard' | 'scenario';
+/** A whole-document editor's save channel — the server's `SaveKind` (src/analysis/recordDiff.ts SAVE_KEYS): a metric has two, its fields and its tree. */
+export type GuardType = 'dashboard' | 'visual' | 'metric' | 'metricTree' | 'report' | 'story' | 'scorecard' | 'scenario';
 
 /** src/app/editConflict.ts SAVED_CHANNEL. */
 export const SAVED_CHANNEL = 'hub:record-saved';
@@ -130,4 +130,15 @@ export function useReload(queryKey: QueryKey): { gen: number; reload: () => void
     void client.refetchQueries({ queryKey: JSON.parse(key) as QueryKey, exact: true }).finally(() => setGen((g) => g + 1));
   }, [client, key]);
   return { gen, reload };
+}
+
+/**
+ * An editor page's open query is dropped when the page is left, so the next open reads the record afresh: what it
+ * shows and the tag its saves send then come from one reply (as `AuthoringPage` does for a dashboard). `gcTime: 0`
+ * alone is not enough — a quick back-and-forth remounts before the cache is collected.
+ */
+export function useDropOnLeave(queryKey: QueryKey): void {
+  const client = useQueryClient();
+  const key = JSON.stringify(queryKey);
+  useEffect(() => () => client.removeQueries({ queryKey: JSON.parse(key) as QueryKey, exact: true }), [client, key]);
 }

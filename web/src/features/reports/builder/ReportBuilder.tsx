@@ -29,7 +29,7 @@ import { PreviewSheet } from './PreviewSheet';
 import { SettingsPane } from './SettingsPane';
 import s from './Builder.module.css';
 import { ConflictBanner } from '../../editConflicts/ConflictBanner';
-import { useEditGuard, useReload } from '../../editConflicts/useEditGuard';
+import { useDropOnLeave, useEditGuard, useReload } from '../../editConflicts/useEditGuard';
 
 const FORMAT_WORD = { pdf: 'PDF', pptx: 'PowerPoint', docx: 'Word' } as const;
 
@@ -94,12 +94,9 @@ function Builder({ projectId, opened, onReload }: { projectId: string; opened: O
         toast(failure(r, 'Could not save.'), { kind: 'error' });
         return false;
       }
-      // Take the server's sanitized copy back, so the two never drift — and keep the cached open in step, so the next
-      // open of this report starts from what was saved (and from its tag).
+      // Take the server's sanitized copy back, so the two never drift.
       setReport(r.report);
       setDirty(false);
-      const saved = r.report;
-      client.setQueryData<OpenReport | { ok: false; error: string }>(['reports:open', projectId, report.id], (o) => (o?.ok ? { ...o, report: saved, tag: r.tag } : o));
       void client.invalidateQueries({ queryKey: ['reports:list', projectId] });
       return true;
     } catch (err) {
@@ -250,6 +247,7 @@ export default function ReportBuilderPage() {
   useAdoptProject(projectId);
   const q = useOpenReport(projectId, reportId);
   const { gen, reload } = useReload(['reports:open', projectId, reportId]);
+  useDropOnLeave(['reports:open', projectId, reportId]);
   if (q.isPending) return <PageSkeleton />;
   if (q.isError || !q.data.ok) {
     return (
