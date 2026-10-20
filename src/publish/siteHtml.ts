@@ -17,7 +17,7 @@
 // absent by construction.
 
 import { createHash } from 'crypto';
-import { styleBlock, styleClasses, embedJson } from '../analysis/dashboardExport';
+import { autoSchemeCss, styleBlock, styleClasses, embedJson } from '../analysis/dashboardExport';
 import { sanitizeStyle, sizeLayout } from '../analysis/dashboards';
 import type { DashboardStyle } from '../analysis/dashboards';
 import { phoneCss } from './sitePhoneCss';
@@ -67,6 +67,8 @@ const SITE_CSS = `
   .pub-kpi-value { font-size: var(--kpi-size); font-weight: 700; color: var(--text-strong); font-family: var(--font-numeric);
     font-variant-numeric: tabular-nums; line-height: 1.1; }
   .pub-kpi-label { font-size: var(--kpi-label-size); color: var(--muted); }
+  .pub-kpi--card { align-items: flex-start; justify-content: center; text-align: left; }
+  .pub-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
   .pub-caption { font-size: 12px; color: var(--muted); margin: 8px 0 0; line-height: 1.4; }
   .pub-note { font-size: 11px; color: var(--text-dim); margin: 6px 0 0; }
   .pub-text-h { font-size: var(--text-h-size); font-weight: 600; margin: 0 0 6px; color: var(--text-strong); }
@@ -173,9 +175,9 @@ function scriptSafe(js: string): string {
  * this function lays it out and pins it; it does not re-validate content.
  */
 export function pageHtml(page: Record<string, any>, assets: SiteAssets, title: string): string { // any: a sanitizePage result
-  const style: DashboardStyle = sanitizeStyle(page.dashboard && page.dashboard.style);
-  const resolved: DashboardStyle = { ...style, theme: style.theme === 'auto' ? 'clean' : style.theme };
-  const css = styleBlock(resolved, page.brand, page.theme) + SITE_CSS + sizeCss();
+  // Style `auto` follows the reader's light or dark setting, as the app follows its own theme (autoSchemeCss).
+  const resolved: DashboardStyle = sanitizeStyle(page.dashboard && page.dashboard.style);
+  const css = styleBlock(resolved, page.brand, page.theme) + autoSchemeCss(resolved, page.brand, page.theme) + SITE_CSS + sizeCss();
   const scripts = [
     assets.chartJs,
     'var module = { exports: {} }; var exports = module.exports;',

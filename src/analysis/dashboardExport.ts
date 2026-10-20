@@ -352,6 +352,23 @@ export function styleBlock(style: DashboardStyle, brand?: ExportBundle['brand'],
   ` + themeBlock(theme);
 }
 
+/**
+ * Style `auto` in a standalone page: the light tokens styleBlock gives it, and — for a reader whose
+ * system is dark — the dark theme's tokens and accent ramp, by a static @media block appended after
+ * styleBlock (no script and no inline style: a published page's CSP pins its one stylesheet).
+ */
+export function autoSchemeCss(style: DashboardStyle, brand?: ExportBundle['brand'], theme?: ExportTheme): string {
+  if (style.theme !== 'auto') return '';
+  const ramp = themedRamp(accentRamp({ ...style, theme: 'dark' }, brand), theme);
+  const chartVars = ramp.chart.map((c, i) => `--chart-${i + 1}: ${c};`).join(' ');
+  return `
+    @media (prefers-color-scheme: dark) {
+      .dash-theme--auto { ${THEME_TOKENS.dark} }
+      .dash-accent--${style.accent} { --accent: ${ramp.accent}; --accent-2: ${ramp.accent2};
+        --accent-soft: ${ramp.soft}; --accent-line: ${ramp.line}; --chart-accent: ${ramp.chart[0]}; ${chartVars} }
+    }`;
+}
+
 // The vanilla render script embedded in the file. It reads `window.__DASHBOARD__`, lays
 // each card on a CSS grid, and draws chart cards with the inlined Chart.js. All text is
 // set via textContent (never innerHTML) so a label/heading can't inject markup.

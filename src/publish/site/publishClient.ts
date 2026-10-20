@@ -218,10 +218,13 @@ function pcDashboard(page: any, root: HTMLElement): void {
     document.body.dataset.combo = String(combo);
   }
   draw();
-  // Crossing the phone line redraws: a chart's legend moves under it, or back beside it.
+  // Crossing the phone line redraws: a chart's legend moves under it, or back beside it. So does the reader's
+  // light/dark setting (a dashboard styled Auto follows it): the charts take their ink from the page's tokens.
   if (typeof matchMedia === 'function') {
-    const mq = matchMedia(PP_PHONE_MQ);
-    if (typeof mq.addEventListener === 'function') mq.addEventListener('change', draw);
+    for (const q of [PP_PHONE_MQ, '(prefers-color-scheme: dark)']) {
+      const mq = matchMedia(q);
+      if (typeof mq.addEventListener === 'function') mq.addEventListener('change', draw);
+    }
   }
 }
 

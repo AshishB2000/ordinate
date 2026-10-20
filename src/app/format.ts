@@ -19,6 +19,8 @@
 // wins over them for what it specifies — decimals, compact, its own prefix —
 // and takes the rest (locale, separators, the workspace currency) from here.
 
+import type { ChartFigures } from '../analysis/chartShapes';
+
 export type NumberStyle = 'locale' | 'comma_dot' | 'dot_comma' | 'space_comma' | 'apostrophe_dot' | 'plain_dot';
 export type DateStyle = 'short' | 'medium' | 'iso';
 export type CurrencyPosition = 'before' | 'after';
@@ -364,4 +366,39 @@ export function formatDateRange(from?: string, to?: string): string {
   if (from) return 'From ' + formatDate(from);
   if (to) return 'Until ' + formatDate(to);
   return '';
+}
+
+// ── A chart's figures as text ───────────────────────────────────────────────
+
+/**
+ * What a waterfall, a Pareto, a 100%-stacked chart or a histogram draws, as
+ * lines of text — what a screen reader hears beside the canvas, the same in
+ * the app and on a published page (which loads this file as OrdFormat).
+ * Formatting only: every number is the reply's own `figures` (analysis/chartShapes).
+ * `labels` are as the axis names them; `series` as drawn (`name`, or a published payload's `label`).
+ */
+export function figureLines(chartType: string, labels: unknown[], series: Array<{ name?: string; label?: string; values?: unknown[] }>, f: ChartFigures | undefined): string[] {
+  if (!f) return [];
+  const n = (v: unknown): string => (typeof v === 'number' ? formatCompact(v) : '—');
+  const pct = (v: unknown): string => (typeof v === 'number' ? formatNumber(v, { maxDecimals: 1 }) + '%' : '—');
+  const at = (i: number): string => String(labels[i] ?? '');
+  if (chartType === 'waterfall' && f.waterfall) {
+    return f.waterfall.steps.map((s) => {
+      const label = s.src >= 0 && s.src < labels.length ? at(s.src) : s.label;
+      return s.kind === 'up' || s.kind === 'down' ? `${label}: ${s.value > 0 ? '+' : ''}${n(s.value)} → ${n(s.end)}` : `${label}: ${n(s.end)}`;
+    });
+  }
+  if (chartType === 'pareto' && f.pareto) {
+    const p = f.pareto;
+    const vals = (series[0] && series[0].values) || [];
+    return p.order.map((i, k) => `${at(i)}: ${n(vals[i])} · ${pct(p.cumPct[k])} cumulative`);
+  }
+  if (/^pct_stacked_/.test(chartType) && f.sharePct) {
+    const shares = f.sharePct;
+    return labels.map((_, j) => `${at(j)}: ${series.map((s, i) => `${s.name ?? s.label ?? ''} ${pct(shares[i] && shares[i][j])}`).join(', ')}`);
+  }
+  if (chartType === 'histogram' && f.histogram) {
+    return (f.histogram[0] || []).map((b) => `${b.from === b.to ? n(b.from) : `${n(b.from)}–${n(b.to)}`}: ${b.count}`);
+  }
+  return [];
 }

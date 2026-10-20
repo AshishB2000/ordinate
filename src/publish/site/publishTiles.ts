@@ -12,6 +12,7 @@ declare const Chart: any; // the app's own Chart.js UMD, inlined before this scr
 declare const OrdFormat: {
   formatValue(v: unknown, mode?: string): string; formatNumber(v: unknown, opts?: { decimals?: number; maxDecimals?: number }): string;
   formatPercent(v: unknown, decimals?: number): string; asMonthLabels(labels: any[]): any[]; setFormatPrefs(p: unknown): void;
+  figureLines(chartType: string, labels: any[], series: any[], figures: any): string[];
 };
 
 const pcCharts: any[] = [];
@@ -25,6 +26,21 @@ function pcEl(tag: string, cls?: string, text?: string): HTMLElement {
 
 function pcFmt(v: number): string {
   try { return OrdFormat.formatValue(v, 'auto'); } catch (_) { return String(v); }
+}
+
+let pcFigures = 0;
+
+/** A share in percent (the payload's figures) as the app's formatter writes it: 33.3%. */
+function pcShare(v: number): string {
+  try { return OrdFormat.formatNumber(v, { maxDecimals: 1 }) + '%'; } catch (_) { return String(v) + '%'; }
+}
+
+/** Chart.js's own ink — ticks, legends, gridlines — from the page's tokens, read when a chart is drawn (the style's light or dark). */
+function pcInk(): void {
+  const cs = getComputedStyle(document.documentElement);
+  const v = (name: string, dflt: string): string => cs.getPropertyValue(name).trim() || dflt;
+  Chart.defaults.color = v('--muted', '#6b7280');
+  Chart.defaults.borderColor = v('--border', '#e5e7eb');
 }
 
 /** Labels as the app's axes name them: a first-of-month axis as "Jan 2023" (the shared formatter). */
@@ -99,7 +115,7 @@ function pcPivot(grid: any): HTMLElement {
   return wrap;
 }
 
-function pcChartBody(card: { chartType: string; category?: string }, payload: any, page: any, onPick: (label: string) => void): HTMLElement {
+function pcChartBody(card: { chartType: string; category?: string; title?: string }, payload: any, page: any, onPick: (label: string) => void): HTMLElement {
   const kind = pkRenderKind(card.chartType);
   if (kind === 'pivot' && payload.pivot) return pcPivot(payload.pivot);
   if (kind === 'map') return pcMap(payload, page, card.chartType);
@@ -117,12 +133,24 @@ function pcChartBody(card: { chartType: string; category?: string }, payload: an
   }
   const holder = pcEl('div', 'pub-chart');
   const canvas = document.createElement('canvas');
+  canvas.setAttribute('role', 'img');
+  canvas.setAttribute('aria-label', card.title || 'Chart');
   holder.appendChild(canvas);
   // A figure type whose figures this page does not carry (published before they existed): say so, never work them out.
-  const cfg = pkChartConfig(card.chartType, payload, pcRamp(), pcFmt, pcMonths);
+  const cfg = pkChartConfig(card.chartType, payload, pcRamp(), pcFmt, pcMonths, pcShare);
   if (!cfg) return pcEl('div', 'pub-broken', 'This chart needs a newer publish to draw — publish the dashboard again.');
   const src: number[] | undefined = cfg.src;
   delete cfg.src;
+  // What it draws, as text a screen reader hears — the app's own list (OrdFormat.figureLines).
+  const lines: string[] = OrdFormat.figureLines(card.chartType, pcMonths(payload.labels || []), payload.series || [], payload.figures);
+  if (lines.length) {
+    const list = pcEl('ul', 'pub-sr');
+    list.id = 'pub-fig-' + (++pcFigures);
+    list.setAttribute('data-figures', '');
+    for (const line of lines) list.appendChild(pcEl('li', '', line));
+    canvas.setAttribute('aria-describedby', list.id);
+    holder.appendChild(list);
+  }
   if (typeof Chart === 'function') {
     // A phone: the legend under the plot, fewer level axis labels (publishPhone.ts).
     if (ppIsPhone()) ppPhoneChart(cfg);
@@ -130,6 +158,7 @@ function pcChartBody(card: { chartType: string; category?: string }, payload: an
       const i = els && els.length ? (src ? src[els[0].index] : els[0].index) : -1;
       if (i >= 0 && payload.labels && i < payload.labels.length) onPick(String(payload.labels[i]));
     };
+    pcInk();
     requestAnimationFrame(() => { pcCharts.push(new Chart(canvas, cfg)); });
   }
   return holder;
@@ -177,8 +206,10 @@ function pcCard(card: any, combo: number, page: any, onPick: (column: string, la
     return el;
   }
   if (card.kind === 'metric') {
-    const box = pcEl('div', 'pub-kpi');
+    // The figure, then what it measures under it, as the app's KPI tile reads (the title is the card's head).
+    const box = pcEl('div', 'pub-kpi pub-kpi--card');
     box.appendChild(pcEl('div', 'pub-kpi-value', payload.display || '—'));
+    if (payload.subtitle) box.appendChild(pcEl('div', 'pub-kpi-label', payload.subtitle));
     el.appendChild(box);
   } else {
     el.appendChild(pcChartBody(card, payload, page, (label) => onPick(card.category || '', label, card.title)));

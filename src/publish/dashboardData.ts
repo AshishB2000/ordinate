@@ -48,6 +48,7 @@ import { lockedOptions, metricAllowed, visualAllowed, type Lock } from './embedL
 import { embedTileLocked } from '../server/embedMessages';
 import { withChartFigures, type ChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
+import { kpiMeasure } from './publishMessages';
 
 export interface PublishedControl {
   id: string;
@@ -470,12 +471,14 @@ export async function buildDashboard(
           if (ctx.checkCancelled) ctx.checkCancelled();
           const bound = resolveFilterParams(scope.filters, scope.params);
           let payload: any = null;
+          let measures = ''; // what it measures, under the figure — a saved metric's own definition, in the Metrics table's words
           try {
             if (m.metricId) {
               const r = await resolveMetric(projectId, m.metricId, { filters: bound.steps, params: scope.params });
               if (r && r.ok) {
                 if (!m.label && r.name) title = r.name;
                 payload = { value: r.value, display: r.display };
+                measures = typeof r.definitionText === 'string' ? r.definitionText : '';
               }
             }
             if (!payload) {
@@ -489,7 +492,12 @@ export async function buildDashboard(
             if (!isLiveFigureError(err)) throw err;
             payload = { error: err.message };
           }
-          if (!payload.error) payload.caption = tileCaption({ kpis: [{ label: title, value: payload.value }] });
+          if (!payload.error) {
+            payload.caption = tileCaption({ kpis: [{ label: title, value: payload.value }] });
+            // What it measures, under the figure as the app's KPI tile reads — unless that only repeats the title.
+            const sub = measures || kpiMeasure(m.aggregation, m.column);
+            if (sub && sub.toLowerCase() !== title.toLowerCase()) payload.subtitle = sub.charAt(0).toUpperCase() + sub.slice(1);
+          }
           base.variants.push(intern(store, payload));
           done++;
           if (ctx.progress) ctx.progress(done / total, `${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tile answers`);

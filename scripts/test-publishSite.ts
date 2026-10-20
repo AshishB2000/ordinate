@@ -144,6 +144,11 @@ async function main(): Promise<void> {
   const exported = sanitizeBundle({ pages: [{ cards: [{ kind: 'chart', chartType: 'bar', layout: {}, data: { labels: ['a'], series: [], figures: { sharePct: [[100]], token: 'sk-live-e' } } }] }] }) as any; // any: an export bundle
   ok('sanitize: the export bundle keeps the same figures through the same whitelist, and strips the same strays',
     JSON.stringify(exported.pages[0].cards[0].data.figures) === '{"sharePct":[[100]]}');
+  const kpiPage = sanitizePage({ kind: 'dashboard', site: {}, dashboard: { name: 'K', keys: ['0'], controls: [], sheets: [{ name: 'S', cards: [
+    { kind: 'metric', title: 'Total sales', layout: {}, variants: [0], payloads: [{ value: 5, display: '5', caption: 'c', subtitle: 'Sum of sales', label: 'x', token: 't' }] },
+  ] }] } }) as any; // any: asserting a sanitizer's output shape
+  ok('sanitize: a KPI keeps what it measures (its subtitle), and nothing else new',
+    JSON.stringify(kpiPage.dashboard.sheets[0].cards[0].payloads[0]) === '{"value":5,"display":"5","caption":"c","subtitle":"Sum of sales"}');
   const story = sanitizePage({ kind: 'story', site: {}, story: { name: 'S', blocks: [
     { kind: 'image', src: 'data:image/svg+xml;base64,PHN2Zz4=' },
     { kind: 'image', src: 'data:image/png;base64,iVBORw0KGgo=' },
@@ -194,6 +199,14 @@ async function main(): Promise<void> {
   ok('page: every region join in the client passes the shape names',
     joins.length > 0 && joins.every((c) => /,\s*shapeNames\)$/.test(c)) && /shapeNames = featureNameSet\(features\)/.test(assets.clientJs));
 
+  // Style Auto follows the reader's light or dark setting: a static @media block, no script, no inline style.
+  const autoHtml = pageHtml(sanitizePage({ kind: 'dashboard', site: {}, dashboard: { name: 'A', style: { theme: 'auto' }, keys: ['0'], controls: [], sheets: [] } }), assets, 'A');
+  const cleanHtml = pageHtml(sanitizePage({ kind: 'dashboard', site: {}, dashboard: { name: 'C', style: { theme: 'clean', chosen: true }, keys: ['0'], controls: [], sheets: [] } }), assets, 'C');
+  const darkBlock = /@media \(prefers-color-scheme: dark\) \{\s*\.dash-theme--auto \{ --bg: #18181b;/;
+  ok('page: an Auto dashboard carries the dark tokens for a dark reader, in its one pinned stylesheet',
+    /<html lang="en" class="dash-theme--auto /.test(autoHtml) && darkBlock.test(autoHtml) && /style-src 'sha256-/.test(autoHtml) && !/ style="/.test(autoHtml));
+  ok('page: …a dashboard styled Clean on purpose stays light (negative control)', !darkBlock.test(cleanHtml) && /class="dash-theme--clean /.test(cleanHtml));
+
   // ── 3. The client core, jsdom-free ──────────────────────────────────────────
   const ctx: any = {}; // any: a bare vm global the core's functions land on
   vm.createContext(ctx);
@@ -232,6 +245,23 @@ async function main(): Promise<void> {
   ok('core: a histogram draws the payload\'s bins, as the app does (not its series as bars)', JSON.stringify(hist.data.datasets[0].data) === JSON.stringify(chartShapes('histogram', { labels: [0, 1, 2], series: [{ name: 'n', values: [1, 1, 9] }] })!.histogram![0].map((b) => b.count)));
   ok('core: without its figures a figure type is not drawn — the card says so; it never works them out',
     ['waterfall', 'pareto', 'pct_stacked_column', 'pct_stacked_bar', 'histogram'].every((t) => ctx.pkChartConfig(t, p, [], fmt) === null) && ctx.pkChartConfig('column', p, [], fmt) !== null);
+  const col = ctx.pkChartConfig('column', p, [], fmt);
+  ok('core: the app\'s axes — no gridlines down from the categories, no frame; the value axis keeps its lines',
+    col.options.scales.x.grid.display === false && col.options.scales.x.border.display === false && col.options.scales.y.grid === undefined && col.options.scales.x.ticks.maxRotation === 40);
+  ok('core: bars and lines carry value labels, as the app\'s do; a Pareto draws none on its bars (the app marks its 80%)',
+    col.plugins.some((x: any) => x.id === 'pkValueLabels') && ctx.pkChartConfig('line', p, [], fmt).plugins.some((x: any) => x.id === 'pkValueLabels') && !(par.plugins || []).some((x: any) => x.id === 'pkValueLabels'));
+  const labelled: string[] = [];
+  const fakeChart = (cfg: any) => ({ // any: the slice of a Chart.js chart the plugin reads
+    ctx: { save() {}, restore() {}, fillText: (t: string) => labelled.push(t) }, options: { indexAxis: cfg.options.indexAxis, color: '#000' }, data: cfg.data,
+    getDatasetMeta: (di: number) => ({ hidden: false, type: cfg.data.datasets[di].type || 'bar', data: cfg.data.datasets[di].data.map(() => ({ x: 0, y: 0, base: 0 })) }),
+  });
+  const draw3 = ctx.pkChartConfig('column', { labels: ['a', 'b', 'c'], series: [{ label: 'v', values: [5, 9, 1] }] }, [], fmt);
+  draw3.plugins.find((x: any) => x.id === 'pkValueLabels').afterDatasetsDraw(fakeChart(draw3));
+  ok('core: as the app labels by default — a series\' largest and smallest bar, not every bar', JSON.stringify(labelled) === '["9","1"]', JSON.stringify(labelled));
+  labelled.length = 0;
+  wf.plugins.find((x: any) => x.id === 'pkValueLabels').afterDatasetsDraw(fakeChart(wf));
+  ok('core: a waterfall labels its totals, and its largest rise and fall, signed', JSON.stringify(labelled) === '["+50","999","-9","990"]', JSON.stringify(labelled));
+  ok('core: a 100% axis reads 0–100%', pctCfg.options.scales.y.ticks.callback(40) === '40%');
   ok('core: a month axis is named as the app names it', JSON.stringify(ctx.pkChartConfig('column', { labels: ['2024-01-01', '2024-02-01'], series: [{ label: 'v', values: [1, 2] }] }, [], fmt, (l: string[]) => l.map((x) => x.slice(0, 7))).data.labels) === '["2024-01","2024-02"]');
   ok('core: plugin types render as a table, maps and pivots as themselves',
     ctx.pkRenderKind('treemap') === 'table' && ctx.pkRenderKind('map_choropleth') === 'map' && ctx.pkRenderKind('pivot') === 'pivot' && ctx.pkRenderKind('line') === 'chart');

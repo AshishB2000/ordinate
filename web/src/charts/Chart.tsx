@@ -7,10 +7,11 @@
 // `responsive` mode already observes that box; the ResizeObserver here is for
 // the word cloud, which is not Chart.js, and keeps any held chart in step.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { SkeletonBlock } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
-import { buildChart } from './build';
+import * as OrdFormat from '../../../src/app/format.ts';
+import { asMonthLabels, buildChart, chartSeries } from './build';
 import s from './Chart.module.css';
 import { loadChartJs } from './loadChartJs';
 import { resolveChartType } from './typeSpec';
@@ -83,6 +84,7 @@ export function Chart({
   const [status, setStatus] = useState<Status>('loading');
   const [failure, setFailure] = useState('');
   const theme = useDocumentTheme();
+  const listId = useId();
   const onChartRef = useRef(onChart);
   useEffect(() => {
     onChartRef.current = onChart;
@@ -146,10 +148,29 @@ export function Chart({
     };
   }, []);
 
+  // A screen reader hears what a waterfall, a Pareto, a 100% bar or a histogram draws: the server's figures as
+  // text (the shared formatter's figureLines — the published page lists the same).
+  const lines = useMemo(
+    () => OrdFormat.figureLines(type, asMonthLabels(Array.isArray(data.labels) ? data.labels : []), chartSeries(data).filter((x) => x.role !== 'overlay'), data.figures),
+    [type, data],
+  );
   return (
     <div className={[s.wrap, s.fresh, className].filter(Boolean).join(' ')}>
       {/* Hidden under the empty / error states (a destroyed word cloud leaves its words); blank while loading anyway. */}
-      <canvas ref={canvasRef} role="img" aria-label={label ?? 'Chart'} className={status === 'empty' || status === 'error' ? s.hidden : undefined} />
+      <canvas
+        ref={canvasRef}
+        role="img"
+        aria-label={label ?? 'Chart'}
+        aria-describedby={lines.length && status === 'ready' ? listId : undefined}
+        className={status === 'empty' || status === 'error' ? s.hidden : undefined}
+      />
+      {lines.length > 0 && status === 'ready' && (
+        <ul id={listId} className={s.figures} data-figures="">
+          {lines.map((line, i) => (
+            <li key={i}>{line}</li>
+          ))}
+        </ul>
+      )}
       {status === 'loading' && (
         <div className={s.state}>
           <SkeletonBlock label="Loading chart" />

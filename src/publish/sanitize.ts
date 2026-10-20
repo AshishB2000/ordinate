@@ -146,7 +146,10 @@ export function sanitizePayload(raw: unknown): unknown {
   if (typeof o.error === 'string') return { error: str(o.error, MAX_LABEL) };
   if (Array.isArray(o.sentences)) return { sentences: arr(o.sentences, 5).map((x) => str(x, MAX_LABEL)) }; // a Summary card's
   if ('display' in o || ('value' in o && !('labels' in o))) {
-    return { value: num(o.value), display: str(o.display, 120), caption: str(o.caption, MAX_LABEL) };
+    // A KPI: its figure, its display, its sentence — and what it measures, when the server wrote that.
+    const kpi: Obj = { value: num(o.value), display: str(o.display, 120), caption: str(o.caption, MAX_LABEL) };
+    if (typeof o.subtitle === 'string' && o.subtitle) kpi.subtitle = str(o.subtitle, MAX_LABEL);
+    return kpi;
   }
   const data: ExportChartData = sanitizeChartData(o);
   const out: Obj = {

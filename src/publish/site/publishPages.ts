@@ -56,7 +56,7 @@ function pcStory(page: any, root: HTMLElement): void {
     if (b.kind === 'chart') {
       const fig = pcEl('figure', 'pub-card pub-story-chart');
       fig.appendChild(pcEl('h3', 'pub-card-title', b.title));
-      fig.appendChild(b.data && b.data.error ? pcEl('div', 'pub-broken', b.data.error) : pcChartBody({ chartType: b.chartType }, b.data || {}, page, () => { /* no filters in a story */ }));
+      fig.appendChild(b.data && b.data.error ? pcEl('div', 'pub-broken', b.data.error) : pcChartBody({ chartType: b.chartType, title: b.title }, b.data || {}, page, () => { /* no filters in a story */ }));
       if (b.caption) fig.appendChild(pcEl('figcaption', 'pub-caption', b.caption));
       col.appendChild(fig);
     }
@@ -140,10 +140,10 @@ function pcScorecard(page: any, root: HTMLElement): void {
         const fill = pcEl('span', 'pub-sc-fill');
         fill.style.width = Math.max(2, Math.min(100, (r.attainment / 150) * 100)) + '%';
         bar.appendChild(fill);
-        att.append(bar, pcEl('span', '', Math.round(r.attainment) + '%'));
+        att.append(bar, pcEl('span', '', OrdFormat.formatNumber(r.attainment, { decimals: 0 }) + '%'));
       } else att.textContent = '—';
       tr.appendChild(att);
-      const chg = r.deltaDisplay ? r.deltaDisplay + (typeof r.pct === 'number' ? ` (${r.pct > 0 ? '+' : ''}${r.pct.toFixed(1)}%)` : '') : '—';
+      const chg = r.deltaDisplay ? r.deltaDisplay + (typeof r.pct === 'number' ? ` (${r.pct > 0 ? '+' : ''}${OrdFormat.formatNumber(r.pct, { decimals: 1 })}%)` : '') : '—';
       tr.appendChild(pcEl('td', 'num pub-sc-tone--' + r.tone, chg));
       const sp = pcEl('td', 'pub-sc-spark-cell pub-sc-dot-c--' + r.status);
       const svg = pcSpark(r.spark || []);
