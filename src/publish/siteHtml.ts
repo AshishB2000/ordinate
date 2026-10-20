@@ -4,7 +4,8 @@
 // A page is: the dashboard's style tokens (dashboardExport.styleBlock — the
 // same tokens an HTML export carries) plus the site's layout CSS; the app's
 // own scripts, inlined in order — Chart.js, the formatter, the geo matcher,
-// the published renderer (./site/publishCore.js + publishClient.js);
+// the published renderer (./site/publishCore.js, publishPhone.js, then the
+// client: publishTiles.js, publishMaps.js, publishPages.js, publishClient.js);
 // and the page's data as a NON-EXECUTED JSON block, sanitized by
 // ./sanitize.ts. Nothing else.
 //
