@@ -43,7 +43,8 @@ function trim(chart: ChartHandle): void {
   chart.update('none');
 }
 
-function ChartThumb({ type, data, overrides, onDrawn }: { type: string; data: ChartDataShape; overrides: Overrides; onDrawn: () => void }) {
+/** A chart drawn small and inert — a gallery card's, and an Explore suggestion's. */
+export function ChartThumb({ type, data, overrides, onDrawn }: { type: string; data: ChartDataShape; overrides: Overrides; onDrawn: () => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = ref.current;

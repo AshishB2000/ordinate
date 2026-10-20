@@ -43,6 +43,7 @@ import { subscriptions } from './subscriptions';
 import { rebuild } from './rebuild';
 import { embed } from './embed';
 import { metricTree } from './metricTree';
+import { explore } from './explore';
 
 export const contracts = {
   ...projects,
@@ -87,6 +88,7 @@ export const contracts = {
   ...rebuild,
   ...embed,
   ...metricTree,
+  ...explore,
 } as const;
 
 export type Channel = keyof typeof contracts;

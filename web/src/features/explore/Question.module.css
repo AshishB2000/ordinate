@@ -1,0 +1,228 @@
+/* The question (./Question.tsx): four wells — Show, Group by, Split by,
+   Filters — of pills. A pill's edge wears its field's hue, as the field list
+   does. Under 600px the wells are rows, the label beside its pills. */
+
+/* One hue per kind of field, from the chart palette (./Explore.module.css .field). */
+.pill[data-kind='dimension'] {
+  --kind: var(--chart-1);
+}
+.pill[data-kind='date'] {
+  --kind: var(--chart-4);
+}
+.pill[data-kind='measure'] {
+  --kind: var(--chart-2);
+}
+.pill[data-kind='filter'] {
+  --kind: var(--muted);
+}
+
+.question {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-16) var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.qHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-height: var(--ctl-sm);
+}
+.qTitle {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.qHint {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--t-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qTools {
+  display: flex;
+  gap: var(--sp-4);
+  margin-left: auto;
+}
+/* The phone's way to the fields; the rail is the desktop's. */
+.qTools .fieldsBtn {
+  display: none;
+}
+@media (max-width: 900px) {
+  .qTools .fieldsBtn {
+    display: inline-flex;
+  }
+}
+.wells {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-8);
+}
+@media (max-width: 1280px) {
+  .wells {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.well {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-width: 0;
+  padding: var(--sp-8) var(--sp-12) var(--sp-12);
+  background: var(--inset);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+}
+.wellLabel {
+  font-size: var(--t-11);
+  font-weight: 700;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.wellBody {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+/* A pill: a field in the question. Its edge wears the field's hue. */
+.pill {
+  display: inline-flex;
+  align-items: stretch;
+  max-width: 100%;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid color-mix(in srgb, var(--kind, var(--border-2)) 40%, var(--border));
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-strong);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.pillAgg,
+.pillMain,
+.pillX {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0 var(--sp-8);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.pillAgg {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--kind);
+  background: color-mix(in srgb, var(--kind) 10%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--kind) 25%, transparent);
+}
+.pillMain {
+  flex: 1 1 auto;
+}
+.pillMain > svg {
+  flex: 0 0 auto;
+  color: var(--kind);
+}
+.pillText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pillX {
+  flex: 0 0 auto;
+  padding: 0 var(--sp-8) 0 var(--sp-4);
+  color: var(--text-faint);
+}
+.pillAgg:hover,
+.pillMain:hover {
+  background: var(--surface-2);
+}
+.pillX:hover {
+  color: var(--error);
+}
+.pillAgg:focus-visible,
+.pillMain:focus-visible,
+.pillX:focus-visible,
+.addPill:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+/* The time grain is one control: a pill that is all button. */
+.grain {
+  flex: 0 0 auto;
+  --kind: var(--chart-4);
+}
+.filterCol {
+  font-weight: 600;
+}
+.addPill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: 30px;
+  padding: 0 var(--sp-12) 0 var(--sp-8);
+  border: 1px dashed var(--border-3);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.addPill:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* A phone: the wells are rows — the label beside its pills — so the answer is not a screen away. */
+@media (max-width: 600px) {
+  .wells {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .well {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--sp-8);
+    padding: var(--sp-8) 0;
+    background: none;
+    border: 0;
+    border-top: 1px solid var(--border-hairline);
+    border-radius: 0;
+  }
+  .wellLabel {
+    flex: 0 0 72px;
+    padding-top: 9px;
+  }
+  .wellBody {
+    flex: 1 1 auto;
+  }
+  /* Clear keeps its name (aria-label); a phone shows its icon. */
+  .qTools .clearBtn > span {
+    display: none;
+  }
+}
+
+/* A well's picker: the list scrolls inside, never off the window. */
+.picker {
+  width: 288px;
+  max-height: min(440px, 70vh);
+  overflow-y: auto;
+  padding: var(--sp-12);
+}

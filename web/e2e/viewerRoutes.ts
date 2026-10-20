@@ -10,6 +10,7 @@
 import { createRequire } from 'node:module';
 import type { Locator, Page } from 'playwright';
 import type { ViewerSeed } from './seed-viewer.ts';
+import { encodeQuestion } from '../src/features/explore/spec.ts';
 
 export interface Control {
   role: 'button' | 'link' | 'heading' | 'textbox' | 'region' | 'navigation' | 'grid' | 'list' | 'menuitem' | 'menuitemradio' | 'combobox';
@@ -151,6 +152,9 @@ const olderVersion = async (page: Page) => {
 // A scenario's what-ifs and a builder's spec are the viewer's own screen: nothing there is stored for them.
 const SCENARIO = ['Remove Revenue', 'Add driver', 'Remove driver 1'];
 const BUILDER = ['Suggest chart', 'Add measure', 'Remove measure', 'Add filter', 'Add'];
+// Explore's wells change only the question in the viewer's own URL.
+const EXPLORE = ['Add measure', 'Remove measure', 'Remove group by', 'Add filter'];
+const EXPLORE_Q = { chartType: 'column', encoding: { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' as const }] }, filters: [] };
 
 export const ROUTES: readonly RouteCase[] = [
   { pattern: '/', url: (s) => `/?project=${s.pid}`, editor: { role: 'button', name: 'New' } },
@@ -158,7 +162,14 @@ export const ROUTES: readonly RouteCase[] = [
   { pattern: '/visuals', url: (s) => `/visuals?project=${s.pid}`, editor: { role: 'button', name: 'New visual' } },
   { pattern: '/analyses', url: (s) => `/analyses?project=${s.pid}`, editor: { role: 'button', name: 'Create dashboard' } },
   { pattern: '/dashboards', url: (s) => `/dashboards?project=${s.pid}`, editor: { role: 'button', name: 'Publish…' } },
-  { pattern: '/explore', url: (s) => `/explore?project=${s.pid}` },
+  // A question by link (docs/explore): an editor may save it; a viewer explores and shares it, and keeps Copy link.
+  {
+    pattern: '/explore',
+    url: (s) => `/explore?project=${s.pid}&dataset=${s.did}&q=${encodeQuestion(EXPLORE_Q)}`,
+    editor: { role: 'button', name: 'Save as visual' },
+    explore: EXPLORE,
+    viewer: [{ role: 'button', name: 'Copy link' }],
+  },
   { pattern: '/reports', url: (s) => `/reports?project=${s.pid}`, editor: { role: 'button', name: 'New report' } },
   { pattern: '/settings', url: (s) => `/settings?tab=privacy&project=${s.pid}`, editor: { role: 'button', name: /^Check \d+ datasets? for sensitive columns$/ } },
   { pattern: '/data/:projectId/:datasetId', url: (s) => `/data/${s.pid}/${s.did}`, editor: { role: 'link', name: 'Prepare' }, open: details },

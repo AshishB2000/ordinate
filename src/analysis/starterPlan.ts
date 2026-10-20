@@ -116,7 +116,7 @@ function placeColumn(ds: PlanDataset): { name: string; level: ResolvedGeoLevel }
   return undefined;
 }
 
-function summaryOf(ds: PlanDataset, name: string): ColumnSummary | undefined {
+function summaryOf(ds: Pick<PlanDataset, 'summaries'>, name: string): ColumnSummary | undefined {
   // BY NAME, never by index. Nothing states that `summaries[]` is index-aligned
   // with `columns[]`, and ColumnSummary carries its own name precisely so a
   // caller does not have to assume it.
@@ -124,8 +124,10 @@ function summaryOf(ds: PlanDataset, name: string): ColumnSummary | undefined {
 }
 
 /** Numeric columns, preferred names first, declared order within each group.
- *  A partition rather than a sort with a comparator — it says what it means. */
-function kpiColumns(ds: PlanDataset): ParsedColumn[] {
+ *  A partition rather than a sort with a comparator — it says what it means.
+ *  Every one of them: Explore's field list and suggestions (./exploreSuggest)
+ *  rank by exactly this order; the KPI strip takes its first MAX_KPIS. */
+export function rankedMeasures(ds: Pick<PlanDataset, 'columns'>): ParsedColumn[] {
   const nums = ds.columns
     .filter((c) => c.type === 'number')
     // An id, a zip or a year is a number the way a phone number is: never a
@@ -138,8 +140,11 @@ function kpiColumns(ds: PlanDataset): ParsedColumn[] {
   return nums
     .map((c, i) => ({ c, i, rank: measureRank(c.name) }))
     .sort((a, b) => a.rank - b.rank || a.i - b.i)
-    .slice(0, MAX_KPIS)
     .map((x) => x.c);
+}
+
+function kpiColumns(ds: PlanDataset): ParsedColumn[] {
+  return rankedMeasures(ds).slice(0, MAX_KPIS);
 }
 
 /**
@@ -149,7 +154,7 @@ function kpiColumns(ds: PlanDataset): ParsedColumn[] {
  * every text column stays eligible: a wide axis is ugly, never wrong, and never
  * worth hydrating a table to avoid.
  */
-function categoryColumns(ds: PlanDataset): ParsedColumn[] {
+export function categoryColumns(ds: Pick<PlanDataset, 'columns' | 'summaries'>): ParsedColumn[] {
   const text = ds.columns.filter((c) => c.type === 'text');
   if (!ds.summaries) return text;
   return text.filter((c) => {

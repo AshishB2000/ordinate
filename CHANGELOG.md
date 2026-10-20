@@ -74,6 +74,13 @@ the desktop installers.
   saves what is on screen as a shared view (editors), and everyone can apply one or copy its link
   (`?view=`); ⌘K opens a view in place, a phone picks one in its Filters sheet, and a published
   page offers it. See [`docs/dashboard-filters/`](docs/dashboard-filters/00-design.md).
+- **Explore: ask a question with no AI model.** Explore is a full-width question builder for
+  everyone, viewers included: pick a dataset, then a measure and its aggregate, what to group by
+  (and a date's grain), a split and filters — or start from a suggested question, each with a live
+  thumbnail. The answer is the server's chart and the same answer as a table; the question lives in
+  the URL, so Copy link shares it and Back undoes an edit. Editors can save it as a visual or open it
+  in the builder. With an AI model set up, an ask box hands plain words to the Assistant. See
+  [`docs/explore/`](docs/explore/00-design.md).
 
 ### Security — since the move to the web
 

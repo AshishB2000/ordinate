@@ -15,7 +15,8 @@ import { stepSummary } from './filterText';
 import { usePeriodPicker, type PeriodSpec } from './PeriodPanel';
 import s from './Filters.module.css';
 
-function Summary({ step }: { step: FilterStep }) {
+/** One step in words; a relative period named by the server. Explore's filter pills say it too. */
+export function FilterSummary({ step }: { step: FilterStep }) {
   const period = step.op === 'period' ? ((step.period as PeriodSpec) ?? null) : null;
   const q = usePeriodPicker(period);
   return <>{stepSummary(step, q.data?.current?.label) || 'Set a condition…'}</>;
@@ -54,7 +55,7 @@ export function FilterRows({
             />
           </div>
           <button type="button" className={s.cond} aria-label={`Edit the filter on ${f.column || 'this column'}`} onClick={() => setEditing(i)}>
-            <Summary step={f} />
+            <FilterSummary step={f} />
           </button>
           {f.context === true && (
             <span className={s.ctx} title="Applied before LOD expressions">

@@ -8,14 +8,21 @@ import type { ChartDataShape } from './types';
 
 const SWATCH = [s.c1, s.c2, s.c3, s.c4, s.c5, s.c6, s.c7, s.c8];
 
-export function DataTable({ data, label }: { data: ChartDataShape; label?: string }) {
+export function DataTable({ data, label, labelHeader, pinLabels }: {
+  data: ChartDataShape;
+  label?: string;
+  /** The first column's header — the column the labels come from — instead of "Label". */
+  labelHeader?: string;
+  /** Keep the row labels and the header in view while the table scrolls (the phone does this by itself). */
+  pinLabels?: boolean;
+}) {
   const m = tableModel(data);
   return (
     <div className={s.scroll}>
-      <table className={s.table} aria-label={label}>
+      <table className={pinLabels ? `${s.table} ${s.pinned}` : s.table} aria-label={label}>
         <thead>
           <tr>
-            <th scope="col">{m.labelHeader}</th>
+            <th scope="col">{labelHeader || m.labelHeader}</th>
             {m.series.map((c, i) => (
               <th key={i} scope="col">
                 <span className={`${s.swatch} ${SWATCH[c.slot]}`} aria-hidden="true" />
