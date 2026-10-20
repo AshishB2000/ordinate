@@ -9,7 +9,10 @@
 
 declare const Chart: any; // the app's own Chart.js UMD, inlined before this script
 // src/app/format.js, inlined and bound by the page's prelude (src/publish/siteHtml.ts).
-declare const OrdFormat: { formatValue(v: unknown, mode?: string): string; setFormatPrefs(p: unknown): void };
+declare const OrdFormat: {
+  formatValue(v: unknown, mode?: string): string; formatNumber(v: unknown, opts?: { decimals?: number; maxDecimals?: number }): string;
+  formatPercent(v: unknown, decimals?: number): string; asMonthLabels(labels: any[]): any[]; setFormatPrefs(p: unknown): void;
+};
 
 const pcCharts: any[] = [];
 
@@ -22,6 +25,11 @@ function pcEl(tag: string, cls?: string, text?: string): HTMLElement {
 
 function pcFmt(v: number): string {
   try { return OrdFormat.formatValue(v, 'auto'); } catch (_) { return String(v); }
+}
+
+/** Labels as the app's axes name them: a first-of-month axis as "Jan 2023" (the shared formatter). */
+function pcMonths(labels: any[]): any[] {
+  try { return OrdFormat.asMonthLabels(labels); } catch (_) { return labels; }
 }
 
 function pcRamp(): string[] {
@@ -110,12 +118,17 @@ function pcChartBody(card: { chartType: string; category?: string }, payload: an
   const holder = pcEl('div', 'pub-chart');
   const canvas = document.createElement('canvas');
   holder.appendChild(canvas);
+  // A figure type whose figures this page does not carry (published before they existed): say so, never work them out.
+  const cfg = pkChartConfig(card.chartType, payload, pcRamp(), pcFmt, pcMonths);
+  if (!cfg) return pcEl('div', 'pub-broken', 'This chart needs a newer publish to draw — publish the dashboard again.');
+  const src: number[] | undefined = cfg.src;
+  delete cfg.src;
   if (typeof Chart === 'function') {
-    const cfg = pkChartConfig(card.chartType, payload, pcRamp(), pcFmt);
     // A phone: the legend under the plot, fewer level axis labels (publishPhone.ts).
     if (ppIsPhone()) ppPhoneChart(cfg);
     cfg.options.onClick = (_e: any, els: any[]) => {
-      if (els && els.length && payload.labels) onPick(String(payload.labels[els[0].index]));
+      const i = els && els.length ? (src ? src[els[0].index] : els[0].index) : -1;
+      if (i >= 0 && payload.labels && i < payload.labels.length) onPick(String(payload.labels[i]));
     };
     requestAnimationFrame(() => { pcCharts.push(new Chart(canvas, cfg)); });
   }

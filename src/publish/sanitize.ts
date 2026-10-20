@@ -154,6 +154,8 @@ export function sanitizePayload(raw: unknown): unknown {
     series: data.series.map((s) => ({ label: s.label.slice(0, MAX_LABEL), values: s.values })),
     caption: str(o.caption, MAX_LABEL),
   };
+  // The figures the chart draws, as the export whitelist named them field by field (analysis/exportSanitize).
+  if (data.figures) out.figures = data.figures;
   if (o.pivot) out.pivot = sanitizePivot(o.pivot);
   if (o.geo) out.geo = sanitizeGeo(o.geo);
   if (typeof o.hidden === 'string') out.hidden = str(o.hidden, MAX_LABEL);

@@ -7,11 +7,12 @@
 // renderer program.
 //
 // NOTHING HERE COMPUTES A FIGURE. Every number was computed by the app and
-// arrives in the page's data; this file picks which answer to show for the
-// filter bar's state, lays it out, and turns it into a Chart.js config. The
-// only arithmetic is presentational — a slice's share of a pie, a running
-// total's baseline under a waterfall bar, a map's projection — the same kind
-// the hub's own renderer does on screen.
+// arrives in the page's data — a waterfall's levels, a Pareto's order and
+// cumulative share, a 100%-stacked chart's shares and a histogram's bins as the
+// payload's `figures` (src/analysis/chartShapes.ts), the same the app draws.
+// This file picks which answer to show for the filter bar's state, lays it out,
+// and turns it into a Chart.js config. The only arithmetic is presentational:
+// a map's projection, a colour ramp, pixels.
 
 /** The combination index for a set of option picks, or -1. */
 function pkComboIndex(keys: string[], picks: number[]): number {
@@ -99,13 +100,27 @@ function pkTableModel(payload: any, categoryName: string): { head: string[]; row
   return { head, rows };
 }
 
+/** Which of the payload's `figures` a chart id draws; without it the chart is not drawn at all. */
+const PK_FIGURES: Record<string, string> = { waterfall: 'waterfall', pareto: 'pareto', pct_stacked_column: 'sharePct', pct_stacked_bar: 'sharePct', histogram: 'histogram' };
+/** A waterfall's rises and falls — the app's own fallbacks for its --ok / --error tokens. */
+const PK_UP = '#16a34a';
+const PK_DOWN = '#e11d48';
+
 /**
- * The Chart.js config for one of the app's chart ids. `fmt` renders a tick /
- * tooltip number the workspace's way (OrdFormat in the page).
+ * The Chart.js config for one of the app's chart ids — with `src`, each drawn
+ * category's index in the payload's labels (-1: a bar of its own, like a
+ * waterfall's closing Total), where the drawn order is not the labels' — or null when the payload
+ * lacks the figures that id draws (a page published before they existed): the
+ * card then says so, and nothing is worked out here. `fmt` renders a tick /
+ * tooltip number the workspace's way (OrdFormat in the page); `shown` names the
+ * labels as the axis draws them (a month as "Jan 2023").
  */
-function pkChartConfig(chartType: string, payload: any, ramp: string[], fmt: (v: number) => string): any {
-  const labels: any[] = Array.isArray(payload && payload.labels) ? payload.labels : [];
+function pkChartConfig(chartType: string, payload: any, ramp: string[], fmt: (v: number) => string, shown: (labels: any[]) => any[] = (l) => l): any {
+  const raw: any[] = Array.isArray(payload && payload.labels) ? payload.labels : [];
+  const labels: any[] = shown(raw);
   const series: any[] = Array.isArray(payload && payload.series) ? payload.series : [];
+  const figures: any = (payload && payload.figures) || {};
+  if (PK_FIGURES[chartType] && !figures[PK_FIGURES[chartType]]) return null;
   const colors = pkPalette(ramp, Math.max(series.length, labels.length));
   const horizontal = /(^|_)bar$/.test(chartType) || chartType === 'funnel';
   const stacked = chartType.indexOf('stacked') >= 0;
@@ -144,25 +159,54 @@ function pkChartConfig(chartType: string, payload: any, ramp: string[], fmt: (v:
     };
   }
   if (chartType === 'waterfall') {
-    // A running total's floating bars: each step drawn from where the last one ended.
-    const s = series[0] || { label: '', values: [] };
-    let run = 0;
-    const bars = s.values.map((v: any) => { const a = run; run += Number(v) || 0; return [a, run]; });
+    // The server's steps: each bar from its start to its end, a total from 0; a step names its category by index.
+    const steps: any[] = figures.waterfall.steps || [];
     return {
       type: 'bar',
-      data: { labels, datasets: [{ label: s.label, data: bars, backgroundColor: s.values.map((v: any) => (Number(v) < 0 ? '#e11d48' : colors[0])) }] },
-      options: { ...base, scales: { y: { ticks: tick } } },
+      data: {
+        labels: steps.map((x) => (x.src >= 0 && x.src < labels.length ? labels[x.src] : x.label)),
+        datasets: [{
+          label: series[0] ? series[0].label : '', data: steps.map((x) => [x.start, x.end]),
+          backgroundColor: steps.map((x) => (x.kind === 'up' ? PK_UP : x.kind === 'down' ? PK_DOWN : colors[0])),
+        }],
+      },
+      options: { ...base, plugins: { legend: { display: false }, tooltip }, scales: { y: { ticks: tick } } },
+      src: steps.map((x) => x.src),
+    };
+  }
+  if (chartType === 'pareto') {
+    // The server's order (largest first) and cumulative share; the bars are the series' own figures in that order.
+    const p = figures.pareto;
+    const vals: any[] = series[0] && Array.isArray(series[0].values) ? series[0].values : [];
+    return {
+      type: 'bar',
+      data: {
+        labels: p.order.map((i: number) => labels[i]),
+        datasets: [
+          { type: 'bar', label: series[0] ? series[0].label : '', data: p.order.map((i: number) => (vals[i] === undefined ? null : vals[i])), backgroundColor: colors[0], order: 2 },
+          { type: 'line', label: 'Cumulative %', data: p.cumPct, yAxisID: 'pct', borderColor: colors[1] || colors[0], backgroundColor: colors[1] || colors[0], pointRadius: 2, order: 1 },
+        ],
+      },
+      options: { ...base, scales: { x: {}, y: { ticks: tick }, pct: { position: 'right', min: 0, max: 100, grid: { display: false } } } },
+      src: p.order,
+    };
+  }
+  if (chartType === 'histogram') {
+    // The server's bins for the first series: touching columns, each labelled by its edges.
+    const bins: any[] = figures.histogram[0] || [];
+    return {
+      type: 'bar',
+      data: {
+        labels: bins.map((b) => (b.from === b.to ? fmt(b.from) : fmt(b.from) + '–' + fmt(b.to))),
+        datasets: [{ label: 'Count', data: bins.map((b) => b.count), backgroundColor: colors[0], barPercentage: 1, categoryPercentage: 1 }],
+      },
+      options: { ...base, plugins: { legend: { display: false }, tooltip }, scales: { y: { ticks: tick } } },
     };
   }
   const lineish = /line|area/.test(chartType);
   const datasets = series.map((s, i) => {
-    let data: any[] = s.values;
-    if (pct) {
-      data = s.values.map((v: any, j: number) => {
-        const tot = series.reduce((n: number, t: any) => n + (Number(t.values[j]) || 0), 0);
-        return tot ? ((Number(v) || 0) / tot) * 100 : null;
-      });
-    }
+    // A 100%-stacked bar is the server's share of its category (figures.sharePct).
+    const data: any[] = pct ? figures.sharePct[i] || [] : s.values;
     const asLine = lineish || (chartType === 'combo' && i > 0);
     return {
       type: asLine ? 'line' : 'bar',
@@ -176,16 +220,6 @@ function pkChartConfig(chartType: string, payload: any, ramp: string[], fmt: (v:
       ...(chartType === 'histogram' ? { barPercentage: 1, categoryPercentage: 1 } : {}),
     };
   });
-  if (chartType === 'pareto' && series[0]) {
-    // The cumulative share line over the (already sorted) bars.
-    const vals = series[0].values.map((v: any) => Number(v) || 0);
-    const tot = vals.reduce((a: number, b: number) => a + b, 0);
-    let acc = 0;
-    datasets.push({
-      type: 'line', label: 'Cumulative %', data: vals.map((v: number) => { acc += v; return tot ? (acc / tot) * 100 : null; }),
-      borderColor: colors[1] || colors[0], backgroundColor: colors[1] || colors[0], yAxisID: 'pct', pointRadius: 2,
-    } as any);
-  }
   const valueAxis = horizontal ? 'x' : 'y';
   // Only the VALUE axis gets the number formatter. An explicit `ticks:
   // undefined` on the category axis is not "use the default" to Chart.js — it
@@ -193,7 +227,6 @@ function pkChartConfig(chartType: string, payload: any, ramp: string[], fmt: (v:
   const scales: any = { x: { stacked }, y: { stacked } };
   scales[valueAxis].ticks = tick;
   if (pct) scales[valueAxis].max = 100;
-  if (chartType === 'pareto') scales.pct = { position: 'right', min: 0, max: 100, grid: { display: false } };
   return {
     type: lineish ? 'line' : 'bar',
     data: { labels, datasets },

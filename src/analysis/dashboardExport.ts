@@ -35,6 +35,7 @@ import { sanitizeFormatPrefs } from '../app/format';
 import type { DashboardStyle } from './dashboards';
 import { themeModel } from './themeTokens';
 import type { ThemeTokens } from './themeTokens';
+import type { ChartFigures } from './chartShapes';
 import { GRID_COLS, sanitizeBundle } from './exportSanitize';
 
 // The whitelist (a trust boundary) is its own module, ./exportSanitize.ts; re-exported so every caller keeps its import.
@@ -57,6 +58,8 @@ export interface ExportSeries {
 export interface ExportChartData {
   labels: (string | number)[];
   series: ExportSeries[];
+  /** What the chart draws beyond its series (./chartShapes), as ./exportSanitize whitelists it. */
+  figures?: ChartFigures;
 }
 
 export interface ExportCard {

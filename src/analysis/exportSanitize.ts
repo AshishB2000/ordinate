@@ -14,6 +14,7 @@
 import { sanitizeStyle } from './dashboards';
 import { themeModel } from './themeTokens';
 import type { AccentRamp, ExportBundle, ExportCard, ExportChartData, ExportLayout, ExportPage, ExportTheme } from './dashboardExport';
+import type { ChartFigures, StepKind } from './chartShapes';
 
 /** The fixed grid column count (kept in sync with .dash-grid in hub.css / dashboards.ts). */
 export const GRID_COLS = 12;
@@ -79,7 +80,62 @@ export function sanitizeChartData(raw: unknown): ExportChartData {
         };
       })
     : [];
-  return { labels, series };
+  const figures = sanitizeFigures(o.figures);
+  return figures ? { labels, series, figures } : { labels, series };
+}
+
+// ── The chart's figures (./chartShapes) — named field by field, never spread ──
+// What a waterfall, a Pareto, a 100%-stacked chart, a histogram, a funnel, a
+// bullet and a calendar draw beyond their series. Finite numbers (else null),
+// in-range integers (else -1), one closed enum and a bounded label: a key not
+// named here — a stray field, a secret, a row — is dropped.
+
+const STEP_KINDS: ReadonlySet<string> = new Set(['start', 'up', 'down', 'total', 'end']);
+const FIG_MAX = 20_000;
+const SERIES_MAX = 64;
+const rec = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+const list = (v: unknown, max = FIG_MAX): unknown[] => (Array.isArray(v) ? v.slice(0, max) : []);
+const nums = (v: unknown): Array<number | null> => list(v).map(asNumOrNull);
+const index = (v: unknown): number => (typeof v === 'number' && Number.isInteger(v) && v >= -1 && v < FIG_MAX ? v : -1);
+
+function sanitizeFigures(raw: unknown): ChartFigures | undefined {
+  const o = rec(raw);
+  const out: ChartFigures = {};
+  if (o.waterfall) {
+    const w = rec(o.waterfall);
+    out.waterfall = {
+      from: asNumOrNull(w.from) ?? 0,
+      to: asNumOrNull(w.to) ?? 0,
+      steps: list(w.steps).map((x) => {
+        const st = rec(x);
+        return {
+          label: asString(st.label).slice(0, 400), start: asNumOrNull(st.start) ?? 0, end: asNumOrNull(st.end) ?? 0,
+          value: asNumOrNull(st.value) ?? 0, kind: (STEP_KINDS.has(st.kind as string) ? st.kind : 'up') as StepKind, src: index(st.src),
+        };
+      }),
+    };
+  }
+  if (o.pareto) {
+    const p = rec(o.pareto);
+    out.pareto = {
+      order: list(p.order).map(index), cumPct: nums(p.cumPct).map((v) => v ?? 0),
+      count80: Math.max(0, index(p.count80)), total: asNumOrNull(p.total) ?? 0, positives: Math.max(0, index(p.positives)),
+    };
+  }
+  if (o.sharePct) out.sharePct = list(o.sharePct, SERIES_MAX).map((r) => nums(r).map((v) => v ?? 0));
+  if (o.histogram) {
+    out.histogram = list(o.histogram, SERIES_MAX).map((bins) => list(bins).map((b) => {
+      const x = rec(b);
+      return { from: asNumOrNull(x.from) ?? 0, to: asNumOrNull(x.to) ?? 0, count: Math.max(0, index(x.count)) };
+    }));
+  }
+  if (o.funnel) out.funnel = { ofTopPct: list(rec(o.funnel).ofTopPct, SERIES_MAX).map(nums) };
+  if (o.bullet) out.bullet = { ofTargetPct: nums(rec(o.bullet).ofTargetPct) };
+  if (o.calendar) {
+    const c = rec(o.calendar);
+    out.calendar = { days: list(c.days).map((d) => (typeof d === 'number' && Number.isInteger(d) ? d : 0)), values: nums(c.values) };
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 // Only a `data:image/...;base64,...` URI is accepted for an embedded PNG — never an
