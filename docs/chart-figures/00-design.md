@@ -22,11 +22,16 @@ ignored Total rows and the two-series bridge. One tile showed three sets of numb
   to show was a sum the browser made.
 - A chart of one of these types whose figures did not arrive (an old cached reply) shows its
   designed "Nothing to draw" state — in the app and on `/p/` — and never works them out itself.
-- **The published page looks like the app**: month axes read "Jan 2023" (not a rotated
-  `2023-01-01`), and so do captions ("from Jan 2023 to Dec 2024"); bars carry value labels and there
-  are no vertical gridlines; a KPI tile shows its label and subtitle, not a bare number; a dashboard
-  styled **Auto** follows the reader's light or dark setting (`dashboards-published-dark.png` now
-  differs from the light one).
+- **The published page looks like the app**: month axes read "Jan 2023" (not `2023-01-01`), and
+  so do captions ("from Jan 2023 to Dec 2024"); bars and lines carry the app's default value labels
+  (each series' largest and smallest; a waterfall's totals and its largest rise and fall) and there
+  are no vertical gridlines; a KPI tile shows its figure with what it measures under it ("Sum of
+  revenue"), left-aligned like the app's, under its title; a scorecard's "3 on track" is the
+  server's count; a dashboard styled **Auto** follows the reader's light or dark setting
+  (`dashboards-published-dark.png` now differs from the light one).
+- A **histogram**'s bins, a **funnel**'s "% of top", a **bullet**'s "% of target" and a
+  **calendar**'s days are the server's too; a **stacked** segment's label is its own figure; the
+  map's cluster markers no longer add up values they never draw.
 - A screen reader hears the drawn figures of these three chart types: each chart carries a hidden
   list of them under the canvas ("Technology +1.3M to 5.4M"), the same text in the app and on `/p/`.
 - The Firefox/WebKit nightly is green again.
@@ -121,10 +126,20 @@ script inlined after `publishPhone.js`; `publishClient.ts` keeps the header, the
 ### The screen-reader list, and the parity e2e
 
 The canvas is not text, so "the same figure text in the app and at `/p/`" needs text both pages
-render. `figureLines(type, data, fmt)` (`src/app/figureText.ts`, inlined into `/p/` like
-`format.js`, imported by the web) turns a `figures` block into lines; both drawers put them in a
-visually hidden list under the canvas. `web/e2e/figures.e2e.ts` opens the same Pareto and waterfall
-tiles in the app and at `/p/` and compares those lists.
+render. `figureLines(type, labels, series, figures)` lives in the shared formatter
+(`src/app/format.ts`, which the app imports and `/p/` already inlines as `OrdFormat` — a new file
+would have needed its own inlined script and CommonJS shim) and turns a `figures` block into lines,
+formatted with the workspace's compact format; both drawers put them in a visually hidden list
+under the canvas that the canvas names with `aria-describedby`. `web/e2e/figures.e2e.ts` opens the
+same Pareto (by a sub-category, so it arrives unsorted) and waterfall (by month) tiles in the app
+and at `/p/` and asserts the two lists are equal.
+
+### KPI tiles on `/p/`
+
+The payload gains `subtitle` (whitelisted): what the KPI measures — a column metric's "Sum of
+revenue" (catalog sentences, `src/publish/publishMessages.ts`), a saved metric's own definition as
+the Metrics table words it — left out when it only repeats the title. The tile reads title (card
+head), figure, subtitle, left-aligned as the app's does.
 
 ### The rest of the sweep: no figure arithmetic left in the browser
 
@@ -191,6 +206,18 @@ order. The grep and its classified hits are in this item's PR.
 - Vitest: the in-app charts render from `figures` (and render nothing without them).
 - e2e: `figures.e2e.ts` (app vs `/p/`, the same Pareto and waterfall); the published screenshots,
   light and dark, differ; `phone.e2e.ts` and `rebuild.e2e.ts` on Chromium, Firefox and WebKit.
+
+## Residuals (classified, not figures)
+
+`grep -nE "\+=|-=|reduce\(|Math\.round|toFixed|\bsum\b|\bcum\b|total"` over `web/src/charts/` and
+`src/publish/site/` still finds: pixel and canvas geometry (placement, `toFixed` of SVG
+coordinates, the word cloud's layout, a map's projection and colour ramp); colour arithmetic
+(`palette.ts`, `alphaHex`); selection of an existing figure (min/max for an axis or a ramp, the
+largest and smallest bar to label); a slice's share used only to decide whether its name fits
+(`valueLabels.ts`, never printed); the funnel's centring spacer; a dragged annotation snapped to a
+round value (user input); the phone strip's page dots; and Format → Sort, which orders a chart's
+categories by their stack total (`build.ts`) — an order, never a printed figure. Every rounding of
+a printed figure goes through the shared formatter.
 
 ## Out (next)
 
