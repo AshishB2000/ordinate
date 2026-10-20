@@ -65,9 +65,9 @@ function Metrics({ projectId }: { projectId: string }) {
   const open = async (m: MetricSummary | null) => {
     if (!m) return setEditing({});
     try {
-      const r = (await rpc('metric:get', { projectId, id: m.id })) as { ok: boolean; metric?: Metric; error?: string };
+      const r = (await rpc('metric:get', { projectId, id: m.id })) as { ok: boolean; metric?: Metric; error?: string; tag?: string };
       if (!r.ok || !r.metric) throw new Error(r.error || 'That metric could not be read.');
-      setEditing(r.metric);
+      setEditing({ ...r.metric, tag: r.tag }); // the tag: the editor's base (docs/edit-conflicts)
     } catch (err) {
       toast(failure(err, 'That metric could not be read.'), { kind: 'error' });
     }

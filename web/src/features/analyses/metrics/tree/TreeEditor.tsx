@@ -5,6 +5,7 @@
 // same-dataset parts) and computes everything else.
 
 import { useMemo, useState } from 'react';
+import { rpc } from '../../../../api/client';
 import { Button, IconButton } from '../../../../ui/Button';
 import { Dialog, DialogClose } from '../../../../ui/Dialog';
 import { Select } from '../../../../ui/Select';
@@ -12,6 +13,8 @@ import { Skeleton } from '../../../../ui/Skeleton';
 import { ErrorState } from '../../../../ui/States';
 import { Icon } from '../../../../ui/icons/Icon';
 import { saveTree, useSuggest, type Relation, type Suggestion, type SuggestReply, type TreeSpec } from './api';
+import { ConflictBanner } from '../../../editConflicts/ConflictBanner';
+import { useEditGuard } from '../../../editConflicts/useEditGuard';
 import s from './TreeEditor.module.css';
 
 type Kind = Relation | 'split';
@@ -239,6 +242,9 @@ export function TreeEditor({
   open,
   onOpenChange,
   onSaved,
+  tag,
+  onReload,
+  onCopied,
 }: {
   projectId: string;
   metricId: string;
@@ -247,22 +253,40 @@ export function TreeEditor({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
+  /** The metric's tag `initial` came with: the save's base (docs/edit-conflicts). */
+  tag?: string;
+  /** The tree as it is now, in a new editor — the banner's Reload. Without one, Reload closes the editor. */
+  onReload?: () => void;
+  /** Open the copy "Save mine as a copy" made (its metric id). */
+  onCopied?: (id: string) => void;
 }) {
   const q = useSuggest(projectId, metricId);
+  const guard = useEditGuard({ projectId, type: 'metric', id: metricId }, tag);
   const start = useMemo<TreeSpec>(() => initial ?? { id: uuid(), metricId }, [initial, metricId]);
   const [draft, setDraft] = useState<TreeSpec>(start);
   const [editing, setEditing] = useState<string | null>(initial ? null : start.id);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const broken = !!draft.relation || !!draft.split;
   const save = async () => {
     setBusy(true);
     setError(null);
-    const broken = !!draft.relation || !!draft.split;
-    const err = await saveTree(projectId, metricId, broken ? draft : null);
+    const r = await guard.save((base) => saveTree(projectId, metricId, broken ? draft : null, base)).catch((e: Error) => ({ error: e.message }));
     setBusy(false);
-    if (err) return setError(err);
+    if (!r) return; // changed elsewhere: the banner
+    if (r.error) return setError(r.error);
     onSaved();
     onOpenChange(false);
+  };
+  // Save mine as a copy: a copy of the metric (metric:duplicate), this draft as its tree, then its page.
+  const copy = async () => {
+    const d = (await rpc('metric:duplicate', { projectId, id: metricId })) as { ok: boolean; metric?: { id: string }; error?: string };
+    if (!d.ok || !d.metric) throw new Error(d.error || 'The copy could not be saved.');
+    const id = d.metric.id;
+    const r = await saveTree(projectId, id, broken ? { ...draft, metricId: id } : null);
+    if (r.error) throw new Error(r.error);
+    onOpenChange(false);
+    onCopied?.(id);
   };
   return (
     <Dialog
@@ -281,12 +305,13 @@ export function TreeEditor({
           <DialogClose asChild>
             <Button variant="ghost">Cancel</Button>
           </DialogClose>
-          <Button variant="primary" loading={busy} disabled={!q.isSuccess} onClick={() => void save()}>
+          <Button variant="primary" loading={busy} disabled={!q.isSuccess || guard.changed} onClick={() => void save()}>
             Save tree
           </Button>
         </>
       }
     >
+      {guard.changed && <ConflictBanner compact noun="metric tree" onReload={onReload ?? (() => onOpenChange(false))} onCopy={copy} />}
       {q.isPending ? (
         <div className={s.loading} aria-busy="true" aria-label="Loading the metrics">
           <Skeleton className={s.skRow} />

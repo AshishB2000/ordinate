@@ -8,6 +8,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { rpc } from '../../../api/client';
+import { toast } from '../../../ui/Toast';
+import { ConflictBanner } from '../../editConflicts/ConflictBanner';
+import { useEditGuard } from '../../editConflicts/useEditGuard';
 import { useDatasetColumns, useDatasets } from '../../../api/datasets';
 import { Button, buttonClass } from '../../../ui/Button';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
@@ -33,8 +36,28 @@ const PREVIEW_MS = 300;
 
 export type MetricDraft = Partial<Omit<Metric, 'definition'>> & { definition?: Metric['definition'] };
 
-export function MetricEditor({ projectId, existing, onSaved, onClose }: { projectId: string; existing?: MetricDraft; onSaved: (m: Metric) => void; onClose: () => void }) {
+type EditorProps = { projectId: string; existing?: MetricDraft; onSaved: (m: Metric) => void; onClose: () => void };
+
+/** The dialog, and its Reload (docs/edit-conflicts): the metric read again, in a new editor. */
+export function MetricEditor(props: EditorProps) {
+  const [current, setCurrent] = useState(props.existing);
+  const [gen, setGen] = useState(0);
+  const reload = async () => {
+    const r = (await rpc('metric:get', { projectId: props.projectId, id: current?.id ?? '' }).catch(() => null)) as { ok: boolean; metric?: Metric; tag?: string } | null;
+    if (!r?.ok || !r.metric) {
+      toast('That metric could not be read.', { kind: 'error' });
+      return props.onClose();
+    }
+    setCurrent({ ...r.metric, tag: r.tag });
+    setGen((g) => g + 1);
+  };
+  return <EditorBody key={gen} {...props} existing={current} onReload={() => void reload()} />;
+}
+
+function EditorBody({ projectId, existing, onSaved, onClose, onReload }: EditorProps & { onReload: () => void }) {
   const editingId = existing?.id ?? '';
+  // The update's base: the tag `existing` was read with (metric:get).
+  const guard = useEditGuard({ projectId, type: 'metric', id: editingId || undefined }, existing?.tag);
   const def = existing?.definition;
   const sets = useDatasets(projectId);
   const [name, setName] = useState(existing?.name ?? '');
@@ -111,12 +134,23 @@ export function MetricEditor({ projectId, existing, onSaved, onClose }: { projec
     if (!name.trim()) return setError('A metric needs a name.');
     if (!ds || !definition) return setError('Choose a dataset and a column.');
     setSaving(true);
-    const r = await saveMetric(projectId, editingId, ds, { name: name.trim(), definition, filters: live, format, description, direction });
+    const r = await saveMetric(projectId, editingId, ds, { name: name.trim(), definition, filters: live, format, description, direction }, guard);
     setSaving(false);
+    if ('changed' in r) return; // the banner
     // In the dialog, not a toast: the user's work is still in these boxes.
     if ('error' in r) return setError(r.error);
     onSaved(r.metric);
     onClose();
+  };
+  // Save mine as a copy: these boxes as a new metric, which the host then shows (a duplicate name is refused as ever).
+  const copy = async () => {
+    if (!ds || !definition) throw new Error('Choose a dataset and a column.');
+    const r = await saveMetric(projectId, '', ds, { name: `${name.trim() || 'Metric'} (copy)`.slice(0, 200), definition, filters: live, format, description, direction });
+    if ('error' in r) throw new Error(r.error);
+    if ('metric' in r) {
+      onSaved(r.metric);
+      onClose();
+    }
   };
 
   const refs = (others.data ?? []).filter((m) => m.id !== editingId && m.datasetId === ds).slice(0, 12);
@@ -143,12 +177,13 @@ export function MetricEditor({ projectId, existing, onSaved, onClose }: { projec
           <DialogClose asChild>
             <Button variant="ghost">Cancel</Button>
           </DialogClose>
-          <Button variant="primary" loading={saving} onClick={() => void save()}>
+          <Button variant="primary" loading={saving} disabled={guard.changed} onClick={() => void save()}>
             {editingId ? 'Save' : 'Create metric'}
           </Button>
         </>
       }
     >
+      {guard.changed && <ConflictBanner compact noun="metric" onReload={onReload} onCopy={copy} />}
       <div className={s.editor}>
         <div className={s.fields}>
           <Input label="Name" placeholder="Revenue" hint="Formulas reference a metric by this name." value={name} onChange={(e) => setName(e.target.value)} autoFocus maxLength={200} />

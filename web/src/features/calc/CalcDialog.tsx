@@ -32,7 +32,7 @@ import c from './Calc.module.css';
 
 export type CalcCreated = { kind: 'measure'; metric: Metric } | { kind: 'column'; name: string; type: Column['type'] };
 
-export function CalcDialog({ projectId, datasetId, columns, metrics, live, chart = false, editing, copyTo, onCreated, onClose }: {
+export function CalcDialog({ projectId, datasetId, columns, metrics, live, chart = false, editing, onReload, copyTo, onCreated, onClose }: {
   projectId: string;
   datasetId: string;
   columns: readonly Column[];
@@ -43,6 +43,8 @@ export function CalcDialog({ projectId, datasetId, columns, metrics, live, chart
   chart?: boolean;
   /** A formula metric to edit (the measure form alone, no kind to choose). */
   editing?: MetricSummary;
+  /** The measure form's Reload after a conflict (docs/edit-conflicts). */
+  onReload?: () => void;
   /** Where "Make a copy" lands (the builder on the copy); the copy's Prepare page otherwise. */
   copyTo?: (copyId: string) => string;
   onCreated: (made: CalcCreated) => void;
@@ -52,7 +54,7 @@ export function CalcDialog({ projectId, datasetId, columns, metrics, live, chart
   const client = useQueryClient();
   const applyReply = useApplyReply(projectId, datasetId);
 
-  const measure = useMeasureForm({ projectId, datasetId, columns, metrics, existing: editing, chart, onClose, onSaved: (metric) => onCreated({ kind: 'measure', metric }) });
+  const measure = useMeasureForm({ projectId, datasetId, columns, metrics, existing: editing, chart, onClose, onReload, onSaved: (metric) => onCreated({ kind: 'measure', metric }) });
 
   const column = useColumnFormula({
     projectId,

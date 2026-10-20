@@ -55,6 +55,8 @@ export interface TreeReply {
   period: { key: PeriodKey | 'scope'; label: string; from?: string; to?: string };
   prior: { label: string; from?: string; to?: string };
   compareLabel: string;
+  /** The metric's content tag: the tree editor's base (docs/edit-conflicts). */
+  tag?: string;
 }
 
 export type ComputeInput = RpcInput<'metricTree:compute'>;
@@ -98,9 +100,13 @@ export function useSuggest(projectId: string, id: string) {
   });
 }
 
-export async function saveTree(projectId: string, id: string, tree: TreeSpec | null): Promise<string | null> {
-  const r = (await rpc('metricTree:save', { projectId, id, tree })) as { ok: boolean; error?: string };
-  return r.ok ? null : r.error || 'The tree could not be saved.';
+/**
+ * Save (or clear) the tree. With `base` — the metric's tag the editor opened with — a save from a stale copy throws
+ * the 409 `record_changed` (editConflicts). `tag` is the metric's next; `error` the server's refusal.
+ */
+export async function saveTree(projectId: string, id: string, tree: TreeSpec | null, base?: string): Promise<{ tag?: string; error?: string }> {
+  const r = (await rpc('metricTree:save', { projectId, id, tree, ...(base ? { base } : {}) })) as { ok: boolean; error?: string; tag?: string };
+  return r.ok ? { tag: r.tag } : { error: r.error || 'The tree could not be saved.' };
 }
 
 /** Words for a relation's operator, as the editor and the cards write it. */

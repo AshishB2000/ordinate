@@ -40,11 +40,19 @@ export const tagOf = (reply: unknown): string | undefined => {
   return typeof t === 'string' && t ? t : undefined;
 };
 
-/** `id` undefined: a record not saved yet — nothing to guard, no base sent. `tag`: from the reply the editor opened with. */
+/**
+ * `id` undefined: a record not saved yet — nothing to guard, no base sent. `tag`: from the reply the editor opened
+ * with; the first one its host has is kept (a host whose reply lands after mount passes it when it does), and after
+ * that only this editor's own saves move it.
+ */
 export function useEditGuard(record: { projectId: string; type: GuardType; id: string | undefined }, tag: string | undefined): EditGuard {
-  const base = useRef(tag);
+  const base = useRef<string | undefined>(undefined);
   // Every tag this editor's own saves produced: its own push, landing before or after the reply, is not news.
-  const own = useRef(new Set(tag ? [tag] : []));
+  const own = useRef(new Set<string>());
+  if (base.current === undefined && tag) {
+    base.current = tag;
+    own.current.add(tag);
+  }
   const chain = useRef<Promise<unknown>>(Promise.resolve());
   const stale = useRef(false);
   const [changed, setChanged] = useState(false);
