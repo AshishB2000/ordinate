@@ -139,3 +139,8 @@
   font-size: var(--t-12);
   color: var(--error);
 }
+
+/* The row's actions sit against the right edge, so every row's ⋯ lines up whatever its test button says. */
+.actionsEnd {
+  justify-content: flex-end;
+}

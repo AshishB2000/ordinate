@@ -302,7 +302,7 @@ export function ChannelsTab() {
                   )}
                 </td>
                 <td className={s.actions}>
-                  <span className={s.cellRow}>
+                  <span className={`${s.cellRow} ${c.actionsEnd}`}>
                     <Button size="sm" icon="send" loading={testing === ch.id} disabled={!ch.ready} onClick={() => sendTest(ch)}>
                       {ch.kind === 'email' ? 'Send a test email' : 'Send a test message'}
                     </Button>

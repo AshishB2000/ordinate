@@ -10,7 +10,7 @@ import { AlertChannels } from './AlertChannels';
 import SubscribeDialog from './SubscribeDialog';
 import { SubscriptionList } from './SubscriptionList';
 import { timeZones } from './Steps';
-import { AID, CARDS, MODEL, PID, SLACK, TEAMS, mount, preview, serve, subscription } from './testServer';
+import { AID, CARDS, EMAIL, MODEL, PID, SLACK, TEAMS, mount, preview, serve, subscription } from './testServer';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -167,6 +167,18 @@ describe('Subscribe dialog', () => {
     expect(within(mail).getByRole('cell', { name: '40%' })).toBeTruthy();
     expect(within(mail).getByText('You receive this as a member of Sales leads in Ordinate.')).toBeTruthy();
     expect(within(dialog).getByText('9 KB')).toBeTruthy();
+  });
+
+  it('the preview is asked again for the first email list picked (its name ends the email) — not for a Slack pick', async () => {
+    const { calls } = openDialog({ 'channel:list': { body: { ok: true, channels: [SLACK, EMAIL], canStore: true, canEmail: true, canManage: false } } });
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByTestId('preview-slack');
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Where/ }));
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /#sales-weekly/ }));
+    await new Promise((r) => setTimeout(r, 500));
+    expect(lastPreview(calls).channelIds).toEqual([]);
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Sales leads/ }));
+    await waitFor(() => expect(lastPreview(calls).channelIds).toEqual([EMAIL.id]));
   });
 
   it('NEGATIVE CONTROL: with email null (no relay) there is no Email tab', async () => {

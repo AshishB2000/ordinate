@@ -44,8 +44,13 @@ export default function SubscribeDialog({ projectId, dashboard, existing, onClos
   // The dashboard picker's list — only when there is a dashboard to pick.
   const gallery = useQuery({ ...galleryQuery(projectId), enabled: !locked });
   const channels = useChannels();
-  // Channels do not change the message: keeping them out of the preview's key saves a round trip per tick.
-  const previewDraft = useMemo(() => (draft.analysisId ? { ...draft, channelIds: [], name: draft.name.trim() || 'Subscription' } : null), [draft]);
+  // Channels do not change the message: keeping them out of the preview's key saves a round trip per tick —
+  // all but the first email list, whose name the email's last line says it was sent to.
+  const firstEmail = draft.channelIds.find((id) => channels.data?.channels.find((c) => c.id === id)?.kind === 'email');
+  const previewDraft = useMemo(
+    () => (draft.analysisId ? { ...draft, channelIds: firstEmail ? [firstEmail] : [], name: draft.name.trim() || 'Subscription' } : null),
+    [draft, firstEmail],
+  );
   const preview = usePreview(projectId, previewDraft);
   const { save } = useSubscriptionWrites(projectId);
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
@@ -85,7 +90,7 @@ export default function SubscribeDialog({ projectId, dashboard, existing, onClos
       size="xxl"
       onOpenChange={(o) => !o && onClose()}
       title={existing ? `Edit ${existing.name}` : dashboard ? `Subscribe to ${dashboard.name}` : 'New subscription'}
-      description="Post this dashboard’s figures to Slack or Teams on a schedule. The server sends it; nobody needs to be signed in."
+      description={`Post this dashboard’s figures to ${channels.data?.canEmail ? 'Slack, Teams or email' : 'Slack or Teams'} on a schedule. The server sends it; nobody needs to be signed in.`}
       footer={
         <>
           <span className={s.footNote}>{firstProblem ? problems[firstProblem.id] : preview.data ? preview.data.scheduleText : ''}</span>
