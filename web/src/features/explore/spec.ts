@@ -8,7 +8,7 @@
 // validator — `VizDataInput`, then sanitizeEncoding / sanitizeFilters — on
 // every read. `t` never leaves the browser. Nothing here computes a figure.
 
-import type { Agg, Encoding, FilterStep, Measure } from '../visuals/api';
+import type { Agg, Encoding, FilterStep, Measure } from '../visuals/encoding';
 
 export interface Question {
   /** '' = the first chart the answer suits. */
@@ -96,14 +96,30 @@ export type KindOf = (name: string) => FieldKind | undefined;
 export function withField(q: Question, f: Field, kindOf: KindOf): Question {
   const e = q.encoding;
   if (f.kind === 'measure') {
-    const values = e.values.some((v) => v.column === f.name)
-      ? e.values.filter((v) => v.column !== f.name)
-      : [...e.values, { column: f.name, aggregation: f.aggregation ?? 'sum' }];
-    return { ...q, encoding: { ...e, values } };
+    return withValues(
+      q,
+      e.values.some((v) => v.column === f.name) ? e.values.filter((v) => v.column !== f.name) : [...e.values, { column: f.name, aggregation: f.aggregation ?? 'sum' }],
+    );
   }
-  if (e.series === f.name) return { ...q, encoding: withoutSplit(e) };
+  if (e.series === f.name) return withSplit(q);
   if (e.category === f.name) return { ...q, encoding: axis(e, '', null) };
   return groupBy(q, f, kindOf);
+}
+
+/**
+ * The measures shown, replaced. One measure and several are different shapes
+ * of answer: crossing between them goes back to the chart that suits the new
+ * one (CONTROL in spec.test: a swap of one measure for another keeps the pick).
+ */
+export function withValues(q: Question, values: Measure[]): Question {
+  const several = (n: number) => n > 1;
+  return { ...q, chartType: several(values.length) === several(q.encoding.values.length) ? q.chartType : '', encoding: { ...q.encoding, values } };
+}
+
+/** Split by `series`, or by nothing — a split is several series: the chart goes back to the one that suits it. */
+export function withSplit(q: Question, series?: string): Question {
+  const e = withoutSplit(q.encoding);
+  return { ...q, chartType: !!series === !!q.encoding.series ? q.chartType : '', encoding: series ? { ...e, series } : e };
 }
 
 export function withoutSplit(e: Encoding): Encoding {

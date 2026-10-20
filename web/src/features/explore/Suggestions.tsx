@@ -6,6 +6,7 @@
 // their glyph: each answer there is a warehouse statement, asked when clicked.
 
 import { useCallback, useState, type CSSProperties } from 'react';
+import { Icon } from '../../ui/icons/Icon';
 import { Skeleton } from '../../ui/Skeleton';
 import { EmptyState } from '../../ui/States';
 import { accentFor, typeLabel } from '../visuals/model';
@@ -39,6 +40,12 @@ function Card({ projectId, datasetId, live, suggestion, onPick }: {
         </span>
         {drawable && answer.isPending && <Skeleton className={s.thumbSkel} />}
         {data && (data.labels ?? []).length > 0 && <ChartThumb type={chartType} data={data} overrides={PLAIN} onDrawn={onDrawn} />}
+        {live && (
+          <span className={s.tileNote}>
+            <Icon name="zap" size={12} />
+            Asked live when opened
+          </span>
+        )}
       </span>
       <span className={s.cardTitle}>{questionTitle(encoding)}</span>
       <span className={s.cardMeta}>{typeLabel(chartType)}</span>

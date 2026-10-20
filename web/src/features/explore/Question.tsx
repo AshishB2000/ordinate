@@ -15,10 +15,12 @@ import { FilterDialog } from '../visuals/filters/FilterDialog';
 import { FilterSummary } from '../visuals/filters/FilterRows';
 import { AGG_LABELS, GRAINS } from '../visuals/model';
 import { FieldList } from './FieldList';
-import { EMPTY, groupBy, roleOf, ungroup, withoutSplit, type Field, type FieldKind, type Question as Q } from './spec';
+import { EMPTY, groupBy, roleOf, ungroup, withSplit, withValues, type Field, type FieldKind, type Question as Q } from './spec';
 import s from './Explore.module.css';
 
 const AGG_OPTIONS = (['sum', 'avg', 'count', 'min', 'max'] as const).map((a) => ({ value: a, label: AGG_LABELS[a] }));
+/** A pill's aggregate, short: "Raw (no aggregation)" would leave no room for the field. */
+const AGG_SHORT: Record<Agg, string> = { ...AGG_LABELS, none: 'Raw' };
 const GRAIN_OPTIONS = [{ value: 'auto', label: 'Auto' }, ...GRAINS];
 const ROLE_WORD = { measure: 'Measure', category: 'Group by', series: 'Split by' } as const;
 const KIND_ICON: Record<FieldKind, IconName> = { dimension: 'type-text', date: 'type-date', measure: 'type-number' };
@@ -108,7 +110,7 @@ export function Question({ projectId, datasetId, fields, question, onChange, onF
             Fields
           </Button>
           {!empty && (
-            <Button size="sm" variant="ghost" icon="rotate-ccw" onClick={() => onChange(EMPTY)}>
+            <Button size="sm" variant="ghost" icon="rotate-ccw" className={s.clearBtn} aria-label="Clear question" onClick={() => onChange(EMPTY)}>
               Clear question
             </Button>
           )}
@@ -122,7 +124,7 @@ export function Question({ projectId, datasetId, fields, question, onChange, onF
                 label={`Aggregate of ${m.column}`}
                 trigger={
                   <button type="button" className={s.pillAgg} aria-label={`Aggregate of ${m.column}: ${AGG_LABELS[m.aggregation]}`}>
-                    {AGG_LABELS[m.aggregation]}
+                    {AGG_SHORT[m.aggregation]}
                     <Icon name="chevron-down" size={12} />
                   </button>
                 }
@@ -132,7 +134,7 @@ export function Question({ projectId, datasetId, fields, question, onChange, onF
                     label: 'Aggregate',
                     value: m.aggregation,
                     options: AGG_OPTIONS,
-                    onChange: (a) => set({ ...e, values: e.values.map((v, j) => (j === i ? { column: v.column, aggregation: a as Agg } : v)) }),
+                    onChange: (a) => onChange(withValues(question, e.values.map((v, j) => (j === i ? { column: v.column, aggregation: a as Agg } : v)))),
                   },
                 ]}
               />
@@ -142,13 +144,13 @@ export function Question({ projectId, datasetId, fields, question, onChange, onF
                 <button type="button" className={s.pillMain} aria-label={`Measure: ${m.column}`}>
                   <span className={s.pillText}>{m.column}</span>
                 </button>,
-                (f) => set({ ...e, values: e.values.map((v, j) => (j === i ? { column: f.name, aggregation: f.aggregation ?? 'sum' } : v)) }),
+                (f) => onChange(withValues(question, e.values.map((v, j) => (j === i ? { column: f.name, aggregation: f.aggregation ?? 'sum' } : v)))),
               )}
-              <Remove label="Remove measure" title={`Take ${m.column} out`} onClick={() => set({ ...e, values: e.values.filter((_, j) => j !== i) })} />
+              <Remove label="Remove measure" title={`Take ${m.column} out`} onClick={() => onChange(withValues(question, e.values.filter((_, j) => j !== i)))} />
             </span>
           ))}
           {picker('Add a measure', ['measure'], <Add label="Add measure" text="Measure" />, (f) =>
-            set({ ...e, values: [...e.values, { column: f.name, aggregation: f.aggregation ?? 'sum' }] }),
+            onChange(withValues(question, [...e.values, { column: f.name, aggregation: f.aggregation ?? 'sum' }])),
           )}
         </Well>
 
@@ -207,12 +209,12 @@ export function Question({ projectId, datasetId, fields, question, onChange, onF
                   <Icon name={KIND_ICON[kindOf(e.series) ?? 'dimension']} size={16} />
                   <span className={s.pillText}>{e.series}</span>
                 </button>,
-                (f) => set({ ...withoutSplit(e), series: f.name }),
+                (f) => onChange(withSplit(question, f.name)),
               )}
-              <Remove label="Remove split" title={`Stop splitting by ${e.series}`} onClick={() => set(withoutSplit(e))} />
+              <Remove label="Remove split" title={`Stop splitting by ${e.series}`} onClick={() => onChange(withSplit(question))} />
             </span>
           ) : (
-            picker('Split by', ['dimension', 'date'], <Add label="Choose a split" text="Split by" />, (f) => (f.name === e.category ? undefined : set({ ...e, series: f.name })))
+            picker('Split by', ['dimension', 'date'], <Add label="Choose a split" text="Split by" />, (f) => (f.name === e.category ? undefined : onChange(withSplit(question, f.name))))
           )}
         </Well>
 

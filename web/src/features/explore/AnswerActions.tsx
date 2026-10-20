@@ -23,10 +23,12 @@ async function copyLink(): Promise<void> {
   }
 }
 
-export function AnswerActions({ projectId, datasetId, canEdit, question, chartType, grain, title }: {
+export function AnswerActions({ projectId, datasetId, canEdit, answered, question, chartType, grain, title }: {
   projectId: string;
   datasetId: string;
   canEdit: boolean;
+  /** False while the question is refused or failed: a visual that cannot draw is not worth saving. */
+  answered: boolean;
   question: Question;
   /** The chart on screen. */
   chartType: string;
@@ -62,9 +64,11 @@ export function AnswerActions({ projectId, datasetId, canEdit, question, chartTy
           >
             Open in the builder
           </Button>
-          <Button size="sm" variant="primary" icon="plus" onClick={() => setNaming(true)}>
-            Save as visual
-          </Button>
+          {answered && (
+            <Button size="sm" variant="primary" icon="plus" onClick={() => setNaming(true)}>
+              Save as visual
+            </Button>
+          )}
         </>
       )}
       {naming && <NameDialog name={title} title="Save as a visual" action="Save" onClose={() => setNaming(false)} onRename={save} />}

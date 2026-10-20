@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeQuestion, encodeQuestion, groupBy, questionTitle, ungroup, withField, type Field, type Question } from './spec';
+import { decodeQuestion, encodeQuestion, groupBy, questionTitle, ungroup, withField, withSplit, withValues, type Field, type Question } from './spec';
 
 const F = (name: string, kind: Field['kind'], aggregation?: 'sum' | 'avg'): Field => ({ name, kind, type: kind === 'measure' ? 'number' : kind === 'date' ? 'date' : 'text', ...(aggregation ? { aggregation } : {}) });
 const KINDS: Record<string, Field['kind']> = { region: 'dimension', segment: 'dimension', order_date: 'date', revenue: 'measure', discount: 'measure' };
@@ -68,6 +68,16 @@ describe('a click on a field', () => {
     const bars = Q({ category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] }, 'bar');
     expect(groupBy(bars, F('order_date', 'date'), kindOf).chartType).toBe('');
     expect(groupBy(bars, F('segment', 'dimension'), kindOf).chartType).toBe('bar');
+  });
+
+  it('one measure to several, or a split added, goes back to the suiting chart (CONTROL: a swap of one measure keeps the pick)', () => {
+    const one = Q({ category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] }, 'pareto');
+    expect(withValues(one, [...one.encoding.values, { column: 'discount', aggregation: 'avg' }]).chartType).toBe('');
+    expect(withField(one, F('discount', 'measure', 'avg'), kindOf).chartType).toBe('');
+    expect(withValues(one, [{ column: 'discount', aggregation: 'avg' }]).chartType).toBe('pareto');
+    expect(withSplit(one, 'segment')).toMatchObject({ chartType: '', encoding: { series: 'segment' } });
+    const split = withSplit({ ...one, chartType: 'stacked_column' }, 'segment');
+    expect(withSplit({ ...split, chartType: 'stacked_column' }, 'region').chartType).toBe('stacked_column');
   });
 
   it('ungrouping drops the date grain and any map regions with the axis', () => {

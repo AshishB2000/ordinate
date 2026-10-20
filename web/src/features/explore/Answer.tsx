@@ -90,10 +90,12 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
               {reply?.asOf && <AsOfCaption asOf={reply.asOf} />}
             </p>
           </div>
-          <AnswerActions projectId={projectId} datasetId={datasetId} canEdit={canEdit} question={question} chartType={current} grain={reply?.category?.grain} title={title} />
+          <AnswerActions projectId={projectId} datasetId={datasetId} canEdit={canEdit} answered={!answer.isError} question={question} chartType={current} grain={reply?.category?.grain} title={title} />
         </header>
         {data && !empty && offered.length > 0 && (
-          <ChartPicker recommended={offered} pool={live ? LIVE_POOL : POOL} data={data} mappable={hasGeo || !!level} selected={current} extras={extras} onSelect={pick} onExtras={setExtras} />
+          <div className={s.types}>
+            <ChartPicker recommended={offered} pool={live ? LIVE_POOL : POOL} data={data} mappable={hasGeo || !!level} selected={current} extras={extras} onSelect={pick} onExtras={setExtras} />
+          </div>
         )}
         {(reply?.warnings ?? []).length > 0 && (
           <ul className={s.notes} aria-label="Notes on this answer">
