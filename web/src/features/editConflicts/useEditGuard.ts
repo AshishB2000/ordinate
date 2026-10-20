@@ -109,7 +109,8 @@ export function useEditGuard(record: { projectId: string; type: GuardType; id: s
     const pushed = s.tag;
     // Checked after this editor's queued saves land, so the push of one still in flight finds its tag in `own`.
     void enqueue(async () => {
-      if (pushed !== base.current && !own.current.has(pushed)) flag();
+      // No base (a reply without a tag): nothing to compare with, and the save will not be checked either.
+      if (base.current && pushed !== base.current && !own.current.has(pushed)) flag();
     });
   });
 
