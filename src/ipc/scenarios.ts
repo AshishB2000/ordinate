@@ -18,6 +18,7 @@ import { paramValues, resolveFilterParams } from '../analysis/params';
 import { MAX_COMPARE, driverLabel, isMetricTarget, sanitizeBaseMetricIds, sanitizeDrivers } from '../analysis/scenarioModel';
 import type { Scenario } from '../analysis/scenarioModel';
 import { compareScenarios, computeScenario, scenarioCardValue, scenarioTargets } from '../analysis/scenarioResolve';
+import { contentTag, tagged } from '../app/editConflict';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const id = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -41,16 +42,18 @@ async function create(projectId: string, input: any): Promise<Scenario | null> {
 
 export function register(): void {
   ipcMain.handle('scenario:list', async (_e, { projectId }: any = {}) => scenarios.listScenarios(id(projectId)));
-  ipcMain.handle('scenario:get', async (_e, { projectId, id: sid }: any = {}) => scenarios.getScenario(id(projectId), id(sid)));
+  // `tag` on the scenario: the editor's base (src/app/editConflict.ts).
+  ipcMain.handle('scenario:get', async (_e, { projectId, id: sid }: any = {}) => tagged('scenario', await scenarios.getScenario(id(projectId), id(sid))));
   ipcMain.handle('scenario:create', async (_e, { projectId, input }: any = {}) => {
     const s = await create(id(projectId), input);
     return s ? { ok: true, scenario: s } : { ok: false, error: 'Could not create the scenario.' };
   });
-  ipcMain.handle('scenario:update', async (_e, { projectId, id: sid, patch }: any = {}) => {
+  // `base`: a stale copy is 409 record_changed (thrown to the route); `tag` is the next base.
+  ipcMain.handle('scenario:update', async (_e, { projectId, id: sid, base, patch }: any = {}) => {
     const pid = id(projectId);
     const p = patch && typeof patch === 'object' ? patch : {};
-    const s = await scenarios.updateScenario(pid, id(sid), { name: p.name, baseMetricIds: p.baseMetricIds, drivers: await named(pid, p.drivers) });
-    return s ? { ok: true, scenario: s } : { ok: false, error: 'Scenario not found.' };
+    const s = await scenarios.updateScenario(pid, id(sid), { name: p.name, baseMetricIds: p.baseMetricIds, drivers: await named(pid, p.drivers) }, base);
+    return s ? { ok: true, scenario: s, tag: contentTag('scenario', s) } : { ok: false, error: 'Scenario not found.' };
   });
   ipcMain.handle('scenario:duplicate', async (_e, { projectId, id: sid }: any = {}) => {
     const s = await scenarios.duplicateScenario(id(projectId), id(sid));

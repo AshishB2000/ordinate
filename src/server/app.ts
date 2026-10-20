@@ -42,6 +42,7 @@ import { maskEmbedTokens, maskEmbedUrl, registerEmbedRoutes } from './embed/rout
 import { useEmbedDb } from './embed/settings';
 import { isLiveDatasetError, LIVE_DATASET_CODE, liveRefusalsRaised, tagLiveRefusals } from '../data/liveDataset';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
+import { isRecordChanged } from '../app/editConflict';
 import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -405,6 +406,12 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         // a typed 409 with the catalog's sentence, never Postgres's text.
         await record('error', decision.projectId);
         return reply.code(409).send({ error: 'record_busy', code: 'record_busy', message: (err as Error).message });
+      }
+      if (isRecordChanged(err)) {
+        // A whole-document save from a stale copy (src/app/editConflict.ts): the record is
+        // untouched; the catalog's sentence and the current tag, never the record.
+        await record('error', decision.projectId);
+        return reply.code(409).send({ error: 'record_changed', code: 'record_changed', message: err.message, tag: err.tag });
       }
       if (isLiveFigureError(err)) {
         // L2.4: a Live KPI the warehouse could not give, thrown past a handler that

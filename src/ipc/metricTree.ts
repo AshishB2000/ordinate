@@ -41,6 +41,7 @@ import { liveCodeOf } from './liveRoute';
 import { splitSegments, OTHER_KEY, SPLIT_MAX_VALUES } from './metricTreeSplit';
 import { computeColumnSummariesResident } from '../engine/statsResident';
 import { addTreeCard } from './metricTreeCard';
+import { contentTag } from '../app/editConflict';
 
 /** Months on a node's sparkline. */
 const SPARK_POINTS = 12;
@@ -382,8 +383,9 @@ async function splitColumns(projectId: string, datasetId: string): Promise<strin
   return text.filter((c) => (distinct.get(c) ?? 0) >= 2 && (distinct.get(c) ?? 0) <= SPLIT_MAX_VALUES);
 }
 
-/** Save (or clear, with null) a metric's tree. Every child must be a metric on the root's dataset. */
-export async function saveTree(projectId: string, id: string, raw: unknown): Promise<{ ok: true; metric: Metric } | { ok: false; error: string }> {
+/** Save (or clear, with null) a metric's tree. Every child must be a metric on the root's dataset. `base`: the
+ *  metric's tag the editor opened with — stale is ERECORDCHANGED (src/app/editConflict.ts); `tag` is the next base. */
+export async function saveTree(projectId: string, id: string, raw: unknown, base?: unknown): Promise<{ ok: true; metric: Metric; tag: string } | { ok: false; error: string }> {
   const before = await metrics.getMetric(projectId, id);
   if (!before) return { ok: false, error: msg.metricGone() };
   const tree = raw === null ? null : sanitizeTree(raw, id);
@@ -394,22 +396,25 @@ export async function saveTree(projectId: string, id: string, raw: unknown): Pro
       if (m.datasetId !== before.datasetId) return { ok: false, error: msg.otherDataset(m.name) };
     }
   }
-  const m = await metrics.updateMetric(projectId, id, { tree });
+  const m = await metrics.updateMetric(projectId, id, { tree }, base);
   if (!m) return { ok: false, error: msg.metricGone() };
   await versions.record(projectId, 'metric', m, { before });
-  return { ok: true, metric: m };
+  return { ok: true, metric: m, tag: contentTag('metric', m) };
 }
 
 export function register(): void {
   ipcMain.handle('metricTree:compute', async (_e, { projectId, id, ...input }: any = {}) => { // any: contract-checked
     try {
-      return await computeTree(projectId, id, input);
+      const out = await computeTree(projectId, id, input);
+      // The metric's tag: the tree editor's base (src/app/editConflict.ts).
+      const m = out.ok ? await metrics.getMetric(projectId, id) : null;
+      return m ? { ...out, tag: contentTag('metric', m) } : out;
     } catch (err: any) { // any: a figure path's throw
       return { ok: false, error: err?.message || 'Failed to compute the tree', ...liveCodeOf(err) };
     }
   });
 
-  ipcMain.handle('metricTree:save', async (_e, { projectId, id, tree }: any = {}) => saveTree(projectId, id, tree)); // any: contract-checked
+  ipcMain.handle('metricTree:save', async (_e, { projectId, id, base, tree }: any = {}) => saveTree(projectId, id, tree, base)); // any: contract-checked
   ipcMain.handle('metricTree:addToDashboard', async (_e, { projectId, id, analysisId, name }: any = {}) => addTreeCard(projectId, id, analysisId, name)); // any: contract-checked
 
   // The editor's starting points: breakdowns read from formulas, the metrics a part may be, the columns a split may use.

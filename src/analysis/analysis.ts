@@ -43,6 +43,7 @@ import type { SavedView } from './savedViews';
 export type { Page, Card, CardLayout, CardMetric, CardType, CardControl, ControlValue, ControlKind, DashboardStyle } from './dashboards';
 import type { Page, DashboardStyle } from './dashboards';
 import * as recordFs from '../app/recordFs';
+import { lockedUpdate } from '../app/editConflict';
 
 export interface Analysis {
   /** Generated UUID — never derived from the name; it is a filesystem path. */
@@ -281,8 +282,9 @@ export async function saveAnalysis(
 // Patch an existing analysis in place, bumping updatedAt. Array fields are
 // REPLACED wholesale, never merged; an omitted
 // field keeps its stored value. Returns null if either id is invalid or the
-// analysis doesn't exist.
-//
+// analysis doesn't exist. Holds the record (every pod) while it reads and
+// writes; a `base` that is not the stored record's content tag refuses the
+// save untouched (src/app/editConflict.ts, ERECORDCHANGED).
 export async function updateAnalysis(
   projectId: string,
   id: string,
@@ -295,31 +297,32 @@ export async function updateAnalysis(
     views?: unknown;
     defaultViewId?: unknown;
   },
+  base?: unknown,
 ): Promise<Analysis | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
-  const existing = await getAnalysis(projectId, id);
-  if (!existing) return null;
-
-  const updated: Analysis = {
-    ...existing,
-    name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,
-    sheets: patch.sheets !== undefined ? sanitizePages(patch.sheets) : existing.sheets,
-    filters: patch.filters !== undefined ? sanitizeDashboardFilters(patch.filters) : existing.filters,
-    // Same replace-or-keep rule as the arrays above: an OMITTED style keeps the
-    // stored one, a SUPPLIED one replaces it wholesale (never axis-merged, for
-    // the same reason `sheets` is never merged). So a caller changing one axis
-    // must send the whole triple — sanitizeStyle defaults the axes it is not
-    // given, and a half-patch would quietly reset the other two.
-    style: patch.style !== undefined ? sanitizeStyle(patch.style) : existing.style,
-    // Replace-or-keep, like every array here.
-    parameters: patch.parameters !== undefined ? sanitizeParameters(patch.parameters, randomUUID) : existing.parameters,
-    updatedAt: new Date().toISOString(),
-  };
-  withViews(updated, patch.views !== undefined ? patch.views : existing.views,
-    patch.defaultViewId !== undefined ? patch.defaultViewId : existing.defaultViewId);
-  await fs.promises.mkdir(analysesDir(projectId), { recursive: true });
-  await writeJsonAtomic(analysisFilePath(projectId, id), updated);
-  return updated;
+  const file = analysisFilePath(projectId, id);
+  return lockedUpdate('dashboard', { projectId, id, file }, base, () => getAnalysis(projectId, id), async (existing) => {
+    const updated: Analysis = {
+      ...existing,
+      name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,
+      sheets: patch.sheets !== undefined ? sanitizePages(patch.sheets) : existing.sheets,
+      filters: patch.filters !== undefined ? sanitizeDashboardFilters(patch.filters) : existing.filters,
+      // Same replace-or-keep rule as the arrays above: an OMITTED style keeps the
+      // stored one, a SUPPLIED one replaces it wholesale (never axis-merged, for
+      // the same reason `sheets` is never merged). So a caller changing one axis
+      // must send the whole triple — sanitizeStyle defaults the axes it is not
+      // given, and a half-patch would quietly reset the other two.
+      style: patch.style !== undefined ? sanitizeStyle(patch.style) : existing.style,
+      // Replace-or-keep, like every array here.
+      parameters: patch.parameters !== undefined ? sanitizeParameters(patch.parameters, randomUUID) : existing.parameters,
+      updatedAt: new Date().toISOString(),
+    };
+    withViews(updated, patch.views !== undefined ? patch.views : existing.views,
+      patch.defaultViewId !== undefined ? patch.defaultViewId : existing.defaultViewId);
+    await fs.promises.mkdir(analysesDir(projectId), { recursive: true });
+    await writeJsonAtomic(file, updated);
+    return updated;
+  });
 }
 
 /**

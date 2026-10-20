@@ -15,6 +15,7 @@ import * as projects from '../app/projects';
 import { isScorePeriod, sanitizeRows } from './scorecardModel';
 import type { Scorecard, ScorePeriod } from './scorecardModel';
 import * as recordFs from '../app/recordFs';
+import { lockedUpdate } from '../app/editConflict';
 
 export type { Scorecard } from './scorecardModel';
 
@@ -130,23 +131,26 @@ export async function saveScorecard(
   return sc;
 }
 
-/** Replace-or-keep per field; `rows` is replaced wholesale, never merged. */
+/** Replace-or-keep per field; `rows` is replaced wholesale, never merged. Holds the record while it
+ *  reads and writes; a stale `base` refuses (src/app/editConflict.ts). */
 export async function updateScorecard(
-  projectId: string, id: string, patch: { name?: unknown; period?: unknown; rows?: unknown; description?: unknown },
+  projectId: string, id: string, patch: { name?: unknown; period?: unknown; rows?: unknown; description?: unknown }, base?: unknown,
 ): Promise<Scorecard | null> {
-  const existing = await getScorecard(projectId, id);
-  if (!existing) return null;
-  const next = normalize({
-    ...existing,
-    name: cleanName(patch.name) || existing.name,
-    period: isScorePeriod(patch.period) ? patch.period : existing.period,
-    rows: patch.rows !== undefined ? patch.rows : existing.rows,
-    description: patch.description !== undefined ? patch.description : existing.description,
-    updatedAt: new Date().toISOString(),
-  }, projectId);
-  await fs.promises.mkdir(dir(projectId), { recursive: true });
-  await writeJsonAtomic(file(projectId, id), next);
-  return next;
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  const at = file(projectId, id);
+  return lockedUpdate('scorecard', { projectId, id, file: at }, base, () => getScorecard(projectId, id), async (existing) => {
+    const next = normalize({
+      ...existing,
+      name: cleanName(patch.name) || existing.name,
+      period: isScorePeriod(patch.period) ? patch.period : existing.period,
+      rows: patch.rows !== undefined ? patch.rows : existing.rows,
+      description: patch.description !== undefined ? patch.description : existing.description,
+      updatedAt: new Date().toISOString(),
+    }, projectId);
+    await fs.promises.mkdir(dir(projectId), { recursive: true });
+    await writeJsonAtomic(at, next);
+    return next;
+  });
 }
 
 export async function duplicateScorecard(projectId: string, id: string): Promise<Scorecard | null> {

@@ -16,6 +16,7 @@ import * as metrics from '../analysis/metrics';
 import { buildPlanRecords } from '../analysis/planBuild';
 import { draftAnalysisPlan } from './analyses';
 import type { StoryBlock } from '../analysis/storyModel';
+import { isRecordChanged, tagged } from '../app/editConflict';
 
 const STORY_INTENT =
   'Plan a written STORY rather than a dashboard: each sheet is one SECTION of a scrolling document, read top to ' +
@@ -71,7 +72,8 @@ export async function blocksFromRecords(
 export function register(): void {
   ipcMain.handle('story:list', async (_e, { projectId }: any = {}) => stories.listStories(projectId));
 
-  ipcMain.handle('story:get', async (_e, { projectId, id }: any = {}) => stories.getStory(projectId, id));
+  // `tag` on the story: the editor's base (src/app/editConflict.ts).
+  ipcMain.handle('story:get', async (_e, { projectId, id }: any = {}) => tagged('story', await stories.getStory(projectId, id)));
 
   ipcMain.handle('story:create', async (_e, { projectId, name, blocks }: any = {}) => {
     try {
@@ -82,11 +84,13 @@ export function register(): void {
     }
   });
 
-  ipcMain.handle('story:update', async (_e, { projectId, id, name, blocks }: any = {}) => {
+  // `base`: a stale copy is 409 record_changed; the reply's `tag` is the next base. A rename from the list sends none.
+  ipcMain.handle('story:update', async (_e, { projectId, id, base, name, blocks }: any = {}) => {
     try {
-      const s = await stories.updateStory(projectId, id, { name, blocks });
+      const s = tagged('story', await stories.updateStory(projectId, id, { name, blocks }, base));
       return s || { ok: false, error: 'Story not found.' };
     } catch (err: any) {
+      if (isRecordChanged(err)) throw err; // the route's 409
       return { ok: false, error: err?.message || 'Could not save the story.' };
     }
   });

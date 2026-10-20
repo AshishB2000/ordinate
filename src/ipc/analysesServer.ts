@@ -19,6 +19,7 @@ import { metricUsage } from '../analysis/metricUsage';
 import { importImage, readImageDataUrl } from '../app/projectAssets';
 import { FileTokenError, resolveUpload } from '../server/files';
 import { isLiveRefusalReply, liveRefusal } from '../data/liveDataset';
+import { contentTag } from '../app/editConflict';
 
 /** What a card needs of a Visual to draw it — the record minus its bookkeeping. */
 function visualDef(v: visuals.Visual) {
@@ -32,6 +33,8 @@ function visualDef(v: visuals.Visual) {
     filters: v.filters,
     ...(v.analytics && v.analytics.length ? { analytics: v.analytics } : {}),
     updatedAt: v.updatedAt,
+    // The visual's content tag: the dashboard's Interactions write its overrides with it as `base`.
+    tag: contentTag('visual', v),
   };
 }
 export type VisualDef = ReturnType<typeof visualDef>;
@@ -80,7 +83,8 @@ export function register(): void {
       const v = await visuals.getVisual(projectId, s.id);
       if (v) defs.push(visualDef(v));
     }
-    return { ok: true, analysis: a, visuals: defs };
+    // `tag`: the editor's base (src/app/editConflict.ts).
+    return { ok: true, analysis: a, visuals: defs, tag: contentTag('dashboard', a) };
   });
 
   ipcMain.handle('analysis:tiles', async (e, { projectId, params, asOf, currency, items }: any = {}) =>

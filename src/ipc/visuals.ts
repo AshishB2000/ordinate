@@ -58,6 +58,7 @@ import type { LiveFailureCode } from '../engine/live/liveQuery';
 import { hasMetricMeasure, planMetricMeasures } from '../analysis/metricMeasures';
 import { metricMeasureData } from './vizMetricMeasures';
 import { withGeoSuggest } from '../analysis/geoHits';
+import { contentTag, isRecordChanged, tagged } from '../app/editConflict';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -549,7 +550,7 @@ export async function saveNewVisual(projectId: string, input: Parameters<typeof 
 export function register() {
   ipcMain.handle('visual:list', async (_e, { projectId }: any = {}) => visuals.listVisuals(projectId));
 
-  ipcMain.handle('visual:get', async (_e, { projectId, id }: any = {}) => visuals.getVisual(projectId, id));
+  ipcMain.handle('visual:get', async (_e, { projectId, id }: any = {}) => tagged('visual', await visuals.getVisual(projectId, id)));
 
   ipcMain.handle('visual:save', async (_e, { projectId, datasetId, name, chartType, encoding, overrides, filters, analytics }: any = {}) => {
     try {
@@ -561,13 +562,15 @@ export function register() {
     }
   });
 
-  ipcMain.handle('visual:update', async (_e, { projectId, id, name, chartType, encoding, overrides, filters, favorite, analytics }: any = {}) => {
+  // `base`: the builder's content tag — a stale copy is 409 record_changed (src/app/editConflict.ts); `tag` is the next base.
+  ipcMain.handle('visual:update', async (_e, { projectId, id, base, name, chartType, encoding, overrides, filters, favorite, analytics }: any = {}) => {
     try {
       const before = await visuals.getVisual(projectId, id);
-      const visual = await visuals.updateVisual(projectId, id, { name, chartType, encoding, overrides, filters, favorite, analytics });
+      const visual = await visuals.updateVisual(projectId, id, { name, chartType, encoding, overrides, filters, favorite, analytics }, base);
       if (visual) await versions.record(projectId, 'visual', visual, { before });
-      return visual ? { ok: true, visual } : { ok: false, error: 'Could not update the visual' };
+      return visual ? { ok: true, visual, tag: contentTag('visual', visual) } : { ok: false, error: 'Could not update the visual' };
     } catch (err: any) {
+      if (isRecordChanged(err)) throw err; // the route's 409
       return { ok: false, error: err?.message || 'Failed to update the visual' };
     }
   });

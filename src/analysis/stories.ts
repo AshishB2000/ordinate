@@ -16,6 +16,7 @@ import * as projects from '../app/projects';
 import { sanitizeBlocks, starterBlocks } from './storyModel';
 import type { StoryBlock } from './storyModel';
 import * as recordFs from '../app/recordFs';
+import { lockedUpdate } from '../app/editConflict';
 
 export interface Story {
   id: string;
@@ -144,19 +145,22 @@ export async function saveStory(projectId: string, input: { name?: unknown; bloc
   return story;
 }
 
-/** Replace-or-keep, like updateAnalysis: `blocks` is replaced wholesale, never merged. */
-export async function updateStory(projectId: string, id: string, patch: { name?: unknown; blocks?: unknown }): Promise<Story | null> {
-  const existing = await getStory(projectId, id);
-  if (!existing) return null;
-  const updated: Story = {
-    ...existing,
-    name: cleanName(patch.name) || existing.name,
-    blocks: patch.blocks !== undefined ? sanitizeBlocks(patch.blocks) : existing.blocks,
-    updatedAt: new Date().toISOString(),
-  };
-  await fs.promises.mkdir(storiesDir(projectId), { recursive: true });
-  await writeJsonAtomic(storyFilePath(projectId, id), updated);
-  return updated;
+/** Replace-or-keep, like updateAnalysis: `blocks` is replaced wholesale, never merged. Holds the
+ *  record while it reads and writes; a stale `base` refuses (src/app/editConflict.ts). */
+export async function updateStory(projectId: string, id: string, patch: { name?: unknown; blocks?: unknown }, base?: unknown): Promise<Story | null> {
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  const file = storyFilePath(projectId, id);
+  return lockedUpdate('story', { projectId, id, file }, base, () => getStory(projectId, id), async (existing) => {
+    const updated: Story = {
+      ...existing,
+      name: cleanName(patch.name) || existing.name,
+      blocks: patch.blocks !== undefined ? sanitizeBlocks(patch.blocks) : existing.blocks,
+      updatedAt: new Date().toISOString(),
+    };
+    await fs.promises.mkdir(storiesDir(projectId), { recursive: true });
+    await writeJsonAtomic(file, updated);
+    return updated;
+  });
 }
 
 export async function deleteStory(projectId: string, id: string): Promise<boolean> {

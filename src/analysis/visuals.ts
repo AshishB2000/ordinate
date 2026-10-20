@@ -37,6 +37,7 @@ import type { TableCalc } from './tableCalc';
 import { sanitizeFormat, NUMBER_FORMAT_IDS, SORT_MODE_IDS } from './chartFormat';
 import type { FormatOverrides, FormatContext, SortMode } from './chartFormat';
 import * as recordFs from '../app/recordFs';
+import { lockedUpdate } from '../app/editConflict';
 import { sanitizeCompare } from './dateIntel';
 import type { CompareMode } from './dateIntel';
 
@@ -607,7 +608,8 @@ export async function saveVisual(
 
 // Patch an existing visual's name / chartType / encoding in place, bumping
 // updatedAt. datasetId is immutable (a re-target is a new visual). Returns null if
-// either id is invalid or the visual does not exist.
+// either id is invalid or the visual does not exist. Holds the record while it
+// reads and writes; a stale `base` refuses (src/app/editConflict.ts).
 export async function updateVisual(
   projectId: string,
   id: string,
@@ -615,32 +617,33 @@ export async function updateVisual(
     name?: string; chartType?: string; encoding?: unknown; overrides?: unknown;
     filters?: unknown; favorite?: unknown; analytics?: unknown;
   },
+  base?: unknown,
 ): Promise<Visual | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
-  const existing = await getVisual(projectId, id);
-  if (!existing) return null;
-
-  const chartType = patch.chartType !== undefined ? sanitizeChartType(patch.chartType) : existing.chartType;
-  const encoding = patch.encoding !== undefined ? sanitizeEncoding(patch.encoding) : existing.encoding;
-  const updated: Visual = {
-    ...existing,
-    name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,
-    chartType,
-    encoding,
-    // Re-clamped even when only the type or encoding changed: a dual axis that
-    // was valid on a combo is not valid on the pie it just became.
-    overrides: sanitizeOverrides(patch.overrides !== undefined ? patch.overrides : existing.overrides, { chartType, encoding }),
-    filters: patch.filters !== undefined ? sanitizeFilters(patch.filters) : existing.filters,
-    favorite: patch.favorite !== undefined ? patch.favorite === true : existing.favorite,
-    updatedAt: new Date().toISOString(),
-  };
-  if (patch.analytics !== undefined) {
-    delete updated.analytics;
-    Object.assign(updated, withAnalytics(patch.analytics));
-  }
-  await fs.promises.mkdir(visualsDir(projectId), { recursive: true });
-  await writeJsonAtomic(visualFilePath(projectId, id), updated);
-  return updated;
+  const file = visualFilePath(projectId, id);
+  return lockedUpdate('visual', { projectId, id, file }, base, () => getVisual(projectId, id), async (existing) => {
+    const chartType = patch.chartType !== undefined ? sanitizeChartType(patch.chartType) : existing.chartType;
+    const encoding = patch.encoding !== undefined ? sanitizeEncoding(patch.encoding) : existing.encoding;
+    const updated: Visual = {
+      ...existing,
+      name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,
+      chartType,
+      encoding,
+      // Re-clamped even when only the type or encoding changed: a dual axis that
+      // was valid on a combo is not valid on the pie it just became.
+      overrides: sanitizeOverrides(patch.overrides !== undefined ? patch.overrides : existing.overrides, { chartType, encoding }),
+      filters: patch.filters !== undefined ? sanitizeFilters(patch.filters) : existing.filters,
+      favorite: patch.favorite !== undefined ? patch.favorite === true : existing.favorite,
+      updatedAt: new Date().toISOString(),
+    };
+    if (patch.analytics !== undefined) {
+      delete updated.analytics;
+      Object.assign(updated, withAnalytics(patch.analytics));
+    }
+    await fs.promises.mkdir(visualsDir(projectId), { recursive: true });
+    await writeJsonAtomic(file, updated);
+    return updated;
+  });
 }
 
 // Duplicate an existing visual into a NEW file with a fresh UUID, copying

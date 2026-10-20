@@ -28,6 +28,7 @@ import { sanitizeSteps } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
 import type { MetricAggregation } from './metricValue';
 import * as recordFs from '../app/recordFs';
+import { lockedUpdate } from '../app/editConflict';
 import { sanitizeTree } from './metricTree';
 import type { TreeNode } from './metricTree';
 
@@ -370,46 +371,48 @@ export async function saveMetric(projectId: string, input: MetricInput): Promise
 /**
  * Patch a metric in place, bumping updatedAt. `datasetId` is immutable — a
  * re-target is a new metric, because every card and rule pointing at this one
- * was written about THIS dataset's numbers.
+ * was written about THIS dataset's numbers. Holds the record while it reads and
+ * writes; a stale `base` refuses (src/app/editConflict.ts).
  */
 export async function updateMetric(
   projectId: string,
   id: string,
   patch: Partial<MetricInput>,
+  base?: unknown,
 ): Promise<Metric | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
-  const existing = await getMetric(projectId, id);
-  if (!existing) return null;
+  const file = metricFilePath(projectId, id);
+  return lockedUpdate('metric', { projectId, id, file }, base, () => getMetric(projectId, id), async (existing) => {
+    const updated: Metric = {
+      ...existing,
+      name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,
+      definition: patch.definition !== undefined ? sanitizeDefinition(patch.definition) : existing.definition,
+      filters: patch.filters !== undefined ? sanitizeMetricFilters(patch.filters) : existing.filters,
+      format: patch.format !== undefined ? sanitizeFormat(patch.format) : existing.format,
+      updatedAt: new Date().toISOString(),
+    };
+    // Both are CLEARABLE, so "key present" decides, not truthiness: passing '' is
+    // how the editor removes a description, and `undefined` is how it leaves one
+    // alone. A truthiness test would make an emptied box a no-op.
+    if (patch.description !== undefined) {
+      const d = trimTo(patch.description, MAX_DESCRIPTION);
+      if (d) updated.description = d;
+      else delete updated.description;
+    }
+    if (patch.direction !== undefined) {
+      if (patch.direction === 'up_good' || patch.direction === 'down_good') updated.direction = patch.direction;
+      else delete updated.direction;
+    }
+    if (patch.tree !== undefined) {
+      const tree = sanitizeTree(patch.tree, id);
+      if (tree) updated.tree = tree;
+      else delete updated.tree;
+    }
 
-  const updated: Metric = {
-    ...existing,
-    name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,
-    definition: patch.definition !== undefined ? sanitizeDefinition(patch.definition) : existing.definition,
-    filters: patch.filters !== undefined ? sanitizeMetricFilters(patch.filters) : existing.filters,
-    format: patch.format !== undefined ? sanitizeFormat(patch.format) : existing.format,
-    updatedAt: new Date().toISOString(),
-  };
-  // Both are CLEARABLE, so "key present" decides, not truthiness: passing '' is
-  // how the editor removes a description, and `undefined` is how it leaves one
-  // alone. A truthiness test would make an emptied box a no-op.
-  if (patch.description !== undefined) {
-    const d = trimTo(patch.description, MAX_DESCRIPTION);
-    if (d) updated.description = d;
-    else delete updated.description;
-  }
-  if (patch.direction !== undefined) {
-    if (patch.direction === 'up_good' || patch.direction === 'down_good') updated.direction = patch.direction;
-    else delete updated.direction;
-  }
-  if (patch.tree !== undefined) {
-    const tree = sanitizeTree(patch.tree, id);
-    if (tree) updated.tree = tree;
-    else delete updated.tree;
-  }
-
-  await fs.promises.mkdir(metricsDir(projectId), { recursive: true });
-  await writeJsonAtomic(metricFilePath(projectId, id), updated);
-  return updated;
+    await fs.promises.mkdir(metricsDir(projectId), { recursive: true });
+    await writeJsonAtomic(file, updated);
+    return updated;
+  });
 }
 
 /** Copy a metric into a new file with a fresh UUID and " (copy)" appended. The

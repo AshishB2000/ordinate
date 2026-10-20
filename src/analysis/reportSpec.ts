@@ -27,6 +27,7 @@ import { GRID_COLS } from './dashboards';
 import type { Card, Page } from './dashboards';
 import { t } from '../app/i18n';
 import * as recordFs from '../app/recordFs';
+import { lockedUpdate } from '../app/editConflict';
 
 export type ReportFormat = 'pdf' | 'pptx' | 'docx';
 export type ReportPageKind = 'cover' | 'summary' | 'sheet' | 'tile' | 'notes' | 'narrative' | 'discussion' | 'scorecard';
@@ -451,38 +452,42 @@ export async function saveReport(projectId: string, input: ReportInput): Promise
  * Patch a report in place, bumping updatedAt. Arrays and objects are REPLACED
  * wholesale, never merged — the same rule updateAnalysis follows, and for the
  * same reason: a half-patched `cover` would quietly reset the fields it omitted.
+ * Holds the record while it reads and writes; a stale `base` refuses
+ * (src/app/editConflict.ts).
  */
 export async function updateReport(
   projectId: string, id: string,
   patch: ReportInput & { lastRunAt?: string; lastFile?: string },
+  base?: unknown,
 ): Promise<Report | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
-  const existing = await getReport(projectId, id);
-  if (!existing) return null;
-  const merged: Report = {
-    ...existing,
-    name: str(patch.name).trim() || existing.name,
-    format: patch.format !== undefined ? sanitizeFormat(patch.format) : existing.format,
-    pages: patch.pages !== undefined ? sanitizePages(patch.pages) : existing.pages,
-    cover: patch.cover !== undefined ? sanitizeCover(patch.cover) : existing.cover,
-    paper: patch.paper !== undefined ? sanitizePaper(patch.paper) : existing.paper,
-    includeFilters: patch.includeFilters !== undefined ? patch.includeFilters !== false : existing.includeFilters,
-    narrative: patch.narrative !== undefined ? patch.narrative === true : existing.narrative,
-    discussion: patch.discussion !== undefined ? patch.discussion === true : existing.discussion,
-    updatedAt: new Date().toISOString(),
-  };
-  if (patch.schedule !== undefined) {
-    const s = sanitizeSchedule(patch.schedule);
-    if (s) merged.schedule = s; else delete merged.schedule;
-  }
-  if (patch.viewId !== undefined) {
-    if (isValidId(patch.viewId) || patch.viewId === 'all') merged.viewId = patch.viewId; else delete merged.viewId;
-  }
-  if (patch.lastRunAt) merged.lastRunAt = patch.lastRunAt;
-  if (patch.lastFile) merged.lastFile = patch.lastFile;
-  await fs.promises.mkdir(reportsDir(projectId), { recursive: true });
-  await writeJsonAtomic(reportFilePath(projectId, id), merged);
-  return merged;
+  const file = reportFilePath(projectId, id);
+  return lockedUpdate('report', { projectId, id, file }, base, () => getReport(projectId, id), async (existing) => {
+    const merged: Report = {
+      ...existing,
+      name: str(patch.name).trim() || existing.name,
+      format: patch.format !== undefined ? sanitizeFormat(patch.format) : existing.format,
+      pages: patch.pages !== undefined ? sanitizePages(patch.pages) : existing.pages,
+      cover: patch.cover !== undefined ? sanitizeCover(patch.cover) : existing.cover,
+      paper: patch.paper !== undefined ? sanitizePaper(patch.paper) : existing.paper,
+      includeFilters: patch.includeFilters !== undefined ? patch.includeFilters !== false : existing.includeFilters,
+      narrative: patch.narrative !== undefined ? patch.narrative === true : existing.narrative,
+      discussion: patch.discussion !== undefined ? patch.discussion === true : existing.discussion,
+      updatedAt: new Date().toISOString(),
+    };
+    if (patch.schedule !== undefined) {
+      const s = sanitizeSchedule(patch.schedule);
+      if (s) merged.schedule = s; else delete merged.schedule;
+    }
+    if (patch.viewId !== undefined) {
+      if (isValidId(patch.viewId) || patch.viewId === 'all') merged.viewId = patch.viewId; else delete merged.viewId;
+    }
+    if (patch.lastRunAt) merged.lastRunAt = patch.lastRunAt;
+    if (patch.lastFile) merged.lastFile = patch.lastFile;
+    await fs.promises.mkdir(reportsDir(projectId), { recursive: true });
+    await writeJsonAtomic(file, merged);
+    return merged;
+  });
 }
 
 export async function deleteReport(projectId: string, id: string): Promise<boolean> {
