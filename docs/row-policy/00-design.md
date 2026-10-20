@@ -26,7 +26,9 @@ item 5 of the five-item round (branch `feat/row-policy`). Threat model: §4.12 a
   - Warnings when the rules cannot hold: the column is gone or is no longer text ("Viewers see no
     rows until you pick another column"), or the prepare steps store a value computed across rows
     (a running total, rank, segment, LOD field) — "Viewers are refused: those values were computed
-    over every row". Below: *Datasets built from this one don't inherit these rules* and their names.
+    over every row" — or a step that writes the column changed since the rules were saved ("Save the rules
+    again to re-open the dataset to viewers"). Below: *Datasets built from this one are closed to
+    viewers until they have rules of their own*, and their names.
   - Without Postgres there is no user directory: the tab says row access needs `DATABASE_URL`.
 - **A viewer in team East**, on a dashboard over that dataset, sees East's figures in every chart and
   KPI, East's rows in the grid and behind a chart mark, and only East's values in every filter list
@@ -62,24 +64,25 @@ left room.
 
 | # | Decision | Why |
 |---|---|---|
-| D1 | **Build on `embedLock.ts`.** `lockStep`, `storesCrossRow` and `makeLock` move to `src/data/rowLock.ts` (no import of the chart door); `embedLock.ts` re-exports them, so `test-embedLock` and the embed path are unchanged. A viewer's lock is `makeLock({ [policy.column]: values })` — the same `Lock`, the same steps (`=`/`in`, `context: true`, placed first), the same `covers()`. `visualAllowed` decides a chart for a restricted viewer as it decides an embed tile. | One mechanism. The embed's differential suite now guards both. |
-| D2 | **The policy lives on the dataset record**: `rowPolicy = { column, rules: [{ userId \| teamId, values: string[] }] }`, sanitized in `src/data/rowPolicy.ts`, carried by `normalize()` with ONE line (`applyRowPolicy(ds, data)`, the `applyFreshOnAsk` pattern), so every writer that persists a normalized record keeps it. No migration (like `Dataset.live`). | `datasets.ts` is 792 lines: five lines total (field, normalize, import, two gate calls). |
-| D2b *(here)* | **A stored policy never fails open.** A `rowPolicy` key that does not sanitize becomes a CLOSED policy (no column, no rules: every restricted reader refused), never "no policy". A test walks every writer of a dataset record (save, update, steps, refresh, incremental, setMode extract⇄Live, snapshot restore, input-table edit, the metadata writers) and proves the policy survives each. | A refresh or a mode switch that silently dropped the rules would widen without anyone noticing. |
-| D3 | **Only a project admin sets it**, through `dataset:setRowPolicy` (`access: 'admin'`, project-scoped, audited by the route), a metadata-only write through `datasetRecord.serialized` (no `updatedAt` bump). *(here)* The tab reads it through `dataset:rowPolicy` (also `admin`): the rules say who sees what, which is not a viewer's business. | Narrowest channel. The answer caches do not need invalidating (D12). |
-| D4 | **Restricted = effective project role viewer.** Org admins and project editors/admins are never restricted. *(here)* A caller with no grant at all (the `/p/` and embed pseudo-identities) counts as restricted with no entitlement — fail closed. | The plan's model; editors could rewrite the rules. |
+| D1 | **Build on `embedLock.ts`.** `lockStep`, `storesCrossRow` and `makeLock` move to `src/data/rowLock.ts` (no import of the chart door); `embedLock.ts` re-exports them. A viewer's lock is `makeLock({ [policy.column]: values })` — the same `Lock`, the same steps (`=`/`in`, `context: true`, placed first), the same `covers()`. The "reads another dataset" half of `visualAllowed` moves beside them and decides a chart for a restricted viewer as it decides an embed tile. The embed path gets the tightened `storesCrossRow` too (D16): its own CHANGELOG line and explicit new cases in `test-embedLock`. | One mechanism, one differential suite guarding both. |
+| D2 | **The policy lives on the dataset record**, `rowPolicy = { column, rules: [{ userId \| teamId, values }], stepsHash }`, sanitized in `src/data/rowPolicy.ts`. It is **never** part of the in-memory `Dataset` or `DatasetMeta` (refutation N3): it is read raw from the record where needed (`rowAccess.ts`, the admin channels), so no reply that spreads a record can carry it. No migration (like `Dataset.live`). | `datasets.ts` is 792 lines: three lines change (two gate calls, one import). |
+| D2b | **A stored policy never fails open, and no data write can drop it** (refutation B1). The record write inside `persistNow` becomes a locked read-merge-write in `datasetRecord.ts` (`writeRecordKeepingPolicy`): under `recordFs.locked` it re-reads the STORED record and copies its `rowPolicy` onto what is written, never from memory — so a policy set while a long fold runs survives the fold's write, and a narrowed policy is never widened back. A `rowPolicy` key that does not sanitize becomes a CLOSED policy (no column: every restricted reader refused), never "no policy". A test walks every writer of a dataset record and proves the policy survives each. | A refresh, a step edit or a mode switch that silently dropped or reverted the rules would widen without anyone noticing. |
+| D3 | **Only a project admin sets it**, through `dataset:setRowPolicy` (`access: 'admin'`, project-scoped, audited by the route), a metadata-only write through `datasetRecord.serialized` (no `updatedAt` bump); the server stamps `stepsHash` (D18). The tab reads it through `dataset:rowPolicy` (also `admin`): the rules say who sees what, which is not a viewer's business. | Narrowest channel. The answer caches do not need invalidating (D12). |
+| D4 | **Restricted = effective project role viewer.** Org admins and project editors/admins are never restricted: editors cannot edit the rules, but they can rewrite Prepare (and so the policy column) and they read every row through it anyway, so restricting them would protect nothing. A caller with no grant at all (the `/p/` and embed pseudo-identities) counts as restricted with no entitlement — fail closed. The project role reuses `authz`'s own `grantRank`; a Postgres error THROWS (deny), never falls back to the org role (refutation S5). | The plan's model, stated accurately. |
 | D5 | **`entitlement(policy, userId, teamIds)` is pure** and returns `'all'` (no policy), the union of matching rules' values, or `'none'`. | One place to test exhaustively. |
-| D6 | **Fail closed before any query**, in this order, each a typed refusal (409 `row_policy`): an **as-of** read; the policy column **missing** from the dataset (also a Live column the warehouse dropped) or **not text**; a pipeline that **stores a cross-row value** (`storesCrossRow`, now an allow-list — D16) or **references a dashboard parameter** (parameter replay re-runs the steps with the viewer's values); entitlement **`none`** or a **blank** value list; a question that reaches a **related** dataset. Never an empty `in`, never a skipped filter: the two widening traps (`transforms.ts:357` unknown column, `:389` empty `in`, and their twins `residentFilter.ts:62/89`, `liveSpec.ts:231/262`) are never reached with the lock. | Each of these would draw the unscoped figure or a cross-row total. |
-| D7 | **The lock is prepended at the doors** — `vizDataFor`, `computeCardMetric`, `computeCard` — after input sanitization, BEFORE the Live split and the answer-cache key, computed **per dataset inside the door** (a formula metric's operands, an overlay metric, a metric measure each get their own dataset's lock). A restricted caller's filter list is reduced to `filter` steps (`alerts:test` and friends pass raw steps). Plus the locked readers: `pageFor` (dataset:page, visual:rows, rowsDownload), the locked distinct reader (dataset:distinct, metric series, scorecard breakdowns), `dataset:profile`. | Every tile, KPI, `visual:preview`/`data`, MCP `aggregate`, and item 2's Explore pass through these three functions. |
-| D8 *(here)* | **A storage net behind the doors** — the Live D6 pattern. `datasets.getDataset` and `datasets.residentSource` call `gateRows(projectId, id)` first (before the as-of hooks and the publish read memo): a restricted caller on a policy dataset is refused unless the current async scope is a **lock scope** for exactly that dataset, opened by the door that prepended its lock. The scope is the innermost door's one dataset — a door for E nested inside a door for D cannot read D unlocked. | A reader the inventory missed then REFUSES (a bug report), instead of leaking (a breach). 31 of the readers below are covered by this net alone. |
-| D9 | **Every other row reader refuses a restricted caller, typed.** The ones that never touch `getDataset`/`residentSource` — stored artifacts, caches, the value index, values carried on the record — get an explicit check or redaction (the EXPLICIT, SKIP and REDACT rows of the inventory). | Those are exactly the paths a storage net cannot see. |
-| D10 | **Fan-out refuses for everyone** in phase 1: publish (`/p/`), signed embeds, subscriptions (every channel — item 4's email included, inside its shared `deliver()`), alerts. Mechanism: a **fan-out scope** around each build (doors and the net refuse ANY policy dataset inside it and record every dataset id they touch) plus ONE exported function, `assertFanOutAllowed(projectId, datasetIds)`, at each send point. *(here)* A published site records the dataset ids its build read; `/p/` stops serving a site once one of them has a policy, and a site published before this change (no recorded ids) is not served while its project has any policy dataset, until it is re-published. A cached embed page re-checks its recorded ids on every hit. | They compute once, as the publisher or the system, and reach people whose entitlement differs. A snapshot built before the rules must not outlive them. |
-| D11 *(here)* | **Exports refuse a restricted caller** (`dashboard:exportHtml`, `story:export`, `report:build`, `report:preview`) through an **export scope**; editors export as today. `visual:rowsDownload` is a locked reader, not an export. | Their builders mix door figures with whole-dataset parts (control values, Summary card, stats tiles); refusing is the honest phase-1 answer. |
+| D6 | **Fail closed before any query**, in this order, each a typed refusal (409 `row_policy`): an **as-of** read; the dataset is **derived** from a policy dataset and has no rules of its own (D14); the policy column **missing** (also a Live column the warehouse dropped), **not text**, or a Live dialect with no binary comparison; a pipeline that **stores a cross-row value** (`storesCrossRow`, an allow-list over steps AND origin — D16), **references a dashboard parameter**, or whose **policy-column writers changed** since the rules were saved (D18); entitlement **`none`** or a **blank** value list; a question that reaches a **related** dataset. Never an empty `in`, never a skipped filter: the two widening traps (`transforms.ts:357` unknown column, `:389` empty `in`, and their twins `residentFilter.ts:62/89`, `liveSpec.ts:231/262`) are never reached with the lock. | Each of these would draw the unscoped figure or a cross-row total. |
+| D7 | **The lock is prepended at the doors** — `vizDataFor`, `computeCardMetric`, `computeCard` — after input sanitization, BEFORE the Live split and the answer-cache key, computed **per dataset inside the door**. The wrappers live in their own module, `src/ipc/rowDoors.ts`; `visuals.ts` and `dashboards.ts` only rename their body (refutation N4). The prepend is idempotent: the lock is prepended unless `filters` already STARTS WITH exactly `lock.steps` (deep-equal) — never skipped just because a scope is open (S4). A restricted caller's filter list is reduced to `filter` steps. Plus the locked readers: `pageFor` (dataset:page, visual:rows, rowsDownload), `distinctFor` (its own file: dataset:distinct, metric series, scorecard breakdowns, alert periods), `dataset:profile`. | Every tile, KPI, `visual:preview`/`data`, MCP `aggregate`, and item 2's Explore pass through these three functions. |
+| D8 | **A storage net behind the doors** — the Live D6 pattern. `datasets.getDataset` and `datasets.residentSource` call `gateRows(projectId, id)` first (before the as-of hooks and the publish read memo): a restricted caller on a policy (or policy-derived) dataset is refused unless the current async scope is a **lock scope** for exactly that dataset, opened by the door that prepended its lock. The scope is the innermost door's one dataset — a door for E nested inside a door for D cannot read D unlocked. | A reader the inventory missed then REFUSES (a bug report), instead of leaking (a breach). 31 of the readers below are covered by this net alone. |
+| D9 | **Every other row reader refuses a restricted caller, typed.** The ones that never touch `getDataset`/`residentSource` — stored artifacts, caches, the value index, values carried on the record — get an explicit check or redaction (the EXPLICIT, SKIP and REDACT rows of the inventory), and so do the channels that return step BODIES (`prepare:get`, refutation S2). | Those are exactly the paths a storage net cannot see. |
+| D10 | **Fan-out refuses for everyone** in phase 1: publish (`/p/`), signed embeds, subscriptions (every channel — item 4's email included, inside its shared `deliver()`), alerts. Mechanism: a **fan-out scope** around each build — per RULE for alerts (refutation N1) — in which doors and the net refuse ANY policy or policy-derived dataset and record every dataset id they touch, plus ONE exported function, `assertFanOutAllowed(projectId, datasetIds)`, at each send point. A published site records the dataset ids its build read; `/p/` stops serving a site once one of them is policy-closed (own rules or derived), and a site published before this change (no recorded ids) is not served while its project has any policy-closed dataset, until it is re-published (N5). A cached embed page re-checks its recorded ids on every hit. | They compute once, as the publisher or the system, and reach people whose entitlement differs. A snapshot built before the rules must not outlive them. |
+| D11 | **Exports refuse a restricted caller** (`dashboard:exportHtml`, `story:export`, `report:build`, `report:preview`) through an **export scope**; editors export as today. `visual:rowsDownload` is a locked reader, not an export. | Their builders mix door figures with whole-dataset parts (control values, Summary card, stats tiles); refusing is the honest phase-1 answer. |
 | D12 | **Caches key on the lock**: it is part of `filters`, which `queryCache.cacheKey` stringifies with sorted keys under the org id (arrays keep order, so `[lock, …f]` never collides with `f`); the Live executor's key carries the IR, which carries it. A restricted caller never reaches the `insights` cache (keyed by dataset alone) for a policy dataset. No cache needs invalidating when rules change: a changed entitlement is a different key. | "A restricted viewer never reads an unrestricted cached answer, and vice versa." |
-| D13 | **Live**: the lock compiles to bound parameters like every value (`compileFilter.ts`: `in` binds each value, `=` binds its value; none reaches SQL text). *(here)* The two Live lookups that run without the question's filters — the latest date that anchors a relative period, and the stored spelling of a typed value (`liveCaseFix`) — compile with the lock as their WHERE. The stored profile sample (`live.profile`) is never shown to a restricted caller. | Parity with the extract path, where `computeCard` folds the lock first. |
-| D14 *(here)* | **Derived datasets do not inherit the rules.** A SQL dataset, a union/lookup step, a combine, "Make a copy" is an EDITOR's act and makes a new dataset with its own (absent) rules; the Row access tab lists the datasets built from this one so the admin can add rules there. | Editors are trusted (D4); inheriting rules across SQL is phase 2. |
+| D13 | **Live**: the lock compiles to bound parameters like every value, and compares **binary** per dialect (refutation S3): DuckDB `CAST(x AS BLOB)`, BigQuery `CAST(x AS BYTES)`, Databricks `CAST(x AS BINARY)`, Snowflake `COLLATE(x, 'utf8')`, the Postgres/Redshift dialect `md5(x)` (byte-based in both; Postgres has no `COLLATE()` function and Redshift no `COLLATE "C"`), ClickHouse plain `=`/`IN` (String compares bytes). A dialect without a known binary form refuses a policy (`column`). The two Live lookups that run without the question's filters — the latest date that anchors a relative period, and the stored spelling of a typed value (`liveCaseFix`) — compile with the lock as their WHERE. The stored profile sample (`live.profile`) is never shown to a restricted caller. | Parity with the extract path (JS string equality), on warehouses whose default collation may be case-insensitive. |
+| D14 | **Derived datasets fail closed** (refutation B2; the earlier "trusted to editors" is withdrawn). The effective policy of a dataset is its own if it has one; otherwise, if its transitive upstream (origin parents — combined, composed, sql, notebook deps — and Prepare `union`/`lookup_join` references, `MAX_DEPTH` 16, a visited set, memoised per request) contains a policy dataset, it is **closed** to restricted callers and inside every fan-out scope (reason `derived`). One small exported closure helper, `upstreamIds` in `src/data/upstream.ts`, built on `originParents` + `stepRefIds` (the primitives `stepRefs.buildsOn` walks); item 4's `deliver()` will share it at integration. A copy of a policy dataset (`dataset:copyLive`, any extract copy) carries the same `rowPolicy`. The Row access tab lists the datasets built from this one. | A SQL dataset over a policy dataset must not be the way around it. |
 | D15 | **One refusal code**, `row_policy` (HTTP 409 from the route, or `{ok:false, code:'row_policy', reason, error}` inside a reply, per item in a batch), a machine `reason`, and a fixed catalog sentence per reason (`t()`; the reply never names another team or value). The route maps `RowPolicyError` like `LiveDatasetError` and tags caught refusals like `tagLiveRefusals`. A catch that turns an error into `[]`/`null` rethrows `RowPolicyError`. | The Live safety net's shape, which the web already renders. |
-| D16 *(here)* | **The policy column must be declared `text`**; values match cells **exactly** (case and spaces), blank values are dropped, and a null or blank cell is in no one's rows. `storesCrossRow` becomes an **allow-list**: row-local steps pass; `window`, `group_aggregate` and `pivot` pass only when partitioned/grouped by every locked column; `segment`, `text_terms`, LOD fields and any step type added later store a cross-row value. | No number/date coercion edge cases in three engines; a new step type fails closed. Tightens embeds the same way. |
+| D16 | **The policy column must be declared `text`**; values match cells **exactly** (case and spaces), blank values are dropped, and a null or blank cell is in no one's rows. `storesCrossRow` becomes an **allow-list** over the steps AND the origin (refutation B3): row-local steps pass; `window`, `group_aggregate` and `pivot` pass only when partitioned/grouped by every locked column; `dedupe_key` only when its key includes every locked column; `segment`, `text_terms`, `lookup_join`, LOD fields and any step type added later store a cross-row value; so does an origin of kind `sql`, `notebook`, `composed` or `combined` (conservative on purpose: such a dataset with its own rules is refused to restricted viewers in phase 1 — a ceiling). | No number/date coercion edge cases in three engines; a new step type fails closed. Tightens embeds the same way (D1). |
 | D17 | No SQL migration, no new dependency, no env var. | Plan. |
+| D18 | **The policy column's writers are pinned** (refutation S1). When an admin saves the rules, the server stores `stepsHash` — a hash of the prepare steps that can WRITE the policy column (a calculated or conditional column, `replace_values`, `fill_empty`, `trim` naming it or all text columns, a mask, `parse_date`, `split_column`, `rename_column` onto or off it, `drop_column`, `unpivot`, `union`, and any step type not known to leave it alone). If the current pipeline's hash differs, `rowLockFor` refuses (`pipeline`) until an admin saves the rules again; the Row access tab says so. | An editor's step that rewrites the column (`East` → everyone's value) would otherwise widen silently. |
 
 ## How it is enforced
 
@@ -105,9 +108,11 @@ request ──► route: contract, authorize (rank seeds the caller memo) ──
 
 - desktop / self-check mode (`ctx()` is the desktop admin): never restricted;
 - `ctx().user.role === 'admin'` (org admin, the jobs' system identity): never restricted, no query;
-- otherwise ONE query by org + email: `users.id`, every `team_members.team_id`, and the max grant rank
-  on the project through user and team grants — `authorize`'s own rule. Rank ≥ editor: not
-  restricted. Viewer or no grant: restricted. No Postgres: rank 0 → restricted, no entitlement.
+- otherwise the project rank from `authz`'s own `grantRank` (exported, not restated; the route and
+  the MCP route seed it from the rank `authorize` just computed, so an editor's request costs no
+  extra query). Rank ≥ editor: not restricted. Viewer or no grant: restricted, and ONE more query by
+  org + email reads `users.id` and every `team_members.team_id`. No Postgres: rank 0 → restricted,
+  no entitlement. A Postgres error THROWS — the request is denied, never answered on the org role.
 - Memoised per request in a `WeakMap` keyed by the request context object, so it dies with the
   request (a job submitted by the request keeps the submitter's answer, as it keeps their context).
   The RPC route and the MCP route seed it with the rank `authorize` already computed. Team or role
@@ -132,8 +137,8 @@ net, never in a handler or the route).
   the whole table and returns its row count, `vizSampleData.ts:45`), refuses `encoding.drivers`
   (the drivers tile anchors "latest" on the whole period column, `alertStore.recentPeriods`), and
   runs the body with `[...lock.steps, ...onlyFilterSteps(filters)]` inside `withRowLock(datasetId)`.
-  A re-entry for the same dataset inside its own scope (metric measures, facet panels) passes
-  through without prepending again. Item 1's `figures` block is computed inside the wrapped body,
+  The prepend is idempotent (S4): a re-entry for the same dataset (metric measures, facet panels)
+  whose `filters` already START WITH exactly `lock.steps` is not prepended again; anything else is. Item 1's `figures` block is computed inside the wrapped body,
   after the extract/Live split, so it is computed from the locked rows with no extra code.
 - **`computeCardMetric`** (`src/ipc/dashboards.ts:147`): the same wrapper (D6 checks, related
   columns, filter steps only, the lock first, the scope). Formula metrics resolve each operand
@@ -218,7 +223,8 @@ entitlement(policy: RowPolicy | null, userId: string | null, teamIds: readonly s
   strings dropped, ≤ 1,000 per rule. On SET a violation is a 400/typed refusal naming the field; on
   LOAD it yields a CLOSED policy (D2b).
 - `rowLockFor(projectId, datasetId)`, for a restricted caller (or inside a fan-out scope), in order:
-  fan-out scope → `fanout`; export scope → `export`; as-of → `asOf`; no policy → `null`; column
+  fan-out scope → `fanout` (for a policy or policy-derived dataset); export scope → `export`; as-of →
+  `asOf`; no own policy but a policy dataset upstream → `derived`; no policy → `null`; column
   missing / not text / dropped by the warehouse → `column`; `storesCrossRow(steps, [column])` or a
   step referencing a parameter → `pipeline`; entitlement `none` → `none`; else
   `makeLock({ [column]: values })`.
@@ -229,7 +235,8 @@ entitlement(policy: RowPolicy | null, userId: string | null, teamIds: readonly s
 |---|---|---|
 | `none` | no rule names the viewer or their teams, or every value is blank | You don't have access to any rows of this dataset. A project admin can give you access. |
 | `column` | the policy column is missing, not text, or gone from the warehouse | This dataset's row access rules name a column it no longer has, so it is closed to you until a project admin fixes them. |
-| `pipeline` | prepare steps store a cross-row value or read a dashboard parameter | This dataset stores values computed across all of its rows, so it can't be limited to the rows you can see. |
+| `derived` | the dataset has no rules but is built from one that has (D14) | This dataset is built from a dataset with row access rules, so it's closed to you until a project admin gives it rules of its own. |
+| `pipeline` | prepare steps or the origin store a cross-row value, read a dashboard parameter, or a step writing the policy column changed since the rules were saved | This dataset stores values computed across all of its rows, so it can't be limited to the rows you can see. |
 | `reader` | a non-door reader (the storage net, an explicit check) | This reads the whole dataset, and your access covers only some of its rows, so it's off for you. |
 | `related` | a column or label reached through a relationship | This question reaches a related dataset, and row access rules don't extend across relationships yet. |
 | `asOf` | an as-of read | Looking at past data is off for datasets with row access rules. |
@@ -276,12 +283,12 @@ exactly once; `scripts/test-rowPolicySafetyNet.ts` holds the same table as code 
 | DOOR+ | 5 | Door figures, plus a part that goes through the locked distinct reader or is redacted. |
 | LOCKED | 5 | Row and value readers locked directly (`pageFor`, distinct, profile). |
 | NET | 31 | Reads rows outside a door through `getDataset`/`residentSource`: refused by the storage net. |
-| EXPLICIT | 10 | Reads a stored artifact, a cache or the value index: refused by an explicit check. |
+| EXPLICIT | 11 | Reads a stored artifact, a cache or the value index: refused by an explicit check. |
 | SKIP | 1 | A search across datasets: policy datasets are skipped for a restricted caller. |
 | REDACT | 6 | Metadata replies that carry row values: the values are stripped for a restricted caller. |
 | FANOUT | 3 | Builds what is sent to others: refused for everyone. |
 | EXPORT | 4 | Builds a file: refused for a restricted caller. |
-| META | 103 | Names, definitions, counts, ids, the caller's own records: not a row reader (reason given). |
+| META | 102 | Names, definitions, counts, ids, the caller's own records: not a row reader (reason given). |
 
 Handler paths are under `src/`.
 
@@ -357,6 +364,7 @@ Handler paths are under `src/`.
 | `summary:rewrite` | `ipc/summary.ts:275` | same facts, then a model |
 | `copilot:ask` | `ipc/copilot.ts:459` | `buildFacts`: a context naming a policy dataset (dataset, visual, analysis, capture, stats, drivers, scenario) refuses; the plain-ask inventory skips policy datasets; the ledger carries only facts that were allowed |
 | `versions:get` | `ipc/versions.ts:66` | stored version file: an input table's version carries the full table (inputTable/store.ts:102) → refused for `type:'dataset'` on a policy dataset |
+| `prepare:get` | `ipc/preparePower.ts:135` | returns the step BODIES (a filter or replace step can name other teams' values) and per-step counts → refused for a restricted caller on a policy or policy-derived dataset (refutation S2) |
 | **SKIP** | | |
 | `dataSearch:query` | `ipc/dataSearch.ts:20` | `runSearch`: `tablePath` + the stored `<id>.search.json` value index (dataSearchRun.ts:99-101) — policy datasets are skipped for a restricted caller; the withheld-columns catch fails closed |
 | **REDACT** | | |
@@ -433,7 +441,6 @@ Handler paths are under `src/`.
 | `pipelines:preview` | `ipc/pipelines.ts:91` | cron times |
 | `plan:check` | `ipc/plan.ts:89` | plan step checks over metadata |
 | `prefs:get` | `ipc/prefs.ts:23` | formats, branding |
-| `prepare:get` | `ipc/preparePower.ts:135` | columns, authored steps, stored `stepCounts` (counts — ceiling); without stored counts it replays from `getDataset` → the net refuses, typed |
 | `privacy:overview` | `ipc/privacy.ts:20` | sensitivity levels and column names |
 | `privacy:review` | `ipc/privacy.ts:44` | same, one dataset |
 | `privacy:summary` | `ipc/privacy.ts:68` | sensitive column names |
@@ -504,7 +511,7 @@ call modules directly, never the RPC handlers — which is why nothing here is e
 | Value index | `dataSearchResident.ts:146` (`scheduleIndex`) | Writes `<id>.search.json`; `dataSearch:query` skips policy datasets for a restricted caller. |
 | Re-publish after refresh | `hosted.ts:266` → `publishHosted` | Fan-out scope: refused; the old snapshot is no longer served either (D10). |
 | Subscriptions | `subscriptions/job.ts:32` → `run.ts:120` (as the owner) | Fan-out scope + `assertFanOutAllowed`: the run fails `row_policy`, nothing posts, the owner sees why. |
-| Dependents re-materialised | `datasetDependents.ts:41` | A derived dataset holds a copy of the rows with no rules of its own (D14, a ceiling). |
+| Dependents re-materialised | `datasetDependents.ts:41` | A derived dataset holds a copy of the rows; it is closed to restricted callers and to fan-out until it has rules of its own (D14) (D14, a ceiling). |
 | Scheduled refresh, fresh-on-ask pull, refresh URL, trash purge, `storage:gc` | `refreshJob.ts`, `freshOnAsk.ts:163`, `hooks/act.ts:56` | Writers, not readers. |
 
 ### Pushes to browsers
@@ -606,13 +613,25 @@ House style: differential with `Object.is`, every guard with a negative control,
      its next hit; an `alerts:fired` push for a policy dataset carries no value. NEGATIVE CONTROL:
      the same on a dataset without rules publishes, sends and posts.
    - **Live**: a fake-warehouse Live dataset with the same policy — East's figures are
-     `Object.is`-equal to the extract *OrdersEast*'s (parity); the compiled statements carry every
-     lock value as a bound parameter and none in the SQL text; the latest-date and case-fix lookups
-     carry the lock; the profile sample is refused / redacted.
-   - **The policy survives every writer** (D2b), and `dataset:setRowPolicy` / `dataset:rowPolicy`
-     answer the admin and 403 the editor and the viewer.
-3. **`test-embedLock.ts`** stays green unchanged (the embed path now shares `rowLock.ts`); new cases
-   for the allow-list's group-aggregate and pivot rules.
+     `Object.is`-equal to the extract *OrdersEast*'s (parity), including a cell `east` that a
+     case-insensitive comparison would admit; the compiled statements carry every lock value as a
+     bound parameter and none in the SQL text; the latest-date and case-fix lookups carry the lock;
+     the profile sample is refused / redacted. `scripts/test-rowPolicyLive.ts` (pure) pins the binary
+     form compiled for each of the six dialects.
+   - **The policy survives every writer** (D2b) — including the race: `dataset:setRowPolicy` lands
+     while a slow `updateDatasetData` fold runs, and the fold's write keeps the new policy (and a
+     NARROWED policy is not widened back). `dataset:setRowPolicy` / `dataset:rowPolicy` answer the
+     admin and 403 the editor and the viewer.
+   - **Derived datasets are closed** (D14): a SQL dataset over *Orders*, a composed one, one with a
+     `union` of *Orders*, two hops down — each refuses East (`derived`) and refuses every fan-out;
+     a copy of *Orders* carries its rules. NEGATIVE CONTROL: the same derivation over a dataset
+     without rules answers.
+   - **Writers pinned** (D18): an editor's `replace_values` on the policy column after the rules were
+     saved refuses East (`pipeline`) until the admin saves again; a step that does not write the
+     column (a filter on `sales`) does not.
+3. **`test-embedLock.ts`** stays green with explicit new cases for the tightened allow-list (a
+   `lookup_join` step, a SQL origin, a `dedupe_key` without the locked column now refuse an embed
+   tile; partitioned/grouped by the locked column still draws).
 4. **`test-liveSafetyNet.ts`**, `test-liveParity`, `test-liveRoute` stay green (the gate is a no-op
    for their admin identity).
 5. **Vitest**: the Row access tab shows for an admin and not for an editor or a viewer (control); its
@@ -630,14 +649,17 @@ House style: differential with `Object.is`, every guard with a negative control,
 3. **Moves, no behaviour change**: `lockStep`/`storesCrossRow`/`makeLock` → `src/data/rowLock.ts`
    (embedLock re-exports); `readDistinctPage`/`distinctValuesPageJs` → `src/engine/datasetDistinct.ts`.
    `test-embedLock`, `test-datasetPage` green before and after.
-4. **The policy**: `src/data/rowPolicy.ts` (sanitizer, `applyRowPolicy`, `entitlement`), the
-   `storesCrossRow` allow-list, the five `datasets.ts` lines, `test-rowPolicy`, the writer-survival test.
+4. **The policy**: `src/data/rowPolicy.ts` (sanitizer, `entitlement`, the writer-steps hash),
+   `src/data/upstream.ts` (the closure), the `storesCrossRow` allow-list over steps and origin,
+   `writeRecordKeepingPolicy` in `datasetRecord.ts` (B1), the three `datasets.ts` lines,
+   `test-rowPolicy`, the writer-survival and race tests.
 5. **Who is asking**: `src/server/authz/caller.ts`, the route and MCP seeding.
 6. **`src/data/rowAccess.ts`**: `RowPolicyError`, the reasons and `src/data/rowAccessMessages.ts`
    (added to `MAIN_FILES`; `i18n-extract`), `rowLockFor`, the scopes, `gateRows`, `assertReadable`,
    `assertFanOutAllowed`; the route's 409 and reply tagging.
-7. **The doors**: `vizDataFor`, `computeCardMetric`, `computeCard` (+ the Live lookups), `pageFor`,
-   `distinctFor` (+ its four callers), `dataset:profile`; the `scoped` flag.
+7. **The doors** (`src/ipc/rowDoors.ts`): `vizDataFor`, `computeCardMetric`, `computeCard` (+ the
+   Live lookups and the binary comparison per dialect), `pageFor`, `distinctFor` (+ its four
+   callers), `dataset:profile`; the `scoped` flag.
 8. **Explicit readers**: insights, captures, snapshots diff, quality failing rows, formula check,
    Summary, copilot, versions:get; SKIP and REDACT rows; `assertReadable` on the fx rates dataset; the
    rethrow in every swallowing catch the safety net finds.
@@ -667,6 +689,31 @@ House style: differential with `Object.is`, every guard with a negative control,
       channel to the fan-out cases (a subscription and an alert on a policy dataset send no email).
     - Re-run every gate on the merged tree.
 
+## Refutation round
+
+A separate reviewer tried to break the first version of this design against the code. It could not
+break the inventory (diffed exactly against `src/api`), the net's placement, the async scoping,
+the cache keys, MCP coverage or the doors' filter semantics. What it did find, and what changed:
+
+| Finding | What it was | What this design does now |
+|---|---|---|
+| B1 (blocker) | `persist` writes the in-memory `Dataset` with no lock and no re-read, so a long fold could overwrite a policy saved meanwhile. | The record write is a locked read-merge-write that copies `rowPolicy` from the STORED record (D2b); a race test. |
+| B2 (blocker) | "Derived datasets don't inherit" let a SQL dataset over a policy dataset show every row. | Derived datasets are closed (`derived`) to restricted callers and fan-out; copies carry the rules (D14). |
+| B3 | The allow-list read steps only; an origin (`sql`, `notebook`, `composed`) or a `lookup_join` mixes rows; `dedupe_key` can keep another team's row. | Origin and those steps count as cross-row; `dedupe_key` passes only when keyed on the policy column (D16). |
+| S1 | An editor could add a step that rewrites the policy column after the rules were saved. | `stepsHash` pins the column's writers; a change refuses until an admin re-saves (D18). |
+| S2 | `prepare:get` returns step bodies (other teams' values in a filter or replace step). | Refused for a restricted caller (EXPLICIT). |
+| S3 | Warehouses may compare text case-insensitively; the lock would admit `east` for `East`. | Binary comparison per dialect for the lock and both lookups; no binary form → refused (D13). |
+| S4 | "Skip the prepend inside an open scope" could drop the lock from a re-entry whose filters were rebuilt. | Prepend unless `filters` already starts with exactly the lock (D7). |
+| S5 | A restated grant query could drift from `authorize`; a DB error could fall back to the org role. | `grantRank` reused; a DB error throws (D4). |
+| N1 | One fan-out scope around `evaluateProject` would let one policy rule fail every rule. | One scope per rule (D10). |
+| N2 | `lastRefreshError` and the refresh-failure push can quote a value. | Redacted for a restricted caller on a policy dataset. |
+| N3 | Claiming `test-embedLock` "unchanged" hid the embed tightening; `rowPolicy` on `DatasetMeta` could ride out in a reply. | Own CHANGELOG line and explicit test edits (D1); the policy is read raw, never in `Dataset`/`DatasetMeta` (D2). |
+| N4 | Door logic inside `visuals.ts` (746 lines). | Wrappers in `rowDoors.ts`, `distinctFor` in its own file, B1's helper in `datasetRecord.ts`. |
+| N5 | The legacy `/p/` rule named only datasets with their own rules. | It uses the same closure: any policy-closed dataset (D10). |
+
+Pre-existing findings logged as F21: the `ParamValues` Map in the answer-cache key, and the
+fail-open share-policy lookup in `dataSearchRun.ts:97` (fixed: a failed lookup refuses the search).
+
 ## Ceilings (documented, not hidden)
 
 - **Metadata stays visible**: dataset and column names, declared types, the dataset's total row
@@ -675,7 +722,9 @@ House style: differential with `Object.is`, every guard with a negative control,
 - **Authored content is not row-filtered**: titles, notes, column notes and examples, comments
   (including the chart point a comment is pinned to), filter values saved in a dashboard, visual or
   saved view, event annotations, the SQL text of a SQL dataset.
-- **Derived datasets** carry no rules of their own (D14).
+- **Derived datasets are closed, not filtered** (D14): a SQL, notebook, composed or combined dataset
+  — or one whose steps look up another dataset — is refused to restricted viewers even when it has
+  rules of its own (D16). Filtering through SQL is phase 2.
 - **The caller's own history**: Assistant threads keep what was answered under the access they had then.
 - **Entitlement changes apply per request**; a published page was never built for a policy dataset.
 - **Phase 2**: per-recipient subscriptions and publish, "run as the viewer" in the warehouse,

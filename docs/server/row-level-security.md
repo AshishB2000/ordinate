@@ -26,7 +26,7 @@ dataset's own record, so a backup or a project bundle carries them.
 
 | Role on the project | What they see on a dataset with rules |
 |---|---|
-| Org admin, project **admin**, project **editor** | Every row. Editors can change the dataset's prepare steps and admins the rules themselves, so restricting them would protect nothing. |
+| Org admin, project **admin**, project **editor** | Every row. Only admins can change the rules; editors cannot, but they can change the dataset's prepare steps (and so the rule column) and read every row through them, so restricting them would protect nothing. |
 | Project **viewer** (granted directly or through a team) | Only the rows whose rule column holds one of **their** values: the union of every rule that names them or a team they belong to. |
 | A viewer that no rule names | **No rows.** Every figure over that dataset says "You don't have access to any rows of this dataset." |
 
@@ -56,7 +56,11 @@ The rules stop holding, and every viewer is **refused** rather than shown more, 
   segment, a level-of-detail field (`{FIXED …}`), top terms. Those values were computed over every
   row, so no filter can make them one region's. Partition the window by the rule column, or keep
   the column in the group-by, and it works again;
-- the steps read a dashboard parameter.
+- the steps read a dashboard parameter;
+- the dataset is built by SQL, a notebook or the composer, or one of its steps looks up another
+  dataset — phase 1 cannot filter rows that were mixed before they were stored;
+- an editor changed a step that writes the rule column (for example a find-and-replace on it) after
+  the rules were saved. The tab says so: **save the rules again** after checking the step.
 
 ## What a restricted viewer sees and does not see
 
@@ -78,8 +82,15 @@ not:
 - the dataset's name, its columns and types, and its **total row count**;
 - anything a person typed: titles, notes, column notes, comments (including the chart point a
   comment is pinned to), filter values saved in a dashboard, a visual or a saved view;
-- a dataset built FROM this one — a SQL dataset, a union or lookup step, a copy. It has its own
-  rules (none until an admin adds them). The Row access tab lists those datasets.
+
+## Datasets built from one with rules
+
+A dataset built FROM a dataset with rules — a SQL dataset, a notebook cell, a composed or combined
+dataset, or one whose prepare steps append or look up the protected dataset, however many steps
+removed — is **closed** to restricted viewers ("This dataset is built from a dataset with row access
+rules…") and to published links, embeds, subscriptions and alerts, until a project admin gives it
+rules of its own. A **copy** of a dataset with rules ("Make a copy" of a Live dataset, a duplicate)
+starts with the same rules. The Row access tab lists the datasets built from the one you are on.
 
 ## Off for a dataset with rules (phase 1)
 
@@ -111,5 +122,16 @@ gone, viewers are refused until an admin picks another.
 | A viewer sees "You don't have access to any rows of this dataset." | No rule names them or one of their teams. Add one, or add them to a team that has one. |
 | Every viewer is refused with "…name a column it no longer has…" | The rule column was renamed, removed or retyped. Pick the column again in Row access. |
 | Every viewer is refused with "…values computed across all of its rows…" | A prepare step stores a cross-row value or reads a parameter (see *Set rules*). |
-| A viewer still sees a total for all regions somewhere | Check it is not a dataset BUILT from this one (it needs its own rules), the total row count (always visible), or text someone typed. Anything else is a bug: report it. |
+| Every viewer is refused with "…built from a dataset with row access rules…" | The dataset is derived from one with rules. Give it rules of its own (and, for a SQL or composed dataset, expect phase 1 to refuse viewers anyway). |
+| A viewer still sees a total for all regions somewhere | Check it is the total row count (always visible) or text someone typed. Anything else is a bug: report it. |
 | Publishing, a subscription or an alert refuses | Expected in phase 1 for a dashboard that reads a dataset with rules. |
+
+## Refutation round
+
+Before any code, a separate reviewer tried to break the design. Its findings changed what this page
+describes: a data refresh can no longer overwrite rules saved during it; datasets built from a
+dataset with rules are closed rather than open; SQL, notebook and composed datasets and lookup steps
+count as mixing rows; a step that rewrites the rule column after the rules were saved closes the
+dataset until an admin saves again; Prepare's step list is not shown to restricted viewers; Live
+warehouses compare the rule's values byte for byte, whatever their default collation. The full
+list, finding by finding, is in [the design](../row-policy/00-design.md#refutation-round).
