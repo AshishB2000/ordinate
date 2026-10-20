@@ -96,7 +96,19 @@ async function usage(channelId: string): Promise<{ subscriptions: Use[]; alerts:
   return { subscriptions, alerts };
 }
 
-type Draft = SubscriptionInput & { analysisId: string; channelIds: string[] };
+type Draft = SubscriptionInput & { analysisId: string; channelIds: string[]; message: { title: string; note: string; includeLink: boolean } };
+
+/**
+ * The title and note as they will be stored, with who wrote them: the caller when either text changed (or the
+ * subscription is new), else whoever wrote them before — so an email's "Note from …" names the writer, not the
+ * owner. Server-set only: the contract takes no `noteBy`.
+ */
+function withNoteBy(message: Draft['message'], cur: Subscription | null, caller: string): Subscription['message'] {
+  const { noteBy: _client, ...next } = store.definitionOf({ message }).message;
+  const same = !!cur && cur.message.title === next.title && cur.message.note === next.note;
+  const noteBy = same ? cur.message.noteBy : next.note || next.title ? caller.toLowerCase() : undefined;
+  return { ...next, ...(noteBy ? { noteBy } : {}) };
+}
 
 export function register(): void {
   // ── Channels ──────────────────────────────────────────────────────────
@@ -144,7 +156,7 @@ export function register(): void {
     return s ? { ok: true as const, runs: s.run.history.map(runView) } : { ok: false as const, error: say.subscriptionGone() };
   });
 
-  registry.handle('subscription:preview', async (_e, { projectId, draft }: { projectId: string; draft: Draft }) => {
+  registry.handle('subscription:preview', async (_e, { projectId, draft, id }: { projectId: string; draft: Draft; id?: string }) => {
     const schedule = sanitizeSubSchedule(draft.schedule);
     const timezone = sanitizeTimeZone(draft.timezone);
     const a = await analysis.getAnalysis(projectId, draft.analysisId);
@@ -157,7 +169,9 @@ export function register(): void {
       // Whether a link CAN be sent, and the sentence for when it cannot.
       linkNote: dashboardLink(projectId, a.id) ? null : say.noLinkNote(),
     };
-    const def = store.definitionOf({ ...draft, viewId: draft.viewId ?? null });
+    // The note's writer as saving this draft would record it (`id`: the subscription being edited).
+    const cur = id ? await store.getSubscription(projectId, id) : null;
+    const def = store.definitionOf({ ...draft, viewId: draft.viewId ?? null, message: withNoteBy(draft.message, cur, ctx().user.email) });
     const built = await buildMessage(projectId, def);
     if ('code' in built) return { ok: true as const, ...frame, empty: say.runText(built.code), slack: null, teams: null, email: null };
     const slack = renderSlack(built.model);
@@ -180,12 +194,12 @@ export function register(): void {
     const known = new Set((await listChannels()).map((c) => c.id));
     const channelIds = subscription.channelIds.filter((c) => known.has(c.toLowerCase()));
     if (!channelIds.length) return { ok: false as const, error: say.subscriptionNeedsChannel() };
-    const input: SubscriptionInput = { ...subscription, channelIds, viewId: subscription.viewId ?? null };
     const who = ctx();
+    const cur = id ? await store.getSubscription(projectId, id) : null;
+    if (id && !cur) return { ok: false as const, error: say.subscriptionGone() };
+    const input: SubscriptionInput = { ...subscription, channelIds, viewId: subscription.viewId ?? null, message: withNoteBy(subscription.message, cur, who.user.email) };
     let saved: Subscription | null;
-    if (id) {
-      const cur = await store.getSubscription(projectId, id);
-      if (!cur) return { ok: false as const, error: say.subscriptionGone() };
+    if (id && cur) {
       // An owner who can no longer run it hands it to whoever saves it next.
       const stale = typeof (await ownerIdentity(who.org.id, cur.owner, projectId)) === 'string';
       saved = await store.updateSubscription(projectId, id, input, stale ? { owner: who.user.email } : {});

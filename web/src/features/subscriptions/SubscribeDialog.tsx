@@ -51,7 +51,7 @@ export default function SubscribeDialog({ projectId, dashboard, existing, onClos
     () => (draft.analysisId ? { ...draft, channelIds: firstEmail ? [firstEmail] : [], name: draft.name.trim() || 'Subscription' } : null),
     [draft, firstEmail],
   );
-  const preview = usePreview(projectId, previewDraft);
+  const preview = usePreview(projectId, previewDraft, existing?.id);
   const { save } = useSubscriptionWrites(projectId);
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
 

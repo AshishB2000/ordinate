@@ -67,7 +67,8 @@ export const subscriptions = {
   'subscription:history': rpc({ access: 'read', input: ById, project: byProjectId }),
   // The message a (possibly unsaved) definition would send now, as the CALLER may see it: the model, how each
   // platform would cut it, the next run times, and the dashboard's cards and views for the dialog to list.
-  'subscription:preview': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, draft: Definition }), project: byProjectId }),
+  // `id`: the subscription being edited, so the preview attributes its note as saving would ("Note from …").
+  'subscription:preview': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, draft: Definition, id: Uuid.optional() }), project: byProjectId }),
   'subscription:save': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid.optional(), subscription: Definition }), project: byProjectId }),
   'subscription:setEnabled': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid, enabled: z.boolean() }), project: byProjectId }),
   'subscription:delete': rpc({ access: 'write', input: ById, project: byProjectId }),

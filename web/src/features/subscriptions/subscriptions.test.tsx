@@ -320,7 +320,7 @@ describe('Subscribe dialog', () => {
   });
 
   it('editing a saved subscription starts from it and saves under its id', async () => {
-    const existing = subscription({ channelIds: [SLACK.id], schedule: { cadence: 'weekly', at: '07:15', days: [2] }, message: { title: 'T', note: '', includeLink: false } });
+    const existing = subscription({ channelIds: [SLACK.id], schedule: { cadence: 'weekly', at: '07:15', days: [2] }, message: { title: 'T', note: 'N', includeLink: false, noteBy: 'ana@acme.test' } });
     const calls = serve({ ...EDITOR, 'channel:list': { body: { ok: true, ...frame } }, 'subscription:preview': preview(), 'subscription:save': { body: { ok: true, subscription: existing } } });
     const onClose = vi.fn();
     mount(<SubscribeDialog projectId={PID} existing={existing} onClose={onClose} />);
@@ -329,6 +329,10 @@ describe('Subscribe dialog', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(calls.find((c) => c.channel === 'subscription:save')?.payload).toMatchObject({ projectId: PID, id: existing.id, subscription: { schedule: { cadence: 'weekly', at: '07:15', days: [2] }, channelIds: [SLACK.id] } });
+    // The preview names the subscription, so the server credits its note as saving would.
+    expect(calls.find((c) => c.channel === 'subscription:preview')?.payload.id).toBe(existing.id);
+    // The server's own `noteBy` is never sent back (the contract would refuse it).
+    expect(calls.find((c) => c.channel === 'subscription:save')?.payload.subscription.message).toEqual({ title: 'T', note: 'N', includeLink: false });
   });
 });
 

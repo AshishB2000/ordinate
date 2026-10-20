@@ -67,7 +67,8 @@ export interface Subscription {
   schedule: Schedule;
   timezone: string;
   channelIds: string[];
-  message: { title: string; note: string; includeLink: boolean };
+  /** `noteBy`: who last wrote the title or note (the server's, never sent back). */
+  message: { title: string; note: string; includeLink: boolean; noteBy?: string };
   conditions: { skipUnchanged: boolean; onlyWhenRefreshed: boolean };
   enabled: boolean;
   owner: string;
@@ -199,14 +200,14 @@ export function useDebounced<T>(value: T, ms = 400): T {
   return v;
 }
 
-/** The message a draft would send now, as the server composes it. The last answer stays up while the next one loads. */
-export function usePreview(projectId: string, draft: Draft | null) {
+/** The message a draft would send now, as the server composes it (`id`: the subscription being edited). The last answer stays up while the next one loads. */
+export function usePreview(projectId: string, draft: Draft | null, id?: string) {
   const settled = useDebounced(draft);
   return useQuery({
-    queryKey: ['subscription:preview', projectId, settled],
+    queryKey: ['subscription:preview', projectId, id ?? null, settled],
     enabled: !!settled,
     placeholderData: keepPreviousData,
-    queryFn: () => must<Preview>(rpc('subscription:preview', { projectId, draft: settled as Draft }), 'The preview could not be built.'),
+    queryFn: () => must<Preview>(rpc('subscription:preview', { projectId, draft: settled as Draft, ...(id ? { id } : {}) }), 'The preview could not be built.'),
   });
 }
 
@@ -291,6 +292,6 @@ export function newDraft(analysisId: string, name: string): Draft {
 export function draftOf(s: Subscription): Draft {
   return {
     name: s.name, analysisId: s.analysisId, content: s.content, viewId: s.viewId, schedule: s.schedule, timezone: s.timezone,
-    channelIds: s.channelIds, message: s.message, conditions: s.conditions, enabled: s.enabled,
+    channelIds: s.channelIds, message: { title: s.message.title, note: s.message.note, includeLink: s.message.includeLink }, conditions: s.conditions, enabled: s.enabled,
   };
 }
