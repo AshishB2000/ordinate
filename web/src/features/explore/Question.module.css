@@ -37,6 +37,14 @@
   font-weight: 600;
   color: var(--text-strong);
 }
+.qHint {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--t-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .qTools {
   display: flex;
   gap: var(--sp-4);

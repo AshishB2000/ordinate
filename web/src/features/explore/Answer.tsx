@@ -61,7 +61,9 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
   const suited = eligible.filter((t) => !GRID_TYPES.has(t) && !(live && LIVE_OFF_CHARTS.has(t)));
   const level = data ? reply?.geoSuggest?.level : undefined;
   const offered = level && !suited.includes('map_choropleth') ? [...suited, 'map_choropleth'] : suited;
-  const current = data && question.chartType && (offered.includes(question.chartType) || chartCanRender(question.chartType, data, hasGeo)) ? question.chartType : (offered[0] ?? 'table');
+  // A link's chart type is user input too: only a type the picker offers is drawn, else the first that suits.
+  const asked = (live ? LIVE_POOL : POOL).includes(question.chartType) ? question.chartType : '';
+  const current = data && asked && (offered.includes(asked) || chartCanRender(asked, data, hasGeo)) ? asked : (offered[0] ?? 'table');
 
   /** A region map names its regions (the level the server saw in the labels); leaving one drops them. */
   const pick = (t: string) => {

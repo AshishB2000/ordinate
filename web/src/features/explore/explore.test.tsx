@@ -115,6 +115,21 @@ describe('Explore: the question is the URL', () => {
     expect(decodeQuestion(new URLSearchParams(router.state.location.search).get('q'))).toEqual(REGION_Q);
   });
 
+  it('a link’s chart type is checked too: one the picker does not offer draws the first that suits (CONTROL: a real one is kept)', async () => {
+    serve('viewer');
+    renderApp(url({ ...REGION_Q, chartType: '<img src=x>' }));
+    await answerTitle();
+    expect((await screen.findByRole('radio', { name: /^Column$/ })).getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByText('<img src=x>')).toBeNull();
+  });
+
+  it('CONTROL: a chart type the picker offers is kept from the link', async () => {
+    serve('viewer');
+    renderApp(url({ ...REGION_Q, chartType: 'bar' }));
+    await answerTitle();
+    expect((await screen.findByRole('radio', { name: /^Bar$/ })).getAttribute('aria-checked')).toBe('true');
+  });
+
   it('a link with a question that is not one opens on the suggestions, asking nothing of it', async () => {
     const calls = serve('viewer');
     renderApp(`/explore?project=${PID}&dataset=${DID}&q=not-a-question`);

@@ -107,6 +107,7 @@ export function Question({ projectId, datasetId, fields, question, onChange, onF
         <h2 id="explore-q" className={s.qTitle}>
           Question
         </h2>
+        {empty && <span className={s.qHint}>Pick a field, or a well’s +</span>}
         <div className={s.qTools}>
           <Button size="sm" icon="list" className={s.fieldsBtn} onClick={onFields}>
             Fields
