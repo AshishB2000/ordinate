@@ -309,9 +309,9 @@ e2e(
       el.dispatchEvent(new Event('change'));
     });
 
-    // A tapped bar asks before it filters.
-    await page.mouse.wheel(0, 260);
+    // A tapped bar asks before it filters. (Scrolled to by the element: mobile WebKit has no mouse wheel.)
     const canvas = page.locator('.pub-card--chart canvas').first();
+    await canvas.scrollIntoViewIfNeeded();
     const ask = page.getByRole('dialog').filter({ hasText: 'Filter this page to' });
     const hit = await tapUntil(page, await box(canvas), async () => (await ask.count()) === 1);
     assert.ok(hit, 'a tap on a bar opens the sheet');
