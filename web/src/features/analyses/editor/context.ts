@@ -22,6 +22,10 @@ export interface Save {
   flush(): Promise<void>;
   /** Run `write` after every write queued so far. */
   queue<T>(write: () => Promise<T>): Promise<T>;
+  /** Another tab or person saved first (editConflicts): nothing more is written until the dashboard is reloaded. */
+  changed: boolean;
+  /** The document on screen holds edits no save has landed. */
+  unsaved(): boolean;
 }
 
 /** The dashboard's saved views (dashboards/views): the list as stored, the one on screen, and how to change both. */

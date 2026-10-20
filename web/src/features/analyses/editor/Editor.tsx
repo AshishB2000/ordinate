@@ -27,7 +27,7 @@ import { DashboardChrome, styleClass, useStyleVars } from '../../dashboards/Dash
 import { isPhoneReader } from '../../dashboards/phone/phoneBlocks';
 import { PhoneHead } from '../../dashboards/phone/PhoneHead';
 import { gatherView, openingView, seedFromView } from '../../dashboards/views/viewState';
-import { ConflictBanner } from '../../editConflicts/ConflictBanner';
+import { ConflictBanner, LeaveGuard } from '../../editConflicts/ConflictBanner';
 import { useEditGuard } from '../../editConflicts/useEditGuard';
 
 /** The autosave debounce (dashboards.ts): a drag fires several edits; one write. */
@@ -50,18 +50,26 @@ function storedPane(): Pane {
  * the view list back as it was. Each save sends the content tag the document was built on; when another tab or person
  * saved first it is refused, and from then on nothing is sent (`paused`) until the dashboard is reloaded.
  */
-function useAutosave(projectId: string, id: string, doc: Doc, version: number, tag: string | undefined): Save & { changed: boolean } {
+function useAutosave(projectId: string, id: string, doc: Doc, version: number, tag: string | undefined): Save {
   const [state, setState] = useState<SaveState>('saved');
   const latest = useRef(doc);
   latest.current = doc;
+  // The document's version on screen, and the last one a save landed: different = edits the server does not have.
+  const shown = useRef(version);
+  shown.current = version;
+  const landed = useRef(0);
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
   const client = useQueryClient();
   // Stable callbacks; `changed` flips once.
   const { save: guarded, queue, changed } = useEditGuard({ projectId, type: 'dashboard', id }, tag);
+  const stale = useRef(changed);
+  stale.current = changed;
+  const unsaved = useCallback(() => shown.current !== landed.current, []);
 
   const write = useCallback(() => {
     pending.current = null;
     const d = latest.current;
+    const v = shown.current;
     setState('saving');
     return guarded((base) => rpc('analysis:update', { projectId, id, base, name: d.name, sheets: d.sheets, filters: d.filters, parameters: d.parameters, style: d.style }))
       .then(
@@ -70,6 +78,7 @@ function useAutosave(projectId: string, id: string, doc: Doc, version: number, t
           const ok = !!(r && (r as { ok?: boolean }).ok);
           setState(ok ? 'saved' : 'error');
           if (!ok) return;
+          landed.current = v;
           void client.invalidateQueries({ queryKey: ['analysis:gallery', projectId] });
           // The name as saved, for whoever reads this page's record without owning it (the Assistant's header). The
           // editor took its document at mount and reads the record no further, so this reseeds nothing.
@@ -102,10 +111,11 @@ function useAutosave(projectId: string, id: string, doc: Doc, version: number, t
     setState('paused');
   }, [changed]);
 
-  // Leaving with an edit still waiting: write it now rather than drop it.
+  // Leaving with an edit still waiting: write it now rather than drop it — and once another save won (nothing more is
+  // written), say so before the edits this document holds are lost.
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
-      if (pending.current) e.preventDefault();
+      if (pending.current || (stale.current && unsaved())) e.preventDefault();
     };
     window.addEventListener('beforeunload', warn);
     return () => {
@@ -115,9 +125,9 @@ function useAutosave(projectId: string, id: string, doc: Doc, version: number, t
         void write();
       }
     };
-  }, [write]);
+  }, [write, unsaved]);
 
-  return { state, retry: () => void write(), flush, queue, changed };
+  return { state, retry: () => void write(), flush, queue, changed, unsaved };
 }
 
 export function Editor({ projectId, analysis, visuals: initialVisuals, tag, onReload, readOnly = false }: {
@@ -364,6 +374,7 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, tag, onRe
         {save.changed && !readOnly && (
           <div className={s.conflict}>
             <ConflictBanner noun="dashboard" onReload={conflict.reload} onCopy={conflict.copy} />
+            <LeaveGuard noun="dashboard" when={save.unsaved} />
           </div>
         )}
         <div className={s.bench}>

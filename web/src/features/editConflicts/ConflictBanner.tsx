@@ -5,9 +5,14 @@
 // has no close button: dismissed, the editor would sit there refusing saves.
 
 import { useEffect, useRef, useState } from 'react';
+import { useBlocker } from 'react-router';
 import { Button } from '../../ui/Button';
+import { Dialog } from '../../ui/Dialog';
 import { Icon } from '../../ui/icons/Icon';
 import s from './ConflictBanner.module.css';
+
+/** True while Save mine as a copy runs: its navigation to the copy is not leaving the work behind. */
+let leavingForCopy = false;
 
 /** What the banner calls the record. */
 export type ConflictNoun = 'dashboard' | 'visual' | 'metric' | 'metric tree' | 'report' | 'story' | 'scorecard' | 'scenario';
@@ -37,10 +42,12 @@ export function ConflictBanner({
     setCopying(true);
     setError('');
     try {
+      leavingForCopy = true;
       await onCopy();
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : 'The copy could not be saved.');
     } finally {
+      leavingForCopy = false;
       setCopying(false);
     }
   };
@@ -65,5 +72,32 @@ export function ConflictBanner({
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Beside the banner, while the editor holds edits no save landed (`when`): an in-app navigation away asks first —
+ * nothing will save them. Mounted only during a conflict, inside the app's data router.
+ */
+export function LeaveGuard({ noun, when }: { noun: ConflictNoun; when: () => boolean }) {
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => !leavingForCopy && currentLocation.pathname !== nextLocation.pathname && when());
+  return (
+    <Dialog
+      open={blocker.state === 'blocked'}
+      onOpenChange={(o) => !o && blocker.reset?.()}
+      size="sm"
+      title="Leave without your changes?"
+      description={`This ${noun} was changed in another tab or by someone else, so your changes since then are not saved. Stay and choose Save mine as a copy to keep them.`}
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => blocker.reset?.()}>
+            Stay
+          </Button>
+          <Button variant="danger" onClick={() => blocker.proceed?.()}>
+            Leave
+          </Button>
+        </>
+      }
+    />
   );
 }

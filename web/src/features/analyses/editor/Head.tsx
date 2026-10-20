@@ -127,6 +127,11 @@ export function Head() {
   const back = `/analyses?project=${ed.projectId}`;
   // Publishing lives with the dashboard viewer (T2.9): write what is on screen now, then go there.
   const publish = () => {
+    // Changed elsewhere: what would be published is the other version, without these edits — not until it is settled.
+    if (ed.save.changed) {
+      toast('Not published: this dashboard was changed in another tab or by someone else, and your changes are not saved. Choose Reload or Save mine as a copy in the banner first.', { kind: 'error' });
+      return;
+    }
     ed.save.retry();
     void navigate(`/dashboards?project=${ed.projectId}&dashboard=${ed.analysisId}`);
   };
