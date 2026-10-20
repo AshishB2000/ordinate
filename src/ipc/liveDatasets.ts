@@ -25,6 +25,7 @@
 // reply — a dataset is named by its header only.
 
 import { ipcMain } from './bus';
+import { storedRowPolicy, withFirstWritePolicy } from '../data/datasetRecord';
 import * as connections from '../connectors/connections';
 import * as connectionRun from '../connectors/connectionRun';
 import { getConnector } from '../connectors';
@@ -197,13 +198,16 @@ export async function copyLiveDataset(p: Record<string, unknown>) {
     console.warn(`[live] make a copy of dataset ${id}: the source refused — ${ran.error}`);
     return { ok: false, error: msg.liveCopyReadFailedMessage() };
   }
-  const saved = await datasets.saveDataset(projectId, {
+  const save = () => datasets.saveDataset(projectId, {
     name: `${meta.name} (copy)`,
     sourceKind: meta.sourceKind,
     columns: ran.result.columns,
     rows: ran.result.rows,
     origin: meta.origin,
   });
+  // A copy of a dataset with row access rules is born with them — never a moment without (docs/row-policy D14).
+  const rules = await storedRowPolicy(projectId, id);
+  const saved = rules === undefined ? await save() : await withFirstWritePolicy(rules, save);
   if (!saved) return { ok: false, error: msg.liveCopySaveFailedMessage() };
   await copyColumnNotes(projectId, id, saved.id, saved.columns).catch((err: unknown) =>
     console.warn(`[live] make a copy of dataset ${id}: column notes not copied — ${safeError(err)}`));

@@ -11,6 +11,7 @@
 // path, so a record path can never escape userData/projects/<projectId>/datasets.
 
 import * as fs from 'fs';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as storage from '../engine/storage';
@@ -266,6 +267,16 @@ export function serialized<T>(file: string, apply: (raw: Record<string, unknown>
   }).catch(() => false);
 }
 
+const firstWritePolicy = new AsyncLocalStorage<{ rowPolicy: unknown }>();
+
+/**
+ * Runs `fn` (a save that creates ONE new dataset) so that dataset's FIRST record write already
+ * carries `rowPolicy` — "Make a copy" of a dataset with row access rules (docs/row-policy D14).
+ */
+export function withFirstWritePolicy<T>(rowPolicy: unknown, fn: () => Promise<T>): Promise<T> {
+  return firstWritePolicy.run({ rowPolicy }, fn);
+}
+
 /**
  * A data write's record write (`datasets.persist`): a LOCKED read-merge-write
  * that copies `rowPolicy` from the STORED record and never from what the writer
@@ -275,6 +286,7 @@ export function serialized<T>(file: string, apply: (raw: Record<string, unknown>
  * unreadable has no rules to keep.
  */
 export async function writeRecordKeepingPolicy(file: string, obj: object): Promise<void> {
+  const first = firstWritePolicy.getStore();
   await recordFs.locked(file, async () => {
     let stored: Record<string, unknown> | null = null;
     try {
@@ -284,7 +296,22 @@ export async function writeRecordKeepingPolicy(file: string, obj: object): Promi
     }
     const next: Record<string, unknown> = { ...(obj as Record<string, unknown>) };
     delete next.rowPolicy;
-    if (stored && typeof stored === 'object' && Object.prototype.hasOwnProperty.call(stored, 'rowPolicy')) next.rowPolicy = stored.rowPolicy;
+    if (stored && typeof stored === 'object') {
+      if (Object.prototype.hasOwnProperty.call(stored, 'rowPolicy')) next.rowPolicy = stored.rowPolicy;
+    } else if (first !== undefined) {
+      next.rowPolicy = first.rowPolicy; // a copy of a dataset with rules is born with them: no moment without
+    }
     await writeJsonAtomic(file, next);
   });
+}
+
+/** The record's stored `rowPolicy` as it is on disk (undefined when it has none) — what a copy is born with. */
+export async function storedRowPolicy(projectId: string, id: string): Promise<unknown> {
+  if (!isValidId(projectId) || !isValidId(id)) return undefined;
+  try {
+    const raw = JSON.parse(await recordFs.readFile(datasetFilePath(projectId, id), 'utf8')) as Record<string, unknown> | null;
+    return raw && typeof raw === 'object' ? raw.rowPolicy : undefined;
+  } catch {
+    return undefined;
+  }
 }

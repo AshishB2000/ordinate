@@ -24,14 +24,12 @@ import { ctx } from '../server/context';
 import { callerOn } from '../server/authz/caller';
 import * as recordFs from '../app/recordFs';
 import { isValidId } from '../app/ids';
-import { stepsUseParams } from '../analysis/params';
 import { stableStringify } from '../engine/queryCache';
 import { datasetFilePath } from './datasetRecord';
 import { asOfIso } from './asOf';
-import { sanitizeSteps } from './transforms';
-import type { FilterStep, TransformStep } from './transforms';
-import { makeLock, storesCrossRow, type Lock } from './rowLock';
-import { entitlement, policyFromRecord, writersHash, type RowPolicy } from './rowPolicy';
+import type { FilterStep } from './transforms';
+import { makeLock, type Lock } from './rowLock';
+import { entitlement, policyFromRecord, ruleState, type RowPolicy } from './rowPolicy';
 import { parentsOfRecord, upstreamIds } from './upstream';
 import * as msg from './rowAccessMessages';
 
@@ -223,14 +221,9 @@ export async function policyClosed(projectId: string, id: string): Promise<boole
 // ── The doors ───────────────────────────────────────────────────────────────
 
 function lockValuesOf(raw: Raw, policy: RowPolicy, userId: string | null, teamIds: readonly string[]): Lock {
-  const columns = Array.isArray(raw.columns) ? (raw.columns as { name?: unknown; type?: unknown }[]) : [];
-  const col = columns.find((c) => c && c.name === policy.column);
-  const live = raw.mode === 'live' ? (raw.live as { missingColumns?: unknown } | undefined) : undefined;
-  const missing = live && Array.isArray(live.missingColumns) ? (live.missingColumns as unknown[]) : [];
-  if (!policy.column || !col || col.type !== 'text' || missing.includes(policy.column)) refuse('column');
-  const steps: TransformStep[] = sanitizeSteps(raw.steps);
-  const origin = raw.origin && typeof raw.origin === 'object' ? (raw.origin as { kind?: unknown }) : null;
-  if (storesCrossRow(steps, [policy.column], origin) || stepsUseParams(steps) || writersHash(steps, policy.column) !== policy.stepsHash) refuse('pipeline');
+  const state = ruleState(raw, policy);
+  if (state === 'column') refuse('column');
+  if (state !== 'ok') refuse('pipeline');
   const values = entitlement(policy, userId, teamIds);
   if (values === 'none' || values === 'all' || values.length === 0) refuse('none');
   const lock = makeLock({ [policy.column]: values });

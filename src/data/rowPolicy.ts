@@ -15,6 +15,9 @@ import { isValidId } from '../app/ids';
 import { paramRefs } from '../analysis/params';
 import { pipelineHash } from '../engine/queryCache';
 import type { TransformStep } from './transforms';
+import { sanitizeSteps } from './transforms';
+import { stepsUseParams } from '../analysis/params';
+import { storesCrossRow } from './rowLock';
 
 export interface RowRule {
   readonly userId?: string;
@@ -137,4 +140,28 @@ export function columnWriters(steps: readonly TransformStep[] | undefined, colum
 /** The hash an admin's save pins: a later change to any writer of the column refuses until they save again. */
 export function writersHash(steps: readonly TransformStep[] | undefined, column: string): string {
   return pipelineHash(columnWriters(steps, column));
+}
+
+/** Why saved rules do not hold on a record as it is now — what refuses a viewer, and what the tab warns of — or 'ok'. */
+export type RuleState = 'ok' | 'column' | 'pipeline' | 'writers';
+
+type Col = { name?: unknown; type?: unknown };
+/** Is `column` a declared text column of the raw record? */
+export function textColumn(raw: Record<string, unknown>, column: string): boolean {
+  return (Array.isArray(raw.columns) ? (raw.columns as Col[]) : []).some((c) => !!c && c.name === column && c.type === 'text');
+}
+
+/**
+ * Do the stored rules hold (D6, D16, D18)? `column`: the rule column is missing, not text, or gone
+ * from the warehouse; `pipeline`: the steps or the origin store a cross-row value, or the steps read a
+ * dashboard parameter; `writers`: a step that writes the rule column changed since the rules were saved.
+ */
+export function ruleState(raw: Record<string, unknown>, policy: RowPolicy): RuleState {
+  const live = raw.mode === 'live' ? (raw.live as { missingColumns?: unknown } | undefined) : undefined;
+  const missing = live && Array.isArray(live.missingColumns) ? (live.missingColumns as unknown[]) : [];
+  if (!policy.column || !textColumn(raw, policy.column) || missing.includes(policy.column)) return 'column';
+  const steps = sanitizeSteps(raw.steps);
+  const origin = raw.origin && typeof raw.origin === 'object' ? (raw.origin as { kind?: unknown }) : null;
+  if (storesCrossRow(steps, [policy.column], origin) || stepsUseParams(steps)) return 'pipeline';
+  return writersHash(steps, policy.column) === policy.stepsHash ? 'ok' : 'writers';
 }

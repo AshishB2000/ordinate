@@ -476,6 +476,7 @@ export function registerHandlers(): void {
   }
   (require('./authz/share') as typeof import('./authz/share')).register(() => dbPool);
   registerCaller(() => dbPool); // row access rules: who is a project viewer
+  (require('../ipc/rowPolicy') as typeof import('../ipc/rowPolicy')).register(() => dbPool); // …and the admin's Row access tab
   // Admin and personal API tokens (T3.4). The env is read per call, like the pool.
   const env = (): ServerEnv => {
     if (!appEnv) throw new Error('no app built');
