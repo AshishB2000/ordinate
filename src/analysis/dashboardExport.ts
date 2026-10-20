@@ -361,9 +361,12 @@ export function autoSchemeCss(style: DashboardStyle, brand?: ExportBundle['brand
   if (style.theme !== 'auto') return '';
   const ramp = themedRamp(accentRamp({ ...style, theme: 'dark' }, brand), theme);
   const chartVars = ramp.chart.map((c, i) => `--chart-${i + 1}: ${c};`).join(' ');
+  // Theme → density → accent, as styleBlock orders them: the dark theme block declares the KPI sizes too, and
+  // compact's own (it wins over the theme's by source order) must still win under it.
   return `
     @media (prefers-color-scheme: dark) {
       .dash-theme--auto { ${THEME_TOKENS.dark} }
+      .dash-density--${style.density} { ${DENSITY_TOKENS[style.density]} }
       .dash-accent--${style.accent} { --accent: ${ramp.accent}; --accent-2: ${ramp.accent2};
         --accent-soft: ${ramp.soft}; --accent-line: ${ramp.line}; --chart-accent: ${ramp.chart[0]}; ${chartVars} }
     }`;

@@ -31,7 +31,7 @@ const visuals: typeof import('../src/analysis/visuals') = require('../src/analys
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const pub: typeof import('../src/publish/publish') = require('../src/publish/publish');
 const { sanitizePage } = require('../src/publish/sanitize') as typeof import('../src/publish/sanitize');
-const { sanitizeBundle } = require('../src/analysis/dashboardExport') as typeof import('../src/analysis/dashboardExport');
+const { autoSchemeCss, sanitizeBundle } = require('../src/analysis/dashboardExport') as typeof import('../src/analysis/dashboardExport');
 const { pageHtml, scriptHashes, sizeCss } = require('../src/publish/siteHtml') as typeof import('../src/publish/siteHtml');
 const { BREAKPOINTS } = require('../src/analysis/sizeLayout') as { BREAKPOINTS: { phone: number } };
 
@@ -217,6 +217,12 @@ async function main(): Promise<void> {
   ok('page: an Auto dashboard carries the dark tokens for a dark reader, in its one pinned stylesheet',
     /<html lang="en" class="dash-theme--auto /.test(autoHtml) && darkBlock.test(autoHtml) && /style-src 'sha256-/.test(autoHtml) && !/ style="/.test(autoHtml));
   ok('page: …a dashboard styled Clean on purpose stays light (negative control)', !darkBlock.test(cleanHtml) && /class="dash-theme--clean /.test(cleanHtml));
+  // Under the dark block, density still wins over the theme for the KPI sizes (a compact KPI must not grow in the dark).
+  const kpiSizeIn = (css: string): string[] => [...css.matchAll(/--kpi-size: (\d+)px/g)].map((m) => m[1]);
+  const compactDark = autoSchemeCss({ theme: 'auto', density: 'compact', accent: 'blue' } as any, undefined, undefined); // any: a DashboardStyle literal
+  ok('page: a compact Auto dashboard keeps its compact KPI size in the dark (the last --kpi-size declared is 20px)',
+    kpiSizeIn(compactDark).at(-1) === '20' && compactDark.indexOf('.dash-density--compact') > compactDark.indexOf('.dash-theme--auto'), compactDark.replace(/\s+/g, ' ').slice(0, 300));
+  ok('page: …and a comfortable one keeps the theme\'s', kpiSizeIn(autoSchemeCss({ theme: 'auto', density: 'comfortable', accent: 'blue' } as any, undefined, undefined)).at(-1) === '30'); // any: as above
 
   // ── 3. The client core, jsdom-free ──────────────────────────────────────────
   const ctx: any = {}; // any: a bare vm global the core's functions land on
