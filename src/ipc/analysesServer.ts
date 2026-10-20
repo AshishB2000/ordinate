@@ -19,7 +19,6 @@ import { metricUsage } from '../analysis/metricUsage';
 import { importImage, readImageDataUrl } from '../app/projectAssets';
 import { FileTokenError, resolveUpload } from '../server/files';
 import { isLiveRefusalReply, liveRefusal } from '../data/liveDataset';
-import { contentTag } from '../app/editConflict';
 
 /** What a card needs of a Visual to draw it — the record minus its bookkeeping. */
 function visualDef(v: visuals.Visual) {
@@ -33,8 +32,6 @@ function visualDef(v: visuals.Visual) {
     filters: v.filters,
     ...(v.analytics && v.analytics.length ? { analytics: v.analytics } : {}),
     updatedAt: v.updatedAt,
-    // The visual's content tag: the dashboard's Interactions write its overrides with it as `base`.
-    tag: contentTag('visual', v),
   };
 }
 export type VisualDef = ReturnType<typeof visualDef>;
@@ -76,15 +73,16 @@ export function register(): void {
   // ponytail: every visual of the project, with its definition — a few KB each.
   // Page by the cards' ids if a project ever holds thousands.
   ipcMain.handle('analysis:open', async (_e, { projectId, id }: any = {}) => {
-    const a = await analysis.getAnalysis(projectId, id);
-    if (!a) return { ok: false, error: 'That dashboard could not be loaded.' };
-    const defs: VisualDef[] = [];
+    // The dashboard and its stored tag, from one read: the editor's base (src/app/editConflict.ts).
+    const t = await analysis.readAnalysis(projectId, id);
+    if (!t) return { ok: false, error: 'That dashboard could not be loaded.' };
+    const defs: Array<VisualDef & { tag: string }> = [];
     for (const s of await visuals.listVisuals(projectId)) {
-      const v = await visuals.getVisual(projectId, s.id);
-      if (v) defs.push(visualDef(v));
+      // Each with its tag: the dashboard's Interactions write a visual's overrides with it as `base`.
+      const v = await visuals.readVisual(projectId, s.id);
+      if (v) defs.push({ ...visualDef(v.rec), tag: v.tag });
     }
-    // `tag`: the editor's base (src/app/editConflict.ts).
-    return { ok: true, analysis: a, visuals: defs, tag: contentTag('dashboard', a) };
+    return { ok: true, analysis: t.rec, visuals: defs, tag: t.tag };
   });
 
   ipcMain.handle('analysis:tiles', async (e, { projectId, params, asOf, currency, items }: any = {}) =>

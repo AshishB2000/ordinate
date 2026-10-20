@@ -27,7 +27,7 @@ import { GRID_COLS } from './dashboards';
 import type { Card, Page } from './dashboards';
 import { t } from '../app/i18n';
 import * as recordFs from '../app/recordFs';
-import { lockedUpdate } from '../app/editConflict';
+import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 
 export type ReportFormat = 'pdf' | 'pptx' | 'docx';
 export type ReportPageKind = 'cover' | 'summary' | 'sheet' | 'tile' | 'notes' | 'narrative' | 'discussion' | 'scorecard';
@@ -448,6 +448,12 @@ export async function saveReport(projectId: string, input: ReportInput): Promise
   return report;
 }
 
+/** The record and the tag of what is stored, from ONE read (src/app/editConflict.ts): its editor's open and the guarded save. */
+export async function readReport(projectId: string, id: string): Promise<Tagged<Report> | null> {
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  return readTagged('report', reportFilePath(projectId, id), (d) => (d && typeof d.id === 'string' && d.id ? normalize(d, projectId) : null));
+}
+
 /**
  * Patch a report in place, bumping updatedAt. Arrays and objects are REPLACED
  * wholesale, never merged — the same rule updateAnalysis follows, and for the
@@ -462,7 +468,7 @@ export async function updateReport(
 ): Promise<Report | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const file = reportFilePath(projectId, id);
-  return lockedUpdate('report', { projectId, id, file }, base, () => getReport(projectId, id), async (existing) => {
+  return lockedUpdate('report', { projectId, id, file }, base, () => readReport(projectId, id), async (existing) => {
     const merged: Report = {
       ...existing,
       name: str(patch.name).trim() || existing.name,

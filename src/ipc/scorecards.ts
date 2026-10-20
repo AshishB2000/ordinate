@@ -44,7 +44,7 @@ import * as reportSpec from '../analysis/reportSpec';
 import * as versions from '../app/versions';
 import { isLiveFigureError, liveCodeOf } from './liveRoute';
 import { isLiveDatasetError, LIVE_DATASET_CODE } from '../data/liveDataset';
-import { contentTag, tagged } from '../app/editConflict';
+import { contentTag, recordReply } from '../app/editConflict';
 
 /**
  * Why a Live figure is missing — the fields a handler's `{ok: false, error, code, reason}`
@@ -437,7 +437,7 @@ export async function scorecardSnapshot(projectId: string, id: string, offset = 
 export function register(): void {
   ipcMain.handle('scorecard:list', async (_e, { projectId }: any = {}) => scorecards.listScorecards(String(projectId || '')));
   // `tag` on the scorecard: the page's base (src/app/editConflict.ts).
-  ipcMain.handle('scorecard:get', async (_e, { projectId, id }: any = {}) => tagged('scorecard', await scorecards.getScorecard(String(projectId || ''), String(id || ''))));
+  ipcMain.handle('scorecard:get', async (_e, { projectId, id }: any = {}) => recordReply(await scorecards.readScorecard(String(projectId || ''), String(id || ''))));
   ipcMain.handle('scorecard:create', async (_e, { projectId, name, period, rows, description }: any = {}) => {
     const sc = await scorecards.saveScorecard(String(projectId || ''), { name, period, rows, description });
     return sc ? { ok: true, scorecard: sc } : { ok: false, error: 'Could not create the scorecard.' };

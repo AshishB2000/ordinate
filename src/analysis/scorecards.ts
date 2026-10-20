@@ -15,7 +15,7 @@ import * as projects from '../app/projects';
 import { isScorePeriod, sanitizeRows } from './scorecardModel';
 import type { Scorecard, ScorePeriod } from './scorecardModel';
 import * as recordFs from '../app/recordFs';
-import { lockedUpdate } from '../app/editConflict';
+import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 
 export type { Scorecard } from './scorecardModel';
 
@@ -131,6 +131,12 @@ export async function saveScorecard(
   return sc;
 }
 
+/** The record and the tag of what is stored, from ONE read (src/app/editConflict.ts): its editor's open and the guarded save. */
+export async function readScorecard(projectId: string, id: string): Promise<Tagged<Scorecard> | null> {
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  return readTagged('scorecard', file(projectId, id), (d) => (d && typeof d.id === 'string' ? normalize(d, projectId) : null));
+}
+
 /** Replace-or-keep per field; `rows` is replaced wholesale, never merged. Holds the record while it
  *  reads and writes; a stale `base` refuses (src/app/editConflict.ts). */
 export async function updateScorecard(
@@ -138,7 +144,7 @@ export async function updateScorecard(
 ): Promise<Scorecard | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const at = file(projectId, id);
-  return lockedUpdate('scorecard', { projectId, id, file: at }, base, () => getScorecard(projectId, id), async (existing) => {
+  return lockedUpdate('scorecard', { projectId, id, file: at }, base, () => readScorecard(projectId, id), async (existing) => {
     const next = normalize({
       ...existing,
       name: cleanName(patch.name) || existing.name,

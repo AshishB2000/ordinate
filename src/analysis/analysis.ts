@@ -43,7 +43,7 @@ import type { SavedView } from './savedViews';
 export type { Page, Card, CardLayout, CardMetric, CardType, CardControl, ControlValue, ControlKind, DashboardStyle } from './dashboards';
 import type { Page, DashboardStyle } from './dashboards';
 import * as recordFs from '../app/recordFs';
-import { lockedUpdate } from '../app/editConflict';
+import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 
 export interface Analysis {
   /** Generated UUID — never derived from the name; it is a filesystem path. */
@@ -301,7 +301,7 @@ export async function updateAnalysis(
 ): Promise<Analysis | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const file = analysisFilePath(projectId, id);
-  return lockedUpdate('dashboard', { projectId, id, file }, base, () => getAnalysis(projectId, id), async (existing) => {
+  return lockedUpdate('dashboard', { projectId, id, file }, base, () => readAnalysis(projectId, id), async (existing) => {
     const updated: Analysis = {
       ...existing,
       name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,
@@ -323,6 +323,12 @@ export async function updateAnalysis(
     await writeJsonAtomic(file, updated);
     return updated;
   });
+}
+
+/** The record and the tag of what is stored, from ONE read (src/app/editConflict.ts): its editor's open and the guarded save. */
+export async function readAnalysis(projectId: string, id: string): Promise<Tagged<Analysis> | null> {
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  return readTagged('dashboard', analysisFilePath(projectId, id), (d) => (isValidAnalysis(d) ? normalize(d, projectId) : null));
 }
 
 /**

@@ -304,11 +304,18 @@ export interface ComputeInput {
   tree?: unknown;
 }
 
-export type ComputeReply = TreeReply | { ok: false; error: string; code?: string; reason?: string };
+/** `tag`: the stored tag of the tree this answer was computed from — the tree editor's base (src/app/editConflict.ts). */
+export type ComputeReply = (TreeReply | { ok: false; error: string; code?: string; reason?: string }) & { tag?: string };
 
 export async function computeTree(projectId: string, metricId: string, input: ComputeInput = {}): Promise<ComputeReply> {
-  const root = await metrics.getMetric(projectId, metricId);
-  if (!root) return { ok: false, error: msg.metricGone() };
+  // ONE read: the tree on screen and its tag must be the same record's, or a save landing between two reads would let
+  // the editor's next save, built on the older tree, pass the compare.
+  const t = await metrics.readMetric(projectId, metricId, 'metricTree');
+  if (!t) return { ok: false, error: msg.metricGone() };
+  return { ...(await computeFor(projectId, t.rec, input)), tag: t.tag };
+}
+
+async function computeFor(projectId: string, root: Metric, input: ComputeInput): Promise<ComputeReply> {
   const meta = await datasets.getDatasetMeta(projectId, root.datasetId);
   if (!meta) return { ok: false, error: msg.noDateColumn(root.name), code: 'no_date' };
 
@@ -396,19 +403,16 @@ export async function saveTree(projectId: string, id: string, raw: unknown, base
       if (m.datasetId !== before.datasetId) return { ok: false, error: msg.otherDataset(m.name) };
     }
   }
-  const m = await metrics.updateMetric(projectId, id, { tree }, base);
+  const m = await metrics.updateMetric(projectId, id, { tree }, base, 'metricTree');
   if (!m) return { ok: false, error: msg.metricGone() };
   await versions.record(projectId, 'metric', m, { before });
-  return { ok: true, metric: m, tag: contentTag('metric', m) };
+  return { ok: true, metric: m, tag: contentTag('metricTree', m) };
 }
 
 export function register(): void {
   ipcMain.handle('metricTree:compute', async (_e, { projectId, id, ...input }: any = {}) => { // any: contract-checked
     try {
-      const out = await computeTree(projectId, id, input);
-      // The metric's tag, on a refusal too: the tree editor's base (src/app/editConflict.ts).
-      const m = await metrics.getMetric(projectId, id);
-      return m ? { ...out, tag: contentTag('metric', m) } : out;
+      return await computeTree(projectId, id, input);
     } catch (err: any) { // any: a figure path's throw
       return { ok: false, error: err?.message || 'Failed to compute the tree', ...liveCodeOf(err) };
     }

@@ -33,7 +33,6 @@ import { buildReportPages, storyReportPages, storyVisual, type PageAnalysis, typ
 import { scorecardSnapshot } from './scorecards';
 import { publicReport } from './reports';
 import type { FilterStep } from '../data/transforms';
-import { contentTag } from '../app/editConflict';
 
 /** A registered handler, called as the RPC layer calls it. Missing → a refusal, never a throw. */
 async function call(event: unknown, channel: string, payload: unknown): Promise<any> { // any: each handler's own reply
@@ -197,8 +196,9 @@ type FigureBlock = { id: string; kind: string; visualId?: string; metricId?: str
 
 export function register(): void {
   ipcMain.handle('reports:open', async (_e, { projectId, id }: any = {}) => {
-    const r = await reportSpec.getReport(projectId, id);
-    if (!r) return { ok: false, error: 'That report is gone.' };
+    const t = await reportSpec.readReport(projectId, id);
+    if (!t) return { ok: false, error: 'That report is gone.' };
+    const r = t.rec;
     const a = await analysisFor(projectId, r);
     const sheets = [];
     for (const s of a ? a.sheets : []) {
@@ -212,7 +212,7 @@ export function register(): void {
     }
     const views = a && Array.isArray((a as { views?: unknown }).views) ? ((a as { views: Array<{ id: string; name: string }> }).views).map((v) => ({ id: v.id, name: v.name })) : [];
     // `tag`: the builder's base (src/app/editConflict.ts).
-    return { ok: true, report: publicReport(r), dashboard: a && a.id ? { id: a.id, name: a.name } : null, sheets, views, missing: !a, tag: contentTag('report', r) };
+    return { ok: true, report: publicReport(r), dashboard: a && a.id ? { id: a.id, name: a.name } : null, sheets, views, missing: !a, tag: t.tag };
   });
 
   const pagesHandler = async (event: unknown, { projectId, id, draft, page }: any = {}) => // any: the contract's parsed input

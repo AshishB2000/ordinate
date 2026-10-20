@@ -196,6 +196,7 @@
   "driverPointMessages.this_measure_is_shown_through_a": "This measure is shown through a table calculation, so the figure on the chart is not a plain total and its change cannot be split into contributions.",
   "driverPointMessages.this_visual_is_not_a_plain": "This visual is not a plain chart over time, so a point on it cannot be broken down.",
   "editConflictMessages.this_dashboard_was_changed_in_another": "This dashboard was changed in another tab or by someone else. Reload it, or save yours as a copy.",
+  "editConflictMessages.this_metric_tree_was_changed_in": "This metric tree was changed in another tab or by someone else. Reload it, or save yours as a copy.",
   "editConflictMessages.this_metric_was_changed_in_another": "This metric was changed in another tab or by someone else. Reload it, or save yours as a copy.",
   "editConflictMessages.this_report_was_changed_in_another": "This report was changed in another tab or by someone else. Reload it, or save yours as a copy.",
   "editConflictMessages.this_scenario_was_changed_in_another": "This scenario was changed in another tab or by someone else. Reload it, or save yours as a copy.",

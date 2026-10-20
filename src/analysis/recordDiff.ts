@@ -22,12 +22,11 @@
 type Rec = Record<string, any>;
 
 export type DiffType = 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report';
-/** A record an editor saves whole (src/app/editConflict.ts): the versioned types, and three that keep no history. */
-export type ContentType = DiffType | 'story' | 'scorecard' | 'scenario';
 
-// Every field an editor writes is content: the edit-conflict tag hashes these,
-// so a field left out here is one a second editor could overwrite unseen.
-const CONTENT_KEYS: Record<ContentType, string[]> = {
+// A version's content: everything a save of the record can change that a
+// restore should put back. (Parameters, a visual's overlays and a report's
+// discussion page and view joined with docs/edit-conflicts.)
+const CONTENT_KEYS: Record<DiffType, string[]> = {
   dashboard: ['name', 'sheets', 'filters', 'style', 'parameters'],
   visual: ['name', 'chartType', 'encoding', 'overrides', 'filters', 'analytics'],
   metric: ['name', 'definition', 'filters', 'format', 'description', 'direction', 'tree'],
@@ -37,6 +36,23 @@ const CONTENT_KEYS: Record<ContentType, string[]> = {
   // exception is an INPUT table (src/data/inputTable/), whose data is authored
   // here: its version also carries `table`, and a restore puts it back.
   dataset: ['steps', 'table'],
+};
+
+/** A whole-document editor's save channel (src/app/editConflict.ts). A metric has two: its fields, and its tree. */
+export type SaveKind = 'dashboard' | 'visual' | 'metric' | 'metricTree' | 'report' | 'story' | 'scorecard' | 'scenario';
+
+/**
+ * What each editor's save can write — replace-or-keep — and so all its
+ * conflict tag covers: another writer's change to a key outside it (a report's
+ * schedule from Pipelines, a metric's tree from the tree editor, a visual's
+ * star) cannot be overwritten by this save, so it never makes the editor stale.
+ */
+export const SAVE_KEYS: Record<SaveKind, readonly string[]> = {
+  dashboard: ['name', 'sheets', 'filters', 'style', 'parameters'], // analysis:update
+  visual: ['name', 'chartType', 'encoding', 'overrides', 'filters', 'analytics'], // visual:update, not `favorite`
+  metric: ['name', 'definition', 'filters', 'format', 'description', 'direction'], // metric:update: no `tree`
+  metricTree: ['tree'], // metricTree:save
+  report: ['name', 'format', 'pages', 'cover', 'paper', 'includeFilters', 'narrative', 'discussion', 'viewId'], // reports:update: no `schedule`, no `analysisId`
   story: ['name', 'blocks'],
   scorecard: ['name', 'period', 'rows', 'description'],
   scenario: ['name', 'baseMetricIds', 'drivers'],
@@ -44,7 +60,7 @@ const CONTENT_KEYS: Record<ContentType, string[]> = {
 
 /** What an absent key means — its store's own default — so a version saved
  *  before the key was content reads the same as a record that has it empty. */
-const ABSENT: Partial<Record<ContentType, Rec>> = {
+const ABSENT: Partial<Record<DiffType, Rec>> = {
   dataset: { steps: [] },
   dashboard: { parameters: [] },
   visual: { analytics: [] },
@@ -53,13 +69,21 @@ const ABSENT: Partial<Record<ContentType, Rec>> = {
 
 /** The versioned fields of a record, in a fixed key order. Absent keys stay
  *  absent (a cleared description is a change, not a null), except the defaults above. */
-export function contentOf(type: ContentType, rec: unknown): Rec {
+export function contentOf(type: DiffType, rec: unknown): Rec {
   const src: Rec = rec && typeof rec === 'object' ? (rec as Rec) : {};
   const out: Rec = {};
   for (const k of CONTENT_KEYS[type]) {
     if (src[k] !== undefined) out[k] = src[k];
   }
   for (const [k, v] of Object.entries(ABSENT[type] ?? {})) if (out[k] === undefined) out[k] = v;
+  return out;
+}
+
+/** The keys one save channel writes, as stored (absent stays absent). */
+export function savedPart(kind: SaveKind, rec: unknown): Rec {
+  const src: Rec = rec && typeof rec === 'object' ? (rec as Rec) : {};
+  const out: Rec = {};
+  for (const k of SAVE_KEYS[kind]) if (src[k] !== undefined) out[k] = src[k];
   return out;
 }
 

@@ -37,7 +37,7 @@ import type { TableCalc } from './tableCalc';
 import { sanitizeFormat, NUMBER_FORMAT_IDS, SORT_MODE_IDS } from './chartFormat';
 import type { FormatOverrides, FormatContext, SortMode } from './chartFormat';
 import * as recordFs from '../app/recordFs';
-import { lockedUpdate } from '../app/editConflict';
+import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { sanitizeCompare } from './dateIntel';
 import type { CompareMode } from './dateIntel';
 
@@ -563,6 +563,12 @@ export async function getVisual(projectId: string, id: string): Promise<Visual |
   }
 }
 
+/** The record and the tag of what is stored, from ONE read (src/app/editConflict.ts): its editor's open and the guarded save. */
+export async function readVisual(projectId: string, id: string): Promise<Tagged<Visual> | null> {
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  return readTagged('visual', visualFilePath(projectId, id), (d) => (isValidVisual(d) ? normalize(d, projectId) : null));
+}
+
 // Create a new visual file. Id is generated (never derived from the name).
 // Rejects (returns null) when: projectId or datasetId is not a UUID, the parent
 // project does not exist, or the referenced dataset does not exist — so a visual
@@ -621,7 +627,7 @@ export async function updateVisual(
 ): Promise<Visual | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const file = visualFilePath(projectId, id);
-  return lockedUpdate('visual', { projectId, id, file }, base, () => getVisual(projectId, id), async (existing) => {
+  return lockedUpdate('visual', { projectId, id, file }, base, () => readVisual(projectId, id), async (existing) => {
     const chartType = patch.chartType !== undefined ? sanitizeChartType(patch.chartType) : existing.chartType;
     const encoding = patch.encoding !== undefined ? sanitizeEncoding(patch.encoding) : existing.encoding;
     const updated: Visual = {

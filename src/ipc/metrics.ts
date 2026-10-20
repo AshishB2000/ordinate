@@ -464,9 +464,9 @@ export function register() {
   });
 
   ipcMain.handle('metric:get', async (_e, { projectId, id }: any = {}) => {
-    const m = await metrics.getMetric(projectId, id);
-    if (!m) return { ok: false, error: 'Metric not found' };
-    return { ok: true, metric: m, definitionText: describeDefinition(m), tag: contentTag('metric', m) }; // tag: the editor's base
+    const t = await metrics.readMetric(projectId, id);
+    if (!t) return { ok: false, error: 'Metric not found' };
+    return { ok: true, metric: t.rec, definitionText: describeDefinition(t.rec), tag: t.tag }; // tag: the metric dialog's base
   });
 
   ipcMain.handle('metric:save', async (_e, { projectId, input }: any = {}) => {

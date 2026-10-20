@@ -18,7 +18,7 @@ import { paramValues, resolveFilterParams } from '../analysis/params';
 import { MAX_COMPARE, driverLabel, isMetricTarget, sanitizeBaseMetricIds, sanitizeDrivers } from '../analysis/scenarioModel';
 import type { Scenario } from '../analysis/scenarioModel';
 import { compareScenarios, computeScenario, scenarioCardValue, scenarioTargets } from '../analysis/scenarioResolve';
-import { contentTag, tagged } from '../app/editConflict';
+import { contentTag, recordReply } from '../app/editConflict';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const id = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -43,7 +43,7 @@ async function create(projectId: string, input: any): Promise<Scenario | null> {
 export function register(): void {
   ipcMain.handle('scenario:list', async (_e, { projectId }: any = {}) => scenarios.listScenarios(id(projectId)));
   // `tag` on the scenario: the editor's base (src/app/editConflict.ts).
-  ipcMain.handle('scenario:get', async (_e, { projectId, id: sid }: any = {}) => tagged('scenario', await scenarios.getScenario(id(projectId), id(sid))));
+  ipcMain.handle('scenario:get', async (_e, { projectId, id: sid }: any = {}) => recordReply(await scenarios.readScenario(id(projectId), id(sid))));
   ipcMain.handle('scenario:create', async (_e, { projectId, input }: any = {}) => {
     const s = await create(id(projectId), input);
     return s ? { ok: true, scenario: s } : { ok: false, error: 'Could not create the scenario.' };

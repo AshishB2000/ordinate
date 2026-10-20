@@ -28,7 +28,7 @@ import { sanitizeSteps } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
 import type { MetricAggregation } from './metricValue';
 import * as recordFs from '../app/recordFs';
-import { lockedUpdate } from '../app/editConflict';
+import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { sanitizeTree } from './metricTree';
 import type { TreeNode } from './metricTree';
 
@@ -297,6 +297,16 @@ export async function listMetrics(projectId: string): Promise<MetricSummary[]> {
   return out;
 }
 
+/**
+ * The record and the tag of what is stored, from ONE read (src/app/editConflict.ts): its editor's open and the guarded
+ * save. `kind`: which of its two editors asks — its fields (`metric`) or its tree (`metricTree`); each tag covers only
+ * what that one saves.
+ */
+export async function readMetric(projectId: string, id: string, kind: 'metric' | 'metricTree' = 'metric'): Promise<Tagged<Metric> | null> {
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  return readTagged(kind, metricFilePath(projectId, id), (d) => (isValidMetric(d) ? normalize(d, projectId) : null));
+}
+
 export async function getMetric(projectId: string, id: string): Promise<Metric | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
@@ -379,10 +389,12 @@ export async function updateMetric(
   id: string,
   patch: Partial<MetricInput>,
   base?: unknown,
+  /** Whose tag `base` is: the metric dialog's (`metric`) or the tree editor's (`metricTree`). */
+  kind: 'metric' | 'metricTree' = 'metric',
 ): Promise<Metric | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   const file = metricFilePath(projectId, id);
-  return lockedUpdate('metric', { projectId, id, file }, base, () => getMetric(projectId, id), async (existing) => {
+  return lockedUpdate(kind, { projectId, id, file }, base, () => readMetric(projectId, id, kind), async (existing) => {
     const updated: Metric = {
       ...existing,
       name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : existing.name,

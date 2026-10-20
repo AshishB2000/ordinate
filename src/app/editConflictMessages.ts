@@ -3,11 +3,11 @@
 // MAIN_FILES) scans these sentences and nothing else. One per record type, in
 // the words the editor's banner uses.
 
-import type { ContentType } from '../analysis/recordDiff';
+import type { SaveKind } from '../analysis/recordDiff';
 import { t } from '../app/i18n';
 
 /** Another tab or person saved this record after the caller's copy was read. */
-export function recordChanged(type: ContentType): string {
+export function recordChanged(type: SaveKind): string {
   switch (type) {
     case 'dashboard':
       return t('editConflictMessages.this_dashboard_was_changed_in_another');
@@ -15,6 +15,8 @@ export function recordChanged(type: ContentType): string {
       return t('editConflictMessages.this_visual_was_changed_in_another');
     case 'metric':
       return t('editConflictMessages.this_metric_was_changed_in_another');
+    case 'metricTree':
+      return t('editConflictMessages.this_metric_tree_was_changed_in');
     case 'report':
       return t('editConflictMessages.this_report_was_changed_in_another');
     case 'story':
