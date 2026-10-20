@@ -12,9 +12,11 @@
 
 import type { Pool } from 'pg';
 import { useChannelSecrets } from '../../app/channels';
+import type { ServerEnv } from '../env';
 import type { SecretStore } from '../secrets/store';
 import { defineJob } from '../jobs/runner';
-import { useDeliveryLog, type Log } from './deliver';
+import { wireMail, type MailLog } from '../mail/emailChannel';
+import { useDeliveryLog } from './deliver';
 import { tickSubscriptions, useSubscriptionDb } from './run';
 
 /** How often an org's subscriptions are checked. A slot is sent within this of its minute. */
@@ -22,11 +24,12 @@ export const SUBSCRIPTIONS_EVERY_MS = 60_000;
 
 let defined = false;
 
-/** Called once the schema is current (src/server/app.ts): accounts, the sealed webhook URLs, the log, the job. */
-export function wireSubscriptions(pool: Pool, devAuth: boolean, secrets: SecretStore | null, log: Log): void {
-  useSubscriptionDb(pool, devAuth);
+/** Called once the schema is current (src/server/app.ts): accounts, the sealed webhook URLs, the SMTP relay, the log, the job. */
+export function wireSubscriptions(pool: Pool, cfg: Pick<ServerEnv, 'auth' | 'mail'>, secrets: SecretStore | null, log: MailLog): void {
+  useSubscriptionDb(pool, cfg.auth.mode === 'dev');
   useChannelSecrets(secrets);
   useDeliveryLog(log);
+  wireMail(cfg.mail, pool, cfg.auth.allowedDomains, log);
   if (defined) return; // a second app in one process (tests) shares the kind
   defined = true;
   defineJob('subscriptions', { everyMs: SUBSCRIPTIONS_EVERY_MS, run: async () => { await tickSubscriptions(); } });
@@ -36,4 +39,5 @@ export function wireSubscriptions(pool: Pool, devAuth: boolean, secrets: SecretS
 export function unwireSubscriptions(): void {
   useSubscriptionDb(null, true);
   useChannelSecrets(null);
+  wireMail(null, null, []);
 }

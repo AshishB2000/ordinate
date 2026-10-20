@@ -1,12 +1,13 @@
-// Subscriptions: a dashboard posted to Slack / Teams on a schedule
+// Subscriptions: a dashboard posted to Slack / Teams or emailed on a schedule
 // (src/server/subscriptions/), and the channels it is posted to.
 //
 // CHANNELS are the org's, and a channel is a path for data to leave the server:
 // making, changing, testing and removing one is an ORG ADMIN's
 // (`org: true` + `admin` — refused with a 403 before the handler runs). Any
 // member may LIST them to pick one, and the list never carries the webhook URL:
-// `{id, name, kind, secretSet}`. `webhookUrl` is write-only — it goes in on
-// save and nothing returns it.
+// `{id, name, kind, secretSet, ready}`. `webhookUrl` is write-only — it goes in
+// on save and nothing returns it. An email channel's `to` names org people and
+// teams by id (never an address); only org admins are shown it.
 //
 // SUBSCRIPTIONS are a project's records: reading them is `read`, everything
 // that changes one or sends one is `write`. Every record body is re-sanitized
@@ -20,7 +21,9 @@ import { byProjectId, rpc, Uuid } from './contract';
 const Name = z.string().trim().min(1).max(80);
 /** https only is the handler's rule (so the refusal can say so); here it is bounded. */
 const WebhookUrl = z.string().max(2048);
-const Kind = z.enum(['slack', 'teams']);
+const Kind = z.enum(['slack', 'teams', 'email']);
+/** Email recipients: ids only — the server resolves them at send time (docs/email). */
+const EmailTo = z.strictObject({ userIds: z.array(Uuid).max(200), teamIds: z.array(Uuid).max(50) });
 
 const Schedule = z.strictObject({
   cadence: z.enum(['hourly', 'daily', 'weekdays', 'weekly', 'monthly']),
@@ -50,12 +53,12 @@ export const subscriptions = {
   // ── Channels (org) ──────────────────────────────────────────────────────
   // { canStore, channels: [{ id, name, kind, secretSet }] } — for every member, to pick from.
   'channel:list': rpc({ access: 'read', org: true, input: z.undefined() }),
-  // Create (no id) or change. `webhookUrl` may be left out on a change: the stored one stays.
-  'channel:save': admin(z.strictObject({ id: Uuid.optional(), name: Name, kind: Kind, webhookUrl: WebhookUrl.optional() })),
+  // Create (no id) or change. `webhookUrl` (or an email channel's `to`) may be left out on a change: the stored one stays.
+  'channel:save': admin(z.strictObject({ id: Uuid.optional(), name: Name, kind: Kind, webhookUrl: WebhookUrl.optional(), to: EmailTo.optional() })),
   // The subscriptions and alert rules that post to it — what Delete warns about. Names from every project: admins only.
   'channel:usage': rpc({ access: 'admin', org: true, audit: 'denials', input: z.strictObject({ id: Uuid }) }),
   'channel:delete': admin(z.strictObject({ id: Uuid })),
-  // Posts one fixed test message to the stored URL.
+  // Posts one fixed test message to the stored URL — or emails it to the calling admin alone (rate-limited).
   'channel:test': admin(z.strictObject({ id: Uuid })),
 
   // ── Subscriptions (project) ─────────────────────────────────────────────

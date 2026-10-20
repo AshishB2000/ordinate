@@ -1,7 +1,8 @@
 // Lineage — what a record is built from, and what is built from it. MAIN.
 //
 // One dependency graph per project, drawn from references the records already
-// carry and nothing else: a dataset's `origin` and prepare `steps`, a visual's
+// carry and nothing else: a dataset's `origin` (a combine's parents, a SQL
+// dataset's `deps`, a notebook's) and prepare `steps`, a visual's
 // `datasetId` and the columns its encoding names, a measure's `metricId`, a
 // metric's definition, a dashboard card's `visualId` / `metric` / `control`, a
 // report's `analysisId`, an alert rule's `datasetId` and `metric`. No new field
@@ -207,10 +208,11 @@ export function buildGraph(input: LineageInput): LineageGraph {
         ref: notebookName.has(str(o.notebookId)) ? { type: 'notebook', id: str(o.notebookId) } : undefined,
       });
       for (const p of arr(o.deps)) link('dataset:' + str(p), target);
-    } else if (o.kind === 'combined' || o.kind === 'composed') {
+    } else if (o.kind === 'combined' || o.kind === 'composed' || o.kind === 'sql') {
+      // A SQL dataset is built from the datasets its query names (`deps`), as a combine is from its parents.
       const parents = o.kind === 'combined'
         ? [str(o.leftId), str(o.rightId)]
-        : [str(o.baseId), ...arr(o.joins).map((j) => str(j && j.datasetId))];
+        : o.kind === 'sql' ? arr(o.deps).map(str) : [str(o.baseId), ...arr(o.joins).map((j) => str(j && j.datasetId))];
       for (const p of parents) link('dataset:' + p, target);
       continue;
     } else {

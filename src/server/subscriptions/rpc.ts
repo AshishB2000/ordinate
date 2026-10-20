@@ -3,14 +3,14 @@
 // What a reply may hold is decided HERE, by `publicSubscription` and
 // `publicChannel`: a subscription's definition, who owns it, its schedule as a
 // sentence, its next runs, and its runs as catalog sentences. Never a webhook
-// URL (the list says `secretSet`), never the figures hash, never anything a
-// remote answered.
+// URL (the list says `secretSet`), never an email address (an email channel's
+// `to` is ids, and only for org admins), never the figures hash, never anything
+// a remote or a mail relay answered.
 
 import * as alertStore from '../../analysis/alertStore';
 import * as analysis from '../../analysis/analysis';
 import * as projects from '../../app/projects';
-import { canKeepWebhooks, deleteChannel, getChannel, listChannels, publicChannel, saveChannel, type PublicChannel } from '../../app/channels';
-import { composeMessage } from '../../analysis/subscriptionMessage';
+import { canKeepWebhooks, deleteChannel, getChannel, listChannels, publicChannel, sanitizeTo, saveChannel, type PublicChannel } from '../../app/channels';
 import { renderSlack, renderTeams } from '../../analysis/subscriptionRender';
 import { nextSlots, sanitizeSubSchedule, sanitizeTimeZone, type SubSchedule } from '../../analysis/subscriptionSchedule';
 import * as store from '../../analysis/subscriptions';
@@ -21,8 +21,19 @@ import { formatBytes } from '../../publish/combos';
 import { ctx } from '../context';
 import { dashboardLink } from '../publicUrl';
 import { registry } from '../rpc';
-import { postToChannel } from './deliver';
+import { brandName, knownRecipients, mailReady, previewEmail } from '../mail/emailChannel';
+import { deliver } from './deliver';
 import { buildMessage, ownerIdentity, runSubscription } from './run';
+
+/** "Send now" at most once a minute per subscription, per pod. */
+let sendNowGapMs = 60_000;
+const lastSendNow = new Map<string, number>();
+
+/** Test hook: suites that send one subscription several times in a row. */
+export function setSendNowGapForTest(ms: number): void {
+  sendNowGapMs = ms;
+  lastSendNow.clear();
+}
 
 /** "Mon 12 Oct, 08:00" in the subscription's own zone. */
 function slotText(at: number, timezone: string): string {
@@ -66,14 +77,10 @@ async function dashboardNames(projectId: string): Promise<Map<string, string>> {
   return new Map((await analysis.listAnalyses(projectId)).map((a) => [a.id, a.name]));
 }
 
-/** What every channel picker needs: the channels, whether this server can keep a URL at all, and whether the caller may add one. */
-async function channelFrame(): Promise<{ channels: PublicChannel[]; canStore: boolean; canManage: boolean }> {
-  return { channels: await Promise.all((await listChannels()).map(publicChannel)), canStore: canKeepWebhooks(), canManage: ctx().user.role === 'admin' };
-}
-
-/** The message a channel's "Send a test message" posts: fixed words, no data. */
-function testMessage(name: string) {
-  return composeMessage({ title: say.testTitle(), subtitle: [], note: say.testBody(name), kpis: [], visuals: [], link: null, footer: '' });
+/** What every channel picker needs: the channels, whether this server can keep a URL or send email at all, and whether the caller may add one. */
+async function channelFrame(): Promise<{ channels: PublicChannel[]; canStore: boolean; canEmail: boolean; canManage: boolean }> {
+  const view = { admin: ctx().user.role === 'admin', mail: mailReady() };
+  return { channels: await Promise.all((await listChannels()).map((c) => publicChannel(c, view))), canStore: canKeepWebhooks(), canEmail: view.mail, canManage: view.admin };
 }
 
 type Use = { projectId: string; project: string; id: string; name: string };
@@ -95,9 +102,14 @@ export function register(): void {
   // ── Channels ──────────────────────────────────────────────────────────
   registry.handle('channel:list', async () => ({ ok: true as const, ...(await channelFrame()) }));
 
-  registry.handle('channel:save', async (_e, input: { id?: string; name: string; kind: string; webhookUrl?: string }) => {
+  registry.handle('channel:save', async (_e, input: { id?: string; name: string; kind: string; webhookUrl?: string; to?: { userIds: string[]; teamIds: string[] } }) => {
+    const kind = input.id ? (await getChannel(input.id))?.kind : input.kind;
+    if (kind === 'email') {
+      if (!mailReady()) return { ok: false as const, error: say.emailNotSetUp() };
+      if (input.to && !(await knownRecipients(sanitizeTo(input.to)))) return { ok: false as const, error: say.emailUnknownRecipients() };
+    }
     const r = await saveChannel(input, ctx().user.email);
-    return r.ok ? { ok: true as const, channel: await publicChannel(r.channel) } : r;
+    return r.ok ? { ok: true as const, channel: await publicChannel(r.channel, { admin: true, mail: mailReady() }) } : r;
   });
 
   registry.handle('channel:usage', async (_e, { id }: { id: string }) => ({ ok: true as const, ...(await usage(id)) }));
@@ -107,9 +119,9 @@ export function register(): void {
   registry.handle('channel:test', async (_e, { id }: { id: string }) => {
     const c = await getChannel(id);
     if (!c) return { ok: false as const, error: say.channelGone() };
-    const model = testMessage(c.name);
-    const r = await postToChannel(c.id, c.name, (c.kind === 'teams' ? renderTeams : renderSlack)(model).payload);
-    return r.ok ? { ok: true as const } : { ok: false as const, error: say.runText(r.code, { channel: c.name, ...(r.status ? { status: r.status } : {}) }) };
+    const r = await deliver(c, { kind: 'test' });
+    if (r.ok) return { ok: true as const };
+    return { ok: false as const, error: say.runText(r.code, { channel: c.name, ...(r.status ? { status: r.status } : {}) }) };
   });
 
   // ── Subscriptions ─────────────────────────────────────────────────────
@@ -147,15 +159,19 @@ export function register(): void {
     };
     const def = store.definitionOf({ ...draft, viewId: draft.viewId ?? null });
     const built = await buildMessage(projectId, def);
-    if ('code' in built) return { ok: true as const, ...frame, empty: say.runText(built.code), slack: null, teams: null };
+    if ('code' in built) return { ok: true as const, ...frame, empty: say.runText(built.code), slack: null, teams: null, email: null };
     const slack = renderSlack(built.model);
     const teams = renderTeams(built.model);
+    // The email as the first email channel picked would get it (its name is in the reason line).
+    const emailTo = mailReady() ? (await Promise.all(draft.channelIds.map(getChannel))).find((c) => c?.kind === 'email') ?? null : null;
+    const email = mailReady() ? previewEmail(built.model, emailTo?.name ?? '') : null;
     return {
       ok: true as const,
       ...frame,
       empty: null,
       slack: { model: slack.model, bytes: slack.bytes, size: formatBytes(slack.bytes), blocks: slack.payload.blocks.length, notes: slack.notes },
       teams: { model: teams.model, bytes: teams.bytes, size: formatBytes(teams.bytes), notes: teams.notes },
+      email: email && { model: email.model, bytes: email.bytes, size: formatBytes(email.bytes), notes: email.notes, brand: brandName(), reason: emailTo ? say.emailReason(emailTo.name) : null },
     };
   });
 
@@ -191,6 +207,11 @@ export function register(): void {
   registry.handle('subscription:delete', async (_e, { projectId, id }: { projectId: string; id: string }) => ({ ok: await store.deleteSubscription(projectId, id) }));
 
   registry.handle('subscription:sendNow', async (_e, { projectId, id }: { projectId: string; id: string }) => {
+    const key = `${ctx().org.id}\0${projectId}\0${id}`;
+    const now = Date.now();
+    for (const [k, at] of lastSendNow) if (now - at >= sendNowGapMs) lastSendNow.delete(k);
+    if (lastSendNow.has(key)) return { ok: false as const, error: say.sendNowWait() };
+    lastSendNow.set(key, now);
     const entry = await runSubscription(projectId, id);
     if (!entry) return { ok: false as const, error: say.subscriptionGone() };
     return entry.outcome === 'sent' ? { ok: true as const, run: runView(entry) } : { ok: false as const, error: say.runText(entry.code, entry.detail), run: runView(entry) };

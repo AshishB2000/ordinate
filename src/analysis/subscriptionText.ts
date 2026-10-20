@@ -10,7 +10,9 @@ import { t } from '../app/i18n';
 export type RunCode =
   | 'sent' | 'partial' | 'unchanged' | 'not_refreshed' | 'missed'
   | 'owner_removed' | 'owner_no_access' | 'dashboard_gone' | 'no_channels' | 'no_content' | 'compute_failed'
-  | 'post_failed' | 'unreachable' | 'refused' | 'no_secret';
+  | 'post_failed' | 'unreachable' | 'refused' | 'no_secret'
+  // email (docs/email/00-design.md §9)
+  | 'mail_off' | 'no_recipients' | 'rate_limited' | 'tls_failed' | 'auth_failed' | 'mail_failed';
 
 export interface RunDetail {
   /** Channels that took the message / that were tried. */
@@ -67,6 +69,12 @@ export function runText(code: RunCode, d: RunDetail = {}): string {
     case 'post_failed': return t('subscriptionText.not_delivered_answered_http', { channel, status });
     case 'unreachable': return t('subscriptionText.not_delivered_could_not_be_reached', { channel });
     case 'refused': return t('subscriptionText.not_delivered_the_address_of_is', { channel });
+    case 'mail_off': return t('subscriptionText.not_sent_email_is_not_set');
+    case 'no_recipients': return t('subscriptionText.not_sent_to_nobody_on_it', { channel });
+    case 'rate_limited': return t('subscriptionText.not_sent_to_this_organization_reached', { channel });
+    case 'tls_failed': return t('subscriptionText.not_delivered_to_the_mail_server', { channel });
+    case 'auth_failed': return t('subscriptionText.not_delivered_to_the_mail_server_2', { channel });
+    case 'mail_failed': return t('subscriptionText.not_delivered_to_the_mail_server_3', { channel, status });
     default: return t('subscriptionText.not_sent_this_server_cannot_read');
   }
 }
@@ -178,6 +186,39 @@ export function channelLimit(max: number): string {
 
 export function channelsNeedStore(): string {
   return t('subscriptionText.this_server_cannot_keep_webhook_urls');
+}
+
+// ── Email channels ──────────────────────────────────────────────────────────
+
+export function emailNotSetUp(): string {
+  return t('subscriptionText.email_is_not_set_up_on');
+}
+
+export function emailNeedsRecipients(): string {
+  return t('subscriptionText.pick_at_least_one_person_or');
+}
+
+export function emailUnknownRecipients(): string {
+  return t('subscriptionText.some_of_the_people_or_teams');
+}
+
+/** The test email's body: who it went to, and whom the channel reaches today. */
+export function testEmailBody(name: string, reach: number): string {
+  return t('subscriptionText.this_test_went_only_to_you', { name, reach });
+}
+
+/** The last line of every email: why the reader has it. */
+export function emailReason(name: string): string {
+  return t('subscriptionText.you_receive_this_as_a_member', { name });
+}
+
+/** An editor's note, attributed to the account the send runs as. */
+export function noteFrom(owner: string): string {
+  return t('subscriptionText.note_from', { owner });
+}
+
+export function sendNowWait(): string {
+  return t('subscriptionText.this_subscription_was_just_sent_wait');
 }
 
 // ── Subscriptions ───────────────────────────────────────────────────────────

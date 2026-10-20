@@ -31,7 +31,6 @@ import { todayIso } from '../../analysis/dateIntel';
 import { filterLine, type PageAnalysis } from '../../analysis/reportPages';
 import { viewControlValue, type SavedView } from '../../analysis/savedViews';
 import { composeMessage, figuresOf, type MessageModel } from '../../analysis/subscriptionMessage';
-import { renderSlack, renderTeams } from '../../analysis/subscriptionRender';
 import { dueDecision } from '../../analysis/subscriptionSchedule';
 import * as store from '../../analysis/subscriptions';
 import type { RunEntry, RunState, Subscription } from '../../analysis/subscriptions';
@@ -44,7 +43,7 @@ import { ctx, runInContext, type Identity } from '../context';
 import { toReaders } from '../jobs/schedules';
 import { dashboardLink } from '../publicUrl';
 import { publish } from '../sse';
-import { postToChannel } from './deliver';
+import { deliver } from './deliver';
 
 let db: { pool: Pool | null; devAuth: boolean } = { pool: null, devAuth: true };
 
@@ -106,6 +105,7 @@ export async function buildMessage(projectId: string, def: Definition): Promise<
     title: def.message.title || a.name,
     subtitle: [formatDate(todayIso()), ...(view ? [viewText(view.name)] : []), ...(filters ? [filters] : []), ...(figs.dataAt ? [asOfText(utcLabel(figs.dataAt))] : [])],
     note: def.message.note,
+    noteBy: ctx().user.email, // the account the send runs as — an email says "Note from …"
     kpis: figs.kpis,
     visuals: figs.visuals,
     link: def.message.includeLink ? dashboardLink(projectId, a.id) : null,
@@ -136,7 +136,7 @@ async function attempt(sub: Subscription, org: string, scheduled: boolean): Prom
     let sent = 0;
     let failure: RunDetail & { code: RunCode } | null = null;
     for (const c of channels) {
-      const r = await postToChannel(c.id, c.name, (c.kind === 'teams' ? renderTeams : renderSlack)(built.model).payload);
+      const r = await deliver(c, { kind: 'dashboard', projectId: sub.projectId, analysisId: sub.analysisId, message: built.model });
       if (r.ok) sent++;
       else failure ??= { code: r.code, channel: c.name, ...(r.status ? { status: r.status } : {}) };
     }

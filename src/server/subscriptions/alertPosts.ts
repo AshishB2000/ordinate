@@ -6,8 +6,8 @@
 // the post says exactly what the bell says — the sentence, then where the change
 // came from when the event carries that (ipc/alertDiagnosis). It goes out as the same neutral
 // message a subscription uses — the rule's name, the sentence, the figure, a
-// link to the dashboard the rule was made on — through the same renderers and
-// the same single door to a webhook (./deliver.ts).
+// link to the dashboard the rule was made on — through the one send door
+// (./deliver.ts), which renders it for Slack, Teams or email.
 //
 // A post that fails is logged and left: the alert itself is in the inbox either
 // way, and the next firing tries again. Each attempt is on the audit trail.
@@ -16,12 +16,11 @@ import { getChannel } from '../../app/channels';
 import * as alertStore from '../../analysis/alertStore';
 import { fmtMetric, type AlertEvent, type AlertRule } from '../../analysis/alerts';
 import { composeMessage } from '../../analysis/subscriptionMessage';
-import { renderSlack, renderTeams } from '../../analysis/subscriptionRender';
 import { alertTitle } from '../../analysis/subscriptionText';
 import { audit } from '../authz/audit';
 import { ctx } from '../context';
 import { dashboardLink } from '../publicUrl';
-import { postToChannel } from './deliver';
+import { deliver } from './deliver';
 import { subscriptionDb } from './run';
 
 /** The message one fired event stands for. Pure given the rule and the event. */
@@ -51,7 +50,7 @@ export async function postFiredAlerts(projectId: string, events: AlertEvent[]): 
       for (const id of rule.channelIds) {
         const c = await getChannel(id);
         if (!c) continue; // removed since: Admin → Channels warned that this rule used it
-        if ((await postToChannel(c.id, c.name, (c.kind === 'teams' ? renderTeams : renderSlack)(model).payload)).ok) ok++;
+        if ((await deliver(c, { kind: 'alert', projectId, ruleId: rule.id, message: model })).ok) ok++;
       }
       sent += ok;
       const who = ctx();

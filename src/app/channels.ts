@@ -1,8 +1,13 @@
-// Channels — the org's saved Slack / Teams destinations. MAIN.
+// Channels — the org's saved Slack / Teams / email destinations. MAIN.
 //
 // A channel is a PATH FOR DATA TO LEAVE THE SERVER, so it belongs to the org
 // and only an org admin makes, changes or removes one (src/api/subscriptions.ts);
-// members see `{id, name, kind, secretSet}` to pick from.
+// members see `{id, name, kind, secretSet, ready}` to pick from.
+//
+// An EMAIL channel holds no secret and no address: `to` names people and teams
+// of the org by id, resolved to addresses only at send time and only for those
+// who can read the project then (src/server/mail/emailChannel.ts). Only an org
+// admin is shown `to`.
 //
 // The record (userData/channels/<id>.json — a `records` row with DATABASE_URL)
 // holds the name and the kind. The WEBHOOK URL is a credential — whoever has it
@@ -21,14 +26,24 @@ import { isValidId } from './ids';
 import * as recordFs from './recordFs';
 import type { SecretStore } from '../server/secrets/store';
 import { ctx } from '../server/context';
-import { channelGone, channelLimit, channelNeedsHttps, channelNeedsName, channelNeedsUrl, channelsNeedStore } from '../analysis/subscriptionText';
+import { channelGone, channelLimit, channelNeedsHttps, channelNeedsName, channelNeedsUrl, channelsNeedStore, emailNeedsRecipients } from '../analysis/subscriptionText';
 
-export type ChannelKind = 'slack' | 'teams';
+export type ChannelKind = 'slack' | 'teams' | 'email';
+
+/** An email channel's recipients: org users and teams, by id. */
+export interface EmailTo {
+  userIds: string[];
+  teamIds: string[];
+}
+export const MAX_TO_USERS = 200;
+export const MAX_TO_TEAMS = 50;
 
 export interface Channel {
   id: string;
   name: string;
   kind: ChannelKind;
+  /** Email only. */
+  to?: EmailTo;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -39,7 +54,12 @@ export interface PublicChannel {
   id: string;
   name: string;
   kind: ChannelKind;
+  /** A webhook URL is stored (always false for email, which has none). */
   secretSet: boolean;
+  /** It can send now: its URL is stored, or (email) the server's mail is set up. */
+  ready: boolean;
+  /** Email, to org admins only: whom it names. */
+  to?: EmailTo;
 }
 
 export const MAX_CHANNELS = 100;
@@ -79,13 +99,23 @@ export function webhookProblem(raw: unknown): string | null {
 const dir = (): string => path.join(appPaths.userData(), 'channels');
 const file = (id: string): string => path.join(dir(), id + '.json');
 const clean = (v: unknown, max: number): string => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max) : '');
+const ids = (v: unknown, max: number): string[] => [...new Set((Array.isArray(v) ? v : []).filter((x): x is string => typeof x === 'string' && isValidId(x)).map((x) => x.toLowerCase()))].slice(0, max);
+
+/** `to` rebuilt field by field: UUIDs only, de-duplicated, capped. */
+export function sanitizeTo(raw: unknown): EmailTo {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  return { userIds: ids(o.userIds, MAX_TO_USERS), teamIds: ids(o.teamIds, MAX_TO_TEAMS) };
+}
 
 export async function getChannel(id: string): Promise<Channel | null> {
   if (!isValidId(id)) return null;
   try {
     const d = JSON.parse(await recordFs.readFile(file(id), 'utf8'));
-    if (!d || d.id !== id || (d.kind !== 'slack' && d.kind !== 'teams')) return null;
-    return { id, name: clean(d.name, 80) || d.kind, kind: d.kind, createdBy: clean(d.createdBy, 320), createdAt: clean(d.createdAt, 40), updatedAt: clean(d.updatedAt, 40) };
+    if (!d || d.id !== id || (d.kind !== 'slack' && d.kind !== 'teams' && d.kind !== 'email')) return null;
+    return {
+      id, name: clean(d.name, 80) || d.kind, kind: d.kind, ...(d.kind === 'email' ? { to: sanitizeTo(d.to) } : {}),
+      createdBy: clean(d.createdBy, 320), createdAt: clean(d.createdAt, 40), updatedAt: clean(d.updatedAt, 40),
+    };
   } catch {
     return null; // missing or corrupt: skipped, never fatal
   }
@@ -115,8 +145,11 @@ async function secretSet(id: string): Promise<boolean> {
   }
 }
 
-export async function publicChannel(c: Channel): Promise<PublicChannel> {
-  return { id: c.id, name: c.name, kind: c.kind, secretSet: await secretSet(c.id) };
+/** `admin`: the caller is an org admin (sees `to`); `mail`: the server can send email. */
+export async function publicChannel(c: Channel, view: { admin: boolean; mail: boolean }): Promise<PublicChannel> {
+  if (c.kind === 'email') return { id: c.id, name: c.name, kind: c.kind, secretSet: false, ready: view.mail, ...(view.admin && c.to ? { to: c.to } : {}) };
+  const set = await secretSet(c.id);
+  return { id: c.id, name: c.name, kind: c.kind, secretSet: set, ready: set };
 }
 
 export type SaveResult = { ok: true; channel: Channel } | { ok: false; error: string };
@@ -125,29 +158,35 @@ export type SaveResult = { ok: true; channel: Channel } | { ok: false; error: st
  * Create (no `id`) or change a channel. A new one needs its URL; an existing one
  * keeps the stored URL when `webhookUrl` is blank. The URL is sealed BEFORE the
  * record is written, so a record never names a channel that has no secret.
+ * An email channel needs `to` (an edit without it keeps the stored one); that its
+ * ids are this org's, and that mail is set up, the RPC handler checks first.
  */
-export async function saveChannel(input: { id?: string; name?: unknown; kind?: unknown; webhookUrl?: unknown }, by: string): Promise<SaveResult> {
+export async function saveChannel(input: { id?: string; name?: unknown; kind?: unknown; webhookUrl?: unknown; to?: unknown }, by: string): Promise<SaveResult> {
   const name = clean(input.name, 80);
   if (!name) return { ok: false, error: channelNeedsName() };
   const cur = input.id ? await getChannel(input.id) : null;
   if (input.id && !cur) return { ok: false, error: channelGone() };
-  const url = typeof input.webhookUrl === 'string' ? input.webhookUrl.trim() : '';
-  if (!cur || url) {
+  const kind: ChannelKind = cur ? cur.kind : input.kind === 'teams' ? 'teams' : input.kind === 'email' ? 'email' : 'slack';
+  const url = kind !== 'email' && typeof input.webhookUrl === 'string' ? input.webhookUrl.trim() : '';
+  const to = kind === 'email' ? (input.to !== undefined ? sanitizeTo(input.to) : cur?.to ?? sanitizeTo(null)) : undefined;
+  if (to && !to.userIds.length && !to.teamIds.length) return { ok: false, error: emailNeedsRecipients() };
+  if (kind !== 'email' && (!cur || url)) {
     const problem = webhookProblem(url);
     if (problem) return { ok: false, error: problem };
   }
-  if (!store) return { ok: false, error: channelsNeedStore() };
+  if (kind !== 'email' && !store) return { ok: false, error: channelsNeedStore() };
   if (!cur && (await listChannels()).length >= MAX_CHANNELS) return { ok: false, error: channelLimit(MAX_CHANNELS) };
   const now = new Date().toISOString();
   const channel: Channel = {
     id: cur ? cur.id : randomUUID(),
     name,
-    kind: cur ? cur.kind : input.kind === 'teams' ? 'teams' : 'slack',
+    kind,
+    ...(to ? { to } : {}),
     createdBy: cur ? cur.createdBy : by,
     createdAt: cur ? cur.createdAt : now,
     updatedAt: now,
   };
-  if (url) await store.put(ctx().org.id, SECRET, channel.id, url);
+  if (url && store) await store.put(ctx().org.id, SECRET, channel.id, url);
   await fs.promises.mkdir(dir(), { recursive: true });
   const tmp = file(channel.id) + '.' + randomUUID() + '.tmp';
   await recordFs.writeFile(tmp, JSON.stringify(channel, null, 2), 'utf8');
