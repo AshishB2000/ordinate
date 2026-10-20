@@ -8,6 +8,7 @@
 // colour (the pivot's conditional ramp, the cohort heatmap, a funnel bar's
 // width) — a visual encoding, never a printed number.
 
+import * as OrdFormat from '../../../../src/app/format.ts';
 import { fmtVal, fmtWith, tcCalcLabel, tcCalcValueText } from '../format';
 import { t } from './strings';
 
@@ -83,8 +84,8 @@ export function pivotFmt(v: number | null | undefined, showAs: string | undefine
   if (v == null || typeof v !== 'number' || !Number.isFinite(v)) return '–';
   if (kind) return tcCalcValueText(kind, v);
   if (showAs === 'pct_row' || showAs === 'pct_col' || showAs === 'pct_total') {
-    // The server sends a ratio; ×100 is the unit a percent sign implies.
-    return (v * 100).toLocaleString(undefined, { maximumFractionDigits: 1 }) + '%';
+    // The server sends a ratio; the formatter writes it as a percent.
+    return OrdFormat.formatPercent(v, 1, { maxOnly: true });
   }
   if (showAs === 'rank') return String(v);
   return fmtWith(v, format || 'auto');
@@ -108,12 +109,12 @@ export function pivotTip(grid: PivotGridShape, r: number, c: number): string {
     .join('\n');
 }
 
-export const engPct = (v: number | null | undefined): string => (v == null ? '' : `${Math.round(v * 10) / 10}%`);
+export const engPct = (v: number | null | undefined): string => (v == null ? '' : `${OrdFormat.formatNumber(v, { maxDecimals: 1 })}%`);
 export const engNum = (v: number | null | undefined): string => (v == null ? '' : fmtVal(v));
 
 export function engDuration(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms)) return '—';
-  const r = (v: number): string => String(Math.round(v * 10) / 10);
+  const r = (v: number): string => OrdFormat.formatNumber(v, { maxDecimals: 1 });
   if (ms < 60_000) return `${r(ms / 1000)} s`;
   if (ms < 3_600_000) return `${r(ms / 60_000)} min`;
   if (ms < 86_400_000) return `${r(ms / 3_600_000)} h`;

@@ -4,8 +4,10 @@
 // in afterDatasetsDraw (gauge in afterDraw), reading per-family state the
 // dataset builders left on `opts`.
 
+import * as OrdFormat from '../../../src/app/format.ts';
 import { isExtraFamily } from './familiesExtra';
 import { buildExtraPlugins } from './familiesPlugins';
+import { pctText } from './format';
 import { numOf, roundLabelFits, valueLabelAt, valueLabelKeys, valueLabelOf } from './labelText';
 import type { ChartCtx, Cx } from './types';
 
@@ -31,7 +33,7 @@ export function buildChartPlugins(c: ChartCtx): Cx[] {
         const { ctx, chartArea } = chart;
         if (!chartArea) return;
         const v = opts._gaugeValue;
-        const txt = (v >= 0 && v <= 1) ? Math.round(v * 100) + '%' : fmt(v);
+        const txt = (v >= 0 && v <= 1) ? OrdFormat.formatPercent(v, 0) : fmt(v);
         const cx = (chartArea.left + chartArea.right) / 2;
         const cy = (chartArea.top + chartArea.bottom) / 2 + 4;
         ctx.save();
@@ -117,21 +119,12 @@ export function buildChartPlugins(c: ChartCtx): Cx[] {
           if (meta.hidden || dataset._overlay) return;
           meta.data.forEach((element: Cx, j: number) => {
             if (!keys.has(di + ':' + j)) return;
-            let displayVal = numOf(dataset.data[j]);
+            const displayVal = numOf(dataset.data[j]);
             if (displayVal == null) return;
-            // Stacked charts position each point at the cumulative top, so label the running
-            // total (visible series 0..di) — otherwise the raw number won't match the axis.
-            if (opts.stacked) {
-              let cum = 0;
-              for (let d = 0; d <= di; d++) {
-                if (chart.getDatasetMeta(d).hidden) continue;
-                const dv = numOf(chart.data.datasets[d].data[j]);
-                if (typeof dv === 'number') cum += dv;
-              }
-              displayVal = cum;
-            }
+            // A stacked segment is labelled with its OWN figure, as every BI tool labels one: the
+            // running total it used to show was a sum the server never made. A 100% bar's own share.
             const pos = element.tooltipPosition();
-            const formatted = valueLabelOf(displayVal, overrides, fmt);
+            const formatted = opts.pct ? pctText(displayVal) : valueLabelOf(displayVal, overrides, fmt);
             const w = ctx.measureText(formatted).width;
             const at = valueLabelAt(element, pos, isHoriz, overrides.labelPosition, w, h,
               chart.config.type === 'bar' && dataset.type !== 'line');
