@@ -320,6 +320,7 @@ function sanitizeScorecard(raw: unknown): Obj {
         spark: arr(x.spark, 24).map(num), owner: str(x.owner, 80), group: str(x.group, 80),
       };
     }),
+    counts: (() => { const c = obj(o.counts); return { good: int(c.good, 0, 60, 0), warn: int(c.warn, 0, 60, 0), off: int(c.off, 0, 60, 0), none: int(c.none, 0, 60, 0) }; })(),
     groups: arr(o.groups, 60).map((g) => {
       const x = obj(g);
       return { group: str(x.group, 80), onTrack: int(x.onTrack, 0, 60, 0), scored: int(x.scored, 0, 60, 0), total: int(x.total, 0, 60, 0) };

@@ -94,12 +94,12 @@ function pcScorecard(page: any, root: HTMLElement): void {
   const sc = page.scorecard;
   root.appendChild(pcEl('h1', 'pub-title', sc.name));
   root.appendChild(pcEl('p', 'pub-sc-period', `${sc.window.label} · ${sc.window.from} – ${sc.window.to}`));
-  const counts: Record<string, number> = { good: 0, warn: 0, off: 0, none: 0 };
-  for (const r of sc.rows) counts[r.status] = (counts[r.status] || 0) + 1;
+  // How many are on track, at risk, off track: the server's count (the app's scorecard shows the same), never tallied here.
+  const counts: Record<string, number> = sc.counts || {};
   const sum = pcEl('div', 'pub-sc-summary');
   for (const st of ['good', 'warn', 'off']) {
     const item = pcEl('span', 'pub-sc-sum');
-    item.append(pcEl('span', 'pub-sc-dot pub-sc-dot--' + st), pcEl('strong', '', String(counts[st])), pcEl('span', '', PC_STATUS[st].toLowerCase()));
+    item.append(pcEl('span', 'pub-sc-dot pub-sc-dot--' + st), pcEl('strong', '', String(counts[st] ?? 0)), pcEl('span', '', PC_STATUS[st].toLowerCase()));
     sum.appendChild(item);
   }
   root.appendChild(sum);

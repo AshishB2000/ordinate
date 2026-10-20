@@ -149,6 +149,10 @@ async function main(): Promise<void> {
   ] }] } }) as any; // any: asserting a sanitizer's output shape
   ok('sanitize: a KPI keeps what it measures (its subtitle), and nothing else new',
     JSON.stringify(kpiPage.dashboard.sheets[0].cards[0].payloads[0]) === '{"value":5,"display":"5","caption":"c","subtitle":"Sum of sales"}');
+  const scored = sanitizePage({ kind: 'scorecard', site: {}, scorecard: { name: 'Q', rows: [{ name: 'a', status: 'good' }, { name: 'b', status: 'off' }],
+    counts: { good: 1, warn: 0, off: 1, none: 'x', extra: 9 }, groups: [] } }) as any; // any: asserting a sanitizer's output shape
+  ok('sanitize: a scorecard carries the server\'s status counts (the page tallies nothing), integers only',
+    JSON.stringify(scored.scorecard.counts) === '{"good":1,"warn":0,"off":1,"none":0}', JSON.stringify(scored.scorecard.counts));
   const story = sanitizePage({ kind: 'story', site: {}, story: { name: 'S', blocks: [
     { kind: 'image', src: 'data:image/svg+xml;base64,PHN2Zz4=' },
     { kind: 'image', src: 'data:image/png;base64,iVBORw0KGgo=' },
