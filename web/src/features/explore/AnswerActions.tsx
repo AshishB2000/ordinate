@@ -27,7 +27,7 @@ export function AnswerActions({ projectId, datasetId, canEdit, answered, questio
   projectId: string;
   datasetId: string;
   canEdit: boolean;
-  /** False while the question is refused or failed: a visual that cannot draw is not worth saving. */
+  /** False until the answer is in, and while it is refused or failed: a visual that cannot draw is not worth saving. */
   answered: boolean;
   question: Question;
   /** The chart on screen. */

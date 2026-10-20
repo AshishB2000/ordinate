@@ -63,7 +63,8 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
   const offered = level && !suited.includes('map_choropleth') ? [...suited, 'map_choropleth'] : suited;
   // A link's chart type is user input too: only a type the picker offers is drawn, else the first that suits.
   const asked = (live ? LIVE_POOL : POOL).includes(question.chartType) ? question.chartType : '';
-  const current = data && asked && (offered.includes(asked) || chartCanRender(asked, data, hasGeo)) ? asked : (offered[0] ?? 'table');
+  // Before the answer arrives it is the asked type (the table's skeleton holds its place); an answer no chart suits is a table.
+  const current = !data ? asked : asked && (offered.includes(asked) || chartCanRender(asked, data, hasGeo)) ? asked : (offered[0] ?? 'table');
 
   /** A region map names its regions (the level the server saw in the labels); leaving one drops them. */
   const pick = (t: string) => {
@@ -81,7 +82,7 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
 
   return (
     <>
-      <section className={s.answer} aria-labelledby="explore-answer" data-chart-type={current}>
+      <section className={s.answer} aria-labelledby="explore-answer" data-chart-type={current || undefined}>
         <header className={s.answerHead}>
           <div className={s.answerTitles}>
             <h2 id="explore-answer" className={s.answerTitle}>
@@ -92,7 +93,7 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
               {reply?.asOf && <AsOfCaption asOf={reply.asOf} />}
             </p>
           </div>
-          <AnswerActions projectId={projectId} datasetId={datasetId} canEdit={canEdit} answered={!answer.isError} question={question} chartType={current} grain={reply?.category?.grain} title={title} />
+          <AnswerActions projectId={projectId} datasetId={datasetId} canEdit={canEdit} answered={!!reply && !answer.isError} question={question} chartType={current} grain={reply?.category?.grain} title={title} />
         </header>
         {data && !empty && offered.length > 0 && (
           <div className={s.types}>

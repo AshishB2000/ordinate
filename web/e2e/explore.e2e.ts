@@ -1,8 +1,8 @@
 // E2E: Explore (docs/explore/00-design.md) against the real server and the
 // bundled sample (Retail orders).
 //
-//   editor   the start page: the suggested questions, their thumbnails drawn
-//            from ONE visual:dataBatch; take a suggestion; change the group-by
+//   editor   pick the sample dataset: the suggested questions, their thumbnails
+//            drawn from ONE visual:dataBatch; take a suggestion; change the group-by
 //            in its well; the table's figures equal the server's own reply to
 //            the same request; a reload of the URL draws the same answer; Save
 //            as visual → it is in Visuals
@@ -144,17 +144,26 @@ e2e('explore: an editor takes a suggestion, regroups it, checks it against the s
   const { pid, did } = await project(s);
   await signIn(page, EDITOR);
 
-  // ── The start page: suggestions, their thumbnails from ONE batch ───────
-  const batch = reply(page, 'visual:dataBatch');
-  await page.goto(`/explore?project=${pid}&dataset=${did}`);
+  // ── Pick the sample dataset; its suggestions, their thumbnails from ONE batch ──
+  const batches: { datasetId: string; items: unknown[] }[] = [];
+  page.on('request', (r) => {
+    if (decodeURIComponent(new URL(r.url()).pathname) !== '/api/rpc/visual:dataBatch') return;
+    const body = JSON.parse(r.postData() ?? '{}') as { args: [{ items: { datasetId: string }[] }] };
+    batches.push({ datasetId: body.args[0].items[0]?.datasetId ?? '', items: body.args[0].items });
+  });
+  await page.goto(`/explore?project=${pid}`);
   await settled(page);
   assert.equal(await page.getByRole('heading', { level: 1 }).textContent(), 'Explore');
+  await page.getByRole('combobox', { name: 'Dataset' }).click();
+  await page.getByRole('option', { name: 'Retail orders' }).click();
+  await page.waitForURL((u) => u.searchParams.get('dataset') === did);
   const cards = page.getByRole('list', { name: 'Suggested questions' }).getByRole('button');
-  await page.getByRole('heading', { name: 'Start with a question' }).waitFor();
+  await page.getByRole('button', { name: /^Total revenue by region/ }).waitFor();
   assert.equal(await cards.count(), 6);
-  const sent = JSON.parse((await batch).request().postData() ?? '{}') as { args: [{ items: unknown[] }] };
-  assert.equal(sent.args[0].items.length, 6, 'one visual:dataBatch carries every thumbnail');
   await inked(page, '[data-suggestion] canvas', 6);
+  const mine = batches.filter((b) => b.datasetId === did);
+  assert.equal(mine.length, 1, `one visual:dataBatch for the dataset's thumbnails, not ${mine.length}`);
+  assert.equal(mine[0]!.items.length, 6, 'it carries every thumbnail');
   assert.equal(await page.getByRole('textbox', { name: 'Ask in your own words' }).count(), 0, 'no AI model: no ask box');
   await screens(page, 'explore-empty');
   await inked(page, '[data-suggestion] canvas', 6);
