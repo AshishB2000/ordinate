@@ -23,6 +23,7 @@ import { useTileAsOf } from './editor/tileAsOf';
 import { LiveRefusal } from '../live/LiveOff';
 import { liveRefusalOf } from '../live/refusal';
 import s from './Tiles.module.css';
+import { figureAsk } from '../../../../src/analysis/figureAsk.ts';
 
 /** The family glyph a chart type wears where it is not drawn (a map preview, a missing visual). */
 export function vizGlyph(type: string): IconName {
@@ -189,6 +190,7 @@ export function VisualTileBody({
       encoding: def.encoding,
       filters: mergeFilters(filters, def.filters),
       ...(def.analytics ? { analytics: def.analytics } : {}),
+      ...figureAsk(def.chartType, def.overrides), // a figure type's figures come with its answer (docs/chart-figures)
     }),
     [def, filters],
   );

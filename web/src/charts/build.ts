@@ -20,9 +20,11 @@ import { buildChartDatasets } from './datasets';
 import { evDrawable, eventsPlugin } from './events';
 import { applyExtraTooltip, extraChartOptions, isExtraFamily } from './familiesExtra';
 import { fmtApply, fmtResolve } from './fmtApply';
-import { fmtVal, fmtWith, tcAxisFmt, tcTooltip } from './format';
+import * as OrdFormat from '../../../src/app/format.ts';
+import { fmtVal, fmtWith, pctText, tcAxisFmt, tcTooltip } from './format';
 import { CHART_PALETTE, getCSSVar, paletteFromSeed } from './palette';
 import { buildChartScales } from './scales';
+import { figuresMissing } from './shapes';
 import { selectionPlugin } from './selection';
 import { t } from './strings';
 import { legendOnByDefault } from './traits';
@@ -141,6 +143,9 @@ export function buildChart(
           isGauge, isCandlestick, isBoxplot, isHistogram, isHoriz } = spec;
   // A word cloud is not a Chart.js chart: wordCloudRender.js draws it on this canvas.
   if (spec.isWordCloud) return { kind: 'wordCloud', labels, series, overrides, theme: { palette, fmt, textColor, titleColor, fontFamily, surfColor } };
+  // A type that draws the server's figures (src/analysis/chartShapes.ts) draws nothing without them — never works them out.
+  let figures = data.figures ?? {};
+  if (figuresMissing(spec, figures)) return null;
 
   // ── Sort by value (bar/column families + pie/donut) ───────────────────────
   // Reorders categories by their total across series; line/area/funnel/histogram
@@ -185,6 +190,7 @@ export function buildChart(
     labels = order.map((i: number) => labels[i]);
     series = series.map((s: ChartSeriesShape) => Object.assign({}, s, { values: order.map((i: number) => s.values[i]) },
       Array.isArray(s.raw) ? { raw: order.map((i: number) => s.raw![i]) } : {}));
+    if (figures.sharePct) figures = { ...figures, sharePct: figures.sharePct.map((row) => order.map((i: number) => row[i])) };
     sortOrder = order;
   }
 
@@ -219,7 +225,7 @@ export function buildChart(
     canvas, labels, series, overrides,
     fmt, valueMode, lineTension,
     palette, textColor, gridColor, surfColor, titleColor, fontFamily,
-    showLegend, showGridlines, tickFont,
+    showLegend, showGridlines, tickFont, figures,
   };
 
   // Datasets FIRST — they write the per-family state on `opts` that the axes and
@@ -276,11 +282,20 @@ export function buildChart(
   }
   if (isFunnel) {
     tooltipConfig.filter = (item: Cx) => item.datasetIndex !== 0;   // hide the spacer stack
+    // A stage's share of the first is the server's (figures.funnel); without it, the stage's own figure.
+    const ofTop = figures.funnel && figures.funnel.ofTopPct[0];
     tooltipConfig.callbacks.label = (item: Cx) => {
       const v = opts._funnelVals[item.dataIndex];
-      const top = opts._funnelVals[0] || 0;
-      const pct = top ? Math.round((v / top) * 100) : null;
-      return pct != null ? t('chartRender.of_top', { v: fmt(v), pct }) : fmt(v);
+      const pct = ofTop ? ofTop[item.dataIndex] : null;
+      return pct != null ? t('chartRender.of_top', { v: fmt(v), pct: OrdFormat.formatNumber(pct, { decimals: 0 }) }) : fmt(v);
+    };
+  }
+  if (opts.pct) {
+    // A 100%-stacked bar is drawn from the server's share; the tooltip says it, then the figure behind it.
+    tooltipConfig.callbacks.label = (item: Cx) => {
+      const name = item.dataset && item.dataset.label ? item.dataset.label + ': ' : '';
+      const s = series[item.datasetIndex];
+      return `${name}${pctText(item.raw)} · ${fmt(s ? s.values[item.dataIndex] : null)}`;
     };
   }
   if (isExtraFamily(spec)) applyExtraTooltip(c, tooltipConfig);

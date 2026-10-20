@@ -9,6 +9,7 @@ import { rpc, RpcError } from '../../api/client';
 import { replyError } from '../live/refusal';
 import type { VizData } from '../../api/visuals';
 import type { Overrides } from '../../charts/types';
+import type { FigureAsk } from '../../../../src/analysis/figureAsk.ts';
 
 export type Agg = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
 
@@ -195,7 +196,7 @@ export function usePreview(req: Parameters<typeof rpcPreview>[0] | undefined) {
   });
 }
 
-async function rpcPreview(req: { projectId: string; datasetId: string; encoding: Encoding; filters: FilterStep[]; analytics?: Record<string, unknown>[]; asOf?: string }) {
+async function rpcPreview(req: { projectId: string; datasetId: string; encoding: Encoding; filters: FilterStep[]; analytics?: Record<string, unknown>[]; asOf?: string } & Partial<FigureAsk>) {
   // "As of" a kept snapshot reads in full through `visual:data` (src/data/asOf.ts); Latest previews (T2.11).
   const r = (await rpc(req.asOf ? 'visual:data' : 'visual:preview', req)) as ({ ok: true } & Preview) | Fail;
   // An "off for Live" refusal keeps its code, so the stage can offer a copy (../live/refusal.ts).

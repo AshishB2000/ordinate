@@ -9,7 +9,7 @@ import { deepStrictEqual } from 'node:assert/strict';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { buildChart } from './build';
 import type { Cx } from './types';
-import { golden } from '../test-golden';
+import { asRecordedPct, golden, served } from '../test-golden';
 
 const THEME: Record<string, string> = {
   '--chart-1': '#2563eb', '--chart-2': '#0e7490', '--chart-3': '#14b8a6', '--chart-4': '#6366f1',
@@ -57,13 +57,15 @@ function agree(type: string, data: unknown, overrides: Record<string, unknown>, 
   const key = type + ' ' + JSON.stringify(overrides) + ' ' + JSON.stringify(data);
   expect(key in G, `recorded: ${key}`).toBe(true);
   const want = G[key];
-  const built = buildChart(canvasStub(), structuredClone(data) as never, type, portOverrides);
+  // What visual:data answers now: the series, and the server's figures for the type (docs/chart-figures).
+  const built = buildChart(canvasStub(), structuredClone(served(type, data as object, portOverrides)) as never, type, portOverrides);
   if (want === null) {
     expect(built).toBeNull();
     return;
   }
   expect(built && built.kind).toBe('chartjs');
   if (!built || built.kind !== 'chartjs') return;
+  asRecordedPct(type, built.config);
   deepStrictEqual(norm(built.config), want);
 }
 

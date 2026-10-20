@@ -22,6 +22,7 @@ import { canvasToPng } from '../png';
 import { SAMPLE_ENCODINGS } from '../sampleEncodings';
 import { VIZ_IDS, VIZ_LABELS, VIZ_RENDERER, type VizId } from '../vizLabels';
 import s from './ChartsGallery.module.css';
+import { figureAsk } from '../../../../src/analysis/figureAsk.ts';
 
 const SAMPLE_DATASET = 'Retail orders';
 
@@ -129,7 +130,7 @@ const VARIANTS: Array<{ key: string; type: string; label: string; encoding: Enco
 ];
 
 function CanvasTile({ id, projectId, datasetId }: { id: VizId; projectId: string; datasetId: string }) {
-  const q = useVizData({ projectId, datasetId, encoding: SAMPLE_ENCODINGS[id] });
+  const q = useVizData({ projectId, datasetId, encoding: SAMPLE_ENCODINGS[id], ...figureAsk(id) });
   const [chart, setChart] = useState<ChartHandle | null>(null);
   const label = VIZ_LABELS[id];
   const renderer = VIZ_RENDERER[id];

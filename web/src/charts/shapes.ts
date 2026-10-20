@@ -1,11 +1,20 @@
-// The pure data shapes behind five chart families — waterfall, bullet, calendar
-// heatmap, radar and Pareto (the desktop's chartShapes.ts). `{labels, series}`
-// in, the numbers each family draws out: running totals, cumulative
-// percentages, week/weekday cells, per-axis normalised values, bullet bands.
-// DOM-free. src/analysis/captions.ts restates the waterfall ends and the Pareto
-// 80% count on the server (scripts/test-captions.ts pins the two).
+// The data shapes behind five chart families — waterfall, bullet, calendar
+// heatmap, radar and Pareto (the desktop's chartShapes.ts), as their plugins
+// read them. DOM-free, and no figure is worked out here: a waterfall's levels,
+// a Pareto's order and cumulative share and a calendar's one value per day are
+// the SERVER's (src/analysis/chartShapes.ts, the reply's `figures`), only
+// indexed and laid out; a radar's per-axis scaling and a bullet's bands are
+// drawing geometry (their tooltips show the raw figure).
 
+import type { ChartFigures } from '../../../src/analysis/chartShapes.ts';
+import type { ChartTypeSpec } from './typeSpec';
 import type { Cx } from './types';
+
+/** A type that draws the server's figures, without them: it draws nothing rather than work them out. */
+export function figuresMissing(spec: ChartTypeSpec, f: ChartFigures): boolean {
+  return (spec.isWaterfall && !f.waterfall) || (spec.isPareto && !f.pareto) || (spec.opts.pct === true && !f.sharePct)
+    || (spec.isHistogram && !f.histogram) || (spec.isCalendar && !f.calendar);
+}
 
 /** One bar of a waterfall. `base` → `base + delta` is the bar; `running` is the level after it. */
 export interface WaterfallShape {
@@ -47,124 +56,46 @@ export interface BulletShape { rows: BulletRow[]; hasTarget: boolean; max: numbe
 const num = (v: Cx): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 // ── Waterfall ─────────────────────────────────────────────────────────────
-// A category is a TOTAL when the chart's `waterfallTotals` override names it
-// or its label reads as one ("Total", "Subtotal", "Sub-total Q1", "Grand
-// total"). A total is drawn from 0 at its own value — which resets the running
-// level — or at the running level when the cell is empty.
-const TOTAL_RE = /^(sub[ -]?|grand )?total\b/i;
-
-export function waterfallSteps(labels: Cx[], series: Cx[], totals?: string[] | null): WaterfallShape {
-  const named = new Set((Array.isArray(totals) ? totals : []).map(String));
-  const isTotal = (l: Cx): boolean => named.has(String(l)) || TOTAL_RE.test(String(l));
-  const out: WaterfallShape = { labels: [], base: [], delta: [], kind: [], running: [], src: [], from: 0, to: 0 };
-  const push = (label: Cx, base: number, delta: number, kind: WaterfallShape['kind'][number], src: number): void => {
-    out.labels.push(String(label));
-    out.base.push(base);
-    out.delta.push(delta);
-    out.kind.push(kind);
-    out.running.push(kind === 'up' || kind === 'down' ? base + delta : delta);
-    out.src.push(src);
+// The SERVER's steps (src/analysis/chartShapes.ts), as the drawer and its
+// plugins read them: a bar from `start` to `end`, its step, and the level after
+// it. A step names its category by index, so a month reads as the axis draws it.
+export function waterfallFromFigures(f: NonNullable<ChartFigures['waterfall']>, labels: Cx[]): WaterfallShape {
+  const steps = f.steps;
+  return {
+    labels: steps.map((s) => (s.src >= 0 && s.src < labels.length ? String(labels[s.src]) : s.label)),
+    base: steps.map((s) => s.start),
+    delta: steps.map((s) => s.value),
+    kind: steps.map((s) => s.kind),
+    running: steps.map((s) => s.end),
+    src: steps.map((s) => s.src),
+    from: f.from,
+    to: f.to,
   };
-  const s0: Cx[] = (series[0] && series[0].values) || [];
-
-  if (series.length >= 2) {
-    // A BRIDGE: series[0] → series[1] (last year → this year), one step per
-    // category. A total-labelled category would count its children twice, so
-    // it is left out of both ends and of the steps.
-    const s1: Cx[] = series[1].values || [];
-    const keep = labels.map((l, i) => i).filter((i) => !isTotal(labels[i]));
-    for (const i of keep) { out.from += num(s0[i]) ?? 0; out.to += num(s1[i]) ?? 0; }
-    push(series[0].name || 'Start', 0, out.from, 'start', -1);
-    let running = out.from;
-    for (const i of keep) {
-      const d = (num(s1[i]) ?? 0) - (num(s0[i]) ?? 0);
-      push(labels[i], running, d, d >= 0 ? 'up' : 'down', i);
-      running += d;
-    }
-    push(series[1].name || 'End', 0, out.to, 'end', -1);
-    return out;
-  }
-
-  let running = 0;
-  labels.forEach((l, i) => {
-    const v = num(s0[i]);
-    if (isTotal(l)) {
-      running = v ?? running;
-      if (i === 0) out.from = running;
-      push(l, 0, running, 'total', i);
-      return;
-    }
-    const d = v ?? 0;
-    push(l, running, d, d >= 0 ? 'up' : 'down', i);
-    running += d;
-  });
-  if (labels.length && !isTotal(labels[labels.length - 1])) push('Total', 0, running, 'end', -1);
-  out.to = running;
-  return out;
 }
 
 // ── Pareto ────────────────────────────────────────────────────────────────
-// Descending by value (stable, nulls last); the cumulative line runs over the
-// POSITIVE values only, so a negative category can neither push the line past
-// 100% nor drag it backwards. count80 is how many categories it takes for the
-// cumulative share to reach 80% — 0 when there is nothing positive to share.
-const REACH = 0.8 * (1 - 1e-12); // ponytail: 1e-12 absorbs float drift at an exact 80%
-
-export function paretoShape(labels: Cx[], values: Cx[]): ParetoShape {
-  const rows = labels.map((l, i) => ({ l, v: num(values[i]), i }));
-  rows.sort((a, b) => {
-    if (a.v === null || b.v === null) return a.v === b.v ? a.i - b.i : (a.v === null ? 1 : -1);
-    return b.v - a.v || a.i - b.i;
-  });
-  let total = 0;
-  for (const r of rows) if (r.v !== null && r.v > 0) total += r.v;
-  let cum = 0;
-  let count80 = 0;
-  const cumPct = rows.map((r, k) => {
-    if (r.v !== null && r.v > 0) cum += r.v;
-    if (!count80 && total > 0 && cum >= total * REACH) count80 = k + 1;
-    return total > 0 ? (cum / total) * 100 : 0;
-  });
-  return { labels: rows.map((r) => r.l), values: rows.map((r) => r.v), cumPct, count80, total, src: rows.map((r) => r.i) };
+// The server's order (largest first) and cumulative share; the bars are the
+// reply's own values, read in that order.
+export function paretoFromFigures(f: NonNullable<ChartFigures['pareto']>, labels: Cx[], values: Cx[]): ParetoShape {
+  return { labels: f.order.map((i) => labels[i]), values: f.order.map((i) => num(values[i])), cumPct: f.cumPct, count80: f.count80, total: f.total, src: f.order };
 }
 
 // ── Calendar ──────────────────────────────────────────────────────────────
-// 'YYYY-MM-DD' or an ISO datetime; the CALENDAR DATE AS WRITTEN is the day
-// (no timezone shift), and all arithmetic is on UTC epoch days so the local
-// zone can never move a cell. Weeks start Monday (ISO), matching the day and
-// week grains in src/analysis/categoryKey.ts. The week index runs on from the
-// first date's Monday and does NOT restart at a new year.
-const DAY_RE = /^(\d{4})-(\d{2})-(\d{2})(?:$|[T ])/;
+// The server's one value per day (epoch days, UTC; two labels on one day are
+// summed there), laid out as week × weekday cells. Weeks start Monday (ISO),
+// matching the day and week grains in src/analysis/categoryKey.ts. The week
+// index runs on from the first date's Monday and does NOT restart at a new year.
 const MS_DAY = 86400000;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 // ponytail: a span past 20 years is refused (null → "couldn't draw"), not
 // truncated — a stray 1900-01-01 would otherwise mean 45k cells.
 const MAX_SPAN_DAYS = 366 * 20;
 
-export function epochDay(label: Cx): number | null {
-  const m = DAY_RE.exec(String(label == null ? '' : label).trim());
-  if (!m) return null;
-  const y = +m[1], mo = +m[2], d = +m[3];
-  const dt = new Date(0);
-  dt.setUTCFullYear(y, mo - 1, d);
-  // Rejects 2023-02-30 and month 13 instead of letting Date roll them over.
-  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
-  return Math.round(dt.getTime() / MS_DAY);
-}
 const weekdayOf = (day: number): number => (((day + 3) % 7) + 7) % 7; // 0 = Monday; 1970-01-01 was a Thursday
 const isoOf = (day: number): string => new Date(day * MS_DAY).toISOString().slice(0, 10);
 
-export function calendarCells(labels: Cx[], values: Cx[]): CalendarShape | null {
-  // ponytail: two labels on one day are SUMMED — right for sum/count, not avg;
-  // the builder forces the day grain for this type, so it only bites raw data.
-  const byDay = new Map<number, number | null>();
-  labels.forEach((l, i) => {
-    const day = epochDay(l);
-    if (day === null) return;
-    const v = num(values[i]);
-    const prev = byDay.has(day) ? byDay.get(day)! : null;
-    byDay.set(day, v === null ? prev : (prev ?? 0) + v);
-  });
+export function calendarCells(f: NonNullable<ChartFigures['calendar']>): CalendarShape | null {
+  const byDay = new Map<number, number | null>(f.days.map((d, i) => [d, f.values[i] ?? null]));
   if (!byDay.size) return null;
   let lo = Infinity, hi = -Infinity;
   for (const d of byDay.keys()) { if (d < lo) lo = d; if (d > hi) hi = d; }
