@@ -20,8 +20,10 @@ ignored Total rows and the two-series bridge. One tile showed three sets of numb
   101%); the labels and tooltips format them with the app's number formatter. Each segment is
   labelled with its own figure (on every stacked chart): the running total a segment's label used
   to show was a sum the browser made.
-- A chart of one of these types whose figures did not arrive (an old cached reply) shows its
-  designed "Nothing to draw" state — in the app and on `/p/` — and never works them out itself.
+- A chart of one of these types whose figures did not arrive never works them out itself: the app
+  shows its designed "Nothing to draw" state (in the builder, a skeleton while the answer that
+  carries them is on its way), and a page published before figures existed says "This chart needs
+  a newer publish to draw — publish the dashboard again".
 - **The published page looks like the app**: month axes read "Jan 2023" (not `2023-01-01`), and
   so do captions ("from Jan 2023 to Dec 2024"); bars and lines carry the app's default value labels
   (each series' largest and smallest; a waterfall's totals and its largest rise and fall) and there
@@ -32,9 +34,11 @@ ignored Total rows and the two-series bridge. One tile showed three sets of numb
 - A **histogram**'s bins, a **funnel**'s "% of top", a **bullet**'s "% of target" and a
   **calendar**'s days are the server's too; a **stacked** segment's label is its own figure; the
   map's cluster markers no longer add up values they never draw.
-- A screen reader hears the drawn figures of these three chart types: each chart carries a hidden
-  list of them under the canvas ("Technology +1.3M to 5.4M"), the same text in the app and on `/p/`.
-- The Firefox/WebKit nightly is green again.
+- A screen reader hears the drawn figures of a waterfall, a Pareto, a 100%-stacked chart and a
+  histogram: each carries a hidden list under its canvas ("Technology: +1.3M → 5.4M",
+  "Copiers: 1.7M · 31.9% cumulative"), the same text in the app and on `/p/`.
+- The Firefox/WebKit nightly's three failures are fixed at their causes (confirmed on Chromium and
+  WebKit here; Firefox does not start on the build machine, so the dispatched nightly confirms it).
 
 ## Decisions (from the plan — not re-litigated)
 
