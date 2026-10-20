@@ -16,17 +16,20 @@ import { LiveOff } from '../live/LiveOff';
 import { ColumnsTab } from './ColumnsTab';
 import { LiveNotice } from './LiveMode';
 import { SchemaPanel } from './SchemaPanel';
+import { RowAccessTab } from './RowAccessTab';
 
-export const LIVE_TABS = ['data', 'schema', 'columns', 'quality', 'insights', 'snapshots'] as const;
+export const LIVE_TABS = ['data', 'schema', 'columns', 'quality', 'insights', 'snapshots', 'access'] as const;
 export type LiveTabId = (typeof LIVE_TABS)[number];
 
-export function LiveTabs({ projectId, datasetId, header, tab, onTab, maxCacheAgeSec }: {
+export function LiveTabs({ projectId, datasetId, header, tab, onTab, maxCacheAgeSec, admin = false }: {
   projectId: string;
   datasetId: string;
   header: DatasetColumns;
   tab: string;
   onTab: (v: string) => void;
   maxCacheAgeSec?: number;
+  /** A project admin: the Row access tab (docs/row-policy). */
+  admin?: boolean;
 }) {
   const value: LiveTabId = (LIVE_TABS as readonly string[]).includes(tab) ? (tab as LiveTabId) : 'data';
   return (
@@ -50,6 +53,11 @@ export function LiveTabs({ projectId, datasetId, header, tab, onTab, maxCacheAge
         <Tab value="snapshots" icon="history">
           Snapshots
         </Tab>
+        {admin && (
+          <Tab value="access" icon="lock">
+            Row access
+          </Tab>
+        )}
       </TabList>
       <TabPanel value="data">
         <LiveNotice projectId={projectId} datasetId={datasetId} maxCacheAgeSec={maxCacheAgeSec} />
@@ -69,6 +77,11 @@ export function LiveTabs({ projectId, datasetId, header, tab, onTab, maxCacheAge
       <TabPanel value="snapshots">
         <LiveOff projectId={projectId} datasetId={datasetId} feature="snapshots" heading={3} />
       </TabPanel>
+      {admin && (
+        <TabPanel value="access">
+          <RowAccessTab projectId={projectId} datasetId={datasetId} header={header} />
+        </TabPanel>
+      )}
     </Tabs>
   );
 }

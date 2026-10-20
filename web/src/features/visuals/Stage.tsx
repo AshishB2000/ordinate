@@ -25,7 +25,7 @@ import { Button } from '../../ui/Button';
 import { toast } from '../../ui/Toast';
 import { LiveOff, LiveRefusal } from '../live/LiveOff';
 import { LIVE_OFF_CHARTS } from '../live/offFeatures';
-import { liveRefusalOf } from '../live/refusal';
+import { isRowRefusal, liveRefusalOf } from '../live/refusal';
 import s from './Builder.module.css';
 
 /** "+ More" on a Live dataset: every chart but the grid engines, which are off for Live (L2.6). */
@@ -117,7 +117,7 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
         ) : !b.complete ? (
           <StageNote>Pick a category and at least one measure to draw a chart.</StageNote>
         ) : b.preview.isError && !reply && liveRefusalOf(b.preview.error) !== null ? (
-          <LiveRefusal message={liveRefusalOf(b.preview.error) ?? ''} projectId={projectId} datasetId={b.datasetId} />
+          <LiveRefusal message={liveRefusalOf(b.preview.error) ?? ''} projectId={projectId} datasetId={b.datasetId} row={isRowRefusal(b.preview.error)} />
         ) : b.preview.isError && !reply ? (
           <ErrorState compact heading={3} title="Could not compute the visual" message={b.preview.error.message} onRetry={() => void b.preview.refetch()} />
         ) : !reply || !data ? (

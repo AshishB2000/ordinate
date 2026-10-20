@@ -131,20 +131,22 @@ export function LiveOffPage({ title, projectId, datasetId, feature }: { title: s
  * sentence, and — when the dataset is known — "Make a copy". Compact, for a
  * dashboard tile, a KPI card, an answer card or the builder's stage.
  */
-export function LiveRefusal({ message, projectId, datasetId, title = 'Off for this Live dataset' }: {
+export function LiveRefusal({ message, projectId, datasetId, title, row = false }: {
   message: string;
   projectId: string;
   datasetId?: string;
   title?: string;
+  /** A row access refusal (./refusal isRowRefusal): about the caller's access — no copy to offer. */
+  row?: boolean;
 }) {
   return (
-    <div className={s.refusal} data-live-refusal="">
+    <div className={s.refusal} data-live-refusal="" data-row-refusal={row ? '' : undefined}>
       <EmptyState
         compact
         heading={3}
-        icon="zap"
-        title={title}
-        actions={datasetId ? <MakeCopyButton projectId={projectId} datasetId={datasetId} variant="secondary" size="sm" /> : undefined}
+        icon={row ? 'lock' : 'zap'}
+        title={title ?? (row ? 'Limited by your access' : 'Off for this Live dataset')}
+        actions={datasetId && !row ? <MakeCopyButton projectId={projectId} datasetId={datasetId} variant="secondary" size="sm" /> : undefined}
       >
         {message}
       </EmptyState>

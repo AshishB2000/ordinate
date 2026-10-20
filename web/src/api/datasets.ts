@@ -8,6 +8,8 @@ import { rpc } from './client';
  */
 export interface DatasetSummary {
   id: string;
+  /** Row access rules limit what the caller sees here (docs/row-policy). */
+  scoped?: true;
   name: string;
   sourceKind: string;
   rowCount: number;
@@ -53,6 +55,8 @@ export interface DatasetColumns {
   columns: { name: string; type: 'text' | 'number' | 'date' }[];
   /** A Live dataset keeps no rows here (L2.1). */
   mode?: 'live';
+  /** Row access rules limit what the caller sees here (docs/row-policy): nothing else about them is sent. */
+  scoped?: true;
 }
 
 /** A dataset's name, row count and typed columns; `null` data = no such dataset. */
