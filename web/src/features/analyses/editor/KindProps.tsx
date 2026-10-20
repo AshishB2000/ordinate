@@ -181,10 +181,12 @@ export function InteractionProps({ def }: { def: VisualDef }) {
   const write = async (patch: Record<string, unknown>) => {
     setBusy(true);
     try {
-      const r = (await rpc('visual:update', { projectId: ed.projectId, id: def.id, overrides: { ...ov, ...patch } })) as { ok: boolean; visual?: VisualDef; error?: string };
+      // The visual's tag from analysis:open (docs/edit-conflicts): changed elsewhere since, the write is refused — a
+      // toast with the server's sentence, and the visual stays as that save left it. Not this editor's document: no banner.
+      const r = (await rpc('visual:update', { projectId: ed.projectId, id: def.id, base: def.tag, overrides: { ...ov, ...patch } })) as { ok: boolean; visual?: VisualDef; error?: string; tag?: string };
       if (!r.ok || !r.visual) throw new Error(r.error || 'The visual could not be updated.');
       const v = r.visual;
-      ed.addVisuals([{ ...def, overrides: v.overrides ?? {}, updatedAt: v.updatedAt }]);
+      ed.addVisuals([{ ...def, overrides: v.overrides ?? {}, updatedAt: v.updatedAt, tag: r.tag }]);
     } catch (err) {
       toast(failure(err, 'The visual could not be updated.'), { kind: 'error' });
     } finally {

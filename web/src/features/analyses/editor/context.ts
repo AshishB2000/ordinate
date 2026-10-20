@@ -11,7 +11,8 @@ import type { Adding } from './AddDialogs';
 import type { Viewer } from '../../dashboards/useViewer';
 
 export type Pane = 'data' | 'visuals' | 'filters' | 'props' | null;
-export type SaveState = 'saved' | 'saving' | 'error';
+/** `paused`: another tab or person saved the dashboard first (editConflicts/useEditGuard) — nothing is sent until Reload. */
+export type SaveState = 'saved' | 'saving' | 'error' | 'paused';
 
 /** The autosave, and the ONE queue every write to the record waits in — a view op never races a document save. */
 export interface Save {

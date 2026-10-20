@@ -73,5 +73,5 @@ export default function AuthoringPage() {
     );
   }
   const role = roles.data?.[projectId];
-  return <Editor key={analysisId} projectId={projectId} analysis={q.data.analysis} visuals={q.data.visuals} readOnly={role !== 'editor' && role !== 'admin'} />;
+  return <Editor key={analysisId} projectId={projectId} analysis={q.data.analysis} visuals={q.data.visuals} tag={q.data.tag} readOnly={role !== 'editor' && role !== 'admin'} />;
 }

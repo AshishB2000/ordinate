@@ -23,6 +23,14 @@ import { ViewsMenu } from '../../dashboards/views/ViewsMenu';
 
 function SaveChip() {
   const { save } = useEditor();
+  // The conflict banner says why and offers the way on; a retry would be refused the same way.
+  if (save.state === 'paused') {
+    return (
+      <span className={`${s.saveChip} ${s.saveError}`} role="status">
+        <Icon name="alert" size={12} /> Not saved
+      </span>
+    );
+  }
   if (save.state === 'error') {
     return (
       <button type="button" className={`${s.saveChip} ${s.saveError}`} onClick={save.retry}>
