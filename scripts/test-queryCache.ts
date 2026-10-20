@@ -37,6 +37,12 @@ const parts = (datasetId: string, updatedAt = '2026-01-01T00:00:00.000Z', steps:
     qc.pipelineHash([{ type: 'trim' }, { type: 'dedupe' }]) !== qc.pipelineHash([{ type: 'dedupe' }, { type: 'trim' }]));
   ok('stableStringify: undefined members are dropped like JSON.stringify',
     qc.stableStringify({ a: 1, b: undefined }) === '{"a":1}');
+  // F21: ParamValues is a Map — two parameter values must be two keys, and insertion order must not matter.
+  const pv = (v: string, flip = false) => new Map<string, unknown>(flip ? [['b', 2], ['a', v]] : [['a', v], ['b', 2]]);
+  ok('stableStringify: a Map keys on its entries (two parameter values are two keys, in either insertion order)',
+    qc.stableStringify({ params: pv('East') }) !== qc.stableStringify({ params: pv('West') })
+      && qc.stableStringify({ params: pv('East') }) === qc.stableStringify({ params: pv('East', true) }));
+  ok('NEGATIVE CONTROL: JSON of a Map is {} — the collision the entries close', JSON.stringify(pv('East')) === JSON.stringify(pv('West')));
 }
 
 // ── memo: hits, misses, nulls not cached, trace counts ──────────────────────

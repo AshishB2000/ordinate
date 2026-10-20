@@ -93,6 +93,8 @@ export function stableStringify(v: unknown): string {
     return s === undefined ? 'null' : s;
   }
   if (Array.isArray(v)) return '[' + v.map(stableStringify).join(',') + ']';
+  // A Map (ParamValues) has no own keys: its entries, in key order — else every parameter set shared one key (F21).
+  if (v instanceof Map) return stableStringify([...v.entries()].sort((a, b) => (String(a[0]) < String(b[0]) ? -1 : String(a[0]) > String(b[0]) ? 1 : 0)));
   const o = v as Record<string, unknown>;
   const keys = Object.keys(o).filter((k) => o[k] !== undefined).sort();
   return '{' + keys.map((k) => JSON.stringify(k) + ':' + stableStringify(o[k])).join(',') + '}';

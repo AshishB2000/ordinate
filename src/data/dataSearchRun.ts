@@ -94,7 +94,7 @@ export async function runSearch(opts: RunOpts): Promise<DataSearchReply> {
       if (cancelled()) return { ...out, ok: false, cancelled: true };
       const meta = await datasets.getDatasetMeta(project.id, summary.id);
       if (!meta || isLive(meta)) continue; // a Live dataset holds no values here to search
-      const exclude = excludedColumns(exportAction, await withheldColumns(project.id, meta.id).catch(() => new Set<string>()));
+      const exclude = excludedColumns(exportAction, await withheldColumns(project.id, meta.id));
       let found;
       if (meta.resident && resident) {
         const src = { parquetPath: tablePath(project.id, meta.id, meta.storageVersion), columns: meta.columns };
