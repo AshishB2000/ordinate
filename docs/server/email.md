@@ -128,7 +128,13 @@ it. It says how many people on the list have signed in.
 
 - `RATE_LIMIT_EMAIL_ORG_PER_HOUR` (default 1000): recipients per organization per hour, in each pod.
   Subscriptions and alerts are counted separately, so a busy subscription schedule cannot stop an
-  alert. A send that would go over is **refused whole**, never cut short, and its run says so.
+  alert. **One project may use at most half of it** per hour, so one project cannot use up the
+  organization's email. A list larger than that half can never go out, and its run says so ("this
+  list is larger than the organization's hourly email limit"); raise the setting or split the list.
+- The budget is charged per message of up to 50 recipients, for the recipients the relay accepted. A
+  message the relay refused costs nothing. If the budget runs out partway, the rest of the list waits
+  for the next run, and the run says how many it reached. A run stopped only by the budget does not
+  count toward pausing the subscription.
 - Ten test emails per organization per hour.
 - **Send now**: once a minute per subscription.
 - At most 4 SMTP sessions at once per pod. After 3 failed connections in a row, sends fail fast for
@@ -136,6 +142,10 @@ it. It says how many people on the list have signed in.
 - A failure before the end of the message is retried twice (after 1 s and 4 s). Once the message
   has been handed over, nothing is retried: the relay may have queued it, and a retry would send it
   twice.
+- Each message of up to 50 recipients is tried, even after an earlier one failed. A send that reached
+  some of the list and not the rest is **sent**, and its run says "the mail server took only *n* of
+  its *m* recipients"; it never counts toward pausing. A TLS, sign-in or refused-relay failure ends the
+  send at once, because every message would fail the same way.
 
 ## What a failed send says
 
@@ -143,7 +153,9 @@ it. It says how many people on the list have signed in.
 |---|---|
 | Not sent: email is not set up on this server. | `SMTP_HOST`, `SMTP_FROM`, `DATABASE_URL`. |
 | Not sent to *list*: nobody on it can read this project. | The project's sharing, and who is on the list. |
-| Not sent to *list*: this organization reached its email limit for this hour. | `RATE_LIMIT_EMAIL_ORG_PER_HOUR`. |
+| Not sent to *list*: this organization reached its email limit for this hour. | `RATE_LIMIT_EMAIL_ORG_PER_HOUR`. It clears within the hour. |
+| Not sent to *list*: this list is larger than the organization's hourly email limit. | The list is larger than half of `RATE_LIMIT_EMAIL_ORG_PER_HOUR`, the most one project may send in an hour. |
+| Sent to *list*, but the mail server took only *n* of its *m* recipients. | The log's `email not sent` lines say which message the relay refused and why. |
 | Not delivered to *list*: the mail server's encryption could not be verified, so nothing was sent. | `SMTP_SECURITY` and the port, the relay's certificate, `NODE_EXTRA_CA_CERTS`. The log names the check that failed. |
 | Not delivered to *list*: the mail server did not accept this server's sign-in. | `SMTP_USER` / `SMTP_PASSWORD`. |
 | Not delivered to *list*: the mail server answered *code*. | The log line holds the relay's own words, for example a sender address it does not accept. |
@@ -162,7 +174,7 @@ The same figures as a Slack or Teams post, from the same message: the dashboard'
 10 rows of each chart, as text, shaped by the project's share policy. There is no attachment, no image
 and no remote content. The email carries no logo, so nothing in it calls back to the server or
 counts opens. It has a text part and an HTML part. Its only link is **Open in Ordinate**, and the
-dashboard still needs a sign-in. An editor's note on a subscription reads "Note from" its owner. The
+dashboard still needs a sign-in. An editor's note on a subscription reads "Note from" whoever last wrote it. The
 last line says which list the reader is on and that an org admin manages it. The sender's name
 (`SMTP_FROM`) appears above the title.
 

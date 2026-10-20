@@ -625,3 +625,23 @@ The orchestrator's rulings on my open questions:
 - **Send now's one-a-minute limit applies to every channel kind** (`subscriptions/rpc.ts`, a test hook for
   the suites that send twice).
 - **`PublicChannel.ready`** replaced `secretSet` in the three pickers (D9).
+
+## 16. Review round (code review and security review)
+
+| # | Finding | Fixed |
+|---|---|---|
+| 1 | "Note from" credited the OWNER, while any project writer can rewrite the note. | `subscription:save` records the writer (`message.noteBy`, server-set, not in the contract) whenever the title or note text changes. The email renders the stored value. The preview (given the subscription's `id`) credits the note as saving would. A note saved before this has no `noteBy` and renders without a name. |
+| 2 | One failed batch ended the whole send. | Every batch is tried; a relay-wide failure (TLS, AUTH, a refused relay) still stops. Some accepted and some not is `mail_partial`: the run is *sent* and clears the failure count. Only all-failed is a failure. |
+| 3 | The quota was charged before sending and never refunded, and a list over the limit was "busy this hour" forever. | Each batch is held, then refunded what the relay did not accept (`mail/budget.ts`); a refused batch costs nothing. A list larger than a project's share gets `list_too_large`. |
+| 4 | A rate refusal counted toward the pause, and one project could drain the org. | A run refused only by the budget is `uncounted`. Each project gets at most half the org's hourly budget per kind, alongside the org bucket. |
+| 5 | `figureDatasets` re-read the project once per channel. | Memoised per source for one subscription run and one alert tick (`DatasetsMemo`); a failed read is memoised too, so every channel refuses alike. Measured on a 200-dataset, 50-metric, 100-visual project: about 22 ms per read, so a 10-channel run went from about 224 ms to about 22 ms. The full scan stays, because lineage's edges need every dataset and metric. |
+| 6 | A turned-off person stayed picked but hidden. | They are shown, marked "Turned off", while picked; the summary counts what is shown. |
+| 7 | `SMTP_HOST=relay.example.com:80` passed, because the URL parser drops a default port. | `bareHost` checks the characters itself (`:80`, `:443`, `:25` and a bracketed IPv6 with a port are refused). |
+| 8 | The reply parser was untested. | Tests for a CR/LF split across chunks, a multi-line EHLO across chunks, a mismatched continuation, a garbled line, the 16 KB and 100-line caps. A `StringDecoder` keeps a character split across chunks whole. |
+| 9 | Copies of the UUID check. | `isValidId` everywhere. |
+| 10 | The door scan had gaps. | `sendBatches` (emailChannel only), destructured `connect` imports and requires, and `new [net.]Socket(` / `new [tls.]TLSSocket(` are covered. Seven planted doors are each found. |
+
+**Found on the re-read (not in the reviews):** `src/analysis/subscriptions.ts` dropped a stored run whose
+code it did not know, so an email run's history entry vanished when it was read back. The email codes
+are now in its `CODES`, with a test and a control. **i18n:** all 15 of this branch's keys are
+translated into es, de, fr and ja (553 of 599 translated, 92.3%).

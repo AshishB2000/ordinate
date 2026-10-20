@@ -98,7 +98,7 @@ organization's people and teams. See [email.md](email.md).
 | `SMTP_USER` | The SMTP AUTH user (PLAIN or LOGIN). Unset: no AUTH, for a relay that trusts the pod's address. | unset | the relay asks for AUTH | no |
 | `SMTP_PASSWORD` | The SMTP AUTH password. It never appears in a log line, an error or a browser. | unset | `SMTP_USER` is set | yes |
 | `SMTP_FROM` | The sender: `bi@example.com` or `Acme Analytics <bi@example.com>`. Its name is shown as the email's brand. Bounces go to this address. | unset | `SMTP_HOST` is set | no |
-| `RATE_LIMIT_EMAIL_ORG_PER_HOUR` | Email recipients per organization per hour, in each pod, counted separately for subscriptions and for alerts. A send that would go over is refused whole and says so in its run. | `1000` | — | no |
+| `RATE_LIMIT_EMAIL_ORG_PER_HOUR` | Email recipients per organization per hour, in each pod, counted separately for subscriptions and for alerts. One project may use at most half of it, so a list larger than half can never go out, and its run says so. Charged per message for the recipients the relay accepted. | `1000` | — | no |
 
 ## Warehouses and live data
 
