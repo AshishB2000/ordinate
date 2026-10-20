@@ -406,8 +406,8 @@ export function register(): void {
   ipcMain.handle('metricTree:compute', async (_e, { projectId, id, ...input }: any = {}) => { // any: contract-checked
     try {
       const out = await computeTree(projectId, id, input);
-      // The metric's tag: the tree editor's base (src/app/editConflict.ts).
-      const m = out.ok ? await metrics.getMetric(projectId, id) : null;
+      // The metric's tag, on a refusal too: the tree editor's base (src/app/editConflict.ts).
+      const m = await metrics.getMetric(projectId, id);
       return m ? { ...out, tag: contentTag('metric', m) } : out;
     } catch (err: any) { // any: a figure path's throw
       return { ok: false, error: err?.message || 'Failed to compute the tree', ...liveCodeOf(err) };
