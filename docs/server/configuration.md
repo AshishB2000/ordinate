@@ -84,6 +84,22 @@ from these tables, or when a table names one that no code reads.
 | `RATE_LIMIT_EMBED_ORG_PER_MINUTE` | [Embed](embedding.md) views per organization, every token together, per pod. | `1200` | — | no |
 | `SSRF_ALLOW` | Comma-separated CIDRs that connectors, URL sources and AI gateways may reach even though they are private, loopback or link-local. Everything else in those ranges, including cloud metadata, is refused before a socket opens. List your internal database subnets here. `0.0.0.0/0` turns the guard off. | unset: no private range allowed | a connector reads a database inside your VPC | no |
 
+## Email
+
+The one SMTP relay that [subscriptions and alerts](subscriptions.md) send email through. With
+`SMTP_HOST` unset, email is not offered. It also needs `DATABASE_URL`, because recipients are the
+organization's people and teams. See [email.md](email.md).
+
+| Variable | Purpose | Default | Required when | Secret |
+|---|---|---|---|---|
+| `SMTP_HOST` | The relay's host name or IP address, bare: no scheme, port or user. A relay on a private address is allowed without `SSRF_ALLOW`. Cloud metadata and link-local addresses are always refused. | unset: email off | you want email | no |
+| `SMTP_PORT` | The relay's port. | `587` (`starttls`), `465` (`tls`), `25` (`plaintext`) | — | no |
+| `SMTP_SECURITY` | `starttls`: upgrade with STARTTLS, and refuse to send if the relay does not offer it. `tls`: TLS from the first byte. `plaintext`: no TLS. It is allowed only to a loopback, private or unique-local address, with no `SMTP_USER`, and it logs a warning at every start. The certificate is always verified; a private CA goes in `NODE_EXTRA_CA_CERTS`. | `starttls` | — | no |
+| `SMTP_USER` | The SMTP AUTH user (PLAIN or LOGIN). Unset: no AUTH, for a relay that trusts the pod's address. | unset | the relay asks for AUTH | no |
+| `SMTP_PASSWORD` | The SMTP AUTH password. It never appears in a log line, an error or a browser. | unset | `SMTP_USER` is set | yes |
+| `SMTP_FROM` | The sender: `bi@example.com` or `Acme Analytics <bi@example.com>`. Its name is shown as the email's brand. Bounces go to this address. | unset | `SMTP_HOST` is set | no |
+| `RATE_LIMIT_EMAIL_ORG_PER_HOUR` | Email recipients per organization per hour, in each pod, counted separately for subscriptions and for alerts. A send that would go over is refused whole and says so in its run. | `1000` | — | no |
+
 ## Warehouses and live data
 
 Bounds on what a connection may cost in the warehouse it reads. See [live-data.md](live-data.md).

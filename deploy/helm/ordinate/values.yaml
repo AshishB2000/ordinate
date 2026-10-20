@@ -28,6 +28,7 @@ replicaCount: 2
 #   ORDINATE_MASTER_KEY   32 random bytes, base64: `openssl rand -base64 32` (required)
 #                         Wraps every stored connection password and AI key — back it up.
 #   OIDC_CLIENT_SECRET    when config.AUTH_MODE is oidc
+#   SMTP_PASSWORD         when config.SMTP_USER is set (email, docs/server/email.md)
 #   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
 #                         only for an S3 store without pod identity (MinIO);
 #                         on EKS use IRSA instead (serviceAccount.annotations)
@@ -67,6 +68,13 @@ config:
   # every node core when no limit is set), DUCKDB_QUERY_TIMEOUT_SECONDS, DUCKDB_IDLE_SECONDS,
   # SESSION_IDLE_MINUTES, SESSION_ABSOLUTE_HOURS, RATE_LIMIT_*_PER_MINUTE,
   # MAX_RPC_BODY_KB, RPC_TIMEOUT_SECONDS, SSRF_ALLOW.
+  # Email for subscriptions and alerts (docs/server/email.md) — empty SMTP_HOST = no email.
+  # The password, when the relay asks for one, goes in the existingSecret as SMTP_PASSWORD.
+  SMTP_HOST: ""            # smtp.example.com, or an internal relay
+  SMTP_PORT: ""            # default 587 (starttls), 465 (tls), 25 (plaintext)
+  SMTP_SECURITY: ""        # starttls (default) | tls | plaintext (private relays only; warns)
+  SMTP_USER: ""
+  SMTP_FROM: ""            # Acme Analytics <bi@example.com>
 
 # DATA_DIR (/data): per-org temp files, uploads in flight and the local cache
 # of S3 tables. With S3 storage an emptyDir is right. Without S3 the tables
@@ -169,6 +177,8 @@ networkPolicy:
   #     ports: [{ port: 5432, protocol: TCP }]
   #   - to: [{ ipBlock: { cidr: 0.0.0.0/0, except: [169.254.169.254/32] } }]
   #     ports: [{ port: 443, protocol: TCP }]          # S3 + IdP over HTTPS
+  #   - to: [{ ipBlock: { cidr: 10.0.40.10/32 } }]     # the SMTP relay (SMTP_HOST)
+  #     ports: [{ port: 587, protocol: TCP }]
   egress: []
 
 podAnnotations: {}

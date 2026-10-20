@@ -12,6 +12,7 @@ import * as path from 'path';
 import { EnvError } from './envError';
 import { liveDailyQueryLimit, liveMaxConcurrent, liveMinCacheAgePublicSec, liveQueryTimeoutMs, maxBytesBilled } from './liveEnv';
 import { publicOrigin } from './publicUrl';
+import { parseMail, type MailEnv } from './mail/mailEnv';
 
 export { EnvError } from './envError';
 // The Live settings live in ./liveEnv.ts; their names stay importable from here.
@@ -50,6 +51,8 @@ export interface ServerEnv {
   readonly storage: StorageEnv;
   /** ORDINATE_TEST_LIVE_FAKE=1: register the test harness's fake warehouse at boot (./main.ts). Refused in prod. */
   readonly testLiveFake: boolean;
+  /** The SMTP relay (./mail/mailEnv.ts, docs/email); null when SMTP_HOST is unset. Holds the relay password: never log it. */
+  readonly mail: MailEnv | null;
 }
 
 export interface LimitsEnv {
@@ -253,7 +256,8 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
     embedOrgPerMinute: positiveInt('RATE_LIMIT_EMBED_ORG_PER_MINUTE', src.RATE_LIMIT_EMBED_ORG_PER_MINUTE, 1200),
   });
   const storage = parseStorage(src, databaseUrl);
-  return Object.freeze({ port, metricsPort, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits, storage, testLiveFake });
+  const mail = parseMail({ SMTP_HOST: src.SMTP_HOST, SMTP_PORT: src.SMTP_PORT, SMTP_SECURITY: src.SMTP_SECURITY, SMTP_USER: src.SMTP_USER, SMTP_PASSWORD: src.SMTP_PASSWORD, SMTP_FROM: src.SMTP_FROM, RATE_LIMIT_EMAIL_ORG_PER_HOUR: src.RATE_LIMIT_EMAIL_ORG_PER_HOUR }, databaseUrl !== null);
+  return Object.freeze({ port, metricsPort, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits, storage, testLiveFake, mail });
 }
 
 /** The directory of a file:// STORAGE_URL, null for unset or s3://. */

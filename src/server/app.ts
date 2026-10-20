@@ -154,6 +154,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   const limits = registerLimits(app, cfg.limits, proxyList(cfg.auth.trustedProxies));
   // Request counts and latency for GET /metrics, which itself is served only on METRICS_PORT (./metrics.ts).
   registerRequestMetrics(app);
+  for (const w of cfg.mail?.warnings ?? []) app.log.warn(w); // the SMTP relay's startup warnings (./mail/mailEnv.ts)
 
   // Liveness: the process is up and serving. Checks nothing else on purpose —
   // a failing dependency must not make Kubernetes restart a healthy pod.
