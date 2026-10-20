@@ -12,6 +12,7 @@
 //   timing       timeouts (after the final dot: afterDot), the breaker, the
 //                session semaphore
 //   batches      120 recipients → 50/50/20; retries before the dot only
+//                (NEGATIVE CONTROL: after it, one attempt), backoff 1 s / 4 s
 //   secrets      the password canary over an AUTH-echoing relay
 //   SSRF         metadata refused even with SSRF_ALLOW (control: the
 //                one-argument guard admits it), plaintext only to private
@@ -30,6 +31,7 @@ import { finish, ok } from './selfcheck';
 import { CERT, startFake, type Fake } from './smtpFake';
 
 const smtp: typeof import('../src/server/mail/smtp') = require('../src/server/mail/smtp');
+const email: typeof import('../src/server/mail/emailChannel') = require('../src/server/mail/emailChannel');
 const mime: typeof import('../src/server/mail/mime') = require('../src/server/mail/mime');
 const mailEnv: typeof import('../src/server/mail/mailEnv') = require('../src/server/mail/mailEnv');
 const ssrf: typeof import('../src/connectors/ssrf') = require('../src/connectors/ssrf');
@@ -241,6 +243,41 @@ async function main(): Promise<void> {
     ok('every RCPT refused: rejected, no DATA', kindOf(all) === 'rejected' && f.txns.length === 1);
     const big = await attempt(Array.from({ length: smtp.MAX_RCPT + 1 }, (_, i) => `u${i}@x.test`));
     ok(`more than ${smtp.MAX_RCPT} recipients in one session: input`, kindOf(big) === 'input');
+  }
+
+  // ── Batches and retries (emailChannel.sendBatches) ──────────────────────
+  {
+    const waits: number[] = [];
+    email.setMailSleepForTest(async (ms) => { waits.push(ms); });
+    const lines: string[] = [];
+    const capture = { info: (o: object, m: string) => lines.push(m + JSON.stringify(o)), warn: (o: object, m: string) => lines.push(m + JSON.stringify(o)) };
+    const f = await fake({});
+    email.wireMail(mailEnv.parseMail({ SMTP_HOST: 'localhost', SMTP_PORT: String(f.port), SMTP_FROM: FROM } as import('../src/server/mail/mailEnv').MailSrc, true), null, [], capture);
+    const to = Array.from({ length: 120 }, (_, i) => `u${i}@x.test`);
+    const r = await email.sendBatches(to, msg(), 'ch-1');
+    ok('batches: 120 recipients go as 50 / 50 / 20, all accepted', r.error === null && r.accepted === 120 && f.txns.map((t) => t.rcpts.length).join() === '50,50,20');
+    ok('the log counts recipients and never names one', lines.length === 3 && !lines.some((l) => l.includes('u0@x.test')));
+    smtp.setTimingForTest({ commandMs: 200, dataMs: 200 });
+    f.opts = { stall: 'mail' };
+    let c0 = f.connections;
+    const r2 = await email.sendBatches(['a@x.test'], msg(), 'ch-1');
+    ok('a timeout BEFORE the final dot is retried: 3 attempts, backing off 1 s then 4 s', r2.error?.kind === 'timeout' && f.connections - c0 === 3 && waits.join() === '1000,4000', [f.connections - c0, waits]);
+    waits.length = 0;
+    f.opts = { stall: 'dot' };
+    c0 = f.connections;
+    const r3 = await email.sendBatches(['a@x.test'], msg(), 'ch-1');
+    ok('NEGATIVE CONTROL: a timeout AFTER the final dot is never retried (the relay may have queued it)', r3.error?.afterDot === true && f.connections - c0 === 1 && waits.length === 0);
+    f.opts = { reply: { dot: '451 4.3.0 later' } };
+    c0 = f.connections;
+    const r4 = await email.sendBatches(['a@x.test'], msg(), 'ch-1');
+    ok('a 4xx to the final dot is final too: one attempt', r4.error?.kind === 'temporary' && f.connections - c0 === 1);
+    f.opts = { reply: { mail: '550 5.7.1 sender refused' } };
+    c0 = f.connections;
+    const r5 = await email.sendBatches(['a@x.test'], msg(), 'ch-1');
+    ok('a 5xx is final: one attempt', r5.error?.kind === 'rejected' && r5.error.code === 550 && f.connections - c0 === 1);
+    smtp.setTimingForTest({ commandMs: 30_000, dataMs: 60_000 });
+    smtp.resetTransportForTest();
+    email.wireMail(null, null, []);
   }
 
   // ── The password canary ──────────────────────────────────────────────────
