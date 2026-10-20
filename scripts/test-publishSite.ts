@@ -433,6 +433,31 @@ async function main(): Promise<void> {
   const one = dataBlock(single);
   ok('dashboardPageHtml: one self-contained page, default state only', one.kind === 'dashboard' && one.dashboard.keys.length === 1 && /default-src 'none'/.test(single));
 
+  // KPI subtitles (docs/chart-figures): an aggregation and a column — never a saved metric's filter or formula
+  // literal, never a column the Share policy marks. A published page reaches every link holder and an embed's customers.
+  const metricsStore: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+  const { resolveMetric } = require('../src/ipc/metrics') as typeof import('../src/ipc/metrics');
+  const CANARY = 'ana.canary@acme.test';
+  await catalog.setColumn(proj.id, ds!.id, 'region', { sensitivity: 'personal' } as any); // any: a ColumnPatch literal
+  const filtered = await metricsStore.saveMetric(proj.id, { name: 'Ana sales', datasetId: ds!.id, definition: { column: 'amount', aggregation: 'sum' },
+    filters: [{ type: 'filter', column: 'region', op: '=', value: CANARY }] } as any); // any: a record literal the saver sanitizes
+  const ratio = await metricsStore.saveMetric(proj.id, { name: 'Twice Ana', datasetId: ds!.id, definition: { formula: '[Ana sales] * 2' } } as any); // any: as above
+  const kpiCard = (metric: object, x: number) => ({ id: randomUUID(), type: 'metric', metric: { datasetId: ds!.id, ...metric }, layout: { x, y: 0, w: 3, h: 2 } });
+  const words = await analysis.saveAnalysis(proj.id, { name: 'KPI words', sheets: [{ id: randomUUID(), name: 'Main', cards: [
+    kpiCard({ metricId: filtered!.id, column: 'amount', aggregation: 'sum', label: 'Ana' }, 0),
+    kpiCard({ metricId: ratio!.id, column: 'amount', aggregation: 'sum', label: 'Twice' }, 3),
+    kpiCard({ column: 'region', aggregation: 'count', label: 'Regions' }, 6),
+    kpiCard({ column: 'amount', aggregation: 'sum', label: 'Total' }, 9),
+  ] }] } as any); // any: as above
+  const wordsHtml = await pub.dashboardPageHtml(proj.id, words!.id);
+  const subs = dataBlock(wordsHtml).dashboard.sheets[0].cards.map((c: any) => c.payloads[c.variants[0]].subtitle ?? ''); // any: a published card
+  ok('kpi subtitle: a saved metric says its aggregation and column; a formula metric and a marked column say nothing',
+    JSON.stringify(subs) === '["Sum of amount","","","Sum of amount"]', JSON.stringify(subs));
+  ok('kpi subtitle: a filter\'s literal and a formula\'s text appear nowhere in the published page (canary)', !wordsHtml.includes(CANARY) && !wordsHtml.includes('[Ana sales]'));
+  const forMembers = await resolveMetric(proj.id, filtered!.id);
+  ok('…while the app still describes the metric to its members, literal and all (control: the canary is real)', !!forMembers && forMembers.ok && forMembers.definitionText.includes(CANARY));
+  await catalog.setColumn(proj.id, ds!.id, 'region', { sensitivity: 'none' } as any); // any: as above
+
   await pub.storeConfig(cfg);
   const back = await pub.getStoredConfig(proj.id);
   ok('re-publish memory: the stored config round-trips', !!back && back.outDir === out && back.dashboardIds[0] === dash!.id && back.options.title === 'Acme site');

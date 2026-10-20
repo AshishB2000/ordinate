@@ -140,10 +140,14 @@ and at `/p/` and asserts the two lists are equal.
 
 ### KPI tiles on `/p/`
 
-The payload gains `subtitle` (whitelisted): what the KPI measures — a column metric's "Sum of
-revenue" (catalog sentences, `src/publish/publishMessages.ts`), a saved metric's own definition as
-the Metrics table words it — left out when it only repeats the title. The tile reads title (card
-head), figure, subtitle, left-aligned as the app's does.
+The payload gains `subtitle` (whitelisted): what the KPI measures, as an aggregation and a measure
+column only — "Sum of revenue", catalog sentences in the org's language (`src/publish/kpiSubtitle.ts`,
+`publishMessages.ts`) — for a card's own column or its saved metric's. Never a metric's description:
+that carries its filters' and formula's literals (`email = ana@acme.test`), and a published page, a
+public link, an HTML export and a signed embed reach readers no Share policy shapes words for. So a
+formula metric gets none, a measure column the Share policy marks gets none, and one that only
+repeats the title is left out. The tile reads title (card head), figure, subtitle, left-aligned as
+the app's does.
 
 ### The rest of the sweep: no figure arithmetic left in the browser
 
