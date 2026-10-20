@@ -24,6 +24,7 @@
 // and a `detail` for the LOG with the password cut out of it.
 
 import * as net from 'net';
+import { StringDecoder } from 'string_decoder';
 import * as tls from 'tls';
 import { checkHost, OPERATOR_HOST, pinnedLookup, SsrfError } from '../../connectors/ssrf';
 import { publicOrigin } from '../publicUrl';
@@ -105,15 +106,16 @@ const tlsErrorCode = (err: unknown): boolean => /CERT|SSL|TLS|SELF_SIGNED|UNABLE
 
 interface Reply { code: number; lines: string[] }
 
-/** Reads replies off whichever socket it is attached to; one reply at a time. */
-class Reader {
+/** Reads replies off whichever socket it is attached to; one reply at a time. Exported for test-smtp's chunking cases. */
+export class Reader {
   private buf = '';
   private lines: string[] = [];
   private replies: Reply[] = [];
   private wait: { resolve: (r: Reply) => void; reject: (e: Error) => void } | null = null;
   private failure: Error | null = null;
   private socket: net.Socket | null = null;
-  private readonly onData = (chunk: Buffer): void => this.feed(chunk.toString('utf8'));
+  private readonly decoder = new StringDecoder('utf8'); // a character split across two chunks stays whole
+  private readonly onData = (chunk: Buffer): void => this.feed(this.decoder.write(chunk));
   private readonly onEnd = (err?: Error): void => this.fail(
     err instanceof MailError ? err
       : err && tlsErrorCode(err) ? new MailError('tls', scrub(String(err.message)))
@@ -141,7 +143,8 @@ class Reader {
     return this.buf.length > 0 || this.lines.length > 0 || this.replies.length > 0 || (s ? s.readableLength > 0 : false);
   }
 
-  private feed(text: string): void {
+  /** Bytes as they arrive — in any chunking (a CR here, its LF in the next chunk). */
+  feed(text: string): void {
     this.buf += text;
     if (this.buf.length > MAX_REPLY_BYTES) return this.fail(new MailError('protocol', 'a reply over 16 KB'));
     let i: number;

@@ -65,13 +65,19 @@ export function plaintextAllowedAt(address: string): boolean {
   return family !== 0 && PLAINTEXT_OK.check(address, family === 6 ? 'ipv6' : 'ipv4');
 }
 
-/** The bare host `raw` names (the SSRF guard's canonicalization), or null when it is anything else. */
-function bareHost(raw: string): string | null {
-  const bare = raw.trim().replace(/^\[(.*)\]$/, '$1');
+/**
+ * The bare host `raw` names, or null when it is anything else. Checked HERE, character by character — a name of
+ * letters, digits, `.`, `-` and `_`, an IPv4, or an IPv6 (bracketed or not) — because the URL parser drops a
+ * scheme's default port, so `relay.example.com:80` would pass a `URL.port` check. The URL parser then only
+ * canonicalizes (lower case; decimal / octal / hex IPv4 forms decoded, as the SSRF guard does).
+ */
+export function bareHost(raw: string): string | null {
+  const t = raw.trim();
+  const v6 = /^\[[0-9A-Fa-f:.]+\]$/.test(t) ? t.slice(1, -1) : t;
+  const host = isIP(v6) === 6 ? `[${v6}]` : /^[A-Za-z0-9._-]{1,253}$/.test(t) ? t : null;
+  if (!host) return null;
   try {
-    const u = new URL(`http://${isIP(bare) === 6 ? `[${bare}]` : bare}/`);
-    if (u.port || u.pathname !== '/' || u.username || u.password || u.search || u.hash) return null;
-    return u.hostname.replace(/^\[(.*)\]$/, '$1') || null;
+    return new URL(`http://${host}/`).hostname.replace(/^\[(.*)\]$/, '$1') || null;
   } catch {
     return null;
   }

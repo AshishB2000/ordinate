@@ -12,7 +12,10 @@
 //   timing       timeouts (after the final dot: afterDot), the breaker, the
 //                session semaphore
 //   batches      120 recipients → 50/50/20; retries before the dot only
-//                (NEGATIVE CONTROL: after it, one attempt), backoff 1 s / 4 s
+//                (NEGATIVE CONTROL: after it, one attempt), backoff 1 s / 4 s;
+//                a failed batch leaves the others (partial); a relay-wide
+//                failure stops; budgets held per batch, refunded, half a
+//                project's; the reply reader's chunking and caps
 //   secrets      the password canary over an AUTH-echoing relay
 //   SSRF         metadata refused even with SSRF_ALLOW (control: the
 //                one-argument guard admits it), plaintext only to private
@@ -32,6 +35,7 @@ import { CERT, startFake, type Fake } from './smtpFake';
 
 const smtp: typeof import('../src/server/mail/smtp') = require('../src/server/mail/smtp');
 const email: typeof import('../src/server/mail/emailChannel') = require('../src/server/mail/emailChannel');
+const budget: typeof import('../src/server/mail/budget') = require('../src/server/mail/budget');
 const mime: typeof import('../src/server/mail/mime') = require('../src/server/mail/mime');
 const mailEnv: typeof import('../src/server/mail/mailEnv') = require('../src/server/mail/mailEnv');
 const ssrf: typeof import('../src/connectors/ssrf') = require('../src/connectors/ssrf');
@@ -280,6 +284,71 @@ async function main(): Promise<void> {
     email.wireMail(null, null, []);
   }
 
+  // ── The reply reader: chunking and the caps ──────────────────────────────
+  {
+    const fed = async (chunks: string[]): Promise<string> => {
+      const r = new smtp.Reader();
+      for (const c of chunks) r.feed(c);
+      return r.read(200).then((x) => `${x.code}:${x.lines.join('|')}`, (e) => `error:${(e as import('../src/server/mail/mime').MailError).kind}`);
+    };
+    ok('reader: a reply whose CR and LF arrive in two chunks', (await fed(['250 ok\r', '\n'])) === '250:250 ok');
+    ok('reader: a multi-line EHLO across chunks, split mid-line', (await fed(['250-fake.te', 'st\r\n250-STARTTLS\r', '\n250 AUTH PL', 'AIN\r\n'])) === '250:250-fake.test|250-STARTTLS|250 AUTH PLAIN');
+    ok('reader: a continuation under another code is a protocol error', (await fed(['250-a\r\n251 b\r\n'])) === 'error:protocol');
+    ok('reader: a garbled line is a protocol error', (await fed(['hello there\r\n'])) === 'error:protocol');
+    ok('reader: over 16 KB with no line end is a protocol error', (await fed(['250-' + 'x'.repeat(17_000)])) === 'error:protocol');
+    ok('reader: over 100 lines in one reply is a protocol error', (await fed([Array.from({ length: 101 }, () => '250-x\r\n').join('') + '250 end\r\n'])) === 'error:protocol');
+    ok('control: 99 continuation lines and an end are one reply', (await fed([Array.from({ length: 99 }, () => '250-x\r\n').join('') + '250 end\r\n'])).startsWith('250:'));
+    ok('control: nothing yet is a timeout, not a parse', (await fed(['250-half'])) === 'error:timeout');
+  }
+
+  // ── Every batch is tried; a failed one leaves the others ─────────────────
+  {
+    email.setMailSleepForTest(async () => undefined);
+    const f = await fake({ rcpt: (a) => (/^u1\d\d@/.test(a) ? '421 4.7.0 try later' : '250 ok') }); // u100–u119: batch 3 only
+    email.wireMail(mailEnv.parseMail({ SMTP_HOST: 'localhost', SMTP_PORT: String(f.port), SMTP_FROM: FROM } as import('../src/server/mail/mailEnv').MailSrc, true), null, []);
+    const to = Array.from({ length: 120 }, (_, i) => `u${i}@x.test`);
+    const r = await email.sendBatches(to, msg(), 'ch-partial');
+    ok('partial: batch 3 refused with 421 (three tries) — batches 1 and 2 still delivered', r.accepted === 100 && r.failedBatches === 1 && r.error?.kind === 'temporary' && f.txns.length === 2 && r.attempts === 5, r);
+    f.opts = { rcpt: (a) => (/^u[0-4]?\d@/.test(a) ? '421 4.7.0 try later' : '250 ok') }; // batch 1 refused
+    const first = await email.sendBatches(to, msg(), 'ch-partial');
+    ok('partial: batch 1 refused — batches 2 and 3 are still tried and delivered', first.accepted === 70 && first.failedBatches === 1, first);
+    f.opts = {};
+    const all = await email.sendBatches(to, msg(), 'ch-partial');
+    ok('control: with no refusal every batch goes and none failed', all.accepted === 120 && all.failedBatches === 0 && all.error === null);
+    const g = await fake({ creds: { user: USER, pass: 'not-it' } });
+    email.wireMail(mailEnv.parseMail({ SMTP_HOST: 'localhost', SMTP_PORT: String(g.port), SMTP_FROM: FROM, SMTP_USER: USER, SMTP_PASSWORD: PASS } as import('../src/server/mail/mailEnv').MailSrc, true), null, []);
+    const wide = await email.sendBatches(to, msg(), 'ch-partial');
+    ok('a relay-wide failure (AUTH) ends the send at the first batch — the others would repeat it', wide.error?.kind === 'auth' && wide.failedBatches === 1 && g.connections === 1);
+    email.wireMail(null, null, []);
+  }
+
+  // ── Budgets: held per batch, refunded, a project's half ──────────────────
+  {
+    budget.resetBudgetsForTest();
+    const A = budget.sendBuckets('acme', 'project-a', 'dashboard', 10);
+    const B = budget.sendBuckets('acme', 'project-b', 'dashboard', 10);
+    ok('a project may hold half the org\'s hour', budget.projectShare(10) === 5 && budget.hold(A, 5) !== null && budget.hold(A, 1) === null);
+    ok('project A exhausting its share does not refuse project B', budget.hold(B, 5) !== null);
+    ok('…and the org\'s own bucket still binds both (10 held of 10)', budget.hold(budget.sendBuckets('acme', 'project-c', 'dashboard', 10), 1) === null);
+    ok('alerts have their own buckets', budget.hold(budget.sendBuckets('acme', 'project-a', 'alert', 10), 5) !== null);
+    budget.resetBudgetsForTest();
+    const h = budget.hold(A, 5);
+    h?.refund(3);
+    ok('a refund gives the room back (5 held, 3 refunded → 3 more fit, 4 do not)', budget.hold(A, 3) !== null && budget.hold(A, 1) === null);
+    budget.resetBudgetsForTest();
+    const f = await fake({});
+    email.wireMail(mailEnv.parseMail({ SMTP_HOST: 'localhost', SMTP_PORT: String(f.port), SMTP_FROM: FROM } as import('../src/server/mail/mailEnv').MailSrc, true), null, []);
+    const to = Array.from({ length: 120 }, (_, i) => `u${i}@x.test`);
+    const r = await email.sendBatches(to, msg(), 'ch-budget', budget.sendBuckets('acme', 'p', 'dashboard', 200)); // a project's share: 100
+    ok('a budget that runs out mid-send stops there: 100 sent, the third batch never held', r.accepted === 100 && r.limited === true && f.txns.length === 2, r);
+    budget.resetBudgetsForTest();
+    f.opts = { rcpt: () => '550 5.1.1 no such user' };
+    await email.sendBatches(to.slice(0, 50), msg(), 'ch-budget', budget.sendBuckets('acme', 'p', 'dashboard', 200));
+    ok('a batch the relay did not take costs nothing: the full share is still free', budget.hold(budget.sendBuckets('acme', 'p', 'dashboard', 200), 100) !== null);
+    budget.resetBudgetsForTest();
+    email.wireMail(null, null, []);
+  }
+
   // ── The password canary ──────────────────────────────────────────────────
   {
     const f = await fake({ creds: { user: USER, pass: 'something-else' }, echoAuth: true });
@@ -337,7 +406,11 @@ async function main(): Promise<void> {
     };
     const cases: Array<[string, Src, string]> = [
       ['SMTP_FROM without SMTP_HOST', { SMTP_HOST: '' }, 'SMTP_HOST'],
-      ['a host with a port', { SMTP_HOST: 'smtp.acme.test:25' }, 'SMTP_HOST'],
+      ['a host with :25', { SMTP_HOST: 'smtp.acme.test:25' }, 'SMTP_HOST'],
+      ['a host with :80 (the URL parser drops a default port)', { SMTP_HOST: 'relay.example.com:80' }, 'SMTP_HOST'],
+      ['a host with :443', { SMTP_HOST: 'relay.example.com:443' }, 'SMTP_HOST'],
+      ['a bracketed IPv6 with a port', { SMTP_HOST: '[::1]:25' }, 'SMTP_HOST'],
+      ['a host with a path', { SMTP_HOST: 'relay.example.com/x' }, 'SMTP_HOST'],
       ['an unknown mode', { SMTP_SECURITY: 'ssl' }, 'SMTP_SECURITY'],
       ['port 0', { SMTP_PORT: '0' }, 'SMTP_PORT'],
       ['port 70000', { SMTP_PORT: '70000' }, 'SMTP_PORT'],
