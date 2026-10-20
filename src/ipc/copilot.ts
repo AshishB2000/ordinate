@@ -1,5 +1,6 @@
 import { ipcMain } from './bus';
 import { senderOf } from '../server/context';
+import { closedToCaller, gateRows } from '../data/rowAccess';
 import * as config from '../app/config';
 import * as execConfig from '../app/execConfig';
 import * as copilot from '../ai/copilot';
@@ -184,6 +185,8 @@ export async function buildFacts(
   // (scripts/test-copilot-analysis-facts.ts) and any non-ask caller see the
   // exact same behaviour as before, and the computed numbers are untouched.
   if (kind === 'dataset' && id) {
+    // Whole-dataset facts (column summaries, sample rows, insights, a Live sample): refused on a dataset with row access rules (row-policy D9).
+    await gateRows(projectId, id);
     // A Live dataset keeps no rows: its columns, its sampled profile and — unless
     // withheld — its sample values (L2.5), with its defined metrics' figures from
     // the warehouse (L2.4). One source: ai/liveFacts.
@@ -248,6 +251,7 @@ export async function buildFacts(
     // Only a capture OF THIS PROJECT: the history store is org-wide, and a
     // caller cleared for this project must not read another's by id.
     if (thread && extracted && thread.projectId === projectId) {
+      if (thread.datasetId) await gateRows(projectId, String(thread.datasetId)); // the stored table IS that dataset's rows (row-policy D9)
       emit({ kind: 'read', label: 'Read ' + (thread.title || 'capture') });
       const draft = captureDataset.buildDraft(extracted);
       emit({ kind: 'read', label: 'Read the extracted table', detail: plural(draft.rows.length, 'row') });
@@ -367,7 +371,8 @@ export async function buildFacts(
     dashboards: dashList.map((x) => x.name),
   }, await Promise.all(metas.filter((m) => !!m).map(async (m) => ({
     name: m!.name, columns: m!.columns, docs: await catalogColumns(projectId, m!.id),
-    notes: await liveInventoryNotes(projectId, m!), // a Live dataset's profile and sample values (L2.5)
+    // A Live dataset's profile and sample values (L2.5) — none from a dataset with row access rules the caller may not read whole.
+    notes: (await closedToCaller(projectId, m!.id)) ? undefined : await liveInventoryNotes(projectId, m!),
   }))));
 }
 

@@ -89,7 +89,7 @@ const iso = (v: unknown): string | undefined => (typeof v === 'string' && v.leng
 
 const CODES: ReadonlySet<string> = new Set([
   'sent', 'partial', 'unchanged', 'not_refreshed', 'missed', 'owner_removed', 'owner_no_access', 'dashboard_gone',
-  'no_channels', 'no_content', 'compute_failed', 'post_failed', 'unreachable', 'refused', 'no_secret',
+  'no_channels', 'no_content', 'compute_failed', 'post_failed', 'unreachable', 'refused', 'no_secret', 'row_policy',
 ]);
 const OUTCOMES: ReadonlySet<string> = new Set(['sent', 'skipped', 'failed', 'missed']);
 

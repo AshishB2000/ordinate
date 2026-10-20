@@ -1,5 +1,6 @@
 import { ipcMain } from './bus';
 import * as versions from '../app/versions';
+import { gateRows } from '../data/rowAccess';
 import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
 import * as metrics from '../analysis/metrics';
@@ -63,8 +64,11 @@ export function register(): void {
   ipcMain.handle('versions:list', async (_e, { projectId, type, id }: any = {}) =>
     versions.list(String(projectId || ''), String(type || ''), String(id || '')));
 
-  ipcMain.handle('versions:get', async (_e, { projectId, type, id, key }: any = {}) =>
-    versions.get(String(projectId || ''), String(type || ''), String(id || ''), String(key || '')));
+  ipcMain.handle('versions:get', async (_e, { projectId, type, id, key }: any = {}) => {
+    // An input table's version is its whole table: refused like its rows (row-policy D9).
+    if (type === 'dataset') await gateRows(String(projectId || ''), String(id || ''));
+    return versions.get(String(projectId || ''), String(type || ''), String(id || ''), String(key || ''));
+  });
 
   ipcMain.handle('versions:restore', async (_e, { projectId, type, id, key }: any = {}) => {
     try {

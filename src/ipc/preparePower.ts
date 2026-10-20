@@ -6,6 +6,7 @@
 // into and out of the step. The renderer only formats what comes back.
 
 import { ipcMain } from './bus';
+import { gateRows } from '../data/rowAccess';
 import * as datasets from '../data/datasets';
 import { applyPipelineAsync } from '../data/regexOffThread';
 import type { TableData, TransformStep } from '../data/transforms';
@@ -132,8 +133,11 @@ export async function prepareState(projectId: string, datasetId: string): Promis
 
 // ponytail: IPC payloads are untrusted JSON envelopes (typed any, as in datasets.ts); every field is coerced before use.
 export function register(): void {
-  ipcMain.handle('prepare:get', async (_e, { projectId, datasetId }: any = {}) =>
-    prepareState(String(projectId || ''), String(datasetId || '')));
+  ipcMain.handle('prepare:get', async (_e, { projectId, datasetId }: any = {}) => {
+    // Step BODIES can name other teams' values (a filter, a replace): refused like the rows (row-policy S2).
+    await gateRows(String(projectId || ''), String(datasetId || ''));
+    return prepareState(String(projectId || ''), String(datasetId || ''));
+  });
   ipcMain.handle('prepare:stepPreview', async (_e, { projectId, datasetId, index, step }: any = {}) => {
     try {
       return await stepPreview(String(projectId || ''), String(datasetId || ''), Number(index), step);

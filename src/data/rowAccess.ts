@@ -260,37 +260,38 @@ export async function rowLockFor(projectId: string, datasetId: string): Promise<
   return lockValuesOf(eff.raw, eff.policy, caller.userId, caller.teamIds);
 }
 
+/** Why the caller may not read `id`'s rows here, or null — the check only: nothing recorded, nothing thrown. */
+async function closedReason(projectId: string, id: string): Promise<RowPolicyReason | null> {
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  const scope = scopes.getStore();
+  const out = scope?.out;
+  if (scope?.locked === id && out?.kind !== 'fanout') return null;
+  const caller = await callerOn(projectId);
+  if (!caller.restricted && out?.kind !== 'fanout') return null;
+  const eff = await effective(projectId, id);
+  if (eff.kind === 'none') return null;
+  if (out?.kind === 'fanout') return 'fanout';
+  if (!caller.restricted) return null;
+  if (out?.kind === 'export') return 'export';
+  return eff.kind === 'derived' ? 'derived' : 'reader';
+}
+
 /**
  * The storage net (D8), and the check every reader that bypasses storage makes:
  * refuses a restricted caller on a dataset with rules (or built from one) unless
  * this is the lock scope of exactly that dataset; inside a fan-out scope,
- * refuses any such dataset for every caller.
+ * refuses any such dataset for every caller — and records the read.
  */
 export async function gateRows(projectId: string, id: string): Promise<void> {
-  if (!isValidId(projectId) || !isValidId(id)) return;
-  const scope = scopes.getStore();
-  const out = scope?.out;
-  if (scope?.locked === id && out?.kind !== 'fanout') return;
-  const caller = await callerOn(projectId);
-  if (!caller.restricted && out?.kind !== 'fanout') return;
-  const eff = await effective(projectId, id);
-  if (out) out.datasets.add(id);
-  if (eff.kind === 'none') return;
-  if (out?.kind === 'fanout') refuse('fanout');
-  if (!caller.restricted) return;
-  if (out?.kind === 'export') refuse('export');
-  refuse(eff.kind === 'derived' ? 'derived' : 'reader');
+  const reason = await closedReason(projectId, id);
+  const out = scopes.getStore()?.out;
+  if (out && isValidId(id)) out.datasets.add(id);
+  if (reason) refuse(reason);
 }
 
-/** For a walk over datasets that skips what the caller may not read (value search, Home's insights): never throws. */
+/** For a walk over datasets that SKIPS what the caller may not read (value search, Home's insights): never throws, never fails a build. */
 export async function closedToCaller(projectId: string, id: string): Promise<boolean> {
-  try {
-    await gateRows(projectId, id);
-    return false;
-  } catch (err) {
-    if (isRowPolicyError(err)) return true;
-    throw err;
-  }
+  return (await closedReason(projectId, id)) !== null;
 }
 
 /** Is the caller restricted on this project at all? (The `scoped` flag; nothing about the rules leaves.) */

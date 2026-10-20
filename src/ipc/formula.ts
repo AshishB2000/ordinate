@@ -27,6 +27,7 @@
 // to step i-1 per keystroke; revisit if anyone actually hits it.
 
 import { ipcMain } from './bus';
+import { gateRows } from '../data/rowAccess';
 
 import { compile, type FValue, type SourceSpan } from '../formula/formula';
 import { tokenize, type Tok } from '../formula/formulaTokens';
@@ -189,6 +190,8 @@ async function checkFormula(projectId: string, datasetId: string, expression: st
 
 export function register(): void {
   ipcMain.handle('formula:check', async (_e, { projectId, datasetId, expression }: any = {}): Promise<FormulaCheck> => {
+    // Its sample rows and LOD preview read the whole table: a restricted caller is refused, typed (row-policy D9).
+    await gateRows(String(projectId || ''), String(datasetId || ''));
     try {
       return await checkFormula(String(projectId || ''), String(datasetId || ''), String(expression ?? ''));
     } catch (err: any) {

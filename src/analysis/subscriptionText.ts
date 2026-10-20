@@ -10,7 +10,7 @@ import { t } from '../app/i18n';
 export type RunCode =
   | 'sent' | 'partial' | 'unchanged' | 'not_refreshed' | 'missed'
   | 'owner_removed' | 'owner_no_access' | 'dashboard_gone' | 'no_channels' | 'no_content' | 'compute_failed'
-  | 'post_failed' | 'unreachable' | 'refused' | 'no_secret';
+  | 'post_failed' | 'unreachable' | 'refused' | 'no_secret' | 'row_policy';
 
 export interface RunDetail {
   /** Channels that took the message / that were tried. */
@@ -67,6 +67,7 @@ export function runText(code: RunCode, d: RunDetail = {}): string {
     case 'post_failed': return t('subscriptionText.not_delivered_answered_http', { channel, status });
     case 'unreachable': return t('subscriptionText.not_delivered_could_not_be_reached', { channel });
     case 'refused': return t('subscriptionText.not_delivered_the_address_of_is', { channel });
+    case 'row_policy': return 'Not sent: this dashboard reads a dataset with row access rules, and subscriptions show the same figures to everyone, so they are off for it.';
     default: return t('subscriptionText.not_sent_this_server_cannot_read');
   }
 }

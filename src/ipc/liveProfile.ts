@@ -19,6 +19,7 @@
 // the pickers' refusal is a reply (`LiveValuesRefusal`) that says which case it is.
 
 import { ipcMain } from './bus';
+import { closedToCaller, gateRows } from '../data/rowAccess';
 import * as datasets from '../data/datasets';
 import type { DatasetMeta } from '../data/datasets';
 import { isLive } from '../data/liveDataset';
@@ -112,6 +113,7 @@ const UNLISTED: Record<UnlistedReason, () => string> = {
 export async function liveDistinct(projectId: string, datasetId: string, column: string, req: { limit?: number; search?: string }): Promise<ProfileDistinct | LiveValuesRefusal | null> {
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta || !isLive(meta)) return null;
+  await gateRows(projectId, datasetId); // the sample is of every row: never to a restricted caller, never fanned out (row-policy D9)
   const r = profileDistinct(meta, column, req);
   return typeof r === 'string' ? { ok: false, code: 'live_refused', reason: r, error: UNLISTED[r]() } : r;
 }
@@ -187,6 +189,8 @@ async function schemaView(projectId: string, datasetId: string): Promise<LiveSch
   const rows = prof?.sampleRows;
   const withheld = await liveWithheld(projectId, datasetId, meta);
   const missingNames = meta.live.missingColumns ?? [];
+  // The sample's values are every row's: none to a caller row access rules restrict (REDACT).
+  const closed = await closedToCaller(projectId, datasetId);
   return {
     ok: true,
     schemaSyncedAt: meta.live.schemaSyncedAt,
@@ -198,7 +202,7 @@ async function schemaView(projectId: string, datasetId: string): Promise<LiveSch
     columns: meta.columns.map((c) => {
       const p = profileOf(meta, c.name);
       const filled = typeof p?.filled === 'number' ? p.filled : null;
-      const values = p?.values ?? [];
+      const values = closed ? [] : p?.values ?? [];
       const distinct = typeof p?.distinct === 'number' ? p.distinct : null;
       return {
         name: c.name,

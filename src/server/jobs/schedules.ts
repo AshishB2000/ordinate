@@ -78,7 +78,8 @@ export function pushToReaders(projectId: string, channel: string, payload: unkno
  * never awaited by the tick. Returns the posts in flight, for a test to wait on.
  */
 export function deliverTickAlerts(batches: TickAlerts[], push: (projectId: string, channel: string, payload: unknown) => void): Promise<number>[] {
-  for (const b of batches) push(b.projectId, 'alerts:fired', b);
+  // No figure from a dataset with row access rules reaches the readers' bells (docs/row-policy, "Pushes").
+  for (const b of batches) void alertStore.pushableEvents(b.projectId, b.events).then((events) => push(b.projectId, 'alerts:fired', { ...b, events })).catch(() => undefined);
   // Lazy: that module reaches back here (through ./run) for `toReaders`.
   const { postFiredAlerts } = require('../subscriptions/alertPosts') as typeof import('../subscriptions/alertPosts');
   return batches.map((b) => postFiredAlerts(b.projectId, b.events));

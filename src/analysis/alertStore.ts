@@ -23,6 +23,7 @@
 // (`explainEvent`), and the notification never waits for it.
 
 import * as fs from 'fs';
+import { assertFanOutAllowed, fanOutScope, isRowPolicyError, policyClosed } from '../data/rowAccess';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as appPaths from '../app/paths';
@@ -433,28 +434,29 @@ export async function evaluateProject(
     // Its history would otherwise keep growing while it was supposed to be off.
     if (!rule.enabled) continue;
     const from = JSON.stringify(rule);
-    let read: Awaited<ReturnType<typeof metricFor>>;
+    let res: ReturnType<typeof alerts.evaluateRule>;
     try {
-      read = await metricFor(projectId, rule);
+      // ONE rule per fan-out scope (docs/row-policy D10, N1): an alert reaches every reader and its channels,
+      // so a rule over a dataset with row access rules (or built from one) is not evaluated — the others still are.
+      res = (await fanOutScope(async () => {
+        const { value, previous, period } = await metricFor(projectId, rule);
+        const r = alerts.evaluateRule({
+          rule, value, previous, period,
+          anomalies: rule.compare === 'anomaly' ? await anomaliesFor(projectId, rule) : undefined,
+          now,
+          eventId: randomUUID(),
+        });
+        if (r.event) {
+          const why = await diagnosisFor(projectId, r.rule);
+          if (why) r.event.diagnosis = why;
+        }
+        return r;
+      })).value;
     } catch (err) {
       // A Live rule whose warehouse did not answer (L2.4) is not evaluated this
-      // time — its state untouched, never "the value was null" — and the others still are.
-      if (isLiveFigureError(err)) continue;
+      // time — its state untouched, never "the value was null" — and the others still are. Nor is a refused one.
+      if (isLiveFigureError(err) || isRowPolicyError(err)) continue;
       throw err;
-    }
-    const { value, previous, period } = read;
-    const res = alerts.evaluateRule({
-      rule,
-      value,
-      previous,
-      period,
-      anomalies: rule.compare === 'anomaly' ? await anomaliesFor(projectId, rule) : undefined,
-      now,
-      eventId: randomUUID(),
-    });
-    if (res.event) {
-      const why = await diagnosisFor(projectId, res.rule);
-      if (why) res.event.diagnosis = why;
     }
     results.push({ from, rule: res.rule, event: res.event || null });
   }
@@ -488,7 +490,9 @@ export async function testRule(projectId: string, raw: any): Promise<{
 }> {
   const rule = alerts.sanitizeRule({ ...(raw || {}), id: raw?.id && UUID_RE.test(String(raw.id)) ? raw.id : randomUUID() });
   if (!rule) return { ok: false, fire: false, message: '', value: null, previous: null };
-  const read = await metricFor(projectId, rule);
+  // An alert fans out: a rule over a dataset with row access rules is refused for everyone, up front (docs/row-policy D10).
+  await assertFanOutAllowed(projectId, [rule.datasetId]);
+  const read = (await fanOutScope(() => metricFor(projectId, rule))).value;
   const { value, previous } = read;
   // By period, no read at all means fewer than two complete periods — say that, not "from the next refresh on".
   if (rule.compare === 'change' && rule.change?.vs === 'previous_period' && rule.change.periodColumn && read.period === undefined) {
@@ -583,4 +587,20 @@ export async function allProjectIds(): Promise<string[]> {
   } catch (_) {
     return [];
   }
+}
+
+/**
+ * The events a push may carry to every reader of the project: one about a
+ * dataset with row access rules (or built from one) keeps its ids and time and
+ * loses its figures, sentence and diagnosis (docs/row-policy, "Pushes") — the
+ * inbox re-reads `alerts:list`, which redacts per caller.
+ */
+export async function pushableEvents(projectId: string, events: AlertEvent[]): Promise<AlertEvent[]> {
+  const out: AlertEvent[] = [];
+  for (const e of events) {
+    if (!(await policyClosed(projectId, e.datasetId))) { out.push(e); continue; }
+    const { diagnosis: _d, ...kept } = e;
+    out.push({ ...kept, value: null, previous: null, delta: null, deltaPct: null, message: '' } as AlertEvent);
+  }
+  return out;
 }

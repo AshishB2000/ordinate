@@ -13,6 +13,7 @@
 // way, and the next firing tries again. Each attempt is on the audit trail.
 
 import { getChannel } from '../../app/channels';
+import { assertFanOutAllowed } from '../../data/rowAccess';
 import * as alertStore from '../../analysis/alertStore';
 import { fmtMetric, type AlertEvent, type AlertRule } from '../../analysis/alerts';
 import { composeMessage } from '../../analysis/subscriptionMessage';
@@ -46,6 +47,8 @@ export async function postFiredAlerts(projectId: string, events: AlertEvent[]): 
     for (const event of events) {
       const rule = rules.get(event.ruleId);
       if (!rule || !rule.channelIds || !rule.channelIds.length) continue;
+      // Never posted from a dataset with row access rules (docs/row-policy D10; item 4's deliver() takes this over).
+      if (await assertFanOutAllowed(projectId, [rule.datasetId, event.datasetId]).then(() => false, () => true)) continue;
       const model = alertMessageModel(projectId, rule, event);
       let ok = 0;
       for (const id of rule.channelIds) {

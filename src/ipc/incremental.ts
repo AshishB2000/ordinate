@@ -5,6 +5,7 @@
 // carry a path) and the browser gets the catalog's sentence as `{ ok:false }`.
 
 import { ipcMain } from './bus';
+import { closedToCaller } from '../data/rowAccess';
 import { incrementalView, saveIncremental } from '../data/incrementalSettings';
 import type { IncrementalPatch } from '../data/incrementalSettings';
 import { incrementalNotRead, incrementalNotSaved } from '../data/incrementalMessages';
@@ -14,7 +15,12 @@ const why = (err: unknown): string => (err instanceof Error ? err.message : Stri
 export function register(): void {
   ipcMain.handle('incremental:get', async (_e, { projectId, datasetId }: { projectId: string; datasetId: string }) => {
     try {
-      return await incrementalView(projectId, datasetId);
+      const view = await incrementalView(projectId, datasetId);
+      // The high-water mark is a row's value (the latest id or date): not for a caller row access rules restrict (REDACT).
+      if (view.ok && (await closedToCaller(projectId, datasetId))) {
+        return { ...view, settings: view.settings ? { ...view.settings, highWater: null } : null, log: view.log.map((e) => ({ ...e, highWater: null })) };
+      }
+      return view;
     } catch (err) {
       console.error('[incremental] incremental:get failed:', why(err));
       return { ok: false, error: incrementalNotRead() };

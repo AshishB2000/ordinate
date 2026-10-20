@@ -17,10 +17,12 @@
 // this app.
 
 import { ipcMain } from './bus';
+import { closedToCaller, policyClosed, rowPolicyRefusal } from '../data/rowAccess';
+import { rowReaderMessage } from '../data/rowAccessMessages';
 
 import * as store from '../analysis/alertStore';
 import * as alerts from '../analysis/alerts';
-import type { AlertEvent } from '../analysis/alerts';
+import type { AlertEvent, AlertRule } from '../analysis/alerts';
 import * as copilot from '../ai/copilot';
 import * as execConfig from '../app/execConfig';
 import { askCopilot } from '../ai/analyze';
@@ -40,7 +42,8 @@ import { liveCodeOf } from './liveRoute';
 export async function deliver(projectId: string, events: AlertEvent[]): Promise<number> {
   if (!Array.isArray(events) || events.length === 0) return 0;
   if (serverDataDir() !== null) {
-    (require('../server/jobs/schedules') as typeof import('../server/jobs/schedules')).pushToReaders(projectId, 'alerts:fired', { projectId, events });
+    const pushable = await store.pushableEvents(projectId, events); // no figure from a dataset with row access rules
+    (require('../server/jobs/schedules') as typeof import('../server/jobs/schedules')).pushToReaders(projectId, 'alerts:fired', { projectId, events: pushable });
   }
   return 0;
 }
@@ -108,6 +111,32 @@ export async function explainEvent(projectId: string, event: AlertEvent): Promis
 
 // ── Channels ─────────────────────────────────────────────────────────────────
 
+/**
+ * Alerts on a dataset whose row access rules restrict the caller keep their ids,
+ * names and times but none of their figures, sentences or diagnoses — those were
+ * computed over every row (docs/row-policy, REDACT).
+ */
+async function redactAlerts<F extends { rules: AlertRule[]; events: AlertEvent[] }>(projectId: string, file: F): Promise<F> {
+  const closed = new Map<string, boolean>();
+  const isClosed = async (id: string): Promise<boolean> => {
+    if (!closed.has(id)) closed.set(id, await closedToCaller(projectId, id));
+    return closed.get(id) === true;
+  };
+  const rules: AlertRule[] = [];
+  for (const r of file.rules) {
+    if (!(await isClosed(r.datasetId))) { rules.push(r); continue; }
+    const { lastValue: _v, history: _h, firedPeriod: _p, ...kept } = r;
+    rules.push(kept as AlertRule);
+  }
+  const events: AlertEvent[] = [];
+  for (const e of file.events) {
+    if (!(await isClosed(e.datasetId))) { events.push(e); continue; }
+    const { diagnosis: _d, ...kept } = e;
+    events.push({ ...kept, value: null, previous: null, delta: null, deltaPct: null, message: rowReaderMessage() } as AlertEvent);
+  }
+  return { ...file, rules, events };
+}
+
 export function register(): void {
 
   // The inbox and the rules page read the same payload: one file, two surfaces.
@@ -116,7 +145,7 @@ export function register(): void {
   ipcMain.handle('alerts:list', async (_e, { projectId }: any = {}) => {
     try {
       await store.syncWatchRules(projectId);
-      const file = await store.load(projectId);
+      const file = await redactAlerts(projectId, await store.load(projectId));
       return {
         ok: true,
         rules: file.rules,
@@ -131,6 +160,8 @@ export function register(): void {
 
   ipcMain.handle('alerts:save', async (_e, { projectId, rule }: any = {}) => {
     try {
+      // An alert fans out (its inbox push, its channels): refused for everyone on a dataset with row access rules (docs/row-policy D10).
+      if (rule && typeof rule.datasetId === 'string' && (await policyClosed(projectId, rule.datasetId))) return rowPolicyRefusal('fanout');
       const saved = await store.saveRule(projectId, rule);
       if (!saved) return { ok: false, error: 'That rule is not complete.' };
       return { ok: true, rule: saved };

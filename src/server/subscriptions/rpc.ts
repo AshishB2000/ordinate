@@ -7,6 +7,7 @@
 // remote answered.
 
 import * as alertStore from '../../analysis/alertStore';
+import { isRowPolicyError } from '../../data/rowAccess';
 import * as analysis from '../../analysis/analysis';
 import * as projects from '../../app/projects';
 import { canKeepWebhooks, deleteChannel, getChannel, listChannels, publicChannel, saveChannel, type PublicChannel } from '../../app/channels';
@@ -22,7 +23,7 @@ import { ctx } from '../context';
 import { dashboardLink } from '../publicUrl';
 import { registry } from '../rpc';
 import { postToChannel } from './deliver';
-import { buildMessage, ownerIdentity, runSubscription } from './run';
+import { buildSendable, ownerIdentity, runSubscription } from './run';
 
 /** "Mon 12 Oct, 08:00" in the subscription's own zone. */
 function slotText(at: number, timezone: string): string {
@@ -146,7 +147,14 @@ export function register(): void {
       linkNote: dashboardLink(projectId, a.id) ? null : say.noLinkNote(),
     };
     const def = store.definitionOf({ ...draft, viewId: draft.viewId ?? null });
-    const built = await buildMessage(projectId, def);
+    let built: Awaited<ReturnType<typeof buildSendable>>;
+    try {
+      built = await buildSendable(projectId, def);
+    } catch (err) {
+      // A dashboard over a dataset with row access rules: the dialog says why, before anything is saved (row-policy D10).
+      if (isRowPolicyError(err)) return { ok: true as const, ...frame, empty: err.message, code: err.code, slack: null, teams: null };
+      throw err;
+    }
     if ('code' in built) return { ok: true as const, ...frame, empty: say.runText(built.code), slack: null, teams: null };
     const slack = renderSlack(built.model);
     const teams = renderTeams(built.model);
@@ -164,6 +172,12 @@ export function register(): void {
     const known = new Set((await listChannels()).map((c) => c.id));
     const channelIds = subscription.channelIds.filter((c) => known.has(c.toLowerCase()));
     if (!channelIds.length) return { ok: false as const, error: say.subscriptionNeedsChannel() };
+    // Refused up front, as the preview says: a send would fan a dataset with row access rules out to everyone (row-policy D10).
+    try {
+      await buildSendable(projectId, store.definitionOf({ ...subscription, channelIds, viewId: subscription.viewId ?? null }));
+    } catch (err) {
+      if (isRowPolicyError(err)) return { ok: false as const, error: err.message };
+    }
     const input: SubscriptionInput = { ...subscription, channelIds, viewId: subscription.viewId ?? null };
     const who = ctx();
     let saved: Subscription | null;

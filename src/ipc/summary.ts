@@ -17,6 +17,7 @@
 // these same sentences and is audited against their ledger.
 
 import { ipcMain } from './bus';
+import { gateRows } from '../data/rowAccess';
 import * as datasets from '../data/datasets';
 import * as visuals from '../analysis/visuals';
 import * as alertStore from '../analysis/alertStore';
@@ -218,6 +219,8 @@ export async function computeSummary(projectId: string, rawPages: unknown, scope
   const cards = readingOrder(rawPages);
   const tiles = await tilesOf(projectId, cards);
   const ids = [...new Set(tiles.map((t) => t.datasetId))].filter((id) => UUID_RE.test(id));
+  // Its facts (insights, quality, alerts, drivers) are about whole datasets: refused on any with row access rules (row-policy D9).
+  for (const id of ids) await gateRows(projectId, id);
   const steps = resolveFilterParams(scope.filters, scope.params).steps;
   const head = cards.find((c) => c.type === 'metric' && c.metric);
   const { kpi, driver } = head ? await kpiAndDriver(projectId, head, steps, scope.params) : { kpi: null, driver: null };

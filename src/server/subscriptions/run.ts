@@ -20,6 +20,7 @@
 // kept: that goes to the log (./deliver.ts).
 
 import { createHash } from 'crypto';
+import { assertFanOutAllowed, fanOutScope, isRowPolicyError } from '../../data/rowAccess';
 import type { Pool } from 'pg';
 import { z } from 'zod';
 import { byProjectId, rpc, Uuid } from '../../api/contract';
@@ -114,6 +115,18 @@ export async function buildMessage(projectId: string, def: Definition): Promise<
   return { model, dataAt: figs.dataAt, hash: createHash('sha256').update(figuresOf(model)).digest('hex') };
 }
 
+/**
+ * The message a send may carry: built inside a fan-out scope, then checked
+ * against every dataset it read — a dashboard over a dataset with row access
+ * rules (or built from one) THROWS RowPolicyError, for every owner (docs/row-policy D10).
+ * Until item 4's shared `deliver()` makes this check itself, it is here, before any post.
+ */
+export async function buildSendable(projectId: string, def: Definition): Promise<Awaited<ReturnType<typeof buildMessage>>> {
+  const { value, datasets } = await fanOutScope(() => buildMessage(projectId, def));
+  await assertFanOutAllowed(projectId, datasets);
+  return value;
+}
+
 interface Result { outcome: RunEntry['outcome']; code: RunCode; detail?: RunDetail; built?: Built }
 
 /** Compute as the owner and post to every channel. Never throws. */
@@ -125,9 +138,9 @@ async function attempt(sub: Subscription, org: string, scheduled: boolean): Prom
     if (!channels.length) return { outcome: 'failed', code: 'no_channels' };
     let built: Awaited<ReturnType<typeof buildMessage>>;
     try {
-      built = await buildMessage(sub.projectId, sub);
-    } catch {
-      return { outcome: 'failed', code: 'compute_failed' };
+      built = await buildSendable(sub.projectId, sub);
+    } catch (err) {
+      return { outcome: 'failed', code: isRowPolicyError(err) ? 'row_policy' : 'compute_failed' };
     }
     if ('code' in built) return { outcome: 'failed', code: built.code };
     // The conditions hold a SCHEDULED run back; "Send now" is someone asking for it.

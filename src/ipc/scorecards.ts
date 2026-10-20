@@ -19,6 +19,7 @@
 // grouped query per metric is the upgrade if that ever shows.
 
 import { ipcMain } from './bus';
+import { closedToCaller } from '../data/rowAccess';
 import { distinctFor } from './distinctFor';
 
 import * as scorecards from '../analysis/scorecards';
@@ -324,7 +325,8 @@ export async function computeScorecard(projectId: string, sc: Scorecard, offset 
     if (def.group) row.group = def.group;
     if (m.direction) row.direction = m.direction;
     const alert = latestAlertFor(alerts, m.id);
-    if (alert) row.alert = alert;
+    // A stored alert sentence carries a whole-dataset figure: not to a caller the dataset's row access rules restrict.
+    if (alert && !(await closedToCaller(projectId, m.datasetId))) row.alert = alert;
     const threads = talk.get(m.id);
     if (threads) row.comments = threads;
     rows.push(row);

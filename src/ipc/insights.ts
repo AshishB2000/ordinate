@@ -1,5 +1,6 @@
 import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
+import { closedToCaller, gateRows, isRowPolicyError } from '../data/rowAccess';
 import * as projects from '../app/projects';
 import { detectAnomalies } from '../analysis/anomalies';
 import { detectAnomaliesResident } from '../engine/anomaliesResident';
@@ -65,6 +66,8 @@ export async function insightsForDataset(projectId: string, datasetId: string): 
     const meta = await datasets.getDatasetMeta(projectId, datasetId);
     if (!meta) return [];
     requireExtract(meta); // D6: a Live dataset's findings are not "none" — they are not computed yet
+    // Row access rules: the cache below is keyed by the dataset alone (whole-table findings) — refused BEFORE it (row-policy D9).
+    await gateRows(projectId, datasetId);
     const parts = await answerKey.keyParts(projectId, datasetId);
     if (!parts) return [];
     const key = queryCache.cacheKey('insights', parts, answerKey.ambient());
@@ -84,7 +87,7 @@ export async function insightsForDataset(projectId: string, datasetId: string): 
       return job.done;
     }));
   } catch (err) {
-    if (isLiveDatasetError(err)) throw err;
+    if (isLiveDatasetError(err) || isRowPolicyError(err)) throw err;
     return [];
   }
 }
@@ -139,9 +142,11 @@ async function dismissedSet(projectId: string): Promise<Set<string>> {
  */
 export async function listInsights(projectId: string, datasetId?: string): Promise<Insight[]> {
   const dismissed = await dismissedSet(projectId);
-  const ids: string[] = datasetId
-    ? [datasetId]
-    : (await datasets.listDatasets(projectId)).filter((d) => !isLive(d)).slice(0, MAX_DATASETS).map((d) => d.id); // Home skips Live
+  const all = datasetId ? [] : (await datasets.listDatasets(projectId)).filter((d) => !isLive(d)); // Home skips Live
+  // …and, for a restricted caller, every dataset with row access rules (row-policy: SKIP), as a walk skips Live.
+  const open: string[] = [];
+  for (const d of all) if (open.length < MAX_DATASETS && !(await closedToCaller(projectId, d.id))) open.push(d.id);
+  const ids: string[] = datasetId ? [datasetId] : open;
 
   const out: Insight[] = [];
   for (const id of ids) {

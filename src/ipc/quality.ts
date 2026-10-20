@@ -7,6 +7,8 @@
 // renderer names a rule by id and never sends a predicate.
 
 import { ipcMain } from './bus';
+import { closedToCaller } from '../data/rowAccess';
+import { gateRows } from '../data/rowAccess';
 import * as quality from '../analysis/qualityRun';
 import { pageFor } from './datasets';
 import { getDatasetMeta } from '../data/datasets';
@@ -40,6 +42,8 @@ export function register(): void {
     try {
       const q = await quality.listQuality(projectId, datasetId);
       if (!q) return { ok: false, error: 'Dataset not found' };
+      // A run's results hold whole failing rows and whole-table counts: not for a caller row access rules restrict (REDACT).
+      if (await closedToCaller(projectId, datasetId)) return { ok: true, rules: q.rules, latest: null, history: [] };
       return { ok: true, rules: q.rules, latest: q.latest || null, history: q.history || [] };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not read the rules' };
@@ -90,6 +94,7 @@ export function register(): void {
   // grid's own search/sort/paging. Same reply shape as `dataset:page`.
   ipcMain.handle('quality:failingRows', async (_e, { projectId, datasetId, ruleId, offset, limit, search, sortColumn, sortDir }: any = {}) => {
     try {
+      await gateRows(projectId, datasetId); // its row filter is computed over the whole table (row-policy D9)
       const filter = await quality.failingRowFilter(projectId, datasetId, String(ruleId || ''));
       if ('error' in filter) return { ok: false, error: filter.error };
       return await pageFor(projectId, datasetId, { offset, limit, search, sortColumn, sortDir, rowFilter: filter }, 'qualityFailingRows');
