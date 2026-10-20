@@ -33,10 +33,9 @@ import { buildGraph } from '../../analysis/lineage';
 import * as metrics from '../../analysis/metrics';
 import { listRelationships } from '../../analysis/relationships';
 import * as visuals from '../../analysis/visuals';
+import { isValidId } from '../../app/ids';
 import * as datasets from '../../data/datasets';
 import type { Delivery } from './deliver';
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATASET_KEY = /datasetids?$/i;
 const VISUAL_KEY = /visualids?$/i;
 const MAX_DEPTH = 40;
@@ -47,7 +46,7 @@ interface Found { all: Set<string>; datasets: Set<string>; visuals: Set<string> 
 export function collectIds(v: unknown, out: Found, key = '', depth = 0): void {
   if (depth > MAX_DEPTH) throw new Error('a record nested too deep to read its references');
   if (typeof v === 'string') {
-    if (!UUID_RE.test(v)) return;
+    if (!isValidId(v)) return;
     const id = v.toLowerCase();
     out.all.add(id);
     if (DATASET_KEY.test(key)) out.datasets.add(id);

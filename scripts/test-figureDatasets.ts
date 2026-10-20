@@ -16,6 +16,8 @@
 //   alert       a rule's dataset and its saved metric's upstream
 //   edges       a test is []; a missing root throws; deliver() refuses a gone
 //               dashboard as compute_failed, before reading any channel secret
+//   memo        one read per source for all the channels of a run (control:
+//               without the memo, one per channel); a failed read memoised
 //   control     a plain dashboard gives exactly its one dataset
 //
 //   npm run build:ts && node scripts/test-figureDatasets.js
@@ -154,6 +156,26 @@ async function main(): Promise<void> {
     const channel = { id: crypto.randomUUID(), name: '#x', kind: 'slack' as const, createdBy: 'dev@local', createdAt: '', updatedAt: '' };
     const r = await deliverMod.deliver(channel, { kind: 'dashboard', projectId: pid, analysisId: crypto.randomUUID(), message: {} as never });
     ok('deliver: a gone dashboard is compute_failed — refused before any channel secret is read', r.ok === false && r.code === 'compute_failed', r);
+
+    // ── One read per source per run, however many channels ─────────────────
+    const real = fd.figureDatasets;
+    let reads = 0;
+    (fd as { figureDatasets: typeof real }).figureDatasets = async (d) => { reads++; return real(d); };
+    const src = { kind: 'dashboard' as const, projectId: pid, analysisId: plainDash, message: {} as never };
+    const five = Array.from({ length: 5 }, () => ({ ...channel, id: crypto.randomUUID() }));
+    const memo: import('../src/server/subscriptions/deliver').DatasetsMemo = new Map();
+    for (const c of five) await deliverMod.deliver(c, src, memo);
+    const once = reads;
+    reads = 0;
+    for (const c of five) await deliverMod.deliver(c, src);
+    ok(`memo: 5 channels of one run read the source once (${once}); NEGATIVE CONTROL: without the memo, 5 times (${reads})`, once === 1 && reads === 5);
+    reads = 0;
+    const goneSrc = { ...src, analysisId: crypto.randomUUID() };
+    const goneMemo: import('../src/server/subscriptions/deliver').DatasetsMemo = new Map();
+    const refusals: string[] = [];
+    for (const c of five) refusals.push((await deliverMod.deliver(c, goneSrc, goneMemo)).code);
+    ok('memo: a failed read is remembered too — every channel refuses alike, one read', reads === 1 && refusals.every((x) => x === 'compute_failed'));
+    (fd as { figureDatasets: typeof real }).figureDatasets = real;
   });
 }
 

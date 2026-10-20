@@ -33,11 +33,13 @@ import { sendEmail, setMailSleepForTest } from '../mail/emailChannel';
 import { figureDatasets } from './figureDatasets';
 
 export type PostCode = 'sent' | 'post_failed' | 'unreachable' | 'refused' | 'no_secret' | 'compute_failed'
-  | 'mail_off' | 'no_recipients' | 'rate_limited' | 'tls_failed' | 'auth_failed' | 'mail_failed';
+  | 'mail_off' | 'no_recipients' | 'rate_limited' | 'list_too_large' | 'tls_failed' | 'auth_failed' | 'mail_failed';
 export interface PostResult {
   ok: boolean;
   code: PostCode;
   status?: number;
+  /** Email only: some recipients got it and some did not (a batch failed, or the hourly budget ran out mid-send). */
+  partial?: { sent: number; total: number };
   attempts: number;
 }
 
@@ -140,11 +142,25 @@ export async function refuseFanOut(datasetIds: readonly string[]): Promise<PostR
   return null;
 }
 
+/**
+ * The datasets of one source, read once for every channel of one run or tick: a caller sending the same source to
+ * several channels passes one `memo` (run.ts per run, alertPosts.ts per tick). A failed read is memoised too, so
+ * every channel refuses alike.
+ */
+export type DatasetsMemo = Map<string, Promise<string[]>>;
+const sourceKey = (d: Delivery): string => (d.kind === 'test' ? 'test' : `${d.kind}:${d.projectId}:${d.kind === 'dashboard' ? d.analysisId : d.ruleId}`);
+
 /** Send one delivery to one channel. Never throws. */
-export async function deliver(channel: Channel, d: Delivery): Promise<PostResult> {
+export async function deliver(channel: Channel, d: Delivery, memo?: DatasetsMemo): Promise<PostResult> {
   let datasetIds: string[];
   try {
-    datasetIds = await figureDatasets(d);
+    const key = sourceKey(d);
+    let read = memo?.get(key);
+    if (!read) {
+      read = figureDatasets(d);
+      memo?.set(key, read);
+    }
+    datasetIds = await read;
   } catch (err) {
     log.warn({ channel: channel.id, error: err instanceof Error ? err.message : String(err) }, 'send refused: what its figures come from could not be read');
     return { ok: false, code: 'compute_failed', attempts: 0 };

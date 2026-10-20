@@ -14,10 +14,17 @@
 //               SAME model holds; the whole text part equals a pure re-render;
 //               an editor's note is attributed to the owner in both parts
 //   alert       a fired rule's sentence arrives to the same readers
-//   limits      no_recipients; a subscription over its hourly bucket is refused
-//               whole (control: an alert, in its own bucket, still goes); the
-//               test-email cap (control: another org is not counted); Send now
-//               twice in a minute; ALLOWED_EMAIL_DOMAINS (control)
+//   note        an editor rewriting the owner's note is credited ("Note from
+//               <editor>"; control: the owner's own note names the owner); the
+//               preview credits as saving would; a client cannot set it
+//   limits      no_recipients, kept in the history; a list larger than one
+//               project's share is its own refusal; a send over the share is
+//               refused whole and does not count toward the pause (control: a
+//               no_recipients run does); another project is not refused; an
+//               alert has its own bucket; the test-email cap; Send now twice;
+//               ALLOWED_EMAIL_DOMAINS (control)
+//   partial     60 recipients, the second batch refused: 50 delivered, the run
+//               sent as mail_partial, the failure count cleared
 //   mail off    no relay: the kind is refused, the list says so, a send is
 //               mail_off with no connection
 //   secrets     the SMTP_PASSWORD canary in no log line, reply, record, audit
@@ -52,6 +59,7 @@ const alertStore: typeof import('../src/analysis/alertStore') = require('../src/
 const render: typeof import('../src/analysis/subscriptionRender') = require('../src/analysis/subscriptionRender');
 const emailRender: typeof import('../src/analysis/subscriptionEmail') = require('../src/analysis/subscriptionEmail');
 const say: typeof import('../src/analysis/subscriptionText') = require('../src/analysis/subscriptionText');
+const store: typeof import('../src/analysis/subscriptions') = require('../src/analysis/subscriptions');
 
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-email-db-'));
 const PASS = 'smtp-pw-CANARY-e2e-41b7';
@@ -153,7 +161,7 @@ async function suite(adminUrl: string): Promise<void> {
     ok(`model: all ${figures.length} figure strings of the Slack rendering are in the email's text — one model, no recomputation`, figures.length > 10 && missing.length === 0, missing);
     const again = emailRender.renderEmail(built.model, { channelName: 'Leads', accent: '', brand: 'Acme Analytics', lang: 'en' });
     ok('model: the text part equals a pure re-render of the same model, byte for byte', Object.is(got.text, again.text), [got.text.length, again.text.length]);
-    ok('note: attributed to the owner in both parts', got.text.includes('Note from boss@acme.test: Read the West row.') && got.html.includes('Note from boss@acme.test:</strong> Read the West row.'));
+    ok('note: the owner\'s own note is attributed to the owner, in both parts', got.text.includes('Note from boss@acme.test: Read the West row.') && got.html.includes('Note from boss@acme.test:</strong> Read the West row.'));
     ok('subject and reason: the title, and why the reader has it', got.subject === built.model.title && got.text.includes(say.emailReason('Leads')) && got.html.includes('https://bi.example.com/analyses/'));
 
     // ── Access moves ─────────────────────────────────────────────────────
@@ -182,23 +190,81 @@ async function suite(adminUrl: string): Promise<void> {
     const alertMail = parts(last());
     ok('alert: the fired rule\'s sentence arrives by email, to the same readers', fake.txns.length === before + 1 && alertMail.text.includes('Revenue is above 1.') && alertMail.subject === say.alertTitle('Revenue watch') && rcpts() === 'bob@acme.test,carol@acme.test,erin@acme.test,pam@acme.test', [rcpts(), alertMail.subject]);
 
+    // ── The note is the writer's, not the owner's ────────────────────────
+    await share({ userId: await uid('bob') }, 'editor');
+    const edited = await as('bob').call('subscription:save', { projectId: pid, id: sub.id, subscription: B.definition(s, [EM], { message: { title: '', note: 'Ignore the East row.', includeLink: true } }) });
+    ok('an editor who is not the owner rewrites the note; the owner stays', edited.body.ok && edited.body.subscription.owner === 'boss@acme.test' && edited.body.subscription.message.noteBy === 'bob@acme.test', show(edited.body));
+    await as('bob').call('subscription:sendNow', { projectId: pid, id: sub.id });
+    const byBob = parts(last());
+    ok('note: the email names the WRITER — "Note from bob", in both parts — never the owner', byBob.text.includes('Note from bob@acme.test: Ignore the East row.') && byBob.html.includes('Note from bob@acme.test:</strong>') && !byBob.text.includes('Note from boss'));
+    await boss.call('subscription:setEnabled', { projectId: pid, id: sub.id, enabled: false });
+    await boss.call('subscription:setEnabled', { projectId: pid, id: sub.id, enabled: true });
+    ok('note: switching it off and on (no new words) keeps the writer', (await boss.call('subscription:get', { projectId: pid, id: sub.id })).body.subscription.message.noteBy === 'bob@acme.test');
+    const keep = await boss.call('subscription:preview', { projectId: pid, id: sub.id, draft: B.definition(s, [EM], { message: { title: '', note: 'Ignore the East row.', includeLink: true } }) });
+    const mine = await boss.call('subscription:preview', { projectId: pid, id: sub.id, draft: B.definition(s, [EM], { message: { title: '', note: 'My words now.', includeLink: true } }) });
+    ok('preview: the note as saving would credit it — the same words stay bob\'s; new words would be the editor\'s own', keep.body.email.model.noteBy === 'bob@acme.test' && mine.body.email.model.noteBy === 'boss@acme.test', [keep.body.email?.model.noteBy, mine.body.email?.model.noteBy]);
+    ok('contract: a client cannot set noteBy itself', (await boss.call('subscription:save', { projectId: pid, id: sub.id, subscription: B.definition(s, [EM], { message: { title: '', note: 'x', includeLink: true, noteBy: 'ceo@acme.test' } }) })).status === 400);
+    await share({ userId: await uid('bob') }, 'viewer');
+
     // ── Limits ───────────────────────────────────────────────────────────
     const nobody = (await boss.call('channel:save', { name: 'Nobody', kind: 'email', to: { userIds: [await uid('dave')], teamIds: [] } })).body.channel.id;
     const lonely = (await boss.call('subscription:save', { projectId: pid, subscription: B.definition(s, [nobody], { name: 'Lonely' }) })).body.subscription;
     const n0 = fake.txns.length;
     const lr = await boss.call('subscription:sendNow', { projectId: pid, id: lonely.id });
     ok('no_recipients: nobody on it can read the project — not sent, said so', lr.body.ok === false && lr.body.error === say.runText('no_recipients', { channel: 'Nobody' }) && fake.txns.length === n0, show(lr.body));
+    const hist = (await boss.call('subscription:history', { projectId: pid, id: lonely.id })).body.runs;
+    ok('history: a stored run with an email code survives being read back', hist.length === 1 && hist[0].text === say.runText('no_recipients', { channel: 'Nobody' }), show(hist));
+    ok('NEGATIVE CONTROL: the store still drops a code it does not know', store.sanitizeRun({ history: [{ at: new Date().toISOString(), outcome: 'failed', code: 'not_a_code' }] }).history.length === 0);
 
-    const readers = 4;
-    rewire(mailEnv.parseMail({ ...relaySrc(fake.port), RATE_LIMIT_EMAIL_ORG_PER_HOUR: String(readers) }, true));
+    const readers = 4; // Leads reaches bob, carol, erin and pam now
+    rewire(mailEnv.parseMail({ ...relaySrc(fake.port), RATE_LIMIT_EMAIL_ORG_PER_HOUR: String(readers * 2 - 2) }, true)); // a project's share: 3
+    const tooBig = await sendNow();
+    ok('a list larger than one project\'s share of the hour is its own refusal, not "this hour"', tooBig.body.ok === false && tooBig.body.error === say.runText('list_too_large', { channel: 'Leads' }) && fake.txns.length === n0, show(tooBig.body));
+    rewire(mailEnv.parseMail({ ...relaySrc(fake.port), RATE_LIMIT_EMAIL_ORG_PER_HOUR: String(readers * 2) }, true)); // share 4
     email.resetLimitsForTest();
     const r1 = await sendNow();
     const r2 = await sendNow();
-    ok('rate: a subscription within its bucket goes; the next would pass it and is refused whole', r1.body.ok === true && r2.body.ok === false && r2.body.error === say.runText('rate_limited', { channel: 'Leads' }) && fake.txns.length === n0 + 1, show(r2.body));
+    ok('rate: a subscription within its share goes; the next would pass it and is refused whole', r1.body.ok === true && r2.body.ok === false && r2.body.error === say.runText('rate_limited', { channel: 'Leads' }) && fake.txns.length === n0 + 1, show(r2.body));
+    const JOBS_RUN = <T>(fn: () => Promise<T>): Promise<T> => B.context.runInContext(JOBS, 'job:subscriptions:acme', fn);
+    let slot = Date.now() + 60_000;
+    const failuresOf = async (id: string): Promise<number> => (await B.context.runInContext(BOSS, 'read', () => store.getSubscription(pid, id)))!.run.failures;
+    await JOBS_RUN(() => run.runSubscription(pid, sub.id, (slot += 60_000)));
+    const limitedRun = (await B.context.runInContext(BOSS, 'read', () => store.getSubscription(pid, sub.id)))!.run;
+    ok('a scheduled run refused only by the hourly budget does not count toward the pause', limitedRun.history[0].code === 'rate_limited' && limitedRun.history[0].trigger === 'schedule' && limitedRun.failures === 0, show(limitedRun.history[0]));
+    await JOBS_RUN(() => run.runSubscription(pid, lonely.id, (slot += 60_000)));
+    ok('NEGATIVE CONTROL: a scheduled run failing for another reason does count', (await failuresOf(lonely.id)) === 1);
+    const pid2: string = (await boss.call('projects:create', { name: 'Second' })).body.id;
+    const s2 = await B.seed(BOSS, pid2);
+    const other = (await boss.call('subscription:save', { projectId: pid2, subscription: B.definition(s2, [EM], { name: 'Second board' }) })).body.subscription;
+    const r3 = await boss.call('subscription:sendNow', { projectId: pid2, id: other.id });
+    ok('one project spending its share does not refuse another project (its own share; the org still has room)', r3.body.ok === true && last().rcpts.join() === 'erin@acme.test', show(r3.body));
     await B.context.runInContext(JOBS, 'job:tick:acme', () => Promise.all(schedules.deliverTickAlerts([{ projectId: pid, events: [{ ...ev, id: randomUUID() }] } as never], () => undefined)));
-    ok('NEGATIVE CONTROL: an alert, in its own bucket, still goes out', fake.txns.length === n0 + 2);
+    ok('NEGATIVE CONTROL: an alert, in its own bucket, still goes out', fake.txns.length === n0 + 3);
     rewire(cfg.mail);
     email.resetLimitsForTest();
+
+    // ── A send where one batch fails is partial: sent, said, never a failure ──
+    const bulkTeam = (await pool.query<{ id: string }>(`INSERT INTO teams (org_id, name) VALUES ('acme', 'Bulk') RETURNING id`)).rows[0].id;
+    for (let i = 0; i < 60; i++) {
+      const u = (await pool.query<{ id: string }>(`INSERT INTO users (org_id, email, role, last_login_at) VALUES ('acme', $1, 'viewer', now()) RETURNING id`, [`bulk-${String(i).padStart(2, '0')}@acme.test`])).rows[0].id;
+      await pool.query('INSERT INTO team_members (team_id, user_id) VALUES ($1, $2)', [bulkTeam, u]);
+    }
+    await share({ teamId: bulkTeam }, 'viewer');
+    const bulkCh = (await boss.call('channel:save', { name: 'Bulk list', kind: 'email', to: { userIds: [], teamIds: [bulkTeam] } })).body.channel.id;
+    const bulk = (await boss.call('subscription:save', { projectId: pid, subscription: B.definition(s, [bulkCh], { name: 'Bulk board' }) })).body.subscription;
+    rewire(null);
+    await JOBS_RUN(() => run.runSubscription(pid, bulk.id, (slot += 60_000)));
+    const failedOnce = await failuresOf(bulk.id);
+    rewire(cfg.mail);
+    const relayOpts = fake.opts;
+    fake.opts = { ...relayOpts, rcpt: (a) => (/^bulk-5\d@/.test(a) ? '421 4.7.0 try later' : '250 ok') }; // the second batch: bulk-50 … bulk-59
+    const nB = fake.txns.length;
+    await JOBS_RUN(() => run.runSubscription(pid, bulk.id, (slot += 60_000)));
+    fake.opts = relayOpts;
+    const bulkRun = (await B.context.runInContext(BOSS, 'read', () => store.getSubscription(pid, bulk.id)))!.run;
+    ok('partial: the first batch of 50 went, the refused second batch did not stop it', fake.txns.length === nB + 1 && fake.txns[nB].rcpts.length === 50);
+    ok('partial: the run is SENT with what it missed, and clears the failure count', failedOnce === 1 && bulkRun.failures === 0 && bulkRun.history[0].outcome === 'sent' && bulkRun.history[0].code === 'mail_partial'
+      && (await boss.call('subscription:history', { projectId: pid, id: bulk.id })).body.runs[0].text === say.runText('mail_partial', { channel: 'Bulk list', sent: 50, total: 60 }), show(bulkRun.history[0]));
 
     const tests: unknown[] = [];
     for (let i = 0; i < email.TEST_EMAILS_PER_HOUR; i++) tests.push((await boss.call('channel:test', { id: EM })).body.ok);
@@ -269,13 +335,21 @@ const DOORS: Array<[RegExp, string[]]> = [
   [/\bwebhookOf\(/, ['server/subscriptions/deliver.ts', 'app/channels.ts']],
   [/\bsendEmail\(/, ['server/subscriptions/deliver.ts', 'server/mail/emailChannel.ts']],
   [/\bsendOnce\(/, ['server/mail/emailChannel.ts', 'server/mail/smtp.ts']],
+  [/\bsendBatches\(/, ['server/mail/emailChannel.ts']],
+];
+/** Any way to open a socket: `net.connect(`, `tls.connect(`, `createConnection(`, `new [net.]Socket(`, `new [tls.]TLSSocket(`, and the destructured `import { connect } from 'tls'` / `const { connect } = require('net')`. */
+const SOCKET = [
+  /\b(?:tls|net)\.connect\(|\bcreateConnection\(/,
+  /\bnew\s+(?:net\.|tls\.)?(?:TLS)?Socket\s*\(/,
+  /\bimport\s*\{[^}]*\b(?:connect|createConnection|Socket|TLSSocket)\b[^}]*\}\s*from\s*['"](?:node:)?(?:net|tls)['"]/,
+  /\{[^}]*\b(?:connect|createConnection|Socket|TLSSocket)\b[^}]*\}\s*=\s*require\(\s*['"](?:node:)?(?:net|tls)['"]\s*\)/,
 ];
 function oneDoor(files: Map<string, string>): string[] {
   const bad: string[] = [];
   for (const [file, text] of files) {
     const f = file.split(path.sep).join('/');
     for (const [re, allowed] of DOORS) if (re.test(text) && !allowed.includes(f)) bad.push(`${f}: ${re.source}`);
-    if (f.startsWith('server/') && f !== 'server/mail/smtp.ts' && /\b(?:tls|net)\.connect\(|\bcreateConnection\(/.test(text)) bad.push(`${f}: a raw socket`);
+    if (f.startsWith('server/') && f !== 'server/mail/smtp.ts' && SOCKET.some((re) => re.test(text))) bad.push(`${f}: a raw socket`);
   }
   return bad;
 }
@@ -294,8 +368,19 @@ function oneDoor(files: Map<string, string>): string[] {
   walk(SRC);
   const bad = oneDoor(files);
   ok('one door: only deliver.ts posts, reads a webhook URL or reaches the SMTP client; only smtp.ts opens a socket under src/server', bad.length === 0, bad);
-  const planted = oneDoor(new Map([...files, [path.join('server', 'evil.ts'), 'await postJson(u, b, c); tls.connect({})']]));
-  ok('NEGATIVE CONTROL: a planted post and a planted socket are both found', planted.length === 2, planted);
+  const plant = (file: string, text: string): number => oneDoor(new Map([...files, [path.join(...file.split('/')), text]])).length;
+  const plants: Array<[string, string, string]> = [
+    ['a post', 'server/evil.ts', 'await postJson(u, b, c);'],
+    ['a direct sendBatches', 'server/subscriptions/evil.ts', 'await sendBatches(to, data, id);'],
+    ['tls.connect', 'server/evil.ts', 'tls.connect({ host });'],
+    ['a destructured import', 'server/evil.ts', "import { connect as dial } from 'node:tls';\ndial({ host });"],
+    ['a destructured require', 'server/evil.ts', "const { createConnection } = require('net');"],
+    ['new net.Socket().connect', 'server/evil.ts', 'new net.Socket().connect(25, host);'],
+    ['new TLSSocket', 'server/evil.ts', 'const t = new TLSSocket(s, {});'],
+  ];
+  const missed = plants.filter(([, file, text]) => plant(file, text) !== 1).map(([what]) => what);
+  ok(`NEGATIVE CONTROL: each of ${plants.length} planted doors is found`, missed.length === 0, missed);
+  ok('control: an import of BlockList / isIP from net is not a socket', plant('server/fine.ts', "import { BlockList, isIP } from 'net';") === 0);
 
   if (!process.env.DATABASE_URL) {
     console.log('skip email DB suite: DATABASE_URL is unset (set it to a Postgres this suite may CREATE DATABASE on)');

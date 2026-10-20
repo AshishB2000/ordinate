@@ -12,7 +12,7 @@ export type RunCode =
   | 'owner_removed' | 'owner_no_access' | 'dashboard_gone' | 'no_channels' | 'no_content' | 'compute_failed'
   | 'post_failed' | 'unreachable' | 'refused' | 'no_secret'
   // email (docs/email/00-design.md §9)
-  | 'mail_off' | 'no_recipients' | 'rate_limited' | 'tls_failed' | 'auth_failed' | 'mail_failed';
+  | 'mail_off' | 'no_recipients' | 'rate_limited' | 'list_too_large' | 'tls_failed' | 'auth_failed' | 'mail_failed' | 'mail_partial';
 
 export interface RunDetail {
   /** Channels that took the message / that were tried. */
@@ -72,6 +72,8 @@ export function runText(code: RunCode, d: RunDetail = {}): string {
     case 'mail_off': return t('subscriptionText.not_sent_email_is_not_set');
     case 'no_recipients': return t('subscriptionText.not_sent_to_nobody_on_it', { channel });
     case 'rate_limited': return t('subscriptionText.not_sent_to_this_organization_reached', { channel });
+    case 'list_too_large': return t('subscriptionText.not_sent_to_this_list_is', { channel });
+    case 'mail_partial': return t('subscriptionText.sent_to_but_the_mail_server', { channel, sent, total });
     case 'tls_failed': return t('subscriptionText.not_delivered_to_the_mail_server', { channel });
     case 'auth_failed': return t('subscriptionText.not_delivered_to_the_mail_server_2', { channel });
     case 'mail_failed': return t('subscriptionText.not_delivered_to_the_mail_server_3', { channel, status });
@@ -212,9 +214,9 @@ export function emailReason(name: string): string {
   return t('subscriptionText.you_receive_this_as_a_member', { name });
 }
 
-/** An editor's note, attributed to the account the send runs as. */
-export function noteFrom(owner: string): string {
-  return t('subscriptionText.note_from', { owner });
+/** An editor's note, attributed to whoever last wrote it (subscription:save records them). */
+export function noteFrom(writer: string): string {
+  return t('subscriptionText.note_from', { writer });
 }
 
 export function sendNowWait(): string {

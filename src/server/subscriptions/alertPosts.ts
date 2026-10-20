@@ -20,7 +20,7 @@ import { alertTitle } from '../../analysis/subscriptionText';
 import { audit } from '../authz/audit';
 import { ctx } from '../context';
 import { dashboardLink } from '../publicUrl';
-import { deliver } from './deliver';
+import { deliver, type DatasetsMemo } from './deliver';
 import { subscriptionDb } from './run';
 
 /** The message one fired event stands for. Pure given the rule and the event. */
@@ -42,6 +42,7 @@ export async function postFiredAlerts(projectId: string, events: AlertEvent[]): 
   let sent = 0;
   try {
     const rules = new Map((await alertStore.load(projectId)).rules.map((r) => [r.id, r]));
+    const memo: DatasetsMemo = new Map(); // each rule's datasets, read once for all its channels this tick
     for (const event of events) {
       const rule = rules.get(event.ruleId);
       if (!rule || !rule.channelIds || !rule.channelIds.length) continue;
@@ -50,7 +51,7 @@ export async function postFiredAlerts(projectId: string, events: AlertEvent[]): 
       for (const id of rule.channelIds) {
         const c = await getChannel(id);
         if (!c) continue; // removed since: Admin → Channels warned that this rule used it
-        if ((await deliver(c, { kind: 'alert', projectId, ruleId: rule.id, message: model })).ok) ok++;
+        if ((await deliver(c, { kind: 'alert', projectId, ruleId: rule.id, message: model }, memo)).ok) ok++;
       }
       sent += ok;
       const who = ctx();

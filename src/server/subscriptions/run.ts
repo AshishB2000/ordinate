@@ -43,7 +43,7 @@ import { ctx, runInContext, type Identity } from '../context';
 import { toReaders } from '../jobs/schedules';
 import { dashboardLink } from '../publicUrl';
 import { publish } from '../sse';
-import { deliver } from './deliver';
+import { deliver, type DatasetsMemo } from './deliver';
 
 let db: { pool: Pool | null; devAuth: boolean } = { pool: null, devAuth: true };
 
@@ -105,7 +105,7 @@ export async function buildMessage(projectId: string, def: Definition): Promise<
     title: def.message.title || a.name,
     subtitle: [formatDate(todayIso()), ...(view ? [viewText(view.name)] : []), ...(filters ? [filters] : []), ...(figs.dataAt ? [asOfText(utcLabel(figs.dataAt))] : [])],
     note: def.message.note,
-    noteBy: ctx().user.email, // the account the send runs as — an email says "Note from …"
+    ...(def.message.noteBy ? { noteBy: def.message.noteBy } : {}), // who wrote it (subscription:save) — an email says "Note from …"
     kpis: figs.kpis,
     visuals: figs.visuals,
     link: def.message.includeLink ? dashboardLink(projectId, a.id) : null,
@@ -114,7 +114,8 @@ export async function buildMessage(projectId: string, def: Definition): Promise<
   return { model, dataAt: figs.dataAt, hash: createHash('sha256').update(figuresOf(model)).digest('hex') };
 }
 
-interface Result { outcome: RunEntry['outcome']; code: RunCode; detail?: RunDetail; built?: Built }
+/** `uncounted`: a failure that must not count toward the pause — every channel only hit the hourly email budget. */
+interface Result { outcome: RunEntry['outcome']; code: RunCode; detail?: RunDetail; built?: Built; uncounted?: boolean }
 
 /** Compute as the owner and post to every channel. Never throws. */
 async function attempt(sub: Subscription, org: string, scheduled: boolean): Promise<Result> {
@@ -135,14 +136,23 @@ async function attempt(sub: Subscription, org: string, scheduled: boolean): Prom
     if (scheduled && sub.conditions.onlyWhenRefreshed && sub.run.lastDataAt && built.dataAt && built.dataAt <= sub.run.lastDataAt) return { outcome: 'skipped', code: 'not_refreshed' };
     let sent = 0;
     let failure: RunDetail & { code: RunCode } | null = null;
+    let partialMail: RunDetail | null = null;
+    let onlyLimited = true;
+    const memo: DatasetsMemo = new Map(); // the dashboard's datasets, read once for all its channels
     for (const c of channels) {
-      const r = await deliver(c, { kind: 'dashboard', projectId: sub.projectId, analysisId: sub.analysisId, message: built.model });
-      if (r.ok) sent++;
-      else failure ??= { code: r.code, channel: c.name, ...(r.status ? { status: r.status } : {}) };
+      const r = await deliver(c, { kind: 'dashboard', projectId: sub.projectId, analysisId: sub.analysisId, message: built.model }, memo);
+      if (r.ok) {
+        sent++;
+        if (r.partial) partialMail ??= { channel: c.name, sent: r.partial.sent, total: r.partial.total };
+      } else {
+        failure ??= { code: r.code, channel: c.name, ...(r.status ? { status: r.status } : {}) };
+        if (r.code !== 'rate_limited') onlyLimited = false;
+      }
     }
-    if (!failure) return { outcome: 'sent', code: 'sent', detail: { sent }, built };
+    // An email list that reached some of its people is sent (it clears the failure count), and says who it missed.
+    if (!failure) return partialMail ? { outcome: 'sent', code: 'mail_partial', detail: partialMail, built } : { outcome: 'sent', code: 'sent', detail: { sent }, built };
     const { code, ...where } = failure;
-    return sent ? { outcome: 'sent', code: 'partial', detail: { sent, total: channels.length, channel: where.channel }, built } : { outcome: 'failed', code, detail: where };
+    return sent ? { outcome: 'sent', code: 'partial', detail: { sent, total: channels.length, channel: where.channel }, built } : { outcome: 'failed', code, detail: where, uncounted: onlyLimited };
   });
 }
 
@@ -164,8 +174,9 @@ export async function runSubscription(projectId: string, id: string, slot?: numb
   }
   const r = await attempt(sub, org, scheduled);
   const entry: RunEntry = { at: new Date(now).toISOString(), trigger: scheduled ? 'schedule' : 'manual', outcome: r.outcome, code: r.code, ...(slotIso ? { slot: slotIso } : {}), ...(r.detail ? { detail: r.detail } : {}) };
-  // Only a SCHEDULED failure counts toward the pause; any send that goes out clears the count.
-  const failures = r.outcome === 'sent' ? 0 : scheduled && r.outcome === 'failed' ? sub.run.failures + 1 : sub.run.failures;
+  // Only a SCHEDULED failure counts toward the pause — and not one where the hourly email budget was the only
+  // reason (it clears by itself); any send that goes out, even partly, clears the count.
+  const failures = r.outcome === 'sent' ? 0 : scheduled && r.outcome === 'failed' && !r.uncounted ? sub.run.failures + 1 : sub.run.failures;
   const pause = scheduled && r.outcome === 'failed' && failures >= store.PAUSE_AFTER;
   await store.stampRun(projectId, id, (run): RunState => ({
     ...run,
