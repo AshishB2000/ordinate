@@ -17,14 +17,14 @@
 // picture, not as body prose, and the examples in the spec are written that
 // way. A page that needs a paragraph gets a Notes page.
 
-import { formatCompact } from '../app/format';
+import { asMonthLabels, formatCompact } from '../app/format';
 import type { ChartData } from './vizData';
+import type { ChartFigures } from './chartShapes';
 import type { PivotGrid } from './pivotData';
 import { cohortCaption } from './cohortData';
 import type { CohortGrid } from './cohortData';
 import { funnelCaption } from './funnelEvents';
 import type { EventFunnel } from './funnelEvents';
-import { waterfallFigures, paretoFigures } from './chartFigures';
 import { analyticsClauses } from './analytics';
 import type { ResolvedOverlay } from './analytics';
 import { calcLabel } from './tableCalc';
@@ -32,7 +32,7 @@ import type { CalcSeries } from './tableCalc';
 import { CATEGORY_CAP, OTHER_LABEL } from './categoryKey';
 import { facetCaption } from './facetCaption';
 import type { FacetGrid } from './facets';
-import { t } from '../app/i18n';
+import { currentLanguage, t } from '../app/i18n';
 
 // ── the app's compact number format ──────────────────────────────────────────
 //
@@ -91,12 +91,15 @@ export interface CaptionKpi {
   value: number | null;
 }
 
+/** A chart's data as a caption reads it: the series, and the figures the chart draws (./chartShapes). */
+type CaptionData = ChartData & { figures?: ChartFigures };
+
 /** Everything a caption may read. Every field is already app-computed. */
 export interface CaptionInput {
   /** Chart id (`column`, `line`, `map_choropleth`, …). Omitted for a KPI row. */
   chartType?: string;
   /** The `{labels, series}` the renderers consume — charts only. May carry its resolved `analytics`. */
-  data?: (ChartData & { analytics?: ResolvedOverlay[]; cohort?: CohortGrid; eventFunnel?: EventFunnel; facets?: FacetGrid }) | null;
+  data?: (CaptionData & { analytics?: ResolvedOverlay[]; cohort?: CohortGrid; eventFunnel?: EventFunnel; facets?: FacetGrid }) | null;
   /**
    * The Analytics pane's resolved overlays (./analytics). A trend or a forecast
    * adds its own clause to the sentence; the rest are drawn, not narrated.
@@ -112,11 +115,12 @@ export interface CaptionInput {
   /** column → the display name the catalog gives it (catalog.displayNames). */
   names?: Record<string, string> | null;
   /**
-   * The two chart overrides that change a FIGURE rather than a look: the
-   * waterfall's "is total" categories and the bullet's fixed target. Without
-   * them the sentence would describe a different chart from the picture.
+   * The chart override that changes a FIGURE the caption works from rather
+   * than a look: the bullet's fixed target. (A waterfall's named totals are in
+   * its `figures` already.) Without it the sentence would describe a
+   * different chart from the picture.
    */
-  overrides?: { waterfallTotals?: string[]; bulletTarget?: number } | null;
+  overrides?: { bulletTarget?: number } | null;
 }
 
 /** Read at call time, not import time: the words follow Settings → Language. */
@@ -146,7 +150,10 @@ function familyCaption(input: CaptionInput): string {
   const family = captionFamily(input.chartType);
   // Small multiples: one sentence ACROSS the panels (./facetCaption).
   if (input.data && input.data.facets) return facetCaption(input.data.facets, family);
-  const measure = measureNoun(input.data, input.names);
+  // A month axis is named as the chart names it — "Jan 2023", in the caption's own language — BEFORE any
+  // sentence is put together (a calendar's labels are days, and stay so).
+  const data = family === 'calendar' ? input.data : monthNamed(input.data);
+  const measure = measureNoun(data, input.names);
   // A pivot's sentence is about the GRID — how big it is and where its peak
   // sits — which `{labels, series}` cannot say: a leaf row's label is a joined
   // path and the shape of the thing is the point.
@@ -159,26 +166,32 @@ function familyCaption(input: CaptionInput): string {
   // written off `geo`, and only the measure noun comes from the series.
   if (family === 'map') return leaderCaption(geoPairs(input.geo), measure, true);
   // A table calculation says both figures: "…at 24.1% of total · 1.25M".
-  if (calcSeriesOf(input.data)) return calcCaption(input.data, family, input.names);
+  if (calcSeriesOf(data)) return calcCaption(data, family, input.names);
 
-  const pairs = chartPairs(input.data);
+  const pairs = chartPairs(data);
   const ov = input.overrides || {};
   switch (family) {
     case 'line': return lineCaption(pairs, measure);
     case 'part': return partCaption(pairs, measure);
-    case 'point': return pointCaption(input.data, measure);
+    case 'point': return pointCaption(data, measure);
     case 'bar': return leaderCaption(pairs, measure, false);
-    case 'waterfall': return waterfallCaption(input.data, ov.waterfallTotals, measure, pairs);
-    case 'pareto': return paretoCaption(input.data, measure, pairs);
-    case 'bullet': return bulletCaption(input.data, ov.bulletTarget, measure, pairs);
-    case 'radar': return radarCaption(input.data);
+    case 'waterfall': return waterfallCaption(data, measure, pairs);
+    case 'pareto': return paretoCaption(data, measure, pairs);
+    case 'bullet': return bulletCaption(data, ov.bulletTarget, measure, pairs);
+    case 'radar': return radarCaption(data);
     case 'calendar': return calendarCaption(pairs, measure);
-    case 'cloud': return cloudCaption(input.data, input.names);
+    case 'cloud': return cloudCaption(data, input.names);
     default: return genericCaption(pairs, measure);
   }
 }
 
 // ── shared reductions ────────────────────────────────────────────────────────
+
+/** `data` with a first-of-month axis named as the chart names it, in the caption's language (../app/format). */
+function monthNamed<D extends ChartData>(data: D | null | undefined): D | null | undefined {
+  if (!data || !Array.isArray(data.labels)) return data;
+  return { ...data, labels: asMonthLabels(data.labels, currentLanguage()) };
+}
 
 interface Pair { label: string; value: number }
 
@@ -434,30 +447,35 @@ function kpiCaption(kpis: CaptionKpi[]): string {
 
 // ── waterfall · Pareto · bullet · radar · calendar ───────────────────────────
 //
-// The waterfall's start/end and the Pareto's 80% count come from ./chartFigures,
-// the main-side twin of the renderer's chartShapes (differential-tested).
+// The waterfall's start, end and steps and the Pareto's order, 80% count and
+// positives are the chart's own `figures` (./chartShapes): the caption reads
+// what the picture draws, and says nothing of them without it — never works
+// them out a second time.
 
 const finite = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 /** "Four steps take revenue from 4.1M to 5.2M; the largest is Technology at +1.3M" */
-function waterfallCaption(
-  data: ChartData | null | undefined, totals: string[] | undefined, measure: string, pairs: Pair[],
-): string {
-  const f = waterfallFigures(data, totals);
-  if (!f.steps.length) return genericCaption(pairs, measure);
-  let big = f.steps[0];
-  for (const s of f.steps) if (Math.abs(s.value) > Math.abs(big.value)) big = s;
-  const n = f.steps.length;
+function waterfallCaption(data: CaptionData | null | undefined, measure: string, pairs: Pair[]): string {
+  const f = data && data.figures && data.figures.waterfall;
+  const labels = (data && Array.isArray(data.labels)) ? data.labels : [];
+  // The rises and falls the chart draws, each named as its bar is (a month as "Jan 2023").
+  const steps = f ? f.steps.filter((s) => s.kind === 'up' || s.kind === 'down')
+    .map((s) => ({ label: s.src >= 0 && s.src < labels.length ? String(labels[s.src]) : s.label, value: s.value })) : [];
+  if (!f || !steps.length) return genericCaption(pairs, measure);
+  let big = steps[0];
+  for (const s of steps) if (Math.abs(s.value) > Math.abs(big.value)) big = s;
+  const n = steps.length;
   const head = t('captions.from_to_3', { p0: sentenceCase(countWord(n)), n, measure, from: compact(f.from), to: compact(f.to) });
   const at = t('captions.at', { label: big.label, p1: !!(big.value > 0), value: compact(big.value) });
   return n === 1 ? `${head}: ${at}` : t('captions.the_largest_is', { head, at });
 }
 
 /** "Three categories make 80% of revenue" */
-function paretoCaption(data: ChartData | null | undefined, measure: string, pairs: Pair[]): string {
-  const p = paretoFigures(data);
-  if (!p.count80) return leaderCaption(pairs, measure, false);
-  if (p.count80 === 1) return t('captions.alone_makes_80_of', { top: p.top, measure });
+function paretoCaption(data: CaptionData | null | undefined, measure: string, pairs: Pair[]): string {
+  const p = data && data.figures && data.figures.pareto;
+  if (!p || !p.count80) return leaderCaption(pairs, measure, false);
+  const labels = (data && Array.isArray(data.labels)) ? data.labels : [];
+  if (p.count80 === 1) return t('captions.alone_makes_80_of', { top: String(labels[p.order[0]]), measure });
   if (p.count80 >= p.positives) {
     return t('captions.it_takes_categories_to_make_80', { p0: p.positives === 2 ? 'both' : 'all ' + countWord(p.positives), measure });
   }

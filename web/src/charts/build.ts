@@ -72,23 +72,9 @@ export function chartSeries(data: ChartDataShape | null | undefined): ChartSerie
     : [];
 }
 
-// A month-truncated date axis reads as a date axis unless it is formatted.
-// `datetrunc('month', order_date)` — the only way to chart by month, since
-// VizEncoding has no granularity — yields '2023-01-01', and a year of those
-// prints twelve full ISO dates whose day part is noise on every one of them.
-//
-// All-or-nothing on purpose: one label that is not a first-of-month means the
-// axis is really daily and the days carry information, so nothing is rewritten.
-// UTC throughout — `new Date('2023-01-01')` is UTC midnight, and formatting it
-// in a negative-offset zone would label January as Dec 2022.
-const FIRST_OF_MONTH_RE = /^(\d{4})-(\d{2})-01(?:[T ]00:00(?::00(?:\.000)?)?Z?)?$/;
-
-export function asMonthLabels(labels: Cx[]): Cx[] {
-  const parsed = labels.map((l) => (typeof l === 'string' ? FIRST_OF_MONTH_RE.exec(l.trim()) : null));
-  if (parsed.some((m) => !m)) return labels;
-  return parsed.map((m: Cx) => new Date(Date.UTC(+m[1], +m[2] - 1, 1))
-    .toLocaleDateString(undefined, { month: 'short', year: 'numeric', timeZone: 'UTC' }));
-}
+// A first-of-month axis reads "Jan 2023": the shared formatter's rule (src/app/format.ts), which the
+// published page and the captions use too. Re-exported under its old name for the chart's callers.
+export const asMonthLabels = (labels: Cx[]): Cx[] => OrdFormat.asMonthLabels(labels);
 
 // The config for the given data + type id, or null when there is nothing to
 // draw (no labels, no series, a calendar without dates). `canvas` must be in
