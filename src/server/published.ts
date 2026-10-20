@@ -30,7 +30,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { runAsPublished, type Identify, type Identity } from './context';
-import { getPage, getSite, PAGE_RE, type HostedSite } from '../publish/hosted';
+import { getPage, getSite, PAGE_RE, servable, type HostedSite } from '../publish/hosted';
 import { isValidId } from '../app/ids';
 
 /** The policy a page pinned in its <meta>, or null. */
@@ -64,6 +64,7 @@ async function find(pool: Pool | null, who: Identity | null, id: string, file: s
       if (!site || !(await allow(site))) return null;
       const projects = require('../app/projects') as typeof import('../app/projects');
       if (!(await projects.getProject(site.projectId))) return null;
+      if (!(await servable(site))) return null; // a snapshot built over rows that now have access rules (row-policy D10)
       return getPage(id, file);
     });
   if (who) {

@@ -16,6 +16,7 @@
 // colours would silently vanish.
 
 import { ipcMain } from './bus';
+import { anyPolicyClosed, restrictedOn } from '../data/rowAccess';
 import * as projects from '../app/projects';
 import * as colorMap from '../analysis/colorMap';
 import type { ColorMap, ColumnColors } from '../analysis/colorMap';
@@ -59,6 +60,8 @@ export function register(): void {
   ipcMain.handle('format:colors:get', async (_e, { projectId }: { projectId?: unknown } = {}) => {
     if (typeof projectId !== 'string') return {};
     const project = await projects.getProject(projectId);
+    // The map lists every value an editor's chart dealt: none to a caller row access rules restrict (REDACT).
+    if (project && (await restrictedOn(projectId)) && (await anyPolicyClosed(projectId))) return {};
     return project ? colorMap.sanitizeColorMap(project.colorMap) : {};
   });
 

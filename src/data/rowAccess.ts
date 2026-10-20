@@ -317,3 +317,12 @@ export function withLockSteps(lock: Lock, filters: readonly FilterStep[] | undef
   const starts = lock.steps.length <= only.length && lock.steps.every((s, i) => same(s, only[i]));
   return starts ? only : [...lock.steps, ...only];
 }
+
+/** Does any dataset of the project have rules (or is built from one)? The legacy `/p/` check and project-wide values (the colour map). */
+export async function anyPolicyClosed(projectId: string): Promise<boolean> {
+  if (!isValidId(projectId)) return false;
+  // Lazy: the dataset store calls into this module, so it is not imported at load time.
+  const datasets = require('./datasets') as typeof import('./datasets');
+  for (const d of await datasets.listDatasets(projectId)) if (await policyClosed(projectId, d.id)) return true;
+  return false;
+}

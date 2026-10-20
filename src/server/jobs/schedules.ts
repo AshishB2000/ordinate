@@ -32,6 +32,7 @@
 // model call (T2.12 routes AI keys first).
 
 import * as scheduler from '../../app/refreshScheduler';
+import { policyClosed } from '../../data/rowAccess';
 import type { TickAlerts } from '../../app/refreshScheduler';
 import * as config from '../../app/config';
 import * as pipelineRunner from '../../app/pipelineRunner';
@@ -99,7 +100,8 @@ export function wireSchedules(pool: Pool, devAuth: boolean): void {
 
   scheduler.setEnabledCheck(() => config.get().autoRefresh !== false);
   scheduler.onRefreshed((o) => {
-    if (!o.ok) push(o.projectId, 'hub:dataset-refreshed', { ...o, error: redactOriginText(o.error ?? 'Refresh failed.') });
+    // A failure's text can quote a value: none from a dataset with row access rules reaches every reader (row-policy N2).
+    if (!o.ok) void policyClosed(o.projectId, o.datasetId).then((closed) => push(o.projectId, 'hub:dataset-refreshed', { ...o, error: closed ? 'Refresh failed.' : redactOriginText(o.error ?? 'Refresh failed.') })).catch(() => undefined);
     // A published site that reads it, opted in, is rebuilt at its link (T2.9; the desktop's job hook).
     if (o.ok) scheduleRepublish(o.projectId, o.datasetId);
     const { org, user, requestId } = ctx(); // the tick's: the job identity, for this org

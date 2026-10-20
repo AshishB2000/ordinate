@@ -1,6 +1,6 @@
 import { ipcMain } from './bus';
 import { withLockOf } from './rowDoors';
-import { RowPolicyError, isRowPolicyError, withLockSteps } from '../data/rowAccess';
+import { RowPolicyError, closedToCaller, isRowPolicyError, restrictedOn, withLockSteps } from '../data/rowAccess';
 import { distinctFor } from './distinctFor';
 // One parser and one byte ceiling, shared with the refresh service — see
 // src/fileImport.ts for why they moved out of this file.
@@ -356,7 +356,15 @@ export function register() {
 
   // On the server a capture summary carries `hasImage`, never its crop path (datasetSummary.ts).
   ipcMain.handle('dataset:list', async (_e, { projectId }: any = {}) => {
-    return datasets.listDatasets(projectId);
+    const list = await datasets.listDatasets(projectId);
+    if (!(await restrictedOn(projectId))) return list;
+    // Row access rules: `scoped` says the caller sees part of it (nothing about the rules leaves), and a failed
+    // refresh's text, which can quote a value, is not theirs to read (row-policy N2).
+    return Promise.all(list.map(async (d) => {
+      if (!(await closedToCaller(projectId, d.id))) return d;
+      const { lastRefreshError: _e2, ...rest } = d;
+      return { ...rest, scoped: true as const };
+    }));
   });
 
   ipcMain.handle('dataset:get', async (_e, { projectId, id }: any = {}) => datasets.getDataset(projectId, id));
@@ -377,7 +385,8 @@ export function register() {
   ipcMain.handle('dataset:columns', async (_e, { projectId, id }: any = {}) => {
     const meta = await datasets.getDatasetMeta(projectId, id);
     // `mode: 'live'` so a screen knows before it asks for rows a Live dataset does not keep (L2.1).
-    return meta ? { ...headerOf(meta), ...(isLive(meta) ? { mode: 'live' as const } : {}) } : null;
+    const scoped = meta && (await closedToCaller(projectId, id)) ? { scoped: true as const } : {}; // row access rules restrict the caller here
+    return meta ? { ...headerOf(meta), ...(isLive(meta) ? { mode: 'live' as const } : {}), ...scoped } : null;
   });
 
   // A delete is a move to the Trash (src/app/trash.ts), taking the dataset's

@@ -25,6 +25,7 @@
 // org's origins>`, and no X-Frame-Options: the ONE route that may be framed.
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { isRowPolicyError } from '../../data/rowAccess';
 import type { Pool } from 'pg';
 import { runAsPublished, type Identify, type Identity } from '../context';
 import { readable } from '../authz/index';
@@ -189,6 +190,11 @@ export function registerEmbedRoutes(app: FastifyInstance, opts: EmbedRouteOption
         return embedHtml(site, dash, c);
       });
     } catch (err) {
+      if (isRowPolicyError(err)) {
+        // A dataset with row access rules: embeds are off for it (docs/row-policy D10) — said, not a 500.
+        await record('denied');
+        return refuse(reply, 403, err.message, ancestors);
+      }
       req.log.error({ err }, 'embed: page could not be built');
       await record('error');
       return refuse(reply, 500, embedFailed(), ancestors);
