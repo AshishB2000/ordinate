@@ -101,8 +101,8 @@ the desktop installers.
   in two tabs, silently overwrote each other's work. Each editor now saves with a tag of the content
   it opened; a save from a copy someone else has since changed is refused, and a banner offers
   "Reload" or "Save mine as a copy" instead of overwriting. An open editor also learns at once when
-  another save lands. Saving a view, starring a visual or generating a report never counts as a
-  change. API and MCP callers that send no tag keep last-writer-wins. Version history now also keeps
+  another save lands. Saving a view, starring a visual, generating a report or scheduling it never
+  counts as a change. API and MCP callers that send no tag keep last-writer-wins. Version history now also keeps
   a dashboard parameter's saved default, a visual's analytics overlays, and a report's discussion page
   and view, and a restore puts them back. See
   [`docs/edit-conflicts/00-design.md`](docs/edit-conflicts/00-design.md).

@@ -20,17 +20,19 @@ save made from a stale copy. Nothing is merged and nothing is overwritten.
   report, a story, a scorecard, a scenario. A page editor shows the banner at the top of the page; a
   dialog editor (a metric, a calculated measure, a tree, a scorecard's rows) shows it inside the
   dialog, above its Save.
-- **What never trips it:** saving a view, starring a visual, a report's "last generated" stamp,
-  renaming from a list — none of those change what the editor holds, so an open editor stays
-  current. One person saving twice never conflicts with themself.
+- **What never trips it:** saving a view, starring a visual, a report's "last generated" stamp or
+  its Pipelines schedule, the tree editor saving a metric's tree while its metric dialog is open (and
+  the other way round) — none of those change what that editor's save writes. One person saving
+  twice never conflicts with themself, and reopening an editor always starts from what is stored now.
+- **While B's banner is up**, Publish… does not go ahead (it says why and points at the banner),
+  and closing the tab or leaving the page with edits the server does not have asks first.
 - **Automation** (MCP, scripts, anything that does not send a tag) keeps last-writer-wins.
 
 ## Decisions (from the plan, not re-litigated)
 
 1. **Compare content, not timestamps.** The tag is sha256 (base64url, 43 characters) of the
-   canonical JSON of the record's content keys — `recordDiff.contentOf`, the same per-type list the
-   version history uses, extended for the types it lacked. Computed on read from the STORED,
-   sanitized record; never stored, so `test-records` byte-identity holds.
+   canonical JSON of the keys that channel's save writes (`recordDiff.SAVE_KEYS`, below), read from
+   the record AS STORED. Computed on read, never stored, so `test-records` byte-identity holds.
 2. **Each whole-document update contract gains an optional `base`.** The compare happens inside
    `recordFs.locked` on the record's own path, so it is atomic across pods. A mismatch refuses with
    **409 `record_changed`**, a catalog sentence and the current tag; the record is untouched.
@@ -48,15 +50,18 @@ save made from a stale copy. Nothing is merged and nothing is overwritten.
 
 | Piece | Where | Job |
 |---|---|---|
-| `contentTag(type, rec)` | `src/app/editConflict.ts` | sha256 of `canonical(contentOf(type, rec))` |
-| `checkBase(type, existing, base)` | same | `existing`'s tag; a `base` that differs → throws `ERECORDCHANGED` (`tag` = the current one); absent `base` → last-writer-wins |
-| `lockedUpdate(type, {projectId, id, file}, base, load, apply)` | same | `recordFs.locked(file)`: load, `checkBase`, apply; after the commit, push `hub:record-saved` if the tag moved. Each store's update function is this, on its own record path |
-| `tagged(type, rec)` | same | a reply that IS the record (`visual:get`, `story:get`, …) with its `tag` on it |
+| `SAVE_KEYS`, `savedPart(kind, rec)` | `src/analysis/recordDiff.ts`, beside `CONTENT_KEYS` | what each channel's save writes |
+| `contentTag(kind, rec)` | `src/app/editConflict.ts` | sha256 of `canonical(savedPart(kind, rec))` |
+| `readTagged(kind, file, normalize)` | same | ONE read: the store's normalized record AND the tag of the bytes as stored. Each store exports its `readX` (`readAnalysis`, `readVisual`, `readMetric(…, kind)`, `readReport`, `readStory`, `readScorecard`, `readScenario`); the open replies and the compare use it |
+| `lockedUpdate(kind, {projectId, id, file}, base, read, apply)` | same | `recordFs.locked(file)`: `read`, refuse a different `base` with `ERECORDCHANGED` (`tag` = the stored one), apply; after the commit, push `hub:record-saved` to the project's WRITERS if the tag moved. Each store's update function is this, on its own record path |
+| `recordReply(t)` | same | a reply that IS the record (`visual:get`, `story:get`, …) with its `tag` on it |
 | `recordChanged(type)` | `src/app/editConflictMessages.ts` | the catalog sentence, one per type |
 | the route | `src/server/app.ts` | an uncaught `ERECORDCHANGED` → `409 {error, code: 'record_changed', message, tag}` |
 | `Base` | `src/api/contract.ts` | `z.string().min(1).max(64)` — the optional `base` of eight contracts |
 | `useEditGuard` | `web/src/features/editConflicts/useEditGuard.ts` | the editor's base, its ONE save queue, the 409 → `changed`, view replies checked, the push |
 | `useReload` | same | a page's Reload: refetch the record, then bump the editor's `key` so a NEW editor mounts on it |
+| `useDropOnLeave` | same | an editor page's open query is removed when the page is left: every open reads afresh |
+| `<LeaveGuard>` | `ConflictBanner.tsx` | while a conflicted editor holds unsaved edits, an in-app navigation away asks first |
 | `<ConflictBanner>` | `web/src/features/editConflicts/ConflictBanner.tsx` | the banner: per-type wording, Reload, Save mine as a copy (busy and failure states); `compact` inside a dialog; scrolls itself into view |
 
 ## Inventory (b5377dd2)
@@ -107,18 +112,43 @@ The compare only protects a save if every other writer of the record waits for t
   `stats`) patched from a read taken before the update; they now read inside the hold. Update
   functions can now refuse with `ERECORDBUSY` after the 15 s wait, which every caller already
   handles (a catch, or the route's 409 `record_busy`).
-- **`CONTENT_KEYS` grew for fields the editors write that the history did not count:** dashboard
-  `parameters` (a parameter's "Save as default" writes only them), visual `analytics` (overlays),
-  report `discussion` and `viewId`. Without them a second editor's save would drop the first's
-  change with matching tags. The history follows: a save that changed only those is now a version,
-  its summary says so ("changed the parameters", "changed the analytics", "changed the dashboard
-  view", "added/removed the discussion page"), and a restore writes them back. Absent keys read as
-  their store's default (`[]`, `[]`, `false`), so old versions do not turn into phantom changes.
-  New types: story (`name, blocks`), scorecard (`name, period, rows, description`), scenario
-  (`name, baseMetricIds, drivers`). A tree is the metric's `tree` key.
+- **The tag covers what the channel's save writes, no more** (`SAVE_KEYS`, review fix 5). A save
+  is replace-or-keep, so a key it never sends cannot be overwritten by it, and a change to that key
+  by someone else must not make the editor stale:
+
+  | Channel | `SAVE_KEYS` | Left out, and who writes it |
+  |---|---|---|
+  | `analysis:update` (dashboard) | name, sheets, filters, style, parameters | views (`analysis:view`) |
+  | `visual:update` (visual) | name, chartType, encoding, overrides, filters, analytics | favorite (the star) |
+  | `metric:update` (metric) | name, definition, filters, format, description, direction | tree (`metricTree:save`) |
+  | `metricTree:save` (metricTree) | tree | the metric's fields (`metric:update`) |
+  | `reports:update` (report) | name, format, pages, cover, paper, includeFilters, narrative, discussion, viewId | schedule (Pipelines), analysisId, lastRunAt |
+  | `story:update` | name, blocks | — |
+  | `scorecard:update` | name, period, rows, description | — |
+  | `scenario:update` | name, baseMetricIds, drivers | — |
+
+  A metric therefore has two tags, its fields' and its tree's; the push says which (`type`
+  `metric` or `metricTree`).
+- **The tag is of the stored bytes** (review fix 2). Several read sanitizers repair a record with a
+  fresh random id (an invalid parameter id, a duplicate block or card id), so a record stored
+  un-normalized — a bundle import, `import-desktop` — normalized differently on every read, and its
+  tag with it: every autosave was refused. Hashing the parsed stored JSON (the smaller change than
+  making those ids deterministic, which would touch eight sanitizers shared with the write paths)
+  keeps one tag per stored state. The open reply and the compare each take record and tag from ONE
+  read, and a save's reply tag is the record exactly as it was written. `metricTree:compute` takes
+  its tag from the same read its tree came from (review fix 1): from a second read, a save landing
+  in between paired an old tree with a newer tag, and the editor's next save overwrote it.
+- **`CONTENT_KEYS` (the version history) grew** for fields the editors write that the history did
+  not count: dashboard `parameters`, visual `analytics`, report `discussion` and `viewId`. A save
+  that changed only those is now a version, its summary says so ("changed the parameters",
+  "changed the analytics", "changed the dashboard view", "added/removed the discussion page"), and
+  a restore writes them back. Absent keys read as their store's default (`[]`, `[]`, `false`, `''`),
+  so old versions do not turn into phantom changes.
 - **The reply's `tag` is a top-level key.** For a wrapped reply (`{ok, analysis, …}`) next to `ok`;
   for a reply that IS the record (`visual:get`, `story:get`/`:update`, `scorecard:get`,
-  `scenario:get`) on that object. `metricTree:compute` carries the metric's tag.
+  `scenario:get`) on that object. `metricTree:compute` carries the tree's tag. `analysis:open`'s
+  visual defs carry theirs (the Interactions checkboxes send it); the gallery's previews do not
+  (review fix 9).
 - **Saved-view replies are a CHECK, not a refresh.** `analysis:view` returns the record's tag; the
   editor's queue compares it with its base. A view op never changes content, so a different tag can
   only mean another writer — the banner goes up. Adopting it would wave a stale document past the
@@ -127,16 +157,21 @@ The compare only protects a save if every other writer of the record waits for t
   gallery's rename and star. They write one field from a fresh list row and never write a document
   back. The scorecard page's name and period ARE its editor and send it.
 - **The dashboard's Interactions checkboxes** (`KindProps.tsx`) write the visual's `overrides` from
-  the dashboard editor, so they send the visual's tag (from `analysis:open`'s visual defs). A refusal
-  is a toast with the server's sentence; the visual is not that editor's document, so no banner.
+  the dashboard editor, so they send the visual's tag (from `analysis:open`'s visual defs). The
+  visual is not that editor's document, so no banner: a refusal reads the visual again (its
+  settings and its tag), says so in a toast, and the next click works from there (review fix 7).
 - **The copy is "<name> (copy)"** for every type, created from what is on screen. A metric copy
   whose name is taken is refused like any duplicate name, and the banner shows that sentence. The
   report and tree copies take two calls (duplicate the stored record, then write the editor's
   document onto the copy, without a base: nobody else can hold it yet).
-- **Early warning: built.** `pushToReaders` (`src/server/jobs/schedules.ts:70`, what
+- **Early warning: built.** `pushToReaders`'s delivery (`src/server/jobs/schedules.ts`, what
   `hub:dataset-refreshed` and comments use) plus `useServerEvent` made it ~20 lines.
-  `lockedUpdate` pushes `hub:record-saved` `{projectId, type, id, tag}` to the project's readers
-  after the commit, only when the tag moved (a view op, a star, a stamp push nothing). The editor
+  `lockedUpdate` pushes `hub:record-saved` `{projectId, type, id, tag}` after the commit, only when
+  the tag moved (a view op, a star, a stamp push nothing), and only to the project's WRITERS
+  (`pushToWriters` → `authz.writerEmails`: org admins, and grants of editor or admin, a user's own or
+  a team's — review fix 6); a viewer cannot have an editor open. Its cost: one writers query and one
+  push per writer (fanned out across pods over Postgres `NOTIFY`) for each save that changed what an
+  editor holds — at most one every 600 ms per open autosaving editor. The editor
   shows the banner when the pushed tag is neither its base nor a tag its own saves produced, checked
   after its queued saves land — so its own push never trips it. Ids and a hash only: nothing a
   reader of the project cannot already read. Ceiling: delivery is not ordered against an open, so a
@@ -159,9 +194,19 @@ The compare only protects a save if every other writer of the record waits for t
 | Scorecard (`reports/scorecards/ScorecardPage.tsx`, `RowsEditor.tsx`) | `scorecard:get` `tag` | name, period and the rows dialog, one guard | under the head, and inside the rows dialog | `useReload` | `scorecard:create` (with the dialog's rows when it was refused) |
 | Scenario (`analytics/scenarios/ScenarioPage.tsx`) | `scenario:get` `tag` | the autosave — now one at a time | under the head | `useReload` | `scenario:create` → its page |
 
-Two caches had to follow the saves: `reports:open` and `scenario:get` are `staleTime: Infinity`, so
-reopening within five minutes started from the first read — with the guard, that is a stale base and
-a false banner on the first save. Each save now writes its reply (and tag) into the cached open.
+**Every open reads afresh** (review fix 4). `reports:open` and `scenario:get` were `staleTime:
+Infinity` and kept after the page was left, and `scorecard:get` showed its cached copy before
+refetching: a reopen started from an old read — content and tag that someone else's save has since
+replaced, so a false banner, or an editor on stale content. Like the dashboard (`removeQueries` on
+leave) these pages and the story now drop their open query when left (`useDropOnLeave`; `gcTime: 0`
+alone loses a quick back-and-forth) and never refetch under an open editor.
+
+**While conflicted, nothing leaves quietly** (review fix 3). The dashboard's Publish… wrote "what is
+on screen" (a no-op once paused) and opened the viewer on the OTHER writer's version; it now stops
+and says why. `beforeunload` warns, and `<LeaveGuard>` asks before an in-app navigation, while the
+editor holds edits no save landed. **The scorecard's copy** is built from the page's own draft —
+the period picked here and the rows as last saved here or in the refused rows dialog — not from the
+server's record (review fix 8).
 
 **Reload is a new editor, not a reset query.** Resetting the open query was enough in theory (the
 page shows its skeleton, then a new editor), but a fast reply lands before React renders the
@@ -197,18 +242,29 @@ autosave debounce it is noise.
 ## Tests
 
 - `scripts/test-editConflicts.ts`, for each of the eight channels, on files and (with
-  `DATABASE_URL`) on Postgres: open → two callers with the open tag → the first saves, the second is
-  `409 record_changed` with the current tag and the record equals the first write; without `base`
-  the second overwrites (control); a saved-view op / favourite / report stamp between open and
-  save does not conflict; the update reply's tag equals the next get's (no self-conflict); a raw
-  session holding the record's advisory key holds the guarded save back until its COMMIT, and the
-  write the raw session commits meanwhile is detected (no stale write lands) — control: the same
-  interleaving without the lock drops it. Plus: the push goes out when the tag moves and not when
-  it does not.
-- Vitest: the guard (base sent, reply tag adopted, 409 → paused, a view reply's different tag →
-  changed, own push ignored, another's push → changed) and the banner (wording, both actions, no
-  dismiss, busy and failure states); the dashboard editor end to end (banner, autosave paused,
-  save → view op → save without a conflict).
+  `DATABASE_URL`) on Postgres: (a) open → two callers with the open tag → the first saves, the second
+  is `409 record_changed` with the current tag and the record equals the first write; (b) the update
+  reply's tag is the next open's (no self-conflict); (c) a write the channel does not make — a view,
+  a star, a report's stamp and Pipelines schedule, the metric's tree for the dialog and its fields
+  for the tree editor — does not conflict; (d) without `base` the stale save lands; (e) a raw session
+  holding the record's advisory key holds the guarded save back until its COMMIT, and the write it
+  commits meanwhile is refused over — NEGATIVE CONTROL: b5377dd2's unguarded update does not wait for
+  the held lock and is then lost to the holder's save; (f) the push goes to writers, never to
+  readers. Then (g) a tree save landing between compute's read and its reply leaves the reply's tag
+  stale, so a save from it is refused — CONTROL: a second read's tag lets it overwrite; (h) a record
+  stored un-normalized (parameter id "p1", duplicate story block ids) keeps one tag across reads and
+  saves from it — CONTROL: the reads' repaired ids differ; (i, DB) writers are the editor and the org
+  admin, not the viewer.
+- Vitest (`editConflicts.test.tsx`, `editors.test.tsx`): the guard (base sent, reply tag adopted,
+  409 → paused, a view reply's different tag → changed, own push ignored, another's push → changed)
+  and the banner (wording, both actions, no dismiss, busy and failure states); the dashboard editor
+  end to end (banner, autosave paused, save → view op → save without a conflict; while conflicted
+  Publish… stays and says why, a tab close and an in-app navigation with unsaved edits ask —
+  CONTROL: without a conflict Publish… leaves and nothing asks); a report, a scenario and a
+  scorecard reopened after someone else's save show it and save from its tag (a NEGATIVE CONTROL run
+  without the fix fails); the Interactions checkbox re-reads the visual on a 409 and the next click
+  sends the new tag (CONTROL: another failure re-reads nothing); a scorecard's copy carries the
+  refused period pick.
 - `web/e2e/edit-conflicts.e2e.ts`: two pages on one dashboard; edit in A, then in B → B's banner;
   Reload shows A's change; Save mine as a copy opens a copy holding B's change; light and dark
   screenshots.
