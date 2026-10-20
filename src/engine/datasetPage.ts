@@ -230,7 +230,8 @@ export async function readPage(src: PageSource, req: PageRequest): Promise<PageR
  */
 export function pageRowsJs(columns: ParsedColumn[], rows: Cell[][], req: PageRequest): PageResult {
   const cols = Array.isArray(columns) ? columns : [];
-  const r = normalize(cols, req) ?? { offset: 0, limit: 0, needle: '', sort: null, filters: [] };
+  // An unreadable window still counts only the FILTERED rows (a row access lock is a filter): never the whole table.
+  const r = normalize(cols, req) ?? { offset: 0, limit: 0, needle: '', sort: null, filters: Array.isArray(req?.filters) ? req.filters : [], rowFilter: req?.rowFilter };
 
   let list: Cell[][] = (Array.isArray(rows) ? rows : []).map((row) => (Array.isArray(row) ? row : []));
   const keep = r.rowFilter ? r.rowFilter.keepFor(cols, list) : null;

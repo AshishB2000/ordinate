@@ -19,6 +19,7 @@
 // grouped query per metric is the upgrade if that ever shows.
 
 import { ipcMain } from './bus';
+import { ROW_POLICY_CODE, isRowPolicyError } from '../data/rowAccess';
 import { closedToCaller } from '../data/rowAccess';
 import { distinctFor } from './distinctFor';
 
@@ -176,6 +177,7 @@ const figureKey = (metricId: string, col: string | null, w: PeriodWindow | null)
 function refusalOf(err: unknown): FigureRefusal | null {
   if (isLiveFigureError(err)) return { ...liveCodeOf(err), code: err.failure.code, error: err.failure.error };
   if (isLiveDatasetError(err)) return { code: LIVE_DATASET_CODE, error: err.message };
+  if (isRowPolicyError(err)) return { code: ROW_POLICY_CODE, error: err.message }; // row access rules: said, never a silent blank
   return null;
 }
 

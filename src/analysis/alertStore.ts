@@ -361,7 +361,7 @@ async function distinctValues(projectId: string, datasetId: string, column: stri
     if (!ds) return null;
     return distinctAllJs(ds.columns, ds.rows, column);
   } catch (err) {
-    if (isLiveDatasetError(err)) throw err; // D6: "no periods" would be a silent answer for a Live dataset
+    if (isLiveDatasetError(err) || isRowPolicyError(err)) throw err; // D6: "no periods" would be a silent answer — and so would a refusal
     return null; // a rule that cannot read its period column simply does not fire
   }
 }
@@ -386,7 +386,7 @@ async function anomaliesFor(projectId: string, rule: AlertRule) {
     if (!ds) return [];
     return detectAnomalies(ds.columns, ds.rows, opts);
   } catch (err) {
-    if (isLiveDatasetError(err)) throw err;
+    if (isLiveDatasetError(err) || isRowPolicyError(err)) throw err;
     return [];
   }
 }
