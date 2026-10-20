@@ -27,6 +27,7 @@ import { formatValue } from '../app/format';
 import type { FilterStep } from '../data/transforms';
 import type { KpiFigure, VisualFigure } from '../analysis/subscriptionMessage';
 import { noFigure } from '../analysis/subscriptionText';
+import { figureAsk } from '../analysis/figureAsk';
 
 /** A registered handler, called as the RPC layer calls it. Missing or throwing → a refusal, never a throw. */
 async function call(channel: string, payload: unknown): Promise<any> { // any: each handler's own reply
@@ -135,6 +136,7 @@ export async function resolveFigures(projectId: string, a: Analysis, cardIds: st
     const r = await call('visual:data', {
       projectId, datasetId: v.datasetId, encoding: v.encoding, filters: mergeDashboardFilters(tile(c), v.filters || []), params: scope.params, share: 'report',
       ...(Array.isArray(analytics) && analytics.length ? { analytics } : {}),
+      ...figureAsk(chartType, v.overrides), // a waterfall's or Pareto's figures, which its caption reads (analysis/chartShapes)
     });
     if (!r || !r.ok) {
       out.push({ title, chartType, note: why(r) });

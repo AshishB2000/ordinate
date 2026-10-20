@@ -35,6 +35,7 @@ const analysis: typeof import('../src/analysis/analysis') = require('../src/anal
 const dashData: typeof import('../src/publish/dashboardData') = require('../src/publish/dashboardData');
 const planPreview: typeof import('../src/analysis/planPreview') = require('../src/analysis/planPreview');
 const capture: typeof import('../src/app/captureUpload') = require('../src/app/captureUpload');
+const subscriptionFigures: typeof import('../src/ipc/subscriptionFigures') = require('../src/ipc/subscriptionFigures');
 
 type Any = any; // golden shapes and replies, read field by field
 const G = wire.decode(fs.readFileSync(path.join(__dirname, '..', 'web', 'src', 'charts', '__golden__', 'shapes.json'), 'utf8')) as Record<string, Record<string, Any>>;
@@ -277,6 +278,36 @@ function doorProblem(data: Any, type: string, ask: Any = {}): string {
     const pp = doorProblem({ ...both, figures: { pareto: both.figures && both.figures.pareto } }, 'pareto');
     const pw = doorProblem({ ...both, figures: { waterfall: both.figures && both.figures.waterfall } }, 'waterfall');
     ok('a capture: one table, the figures of every suggested type that has them', !pp && !pw && Object.keys(both.figures || {}).length === 2, pp || pw || show(both));
+  }
+  // A subscription (Slack, Teams, email): its visual card through `visual:data`, and its caption from those figures.
+  {
+    const vid = await H.as(H.ORG_A, async () => (await visuals.saveVisual(P, { name: 'Sent bridge', datasetId: s.extractId, chartType: 'waterfall',
+      encoding: { category: 'region', values: [M('amt', 'sum')] }, overrides: { waterfallTotals: WF_TOTALS }, filters: [] } as Any))!.id);
+    const a = await H.as(H.ORG_A, () => analysis.saveAnalysis(P, { name: 'Sent', sheets: [{ id: 's1', name: 'S', cards: [{ id: 'c1', type: 'visual', visualId: vid, layout: { x: 0, y: 0, w: 12, h: 4 } }] }] } as Any));
+    const sent = await H.as(H.ORG_A, () => subscriptionFigures.resolveFigures(P, a!, null, null));
+    const v = sent.visuals[0] as Any;
+    const p = doorProblem(v && v.data, 'waterfall', { waterfallTotals: WF_TOTALS });
+    ok('a subscription\'s waterfall carries its figures, its named total included, and its caption reads them', !p && /steps? takes?/.test(String(v.caption)), p || show(v).slice(0, 300));
+  }
+  // Every server-side call of `visual:data` names what it draws (src/analysis/figureAsk.ts). Enumerated, not listed:
+  // a new door that forgets is a failure here.
+  {
+    const askless = (src: string, file: string): string[] => {
+      const out: string[] = [];
+      for (const m of src.matchAll(/(?:call\((?:e|event)?,?\s*|handlers\.get\()'visual:data'/g)) {
+        // The call's own text: from the match to the end of its statement (a handler fetched by name is called just below).
+        const from = m.index as number;
+        const end = src.indexOf(');', src.indexOf(m[0].startsWith('handlers') ? 'data(e,' : '{', from));
+        if (!src.slice(from, end).includes('figureAsk(')) out.push(`${file}:${src.slice(0, from).split('\n').length}`);
+      }
+      return out;
+    };
+    const roots = ['src/ipc', 'src/publish', 'src/analysis', 'src/server', 'src/app', 'src/automation'];
+    const files = roots.flatMap((d) => fs.readdirSync(path.join(__dirname, '..', d)).filter((f) => f.endsWith('.ts')).map((f) => path.join(d, f)));
+    const calls = files.flatMap((f) => askless(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), f));
+    const scanned = files.filter((f) => /'visual:data'/.test(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'))).length;
+    ok('every server-side call of visual:data asks for the figures of what it draws', calls.length === 0 && scanned >= 5, `${calls.join(', ')} (${scanned} files)`);
+    ok('…and the scan sees one that does not (negative control)', askless("const r = await call(e, 'visual:data', { projectId, datasetId });", 'planted.ts').length === 1);
   }
   // Small multiples: every panel of a faceted figure-type chart carries its own.
   {
