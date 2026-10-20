@@ -371,6 +371,7 @@ export const MAIN_FILES = [
   'src/analysis/metricTreeMessages.ts',
   'src/app/recordLockMessages.ts',
   'src/analysis/savedViewMessages.ts',
+  'src/data/rowAccessMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

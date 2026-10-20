@@ -265,3 +265,26 @@ export function serialized<T>(file: string, apply: (raw: Record<string, unknown>
     }
   }).catch(() => false);
 }
+
+/**
+ * A data write's record write (`datasets.persist`): a LOCKED read-merge-write
+ * that copies `rowPolicy` from the STORED record and never from what the writer
+ * holds — the in-memory Dataset does not carry it. So rules an admin saves while
+ * a long fold runs survive that fold's write, and narrowed rules are never
+ * widened back (docs/row-policy/00-design.md D2b). A record that is missing or
+ * unreadable has no rules to keep.
+ */
+export async function writeRecordKeepingPolicy(file: string, obj: object): Promise<void> {
+  await recordFs.locked(file, async () => {
+    let stored: Record<string, unknown> | null = null;
+    try {
+      stored = JSON.parse(await recordFs.readFile(file, 'utf8')) as Record<string, unknown>;
+    } catch {
+      stored = null; // a first save, or a record no reader can open
+    }
+    const next: Record<string, unknown> = { ...(obj as Record<string, unknown>) };
+    delete next.rowPolicy;
+    if (stored && typeof stored === 'object' && Object.prototype.hasOwnProperty.call(stored, 'rowPolicy')) next.rowPolicy = stored.rowPolicy;
+    await writeJsonAtomic(file, next);
+  });
+}

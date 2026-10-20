@@ -44,7 +44,7 @@ export function lockStep(column: string, values: readonly LockValue[]): FilterSt
  * (docs/row-policy/00-design.md D16). `union` appends another dataset's rows as
  * they are; LOD calculated fields are caught by `lodFields` below.
  */
-const ROW_LOCAL: ReadonlySet<string> = new Set([
+export const ROW_LOCAL: ReadonlySet<string> = new Set([
   'calculated_field', 'filter', 'fill_empty', 'trim', 'drop_column', 'rename_column',
   'mask_hash', 'mask_redact', 'mask_generalize',
   'split_column', 'unpivot', 'parse_date', 'replace_values', 'conditional_column', 'union', 'spatial_join',
@@ -52,7 +52,7 @@ const ROW_LOCAL: ReadonlySet<string> = new Set([
 ]);
 
 /** Steps that combine rows by key: row-local only when every locked column is part of the key. */
-const KEYED: Readonly<Record<string, (s: Record<string, unknown>) => readonly unknown[] | undefined>> = {
+export const KEYED: Readonly<Record<string, (s: Record<string, unknown>) => readonly unknown[] | undefined>> = {
   window: (s) => (Array.isArray(s.partitionBy) ? s.partitionBy : []),
   group_aggregate: (s) => (Array.isArray(s.groupBy) ? s.groupBy : []),
   pivot: (s) => (Array.isArray(s.groupBy) ? s.groupBy : []),
@@ -60,6 +60,9 @@ const KEYED: Readonly<Record<string, (s: Record<string, unknown>) => readonly un
   // A dedupe with no columns compares whole rows, the locked columns included.
   dedupe: (s) => (Array.isArray(s.columns) ? s.columns : undefined),
 };
+
+/** Steps that always store a cross-row value (a clustering, a corpus's terms, another dataset's columns joined by key). */
+export const CROSS_ROW_STEPS: ReadonlySet<string> = new Set(['segment', 'text_terms', 'lookup_join']);
 
 /** Origins whose stored rows were computed from other tables' rows: a query, a notebook cell, a join or append. */
 const CROSS_ROW_ORIGINS: ReadonlySet<string> = new Set(['sql', 'notebook', 'composed', 'combined']);

@@ -148,7 +148,7 @@ export type StepType = TransformStep['type'];
 // ── Small helpers ────────────────────────────────────────────────────────────
 
 const AGG_FNS: ReadonlySet<string> = new Set(['sum', 'avg', 'count', 'min', 'max']);
-const STEP_TYPES: ReadonlySet<string> = new Set([
+export const STEP_TYPES: ReadonlySet<string> = new Set([
   'calculated_field',
   'filter',
   'group_aggregate',
