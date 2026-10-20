@@ -67,7 +67,7 @@ export function runText(code: RunCode, d: RunDetail = {}): string {
     case 'post_failed': return t('subscriptionText.not_delivered_answered_http', { channel, status });
     case 'unreachable': return t('subscriptionText.not_delivered_could_not_be_reached', { channel });
     case 'refused': return t('subscriptionText.not_delivered_the_address_of_is', { channel });
-    case 'row_policy': return 'Not sent: this dashboard reads a dataset with row access rules, and subscriptions show the same figures to everyone, so they are off for it.';
+    case 'row_policy': return t('subscriptionText.not_sent_this_dashboard_reads_a');
     default: return t('subscriptionText.not_sent_this_server_cannot_read');
   }
 }

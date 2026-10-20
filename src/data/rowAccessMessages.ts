@@ -1,3 +1,4 @@
+import { t } from '../app/i18n';
 // What a person reads about row access rules (docs/row-policy/00-design.md,
 // "Refusals") — MAIN, through the catalog. Its own file so the i18n extractor
 // scans only sentences. Fixed sentences: a refusal never names another team,
@@ -5,65 +6,65 @@
 
 /** No rule names the caller or a team they are in (or every value was blank). */
 export function rowNoneMessage(): string {
-  return "You don't have access to any rows of this dataset. A project admin can give you access.";
+  return t('rowAccessMessages.you_don_t_have_access_to');
 }
 
 /** The rule column is gone, not text, or missing from the warehouse. */
 export function rowColumnMessage(): string {
-  return "This dataset's row access rules name a column it no longer has, so it is closed to you until a project admin fixes them.";
+  return t('rowAccessMessages.this_dataset_s_row_access_rules');
 }
 
 /** Stored cross-row values, a parameter in the steps, or a changed writer of the rule column. */
 export function rowPipelineMessage(): string {
-  return "This dataset stores values computed across all of its rows, so it can't be limited to the rows you can see.";
+  return t('rowAccessMessages.this_dataset_stores_values_computed');
 }
 
 /** A reader that is not one of the locked doors. */
 export function rowReaderMessage(): string {
-  return "This reads the whole dataset, and your access covers only some of its rows, so it's off for you.";
+  return t('rowAccessMessages.this_reads_the_whole_dataset_and');
 }
 
 /** A column or label reached through a relationship. */
 export function rowRelatedMessage(): string {
-  return "This question reaches a related dataset, and row access rules don't extend across relationships yet.";
+  return t('rowAccessMessages.this_question_reaches_a_related_dataset');
 }
 
 /** An as-of read. */
 export function rowAsOfMessage(): string {
-  return 'Looking at past data is off for datasets with row access rules.';
+  return t('rowAccessMessages.looking_at_past_data_is_off');
 }
 
 /** Publish, embed, subscription, alert. */
 export function rowFanOutMessage(): string {
-  return "This reads a dataset with row access rules. Published links, embeds, subscriptions and alerts show the same figures to everyone, so they're off for it.";
+  return t('rowAccessMessages.this_reads_a_dataset_with_row');
 }
 
 /** An export by a restricted caller. */
 export function rowExportMessage(): string {
-  return 'Exports are off for datasets with row access rules while your access covers only some of its rows.';
+  return t('rowAccessMessages.exports_are_off_for_datasets_with');
 }
 
 /** A dataset with no rules of its own, built from one that has them. */
 export function rowDerivedMessage(): string {
-  return "This dataset is built from a dataset with row access rules, so it's closed to you until a project admin gives it rules of its own.";
+  return t('rowAccessMessages.this_dataset_is_built_from_a');
 }
 
 /** Rules need the user directory. */
 export function rowNeedsDatabaseMessage(): string {
-  return 'Row access rules need the server\'s user directory (DATABASE_URL).';
+  return t('rowAccessMessages.row_access_rules_need_the_server');
 }
 
 /** A rule names someone who is not a user or team of this organization. */
 export function rowUnknownMemberMessage(): string {
-  return 'A rule names someone who is not a user or a team of this organization.';
+  return t('rowAccessMessages.a_rule_names_someone_who_is');
 }
 
 /** The chosen column is not a text column of the dataset. */
 export function rowBadColumnMessage(): string {
-  return 'Pick a text column of this dataset for the rules.';
+  return t('rowAccessMessages.pick_a_text_column_of_this');
 }
 
 /** A rule's values are missing or invalid. */
 export function rowBadValuesMessage(): string {
-  return 'Each rule needs at least one value, and a value cannot be blank or name a parameter.';
+  return t('rowAccessMessages.each_rule_needs_at_least_one');
 }
