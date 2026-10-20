@@ -170,6 +170,33 @@ describe('Admin → Channels', () => {
       await waitFor(() => expect(calls.find((c) => c.channel === 'channel:save')?.payload).toEqual({ name: 'Sales leads', kind: 'email', to: { userIds: ['u1'], teamIds: ['t1'] } }));
     });
 
+    it('a turned-off person still picked is shown, marked, and can be removed — the summary counts what is shown', async () => {
+      const calls = serve({ 'channel:list': channels([{ ...EMAIL, to: { userIds: ['u1', 'u3', 'gone-id'], teamIds: [] } }], { canEmail: true }), ...people, 'channel:save': { body: { ok: true, channel: EMAIL } } });
+      mount(<ChannelsTab />);
+      fireEvent.pointerDown(await screen.findByRole('button', { name: 'Actions for Sales leads' }), { button: 0, ctrlKey: false });
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit…' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Edit Sales leads' });
+      const gone = await within(dialog).findByRole('checkbox', { name: /gone@acme\.test/ });
+      expect((gone as HTMLInputElement).checked).toBe(true);
+      expect(within(dialog).getByText('Turned off — gets nothing; untick to remove')).toBeTruthy();
+      expect(within(dialog).getByText(/Names 2 people\./)).toBeTruthy(); // 'gone-id' matches no account
+      fireEvent.click(gone);
+      expect(within(dialog).queryByRole('checkbox', { name: /gone@acme\.test/ })).toBeNull(); // unticked, it is no longer offered
+      expect(within(dialog).getByText(/Names 1 person\./)).toBeTruthy();
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(calls.find((c) => c.channel === 'channel:save')?.payload.to).toEqual({ userIds: ['u1', 'gone-id'], teamIds: [] }));
+    });
+
+    it('NEGATIVE CONTROL: a turned-off person who is not picked is not offered', async () => {
+      serve({ 'channel:list': channels([], { canEmail: true }), ...people });
+      mount(<ChannelsTab />);
+      fireEvent.click((await screen.findAllByRole('button', { name: /Add a channel/ }))[0]);
+      const dialog = await screen.findByRole('dialog', { name: 'Add a channel' });
+      fireEvent.click(within(dialog).getByRole('radio', { name: 'Email' }));
+      await within(dialog).findByRole('checkbox', { name: /alice@acme\.test/ });
+      expect(within(dialog).queryByRole('checkbox', { name: /gone@acme\.test/ })).toBeNull();
+    });
+
     it('lists an email channel by whom it names, and sends a test email to the admin', async () => {
       const calls = serve({ 'channel:list': channels([{ ...EMAIL, to: { userIds: ['u1', 'u2'], teamIds: ['t1'] } }], { canEmail: true }), 'channel:test': { body: { ok: true } } });
       mount(<ChannelsTab />);

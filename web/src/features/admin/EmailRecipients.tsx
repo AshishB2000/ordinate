@@ -25,6 +25,10 @@ export function EmailRecipients({ value, onChange, error }: { value: EmailTo; on
   const teams = useTeams();
   const [q, setQ] = useState('');
   const toggle = (key: keyof EmailTo, id: string, on: boolean): void => onChange({ ...value, [key]: on ? [...value[key], id] : value[key].filter((x) => x !== id) });
+  // The summary counts what the lists can show: a picked id of a deleted account or team matches nothing.
+  const shown: EmailTo = users.data && teams.data
+    ? { userIds: value.userIds.filter((id) => users.data.some((u) => u.id === id)), teamIds: value.teamIds.filter((id) => teams.data.some((t) => t.id === id)) }
+    : value;
 
   let lists;
   if (users.isPending || teams.isPending) lists = <SkeletonTable cols={1} rows={4} label="Loading people and teams" />;
@@ -33,7 +37,8 @@ export function EmailRecipients({ value, onChange, error }: { value: EmailTo; on
   } else {
     const needle = q.trim().toLowerCase();
     const groups = teams.data.filter((t) => !needle || t.name.toLowerCase().includes(needle));
-    const people = users.data.filter((u) => !u.disabled && (!needle || u.email.includes(needle)));
+    // A turned-off account is offered only while it is still picked — so it can be removed.
+    const people = users.data.filter((u) => (!u.disabled || value.userIds.includes(u.id)) && (!needle || u.email.includes(needle)));
     lists = (
       <div className={c.pickerLists}>
         <section className={c.pickerGroup} aria-label="Teams">
@@ -55,7 +60,7 @@ export function EmailRecipients({ value, onChange, error }: { value: EmailTo; on
               <Checkbox
                 key={u.id}
                 label={u.email}
-                hint={u.pending ? 'Invited — receives once they have signed in' : undefined}
+                hint={u.disabled ? 'Turned off — gets nothing; untick to remove' : u.pending ? 'Invited — receives once they have signed in' : undefined}
                 checked={value.userIds.includes(u.id)}
                 onCheckedChange={(on) => toggle('userIds', u.id, on)}
               />
@@ -72,8 +77,8 @@ export function EmailRecipients({ value, onChange, error }: { value: EmailTo; on
       <Input label="Find people or teams" value={q} placeholder="A name or an address" autoComplete="off" spellCheck={false} onChange={(e) => setQ(e.target.value)} />
       {lists}
       <p id="email-recipients-summary" className={c.pickerSummary}>
-        {value.userIds.length + value.teamIds.length > 0
-          ? `Names ${recipientsText(value)}. Each send reaches only those who can open the dashboard’s project at that moment.`
+        {shown.userIds.length + shown.teamIds.length > 0
+          ? `Names ${recipientsText(shown)}. Each send reaches only those who can open the dashboard’s project at that moment.`
           : 'Pick at least one person or team.'}
       </p>
       {error && (
