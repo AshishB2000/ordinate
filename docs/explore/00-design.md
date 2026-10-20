@@ -32,7 +32,8 @@ Open **Explore** in the left nav and you are in a full-width workbench on the cu
   is complete without it.
 - **The states are designed**, in both themes: no project; no datasets (an editor gets the import
   and connect doors, a viewer reads "An editor of this project can bring in data. You have
-  view-only access."); a skeleton while the fields load; a question half-asked ("Pick a measure");
+  view-only access."); a skeleton while the fields load; a question half-asked ("Add a measure, and
+  the answer appears here.");
   a figure a Live dataset cannot give (the server's sentence, and Make a copy for an editor); an
   error with Try again; and a question no row answers ("No rows match this question", with Clear
   filters).
