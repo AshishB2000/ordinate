@@ -100,6 +100,8 @@ export interface FilterStep {
   radius?: RadiusSpec;
   /** r7:lod — a CONTEXT filter: applied before LOD expressions (analysis/lodQuery.ts). */
   context?: boolean;
+  /** A row access / embed lock (data/rowLock.ts): a warehouse compares it byte for byte (row-policy D13). */
+  lock?: true;
 }
 export interface GroupAggregateStep {
   type: 'group_aggregate';

@@ -29,6 +29,7 @@ export const databricksDialect: SqlDialect = {
   toDouble: (x) => `CAST(${x} AS DOUBLE)`,
   toInt: (x) => `CAST(${x} AS INT)`,
   text: (c) => `CAST(${c} AS STRING)`,
+  binary: (x) => `CAST(${x} AS BINARY)`,
   number: (c) => finiteBySubtraction(`try_cast(${c} AS DOUBLE)`),
   date: (c) => `try_cast(${c} AS DATE)`,
   isoDay: (d) => `date_format(${d}, 'yyyy-MM-dd')`,

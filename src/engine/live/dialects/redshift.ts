@@ -30,6 +30,8 @@ export const redshiftDialect: SqlDialect = {
   toDouble: (x) => `CAST(${x} AS DOUBLE PRECISION)`,
   toInt: (x) => `CAST(${x} AS INTEGER)`,
   text: (c) => `CAST(${c} AS ${TEXT})`,
+  // md5 hashes the bytes in both Postgres and Redshift (Postgres has no COLLATE() function, Redshift no COLLATE "C").
+  binary: (x) => `md5(${x})`,
   number: (c, storedAsText) => finiteBySubtraction(storedAsText
     ? `CASE WHEN CAST(${c} AS ${TEXT}) ~ ${NUMBER_TEXT} THEN CAST(${c} AS DOUBLE PRECISION) END`
     : `CAST(${c} AS DOUBLE PRECISION)`),

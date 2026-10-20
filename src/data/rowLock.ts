@@ -33,8 +33,8 @@ export interface Lock {
 /** The filter step a locked column becomes. */
 export function lockStep(column: string, values: readonly LockValue[]): FilterStep {
   return values.length === 1
-    ? { type: 'filter', column, op: '=', value: values[0], context: true }
-    : { type: 'filter', column, op: 'in', values: values.slice(), context: true };
+    ? { type: 'filter', column, op: '=', value: values[0], context: true, lock: true }
+    : { type: 'filter', column, op: 'in', values: values.slice(), context: true, lock: true };
 }
 
 /**

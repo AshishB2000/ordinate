@@ -29,6 +29,7 @@ export const bigqueryDialect: SqlDialect = {
   toDouble: (x) => `CAST(${x} AS FLOAT64)`,
   toInt: (x) => `CAST(${x} AS INT64)`,
   text: (c) => `CAST(${c} AS STRING)`,
+  binary: (x) => `CAST(${x} AS BYTES)`,
   number: (c) => {
     const v = `SAFE_CAST(${c} AS FLOAT64)`;
     return `CASE WHEN NOT IS_INF(${v}) AND NOT IS_NAN(${v}) THEN ${v} END`;

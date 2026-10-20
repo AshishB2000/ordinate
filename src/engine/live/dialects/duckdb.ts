@@ -26,6 +26,8 @@ export const duckdbDialect: SqlDialect = {
   toDouble: (x) => `CAST(${x} AS DOUBLE)`,
   toInt: (x) => `CAST(${x} AS INTEGER)`,
   text: (c) => `CAST(${c} AS VARCHAR)`,
+  // encode(): the UTF-8 bytes, no escape parsing (a VARCHAR → BLOB cast would read `\\x41` as 'A').
+  binary: (x) => `encode(${x})`,
   // TRY_CAST accepts any input type here, so the storage is irrelevant.
   number: (c) => {
     const v = `TRY_CAST(${c} AS DOUBLE)`;

@@ -133,7 +133,9 @@ export function predicate(c: Ctx, f: LiveFilter): string | LiveRefusal {
           : `coalesce(${numberOf(c, col)} IN (${[...targets].map((n) => c.b.bind('number', n)).join(', ')}), FALSE)`;
       } else {
         const targets = new Set<string>(f.values.map((v) => cellText(v)));
-        inner = `(coalesce(${compareText(c, col)}, '') IN (${[...targets].map((t) => c.b.bind('text', t)).join(', ')}))`;
+        // A lock compares bytes (row-policy D13): `east` is not `East` on a case-insensitive warehouse either.
+        const as = (x: string): string => (f.binary ? c.d.binary(x) : x);
+        inner = `(${as(`coalesce(${compareText(c, col)}, '')`)} IN (${[...targets].map((t) => as(c.b.bind('text', t))).join(', ')}))`;
       }
       // `not in` is the EXACT complement: a null cell is in no list, so it stays.
       return f.negate ? `(NOT ${inner})` : inner;
@@ -160,6 +162,7 @@ export function predicate(c: Ctx, f: LiveFilter): string | LiveRefusal {
         return `(${numberOf(c, col)} ${SQL_OP[f.op]} ${c.b.bind('number', t)})`;
       }
       // Text and date compare as text, a null cell as '' — so `!=` and `<` keep it.
+      if (f.binary && (f.op === '=' || f.op === '!=')) return `(${c.d.binary(`coalesce(${compareText(c, col)}, '')`)} ${SQL_OP[f.op]} ${c.d.binary(c.b.bind('text', cellText(f.value)))})`;
       return `(coalesce(${compareText(c, col)}, '') ${SQL_OP[f.op]} ${c.b.bind('text', cellText(f.value))})`;
     }
     default:
