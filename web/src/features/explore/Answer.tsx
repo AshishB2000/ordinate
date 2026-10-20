@@ -51,6 +51,8 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
   const colors = useColorMap(projectId);
   const [extras, setExtras] = useState<string[]>([]);
   const reply = answer.data;
+  // The last question's answer, kept on screen (dimmed) while this one computes: never read, offered or saved as this one's.
+  const stale = answer.isPlaceholderData;
   const data = reply?.data as Data | undefined;
   const title = questionTitle(e);
 
@@ -93,9 +95,9 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
               {reply?.asOf && <AsOfCaption asOf={reply.asOf} />}
             </p>
           </div>
-          <AnswerActions projectId={projectId} datasetId={datasetId} canEdit={canEdit} answered={!!reply && !answer.isError} question={question} chartType={current} grain={reply?.category?.grain} title={title} />
+          <AnswerActions projectId={projectId} datasetId={datasetId} canEdit={canEdit} answered={!!reply && !answer.isError && !stale} question={question} chartType={current} grain={reply?.category?.grain} title={title} />
         </header>
-        {data && !empty && offered.length > 0 && (
+        {data && !stale && !empty && offered.length > 0 && (
           <div className={s.types}>
             <ChartPicker recommended={offered} pool={live ? LIVE_POOL : POOL} data={data} mappable={hasGeo || !!level} selected={current} extras={extras} onSelect={pick} onExtras={setExtras} />
           </div>
@@ -143,9 +145,9 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
           <h2 id="explore-table" className={s.tableH}>
             As a table
           </h2>
-          {data && !empty ? (
+          {data && !stale && !empty ? (
             <DataTable data={data} label={`${title}, as a table`} labelHeader={e.grain ? `${e.category} (${e.grain})` : e.category} pinLabels />
-          ) : !data ? (
+          ) : !data || stale ? (
             <SkeletonTable rows={5} cols={3} label="Loading the table" />
           ) : (
             <p className={s.tableNone}>No rows.</p>

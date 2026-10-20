@@ -164,6 +164,40 @@ describe('Explore: what a figure can come back as', () => {
   });
 });
 
+describe('Explore: while a changed question computes', () => {
+  it('the last answer is never offered, saved or read as the new one (CONTROL: once it lands, it is)', async () => {
+    serve('editor');
+    // The new question's answer (by order_date) is held until the test lets it go.
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    const inner = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (String(init?.body ?? '').includes('order_date')) {
+        await held;
+        const months = { ...ANSWER, data: { labels: ['2024-01', '2024-02'], series: [{ name: 'sum of revenue', values: [10, 20] }] }, recommendedShape: 'time_series' };
+        return new Response(JSON.stringify(months), { status: 200 });
+      }
+      return inner(u, init);
+    });
+    renderApp(url(REGION_Q));
+    await answerTitle();
+    await screen.findByRole('button', { name: 'Save as visual' });
+    expect(within(await screen.findByRole('table', { name: /, as a table$/ })).getByText('East')).toBeTruthy();
+
+    fireEvent.click(within(screen.getByRole('complementary', { name: 'Fields' })).getByRole('button', { name: 'order_date' }));
+    await screen.findByRole('heading', { level: 2, name: 'Total revenue by month of order_date' });
+    expect(screen.queryByRole('button', { name: 'Save as visual' })).toBeNull();
+    expect(screen.queryByRole('table', { name: /, as a table$/ })).toBeNull(); // no old rows under the new header
+    expect(screen.queryByText('East')).toBeNull();
+    expect(screen.queryByRole('radiogroup', { name: 'Chart type' })).toBeNull();
+
+    release();
+    const table = await screen.findByRole('table', { name: /, as a table$/ });
+    expect(within(table).getByText('2024-01')).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Save as visual' })).toBeTruthy();
+  });
+});
+
 describe('Explore: the AI hand-off', () => {
   it('without a model there is no ask box at all', async () => {
     serve('viewer');
