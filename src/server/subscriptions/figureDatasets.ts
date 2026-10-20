@@ -17,7 +17,8 @@
 //      every collected id that names a dataset, metric or visual: combined /
 //      composed / sql / notebook parents, Prepare union and lookup_join,
 //      calculated fields, formula metrics naming other metrics, visual →
-//      metric, dashboard → visual / metric / control, alert → metric.
+//      metric, dashboard → visual / metric / control, alert → metric — plus
+//      every reached metric's own dataset, edge or not.
 //   4. the project's relationships, both directions, until nothing new
 //      appears — each newcomer's own lineage upstream included.
 //
@@ -95,6 +96,8 @@ export async function figureDatasets(d: Delivery): Promise<string[]> {
   const up = new Map<string, string[]>();
   for (const e of graph.edges) (up.get(e.to) ?? up.set(e.to, []).get(e.to) as string[]).push(e.from);
 
+  // A metric's own dataset even where lineage draws no edge (a formula made only of other metrics).
+  const metricDataset = new Map(present(mets).map((m) => [`metric:${m.id}`, `dataset:${m.datasetId}`]));
   const out = new Set(found.datasets);
   const seen = new Set<string>();
   const climb = (start: string): void => {
@@ -105,6 +108,8 @@ export async function figureDatasets(d: Delivery): Promise<string[]> {
       seen.add(cur);
       if (cur.startsWith('dataset:')) out.add(cur.slice('dataset:'.length));
       stack.push(...(up.get(cur) ?? []));
+      const own = metricDataset.get(cur);
+      if (own) stack.push(own);
     }
   };
   climb(`${d.kind === 'dashboard' ? 'dashboard' : 'alert'}:${d.kind === 'dashboard' ? d.analysisId : d.ruleId}`);
