@@ -17,6 +17,7 @@ import { useRelated, useVisual, type Encoding } from './api';
 import { Editor, type Initial } from './Editor';
 import { defaultEncoding, fitEncoding, type Column } from './model';
 import { switchEncoding } from '../analytics/grids/gridEncoding';
+import { useReload } from '../editConflicts/useEditGuard';
 
 export default function BuilderPage() {
   const { projectId: routeId, visualId } = useParams();
@@ -43,6 +44,7 @@ function Load({ projectId, visualId, datasetParam }: { projectId: string; visual
   const datasetId = visualId ? saved.data?.datasetId : (datasetParam ?? datasets.data?.[0]?.id);
   const cols = useDatasetColumns(projectId, datasetId);
   const related = useRelated(projectId, datasetId);
+  const { gen, reload } = useReload(['visual:get', projectId, visualId ?? '']);
   const back = () => void navigate(`/visuals/${projectId}`);
 
   if (datasets.isPending || (visualId && saved.isPending)) return <PageSkeleton />;
@@ -110,5 +112,5 @@ function Load({ projectId, visualId, datasetParam }: { projectId: string; visual
     live: cols.data.mode === 'live',
     tag: v?.tag,
   };
-  return <Editor projectId={projectId} datasets={datasets.data} columns={columns} related={rel} initial={initial} />;
+  return <Editor key={gen} projectId={projectId} datasets={datasets.data} columns={columns} related={rel} initial={initial} onReload={reload} />;
 }

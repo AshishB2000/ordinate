@@ -29,7 +29,7 @@ import { useCanEdit } from '../../projects/api';
 import { useAdoptProject } from '../../projects/current';
 import { failure, STATUS_WORD, type ScorePeriod, type Scorecard, type ScorecardRowDef, type ScoreResult, type ScoreRow } from '../api';
 import { ConflictBanner } from '../../editConflicts/ConflictBanner';
-import { useEditGuard } from '../../editConflicts/useEditGuard';
+import { useEditGuard, useReload } from '../../editConflicts/useEditGuard';
 import { Detail } from './Detail';
 import { Dot } from './Dot';
 import { MAX_BACK, periodsBack } from './period';
@@ -177,7 +177,7 @@ function Table({ res, selected, onOpen, onAdd }: { res: ScoreResult; selected: s
   );
 }
 
-function Page({ projectId, sc, startEditing }: { projectId: string; sc: Scorecard; startEditing: boolean }) {
+function Page({ projectId, sc, startEditing, onReload }: { projectId: string; sc: Scorecard; startEditing: boolean; onReload: () => void }) {
   const client = useQueryClient();
   const navigate = useNavigate();
   // The period on screen lives in the URL (./period.ts): `replace`, so stepping through periods is not a trail of Back presses.
@@ -212,8 +212,7 @@ function Page({ projectId, sc, startEditing }: { projectId: string; sc: Scorecar
     }
   };
   const conflict = {
-    // The page's skeleton, then a new page on the scorecard as it is now.
-    reload: () => void client.resetQueries({ queryKey: ['scorecard:get', projectId, sc.id] }),
+    reload: onReload,
     // This page's name and period, and the rows dialog's rows when it is the one refused.
     copy: async (rows: ScorecardRowDef[] = sc.rows) => {
       const r = (await rpc('scorecard:create', {
@@ -392,6 +391,7 @@ export default function ScorecardPage() {
     queryKey: ['scorecard:get', projectId, scorecardId],
     queryFn: async () => (await rpc('scorecard:get', { projectId, id: scorecardId })) as Scorecard | null,
   });
+  const { gen, reload } = useReload(['scorecard:get', projectId, scorecardId]);
   if (q.isPending) return <PageSkeleton />;
   if (q.isError || !q.data) {
     return (
@@ -400,5 +400,5 @@ export default function ScorecardPage() {
       </div>
     );
   }
-  return <Page key={scorecardId} projectId={projectId} sc={q.data} startEditing={startEditing} />;
+  return <Page key={`${scorecardId}:${gen}`} projectId={projectId} sc={q.data} startEditing={startEditing} onReload={reload} />;
 }

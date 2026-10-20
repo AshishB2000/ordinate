@@ -29,7 +29,7 @@ import { PreviewSheet } from './PreviewSheet';
 import { SettingsPane } from './SettingsPane';
 import s from './Builder.module.css';
 import { ConflictBanner } from '../../editConflicts/ConflictBanner';
-import { useEditGuard } from '../../editConflicts/useEditGuard';
+import { useEditGuard, useReload } from '../../editConflicts/useEditGuard';
 
 const FORMAT_WORD = { pdf: 'PDF', pptx: 'PowerPoint', docx: 'Word' } as const;
 
@@ -43,7 +43,7 @@ function useSettled<T>(value: T, ms: number): T {
   return v;
 }
 
-function Builder({ projectId, opened }: { projectId: string; opened: OpenReport }) {
+function Builder({ projectId, opened, onReload }: { projectId: string; opened: OpenReport; onReload: () => void }) {
   const client = useQueryClient();
   const [report, setReport] = useState<Report>(opened.report);
   const [selected, setSelected] = useState(0);
@@ -122,7 +122,6 @@ function Builder({ projectId, opened }: { projectId: string; opened: OpenReport 
   };
 
   const conflict = {
-    reload: () => void client.resetQueries({ queryKey: ['reports:open', projectId, report.id] }),
     // A duplicate of the stored report, then this draft written onto it (nobody else can hold it yet).
     copy: async () => {
       const d = (await rpc('reports:duplicate', { projectId, id: report.id })) as { ok: boolean; report?: Report; error?: string };
@@ -164,7 +163,7 @@ function Builder({ projectId, opened }: { projectId: string; opened: OpenReport 
       </header>
       {guard.changed && canEdit && (
         <div className={s.conflict}>
-          <ConflictBanner noun="report" onReload={conflict.reload} onCopy={conflict.copy} />
+          <ConflictBanner noun="report" onReload={onReload} onCopy={conflict.copy} />
         </div>
       )}
       {opened.missing && !report.scorecardId && (
@@ -250,6 +249,7 @@ export default function ReportBuilderPage() {
   const { projectId = '', reportId = '' } = useParams();
   useAdoptProject(projectId);
   const q = useOpenReport(projectId, reportId);
+  const { gen, reload } = useReload(['reports:open', projectId, reportId]);
   if (q.isPending) return <PageSkeleton />;
   if (q.isError || !q.data.ok) {
     return (
@@ -258,5 +258,5 @@ export default function ReportBuilderPage() {
       </div>
     );
   }
-  return <Builder key={reportId} projectId={projectId} opened={q.data} />;
+  return <Builder key={`${reportId}:${gen}`} projectId={projectId} opened={q.data} onReload={reload} />;
 }

@@ -29,7 +29,7 @@ import { ScenarioSetup, type Draft } from './ScenarioSetup';
 import f from './Scenarios.module.css';
 import s from './ScenarioEditor.module.css';
 import { ConflictBanner } from '../../editConflicts/ConflictBanner';
-import { useEditGuard } from '../../editConflicts/useEditGuard';
+import { useEditGuard, useReload } from '../../editConflicts/useEditGuard';
 
 /** The value `v`, settled for `ms` (the draft a compute or a save is for). */
 function useSettled<T>(v: T, ms: number): T {
@@ -41,7 +41,7 @@ function useSettled<T>(v: T, ms: number): T {
   return settled;
 }
 
-function Editor({ projectId, sc, readOnly }: { projectId: string; sc: Scenario; readOnly: boolean }) {
+function Editor({ projectId, sc, readOnly, onReload }: { projectId: string; sc: Scenario; readOnly: boolean; onReload: () => void }) {
   const [draft, setDraft] = useState<Draft>({ name: sc.name, baseMetricIds: sc.baseMetricIds, drivers: sc.drivers });
   const [focus, setFocus] = useState('');
   const [status, setStatus] = useState('');
@@ -90,7 +90,6 @@ function Editor({ projectId, sc, readOnly }: { projectId: string; sc: Scenario; 
     void client.invalidateQueries({ queryKey: ['scenario:list', projectId] });
   };
   const conflict = {
-    reload: () => void client.resetQueries({ queryKey: ['scenario:get', projectId, sc.id] }),
     copy: async () => {
       const r = await call<{ ok: true; scenario: Scenario }>(
         rpc('scenario:create', { projectId, input: { name: `${draft.name || sc.name} (copy)`.slice(0, 200), baseMetricIds: draft.baseMetricIds, drivers: draft.drivers } }),
@@ -166,7 +165,7 @@ function Editor({ projectId, sc, readOnly }: { projectId: string; sc: Scenario; 
           )}
         </div>
       </div>
-      {guard.changed && !readOnly && <ConflictBanner noun="scenario" onReload={conflict.reload} onCopy={conflict.copy} />}
+      {guard.changed && !readOnly && <ConflictBanner noun="scenario" onReload={onReload} onCopy={conflict.copy} />}
       <div className={s.main}>
         <ScenarioSetup
           projectId={projectId}
@@ -218,6 +217,7 @@ export default function ScenarioPage() {
     enabled: !!projectId && !!scenarioId,
     staleTime: Infinity,
   });
+  const { gen, reload } = useReload(['scenario:get', projectId, scenarioId]);
   if (!projectId || !scenarioId || q.isPending || roles.isPending) return <PageSkeleton />;
   if (q.isError) {
     return (
@@ -244,6 +244,6 @@ export default function ScenarioPage() {
     );
   }
   const role = roles.data?.[projectId];
-  return <Editor key={q.data.id} projectId={projectId} sc={q.data} readOnly={role !== 'editor' && role !== 'admin'} />;
+  return <Editor key={`${q.data.id}:${gen}`} projectId={projectId} sc={q.data} readOnly={role !== 'editor' && role !== 'admin'} onReload={reload} />;
 }
 

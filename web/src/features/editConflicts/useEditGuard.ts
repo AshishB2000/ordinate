@@ -8,6 +8,7 @@
 // record's tag.
 
 import { useCallback, useRef, useState } from 'react';
+import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { RpcError } from '../../api/client';
 import { useServerEvent } from '../../api/events';
 
@@ -113,4 +114,19 @@ export function useEditGuard(record: { projectId: string; type: GuardType; id: s
   });
 
   return { changed, save, queue };
+}
+
+/**
+ * A page's Reload after a conflict: read the record again, then mount a NEW editor on it — the host keys its editor
+ * with `gen`. (Resetting the query is not enough: a fast reply lands before the page ever renders its skeleton, and
+ * the old editor, still holding its document and its paused guard, would stay.)
+ */
+export function useReload(queryKey: QueryKey): { gen: number; reload: () => void } {
+  const client = useQueryClient();
+  const [gen, setGen] = useState(0);
+  const key = JSON.stringify(queryKey);
+  const reload = useCallback(() => {
+    void client.refetchQueries({ queryKey: JSON.parse(key) as QueryKey, exact: true }).finally(() => setGen((g) => g + 1));
+  }, [client, key]);
+  return { gen, reload };
 }

@@ -32,12 +32,14 @@ import { ConflictBanner } from '../editConflicts/ConflictBanner';
 
 export type { Initial };
 
-export function Editor({ projectId, datasets, columns, related, initial }: {
+export function Editor({ projectId, datasets, columns, related, initial, onReload }: {
   projectId: string;
   datasets: DatasetSummary[];
   columns: Column[];
   related: RelatedCol[];
   initial: Initial;
+  /** The banner's Reload: the visual read again, in a new builder (editConflicts/useReload). */
+  onReload: () => void;
 }) {
   const navigate = useNavigate();
   const ai = useAiStatus();
@@ -71,7 +73,7 @@ export function Editor({ projectId, datasets, columns, related, initial }: {
     <div className={s.builder}>
       {b.changed && b.canEdit && (
         <div className={s.conflict}>
-          <ConflictBanner noun="visual" onReload={b.conflict.reload} onCopy={b.conflict.copy} />
+          <ConflictBanner noun="visual" onReload={onReload} onCopy={b.conflict.copy} />
         </div>
       )}
       <header className={s.head}>

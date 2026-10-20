@@ -31,7 +31,7 @@ import { StoryBlockRow } from './StoryBlock';
 import s from './Story.module.css';
 import { CommentDoor } from '../../dashboards/CommentsPanel';
 import { ConflictBanner } from '../../editConflicts/ConflictBanner';
-import { useEditGuard } from '../../editConflicts/useEditGuard';
+import { useEditGuard, useReload } from '../../editConflicts/useEditGuard';
 
 type Snap = { name: string; blocks: StoryBlock[] };
 type Pending = { kind: 'visual' | 'metric' | 'metrics_row'; place: (b: StoryBlock) => void } | { kind: 'pin'; blockId: string; datasetId: string } | null;
@@ -54,7 +54,7 @@ function figureBlocks(blocks: StoryBlock[]): FigureReq[] {
   );
 }
 
-function Editor({ projectId, story, focusEnd, readOnly }: { projectId: string; story: Story; focusEnd: boolean; readOnly: boolean }) {
+function Editor({ projectId, story, focusEnd, readOnly, onReload }: { projectId: string; story: Story; focusEnd: boolean; readOnly: boolean; onReload: () => void }) {
   const client = useQueryClient();
   const navigate = useNavigate();
   const [snap, setSnap] = useState<Snap>(() => ({ name: story.name, blocks: readOnly ? story.blocks : withTail(story.blocks) }));
@@ -93,7 +93,6 @@ function Editor({ projectId, story, focusEnd, readOnly }: { projectId: string; s
     if (changed) setStatus('Not saved');
   }, [changed]);
   const conflict = {
-    reload: () => void client.resetQueries({ queryKey: ['story:get', projectId, story.id] }),
     copy: async () => {
       const made = (await rpc('story:create', { projectId, name: `${latest.current.name} (copy)`.slice(0, 200), blocks: latest.current.blocks })) as Story | { ok: false; error: string };
       if (!('id' in made)) throw new Error(failure(made, 'The copy could not be saved.'));
@@ -255,7 +254,7 @@ function Editor({ projectId, story, focusEnd, readOnly }: { projectId: string; s
       </header>
       {changed && !readOnly && (
         <div className={s.conflict}>
-          <ConflictBanner noun="story" onReload={conflict.reload} onCopy={conflict.copy} />
+          <ConflictBanner noun="story" onReload={onReload} onCopy={conflict.copy} />
         </div>
       )}
       <div className={s.layout}>
@@ -417,6 +416,7 @@ export default function StoryPageRoute() {
     refetchOnWindowFocus: false,
     gcTime: 0,
   });
+  const { gen, reload } = useReload(['story:get', projectId, storyId]);
   if (q.isPending || roles.isPending) return <PageSkeleton />;
   if (q.isError || !q.data) {
     return (
@@ -426,5 +426,5 @@ export default function StoryPageRoute() {
     );
   }
   const role = roles.data?.[projectId];
-  return <Editor key={storyId} projectId={projectId} story={q.data} focusEnd={params.get('focus') === 'end'} readOnly={role !== 'editor' && role !== 'admin'} />;
+  return <Editor key={`${storyId}:${gen}`} projectId={projectId} story={q.data} focusEnd={params.get('focus') === 'end'} readOnly={role !== 'editor' && role !== 'admin'} onReload={reload} />;
 }

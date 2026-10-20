@@ -198,8 +198,6 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
     return true;
   };
   const conflict = {
-    // The builder's skeleton, then a new editor on the visual as it is now.
-    reload: () => void qc.resetQueries({ queryKey: ['visual:get', projectId, visualId ?? ''] }),
     copy: async () => {
       const made = await saveVisual({ projectId, datasetId, ...body(`${initial.name || label} (copy)`.slice(0, 200)) });
       refresh(undefined);

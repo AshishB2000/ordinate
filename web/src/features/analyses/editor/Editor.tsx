@@ -120,11 +120,20 @@ function useAutosave(projectId: string, id: string, doc: Doc, version: number, t
   return { state, retry: () => void write(), flush, queue, changed };
 }
 
-export function Editor({ projectId, analysis, visuals: initialVisuals, tag, readOnly = false }: { projectId: string; analysis: Analysis; visuals: VisualDef[]; tag?: string; readOnly?: boolean }) {
+export function Editor({ projectId, analysis, visuals: initialVisuals, tag, onReload, readOnly = false }: {
+  projectId: string;
+  analysis: Analysis;
+  visuals: VisualDef[];
+  /** The record's content tag from `analysis:open`: the autosave's first base (docs/edit-conflicts). */
+  tag?: string;
+  /** The banner's Reload: the host reads the record again and mounts a new editor (editConflicts/useReload). */
+  onReload?: () => void;
+  readOnly?: boolean;
+}) {
   const [history, dispatch] = useReducer(reduce, analysis, (a) => initial(fromAnalysis(a)));
   const doc = history.doc;
   const save = useAutosave(projectId, analysis.id, doc, history.version, tag);
-  const conflict = useConflictActions(projectId, analysis.id, doc);
+  const conflict = useConflictActions(projectId, analysis.id, doc, onReload);
   // Saved views (dashboards/views): `?view=<id>`, else the default view, else the dashboard as authored.
   const [search, setSearch] = useSearchParams();
   const [opening] = useState(() => {
@@ -370,12 +379,11 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, tag, read
 }
 
 /** The banner's two ways on (editConflicts): drop my change and read the record again, or make my document a new dashboard. */
-function useConflictActions(projectId: string, id: string, doc: Doc) {
+function useConflictActions(projectId: string, id: string, doc: Doc, onReload?: () => void) {
   const client = useQueryClient();
   const navigate = useNavigate();
   return {
-    // AuthoringPage shows its skeleton and mounts a new editor on what the server has now.
-    reload: () => void client.resetQueries({ queryKey: ['analysis:open', projectId, id] }),
+    reload: onReload ?? (() => void client.resetQueries({ queryKey: ['analysis:open', projectId, id] })),
     copy: async () => {
       const made = (await rpc('analysis:create', {
         projectId, name: `${doc.name} (copy)`.slice(0, 200), sheets: doc.sheets, filters: doc.filters, parameters: doc.parameters, style: doc.style,
