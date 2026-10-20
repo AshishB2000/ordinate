@@ -26,7 +26,8 @@
 }
 
 .text {
-  flex: 1 1 auto;
+  /* Basis 0: when the banner wraps (a dialog, a phone) the text stays beside its icon; only the actions wrap. */
+  flex: 1 1 0;
   min-width: 0;
   padding-top: var(--sp-4);
 }

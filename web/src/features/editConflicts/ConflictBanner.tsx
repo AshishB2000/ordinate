@@ -4,7 +4,7 @@
 // change — or Save mine as a copy — a new record from my document, opened. It
 // has no close button: dismissed, the editor would sit there refusing saves.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/icons/Icon';
 import s from './ConflictBanner.module.css';
@@ -28,6 +28,11 @@ export function ConflictBanner({
 }) {
   const [copying, setCopying] = useState(false);
   const [error, setError] = useState('');
+  // It appears mid-edit — in a long dialog, scrolled down to the field being typed in: bring it into view.
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.scrollIntoView?.({ block: 'nearest' });
+  }, []);
   const copy = async () => {
     setCopying(true);
     setError('');
@@ -40,7 +45,7 @@ export function ConflictBanner({
     }
   };
   return (
-    <div className={compact ? `${s.banner} ${s.compact}` : s.banner} role="alert" data-edit-conflict="">
+    <div ref={ref} className={compact ? `${s.banner} ${s.compact}` : s.banner} role="alert" data-edit-conflict="">
       <span className={s.icon} aria-hidden="true">
         <Icon name="alert" size={16} />
       </span>
