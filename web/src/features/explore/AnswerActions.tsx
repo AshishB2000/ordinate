@@ -12,7 +12,7 @@ import { saveVisual } from '../visuals/api';
 import { liveFilters } from '../visuals/filters/filterText';
 import { NameDialog } from '../visuals/NameDialog';
 import type { Question } from './spec';
-import s from './Explore.module.css';
+import s from './Answer.module.css';
 
 async function copyLink(): Promise<void> {
   try {

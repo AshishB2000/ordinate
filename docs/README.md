@@ -18,6 +18,7 @@ New here? Start with the [README](../README.md). To run Ordinate, go to the
 | [`first-run-pass/`](first-run-pass/findings.md) | **The first-run pass**: a fresh install walked as an admin, an editor and a viewer; what was rough, what fixed it, and what is still open. |
 | [`analysis/`](analysis/00-model.md) | The analysis and dashboard record model (an analysis is the authoring surface; a dashboard is a by-value snapshot) and the authoring surface. Still the spec. |
 | [`automation.md`](automation.md) | The MCP endpoint and the command registry. Generated from `src/automation/registry.ts`; do not edit by hand. |
+| [`explore/`](explore/00-design.md) | **Explore**: a question builder for everyone, no AI model needed — the fields of a dataset, a question in four wells, suggested questions from `starterPlan`'s ranking (`explore:suggest`), the answer and its table from `visual:data`, the question in the URL. |
 
 ## History (the desktop era)
 

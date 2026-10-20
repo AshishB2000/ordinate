@@ -19,6 +19,7 @@ import { NoProject } from '../projects/NoProject';
 import { VizIcon } from '../visuals/VizIcon';
 import { Explorer } from './Explorer';
 import s from './Explore.module.css';
+import cards from './Start.module.css';
 
 const TITLE = 'Explore';
 const SUB = 'Ask a question of your data: pick fields, or start from a suggestion. Every figure is computed by the app.';
@@ -139,9 +140,9 @@ function ExploreSkeleton() {
         </div>
         <div className={s.main}>
           <Skeleton className={s.skWells} />
-          <div className={s.cards}>
+          <div className={cards.cards}>
             {Array.from({ length: 6 }, (_, i) => (
-              <Skeleton key={i} className={s.cardSkel} />
+              <Skeleton key={i} className={cards.cardSkel} />
             ))}
           </div>
         </div>

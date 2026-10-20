@@ -14,7 +14,7 @@ import { ChartThumb, NO_THUMB } from '../visuals/Thumb';
 import { VizIcon } from '../visuals/VizIcon';
 import { useAnswer, type Suggestion } from './api';
 import { questionTitle } from './spec';
-import s from './Explore.module.css';
+import s from './Start.module.css';
 
 /** A thumbnail's own look comes from ChartThumb; a stable object, or it redraws on every render. */
 const PLAIN = {};

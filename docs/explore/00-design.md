@@ -9,11 +9,11 @@ Open **Explore** in the left nav and you are in a full-width workbench on the cu
   codes, years or coordinates), **Dates**, **Measures** (numbers, the money ones first). A field in
   the question is marked. Click a measure to add it, a dimension or a date to group by it; click it
   again to take it out.
-- **The question, as a sentence**, in a card along the top: *Show* [Sum ▾] [revenue ▾] *by*
-  [region ▾] *per* [Month ▾] *split by* [+] *where* [order_date in Last 12 months ×] [+ Add filter].
-  Every part is a pill that opens the field list, the aggregate menu (Sum, Average, Count, Min,
+- **The question, in four wells** along the top: SHOW ([Sum ▾ | revenue ×] [+ Measure]), GROUP BY
+  ([region ×], and [Month ▾] when it is a date), SPLIT BY and FILTERS ([order_date in Last 12 months
+  ×] [+ Filter]). Every pill opens the field list, the aggregate menu (Sum, Average, Count, Min,
   Max), the time grain (Auto, Day, Week, Month, Quarter, Year) or the filter dialog the builder
-  already uses (values, ranges, relative periods).
+  already uses (values, ranges, relative periods). Clear question starts over.
 - **The answer under it**: a title the question words ("Total revenue by region"), the chart-type
   chips the answer suits (+ More for every other chart), how fresh the figures are, any note the
   server attached ("Showing the top 50 of 312"), the chart, and **the same answer as a table**
@@ -37,9 +37,10 @@ Open **Explore** in the left nav and you are in a full-width workbench on the cu
   error with Try again; and a question no row answers ("No rows match this question", with Clear
   filters).
 - **On a phone** the field list moves into a bottom sheet (#299's `Sheet`, opened by **Fields**),
-  the sentence wraps, the chart is phone height and full width, and the table scrolls sideways with
-  its first column pinned. The app's own top bar and rail stay: Explore has no back button of its
-  own.
+  the four wells become four compact rows (the label beside its pills), the chart-type chips are one
+  line that scrolls sideways, the chart is phone height and full width, and the table scrolls
+  sideways with its first column pinned. The app's own top bar and rail stay: Explore has no back
+  button of its own.
 
 ## Decisions (from the plan; not re-litigated)
 
@@ -70,6 +71,11 @@ Open **Explore** in the left nav and you are in a full-width workbench on the cu
 | Thumbnails on the suggestions | Drawn from one `visual:dataBatch` — **extract datasets only**. A Live dataset's cards keep their chart glyph. | A Live question is a warehouse statement against `LIVE_DAILY_QUERY_LIMIT` and, on BigQuery, billed bytes. Six statements for questions nobody clicked would be a surprise bill. |
 | Phone | Under 900 px the rail is not drawn; a **Fields** button opens it in `Sheet`. Under 600 px the chart is 300 px tall. No `data-phone` attribute: that hides the shell for a dashboard, which has its own back button; Explore does not. The table pins its first column with a new `pinLabels` prop on `DataTable`. | |
 | A field in use | Clicking a used field takes it out. A question without a measure or a group-by says which is missing rather than drawing nothing. | |
+| The chart when the question changes shape | A picked chart type is kept until the answer changes SHAPE: the group-by changes kind (text ↔ date), the measures go from one to several (or back), or a split is added or removed. Then it goes back to the first type the new answer suits (`spec.ts groupBy` / `withValues` / `withSplit`). | A column chart picked for regions is not what a run of months, or two measures, asks for; a swap of one measure for another keeps the pick. |
+| Save on a refused answer | "Save as visual" is not offered while the answer is refused or failed; Open in the builder stays (the builder says why). | A visual that cannot draw is a trap in the gallery. |
+| A Live dataset's suggestion cards | The chart glyph and a "Asked live when opened" note, no thumbnail. | See the thumbnail decision above. |
+| The colour map | Read (`format:colors:get`), never dealt: exploring writes nothing, for an editor either. | A viewer's question, and an editor's passing one, must not change the project's stored colours. |
+| Types the e2e can import | The encoding and filter types moved from `visuals/api.ts` to a dependency-free `visuals/encoding.ts` (re-exported, so no importer changed); `spec.ts` imports only those, so the e2e builds links with the page's own encoder. | |
 | Saving | The name defaults to the question's title. An "Auto" time grain is saved as the grain the server chose (`category.grain`), exactly as the builder's Save does, so the saved visual draws the same axis. After the save a toast offers **Open in Visuals**; the page stays on the question. | |
 | AI hand-off | `pickDockProject(projectId)` then `openDockWith(text)`: the dock asks in Explore's project. | The dock does not follow the switcher off a project's own route (`dockState.ts`). |
 
@@ -92,10 +98,10 @@ nothing to cover there.
    handler in `src/ipc/explore.ts`, the pure ladder in `src/analysis/exploreSuggest.ts`;
    `starterPlan.ts` exports `rankedMeasures` and `categoryColumns` (its `kpiColumns` becomes
    `rankedMeasures(ds).slice(0, 4)`, so every starter is unchanged).
-2. `web/src/features/explore/`: `spec.ts` (URL ⇄ spec, pure, the question's title),
-   `useExploreSpec.ts`, `api.ts`, `ExplorePage.tsx` (the gates and states), `Explorer.tsx` (the
-   workbench), `FieldList.tsx`, `Question.tsx` (the sentence), `Answer.tsx`, `Suggestions.tsx`,
-   `Explore.module.css`.
+2. `web/src/features/explore/`: `spec.ts` (URL ⇄ question, the edits a click makes, the title —
+   pure), `useExploreSpec.ts`, `api.ts`, `ExplorePage.tsx` (the gates and states), `Explorer.tsx`
+   (the workbench), `FieldList.tsx`, `Question.tsx` (the wells), `Answer.tsx`, `AnswerActions.tsx`,
+   `Suggestions.tsx`, `AskBox.tsx`, `Explore.module.css`.
 3. Editor actions: Save as visual (`NameDialog`, `saveVisual`), Open in the builder (BuilderPage
    takes `filters` from the navigation state too).
 4. The AI ask box.
@@ -111,7 +117,9 @@ nothing to cover there.
 | `BuilderPage.tsx`: `location.state.filters` | `VisualsPage.go` and `AnalyticsPage` send `{encoding?, chartType}` — no `filters`, so they read `[]` as today. |
 | `DataTable`: optional `labelHeader`, `pinLabels` | `AnswerCard`, `VisualTile` ×2, `ChartStage`, `NewVisualDialog`, `ChartsGallery`: none passes them; unchanged. |
 | `Thumb.tsx`: `ChartThumb` exported | Used as before by `Thumb`. |
-| `web/e2e/viewerRoutes.ts` `/explore` | The viewer walk: an editor control (Save as visual), the exploration names the write pattern would count, and what a viewer must keep (Copy link). |
+| `web/e2e/viewerRoutes.ts` `/explore` | The viewer walk: walked on a question link now; an editor control (Save as visual), the exploration names the write pattern would count (Add measure, Remove measure, Remove group by, Add filter), and what a viewer must keep (Copy link). |
+| `visuals/api.ts` encoding types | Moved to `visuals/encoding.ts` and re-exported from `api.ts`: every importer unchanged. |
+| `FilterRows.tsx` | Its step summary exported as `FilterSummary` (Explore's filter pills); FilterRows itself unchanged. |
 | `routes.tsx`, `nav.ts` | Untouched: both entries exist. |
 
 ## Out
@@ -139,3 +147,12 @@ multiples, analytics overlays and "As of" (all in the builder, one click away fo
   figures equal the server's reply to the same request; a reload of the URL gives the same chart;
   the editor saves a visual and it is in Visuals; ≤ 25 RPCs per load; screenshots `explore-empty`,
   `explore-question`, `explore-viewer`, `explore-phone`, light and dark.
+
+## Measured
+
+- `explore:suggest` through the real route (Fastify inject, records as files): **0.57 ms** median of
+  50 — one metadata read; no summary pass, no sample.
+- RPCs per page load in the e2e (budget 25): the start page **8** (one `visual:dataBatch` carries
+  all six thumbnails), a question **9–10**, the empty project **5**.
+- Explore's answer on a resident extract is the `visual:data` fast path (no hydrate); on a Live
+  dataset it is one warehouse statement, cached by `vizDataFor` like any tile's.

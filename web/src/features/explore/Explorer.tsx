@@ -24,6 +24,7 @@ import { isComplete, withField } from './spec';
 import { Suggestions } from './Suggestions';
 import { useExploreSpec } from './useExploreSpec';
 import s from './Explore.module.css';
+import cards from './Start.module.css';
 
 export function Explorer({ projectId, datasets, dataset }: { projectId: string; datasets: readonly DatasetSummary[]; dataset: DatasetSummary }) {
   const fields = useExploreFields(projectId, dataset.id);
@@ -103,9 +104,9 @@ export function Explorer({ projectId, datasets, dataset }: { projectId: string; 
               {fields.data ? (
                 <Suggestions projectId={projectId} datasetId={dataset.id} datasetName={name} live={live} suggestions={fields.data.suggestions} onPick={take} />
               ) : fields.isPending ? (
-                <div className={s.cards} role="status" aria-busy="true" aria-label="Loading the suggestions">
+                <div className={cards.cards} role="status" aria-busy="true" aria-label="Loading the suggestions">
                   {Array.from({ length: 6 }, (_, i) => (
-                    <Skeleton key={i} className={s.cardSkel} />
+                    <Skeleton key={i} className={cards.cardSkel} />
                   ))}
                 </div>
               ) : null}

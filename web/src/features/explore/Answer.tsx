@@ -25,7 +25,7 @@ import { useColorMap } from '../visuals/format/colorMap';
 import { AnswerActions } from './AnswerActions';
 import { useAnswer, type Ask } from './api';
 import { questionTitle, type Question } from './spec';
-import s from './Explore.module.css';
+import s from './Answer.module.css';
 
 const REGION_MAPS = new Set(['map_choropleth', 'map_bubble']);
 /** Pivot, cohort and funnel are their own shelves, not a chart of a question: the builder is their door. */

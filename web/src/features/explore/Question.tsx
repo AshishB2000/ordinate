@@ -16,14 +16,15 @@ import { FilterSummary } from '../visuals/filters/FilterRows';
 import { AGG_LABELS, GRAINS } from '../visuals/model';
 import { FieldList } from './FieldList';
 import { EMPTY, groupBy, roleOf, ungroup, withSplit, withValues, type Field, type FieldKind, type Question as Q } from './spec';
-import s from './Explore.module.css';
+import s from './Question.module.css';
 
 const AGG_OPTIONS = (['sum', 'avg', 'count', 'min', 'max'] as const).map((a) => ({ value: a, label: AGG_LABELS[a] }));
 /** A pill's aggregate, short: "Raw (no aggregation)" would leave no room for the field. */
 const AGG_SHORT: Record<Agg, string> = { ...AGG_LABELS, none: 'Raw' };
 const GRAIN_OPTIONS = [{ value: 'auto', label: 'Auto' }, ...GRAINS];
 const ROLE_WORD = { measure: 'Measure', category: 'Group by', series: 'Split by' } as const;
-const KIND_ICON: Record<FieldKind, IconName> = { dimension: 'type-text', date: 'type-date', measure: 'type-number' };
+/** A field's declared type, as the field list draws it: an id-like number is a dimension with a number's mark. */
+const TYPE_ICON: Record<Field['type'], IconName> = { text: 'type-text', number: 'type-number', date: 'type-date' };
 
 /** "Where is this field in the question?", worded for the field list's mark. */
 export const roleWord = (q: Q) => (name: string): string | null => {
@@ -91,6 +92,7 @@ export function Question({ projectId, datasetId, fields, question, onChange, onF
   const [editing, setEditing] = useState<{ index: number; column: string } | null>(null);
   const e = question.encoding;
   const kindOf = (name: string): FieldKind | undefined => fields.find((f) => f.name === name)?.kind;
+  const typeOf = (name: string): Field['type'] => fields.find((f) => f.name === name)?.type ?? 'text';
   const set = (encoding: Q['encoding']) => onChange({ ...question, encoding });
   const setFilters = (filters: FilterStep[]) => onChange({ ...question, filters });
   const picker = (title: string, kinds: readonly FieldKind[], trigger: ReactElement, onPick: (f: Field) => void) => (
@@ -162,7 +164,7 @@ export function Question({ projectId, datasetId, fields, question, onChange, onF
                   'Group by',
                   ['dimension', 'date'],
                   <button type="button" className={s.pillMain} aria-label={`Group by: ${e.category}`}>
-                    <Icon name={KIND_ICON[kindOf(e.category) ?? 'dimension']} size={16} />
+                    <Icon name={TYPE_ICON[typeOf(e.category)]} size={16} />
                     <span className={s.pillText}>{e.category}</span>
                   </button>,
                   (f) => onChange(groupBy(question, f, kindOf)),
@@ -206,7 +208,7 @@ export function Question({ projectId, datasetId, fields, question, onChange, onF
                 'Split by',
                 ['dimension', 'date'],
                 <button type="button" className={s.pillMain} aria-label={`Split by: ${e.series}`}>
-                  <Icon name={KIND_ICON[kindOf(e.series) ?? 'dimension']} size={16} />
+                  <Icon name={TYPE_ICON[typeOf(e.series)]} size={16} />
                   <span className={s.pillText}>{e.series}</span>
                 </button>,
                 (f) => onChange(withSplit(question, f.name)),
