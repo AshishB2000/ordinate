@@ -46,6 +46,8 @@ import type { ComboPlan, ControlDomain } from './combos';
 import { sanitizeRadiusValue } from '../analysis/geo/radius';
 import { lockedOptions, metricAllowed, visualAllowed, type Lock } from './embedLock';
 import { embedTileLocked } from '../server/embedMessages';
+import { withChartFigures, type ChartFigures } from '../analysis/chartShapes';
+import { figureAsk } from '../analysis/figureAsk';
 
 export interface PublishedControl {
   id: string;
@@ -183,9 +185,13 @@ export async function chartPayload(
     if ('hidden' in shaped) return { hidden: shaped.hidden };
     data = shaped;
   }
+  // The figures the chart draws, off the series as shaped for the page (analysis/chartShapes) — and so its caption's.
+  data = withChartFigures(data, figureAsk(chartType, overrides));
+  const { figures } = data as { figures?: ChartFigures };
   return {
     labels: data.labels,
     series: data.series.map((s) => ({ label: s.name, values: s.values })),
+    ...(figures ? { figures } : {}),
     ...(data.pivot ? { pivot: data.pivot } : {}),
     ...(data.geo ? { geo: data.geo } : {}),
     // r8:events — event markers, only while the shaped labels are still the ones they index.

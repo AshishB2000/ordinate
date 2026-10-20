@@ -30,6 +30,8 @@ import { arrangeSheet, readingOrder, type PlacedTile } from './planLayout';
 // preview/build guarantee structural instead of aspirational.
 import { vizDataFor } from '../ipc/visuals';
 import { withTableCalcs } from './tableCalc';
+import { withChartFigures } from './chartShapes';
+import { figureAsk } from './figureAsk';
 
 /**
  * The JS-fallback ceiling for a PREVIEW chart, in rows. See `vizDataFor`: the
@@ -253,7 +255,7 @@ async function previewVisual(
       : res.error;
     return base;
   }
-  base.data = res.data;
+  base.data = withChartFigures(res.data, figureAsk(base.chartType)); // the figures it draws (./chartShapes), as a built tile gets them
   base.recommendedShape = res.recommendedShape;
   base.warnings = res.warnings;
   return base;

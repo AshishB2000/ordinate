@@ -22,6 +22,7 @@ import { offerDownload } from '../server/files';
 import * as appPaths from '../app/paths';
 import { formatDateRange } from '../app/format';
 import * as visuals from '../analysis/visuals';
+import { figureAsk } from '../analysis/figureAsk';
 import * as datasets from '../data/datasets';
 import { rowShaper } from '../app/sharePolicy';
 import { describePeriod, getCalendar, resolvePeriodNow, sanitizePeriod, type PeriodSpec } from '../analysis/dateIntel';
@@ -57,7 +58,7 @@ export function register(): void {
       ids.map(async (id) => {
         const v = await visuals.getVisual(projectId, id);
         if (!v) return { id, ok: false, error: 'That visual no longer exists.' };
-        const reply = (await data(e, { projectId, datasetId: v.datasetId, encoding: v.encoding, filters: v.filters })) as object;
+        const reply = (await data(e, { projectId, datasetId: v.datasetId, encoding: v.encoding, filters: v.filters, ...figureAsk(v.chartType, v.overrides) })) as object;
         return { ...reply, id, chartType: v.chartType, overrides: v.overrides };
       }),
     );
