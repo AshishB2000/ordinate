@@ -141,6 +141,13 @@ async function main(): Promise<void> {
   ok('sanitize: an unknown sibling anywhere in the figures is stripped — no leak, no secret, no row, no URL',
     !/sk-live|leak|extra|rows|raw|spare|"url"|"secret"|http/.test(JSON.stringify(figOut)), JSON.stringify(figOut));
   ok('sanitize: …and the check sees one (negative control: the raw block carries them)', /sk-live|leak|extra|rows|raw|spare/.test(JSON.stringify(figuresIn)));
+  const bigPage = sanitizePage({ kind: 'dashboard', site: {}, dashboard: { name: 'B', keys: ['0'], controls: [], sheets: [{ name: 'S', cards: [
+    { kind: 'chart', chartType: 'histogram', title: 'H', layout: {}, variants: [0], payloads: [{ labels: [0], series: [{ label: 'n', values: [1] }],
+      figures: { histogram: [[{ from: 0, to: 1, count: 25_000 }, { from: 1, to: 2, count: -3 }, { from: 2, to: 3, count: NaN }]], pareto: { order: [0], cumPct: [100], count80: 25_000, total: 1, positives: 25_000 } } }] },
+  ] }] } }) as any; // any: asserting a sanitizer's output shape
+  const bigFig = bigPage.dashboard.sheets[0].cards[0].payloads[0].figures;
+  ok('sanitize: a count is a count, not an index — a 25,000-row bin and an 80% count past 20,000 survive; a negative or NaN is 0',
+    JSON.stringify(bigFig.histogram[0].map((b: any) => b.count)) === '[25000,0,0]' && bigFig.pareto.count80 === 25_000 && bigFig.pareto.positives === 25_000, JSON.stringify(bigFig));
   const exported = sanitizeBundle({ pages: [{ cards: [{ kind: 'chart', chartType: 'bar', layout: {}, data: { labels: ['a'], series: [], figures: { sharePct: [[100]], token: 'sk-live-e' } } }] }] }) as any; // any: an export bundle
   ok('sanitize: the export bundle keeps the same figures through the same whitelist, and strips the same strays',
     JSON.stringify(exported.pages[0].cards[0].data.figures) === '{"sharePct":[[100]]}');

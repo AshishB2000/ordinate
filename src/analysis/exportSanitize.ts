@@ -97,6 +97,8 @@ const rec = (v: unknown): Record<string, unknown> => (v && typeof v === 'object'
 const list = (v: unknown, max = FIG_MAX): unknown[] => (Array.isArray(v) ? v.slice(0, max) : []);
 const nums = (v: unknown): Array<number | null> => list(v).map(asNumOrNull);
 const index = (v: unknown): number => (typeof v === 'number' && Number.isInteger(v) && v >= -1 && v < FIG_MAX ? v : -1);
+/** A count (a bin's rows, a Pareto's 80% count): a finite, non-negative number — not an index, so no FIG_MAX bound. */
+const count = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= Number.MAX_SAFE_INTEGER ? v : 0);
 
 function sanitizeFigures(raw: unknown): ChartFigures | undefined {
   const o = rec(raw);
@@ -119,14 +121,14 @@ function sanitizeFigures(raw: unknown): ChartFigures | undefined {
     const p = rec(o.pareto);
     out.pareto = {
       order: list(p.order).map(index), cumPct: nums(p.cumPct).map((v) => v ?? 0),
-      count80: Math.max(0, index(p.count80)), total: asNumOrNull(p.total) ?? 0, positives: Math.max(0, index(p.positives)),
+      count80: count(p.count80), total: asNumOrNull(p.total) ?? 0, positives: count(p.positives),
     };
   }
   if (o.sharePct) out.sharePct = list(o.sharePct, SERIES_MAX).map((r) => nums(r).map((v) => v ?? 0));
   if (o.histogram) {
     out.histogram = list(o.histogram, SERIES_MAX).map((bins) => list(bins).map((b) => {
       const x = rec(b);
-      return { from: asNumOrNull(x.from) ?? 0, to: asNumOrNull(x.to) ?? 0, count: Math.max(0, index(x.count)) };
+      return { from: asNumOrNull(x.from) ?? 0, to: asNumOrNull(x.to) ?? 0, count: count(x.count) };
     }));
   }
   if (o.funnel) out.funnel = { ofTopPct: list(rec(o.funnel).ofTopPct, SERIES_MAX).map(nums) };
