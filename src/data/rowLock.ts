@@ -38,18 +38,50 @@ export function lockStep(column: string, values: readonly LockValue[]): FilterSt
 }
 
 /**
- * Does a dataset's prepare pipeline store a value computed across rows — so
- * over every customer? A window partitioned by every locked column stays
- * inside one customer's rows and is fine.
+ * Steps whose output row is computed from that input row alone (or that only
+ * drop rows): they cannot carry one customer's value into another's row. An
+ * ALLOW-list — a step type added later is cross-row until it is classified here
+ * (docs/row-policy/00-design.md D16). `union` appends another dataset's rows as
+ * they are; LOD calculated fields are caught by `lodFields` below.
  */
-export function storesCrossRow(steps: readonly TransformStep[] | undefined, locked: readonly string[]): boolean {
+const ROW_LOCAL: ReadonlySet<string> = new Set([
+  'calculated_field', 'filter', 'fill_empty', 'trim', 'drop_column', 'rename_column',
+  'mask_hash', 'mask_redact', 'mask_generalize',
+  'split_column', 'unpivot', 'parse_date', 'replace_values', 'conditional_column', 'union', 'spatial_join',
+  'text_sentiment', 'keyword_rules',
+]);
+
+/** Steps that combine rows by key: row-local only when every locked column is part of the key. */
+const KEYED: Readonly<Record<string, (s: Record<string, unknown>) => readonly unknown[] | undefined>> = {
+  window: (s) => (Array.isArray(s.partitionBy) ? s.partitionBy : []),
+  group_aggregate: (s) => (Array.isArray(s.groupBy) ? s.groupBy : []),
+  pivot: (s) => (Array.isArray(s.groupBy) ? s.groupBy : []),
+  dedupe_key: (s) => (Array.isArray(s.columns) ? s.columns : []),
+  // A dedupe with no columns compares whole rows, the locked columns included.
+  dedupe: (s) => (Array.isArray(s.columns) ? s.columns : undefined),
+};
+
+/** Origins whose stored rows were computed from other tables' rows: a query, a notebook cell, a join or append. */
+const CROSS_ROW_ORIGINS: ReadonlySet<string> = new Set(['sql', 'notebook', 'composed', 'combined']);
+
+/**
+ * Does a dataset's pipeline (or the origin it was built from) store a value
+ * computed across rows — so over every customer? A window, group-by, pivot or
+ * dedupe keyed by every locked column stays inside one customer's rows.
+ * `segment`, `text_terms`, `lookup_join`, LOD fields and any unknown step
+ * type do not; neither does a dataset built by SQL, a notebook or the composer.
+ */
+export function storesCrossRow(steps: readonly TransformStep[] | undefined, locked: readonly string[], origin?: { kind?: unknown } | null): boolean {
+  if (origin && typeof origin.kind === 'string' && CROSS_ROW_ORIGINS.has(origin.kind)) return true;
   const list = Array.isArray(steps) ? steps : [];
-  const crosses = (s: TransformStep): boolean => {
-    const t = s.type as string;
-    if (t === 'segment') return true;
-    if (t !== 'window') return false;
-    const by = (s as unknown as { partitionBy?: string[] }).partitionBy ?? [];
-    return !locked.every((c) => by.includes(c));
+  const crosses = (step: TransformStep): boolean => {
+    const s = step as unknown as Record<string, unknown>;
+    const t = typeof s.type === 'string' ? s.type : '';
+    if (ROW_LOCAL.has(t)) return false;
+    const keyOf = Object.prototype.hasOwnProperty.call(KEYED, t) ? KEYED[t] : undefined;
+    if (!keyOf) return true;
+    const key = keyOf(s);
+    return key !== undefined && !locked.every((c) => key.includes(c));
   };
   return list.some((s) => !!s && crosses(s)) || lodFields(list as TransformStep[]).length > 0;
 }
@@ -73,7 +105,7 @@ export function makeLock(values: Readonly<Record<string, readonly LockValue[]>>)
         // Lazy: the dataset store calls into this layer, so it is not imported at load time.
         const datasets = require('./datasets') as typeof import('./datasets');
         hit = datasets.getDatasetMeta(projectId, datasetId).then(
-          (meta) => !!meta && cols.every((c) => meta.columns.some((x) => x.name === c)) && !storesCrossRow((meta as { steps?: TransformStep[] }).steps, cols),
+          (meta) => !!meta && cols.every((c) => meta.columns.some((x) => x.name === c)) && !storesCrossRow(meta.steps, cols, meta.origin),
           () => false,
         );
         seen.set(key, hit);
