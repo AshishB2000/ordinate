@@ -656,6 +656,8 @@ export interface DistinctRequest {
   /** Case-insensitive substring match, applied IN SQL. Blank/absent = no filter. */
   search?: string;
   limit?: number;
+  /** Rows to keep first (a row access lock): `filterPredicates` here, the fold in the JS reference. */
+  filters?: FilterStep[];
 }
 
 /**
@@ -705,6 +707,7 @@ export async function readDistinctPage(
     // whitespace-only value IS a legitimate option; matching the original
     // matters more than being internally consistent.
     let where = `${p} IS NOT NULL AND CAST(${p} AS VARCHAR) <> ''`;
+    for (const pred of filterPredicates(cols, req?.filters ?? [], params)) where += ` AND ${pred}`;
     if (search !== '') {
       // Parameterised, never interpolated: a search box is untrusted input.
       // `lower()` on both sides, matching the JS reference's toLowerCase().
@@ -777,7 +780,7 @@ export function distinctValuesPageJs(
 
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const r of Array.isArray(rows) ? rows : []) {
+  for (const r of req?.filters?.length ? applyPipeline({ columns: cols, rows }, req.filters).rows : Array.isArray(rows) ? rows : []) {
     const cell = r ? r[ci] : null;
     if (cell == null || cell === '') continue;
     const s = String(cell);

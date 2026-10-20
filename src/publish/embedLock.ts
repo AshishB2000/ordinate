@@ -32,75 +32,15 @@ import * as metrics from '../analysis/metrics';
 import { isLive } from '../data/liveDataset';
 import { hasMetricMeasure } from '../analysis/metricMeasures';
 import { OTHER_LABEL } from '../analysis/categoryKey';
-import { paramRefs } from '../analysis/params';
-import { lodFields } from '../analysis/lodQuery';
-import type { FilterStep, TransformStep } from '../data/transforms';
 import type { VizEncoding } from '../analysis/visuals';
 import type { CardControl } from '../analysis/dashboards';
 import { vizDataFor } from '../ipc/visuals';
 import { embedControlLocked } from '../server/embedMessages';
+import type { Lock } from '../data/rowLock';
 
-export type LockValue = string | number;
-
-export interface Lock {
-  /** column → the values it is held to (never empty: an empty `in` would widen). */
-  readonly values: Readonly<Record<string, readonly LockValue[]>>;
-  /** The filter steps, one per column. */
-  readonly steps: readonly FilterStep[];
-  /** Has every dataset id asked so far every locked column? Memoised per build. */
-  covers(projectId: string, datasetId: string | undefined): Promise<boolean>;
-}
-
-/** The filter step a locked column becomes. */
-export function lockStep(column: string, values: readonly LockValue[]): FilterStep {
-  return values.length === 1
-    ? { type: 'filter', column, op: '=', value: values[0], context: true }
-    : { type: 'filter', column, op: 'in', values: values.slice(), context: true };
-}
-
-/** The lock for one build, or null when the token locks nothing. */
-/**
- * Does a dataset's prepare pipeline store a value computed across rows — so
- * over every customer? A window partitioned by every locked column stays
- * inside one customer's rows and is fine.
- */
-export function storesCrossRow(steps: readonly TransformStep[] | undefined, locked: readonly string[]): boolean {
-  const list = Array.isArray(steps) ? steps : [];
-  const crosses = (s: TransformStep): boolean => {
-    const t = s.type as string;
-    if (t === 'segment') return true;
-    if (t !== 'window') return false;
-    const by = (s as unknown as { partitionBy?: string[] }).partitionBy ?? [];
-    return !locked.every((c) => by.includes(c));
-  };
-  return list.some((s) => !!s && crosses(s)) || lodFields(list as TransformStep[]).length > 0;
-}
-
-export function makeLock(values: Readonly<Record<string, readonly LockValue[]>>): Lock | null {
-  const cols = Object.keys(values);
-  if (!cols.length) return null;
-  if (cols.some((c) => !values[c] || values[c].length === 0)) throw new Error('an empty lock would widen the embed');
-  // A parameter reference would be bound (and an unset one would DROP the step): a lock is literal values only.
-  if (cols.some((c) => values[c].some((v) => paramRefs(v).length > 0))) throw new Error('a lock value names a parameter');
-  const seen = new Map<string, Promise<boolean>>();
-  return {
-    values,
-    steps: cols.map((c) => lockStep(c, values[c])),
-    covers(projectId, datasetId) {
-      if (!datasetId) return Promise.resolve(false);
-      const key = `${projectId}:${datasetId}`;
-      let hit = seen.get(key);
-      if (!hit) {
-        hit = datasets.getDatasetMeta(projectId, datasetId).then(
-          (meta) => !!meta && cols.every((c) => meta.columns.some((x) => x.name === c)) && !storesCrossRow((meta as { steps?: TransformStep[] }).steps, cols),
-          () => false,
-        );
-        seen.set(key, hit);
-      }
-      return hit;
-    },
-  };
-}
+// The lock itself (steps, cross-row rule, coverage) is shared with row access rules: ../data/rowLock.ts.
+export { lockStep, makeLock, storesCrossRow } from '../data/rowLock';
+export type { Lock, LockValue } from '../data/rowLock';
 
 /** May a visual tile be drawn under `lock`? */
 export async function visualAllowed(lock: Lock, projectId: string, datasetId: string, enc: VizEncoding): Promise<boolean> {
