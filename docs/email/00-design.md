@@ -14,9 +14,9 @@ Phase A is this document. It is attacked by a separate reviewer before any code 
   teams through a filterable checklist. **No address can be typed.** The table's third column shows
   "4 people · 1 team" for an email channel where a webhook channel shows its *Stored* badge.
 - **Send a test email** sends one fixed message, with no data in it, **to the admin who clicked**. The
-  message names the channel and says how many people it reaches today. It is rate-limited per
-  organization: after the 10th test in an hour the admin sees "Ten test emails were sent from this
-  organization in the last hour. Try again later."
+  message names the channel and says how many people on it have signed in. It is rate-limited per
+  organization: after the 10th test in an hour the admin sees "Not sent to Sales leadership: this
+  organization reached its email limit for this hour."
 - **Subscribe** (and Reports → Subscriptions) and the alert dialog's **Also post to** list email
   channels beside Slack and Teams, each with an envelope mark. The subscription preview gains an
   **Email** tab, which draws the message as it will be sent.
