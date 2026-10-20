@@ -204,7 +204,7 @@ function connected(socket: net.Socket, event: 'connect' | 'secureConnect'): Prom
     socket.once(event, () => { clearTimeout(timer); resolve(); });
     socket.once('error', (err) => {
       clearTimeout(timer);
-      reject(new MailError(tlsErrorCode(err) ? 'tls' : 'unreachable', scrub(`${(err as { code?: string }).code ?? ''} ${err.message}`)));
+      reject(err instanceof MailError ? err : new MailError(tlsErrorCode(err) ? 'tls' : 'unreachable', scrub(`${(err as { code?: string }).code ?? ''} ${err.message}`)));
     });
   });
 }

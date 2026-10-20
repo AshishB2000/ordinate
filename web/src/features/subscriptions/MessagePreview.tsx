@@ -142,7 +142,8 @@ export function MessagePreview({
   const [picked, setPicked] = useState<ChannelKind | null>(null);
   // Email is offered only by a server that sends it (the preview says so with `email`).
   const platforms = PLATFORMS.filter((x) => x.kind !== 'email' || preview?.email || prefer === 'email');
-  const kind = picked ?? prefer ?? 'slack';
+  // An email list picked on a server whose mail is off has no email to show: open on Slack instead.
+  const kind = picked ?? (prefer === 'email' && preview && !preview.email ? 'slack' : prefer) ?? 'slack';
   const p: PlatformPreview | null | undefined = preview ? preview[kind] : undefined;
   return (
     <section className={s.pane} aria-label="Preview">
