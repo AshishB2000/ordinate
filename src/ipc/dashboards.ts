@@ -1,4 +1,5 @@
 import { ipcMain } from './bus';
+import { lockedMetric } from './rowDoors';
 import * as dashboards from '../analysis/dashboards';
 import * as answerKey from '../data/answerKey';
 import * as queryCache from '../engine/queryCache';
@@ -144,12 +145,23 @@ async function loadMetricTarget(projectId: string, datasetId: string): Promise<M
  * `sanitizeDashboardFilters` contract the handler below holds, and it is a
  * security control, not a formatter.
  */
-export async function computeCardMetric(
+/** THE KPI door: row access rules first (./rowDoors — a refusal throws), then the unchanged body below. */
+export function computeCardMetric(
   projectId: string,
   datasetId: string,
   spec: { column: string; aggregation: MetricAggregation },
   filters: FilterStep[] = [],
   params?: ParamValues,
+): Promise<{ ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf }> {
+  return lockedMetric(projectId, datasetId, spec, filters, params, computeCardMetricUnlocked);
+}
+
+async function computeCardMetricUnlocked(
+  projectId: string,
+  datasetId: string,
+  spec: { column: string; aggregation: MetricAggregation },
+  filters: FilterStep[],
+  params: ParamValues | undefined,
 ): Promise<{ ok: boolean; value: number | null; fx?: FxInfo; asOf?: AsOf }> {
   // A Live dataset is asked of its warehouse (L2.4, ./liveRoute) — before the cache below. A failure THROWS (LiveFigureError).
   const live = await liveMetaOf(projectId, datasetId);

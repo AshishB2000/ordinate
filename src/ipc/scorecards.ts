@@ -19,6 +19,7 @@
 // grouped query per metric is the upgrade if that ever shows.
 
 import { ipcMain } from './bus';
+import { distinctFor } from './distinctFor';
 
 import * as scorecards from '../analysis/scorecards';
 import * as metrics from '../analysis/metrics';
@@ -33,7 +34,6 @@ import type { PeriodWindow, RowStatus, Scorecard, ScorecardRow, ScorePeriod, Gro
 import { resolveOverlays } from '../analysis/analytics';
 import type { ResolvedOverlay } from '../analysis/analytics';
 import { forecastSeries } from '../analysis/forecast';
-import { readDistinctPage, distinctValuesPageJs } from '../engine/datasetPage';
 import * as alertStore from '../analysis/alertStore';
 import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
@@ -340,15 +340,9 @@ async function topDimension(projectId: string, datasetId: string): Promise<strin
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta) return null;
   const texts = meta.columns.filter((c) => c.type === 'text').slice(0, 12);
-  const src = await datasets.residentSource(projectId, datasetId).catch(() => null);
-  let ds: Awaited<ReturnType<typeof datasets.getDataset>> | undefined;
   for (const c of texts) {
-    let values: string[] | null = null;
-    if (src) { const r = await readDistinctPage(src, c.name, { limit: 51 }); values = r ? r.values : null; }
-    if (values === null) {
-      if (ds === undefined) ds = await datasets.getDataset(projectId, datasetId);
-      values = ds ? distinctValuesPageJs(ds.columns, ds.rows, c.name, { limit: 51, search: '' }).values : [];
-    }
+    // Under the caller's row access lock (./distinctFor): the values their rows hold.
+    const values = (await distinctFor(projectId, datasetId, c.name, { limit: 51, search: '' }))?.values ?? [];
     if (values.length >= 2 && values.length <= 50) return c.name;
   }
   return null;
