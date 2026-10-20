@@ -10,6 +10,25 @@ import type { ChartFigures } from '../../../src/analysis/chartShapes.ts';
 import type { ChartTypeSpec } from './typeSpec';
 import type { Cx } from './types';
 
+/**
+ * The figures in the drawn category order (Format → Sort reorders the categories by `order`, old index per new
+ * position): every per-category array permuted the same way, and every label index a waterfall step or a Pareto
+ * order holds remapped. Indexing, never a figure; the one place figures follow a sort.
+ */
+export function sortedFigures(f: ChartFigures, order: number[]): ChartFigures {
+  const pick = <T,>(row: T[]): T[] => order.map((i) => row[i]);
+  const at = new Map(order.map((was, now) => [was, now]));
+  const moved = (i: number): number => (i >= 0 ? at.get(i) ?? -1 : -1);
+  return {
+    ...f,
+    ...(f.sharePct ? { sharePct: f.sharePct.map(pick) } : {}),
+    ...(f.funnel ? { funnel: { ofTopPct: f.funnel.ofTopPct.map(pick) } } : {}),
+    ...(f.bullet ? { bullet: { ofTargetPct: pick(f.bullet.ofTargetPct) } } : {}),
+    ...(f.waterfall ? { waterfall: { ...f.waterfall, steps: f.waterfall.steps.map((x) => ({ ...x, src: moved(x.src) })) } } : {}),
+    ...(f.pareto ? { pareto: { ...f.pareto, order: f.pareto.order.map(moved) } } : {}),
+  };
+}
+
 /** A type that draws the server's figures, without them: it draws nothing rather than work them out. */
 export function figuresMissing(spec: ChartTypeSpec, f: ChartFigures): boolean {
   return (spec.isWaterfall && !f.waterfall) || (spec.isPareto && !f.pareto) || (spec.opts.pct === true && !f.sharePct)

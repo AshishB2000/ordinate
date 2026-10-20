@@ -17,7 +17,7 @@ import { chartShapes } from '../../../src/analysis/chartShapes.ts';
 import { decode } from '../../../src/server/wire.ts';
 import { BULLET, CALENDAR, FUNNEL, HISTOGRAM, PARETO, SHARES, WATERFALL } from '../../../scripts/fixtures/figureCases.ts';
 import { buildChart } from './build';
-import { calendarCells, paretoFromFigures, waterfallFromFigures } from './shapes';
+import { calendarCells, paretoFromFigures, sortedFigures, waterfallFromFigures } from './shapes';
 import type { ChartDataShape, ChartSeriesShape, Cx } from './types';
 
 type Golden = Record<string, Record<string, Cx>>;
@@ -118,6 +118,25 @@ describe('the in-app chart draws the server\'s figures, and draws what it drew b
     const cfg = config('pct_stacked_bar', data, { sort: 'desc' });
     expect(cfg.data.labels).toEqual(['b', 'c', 'a']);
     expect(cfg.data.datasets[0].data).toEqual([75, 50, 25]);
+  });
+
+  it('a bullet sorted by value: each row\'s tooltip still says its own % of target', () => {
+    const series = [s('actual', [40, 90, 60]), s('target', [100, 100, 100])];
+    const cfg = config('bullet', reply('bullet', ['A', 'B', 'C'], series), { sort: 'desc' });
+    expect(cfg.data.labels).toEqual(['B', 'C', 'A']);
+    expect(tooltips(cfg, 3)).toEqual(['90 of 100 target (90%)', '60 of 100 target (60%)', '40 of 100 target (40%)']);
+  });
+
+  it('sortedFigures permutes every per-category array and remaps every label index, one way', () => {
+    const f = { sharePct: [[1, 2, 3]], bullet: { ofTargetPct: [10, 20, 30] }, funnel: { ofTopPct: [[100, 50, 25]] },
+      pareto: { order: [2, 0, 1], cumPct: [1, 2, 3], count80: 1, total: 6, positives: 3 },
+      waterfall: { from: 0, to: 1, steps: [{ label: 'a', start: 0, end: 1, value: 1, kind: 'up' as const, src: 0 }, { label: 'T', start: 0, end: 1, value: 1, kind: 'end' as const, src: -1 }] } };
+    const g = sortedFigures(f, [2, 0, 1]);
+    expect(g.sharePct).toEqual([[3, 1, 2]]);
+    expect(g.bullet!.ofTargetPct).toEqual([30, 10, 20]);
+    expect(g.funnel!.ofTopPct).toEqual([[25, 100, 50]]);
+    expect(g.pareto!.order).toEqual([0, 1, 2]); // label 2 is now at 0, label 0 at 1, label 1 at 2
+    expect(g.waterfall!.steps.map((x) => x.src)).toEqual([1, -1]);
   });
 
   it('without its figures, a figure type draws nothing — it never works them out', () => {

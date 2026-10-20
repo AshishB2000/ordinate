@@ -24,7 +24,7 @@ import * as OrdFormat from '../../../src/app/format.ts';
 import { fmtVal, fmtWith, pctText, tcAxisFmt, tcTooltip } from './format';
 import { CHART_PALETTE, getCSSVar, paletteFromSeed } from './palette';
 import { buildChartScales } from './scales';
-import { figuresMissing } from './shapes';
+import { figuresMissing, sortedFigures } from './shapes';
 import { selectionPlugin } from './selection';
 import { t } from './strings';
 import { legendOnByDefault } from './traits';
@@ -176,7 +176,7 @@ export function buildChart(
     labels = order.map((i: number) => labels[i]);
     series = series.map((s: ChartSeriesShape) => Object.assign({}, s, { values: order.map((i: number) => s.values[i]) },
       Array.isArray(s.raw) ? { raw: order.map((i: number) => s.raw![i]) } : {}));
-    if (figures.sharePct) figures = { ...figures, sharePct: figures.sharePct.map((row) => order.map((i: number) => row[i])) };
+    figures = sortedFigures(figures, order);
     sortOrder = order;
   }
 
