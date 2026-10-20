@@ -18,6 +18,7 @@ New here? Start with the [README](../README.md). To run Ordinate, go to the
 | [`first-run-pass/`](first-run-pass/findings.md) | **The first-run pass**: a fresh install walked as an admin, an editor and a viewer; what was rough, what fixed it, and what is still open. |
 | [`analysis/`](analysis/00-model.md) | The analysis and dashboard record model (an analysis is the authoring surface; a dashboard is a by-value snapshot) and the authoring surface. Still the spec. |
 | [`automation.md`](automation.md) | The MCP endpoint and the command registry. Generated from `src/automation/registry.ts`; do not edit by hand. |
+| [`email/`](email/00-design.md) | **Email for subscriptions and alerts**: an email list of the org's people and teams, resolved at each send to those who can read the project then; our own SMTP client (TLS required, the operator's one relay); `deliver(channel, source)`, the one send door, which computes the datasets a send's figures come from. Operator guide: [`server/email.md`](server/email.md). |
 
 ## History (the desktop era)
 

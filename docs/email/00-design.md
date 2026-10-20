@@ -378,7 +378,8 @@ catalog when it is read (`subscriptionText.runText`, `{channel}` = the channel's
 | `unreachable`, `timeout` | `unreachable` (existing) | "Not delivered: {channel} could not be reached." (existing) | the relay host and port, the error **message** only (never the error object), attempt |
 | `tls` | `tls_failed` | "Not delivered to {channel}: the mail server's encryption could not be verified, so nothing was sent." | which check: no STARTTLS / 454 / buffered bytes / the certificate error's code and reason |
 | `auth` | `auth_failed` | "Not delivered to {channel}: the mail server did not accept this server's sign-in." | the reply code and text, **redacted** |
-| `rejected`, `temporary`, `protocol`, `input` | `mail_failed` | "Not delivered to {channel}: the mail server answered {status}." (status = the 3-digit reply code; 0 → "refused the message") | the reply code, enhanced status and text (≤ 500 chars), **redacted** |
+| `rejected`, `temporary` | `mail_failed` | "Not delivered to {channel}: the mail server answered {status}." (status = the 3-digit reply code) | the reply code, enhanced status and text (≤ 500 chars), **redacted** |
+| `protocol` / `input` | `unreachable` / `compute_failed` | the existing sentences (a relay that does not speak SMTP was not reached; a message that cannot be built is a failed composition) | the check that failed |
 
 - **Redaction** runs before **every** reply text is logged: the password, the PLAIN blob
   `base64("\0"+user+"\0"+pass)` and `base64(pass)` are cut out, as `redactWebhook` cuts a URL. This is
@@ -605,3 +606,22 @@ The orchestrator's rulings on my open questions:
 - there is no per-recipient audit list (R18(f));
 - the committed test certificate is named `test-only-*` with a header comment;
 - `secretSet` is replaced by an explicit `ready` flag (D9).
+
+## 15. What changed while building
+
+- **i18n budget.** The drafts must stay ≥ 90 % translated (`test-i18n`), and the rules forbid editing
+  `src/i18n/*.json` by hand. The base was 538 of 584 keys, so the whole round has room for **13 new
+  null keys**. This item uses exactly 13:
+  - `mail_failed` has one sentence, since it always has a code;
+  - a refused test email reuses `rate_limited`'s sentence;
+  - the test body is one sentence;
+  - the email preview has no limit note, because "+N more in the dashboard" is in the message itself.
+
+  Items 3 and 5 will need translations, or the threshold changed, at merge.
+- **`figureDatasets` also adds every reached metric's own dataset.** Lineage draws no edge into a
+  formula metric made only of other metrics, and `test-figureDatasets`' alert case found that.
+- **The preview sends the first email list's id** (and only that one), because the email's last line names it.
+  Slack and Teams picks still cost no round trip. A Vitest covers it.
+- **Send now's one-a-minute limit applies to every channel kind** (`subscriptions/rpc.ts`, a test hook for
+  the suites that send twice).
+- **`PublicChannel.ready`** replaced `secretSet` in the three pickers (D9).

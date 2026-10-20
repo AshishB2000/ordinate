@@ -74,6 +74,13 @@ the desktop installers.
   saves what is on screen as a shared view (editors), and everyone can apply one or copy its link
   (`?view=`); ⌘K opens a view in place, a phone picks one in its Filters sheet, and a published
   page offers it. See [`docs/dashboard-filters/`](docs/dashboard-filters/00-design.md).
+- **Email for subscriptions and alerts.** An org admin makes an email list in Admin → Channels from
+  the organization's people and teams (no typed addresses); a subscription or an alert sent to it
+  reaches only those of them who can open the dashboard's project at that moment, through the one SMTP
+  relay the operator configures (`SMTP_HOST`, `SMTP_FROM`; TLS required, `plaintext` only to a private
+  relay). The subscription preview has an Email tab; **Send a test email** goes to the admin alone.
+  **Send now** is limited to once a minute per subscription, for every channel kind.
+  See [`docs/server/email.md`](docs/server/email.md).
 
 ### Security — since the move to the web
 
