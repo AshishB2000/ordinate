@@ -114,6 +114,18 @@ export function runInContext<T>(identity: Identity, requestId: string, fn: () =>
   return als.run({ ...identity, requestId, client, signal }, fn);
 }
 
+/**
+ * Runs `fn` with `signal` joined to the current request's (src/app/jobs.ts: a
+ * job's Cancel or drain interrupts the DuckDB call it is in). A store without a
+ * signal (a scheduled run) takes `signal` alone; no store (desktop), no change.
+ */
+export function withAbort<T>(signal: AbortSignal, fn: () => T): T {
+  const s = als.getStore();
+  if (!s) return fn();
+  // AbortSignal.any throws on an undefined member, and a store's signal is optional.
+  return als.run({ ...s, signal: s.signal ? AbortSignal.any([s.signal, signal]) : signal }, fn);
+}
+
 /** Runs `fn` as a published page's request (./published.ts): `isPublishedRequest()` holds below it. No tab to push to. */
 export function runAsPublished<T>(identity: Identity, requestId: string, fn: () => T): T {
   return als.run({ ...identity, requestId, client: NO_CLIENT, published: true }, fn);

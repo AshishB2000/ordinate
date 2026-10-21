@@ -46,12 +46,25 @@ async function main(): Promise<void> {
   // A 60 s per-query limit, as in production: only the shutdown can explain a prompt stop.
   const pool = poolMod.routeByOrg({ dataDir: DATA, maxWorkers: 4, memoryLimit: '256MiB', threads: 1, queryTimeoutMs: 60_000, idleMs: 60_000 });
   await asJob(() => duck.queryAsync('SELECT 1 AS warm'));
+
+  // 0. A job's Cancel interrupts the DuckDB call it is in (jobs.start → context.withAbort).
+  const jobs: typeof import('../src/app/jobs') = require('../src/app/jobs');
+  const long = asJob(async () => jobs.submit({ kind: 'sql-save', label: 'a long query', run: () => duck.queryAsync(LONG) }));
+  const job = await long;
+  job.done.catch(() => undefined);
+  await new Promise((r) => setTimeout(r, 1000));
+  ok('NEGATIVE CONTROL: left alone, the job is still running at 1 s (its query does not just finish)', jobs.get(job.id)?.state === 'running');
+  let t0 = Date.now();
+  jobs.cancel(job.id);
+  await job.done.catch(() => undefined);
+  ok(`a job's Cancel interrupts its query: cancelled in ${Date.now() - t0} ms`, jobs.get(job.id)?.state === 'cancelled' && Date.now() - t0 < 500, JSON.stringify(jobs.get(job.id)));
+
   const running = codeOf(asJob(() => duck.queryAsync(LONG)));
   const queued = codeOf(asJob(() => duck.execAsync('CREATE TABLE never_made AS SELECT 1 AS x')));
   await new Promise((r) => setTimeout(r, 300));
 
   // 1. The close alone: queued behind a query nobody can cancel.
-  let t0 = Date.now();
+  t0 = Date.now();
   const control = await (require('../src/engine/duckdbClose') as typeof import('../src/engine/duckdbClose')).closeEvery(Date.now() + 400);
   const controlMs = Date.now() - t0;
   ok(`NEGATIVE CONTROL: a close queued behind a signal-less query is still waiting at the deadline (${controlMs} ms), naming the org`,
