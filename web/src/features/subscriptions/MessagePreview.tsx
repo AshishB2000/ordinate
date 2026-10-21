@@ -8,6 +8,7 @@ import { Skeleton } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { Icon } from '../../ui/icons/Icon';
 import { ChannelMark } from './ChannelMark';
+import { EmailMessage } from './EmailMessage';
 import type { ChannelKind, MessageModel, MessageSection, PlatformPreview, Preview } from './api';
 import s from './Preview.module.css';
 
@@ -117,6 +118,7 @@ function TeamsMessage({ m }: { m: MessageModel }) {
 const PLATFORMS: { kind: ChannelKind; label: string }[] = [
   { kind: 'slack', label: 'Slack' },
   { kind: 'teams', label: 'Teams' },
+  { kind: 'email', label: 'Email' },
 ];
 
 /**
@@ -138,14 +140,17 @@ export function MessagePreview({
   prefer?: ChannelKind;
 }) {
   const [picked, setPicked] = useState<ChannelKind | null>(null);
-  const kind = picked ?? prefer ?? 'slack';
+  // Email is offered only by a server that sends it (the preview says so with `email`).
+  const platforms = PLATFORMS.filter((x) => x.kind !== 'email' || preview?.email || prefer === 'email');
+  // An email list picked on a server whose mail is off has no email to show: open on Slack instead.
+  const kind = picked ?? (prefer === 'email' && preview && !preview.email ? 'slack' : prefer) ?? 'slack';
   const p: PlatformPreview | null | undefined = preview ? preview[kind] : undefined;
   return (
     <section className={s.pane} aria-label="Preview">
       <div className={s.paneHead}>
         <span className={s.paneTitle}>Preview</span>
         <div className={s.switch} role="tablist" aria-label="Preview as">
-          {PLATFORMS.map((x) => (
+          {platforms.map((x) => (
             <button key={x.kind} type="button" role="tab" aria-selected={kind === x.kind} className={kind === x.kind ? `${s.switchBtn} ${s.switchOn}` : s.switchBtn} onClick={() => setPicked(x.kind)}>
               <ChannelMark kind={x.kind} />
               {x.label}
@@ -170,6 +175,8 @@ export function MessagePreview({
           </div>
         ) : kind === 'slack' ? (
           <SlackMessage m={p.model} />
+        ) : kind === 'email' && preview.email ? (
+          <EmailMessage m={p.model} brand={preview.email.brand} reason={preview.email.reason} />
         ) : (
           <TeamsMessage m={p.model} />
         )}

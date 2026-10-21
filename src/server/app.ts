@@ -44,6 +44,7 @@ import { isLiveDatasetError, LIVE_DATASET_CODE, liveRefusalsRaised, tagLiveRefus
 import { isLiveFigureError } from '../engine/live/liveFigureError';
 import { isRowPolicyError, ROW_POLICY_CODE, rowPolicyRaised, tagRowPolicyRefusals } from '../data/rowAccess';
 import { seedRank, register as registerCaller } from './authz/caller';
+import { isRecordChanged } from '../app/editConflict';
 import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -156,6 +157,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   const limits = registerLimits(app, cfg.limits, proxyList(cfg.auth.trustedProxies));
   // Request counts and latency for GET /metrics, which itself is served only on METRICS_PORT (./metrics.ts).
   registerRequestMetrics(app);
+  for (const w of cfg.mail?.warnings ?? []) app.log.warn(w); // the SMTP relay's startup warnings (./mail/mailEnv.ts)
 
   // Liveness: the process is up and serving. Checks nothing else on purpose —
   // a failing dependency must not make Kubernetes restart a healthy pod.
@@ -205,9 +207,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       orgConfig.useOrgConfig(pool, cfg.dataDir);
       await orgConfig.fresh(cfg.auth.org);
       (require('./jobs/schedules') as typeof import('./jobs/schedules')).wireSchedules(pool, cfg.auth.mode === 'dev');
-      // Subscriptions: scheduled sends to Slack / Teams, their webhook URLs in the encrypted store (none without a master key).
+      // Subscriptions: scheduled sends to Slack / Teams (URLs in the encrypted store, none without a master key) and email (cfg.mail).
       (require('./subscriptions/job') as typeof import('./subscriptions/job')).wireSubscriptions(
-        pool, cfg.auth.mode === 'dev', cfg.masterKey ? createSecretStore(pool, cfg.masterKey) : null, app.log);
+        pool, cfg, cfg.masterKey ? createSecretStore(pool, cfg.masterKey) : null, app.log);
       // S3 (T5.2): objects are registered in Postgres; old versions are collected by a job.
       if (cfg.storage.s3) {
         const storage = require('../engine/storage') as typeof import('../engine/storage');
@@ -416,6 +418,12 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         await record('error', decision.projectId);
         return reply.code(409).send({ error: 'record_busy', code: 'record_busy', message: (err as Error).message });
       }
+      if (isRecordChanged(err)) {
+        // A whole-document save from a stale copy (src/app/editConflict.ts): the record is
+        // untouched; the catalog's sentence and the current tag, never the record.
+        await record('error', decision.projectId);
+        return reply.code(409).send({ error: 'record_changed', code: 'record_changed', message: err.message, tag: err.tag });
+      }
       if (isLiveFigureError(err)) {
         // L2.4: a Live KPI the warehouse could not give, thrown past a handler that
         // did not catch it — typed the same way, its catalog sentence only (R-L6).
@@ -502,6 +510,8 @@ export function registerHandlers(): void {
   // The Visuals screen (T2.7): the builder's sampled preview, the gallery's thumbnails, the drill
   // panel and period picker, and the project colour map that Format → Colours edits.
   for (const mod of ['../ipc/vizSample', '../ipc/visualsServer', '../ipc/format']) (require(mod) as { register: () => void }).register();
+  // Explore (docs/explore): a dataset's fields and suggested questions; every figure it draws is `visual:data`'s.
+  (require('../ipc/explore') as typeof import('../ipc/explore')).register();
 
   // Prepare and pipelines (T2.6). Pipelines' cron rides the server's own tick job (./jobs/schedules.ts), so headless here.
   for (const mod of ['../ipc/preparePower', '../ipc/text', '../ipc/formula']) (require(mod) as { register: () => void }).register();

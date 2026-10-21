@@ -220,22 +220,25 @@ export async function withStatsTiles(projectId: string, pages: dashboards.Page[]
 
 /** Append a "stats" card (6×6) under everything on the last sheet of a dashboard, or of a new one. */
 async function addStatsCard(projectId: string, spec: StatsSpec, analysisId: string, name: string) {
-  let a = analysisId ? await analysis.getAnalysis(projectId, analysisId) : null;
-  if (!analysisId) {
-    const preset = DASHBOARD_STYLE_PRESETS[config.get().branding.dashboardStyle];
-    a = await analysis.saveAnalysis(projectId, { name: name.trim().slice(0, 200) || 'Untitled dashboard', style: preset });
-    if (a) await versions.record(projectId, 'dashboard', a);
-  }
-  if (!a) return { ok: false, error: 'That dashboard could not be opened.' };
-  const sheets = a.sheets.map((p) => ({ ...p, cards: [...(p.cards || [])] }));
-  const last = sheets[sheets.length - 1];
-  const y = last.cards.reduce((m, c) => Math.max(m, (c.layout?.y ?? 0) + (c.layout?.h ?? 0)), 0);
-  last.cards.push({ id: randomUUID(), type: 'stats', stats: spec, layout: { x: 0, y, w: 6, h: 6 } } as (typeof last.cards)[number]);
-  const before = analysisId ? a : undefined;
-  const saved = await analysis.updateAnalysis(projectId, a.id, { sheets });
-  if (!saved) return { ok: false, error: 'Could not add it to that dashboard.' };
-  await versions.record(projectId, 'dashboard', saved, before ? { before } : undefined);
-  return { ok: true, analysisId: saved.id, name: saved.name };
+  // Read and write under the dashboard's hold (every pod): an editor's save between the two is never dropped.
+  return analysis.lockedAnalysis(projectId, analysisId, async () => {
+    let a = analysisId ? await analysis.getAnalysis(projectId, analysisId) : null;
+    if (!analysisId) {
+      const preset = DASHBOARD_STYLE_PRESETS[config.get().branding.dashboardStyle];
+      a = await analysis.saveAnalysis(projectId, { name: name.trim().slice(0, 200) || 'Untitled dashboard', style: preset });
+      if (a) await versions.record(projectId, 'dashboard', a);
+    }
+    if (!a) return { ok: false, error: 'That dashboard could not be opened.' };
+    const sheets = a.sheets.map((p) => ({ ...p, cards: [...(p.cards || [])] }));
+    const last = sheets[sheets.length - 1];
+    const y = last.cards.reduce((m, c) => Math.max(m, (c.layout?.y ?? 0) + (c.layout?.h ?? 0)), 0);
+    last.cards.push({ id: randomUUID(), type: 'stats', stats: spec, layout: { x: 0, y, w: 6, h: 6 } } as (typeof last.cards)[number]);
+    const before = analysisId ? a : undefined;
+    const saved = await analysis.updateAnalysis(projectId, a.id, { sheets });
+    if (!saved) return { ok: false, error: 'Could not add it to that dashboard.' };
+    await versions.record(projectId, 'dashboard', saved, before ? { before } : undefined);
+    return { ok: true, analysisId: saved.id, name: saved.name };
+  });
 }
 
 const fail = (err: unknown, fallback: string) => ({ ok: false, error: err instanceof Error && err.message ? err.message : fallback });

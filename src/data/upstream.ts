@@ -2,23 +2,39 @@
 // docs/row-policy/00-design.md D14.
 //
 // A dataset's direct parents are its origin's (a SQL or notebook dataset's deps,
-// a combined or composed dataset's inputs: `originParents`) and the datasets its
-// prepare steps union or look up (`stepRefIds`) — the same two edges
-// `stepRefs.buildsOn` walks. Row access rules use the closure to close a dataset
-// built from one with rules; the fan-out paths share it.
+// a combined or composed dataset's inputs) and the datasets its prepare steps
+// union or look up (`stepRefIds`). THE one definition: row access rules close a
+// dataset built from one with rules over this closure, and the lineage graph
+// (src/analysis/lineage.ts) — so item 4's `figureDatasets` and the pipeline —
+// draws its dataset edges from `parentsOfRecord` too.
 
-import { originParents } from './datasetSummary';
-import { sanitizeOrigin } from './datasetOrigin';
+import { isValidId } from '../app/ids';
 import { stepRefIds } from './stepTypes';
 
 /** How far the walk follows parents, as `stepRefs.buildsOn` does. */
 export const MAX_DEPTH = 16;
 
-/** The direct parents a raw dataset record names (origin and union/lookup steps), de-duplicated. */
+const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+/**
+ * The parents an origin names, read LENIENTLY — as stored, never through
+ * sanitizeOrigin: an origin that would not sanitize (one bad join entry drops it
+ * whole) still names its parents, so the closure over-approximates and fails closed.
+ */
+function originParentIds(origin: unknown): unknown[] {
+  if (!origin || typeof origin !== 'object') return [];
+  const o = origin as Record<string, unknown>;
+  if (o.kind === 'sql' || o.kind === 'notebook') return list(o.deps);
+  if (o.kind === 'combined') return [o.leftId, o.rightId];
+  if (o.kind === 'composed') return [o.baseId, ...list(o.joins).map((j) => (j && typeof j === 'object' ? (j as { datasetId?: unknown }).datasetId : null))];
+  return [];
+}
+
+/** The direct parents a dataset record names (origin and union/lookup steps), de-duplicated, valid ids only. */
 export function parentsOfRecord(raw: unknown): string[] {
   const rec = (raw && typeof raw === 'object' ? raw : {}) as { origin?: unknown; steps?: unknown };
   const steps = Array.isArray(rec.steps) ? (rec.steps as { type?: unknown; datasetId?: unknown }[]) : [];
-  return [...new Set([...stepRefIds(steps), ...originParents(sanitizeOrigin(rec.origin))])];
+  return [...new Set([...stepRefIds(steps), ...originParentIds(rec.origin)].filter((id): id is string => typeof id === 'string' && isValidId(id)))];
 }
 
 /**

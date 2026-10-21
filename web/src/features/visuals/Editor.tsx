@@ -28,15 +28,18 @@ import { engineKind, engineNeeds, pivotEncoding, type Pivot } from '../analytics
 import { PivotShelves } from '../analytics/grids/PivotShelves';
 import s from './Builder.module.css';
 import { CommentDoor } from '../dashboards/CommentsPanel';
+import { ConflictBanner } from '../editConflicts/ConflictBanner';
 
 export type { Initial };
 
-export function Editor({ projectId, datasets, columns, related, initial }: {
+export function Editor({ projectId, datasets, columns, related, initial, onReload }: {
   projectId: string;
   datasets: DatasetSummary[];
   columns: Column[];
   related: RelatedCol[];
   initial: Initial;
+  /** The banner's Reload: the visual read again, in a new builder (editConflicts/useReload). */
+  onReload: () => void;
 }) {
   const navigate = useNavigate();
   const ai = useAiStatus();
@@ -68,6 +71,11 @@ export function Editor({ projectId, datasets, columns, related, initial }: {
 
   return (
     <div className={s.builder}>
+      {b.changed && b.canEdit && (
+        <div className={s.conflict}>
+          <ConflictBanner noun="visual" onReload={onReload} onCopy={b.conflict.copy} />
+        </div>
+      )}
       <header className={s.head}>
         <Button icon="arrow-left" onClick={() => void navigate(`/visuals/${projectId}`)}>
           Back
@@ -111,7 +119,7 @@ export function Editor({ projectId, datasets, columns, related, initial }: {
             </Button>
           )}
           {b.canEdit ? (
-            <Button variant="primary" onClick={trySave}>
+            <Button variant="primary" onClick={trySave} disabled={b.changed}>
               Save visual
             </Button>
           ) : (
@@ -166,7 +174,14 @@ export function Editor({ projectId, datasets, columns, related, initial }: {
       </div>
 
       {naming && (
-        <NameDialog name={b.label} title={visualId ? 'Rename this visual' : 'Name this visual'} action="Save" onClose={() => setNaming(false)} onRename={b.save} />
+        <NameDialog
+          name={b.label}
+          title={visualId ? 'Rename this visual' : 'Name this visual'}
+          action="Save"
+          onClose={() => setNaming(false)}
+          // Refused as changed elsewhere: close, so the banner above is what is read.
+          onRename={async (n) => void ((await b.save(n)) || setNaming(false))}
+        />
       )}
       {suggesting && (
         <NewVisualDialog

@@ -39,6 +39,8 @@ import type { PeriodRange } from '../engine/live/evaluate';
 import { compileCaseMatches } from '../engine/live/compile';
 import { answerNames, missingRefusal } from '../engine/live/liveMissing';
 import type { Built, Failure } from './answers';
+import { withChartFigures } from '../analysis/chartShapes';
+import { figureAsk } from '../analysis/figureAsk';
 
 /** The operators the case fix applies to — `answers.canonicaliseTextFilters`'s. */
 const CASE_OPS: ReadonlySet<string> = new Set(['=', '!=', 'in', 'not in']);
@@ -176,8 +178,9 @@ export async function liveCardFor(projectId: string, spec: AnswerSpec, lock: rea
 
   const catCol = meta.columns.find((c) => c.name === spec.category);
   const isDate = !!catCol && catCol.type === 'date';
-  const data: ChartData = { labels: r.data.labels, series: r.data.series };
   const chartType = ANSWER_CHART_TYPES.has(spec.chartType) ? spec.chartType : defaultAnswerChart(catCol ? catCol.type : 'text', !!spec.series);
+  // The figures the card draws (analysis/chartShapes), off the warehouse's answer — and its caption reads them.
+  const data: ChartData = withChartFigures({ labels: r.data.labels, series: r.data.series }, figureAsk(chartType));
   const caption = tileCaption({ chartType, data, names: await displayNames(projectId, meta.id).catch(() => ({})) });
   const additive = spec.measures.every((m) => m.aggregation === 'sum' || m.aggregation === 'count');
   const filterLabels = cardLabels(spec, meta.columns, r.filterLabels);

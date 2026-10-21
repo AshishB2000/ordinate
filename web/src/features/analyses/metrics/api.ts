@@ -29,6 +29,8 @@ export interface MetricSummary {
   /** It has a metric tree (./tree). */
   hasTree?: true;
   updatedAt: string;
+  /** The content tag from `metric:get`, when an editor opened it: its save's base (docs/edit-conflicts). */
+  tag?: string;
 }
 
 /** The full record (`metric:get`) — the summary plus its filters. */

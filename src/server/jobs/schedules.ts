@@ -39,7 +39,7 @@ import * as pipelineRunner from '../../app/pipelineRunner';
 import * as alertStore from '../../analysis/alertStore';
 import type { Pool } from 'pg';
 import { redactOriginText } from '../../data/datasetOrigin';
-import { readerEmails } from '../authz/index';
+import { readerEmails, writerEmails } from '../authz/index';
 import { audit } from '../authz/audit';
 import { ctx } from '../context';
 import { publish } from '../sse';
@@ -57,10 +57,10 @@ let readersVia: { pool: Pool; devAuth: boolean } | null = null;
  * dev sign-in (`everyone`) there is one identity and it is an org admin, so the
  * org is the same set of tabs.
  */
-export async function toReaders(pool: Pool, everyone: boolean, projectId: string, channel: string, payload: unknown): Promise<void> {
+export async function toReaders(pool: Pool, everyone: boolean, projectId: string, channel: string, payload: unknown, writersOnly = false): Promise<void> {
   const org = ctx().org.id;
   if (everyone) return publish({ org }, channel, payload);
-  for (const user of await readerEmails(pool, org, projectId)) publish({ org, user }, channel, payload);
+  for (const user of await (writersOnly ? writerEmails : readerEmails)(pool, org, projectId)) publish({ org, user }, channel, payload);
 }
 
 /**
@@ -71,6 +71,12 @@ export async function toReaders(pool: Pool, everyone: boolean, projectId: string
 export function pushToReaders(projectId: string, channel: string, payload: unknown): void {
   if (!readersVia) return publish({ org: ctx().org.id }, channel, payload);
   void toReaders(readersVia.pool, readersVia.devAuth, projectId, channel, payload).catch(() => undefined);
+}
+
+/** `pushToReaders` for the members who may WRITE the project — "someone else saved this" (src/app/editConflict.ts). */
+export function pushToWriters(projectId: string, channel: string, payload: unknown): void {
+  if (!readersVia) return publish({ org: ctx().org.id }, channel, payload);
+  void toReaders(readersVia.pool, readersVia.devAuth, projectId, channel, payload, true).catch(() => undefined);
 }
 
 /**

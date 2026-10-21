@@ -8,7 +8,7 @@
 // and valueLabels.ts.
 
 import { buildExtraDatasets, isExtraFamily } from './familiesExtra';
-import { histogramBins } from './format';
+import { binLabel } from './format';
 import { chartMuted, makeAreaGradient, makeBarGradient } from './paint';
 import { getCSSVar, interpolatePalette } from './palette';
 import { t } from './strings';
@@ -177,12 +177,12 @@ export function buildChartDatasets(c: ChartCtx): { datasets: Cx[]; chartLabels: 
     opts._funnelMax = maxV;
     opts._funnelVals = vals;
   } else if (isHistogram) {
-    // Distribution of the first numeric series, binned into touching columns.
-    const bins = histogramBins(series[0].values.filter((v: Cx) => typeof v === 'number'));
-    chartLabels = bins.labels;
+    // Distribution of the first numeric series, binned into touching columns — the server's bins (figures.histogram).
+    const bins = c.figures.histogram![0] ?? [];
+    chartLabels = bins.map(binLabel);
     datasets = [{
       label: t('common.count'),
-      data: bins.counts,
+      data: bins.map((b) => b.count),
       backgroundColor: makeBarGradient(palette[0], isHoriz),
       borderColor: 'transparent', borderWidth: 0, borderRadius: 3,
       barPercentage: 1.0, categoryPercentage: 1.0,
@@ -287,13 +287,8 @@ export function buildChartDatasets(c: ChartCtx): { datasets: Cx[]; chartLabels: 
     }));
   } else {
     // bars / columns (including pct-stacked)
-    const buildBarData = (s: ChartSeriesShape, _i: number) => {
-      if (opts.pct) {
-        const totals = labels.map((_: Cx, j: number) => series.reduce((sum: number, ss: ChartSeriesShape) => sum + (ss.values[j] || 0), 0));
-        return s.values.map((v: Cx, j: number) => totals[j] ? Math.round((v / totals[j]) * 100) : 0);
-      }
-      return s.values;
-    };
+    // A 100%-stacked bar is the server's share (figures.sharePct), drawn unrounded.
+    const buildBarData = (s: ChartSeriesShape, i: number) => (opts.pct ? c.figures.sharePct![i] : s.values);
     if (opts.combo && series.length >= 2) {
       // Mixed chart: first series as columns, the rest as lines on a 2nd y-axis.
       datasets = series.map((s: ChartSeriesShape, i: number) => i === 0

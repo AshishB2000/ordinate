@@ -23,8 +23,6 @@ const rowAccess: typeof import('../src/data/rowAccess') = require('../src/data/r
 const hosted: typeof import('../src/publish/hosted') = require('../src/publish/hosted');
 const embedPage: typeof import('../src/publish/embedPage') = require('../src/publish/embedPage');
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
-const run: typeof import('../src/server/subscriptions/run') = require('../src/server/subscriptions/run');
-const subs: typeof import('../src/analysis/subscriptions') = require('../src/analysis/subscriptions');
 const asOf: typeof import('../src/data/asOf') = require('../src/data/asOf');
 const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
 const fakeMod: typeof import('./liveFakeConnector') = require('./liveFakeConnector');
@@ -76,13 +74,60 @@ const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 200)}`;
     ok('fan-out: …and the cached embed refuses on its next view', (await embed()) === 'refused');
     await policy(plain, null);
     ok('NEGATIVE CONTROL: rules removed, the page is served again', (await page()) === 200);
-    const legacy = await W.as('boss', async () => hosted.servable({ ...(await hosted.getSite(siteId))!, datasetIds: undefined }));
-    ok('legacy: a site published before builds were recorded is not served while the project has a dataset with rules', legacy === false);
-    const draft = { name: 'Send', analysisId: onOrders, content: { mode: 'all', cardIds: [] }, schedule: { cadence: 'daily', at: '08:00' }, timezone: 'UTC', channelIds: [], message: { title: '', note: '', includeLink: false }, conditions: { skipUnchanged: false, onlyWhenRefreshed: false } };
-    const prev = await W.call('boss', 'subscription:preview', { projectId: P, draft });
+    // An older site (no datasets recorded): worked out ONCE from what it was published with, then kept (round 2, #10).
+    const recordFsMod: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
+    const appPaths: typeof import('../src/app/paths') = require('../src/app/paths');
+    await W.as('boss', async () => {
+      const { datasetIds: _recorded, ...older } = (await hosted.getSite(siteId))!;
+      await recordFsMod.writeFile(require('path').join(appPaths.userData(), 'published', siteId, 'manifest.json') as string, JSON.stringify(older));
+    });
+    ok('setup: the site now reads as one published before builds were recorded', (await W.as('boss', () => hosted.getSite(siteId)))?.datasetIds === undefined);
+    ok('legacy: an older site over the plain dataset is served while Orders has rules — its datasets worked out from its published dashboards', (await page()) === 200);
+    const kept = await W.as('boss', () => hosted.getSite(siteId));
+    ok('legacy: …and kept on its manifest, so every later fetch reads them there', JSON.stringify(kept?.datasetIds) === JSON.stringify([plain]), JSON.stringify(kept?.datasetIds));
+    await policy(plain, [{ teamId: W.team, values: ['East'] }]);
+    ok('legacy: …rules on that dataset take it down like any site', (await page()) === 404);
+    await policy(plain, null);
+    const storySite = { ...kept!, datasetIds: undefined, config: { ...kept!.config, storyIds: [crypto.randomUUID()] } };
+    ok('legacy: a site whose datasets cannot be worked out (a story) is not served while the project has a dataset with rules', (await W.as('boss', () => hosted.servable(storySite))) === false);
+    // The project-wide check is remembered for a few seconds per pod — and forgotten the moment rules are saved here.
+    const P2: string = (await W.call('boss', 'projects:create', { name: 'Second' })).body.id;
+    const lone = await W.as('boss', async () => (await datasets.saveDataset(P2, { name: 'Lone', sourceKind: 'csv', columns: H.COLUMNS, rows: H.ROWS }))!.id);
+    const storyIn2 = { ...storySite, projectId: P2 };
+    ok('legacy (not worked out): served in a project with no rules — the answer is now remembered', (await W.as('boss', () => hosted.servable(storyIn2))) === true);
+    const set2 = await W.call('boss', 'dataset:setRowPolicy', { projectId: P2, datasetId: lone, policy: { column: 'region', rules: [{ teamId: W.team, values: ['East'] }] } });
+    ok('legacy (not worked out): rules saved → down at once on this pod (the memory is forgotten, not waited out)', set2.body?.ok === true && (await W.as('boss', () => hosted.servable(storyIn2))) === false, show(set2));
+    // ── Subscriptions: ONE door (deliver.ts refuseFanOut), and a save asked from the definition (round 2, #9) ──
+    const channelsMod: typeof import('../src/app/channels') = require('../src/app/channels');
+    const figMod: typeof import('../src/ipc/subscriptionFigures') = require('../src/ipc/subscriptionFigures');
+    const chan = await W.as('boss', () => channelsMod.saveChannel({ name: 'Ops list', kind: 'email', to: { userIds: [W.uid.west], teamIds: [] } }, 'boss@acme.test'));
+    const chanId = 'channel' in chan ? chan.channel.id : '';
+    const draft = (analysisId: string) => ({ name: 'Send', analysisId, content: { mode: 'all', cardIds: [] }, schedule: { cadence: 'daily', at: '08:00' }, timezone: 'UTC', channelIds: [chanId], message: { title: '', note: '', includeLink: false }, conditions: { skipUnchanged: false, onlyWhenRefreshed: false } });
+    const realResolve = figMod.resolveFigures;
+    let computed = 0;
+    (figMod as { resolveFigures: typeof realResolve }).resolveFigures = async (...a) => { computed++; return realResolve(...a); };
+    let prev: H.Reply;
+    let saveRefused: H.Reply;
+    let prevPlain: H.Reply;
+    try {
+      prev = await W.call('boss', 'subscription:preview', { projectId: P, draft: draft(onOrders) });
+      saveRefused = await W.call('boss', 'subscription:save', { projectId: P, subscription: draft(onOrders) });
+      ok('fan-out: preview and save over Orders compute no figure (the refusal is read from the definition)', computed === 0, String(computed));
+      prevPlain = await W.call('boss', 'subscription:preview', { projectId: P, draft: draft(onPlain) });
+      ok('NEGATIVE CONTROL: a preview over the plain dataset computes its figures', computed > 0, String(computed));
+    } finally {
+      (figMod as { resolveFigures: typeof realResolve }).resolveFigures = realResolve;
+    }
     ok('fan-out: the subscription dialog says why, before anything is saved', prev.body?.ok === true && prev.body.code === 'row_policy' && !prev.body.slack && typeof prev.body.empty === 'string', show(prev));
-    const sendable = await W.as('boss', () => run.buildSendable(P, subs.definitionOf({ ...draft, viewId: null })).then(() => 'built', (err: unknown) => (rowAccess.isRowPolicyError(err) ? 'refused' : String(err))));
-    ok('fan-out: a send over Orders is refused before any post, whoever owns it', sendable === 'refused', sendable);
+    ok('fan-out: …and the save is refused with the same sentence', saveRefused.body?.ok === false && saveRefused.body.error === prev.body?.empty, show(saveRefused));
+    ok('NEGATIVE CONTROL: the plain dashboard previews', prevPlain.body?.ok === true && !!prevPlain.body.slack, show(prevPlain));
+    const deliverMod: typeof import('../src/server/subscriptions/deliver') = require('../src/server/subscriptions/deliver');
+    const fakeChan = { id: crypto.randomUUID(), name: 'Ops', kind: 'slack' } as never;
+    const sendOf = (analysisId: string) => W.as('boss', () => deliverMod.deliver(fakeChan, { kind: 'dashboard', projectId: P, analysisId, message: { title: 'x', subtitle: [], note: '', kpis: [], visuals: [], link: null, footer: '' } as never }));
+    const refusedSend = await sendOf(onOrders);
+    ok('fan-out: deliver() refuses a send over Orders before any post, whoever owns it — `row_policy`', refusedSend.ok === false && refusedSend.code === 'row_policy' && refusedSend.attempts === 0, JSON.stringify(refusedSend));
+    const plainSend = await sendOf(onPlain);
+    ok('NEGATIVE CONTROL: …a send over the plain dataset gets past it (to the post itself)', !['row_policy', 'compute_failed'].includes(plainSend.code), JSON.stringify(plainSend));
     const rule = (d: string) => ({ id: crypto.randomUUID(), name: 'Big', datasetId: d, metric: { column: 'sales', aggregation: 'sum' }, compare: 'threshold', threshold: { op: '>', value: 1 }, enabled: true });
     ok('fan-out: an alert rule over Orders is refused at save and at test', H.refused(await W.call('boss', 'alerts:save', { projectId: P, rule: rule(orders) }), 'fanout') && H.refused(await W.call('boss', 'alerts:test', { projectId: P, rule: rule(orders) })));
     const fired = await W.as('boss', async () => {

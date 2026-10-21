@@ -55,6 +55,7 @@ import type { AsOf } from '../api/asOf';
 import { liveCodeOf } from './liveRoute';
 import { isLiveDatasetError, requireExtract } from '../data/liveDataset';
 import { vizDataFor } from './visuals';
+import { contentTag, isRecordChanged } from '../app/editConflict';
 
 /** How many distinct values of a breakout column are read before rolling up. */
 const SERIES_SCAN = 2000;
@@ -459,9 +460,9 @@ export function register() {
   });
 
   ipcMain.handle('metric:get', async (_e, { projectId, id }: any = {}) => {
-    const m = await metrics.getMetric(projectId, id);
-    if (!m) return { ok: false, error: 'Metric not found' };
-    return { ok: true, metric: m, definitionText: describeDefinition(m) };
+    const t = await metrics.readMetric(projectId, id);
+    if (!t) return { ok: false, error: 'Metric not found' };
+    return { ok: true, metric: t.rec, definitionText: describeDefinition(t.rec), tag: t.tag }; // tag: the metric dialog's base
   });
 
   ipcMain.handle('metric:save', async (_e, { projectId, input }: any = {}) => {
@@ -481,18 +482,20 @@ export function register() {
     }
   });
 
-  ipcMain.handle('metric:update', async (_e, { projectId, id, patch }: any = {}) => {
+  // `base`: the editor's content tag — a stale copy is 409 record_changed (src/app/editConflict.ts); `tag` is the next base.
+  ipcMain.handle('metric:update', async (_e, { projectId, id, base, patch }: any = {}) => {
     try {
       const raw = patch && typeof patch === 'object' ? patch : {};
       if (raw.name !== undefined && (await nameTaken(projectId, raw.name, id))) return { ok: false, error: nameTakenMessage(raw.name), field: 'name' };
       const next = { ...raw };
       if (raw.filters !== undefined) next.filters = sanitizeDashboardFilters(raw.filters);
       const before = await metrics.getMetric(projectId, id);
-      const m = await metrics.updateMetric(projectId, id, next);
+      const m = await metrics.updateMetric(projectId, id, next, base);
       if (!m) return { ok: false, error: 'Metric not found' };
       await versions.record(projectId, 'metric', m, { before });
-      return { ok: true, metric: m };
+      return { ok: true, metric: m, tag: contentTag('metric', m) };
     } catch (err: any) {
+      if (isRecordChanged(err)) throw err; // the route's 409
       return { ok: false, error: err?.message || 'Failed to update the metric' };
     }
   });

@@ -24,11 +24,13 @@ import * as versionDiff from './versionDiff';
 // ponytail: restore writes one of five record shapes; each store sanitizes its own
 export async function writeBack(projectId: string, type: string, id: string, rec: any): Promise<any> {
   if (type === 'dashboard') {
-    return analysis.updateAnalysis(projectId, id, { name: rec.name, sheets: rec.sheets, filters: rec.filters, style: rec.style });
+    // `parameters` absent (a version saved before they were content) keeps today's.
+    return analysis.updateAnalysis(projectId, id, { name: rec.name, sheets: rec.sheets, filters: rec.filters, style: rec.style, parameters: rec.parameters });
   }
   if (type === 'visual') {
     return visuals.updateVisual(projectId, id, {
       name: rec.name, chartType: rec.chartType, encoding: rec.encoding, overrides: rec.overrides, filters: rec.filters,
+      analytics: rec.analytics, // absent on a version saved before overlays were content: today's are kept
     });
   }
   if (type === 'metric') {
@@ -44,7 +46,8 @@ export async function writeBack(projectId: string, type: string, id: string, rec
   if (type === 'report') {
     return reportSpec.updateReport(projectId, id, {
       name: rec.name, format: rec.format, pages: rec.pages, cover: rec.cover, paper: rec.paper,
-      includeFilters: rec.includeFilters, narrative: rec.narrative,
+      // `discussion` / `viewId` absent (a version saved before they were content) keep today's.
+      includeFilters: rec.includeFilters, narrative: rec.narrative, discussion: rec.discussion, viewId: rec.viewId,
       schedule: rec.schedule === undefined ? null : rec.schedule,
     });
   }

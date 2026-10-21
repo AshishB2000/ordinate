@@ -34,6 +34,7 @@ import { buildReportPages, storyReportPages, storyVisual, type PageAnalysis, typ
 import { scorecardSnapshot } from './scorecards';
 import { publicReport } from './reports';
 import type { FilterStep } from '../data/transforms';
+import { figureAsk } from '../analysis/figureAsk';
 
 /** A registered handler, called as the RPC layer calls it. Missing → a refusal, never a throw. */
 async function call(event: unknown, channel: string, payload: unknown): Promise<any> { // any: each handler's own reply
@@ -66,6 +67,7 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
       return call(event, 'visual:data', {
         projectId, datasetId: v.datasetId, encoding: v.encoding, filters, params, ...(share ? { share: 'report' } : {}),
         ...(Array.isArray(v.analytics) && v.analytics.length ? { analytics: v.analytics } : {}),
+        ...figureAsk(v.chartType, v.overrides), // what the page draws it as: its figures, and its caption's
       });
     },
     metric: async (m, filters, params) => {
@@ -197,8 +199,9 @@ type FigureBlock = { id: string; kind: string; visualId?: string; metricId?: str
 
 export function register(): void {
   ipcMain.handle('reports:open', async (_e, { projectId, id }: any = {}) => {
-    const r = await reportSpec.getReport(projectId, id);
-    if (!r) return { ok: false, error: 'That report is gone.' };
+    const t = await reportSpec.readReport(projectId, id);
+    if (!t) return { ok: false, error: 'That report is gone.' };
+    const r = t.rec;
     const a = await analysisFor(projectId, r);
     const sheets = [];
     for (const s of a ? a.sheets : []) {
@@ -211,7 +214,8 @@ export function register(): void {
       sheets.push({ name: s.name, cards });
     }
     const views = a && Array.isArray((a as { views?: unknown }).views) ? ((a as { views: Array<{ id: string; name: string }> }).views).map((v) => ({ id: v.id, name: v.name })) : [];
-    return { ok: true, report: publicReport(r), dashboard: a && a.id ? { id: a.id, name: a.name } : null, sheets, views, missing: !a };
+    // `tag`: the builder's base (src/app/editConflict.ts).
+    return { ok: true, report: publicReport(r), dashboard: a && a.id ? { id: a.id, name: a.name } : null, sheets, views, missing: !a, tag: t.tag };
   });
 
   // A report's pages are an export (docs/row-policy D11): refused to a caller row access rules restrict.

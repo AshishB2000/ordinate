@@ -1,7 +1,8 @@
 // Lineage — what a record is built from, and what is built from it. MAIN.
 //
 // One dependency graph per project, drawn from references the records already
-// carry and nothing else: a dataset's `origin` and prepare `steps`, a visual's
+// carry and nothing else: a dataset's `origin` (a combine's parents, a SQL
+// dataset's `deps`, a notebook's) and prepare `steps`, a visual's
 // `datasetId` and the columns its encoding names, a measure's `metricId`, a
 // metric's definition, a dashboard card's `visualId` / `metric` / `control`, a
 // report's `analysisId`, an alert rule's `datasetId` and `metric`. No new field
@@ -25,7 +26,7 @@
 // metric formula naming itself through another metric) is dropped while
 // ordering, so every edge in the output points left to right.
 
-import { stepRefIds } from '../data/stepTypes';
+import { parentsOfRecord } from '../data/upstream';
 
 export type LineageKind =
   | 'source' | 'dataset' | 'prepare' | 'calc' | 'metric' | 'visual' | 'dashboard' | 'report' | 'alert';
@@ -174,9 +175,9 @@ export function buildGraph(input: LineageInput): LineageGraph {
     const did = str(d.id);
     const target = 'dataset:' + did;
     if (!nodes.has(target)) continue;
-    // A union / lookup step READS another dataset, so it is built from it — as a
-    // combined dataset is from its parents — and counts in that one's "Used in".
-    for (const ref of stepRefIds(arr(d.steps))) link('dataset:' + ref, target);
+    // Built from: its origin's parents, and a union / lookup step READS another dataset, so it counts in that
+    // one's "Used in" — the ONE definition row access rules close over (src/data/upstream.ts).
+    for (const p of parentsOfRecord(d)) link('dataset:' + p, target);
     const o: Rec = d.origin || {};
     let sid = '';
     if (o.kind === 'connection') {
@@ -206,13 +207,8 @@ export function buildGraph(input: LineageInput): LineageGraph {
         name: notebookName.get(str(o.notebookId)) || 'Deleted notebook', sub: 'Notebook',
         ref: notebookName.has(str(o.notebookId)) ? { type: 'notebook', id: str(o.notebookId) } : undefined,
       });
-      for (const p of arr(o.deps)) link('dataset:' + str(p), target);
-    } else if (o.kind === 'combined' || o.kind === 'composed') {
-      const parents = o.kind === 'combined'
-        ? [str(o.leftId), str(o.rightId)]
-        : [str(o.baseId), ...arr(o.joins).map((j) => str(j && j.datasetId))];
-      for (const p of parents) link('dataset:' + p, target);
-      continue;
+    } else if (o.kind === 'combined' || o.kind === 'composed' || o.kind === 'sql') {
+      continue; // its parents are its sources, linked above
     } else {
       sid = add({
         id: 'source:import:' + did, kind: 'source',

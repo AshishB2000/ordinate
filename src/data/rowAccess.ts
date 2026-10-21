@@ -289,6 +289,31 @@ export async function anyPolicyClosed(projectId: string): Promise<boolean> {
   return false;
 }
 
+/** `anyPolicyClosed`, remembered per org and project on this pod for a few seconds — the legacy `/p/` check runs per fetch. */
+const ANY_CLOSED_TTL_MS = 15_000;
+const anyClosed = new Map<string, { at: number; value: Promise<boolean> }>();
+
+/**
+ * `anyPolicyClosed` for a page served per fetch (an older published site, src/publish/hosted.ts). Forgotten at
+ * once when this pod saves rules (`rulesChanged`); CEILING: another pod may serve such a page for up to 15 s
+ * after rules are first set in its project.
+ */
+export function anyPolicyClosedRecently(projectId: string): Promise<boolean> {
+  const key = ctx().org.id + '\u0000' + projectId;
+  const hit = anyClosed.get(key);
+  if (hit && Date.now() - hit.at < ANY_CLOSED_TTL_MS) return hit.value;
+  const value = anyPolicyClosed(projectId);
+  anyClosed.set(key, { at: Date.now(), value });
+  value.catch(() => anyClosed.delete(key));
+  if (anyClosed.size > 1000) anyClosed.delete(anyClosed.keys().next().value as string);
+  return value;
+}
+
+/** Rules were saved or removed in `projectId` (dataset:setRowPolicy): what this pod remembers of it goes. */
+export function rulesChanged(projectId: string): void {
+  anyClosed.delete(ctx().org.id + '\u0000' + projectId);
+}
+
 /**
  * The rules a NEW dataset made from `sourceId`'s rows is born with (round 2, #3): none when the source has
  * none; the source's own stored rules; or, for a source closed by an upstream dataset's rules, rules that

@@ -15,6 +15,7 @@ import * as projects from '../app/projects';
 import { sanitizeBaseMetricIds, sanitizeDrivers } from './scenarioModel';
 import type { Scenario } from './scenarioModel';
 import * as recordFs from '../app/recordFs';
+import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 
 export type { Scenario } from './scenarioModel';
 
@@ -124,20 +125,29 @@ export async function saveScenario(projectId: string, input: ScenarioInput): Pro
   return s;
 }
 
-/** Replace-or-keep per field; `drivers` and `baseMetricIds` are replaced wholesale, never merged. */
-export async function updateScenario(projectId: string, id: string, patch: ScenarioInput): Promise<Scenario | null> {
-  const existing = await getScenario(projectId, id);
-  if (!existing) return null;
-  const next = normalize({
-    ...existing,
-    name: cleanName(patch.name) || existing.name,
-    baseMetricIds: patch.baseMetricIds !== undefined ? patch.baseMetricIds : existing.baseMetricIds,
-    drivers: patch.drivers !== undefined ? patch.drivers : existing.drivers,
-    updatedAt: new Date().toISOString(),
-  }, projectId);
-  await fs.promises.mkdir(dir(projectId), { recursive: true });
-  await writeJsonAtomic(file(projectId, id), next);
-  return next;
+/** The record and the tag of what is stored, from ONE read (src/app/editConflict.ts): its editor's open and the guarded save. */
+export async function readScenario(projectId: string, id: string): Promise<Tagged<Scenario> | null> {
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  return readTagged('scenario', file(projectId, id), (d) => (d && typeof d.id === 'string' ? normalize(d, projectId) : null));
+}
+
+/** Replace-or-keep per field; `drivers` and `baseMetricIds` are replaced wholesale, never merged. Holds
+ *  the record while it reads and writes; a stale `base` refuses (src/app/editConflict.ts). */
+export async function updateScenario(projectId: string, id: string, patch: ScenarioInput, base?: unknown): Promise<Scenario | null> {
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  const at = file(projectId, id);
+  return lockedUpdate('scenario', { projectId, id, file: at }, base, () => readScenario(projectId, id), async (existing) => {
+    const next = normalize({
+      ...existing,
+      name: cleanName(patch.name) || existing.name,
+      baseMetricIds: patch.baseMetricIds !== undefined ? patch.baseMetricIds : existing.baseMetricIds,
+      drivers: patch.drivers !== undefined ? patch.drivers : existing.drivers,
+      updatedAt: new Date().toISOString(),
+    }, projectId);
+    await fs.promises.mkdir(dir(projectId), { recursive: true });
+    await writeJsonAtomic(at, next);
+    return next;
+  });
 }
 
 export async function duplicateScenario(projectId: string, id: string): Promise<Scenario | null> {

@@ -97,6 +97,34 @@ const TEAM = '33333333-3333-4333-8333-333333333333';
   ok('parents: a record\'s origin deps and its union/lookup steps',
     JSON.stringify(up.parentsOfRecord({ origin: { kind: 'sql', sql: 'select 1', deps: [U1] }, steps: [{ type: 'union', datasetId: U2 }, { type: 'lookup_join', datasetId: U1 }] })) === JSON.stringify([U2, U1]));
 
+  // ── One closure: the lineage graph (figureDatasets, pipelines) agrees with the rules' walk (round 2, PART 2b) ──
+  const lineage: typeof import('../src/analysis/lineage') = require('../src/analysis/lineage');
+  const originMod: typeof import('../src/data/datasetOrigin') = require('../src/data/datasetOrigin');
+  const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const [A, B, C, D, E, F, G, H2] = [1, 2, 3, 4, 5, 6, 7, 8].map(id);
+  const brokenJoin = { kind: 'composed', baseId: A, joins: [{ datasetId: B, mode: 'sideways' }] };
+  const recs: Record<string, Record<string, unknown>> = {
+    [A]: { id: A, name: 'A', steps: [] },
+    [B]: { id: B, name: 'B', steps: [] },
+    [C]: { id: C, name: 'Composed', steps: [], origin: { kind: 'composed', baseId: A, joins: [{ datasetId: B, mode: 'left' }] } },
+    [D]: { id: D, name: 'Sql', steps: [], origin: { kind: 'sql', sql: 'select 1', deps: [A] } },
+    [E]: { id: E, name: 'Union', steps: [{ type: 'union', datasetId: B }] },
+    [F]: { id: F, name: 'Lookup', steps: [{ type: 'lookup_join', datasetId: A, leftKey: 'k', rightKey: 'k', columns: ['x'] }] },
+    [G]: { id: G, name: 'Chain', steps: [], origin: { kind: 'sql', sql: 'select 1', deps: [C, E] } },
+    [H2]: { id: H2, name: 'Broken', steps: [], origin: brokenJoin },
+  };
+  const g = lineage.buildGraph({ datasets: Object.values(recs), visuals: [], dashboards: [], metrics: [], reports: [], alerts: [] });
+  const ups = new Map<string, string[]>();
+  for (const e of g.edges) if (e.from.startsWith('dataset:') && e.to.startsWith('dataset:')) ups.set(e.to.slice(8), [...(ups.get(e.to.slice(8)) ?? []), e.from.slice(8)]);
+  const viaGraph = async (x: string) => (await up.upstreamIds(x, async (p) => ups.get(p) ?? [])).ids;
+  const viaRules = async (x: string) => (await up.upstreamIds(x, async (p) => up.parentsOfRecord(recs[p]))).ids;
+  const show = (ids: Set<string>) => [...ids].sort().join(',');
+  for (const [label, x, want] of [['composed', C, [A, B]], ['sql', D, [A]], ['union', E, [B]], ['lookup_join', F, [A]], ['sql over composed + union', G, [A, B, C, E]], ['an origin that does not sanitize', H2, [A, B]]] as const) {
+    const [a, b] = [await viaGraph(x), await viaRules(x)];
+    ok(`one closure: ${label} — the lineage graph and the rules' walk agree, exactly`, show(a) === show(b) && show(b) === [...want].sort().join(','), `${show(a)} | ${show(b)}`);
+  }
+  ok('NEGATIVE CONTROL: that last origin is one sanitizeOrigin drops — a strict reading would have named no parent', originMod.sanitizeOrigin(brokenJoin) === undefined);
+
   // ── The prepend is idempotent, and only keeps filter steps (D7, S4) ─────
   const l = lock.makeLock({ region: ['East', 'North'] })!;
   const user = [{ type: 'filter', column: 'sales', op: '>', value: 1 }] as never[];

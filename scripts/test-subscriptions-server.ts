@@ -85,7 +85,7 @@ const show = (v: unknown): string => JSON.stringify(v).slice(0, 400);
 
     const slack = await call('channel:save', { name: 'Sales team', kind: 'slack', webhookUrl: rx.url() });
     const teams = await call('channel:save', { name: 'Leadership', kind: 'teams', webhookUrl: rx.url(`/teams/${B.CANARY}`) });
-    ok('channel:save: the reply is {id, name, kind, secretSet} — no URL', slack.body.ok && Object.keys(slack.body.channel).sort().join() === 'id,kind,name,secretSet' && slack.body.channel.secretSet === true && teams.body.channel.kind === 'teams', show(slack.body));
+    ok('channel:save: the reply is {id, name, kind, secretSet, ready} — no URL', slack.body.ok && Object.keys(slack.body.channel).sort().join() === 'id,kind,name,ready,secretSet' && slack.body.channel.secretSet === true && slack.body.channel.ready === true && teams.body.channel.kind === 'teams', show(slack.body));
     const SL: string = slack.body.channel.id;
     const TM: string = teams.body.channel.id;
     const listed = await call('channel:list');
@@ -101,7 +101,7 @@ const show = (v: unknown): string => JSON.stringify(v).slice(0, 400);
     const renamed = await call('channel:save', { id: SL, name: 'Sales', kind: 'slack' });
     ok('channel:save on an existing channel with no URL keeps the stored one', renamed.body.ok && renamed.body.channel.name === 'Sales' && renamed.body.channel.secretSet === true && secrets.dump().length === 2);
     ok('contract: a name is required; an unknown kind and an unknown field are 400',
-      (await call('channel:save', { name: ' ', kind: 'slack', webhookUrl: rx.url() })).status === 400 && (await call('channel:save', { name: 'X', kind: 'email', webhookUrl: rx.url() })).status === 400
+      (await call('channel:save', { name: ' ', kind: 'slack', webhookUrl: rx.url() })).status === 400 && (await call('channel:save', { name: 'X', kind: 'discord', webhookUrl: rx.url() })).status === 400
       && (await call('channel:save', { name: 'X', kind: 'slack', webhookUrl: rx.url(), secretSet: true })).status === 400);
     ok('no contract, no channel: there is no way to read a URL back', (await call('channel:webhook', { id: SL })).status === 404 && (await call('channel:get', { id: SL })).status === 404);
 

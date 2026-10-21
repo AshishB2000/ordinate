@@ -59,6 +59,9 @@ import type { LiveFailureCode } from '../engine/live/liveQuery';
 import { hasMetricMeasure, planMetricMeasures } from '../analysis/metricMeasures';
 import { metricMeasureData } from './vizMetricMeasures';
 import { withGeoSuggest } from '../analysis/geoHits';
+import { contentTag, isRecordChanged, recordReply } from '../app/editConflict';
+import { withFigures } from '../analysis/chartShapes';
+import { figureAsk } from '../analysis/figureAsk';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -556,7 +559,7 @@ export async function saveNewVisual(projectId: string, input: Parameters<typeof 
 export function register() {
   ipcMain.handle('visual:list', async (_e, { projectId }: any = {}) => visuals.listVisuals(projectId));
 
-  ipcMain.handle('visual:get', async (_e, { projectId, id }: any = {}) => visualForCaller(projectId, await visuals.getVisual(projectId, id)));
+  ipcMain.handle('visual:get', async (_e, { projectId, id }: any = {}) => visualForCaller(projectId, recordReply(await visuals.readVisual(projectId, id))));
 
   ipcMain.handle('visual:save', async (_e, { projectId, datasetId, name, chartType, encoding, overrides, filters, analytics }: any = {}) => {
     try {
@@ -568,13 +571,15 @@ export function register() {
     }
   });
 
-  ipcMain.handle('visual:update', async (_e, { projectId, id, name, chartType, encoding, overrides, filters, favorite, analytics }: any = {}) => {
+  // `base`: the builder's content tag — a stale copy is 409 record_changed (src/app/editConflict.ts); `tag` is the next base.
+  ipcMain.handle('visual:update', async (_e, { projectId, id, base, name, chartType, encoding, overrides, filters, favorite, analytics }: any = {}) => {
     try {
       const before = await visuals.getVisual(projectId, id);
-      const visual = await visuals.updateVisual(projectId, id, { name, chartType, encoding, overrides, filters, favorite, analytics });
+      const visual = await visuals.updateVisual(projectId, id, { name, chartType, encoding, overrides, filters, favorite, analytics }, base);
       if (visual) await versions.record(projectId, 'visual', visual, { before });
-      return visual ? { ok: true, visual } : { ok: false, error: 'Could not update the visual' };
+      return visual ? { ok: true, visual, tag: contentTag('visual', visual) } : { ok: false, error: 'Could not update the visual' };
     } catch (err: any) {
+      if (isRecordChanged(err)) throw err; // the route's 409
       return { ok: false, error: err?.message || 'Failed to update the visual' };
     }
   });
@@ -607,7 +612,7 @@ export function register() {
   // here, after vizDataFor, so a cached answer is shaped on its way out and the
   // cache never holds a masked one (app/sharePolicy.ts).
   // `asOf` (view state, data/asOf.ts): every dataset read as of that time.
-  const vizData = async ({ projectId, datasetId, encoding, filters, params, share, analytics, asOf, currency }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
+  const vizData = async ({ projectId, datasetId, encoding, filters, params, share, analytics, asOf, currency, ...drawnAs }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
     try {
       // Sanitisation FIRST, always — the encoding and the filters are untrusted
       // renderer input, and both paths below consume the sanitized values.
@@ -629,7 +634,8 @@ export function register() {
       // The Analytics pane's overlays, resolved on the finished reply under the
       // same scope — AFTER the share policy, so an overlay can only name what
       // the shaped chart still shows.
-      const reply = withGeoSuggest(await withEvents(await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), flt, values), projectId, datasetId, flt), enc); // r8:events
+      // The figures the chart draws (analysis/chartShapes) come LAST, off the series as shaped: never more than they say.
+      const reply = withFigures(withGeoSuggest(await withEvents(await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), flt, values), projectId, datasetId, flt), enc), figureAsk(drawnAs.chartType, drawnAs)); // r8:events
       // A parameter that cannot be made well-typed is a VALIDATION message the
       // tile shows — never a silently empty chart. Dated last (L0.2), inside the
       // as-of scope, so a snapshot view says the snapshot's time.

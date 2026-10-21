@@ -136,15 +136,26 @@ export async function readable(pool: Pool | null, who: Identity): Promise<(proje
  * about one project that must reach only them (../jobs/schedules.ts).
  */
 export async function readerEmails(pool: Pool, org: string, projectId: string): Promise<string[]> {
+  return grantedEmails(pool, org, projectId, null);
+}
+
+/** …and who may WRITE it: an org admin, or a grant of editor or admin (their own or a team's). */
+export async function writerEmails(pool: Pool, org: string, projectId: string): Promise<string[]> {
+  return grantedEmails(pool, org, projectId, ['editor', 'admin']);
+}
+
+/** Members of `org` with any grant on `projectId` (`roles` null) or one of `roles`, and the org's admins. */
+async function grantedEmails(pool: Pool, org: string, projectId: string, roles: string[] | null): Promise<string[]> {
   const r = await pool.query<{ email: string }>(
     `SELECT u.email FROM users u
       WHERE u.org_id = $1 AND u.disabled_at IS NULL
         AND (u.role = 'admin' OR EXISTS (
               SELECT 1 FROM project_grants g
                WHERE g.org_id = u.org_id AND g.project_id = $2
+                 AND ($3::text[] IS NULL OR g.role = ANY($3::text[]))
                  AND (g.user_id = u.id OR g.team_id IN (SELECT team_id FROM team_members WHERE user_id = u.id))))
       ORDER BY u.email`,
-    [org, projectId],
+    [org, projectId, roles],
   );
   return r.rows.map((row) => row.email);
 }

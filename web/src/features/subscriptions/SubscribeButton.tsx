@@ -17,7 +17,7 @@ export function SubscribeButton() {
       <Button
         size="sm"
         icon="send"
-        title="Post this dashboard to Slack or Teams on a schedule"
+        title="Send this dashboard to Slack, Teams or email on a schedule"
         onClick={() => {
           ed.save.retry(); // what is on screen is what gets sent
           setOpen(true);

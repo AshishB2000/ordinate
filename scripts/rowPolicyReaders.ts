@@ -70,6 +70,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'embed:columns': 'META',
   'embed:status': 'META',
   'events:list': 'META',
+  'explore:suggest': 'META',
   'format:colors:get': 'REDACT',
   'formula:check': 'EXPLICIT',
   'formula:functions': 'META',

@@ -23,6 +23,7 @@ import { useTileAsOf } from './editor/tileAsOf';
 import { LiveRefusal } from '../live/LiveOff';
 import { liveRefusalOf } from '../live/refusal';
 import s from './Tiles.module.css';
+import { figureAsk, figureAskKey } from '../../../../src/analysis/figureAsk.ts';
 
 /** The family glyph a chart type wears where it is not drawn (a map preview, a missing visual). */
 export function vizGlyph(type: string): IconName {
@@ -189,6 +190,7 @@ export function VisualTileBody({
       encoding: def.encoding,
       filters: mergeFilters(filters, def.filters),
       ...(def.analytics ? { analytics: def.analytics } : {}),
+      ...figureAsk(def.chartType, def.overrides), // a figure type's figures come with its answer (docs/chart-figures)
     }),
     [def, filters],
   );
@@ -210,6 +212,8 @@ export function VisualTileBody({
     if (live !== null) return <LiveRefusal refusal={q.isError ? q.error : q.data} projectId={projectId} datasetId={def.datasetId} />;
     return <ErrorState compact heading={3} title="No data for this chart" message={message} onRetry={() => void q.refetch()} />;
   }
+  // A held answer for another ask (the type or a figure override just changed): loading, never drawn as this one.
+  if (q.data.ask !== undefined && q.data.ask !== figureAskKey(def.chartType, def.overrides)) return <SkeletonBlock label={`Loading ${label}`} />;
   const labels: readonly unknown[] | undefined = q.data.data.labels;
   // "time": the SERVER bucketed the axis by date (its `category.kind`).
   const time = q.data.category?.kind === 'date';

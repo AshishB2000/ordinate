@@ -58,6 +58,8 @@ import { liveWithheld } from './liveProfile';
 import { isLive } from '../data/liveDataset';
 import { ensureFresh } from '../data/freshOnAsk';
 import { withPulls } from '../data/freshOnAskState';
+import { withChartFigures } from '../analysis/chartShapes';
+import { figureAsk } from '../analysis/figureAsk';
 
 export type Guard = (text: string, ledger: LedgerEntry[]) => { text: string; audit: NumberAudit };
 
@@ -174,6 +176,7 @@ async function computeCardWith(projectId: string, asked: AnswerSpec, loose: bool
   if (!isDate) data = ranked(data, spec.top);
 
   const chartType = ANSWER_CHART_TYPES.has(spec.chartType) ? spec.chartType : defaultAnswerChart(catCol ? catCol.type : 'text', !!spec.series);
+  data = withChartFigures(data, figureAsk(chartType)); // the figures the card draws (analysis/chartShapes), and its caption reads
   // A column the user gave a display name reads as that name (the catalog).
   const caption = tileCaption({ chartType, data, names: await displayNames(projectId, ds.id).catch(() => ({})) });
   const additive = spec.measures.every((m) => m.aggregation === 'sum' || m.aggregation === 'count');

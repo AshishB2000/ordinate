@@ -38,6 +38,11 @@ export interface Member {
   readonly identity: Identity;
 }
 
+/** ALLOWED_EMAIL_DOMAINS' rule (empty = any domain) — sign-in's, and so also whom email may reach (docs/email). */
+export function domainAllowed(allowed: readonly string[], email: string): boolean {
+  return allowed.length === 0 || allowed.includes(email.slice(email.lastIndexOf('@') + 1));
+}
+
 /**
  * The org membership for a signed-in `email` (already normalised), created on
  * first sign-in as a viewer. ORDINATE_ADMIN_EMAIL is made admin on EVERY
@@ -45,8 +50,7 @@ export interface Member {
  * admin was demoted. ALLOWED_EMAIL_DOMAINS refuses before anything is written.
  */
 export async function provision(pool: Pool, auth: AuthEnv, email: string): Promise<Member | Refusal> {
-  const domain = email.slice(email.lastIndexOf('@') + 1);
-  if (auth.allowedDomains.length > 0 && !auth.allowedDomains.includes(domain)) return 'domain';
+  if (!domainAllowed(auth.allowedDomains, email)) return 'domain';
   const isAdmin = auth.adminEmail === email;
   const r = await pool.query<{ id: string; role: Role; disabled: boolean }>(
     `INSERT INTO users (org_id, email, role, last_login_at) VALUES ($1, $2, $3, now())

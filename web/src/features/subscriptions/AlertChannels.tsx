@@ -20,9 +20,9 @@ export function AlertChannels({ value, onChange }: { value: string[]; onChange: 
             <ChannelMark kind={c.kind} />
             <Checkbox
               label={c.name}
-              hint={c.secretSet ? KIND_LABEL[c.kind] : `${KIND_LABEL[c.kind]} · its webhook URL is missing`}
+              hint={c.ready ? KIND_LABEL[c.kind] : c.kind === 'email' ? 'Email · email is not set up on this server' : `${KIND_LABEL[c.kind]} · its webhook URL is missing`}
               checked={value.includes(c.id)}
-              disabled={!c.secretSet && !value.includes(c.id)}
+              disabled={!c.ready && !value.includes(c.id)}
               onCheckedChange={(on) => onChange(on ? [...value, c.id] : value.filter((x) => x !== c.id))}
             />
           </span>

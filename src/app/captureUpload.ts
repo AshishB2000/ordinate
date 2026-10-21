@@ -19,6 +19,8 @@ import { persistableResult, seedCaptureConversation } from './captureRecord';
 import { analyze } from '../ai/analyze';
 import { buildDraft } from '../data/captureDataset';
 import { deriveChartData } from '../formula/calc';
+import { withChartFigures } from '../analysis/chartShapes';
+import { figureAsk } from '../analysis/figureAsk';
 import type { ParsedColumn } from '../data/parse';
 
 /** Larger than any screenshot a provider accepts; the upload cap still applies first. */
@@ -101,6 +103,9 @@ export function draftOf(thread: any): CaptureDraft | Fail {
   return { ok: true, captureId: String(thread.id), title: titleOf(thread), ...table, unsure: unsureOf(thread.result) };
 }
 
+/** The chart ids the model judged a fit, in its order. */
+const chartTypesOf = (result: any): string[] => (Array.isArray(result.visualizations) ? strings(result.visualizations.map((v: any) => v && v.type)) : []);
+
 /** A stored capture for its own page. */
 // ponytail: thread envelope — any. A record an older build wrote may lack any field, so each is narrowed.
 export function viewOf(thread: any): CaptureView {
@@ -121,8 +126,9 @@ export function viewOf(thread: any): CaptureView {
     metrics: metrics.map((m: any) => ({ id: String(m.id), title: String(m.title), lines: strings(m.lines) })),
     // Derived again from the table, not read back: a record an older build
     // wrote may carry chart data from before the app derived it.
-    chart: deriveChartData(result.extractedTable, result.columnRoles, result.dataShape),
-    chartTypes: Array.isArray(result.visualizations) ? strings(result.visualizations.map((v: any) => v && v.type)) : [],
+    // …with the figures each suggested type draws over it (analysis/chartShapes).
+    chart: chartTypesOf(result).reduce((d, t) => withChartFigures(d, figureAsk(t)), deriveChartData(result.extractedTable, result.columnRoles, result.dataShape)),
+    chartTypes: chartTypesOf(result),
     followups: strings(result.followups),
     table: tableOf(result),
     unsure: unsureOf(result),

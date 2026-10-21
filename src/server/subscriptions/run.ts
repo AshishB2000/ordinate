@@ -20,7 +20,6 @@
 // kept: that goes to the log (./deliver.ts).
 
 import { createHash } from 'crypto';
-import { assertFanOutAllowed, fanOutScope, isRowPolicyError } from '../../data/rowAccess';
 import type { Pool } from 'pg';
 import { z } from 'zod';
 import { byProjectId, rpc, Uuid } from '../../api/contract';
@@ -32,7 +31,6 @@ import { todayIso } from '../../analysis/dateIntel';
 import { filterLine, type PageAnalysis } from '../../analysis/reportPages';
 import { viewControlValue, type SavedView } from '../../analysis/savedViews';
 import { composeMessage, figuresOf, type MessageModel } from '../../analysis/subscriptionMessage';
-import { renderSlack, renderTeams } from '../../analysis/subscriptionRender';
 import { dueDecision } from '../../analysis/subscriptionSchedule';
 import * as store from '../../analysis/subscriptions';
 import type { RunEntry, RunState, Subscription } from '../../analysis/subscriptions';
@@ -45,7 +43,7 @@ import { ctx, runInContext, type Identity } from '../context';
 import { toReaders } from '../jobs/schedules';
 import { dashboardLink } from '../publicUrl';
 import { publish } from '../sse';
-import { postToChannel } from './deliver';
+import { deliver, type DatasetsMemo } from './deliver';
 
 let db: { pool: Pool | null; devAuth: boolean } = { pool: null, devAuth: true };
 
@@ -107,6 +105,7 @@ export async function buildMessage(projectId: string, def: Definition): Promise<
     title: def.message.title || a.name,
     subtitle: [formatDate(todayIso()), ...(view ? [viewText(view.name)] : []), ...(filters ? [filters] : []), ...(figs.dataAt ? [asOfText(utcLabel(figs.dataAt))] : [])],
     note: def.message.note,
+    ...(def.message.noteBy ? { noteBy: def.message.noteBy } : {}), // who wrote it (subscription:save) — an email says "Note from …"
     kpis: figs.kpis,
     visuals: figs.visuals,
     link: def.message.includeLink ? dashboardLink(projectId, a.id) : null,
@@ -115,19 +114,8 @@ export async function buildMessage(projectId: string, def: Definition): Promise<
   return { model, dataAt: figs.dataAt, hash: createHash('sha256').update(figuresOf(model)).digest('hex') };
 }
 
-/**
- * The message a send may carry: built inside a fan-out scope, then checked
- * against every dataset it read — a dashboard over a dataset with row access
- * rules (or built from one) THROWS RowPolicyError, for every owner (docs/row-policy D10).
- * Until item 4's shared `deliver()` makes this check itself, it is here, before any post.
- */
-export async function buildSendable(projectId: string, def: Definition): Promise<Awaited<ReturnType<typeof buildMessage>>> {
-  const { value, datasets } = await fanOutScope(() => buildMessage(projectId, def));
-  await assertFanOutAllowed(projectId, datasets);
-  return value;
-}
-
-interface Result { outcome: RunEntry['outcome']; code: RunCode; detail?: RunDetail; built?: Built }
+/** `uncounted`: a failure that must not count toward the pause — every channel only hit the hourly email budget. */
+interface Result { outcome: RunEntry['outcome']; code: RunCode; detail?: RunDetail; built?: Built; uncounted?: boolean }
 
 /** Compute as the owner and post to every channel. Never throws. */
 async function attempt(sub: Subscription, org: string, scheduled: boolean): Promise<Result> {
@@ -138,9 +126,9 @@ async function attempt(sub: Subscription, org: string, scheduled: boolean): Prom
     if (!channels.length) return { outcome: 'failed', code: 'no_channels' };
     let built: Awaited<ReturnType<typeof buildMessage>>;
     try {
-      built = await buildSendable(sub.projectId, sub);
-    } catch (err) {
-      return { outcome: 'failed', code: isRowPolicyError(err) ? 'row_policy' : 'compute_failed' };
+      built = await buildMessage(sub.projectId, sub);
+    } catch {
+      return { outcome: 'failed', code: 'compute_failed' };
     }
     if ('code' in built) return { outcome: 'failed', code: built.code };
     // The conditions hold a SCHEDULED run back; "Send now" is someone asking for it.
@@ -148,14 +136,23 @@ async function attempt(sub: Subscription, org: string, scheduled: boolean): Prom
     if (scheduled && sub.conditions.onlyWhenRefreshed && sub.run.lastDataAt && built.dataAt && built.dataAt <= sub.run.lastDataAt) return { outcome: 'skipped', code: 'not_refreshed' };
     let sent = 0;
     let failure: RunDetail & { code: RunCode } | null = null;
+    let partialMail: RunDetail | null = null;
+    let onlyLimited = true;
+    const memo: DatasetsMemo = new Map(); // the dashboard's datasets, read once for all its channels
     for (const c of channels) {
-      const r = await postToChannel(c.id, c.name, (c.kind === 'teams' ? renderTeams : renderSlack)(built.model).payload);
-      if (r.ok) sent++;
-      else failure ??= { code: r.code, channel: c.name, ...(r.status ? { status: r.status } : {}) };
+      const r = await deliver(c, { kind: 'dashboard', projectId: sub.projectId, analysisId: sub.analysisId, message: built.model }, memo);
+      if (r.ok) {
+        sent++;
+        if (r.partial) partialMail ??= { channel: c.name, sent: r.partial.sent, total: r.partial.total };
+      } else {
+        failure ??= { code: r.code, channel: c.name, ...(r.status ? { status: r.status } : {}) };
+        if (r.code !== 'rate_limited') onlyLimited = false;
+      }
     }
-    if (!failure) return { outcome: 'sent', code: 'sent', detail: { sent }, built };
+    // An email list that reached some of its people is sent (it clears the failure count), and says who it missed.
+    if (!failure) return partialMail ? { outcome: 'sent', code: 'mail_partial', detail: partialMail, built } : { outcome: 'sent', code: 'sent', detail: { sent }, built };
     const { code, ...where } = failure;
-    return sent ? { outcome: 'sent', code: 'partial', detail: { sent, total: channels.length, channel: where.channel }, built } : { outcome: 'failed', code, detail: where };
+    return sent ? { outcome: 'sent', code: 'partial', detail: { sent, total: channels.length, channel: where.channel }, built } : { outcome: 'failed', code, detail: where, uncounted: onlyLimited };
   });
 }
 
@@ -177,8 +174,9 @@ export async function runSubscription(projectId: string, id: string, slot?: numb
   }
   const r = await attempt(sub, org, scheduled);
   const entry: RunEntry = { at: new Date(now).toISOString(), trigger: scheduled ? 'schedule' : 'manual', outcome: r.outcome, code: r.code, ...(slotIso ? { slot: slotIso } : {}), ...(r.detail ? { detail: r.detail } : {}) };
-  // Only a SCHEDULED failure counts toward the pause; any send that goes out clears the count.
-  const failures = r.outcome === 'sent' ? 0 : scheduled && r.outcome === 'failed' ? sub.run.failures + 1 : sub.run.failures;
+  // Only a SCHEDULED failure counts toward the pause — and not one where the hourly email budget was the only
+  // reason (it clears by itself); any send that goes out, even partly, clears the count.
+  const failures = r.outcome === 'sent' ? 0 : scheduled && r.outcome === 'failed' && !r.uncounted ? sub.run.failures + 1 : sub.run.failures;
   const pause = scheduled && r.outcome === 'failed' && failures >= store.PAUSE_AFTER;
   await store.stampRun(projectId, id, (run): RunState => ({
     ...run,

@@ -17,7 +17,8 @@
 // when it was published, and only a re-publish changes them.
 
 import * as fs from 'fs';
-import { anyPolicyClosed, assertFanOutAllowed, fanOutScope, policyClosed } from '../data/rowAccess';
+import { anyPolicyClosedRecently, assertFanOutAllowed, fanOutScope, policyClosed } from '../data/rowAccess';
+import { datasetsOfRoot } from '../server/subscriptions/figureDatasets';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as appPaths from '../app/paths';
@@ -88,17 +89,43 @@ export async function getSite(id: string): Promise<HostedSite | null> {
 
 /**
  * May `site` still be served (docs/row-policy D10)? Not once a dataset its build read has row access
- * rules (or is built from one); a site published before builds were recorded is not served while its
- * project has any such dataset — re-publishing records its datasets (and refuses if it reads one).
+ * rules (or is built from one). A site published before builds were recorded has its datasets worked
+ * out ONCE from the dashboards it was published with, and kept (round 2, #10); one that cannot be
+ * (a story or scorecard, no stored definitions) is not served while its project has any such dataset.
  */
 export async function servable(site: HostedSite): Promise<boolean> {
   try {
-    if (!Array.isArray(site.datasetIds)) return !(await anyPolicyClosed(site.projectId));
-    for (const id of site.datasetIds) if (await policyClosed(site.projectId, id)) return false;
+    const ids = Array.isArray(site.datasetIds) ? site.datasetIds : await backfillDatasets(site);
+    if (ids === null) return !(await anyPolicyClosedRecently(site.projectId));
+    for (const id of ids) if (await policyClosed(site.projectId, id)) return false;
     return true;
   } catch {
     return false; // rules that cannot be read: not served
   }
+}
+
+/**
+ * The datasets an older site's dashboards can show, from the definitions it was PUBLISHED with
+ * (item 4's walk: lineage upstream and relationships, an over-approximation), written onto its
+ * manifest so the next fetch reads them there. Null when they cannot be worked out.
+ */
+async function backfillDatasets(site: HostedSite): Promise<readonly string[] | null> {
+  if (site.config.storyIds.length || site.config.scorecardIds.length) return null;
+  const defs = await getDefs(site.id);
+  if (!defs) return null;
+  const ids = new Set<string>();
+  for (const dashId of site.config.dashboardIds) {
+    const def = defs[dashId];
+    if (!def) return null; // a dashboard the build kept no definition of: cannot say what it showed
+    for (const d of await datasetsOfRoot(site.projectId, 'dashboard', dashId, def.analysis, def.visuals)) ids.add(d);
+  }
+  const datasetIds = [...ids];
+  // Kept only on the manifest it was worked out from: a re-publish meanwhile recorded its own.
+  await recordFs.locked(manifestPath(site.id), async () => {
+    const now = await getSite(site.id);
+    if (now && !Array.isArray(now.datasetIds) && now.publishedAt === site.publishedAt) await writeJson(manifestPath(site.id), { ...now, datasetIds });
+  });
+  return datasetIds;
 }
 
 /** One page's HTML, or null. */

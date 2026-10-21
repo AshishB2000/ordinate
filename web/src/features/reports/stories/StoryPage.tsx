@@ -30,6 +30,8 @@ import { Present } from './Present';
 import { StoryBlockRow } from './StoryBlock';
 import s from './Story.module.css';
 import { CommentDoor } from '../../dashboards/CommentsPanel';
+import { ConflictBanner } from '../../editConflicts/ConflictBanner';
+import { useDropOnLeave, useEditGuard, useReload } from '../../editConflicts/useEditGuard';
 
 type Snap = { name: string; blocks: StoryBlock[] };
 type Pending = { kind: 'visual' | 'metric' | 'metrics_row'; place: (b: StoryBlock) => void } | { kind: 'pin'; blockId: string; datasetId: string } | null;
@@ -52,7 +54,7 @@ function figureBlocks(blocks: StoryBlock[]): FigureReq[] {
   );
 }
 
-function Editor({ projectId, story, focusEnd, readOnly }: { projectId: string; story: Story; focusEnd: boolean; readOnly: boolean }) {
+function Editor({ projectId, story, focusEnd, readOnly, onReload }: { projectId: string; story: Story; focusEnd: boolean; readOnly: boolean; onReload: () => void }) {
   const client = useQueryClient();
   const navigate = useNavigate();
   const [snap, setSnap] = useState<Snap>(() => ({ name: story.name, blocks: readOnly ? story.blocks : withTail(story.blocks) }));
@@ -68,6 +70,9 @@ function Editor({ projectId, story, focusEnd, readOnly }: { projectId: string; s
   const { hooks, dialog } = useGenerateHooks();
 
   // ── saving: debounced, and flushed before leaving ──
+  // One save at a time, each with the tag the last returned (docs/edit-conflicts); once another tab or person saved
+  // first, nothing more is sent until Reload.
+  const { save: guarded, changed } = useEditGuard({ projectId, type: 'story', id: story.id }, story.tag);
   const latest = useRef(snap);
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -75,14 +80,26 @@ function Editor({ projectId, story, focusEnd, readOnly }: { projectId: string; s
     clearTimeout(timer.current);
     if (!dirty.current) return;
     dirty.current = false;
+    const { name, blocks } = latest.current;
     try {
-      const r = (await rpc('story:update', { projectId, id: story.id, name: latest.current.name, blocks: latest.current.blocks })) as { id?: string };
-      setStatus(r && r.id ? 'Saved' : 'Could not save');
-      void client.invalidateQueries({ queryKey: ['story:list', projectId] });
+      const r = (await guarded((base) => rpc('story:update', { projectId, id: story.id, base, name, blocks }))) as { id?: string } | null;
+      setStatus(r === null ? 'Not saved' : r && r.id ? 'Saved' : 'Could not save');
+      if (r) void client.invalidateQueries({ queryKey: ['story:list', projectId] });
     } catch {
       setStatus('Could not save');
     }
-  }, [client, projectId, story.id]);
+  }, [client, projectId, story.id, guarded]);
+  useEffect(() => {
+    if (changed) setStatus('Not saved');
+  }, [changed]);
+  const conflict = {
+    copy: async () => {
+      const made = (await rpc('story:create', { projectId, name: `${latest.current.name} (copy)`.slice(0, 200), blocks: latest.current.blocks })) as Story | { ok: false; error: string };
+      if (!('id' in made)) throw new Error(failure(made, 'The copy could not be saved.'));
+      void client.invalidateQueries({ queryKey: ['story:list', projectId] });
+      await navigate(`/stories/${projectId}/${made.id}`);
+    },
+  };
   useEffect(() => () => void flush(), [flush]);
 
   const commit = (next: Snap, label: string, coalesce = false) => {
@@ -92,7 +109,7 @@ function Editor({ projectId, story, focusEnd, readOnly }: { projectId: string; s
     latest.current = tailed;
     setHist((h) => historyPush(h, label, tailed, Date.now(), coalesce));
     dirty.current = true;
-    setStatus('Saving…');
+    setStatus(changed ? 'Not saved' : 'Saving…');
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void flush(), 600);
   };
@@ -235,6 +252,11 @@ function Editor({ projectId, story, focusEnd, readOnly }: { projectId: string; s
           )}
         </div>
       </header>
+      {changed && !readOnly && (
+        <div className={s.conflict}>
+          <ConflictBanner noun="story" onReload={onReload} onCopy={conflict.copy} />
+        </div>
+      )}
       <div className={s.layout}>
         <nav className={s.outline} aria-label="Outline">
           <div className={s.outlineTitle}>Outline</div>
@@ -394,6 +416,8 @@ export default function StoryPageRoute() {
     refetchOnWindowFocus: false,
     gcTime: 0,
   });
+  const { gen, reload } = useReload(['story:get', projectId, storyId]);
+  useDropOnLeave(['story:get', projectId, storyId]);
   if (q.isPending || roles.isPending) return <PageSkeleton />;
   if (q.isError || !q.data) {
     return (
@@ -403,5 +427,5 @@ export default function StoryPageRoute() {
     );
   }
   const role = roles.data?.[projectId];
-  return <Editor key={storyId} projectId={projectId} story={q.data} focusEnd={params.get('focus') === 'end'} readOnly={role !== 'editor' && role !== 'admin'} />;
+  return <Editor key={`${storyId}:${gen}`} projectId={projectId} story={q.data} focusEnd={params.get('focus') === 'end'} readOnly={role !== 'editor' && role !== 'admin'} onReload={reload} />;
 }

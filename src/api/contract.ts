@@ -68,6 +68,13 @@ export const onlyReadable =
 /** A record id, as UUID_RE spells it everywhere a record id reaches a path. */
 export const Uuid = z.guid();
 
+/**
+ * A record's content tag (src/app/editConflict.ts): what a whole-document
+ * editor's copy was built on. Sent as `base`, a save from a stale copy is
+ * refused 409 `record_changed`; left out, the save is last-writer-wins.
+ */
+export const Base = z.string().min(1).max(64);
+
 /** A token from `POST /api/files` (src/server/files.ts): 32 random bytes, base64url. */
 export const FileToken = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 

@@ -372,6 +372,8 @@ export const MAIN_FILES = [
   'src/app/recordLockMessages.ts',
   'src/analysis/savedViewMessages.ts',
   'src/data/rowAccessMessages.ts',
+  'src/app/editConflictMessages.ts',
+  'src/publish/publishMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

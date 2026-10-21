@@ -229,13 +229,28 @@ e2e('rebuild: the way in from Create dashboard → Start from, on the dataset pi
   connectModel(server.dataDir);
   const pid = server.sample.projectId;
   const before = model.calls;
+  // The template catalogue lands while the card is pressed — the nightly's Firefox did this by timing. While it
+  // loaded, the layouts sat 127px higher than after, so the release missed the card and the click was lost.
+  let land = (): void => undefined;
+  const landed = new Promise<void>((r) => (land = r));
+  await page.route('**/api/rpc/template*', async (route) => {
+    await landed;
+    await route.continue();
+  });
   await page.goto(`/analyses?project=${pid}&new=1`);
   const wizard = page.getByRole('dialog', { name: 'Create dashboard' });
   await wizard.getByRole('radio', { name: /Retail orders/ }).click();
   await wizard.getByRole('button', { name: 'Next' }).click();
   const card = wizard.getByRole('radiogroup', { name: 'Layouts' }).getByRole('radio', { name: /^Rebuild from a screenshot/ });
-  await card.click();
   await card.scrollIntoViewIfNeeded();
+  await screensInPlace(page, 'rebuild-wizard-loading');
+  const at = (await card.boundingBox()) as { x: number; y: number; width: number; height: number };
+  await page.mouse.move(at.x + at.width / 2, at.y + at.height / 2);
+  await page.mouse.down();
+  land();
+  await wizard.getByRole('radiogroup', { name: 'Templates' }).waitFor();
+  await page.mouse.up();
+  assert.equal(await card.getAttribute('aria-checked'), 'true', 'the press that the catalogue landed under still picks the card');
   await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]'));
   await screensInPlace(page, 'rebuild-wizard');
   await wizard.getByRole('button', { name: 'Choose a screenshot' }).click();

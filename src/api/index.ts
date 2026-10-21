@@ -43,6 +43,7 @@ import { subscriptions } from './subscriptions';
 import { rebuild } from './rebuild';
 import { embed } from './embed';
 import { metricTree } from './metricTree';
+import { explore } from './explore';
 import { rowPolicy } from './rowPolicy';
 
 export const contracts = {
@@ -88,6 +89,7 @@ export const contracts = {
   ...rebuild,
   ...embed,
   ...metricTree,
+  ...explore,
   ...rowPolicy,
 } as const;
 

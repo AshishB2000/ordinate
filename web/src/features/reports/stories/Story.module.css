@@ -466,3 +466,8 @@
   height: 40px;
 }
 
+
+/* The edit-conflict banner (editConflicts/ConflictBanner), under the head. */
+.conflict {
+  padding: var(--sp-12) var(--sp-24) 0;
+}

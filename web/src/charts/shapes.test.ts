@@ -1,14 +1,17 @@
-// The pure shapes behind the waterfall, Pareto, calendar heatmap, radar and
-// bullet charts — ./shapes.ts, what the chart engine's plugins draw from.
+// The shapes behind the waterfall, Pareto, calendar heatmap, radar and bullet
+// charts — what the chart engine's plugins draw from.
 //
 // Hand-computed expectations on purpose: these ARE the reference arithmetic.
-// Ported from scripts/test-chartShapes.ts at the T8.1 cutover, where the same
-// checks pinned the desktop's chartShapes.js; ./legacy.test.ts holds this port
-// to that file's recorded configs, and scripts/test-captions.ts holds the
-// captions' server-side twin to its recorded figures.
+// A waterfall's levels, a Pareto's order and cumulative share and a calendar's
+// days are the SERVER's now (src/analysis/chartShapes.ts); each check runs the
+// server's figures through the drawer's own reader (./shapes) — the path a
+// chart takes. __golden__/shapes.json (./figures.test.ts and
+// scripts/test-chartShapes.ts) holds both to what the in-app chart drew before
+// the math moved; ./legacy.test.ts holds the configs to the desktop's.
 
 import { describe, expect, it } from 'vitest';
-import * as portShapes from './shapes';
+import { chartShapes } from '../../../src/analysis/chartShapes.ts';
+import { bulletShape, calendarBands, calendarCells as cellsOf, paretoFromFigures, radarShape, waterfallFromFigures } from './shapes';
 
 describe("chart shapes: waterfall, Pareto, calendar, radar, bullet", () => {
   it('every check holds', () => {
@@ -18,15 +21,11 @@ describe("chart shapes: waterfall, Pareto, calendar, radar, bullet", () => {
     };
     const failureCount = (): number => fails.length;
     // any: the checks index loosely into the shapes, as they did against the desktop file
-    const shapes = portShapes as unknown as {
-      waterfallSteps: (labels: any[], series: any[], totals?: string[] | null) => any;
-      paretoShape: (labels: any[], values: any[]) => any;
-      calendarCells: (labels: any[], values: any[]) => any;
-      calendarBands: (weeks: number, w: number, h: number, gapRows: number) => { bands: number; perRow: number; rows: number };
-      radarShape: (labels: any[], series: any[]) => any;
-      bulletShape: (labels: any[], series: any[], target?: number | null) => any;
-    };
-    const { waterfallSteps, paretoShape, calendarCells, calendarBands, radarShape, bulletShape } = shapes;
+    const waterfallSteps = (labels: any[], series: any[], totals?: string[] | null): any =>
+      waterfallFromFigures(chartShapes('waterfall', { labels, series }, { waterfallTotals: totals ?? undefined })!.waterfall!, labels);
+    const paretoShape = (labels: any[], values: any[]): any =>
+      paretoFromFigures(chartShapes('pareto', { labels, series: [{ name: 'v', values }] })!.pareto!, labels, values);
+    const calendarCells = (labels: any[], values: any[]): any => cellsOf(chartShapes('calendar', { labels, series: [{ name: 'v', values }] })!.calendar!);
 
     const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
     const s1 = (values: any[], name = 'sum of revenue') => [{ name, values }];

@@ -15,13 +15,16 @@
 export {}; // module scope — sibling scripts share top-level names
 import { ok, failureCount, finish } from './selfcheck';
 import { tileCaption, captionFamily, compact } from '../src/analysis/captions';
-import { waterfallFigures, paretoFigures } from '../src/analysis/chartFigures';
+import { chartShapes, withChartFigures } from '../src/analysis/chartShapes';
+import { figureAsk } from '../src/analysis/figureAsk';
 import { golden } from './golden';
 
 const fs: typeof import('fs') = require('fs');
 const path: typeof import('path') = require('path');
 
 const s1 = (name: string, values: (number | null)[]) => [{ name, values }];
+/** A chart's data as its door serves it (docs/chart-figures): the series, plus the figures the chart draws. */
+const served = <D extends object>(chartType: string, data: D, overrides?: object): D => withChartFigures(data, figureAsk(chartType, overrides));
 
 // ── bar / column ─────────────────────────────────────────────────────────────
 
@@ -124,6 +127,12 @@ ok('line: one point is a reading, not a trend',
     chartType: 'line',
     data: { labels: ['Nov 2023'], series: s1('sum of revenue', [342_700]) },
   }) === 'Revenue was 342.7K in Nov 2023');
+
+ok('line: a month axis is named as the chart names it, not as the stored 2023-01-01 (formatted before the sentence)',
+  tileCaption({
+    chartType: 'line',
+    data: { labels: ['2023-01-01', '2023-06-01', '2024-12-01'], series: s1('sum of revenue', [100, 90, 141]) },
+  }) === 'Revenue rose 41% from Jan 2023 to Dec 2024');
 
 ok('line: empty says so',
   tileCaption({ chartType: 'line', data: { labels: [], series: [] } }) === 'No data to summarize');
@@ -295,48 +304,62 @@ ok('captionFamily knows the pivot family', captionFamily('pivot') === 'pivot');
 
 // ── waterfall · Pareto · bullet · radar · calendar ───────────────────────────
 
+// A waterfall's and a Pareto's caption reads the chart's own `figures` (src/analysis/chartShapes.ts),
+// so each is given its data as its door serves it.
 ok('waterfall: steps, span and the largest step (the spec sentence)',
   tileCaption({
     chartType: 'waterfall',
-    data: { labels: ['Total 2023', 'Technology', 'Furniture', 'Office', 'Other'],
-            series: s1('sum of revenue', [4_100_000, 1_300_000, -400_000, 100_000, 100_000]) },
-  }) === 'Four steps take revenue from 4.1M to 5.2M; the largest is Technology at +1.3M',
-  tileCaption({ chartType: 'waterfall', data: { labels: ['Total 2023', 'Technology', 'Furniture', 'Office', 'Other'], series: s1('sum of revenue', [4_100_000, 1_300_000, -400_000, 100_000, 100_000]) } }));
+    data: served('waterfall', { labels: ['Total 2023', 'Technology', 'Furniture', 'Office', 'Other'],
+            series: s1('sum of revenue', [4_100_000, 1_300_000, -400_000, 100_000, 100_000]) }),
+  }) === 'Four steps take revenue from 4.1M to 5.2M; the largest is Technology at +1.3M');
 
 ok('waterfall: with no opening total it starts from 0, and a fall keeps its sign',
-  tileCaption({ chartType: 'waterfall', data: { labels: ['A', 'B', 'C'], series: s1('sum of profit', [500, -900, 100]) } })
+  tileCaption({ chartType: 'waterfall', data: served('waterfall', { labels: ['A', 'B', 'C'], series: s1('sum of profit', [500, -900, 100]) }) })
   === 'Three steps take profit from 0 to -300; the largest is B at -900');
 
-ok('waterfall: the override names an opening total the label does not',
+ok('waterfall: the override names an opening total the label does not (it travels with the request, into the figures)',
   tileCaption({
     chartType: 'waterfall',
-    data: { labels: ['Opening', 'Q1'], series: s1('sum of cash', [1_000, 250]) },
-    overrides: { waterfallTotals: ['Opening'] },
+    data: served('waterfall', { labels: ['Opening', 'Q1'], series: s1('sum of cash', [1_000, 250]) }, { waterfallTotals: ['Opening'] }),
   }) === 'One step takes cash from 1.0K to 1.3K: Q1 at +250');
 
 ok('waterfall: two series are a bridge from one sum to the other',
   tileCaption({
     chartType: 'waterfall',
-    data: { labels: ['East', 'West'], series: [{ name: '2023', values: [100, 300] }, { name: '2024', values: [180, 250] }] },
+    data: served('waterfall', { labels: ['East', 'West'], series: [{ name: '2023', values: [100, 300] }, { name: '2024', values: [180, 250] }] }),
   }) === 'Two steps take the total from 400 to 430; the largest is East at +80');
+
+ok('waterfall: a month step is named as its bar is',
+  tileCaption({
+    chartType: 'waterfall',
+    data: served('waterfall', { labels: ['2024-01-01', '2024-02-01', '2024-03-01'], series: s1('sum of cash', [100, -40, 25]) }),
+  }) === 'Three steps take cash from 0 to 85; the largest is Jan 2024 at +100');
+
+ok('waterfall: without its figures it says what any chart says — it never works them out',
+  tileCaption({ chartType: 'waterfall', data: { labels: ['A', 'B', 'C'], series: s1('sum of profit', [500, -900, 100]) } })
+  === tileCaption({ chartType: 'combo_unknown', data: { labels: ['A', 'B', 'C'], series: s1('sum of profit', [500, -900, 100]) } }));
 
 ok('pareto: how many categories make 80% (the spec sentence)',
   tileCaption({
     chartType: 'pareto',
-    data: { labels: ['A', 'B', 'C', 'D', 'E'], series: s1('sum of revenue', [30, 20, 5, 35, 10]) },
+    data: served('pareto', { labels: ['A', 'B', 'C', 'D', 'E'], series: s1('sum of revenue', [30, 20, 5, 35, 10]) }),
   }) === 'Three categories make 80% of revenue');
 
 ok('pareto: one dominant category is named',
-  tileCaption({ chartType: 'pareto', data: { labels: ['A', 'B', 'C'], series: s1('sum of revenue', [5, 90, 5]) } })
+  tileCaption({ chartType: 'pareto', data: served('pareto', { labels: ['A', 'B', 'C'], series: s1('sum of revenue', [5, 90, 5]) }) })
   === 'B alone makes 80% of revenue');
 
 ok('pareto: when every category is needed, it says so',
-  tileCaption({ chartType: 'pareto', data: { labels: ['A', 'B', 'C', 'D'], series: s1('sum of revenue', [25, 25, 25, 25]) } })
+  tileCaption({ chartType: 'pareto', data: served('pareto', { labels: ['A', 'B', 'C', 'D'], series: s1('sum of revenue', [25, 25, 25, 25]) }) })
   === 'It takes all four categories to make 80% of revenue');
 
 ok('pareto: nothing positive has no 80% — it falls back to comparing',
-  tileCaption({ chartType: 'pareto', data: { labels: ['A', 'B'], series: s1('sum of revenue', [0, 0]) } })
+  tileCaption({ chartType: 'pareto', data: served('pareto', { labels: ['A', 'B'], series: s1('sum of revenue', [0, 0]) }) })
   === 'A and B tie for the lead in revenue at 0');
+
+ok('pareto: without its figures it compares, as a bar chart would — it never sorts or accumulates',
+  tileCaption({ chartType: 'pareto', data: { labels: ['A', 'B', 'C'], series: s1('sum of revenue', [5, 90, 5]) } })
+  === 'B leads revenue at 90, 18.0× A');
 
 ok('bullet: a second measure is the target, per category',
   tileCaption({
@@ -386,23 +409,19 @@ ok('the five newer ids map to their own families', [
 ].every(Boolean));
 
 /**
- * DIFFERENTIAL: the caption's figures against the chart's.
+ * DIFFERENTIAL: the figures a caption reads against the chart's.
  *
- * A caption is written in MAIN (src/analysis/chartFigures.ts) about a picture
- * the desktop drew from its chartShapes.js — two implementations of one piece
- * of arithmetic, so the house rule applies: run both over the same fixtures and
- * require Object.is on every figure the sentence states. The desktop's answers
- * were recorded when it went (T8.1): scripts/fixtures/golden/captions.json. The
- * web chart engine is pinned to the same desktop shapes by
- * web/src/charts/legacy.test.ts.
+ * A caption states figures the chart draws: a waterfall's start, end and step
+ * count, a Pareto's 80% count and leader. They are the chart's own `figures`
+ * (src/analysis/chartShapes.ts, computed once on the server), so the house rule
+ * applies twice: the server's figures against the desktop's chartShapes.js as
+ * it was recorded when it went (T8.1, scripts/fixtures/golden/captions.json),
+ * with Object.is; and the caption's numbers against those figures. The web
+ * chart draws the same figures (web/src/charts/figures.test.ts).
  */
 type Steps = { from: number; to: number; kind: string[] };
 type Pareto = { count80: number; labels: any[] };
 const G = golden<{ waterfall: Record<string, Steps>; pareto: Record<string, Pareto> }>('captions');
-const shapes = {
-  waterfallSteps: (name: string): Steps => G.waterfall[name],
-  paretoShape: (name: string): Pareto => G.pareto[name],
-};
 const WF: Array<{ name: string; data: any; totals?: string[] }> = [
   { name: 'plain steps', data: { labels: ['a', 'b', 'c'], series: s1('v', [0.1, 0.2, 0.3]) } },
   { name: 'opening total', data: { labels: ['Total', 'x', 'y'], series: s1('v', [1e6 / 3, -123.45, 7e-3]) } },
@@ -414,12 +433,16 @@ const WF: Array<{ name: string; data: any; totals?: string[] }> = [
 ];
 ok('the waterfall fixture holds exactly these cases', JSON.stringify(WF.map((f) => f.name)) === JSON.stringify(Object.keys(G.waterfall)));
 for (const f of WF) {
-  const main = waterfallFigures(f.data, f.totals);
-  const drawn = shapes.waterfallSteps(f.name);
-  const steps = drawn.kind.filter((k) => k === 'up' || k === 'down').length;
-  ok(`differential waterfall (${f.name}): same start, end and step count`,
-     Object.is(main.from, drawn.from) && Object.is(main.to, drawn.to) && main.steps.length === steps,
-     JSON.stringify({ main: [main.from, main.to, main.steps.length], drawn: [drawn.from, drawn.to, steps] }));
+  const w = chartShapes('waterfall', f.data, { waterfallTotals: f.totals })?.waterfall ?? { from: 0, to: 0, steps: [] };
+  const drawn = G.waterfall[f.name];
+  const steps = w.steps.filter((x) => x.kind === 'up' || x.kind === 'down').length;
+  const drawnSteps = drawn.kind.filter((k) => k === 'up' || k === 'down').length;
+  ok(`differential waterfall (${f.name}): the server's start, end and step count are the desktop's`,
+     Object.is(w.from, drawn.from) && Object.is(w.to, drawn.to) && steps === drawnSteps,
+     JSON.stringify({ server: [w.from, w.to, steps], desktop: [drawn.from, drawn.to, drawnSteps] }));
+  if (!steps) continue;
+  const caption = tileCaption({ chartType: 'waterfall', data: served('waterfall', f.data, { waterfallTotals: f.totals }) });
+  ok(`caption waterfall (${f.name}): says the figures' start and end`, caption.includes(`from ${compact(w.from)} to ${compact(w.to)}`), caption);
 }
 const PARETO: Array<{ name: string; data: any }> = [
   { name: 'spread', data: { labels: ['a', 'b', 'c', 'd', 'e'], series: s1('v', [30, 20, 5, 35, 10]) } },
@@ -432,11 +455,22 @@ const PARETO: Array<{ name: string; data: any }> = [
 ];
 ok('the Pareto fixture holds exactly these cases', JSON.stringify(PARETO.map((f) => f.name)) === JSON.stringify(Object.keys(G.pareto)));
 for (const f of PARETO) {
-  const main = paretoFigures(f.data);
-  const drawn = shapes.paretoShape(f.name);
-  ok(`differential pareto (${f.name}): same 80% count and the same leader`,
-     Object.is(main.count80, drawn.count80) && (drawn.labels.length === 0 || main.top === String(drawn.labels[0])),
-     JSON.stringify({ main, drawn: [drawn.count80, drawn.labels[0]] }));
+  const p = chartShapes('pareto', f.data)!.pareto!;
+  const drawn = G.pareto[f.name];
+  const top = String(f.data.labels[p.order[0]]);
+  ok(`differential pareto (${f.name}): the server's 80% count and leader are the desktop's`,
+     Object.is(p.count80, drawn.count80) && (drawn.labels.length === 0 || top === String(drawn.labels[0])),
+     JSON.stringify({ server: [p.count80, top], desktop: [drawn.count80, drawn.labels[0]] }));
+  if (!p.count80) continue;
+  const caption = tileCaption({ chartType: 'pareto', data: served('pareto', f.data) });
+  const said = p.count80 === 1 ? caption.startsWith(`${top} alone`) : /categor/.test(caption);
+  ok(`caption pareto (${f.name}): names the figures' leader or counts their 80%`, said, caption);
+}
+{
+  // NEGATIVE CONTROL: figures that disagree with the series are what the caption says — it reads them, never the series.
+  const data = served('waterfall', { labels: ['a', 'b'], series: s1('v', [1, 2]) }) as any;
+  data.figures.waterfall.to = 999;
+  ok('control: the caption states the figures it is given (a planted end of 999 is what it says)', tileCaption({ chartType: 'waterfall', data }).includes('to 999'));
 }
 
 if (!failureCount()) console.log('\nAll caption checks passed.');

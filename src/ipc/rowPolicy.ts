@@ -20,6 +20,7 @@ import { datasetFilePath, serialized } from '../data/datasetRecord';
 import { sanitizeSteps } from '../data/transforms';
 import { parseRules, policyFromRecord, ruleState, textColumn, writersHash, type RowPolicy, type RuleState } from '../data/rowPolicy';
 import { parentsOfRecord, upstreamIds } from '../data/upstream';
+import { rulesChanged } from '../data/rowAccess';
 import * as msg from '../data/rowAccessMessages';
 
 // ponytail: one pool per process, like authz/share.ts — set by register().
@@ -83,24 +84,34 @@ export function register(pool: () => Pool | null): void {
     const db = poolOf();
     if (!db) return { ok: false as const, code: 'no_database', error: msg.rowNeedsDatabaseMessage() };
     const file = datasetFilePath(projectId, datasetId);
-    if (policy === null) {
-      const done = await serialized(file, (raw) => {
-        delete raw.rowPolicy;
-        return true;
-      });
-      return done ? { ok: true as const, policy: null } : { ok: false as const, error: 'Dataset not found' };
+    rulesChanged(projectId); // before and after: a check that started meanwhile is not remembered past this save
+    try {
+      return await saveRules(db, file, policy);
+    } finally {
+      rulesChanged(projectId);
     }
-    const parsed = parseRules(policy.column, policy.rules);
-    if (!parsed.ok) return { ok: false as const, error: PROBLEM[parsed.problem]() };
-    if (!(await membersExist(db, parsed.rules))) return { ok: false as const, error: msg.rowUnknownMemberMessage() };
-    // Checked and stamped under the record's lock, against the record as it is at that moment.
-    const res = await serialized(file, (raw): 'saved' | 'column' => {
-      if (!textColumn(raw, parsed.column)) return 'column';
-      raw.rowPolicy = { column: parsed.column, rules: parsed.rules, stepsHash: writersHash(sanitizeSteps(raw.steps), parsed.column) };
-      return 'saved';
-    });
-    if (res === false) return { ok: false as const, error: 'Dataset not found' };
-    if (res === 'column') return { ok: false as const, error: msg.rowBadColumnMessage() };
-    return { ok: true as const, policy: { column: parsed.column, rules: parsed.rules } };
   });
+}
+
+/** Save or remove a dataset's rules (the record's lock holds the check and the stamp). */
+async function saveRules(db: Pool, file: string, policy: { column: string; rules: unknown[] } | null) {
+  if (policy === null) {
+    const done = await serialized(file, (raw) => {
+      delete raw.rowPolicy;
+      return true;
+    });
+    return done ? { ok: true as const, policy: null } : { ok: false as const, error: 'Dataset not found' };
+  }
+  const parsed = parseRules(policy.column, policy.rules);
+  if (!parsed.ok) return { ok: false as const, error: PROBLEM[parsed.problem]() };
+  if (!(await membersExist(db, parsed.rules))) return { ok: false as const, error: msg.rowUnknownMemberMessage() };
+  // Checked and stamped under the record's lock, against the record as it is at that moment.
+  const res = await serialized(file, (raw): 'saved' | 'column' => {
+    if (!textColumn(raw, parsed.column)) return 'column';
+    raw.rowPolicy = { column: parsed.column, rules: parsed.rules, stepsHash: writersHash(sanitizeSteps(raw.steps), parsed.column) };
+    return 'saved';
+  });
+  if (res === false) return { ok: false as const, error: 'Dataset not found' };
+  if (res === 'column') return { ok: false as const, error: msg.rowBadColumnMessage() };
+  return { ok: true as const, policy: { column: parsed.column, rules: parsed.rules } };
 }

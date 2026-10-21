@@ -16,6 +16,7 @@ import * as projects from '../app/projects';
 import { sanitizeBlocks, starterBlocks } from './storyModel';
 import type { StoryBlock } from './storyModel';
 import * as recordFs from '../app/recordFs';
+import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 
 export interface Story {
   id: string;
@@ -144,19 +145,28 @@ export async function saveStory(projectId: string, input: { name?: unknown; bloc
   return story;
 }
 
-/** Replace-or-keep, like updateAnalysis: `blocks` is replaced wholesale, never merged. */
-export async function updateStory(projectId: string, id: string, patch: { name?: unknown; blocks?: unknown }): Promise<Story | null> {
-  const existing = await getStory(projectId, id);
-  if (!existing) return null;
-  const updated: Story = {
-    ...existing,
-    name: cleanName(patch.name) || existing.name,
-    blocks: patch.blocks !== undefined ? sanitizeBlocks(patch.blocks) : existing.blocks,
-    updatedAt: new Date().toISOString(),
-  };
-  await fs.promises.mkdir(storiesDir(projectId), { recursive: true });
-  await writeJsonAtomic(storyFilePath(projectId, id), updated);
-  return updated;
+/** The record and the tag of what is stored, from ONE read (src/app/editConflict.ts): its editor's open and the guarded save. */
+export async function readStory(projectId: string, id: string): Promise<Tagged<Story> | null> {
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  return readTagged('story', storyFilePath(projectId, id), (d) => (d && typeof d.id === 'string' ? normalize(d, projectId) : null));
+}
+
+/** Replace-or-keep, like updateAnalysis: `blocks` is replaced wholesale, never merged. Holds the
+ *  record while it reads and writes; a stale `base` refuses (src/app/editConflict.ts). */
+export async function updateStory(projectId: string, id: string, patch: { name?: unknown; blocks?: unknown }, base?: unknown): Promise<Story | null> {
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  const file = storyFilePath(projectId, id);
+  return lockedUpdate('story', { projectId, id, file }, base, () => readStory(projectId, id), async (existing) => {
+    const updated: Story = {
+      ...existing,
+      name: cleanName(patch.name) || existing.name,
+      blocks: patch.blocks !== undefined ? sanitizeBlocks(patch.blocks) : existing.blocks,
+      updatedAt: new Date().toISOString(),
+    };
+    await fs.promises.mkdir(storiesDir(projectId), { recursive: true });
+    await writeJsonAtomic(file, updated);
+    return updated;
+  });
 }
 
 export async function deleteStory(projectId: string, id: string): Promise<boolean> {

@@ -10,7 +10,8 @@
 // handler never trusts its payload. The zod shapes bound size and type only.
 
 import { z } from 'zod';
-import { byProjectId, FileToken, rpc, Steps, Uuid } from './contract';
+import { Base, byProjectId, FileToken, rpc, Steps, Uuid } from './contract';
+import { FigureAskFields } from './visuals';
 
 const Name = z.string().max(200);
 /** A sheet array: `sanitizePages` whitelists every card by type. */
@@ -42,6 +43,7 @@ const Tile = z.discriminatedUnion('kind', [
     encoding: Encoding,
     filters: Steps.optional(),
     analytics: z.array(z.looseObject({})).max(50).optional(),
+    ...FigureAskFields,
   }),
   z.strictObject({
     kind: z.literal('metric'),
@@ -81,18 +83,22 @@ export const analyses = {
       name: Name,
       sheets: Sheets.optional(),
       filters: Steps.optional(),
+      // "Save mine as a copy" brings the editor's style; absent, the workspace default.
+      style: z.looseObject({}).optional(),
       parameters: Parameters.optional(),
     }),
     project: byProjectId,
   }),
   'analysis:rename': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid, name: Name }), project: byProjectId }),
   // A supplied array REPLACES the stored one wholesale (the autosave sends the
-  // whole document); an omitted field keeps its stored value.
+  // whole document); an omitted field keeps its stored value. `base`: the tag
+  // the editor's copy was built on (contract.ts Base).
   'analysis:update': rpc({
     access: 'write',
     input: z.strictObject({
       projectId: Uuid,
       id: Uuid,
+      base: Base.optional(),
       name: Name.optional(),
       sheets: Sheets.optional(),
       filters: Steps.optional(),

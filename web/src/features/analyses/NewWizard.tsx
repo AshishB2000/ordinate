@@ -23,7 +23,7 @@ import { AiNotReady } from '../assistant/AiNotReady';
 import { failure, type Analysis, type BuildReply, type Sheet, type StarterKind, type TemplateList } from './api';
 import { DEFAULT_BRIEF, DraftBrief } from './DraftBrief';
 import { DraftFlow } from './DraftReview';
-import { MapColumns, TemplateGallery } from './TemplateStep';
+import { MapColumns, TemplateGallery, TemplateGallerySkeleton } from './TemplateStep';
 import s from './Wizard.module.css';
 
 type Start = 'blank' | StarterKind | 'ai' | 'template' | 'rebuild';
@@ -313,7 +313,7 @@ export function NewWizard({ projectId, datasetId: preset, initialStep = 1, onClo
             <span className={s.groupP}>A complete dashboard, mapped to your columns.</span>
           </div>
           {templates.isPending ? (
-            <SkeletonRows rows={2} label="Reading your columns" />
+            <TemplateGallerySkeleton />
           ) : templates.data && !templates.data.ok ? (
             <p className={s.none}>{templates.data.error || 'Templates are unavailable for this dataset.'}</p>
           ) : templates.isError ? (

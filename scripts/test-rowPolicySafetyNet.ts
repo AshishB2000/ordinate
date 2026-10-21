@@ -151,6 +151,10 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     const row = (r: H.Reply, id: string) => (r.body as { id: string; scoped?: boolean }[]).find((x) => x.id === id);
     ok('scoped: east\'s dataset list says Orders is limited, and nothing about the rules', row(list, orders)?.scoped === true && row(list, W.plain)?.scoped === undefined && !list.text.includes('rowPolicy'));
     ok('NEGATIVE CONTROL: the editor\'s list has no scoped flag', row(await W.call('ed', 'dataset:list', { projectId: P }), orders)?.scoped === undefined);
+    // Explore's fields and suggestions are structure only (item 2): east is answered, without tripping the net.
+    const sugg = await W.call('east', 'explore:suggest', { projectId: P, datasetId: orders });
+    eastReplies.push(sugg.text);
+    ok('meta: explore:suggest answers east from the declared columns — suggestions, no refusal', sugg.status === 200 && sugg.body?.ok === true && Array.isArray(sugg.body.suggestions) && sugg.body.suggestions.length > 0, sugg.text.slice(0, 160));
     const header = await W.call('east', 'dataset:columns', { projectId: P, id: orders });
     ok('scoped: the grid header says so too', header.body?.scoped === true);
     await W.call('boss', 'quality:save', { projectId: P, datasetId: orders, rule: { kind: 'not_null', column: 'region', severity: 'fail' } });

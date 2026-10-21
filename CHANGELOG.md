@@ -74,6 +74,20 @@ the desktop installers.
   saves what is on screen as a shared view (editors), and everyone can apply one or copy its link
   (`?view=`); ⌘K opens a view in place, a phone picks one in its Filters sheet, and a published
   page offers it. See [`docs/dashboard-filters/`](docs/dashboard-filters/00-design.md).
+- **Explore: ask a question with no AI model.** Explore is a full-width question builder for
+  everyone, viewers included: pick a dataset, then a measure and its aggregate, what to group by
+  (and a date's grain), a split and filters — or start from a suggested question, each with a live
+  thumbnail. The answer is the server's chart and the same answer as a table; the question lives in
+  the URL, so Copy link shares it and Back undoes an edit. Editors can save it as a visual or open it
+  in the builder. With an AI model set up, an ask box hands plain words to the Assistant. See
+  [`docs/explore/`](docs/explore/00-design.md).
+- **Email for subscriptions and alerts.** An org admin makes an email list in Admin → Channels from
+  the organization's people and teams (no typed addresses); a subscription or an alert sent to it
+  reaches only those of them who can open the dashboard's project at that moment, through the one SMTP
+  relay the operator configures (`SMTP_HOST`, `SMTP_FROM`; TLS required, `plaintext` only to a private
+  relay). The subscription preview has an Email tab; **Send a test email** goes to the admin alone.
+  **Send now** is limited to once a minute per subscription, for every channel kind.
+  See [`docs/server/email.md`](docs/server/email.md).
 
 - **Row access rules.** A project admin can limit what each project viewer sees in a dataset to the rows whose chosen column holds their values — by person or by team — from the dataset's new **Row access** tab. Every chart, KPI, answer, data grid, filter list and column panel then shows that viewer only their rows; readers that work over the whole table (SQL, statistics, drivers, segments, insights, quality results, snapshot diffs, Prepare previews, exports) are refused with a sentence that says why, and published links, embeds, subscriptions and alerts are off for such a dataset. Live datasets bind and byte-compare the rule's values on every warehouse. See [`docs/server/row-level-security.md`](docs/server/row-level-security.md).
 
@@ -101,6 +115,25 @@ the desktop installers.
   [`docs/record-locks/00-design.md`](docs/record-locks/00-design.md).
 - A new project's first alert rule could appear in the next new project's alerts.
 - A dashboard whose prepare steps read a parameter could be served another parameter value's cached figure, and the data search read personal and financial columns when the share-policy lookup failed (F21). A grid request with no page window counted every row instead of the filtered ones.
+- **A published Pareto and waterfall showed different figures from the app.** The `/p/` page and
+  signed embeds worked them out a third time, differently: a Pareto drawn in arrival order, its
+  cumulative line dragged down by negatives, and a waterfall without its Total rows or its
+  last-year → this-year bridge. The server now computes a chart's drawn figures once (a waterfall's
+  levels, a Pareto's order and cumulative share, 100%-stacked shares — unrounded — a histogram's
+  bins, a funnel's and a bullet's percentages, a calendar's days) and the app, its captions, `/p/`
+  and embeds all draw them. The published page also reads like the app: "Jan 2023" months, value
+  labels, no vertical gridlines, KPI subtitles, and style Auto following the reader's light or dark
+  setting. See [`docs/chart-figures/00-design.md`](docs/chart-figures/00-design.md).
+- **Two editors never overwrite each other.** Dashboards, visuals, metrics and metric trees, reports,
+  stories, scorecards and scenarios were last-writer-wins: two people on one dashboard, or one person
+  in two tabs, silently overwrote each other's work. Each editor now saves with a tag of the content
+  it opened; a save from a copy someone else has since changed is refused, and a banner offers
+  "Reload" or "Save mine as a copy" instead of overwriting. An open editor also learns at once when
+  another save lands. Saving a view, starring a visual, generating a report or scheduling it never
+  counts as a change. API and MCP callers that send no tag keep last-writer-wins. Version history now also keeps
+  a dashboard parameter's saved default, a visual's analytics overlays, and a report's discussion page
+  and view, and a restore puts them back. See
+  [`docs/edit-conflicts/00-design.md`](docs/edit-conflicts/00-design.md).
 
 ### Added
 - **The app is no longer empty on first launch.** A bundled sample project — 5,000 rows of generated

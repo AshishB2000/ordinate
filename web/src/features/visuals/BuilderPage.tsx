@@ -13,10 +13,11 @@ import { useDatasetColumns, useDatasets } from '../../api/datasets';
 import { useVisualsProject } from './project';
 import { EmptyState, ErrorState, Page, PageSkeleton } from '../../app/blocks';
 import { Button } from '../../ui/Button';
-import { useRelated, useVisual, type Encoding } from './api';
+import { useRelated, useVisual, type Encoding, type FilterStep } from './api';
 import { Editor, type Initial } from './Editor';
 import { defaultEncoding, fitEncoding, type Column } from './model';
 import { switchEncoding } from '../analytics/grids/gridEncoding';
+import { useReload } from '../editConflicts/useEditGuard';
 
 export default function BuilderPage() {
   const { projectId: routeId, visualId } = useParams();
@@ -43,6 +44,7 @@ function Load({ projectId, visualId, datasetParam }: { projectId: string; visual
   const datasetId = visualId ? saved.data?.datasetId : (datasetParam ?? datasets.data?.[0]?.id);
   const cols = useDatasetColumns(projectId, datasetId);
   const related = useRelated(projectId, datasetId);
+  const { gen, reload } = useReload(['visual:get', projectId, visualId ?? '']);
   const back = () => void navigate(`/visuals/${projectId}`);
 
   if (datasets.isPending || (visualId && saved.isPending)) return <PageSkeleton />;
@@ -94,7 +96,8 @@ function Load({ projectId, visualId, datasetParam }: { projectId: string; visual
 
   const columns: Column[] = cols.data.columns.map((c) => ({ name: c.name, type: c.type === 'number' || c.type === 'date' ? c.type : 'text' }));
   const rel = related.data ?? [];
-  const suggested = location.state as { encoding?: Encoding; chartType?: string } | null;
+  // A door's prefill: a suggestion, an Analytics grid type, or an Explore question (its filters too).
+  const suggested = location.state as { encoding?: Encoding; chartType?: string; filters?: FilterStep[] } | null;
   const v = saved.data ?? null;
   const preset = v ? v.encoding : suggested?.encoding;
   const initial: Initial = {
@@ -105,9 +108,10 @@ function Load({ projectId, visualId, datasetParam }: { projectId: string; visual
     encoding: switchEncoding(preset ? fitEncoding(preset, columns, rel) : defaultEncoding(columns), 'column', v?.chartType ?? suggested?.chartType ?? '', columns),
     chartType: v?.chartType ?? suggested?.chartType ?? '',
     overrides: v?.overrides ?? {},
-    filters: v?.filters ?? [],
+    filters: v?.filters ?? (Array.isArray(suggested?.filters) ? suggested.filters : []),
     analytics: v?.analytics ?? [],
     live: cols.data.mode === 'live',
+    tag: v?.tag,
   };
-  return <Editor projectId={projectId} datasets={datasets.data} columns={columns} related={rel} initial={initial} />;
+  return <Editor key={gen} projectId={projectId} datasets={datasets.data} columns={columns} related={rel} initial={initial} onReload={reload} />;
 }

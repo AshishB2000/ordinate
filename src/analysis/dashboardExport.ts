@@ -31,20 +31,15 @@
 // (buildVizData / computeMetric); this module only lays them out (strict-number rule
 // untouched — it never computes a figure).
 
-// The ONE non-pure-ish import: the shared style clamp. dashboards.ts is imported
-// for `sanitizeStyle` rather than copying its three enums here, for the same
-// reason dashboards.ts itself takes a value import of visuals.ts — duplicating a
-// whitelist is how whitelists drift. It stays node-testable: dashboards.ts pulls
-// no fs/DOM work at load, so scripts/test-dashboardExport.ts still runs under
-// bare `node` with no setup.
-import { sanitizeStyle } from './dashboards';
 import { sanitizeFormatPrefs } from '../app/format';
 import type { DashboardStyle } from './dashboards';
 import { themeModel } from './themeTokens';
 import type { ThemeTokens } from './themeTokens';
+import type { ChartFigures } from './chartShapes';
+import { GRID_COLS, sanitizeBundle } from './exportSanitize';
 
-// The fixed grid column count (kept in sync with .dash-grid in hub.css / dashboards.ts).
-const GRID_COLS = 12;
+// The whitelist (a trust boundary) is its own module, ./exportSanitize.ts; re-exported so every caller keeps its import.
+export { sanitizeBrand, sanitizeBundle, sanitizeChartData, sanitizeLayout, sanitizePng, sanitizeSlots } from './exportSanitize';
 
 export type ExportCardKind = 'chart' | 'image' | 'metric' | 'text' | 'broken';
 
@@ -63,6 +58,8 @@ export interface ExportSeries {
 export interface ExportChartData {
   labels: (string | number)[];
   series: ExportSeries[];
+  /** What the chart draws beyond its series (./chartShapes), as ./exportSanitize whitelists it. */
+  figures?: ChartFigures;
 }
 
 export interface ExportCard {
@@ -143,183 +140,6 @@ export interface ExportBundle {
 }
 
 export interface ExportTheme { name: string; tokens: ThemeTokens }
-
-// Core Chart.js types that render live from inlined data. Anything else (treemap /
-// sankey / matrix / financial / boxplot / map / table) arrives as a {kind:'image'} PNG,
-// so this whitelist never needs the plugin bundles.
-const CORE_CHART_TYPES: ReadonlySet<string> = new Set([
-  'bar',
-  'line',
-  'pie',
-  'doughnut',
-  'radar',
-  'polarArea',
-  'scatter',
-  'bubble',
-]);
-
-// ── Defensive whitelisting (never throw — "keep known keys, coerce, drop the rest") ──
-
-function intOr(v: unknown, fallback: number): number {
-  return typeof v === 'number' && Number.isFinite(v) ? Math.trunc(v) : fallback;
-}
-
-export function sanitizeLayout(raw: unknown): ExportLayout {
-  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  let x = intOr(o.x, 0);
-  let y = intOr(o.y, 0);
-  let w = intOr(o.w, 1);
-  let h = intOr(o.h, 1);
-  if (x < 0) x = 0;
-  if (x > GRID_COLS - 1) x = GRID_COLS - 1;
-  if (y < 0) y = 0;
-  if (w < 1) w = 1;
-  if (w > GRID_COLS) w = GRID_COLS;
-  if (h < 1) h = 1;
-  if (x + w > GRID_COLS) w = GRID_COLS - x;
-  return { x, y, w, h };
-}
-
-function asString(v: unknown): string {
-  return typeof v === 'string' ? v : '';
-}
-
-// A cell value that may legitimately appear in inlined chart data: a finite number, or
-// null. ANYTHING else (string, object, a stray secret) → null. This is a hard barrier:
-// only numbers survive into the chart datasets.
-function asNumOrNull(v: unknown): number | null {
-  return typeof v === 'number' && Number.isFinite(v) ? v : null;
-}
-
-export function sanitizeChartData(raw: unknown): ExportChartData {
-  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  const labels = Array.isArray(o.labels)
-    ? o.labels.filter((l): l is string | number => typeof l === 'string' || typeof l === 'number')
-    : [];
-  const series = Array.isArray(o.series)
-    ? o.series.map((s) => {
-        const so = s && typeof s === 'object' ? (s as Record<string, unknown>) : {};
-        return {
-          label: asString(so.label),
-          values: Array.isArray(so.values) ? so.values.map(asNumOrNull) : [],
-        };
-      })
-    : [];
-  return { labels, series };
-}
-
-// Only a `data:image/...;base64,...` URI is accepted for an embedded PNG — never an
-// http(s) URL (keeps the file offline) and never arbitrary text. A MapLibre map card
-// arrives here as `nativeImage.toDataURL()` output ("data:image/png;base64,…"), so it
-// passes unchanged — the WebGL migration needed NO loosening of this gate.
-export function sanitizePng(v: unknown): string {
-  return typeof v === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(v) ? v : '';
-}
-
-/**
- * A list of ramp slots: integers 0–7, one per label/series, or nothing. One
- * bad entry drops the whole list — a garbled list is not half-trusted — and
- * the chart falls back to drawing by position, as every export did before.
- */
-export function sanitizeSlots(raw: unknown, n: number): number[] | undefined {
-  if (!Array.isArray(raw) || raw.length === 0 || raw.length > n) return undefined;
-  return raw.every((k) => Number.isInteger(k) && k >= 0 && k < 8) ? (raw as number[]).slice() : undefined;
-}
-
-function sanitizeCard(raw: unknown): ExportCard | null {
-  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
-  if (!o) return null;
-  const layout = sanitizeLayout(o.layout);
-  const kind = o.kind;
-
-  if (kind === 'chart') {
-    const data = sanitizeChartData(o.data);
-    const chartType =
-      typeof o.chartType === 'string' && CORE_CHART_TYPES.has(o.chartType) ? o.chartType : 'bar';
-    const slots = sanitizeSlots(o.slots, data.labels.length);
-    const seriesSlots = sanitizeSlots(o.seriesSlots, data.series.length);
-    return {
-      kind: 'chart', layout, chartType, title: asString(o.title), data,
-      ...(slots ? { slots } : {}), ...(seriesSlots ? { seriesSlots } : {}),
-    };
-  }
-  if (kind === 'image') {
-    const png = sanitizePng(o.png);
-    // A missing/invalid PNG degrades to a broken placeholder rather than a blank tile.
-    if (!png) return { kind: 'broken', layout, reason: asString(o.title) || 'Image unavailable' };
-    return { kind: 'image', layout, png, title: asString(o.title) };
-  }
-  if (kind === 'metric') {
-    const value =
-      typeof o.value === 'number' && Number.isFinite(o.value)
-        ? o.value
-        : typeof o.value === 'string'
-          ? o.value
-          : null;
-    return {
-      kind: 'metric', layout, label: asString(o.label), subLabel: asString(o.subLabel),
-      value, format: asString(o.format),
-    };
-  }
-  if (kind === 'text') {
-    return { kind: 'text', layout, heading: asString(o.heading), text: asString(o.text) };
-  }
-  if (kind === 'broken') {
-    return { kind: 'broken', layout, reason: asString(o.reason) || 'Source removed' };
-  }
-  return null; // unknown kind → dropped
-}
-
-function sanitizePage(raw: unknown): ExportPage {
-  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  const cards: ExportCard[] = [];
-  if (Array.isArray(o.cards)) {
-    for (const c of o.cards) {
-      const card = sanitizeCard(c);
-      if (card) cards.push(card);
-    }
-  }
-  return { name: asString(o.name) || 'Page', cards };
-}
-
-// Whitelist the whole bundle down to the fixed primitive schema. The RETURN of this
-// function is the ONLY thing that ever gets serialized into the file — so anything not
-// named here (a secret, a raw dataset row, a config field) is impossible to leak.
-export function sanitizeBundle(raw: unknown): ExportBundle {
-  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  const pages = Array.isArray(o.pages) ? o.pages.map(sanitizePage) : [];
-  if (pages.length === 0) pages.push({ name: 'Page', cards: [] });
-  return {
-    name: asString(o.name) || 'Dashboard',
-    pages,
-    controlsSummary: asString(o.controlsSummary),
-    // A closed-enum clamp, NOT a widening of the whitelist above — see the
-    // note on ExportBundle.style. Missing/garbage → the default light style,
-    // which is what every export looked like before this field existed.
-    style: sanitizeStyle(o.style),
-    brand: sanitizeBrand(o.brand),
-    ...themeField(o.theme),
-  };
-}
-
-function themeField(raw: unknown): { theme?: ExportTheme } {
-  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  const tokens = themeModel.sanitizeTokens(o.tokens);
-  return Object.keys(tokens).length ? { theme: { name: asString(o.name).slice(0, 60), tokens } } : {};
-}
-
-const COLOR_RE = /^(#[0-9a-f]{6}|rgba\(\d{1,3}, \d{1,3}, \d{1,3}, (0|1|0?\.\d{1,4})\))$/i;
-
-export function sanitizeBrand(raw: unknown): ExportBundle['brand'] {
-  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  const r = o.ramp && typeof o.ramp === 'object' ? (o.ramp as Record<string, unknown>) : {};
-  const color = (v: unknown): string => (typeof v === 'string' && COLOR_RE.test(v) ? v : '');
-  const chart = Array.isArray(r.chart) ? r.chart.slice(0, 8).map(color) : [];
-  const ramp: AccentRamp = { accent: color(r.accent), accent2: color(r.accent2), soft: color(r.soft), line: color(r.line), chart };
-  const whole = chart.length === 8 && chart.every(Boolean) && ramp.accent && ramp.accent2 && ramp.soft && ramp.line;
-  const logo = sanitizePng(o.logo);
-  return { ...(whole ? { ramp } : {}), ...(logo ? { logo } : {}) };
-}
 
 // Serialize a JS value for safe embedding inside a <script> tag: escape `<`/`>` (so a
 // `</script>` in any string can't break out) and the U+2028/U+2029 line separators
@@ -530,6 +350,26 @@ export function styleBlock(style: DashboardStyle, brand?: ExportBundle['brand'],
       letter-spacing: .04em; color: var(--text-faint); }
     .dash-broken-reason { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
   ` + themeBlock(theme);
+}
+
+/**
+ * Style `auto` in a standalone page: the light tokens styleBlock gives it, and — for a reader whose
+ * system is dark — the dark theme's tokens and accent ramp, by a static @media block appended after
+ * styleBlock (no script and no inline style: a published page's CSP pins its one stylesheet).
+ */
+export function autoSchemeCss(style: DashboardStyle, brand?: ExportBundle['brand'], theme?: ExportTheme): string {
+  if (style.theme !== 'auto') return '';
+  const ramp = themedRamp(accentRamp({ ...style, theme: 'dark' }, brand), theme);
+  const chartVars = ramp.chart.map((c, i) => `--chart-${i + 1}: ${c};`).join(' ');
+  // Theme → density → accent, as styleBlock orders them: the dark theme block declares the KPI sizes too, and
+  // compact's own (it wins over the theme's by source order) must still win under it.
+  return `
+    @media (prefers-color-scheme: dark) {
+      .dash-theme--auto { ${THEME_TOKENS.dark} }
+      .dash-density--${style.density} { ${DENSITY_TOKENS[style.density]} }
+      .dash-accent--${style.accent} { --accent: ${ramp.accent}; --accent-2: ${ramp.accent2};
+        --accent-soft: ${ramp.soft}; --accent-line: ${ramp.line}; --chart-accent: ${ramp.chart[0]}; ${chartVars} }
+    }`;
 }
 
 // The vanilla render script embedded in the file. It reads `window.__DASHBOARD__`, lays

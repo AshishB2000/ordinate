@@ -9,59 +9,10 @@ import { rpc, RpcError } from '../../api/client';
 import { replyError } from '../live/refusal';
 import type { VizData } from '../../api/visuals';
 import type { Overrides } from '../../charts/types';
+import { figureAskKey, type FigureAsk } from '../../../../src/analysis/figureAsk.ts';
 
-export type Agg = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
-
-export interface Measure {
-  column: string;
-  aggregation: Agg;
-  /** A measure from a RELATED dataset (the "from …" groups). */
-  datasetId?: string;
-  metricId?: string;
-  calc?: Record<string, unknown>;
-  [k: string]: unknown;
-}
-
-export interface Geo {
-  level: 'country' | 'us_state' | 'us_county' | 'us_city' | 'us_zip' | 'world_city' | 'point' | 'custom' | 'hexbin' | 'flow';
-  lat?: string;
-  lon?: string;
-  lat2?: string;
-  lon2?: string;
-  from?: string;
-  to?: string;
-  color?: string;
-  boundaryId?: string;
-  property?: string;
-  basemap?: 'osm' | 'none';
-}
-
-/**
- * A chart's encoding as the server stores it. Open on purpose: the shelves this
- * screen does not edit yet (pivot, cohort, eventFunnel, facet, drivers, bins)
- * ride through untouched, so opening and saving never drops them.
- */
-export interface Encoding {
-  category: string;
-  values: Measure[];
-  series?: string;
-  grain?: string;
-  overlay?: 'previous_year';
-  geo?: Geo;
-  categoryDatasetId?: string;
-  seriesDatasetId?: string;
-  [shelf: string]: unknown;
-}
-
-/** A visual-level row filter (a transforms `filter` step). */
-export interface FilterStep {
-  type: 'filter';
-  column: string;
-  op: string;
-  value?: string | number | null;
-  values?: (string | number | null)[];
-  [k: string]: unknown;
-}
+export type { Agg, Encoding, FilterStep, Geo, Measure } from './encoding';
+import type { Encoding, FilterStep } from './encoding';
 
 export interface VisualSummary {
   id: string;
@@ -77,6 +28,8 @@ export interface Visual extends VisualSummary {
   overrides: Overrides;
   filters: FilterStep[];
   analytics?: Record<string, unknown>[];
+  /** The content tag (`visual:get`, and an update's reply): the builder's base (docs/edit-conflicts). */
+  tag?: string;
 }
 
 /** `visual:data` / `visual:preview`, with the builder's extras. */
@@ -195,12 +148,12 @@ export function usePreview(req: Parameters<typeof rpcPreview>[0] | undefined) {
   });
 }
 
-async function rpcPreview(req: { projectId: string; datasetId: string; encoding: Encoding; filters: FilterStep[]; analytics?: Record<string, unknown>[]; asOf?: string }) {
+async function rpcPreview(req: { projectId: string; datasetId: string; encoding: Encoding; filters: FilterStep[]; analytics?: Record<string, unknown>[]; asOf?: string } & Partial<FigureAsk>) {
   // "As of" a kept snapshot reads in full through `visual:data` (src/data/asOf.ts); Latest previews (T2.11).
   const r = (await rpc(req.asOf ? 'visual:data' : 'visual:preview', req)) as ({ ok: true } & Preview) | Fail;
   // An "off for Live" refusal keeps its code, so the stage can offer a copy (../live/refusal.ts).
   if (!r.ok) throw replyError(r, 'Could not compute the visual.');
-  return r;
+  return { ...r, ask: figureAskKey(req.chartType, req) }; // which figures it answers (the stage never draws a held one as another's)
 }
 
 /** The chart's figures shaped by the project's Share policy — what "Copy data" puts on the clipboard. */
@@ -225,14 +178,15 @@ export async function saveVisual(input: {
   return r as Visual;
 }
 
+/** A patch; with `base` (the builder's content tag) a save from a stale copy is refused 409 `record_changed`. The visual, with its new tag. */
 export async function updateVisual(
   projectId: string,
   id: string,
-  patch: Partial<Pick<Visual, 'name' | 'chartType' | 'encoding' | 'overrides' | 'filters' | 'favorite' | 'analytics'>>,
+  patch: Partial<Pick<Visual, 'name' | 'chartType' | 'encoding' | 'overrides' | 'filters' | 'favorite' | 'analytics'>> & { base?: string },
 ): Promise<Visual> {
-  const r = (await rpc('visual:update', { projectId, id, ...patch })) as { ok: true; visual: Visual } | Fail;
+  const r = (await rpc('visual:update', { projectId, id, ...patch })) as { ok: true; visual: Visual; tag?: string } | Fail;
   if (!r.ok) throw new Error(r.error || 'Could not update the visual.');
-  return r.visual;
+  return { ...r.visual, tag: r.tag };
 }
 
 export async function duplicateVisual(projectId: string, id: string): Promise<Visual> {
