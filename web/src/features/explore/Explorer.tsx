@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import type { DatasetSummary } from '../../api/datasets';
+import { PageHead } from '../../app/blocks';
 import { Button } from '../../ui/Button';
 import { DialogClose } from '../../ui/Dialog';
 import { Icon } from '../../ui/icons/Icon';
@@ -64,19 +65,25 @@ export function Explorer({ projectId, datasets, dataset }: { projectId: string; 
 
   return (
     <div className={s.page}>
-      <header className={s.head}>
-        <h1 className={s.title}>Explore</h1>
-        <p className={s.sub}>
-          Ask <b className={s.subName}>{name}</b> a question: pick its fields, or start from a suggestion. Every figure is computed by the app.
-          {live && (
-            <span className={s.liveTag}>
-              <Icon name="zap" size={12} />
-              Live
-            </span>
-          )}
-          {dataset.scoped && <ScopedChip />}
-        </p>
-      </header>
+      <PageHead
+        title="Explore"
+        status={
+          <>
+            {live && (
+              <span className={s.liveTag}>
+                <Icon name="zap" size={12} />
+                Live
+              </span>
+            )}
+            {dataset.scoped && <ScopedChip />}
+          </>
+        }
+        sub={
+          <p>
+            Ask <b className={s.subName}>{name}</b> a question: pick its fields, or start from a suggestion. Every figure is computed by the app.
+          </p>
+        }
+      />
       <AskBox projectId={projectId} />
       <div className={s.bench}>
         <aside className={s.rail} aria-label="Fields">

@@ -63,7 +63,7 @@ export function WorkbenchHead({
       actions={
         <div className={s.dsPick}>
           <Select
-            label="Dataset"
+            aria-label="Dataset"
             size="sm"
             value={datasetId}
             options={options.length ? options : [{ value: datasetId, label: 'This dataset' }]}

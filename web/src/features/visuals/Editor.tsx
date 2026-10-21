@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { DatasetSummary } from '../../api/datasets';
+import { PageHead } from '../../app/blocks';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
 import { Select } from '../../ui/Select';
@@ -76,57 +77,57 @@ export function Editor({ projectId, datasets, columns, related, initial, onReloa
           <ConflictBanner noun="visual" onReload={onReload} onCopy={b.conflict.copy} />
         </div>
       )}
-      <header className={s.head}>
-        <Button icon="arrow-left" onClick={() => void navigate(`/visuals/${projectId}`)}>
-          Back
-        </Button>
-        <h1 className={s.name}>{initial.name || 'New visual'}</h1>
-        <div className={s.headActions}>
-          <Select
-            label="Dataset"
-            className={s.dataset}
-            size="sm"
-            value={datasetId}
-            options={datasets.map((d) => ({ value: d.id, label: d.name || 'Untitled dataset' }))}
-            // Another dataset starts a fresh build — the open visual and its styling stay as saved.
-            onValueChange={(id) => void navigate(`/visuals/${projectId}/new?dataset=${encodeURIComponent(id)}`)}
-          />
-          {/* "As of" reads a kept snapshot; a Live dataset keeps none (L2.6). */}
-          {!b.liveDataset && <AsOfPicker projectId={projectId} datasetIds={[datasetId]} value={b.asOf} onChange={b.setAsOf} />}
-          <Button
-            size="sm"
-            icon="sparkles"
-            disabled={!ai.data?.ready}
-            title={ai.data && !ai.data.ready ? AI_NOT_READY : undefined}
-            onClick={() => setSuggesting(true)}
-          >
-            Suggest chart
-          </Button>
-          <Button
-            size="sm"
-            icon="database"
-            title="Open this dataset, profiling the category column"
-            // The profile panel is the Data section's (T2.3): link to it, never a second copy here.
-            onClick={() => void navigate(`/data/${projectId}/${datasetId}${b.eff.category ? `?profile=${encodeURIComponent(b.eff.category)}` : ''}`)}
-          >
-            Profile
-          </Button>
-          {/* Comments on this visual (T2.9 commentDoors.ts) — a saved visual only; a viewer cannot save one, so is not told to. */}
-          {(visualId || b.canEdit) && <CommentDoor projectId={projectId} kind="visual" id={visualId ?? undefined} disabledReason="Save this visual first, then comment on it" />}
-          {visualId && (
-            <Button size="sm" icon="history" title="Version history" onClick={() => void navigate(`/versions/${projectId}/visual/${visualId}`)}>
-              History
+      <PageHead
+        className={s.head}
+        back={{ to: `/visuals/${projectId}`, label: 'Visuals' }}
+        title={initial.name || 'New visual'}
+        status={!b.canEdit && <Badge icon="eye">View only</Badge>}
+        actions={
+          <>
+            <Select
+              aria-label="Dataset"
+              className={s.dataset}
+              size="sm"
+              value={datasetId}
+              options={datasets.map((d) => ({ value: d.id, label: d.name || 'Untitled dataset' }))}
+              // Another dataset starts a fresh build — the open visual and its styling stay as saved.
+              onValueChange={(id) => void navigate(`/visuals/${projectId}/new?dataset=${encodeURIComponent(id)}`)}
+            />
+            {/* "As of" reads a kept snapshot; a Live dataset keeps none (L2.6). */}
+            {!b.liveDataset && <AsOfPicker projectId={projectId} datasetIds={[datasetId]} value={b.asOf} onChange={b.setAsOf} />}
+            <Button
+              size="sm"
+              icon="sparkles"
+              disabled={!ai.data?.ready}
+              title={ai.data && !ai.data.ready ? AI_NOT_READY : undefined}
+              onClick={() => setSuggesting(true)}
+            >
+              Suggest chart
             </Button>
-          )}
-          {b.canEdit ? (
-            <Button variant="primary" onClick={trySave} disabled={b.changed}>
-              Save visual
+            <Button
+              size="sm"
+              icon="database"
+              title="Open this dataset, profiling the category column"
+              // The profile panel is the Data section's (T2.3): link to it, never a second copy here.
+              onClick={() => void navigate(`/data/${projectId}/${datasetId}${b.eff.category ? `?profile=${encodeURIComponent(b.eff.category)}` : ''}`)}
+            >
+              Profile
             </Button>
-          ) : (
-            <Badge icon="eye">View only</Badge>
-          )}
-        </div>
-      </header>
+            {/* Comments on this visual (T2.9 commentDoors.ts) — a saved visual only; a viewer cannot save one, so is not told to. */}
+            {(visualId || b.canEdit) && <CommentDoor projectId={projectId} kind="visual" id={visualId ?? undefined} disabledReason="Save this visual first, then comment on it" />}
+            {visualId && (
+              <Button size="sm" icon="history" title="Version history" onClick={() => void navigate(`/versions/${projectId}/visual/${visualId}`)}>
+                History
+              </Button>
+            )}
+            {b.canEdit && (
+              <Button variant="primary" onClick={trySave} disabled={b.changed}>
+                Save visual
+              </Button>
+            )}
+          </>
+        }
+      />
 
       <div className={s.body}>
         <aside className={s.rail} aria-label="Encoding">

@@ -7,9 +7,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { EmptyState, ErrorState, Page, PageSkeleton } from '../../app/blocks';
+import { EmptyState, ErrorState, Page, PageHead, PageSkeleton } from '../../app/blocks';
 import { Button, buttonClass } from '../../ui/Button';
-import { Icon } from '../../ui/icons/Icon';
 import { toast } from '../../ui/Toast';
 import {
   describeTable,
@@ -271,20 +270,21 @@ function Workbench({ projectId, conn, def, logo }: { projectId: string; conn: Co
 
   return (
     <div className={s.page}>
-      <header className={s.head}>
-        <Link className={buttonClass('secondary', 'sm')} to={`/connections/${projectId}`}>
-          <Icon name="arrow-left" />
-          <span>Connections</span>
-        </Link>
-        <ConnLogo logo={logo} label={label} small />
-        <div className={s.ident}>
-          <h1 className={s.title}>{conn.name}</h1>
-          <span className={s.sub}>{at ? `${label} · ${at}` : label}</span>
-        </div>
-        <Button size="sm" icon="sliders" aria-expanded={details} aria-controls="conn-wb-details" onClick={() => setDetails(!details)}>
-          Details
-        </Button>
-      </header>
+      <PageHead
+        back={{ to: `/connections/${projectId}`, label: 'Connections' }}
+        title={
+          <span className={s.titled}>
+            <ConnLogo logo={logo} label={label} small />
+            {conn.name}
+          </span>
+        }
+        sub={at ? `${label} · ${at}` : label}
+        actions={
+          <Button size="sm" icon="sliders" aria-expanded={details} aria-controls="conn-wb-details" onClick={() => setDetails(!details)}>
+            Details
+          </Button>
+        }
+      />
       <div className={[s.body, !browsable && s.noTree, !details && s.noDetails].filter(Boolean).join(' ')}>
         {browsable && <SchemaTree tables={tables} family={family} selected={selected} keyOf={keyOf} describe={describe} onSelect={selectTable} />}
         <div className={`${s.pane} ${s.main}`}>
