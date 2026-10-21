@@ -1,0 +1,121 @@
+/* The answer (./Answer.tsx): its card — title, actions, chart-type chips,
+   notes, the chart's box — then the same answer as a table. */
+
+.answer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.answerHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sp-12);
+}
+.answerTitles {
+  display: flex;
+  flex: 1 1 280px;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.answerTitle {
+  margin: 0;
+  font-size: var(--t-15);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tr-tight);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.answerMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-8);
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.answerMeta > * + *::before {
+  content: '·';
+  margin-right: var(--sp-8);
+  color: var(--text-faint);
+}
+.answerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.notes li {
+  padding: var(--sp-4) var(--sp-8);
+  border-radius: var(--r-sm);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: var(--t-12);
+}
+/* A phone: the chart-type chips are one line that scrolls sideways, not three that push the chart down. */
+@media (max-width: 600px) {
+  .types [role='radiogroup'] {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .types [role='radiogroup'] > * {
+    flex: 0 0 auto;
+  }
+}
+/* The chart's box: ChartStage fills it (a flex column of a fixed height). */
+.chart {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 440px;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.dim {
+  opacity: 0.55;
+}
+@media (max-width: 600px) {
+  .chart {
+    height: 300px;
+  }
+}
+.table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  max-height: 480px;
+  padding: var(--sp-12) var(--sp-16) var(--sp-16);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+/* The table scrolls inside its card, both ways, its header and labels pinned. */
+.table > div:last-child {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.tableH {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.tableNone {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
