@@ -77,7 +77,7 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       ['KPI average', 'dashboard:metric', (d) => ({ projectId: P, datasetId: d, column: 'qty', aggregation: 'avg' })],
       ['metric preview', 'metric:preview', (d) => ({ projectId: P, datasetId: d, definition: { column: 'sales', aggregation: 'sum' } })],
       ['metric values', 'metric:values', (d) => ({ projectId: P, ids: [recs[d].metricId] })],
-      ['metric check', 'metric:check', (d) => ({ projectId: P, datasetId: d, expression: 'sum(sales) / sum(qty)', name: 'Per unit', chart: true })],
+      ['metric check', 'metric:check', (d) => ({ projectId: P, datasetId: d, expression: 'sum(sales)', name: 'Sales', chart: true })],
       ['dashboard tiles', 'analysis:tiles', (d) => ({ projectId: P, items: [{ kind: 'visual', datasetId: d, encoding: enc }, { kind: 'metric', datasetId: d, column: 'sales', aggregation: 'sum' }] })],
       ['story figures', 'story:figures', (d) => ({ projectId: P, blocks: [{ id: 'b1', kind: 'visual', visualId: recs[d].visualId }] })],
       ['answer card', 'answer:card', (d) => ({ projectId: P, spec: spec(d) })],
@@ -101,7 +101,7 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       eastReplies.push(mine.text);
       const d = diff(mine, truth);
       ok(`door: ${label} (${channel}) — east on Orders ≡ the editor on East's rows`, mine.status === 200 && truth.status === 200 && d === '', `${d} | ${mine.status} ${mine.text.slice(0, 200)}`);
-      ok(`NEGATIVE CONTROL: ${label} — the editor on Orders sees more`, diff(whole, truth) !== '' || channel === 'metric:check', `${whole.text.slice(0, 200)} | ${truth.text.slice(0, 200)}`);
+      ok(`NEGATIVE CONTROL: ${label} — the editor on Orders sees more`, diff(whole, truth) !== '', `${whole.text.slice(0, 200)} | ${truth.text.slice(0, 200)}`);
     }
     function diff(a: H.Reply, b: H.Reply): string {
       return H.diff(a.body, b.body, swap);

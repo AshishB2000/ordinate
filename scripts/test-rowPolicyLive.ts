@@ -23,10 +23,27 @@ const rowLock: typeof import('../src/data/rowLock') = require('../src/data/rowLo
 
 const COLS: LiveColumn[] = [{ name: 'region', type: 'text' }, { name: 'amount', type: 'number' }, { name: 'day', type: 'date' }];
 const env = (dialect: CompileDialectId) => ({ dialect, source: { kind: 'table' as const, parts: ['db', 'sch', 'orders'] }, columns: COLS });
-/** The byte form each dialect must use (refutation S3). */
-const BINARY: Record<CompileDialectId, RegExp> = {
-  duckdb: /encode\(/, bigquery: /CAST\(.* AS BYTES\)/, databricks: /CAST\(.* AS BINARY\)/, snowflake: /TO_BINARY\(.*'UTF-8'\)/, redshift: /md5\(/, clickhouse: /(IN \(|= \{p)/,
+/** The EXACT lock clause per dialect (refutation S3): both sides in the byte form, every value a placeholder.
+ *  ClickHouse compares String bytes already, so its form is the identity. `c` is the column, `p(i)` a placeholder. */
+const COL: Record<CompileDialectId, string> = {
+  duckdb: 'coalesce(CAST(lv_src."region" AS VARCHAR), \'\')', snowflake: 'coalesce(CAST(lv_src."region" AS VARCHAR), \'\')',
+  redshift: 'coalesce(CAST(lv_src."region" AS VARCHAR(65535)), \'\')', bigquery: 'coalesce(CAST(lv_src.`region` AS STRING), \'\')',
+  databricks: 'coalesce(CAST(lv_src.`region` AS STRING), \'\')', clickhouse: 'coalesce(CAST(lv_src.`region` AS Nullable(String)), \'\')',
 };
+const PARAM: Record<CompileDialectId, (i: number) => string> = {
+  duckdb: (i) => `CAST($${i + 1} AS VARCHAR)`, snowflake: () => 'CAST(? AS VARCHAR)', redshift: (i) => `CAST($${i + 1} AS VARCHAR(65535))`,
+  bigquery: (i) => `CAST(@p${i} AS STRING)`, databricks: (i) => `CAST(:p${i} AS STRING)`, clickhouse: (i) => `{p${i}:String}`,
+};
+const BYTES: Record<CompileDialectId, (x: string) => string> = {
+  duckdb: (x) => `encode(${x})`, snowflake: (x) => `TO_BINARY(${x}, 'UTF-8')`, redshift: (x) => `md5(${x})`,
+  bigquery: (x) => `CAST(${x} AS BYTES)`, databricks: (x) => `CAST(${x} AS BINARY)`, clickhouse: (x) => x,
+};
+const expectedWhere = (id: CompileDialectId, n: number, lock: boolean): string => {
+  const b = lock ? BYTES[id] : (x: string) => x;
+  const ps = Array.from({ length: n }, (_, i) => b(PARAM[id](i)));
+  return `WHERE (${b(COL[id])} ${n > 1 ? `IN (${ps.join(', ')})` : `= ${ps[0]}`})`;
+};
+const whereOf = (sql: string): string => { const i = sql.indexOf('WHERE'); const e = sql.indexOf('\n', i); return i < 0 ? '' : sql.slice(i, e < 0 ? undefined : e); };
 const SECRET = ['East_SECRET_V1', "O'Brien_SECRET_V2"];
 
 const metricSql = (id: CompileDialectId, filters: FilterStep[]) => {
@@ -43,15 +60,17 @@ const metricSql = (id: CompileDialectId, filters: FilterStep[]) => {
   const lockEq = rowLock.lockStep('region', [SECRET[0]]);
   ok('a lock step is marked, `=` for one value and `in` for several', lockIn.lock === true && lockIn.op === 'in' && lockEq.op === '=' && lockEq.lock === true);
   for (const id of dialects.DIALECT_IDS) {
-    for (const [label, step] of [['in', lockIn], ['=', lockEq]] as const) {
+    for (const [label, step, n] of [['in', lockIn, 2], ['=', lockEq, 1]] as const) {
       const q = metricSql(id, [step]);
-      ok(`${id}: a lock (${label}) compares byte for byte`, BINARY[id].test(q.sql), q.sql);
-      ok(`${id}: …every lock value is a bound parameter, none in the SQL text`,
-        SECRET.slice(0, label === 'in' ? 2 : 1).every((v) => q.params.some((p) => p.value === v) && !q.sql.includes(v)), JSON.stringify(q.params));
+      const want = expectedWhere(id, n, true);
+      ok(`${id}: a lock (${label}) compiles to exactly ${want}`, whereOf(q.sql) === want, whereOf(q.sql));
+      const wantParams = SECRET.slice(0, n).map((value, i) => ({ name: `p${i}`, type: 'text', value }));
+      ok(`${id}: …its values are exactly the bound parameters, none in the SQL text`,
+        JSON.stringify(q.params) === JSON.stringify(wantParams) && SECRET.every((v) => !q.sql.includes(v)), JSON.stringify(q.params));
     }
     const plain = metricSql(id, [{ type: 'filter', column: 'region', op: '=', value: 'East' }]);
-    const binaryRe = id === 'clickhouse' ? /(?!)/ : BINARY[id];
-    ok(`${id}: NEGATIVE CONTROL — a filter that is not a lock compiles as before (no byte form)`, !binaryRe.test(plain.sql), plain.sql);
+    ok(`${id}: NEGATIVE CONTROL — a filter that is not a lock compiles exactly as before (no byte form)`, whereOf(plain.sql) === expectedWhere(id, 1, false), whereOf(plain.sql));
+    if (id !== 'clickhouse') ok(`${id}: NEGATIVE CONTROL — the lock's expected clause differs from the plain one, so the check above can fail`, expectedWhere(id, 1, true) !== expectedWhere(id, 1, false));
   }
 
   // The two lookups that run without the question's filters take the lock (D13).

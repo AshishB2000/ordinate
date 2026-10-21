@@ -100,6 +100,30 @@ async function main(adminUrl: string): Promise<void> {
       const pgPins: typeof import('./liveParityPgPins') = require('./liveParityPgPins');
       await pgPins.run({ ok, pid: x.pid, pg: p, bound });
 
+      // A row access lock on a REAL engine (docs/row-policy D13): byte-compared (md5) and bound, even on a column
+      // whose collation calls 'east' and 'East' equal. NEGATIVE CONTROL: a plain '=' on that column admits both.
+      const comp: typeof import('../src/engine/live/compile') = require('../src/engine/live/compile');
+      const lspec: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
+      const rowLock: typeof import('../src/data/rowLock') = require('../src/data/rowLock');
+      await p.query("CREATE COLLATION IF NOT EXISTS rp_ci (provider = icu, locale = 'und-u-ks-level2', deterministic = false)");
+      await p.query('DROP TABLE IF EXISTS rp_lock');
+      await p.query('CREATE TABLE rp_lock (region text COLLATE rp_ci, amount double precision)');
+      await p.query("INSERT INTO rp_lock VALUES ('East', 1), ('east', 2), ('East ', 4), ('West', 8), (NULL, 16)");
+      const LCOLS = [{ name: 'region', type: 'text' as const, sourceType: 'text' }, { name: 'amount', type: 'number' as const, sourceType: 'double precision' }];
+      const sumOver = async (step: import('../src/data/transforms').FilterStep): Promise<unknown> => {
+        const a = lspec.fromMetric({ column: 'amount', aggregation: 'sum' }, [step], LCOLS);
+        if (!a.ok) return `refused ${a.code}`;
+        const c = comp.compileMetric(a.ir, { dialect: 'redshift', source: { kind: 'table', parts: ['public', 'rp_lock'] }, columns: LCOLS });
+        if (!c.ok) return `refused ${c.code}`;
+        const r = await bound(c.query.sql, c.query.params);
+        return r.ok ? r.rows[0]?.[0] : r.error;
+      };
+      const locked = await sumOver(rowLock.lockStep('region', ['East']));
+      const lockedIn = await sumOver(rowLock.lockStep('region', ['East', 'West']));
+      const plainEq = await sumOver({ type: 'filter', column: 'region', op: '=', value: 'East' });
+      ok('row access lock on Postgres: md5-compared and bound — exactly East (1), and East + West (9), never \'east\' or \'East \'', locked === 1 && lockedIn === 9, `${String(locked)} / ${String(lockedIn)}`);
+      ok('NEGATIVE CONTROL: the same filter WITHOUT the lock mark follows the case-insensitive collation (East + east = 3)', plainEq === 3, String(plainEq));
+
       // The LITERAL twin — the fixture as a defining query over E'…' literals,
       // the way the nightly loads it into read-only Snowflake and BigQuery
       // roles (scripts/liveParityLiteral.ts) — proved here, every 9th case.
