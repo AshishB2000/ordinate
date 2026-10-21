@@ -50,7 +50,7 @@ function Subtitle({ project, failed, loading }: { project: Project | undefined; 
   );
 }
 
-/** Dashboard and Visual open their section; each way of bringing data in opens its own door, in Home's project. */
+/** Dashboard opens the new-dashboard wizard and Visual its section; each way of bringing data in opens its own door, in Home's project. */
 function NewMenu({ projectId }: { projectId: string | undefined }) {
   const navigate = useNavigate();
   return (
@@ -64,7 +64,8 @@ function NewMenu({ projectId }: { projectId: string | undefined }) {
         </Button>
       }
       items={[
-        { label: 'Dashboard', icon: 'layout-dashboard', onSelect: () => void navigate('/dashboards') },
+        // The wizard, as the palette's "New dashboard" (the Dashboards section lists published pages).
+        { label: 'Dashboard', icon: 'layout-dashboard', onSelect: () => void navigate(projectId ? `/analyses?project=${projectId}&new=1` : '/analyses?new=1') },
         { label: 'Visual', icon: 'chart-bar', onSelect: () => void navigate('/visuals') },
         { kind: 'separator' },
         { kind: 'heading', label: 'Add data' },

@@ -37,7 +37,7 @@ const STEPS: Step[] = [
     line: 'Chart the sample orders by month, region or category in a few clicks.',
   },
   {
-    id: 'dashboard', icon: 'layout-dashboard', title: 'Create a dashboard', to: '/dashboards', action: 'Browse templates',
+    id: 'dashboard', icon: 'layout-dashboard', title: 'Create a dashboard', to: '/analyses?new=1', action: 'Browse templates',
     line: 'Start from a template and have a laid-out sheet in one step.',
   },
   {

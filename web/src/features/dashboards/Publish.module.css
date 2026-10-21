@@ -1,12 +1,12 @@
 /* The Dashboards page (published links) and the Publish dialog (hub.css
    .pd-* / publishDialog.ts). Tokens only. */
 
+/* Who may open a link: a line under the header (its actions are the header's). */
 .bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--sp-12);
-  margin-bottom: var(--sp-16);
+  margin-top: calc(-1 * var(--sp-12));
 }
 .barNote {
   display: inline-flex;

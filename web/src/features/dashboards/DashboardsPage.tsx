@@ -6,10 +6,10 @@
 // at /p/<id>/ — a snapshot, built by value when published.
 
 import { useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { EmptyState, ErrorState, Page } from '../../app/blocks';
 import { ago } from '../../app/when';
-import { Button, IconButton } from '../../ui/Button';
+import { Button, buttonClass, IconButton } from '../../ui/Button';
 import { Menu } from '../../ui/Menu';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { toast } from '../../ui/Toast';
@@ -100,6 +100,16 @@ function SiteRow({ site, projectId, publicLinks, onRepublish, onEmbed, canEdit }
   );
 }
 
+/** The new-dashboard wizard (Analyses, `?new=1`): what is published here is made there. */
+function CreateDashboard({ projectId }: { projectId: string }) {
+  return (
+    <Link className={buttonClass('secondary')} to={`/analyses?project=${projectId}&new=1`}>
+      <Icon name="plus" />
+      <span>Create dashboard</span>
+    </Link>
+  );
+}
+
 function Published({ projectId }: { projectId: string }) {
   const [params, setParams] = useSearchParams();
   const preselect = params.get('dashboard') ?? undefined;
@@ -116,17 +126,25 @@ function Published({ projectId }: { projectId: string }) {
   };
   const publicLinks = q.data?.publicLinks ?? false;
   return (
-    <Page title="Dashboards" sub="Published, read-only pages of this project’s dashboards, stories and scorecards.">
+    <Page
+      title="Dashboards"
+      sub="Published, read-only pages of this project’s dashboards, stories and scorecards."
+      actions={
+        canEdit && (
+          <>
+            <CreateDashboard projectId={projectId} />
+            <Button variant="primary" icon="globe" onClick={() => setDialog({})}>
+              Publish…
+            </Button>
+          </>
+        )
+      }
+    >
       <div className={p.bar}>
         <span className={p.barNote}>
           <Icon name={publicLinks ? 'globe' : 'lock'} size={12} />
           {publicLinks ? 'Your organisation allows links anyone can open.' : 'Links open for people in your organisation only.'}
         </span>
-        {canEdit && (
-          <Button variant="primary" icon="globe" onClick={() => setDialog({})}>
-            Publish…
-          </Button>
-        )}
       </div>
       {q.isPending ? (
         <SkeletonRows rows={4} label="Loading published links" />
@@ -138,9 +156,12 @@ function Published({ projectId }: { projectId: string }) {
           title="Nothing published yet"
           actions={
             canEdit && (
-              <Button variant="primary" icon="globe" onClick={() => setDialog({})}>
-                Publish a dashboard
-              </Button>
+              <>
+                <CreateDashboard projectId={projectId} />
+                <Button variant="primary" icon="globe" onClick={() => setDialog({})}>
+                  Publish a dashboard
+                </Button>
+              </>
             )
           }
         >

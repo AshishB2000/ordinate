@@ -21,7 +21,7 @@ const TABS = ['datasets', 'captures', 'catalog', 'relationships'] as const;
 type TabId = (typeof TABS)[number];
 
 const SUB: Record<TabId, string> = {
-  datasets: 'Import CSV, JSON or Excel — or paste data — to save a structured dataset in this project.',
+  datasets: 'Import a file, paste data, or connect a database, warehouse or app — each saves a structured dataset in this project.',
   captures: 'Screenshots turned into tables. Each one becomes a dataset once you review it.',
   catalog: 'Every dataset, visual, dashboard, metric and report, with its description, tags, owner and use.',
   relationships: 'Relate datasets once; visuals then use columns from both.',
@@ -61,6 +61,11 @@ export default function DataSection() {
             <>
               <Link className={buttonClass('ghost')} to={`/data/import?project=${projectId}&source=paste`}>
                 Paste data
+              </Link>
+              {/* The 40 databases, warehouses and apps (T2.5) are a connection, not an upload. */}
+              <Link className={buttonClass('secondary')} to={`/connections/${projectId}`}>
+                <Icon name="plug" />
+                <span>Connect a database</span>
               </Link>
               <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
                 Import file
