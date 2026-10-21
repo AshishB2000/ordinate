@@ -223,7 +223,7 @@ function Metrics({ projectId }: { projectId: string }) {
 
   const usage = deleting ? q.data?.rows[deleting.id]?.usage : null;
   return (
-    <Page title="Metrics" sub="What this project's numbers mean, defined once.">
+    <Page back={{ to: `/data/${projectId}`, label: 'Data' }} title="Metrics" sub="What this project's numbers mean, defined once.">
       <div className={s.head}>
         {count > 0 ? <span className={s.count}>{count === 1 ? '1 metric' : `${count} metrics`}</span> : <span />}
         {canEdit && (

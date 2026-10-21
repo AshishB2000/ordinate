@@ -133,7 +133,7 @@ function Captures({ projectId }: { projectId: string }) {
     );
   }
   return (
-    <Page title="Captures" sub="Screenshots the model has read in this project.">
+    <Page back={{ to: `/data/${projectId}`, label: 'Data' }} title="Captures" sub="Screenshots the model has read in this project.">
       {canEdit && q.data && q.data.length > 0 && (
         <>
           <div className={s.capBar}>
