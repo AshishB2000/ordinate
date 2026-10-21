@@ -264,6 +264,13 @@ function doorProblem(data: Any, type: string, ask: Any = {}): string {
     const v = pv.ok ? pv.sheets[0].visuals[0] : null;
     const p = v ? doorProblem(v.data, 'pareto') : 'no preview';
     ok('the plan preview: the chart the review shows carries its figures', !p, p || show(pv).slice(0, 300));
+    // A saved visual reused by a plan previews with ITS overrides: its named waterfall total stays a total.
+    await H.as(H.ORG_A, () => visuals.saveVisual(P, { name: 'Reused bridge', datasetId: s.extractId, chartType: 'waterfall',
+      encoding: { category: 'region', values: [M('amt', 'sum')] }, overrides: { waterfallTotals: WF_TOTALS }, filters: [] } as Any));
+    const reused = await H.as(H.ORG_A, () => planPreview.previewPlan(P, { name: 'Plan', sheets: [{ name: 'S', visuals: [{ visual: 'Reused bridge' }] }] }));
+    const rv = reused.ok ? reused.sheets[0].visuals[0] : null;
+    const rp = rv ? doorProblem(rv.data, 'waterfall', { waterfallTotals: WF_TOTALS }) : 'no preview';
+    ok('the plan preview: a reused visual keeps its named totals in its figures', !rp && (rv!.data as Any).figures.waterfall.steps.some((x: Any) => x.kind === 'total'), rp || show(rv).slice(0, 300));
     const view = capture.viewOf({
       id: 'x', result: {
         extractedTable: {

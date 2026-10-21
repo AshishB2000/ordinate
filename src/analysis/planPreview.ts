@@ -224,6 +224,7 @@ async function previewVisual(
   // is what the analysis will show — never through a re-derived one.
   let encoding = pv.encoding;
   let filters = pv.filters;
+  let overrides: unknown; // a reused visual's own: its named waterfall totals and bullet target change its figures
   if (pv.kind === 'existing' && pv.visualId) {
     const v = await visuals.getVisual(projectId, pv.visualId);
     if (!v) {
@@ -235,6 +236,7 @@ async function previewVisual(
     base.encoding = encoding;
     base.filters = filters;
     base.chartType = v.chartType;
+    overrides = v.overrides;
   }
 
   // A column that does not exist yet cannot be charted, and an approximation
@@ -255,7 +257,7 @@ async function previewVisual(
       : res.error;
     return base;
   }
-  base.data = withChartFigures(res.data, figureAsk(base.chartType)); // the figures it draws (./chartShapes), as a built tile gets them
+  base.data = withChartFigures(res.data, figureAsk(base.chartType, overrides)); // the figures it draws (./chartShapes), as a built tile gets them
   base.recommendedShape = res.recommendedShape;
   base.warnings = res.warnings;
   return base;
