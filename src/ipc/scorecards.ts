@@ -19,8 +19,7 @@
 // grouped query per metric is the upgrade if that ever shows.
 
 import { ipcMain } from './bus';
-import { ROW_POLICY_CODE, isRowPolicyError } from '../data/rowAccess';
-import { closedToCaller } from '../data/rowAccess';
+import { ROW_POLICY_CODE, closedToCaller, isRowPolicyError } from '../data/rowAccess';
 import { distinctFor } from './distinctFor';
 
 import * as scorecards from '../analysis/scorecards';

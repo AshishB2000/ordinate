@@ -21,7 +21,6 @@ import type { FilterStep } from '../data/transforms';
 import { applyPipeline } from '../data/transforms';
 import type { Lock } from '../data/rowLock';
 import { RowPolicyError, isRowPolicyError, rowLockFor, rowPolicyRefusal, withLockSteps, withRowLock } from '../data/rowAccess';
-import type { RowPolicyReason } from '../data/rowAccess';
 import { hasMetricMeasure } from '../analysis/metricMeasures';
 import type { VizEncoding } from '../analysis/visuals';
 import { relatedColumnNames } from './relationships';
@@ -105,7 +104,3 @@ export function lockedTable<T extends { columns: datasets.Dataset['columns']; ro
   return { ...ds, rows: t.rows, rowCount: t.rows.length, source: undefined };
 }
 
-/** A typed refusal for a reader that is not a door (the explicit checks). */
-export function refuseRows(reason: RowPolicyReason): never {
-  throw new RowPolicyError(reason);
-}
