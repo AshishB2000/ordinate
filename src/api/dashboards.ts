@@ -85,6 +85,8 @@ export const dashboards = {
   'comment:reopen': rpc({ access: 'read', audit: true, input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
   'comment:delete': rpc({ access: 'read', audit: true, input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
   'comment:deleteReply': rpc({ access: 'read', audit: true, input: z.strictObject({ projectId: Uuid, id: Uuid, replyId: Uuid }), project: byProjectId }),
+  // The @ picker (docs/notifications §5.11): at most 8 people who can read this project NOW, matching `q` — never the org directory.
+  'comment:mentionable': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, q: z.string().max(100) }), project: byProjectId }),
 
   'alerts:list': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
   'alerts:save': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, rule: Rule }), project: byProjectId }),

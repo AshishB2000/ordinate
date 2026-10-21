@@ -1,7 +1,7 @@
 // Hourly email budgets, per pod (docs/email/00-design.md D6; the R8 ceiling):
 //
 //   org      RATE_LIMIT_EMAIL_ORG_PER_HOUR recipients per org and kind
-//            (subscriptions and alerts apart, so one cannot starve the other)
+//            (subscriptions, alerts and mentions apart, so one cannot starve another)
 //   project  half of that per project and kind, so one project cannot drain
 //            the org's budget
 //   test     TEST_EMAILS_PER_HOUR test emails per org
@@ -25,7 +25,7 @@ function charges(key: string, now: number): Charge[] {
 export type Bucket = readonly [key: string, limit: number];
 
 /** What one send's batches are held against: the org's bucket and the project's half, for this kind. */
-export function sendBuckets(org: string, projectId: string, kind: 'dashboard' | 'alert', orgPerHour: number): Bucket[] {
+export function sendBuckets(org: string, projectId: string, kind: 'dashboard' | 'alert' | 'mention', orgPerHour: number): Bucket[] {
   return [[`${org}\0${kind}`, orgPerHour], [`${org}\0${projectId}\0${kind}`, projectShare(orgPerHour)]];
 }
 

@@ -59,7 +59,7 @@ const inFlight = new Set<Promise<number>>();
 
 /** Test hook: until every post started so far has ended. */
 export async function postsSettled(): Promise<void> {
-  while (inFlight.size) await Promise.all([...inFlight]);
+  while (inFlight.size) await Promise.all(inFlight);
 }
 
 /** Post each of `events` to its rule's channels, each event at most once. Returns how many posts went out. Never throws. */

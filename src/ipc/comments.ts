@@ -12,6 +12,13 @@
 // `comments:changed` is pushed to every hub window after any change, so a
 // second window's card counts follow the first's. An empty projectId means
 // "all projects" — the display name changed.
+//
+// @MENTIONS (docs/notifications/00-design.md §5.5): add, reply and edit read the
+// project's current readers first and hand the store a gate it runs INSIDE its
+// lock, on the body as stored; a stored piece's new mentions are then told —
+// started with `void`, so a mention never delays or fails the comment. The list
+// says whether mentions are on, and names the mentioned people who can read the
+// project now (`people`) — no one else.
 
 import { ipcMain } from './bus';
 import { serverDataDir } from '../server/context';
@@ -23,6 +30,7 @@ import * as datasets from '../data/datasets';
 import * as stories from '../analysis/stories';
 import type { Comment } from '../app/commentModel';
 import type { Card } from '../analysis/dashboards';
+import { currentReaders, mentionGate, mentionsOn, peopleIn } from '../server/mentions/people';
 
 interface TargetInfo { name: string; analysisId?: string }
 
@@ -69,7 +77,25 @@ async function answer(projectId: string, res: comments.Result): Promise<unknown>
   }));
   let targets: Record<string, TargetInfo> = {};
   try { targets = await targetNames(projectId, res.comments); } catch (_) { /* names are a nicety */ }
-  return { ok: true, comments: list, targets };
+  const bodies = res.comments.flatMap((c) => [c.body, ...c.replies.map((r) => r.body)]);
+  const people = bodies.some((b) => b.includes('@(')) ? peopleIn(bodies, await currentReaders(projectId).catch(() => null)) : {};
+  return { ok: true, comments: list, targets, mentions: mentionsOn(), people };
+}
+
+/** After a write that stored a piece: tell its new mentions, never in the write's way. */
+function tell(projectId: string, res: comments.Written): void {
+  if (!res.ok || !('piece' in res) || !res.mentioned.length) return;
+  const c = res.comments.find((x) => x.id === res.piece.commentId);
+  if (!c) return;
+  const body = res.piece.id === c.id ? c.body : c.replies.find((r) => r.id === res.piece.id)?.body ?? '';
+  const { notifyMentions } = require('../server/mentions/notify') as typeof import('../server/mentions/notify');
+  void notifyMentions({ projectId, commentId: c.id, id: res.piece.id, target: c.target, author: comments.author(), body }, res.mentioned);
+}
+
+/** The gate for a write by the caller: the project's readers, read before the lock. */
+async function gateFor(projectId: string): Promise<comments.MentionGate> {
+  // No answer from the directory: no one is a reader, so a new mention is refused (fail closed), the rest of the write goes on.
+  return mentionGate(await currentReaders(projectId).catch(() => null), comments.author());
 }
 
 export function register(): void {
@@ -90,12 +116,21 @@ export function register(): void {
 
   // ponytail: IPC payloads are JSON envelopes; every field is re-checked in app/comments
   ipcMain.handle('comment:list', async (_e, { projectId }: any = {}) => answer(pid(projectId), await comments.list(pid(projectId))));
-  ipcMain.handle('comment:add', async (_e, { projectId, target, body }: any = {}) =>
-    write(pid(projectId), await comments.add(pid(projectId), target, body)));
-  ipcMain.handle('comment:reply', async (_e, { projectId, id: cid, body }: any = {}) =>
-    write(pid(projectId), await comments.reply(pid(projectId), id(cid), body)));
-  ipcMain.handle('comment:edit', async (_e, { projectId, id: cid, body }: any = {}) =>
-    write(pid(projectId), await comments.edit(pid(projectId), id(cid), body)));
+  ipcMain.handle('comment:add', async (_e, { projectId, target, body }: any = {}) => {
+    const res = await comments.add(pid(projectId), target, body, await gateFor(pid(projectId)));
+    tell(pid(projectId), res);
+    return write(pid(projectId), res);
+  });
+  ipcMain.handle('comment:reply', async (_e, { projectId, id: cid, body }: any = {}) => {
+    const res = await comments.reply(pid(projectId), id(cid), body, await gateFor(pid(projectId)));
+    tell(pid(projectId), res);
+    return write(pid(projectId), res);
+  });
+  ipcMain.handle('comment:edit', async (_e, { projectId, id: cid, body }: any = {}) => {
+    const res = await comments.edit(pid(projectId), id(cid), body, await gateFor(pid(projectId)));
+    tell(pid(projectId), res);
+    return write(pid(projectId), res);
+  });
   ipcMain.handle('comment:resolve', async (_e, { projectId, id: cid }: any = {}) =>
     write(pid(projectId), await comments.resolve(pid(projectId), id(cid))));
   ipcMain.handle('comment:reopen', async (_e, { projectId, id: cid }: any = {}) =>

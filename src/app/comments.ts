@@ -43,6 +43,17 @@ const FILE = 'comments.json';
 
 export type Result = { ok: true; comments: Comment[] } | { ok: false; error: string };
 
+/**
+ * A write's @mention check (server/mentions/people.ts `mentionGate`), run INSIDE
+ * the locked change on the body as it will be stored and the body it replaces
+ * ('' for a new comment or reply): a sentence refuses the write; a list is the
+ * new mentions to notify.
+ */
+export type MentionGate = (prevBody: string, nextBody: string) => string | string[];
+/** A write that stored a comment or a reply: which piece, and who it newly mentions. */
+export type Written = Result | { ok: true; comments: Comment[]; piece: { id: string; commentId: string }; mentioned: string[] };
+const noGate: MentionGate = () => [];
+
 // ── author ───────────────────────────────────────────────────────────────────
 
 function osUser(): string {
@@ -198,19 +209,50 @@ function onThread(projectId: string, id: string, fn: (c: Comment, now: string) =
   });
 }
 
-export function add(projectId: string, target: unknown, body: unknown): Promise<Result> {
-  return mutate(projectId, (all, now) => {
+/** `res` with the piece the change wrote and its new mentions, when it wrote one. */
+function written(res: Result, out: { piece: { id: string; commentId: string }; mentioned: string[] } | null): Written {
+  return res.ok && out ? { ...res, ...out } : res;
+}
+
+export async function add(projectId: string, target: unknown, body: unknown, gate: MentionGate = noGate): Promise<Written> {
+  let out: { piece: { id: string; commentId: string }; mentioned: string[] } | null = null;
+  const res = await mutate(projectId, (all, now) => {
     const c = model.makeComment(randomUUID(), target, body, author(), now);
-    return c ? all.concat([c]) : 'A comment needs some text and something to be about.';
+    if (!c) return 'A comment needs some text and something to be about.';
+    const g = gate('', c.body);
+    if (typeof g === 'string') return g;
+    out = { piece: { id: c.id, commentId: c.id }, mentioned: g };
+    return all.concat([c]);
   });
+  return written(res, out);
 }
 
-export function reply(projectId: string, id: string, body: unknown): Promise<Result> {
-  return onThread(projectId, id, (c, now) => model.addReply(c, randomUUID(), body, author(), now) || 'A reply needs some text.');
+export async function reply(projectId: string, id: string, body: unknown, gate: MentionGate = noGate): Promise<Written> {
+  let out: { piece: { id: string; commentId: string }; mentioned: string[] } | null = null;
+  const res = await onThread(projectId, id, (c, now) => {
+    const next = model.addReply(c, randomUUID(), body, author(), now);
+    if (!next) return 'A reply needs some text.';
+    const r = next.replies[next.replies.length - 1];
+    const g = gate('', r.body);
+    if (typeof g === 'string') return g;
+    out = { piece: { id: r.id, commentId: c.id }, mentioned: g };
+    return next;
+  });
+  return written(res, out);
 }
 
-export function edit(projectId: string, id: string, body: unknown): Promise<Result> {
-  return onThread(projectId, id, (c, now) => (isMine(c.author) ? model.editBody(c, body, now) : 'Only the author can edit a comment.'));
+export async function edit(projectId: string, id: string, body: unknown, gate: MentionGate = noGate): Promise<Written> {
+  let out: { piece: { id: string; commentId: string }; mentioned: string[] } | null = null;
+  const res = await onThread(projectId, id, (c, now) => {
+    if (!isMine(c.author)) return 'Only the author can edit a comment.';
+    const next = model.editBody(c, body, now);
+    if (!next) return null; // unchanged: a no-op
+    const g = gate(c.body, next.body); // the body it replaces, as stored
+    if (typeof g === 'string') return g;
+    out = { piece: { id: c.id, commentId: c.id }, mentioned: g };
+    return next;
+  });
+  return written(res, out);
 }
 
 export function resolve(projectId: string, id: string): Promise<Result> {

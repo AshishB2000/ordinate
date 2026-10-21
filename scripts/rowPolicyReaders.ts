@@ -38,6 +38,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'comment:deleteReply': 'META',
   'comment:edit': 'META',
   'comment:list': 'META',
+  'comment:mentionable': 'META', // names of the project's current readers; no row, no figure
   'comment:reopen': 'META',
   'comment:reply': 'META',
   'comment:resolve': 'META',
@@ -89,6 +90,10 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'jobs:list': 'META',
   'key:status': 'META',
   'lineage:get': 'META',
+  'mentions:list': 'META', // the caller's own mention rows; snippets of comments, never a row or figure
+  'mentions:prefs': 'META',
+  'mentions:seen': 'META',
+  'mentions:setPrefs': 'META',
   'metric:check': 'DOOR',
   'metric:get': 'META',
   'metric:list': 'META',

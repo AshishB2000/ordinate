@@ -189,6 +189,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // runner: a job's handler reads records like a request does.
       useRecordDb(pool);
       useOrgDb(pool); // per-member alert inbox, alert post claims, mentions (0020): forced RLS, one org per transaction
+      (require('./mentions/notify') as typeof import('./mentions/notify')).useNotifyLog(app.log); // a failed mention notice, to the server's log
       useBlobDb(pool); // logos and Image-card pictures too (0018): nothing durable on this pod's disk
       // One refresh of a dataset at a time across pods (L0.4): an advisory lock per (org, dataset).
       useRefreshLockDb(pool);
@@ -560,4 +561,6 @@ export function registerHandlers(): void {
   (require('../ipc/rebuild') as typeof import('../ipc/rebuild')).register();
   // Metric trees (docs/metric-tree): a metric broken into its parts, its change attributed to them.
   (require('../ipc/metricTree') as typeof import('../ipc/metricTree')).register();
+  // @mentions (docs/notifications): the picker, the caller's "Mentioned you" and its email setting.
+  (require('./mentions/rpc') as typeof import('./mentions/rpc')).register();
 }

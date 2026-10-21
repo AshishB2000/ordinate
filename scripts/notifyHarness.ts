@@ -52,6 +52,14 @@ export interface Bench {
 }
 
 const roles: string[] = []; // ordinary roles made by a suite: dropped with its database
+let registered = false;
+
+/** Server mode on `dir`, and every handler registered once per process (a second registration throws). */
+export function serverMode(dir: string): void {
+  B.context.enterServerMode(dir);
+  if (!registered) appMod.registerHandlers();
+  registered = true;
+}
 
 const email = (who: string): string => (who.includes('@') ? who : `${who}@acme.test`);
 
@@ -71,8 +79,7 @@ export async function withServer(name: string, env: Record<string, string>, fn: 
   await root.query(`CREATE DATABASE ${dbName}`);
   const pool = new Pool({ connectionString: scratch.toString(), max: 4 });
   pool.on('error', () => undefined);
-  B.context.enterServerMode(DATA);
-  appMod.registerHandlers();
+  serverMode(DATA);
   const log: string[] = [];
   const cfg = envMod.parseEnv({
     LOG_LEVEL: 'info', DATA_DIR: DATA, DATABASE_URL: scratch.toString(), AUTH_MODE: 'header', ORDINATE_MASTER_KEY: randomBytes(32).toString('base64'),
@@ -105,12 +112,13 @@ export async function withServer(name: string, env: Record<string, string>, fn: 
 }
 
 /** An ordinary (non-superuser) role on the scratch database with `grants` on `tables`: RLS applies to it. */
-export async function ordinaryRole(b: Bench, tables: string[], grants = 'SELECT, INSERT, UPDATE, DELETE'): Promise<Pool> {
+export async function ordinaryRole(b: Bench, tables: string[], readOnly: string[] = [], grants = 'SELECT, INSERT, UPDATE, DELETE'): Promise<Pool> {
   const role = `notify_role_${process.pid}_${roles.length}`;
   roles.push(role);
   const pw = randomBytes(12).toString('hex');
   await b.pool.query(`CREATE ROLE ${role} LOGIN PASSWORD '${pw}'`);
   for (const t of tables) await b.pool.query(`GRANT ${grants} ON ${t} TO ${role}`);
+  for (const t of readOnly) await b.pool.query(`GRANT SELECT ON ${t} TO ${role}`);
   const url = new URL(b.dbUrl);
   url.username = role;
   url.password = pw;
@@ -148,3 +156,15 @@ export async function refusedAs(p: Pool, org: string, sql: string, args: unknown
     c.release();
   }
 }
+
+/** A relayed message's Subject and plain-text part, decoded (as scripts/test-email-db.ts reads them). */
+export function mailParts(data: string): { subject: string; text: string } {
+  const head = data.split('\r\n\r\n')[0].replace(/\r\n /g, ' ');
+  const subject = (/^Subject: (.*)$/m.exec(head)?.[1] ?? '').split(' ').map((w) => {
+    const m = /^=\?UTF-8\?B\?(.*)\?=$/.exec(w);
+    return m ? Buffer.from(m[1], 'base64').toString('utf8') : w + ' ';
+  }).join('').trim();
+  const body = /Content-Type: text\/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n([A-Za-z0-9+/=\r\n]+?)\r\n--/.exec(data);
+  return { subject, text: body ? Buffer.from(body[1].replace(/\r\n/g, ''), 'base64').toString('utf8') : '' };
+}
+
