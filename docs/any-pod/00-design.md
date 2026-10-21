@@ -219,9 +219,17 @@ export function offerDownload(filePath: string, name: string): Promise<{ downloa
   writes a temp sibling, checks the length and renames, so a reader never sees a partial file).
 - `done()` stays synchronous and fire-and-forget, as today's `forget` (`fs.rm` with a callback). So
   no caller changes beyond `await`, and every `done()` stays where it is: each call becomes
-  `upload = await resolveUpload(token)` inside the same `try`. The token is taken before any byte
-  moves, so a failed fetch after a successful take burns the token; the user uploads again (the
-  object and row go with the sweep).
+  `upload = await resolveUpload(token)` inside the same `try`.
+- **After the take** (findings 10 and 11):
+  - **The path is checked.** `resolveUpload` `stat`s the local path. Every failure after the take
+    (a missing file, a failed fetch) is a `FileTokenError`, so no server path or storage error
+    reaches a browser.
+  - **`datasetImport.ts:66-69` stops returning `err.message`.** A non-job error there answers the
+    generic sentence.
+  - **A transient S3 GET does not burn the token.** It retries once on a 5xx or a network error.
+    If that fails too, the take is undone with a compare-and-set,
+    `UPDATE file_tokens SET used_at = NULL WHERE org_id = $1 AND token_hash = $2 AND used_at = $3`
+    (`$3` is the `used_at` this take wrote), so the user can simply try again.
 - `offerDownload` asserts the file is directly inside the caller's org `temp()` and its name matches
   `^[a-z]+-[0-9a-f-]{32,36}\.[a-z]{2,8}$` (all four callers already comply). In S3 mode it PUTs the
   file before it answers, because another pod cannot ask this one for it.
@@ -243,7 +251,12 @@ name, never a path and never from a client:
 
 - Every key is checked against `^[a-z]+-[0-9a-f-]{32,36}(\.[a-z]{2,8})?$` before it touches a path or
   a URL: no `/`, no `..`.
-- **The org always comes from `ctx().org.id`** (checked by `ORG_RE`), never from a row:
+- **The org comes from `ctx().org.id` at take time** (checked by `ORG_RE`), never from a row. The
+  take returns `{ org, key, hash }`, and every deferred cleanup (a download's `close`, `done()`, the
+  local-copy timer) uses only those captured values and never calls `ctx()`. A client abort fires
+  `close` outside the request's AsyncLocalStorage, where `ctx()` throws, and with no
+  `uncaughtException` handler that would kill the pod. Every deferred delete ends in
+  `.catch(log)`.
   - file mode: `DATA_DIR/orgs/<org>/temp/<key>`;
   - S3: `<prefix>/orgs/<org>/staging/<key>` (bucket-relative, for Node's signed calls) and
     `s3://<bucket>/<prefix>/orgs/<org>/staging/<key>` (for DuckDB).
@@ -259,20 +272,39 @@ name, never a path and never from a client:
 - `storage.ts` gains `export function s3Config(): S3Env | null` and exports its private `orgKey`;
   staging builds on those. Staging objects are not registered in `storage_objects`, so the
   dataset GC (`collectGarbage`) never sees them; the sweep (§3.10) owns them.
-- **S3 PUT** (`s3.ts`): `signedHeaders(cfg, method, url, creds, now, payloadHash = 'UNSIGNED-PAYLOAD')`,
-  and `send(cfg, method, key, body?)` where `body = { open: () => Readable, sha256: hex, size }`. A
-  factory, because the 403 retry needs a fresh stream. The request sends `content-length` and
-  `duplex: 'half'`. Verified on Node 24.14: `fetch` then sends `Content-Length` and no
-  `Transfer-Encoding: chunked`, which S3 would refuse. `put(cfg, key, file, sha256, size)` and
-  `open(cfg, key) → { body: Readable, size }` (for the download route) are the two new exports.
+- **S3 PUT** (`s3.ts`): `signedHeaders(cfg, method, url, creds, now, payloadHash = 'UNSIGNED-PAYLOAD')`
+  signs the real sha256. `put(cfg, key, file, sha256, size)` and `open(cfg, key) → { body: Readable,
+  size }` (for the download route) are the two new exports. A 403 retries once with fresh
+  credentials and a fresh read stream.
+  - **Refutation, condition (5):** the PUT goes through `http(s).request` with the file piped in
+    and an explicit `Content-Length` (S3 refuses chunked), not through `fetch`. undici's
+    `headersTimeout`/`bodyTimeout` (300 s) would otherwise bound a multi-GB upload on a slow link;
+    plain `http` has no such timer, and the request ends when the body does. GET stays on `fetch`:
+    its `bodyTimeout` is per chunk, not per transfer. A test sends a multi-MB body to a server that
+    reads it slowly.
+- **Row first, then PUT** (finding 3). The token row is inserted before the bytes go up, and a
+  failed PUT deletes its row (as `storage.newObject` registers first). The backstop for a pod that
+  dies mid-PUT is an S3 lifecycle rule on `*/staging/`: expire after 1 day, and abort incomplete
+  multipart uploads after 1 day. It goes in `eks.md`, `ecs.md`, `gke-aks.md` and R8.
+- **Download bytes are hashed while they are written** (condition 5): `offerDownload(file, name,
+  sha256?)`.
+  - The three callers that hold their bytes in memory (`projects:export`, `dashboard:exportHtml`,
+    `backups:download`) pass the hash.
+  - The drill-down CSV hashes inside its own writer.
+  - Only a caller that passes nothing is read a second time.
 - **One PUT is at most 5 GiB.** In S3 mode the upload route caps at `min(MAX_UPLOAD_MB, 5120)`; the
   413 already names the cap. It is not a boot error, so an install with a larger cap still starts
   after the upgrade. The largest download (a backup) is bounded by the zip's 4 GiB − 1.
 - **The S3 fast path.** The pod that received an upload, or that wrote a download, keeps its local
-  file in a per-process `localCopies` Map (token hash → path, expiry). A take on the same pod uses it
-  instead of a GET. Today's per-process sweep timer deletes local copies past `TOKEN_TTL_MS`, so a
-  take on another pod never leaves the first pod's copy behind for long.
-  `ponytail:` a crash leaves local copies in the emptyDir until the pod is replaced.
+  file in a per-process `localCopies` Map (token hash → path, org, expiry) when it is at most
+  64 MiB; a larger file is deleted once its PUT lands (finding 8). A take on the same pod uses the
+  copy instead of a GET.
+  - **Refcounted.** An open `Upload` handle holds its copy, and nothing deletes a held copy
+    (finding 2).
+  - **The 60 s per-process timer** also drops copies whose row is gone or used: one
+    `SELECT token_hash … WHERE token_hash = ANY($1)` per org, in that org's captured context. So a
+    take on another pod never leaves this pod's copy behind for longer than a minute (finding 8).
+  - `ponytail:` a crash leaves local copies in the emptyDir until the pod is replaced.
 
 ### 3.3 The token rows and the take
 
@@ -296,7 +328,12 @@ RETURNING storage_key, name, size
     first commits, so exactly one wins.
 - `done()` / a finished download: delete the object (and this pod's local copy), then
   `DELETE FROM file_tokens WHERE org_id = $1 AND token_hash = $2`. If the object delete fails, the
-  row stays, and the sweep retries.
+  row stays, and the sweep retries. All of it uses the org, key and hash captured at take time.
+- **The negative control lives in the test, not in `src/`** (finding 9). The test preload
+  (`scripts/anyPodPreload.ts`, which is never in `src/`) replaces `fileTokens.takeRow` with a
+  deliberately non-atomic `SELECT`, then an unconditional `UPDATE`, when its env asks. `files.ts`
+  calls the take through the module object, as `jobsPodPreload` overrides `identityFor`. The race
+  test must catch that version letting two takes through.
 
 ### 3.4 Staged imports as Parquet
 
@@ -308,7 +345,7 @@ with a tag:
 | `null` | SQL `NULL` |
 | a number | `'n' + (Object.is(v, -0) ? '-0' : String(v))`. `String` gives the shortest decimal that round-trips, and `Number('-0')` is `-0`. |
 | a string that is well-formed UTF-16 and has no U+0000 | `'s' + v` |
-| any other string (a lone surrogate, a NUL) | `'j' + JSON.stringify(v)`, which is pure ASCII escapes, decoded with `JSON.parse` |
+| any other string (a lone surrogate, a NUL) | `'j' + JSON.stringify(v)`, decoded with `JSON.parse`. `JSON.stringify` writes a lone surrogate and U+0000 as `\u` escapes, so the result is well-formed and NUL-free. It is not ASCII: other non-ASCII characters pass through as themselves. |
 | anything else | a `TypeError`: a writer broke the stage contract. It fails the import loudly, never silently. |
 
 Why tags and not the dataset contract (`parquetStore`'s VARCHAR + declared type):
@@ -334,6 +371,12 @@ to `parquetStore.ts` (377 lines):
 
 The decoder then runs over the rows in place, with no second array.
 
+**One NDJSON line is one row, and `read_json` refuses an object over `maximum_object_size`
+(16 MB by default).** So a single row over 16 MB, from very wide tables or huge cells, would fail
+the COPY, and the dataset save path has the same limit today. `readJsonSql` passes
+`maximum_object_size` = 1 GiB. A test writes a 20 MB row through both the stage and the dataset
+writer (condition 4).
+
 **Parse metadata** goes in the stage row as JSON text:
 `{ v: 1, columns: [{name, type}], rowCount, warnings, sheetNames? }`. It is `text`, not `jsonb`:
 `jsonb` refuses `\u0000`, which a column name can hold. `JSON.stringify` escapes lone surrogates
@@ -357,10 +400,14 @@ and NUL to ASCII, so names round-trip exactly.
   stage saved (and dropped) on pod B is GONE on pod A even when A still holds the bytes in memory.
 - **`drop(id)`** deletes the row (`RETURNING storage_key`), then the object and the memory copy.
 - **The same-pod fast path** is today's Map, kept only for tables of at most
-  `STAGE_MEMORY_CELLS = 250_000` cells (rows × max(1, columns)). Larger tables are written, the
-  parse is released, and the RPC returns only `previewOf`'s 2,000 rows. That reconciles "the
-  in-memory copy stays as a fast path" with "the 1M-row parse leaves the heap". The cap is a count,
-  like the notebook cache's (`notebook/run.ts:78`).
+  `STAGE_MEMORY_CELLS = 250_000` cells (rows × max(1, columns)).
+  - Larger tables are written, the parse is released, and the RPC returns only `previewOf`'s 2,000
+    rows. That reconciles "the in-memory copy stays as a fast path" with "the 1M-row parse leaves
+    the heap".
+  - **A pod-wide budget** (condition 3), `STAGE_MEMORY_POD_CELLS = 4_000_000`, is an LRU over every
+    owner: the oldest memory copy goes first, and its Parquet stays. That is the notebook cache's
+    rule (`notebook/run.ts:78-98`).
+  - The caps are cell counts, like the notebook cache's.
 - **The async API.** `put`, `get` and `drop` become async; every caller adds `await` and grows no
   lines (`datasets.ts` stays at 747). `get` returns the full `rowCount` with up to `limit` rows, so
   `resolveRef` computes `truncated` from `rowCount`. Without the DB, the Map path is today's code.
@@ -425,21 +472,35 @@ fence (`runner.ts:120-153`):
 
 1. **Claim** (locked). Read the run.
    - Running with a live lease: answer the snapshot with "This step is still running."
-   - Running with an expired lease (its pod died): mark that step failed, "The server restarted
-     while this step ran. Run it again, or skip it.", and answer.
+   - Running with an expired lease (its pod died or stalled): `recoverStep` marks that step failed,
+     "The server restarted while this step ran, so it may have partly run. Check what it made, then
+     run it again or skip it.", and answers. The touches it already recorded are kept, so undo still
+     covers them.
    - Otherwise `beginStep(run)`: state `running`, the step `running`, and
-     `lease = { claim: <uuid>, until: now + 90 s }`. Write.
+     `lease = { claim: <uuid>, until: <DB now> + 90 s }`. Write.
 2. **Run the step** with no lock held. A heartbeat every 30 s re-takes the lock and moves
    `lease.until` on, only while `lease.claim` is still ours.
-3. **Apply** (locked). Re-read. If `lease.claim` is ours, `endStep(run, i, outcome)`, clear the
-   lease and write. If not (a stall past 90 s let another request recover the run), log and apply
-   nothing, like a late job finish (`runner.ts:153`).
+3. **Apply** (locked). Re-read, then **merge the facts always and fence only the transition**
+   (finding 7):
+   - The step's touches are appended to `run.touches` whatever the lease says. A lost lease must
+     never drop a touch, or undo could not trash what the step created.
+   - If `lease.claim` is still ours: `endStep(run, i, outcome)` (status, result or error, state)
+     and clear the lease.
+   - If not (another request recovered the run after a stall): the status and state stay as the
+     recovery left them, and the outcome's error or summary is logged.
+   - Then write.
 
-- **The pure state machine** (`planRun.ts`) is split: `beginStep` (`:121-126`), the executor, and
-  `endStep` (`:139-150`), plus `recoverStep`. `runNext` stays as their composition, so
-  `scripts/test-planRun.ts` keeps passing and gains cases for each part.
+- **Leases use the database clock** (condition 1). The claim and heartbeat read `SELECT now()` from
+  the pool and compare `lease.until` against it, so pods with skewed clocks agree. Without the DB
+  there is one pod, and its clock is the only one.
+- **The pure state machine** (`planRun.ts`) is split: `beginStep` (`:121-126`), the executor,
+  `endStep` (`:139-150`), `recoverStep`, and `addTouches`. `runNext` stays as their composition, so
+  `scripts/test-planRun.ts` keeps passing and gains cases for each part, including "a fenced apply
+  still keeps the touches".
 - **Undo** writes back records, and a dataset write-back recomputes steps in DuckDB. So it takes the
-  same claim/lease/apply path and shows as `running` while it works.
+  same claim/lease/apply path and shows as `running` while it works. Its report is merged under the
+  lock: `undo` is recorded, and the state becomes `undone`, even when the lease was lost, because
+  the records are already back.
 - **Fix** calls the model outside any lock. Then a locked apply replaces step *i* only if it is
   still `failed` and the run is not running.
 - **Skip, stop and replace** are one locked read-modify-write each. They refuse while a live lease
@@ -447,19 +508,21 @@ fence (`runner.ts:120-153`):
   recover an expired one first.
 - Two pods (or two tabs) clicking Next at once: one claims, the other gets "still running".
 
-**Cap and TTL.**
+**Cap and TTL** (finding 15).
 
-- `MAX_RUNS_PER_ORG = 50`. Today it is 20 per pod across every org. Per org with a 24 h TTL, a cap
-  of 20 could evict a colleague's run mid-use in a busy org, and 50 runs of JSON cost nothing.
-- `prune()` lists the project directories (`recordFs.readdir(projectsBase())`, UUID names only) and
-  each `plans/` directory, then:
-  - deletes runs past the TTL;
-  - beyond the cap, deletes the oldest by `updatedAt`, never one with a live lease.
-- It runs at `plan:start`, after the new run is written, and in the sweep job (§3.10).
-  `ponytail:` one `readdir` per project and a read per run on each start; an index record when an
-  org has hundreds of projects.
+- **Per user:** 10 runs. A new run evicts that user's oldest by `updatedAt`.
+- **Per org:** 50, the backstop. Today the cap is 20 per pod across every org.
+- **TTL:** 24 h from `updatedAt`.
+- `prune(user?)` lists the project directories (`recordFs.readdir(projectsBase())`, UUID names
+  only) and each `plans/` directory, reads each run (plain), and picks the victims: past the TTL,
+  beyond the user's 10, beyond the org's 50, oldest first, never one with a live lease.
+- **Each delete happens inside `locked(runPath)`**, re-checking the lease and the TTL on a fresh
+  read (finding 7). A run that a step claimed between the scan and the delete is kept.
+- It runs at `plan:start`, after the new run is written (for that user), and in the sweep job (for
+  the org). `ponytail:` one `readdir` per project and a read per run; an index record when an org
+  has hundreds of projects.
 
-### 3.6 Jobs: cancel and clear over the bus, the popover merges
+### 3.6 Jobs: list, cancel and clear across pods; the popover merges
 
 **How cancel finds the owning pod.** It broadcasts. Job ids are UUIDs, so exactly one pod holds a
 given job.
@@ -475,6 +538,13 @@ given job.
 
 `jobs:clear` clears locally, then sends `{ cmd: 'jobs:clear', d: { owner } }` to every other pod.
 
+**`jobs:list` covers every pod** (finding 6). A reload gives the tab a new client id, so a job still
+running on A would otherwise be invisible and impossible to cancel from B. B answers its own slice
+and sends `{ cmd: 'jobs:list', d: { owner } }`. Every other pod that holds jobs for that owner
+publishes `jobs:changed` with `snapshotFor(owner)` to the owner's tabs (target `{ org, user }`).
+That is the same scope `jobs:list` answers today: the owner's jobs, on every tab. The merging
+popover absorbs it.
+
 **The command channel.** `src/server/podCommands.ts` holds:
 
 - `onPodCommand(cmd, fn)`;
@@ -484,12 +554,13 @@ given job.
 `bus.ts` makes two additive edits:
 
 - `startBus` installs a sender that runs one `pg_notify(CHANNEL, {p: POD, s, cmd, d})`. The payload
-  is under 200 bytes, so it is never sent by reference. `stop()` removes the sender.
+  is under 400 bytes, so it is never sent by reference. `stop()` removes the sender.
 - `handle` routes a message carrying `cmd` (after the own-pod check) to `runPodCommand`.
 
-Receivers shape-check `d`. Item 2 adds "close this user's streams" to the bus at the same time;
-this is a separate branch in `handle`, so the merge keeps both. Nothing is added to
-`src/app/jobs.ts`, whose `drain` belongs to item 1. The relay lives in `src/ipc/jobs.ts`.
+Receivers shape-check `d`; the owner string is split into org and email and both must be
+non-empty. Item 2 adds "close this user's streams" to the bus at the same time; this is a separate
+branch in `handle`, so the merge keeps both. Nothing is added to `src/app/jobs.ts`, whose `drain`
+belongs to item 1. The relay lives in `src/ipc/jobs.ts`.
 
 **The popover** (`web/src/api/jobs.ts`) merges by job id instead of replacing:
 
@@ -503,7 +574,7 @@ this is a separate branch in `handle`, so the merge keeps both. Nothing is added
   key, without registering the event handlers a second time (which would toast twice). It no longer
   reads raw pushes.
 
-No server payload changes. A dead pod's active job stays in the list until a reload, which is the
+No push payload changes. A dead pod's active job stays in the list until a reload, which is the
 same as a dead pod's slice before this change.
 
 ### 3.7 Drivers facts: one record per project
@@ -512,6 +583,9 @@ same as a dead pod's slice before this change.
   newest 20 entries, none older than 24 h.
 - **Written** under `recordFs.locked` after the answer is computed. The lock holds only the
   read-modify-write, never DuckDB.
+- **The write is best-effort** (condition 7). If it fails (`ERECORDBUSY`, a rolled-back hold), the
+  explain still answers, without a token. The dock then has no follow-up context, as with an
+  evicted token today.
 - **Read** with a plain load. An entry past 24 h is missing.
 - **Bounded by construction**, so it needs no sweep.
 - **Only the panel doors mint a token.** Today `driversFor` remembers on every call (`:392`),
@@ -526,45 +600,63 @@ same as a dead pod's slice before this change.
 
 ### 3.8 The shared counter
 
-`src/server/counters.ts` has two stores with the same semantics: Postgres (0021
-`shared_counters`), and memory when there is no DB (a Map with the 5,000-key LRU of today's
-lockout). A differential test drives both through one script.
+`src/server/counters.ts` is generic over a key: it knows no kind, so item 3's `mention` (or any
+later budget) moves onto it with no special case. It has two stores with the same semantics:
+Postgres (0021 `shared_counters`), and memory when there is no DB (a Map with the 5,000-key LRU of
+today's lockout). A differential test drives both through one script.
 
 ```ts
 type Bucket = { key: string; limit: number; windowMs: number };
-take(org, buckets, by = 1): Promise<{ ok: true; windows: Map<string, number> } | { ok: false; retryAfterSec: number }>
+take(org, buckets, by = 1): Promise<{ ok: true; windows: Array<[key, windowEndMs]> } | { ok: false; retryAfterSec: number }>
 give(org, windows, n): Promise<void>        // refund into the same window it was charged in
-peek(org, key): Promise<{ n: number; retryAfterSec: number } | null>
 clear(org, key): Promise<void>
 ```
 
-**`take` is all-or-none in one transaction.** It is the spec's upsert, generalised to `+ by` and a
-window that opens at the first hit:
+**`take` is all-or-none, in one transaction, and a refusal writes nothing** (finding 13). Each
+bucket is one statement: the spec's upsert, generalised to `+ by` and a window that opens at the
+first hit, with the limit in the `DO UPDATE`'s `WHERE`:
 
 ```sql
 INSERT INTO shared_counters AS c (org_id, key, n, window_end)
-SELECT $1, k, $3, date_trunc('milliseconds', now() + w * interval '1 millisecond')
-  FROM unnest($2::text[], $4::int8[]) AS t(k, w)
+VALUES ($1, $2, $3, date_trunc('milliseconds', now() + $4 * interval '1 millisecond'))
 ON CONFLICT (org_id, key) DO UPDATE SET
   n          = CASE WHEN c.window_end <= now() THEN EXCLUDED.n ELSE c.n + EXCLUDED.n END,
   window_end = CASE WHEN c.window_end <= now() THEN EXCLUDED.window_end ELSE c.window_end END
-RETURNING key, n, window_end, ceil(extract(epoch FROM window_end - now()))::int AS left_sec
+WHERE c.window_end <= now() OR c.n + EXCLUDED.n <= $5
+RETURNING n, window_end
 ```
 
-- Keys are de-duplicated and sorted, so two transactions take row locks in the same order and never
-  deadlock.
-- If any returned `n` passes its bucket's `limit`, it rolls back (nothing charged) and answers the
-  largest `left_sec`. The row lock serialises takers on one key, so N pods racing at
-  `limit − 1` let exactly one through.
-- `window_end` is cut to milliseconds, so a refund can name its window exactly from JS:
-  `UPDATE … SET n = greatest(0, n - $k) WHERE org_id = $1 AND key = $2 AND window_end = $3`. A
-  window that has already ended ignores the refund.
+- **No row returned means refused.** The row is then not updated (no new tuple). The refusal's
+  `Retry-After` comes from one `SELECT ceil(extract(epoch FROM window_end - now()))`.
+- **`by > limit` is refused in JS before any statement**, since the fresh-insert path has no
+  `WHERE`.
+- **A refusal on the second bucket rolls back the first.** That is the all-or-none of today's
+  `hold`.
+- **No deadlocks.** Keys are de-duplicated and sorted, so two transactions take row locks in the
+  same order.
+- **No overshoot under a race.** The row lock serialises takers on one key, and the `WHERE` re-reads
+  the committed `n`. So N pods racing at `limit − 1` let exactly one through.
+- **Refunds name their window.** `window_end` is cut to milliseconds, so a refund names its window
+  exactly from JS: `UPDATE … SET n = greatest(0, n - $k) WHERE org_id = $1 AND key = $2 AND
+  window_end = $3`. A window that has already ended ignores the refund.
+
+**The password lockout charges first** (finding 4):
+
+1. `take(auth.org, [{ key: 'login:' + normalEmail, limit: 10, windowMs: 15 min }])` runs before
+   scrypt. A refusal answers `locked` with `Retry-After` and never verifies.
+2. A right password then `clear`s the key.
+
+So the 10 charges are the 10 attempts that may verify. 9 failures followed by the right password
+still sign in. 30 concurrent wrong attempts split across two pods run at most 10 scrypt
+verifications. Today the check and the charge are separate, so concurrent attempts all passed the
+check. The password change (`:160-165`) takes the same path. A charge is no longer refunded on
+success; the key is cleared instead.
 
 **Keys and windows against today.** Every limit's number is unchanged.
 
 | Use | Org | Key | Limit | Window | Today |
 |---|---|---|---|---|---|
-| Password lockout | `auth.org` | `login:<email>` | 10 failures, `peek` before verifying | 15 min from the first failure; success `clear`s | Same rule, per pod (`password.ts:51-62`) |
+| Password lockout | `auth.org` | `login:<normalEmail>` | 10 attempts, charged before verifying | 15 min from the first; success `clear`s | Charge after a failure, per pod (`password.ts:51-62`) |
 | Email, org | from the bucket | `mail:<kind>` | `RATE_LIMIT_EMAIL_ORG_PER_HOUR` | 1 h from the first charge | A rolling hour of charges, per pod |
 | Email, project | from the bucket | `mail:<project>:<kind>` | half of that | 1 h | Same |
 | Test email | from the bucket | `mail:test` | 10 | 1 h | Same |
@@ -572,9 +664,11 @@ RETURNING key, n, window_end, ceil(extract(epoch FROM window_end - now()))::int 
 | Embed, per token | the token's org (after the MAC) | `embed-token:<fingerprint>` (the first 16 characters of the signature, `token.ts:184-187`, never the token) | `RATE_LIMIT_EMBED_PER_MINUTE` | 60 s from the first view | `@fastify/rate-limit`'s local store, a fixed window from the first hit, per pod |
 | Embed, per org | same | `embed-org` | `RATE_LIMIT_EMBED_ORG_PER_MINUTE` | 60 s | Same, per pod |
 
-- **The mail budgets change shape:** a rolling hour becomes a fixed hour from the first charge. That
-  is what an `ON CONFLICT` counter can be. The worst case is 2× the limit in the minutes around a
-  window's end. Today it is N× across N pods, so with two pods or more this is never looser.
+- **The mail budgets change shape** (condition 2): a rolling hour becomes a fixed hour from the
+  first charge. That is what an `ON CONFLICT` counter can be. The worst case is 2× the limit in the
+  minutes around a window's end. On a single replica that is a real loosening, from 1× to 2× at the
+  edge. With two or more pods it is never looser than today's N×. `email.md` and
+  `configuration.md` say so.
 - **Budget API.** `budget.ts` keeps its `Bucket` tuple (`[org + '\0' + rest, limit]`) and its
   bucket builders. `hold` and `refund` become async and split the org off the key: every key of one
   hold must name the same org, which is asserted. So **every kind moves without being named**,
@@ -589,19 +683,22 @@ RETURNING key, n, window_end, ceil(extract(epoch FROM window_end - now()))::int 
 
 ### 3.9 `sample:seed`
 
-`withOrgLock(name, fn)` is added to `src/server/jobs/refreshLock.ts`, which already owns the
-advisory-lock pool (`useRefreshLockDb`, `:43-46`):
+The lock is session-level, on a dedicated client: the `refreshLock` pattern, never an open
+transaction (finding 14). `withOrgTryLock(name, fn)` is factored out of `withRefreshLock`
+(`src/server/jobs/refreshLock.ts:76-102`), which now delegates to it with the dataset id as the
+name, so the refresh lock's key is unchanged. `withOrgLock(name, fn, waitMs)` wraps it: it retries
+every 250 ms until `waitMs` (30 s).
 
-1. A dedicated client: `BEGIN`, `SET LOCAL lock_timeout = '30s'`,
-   `SELECT pg_advisory_xact_lock(hashtext(<org> || ':sample:seed'))`.
+1. `pg_try_advisory_lock(hashtext(<org> || ':sample:seed'))`, with retries.
 2. `fn`: re-check `listProjects()`, then seed.
-3. `COMMIT`.
+3. `pg_advisory_unlock`. A client that cannot prove it let go is destroyed, not returned to the
+   pool.
 
-- Transaction-level, so a pod that dies drops it.
-- Nothing else runs on that client. The seed's own writes use other clients, so this is not
-  `recordFs.locked`'s DuckDB-in-a-transaction problem.
+- Session-level, so a pod that dies drops it with its connection.
+- **A lock error, or no lock within 30 s, answers `{ ok: false, error: 'unavailable' }`. It never
+  seeds unlocked.**
 - The per-pod `seeding` Map stays in front, so same-pod callers still share one answer.
-- A second pod's caller waits for the first to commit, then sees a project and answers
+- A second pod's caller waits for the first to finish, then sees a project and answers
   `has_projects`. The page already says "Your organization already has a project." and refreshes
   its lists (`NoProject.tsx:30-33`).
 - Without the DB it just runs (one process).
@@ -610,18 +707,22 @@ advisory-lock pool (`useRefreshLockDb`, `:43-46`):
 
 `defineJob('shared:sweep', { everyMs: 5 * 60_000 })`, defined once per process (the `defined`
 guard, `subscriptions/job.ts:25-34`). The runner runs it per org, in that org's context, so every
-statement is under RLS for that org. One pass:
+statement is under RLS for that org. One pass never deletes anything still in use (finding 2):
 
-1. `file_tokens` with `expires_at < now() − 10 min`: delete the object, then the row. The grace keeps
-   a download that started just before expiry from losing its bytes mid-stream; the token itself
-   stopped working at `expires_at`.
-2. `import_stages` past `expires_at`: object, then row.
-3. `shared_counters` whose `window_end < now()`: delete.
-4. Plan runs: `prune()` (§3.5).
+1. **File tokens.** A taken token belongs to its `done()`; item 1 streams a restore inside a long
+   job. So the sweep takes rows with `used_at IS NULL AND expires_at < now() − 10 min` (never taken,
+   and expired; the grace covers a download that started just before expiry), or
+   `used_at < now() − 6 h` (the crash backstop: no handler runs that long). It deletes the object,
+   then the row.
+2. **Stages.** The same 10-minute grace after `expires_at`: object, then row.
+3. **Counters** whose `window_end < now()`: delete.
+4. **Plan runs:** `prune()` (§3.5), each delete in its own `locked`.
 
 - A failed object delete keeps its row for the next pass (as `collectGarbage`, `storage.ts:160-165`).
-- The per-process timer in `files.ts` stays. It sweeps the Map backend, or (DB on) this pod's local
-  copies.
+- **The per-process 60 s timer in `files.ts`** stays. It sweeps the Map backend, or (DB on) this
+  pod's local copies:
+  - past their expiry, or whose row is gone or used (§3.2);
+  - never one with an open handle.
 
 ### 3.11 Without `DATABASE_URL`
 
@@ -635,6 +736,40 @@ Nothing is shared, because there is one process:
 
 Plan runs and drivers facts are records either way (recordFs writes files). The Helm chart requires
 `DATABASE_URL` (`values.yaml:27`), so a multi-pod install always has it.
+
+### 3.12 Pipelines: one run at a time across pods
+
+A missed piece of state (finding 5): `pipelineRunner.live` (`src/app/pipelineRunner.ts:39`), checked
+at `:152-154` and `:208`. `pipelines:run` is live on the server (`app.ts:518`, `src/api/prepare.ts:68`),
+so today a second pod starts a concurrent run of the same pipeline, and each run's failures raise
+the alerts again.
+
+- `runFrom` takes `withOrgTryLock('pipeline:' + projectId)` around the whole run (key
+  `<org>:pipeline:<projectId>`, session-level on a dedicated client). If the lock is held anywhere,
+  it answers "This pipeline is already running.", today's sentence.
+- The cron `tick` goes through `runFrom` and skips a held lock the same way.
+- **One client per running pipeline** (rare, user-driven), the refresh lock's budget class.
+- **`liveState` stays this pod's view, and says so.** `pipelines:get`'s `live` holds the node
+  states of a run on THIS pod. The running pod pushes `pipelines:changed` with the full live map to
+  every tab of the org at each node's start and finish, and that completes a page opened on another
+  pod within one node. The `ipc/pipelines.ts` header says this.
+- Test: two pods start the same pipeline at once: one runs and one gets "already running". The
+  negative control is the preload passing the lock through, which gives two runs.
+
+### 3.13 The chart: more than one replica without shared storage
+
+The chart defaults (`values.yaml`) are `replicaCount: 2`, `data.existingClaim: ""` (an emptyDir
+per pod) and `config.STORAGE_URL: ""`. **The defaults ARE the misconfiguration:** each pod has its
+own `DATA_DIR` and no S3, so tables already differ between pods. A render failure would break
+`helm install` with default values, and `helm lint` / `helm template` must stay green.
+
+- **Decision: a louder `NOTES.txt` warning, and no render failure.** `NOTES.txt:4-12` already warns
+  about an emptyDir without S3. It gains the replica case: with `replicaCount > 1` or
+  `hpa.enabled`, "each of the N pods has its own disk, so a table, an upload or an import made on
+  one is missing on the others".
+- The existing-claim branch already says "ReadWriteMany".
+- **The server logs one startup line naming its storage mode** (`S3` or `DATA_DIR`). It cannot see
+  the replica count, so it does not guess. The docs carry the rule.
 
 ## 4. Migration `0021_any_pod.sql`
 
@@ -764,10 +899,12 @@ runs both ways at the end.
    - Code: `podCommands.ts`; `bus.ts`; `ipc/jobs.ts`; `web/src/api/jobs.ts` (the merge,
      `useJobList`); `SegmentsParts.tsx`.
    - Tests: Vitest; test-anyPod case 5.
-8. **Drivers facts record, and the `sample:seed` lock.**
+8. **Drivers facts record, the `sample:seed` lock, and the pipeline lock.**
    - Code: `drivers.ts` (`remember` / `recall`, `driversFor`'s option); `copilot.ts:310`;
      `refreshLock.ts` (`withOrgLock`); `projects.ts`.
-   - Tests: `test-drivers`; a two-pod seed race in test-anyPod.
+   - Code: `pipelineRunner.runFrom` under `withOrgTryLock('pipeline:<id>')`.
+   - Tests: `test-drivers`; two-pod seed and pipeline races in test-anyPod, each with its negative
+     control.
 9. **Docs.**
    - Every row of the table in §2, with each "per pod" line made true.
    - `docs/server/README.md`'s day-one list loses its sticky item (two things now).
@@ -778,6 +915,8 @@ runs both ways at the end.
      at most an hour plus the sweep.
    - `CLAUDE.md:52`, `CHANGELOG.md`, and a `docs/README.md` row.
    - The `ponytail:` per-pod comments in code.
+   - The S3 lifecycle rule on `*/staging/` in the bucket sections of `eks.md`, `ecs.md` and
+     `gke-aks.md`; the chart's `NOTES.txt` replica warning (§3.13).
 
 ## 6. Tests, one to one with the spec
 
@@ -803,21 +942,29 @@ It runs three passes:
 | # | Spec test | How |
 |---|---|---|
 | 1 | Upload on A → parse on B → save on A = a one-pod import | A nasty CSV: `007`, `-0`, `1e21`, an empty string and a NULL, NBSP and tab, a leading BOM, a duplicate and a quoted header, enough rows to pass `STAGE_MEMORY_CELLS` (the Parquet path) and a small one (the fast path). The cross-pod import's rows read over RPC (wire-encoded, so `-0` survives) equal the one-pod import's, with `Object.is` on every cell, and the columns and types match. `dataset:composePreview` on B reads the same stage with a limit. |
-| 2 | Export on A → download on B | `projects:export` on A, `GET /api/files/<token>` on B: byte-identical to a same-pod download of a second export. |
+| 2 | Export on A → download on B | `projects:export` on A, `GET /api/files/<token>` on B. The download's sha256 equals the sha256 of the file A offered: the preload logs each `offerDownload`'s hash. A second export would differ in `exportedAt` and the zip times. |
 | 3 | Backup on B → restore on A | `backups:download` on B, download on A, upload on B, `backups:restore` on A. Every project comes back, and counts match. |
 | 4 | A plan run started on A advances on B, undo works on A | `plan:start` on A with `[import, metric]`. The upload is on A; `plan:next` on B runs the import (also a cross-pod take); `plan:next` on A runs the metric; `plan:undo` on A trashes both. Plus: Next on A and B at once (the preload slows the import step), and exactly one runs it while the other gets "still running". |
-| 5 | Cancel on B stops a job running on A | The preload holds `sql-save` jobs until their signal aborts. `sql:prepareSave` on A; read the job id from `jobs:list` on A; `jobs:cancel` on B. A's RPC answers `canceled`, and a tab whose stream is on B gets `jobs:changed` with `cancelled`. |
-| 6 | Two simultaneous takes of one token, on A and B | `boundary:import` with the same token on both at once, 20 times: exactly one `ok` each time. |
+| 5 | Cancel on B stops a job running on A | The preload holds `sql-save` jobs until their signal aborts. `sql:prepareSave` on A. A tab opens a NEW stream on B (a reload) and calls `jobs:list` on B; A's slice arrives as a push (finding 6), and the job id is read from it. `jobs:cancel` on B. A's RPC answers `canceled`, and the B tab gets `jobs:changed` with `cancelled`. |
+| 6 | Two simultaneous takes of one token, on A and B | **A real race** (finding 9). A side transaction holds `SELECT … FOR UPDATE` on the token row. Both takes are fired (`boundary:import`, the same token, one on A and one on B). The test waits until `pg_stat_activity` shows two backends waiting on that lock, then COMMITs: exactly one `ok`. **NEGATIVE CONTROL:** pods started with the preload's non-atomic take, raced the same way, let both through, and the assertion catches it. |
 | 7 | A wrong user's take on B does not burn the token | User 2 takes user 1's token on B: refused. Control: user 1 then takes it on A, ok. |
 | 8 | An expired token fails on both pods; its object is gone after the sweep | Set `expires_at` to a day ago in SQL. Takes on A and B are refused. Make `shared:sweep` due (`UPDATE jobs SET next_run_at = now()`; the preload shortens the runner's poll). The row is gone, and so is the file (file mode) or the object (S3 GET → 404). |
 | 9 | NEGATIVE CONTROL: the memory store fails across pods | In the `memory` pass, an upload on A taken on B is refused ("expired"). Control: the same take on A works. |
+| 10 | A download aborted mid-stream (finding 1) | A multi-MB export; `GET` on B, destroyed after the first chunk. B is still alive (`/healthz`), its stderr holds no uncaught error, and within the cleanup the row and the object are gone. |
+| 11 | The row is the truth (finding 12) | Parse a small table on A (the memory fast path), save on B, save again on A: GONE. |
+| 12 | The sweep spares a taken token (finding 2) | Take an upload (`backups:restore` held by the preload's slow `restore` job), expire the row in SQL, run the sweep: the object and the row survive until `done()`, then go. |
 
 Also in this suite:
 
 - **The org wall.** A stage row planted for org X with a key; org Y asking for that id gets GONE.
   A `file_tokens` row planted in org Y with org X's object key can only resolve inside Y's own
   staging (the file is absent).
-- **The seed race.** `sample:seed` on A and B at once makes exactly one project.
+- **The seed race.** `sample:seed` on A and B at once makes exactly one project. **NEGATIVE
+  CONTROL:** with the preload passing the lock through (and slowing the seed), two projects.
+- **The pipeline race** (§3.12): one run, and "already running" for the other. Negative control:
+  the lock passed through gives two runs.
+- **A slow PUT** (condition 5): `s3.put` of a 12 MB file to a local server that reads at
+  ~200 KB/s completes, with no timeout and no chunked encoding.
 
 ### Counters (`scripts/test-sharedCounters.ts`, new)
 
@@ -825,6 +972,9 @@ Also in this suite:
   `AUTH_MODE=password` pods on one database, with a user created through the setup code each pod
   logs. Failures alternate A/B. The 11th attempt answers `locked` with `Retry-After`. Control:
   after 9 failures, the right password signs in.
+- **30 concurrent wrong attempts split across A and B run at most 10 scrypt verifications**
+  (finding 4). Each pod logs "password sign-in refused: wrong email or password" once per
+  verification, and the test counts those lines across both pods' logs.
 - **The test-email limit holds across pods.** A fake SMTP server; `channel:test` alternating A/B.
   10 are sent and the 11th is refused `rate_limited`. Control: the 10th is sent.
 - **The helper, against both stores** (differential): the same scripted sequence (charge, refuse at
@@ -843,6 +993,10 @@ Also in this suite:
 - **NEGATIVE CONTROL:** the same table written with the plain dataset encoding (no tags) fails the
   comparison on `-0` and on the lone surrogate. The fixture really bites.
 - A non-string, non-number cell throws.
+- **A 20 MB row** (one cell) goes through the stage writer and the dataset writer, past `read_json`'s
+  default `maximum_object_size` (condition 4).
+- **Measured** (§3.4): a 1M × 10 table and a 20k × 1,000 table, written and read back, against the
+  60 s RPC timeout.
 
 ### Must stay green
 
@@ -878,15 +1032,16 @@ Also in this suite:
    holds, because the upload's write stream closes before the token is issued.
 3. **`bus.ts` is shared with item 2** (closing a user's streams). The command branch is separate and
    additive; keep both at the merge.
-4. **Pool budget.** No new long-held client: plan steps hold no lock while they run, and
-   `sample:seed` holds one client for a few seconds, once per org. Each embed view adds one short
-   transaction (three round trips), which is worth watching on item 1's `pg_pool` metric.
+4. **Pool budget.** Plan steps hold no lock while they run. `sample:seed` holds one client for a
+   few seconds, once per org. A running pipeline holds one, as a refresh does. Each embed view adds
+   one short transaction (a statement per bucket), which is worth watching on item 1's `pg_pool`
+   metric.
 5. **The mail-budget window changes shape** (rolling to fixed). The worst case is 2× at a window's
    end. Documented in `email.md` and `configuration.md`.
 6. **A stall past the plan lease** (90 s with no heartbeat, a blocked event loop) lets another
-   request recover the run while the first still finishes its writes. The fence then drops the late
-   outcome, so undo does not know about those writes; they are still in version history and the
-   Trash. The same class as the jobs runner's late finish.
+   request recover the run while the first still finishes. The fence keeps the recovery's status
+   but still merges the late step's touches, so undo covers what it made. The recovery sentence
+   says the step "may have partly run".
 7. **The Parquet write on the parse path** adds seconds at 1M rows, behind the composer's existing
    spinner. Phase B measures it, and the PR body states it.
 8. **S3's single PUT** caps uploads at 5 GiB in S3 mode. A drill-down CSV over 5 GiB would fail its
@@ -899,3 +1054,24 @@ Also in this suite:
     touched.
 12. **Contract change.** The `plan:*` inputs gain `projectId`. A stale browser tab gets a 400 on
     Next until it reloads, which is acceptable for a release.
+
+## 8. The refutation, and where each finding landed
+
+| Finding | Where |
+|---|---|
+| 1 (blocker) deferred cleanup never calls `ctx()` | §3.2, §3.3; test 10 |
+| 2 the sweep spares what is in use | §3.10, §3.2 (refcount); test 12 |
+| 3 row first, then PUT; the S3 lifecycle rule | §3.2; docs in step 9 |
+| 4 the lockout charges first | §3.8; the 30-attempt test |
+| 5 pipelines | §3.12 |
+| 6 `jobs:list` across pods | §3.6; test 5 |
+| 7 plan runs merge facts and fence only the transition | §3.5 |
+| 8 local copies do not outlive the cross-pod take; 64 MiB | §3.2 |
+| 9 real races and their negative controls | §3.3; test 6, the seed and pipeline races |
+| 10 post-take failures are `FileTokenError`; the chart | §3.1, §3.13 |
+| 11 a transient GET does not burn the token | §3.1 |
+| 12 case 2 by sha256; "the row is the truth" | tests 2 and 11 |
+| 13 a refusal writes nothing | §3.8 |
+| 14 a session-level seed lock, `unavailable` on failure | §3.9 |
+| 15 10 runs per user, 50 per org | §3.5 |
+| Conditions 1–7 | §3.5 (DB clock), §3.8 (1× → 2×), §3.4 (pod budget, the ASCII claim, 16 MB rows, measurements), §3.2 (`http` PUT, hash while writing), §3.7 (best-effort) |
