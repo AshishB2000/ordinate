@@ -15,16 +15,19 @@ import { mdParse, mdTokens, type Block, type Inline } from './mdParse';
 import s from './Dashboards.module.css';
 
 type Token = (name: string) => { text: string; missing?: boolean };
+/** How a run of plain text is drawn — itself, unless a caller draws more into it (a comment's @mention chips). */
+type Text = (v: string) => ReactNode;
+const asIs: Text = (v) => v;
 
-function inline(nodes: Inline[], token: Token): ReactNode[] {
+function inline(nodes: Inline[], token: Token, text: Text = asIs): ReactNode[] {
   return nodes.map((n, i) => {
-    if (n.t === 'text') return <Fragment key={i}>{n.v}</Fragment>;
+    if (n.t === 'text') return <Fragment key={i}>{text(n.v)}</Fragment>;
     if (n.t === 'code') return <code key={i}>{n.v}</code>;
-    if (n.t === 'b' || n.t === 'i') return n.t === 'b' ? <strong key={i}>{inline(n.c, token)}</strong> : <em key={i}>{inline(n.c, token)}</em>;
+    if (n.t === 'b' || n.t === 'i') return n.t === 'b' ? <strong key={i}>{inline(n.c, token, text)}</strong> : <em key={i}>{inline(n.c, token, text)}</em>;
     if (n.t === 'a') {
       return (
         <a key={i} href={n.href} target="_blank" rel="noopener noreferrer">
-          {inline(n.c, token)}
+          {inline(n.c, token, text)}
         </a>
       );
     }
@@ -38,13 +41,13 @@ function inline(nodes: Inline[], token: Token): ReactNode[] {
   });
 }
 
-function block(b: Block, i: number, token: Token): ReactNode {
+function block(b: Block, i: number, token: Token, text: Text): ReactNode {
   if (b.t === 'h') {
     // # → h3: a card sits under the page's own headings.
     const H = (['h3', 'h4', 'h5'] as const)[b.level - 1] ?? 'h5';
-    return <H key={i} className={s.mdH}>{inline(b.c, token)}</H>;
+    return <H key={i} className={s.mdH}>{inline(b.c, token, text)}</H>;
   }
-  if (b.t === 'p') return <p key={i}>{inline(b.c, token)}</p>;
+  if (b.t === 'p') return <p key={i}>{inline(b.c, token, text)}</p>;
   if (b.t === 'pre') {
     return (
       <pre key={i}>
@@ -56,15 +59,20 @@ function block(b: Block, i: number, token: Token): ReactNode {
   return (
     <L key={i}>
       {b.items.map((it, j) => (
-        <li key={j}>{inline(it, token)}</li>
+        <li key={j}>{inline(it, token, text)}</li>
       ))}
     </L>
   );
 }
 
+/** An already-parsed tree (a caller that rewrote it first: CommentBody), with an optional plain-text hook. */
+export function MarkdownBlocks({ blocks, token, text = asIs }: { blocks: Block[]; token: Token; text?: Text }) {
+  return <div className={s.md}>{blocks.map((b, i) => block(b, i, token, text))}</div>;
+}
+
 /** Markdown with a fixed token resolver — the pure half, tested on its own. */
 export function MarkdownView({ text, token }: { text: string; token: Token }) {
-  return <div className={s.md}>{mdParse(text).map((b, i) => block(b, i, token))}</div>;
+  return <MarkdownBlocks blocks={mdParse(text)} token={token} />;
 }
 
 export function TextBody({ projectId, text, params, filters }: { projectId: string; text: string; params: ParamPayload; filters: Step[] }) {

@@ -3,12 +3,13 @@
 // dashboard, its cards and the visuals they draw, with Open / Resolved / All.
 // Bodies are Markdown (the text card's subset, never HTML). The author on every
 // comment is the signed-in user — the server writes it from the session; the
-// browser never sends a name — and only the author may edit or delete.
+// browser never sends a name — and only the author may edit or delete. Typing @
+// in any box offers the people who can read the project (MentionInput); a
+// mention shows as "@Name", or "@former member" once they lost access (CommentBody).
 
 import { useState, type ReactNode } from 'react';
 import { Button, IconButton } from '../../ui/Button';
 import { Drawer } from '../../ui/Dialog';
-import { Textarea } from '../../ui/Field';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
@@ -17,12 +18,11 @@ import { ago } from '../../app/when';
 import type { Card } from '../analyses/api';
 import type { EditorApi } from '../analyses/editor/context';
 import type { CommentTarget } from './useViewer';
-import { MarkdownView } from './Markdown';
+import { CommentBody } from './CommentBody';
+import { MentionInput } from './MentionInput';
 import { reason, threadsOn, useCommentWrite, useComments, useCommentsLive, type Comment, type TargetKind } from './api';
 import { jumpToCard } from './SummaryBody';
 import s from './Comments.module.css';
-
-const plain = (name: string) => ({ text: `{{${name}}}` });
 
 function Avatar({ name }: { name: string }) {
   let h = 0;
@@ -101,7 +101,13 @@ export function CommentButton({ ed, card }: { ed: EditorApi; card: Card }) {
   );
 }
 
-function Thread({ c, projectId, onJump, targetName }: { c: Comment; projectId: string; onJump?: () => void; targetName?: string }) {
+/** What every box and body of a panel needs to know about mentions: on here, and the names the server gave. */
+interface Mentions {
+  on: boolean;
+  people: Record<string, string>;
+}
+
+function Thread({ c, projectId, onJump, targetName, mentions }: { c: Comment; projectId: string; onJump?: () => void; targetName?: string; mentions: Mentions }) {
   const write = useCommentWrite(projectId);
   const [reply, setReply] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
@@ -134,7 +140,7 @@ function Thread({ c, projectId, onJump, targetName }: { c: Comment; projectId: s
             if (editing.trim()) run({ channel: 'comment:edit', input: { projectId: pid, id: c.id, body: editing.trim() } }, () => setEditing(null));
           }}
         >
-          <Textarea label="Edit comment" value={editing} onChange={(e) => setEditing(e.target.value)} rows={3} autoFocus />
+          <MentionInput projectId={pid} enabled={mentions.on} label="Edit comment" value={editing} onValueChange={setEditing} rows={3} autoFocus />
           <div className={s.composerRow}>
             <Button size="sm" variant="ghost" type="button" onClick={() => setEditing(null)}>
               Cancel
@@ -146,7 +152,7 @@ function Thread({ c, projectId, onJump, targetName }: { c: Comment; projectId: s
         </form>
       ) : (
         <div className={s.cmtBody}>
-          <MarkdownView text={c.body} token={plain} />
+          <CommentBody text={c.body} people={mentions.people} />
         </div>
       )}
       {c.replies
@@ -160,7 +166,7 @@ function Thread({ c, projectId, onJump, targetName }: { c: Comment; projectId: s
               {r.mine && <IconButton icon="trash" size="sm" label="Delete reply" onClick={() => run({ channel: 'comment:deleteReply', input: { projectId: pid, id: c.id, replyId: r.id } })} />}
             </div>
             <div className={s.cmtBody}>
-              <MarkdownView text={r.body} token={plain} />
+              <CommentBody text={r.body} people={mentions.people} />
             </div>
           </div>
         ))}
@@ -205,12 +211,14 @@ function Thread({ c, projectId, onJump, targetName }: { c: Comment; projectId: s
             if (reply.trim()) run({ channel: 'comment:reply', input: { projectId: pid, id: c.id, body: reply.trim() } }, () => setReply(''));
           }}
         >
-          <Textarea
+          <MentionInput
+            projectId={pid}
+            enabled={mentions.on}
             label="Reply"
             value={reply}
             rows={1}
             placeholder="Reply…"
-            onChange={(e) => setReply(e.target.value)}
+            onValueChange={setReply}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
             }}
@@ -251,6 +259,7 @@ export function CommentsDrawer({ projectId, target, dashboard, title: titleIn, o
   const [pin, setPin] = useState(target !== 'all' ? target.point : undefined);
   const all = target === 'all' && !!dashboard;
   const list = q.data?.comments ?? [];
+  const mentions: Mentions = { on: q.data?.mentions === true, people: q.data?.people ?? {} };
   const one = target === 'all' ? { kind: 'analysis' as const, id: dashboard?.analysisId ?? '' } : target;
   const threads = all && dashboard ? dashboardThreads(list, dashboard) : threadsOn(list, one.kind, one.id);
   const counts = { open: threads.filter((c) => !c.resolvedAt).length, resolved: threads.filter((c) => c.resolvedAt).length, all: threads.length };
@@ -293,6 +302,7 @@ export function CommentsDrawer({ projectId, target, dashboard, title: titleIn, o
             projectId={projectId}
             targetName={all && c.target.kind !== 'analysis' ? name(c) : undefined}
             onJump={all && dashboard && c.target.kind === 'card' ? () => dashboard.jump(c.target.id) : undefined}
+            mentions={mentions}
           />
         ))}
       </ul>
@@ -318,13 +328,15 @@ export function CommentsDrawer({ projectId, target, dashboard, title: titleIn, o
               <IconButton icon="x" size="sm" label="Unpin" onClick={() => setPin(undefined)} />
             </span>
           )}
-          <Textarea
+          <MentionInput
+            projectId={projectId}
+            enabled={mentions.on}
             label="New comment"
             value={draft}
             rows={3}
             placeholder={all ? 'Comment on this dashboard' : pin ? 'What about this point?' : 'Add a comment'}
-            hint="Markdown works. ⌘↩ to post."
-            onChange={(e) => setDraft(e.target.value)}
+            hint={mentions.on ? 'Markdown works. Type @ to mention someone. ⌘↩ to post.' : 'Markdown works. ⌘↩ to post.'}
+            onValueChange={setDraft}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();

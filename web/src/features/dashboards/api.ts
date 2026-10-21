@@ -124,6 +124,10 @@ export interface CommentList {
   ok: true;
   comments: Comment[];
   targets: Record<string, { name: string; analysisId?: string }>;
+  /** @mentions are on (the server has a user directory). */
+  mentions?: boolean;
+  /** Mentioned addresses → name, for people who can read the project NOW; anyone else is "@former member". */
+  people?: Record<string, string>;
 }
 
 /**
