@@ -19,7 +19,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import type { Locator, Page } from 'playwright';
-import { e2e, SCREENS, settled } from './fixtures.ts';
+import { e2e, hasWebGL2, SCREENS, settled } from './fixtures.ts';
 
 const PHONE = { viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true };
 
@@ -124,10 +124,13 @@ e2e(
     }
     const head = page.getByRole('group', { name: 'Revenue by month card' }).locator('> div').first();
     assert.equal(await head.evaluate((el) => getComputedStyle(el).touchAction), 'auto', 'a finger on a card title scrolls the page');
-    // The map: one finger scrolls the page, two move the map.
+    // The map: one finger scrolls the page, two move the map — where the page can draw one. Without
+    // WebGL2 (the nightly's headless Firefox) it shows its designed state; Chromium without it fails.
     const map = page.getByRole('group', { name: 'Profit by state card' });
-    await map.locator('.maplibregl-canvas').waitFor({ timeout: 15_000 });
-    assert.equal(await map.locator('.maplibregl-cooperative-gestures, .maplibregl-cooperative-gesture-screen').count() > 0, true, 'cooperative gestures on a touch screen');
+    if (await hasWebGL2(page)) {
+      await map.locator('.maplibregl-canvas').waitFor({ timeout: 15_000 });
+      assert.equal(await map.locator('.maplibregl-cooperative-gestures, .maplibregl-cooperative-gesture-screen').count() > 0, true, 'cooperative gestures on a touch screen');
+    } else await map.locator('[data-map-status="nowebgl"]').getByText('This map needs WebGL').waitFor();
     await map.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1200);
     await shots(page, 'phone-viewer-charts');
@@ -306,9 +309,9 @@ e2e(
       el.dispatchEvent(new Event('change'));
     });
 
-    // A tapped bar asks before it filters.
-    await page.mouse.wheel(0, 260);
+    // A tapped bar asks before it filters. (Scrolled to by the element: mobile WebKit has no mouse wheel.)
     const canvas = page.locator('.pub-card--chart canvas').first();
+    await canvas.scrollIntoViewIfNeeded();
     const ask = page.getByRole('dialog').filter({ hasText: 'Filter this page to' });
     const hit = await tapUntil(page, await box(canvas), async () => (await ask.count()) === 1);
     assert.ok(hit, 'a tap on a bar opens the sheet');

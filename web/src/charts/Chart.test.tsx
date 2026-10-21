@@ -7,6 +7,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Chart } from './Chart';
 import type { ChartDataShape, Cx } from './types';
+import { served } from '../test-golden';
 
 const log: string[] = [];
 let instances: Cx[] = [];
@@ -62,7 +63,7 @@ describe('<Chart>', () => {
     expect(instances).toHaveLength(1);
 
     // pareto is also a Chart.js bar: still the same instance.
-    rerender(<Chart type="pareto" data={MORE} label="Revenue" />);
+    rerender(<Chart type="pareto" data={served('pareto', MORE)} label="Revenue" />);
     await waitFor(() => expect(log).toHaveLength(3));
     expect(instances).toHaveLength(1);
 

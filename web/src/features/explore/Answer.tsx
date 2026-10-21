@@ -24,6 +24,7 @@ import { liveFilters } from '../visuals/filters/filterText';
 import { useColorMap } from '../visuals/format/colorMap';
 import { AnswerActions } from './AnswerActions';
 import { useAnswer, type Ask } from './api';
+import { FIGURE_TYPES, figureAsk, figureAskKey } from '../../../../src/analysis/figureAsk.ts';
 import { questionTitle, type Question } from './spec';
 import s from './Answer.module.css';
 
@@ -46,7 +47,10 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
   onChange: (next: Question) => void;
 }) {
   const e = question.encoding;
-  const ask: Ask = useMemo(() => ({ projectId, datasetId, encoding: e, filters: liveFilters(question.filters) }), [projectId, datasetId, e, question.filters]);
+  // A link's chart type is user input too: only a type the picker offers is drawn, else the first that suits.
+  const asked = (live ? LIVE_POOL : POOL).includes(question.chartType) ? question.chartType : '';
+  // A waterfall, Pareto, 100% stack… draws the server's figures, which come only when the ask names the type (docs/chart-figures).
+  const ask: Ask = useMemo(() => ({ projectId, datasetId, encoding: e, filters: liveFilters(question.filters), ...figureAsk(asked) }), [projectId, datasetId, e, question.filters, asked]);
   const answer = useAnswer(ask);
   const colors = useColorMap(projectId);
   const [extras, setExtras] = useState<string[]>([]);
@@ -63,8 +67,6 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
   const suited = eligible.filter((t) => !GRID_TYPES.has(t) && !(live && LIVE_OFF_CHARTS.has(t)));
   const level = data ? reply?.geoSuggest?.level : undefined;
   const offered = level && !suited.includes('map_choropleth') ? [...suited, 'map_choropleth'] : suited;
-  // A link's chart type is user input too: only a type the picker offers is drawn, else the first that suits.
-  const asked = (live ? LIVE_POOL : POOL).includes(question.chartType) ? question.chartType : '';
   // Before the answer arrives it is the asked type (the table's skeleton holds its place); an answer no chart suits is a table.
   const current = !data ? asked : asked && (offered.includes(asked) || chartCanRender(asked, data, hasGeo)) ? asked : (offered[0] ?? 'table');
 
@@ -114,7 +116,7 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
             <LiveRefusal message={refusal} projectId={projectId} datasetId={datasetId} />
           ) : answer.isError ? (
             <ErrorState compact heading={3} title="This question could not be answered" message={answer.error.message} onRetry={() => void answer.refetch()} />
-          ) : !reply || !data ? (
+          ) : !reply || !data || (FIGURE_TYPES.has(current) && reply.ask !== figureAskKey(current)) ? (
             <SkeletonBlock label="Answering the question" />
           ) : empty ? (
             <EmptyState

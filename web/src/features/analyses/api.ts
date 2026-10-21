@@ -8,6 +8,7 @@ import { EditorCtx } from './editor/context';
 import { rpc, RpcError, type RpcInput } from '../../api/client';
 import type { ChartDataShape } from '../../charts/types';
 import type { AsOf } from '../../ui/asOfView';
+import { figureAskKey } from '../../../../src/analysis/figureAsk.ts';
 
 export type Agg = 'sum' | 'avg' | 'count' | 'min' | 'max';
 /** A starter layout, spelled as the `analysis:starterCards` contract spells it. */
@@ -191,7 +192,7 @@ export interface CompareReply {
 /** Every tile's answer says how fresh it is (`asOf`, L0.2) — the card's head shows it. */
 export type VisualTile =
   // `category`: how the server bucketed the axis (src/analysis/categoryKey.ts) — a `date` axis is a time series.
-  | { ok: true; data: ChartDataShape & Record<string, unknown>; warnings: string[]; paramErrors?: string[]; asOf?: AsOf; category?: { kind: 'text' | 'date' | 'number'; grain?: string } }
+  | { ok: true; data: ChartDataShape & Record<string, unknown>; warnings: string[]; paramErrors?: string[]; asOf?: AsOf; category?: { kind: 'text' | 'date' | 'number'; grain?: string }; ask?: string }
   | { ok: false; error: string };
 /** A statistics card's answer (src/ipc/stats.ts computeStatsTile): every cell a string the server wrote. */
 export type StatsTile =
@@ -257,7 +258,8 @@ export function useTile<T extends VisualTile | MetricTile | StatsTile | { ok: bo
   const scope: Scope = { ...(view?.asOf ? { asOf: view.asOf } : {}), ...(view?.currency ? { currency: view.currency } : {}) };
   return useQuery({
     queryKey: ['analysis:tile', projectId, params, scope, req],
-    queryFn: req === undefined ? skipToken : async () => (await loadTile(projectId, params, scope, req)) as T,
+    // Each answer says which figure ask it answers, so a held one for another ask is never drawn as this one's.
+    queryFn: req === undefined ? skipToken : async () => ({ ...((await loadTile(projectId, params, scope, req)) as object), ask: figureAskKey((req as { chartType?: string }).chartType, req) }) as unknown as T,
     retry: (count, err) => count < 2 && err instanceof RpcError && (err.status === 0 || err.status >= 500),
     // Keep the last figure on screen while the next computes (kpiTicker's hold).
     placeholderData: (prev) => prev,

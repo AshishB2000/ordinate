@@ -9,6 +9,8 @@
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { withChartFigures } from '../../src/analysis/chartShapes.ts';
+import { figureAsk } from '../../src/analysis/figureAsk.ts';
 import { decode } from '../../src/server/wire.ts';
 
 /** One fixture file, decoded. `file` is relative to web/ (Vitest's cwd). */
@@ -38,4 +40,27 @@ export function goldenSequence(file: string, field?: string) {
       return [...used].filter(([name, n]) => n !== all[name]!.length).map(([name, n]) => `${name}: ${n}/${all[name]!.length}`);
     },
   };
+}
+
+/**
+ * Recorded chart data as `visual:data` answers it TODAY for a chart drawn as
+ * `type`: the same series, plus the figures the server computes for that type
+ * (src/analysis/chartShapes.ts, docs/chart-figures). The chart recordings
+ * predate `figures`; the engine now draws them and works out none itself.
+ */
+export function served<T extends object>(type: string, data: T, overrides?: unknown): T {
+  return withChartFigures(data, figureAsk(type, overrides));
+}
+
+/**
+ * The one deliberate divergence from a recorded 100%-stacked config: its bars
+ * are the server's unrounded shares (the recording rounded them to whole
+ * percents before drawing) and its tooltip says the share and the figure.
+ * Rounds the bars and drops that tooltip, so everything else compares strictly.
+ */
+export function asRecordedPct(type: string, config: { data: { datasets: Array<{ data: unknown[] }> }; options?: { plugins?: { tooltip?: { callbacks?: Record<string, unknown> } } } }): void {
+  if (!/^pct_stacked_/.test(type)) return;
+  for (const d of config.data.datasets) d.data = d.data.map((v) => (typeof v === 'number' ? Math.round(v) : v));
+  const cb = config.options?.plugins?.tooltip?.callbacks;
+  if (cb) delete cb.label;
 }

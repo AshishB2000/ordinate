@@ -22,6 +22,7 @@ import type { EditorApi } from '../analyses/editor/context';
 import { DrawnVisual, mergeFilters, vizLabel } from '../analyses/VisualTile';
 import { stashNavigation, stepKey } from './useViewer';
 import s from './Dashboards.module.css';
+import { figureAsk } from '../../../../src/analysis/figureAsk.ts';
 
 export interface TileAction {
   kind: 'navigate' | 'url' | 'filter_target' | 'tooltip_visual';
@@ -135,6 +136,7 @@ export function TooltipVisual({ ed, tip, column, category, at }: { ed: EditorApi
             datasetId: tip.datasetId,
             encoding: tip.encoding,
             filters: [...mergeFilters(ed.filters, tip.filters), ...(column ? [{ type: 'filter', column, op: '=', value: category }] : [])],
+            ...figureAsk(tip.chartType, tip.overrides),
           }
         : undefined,
     [tip, ed.filters, column, category],

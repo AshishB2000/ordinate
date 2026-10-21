@@ -7,11 +7,12 @@
 // renderer program.
 //
 // NOTHING HERE COMPUTES A FIGURE. Every number was computed by the app and
-// arrives in the page's data; this file picks which answer to show for the
-// filter bar's state, lays it out, and turns it into a Chart.js config. The
-// only arithmetic is presentational — a slice's share of a pie, a running
-// total's baseline under a waterfall bar, a map's projection — the same kind
-// the hub's own renderer does on screen.
+// arrives in the page's data — a waterfall's levels, a Pareto's order and
+// cumulative share, a 100%-stacked chart's shares and a histogram's bins as the
+// payload's `figures` (src/analysis/chartShapes.ts), the same the app draws.
+// This file picks which answer to show for the filter bar's state, lays it out,
+// and turns it into a Chart.js config. The only arithmetic is presentational:
+// a map's projection, a colour ramp, pixels.
 
 /** The combination index for a set of option picks, or -1. */
 function pkComboIndex(keys: string[], picks: number[]): number {
@@ -99,18 +100,38 @@ function pkTableModel(payload: any, categoryName: string): { head: string[]; row
   return { head, rows };
 }
 
+/** Which of the payload's `figures` a chart id draws; without it the chart is not drawn at all. */
+const PK_FIGURES: Record<string, string> = { waterfall: 'waterfall', pareto: 'pareto', pct_stacked_column: 'sharePct', pct_stacked_bar: 'sharePct', histogram: 'histogram' };
+/** A waterfall's rises and falls — the app's own fallbacks for its --ok / --error tokens. */
+const PK_UP = '#16a34a';
+const PK_DOWN = '#e11d48';
+
 /**
- * The Chart.js config for one of the app's chart ids. `fmt` renders a tick /
- * tooltip number the workspace's way (OrdFormat in the page).
+ * The Chart.js config for one of the app's chart ids — with `src`, each drawn
+ * category's index in the payload's labels (-1: a bar of its own, like a
+ * waterfall's closing Total), where the drawn order is not the labels' — or null when the payload
+ * lacks the figures that id draws (a page published before they existed): the
+ * card then says so, and nothing is worked out here. `fmt` renders a tick /
+ * tooltip number the workspace's way (OrdFormat in the page); `shown` names the
+ * labels as the axis draws them (a month as "Jan 2023").
  */
-function pkChartConfig(chartType: string, payload: any, ramp: string[], fmt: (v: number) => string): any {
-  const labels: any[] = Array.isArray(payload && payload.labels) ? payload.labels : [];
+function pkChartConfig(
+  chartType: string, payload: any, ramp: string[], fmt: (v: number) => string,
+  shown: (labels: any[]) => any[] = (l) => l, share: (v: number) => string = (v) => v + '%',
+): any {
+  const raw: any[] = Array.isArray(payload && payload.labels) ? payload.labels : [];
+  const labels: any[] = shown(raw);
   const series: any[] = Array.isArray(payload && payload.series) ? payload.series : [];
+  const figures: any = (payload && payload.figures) || {};
+  if (PK_FIGURES[chartType] && !figures[PK_FIGURES[chartType]]) return null;
   const colors = pkPalette(ramp, Math.max(series.length, labels.length));
   const horizontal = /(^|_)bar$/.test(chartType) || chartType === 'funnel';
   const stacked = chartType.indexOf('stacked') >= 0;
   const pct = chartType.indexOf('pct_') === 0;
   const tick = { callback: (v: any) => (typeof v === 'number' ? fmt(v) : v) };
+  // The app's axes (web/src/charts/scales.ts): no frame, no gridlines down from the categories, a label tilted at most 40°.
+  const catAxis = (extra: any = {}): any => ({ grid: { display: false }, border: { display: false }, ticks: { maxRotation: 40 }, ...extra });
+  const valAxis = (extra: any = {}): any => ({ border: { display: false }, ticks: tick, ...extra });
   const tooltip = { callbacks: { label: (c: any) => `${c.dataset.label ? c.dataset.label + ': ' : ''}${fmt(Number(c.raw && typeof c.raw === 'object' ? c.raw.y : c.raw))}` } };
   const base = { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: series.length > 1 }, tooltip } };
 
@@ -144,25 +165,63 @@ function pkChartConfig(chartType: string, payload: any, ramp: string[], fmt: (v:
     };
   }
   if (chartType === 'waterfall') {
-    // A running total's floating bars: each step drawn from where the last one ended.
-    const s = series[0] || { label: '', values: [] };
-    let run = 0;
-    const bars = s.values.map((v: any) => { const a = run; run += Number(v) || 0; return [a, run]; });
+    // The server's steps: each bar from its start to its end, a total from 0; a step names its category by index.
+    const steps: any[] = figures.waterfall.steps || [];
+    // A waterfall's totals always; of its rises and falls, the largest and the smallest — signed (the app's rule).
+    const moves = steps.map((y, k) => (y.kind === 'up' || y.kind === 'down' ? k : -1)).filter((k) => k >= 0);
+    const vals = moves.map((k) => steps[k].value);
+    const hi = moves[pkArgOf(vals, 1)];
+    const lo = moves[pkArgOf(vals, -1)];
+    const texts = steps.map((x, j) => (x.kind !== 'up' && x.kind !== 'down' ? fmt(x.value) : j === hi || j === lo ? (x.value > 0 ? '+' : '') + fmt(x.value) : ''));
     return {
       type: 'bar',
-      data: { labels, datasets: [{ label: s.label, data: bars, backgroundColor: s.values.map((v: any) => (Number(v) < 0 ? '#e11d48' : colors[0])) }] },
-      options: { ...base, scales: { y: { ticks: tick } } },
+      data: {
+        labels: steps.map((x) => OrdFormat.stepLabel(x, labels)),
+        datasets: [{
+          label: series[0] ? series[0].label : '', data: steps.map((x) => [x.start, x.end]),
+          backgroundColor: steps.map((x) => (x.kind === 'up' ? PK_UP : x.kind === 'down' ? PK_DOWN : colors[0])),
+        }],
+      },
+      options: { ...base, plugins: { legend: { display: false }, tooltip }, scales: { x: catAxis(), y: valAxis() } },
+      plugins: [pkValueLabels([texts], (j) => steps[j].value)],
+      src: steps.map((x) => x.src),
+    };
+  }
+  if (chartType === 'pareto') {
+    // The server's order (largest first) and cumulative share; the bars are the series' own figures in that order.
+    const p = figures.pareto;
+    const vals: any[] = series[0] && Array.isArray(series[0].values) ? series[0].values : [];
+    return {
+      type: 'bar',
+      data: {
+        labels: p.order.map((i: number) => labels[i]),
+        datasets: [
+          { type: 'bar', label: series[0] ? series[0].label : '', data: p.order.map((i: number) => (vals[i] === undefined ? null : vals[i])), backgroundColor: colors[0], order: 2 },
+          { type: 'line', label: 'Cumulative %', data: p.cumPct, yAxisID: 'pct', borderColor: colors[1] || colors[0], backgroundColor: colors[1] || colors[0], pointRadius: 2, order: 1 },
+        ],
+      },
+      options: { ...base, scales: { x: catAxis(), y: valAxis(), pct: { position: 'right', min: 0, max: 100, grid: { display: false }, border: { display: false }, ticks: { callback: (v: any) => v + '%' } } } },
+      src: p.order,
+    };
+  }
+  if (chartType === 'histogram') {
+    // The server's bins for the first series: touching columns, each labelled by its edges.
+    const bins: any[] = figures.histogram[0] || [];
+    const counts = bins.map((b) => b.count);
+    return {
+      type: 'bar',
+      data: {
+        labels: bins.map((b) => (b.from === b.to ? fmt(b.from) : fmt(b.from) + '–' + fmt(b.to))),
+        datasets: [{ label: 'Count', data: counts, backgroundColor: colors[0], barPercentage: 1, categoryPercentage: 1 }],
+      },
+      options: { ...base, plugins: { legend: { display: false }, tooltip }, scales: { x: catAxis(), y: valAxis() } },
+      plugins: [pkValueLabels(pkMaxMin([counts], fmt))],
     };
   }
   const lineish = /line|area/.test(chartType);
   const datasets = series.map((s, i) => {
-    let data: any[] = s.values;
-    if (pct) {
-      data = s.values.map((v: any, j: number) => {
-        const tot = series.reduce((n: number, t: any) => n + (Number(t.values[j]) || 0), 0);
-        return tot ? ((Number(v) || 0) / tot) * 100 : null;
-      });
-    }
+    // A 100%-stacked bar is the server's share of its category (figures.sharePct).
+    const data: any[] = pct ? figures.sharePct[i] || [] : s.values;
     const asLine = lineish || (chartType === 'combo' && i > 0);
     return {
       type: asLine ? 'line' : 'bar',
@@ -176,29 +235,79 @@ function pkChartConfig(chartType: string, payload: any, ramp: string[], fmt: (v:
       ...(chartType === 'histogram' ? { barPercentage: 1, categoryPercentage: 1 } : {}),
     };
   });
-  if (chartType === 'pareto' && series[0]) {
-    // The cumulative share line over the (already sorted) bars.
-    const vals = series[0].values.map((v: any) => Number(v) || 0);
-    const tot = vals.reduce((a: number, b: number) => a + b, 0);
-    let acc = 0;
-    datasets.push({
-      type: 'line', label: 'Cumulative %', data: vals.map((v: number) => { acc += v; return tot ? (acc / tot) * 100 : null; }),
-      borderColor: colors[1] || colors[0], backgroundColor: colors[1] || colors[0], yAxisID: 'pct', pointRadius: 2,
-    } as any);
-  }
   const valueAxis = horizontal ? 'x' : 'y';
   // Only the VALUE axis gets the number formatter. An explicit `ticks:
   // undefined` on the category axis is not "use the default" to Chart.js — it
   // replaces the category callback and the axis prints indexes (0, 1, 2…).
-  const scales: any = { x: { stacked }, y: { stacked } };
-  scales[valueAxis].ticks = tick;
-  if (pct) scales[valueAxis].max = 100;
-  if (chartType === 'pareto') scales.pct = { position: 'right', min: 0, max: 100, grid: { display: false } };
+  const scales: any = { [valueAxis]: valAxis({ stacked }), [horizontal ? 'y' : 'x']: catAxis({ stacked }) };
+  if (pct) scales[valueAxis] = valAxis({ stacked, max: 100, ticks: { callback: (v: any) => v + '%' } });
+  // The app's default value labels: each series' largest and smallest (a 100% bar's own share).
+  const labelled = [pkValueLabels(pkMaxMin(datasets.map((d) => d.data), pct ? share : fmt))];
   return {
     type: lineish ? 'line' : 'bar',
     data: { labels, datasets },
     options: { ...base, indexAxis: horizontal ? 'y' : 'x', scales },
-    plugins: horizontal ? [] : pkEventPlugins(payload),
+    plugins: labelled.concat(horizontal ? [] : pkEventPlugins(payload)),
+  };
+}
+
+/** The index of the largest (`dir` 1) or smallest (-1) number in `vals`, or -1 — a choice among figures, never a new one. */
+function pkArgOf(vals: any[], dir: 1 | -1): number {
+  let at = -1;
+  vals.forEach((v, i) => { if (typeof v === 'number' && (at < 0 || (dir > 0 ? v > vals[at] : v < vals[at]))) at = i; });
+  return at;
+}
+
+/** The app's default bar labels (valueMode 'maxmin'): each series' largest and smallest figure, in `text` — once per config. */
+function pkMaxMin(rows: any[][], text: (v: number) => string): string[][] {
+  return rows.map((data) => {
+    const hi = pkArgOf(data, 1);
+    const lo = pkArgOf(data, -1);
+    return data.map((v, j) => (typeof v === 'number' && (j === hi || j === lo) ? text(v) : ''));
+  });
+}
+
+/**
+ * A chart's value labels: `texts[dataset][index]` says what a bar or point carries ('' for none), worked out once
+ * when the chart is configured — a draw only places them. The label sits past the bar's end (above a point), out of
+ * the way of the next. `valueAt` (a waterfall's step) says which way the bar points when its data is a [from, to]
+ * pair. Pixel placement only.
+ */
+function pkValueLabels(texts: string[][], valueAt?: (j: number) => number): any {
+  return {
+    id: 'pkValueLabels',
+    afterDatasetsDraw(chart: any) {
+      const ctx = chart.ctx;
+      const horiz = chart.options.indexAxis === 'y';
+      ctx.save();
+      ctx.font = '600 10px system-ui, sans-serif';
+      ctx.fillStyle = chart.options.color || '#6b7280';
+      chart.data.datasets.forEach((ds: any, di: number) => {
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden || ds.yAxisID === 'pct') return; // a Pareto's cumulative line is read off its own axis
+        const line = meta.type === 'line' || ds.type === 'line';
+        meta.data.forEach((el: any, j: number) => {
+          const t = (texts[di] || [])[j];
+          if (!t || !el) return;
+          const v = valueAt ? valueAt(j) : ds.data[j];
+          const up = typeof v !== 'number' || v >= 0;
+          if (line) {
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(t, el.x, el.y - 6);
+          } else if (horiz) {
+            ctx.textAlign = up ? 'left' : 'right';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(t, up ? Math.max(el.x, el.base) + 4 : Math.min(el.x, el.base) - 4, el.y);
+          } else {
+            ctx.textAlign = 'center';
+            ctx.textBaseline = up ? 'bottom' : 'top';
+            ctx.fillText(t, el.x, up ? Math.min(el.y, el.base) - 4 : Math.max(el.y, el.base) + 4);
+          }
+        });
+      });
+      ctx.restore();
+    },
   };
 }
 

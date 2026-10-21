@@ -314,6 +314,9 @@ export function e2e(name: string, fn: (s: Session) => Promise<void>, opts: E2eOp
       const problems = s.problems();
       if (problems.length) throw new Error(`${problems.length} problem(s):\n  ${problems.join('\n  ')}`);
     } catch (err) {
+      // What the page reported before the failure: an error there is often its cause (a nightly runs unwatched).
+      const problems = s.problems();
+      if (problems.length) console.error(`--- page problems ---\n  ${problems.join('\n  ')}`);
       console.error(`--- server log (tail) ---\n${s.server.log().slice(-4000)}`);
       throw err;
     } finally {

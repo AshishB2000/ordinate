@@ -231,4 +231,20 @@ describe('Explore: every figure is asked of visual:data', () => {
     const batch = calls.find((c) => c.channel === 'visual:dataBatch')?.payload as { items: { encoding: unknown; filters: unknown[] }[] } | undefined;
     expect(batch?.items.map((i) => i.encoding)).toEqual([BY_REGION, BY_MONTH]);
   });
+
+  it('a waterfall asks for its figures by name: the server computes them (docs/chart-figures)', async () => {
+    const calls = serve('viewer');
+    renderApp(url({ ...REGION_Q, chartType: 'waterfall' }));
+    await answerTitle();
+    await waitFor(() => expect(calls.some((c) => c.channel === 'visual:data' && (c.payload as { chartType?: string }).chartType === 'waterfall')).toBe(true));
+  });
+
+  it('CONTROL: a column has no figures to ask for, so its ask names no type', async () => {
+    const calls = serve('viewer');
+    renderApp(url(REGION_Q));
+    await screen.findByRole('table', { name: 'Total revenue by region, as a table' });
+    const asks = calls.filter((c) => c.channel === 'visual:data');
+    expect(asks.length).toBeGreaterThan(0);
+    expect(asks.every((c) => !('chartType' in (c.payload as object)))).toBe(true);
+  });
 });

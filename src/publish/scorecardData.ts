@@ -33,6 +33,8 @@ export interface PublishedScorecard {
   window: { label: string; from: string; to: string };
   rows: PublishedScoreRow[];
   groups: Array<{ group: string; onTrack: number; scored: number; total: number }>;
+  /** How many rows are on track, at risk, off track, without a target — the server's count, as the app's page shows it. */
+  counts: Record<'good' | 'warn' | 'off' | 'none', number>;
   geoLevels: string[];
   boundaryIds: string[];
 }
@@ -55,6 +57,7 @@ export async function buildScorecard(projectId: string, id: string, ctx: BuildPr
       owner: r.owner || '', group: r.group || '',
     })),
     groups: res.groups,
+    counts: res.counts,
     geoLevels: [],
     boundaryIds: [],
   };

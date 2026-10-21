@@ -25,6 +25,7 @@ import { categoryType, suggestName, type Column } from './model';
 import { engineKind, engineName, switchEncoding } from '../analytics/grids/gridEncoding';
 import { chartFeature, LIVE_OFF_CHARTS } from '../live/offFeatures';
 import { useEditGuard } from '../editConflicts/useEditGuard';
+import { figureAsk } from '../../../../src/analysis/figureAsk.ts';
 
 export interface Initial {
   visualId?: string;
@@ -98,8 +99,10 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
   // A grid type on a Live dataset is off in v1: nothing is asked, the stage explains (../live/offFeatures).
   const offType = initial.live ? chartFeature(chartType) : null;
   const wanted = useMemo(
-    () => (complete && !offType ? { projectId, datasetId, encoding: eff, filters: live, ...(overlays.length ? { analytics: overlays } : {}), ...(asOf ? { asOf } : {}) } : undefined),
-    [complete, offType, projectId, datasetId, eff, live, overlays, asOf],
+    () => (complete && !offType
+      ? { projectId, datasetId, encoding: eff, filters: live, ...(overlays.length ? { analytics: overlays } : {}), ...(asOf ? { asOf } : {}), ...figureAsk(chartType, overrides) }
+      : undefined),
+    [complete, offType, projectId, datasetId, eff, live, overlays, asOf, chartType, overrides],
   );
   const preview = usePreview(useSettled(wanted, 160));
   const reply = complete ? preview.data : undefined;
