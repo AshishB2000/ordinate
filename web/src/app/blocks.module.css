@@ -11,19 +11,94 @@
     padding: var(--sp-16);
   }
 }
+
+/* ── The page header (docs/design-floor) ──────────────────────────────────
+   crumb
+   title [status]                                   [actions … primary]
+   sub (a sentence) or meta (a row of facts)
+   A page with only a title and a sentence draws exactly what it always did:
+   the title row is the title's own height, the sentence 4px under it. */
 .head {
   display: flex;
   flex-direction: column;
+  gap: var(--sp-8);
+  min-width: 0;
+}
+/* The crumb: quiet, so the title stays the heaviest thing in the header. The
+   arrow's edge lines up with the title's (the -4px pays back the padding). */
+.back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
   gap: var(--sp-4);
+  min-height: 24px;
+  margin: -2px 0 -2px calc(-1 * var(--sp-4));
+  padding: 0 var(--sp-4);
+  border-radius: var(--r-sm);
+  font-size: var(--t-13);
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.back:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.back:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-12) var(--sp-24);
+}
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  flex: 1 1 20rem;
+  min-width: 0;
+}
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+  min-width: 0;
+}
+/* Beside actions the title row is a control's height, so the title centres on
+   the buttons rather than riding their top edge. */
+.row:has(> .actions) .titleRow {
+  min-height: var(--ctl-md);
 }
 .title {
+  min-width: 0;
   font-size: var(--t-20);
   line-height: var(--lh-tight);
   letter-spacing: var(--tr-tighter);
   font-weight: 600;
   color: var(--text-strong);
+  overflow-wrap: anywhere;
 }
 .sub {
   color: var(--muted);
   max-width: 72ch;
+}
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8) var(--sp-12);
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
 }
