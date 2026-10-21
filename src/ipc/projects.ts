@@ -15,10 +15,13 @@ import { projectDir } from '../app/recordKinds';
 import { safetyBackup } from './backups';
 import * as recordFs from '../app/recordFs';
 import * as sample from '../app/sampleProject';
+import { withOrgLock } from '../server/jobs/refreshLock';
 
 type SeedReply = { ok: true; projectId: string; analysisId?: string } | { ok: false; error: 'has_projects' | 'unavailable' };
 /** `sample:seed` calls in flight, by org. */
 const seeding = new Map<string, Promise<SeedReply>>();
+/** How long a second seed waits for the first, on another pod, to finish. */
+const SEED_LOCK_WAIT_MS = 30_000;
 
 // Projects (workspace shell) IPC — list/create/rename/archive/open, the
 // switcher's overview, and the .ordinate bundle's export and import.
@@ -59,21 +62,24 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
   // The bundled sample as the org's FIRST project (Home's "Start with sample
   // data"). Refused once the org has any project, archived ones included, so a
   // second click or a second admin adds nothing. Callers that arrive while a
-  // seed is running share its answer.
-  // ponytail: the in-flight map is per pod — two admins on two pods clicking
-  // in the same second would make two sample projects. An advisory lock on the
-  // org if that ever happens.
+  // seed is running share its answer on this pod; across pods the seed holds
+  // the org's `sample:seed` advisory lock (docs/any-pod/00-design.md §3.9), so a
+  // second pod's caller waits, then finds the project. No lock in 30 s, or a lock
+  // that fails, answers `unavailable` — never a seed without it.
   ipcMain.handle('sample:seed', async () => {
     const key = orgKey('sample:seed');
     const running = seeding.get(key);
     if (running) return running;
     const run = (async (): Promise<SeedReply> => {
-      if ((await projects.listProjects()).length > 0) return { ok: false, error: 'has_projects' };
-      const made = await sample.seedSampleProject({ again: true });
-      if (!made.seeded || !made.projectId) return { ok: false, error: 'unavailable' };
-      active(made.projectId);
-      await projects.touchOpened(made.projectId);
-      return { ok: true, projectId: made.projectId, analysisId: made.analysisId };
+      const seeded = await withOrgLock('sample:seed', async (): Promise<SeedReply> => {
+        if ((await projects.listProjects()).length > 0) return { ok: false, error: 'has_projects' };
+        const made = await sample.seedSampleProject({ again: true });
+        if (!made.seeded || !made.projectId) return { ok: false, error: 'unavailable' };
+        active(made.projectId);
+        await projects.touchOpened(made.projectId);
+        return { ok: true, projectId: made.projectId, analysisId: made.analysisId };
+      }, SEED_LOCK_WAIT_MS).catch((): { ran: false } => ({ ran: false }));
+      return seeded.ran ? seeded.value : { ok: false, error: 'unavailable' };
     })().finally(() => seeding.delete(key));
     seeding.set(key, run);
     return run;

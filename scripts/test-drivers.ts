@@ -346,7 +346,7 @@ async function endToEnd(): Promise<void> {
   let hydrations = 0;
   const realGet = datasets.getDataset;
   (datasets as any).getDataset = async (...args: any[]) => { hydrations += 1; return (realGet as any)(...args); };
-  const fast = await ipc.driversFor(pid, spec);
+  const fast = await ipc.driversFor(pid, spec, undefined, { remember: true }); // the panel's door: it mints a token
   const hydratedResident = hydrations;
   (datasets as any).getDataset = realGet;
   ok('explain: an answer', fast.ok === true, JSON.stringify(fast).slice(0, 300));
@@ -381,7 +381,7 @@ async function endToEnd(): Promise<void> {
   const slow = await ipc.driversFor(pid, spec);
   (residentQuery as any).isResident = realIs;
   ok('resident ≡ JS: every figure, Object.is',
-    slow.ok && JSON.stringify({ ...slow, token: '' }) === JSON.stringify({ ...fast, token: '' }));
+    slow.ok && fast.ok && JSON.stringify({ ...slow, token: undefined }) === JSON.stringify({ ...fast, token: undefined }));
 
   // Drill: West → its states.
   const west = await ipc.driversFor(pid, { ...spec, path: [{ column: 'region', value: 'West' }] });
@@ -404,7 +404,9 @@ async function endToEnd(): Promise<void> {
   const facts = await copilot.buildFacts(pid, { kind: 'drivers', id: fast.token });
   ok('facts: the question and the leader are in the text', /why did "Revenue" change/.test(facts.text) && /California/.test(facts.text));
   ok('facts: every figure printed is in the ledger', audit.auditNumbers(facts.text, facts.ledger).ok);
-  ok('facts: a token from another project recalls nothing', ipc.recall('00000000-0000-4000-8000-00000000abcd', fast.token) === null);
+  ok('facts: a token from another project recalls nothing', (await ipc.recall('00000000-0000-4000-8000-00000000abcd', fast.ok ? fast.token : '')) === null);
+  ok('control: …and from its own project, it does', (await ipc.recall(pid, fast.ok ? fast.token : '')) !== null);
+  ok('only the panel\'s doors remember: a tile\'s or a summary\'s answer carries no token', slow.ok && slow.token === undefined);
 
   // The waterfall tile: recomputed from the question, under the sheet's filters.
   const tile = await ipc.driversVizData(pid, ds.id, { category: 'state', drivers: { metric: { metricId: revenue.id }, compare: { mode: 'previous_period' }, path: [] } }, feb);

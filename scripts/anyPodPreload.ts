@@ -11,6 +11,7 @@
 //   ANYPOD_SLOW_JOBS=a,b      jobs of these kinds — or whose label names a file with `slow` in it —
 //                             wait ANYPOD_SLOW_MS (or until cancelled) before running
 //   ANYPOD_NO_PLAN_LEASE=1    NEGATIVE CONTROL: a plan step claim that ignores a live lease
+//   ANYPOD_NO_ORG_LOCK=1      NEGATIVE CONTROL: the sample-seed and pipeline locks just run
 //   ANYPOD_OFFER_LOG=1        every offered download logs its bytes' sha256 (`anypod:offered`)
 //   ANYPOD_TAKE_LOG=1         every token take that WON logs its hash (`anypod:took`)
 
@@ -119,4 +120,10 @@ if (env.ANYPOD_NO_PLAN_LEASE === '1') {
     });
     return r && { run: r.run, claim: id, ...r.out };
   };
+}
+
+if (env.ANYPOD_NO_ORG_LOCK === '1') {
+  const locks: typeof import('../src/server/jobs/refreshLock') = require('../src/server/jobs/refreshLock');
+  (locks as { withOrgLock: typeof locks.withOrgLock }).withOrgLock = async (_name, fn) => ({ ran: true, value: await fn() });
+  (locks as { withOrgTryLock: typeof locks.withOrgTryLock }).withOrgTryLock = async (_name, fn) => ({ ran: true, value: await fn() });
 }

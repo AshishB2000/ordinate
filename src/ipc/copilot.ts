@@ -307,7 +307,7 @@ export async function buildFacts(
   // from the token it was asked under (ipc/drivers.ts), so the model narrates
   // the app's decomposition and never derives one (ai/driversFacts.ts).
   if (kind === 'drivers' && id) {
-    const asked = drivers.recall(projectId, id);
+    const asked = await drivers.recall(projectId, id);
     const res = asked ? await drivers.driversFor(projectId, asked.spec, asked.params) : null;
     if (res && res.ok) {
       emit({ kind: 'compute', label: 'Explained the change across ' + plural(res.dimensions.length, 'dimension'), count: res.dimensions.length });

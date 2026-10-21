@@ -34,6 +34,11 @@
 //
 // Pool budget: a running refresh holds one of the pod's 10 clients (pool.ts),
 // at most jobs.MAX_RUNNING (3) of them — refreshes only take this lock as jobs.
+//
+// The same lock, by any NAME in the org (`withOrgTryLock`), keeps other
+// one-at-a-time work single across pods (docs/any-pod/00-design.md §3.9, §3.12):
+// a project's pipeline run (`pipeline:<project>`, one client while it runs) and
+// the sample seed (`sample:seed`, waited for by `withOrgLock`, a few seconds).
 
 import type { Pool, PoolClient } from 'pg';
 import { ctx } from '../context';
@@ -76,9 +81,27 @@ async function unlock(client: PoolClient, key: string): Promise<boolean> {
  * another's — holds it. `fn`'s own throw passes through, after the release.
  */
 export async function withRefreshLock<T>(datasetId: string, fn: () => Promise<T>): Promise<Locked<T>> {
+  return withOrgTryLock(datasetId, fn);
+}
+
+/** Waits up to `waitMs` for `name`'s lock (retrying every 250 ms), then `withOrgTryLock`. `{ ran: false }` past the wait. */
+export async function withOrgLock<T>(name: string, fn: () => Promise<T>, waitMs: number): Promise<Locked<T>> {
+  const until = Date.now() + waitMs;
+  for (;;) {
+    const r = await withOrgTryLock(name, fn);
+    if (r.ran || Date.now() >= until) return r;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
+/**
+ * Runs `fn` holding the advisory lock `<org>:<name>` on a dedicated client, or returns `{ ran: false }`
+ * without running it when any session holds it. Without Postgres (one process) it just runs.
+ */
+export async function withOrgTryLock<T>(name: string, fn: () => Promise<T>): Promise<Locked<T>> {
   const p = pool;
   if (!p) return { ran: true, value: await fn() };
-  const key = lockKey(ctx().org.id, datasetId);
+  const key = lockKey(ctx().org.id, name);
   const client = await p.connect();
   let destroy = false;
   const lost = (): void => { destroy = true; };

@@ -35,10 +35,12 @@ const hashOf = (token: string): Buffer => createHash('sha256').update(token, 'ut
 
 /** The members the dev identities name (a creator's grant needs a users row): two in acme, one in globex. */
 export async function seedMembers(pool: import('pg').Pool): Promise<void> {
-  await pool.query(`INSERT INTO orgs (id, name) VALUES ('acme', 'acme'), ('globex', 'globex') ON CONFLICT DO NOTHING`);
+  await pool.query(`INSERT INTO orgs (id, name) VALUES ('acme', 'acme'), ('globex', 'globex'), ('seedone', 'seedone'), ('seedtwo', 'seedtwo') ON CONFLICT DO NOTHING`);
   await pool.query(`INSERT INTO users (org_id, email, role, last_login_at) VALUES
-    ('acme', 'u1@acme.test', 'admin', now()), ('acme', 'u2@acme.test', 'admin', now()), ('globex', 'g1@globex.test', 'admin', now())
+    ('acme', 'u1@acme.test', 'admin', now()), ('acme', 'u2@acme.test', 'admin', now()), ('globex', 'g1@globex.test', 'admin', now()),
+    ('seedone', 's@seedone.test', 'admin', now()), ('seedtwo', 's@seedtwo.test', 'admin', now())
     ON CONFLICT DO NOTHING`);
+  await pool.query(`INSERT INTO orgs (id, name) VALUES ('seedone', 'seedone'), ('seedtwo', 'seedtwo') ON CONFLICT DO NOTHING`);
 }
 
 const projects = new Map<string, string>();
@@ -348,7 +350,47 @@ export async function cancelAcrossPods(p: Pass): Promise<void> {
     cancel?.body?.ok === true && answer.body?.canceled === true && landed, JSON.stringify({ cancel: cancel?.body, answer: answer.body, landed }));
 }
 
-export const CASES: Array<(p: Pass) => Promise<void>> = [crossPodImport, rowIsTruth, planAcrossPods, cancelAcrossPods, takeRace, wrongUser, expired, exportAndBackup, sweepSparesTaken, abortedDownload, orgWall];
+// ── The sample seed and a pipeline run: one at a time across pods ────────
+async function seedBoth(A: H.Pod, B: H.Pod, org: string): Promise<{ replies: unknown[]; projects: number }> {
+  const who = { 'x-test-user': `s@${org}.test`, 'x-test-org': org };
+  const replies = (await Promise.all([H.rpc(A.base, who, 'sample:seed'), H.rpc(B.base, who, 'sample:seed')])).map((r) => r.body);
+  const list = (await H.rpc(A.base, who, 'projects:list')).body as unknown[];
+  return { replies, projects: list.length };
+}
+
+async function runBoth(p: Pass, A: H.Pod, B: H.Pod): Promise<Array<{ ok?: boolean; error?: string }>> {
+  const pid = await projectOf(p, U1);
+  return (await Promise.all([H.rpc(A.base, U1, 'pipelines:run', { projectId: pid }), H.rpc(B.base, U1, 'pipelines:run', { projectId: pid })])).map((r) => r.body);
+}
+
+export async function oneAtATime(p: Pass): Promise<void> {
+  const seeded = await seedBoth(p.A, p.B, 'seedone');
+  ok(`[${p.name}] sample:seed on A and B at once makes exactly one project (the other waits, then finds it)`, seeded.projects === 1, JSON.stringify(seeded));
+  // A pipeline with a slow node: the plan makes a dataset, its metric and an alert named "slow alert" (the preload holds its check ~4 s).
+  const pid = await projectOf(p, U1);
+  const start = await H.rpc(p.A.base, U1, 'plan:start', { projectId: pid, intent: 'pipe', steps: [
+    { kind: 'import', file: 'pipe.csv', name: 'Pipe' }, { kind: 'metric', dataset: 'Pipe', name: 'Pipe total', column: 'amount', aggregation: 'sum' },
+    { kind: 'alert', metric: 'Pipe total', op: '>', value: 1, name: 'slow alert' }] });
+  const runId = start.body?.runId as string;
+  await H.rpc(p.A.base, U1, 'plan:next', { projectId: pid, runId, fileToken: await H.upload(p.A.base, U1, PLAN_CSV, 'pipe.csv') });
+  await H.rpc(p.A.base, U1, 'plan:next', { projectId: pid, runId });
+  const third = await H.rpc(p.A.base, U1, 'plan:next', { projectId: pid, runId });
+  const runs = await runBoth(p, p.A, p.B);
+  ok(`[${p.name}] a pipeline run on A and B at once: one runs, the other is told it is already running`,
+    third.body?.status?.[2] === 'done' && runs.filter((r) => r.ok === true).length === 1 && runs.some((r) => r.error === 'This pipeline is already running.'),
+    JSON.stringify({ plan: third.body?.status, runs }));
+  if (p.name !== 'file') return;
+  const C = await p.startPod({ ANYPOD_NO_ORG_LOCK: '1' });
+  const D = await p.startPod({ ANYPOD_NO_ORG_LOCK: '1' });
+  const twice = await seedBoth(C, D, 'seedtwo');
+  const both = await runBoth(p, C, D);
+  ok('[file] NEGATIVE CONTROL — with the org locks off, the same two seeds make two projects and the same two runs both run',
+    twice.projects === 2 && both.every((r) => r.ok === true), JSON.stringify({ twice, both }));
+  await C.stop();
+  await D.stop();
+}
+
+export const CASES: Array<(p: Pass) => Promise<void>> = [crossPodImport, rowIsTruth, planAcrossPods, cancelAcrossPods, oneAtATime, takeRace, wrongUser, expired, exportAndBackup, sweepSparesTaken, abortedDownload, orgWall];
 
 // ── 9. NEGATIVE CONTROL: no database, the Map — a take does not cross pods ─
 export async function memoryControl(A: H.Pod, B: H.Pod): Promise<void> {

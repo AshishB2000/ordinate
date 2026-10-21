@@ -34,8 +34,13 @@ import { downstream, runGraph } from './pipelines';
 import type { ExecResult, NodeOutcome, PipelineGraph, PipelineNode } from './pipelines';
 import { loadGraph } from './pipelineView';
 import { nextCronRun } from './pipelineCron';
+import { withOrgTryLock } from '../server/jobs/refreshLock';
 
-/** Projects with a run in flight, and its nodes' live state. */
+/**
+ * Projects with a run in flight ON THIS POD, and its nodes' live state. `pipelines:get` reads it, so
+ * a page opened on another pod mid-run shows no live states until the running pod's next
+ * `pipelines:changed` push (sent to every tab of the org at each node's start and finish).
+ */
 const live = new Map<string, Map<string, 'queued' | 'running'>>();
 
 export function liveState(projectId: string): Record<string, string> {
@@ -144,14 +149,26 @@ async function raiseFailures(projectId: string, graph: PipelineGraph, outcomes: 
 
 export type RunReply = { ok: true; runId: string; outcomes: NodeOutcome[] } | { ok: false; error: string };
 
-/** Run these nodes and everything downstream. One run per project at a time. */
+const ALREADY = 'This pipeline is already running.';
+
+/**
+ * Run these nodes and everything downstream. One run per project at a time — across pods too: the
+ * run holds the org's `pipeline:<project>` advisory lock (docs/any-pod/00-design.md §3.12), so a
+ * second pod's Run, or its cron tick, answers "already running" instead of running (and alerting) twice.
+ */
 export async function runFrom(
   projectId: string, start: string[], trigger: 'manual' | 'schedule',
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
 ): Promise<RunReply> {
+  if (live.has(orgKey(projectId))) return { ok: false, error: ALREADY };
+  const r = await withOrgTryLock(`pipeline:${projectId}`, () => runLocked(projectId, start, trigger, sleep));
+  return r.ran ? r.value : { ok: false, error: ALREADY };
+}
+
+async function runLocked(projectId: string, start: string[], trigger: 'manual' | 'schedule', sleep: (ms: number) => Promise<void>): Promise<RunReply> {
   // Keyed per org: on a server a project id repeats across orgs after an import.
   const key = orgKey(projectId);
-  if (live.has(key)) return { ok: false, error: 'This pipeline is already running.' };
+  if (live.has(key)) return { ok: false, error: ALREADY };
   const state = new Map<string, 'queued' | 'running'>();
   live.set(key, state);
   try {
