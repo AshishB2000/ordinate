@@ -368,83 +368,70 @@ new member → provision → applyIdpGroups
 - OIDC applies at every sign-in without comparing, but writes the digest too, so one code path serves
   both modes.
 
-### 3.12 The R19 label filter: labels in the caller's own locked result, without a second full compute
+### 3.12 The R19 label filter (revised after refutation, M5/M6/m1/B1)
 
-`visualForCaller(projectId, v, drawn?)` in `src/ipc/rowDoors.ts`:
+`visualForCaller(projectId, v)` in `src/ipc/rowDoors.ts` never computes:
 
-1. **Unchanged** (the same object back, no extra read) unless the caller is restricted on the project
-   (`restrictedOn`, memoised per request) AND `v` carries a label field (`sortOrder`, `seriesColors`,
-   `waterfallTotals`, `y2Series` non-empty). Editors, admins and most visuals pay nothing.
-2. **Closed** = `closedToCaller(base)` (the dataset unknown → closed, as today), OR the question
-   reaches another dataset (`reachesOther`, the door's own check, `rowDoors.ts:37-45`). Not closed →
-   unchanged.
-3. **Closed:**
-   - drop `sortOrder` and `seriesColors` (#12, unchanged);
-   - **`y2Series` ∩ `measureNames(encoding)`.** `validateDualAxis` (`chartFormat.ts:160-186`) refuses a
-     dual axis with a series split and keeps only measure names, at every write and read
-     (`visuals.ts:486,600,640`, `dashboards.ts:314`). So the series names of ANY ok locked result of
-     this encoding are exactly these names, computed from the encoding alone with no compute. A
-     differential test pins that equality against a real locked result (§7, test 4).
-   - **`waterfallTotals`**: dropped unless `chartType === 'waterfall'` (`figureAsk` sends them only for
-     a waterfall, `figureAsk.ts:35`, so elsewhere they are inert). For a waterfall: totals ∩
-     `drawn.labels`, where `drawn` is:
-     - **the reply already in hand.** `visual:thumbs` passes the `visual:data` reply it just
-       computed (`visualsServer.ts:62`). `story:figures` passes the chart data `storyVisual` just
-       computed. No extra compute.
-     - **otherwise, one call of the registered `visual:data` handler** with exactly the question
-       `visual:thumbs` asks (`{projectId, datasetId, encoding, filters, ...figureAsk(chartType,
-       overrides)}`). It goes through the same lock door and the same answer cache
-       (`visuals.ts:464-473`), so it costs one locked aggregate per closed waterfall that has totals,
-       shared with the gallery thumbnail and the builder's own first `visual:data`. A repeat is a
-       cache hit.
-     - a refusal, a failure, or no handler registered → empty labels, so every total is dropped
-       (fail closed).
-4. **Tag.** When the record changed and carries a `tag`, it becomes `contentTag('visual', sent)`. A
-   restricted caller cannot write, so the stored tag is useless to them and an oracle (§2.7).
-   `analysis:open` compares the returned object with the input and does the same for its separate
-   `tag`.
+1. **Unchanged** (the same object back) unless the caller is restricted on the project (`restrictedOn`,
+   memoised per request) and the visual is **closed**: `closedToCaller(base)` (an unknown dataset is
+   closed, as today), or a dataset the question reaches is closed to them (`relatedClosed`, the B1
+   gate below).
+2. **Closed:** drop `sortOrder`, `seriesColors` (#12) and **`waterfallTotals`**; keep `y2Series` ∩
+   `measureNames(encoding)` (`validateDualAxis` makes those the series names of any locked result:
+   verdict 2); strip the drivers labels (`encoding.drivers.path` → `[]`, a `bucket` compare's
+   `label`/`prev` → `''`; drivers tiles are refused to restricted callers anyway, `rowDoors.ts:73`).
+3. **The waterfall still marks its totals, server-side.** `visual:data`, `visual:dataBatch` and
+   `analysis:tiles` accept `visualId` (in `FigureAskFields`). When a waterfall request carries no
+   `waterfallTotals` and names a visual of the same project AND the same dataset, the server fills the
+   STORED totals into the ask (`storedFigureAsk`, rowDoors). `chartShapes.waterfall` marks only labels
+   already in the reply (`chartShapes.ts:72-110`), so nothing foreign leaves. The web always sends
+   `visualId` for a saved visual's tile, tooltip tile and builder; a request's own totals win (an
+   editor's builder). `visual:thumbs` and `story:figures` ask with the stored overrides server-side
+   already; their returned `overrides` go through the same strip.
+4. **Tags (m1).** For ANY restricted caller every tag in the reply is recomputed over what is sent
+   (`contentTag(kind, sent)`): `visual:get`'s, each `analysis:open` visual's and the dashboard's own.
+   The stored tag hashes the raw bytes (`editConflict.ts:41-55`), so even an "unchanged" record's
+   stored tag can confirm a guess. A restricted caller cannot write, so nothing uses it.
+5. **Funnel `steps` (M6): an authored ceiling, R19(a).** They are the definition the server runs;
+   dropping one would change every conversion figure, so they are not filtered. Same class as saved
+   filter values. Column names a prepare pivot makes from row values are R19(a) metadata (verdict 2).
 
-**Callers:**
+**B1 — the related-dataset gate (its own commit).** `lockedViz` and `lockedMetric` returned the body
+when the base dataset has no lock (`rowDoors.ts:72`, `:89`), so the body's answer cache
+(`visuals.ts:464-473`; key = base dataset + spec, no caller state) handed a restricted viewer the
+editor's joined labels and figures from a ruled dataset. Now, when the lock is null and the caller is
+restricted, every OTHER dataset the question reaches is gated first, before the body and its cache:
+`categoryDatasetId`, `seriesDatasetId`, `values[].datasetId`, and the related datasets that supply a
+name it uses (`relatedColumnSources`, relationships.ts). Any `closedToCaller` → refuse `related`. The
+other null-lock return, `withLockOf`, serves single-dataset bodies (answer cards check every column is
+their own, the grid, distinct values) and needs no gate. Copilot facts and tiles go through these doors.
 
-- `visual:get`, `analysis:gallery`, `analysis:open` (visuals) and `versions:get` (visual: the version's
-  own encoding and filters on the current dataset) call it without `drawn`;
-- `visual:thumbs` and `story:figures` call it with `drawn`;
-- `analysis:open`'s `analysis` and `versions:get` (dashboard) map each `card.visual` through it. They
-  are records, so they are called without `drawn`.
+### 3.13 Linked teams when the map changes (revised, verdict 3)
 
-**CEILING** (documented, R19): in a dashboard, a tile's sheet filters can narrow the labels further.
-The filter uses the visual's own question, a superset that is still entirely the caller's rows. The
-authored `filters` and `analytics[].at` stay visible: they are R19(a)'s "anything a person typed or
-saved".
+`admin:setIdpGroup` runs under the exclusive people lock and refuses while the mapping is dormant
+(`dormant`; the panel hides the editor then). In one transaction:
 
-### 3.13 Linked teams when the map changes
+1. upsert or delete the row;
+2. a team whose set of linking groups changed (gained, lost, or lost its last: unlink too) has its
+   members deleted;
+3. **re-apply at once** for every enabled member with stored groups (`users.idp_groups`, the canonical
+   list of their last explicit sync): role (last-admin rule, sequential) and linked teams, one
+   `idp:sync` audit row per changed member. That refills the cleared teams immediately: no 7-day OIDC
+   gap, and a mapping mistake is fixed without a disable. Members with no stored groups sync at their
+   next sign-in or request. ponytail: one loop over the org's synced members per mapping change, fine
+   for thousands; set-based if an org outgrows it.
 
-When a team's set of linking groups changes in `admin:setIdpGroup`, the team's members are deleted in
-the same transaction **iff it is linked afterwards AND (it was unlinked before OR it lost a group)**.
-They refill as each member next syncs: header mode on their next request (digests are cleared), OIDC
-at their next sign-in.
+### 3.14 Token-expiry details (revised, M4)
 
-- Manual members of a newly linked team were never vouched for by the IdP. Removing them fails closed
-  (fewer projects, fewer rows).
-- A team that only gains another group keeps its IdP-sourced members.
-- A team that loses its last link becomes manual and keeps its members, which the admin then manages.
-
-The panel's confirm sentence says this. Under OIDC the gap is at most one session lifetime: the bound
-the spec accepts everywhere.
-
-### 3.14 Token-expiry details
-
-- `tokens:create` requires `expiresInDays`. The contract allows 1–3650. Above `API_TOKEN_MAX_DAYS`,
-  the handler refuses with `{ok:false, error:'expiry'}`. The INSERT sets `expires_at = now() + n *
-  interval '1 day'`, on the DB clock like sessions. There is no silent default, so no hidden lifetime.
-- `tokens:list` → `{tokens, maxDays}`:
-  - every unrevoked token, including expired ones (marked, so a broken script is explained);
-  - `expiresAt` = `coalesce(expires_at, created_at + maxDays)`;
-  - `legacy` = `expires_at IS NULL`.
-- The page offers 30 / 90 / 365 days, minus any above `maxDays`, plus `maxDays` itself when it is below
-  365 and not already listed. The default is 90 when offered, else the largest option.
-- The cap of 50 counts tokens that are unrevoked AND unexpired, so expired tokens never lock anyone
-  out.
+- `tokens:create` requires `expiresInDays` (contract 1–3650; above `API_TOKEN_MAX_DAYS` → `{ok:false,
+  error:'expiry'}`); `expires_at = now() + n days`.
+- **The effective end of every token** is `least(coalesce(expires_at, 'infinity'), created_at +
+  API_TOKEN_MAX_DAYS)`: in `tokenIdentity`, in the list's `expiresAt` and in the 50-token cap. Lowering
+  the maximum shortens every token, old and new.
+- `tokens:list` → `{tokens, maxDays}`; each row `expiresAt` (effective), `expired`, `legacy`
+  (`expires_at IS NULL`). Expired, unrevoked tokens stay listed and do not count toward the cap.
+- The page offers 30 / 90 / 365 minus any above `maxDays`, plus `maxDays` below 365; default 90 when
+  offered, else the largest.
 
 ### 3.15 The Admin → People panel
 
@@ -474,7 +461,7 @@ the spec accepts everywhere.
 ```sql
 -- IdP groups → org role and teams (docs/sso-lifecycle/00-design.md).
 --
--- Additive only: a new table and a new nullable column. An older release
+-- Additive only: a new table and two new nullable columns. An older release
 -- ignores both: it never reads groups, and keeps roles and teams as stored.
 --
 -- One row per (org, group): the group maps to an org role, a team, or both.
@@ -494,10 +481,14 @@ CREATE TABLE idp_groups (
   CHECK (role IS NOT NULL OR team_id IS NOT NULL)
 );
 
--- What the member's last group sync evaluated: the hex sha256 of their
--- canonical group list and the break-glass flag, or 'absent'. Header mode
--- compares it per request and writes only on change. NULL = sync at the next
--- request; cleared for the whole org whenever idp_groups changes.
+-- A member's last EXPLICIT group list as sign-in read it (canonical, sorted),
+-- so a mapping change re-applies every synced member at once. NULL = none seen.
+ALTER TABLE users ADD COLUMN idp_groups text[];
+
+-- What header mode compares per request (writes only on change): the hex
+-- sha256 of [break-glass flag, ...idp_groups], or 'kept:<sha>' when the last
+-- admin was kept (cleared whenever the org gains an admin). NULL = re-apply
+-- at the next request.
 ALTER TABLE users ADD COLUMN idp_groups_digest text;
 ```
 
@@ -767,3 +758,32 @@ e2e.
   They are R19(a)'s authored-content ceiling; restated in R19.
 - `story:figures` sent raw overrides even when its door refused the chart. Fixed in step 1, recorded
   as a finding.
+
+## 10. Refutation round
+
+An independent reviewer checked this design against d81ebe26. It confirmed the peer check on every
+path, `email_verified` refused first, the lower-cased break-glass email, `tokenIdentity` as the one
+verifier (the MCP included), the cross-org bindings and the `tokens:list` callers. What it found, and
+what the design does now (this table supersedes §3, §5–§7 where they differ):
+
+| Finding | What it was | What this design does now |
+|---|---|---|
+| B1 (blocker, on develop since #312) | A null lock on the base dataset skipped `reachesOther`, so the answer cache handed a restricted viewer the editor's joined labels and figures from a ruled related dataset. | Gate every reached dataset before the body and its cache; refuse `related` (§3.12). Own commit after the R19 label commit, own CHANGELOG line, named in R19. Test: editor warms the cache, the viewer is refused; NEGATIVE CONTROL with the gate off leaks. |
+| M1 | The digest short-circuit would stop header mode restoring the break-glass admin. | `index.ts:51`'s condition (`adminEmail === email && role !== 'admin'`) still sends them through `provision`; `rolesAndTeams` returns admin for break-glass, managed or not. |
+| M2 | One exclusive org lock per header apply piles up (a page load is ~25 RPCs, pool max 10). | Single-flight per (org, email) per pod in `headerIdentify`. Syncs take `pg_advisory_xact_lock_shared`; `setIdpGroup`, `setRole`, `setDisabled`, `teamMember` take it exclusive. A sync whose read would demote an admin rolls back and redoes under the exclusive lock, deciding again from a fresh read. |
+| M3 | The digest hides drift (a manual change, a kept admin). | `setRole`, `teamMember` and enable clear the target's digest in the same statement. A kept last admin gets `'kept:' + digest` (the short-circuit treats it as current); any transaction that gains an admin clears the org's `kept:` markers. The denied log and audit are rate-limited (once per member per hour per pod). |
+| M4 | Lowering `API_TOKEN_MAX_DAYS` left new tokens long. | `least(coalesce(expires_at,'infinity'), created_at + max)` everywhere (§3.14). |
+| M5 | Computing a locked result on record paths (`analysis:open` loops every visual; the full handler refreshes, spends Live budget, overlays). | Record paths DROP `waterfallTotals`; the server fills stored totals into the ask from `visualId` (§3.12). |
+| M6 | Encoding label fields: funnel `steps`, drivers `path[].value`, a bucket compare's `label`/`prev`. | Drivers labels stripped; funnel steps an R19(a) authored ceiling (§3.12). |
+| m1 | Tags. | Every tag recomputed for any restricted caller (§3.12). |
+| m2 | `teamMember`'s check-then-insert raced `setIdpGroup`. | Under the exclusive people lock. |
+| m3 | Two last-admin rules. | One rule everywhere: other enabled admins who have signed in (`OTHER_ADMINS` in `people.ts` included). |
+| m4 | Other session ends left streams open; a disable racing a stream open. | Streams carry their session's hash. `admin:resetPassword` and `endOtherSessions` (keeping the current session's stream) close streams too. The 30 s sweep also closes streams whose session is gone, expired or idle. A stream cannot open after the disable commits: sessions go in the same statement and `identify` refuses a disabled user; one that opened just before is the sweep's. |
+| m5 | An absent header must not write. | Absent → `known` as is, no write; a warning once per member per hour per pod and a counter (`idp_groups_absent`). |
+| m6 | Tests that pass with the bug. | 1g uses a barrier hook (released when `pg_locks` shows the second sync waiting, or, lock off, when both arrived); the y2 differential plants a raw `y2Series` in a VERSION record; the related case warms the cache. Added: bearer + groups header from a trusted and an untrusted peer, break-glass in header mode, the kept admin re-evaluated, the maximum lowered. |
+| Verdict 3 | Linked-team refill gap. | Clear on unlink too; store `users.idp_groups`; `setIdpGroup` re-applies every synced member at once (§3.13). |
+| Verdict 4 | Absent header = no change. | Acceptable with a stated requirement: `sso.md` and R20 require the proxy to admit only members of an allowed group (oauth2-proxy `--allowed-group`) and to set or strip the groups header itself; plus m5. |
+| Verdict 5 | ID token only. | `sso.md`: Okta "Include in: ID Token", Keycloak "Add to ID token", Entra overage (> 200 groups → permanently absent: use "Groups assigned to the application" or `roles`). |
+
+Steps (§5) gain step 1b, the B1 gate, right after the label filter. No `console.*` in `src/`: each
+module logs through the logger it is handed (`app.log`, the request's log).
