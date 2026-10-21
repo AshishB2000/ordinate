@@ -29,6 +29,7 @@ import { useCanEdit } from '../projects/api';
 import { useCurrentProject } from '../projects/current';
 import { reason, useAlerts, useAlertsLive, useAlertWrite, type AlertEvent, type AlertRule } from './api';
 import { usePausedNotice } from '../subscriptions/notices';
+import { useMentionNotice } from './mentionNotice';
 import s from './Alerts.module.css';
 
 /** The rule's last values as a 96×24 line — positions only; every value is the server's. */
@@ -224,6 +225,8 @@ export function AlertsBell() {
   const [open, setOpen] = useState(false);
   // The bell is on every page, so it is also where a subscription's owner hears that it paused itself.
   usePausedNotice();
+  // …and where a person hears that someone mentioned them (docs/notifications §5.9).
+  useMentionNotice();
   // The bell asks the server only once it matters: opened, or an alert fired
   // (alerts:fired). A dashboard's KPI cards read the same list, so on a
   // dashboard the badge is there at once; every other page stays inside its
