@@ -8,6 +8,7 @@
 // __golden__/palette.json, compared with Object.is at every leaf.
 
 import { deepStrictEqual } from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -42,31 +43,49 @@ function contrast(a: string, b: string): number {
 
 const HOSTILE = ['#ffff00', '#ffffff', '#000000', '#00ff00', '#808080', '#1a1a1a', '#ff00ff', '#7fffd4'];
 
+/** A rule's custom property, read out of a stylesheet (comments dropped). */
+function cssToken(rel: string, sel: string, name: string): string {
+  const css = readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const body = new RegExp(`(^|[;}\\s])${sel.replace(/[.[\]"=]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[2] ?? '';
+  return new RegExp(`${name}\\s*:\\s*(#[0-9a-f]{6})`, 'i').exec(body)?.[1] ?? `${sel} has no ${name}`;
+}
+
 describe('the desktop palette, recorded', () => {
-  it('the dark surfaces', () => deepStrictEqual(BRAND_DARK_SURFACES, G.darkSurfaces));
+  // The desktop walked against two dark surfaces; the golden holds its answers for those. Today's list
+  // (every dark --surface and --surface-float, the app's and the dark sheet's) is only a different
+  // input to the same algorithm, so each comparison below passes the recorded one.
+  it('the dark surfaces: the recorded ones, and today\'s read out of the CSS', () => {
+    deepStrictEqual(G.darkSurfaces, ['#1c1c20', '#232327']);
+    const today = ['--surface', '--surface-float'].flatMap((t) => [cssToken('../theme.css', '[data-theme="dark"]', t), cssToken('../features/dashboards/Style.module.css', '.theme_dark', t)]);
+    deepStrictEqual([...BRAND_DARK_SURFACES].sort(), [...new Set(today)].sort());
+  });
 
   it('brandTokens: every seed gives the desktop tokens', () => {
     expect(G.brandTokens.length).toBeGreaterThan(16);
-    for (const [seed, want] of G.brandTokens) deepStrictEqual(brandTokens(seed), want, seed);
+    for (const [seed, want] of G.brandTokens) deepStrictEqual(brandTokens(seed, G.darkSurfaces), want, seed);
   });
 
   it('valueRamp and rampColor: every kind, seed and surface', () => {
-    for (const [kind, seed, surface, want] of G.ramps) deepStrictEqual(valueRamp(kind, seed, surface), want, `${kind} ${seed} ${surface}`);
+    for (const [kind, seed, surface, want] of G.ramps) deepStrictEqual(valueRamp(kind, seed, surface, 7, G.darkSurfaces), want, `${kind} ${seed} ${surface}`);
     for (const [kind, ramp, v, min, max, want] of G.colors) expect(Object.is(rampColor(ramp, kind, v, min, max), want), `${kind} ${v}`).toBe(true);
   });
 
-  it('applyBrandTokens sets the desktop properties, and clearing removes them', () => {
+  it('applyBrandTokens sets the desktop properties to brandTokens\' values, and clearing removes them', () => {
     const el = document.createElement('div');
     applyBrandTokens(el, '#7c3aed');
     const set = Object.fromEntries([...Array(el.style.length).keys()].map((i) => [el.style.item(i), el.style.getPropertyValue(el.style.item(i))]));
-    deepStrictEqual(set, G.applied);
+    deepStrictEqual(Object.keys(set).sort(), Object.keys(G.applied).sort());
+    const t = brandTokens('#7c3aed')!;
+    deepStrictEqual(set, { ...t.light, ...t.dark });
     expect(Object.keys(set).length).toBeGreaterThan(10);
     applyBrandTokens(el, '');
     expect(el.style.length).toBe(0);
   });
 
   it('a broken port would be caught (negative control)', () => {
-    expect(() => deepStrictEqual(brandTokens('#2563eb'), G.brandTokens.find(([s]) => s === '#7c3aed')![1])).toThrow();
+    expect(() => deepStrictEqual(brandTokens('#2563eb', G.darkSurfaces), G.brandTokens.find(([s]) => s === '#7c3aed')![1])).toThrow();
+    // …and so would a surface list that drifted from the CSS: today's walk differs from the desktop's.
+    expect(() => deepStrictEqual(brandTokens('#2563eb'), G.brandTokens.find(([s]) => s === '#2563eb')![1])).toThrow();
   });
 });
 

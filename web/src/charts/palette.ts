@@ -136,15 +136,20 @@ function brandRgba(hex: string, a: number): string {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 }
 
-/** The surfaces the ramp must read on — theme.css --surface in each theme, and the dark sheet. */
+/**
+ * The surfaces the ramp must read on: theme.css --surface in light, and every
+ * dark surface a chart or the accent is drawn on — the app's --surface and
+ * --surface-float (dialogs, the dock, Explore's cards) and the dark sheet's
+ * (Style.module.css .theme_dark). palette.test.ts reads them out of the CSS.
+ */
 const BRAND_LIGHT_SURFACE = '#ffffff';
-export const BRAND_DARK_SURFACES = ['#1c1c20', '#232327'];
+export const BRAND_DARK_SURFACES: readonly string[] = ['#1c1c20', '#26262c', '#232327', '#2a2a30'];
 
 /**
  * One accent → `{ light, dark }` token maps, every contrast floor met. Null
  * for anything that is not a #rrggbb.
  */
-export function brandTokens(hex: string): { light: Record<string, string>; dark: Record<string, string> } | null {
+export function brandTokens(hex: string, darkSurfaces: readonly string[] = BRAND_DARK_SURFACES): { light: Record<string, string>; dark: Record<string, string> } | null {
   if (!/^#[0-9a-f]{6}$/i.test(String(hex))) return null;
   const seed = hex.toLowerCase();
   // Light: dark enough for white text on it.
@@ -162,7 +167,7 @@ export function brandTokens(hex: string): { light: Record<string, string>; dark:
   });
   // Dark: light enough to read on the dark surfaces, still dark enough for
   // white button text at the large-text floor.
-  const readsOnDark = (h: string): boolean => BRAND_DARK_SURFACES.every((s) => brandContrast(h, s) >= 4);
+  const readsOnDark = (h: string): boolean => darkSurfaces.every((s) => brandContrast(h, s) >= 4);
   let dk = brandWalk(seed, 1, readsOnDark);
   if (brandContrast(dk, '#ffffff') < 3) dk = brandWalk(dk, -1, (h) => brandContrast(h, '#ffffff') >= 3);
   const dkHsl = hexToHsl(dk) as { h: number; s: number; l: number };
@@ -177,7 +182,7 @@ export function brandTokens(hex: string): { light: Record<string, string>; dark:
   };
   paletteFromSeed(dk, CHART_PALETTE.length).forEach((c, i) => {
     dark['--brand-dk-chart-' + (i + 1)] = i === 0 ? dk
-      : brandWalk(c, 1, (h) => BRAND_DARK_SURFACES.every((s) => brandContrast(h, s) >= 3));
+      : brandWalk(c, 1, (h) => darkSurfaces.every((s) => brandContrast(h, s) >= 3));
   });
   return { light, dark };
 }
@@ -212,10 +217,10 @@ export function rampIsDark(surface: string): boolean {
   return /^#[0-9a-f]{6}$/i.test(String(surface)) && brandLum(surface) < 0.2;
 }
 
-/** Does `hex` read as a chart mark on the light surface, or on BOTH dark ones? */
-function rampReads(hex: string, dark: boolean): boolean {
+/** Does `hex` read as a chart mark on the light surface, or on EVERY dark one? */
+function rampReads(hex: string, dark: boolean, darkSurfaces: readonly string[]): boolean {
   return dark
-    ? BRAND_DARK_SURFACES.every((s) => brandContrast(hex, s) >= 3)
+    ? darkSurfaces.every((s) => brandContrast(hex, s) >= 3)
     : brandContrast(hex, BRAND_LIGHT_SURFACE) >= 3;
 }
 
@@ -224,11 +229,11 @@ function rampReads(hex: string, dark: boolean): boolean {
  * luminance at a fixed hue and saturation, so once the near end passes the
  * floor every step beyond it passes too.
  */
-export function rampOfHue(hex: string, n: number, dark: boolean): string[] {
+export function rampOfHue(hex: string, n: number, dark: boolean, darkSurfaces: readonly string[] = BRAND_DARK_SURFACES): string[] {
   const hsl = hexToHsl(hex);
   if (!hsl || n < 1) return Array.from({ length: Math.max(0, n) }, () => hex);
   const s = hsl.s < 0.05 ? 0 : Math.max(0.45, hsl.s);
-  const near = brandWalk(hslToHex(hsl.h, s, dark ? 0.2 : 0.9), dark ? 1 : -1, (h) => rampReads(h, dark));
+  const near = brandWalk(hslToHex(hsl.h, s, dark ? 0.2 : 0.9), dark ? 1 : -1, (h) => rampReads(h, dark, darkSurfaces));
   const nearL = (hexToHsl(near) as { l: number }).l;
   const farL = dark ? Math.max(nearL, 0.88) : Math.min(nearL, 0.22);
   if (n === 1) return [near];
@@ -240,15 +245,15 @@ export function rampOfHue(hex: string, n: number, dark: boolean): string[] {
  * sequential: `n` steps of the accent's hue, low → high.
  * diverging:  the accent's complement ← a neutral centre → the accent, `n` odd.
  */
-export function valueRamp(kind: string, accent: string, surface: string, n = 7): string[] {
+export function valueRamp(kind: string, accent: string, surface: string, n = 7, darkSurfaces: readonly string[] = BRAND_DARK_SURFACES): string[] {
   const dark = rampIsDark(surface);
   const seed = /^#[0-9a-f]{6}$/i.test(String(accent)) ? accent.toLowerCase() : CHART_PALETTE[0];
-  if (kind !== 'diverging') return rampOfHue(seed, n, dark);
+  if (kind !== 'diverging') return rampOfHue(seed, n, dark, darkSurfaces);
   const half = Math.max(1, Math.floor(n / 2));
   const hsl = hexToHsl(seed) as { h: number; s: number; l: number };
-  const pos = rampOfHue(seed, half + 1, dark);
-  const neg = rampOfHue(hslToHex(hsl.h + 180, hsl.s, hsl.l), half + 1, dark);
-  const mid = rampOfHue('#808080', 1, dark)[0];
+  const pos = rampOfHue(seed, half + 1, dark, darkSurfaces);
+  const neg = rampOfHue(hslToHex(hsl.h + 180, hsl.s, hsl.l), half + 1, dark, darkSurfaces);
+  const mid = rampOfHue('#808080', 1, dark, darkSurfaces)[0];
   return neg.slice(1).reverse().concat([mid], pos.slice(1));
 }
 
