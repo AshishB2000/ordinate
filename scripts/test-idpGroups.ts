@@ -11,6 +11,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { withCsrf } from './csrfPair';
 import { Writable } from 'stream';
 import { Client, Pool } from 'pg';
 import type { FastifyInstance } from 'fastify';
@@ -23,6 +24,7 @@ const appMod: typeof import('../src/server/app') = require('../src/server/app');
 const store: typeof import('../src/server/auth/store') = require('../src/server/auth/store');
 const context: typeof import('../src/server/context') = require('../src/server/context');
 const caller: typeof import('../src/server/authz/caller') = require('../src/server/authz/caller');
+const wire: typeof import('../src/server/wire') = require('../src/server/wire');
 
 type Mapping = import('../src/server/auth/idpGroups').GroupMapping;
 const throws = (fn: () => unknown, re: RegExp): boolean => {
@@ -115,6 +117,7 @@ async function db(): Promise<void> {
   try {
     await oidcPart(scratch.toString(), pool, apps, (m) => (mock = m));
     await headerPart(scratch.toString(), pool, apps);
+    await dormantPart(scratch.toString(), apps);
   } finally {
     for (const a of apps) await a.close().catch(() => undefined);
     await (mock as MockOidc | null)?.close();
@@ -249,6 +252,111 @@ async function headerPart(url: string, pool: Pool, apps: FastifyInstance[]): Pro
     return [a, (await caller.callerOn(P)).teamIds.length];
   });
   ok('NEGATIVE CONTROL: a raw change without the forget is still memoised (1 → 1)', stale[0] === 1 && stale[1] === 1, JSON.stringify(stale));
+
+  // ── f. Managed means managed (over the RPC route, as the break-glass admin) ──
+  const rpc = async (channel: string, payload?: unknown, email = 'root@hdr.test') => {
+    const r = await app.inject({ method: 'POST', url: `/api/rpc/${channel}`, remoteAddress: '127.0.0.1',
+      headers: withCsrf({ 'content-type': 'application/json', 'x-forwarded-email': email }), payload: wire.encode({ args: payload === undefined ? [] : [payload] }) });
+    return { status: r.statusCode, body: (r.statusCode === 200 ? wire.decode(r.body) : JSON.parse(r.body)) as any }; // any: each channel's reply
+  };
+  const idOf = async (email: string) => (await q<{ id: string }>(pool, 'SELECT id::text FROM users WHERE email = $1', [email]))[0].id;
+  const erin = await idOf('erin@hdr.test');
+  const refusedRole = await rpc('admin:setRole', { userId: erin, role: 'viewer' });
+  ok('managed: admin:setRole is 409 idp_managed with the catalog sentence while a group maps a role',
+    refusedRole.status === 409 && refusedRole.body.code === 'idp_managed' && /identity provider/.test(refusedRole.body.message) && (await roleOf(pool, 'erin@hdr.test')) === 'editor', JSON.stringify(refusedRole));
+  const view = (await rpc('admin:idpGroups')).body;
+  ok('admin:idpGroups: the source, the header, the map with team names, what is managed',
+    view.source === 'header' && view.from === 'x-forwarded-groups' && view.roleManaged === true && view.linkedTeamIds.includes(ops)
+      && view.groups.some((g: { group: string; teamName: string }) => g.group === 'ops' && g.teamName === 'Ops'), JSON.stringify(view));
+  await pool.query(`UPDATE idp_groups SET role = NULL WHERE org_id = 'hdr' AND team_id IS NOT NULL`);
+  await pool.query(`DELETE FROM idp_groups WHERE org_id = 'hdr' AND team_id IS NULL`);
+  const allowed = await rpc('admin:setRole', { userId: erin, role: 'viewer' });
+  ok('NEGATIVE CONTROL: with no group mapping a role, admin:setRole works (roles are manual)', allowed.body?.ok === true && (await roleOf(pool, 'erin@hdr.test')) === 'viewer', JSON.stringify(allowed));
+  const linkedRefused = await rpc('admin:teamMember', { teamId: ops, userId: erin, member: false });
+  ok('managed: admin:teamMember is 409 idp_managed on a linked team', linkedRefused.status === 409 && linkedRefused.body.code === 'idp_managed' && (await teamsOf(pool, 'erin@hdr.test')) === 'Ops', JSON.stringify(linkedRefused));
+  const manual = await team(pool, 'hdr', 'Manual');
+  const manualOk = await rpc('admin:teamMember', { teamId: manual, userId: erin, member: true });
+  ok('NEGATIVE CONTROL: admin:teamMember works on a manual team, and clears the digest (re-checked next request)',
+    manualOk.body?.ok === true && (await teamsOf(pool, 'erin@hdr.test')) === 'Manual,Ops'
+      && (await q<{ d: string | null }>(pool, `SELECT idp_groups_digest AS d FROM users WHERE email = 'erin@hdr.test'`))[0].d === null);
+
+  // ── j. A map change applies at once: a newly linked team is emptied and refilled from stored groups ──
+  const ana = await team(pool, 'hdr', 'Analysts');
+  await me('gus@hdr.test', 'misc');
+  await pool.query(`INSERT INTO team_members (team_id, user_id) SELECT $1, id FROM users WHERE email = 'gus@hdr.test'`, [ana]);
+  const link = await rpc('admin:setIdpGroup', { group: ' ops ', role: 'editor', teamId: ana });
+  ok('map: linking a team applies at once — members with that group are in it now, a manual member is out',
+    link.body?.ok === true && (await teamsOf(pool, 'erin@hdr.test')).includes('Analysts') && (await teamsOf(pool, 'fred@hdr.test')) === 'Analysts'
+      && !(await teamsOf(pool, 'gus@hdr.test')).includes('Analysts'), `${JSON.stringify(link)} gus=${await teamsOf(pool, 'gus@hdr.test')}`);
+  ok('map: the role it maps applies at once too, stored as trimmed', (await roleOf(pool, 'erin@hdr.test')) === 'editor'
+    && (await q(pool, `SELECT 1 FROM idp_groups WHERE org_id = 'hdr' AND group_name = 'ops'`)).length === 1);
+  ok('map: Ops, no longer linked by ops, is emptied (unlink clears too)', (await q(pool, 'SELECT 1 FROM team_members WHERE team_id = $1', [ops])).length === 0);
+  const badTeam = await rpc('admin:setIdpGroup', { group: 'x', role: null, teamId: crypto.randomUUID() });
+  ok('map: a team from nowhere is refused, nothing written', badTeam.body?.ok === false && badTeam.body.error === 'unknown team' && (await q(pool, `SELECT 1 FROM idp_groups WHERE group_name = 'x'`)).length === 0);
+  ok('map: a viewer cannot read or change it (403)', (await rpc('admin:idpGroups', undefined, 'erin@hdr.test')).status === 403
+    && (await rpc('admin:setIdpGroup', { group: 'y', role: 'admin', teamId: null }, 'erin@hdr.test')).status === 403);
+  await rpc('admin:setIdpGroup', { group: 'admins', role: 'admin', teamId: null });
+
+  // ── M3: a kept last admin is evaluated again once the org gains an admin ──
+  const lone = `lone-${Date.now()}`;
+  await pool.query(`INSERT INTO orgs (id, name) VALUES ($1, $1)`, [lone]);
+  const loneAuth = { ...cfg.auth, org: lone, adminEmail: null };
+  const mk = async (email: string, role: string) => (await q<{ id: string }>(pool, `INSERT INTO users (org_id, email, role, last_login_at) VALUES ($1, $2, $3, now()) RETURNING id::text`, [lone, email, role]))[0].id;
+  await pool.query(`INSERT INTO idp_groups (org_id, group_name, role) VALUES ($1, 'staff', 'viewer'), ($1, 'admins', 'admin')`, [lone]);
+  const kim = await mk('kim@hdr.test', 'admin');
+  const kept = await idpMod.applyIdpGroups(pool, loneAuth, { userId: kim, email: 'kim@hdr.test' }, ['staff'], { compare: true, log: app.log });
+  const keptDigest = (await q<{ d: string }>(pool, 'SELECT idp_groups_digest AS d FROM users WHERE id = $1', [kim]))[0].d;
+  ok('last admin: a sync that would demote the org\'s only admin keeps them, marked kept', kept === 'admin' && keptDigest.startsWith('kept:'), keptDigest);
+  ok('last admin: audited denied, once', (await q(pool, `SELECT 1 FROM audit_log WHERE org_id = $1 AND channel = 'idp:sync' AND outcome = 'denied'`, [lone])).length === 1);
+  const lee = await mk('lee@hdr.test', 'viewer');
+  await idpMod.applyIdpGroups(pool, loneAuth, { userId: lee, email: 'lee@hdr.test' }, ['admins'], { compare: true, log: app.log });
+  ok('last admin: the org gains an admin → the kept marker is cleared', (await q<{ d: string | null }>(pool, 'SELECT idp_groups_digest AS d FROM users WHERE id = $1', [kim]))[0].d === null);
+  ok('last admin: …and the next sync demotes the kept admin', (await idpMod.applyIdpGroups(pool, loneAuth, { userId: kim, email: 'kim@hdr.test' }, ['staff'], { compare: true, log: app.log })) === 'viewer');
+
+  // ── g. Three demotions racing: the people lock keeps exactly one admin (a deterministic barrier) ──
+  const race = async (lock: boolean): Promise<number> => {
+    const org = `race-${lock ? 'on' : 'off'}-${Date.now()}`;
+    await pool.query(`INSERT INTO orgs (id, name) VALUES ($1, $1)`, [org]);
+    await pool.query(`INSERT INTO idp_groups (org_id, group_name, role) VALUES ($1, 'staff', 'viewer')`, [org]);
+    const ids = [];
+    for (const n of ['a1', 'a2', 'a3']) ids.push((await q<{ id: string }>(pool, `INSERT INTO users (org_id, email, role, last_login_at) VALUES ($1, $2, 'admin', now()) RETURNING id::text`, [org, `${n}@race.test`]))[0].id);
+    const auth = { ...cfg.auth, org, adminEmail: null };
+    let arrived = 0;
+    const waiting = async () => (await q(pool, `SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`)).length > 0;
+    const until = async (cond: () => boolean | Promise<boolean>) => {
+      for (let i = 0; i < 500 && !(await cond()); i++) await new Promise((r) => setTimeout(r, 10));
+    };
+    idpMod.setSyncBarrierForTest(async () => {
+      arrived++;
+      // With the lock: the holder waits until another sync is BLOCKED on it. Without: every sync waits for all three.
+      if (lock) await until(waiting);
+      else await until(() => arrived >= 3);
+    });
+    store.setPeopleLockForTest(lock);
+    try {
+      await Promise.all(ids.map((id, i) => idpMod.applyIdpGroups(pool, auth, { userId: id, email: `a${i + 1}@race.test` }, ['staff'], { compare: true, log: app.log })));
+    } finally {
+      idpMod.setSyncBarrierForTest(null);
+      store.setPeopleLockForTest(true);
+    }
+    return (await q(pool, `SELECT 1 FROM users WHERE org_id = $1 AND role = 'admin'`, [org])).length;
+  };
+  const withLock = await race(true);
+  ok('race: three admins demoted at once under the people lock leave exactly one admin', withLock === 1, String(withLock));
+  const withoutLock = await race(false);
+  ok('NEGATIVE CONTROL: without the lock, the same race leaves no admin', withoutLock === 0, String(withoutLock));
+  await app.close();
+}
+
+// ── The map is refused while groups are not read (dormant) ──
+async function dormantPart(url: string, apps: FastifyInstance[]): Promise<void> {
+  const app = appMod.buildApp(envMod.parseEnv({ LOG_LEVEL: 'silent', DATABASE_URL: url, AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ORG: 'hdr', ORDINATE_ADMIN_EMAIL: 'root@hdr.test' }), sink);
+  apps.push(app);
+  await app.ready();
+  const r = await app.inject({ method: 'POST', url: '/api/rpc/admin:setIdpGroup', remoteAddress: '127.0.0.1',
+    headers: withCsrf({ 'content-type': 'application/json', 'x-forwarded-email': 'root@hdr.test' }), payload: wire.encode({ args: [{ group: 'z', role: 'admin', teamId: null }] }) });
+  const body = r.statusCode === 200 ? (wire.decode(r.body) as { ok: boolean; error?: string }) : null;
+  ok('map: refused while the server reads no groups (`dormant`); the earlier saves are the control', body?.ok === false && body.error === 'dormant', r.body);
   await app.close();
 }
 

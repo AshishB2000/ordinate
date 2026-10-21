@@ -8,7 +8,11 @@
 
 import type { Pool } from 'pg';
 import { ctx, type Role } from '../context';
+import type { AuthEnv } from '../env';
 import { registry } from '../rpc';
+import { IdpManagedError, roleManaged, teamLinked } from '../auth/idpGroups';
+import { CLEAR_KEPT, OTHER_ADMINS, withPeopleLock } from '../auth/store';
+import { roleFromIdp, teamFromIdp } from '../idpMessages';
 
 export interface UserRow {
   readonly id: string;
@@ -35,11 +39,8 @@ type Result = { ok: true } | { ok: false; error: string };
 
 const iso = (col: string, as: string) => `to_json(${col}) #>> '{}' AS "${as}"`;
 
-/** Other enabled admins than `userId` in the org — the last-admin guard's question. */
-const OTHER_ADMINS = `(SELECT count(*) FROM users o WHERE o.org_id = $1 AND o.id <> $2 AND o.role = 'admin' AND o.disabled_at IS NULL)`;
-
-/** `allowedDomains()`: ALLOWED_EMAIL_DOMAINS, read per call. */
-export function register(pool: () => Pool | null, allowedDomains: () => readonly string[]): void {
+/** `allowedDomains()`: ALLOWED_EMAIL_DOMAINS, read per call; `auth()`: whether roles and teams follow the IdP. */
+export function register(pool: () => Pool | null, allowedDomains: () => readonly string[], auth: () => AuthEnv): void {
   const db = (): Pool => {
     const p = pool();
     if (!p) throw new Error('admin needs Postgres (DATABASE_URL)');
@@ -73,12 +74,19 @@ export function register(pool: () => Pool | null, allowedDomains: () => readonly
     return r.rows[0] ? { ok: true, id: r.rows[0].id } : { ok: false, error: 'exists' };
   });
 
+  // Under the exclusive people lock (docs/sso-lifecycle §3.6): the last-admin rule holds against an IdP sync.
+  // Refused (409) while roles follow the IdP. The digest is cleared, so header mode re-checks this person.
   registry.handle('admin:setRole', async (_e, { userId, role }: { userId: string; role: Role }): Promise<Result> => {
-    const r = await db().query(
-      `UPDATE users SET role = $3 WHERE org_id = $1 AND id = $2 AND ($3 = 'admin' OR role <> 'admin' OR ${OTHER_ADMINS} > 0)`,
-      [org(), userId, role],
-    );
-    if (r.rowCount === 1) return { ok: true };
+    const updated = await withPeopleLock(db(), org(), 'exclusive', async (c) => {
+      if (await roleManaged(c, auth(), org())) throw new IdpManagedError(roleFromIdp());
+      const r = await c.query(
+        `UPDATE users SET role = $3, idp_groups_digest = NULL WHERE org_id = $1 AND id = $2 AND ($3 = 'admin' OR role <> 'admin' OR ${OTHER_ADMINS} > 0)`,
+        [org(), userId, role],
+      );
+      if (r.rowCount === 1 && role === 'admin') await c.query(CLEAR_KEPT, [org()]);
+      return r.rowCount === 1;
+    });
+    if (updated) return { ok: true };
     return { ok: false, error: (await exists(db(), org(), userId)) ? 'last-admin' : 'unknown' };
   });
 
@@ -132,19 +140,26 @@ export function register(pool: () => Pool | null, allowedDomains: () => readonly
   registry.handle(
     'admin:teamMember',
     async (_e, { teamId, userId, member }: { teamId: string; userId: string; member: boolean }): Promise<Result> => {
-      // Both must be this org's: the SELECT finds nothing for another org's team or user.
-      const r = member
-        ? await db().query(
-            `INSERT INTO team_members (team_id, user_id)
-             SELECT t.id, u.id FROM teams t, users u WHERE t.id = $2 AND t.org_id = $1 AND u.id = $3 AND u.org_id = $1
-             ON CONFLICT DO NOTHING`,
-            [org(), teamId, userId],
-          )
-        : await db().query(
-            `DELETE FROM team_members m USING teams t WHERE m.team_id = t.id AND t.org_id = $1 AND m.team_id = $2 AND m.user_id = $3`,
-            [org(), teamId, userId],
-          );
-      if (r.rowCount === 1) return { ok: true };
+      // Under the exclusive people lock, so a team being linked cannot gain a manual member in between.
+      // Refused (409) on a linked team: its members come from the IdP.
+      const n = await withPeopleLock(db(), org(), 'exclusive', async (c) => {
+        if (await teamLinked(c, auth(), org(), teamId)) throw new IdpManagedError(teamFromIdp());
+        // Both must be this org's: the SELECT finds nothing for another org's team or user.
+        const r = member
+          ? await c.query(
+              `INSERT INTO team_members (team_id, user_id)
+               SELECT t.id, u.id FROM teams t, users u WHERE t.id = $2 AND t.org_id = $1 AND u.id = $3 AND u.org_id = $1
+               ON CONFLICT DO NOTHING`,
+              [org(), teamId, userId],
+            )
+          : await c.query(
+              `DELETE FROM team_members m USING teams t WHERE m.team_id = t.id AND t.org_id = $1 AND m.team_id = $2 AND m.user_id = $3`,
+              [org(), teamId, userId],
+            );
+        await c.query('UPDATE users SET idp_groups_digest = NULL WHERE org_id = $1 AND id = $2', [org(), userId]);
+        return r.rowCount;
+      });
+      if (n === 1) return { ok: true };
       // Already in (or already out) is fine; an id from nowhere is not.
       const known = await db().query(
         'SELECT 1 FROM teams t, users u WHERE t.id = $2 AND t.org_id = $1 AND u.id = $3 AND u.org_id = $1',

@@ -22,6 +22,17 @@ import { audit } from '../authz/audit';
 import { forgetCaller } from '../authz/caller';
 import { CLEAR_KEPT, OTHER_ADMINS, withPeopleLock } from './store';
 
+/** A role or a team the identity provider decides: the RPC route answers it 409 `idp_managed` with its sentence. */
+export const IDP_MANAGED_CODE = 'idp_managed';
+export class IdpManagedError extends Error {
+  readonly code = IDP_MANAGED_CODE;
+  constructor(message: string) {
+    super(message);
+    this.name = 'IdpManagedError';
+  }
+}
+export const isIdpManaged = (err: unknown): err is IdpManagedError => err instanceof Error && (err as { code?: unknown }).code === IDP_MANAGED_CODE;
+
 export interface GroupMapping {
   readonly group: string;
   readonly role: Role | null;

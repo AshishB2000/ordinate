@@ -5,7 +5,7 @@
 // same way, so a module in this graph that cannot load there breaks the build's
 // tests, not a deploy.
 
-import { fastify, type FastifyInstance, type FastifyRequest } from 'fastify';
+import { fastify, type FastifyBaseLogger, type FastifyInstance, type FastifyRequest } from 'fastify';
 import { probe, shutdown } from '../engine/duckdb';
 import { contractFor } from '../api/index';
 import { proxyList, type ServerEnv } from './env';
@@ -13,6 +13,7 @@ import { ctx, runInContext, type Identify } from './context';
 import { authorize, grantCreator, orgAllows, readable } from './authz/index';
 import { audit, targetIds, type Outcome } from './authz/audit';
 import { registerAuth } from './auth/index';
+import { isIdpManaged } from './auth/idpGroups';
 import { cookieNames } from './auth/cookies';
 import { registerSecurityHeaders } from './headers';
 import { registerCsrf } from './csrf';
@@ -91,6 +92,8 @@ export const REDACT_PATHS: readonly string[] = SECRET_KEYS.flatMap((k) => {
 const STORAGE_GC_EVERY_MS = 15 * 60_000;
 let dbPool: Pool | null = null;
 let appEnv: ServerEnv | null = null;
+/** The built app's logger, for handlers registered once that log outside a request's (the IdP sync's reports). */
+let appLog: FastifyBaseLogger | null = null;
 
 /**
  * The org role a non-RPC /api/ route needs: uploading stages data (write); the
@@ -170,6 +173,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   const pool = dbUrl ? createPool(dbUrl, (err) => app.log.warn({ err }, 'postgres idle client error')) : null;
   dbPool = pool;
   appEnv = cfg;
+  appLog = app.log;
   if (pool && dbUrl) {
     // Scheduled jobs and cross-pod events (./jobs/): started once the schema
     // is current, stopped on close after the job in flight finishes and
@@ -418,6 +422,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         await record('error', decision.projectId);
         return reply.code(409).send({ error: 'record_busy', code: 'record_busy', message: (err as Error).message });
       }
+      if (isIdpManaged(err)) {
+        // A role or team the identity provider decides (docs/sso-lifecycle): a typed 409 with the catalog's sentence.
+        await record('denied', decision.projectId);
+        return reply.code(409).send({ error: err.code, code: err.code, message: err.message });
+      }
       if (isRecordChanged(err)) {
         // A whole-document save from a stale copy (src/app/editConflict.ts): the record is
         // untouched; the catalog's sentence and the current tag, never the record.
@@ -490,7 +499,9 @@ export function registerHandlers(): void {
     if (!appEnv) throw new Error('no app built');
     return appEnv;
   };
-  (require('./admin/people') as typeof import('./admin/people')).register(() => dbPool, () => env().auth.allowedDomains);
+  (require('./admin/people') as typeof import('./admin/people')).register(() => dbPool, () => env().auth.allowedDomains, () => env().auth);
+  // Identity provider groups (docs/sso-lifecycle): the map, and a re-apply of every synced member when it changes.
+  (require('./admin/idpGroups') as typeof import('./admin/idpGroups')).register(() => dbPool, () => env().auth, () => appLog);
   (require('./admin/passwords') as typeof import('./admin/passwords')).register(() => dbPool, () => (appEnv ?? env()).auth.mode, () => env().auth.allowedDomains);
   (require('./admin/org') as typeof import('./admin/org')).register(() => dbPool, () => env().maxUploadMb);
   // Admin → Live usage (live data L2.7): Postgres's counts, or this pod's without it.

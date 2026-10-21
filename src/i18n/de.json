@@ -231,6 +231,8 @@
   "freshOnAskMessages.fresh_on_ask_pulls_only_new": "„Bei Abfrage aktualisieren“ holt nur neue Zeilen, und die nächste Aktualisierung dieses Datensatzes muss vollständig sein ({reason}). Es wurde nichts geholt; die nächste geplante oder manuelle Aktualisierung übernimmt das.",
   "freshOnAskMessages.fresh_on_ask_pulls_only_new_2": "„Bei Abfrage aktualisieren“ holt nur neue Zeilen, und dieser Datensatz hat keine inkrementelle Aktualisierung. Es wurde nichts geholt.",
   "freshOnAskMessages.fresh_on_ask_takes_an_age": "„Bei Abfrage aktualisieren“ erwartet ein Alter zwischen 1 Minute und 1 Tag.",
+  "idpMessages.this_person_s_role_comes_from": null,
+  "idpMessages.this_team_s_members_come_from": null,
   "incrementalMessages.a_live_dataset_is_asked_at": "Ein Live-Datensatz wird jedes Mal im Warehouse abgefragt und hält daher keine Kopie, die inkrementell aktualisiert werden könnte.",
   "incrementalMessages.append_mode_adds_new_rows_and": "Der Anfügemodus fügt neue Zeilen hinzu und nimmt keine Schlüsselspalte. Wählen Sie „Nach Schlüssel aktualisieren“, um eine zu verwenden.",
   "incrementalMessages.cannot_filter_by_a_column_so": "{source} kann nicht nach einer Spalte filtern; jede inkrementelle Aktualisierung würde also weiterhin die ganze Quelle lesen und erst danach filtern. Verwenden Sie stattdessen einen Aktualisierungsplan.",

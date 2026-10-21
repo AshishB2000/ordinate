@@ -374,6 +374,7 @@ export const MAIN_FILES = [
   'src/data/rowAccessMessages.ts',
   'src/app/editConflictMessages.ts',
   'src/publish/publishMessages.ts',
+  'src/server/idpMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

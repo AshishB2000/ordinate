@@ -231,6 +231,8 @@
   "freshOnAskMessages.fresh_on_ask_pulls_only_new": "「問い合わせ時に更新」は新しい行だけを取得しますが、このデータセットの次の更新は完全更新である必要があります ({reason})。何も取得していません。次のスケジュール更新または手動更新で実行されます。",
   "freshOnAskMessages.fresh_on_ask_pulls_only_new_2": "「問い合わせ時に更新」は新しい行だけを取得しますが、このデータセットには増分更新がありません。何も取得していません。",
   "freshOnAskMessages.fresh_on_ask_takes_an_age": "「問い合わせ時に更新」に指定できる経過時間は 1 分から 1 日までです。",
+  "idpMessages.this_person_s_role_comes_from": null,
+  "idpMessages.this_team_s_members_come_from": null,
   "incrementalMessages.a_live_dataset_is_asked_at": "Live データセットは毎回ウェアハウスに問い合わせるため、増分更新するコピーを持ちません。",
   "incrementalMessages.append_mode_adds_new_rows_and": "追加モードは新しい行を追加するだけで、キー列は使いません。キー列を使うには「キーで更新」を選んでください。",
   "incrementalMessages.cannot_filter_by_a_column_so": "{source} は列で絞り込めないため、増分更新でも毎回ソース全体を読み込んでから絞り込むことになります。代わりに更新スケジュールを使ってください。",

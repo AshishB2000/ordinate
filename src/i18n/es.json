@@ -231,6 +231,8 @@
   "freshOnAskMessages.fresh_on_ask_pulls_only_new": "«Actualizar al consultar» solo trae filas nuevas, y la próxima actualización de este conjunto de datos debe ser completa ({reason}). No se trajo nada; la próxima actualización programada o manual la hará.",
   "freshOnAskMessages.fresh_on_ask_pulls_only_new_2": "«Actualizar al consultar» solo trae filas nuevas, y este conjunto de datos no tiene actualización incremental. No se trajo nada.",
   "freshOnAskMessages.fresh_on_ask_takes_an_age": "«Actualizar al consultar» admite una antigüedad de entre 1 minuto y 1 día.",
+  "idpMessages.this_person_s_role_comes_from": null,
+  "idpMessages.this_team_s_members_come_from": null,
   "incrementalMessages.a_live_dataset_is_asked_at": "Un conjunto de datos Live se consulta en el almacén cada vez, así que no guarda una copia que actualizar de forma incremental.",
   "incrementalMessages.append_mode_adds_new_rows_and": "El modo añadir agrega filas nuevas y no admite columna clave. Elija actualizar por clave para usar una.",
   "incrementalMessages.cannot_filter_by_a_column_so": "{source} no puede filtrar por una columna, así que cada actualización incremental seguiría leyendo todo el origen y filtrando después. Use una actualización programada en su lugar.",
