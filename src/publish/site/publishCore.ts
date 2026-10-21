@@ -167,6 +167,12 @@ function pkChartConfig(
   if (chartType === 'waterfall') {
     // The server's steps: each bar from its start to its end, a total from 0; a step names its category by index.
     const steps: any[] = figures.waterfall.steps || [];
+    // A waterfall's totals always; of its rises and falls, the largest and the smallest — signed (the app's rule).
+    const moves = steps.map((y, k) => (y.kind === 'up' || y.kind === 'down' ? k : -1)).filter((k) => k >= 0);
+    const vals = moves.map((k) => steps[k].value);
+    const hi = moves[pkArgOf(vals, 1)];
+    const lo = moves[pkArgOf(vals, -1)];
+    const texts = steps.map((x, j) => (x.kind !== 'up' && x.kind !== 'down' ? fmt(x.value) : j === hi || j === lo ? (x.value > 0 ? '+' : '') + fmt(x.value) : ''));
     return {
       type: 'bar',
       data: {
@@ -177,14 +183,7 @@ function pkChartConfig(
         }],
       },
       options: { ...base, plugins: { legend: { display: false }, tooltip }, scales: { x: catAxis(), y: valAxis() } },
-      plugins: [pkValueLabels((ds, j) => {
-        // A waterfall's totals always; of its rises and falls, the largest and the smallest — signed (the app's rule).
-        const x = steps[j];
-        if (x.kind !== 'up' && x.kind !== 'down') return fmt(x.value);
-        const moves = steps.map((y, k) => (y.kind === 'up' || y.kind === 'down' ? k : -1)).filter((k) => k >= 0);
-        const vals = moves.map((k) => steps[k].value);
-        return moves[pkArgOf(vals, 1)] === j || moves[pkArgOf(vals, -1)] === j ? (x.value > 0 ? '+' : '') + fmt(x.value) : '';
-      }, (j) => steps[j].value)],
+      plugins: [pkValueLabels([texts], (j) => steps[j].value)],
       src: steps.map((x) => x.src),
     };
   }
@@ -208,14 +207,15 @@ function pkChartConfig(
   if (chartType === 'histogram') {
     // The server's bins for the first series: touching columns, each labelled by its edges.
     const bins: any[] = figures.histogram[0] || [];
+    const counts = bins.map((b) => b.count);
     return {
       type: 'bar',
       data: {
         labels: bins.map((b) => (b.from === b.to ? fmt(b.from) : fmt(b.from) + '–' + fmt(b.to))),
-        datasets: [{ label: 'Count', data: bins.map((b) => b.count), backgroundColor: colors[0], barPercentage: 1, categoryPercentage: 1 }],
+        datasets: [{ label: 'Count', data: counts, backgroundColor: colors[0], barPercentage: 1, categoryPercentage: 1 }],
       },
       options: { ...base, plugins: { legend: { display: false }, tooltip }, scales: { x: catAxis(), y: valAxis() } },
-      plugins: [pkValueLabels(pkMaxMin(fmt))],
+      plugins: [pkValueLabels(pkMaxMin([counts], fmt))],
     };
   }
   const lineish = /line|area/.test(chartType);
@@ -242,7 +242,7 @@ function pkChartConfig(
   const scales: any = { [valueAxis]: valAxis({ stacked }), [horizontal ? 'y' : 'x']: catAxis({ stacked }) };
   if (pct) scales[valueAxis] = valAxis({ stacked, max: 100, ticks: { callback: (v: any) => v + '%' } });
   // The app's default value labels: each series' largest and smallest (a 100% bar's own share).
-  const labelled = [pkValueLabels(pkMaxMin(pct ? share : fmt))];
+  const labelled = [pkValueLabels(pkMaxMin(datasets.map((d) => d.data), pct ? share : fmt))];
   return {
     type: lineish ? 'line' : 'bar',
     data: { labels, datasets },
@@ -258,20 +258,22 @@ function pkArgOf(vals: any[], dir: 1 | -1): number {
   return at;
 }
 
-/** The app's default bar labels (valueMode 'maxmin'): a bar series' largest and smallest figure, in `text`. */
-function pkMaxMin(text: (v: number) => string): (ds: any, j: number) => string {
-  return (ds, j) => {
-    const v = ds.data[j];
-    return typeof v === 'number' && (pkArgOf(ds.data, 1) === j || pkArgOf(ds.data, -1) === j) ? text(v) : '';
-  };
+/** The app's default bar labels (valueMode 'maxmin'): each series' largest and smallest figure, in `text` — once per config. */
+function pkMaxMin(rows: any[][], text: (v: number) => string): string[][] {
+  return rows.map((data) => {
+    const hi = pkArgOf(data, 1);
+    const lo = pkArgOf(data, -1);
+    return data.map((v, j) => (typeof v === 'number' && (j === hi || j === lo) ? text(v) : ''));
+  });
 }
 
 /**
- * A chart's value labels: `textAt(dataset, index)` says what a bar or point carries ('' for none); the
- * label sits past the bar's end (above a point), out of the way of the next. `valueAt` (a waterfall's step) says which way
- * the bar points when its data is a [from, to] pair. Pixel placement only.
+ * A chart's value labels: `texts[dataset][index]` says what a bar or point carries ('' for none), worked out once
+ * when the chart is configured — a draw only places them. The label sits past the bar's end (above a point), out of
+ * the way of the next. `valueAt` (a waterfall's step) says which way the bar points when its data is a [from, to]
+ * pair. Pixel placement only.
  */
-function pkValueLabels(textAt: (ds: any, j: number) => string, valueAt?: (j: number) => number): any {
+function pkValueLabels(texts: string[][], valueAt?: (j: number) => number): any {
   return {
     id: 'pkValueLabels',
     afterDatasetsDraw(chart: any) {
@@ -285,7 +287,7 @@ function pkValueLabels(textAt: (ds: any, j: number) => string, valueAt?: (j: num
         if (meta.hidden || ds.yAxisID === 'pct') return; // a Pareto's cumulative line is read off its own axis
         const line = meta.type === 'line' || ds.type === 'line';
         meta.data.forEach((el: any, j: number) => {
-          const t = textAt(ds, j);
+          const t = (texts[di] || [])[j];
           if (!t || !el) return;
           const v = valueAt ? valueAt(j) : ds.data[j];
           const up = typeof v !== 'number' || v >= 0;
