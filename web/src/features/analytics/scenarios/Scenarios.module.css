@@ -30,11 +30,6 @@
 }
 
 /* ── The list ──────────────────────────────────────────────────────────── */
-.listBar {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--sp-8);
-}
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

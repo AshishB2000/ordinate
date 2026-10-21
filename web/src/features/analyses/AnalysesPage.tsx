@@ -165,7 +165,7 @@ function Gallery({ projectId }: { projectId: string }) {
   const aiReady = !!key.data?.ready;
   const aiWhy = key.isPending ? 'Checking whether a model is set up…' : AI_NOT_READY;
   const actions = (
-    <div className={s.actions}>
+    <>
       <Link className={buttonClass('ghost')} to={`/data/metrics?project=${projectId}`}>
         <Icon name="target" />
         <span>Metrics</span>
@@ -180,7 +180,7 @@ function Gallery({ projectId }: { projectId: string }) {
           </Button>
         </>
       )}
-    </div>
+    </>
   );
 
   let body;
@@ -287,11 +287,12 @@ function Gallery({ projectId }: { projectId: string }) {
   }
 
   return (
-    <Page title="Analyses" sub="The dashboards you author: sheets of charts, metrics and text over your datasets.">
-      <div className={s.head}>
-        {count > 0 ? <span className={s.count}>{count === 1 ? '1 dashboard' : `${count} dashboards`}</span> : <span />}
-        {actions}
-      </div>
+    <Page
+      title="Analyses"
+      status={count > 0 && <span className={s.count}>{count === 1 ? '1 dashboard' : `${count} dashboards`}</span>}
+      sub="The dashboards you author: sheets of charts, metrics and text over your datasets."
+      actions={actions}
+    >
       {body}
       {wizard && canEdit && <NewWizard projectId={projectId} datasetId={wizard.datasetId} initialStep={wizard.datasetId ? 2 : 1} onClose={() => setWizard(null)} />}
       {lineage && <LineageDrawer projectId={projectId} type="dashboard" id={lineage.id} name={lineage.name || 'Untitled dashboard'} onClose={() => setLineage(null)} />}

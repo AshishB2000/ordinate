@@ -107,16 +107,18 @@ function Gallery({ projectId }: { projectId: string }) {
 
   const count = list.data?.length ?? 0;
   return (
-    <Page title={TITLE} sub={SUB}>
-      <div className={s.toolbar}>
-        <span className={s.spacer} />
-        {count > 0 && <span className={s.count}>{count === 1 ? '1 visual' : `${count} visuals`}</span>}
-        {canEdit && (
+    <Page
+      title={TITLE}
+      status={count > 0 && <span className={s.count}>{count === 1 ? '1 visual' : `${count} visuals`}</span>}
+      sub={SUB}
+      actions={
+        canEdit && (
           <Button variant="primary" icon="plus" onClick={() => setCreating({})}>
             New visual
           </Button>
-        )}
-      </div>
+        )
+      }
+    >
 
       {list.isPending ? (
         <div className={s.grid} role="status" aria-busy="true" aria-label="Loading visuals">

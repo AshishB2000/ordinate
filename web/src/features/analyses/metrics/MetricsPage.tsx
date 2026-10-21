@@ -223,15 +223,19 @@ function Metrics({ projectId }: { projectId: string }) {
 
   const usage = deleting ? q.data?.rows[deleting.id]?.usage : null;
   return (
-    <Page back={{ to: `/data/${projectId}`, label: 'Data' }} title="Metrics" sub="What this project's numbers mean, defined once.">
-      <div className={s.head}>
-        {count > 0 ? <span className={s.count}>{count === 1 ? '1 metric' : `${count} metrics`}</span> : <span />}
-        {canEdit && (
+    <Page
+      back={{ to: `/data/${projectId}`, label: 'Data' }}
+      title="Metrics"
+      status={count > 0 && <span className={s.count}>{count === 1 ? '1 metric' : `${count} metrics`}</span>}
+      sub="What this project's numbers mean, defined once."
+      actions={
+        canEdit && (
           <Button variant="primary" icon="plus" onClick={() => void open(null)}>
             New metric
           </Button>
-        )}
-      </div>
+        )
+      }
+    >
       {body}
       {editing && canEdit && <MetricEditor projectId={projectId} existing={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
       <Dialog

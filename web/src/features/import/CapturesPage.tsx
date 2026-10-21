@@ -133,17 +133,21 @@ function Captures({ projectId }: { projectId: string }) {
     );
   }
   return (
-    <Page back={{ to: `/data/${projectId}`, label: 'Data' }} title="Captures" sub="Screenshots the model has read in this project.">
-      {canEdit && q.data && q.data.length > 0 && (
-        <>
-          <div className={s.capBar}>
-            <Button variant={uploading ? 'secondary' : 'primary'} icon={uploading ? 'x' : 'camera'} aria-expanded={uploading} onClick={() => setUploading(!uploading)}>
-              {uploading ? 'Cancel' : 'Upload a screenshot'}
-            </Button>
-          </div>
-          {uploading && reader}
-        </>
-      )}
+    <Page
+      back={{ to: `/data/${projectId}`, label: 'Data' }}
+      title="Captures"
+      sub="Screenshots the model has read in this project."
+      actions={
+        canEdit &&
+        q.data &&
+        q.data.length > 0 && (
+          <Button variant={uploading ? 'secondary' : 'primary'} icon={uploading ? 'x' : 'camera'} aria-expanded={uploading} onClick={() => setUploading(!uploading)}>
+            {uploading ? 'Cancel' : 'Upload a screenshot'}
+          </Button>
+        )
+      }
+    >
+      {canEdit && q.data && q.data.length > 0 && uploading && reader}
       {body}
       <Dialog
         open={deleting !== null}

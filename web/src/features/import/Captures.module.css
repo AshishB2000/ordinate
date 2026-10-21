@@ -1,10 +1,6 @@
 /* The Captures tab (hub.css .viz-card / .cap-card*): a card grid of the
    screenshots the model read. Tokens only: both themes follow. */
 
-.capBar {
-  display: flex;
-  justify-content: flex-end;
-}
 /* The drop zone / the model reading / its error card, in place on the tab. */
 .capUpload {
   display: flex;
