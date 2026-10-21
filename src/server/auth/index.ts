@@ -115,7 +115,7 @@ export function registerAuth(app: FastifyInstance, cfg: ServerEnv, pool: Pool | 
   if (pool && !override) {
     const db = pool;
     const byMode = identify;
-    identify = (headers, peer) => (hasBearer(headers.authorization) ? tokenIdentity(db, headers.authorization as string) : byMode(headers, peer));
+    identify = (headers, peer) => (hasBearer(headers.authorization) ? tokenIdentity(db, headers.authorization as string, auth.apiTokenMaxDays) : byMode(headers, peer));
   }
 
   const who = (req: FastifyRequest) => identify(req.headers, req.socket.remoteAddress);

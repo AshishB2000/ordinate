@@ -506,7 +506,7 @@ export function registerHandlers(): void {
   (require('./admin/org') as typeof import('./admin/org')).register(() => dbPool, () => env().maxUploadMb);
   // Admin → Live usage (live data L2.7): Postgres's counts, or this pod's without it.
   (require('./admin/liveUsage') as typeof import('./admin/liveUsage')).register();
-  (require('./auth/tokens') as typeof import('./auth/tokens')).register(() => dbPool);
+  (require('./auth/tokens') as typeof import('./auth/tokens')).register(() => dbPool, () => env().auth.apiTokenMaxDays);
   // Refresh URLs (live data L0.5): a project writer's, per dataset.
   (require('./hooks/rpc') as typeof import('./hooks/rpc')).register(() => dbPool, () => env().limits.refreshHookMinIntervalSec);
   // The Assistant dock (T2.12): conversations, answers, plans, provider keys.

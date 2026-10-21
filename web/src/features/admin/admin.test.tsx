@@ -174,20 +174,66 @@ describe('Admin under password sign-in', () => {
 
 describe('API tokens', () => {
   it('designs the empty state', async () => {
-    serve({ '/api/auth/me': { body: VIEWER }, 'tokens:list': { body: [] } });
+    serve({ '/api/auth/me': { body: VIEWER }, 'tokens:list': { body: { tokens: [], maxDays: 365 } } });
     renderApp('/tokens');
     expect(await screen.findByRole('heading', { name: 'No API tokens' })).toBeTruthy();
   });
 
-  it('shows a new token once, then only its prefix', async () => {
-    const TOKEN = 'ord_' + 'a'.repeat(43);
-    let listed: unknown[] = [];
+  const listed = (tokens: unknown[], maxDays = 365) => ({ body: { tokens, maxDays } });
+  const tokenRow = (over: Record<string, unknown>) => ({
+    id: 't1', name: 'CLI', prefix: 'ord_abcdefgh', createdAt: '2026-10-03T09:00:00Z', lastUsedAt: null,
+    expiresAt: '2027-01-01T09:00:00Z', expired: false, legacy: false, ...over,
+  });
+
+  it('offers 30, 90 or 365 days, 90 chosen, and sends the choice', async () => {
+    const calls = serve({ '/api/auth/me': { body: VIEWER }, 'tokens:list': listed([]), 'tokens:create': { body: { ok: false, error: 'limit' } } });
+    renderApp('/tokens');
+    fireEvent.click(await screen.findByRole('button', { name: 'New token' }));
+    const picker = await screen.findByRole('combobox', { name: 'Expires after' });
+    expect(picker.textContent).toContain('90 days');
+    fireEvent.click(picker);
+    const options = await screen.findAllByRole('option');
+    expect(options.map((o) => o.textContent)).toEqual(['30 days', '90 days', '1 year']);
+    fireEvent.click(options[2]);
+    await waitFor(() => expect(picker.textContent).toContain('1 year'));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'CI' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'tokens:create')?.payload).toEqual({ name: 'CI', expiresInDays: 365 }));
+  });
+
+  it("offers nothing past the server's maximum, and the maximum itself", async () => {
+    serve({ '/api/auth/me': { body: VIEWER }, 'tokens:list': listed([], 60) });
+    renderApp('/tokens');
+    fireEvent.click(await screen.findByRole('button', { name: 'New token' }));
+    const picker = await screen.findByRole('combobox', { name: 'Expires after' });
+    expect(picker.textContent).toContain('60 days');
+    fireEvent.click(picker);
+    expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['30 days', '60 days']);
+  });
+
+  it("shows each token's end, an expired one, and one made before tokens expired", async () => {
     serve({
       '/api/auth/me': { body: VIEWER },
-      'tokens:list': () => ({ body: listed }),
+      'tokens:list': listed([tokenRow({}), tokenRow({ id: 't2', name: 'Old CI', expired: true }), tokenRow({ id: 't3', name: 'Legacy', legacy: true })]),
+    });
+    renderApp('/tokens');
+    const row = (name: string) => screen.getByRole('cell', { name }).closest('tr') as HTMLElement;
+    await screen.findByRole('columnheader', { name: 'Expires' });
+    expect(within(row('CLI')).getByText(/2027/)).toBeTruthy();
+    expect(within(row('Old CI')).getByText('Expired')).toBeTruthy();
+    expect(within(row('Legacy')).getByText('Made before tokens expired')).toBeTruthy();
+    expect(within(row('CLI')).queryByText('Made before tokens expired')).toBeNull();
+  });
+
+  it('shows a new token once, then only its prefix', async () => {
+    const TOKEN = 'ord_' + 'a'.repeat(43);
+    let tokens: unknown[] = [];
+    serve({
+      '/api/auth/me': { body: VIEWER },
+      'tokens:list': () => ({ body: { tokens, maxDays: 365 } }),
       'tokens:create': () => {
-        listed = [{ id: 't1', name: 'CLI', prefix: TOKEN.slice(0, 12), createdAt: '2026-10-03T09:00:00Z', lastUsedAt: null }];
-        return { body: { ok: true, id: 't1', name: 'CLI', prefix: TOKEN.slice(0, 12), createdAt: '2026-10-03T09:00:00Z', token: TOKEN } };
+        tokens = [{ id: 't1', name: 'CLI', prefix: TOKEN.slice(0, 12), createdAt: '2026-10-03T09:00:00Z', lastUsedAt: null, expiresAt: '2027-01-01T09:00:00Z', expired: false, legacy: false }];
+        return { body: { ok: true, id: 't1', name: 'CLI', prefix: TOKEN.slice(0, 12), createdAt: '2026-10-03T09:00:00Z', expiresAt: '2027-01-01T09:00:00Z', token: TOKEN } };
       },
     });
     renderApp('/tokens');

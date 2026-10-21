@@ -10,7 +10,10 @@
 // identity, header identity, wrong and revoked tokens alike), the Origin and
 // body-cap gates, per-project authorization of tool calls and their audit
 // rows. Every log line the run produced (trace level) is searched for every
-// token value.
+// token value. Expiry (docs/sso-lifecycle §3.14, API_TOKEN_MAX_DAYS=100 here):
+// the `expiresInDays` bounds, an expired token, a token made before tokens had
+// an end, the cap counting live tokens only, and a LOWERED maximum shortening
+// every token (a second app on the same database).
 //
 // Needs a Postgres it may CREATE DATABASE on; without DATABASE_URL it prints
 // one skip line. Every run makes its own scratch database and drops it.
@@ -65,7 +68,7 @@ const sink = new Writable({
     appMod.registerHandlers();
     app = appMod.buildApp(envMod.parseEnv({
       LOG_LEVEL: 'trace', DATA_DIR: DATA, DATABASE_URL: scratch.toString(), AUTH_MODE: 'header',
-      TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ORG: 'acme', ORDINATE_ADMIN_EMAIL: 'boss@acme.test',
+      TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ORG: 'acme', ORDINATE_ADMIN_EMAIL: 'boss@acme.test', API_TOKEN_MAX_DAYS: '100',
     }), sink);
     await app.listen({ port: 0, host: '127.0.0.1' });
     const host = `127.0.0.1:${(app.server.address() as import('net').AddressInfo).port}`;
@@ -113,12 +116,12 @@ const sink = new Writable({
       datasets.saveDataset(shared, { name: 'Sales', sourceKind: 'csv', columns: [{ name: 'region', type: 'text' }, { name: 'amount', type: 'number' }], rows: [['north', 3], ['south', 4]] }));
 
     // ── Create: the value once, the prefix and hash at rest ───────────────
-    const created = await call({ email: 'alice@acme.test' }, 'tokens:create', { name: 'laptop CLI' });
+    const created = await call({ email: 'alice@acme.test' }, 'tokens:create', { name: 'laptop CLI', expiresInDays: 90 });
     const token = created.body.token as string;
     tokens.push(token);
     ok('create: returns ord_ + 43 base64url chars, once, with its 12-char prefix',
       created.status === 200 && /^ord_[A-Za-z0-9_-]{43}$/.test(token) && created.body.prefix === token.slice(0, 12), JSON.stringify({ ...created.body, token: '…' }));
-    const listed = (await call({ email: 'alice@acme.test' }, 'tokens:list')).body as Record<string, unknown>[];
+    const listed = (await call({ email: 'alice@acme.test' }, 'tokens:list')).body.tokens as Record<string, unknown>[];
     ok('list: name, created, last used, prefix — and no token value', listed.length === 1 && listed[0].name === 'laptop CLI' && listed[0].prefix === token.slice(0, 12)
       && listed[0].lastUsedAt === null && typeof listed[0].createdAt === 'string' && !JSON.stringify(listed).includes(token) && !('token' in listed[0]));
     const row = (await q<{ token_hash: string; prefix: string }>('SELECT token_hash, prefix FROM api_tokens'))[0];
@@ -135,8 +138,8 @@ const sink = new Writable({
     ok('use: projects:list as alice — only the project shared with her', list.status === 200 && list.body.length === 1 && list.body[0].id === shared);
     ok('use: alice\'s role applies (viewer may not create a project → 403)', (await call({ bearer: token }, 'projects:create', { name: 'x' })).status === 403);
     ok('use: a bearer beats a forwarded email — a wrong token with boss\'s header is 401', (await call({ email: 'boss@acme.test', bearer: 'ord_' + 'x'.repeat(43) }, 'projects:list')).status === 401);
-    ok('use: last_used_at is stamped', (await call({ email: 'alice@acme.test' }, 'tokens:list')).body[0].lastUsedAt !== null);
-    const mint = await call({ bearer: token }, 'tokens:create', { name: 'from a token' });
+    ok('use: last_used_at is stamped', (await call({ email: 'alice@acme.test' }, 'tokens:list')).body.tokens[0].lastUsedAt !== null);
+    const mint = await call({ bearer: token }, 'tokens:create', { name: 'from a token', expiresInDays: 30 });
     ok('a token cannot mint a token', mint.status === 200 && mint.body.ok === false && mint.body.error === 'session' && !('token' in mint.body));
 
     // ── MCP at /api/mcp ───────────────────────────────────────────────────
@@ -156,7 +159,7 @@ const sink = new Writable({
     const vis = { project: shared, dataset: 'Sales', name: 'By region', chartType: 'bar', encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] } };
     const viewerWrite = await mcp({ bearer: token }, 'tools/call', { name: 'create_visual', arguments: vis });
     ok('mcp: a viewer\'s create_visual is refused (needs editor)', viewerWrite.body.result?.isError === true && /needs editor/.test(viewerWrite.body.result.content[0].text), JSON.stringify(viewerWrite.body));
-    const carolToken = (await call({ email: 'carol@acme.test' }, 'tokens:create', { name: 'carol' })).body.token as string;
+    const carolToken = (await call({ email: 'carol@acme.test' }, 'tokens:create', { name: 'carol', expiresInDays: 30 })).body.token as string;
     tokens.push(carolToken);
     const editorWrite = await mcp({ bearer: carolToken }, 'tools/call', { name: 'create_visual', arguments: vis });
     ok('mcp: an editor\'s create_visual saves the visual', editorWrite.body.result?.isError === false, JSON.stringify(editorWrite.body));
@@ -197,12 +200,72 @@ const sink = new Writable({
     ok('revoke: alice revokes hers', (await call({ email: 'alice@acme.test' }, 'tokens:revoke', { id })).body.ok === true);
     ok('revoke: the RPC API refuses it (401)', (await call({ bearer: token }, 'projects:list')).status === 401);
     ok('revoke: /api/mcp refuses it (401)', (await mcp({ bearer: token }, 'initialize')).status === 401);
-    ok('revoke: gone from her list; revoking again is ok:false', (await call({ email: 'alice@acme.test' }, 'tokens:list')).body.length === 0
+    ok('revoke: gone from her list; revoking again is ok:false', (await call({ email: 'alice@acme.test' }, 'tokens:list')).body.tokens.length === 0
       && (await call({ email: 'alice@acme.test' }, 'tokens:revoke', { id })).body.ok === false);
     const trail = await q<{ channel: string; actor: string; outcome: string; target_ids: string[] }>(`SELECT channel, actor, outcome, target_ids FROM audit_log WHERE channel LIKE 'tokens:%' ORDER BY id`);
     ok('audit: token create and revoke are rows (tokens:list is not); revoke names the token id',
       trail.some((r) => r.channel === 'tokens:create' && r.actor === 'alice@acme.test' && r.outcome === 'ok')
         && trail.some((r) => r.channel === 'tokens:revoke' && r.target_ids.includes(id)) && !trail.some((r) => r.channel === 'tokens:list'), JSON.stringify(trail));
+
+    // ── Expiry (API_TOKEN_MAX_DAYS=100) ───────────────────────────────────
+    const make = async (expiresInDays: unknown) => call({ email: 'boss@acme.test' }, 'tokens:create', { name: `days ${String(expiresInDays)}`, expiresInDays });
+    const zero = await make(0);
+    const huge = await make(3651);
+    const over = await make(101);
+    ok('expiry: 0 and 3651 days are refused by the contract (400)', zero.status === 400 && huge.status === 400);
+    ok('expiry: past API_TOKEN_MAX_DAYS is refused (`expiry`), nothing minted', over.body.ok === false && over.body.error === 'expiry' && !('token' in over.body));
+    const one = await make(1);
+    const hundred = await make(100);
+    tokens.push(one.body.token, hundred.body.token);
+    const days = (r: { body: { createdAt: string; expiresAt: string } }) => Math.round((Date.parse(r.body.expiresAt) - Date.parse(r.body.createdAt)) / 86_400_000);
+    ok('expiry: 1 and 100 days mint a token ending that many days after it was made', one.body.ok === true && hundred.body.ok === true && days(one) === 1 && days(hundred) === 100, `${days(one)} ${days(hundred)}`);
+    const live = one.body.token as string;
+    ok('expiry: a live token works', (await call({ bearer: live }, 'projects:list')).status === 200);
+    await pool.query(`UPDATE api_tokens SET expires_at = now() - interval '1 minute' WHERE prefix = $1`, [live.slice(0, 12)]);
+    ok('expiry: an expired token gets 401', (await call({ bearer: live }, 'projects:list')).status === 401);
+    // Tokens made before tokens had an end: expires_at NULL, ending created_at + API_TOKEN_MAX_DAYS.
+    const bossId = await uid('boss@acme.test');
+    const legacy = async (ageDays: number) => {
+      const t = 'ord_' + createHash('sha256').update(`legacy ${ageDays}`).digest('base64url').slice(0, 43);
+      tokens.push(t);
+      await pool.query(`INSERT INTO api_tokens (user_id, name, token_hash, prefix, created_at) VALUES ($1, $2, $3, $4, now() - $5 * interval '1 day')`,
+        [bossId, `legacy ${ageDays}`, createHash('sha256').update(t).digest('hex'), t.slice(0, 12), ageDays]);
+      return t;
+    };
+    const old = await legacy(101);
+    const young = await legacy(99);
+    ok('legacy: a token made 101 days ago with no end gets 401 (created_at + 100 days)', (await call({ bearer: old }, 'projects:list')).status === 401);
+    ok('NEGATIVE CONTROL: one made 99 days ago still works', (await call({ bearer: young }, 'projects:list')).status === 200);
+    const bossList = (await call({ email: 'boss@acme.test' }, 'tokens:list')).body as { tokens: { name: string; expiresAt: string; expired: boolean; legacy: boolean }[]; maxDays: number };
+    const byName = (n: string) => bossList.tokens.find((t) => t.name === n);
+    ok('list: the maximum, each token\'s end, expired and legacy marked',
+      bossList.maxDays === 100 && byName('legacy 101')?.expired === true && byName('legacy 101')?.legacy === true && byName('legacy 99')?.expired === false
+        && byName('days 100')?.legacy === false && typeof byName('days 100')?.expiresAt === 'string', JSON.stringify(bossList).slice(0, 300));
+    // The cap counts live tokens only: 50 expired ones never lock anyone out.
+    const carolId = await uid('carol@acme.test');
+    await pool.query(`UPDATE users SET disabled_at = NULL WHERE id = $1`, [carolId]);
+    await pool.query(`INSERT INTO api_tokens (user_id, name, token_hash, prefix, expires_at)
+      SELECT $1, 'old ' || g, md5(g::text || 'cap'), 'ord_cap', now() - interval '1 day' FROM generate_series(1, 50) g`, [carolId]);
+    const capOk = await call({ email: 'carol@acme.test' }, 'tokens:create', { name: 'after 50 expired', expiresInDays: 30 });
+    if (capOk.body.token) tokens.push(capOk.body.token);
+    ok('cap: 50 expired tokens do not count toward the 50', capOk.body.ok === true, JSON.stringify({ ...capOk.body, token: '…' }));
+    await pool.query(`UPDATE api_tokens SET expires_at = now() + interval '1 day' WHERE user_id = $1 AND name LIKE 'old %'`, [carolId]);
+    const capFull = await call({ email: 'carol@acme.test' }, 'tokens:create', { name: 'one too many', expiresInDays: 30 });
+    ok('NEGATIVE CONTROL: 50 live ones do (`limit`)', capFull.body.ok === false && capFull.body.error === 'limit');
+    // M4: lowering the maximum shortens EVERY token — a 90-day token made 40 days ago, under a 30-day maximum.
+    const ninety = await make(90);
+    tokens.push(ninety.body.token);
+    await pool.query(`UPDATE api_tokens SET created_at = now() - interval '40 days', expires_at = now() + interval '50 days' WHERE prefix = $1`, [ninety.body.token.slice(0, 12)]);
+    ok('lowered: under the 100-day maximum the 90-day token made 40 days ago works', (await call({ bearer: ninety.body.token }, 'projects:list')).status === 200);
+    const lowered = appMod.buildApp(envMod.parseEnv({
+      LOG_LEVEL: 'silent', DATA_DIR: DATA, DATABASE_URL: scratch.toString(), AUTH_MODE: 'header',
+      TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ORG: 'acme', API_TOKEN_MAX_DAYS: '30',
+    }));
+    await lowered.ready();
+    const meAt = async (a: FastifyInstance, t: string) => (await a.inject({ method: 'GET', url: '/api/auth/me', headers: { authorization: `Bearer ${t}` } })).json() as { user: unknown };
+    ok('lowered: under API_TOKEN_MAX_DAYS=30 the same token is refused (its end is created_at + 30 days)', (await meAt(lowered, ninety.body.token)).user === null);
+    ok('NEGATIVE CONTROL: a token made today still works under the lower maximum', (await meAt(lowered, hundred.body.token)).user !== null);
+    await lowered.close();
 
     // ── Redaction: no token value in any log line ─────────────────────────
     app.log.info({ cfg: { nested: { apiToken: token, accessToken: token, api_token: token, bearer: token } } }, 'redaction probe');
