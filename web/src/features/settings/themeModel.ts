@@ -18,6 +18,7 @@ const AXIS_COLORS = [
   '--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5', '--chart-6', '--chart-7', '--chart-8',
   '--chart-accent',
   '--error', '--error-soft', '--ok', '--ok-soft', '--warn', '--warn-soft',
+  '--accent-text', '--ok-text', '--warn-text', '--error-text',
   '--titlebar',
 ];
 const AXIS_SHADOWS = ['--shadow-sm', '--shadow-md', '--shadow-lg'];

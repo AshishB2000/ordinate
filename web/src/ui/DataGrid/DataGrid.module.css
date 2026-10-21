@@ -111,15 +111,17 @@
 }
 .text {
   background: var(--surface-3);
-  color: var(--text-dim);
+  color: var(--muted);
 }
 .number {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
 }
+/* The tint keeps the palette's hue; the word is that hue taken halfway toward the
+   strongest text, so it reads at 4.5:1 on the tint (theme.contrast.test.ts). */
 .date {
   background: color-mix(in srgb, var(--chart-4) 14%, transparent);
-  color: var(--chart-4);
+  color: color-mix(in srgb, var(--chart-4) 50%, var(--text-strong));
 }
 .typeWord {
   font-variant-numeric: normal;
