@@ -9,10 +9,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useBlocker, useNavigate, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
-import { ErrorState, PageSkeleton } from '../../../app/blocks';
+import { ErrorState, PageHead, PageSkeleton } from '../../../app/blocks';
 import { Badge } from '../../../ui/Badge';
-import { Button, buttonClass } from '../../../ui/Button';
-import { Icon } from '../../../ui/icons/Icon';
+import { Button } from '../../../ui/Button';
 import { Dialog } from '../../../ui/Dialog';
 import { Textarea } from '../../../ui/Field';
 import { Skeleton } from '../../../ui/Skeleton';
@@ -134,30 +133,28 @@ function Builder({ projectId, opened, onReload }: { projectId: string; opened: O
   const captionable = page && page.kind !== 'notes' && raw && (raw.kind === 'tile' || raw.kind === 'sheet' || raw.kind === 'summary');
   return (
     <div className={s.builder}>
-      <header className={s.head}>
-        <Link className={buttonClass('ghost', 'sm')} to={`/reports?project=${projectId}`}>
-          <Icon name="arrow-left" />
-          <span>Reports</span>
-        </Link>
-        <div className={s.ident}>
-          <h1 className={s.name}>{report.name}</h1>
-          <span className={s.of}>{opened.dashboard ? `From “${opened.dashboard.name}”` : report.scorecardId ? 'From a scorecard' : 'Its dashboard was deleted'}</span>
-        </div>
-        {dirty && <Badge tone="warn">Unsaved</Badge>}
-        <div className={s.headActions}>
-          <Link className={s.link} to={`/versions/${projectId}/report/${report.id}`}>
-            History
-          </Link>
-          {canEdit && (
-            <Button onClick={() => void save().then((ok) => ok && toast('Report saved', { kind: 'success' }))} loading={busy === 'save'} disabled={!dirty || !!busy || guard.changed}>
-              Save
+      <PageHead
+        className={s.head}
+        back={{ to: `/reports?project=${projectId}`, label: 'Reports' }}
+        title={report.name}
+        status={dirty && <Badge tone="warn">Unsaved</Badge>}
+        sub={opened.dashboard ? `From “${opened.dashboard.name}”` : report.scorecardId ? 'From a scorecard' : 'Its dashboard was deleted'}
+        actions={
+          <>
+            <Link className={s.link} to={`/versions/${projectId}/report/${report.id}`}>
+              History
+            </Link>
+            {canEdit && (
+              <Button onClick={() => void save().then((ok) => ok && toast('Report saved', { kind: 'success' }))} loading={busy === 'save'} disabled={!dirty || !!busy || guard.changed}>
+                Save
+              </Button>
+            )}
+            <Button variant="primary" icon="download" onClick={() => void generate()} loading={busy === 'generate'} disabled={!!busy}>
+              Generate {FORMAT_WORD[report.format]}
             </Button>
-          )}
-          <Button variant="primary" icon="download" onClick={() => void generate()} loading={busy === 'generate'} disabled={!!busy}>
-            Generate {FORMAT_WORD[report.format]}
-          </Button>
-        </div>
-      </header>
+          </>
+        }
+      />
       {guard.changed && canEdit && (
         <div className={s.conflict}>
           <ConflictBanner noun="report" onReload={onReload} onCopy={conflict.copy} />

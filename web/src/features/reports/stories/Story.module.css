@@ -10,42 +10,24 @@
   background: var(--bg);
 }
 .head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-12);
-  padding: var(--sp-8) var(--sp-24);
+  padding: var(--sp-12) var(--sp-24);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
-.nameH {
-  flex: 0 1 420px;
-  min-width: 120px;
-  margin: 0;
-  font-size: inherit;
-}
+/* The name, edited where it reads: the page title's type, its text on the
+   title's left edge (the padding and border are paid back). */
 .nameInput {
-  width: 100%;
+  width: 420px;
+  max-width: 100%;
   height: var(--ctl-md);
+  margin-left: calc(-1 * (var(--sp-8) + 1px));
   padding: 0 var(--sp-8);
   border: 1px solid transparent;
   border-radius: var(--r-md);
   background: none;
   color: var(--text-strong);
   font: inherit;
-  font-size: var(--t-15);
-  font-weight: 600;
-}
-/* A viewer's name: the input's type, as plain text. */
-.nameText {
-  flex: 0 1 auto;
-  min-width: 0;
-  padding: 0 var(--sp-8);
-  color: var(--text-strong);
-  font-size: var(--t-15);
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  letter-spacing: inherit;
 }
 .nameInput:hover {
   border-color: var(--border);
@@ -58,12 +40,6 @@
   font-size: var(--t-12);
   color: var(--muted);
   min-width: 60px;
-}
-.headActions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
 }
 .layout {
   flex: 1;

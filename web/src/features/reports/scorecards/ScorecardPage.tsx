@@ -8,13 +8,13 @@
 // the options are an editor's.
 
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
-import { ErrorState, PageSkeleton } from '../../../app/blocks';
+import { ErrorState, PageHead, PageSkeleton } from '../../../app/blocks';
 import { ago } from '../../../app/when';
 import { Badge } from '../../../ui/Badge';
-import { Button, IconButton, buttonClass } from '../../../ui/Button';
+import { Button, IconButton } from '../../../ui/Button';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Menu } from '../../../ui/Menu';
 import { Select } from '../../../ui/Select';
@@ -251,13 +251,11 @@ function Page({ projectId, sc, startEditing, onReload }: { projectId: string; sc
 
   return (
     <div className={detail ? `${s.page} ${s.hasDetail}` : s.page}>
-      <header className={s.head}>
-        <Link className={buttonClass('ghost', 'sm')} to={`/reports?project=${projectId}&tab=scorecards`}>
-          <Icon name="arrow-left" />
-          <span>Scorecards</span>
-        </Link>
-        {canEdit ? (
-          <h1 className={s.nameH}>
+      <PageHead
+        className={s.head}
+        back={{ to: `/reports?project=${projectId}&tab=scorecards`, label: 'Scorecards' }}
+        title={
+          canEdit ? (
             <input
               className={s.nameInput}
               aria-label="Scorecard name"
@@ -267,32 +265,32 @@ function Page({ projectId, sc, startEditing, onReload }: { projectId: string; sc
               onBlur={() => name.trim() && name.trim() !== sc.name && void update({ name: name.trim() })}
               onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
             />
-          </h1>
-        ) : (
-          <>
-            <h1 className={`${s.nameH} ${s.nameText}`}>{sc.name}</h1>
-            <Badge icon="eye">View only</Badge>
-          </>
-        )}
-        {canEdit && (
-          <div className={s.headActions}>
-            <Button icon="pencil" onClick={() => setEditing(true)}>
-              Metrics & targets
-            </Button>
-            <Menu
-              label="Scorecard options"
-              align="end"
-              trigger={<IconButton icon="more-horizontal" label="Scorecard options" />}
-              items={[
-                { label: 'Create report…', icon: 'file-text', onSelect: () => void createReport() },
-                { label: 'Duplicate', icon: 'copy', onSelect: () => void duplicate() },
-                { kind: 'separator' },
-                { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setConfirmDelete(true) },
-              ]}
-            />
-          </div>
-        )}
-      </header>
+          ) : (
+            sc.name
+          )
+        }
+        status={!canEdit && <Badge icon="eye">View only</Badge>}
+        actions={
+          canEdit && (
+            <>
+              <Button icon="pencil" onClick={() => setEditing(true)}>
+                Metrics & targets
+              </Button>
+              <Menu
+                label="Scorecard options"
+                align="end"
+                trigger={<IconButton icon="more-horizontal" label="Scorecard options" />}
+                items={[
+                  { label: 'Create report…', icon: 'file-text', onSelect: () => void createReport() },
+                  { label: 'Duplicate', icon: 'copy', onSelect: () => void duplicate() },
+                  { kind: 'separator' },
+                  { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setConfirmDelete(true) },
+                ]}
+              />
+            </>
+          )
+        }
+      />
       {guard.changed && canEdit && (
         <div className={s.conflict}>
           <ConflictBanner noun="scorecard" onReload={conflict.reload} onCopy={() => conflict.copy()} />
