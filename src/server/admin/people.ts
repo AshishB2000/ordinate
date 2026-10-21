@@ -13,6 +13,7 @@ import { registry } from '../rpc';
 import { IdpManagedError, roleManaged, teamLinked } from '../auth/idpGroups';
 import { CLEAR_KEPT, OTHER_ADMINS, withPeopleLock } from '../auth/store';
 import { roleFromIdp, teamFromIdp } from '../idpMessages';
+import { closeStreamsOf } from '../sse';
 
 export interface UserRow {
   readonly id: string;
@@ -90,18 +91,36 @@ export function register(pool: () => Pool | null, allowedDomains: () => readonly
     return { ok: false, error: (await exists(db(), org(), userId)) ? 'last-admin' : 'unknown' };
   });
 
+  // Disable is FINAL (docs/sso-lifecycle §3.8): in ONE statement the member is disabled, every token of theirs
+  // revoked (so re-enabling cannot revive one) and every session ended; then their event streams close on
+  // every pod. Enabling someone who was disabled revokes again — a token that escaped an older release's
+  // disable — and clears their digest, so header mode re-applies their groups. Under the exclusive people lock.
   registry.handle('admin:setDisabled', async (_e, { userId, disabled }: { userId: string; disabled: boolean }): Promise<Result> => {
     const self = await db().query('SELECT 1 FROM users WHERE org_id = $1 AND id = $2 AND email = $3', [org(), userId, ctx().user.email]);
     if (disabled && self.rowCount === 1) return { ok: false, error: 'self' };
-    const r = await db().query(
-      disabled
-        ? `UPDATE users SET disabled_at = coalesce(disabled_at, now()) WHERE org_id = $1 AND id = $2 AND (role <> 'admin' OR ${OTHER_ADMINS} > 0)`
-        : `UPDATE users SET disabled_at = NULL WHERE org_id = $1 AND id = $2`,
-      [org(), userId],
-    );
+    const r = await withPeopleLock(db(), org(), 'exclusive', async (c) => {
+      if (disabled) {
+        return c.query<{ email: string }>(
+          `WITH u AS (UPDATE users SET disabled_at = coalesce(disabled_at, now())
+                       WHERE org_id = $1 AND id = $2 AND (role <> 'admin' OR ${OTHER_ADMINS} > 0) RETURNING id, email),
+                t AS (UPDATE api_tokens SET revoked_at = now() WHERE user_id IN (SELECT id FROM u) AND revoked_at IS NULL),
+                s AS (DELETE FROM sessions WHERE user_id IN (SELECT id FROM u))
+           SELECT email FROM u`,
+          [org(), userId],
+        );
+      }
+      const on = await c.query<{ email: string; role: Role }>(
+        `WITH was AS (SELECT id FROM users WHERE org_id = $1 AND id = $2 AND disabled_at IS NOT NULL),
+              t AS (UPDATE api_tokens SET revoked_at = now() WHERE user_id IN (SELECT id FROM was) AND revoked_at IS NULL)
+         UPDATE users SET disabled_at = NULL, idp_groups_digest = NULL WHERE org_id = $1 AND id = $2 RETURNING email, role`,
+        [org(), userId],
+      );
+      if (on.rows[0]?.role === 'admin') await c.query(CLEAR_KEPT, [org()]); // the org gained an admin
+      return on;
+    });
     if (r.rowCount !== 1) return { ok: false, error: (await exists(db(), org(), userId)) ? 'last-admin' : 'unknown' };
-    // Signed out everywhere now, not at the next request (sessions and tokens already refuse a disabled user).
-    if (disabled) await db().query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+    // Their open event streams, on every pod (sessions and tokens already refuse them).
+    if (disabled) closeStreamsOf(org(), r.rows[0].email);
     return { ok: true };
   });
 

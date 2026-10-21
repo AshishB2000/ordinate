@@ -14,6 +14,7 @@ import { authorize, grantCreator, orgAllows, readable } from './authz/index';
 import { audit, targetIds, type Outcome } from './authz/audit';
 import { registerAuth } from './auth/index';
 import { isIdpManaged } from './auth/idpGroups';
+import { hashId } from './auth/store';
 import { cookieNames } from './auth/cookies';
 import { registerSecurityHeaders } from './headers';
 import { registerCsrf } from './csrf';
@@ -180,6 +181,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     // reschedules. Lazy requires: nothing loads them without a DB.
     let jobs: { stop(): Promise<void> } | null = null;
     let bus: { stop(): Promise<void> } | null = null;
+    let sweep: { stop(): void } | null = null;
     app.addHook('onReady', async () => {
       try {
         const r = await migrate(pool);
@@ -224,6 +226,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         });
       }
       bus = await (require('./jobs/bus') as typeof import('./jobs/bus')).startBus(pool, dbUrl, app.log);
+      // The backstop for a stream close the bus lost (docs/sso-lifecycle §3.9).
+      sweep = (require('./streamSweep') as typeof import('./streamSweep')).startStreamSweep(pool, cfg.auth.sessionIdleMs, app.log);
       jobs = (require('./jobs/runner') as typeof import('./jobs/runner')).startRunner(pool, cfg.dataDir, app.log);
     });
     // preClose, not onClose: onClose hooks run last-registered first, so
@@ -231,6 +235,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     app.addHook('preClose', async () => {
       await jobs?.stop();
       await bus?.stop();
+      sweep?.stop();
     });
     app.addHook('onClose', async () => {
       useRecordDb(null);
@@ -319,7 +324,13 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     );
   });
 
-  registerEvents(app);
+  // Each stream remembers its session (session sign-in modes), so the sweep below ends it with its session.
+  const sessionCookie = cookieNames(cfg.env === 'prod').session;
+  const sessionModes = cfg.auth.mode === 'oidc' || cfg.auth.mode === 'password';
+  registerEvents(app, (req) => {
+    const id = sessionModes ? req.cookies?.[sessionCookie] : undefined;
+    return typeof id === 'string' && id ? hashId(id) : null;
+  });
 
   // Readiness: can this pod answer queries? DuckDB, plus Postgres when
   // configured. With per-org workers (T4.3) the first call starts a locked,

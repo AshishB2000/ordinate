@@ -27,6 +27,7 @@ import { registerOidc } from './oidc';
 import { registerPassword } from './password';
 import { setupOpen } from './passwordStore';
 import { hasBearer, tokenIdentity } from './tokens';
+import { closeStreamsOf } from '../sse';
 import { endAllSessions, endSession, ensureOrg, member, normalEmail, provision, sessionIdentity } from './store';
 import { applyIdpGroups, countSync, digestOf, groupsFromHeader, oncePerHour, type SyncLog } from './idpGroups';
 
@@ -170,6 +171,7 @@ export function registerAuth(app: FastifyInstance, cfg: ServerEnv, pool: Pool | 
     const id = await who(req);
     if (!id) return reply.code(401).send({ error: 'not signed in' });
     const ended = pool ? await endAllSessions(pool, id.org.id, id.user.email) : 0;
+    closeStreamsOf(id.org.id, id.user.email); // and every open event stream of theirs, on every pod (R5)
     await trail(req, id.org.id, id.user.email, 'logout_everywhere');
     reply.clearCookie(names.session, cookieOpts(secure, '/'));
     return reply.send({ ended });

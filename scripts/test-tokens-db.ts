@@ -194,6 +194,25 @@ const sink = new Writable({
     await pool.query(`UPDATE users SET disabled_at = now() WHERE email = 'carol@acme.test'`);
     ok('disabled user: their token is refused (401)', (await call({ bearer: carolToken }, 'projects:list')).status === 401);
 
+    // ── Disable is final: re-enabling never revives a token (docs/sso-lifecycle §3.8) ──
+    const ednaToken = await (async () => {
+      await call({ email: 'edna@acme.test' }, 'projects:list');
+      const t = (await call({ email: 'edna@acme.test' }, 'tokens:create', { name: 'edna', expiresInDays: 30 })).body.token as string;
+      tokens.push(t);
+      return t;
+    })();
+    const edna = await uid('edna@acme.test');
+    const setDisabled = (disabled: boolean) => call({ email: 'boss@acme.test' }, 'admin:setDisabled', { userId: edna, disabled });
+    ok('disable: answered ok, and the token stops (401)', (await setDisabled(true)).body.ok === true && (await call({ bearer: ednaToken }, 'projects:list')).status === 401);
+    ok('disable: the token is revoked in the same statement (revoked_at set)', (await q<{ r: boolean }>('SELECT revoked_at IS NOT NULL AS r FROM api_tokens WHERE user_id = $1', [edna]))[0].r === true);
+    ok('disable → re-enable: the old token is still 401', (await setDisabled(false)).body.ok === true && (await call({ bearer: ednaToken }, 'projects:list')).status === 401);
+    // A token that escaped a disable (an older release, or an old pod during a rollout): enabling revokes it.
+    const fresh = (await call({ email: 'edna@acme.test' }, 'tokens:create', { name: 'edna 2', expiresInDays: 30 })).body.token as string;
+    tokens.push(fresh);
+    ok('NEGATIVE CONTROL: enabling someone already enabled revokes nothing', (await setDisabled(false)).body.ok === true && (await call({ bearer: fresh }, 'projects:list')).status === 200);
+    await pool.query('UPDATE users SET disabled_at = now() WHERE id = $1', [edna]); // the old way: no revocation
+    ok('re-enable after an old-style disable revokes the token that escaped it', (await setDisabled(false)).body.ok === true && (await call({ bearer: fresh }, 'projects:list')).status === 401);
+
     // ── Revoke ────────────────────────────────────────────────────────────
     const id = listed[0].id as string;
     ok('revoke: someone else\'s token id is not theirs to revoke', (await call({ email: 'boss@acme.test' }, 'tokens:revoke', { id })).body.ok === false);

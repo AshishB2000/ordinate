@@ -28,7 +28,8 @@ import { audit, type AuditAction, type Outcome } from '../authz/audit';
 import { cookieOpts, type CookieNames } from './cookies';
 import { hashPassword, normalSetupCode, passwordProblem, PASSWORD_MAX, verifyPassword } from './passwordHash';
 import { completeSetup, credentials, issueSetupCode, setPassword, SETUP_CODE_HOURS, setupCodeValid, setupOpen, stampSignIn } from './passwordStore';
-import { createSession, endOtherSessions, normalEmail, sessionIdentity } from './store';
+import { createSession, endOtherSessions, hashId, normalEmail, sessionIdentity } from './store';
+import { closeStreamsOf } from '../sse';
 
 export const PASSWORD_ROUTES = ['/api/auth/password/login', '/api/auth/password/setup', '/api/auth/password/change'] as const;
 
@@ -172,8 +173,9 @@ export function registerPassword(app: FastifyInstance, cfg: ServerEnv, pool: Poo
     if (!(await setPassword(pool, who.org.id, c.userId, await hashPassword(body.data.password), false))) {
       return refuse('signed-out');
     }
-    // Whoever else held a session on the old password is out; this browser stays in.
+    // Whoever else held a session on the old password is out — with their open event streams; this browser stays in.
     await endOtherSessions(pool, c.userId, sid);
+    closeStreamsOf(who.org.id, email, sid ? hashId(sid) : '');
     req.log.info('password changed');
     await trail(req, email, 'password_change', 'ok');
     return { ok: true };
