@@ -13,6 +13,7 @@ import { isMapChartType } from '../../../charts/maps/mapKinds';
 import { chartIsSmallMultiple } from '../../../charts/traits';
 import type { ChartDataShape, ChartSeriesShape, Cx, Overrides } from '../../../charts/types';
 import s from './Facets.module.css';
+import type { ChartFigures } from '../../../../../src/analysis/chartShapes.ts';
 
 interface Panel {
   row: number;
@@ -25,6 +26,8 @@ interface Panel {
   analytics?: Cx[];
   pivot?: Cx;
   seriesName?: string;
+  /** The server's figures for this panel (src/analysis/chartShapes.ts): its own, never the whole chart's. */
+  figures?: ChartFigures;
 }
 export interface Grid {
   rows: string[];
@@ -50,7 +53,9 @@ export function facetGridOf(data: ChartDataShape & { facets?: Grid }, type: stri
   const panels: Panel[] = [];
   series.forEach((x, i) => {
     if (hidden.has(i)) return;
-    panels.push({ row: 0, col: panels.length, title: x.name || `Series ${i + 1}`, steps: [], labels: data.labels || [], series: [x], empty: false, seriesName: x.name });
+    // The server's per-series figures (a histogram's bins, a funnel's percentages) are indexed over the drawn series: no overlay.
+    const k = x.role === 'overlay' ? -1 : series.slice(0, i).filter((y) => y.role !== 'overlay').length;
+    panels.push({ row: 0, col: panels.length, title: x.name || `Series ${i + 1}`, steps: [], labels: data.labels || [], series: [x], empty: false, seriesName: x.name, figures: seriesFigures(data.figures, k) });
   });
   return { rows: [], cols: panels.map((p) => p.title), scale: 'independent', domain: null, panels };
 }
@@ -59,6 +64,15 @@ export function facetGridOf(data: ChartDataShape & { facets?: Grid }, type: stri
 export function facetControlsData<T extends ChartDataShape & { facets?: Grid }>(data: T): T {
   const p = data && data.facets && Array.isArray(data.facets.panels) ? data.facets.panels.find((x) => !x.empty) : null;
   return p ? { ...data, labels: p.labels, series: p.series } : data;
+}
+
+/** Series `k`'s part of a per-series figures block — an index into the server's, not a figure. */
+function seriesFigures(f: ChartFigures | undefined, k: number): ChartFigures | undefined {
+  if (!f || k < 0) return undefined;
+  return {
+    ...(f.histogram ? { histogram: [f.histogram[k] ?? []] } : {}),
+    ...(f.funnel ? { funnel: { ofTopPct: [f.funnel.ofTopPct[k] ?? []] } } : {}),
+  };
 }
 
 /** A shared scale: every panel's value axis spans the union domain. */
@@ -84,7 +98,7 @@ function PanelChart({ p, grid, data, type, ov, onMark, onLegend }: {
   onLegend?: (l: Swatch[]) => void;
 }) {
   const chart = useRef<ChartHandle | null>(null);
-  const panelData = useMemo(() => ({ ...data, labels: p.labels, series: p.series, analytics: p.analytics ?? undefined }), [data, p]);
+  const panelData = useMemo(() => ({ ...data, labels: p.labels, series: p.series, analytics: p.analytics ?? undefined, figures: p.figures }), [data, p]);
   return (
     <div className={s.canvas} onClick={(e) => chart.current && onMark?.(chart.current, e.nativeEvent, p.steps, p.seriesName)}>
       <Chart

@@ -20,9 +20,11 @@ import { buildChartDatasets } from './datasets';
 import { evDrawable, eventsPlugin } from './events';
 import { applyExtraTooltip, extraChartOptions, isExtraFamily } from './familiesExtra';
 import { fmtApply, fmtResolve } from './fmtApply';
-import { fmtVal, fmtWith, tcAxisFmt, tcTooltip } from './format';
+import * as OrdFormat from '../../../src/app/format.ts';
+import { fmtVal, fmtWith, pctText, tcAxisFmt, tcTooltip } from './format';
 import { CHART_PALETTE, getCSSVar, paletteFromSeed } from './palette';
 import { buildChartScales } from './scales';
+import { figuresMissing, sortedFigures } from './shapes';
 import { selectionPlugin } from './selection';
 import { t } from './strings';
 import { legendOnByDefault } from './traits';
@@ -70,23 +72,9 @@ export function chartSeries(data: ChartDataShape | null | undefined): ChartSerie
     : [];
 }
 
-// A month-truncated date axis reads as a date axis unless it is formatted.
-// `datetrunc('month', order_date)` — the only way to chart by month, since
-// VizEncoding has no granularity — yields '2023-01-01', and a year of those
-// prints twelve full ISO dates whose day part is noise on every one of them.
-//
-// All-or-nothing on purpose: one label that is not a first-of-month means the
-// axis is really daily and the days carry information, so nothing is rewritten.
-// UTC throughout — `new Date('2023-01-01')` is UTC midnight, and formatting it
-// in a negative-offset zone would label January as Dec 2022.
-const FIRST_OF_MONTH_RE = /^(\d{4})-(\d{2})-01(?:[T ]00:00(?::00(?:\.000)?)?Z?)?$/;
-
-export function asMonthLabels(labels: Cx[]): Cx[] {
-  const parsed = labels.map((l) => (typeof l === 'string' ? FIRST_OF_MONTH_RE.exec(l.trim()) : null));
-  if (parsed.some((m) => !m)) return labels;
-  return parsed.map((m: Cx) => new Date(Date.UTC(+m[1], +m[2] - 1, 1))
-    .toLocaleDateString(undefined, { month: 'short', year: 'numeric', timeZone: 'UTC' }));
-}
+// A first-of-month axis reads "Jan 2023": the shared formatter's rule (src/app/format.ts), which the
+// published page and the captions use too. Re-exported under its old name for the chart's callers.
+export const asMonthLabels = (labels: Cx[]): Cx[] => OrdFormat.asMonthLabels(labels);
 
 // The config for the given data + type id, or null when there is nothing to
 // draw (no labels, no series, a calendar without dates). `canvas` must be in
@@ -141,6 +129,9 @@ export function buildChart(
           isGauge, isCandlestick, isBoxplot, isHistogram, isHoriz } = spec;
   // A word cloud is not a Chart.js chart: wordCloudRender.js draws it on this canvas.
   if (spec.isWordCloud) return { kind: 'wordCloud', labels, series, overrides, theme: { palette, fmt, textColor, titleColor, fontFamily, surfColor } };
+  // A type that draws the server's figures (src/analysis/chartShapes.ts) draws nothing without them — never works them out.
+  let figures = data.figures ?? {};
+  if (figuresMissing(spec, figures)) return null;
 
   // ── Sort by value (bar/column families + pie/donut) ───────────────────────
   // Reorders categories by their total across series; line/area/funnel/histogram
@@ -185,6 +176,7 @@ export function buildChart(
     labels = order.map((i: number) => labels[i]);
     series = series.map((s: ChartSeriesShape) => Object.assign({}, s, { values: order.map((i: number) => s.values[i]) },
       Array.isArray(s.raw) ? { raw: order.map((i: number) => s.raw![i]) } : {}));
+    figures = sortedFigures(figures, order);
     sortOrder = order;
   }
 
@@ -219,7 +211,7 @@ export function buildChart(
     canvas, labels, series, overrides,
     fmt, valueMode, lineTension,
     palette, textColor, gridColor, surfColor, titleColor, fontFamily,
-    showLegend, showGridlines, tickFont,
+    showLegend, showGridlines, tickFont, figures,
   };
 
   // Datasets FIRST — they write the per-family state on `opts` that the axes and
@@ -276,11 +268,20 @@ export function buildChart(
   }
   if (isFunnel) {
     tooltipConfig.filter = (item: Cx) => item.datasetIndex !== 0;   // hide the spacer stack
+    // A stage's share of the first is the server's (figures.funnel); without it, the stage's own figure.
+    const ofTop = figures.funnel && figures.funnel.ofTopPct[0];
     tooltipConfig.callbacks.label = (item: Cx) => {
       const v = opts._funnelVals[item.dataIndex];
-      const top = opts._funnelVals[0] || 0;
-      const pct = top ? Math.round((v / top) * 100) : null;
-      return pct != null ? t('chartRender.of_top', { v: fmt(v), pct }) : fmt(v);
+      const pct = ofTop ? ofTop[item.dataIndex] : null;
+      return pct != null ? t('chartRender.of_top', { v: fmt(v), pct: OrdFormat.formatNumber(pct, { decimals: 0 }) }) : fmt(v);
+    };
+  }
+  if (opts.pct) {
+    // A 100%-stacked bar is drawn from the server's share; the tooltip says it, then the figure behind it.
+    tooltipConfig.callbacks.label = (item: Cx) => {
+      const name = item.dataset && item.dataset.label ? item.dataset.label + ': ' : '';
+      const s = series[item.datasetIndex];
+      return `${name}${pctText(item.raw)} · ${fmt(s ? s.values[item.dataIndex] : null)}`;
     };
   }
   if (isExtraFamily(spec)) applyExtraTooltip(c, tooltipConfig);

@@ -203,7 +203,8 @@ export function readAssets(): SiteAssets {
     geoMatchJs: read('src', 'analysis', 'geoMatch.js'),
     coreJs: read('src', 'publish', 'site', 'publishCore.js'),
     phoneJs: read('src', 'publish', 'site', 'publishPhone.js'),
-    clientJs: read('src', 'publish', 'site', 'publishClient.js'),
+    // One inline script, in order: the tiles and the helpers the rest use, the maps, the other pages, then the page.
+    clientJs: ['publishTiles.js', 'publishMaps.js', 'publishPages.js', 'publishClient.js'].map((f) => read('src', 'publish', 'site', f)).join('\n'),
   };
 }
 

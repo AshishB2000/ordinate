@@ -71,42 +71,41 @@ export interface Cluster {
   lat: number;
   lng: number;
   count: number;
-  sum: number;
   /** A single point: its index in the input. */
   index?: number;
 }
 
 /**
  * Grid clustering at `zoom`: the world (Web Mercator, so cells are square on
- * screen) cut into `cellPx`-pixel cells; each cell's points become one cluster
- * at their mean position. Points are ordered by position before any sum, so the
+ * screen) cut into `cellPx`-pixel cells; each cell's points become one marker
+ * at their mean position, labelled with how many it holds — layout, never a
+ * figure: no value is added up. Points are ordered by position first, so the
  * same points in ANY order give byte-identical clusters.
  */
 export function gridCluster(points: ReadonlyArray<{ lat: number; lng: number; value?: number | null }>, zoom: number, cellPx = 64): Cluster[] {
   const idx = points.map((_, i) => i);
   if (points.length <= CLUSTER_MIN) {
-    return idx.map((i) => ({ lat: points[i].lat, lng: points[i].lng, count: 1, sum: points[i].value ?? 0, index: i }));
+    return idx.map((i) => ({ lat: points[i].lat, lng: points[i].lng, count: 1, index: i }));
   }
   idx.sort((a, b) => points[a].lng - points[b].lng || points[a].lat - points[b].lat || a - b);
   const n = (256 * Math.pow(2, Math.max(0, Math.floor(zoom)))) / cellPx;
-  const cells = new Map<string, { cx: number; cy: number; lat: number; lng: number; count: number; sum: number; index: number }>();
+  const cells = new Map<string, { cx: number; cy: number; lat: number; lng: number; count: number; index: number }>();
   for (const i of idx) {
     const p = points[i];
     const cx = Math.floor(mercX(p.lng) * n);
     const cy = Math.floor(mercY(p.lat) * n);
     const k = cx + ',' + cy;
-    const c = cells.get(k) || { cx, cy, lat: 0, lng: 0, count: 0, sum: 0, index: i };
+    const c = cells.get(k) || { cx, cy, lat: 0, lng: 0, count: 0, index: i };
     c.lat += p.lat;
     c.lng += p.lng;
     c.count += 1;
-    c.sum += typeof p.value === 'number' ? p.value : 0;
     cells.set(k, c);
   }
   return [...cells.values()]
     .sort((a, b) => a.cy - b.cy || a.cx - b.cx)
     .map((c) =>
       c.count === 1
-        ? { lat: c.lat, lng: c.lng, count: 1, sum: c.sum, index: c.index }
-        : { lat: c.lat / c.count, lng: c.lng / c.count, count: c.count, sum: c.sum },
+        ? { lat: c.lat, lng: c.lng, count: 1, index: c.index }
+        : { lat: c.lat / c.count, lng: c.lng / c.count, count: c.count },
     );
 }

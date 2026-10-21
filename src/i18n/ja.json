@@ -343,6 +343,8 @@
   "pivotRender.pick_a_row_dimension_and_at": "ピボットを作成するには、行ディメンションと1つ以上の値を選択してください。",
   "pivotRender.showing_the_first_row_groups_and": "先頭の{p0}個の行グループと{p1}個の列グループを表示中。残りを見るには、フィルターまたは上位N件でピボットを絞り込んでください。",
   "pivotRender.sort_by": "{p0}で並べ替え{p1}",
+  "publishMessages.maximum_of": "{column} の最大値",
+  "publishMessages.minimum_of": "{column} の最小値",
   "rebuildMessages.a_date_range_needs_a_date": "日付範囲には日付列が必要ですが、「{column}」は {type} です。",
   "rebuildMessages.needs_a_number_column_but_is": "{aggregation} には数値列が必要ですが、「{column}」は {type} です。",
   "rebuildMessages.no_column_like_in_this_dataset": "このデータセットに「{said}」に近い列はありません。列を選んでください。",

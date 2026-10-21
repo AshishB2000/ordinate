@@ -33,6 +33,7 @@ import { buildReportPages, storyReportPages, storyVisual, type PageAnalysis, typ
 import { scorecardSnapshot } from './scorecards';
 import { publicReport } from './reports';
 import type { FilterStep } from '../data/transforms';
+import { figureAsk } from '../analysis/figureAsk';
 
 /** A registered handler, called as the RPC layer calls it. Missing → a refusal, never a throw. */
 async function call(event: unknown, channel: string, payload: unknown): Promise<any> { // any: each handler's own reply
@@ -65,6 +66,7 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
       return call(event, 'visual:data', {
         projectId, datasetId: v.datasetId, encoding: v.encoding, filters, params, ...(share ? { share: 'report' } : {}),
         ...(Array.isArray(v.analytics) && v.analytics.length ? { analytics: v.analytics } : {}),
+        ...figureAsk(v.chartType, v.overrides), // what the page draws it as: its figures, and its caption's
       });
     },
     metric: async (m, filters, params) => {

@@ -343,6 +343,8 @@
   "pivotRender.pick_a_row_dimension_and_at": "Choisissez une dimension de ligne et au moins une valeur pour créer un tableau croisé.",
   "pivotRender.showing_the_first_row_groups_and": "Affichage des {p0} premiers groupes de lignes et des {p1} premiers groupes de colonnes — restreignez le tableau croisé avec un filtre ou Top N pour voir le reste.",
   "pivotRender.sort_by": "Trier par {p0}{p1}",
+  "publishMessages.maximum_of": "Maximum de {column}",
+  "publishMessages.minimum_of": "Minimum de {column}",
   "rebuildMessages.a_date_range_needs_a_date": "Une plage de dates nécessite une colonne de date, mais « {column} » est {type}.",
   "rebuildMessages.needs_a_number_column_but_is": "{aggregation} nécessite une colonne numérique, mais « {column} » est {type}.",
   "rebuildMessages.no_column_like_in_this_dataset": "Aucune colonne ne ressemble à « {said} » dans ce jeu de données. Choisissez-en une.",

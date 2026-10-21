@@ -343,6 +343,8 @@
   "pivotRender.pick_a_row_dimension_and_at": "Wählen Sie eine Zeilendimension und mindestens einen Wert, um einen Pivot zu erstellen.",
   "pivotRender.showing_the_first_row_groups_and": "Die ersten {p0} Zeilengruppen und {p1} Spaltengruppen werden angezeigt — grenzen Sie den Pivot mit einem Filter oder Top N ein, um den Rest zu sehen.",
   "pivotRender.sort_by": "Sortieren nach {p0}{p1}",
+  "publishMessages.maximum_of": "Maximum von {column}",
+  "publishMessages.minimum_of": "Minimum von {column}",
   "rebuildMessages.a_date_range_needs_a_date": "Ein Datumsbereich braucht eine Datumsspalte, aber „{column}“ ist {type}.",
   "rebuildMessages.needs_a_number_column_but_is": "{aggregation} braucht eine Zahlenspalte, aber „{column}“ ist {type}.",
   "rebuildMessages.no_column_like_in_this_dataset": "Keine Spalte wie „{said}“ in diesem Datensatz. Wählen Sie eine.",

@@ -151,8 +151,10 @@ const at = (marks: ReturnType<typeof E.eventsOnAxis>): string => J(marks.map((m)
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'publish', 'site', 'publishCore.js'), 'utf8'), ctx);
   const cfg = ctx.pkChartConfig('line', { labels: ['a', 'b'], series: [{ label: 's', values: [1, 2] }], events: out.events }, [], String);
-  ok('publish: a line chart with events gets the marker plugin', Array.isArray(cfg.plugins) && cfg.plugins.length === 1 && cfg.plugins[0].id === 'pkEvents');
-  ok('publish: without events, no plugin', ctx.pkChartConfig('line', { labels: ['a'], series: [] }, [], String).plugins.length === 0);
+  // (A chart's other plugins — its value labels — ride beside the marker plugin; only the marker one is about events.)
+  const markers = (c: any) => (Array.isArray(c.plugins) ? c.plugins : []).filter((x: any) => x.id === 'pkEvents'); // any: a Chart.js config
+  ok('publish: a line chart with events gets the marker plugin', markers(cfg).length === 1);
+  ok('publish: without events, no marker plugin', markers(ctx.pkChartConfig('line', { labels: ['a'], series: [] }, [], String)).length === 0);
 }
 
 finish();

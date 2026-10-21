@@ -19,6 +19,8 @@
 // wins over them for what it specifies — decimals, compact, its own prefix —
 // and takes the rest (locale, separators, the workspace currency) from here.
 
+import type { ChartFigures } from '../analysis/chartShapes';
+
 export type NumberStyle = 'locale' | 'comma_dot' | 'dot_comma' | 'space_comma' | 'apostrophe_dot' | 'plain_dot';
 export type DateStyle = 'short' | 'medium' | 'iso';
 export type CurrencyPosition = 'before' | 'after';
@@ -316,6 +318,25 @@ export function formatMetric(value: number | null | undefined, f: MetricFormatLi
 
 // ── Dates ───────────────────────────────────────────────────────────────────
 
+// A month-truncated date axis reads as a date axis unless it is formatted:
+// `datetrunc('month', order_date)` yields '2023-01-01', and a year of those
+// prints twelve full ISO dates whose day part is noise on every one of them.
+// All-or-nothing on purpose: one label that is not a first-of-month means the
+// axis is really daily and the days carry information, so nothing is rewritten.
+// UTC throughout — '2023-01-01' is UTC midnight, and formatting it in a
+// negative-offset zone would label January as Dec 2022. The app's chart axes,
+// the published page's (as OrdFormat) and the captions all name months here.
+const FIRST_OF_MONTH_RE = /^(\d{4})-(\d{2})-01(?:[T ]00:00(?::00(?:\.000)?)?Z?)?$/;
+
+/** A first-of-month axis as "Jan 2023", else the labels as they are. `locale`: a caption's language; default the workspace's. */
+export function asMonthLabels<T>(labels: T[], locale?: string): Array<T | string> {
+  const parsed = labels.map((l) => (typeof l === 'string' ? FIRST_OF_MONTH_RE.exec(l.trim()) : null));
+  if (parsed.some((m) => !m)) return labels;
+  return parsed.map((m) => new Date(Date.UTC(Number(m![1]), Number(m![2]) - 1, 1))
+    .toLocaleDateString(locale || localeOf(prefs), { month: 'short', year: 'numeric', timeZone: 'UTC' }));
+}
+
+
 const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})/;
 
 /**
@@ -345,4 +366,49 @@ export function formatDateRange(from?: string, to?: string): string {
   if (from) return 'From ' + formatDate(from);
   if (to) return 'Until ' + formatDate(to);
   return '';
+}
+
+// ── A chart's figures as text ───────────────────────────────────────────────
+
+/** A share already in percent (a server figure) as the app writes it — 33.3% — or '' for no figure. */
+export function formatPct(v: unknown): string {
+  return typeof v === 'number' && Number.isFinite(v) ? formatNumber(v, { maxDecimals: 1 }) + '%' : '';
+}
+
+/** A waterfall step's name: the category it came from (`src`, an index into `labels`), or its own (a total). */
+export function stepLabel(step: { src: number; label: string }, labels: readonly unknown[]): string {
+  return step.src >= 0 && step.src < labels.length ? String(labels[step.src] ?? '') : step.label;
+}
+
+/**
+ * What a waterfall, a Pareto, a 100%-stacked chart or a histogram draws, as
+ * lines of text — what a screen reader hears beside the canvas, the same in
+ * the app and on a published page (which loads this file as OrdFormat).
+ * Formatting only: every number is the reply's own `figures` (analysis/chartShapes).
+ * `labels` are as the axis names them; `series` as drawn (`name`, or a published payload's `label`).
+ */
+export function figureLines(chartType: string, labels: unknown[], series: Array<{ name?: string; label?: string; values?: unknown[] }>, f: ChartFigures | undefined): string[] {
+  if (!f) return [];
+  const n = (v: unknown): string => (typeof v === 'number' ? formatCompact(v) : '—');
+  const pct = (v: unknown): string => formatPct(v) || '—';
+  const at = (i: number): string => String(labels[i] ?? '');
+  if (chartType === 'waterfall' && f.waterfall) {
+    return f.waterfall.steps.map((s) => {
+      const label = stepLabel(s, labels);
+      return s.kind === 'up' || s.kind === 'down' ? `${label}: ${s.value > 0 ? '+' : ''}${n(s.value)} → ${n(s.end)}` : `${label}: ${n(s.end)}`;
+    });
+  }
+  if (chartType === 'pareto' && f.pareto) {
+    const p = f.pareto;
+    const vals = (series[0] && series[0].values) || [];
+    return p.order.map((i, k) => `${at(i)}: ${n(vals[i])} · ${pct(p.cumPct[k])} cumulative`);
+  }
+  if (/^pct_stacked_/.test(chartType) && f.sharePct) {
+    const shares = f.sharePct;
+    return labels.map((_, j) => `${at(j)}: ${series.map((s, i) => `${s.name ?? s.label ?? ''} ${pct(shares[i] && shares[i][j])}`).join(', ')}`);
+  }
+  if (chartType === 'histogram' && f.histogram) {
+    return (f.histogram[0] || []).map((b) => `${b.from === b.to ? n(b.from) : `${n(b.from)}–${n(b.to)}`}: ${b.count}`);
+  }
+  return [];
 }

@@ -2,6 +2,7 @@
 // chartRender.ts (ChartSeriesShape, ChartDataShape, ChartCtx) and calcMenu.ts
 // (TcCalc); the pipeline they describe is build.ts.
 
+import type { ChartFigures } from '../../../src/analysis/chartShapes.ts';
 import type { ChartTypeSpec } from './typeSpec';
 
 /**
@@ -43,6 +44,12 @@ export interface ChartDataShape {
   analytics?: Cx[];
   /** Project events placed on the label axis by the server (analysis/events.ts). */
   events?: Cx[];
+  /**
+   * What the chart draws beyond `{labels, series}` — a waterfall's levels, a Pareto's order and
+   * cumulative share, shares, bins, percentages, calendar days — computed by the SERVER
+   * (src/analysis/chartShapes.ts) for the type the request named. Never worked out here.
+   */
+  figures?: ChartFigures;
 }
 
 /**
@@ -75,4 +82,6 @@ export interface ChartCtx extends ChartTypeSpec {
   showLegend: boolean;
   showGridlines: boolean;
   tickFont: { family: string; size: number };
+  /** The reply's figures, in the drawn category order (ChartDataShape.figures). */
+  figures: ChartFigures;
 }

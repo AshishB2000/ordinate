@@ -8,7 +8,8 @@
 
 import { makeBarGradient } from './paint';
 import { getCSSVar, interpolatePalette } from './palette';
-import { bulletShape, calendarBands, calendarCells, paretoShape, radarShape, waterfallSteps } from './shapes';
+import * as OrdFormat from '../../../src/app/format.ts';
+import { bulletShape, calendarBands, calendarCells, paretoFromFigures, radarShape, waterfallFromFigures } from './shapes';
 import { t } from './strings';
 import type { ChartTypeSpec } from './typeSpec';
 import type { ChartCtx, Cx } from './types';
@@ -42,7 +43,7 @@ export function buildExtraDatasets(c: ChartCtx): { datasets: Cx[]; chartLabels: 
   const { canvas, labels, series, opts, overrides, palette, gridColor, surfColor } = c;
 
   if (c.isWaterfall) {
-    const w = waterfallSteps(labels, series, overrides.waterfallTotals);
+    const w = waterfallFromFigures(c.figures.waterfall!, labels);
     const up = getCSSVar('--ok', canvas) || '#16a34a';
     const down = getCSSVar('--error', canvas) || '#dc2626';
     const colors = w.kind.map((k) => (k === 'up' ? up : k === 'down' ? down : palette[0]));
@@ -61,7 +62,7 @@ export function buildExtraDatasets(c: ChartCtx): { datasets: Cx[]; chartLabels: 
   }
 
   if (c.isPareto) {
-    const p = paretoShape(labels, series[0].values);
+    const p = paretoFromFigures(c.figures.pareto!, labels, series[0].values);
     opts._pareto = p;
     opts._paretoLine = palette[1] || palette[0];
     return {
@@ -104,7 +105,7 @@ export function buildExtraDatasets(c: ChartCtx): { datasets: Cx[]; chartLabels: 
   }
 
   if (c.isCalendar) {
-    const cal = calendarCells(labels, series[0].values);
+    const cal = calendarCells(c.figures.calendar!);
     if (!cal) return null;
     // Band the strip for the box it will fill. The size is the container's as
     // laid out NOW (Chart.js sizes to the same parent); unknown (0) means one
@@ -235,15 +236,18 @@ export function applyExtraTooltip(c: ChartCtx, tv: Cx): void {
     cb.labelColor = (item: Cx) => swatch(opts._wfColors[item.dataIndex]);
   } else if (c.isPareto) {
     cb.label = (item: Cx) => (item.datasetIndex === 1
-      ? t('chartFamiliesExtra.cumulative_2', { p0: Number(item.raw).toFixed(1) })
+      ? t('chartFamiliesExtra.cumulative_2', { p0: OrdFormat.formatNumber(item.raw, { decimals: 1 }) })
       : (item.dataset.label ? item.dataset.label + ': ' : '') + fmt(item.raw));
     cb.labelColor = (item: Cx) => swatch(item.datasetIndex === 1 ? opts._paretoLine : palette[0]);
   } else if (c.isBullet) {
+    // A row's share of its target is the server's (figures.bullet); without it, the two figures alone.
+    const ofTarget = c.figures.bullet ? c.figures.bullet.ofTargetPct : [];
     cb.label = (item: Cx) => {
       const r = opts._bullet.rows[item.dataIndex];
       if (!r || r.value === null) return 'n/a';
       if (r.target === null) return fmt(r.value);
-      const pct = r.target ? ` (${Math.round((r.value / r.target) * 100)}%)` : '';
+      const p = ofTarget[item.dataIndex];
+      const pct = p != null ? ` (${OrdFormat.formatNumber(p, { decimals: 0 })}%)` : '';
       return t('chartFamiliesExtra.of_target', { value: fmt(r.value), target: fmt(r.target), pct });
     };
   } else if (c.isCalendar) {

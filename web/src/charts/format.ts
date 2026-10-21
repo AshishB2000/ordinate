@@ -1,10 +1,10 @@
 // How a chart prints a figure — the app's ONE formatter (src/app/format.ts,
 // which has no runtime imports, so the browser imports the server's file and
 // both halves format alike) under the names the chart code has always called:
-// hub.ts's `_fmtVal` / `fmtWith` / `histogramBins`, and calcMenu.ts's table
-// calculation display (`tcAxisFmt`, `tcTooltip`). Nothing here computes a
-// figure the server did not: a histogram bins the values it was sent, and a
-// calculated series is only labelled.
+// hub.ts's `_fmtVal` / `fmtWith`, a share the server sent (`pctText`), and
+// calcMenu.ts's table calculation display (`tcAxisFmt`, `tcTooltip`). Nothing
+// here computes a figure the server did not: a histogram's bins are the
+// server's (src/analysis/chartShapes.ts), and a calculated series is only labelled.
 
 import * as OrdFormat from '../../../src/app/format.ts';
 import { t } from './strings';
@@ -21,23 +21,12 @@ export function fmtWith(v: Cx, mode: string): string {
   return OrdFormat.formatValue(v, mode);
 }
 
-// Bin numeric values into ~sqrt(n) equal-width buckets for a histogram.
-// Returns { labels: ["lo–hi", …], counts: [n, …] }. Empty/degenerate inputs are safe.
-export function histogramBins(values: number[]): { labels: string[]; counts: number[] } {
-  if (!values.length) return { labels: [], counts: [] };
-  const min = Math.min(...values), max = Math.max(...values);
-  if (min === max) return { labels: [fmtVal(min)], counts: [values.length] };
-  const k = Math.min(12, Math.max(5, Math.ceil(Math.sqrt(values.length))));
-  const width = (max - min) / k;
-  const counts: number[] = new Array(k).fill(0);
-  values.forEach((v) => {
-    let idx = Math.floor((v - min) / width);
-    if (idx >= k) idx = k - 1;        // max value lands in the last bin
-    if (idx < 0) idx = 0;
-    counts[idx]!++;
-  });
-  const labels = counts.map((_, i) => `${fmtVal(min + i * width)}–${fmtVal(min + (i + 1) * width)}`);
-  return { labels, counts };
+/** A share already in percent (the server's figures) as the formatter writes it: 33.3%. Nothing for no figure. */
+export const pctText: (v: Cx) => string = OrdFormat.formatPct;
+
+/** A histogram bin's label from the server's edges: "1.2K–2.4K", or the one value every number shared. */
+export function binLabel(b: { from: number; to: number }): string {
+  return b.from === b.to ? fmtVal(b.from) : `${fmtVal(b.from)}–${fmtVal(b.to)}`;
 }
 
 // ── Table calculations: display only (calcMenu.ts) ─────────────────────────

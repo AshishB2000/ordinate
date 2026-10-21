@@ -343,6 +343,8 @@
   "pivotRender.pick_a_row_dimension_and_at": "Elige una dimensión de fila y al menos un valor para crear una tabla dinámica.",
   "pivotRender.showing_the_first_row_groups_and": "Mostrando los primeros {p0} grupos de filas y {p1} grupos de columnas: acota la tabla dinámica con un filtro o con N principales para ver el resto.",
   "pivotRender.sort_by": "Ordenar por {p0}{p1}",
+  "publishMessages.maximum_of": "Máximo de {column}",
+  "publishMessages.minimum_of": "Mínimo de {column}",
   "rebuildMessages.a_date_range_needs_a_date": "Un rango de fechas necesita una columna de fecha, pero «{column}» es {type}.",
   "rebuildMessages.needs_a_number_column_but_is": "{aggregation} necesita una columna numérica, pero «{column}» es {type}.",
   "rebuildMessages.no_column_like_in_this_dataset": "Ninguna columna se parece a «{said}» en este conjunto de datos. Elija una.",

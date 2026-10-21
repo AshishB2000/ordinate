@@ -25,7 +25,7 @@ import { CHART_PALETTE, choroplethColor, flowWidth, isDarkHex } from './colors';
 import { drawMap, type MapTheme, type Overlay } from './draw';
 import { choroplethLayer, valueLabelKeys } from './features';
 import { buildPeriodGeo, geoBBox, abbrevFor, withCentroids } from './geometry';
-import { axisOf, detectLatLon, gridCluster } from './geoCluster';
+import { axisOf, detectLatLon, gridCluster, type Cluster } from './geoCluster';
 import { featureNameSet, matchGeoItem, normalizeName } from './geoMatch';
 import { geoChartTypeFor, geoMapFits, geoNeedsText, isMapChartType, withGeoChartType } from './mapKinds';
 import type { MapLibre, MlMap } from './maplibre';
@@ -204,8 +204,10 @@ describe('pure helpers equal the desktop', () => {
     const lc = SC as { detectLatLon: typeof detectLatLon; gridCluster: typeof gridCluster };
     agree(detectLatLon(fixture.columns, sampler), lc.detectLatLon(fixture.columns, sampler));
     const pts = pointData().geo!.items as Array<{ lat: number; lng: number; value: number }>;
-    for (let z = 0; z <= 12; z++) agree(gridCluster(pts, z), lc.gridCluster(pts, z));
-    agree(gridCluster(pts.slice(0, 500), 4), lc.gridCluster(pts.slice(0, 500), 4)); // below the threshold: no clustering
+    // The port leaves out the desktop's `sum` of the values under a marker: never drawn, and a sum the server never made.
+    const recorded = (cs: Cluster[]) => cs.map(({ sum: _sum, ...c }: Cluster & { sum?: number }) => c);
+    for (let z = 0; z <= 12; z++) agree(gridCluster(pts, z), recorded(lc.gridCluster(pts, z)));
+    agree(gridCluster(pts.slice(0, 500), 4), recorded(lc.gridCluster(pts.slice(0, 500), 4))); // below the threshold: no clustering
   });
 
   it('mapKinds, in the desktop English', () => {
