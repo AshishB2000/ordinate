@@ -132,7 +132,8 @@ The rest of the send path:
 3. **Per-user alert inbox.** `src/server/alertInbox.ts`: `seenView(projectId, events)` (the caller's
    predicate, or the shared flag with no database / no row) and `markSeenFor(projectId, eventId?)`.
    `alerts:list` and `alerts:markSeen` use it (store `markSeen` stays for no database); `alerts:markSeen`
-   → `access: 'read'`; `ipc/summary.ts` `alertFact` filters with `seenView`. `alertStore` stamps each
+   → `access: 'read'`; `ipc/summary.ts` `alertFact` takes the caller's `seenView` on the card's own
+   compute and rewrite, and the caller-free rule of §5.14 everywhere outbound. `alertStore` stamps each
    newly stored event's `at` strictly after the newest stored one (§5.2), in `evaluateProject`'s apply
    and `recordEvents`. `scripts/test-alertInbox.ts`; `test-dashboardsServer.ts:352` → `read`.
 4. **AlertsBell.** Mark seen / Mark all seen for every reader; Snooze stays behind `canEdit` as
@@ -144,7 +145,7 @@ The rest of the send path:
    `deliverFired` (same signature and return, so `test-alertChannels`/`test-email-db` stand).
    `evaluateAndDeliver` awaits `deliverFired(…).pushed` and never awaits the posts (as the tick).
    `qualityRun.ts:110-112` feature-detects `pushAlertEvents`; `pipelineRunner.ts:139` calls it.
-   `alertPosts.ts`: claim the batch's postable event ids in `alert_posts` before posting (§5.3).
+   `alertPosts.ts`: claim each postable event in `alert_posts` right before its own post (§5.3).
    `scripts/test-alertDelivery.ts`.
 6. **Subscriptions refuse first.** `runSubscription`, after the slot fence and before `attempt`:
    `dashboardSendRefusal` → a `skipped` / `row_policy` entry, nothing computed; any other error from it
@@ -155,14 +156,17 @@ The rest of the send path:
    `personName(email)`. `src/app/threadPath.ts` (pure): the route that opens a thread (moved from
    `RecentComments.threadHref`, which then imports it). `src/server/mentions/people.ts`:
    `currentReaders(projectId)` (= `readerEmails`, null without a database), `peopleFor(projectId,
-   bodies)` (email → name for current readers only). `ipc/comments.ts`: add / reply / edit validate
-   new mentions before writing; `answer` adds `mentions: boolean` and `people`. `app/comments.ts`
-   `add`/`reply` take an optional id (so the caller knows the new piece). Names replace tokens in
+   bodies)` (email → name for current readers only). `ipc/comments.ts` reads the readers BEFORE the
+   write and hands `app/comments.ts` a synchronous gate that runs INSIDE `mutate`'s locked change,
+   on the stored previous body and the cleaned new one (§5.5); the store returns `{ piece,
+   newMentions }`. `answer` adds `mentions: boolean` and `people`. Names replace tokens in
    `ipc/recent.ts`'s snippet and `ipc/reportsServer.ts`'s discussion bodies. `comment:mentionable`
    contract + handler (`src/server/mentions/rpc.ts`). Sentences in
    `src/server/mentions/mentionMessages.ts` (added to `MAIN_FILES`).
 8. **Mention notices.** `src/server/mentions/store.ts` (rows, the setting, the list, seen) and
-   `notify.ts` `notifyMentions(projectId, piece, emails)`: fresh reader check → row → push → email.
+   `notify.ts` `notifyMentions(projectId, piece, emails)`, started with `void` after the write (never
+   delays or fails it; `mentionsSettled()` for tests): fresh reader check → row INSERT (the gate) →
+   push and email, each failing on its own.
    Email goes through `deliver()` as `Delivery {kind: 'mention'}` to a one-person email channel
    (§5.6); `budget.ts` kind union gains `'mention'`; `subscriptionEmail` takes an optional reason
    line. Contracts `mentions:list`, `mentions:seen`, `mentions:prefs`, `mentions:setPrefs` in a new
@@ -209,19 +213,23 @@ CREATE TABLE alert_inbox (
 -- Each fired alert event goes to its rule's channels at most once, whichever
 -- path delivered it (the tick, a refresh, a refresh URL, MCP, a pipeline step)
 -- and on whichever pod (src/server/subscriptions/alertPosts.ts). The INSERT is
--- the claim; rows older than 30 days are deleted by the next claim in the org.
+-- the claim, made right before that event's own post; rows older than 30 days
+-- are deleted by the next claim in the org.
 CREATE TABLE alert_posts (
   org_id     text        NOT NULL,
+  project_id uuid        NOT NULL,
   event_id   uuid        NOT NULL,
   claimed_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (org_id, event_id)
+  PRIMARY KEY (org_id, project_id, event_id)
 );
 CREATE INDEX alert_posts_age ON alert_posts (org_id, claimed_at);
 
 -- A member named in a comment or a reply: Home's "Mentioned you". No text is
 -- copied here: Home reads the comment as it is now, so an edit or a delete is
 -- never shown stale, and a member who lost access to the project sees nothing
--- of it. At most 200 rows per member (src/server/mentions/store.ts).
+-- of it. The INSERT … ON CONFLICT DO NOTHING is also the gate: a push and an
+-- email go out only when it inserted, so removing and re-adding a mention never
+-- notifies twice. At most 200 rows per member (src/server/mentions/store.ts).
 CREATE TABLE mentions (
   org_id     text        NOT NULL,
   user_email text        NOT NULL,   -- who was mentioned
@@ -231,7 +239,7 @@ CREATE TABLE mentions (
   author     text        NOT NULL,   -- who wrote it: an email, as comments.json keeps authors
   created_at timestamptz NOT NULL DEFAULT now(),
   seen_at    timestamptz,
-  PRIMARY KEY (org_id, user_email, piece_id)
+  PRIMARY KEY (org_id, user_email, project_id, piece_id)   -- ids repeat across projects after a bundle import
 );
 CREATE INDEX mentions_inbox ON mentions (org_id, user_email, created_at DESC);
 
@@ -269,35 +277,39 @@ module `src/app/mentionToken.ts` owns it, and both halves import it (the web alr
 `src/` modules, e.g. `src/app/format.ts`), so there is one parser, not two:
 
 ```
-MENTION_RE = /@\(([^\s()<>\[\]@]{1,64}@[^\s()<>\[\]@]{1,190})\)/g     (case kept; compared lower-cased)
+MENTION_RE = /(?<!\\)@\(([^\s()<>\[\]@\\]{1,64}@[^\s()<>\[\]@\\]{1,190})\)/g
+normalize(address) = address.toLowerCase()   — the ONE normaliser; mentionsIn returns normalised, unique, in order
 ```
+
+`\@(…)` is an escaped, literal `@(…)`: not a mention on either side, shown without the backslash.
 
 **Why it can never be a link or HTML.**
 
 - An address cannot contain `(`, `)`, `<`, `>`, `[`, `]` or whitespace (`mailEnv.ts`'s `LOCAL`/`LABEL`
   exclude them), and the regex refuses them inside the token. So the token holds no `[…](…)` link
   shape, no `<…>` autolink or tag, and nothing that ends early.
-- The web renderer never hands the address to the Markdown parser at all. `CommentBody` first
-  replaces every match with an inert placeholder token, `{{<n>}}` (a private-use character no
-  one types; any U+E000 already in the body is stripped first so a body cannot forge one), and only
-  then calls `mdParse`. `mdParse`'s `{{…}}` rule is atomic and the placeholder contains none of `*`,
-  `_`, `` ` ``, `[`, `\`, so an underscore in `first_last@acme.com` can never pair with another `_`
-  and turn half a mention into italics (the bug a raw `@{first_last@…}` would have). The token resolver
-  returns a React node — the chip — never markup; `mdParse` itself is untouched, so its golden
-  fixtures stand.
-- Inside a code span or a fenced block the placeholder is mapped back to the plain words "@Ann Lee" /
-  "@former member" (a walk over the parsed tree's `code`/`pre` values), never the address.
+- The web renderer never hands the address to the Markdown parser at all. `CommentBody` first strips
+  U+E000/U+E001 from the body (so a body cannot forge a placeholder), replaces every match with
+  U+E000 + `<n>` + U+E001 — private-use characters and digits, none of which `mdParse` treats as
+  markup or can escape — and only then calls `mdParse`. An underscore in `first_last@acme.com`
+  therefore never pairs with another `_` (the bug a raw address in the text would have), and nothing
+  depends on the `{{…}}` rule. `mdParse` is untouched, so its golden fixtures stand.
+- ONE walk over the parsed tree maps placeholders back: in `code` and `pre` values and in a link's
+  text they become the plain words "@Ann Lee" / "@former member"; in ordinary text they become the
+  chip, a React node through `MarkdownBlocks`' text hook — never markup, never the address.
 - Server text (an email, Home's snippet, a report's discussion page, the toast) goes through
   `withMentionLabels(body, label)` — plain-string replacement, then the existing escaping of each
-  surface (`renderEmail` escapes, React sets text).
+  surface (`renderEmail` escapes, React sets text). The one snippet function (`commentSnippet(body,
+  label, max)`: Home 200, email 1 000) applies the labels BEFORE it cuts, so a token straddling the cut
+  can never leave half an address.
 
 **Round trip.** The picker only offers addresses that `MENTION_RE` matches whole (an address the
 users table holds but the token cannot carry is simply not offered), and inserts `@(address) `.
 
-Tests: Vitest `CommentBody.test.tsx` (chip, no `<a>`, no element from `<script>`-shaped text, the
-underscore case, bold around a mention, a mention in a code span, a forged ``), and the server
-half in `test-mentions.ts` (`mentionsIn` on the same table of bodies — the two halves share the module,
-so this is one implementation exercised twice).
+Tests: Vitest `CommentBody.test.tsx` — one case each for the chip, no `<a>` from a mention, no element
+from `<script>`-shaped text, the underscore case, bold around a mention, a mention in a code span, a
+mention in link text (plain "@Name"), a forged U+E000, `\@(…)`, and upper-case addresses — and the
+server half in `test-mentions.ts` over the same bodies (one module, exercised from both sides).
 
 ### 5.2 The alert watermark is exact
 
@@ -311,7 +323,9 @@ it**, strictly after the newest stored one — `after(newest, now)`, the same on
 (`commentModel.ts:245`) — inside `withAlerts` (the cross-pod record lock), in `evaluateProject`'s apply
 and in `recordEvents`. Stored order is then `at` order on every pod, whatever the clocks, and an event
 stored after a Mark all seen is always unseen. The cost: `at` moves from "evaluation started" to
-"stored", seconds apart.
+"stored", seconds apart. Pinned by tests: `evaluateProject` returns the stamped copies (what it
+stored is what it delivers); a `recordEvents` batch is stamped in descending order (its first element,
+newest first like the file, gets the latest time); `rule.lastFiredAt` keeps the evaluation-start time.
 
 Single marks: the upsert unions the id into `seen_ids` and prunes it to the ids still in the file (≤ 200,
 the CHECK holds). A first write (no row) inserts the ids the shared flag already marks seen plus the new
@@ -327,12 +341,14 @@ rather than of every caller: `postFiredAlerts` first picks the events whose rule
 claims their ids in one statement,
 
 ```sql
-INSERT INTO alert_posts (org_id, event_id) SELECT $1, unnest($2::uuid[])
-ON CONFLICT DO NOTHING RETURNING event_id::text
+INSERT INTO alert_posts (org_id, project_id, event_id) VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING RETURNING event_id
 ```
 
 (in `inOrg`, with `DELETE FROM alert_posts WHERE org_id = $1 AND claimed_at < now() - interval '30
-days'` first), and posts only what it claimed. It lives in Postgres because that is the one store every
+days'` first). The claim is made **per event, right before that event's own post**, so a slow first
+post never holds a claim on the rest of the batch. A claim that errors (database down) posts nothing for
+that event and writes its `alerts:post` audit row with outcome `error`. It lives in Postgres because that is the one store every
 pod shares and the INSERT is atomic; the alerts record would need a second locked write per firing and a
 new field in the event schema. Claim-before-post means **at most once**: a pod that dies between the
 claim and the post loses that post — the same promise as today ("a post that fails is logged and
@@ -351,6 +367,11 @@ detached. A call with **no** context would throw inside `postFiredAlerts`' catch
 `test-alertDelivery` drives **every** path end to end and asserts exactly one post per path — the guard
 that a future path without a context is caught.
 
+The comment write never waits for a mention: `void notifyMentions(…)` runs after the write, in the
+request's context; it never throws, and its push and email fail independently. The row INSERT is the
+gate: if it errors, nothing is sent for that piece, because a repeat must never re-notify.
+`mentionsSettled()` lets a test wait for it.
+
 Delivery shape: the request paths **await the push** (as today, so the bell is right when the refresh
 answers) and **never await the posts** (as the tick: a slow Slack must not hold up a refresh reply). The
 test waits on `alertPosts.postsSettled()`, a set of in-flight posts the module keeps for that purpose.
@@ -359,11 +380,15 @@ test waits on `alertPosts.postsSettled()`, a set of in-flight posts the module k
 
 Three checks, each fresh, each with `readerEmails`' predicate:
 
-1. **On write** (add / reply / edit): every NEW mention must be in `readerEmails(org, project)`, else the
-   whole write is refused before anything is stored. On edit, "new" means not in the body being
-   replaced; a mention kept from the previous version is not re-checked (refusing it would make a
-   comment uneditable once someone leaves, and a kept mention notifies no one). The body being replaced
-   is read just before the write; only the author can edit, so the window is the author's own.
+1. **On write** (add / reply / edit): the handler reads `readerEmails(org, project)` first, then hands
+   the store a synchronous gate that runs **inside** `mutate`'s locked change, against the body as it
+   will be stored (`cleanBody` cuts at `BODY_MAX` 5 000 although the contract admits 10 000) and the
+   stored previous body (edit). The gate refuses the write when the piece holds more than **10**
+   distinct mentions, or when a NEW mention (one not in the previous body) is not a current reader; it
+   returns the new mentions minus the author, and the store returns them with the piece. A mention kept
+   from the previous version is not re-checked (refusing it would make a comment uneditable once
+   someone leaves, and a kept mention notifies no one). **Without a database** there are no readers:
+   any NEW mention is refused, a kept one is allowed, so an imported comment stays editable.
 2. **At send** (`notifyMentions`): `readerEmails` is run **again**, after the write, and only the
    mentioned addresses still in it get a row, a push or an email. `notifyMentions` is exported so the
    test can revoke a grant between the write and the send.
@@ -423,12 +448,15 @@ from ids; it never follows a URL from a push.
 ### 5.10 Home's "Mentioned you"
 
 - **Data:** `mentions:list` (org-scoped, `read`; one RPC on Home, inside the 25 budget) returns
-  `{ available, items }`. The handler reads the caller's 20 newest rows (unseen first, then newest),
-  keeps only projects `readable()` says the caller may read **now**, reads each project's comments once,
+  `{ available, items }`. The handler filters to the projects the caller may read **now** in SQL
+  (`readable`'s predicate: an org admin reads all; otherwise a direct or team grant), unseen first then
+  newest, fetches 60 rows so deleted pieces cannot starve the list, keeps the first 20 that survive,
+  reads each project's comments once,
   drops a row whose comment, reply or mention is gone (edited out, deleted), and returns per item: piece
   id, project id, target, `on` (name + analysisId, from `targetNames`), `by` (author's name), a snippet
   (the existing Recent-comments snippet rule, extracted to one function, with mentions as names), `at`,
-  `seen`. `available: false` without a database. `mentions:seen {id?}` marks the caller's own rows.
+  `seen`. `available: false` without a database. `mentions:seen {projectId?, id?}` marks the caller's
+  own row (both given) or all of them (neither).
 - **Placement:** above "Recent comments" in Home's single column, in the same card style
   (`Comments.module.css` home classes). Header "Mentioned you" with "N new", and **Mark all seen** while
   any is unseen. Up to 8 cards; an unseen one has an accent dot and bold author. A card reads "**Ann
@@ -445,7 +473,9 @@ from ids; it never follows a URL from a push.
 "Reply" / "Edit comment" by label still does), following `QueryEditor.tsx`'s completion pattern:
 `role="combobox"`, `aria-expanded`, `aria-controls`, `aria-activedescendant`, a `listbox` of `option`s
 (name + address), ArrowUp/ArrowDown wrap, Enter/Tab insert `@(address) ` at the `@` (caret placed with
-`useCaret`), Esc closes, click outside or blur closes. It opens on `@` at a word start, queries
+`useCaret`), Esc closes, click outside or blur closes. The server filters first and cuts last: match
+`q` against address and name, drop the caller, drop any address the token cannot carry, THEN keep 8.
+It opens on `@` at a word start, queries
 `comment:mentionable` with what follows (debounced 150 ms, `keepPreviousData`), and shows "Searching…",
 "No one who can read this project matches “q”" and "Could not search people" rows. **Trap:** Radix
 catches Escape on the document in the capture phase, before the textarea, so the picker adds a
@@ -462,6 +492,24 @@ on Home and as a notice." Loading → a skeleton row; error → `ErrorState comp
 → the group is not shown. `mentions:prefs` → `{ available, mail, emailMe }`; `mentions:setPrefs
 { emailMe }` (org-scoped `read`: one's own setting, like `starred:set`).
 
+### 5.14 The Summary card's alert sentence, inside and outbound
+
+`computeSummary` feeds the card in the app (`summary:compute`, `summary:rewrite`) and also leaves the
+app: published and embedded pages (`publish/dashboardData.ts:564`), reports (`reportsServer.ts:95`, which
+calls `summary:compute` with `outbound: true`) and re-publish after a refresh (`publish/hosted.ts:316-324`,
+run as a member, `jobs@system` or a hook creator). A per-person inbox must not decide what a page shows
+everyone. So `SummaryScope` gains `seen?: (e) => boolean`:
+
+- **The card in the app** (`summary:compute` without `outbound`, and `summary:rewrite`): the caller's
+  `seenView` — the latest alert *you* have not seen.
+- **Everywhere else** (no `seen`): a rule that reads no one's state — the latest alert on the sheet's
+  datasets that fired **on the data as it is now**: `e.at >= lastRefreshedAt` of its dataset (read from
+  the dataset's metadata). A refresh that fires nothing retires it. A dataset never refreshed (a Live
+  one) contributes no alert sentence outbound. The as-of cutoff applies as before.
+
+Test: two members with different inbox states publish the same dashboard and get identical Summary
+payloads (control: their in-app cards differ).
+
 ### 5.13 Contracts added or changed
 
 | Channel | Contract |
@@ -469,11 +517,12 @@ on Home and as a notice." Loading → a skeleton row; error → `ErrorState comp
 | `alerts:markSeen` | `access: 'read'` (was `write`); input unchanged |
 | `comment:mentionable` | `read`, `project: byProjectId`, `{ projectId: Uuid, q: string ≤ 100 }` |
 | `mentions:list` | `read`, `org: true`, `z.undefined()` |
-| `mentions:seen` | `read`, `org: true`, `{ id?: Uuid }` |
+| `mentions:seen` | `read`, `org: true`, `{ projectId?: Uuid, id?: Uuid }` (both or neither) |
 | `mentions:prefs` | `read`, `org: true`, `z.undefined()` |
 | `mentions:setPrefs` | `read`, `org: true`, `{ emailMe: boolean }` |
 
-`comment:list`'s reply gains `mentions: boolean` and `people: Record<email, name>`.
+`comment:list`'s reply gains `mentions: boolean` and `people: Record<email, name>`. Every new or changed
+`read` contract is classified in `scripts/rowPolicyReaders.ts` (all `META`: none reads a row).
 
 ## 6. Test plan (one-to-one with the spec's Tests)
 
@@ -485,10 +534,12 @@ on Home and as a notice." Loading → a skeleton row; error → `ErrorState comp
 | a user with no row inherits the shared flag | same | events shared-seen before → seen; a first single mark keeps them seen; **control:** a shared-unseen event stays unseen |
 | *(missed caller)* summary card | same | `summary:compute`'s alert sentence follows the caller's seen state (**control:** another member still sees it) |
 | *(RLS)* | same | a row written under org A is invisible to a query under org B; with `ordinate.org` unset, no rows |
-| each listed path posts once to Slack and to the fake SMTP | `scripts/test-alertDelivery.ts` (-db: channel secrets need the store) | for each of `dataset:refresh`, `connection:refresh`, `input:save`, `input:setColumns`, `snapshots:restore`, fresh on ask, a refresh URL, the MCP refresh tool, a pipeline alert node, the tick: exactly one Slack post and one email (`smtpFake`), and one `alerts:post` audit row |
+| each listed path posts once to Slack and to the fake SMTP | `scripts/test-alertDelivery.ts` (-db: channel secrets need the store) | for each of `dataset:refresh`, `input:save`, `snapshots:restore`, fresh on ask (through a real `dashboard:metric` ask), a refresh URL (a real HTTP POST), the MCP refresh tool, a pipeline alert node, the tick: exactly one Slack post and one email (`smtpFake`), and one `alerts:post` audit row whose **actor** proves the context it ran in (the member, `jobs@system`, the hook creator, the token's user). No path is wrapped in a test-side context except the tick, which the job runner wraps. (`connection:refresh` and `input:setColumns` share `refreshNow` / `afterRefresh` with paths above.) |
 | NEGATIVE CONTROL: a rule with no channels posts nothing | same | same paths, zero posts |
 | a breach seen by both the tick and a refresh posts once | same | `tickNow` and `dataset:refresh` together on one breach → one post |
-| *(dedup ledger)* | same | `postFiredAlerts` twice with the same event → one post (**control:** two event ids → two) |
+| *(dedup ledger)* | same | `postFiredAlerts` twice with the same event → one post (**control:** two event ids → two); a claim that errors (pool closed) → no post and an `alerts:post` audit row with outcome `error` |
+| *(re-stamped `at`)* | `scripts/test-alertInbox.ts` | `evaluateProject` returns the stamped copies; a `recordEvents` batch is stamped in descending order; `rule.lastFiredAt` keeps the evaluation-start time |
+| *(outbound Summary, §5.14)* | `scripts/test-alertInbox.ts` | two members with different inbox states: identical outbound `computeSummary` (**control:** their in-app sentences differ) |
 | *(push-only kinds)* | same | a quality event and a pipeline failure push `alerts:fired` and post nothing; quality events are still recorded after the rename (**control:** sink resolves) |
 | Subscriptions: a policy dashboard is skipped, `resolveFigures` never called | `scripts/test-rowPolicyFanOut.ts` | spy on `ipc/subscriptionFigures.resolveFigures`: 0 calls; history entry `skipped`/`row_policy`; no post. **Control:** a plain dashboard computes (spy called) and sends |
 | the picker returns only current readers | `scripts/test-mentions.ts` (-db, header sign-in, `smtpFake`) | a team member and an org admin appear; a member without a grant, a disabled member and another org's member never do |
@@ -501,13 +552,20 @@ on Home and as a notice." Loading → a skeleton row; error → `ErrorState comp
 | a reader who loses access before the send gets nothing | same | write, revoke B's grant, then `notifyMentions` → nothing for B (**control:** C, still a reader, gets all three) |
 | *(names never leak)* | same | `comment:list` `people` holds current readers only; a former member's address appears in no name; Home snippet, report discussion page and email say "@Ann Lee" / "@former member", never the address |
 | *(audit)* | same | one `comment:mention` row per recipient, target ids = comment, piece, recipient |
+| *(M1: a mention never delays a comment)* | same | SMTP down, and SMTP stalling: `comment:add` answers ok promptly, stores the comment once, still writes the row and sends the push |
+| *(M3: what is stored decides)* | same | a 6 000-character body with a mention at 5 500 notifies nobody (the store keeps 5 000) |
+| *(M4: the flood)* | same | 11 distinct mentions in one piece are refused (**control:** 10 pass); removing and re-adding a mention sends nothing |
+| *(snippet)* | same | a token straddling the 200-character cut reads "@Ann Lee", never half an address |
+| *(picker, filter then cut)* | same | the caller sorts first and is still not returned, and 8 others are |
+| *(ids repeat across projects)* | same | the same piece id in two projects: two rows; `mentions:seen {projectId, id}` marks one |
+| *(RLS, as an ordinary role)* | `test-mentions.ts` (`mentions`), `test-alertInbox.ts` (`alert_inbox`, `alert_posts`) | a non-superuser role: no rows without the setting; another org's rows invisible; a write for another org refused (WITH CHECK); the stores' own statements pass |
 | *(no database)* | same file, run without `DATABASE_URL` | `comment:list` says `mentions: false`; a body with a token is refused; `alerts:markSeen` uses the shared flag |
 | Vitest: viewers see Mark seen, only editors see Snooze | `AlertsBell.test.tsx` | viewer: Mark seen + Mark all seen, no "Snooze for everyone · 24 h"; editor: all three |
 | Vitest: the picker's keyboard behaviour | `MentionInput.test.tsx` | ↑/↓ wrap, Enter and Tab insert `@(addr) `, Esc closes the list and **not** the drawer (control: a second Esc closes the drawer); never opens when mentions are off |
 | Vitest: the chip and "@former member" | `CommentBody.test.tsx` | §5.1's table |
 | *(Home and Settings)* | `MentionedYou.test.tsx`, `settings.test.tsx` | loading, error (Retry), empty, unseen first, Mark all seen, hidden when unavailable; the switch and its disabled state |
 | e2e: A mentions B on a dashboard; B's tab toasts and B's Home lists it | `web/e2e/notifications.e2e.ts` (header sign-in, scratch Postgres; skips without `DATABASE_URL`) | B's page open on Home; A picks B in the dashboard's comments and posts; B sees "… mentioned you on …" with Open, and the "Mentioned you" card; Open lands on the thread; ≤ 25 RPCs per load; light + dark screenshots of the picker, B's toast and B's Home |
-| Must stay green | — | alerts, alertChannels, email(-db), smtp, comments, subscriptions suites, `test-rowPolicySafetyNet`, the dashboards e2e; `test-dashboardsServer` with `alerts:markSeen` now `read` |
+| Must stay green | — | alerts, alertChannels, email(-db), smtp, comments, subscriptions suites, `test-rowPolicySafetyNet` (new `read` contracts classified), the dashboards e2e; `test-dashboardsServer` with `alerts:markSeen` now `read` |
 
 ## 7. Risks and traps
 
@@ -516,8 +574,12 @@ on Home and as a notice." Loading → a skeleton row; error → `ErrorState comp
   (list, seen) and `users.mention_email`. `mentions:seen {id}` matches `user_email` too, so another
   member's piece id changes nothing.
 - The push target is `{org, user}`; `sse.ts` delivers only to streams bound to that org and email.
-- The picker discloses a project's readers to its readers — inherent to the feature, and no wider than
-  "Who has access", which every reader already sees.
+- The picker shows every reader of the project the addresses of the project's readers, **including
+  org admins and the members of granted teams**. "Who has access" (`project:access`) lists direct
+  grants and team names only, so this is a real widening, and the spec requires it. It is written
+  into the new threat-model row as it is.
+- **Logging:** no `console.*` is added under `src/` (item 1 adds `no-console`): the new server modules
+  take an injected log (`useNotifyLog`, wired to `app.log` like `useDeliveryLog`).
 
 **Cross-org.**
 - Every new table is org-keyed with RLS forced, and `inOrg` refuses an org that fails `ORG_RE`.
@@ -548,8 +610,9 @@ on Home and as a notice." Loading → a skeleton row; error → `ErrorState comp
   later event at or under a member's watermark. That needs both at once; accepted.
 
 **Budgets are per pod** until item 4, which moves every kind, `mention` included, to the shared
-counter. An author toggling a mention in and out by editing re-notifies each time. The email budget
-bounds the expensive channel; the push and the Home row are not limited.
+counter. The flood is capped: at most 10 distinct mentions per piece (refused beyond, with a catalog
+sentence), and a person is notified once per piece, ever — removing and re-adding a mention finds the
+row already there and sends nothing.
 
 **At-most-once posts (§5.3)**: a crash between claim and post drops that post.
 
@@ -568,3 +631,23 @@ which still works.
 - `alertStore.ts` (606) and `alerts.ts` (620) gain only the stamp and nothing else. New logic is in
   new modules.
 - `ipc/comments.ts` (114), `CommentsPanel.tsx` (355) and `emailChannel.ts` (257) stay far below 500.
+
+## 8. Refutation folded in (against 5b359163)
+
+| Finding | Change |
+|---|---|
+| M1 notify must never delay or fail a comment | `void notifyMentions(…)` after the write, never throws, push and email fail apart, `mentionsSettled()`; SMTP down/slow test (§5.4) |
+| M2 outbound Summary | `SummaryScope.seen` only for the in-app card and rewrite; outbound uses "fired on the current data" (§5.14) |
+| M3 mentions from what is stored | gate inside `mutate`'s locked change on the cleaned body and the stored previous body; store returns `{piece, newMentions}`; no-database edit rule (§5.5) |
+| M4 flood | ≤ 10 distinct mentions per piece; push and email only when the `mentions` INSERT inserted (§4, §7) |
+| m1 widening | stated in §7 and the threat-model row |
+| m2 claim per event | claim right before each post; claim error → no post, audit `error` (§5.3) |
+| m3 one parser | `normalize()`, PUA placeholder without `{{}}`, one tree walk, link text plain, escape rule (§5.1) |
+| m4 labels before the cut | `commentSnippet` (§5.1) |
+| m5 RLS as an ordinary role | tests in §6 |
+| m6 row-policy inventory | §5.13 |
+| m7 filter then cut | picker (§5.11), `mentions:list` SQL filter + over-fetch (§5.10) |
+| m8 ids repeat across projects | `mentions` key includes `project_id`; `mentions:seen {projectId, id}`; `alert_posts` too (§4) |
+| m9 real paths | `test-alertDelivery` drives fresh-on-ask and the refresh URL for real and asserts the audit actor (§6) |
+| m10 re-stamp | stated and tested (§5.2) |
+
