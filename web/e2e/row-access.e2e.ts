@@ -6,10 +6,10 @@
 //   - Vera, in team East and a project viewer, opens a dashboard: its Revenue
 //     KPI is the server's East-only figure (control: the admin's is the whole
 //     table), the Region dropdown offers East and nothing else, and the dataset
-//     page says "Rows limited to your access".
+//     page and Explore say "Rows limited to your access".
 //   - The admin's Publish dialog says why that dashboard cannot be published.
 //
-// Screens: web/e2e/__screens__/row-access-{tab,viewer,publish}-{light,dark}.png.
+// Screens: web/e2e/__screens__/row-access-{tab,viewer,explore,publish}-{light,dark}.png.
 // Needs Postgres: without DATABASE_URL this spec prints one skip line.
 
 import { after, test } from 'node:test';
@@ -124,6 +124,12 @@ if (!adminUrl) {
       await vpage.goto(`/data/${pid}/${did}`);
       await vpage.getByText('Rows limited to your access').waitFor();
       assert.equal(await vpage.getByRole('tab', { name: 'Row access' }).count(), 0, 'a viewer has no Row access tab');
+      // Explore: the same chip, and its suggestions drawn over East's rows (they go through visual:data).
+      await vpage.goto(`/explore?project=${pid}&dataset=${did}`);
+      await vpage.getByRole('heading', { level: 1, name: 'Explore' }).waitFor();
+      await vpage.getByText('Rows limited to your access').waitFor();
+      await settled(vpage);
+      await screens(vpage, 'row-access-explore');
       assert.deepEqual(problems(), []);
     } finally {
       await ctx.close();
