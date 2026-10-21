@@ -22,6 +22,7 @@ export const context: typeof import('../src/server/context') = require('../src/s
 export const wire: typeof import('../src/server/wire') = require('../src/server/wire');
 export const channels: typeof import('../src/app/channels') = require('../src/app/channels');
 export const deliver: typeof import('../src/server/subscriptions/deliver') = require('../src/server/subscriptions/deliver');
+const subscriptionRpc: typeof import('../src/server/subscriptions/rpc') = require('../src/server/subscriptions/rpc');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const visuals: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
@@ -69,6 +70,7 @@ export function openLoopback(): { waits: number[] } {
   channels.allowHttpForTest(true);
   const waits: number[] = [];
   deliver.setSleepForTest(async (ms) => { waits.push(ms); });
+  subscriptionRpc.setSendNowGapForTest(0); // these suites Send now one subscription several times in a row
   return { waits };
 }
 

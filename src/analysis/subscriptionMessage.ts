@@ -52,6 +52,8 @@ export interface ComposeInput {
   /** The date, the view, the filter line — whatever applies, already worded. */
   subtitle: string[];
   note?: string;
+  /** Who wrote `note` — the account the send runs as. An email says so ("Note from …"). */
+  noteBy?: string;
   kpis: KpiFigure[];
   visuals: VisualFigure[];
   /** The dashboard in the app, or null when this server does not know its public address. */
@@ -81,6 +83,8 @@ export interface MessageModel {
   title: string;
   subtitle: string[];
   note?: string;
+  /** Set with an author's note: whom an email attributes it to. */
+  noteBy?: string;
   kpis: MessageKpi[];
   sections: MessageSection[];
   /** KPIs and sections left out to fit a platform. */
@@ -185,6 +189,7 @@ export function composeMessage(input: ComposeInput): MessageModel {
   };
   const note = clean(input.note, 1000);
   if (note) model.note = note;
+  if (note && input.noteBy) model.noteBy = clean(input.noteBy, 320);
   if (input.link) model.link = { url: input.link, label: say.openInOrdinate() };
   return model;
 }

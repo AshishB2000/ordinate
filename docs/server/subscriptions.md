@@ -38,6 +38,13 @@ All settings are in [configuration.md](configuration.md).
 
 One webhook posts to one channel. Make one channel in Ordinate per Slack channel.
 
+## Send by email instead
+
+A channel can also be an **email list**: Admin → Channels → **Add a channel** → Email. It names
+people and teams of the organization, never typed addresses, and each send reaches only those of them
+who can open the dashboard's project at that moment. It needs an SMTP relay (`SMTP_HOST`) and
+`DATABASE_URL`. See [email.md](email.md).
+
 ## Create a Teams webhook
 
 Microsoft is retiring Office 365 connectors, so Ordinate posts to a **Workflows** webhook.

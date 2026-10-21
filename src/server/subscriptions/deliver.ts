@@ -1,5 +1,12 @@
-// Posting one message to one channel — the ONLY module that reads a webhook URL
-// (src/app/channels.ts webhookOf) and the only socket a subscription opens.
+// Sending one message to one channel — `deliver`, THE ONE DOOR every send goes
+// through: a subscription run, a fired alert, a channel test. It is the only
+// module that reads a webhook URL (src/app/channels.ts webhookOf) and the only
+// way to the SMTP client (../mail/emailChannel.ts).
+//
+// A caller names a SOURCE, never the datasets: `deliver` computes them itself
+// (./figureDatasets.ts) and asks `refuseFanOut` — item 5's row-policy refusal —
+// before a recipient is resolved, a URL read or a socket opened. A test's
+// message is composed here, so no figures ride the test branch.
 //
 // Every post goes through the SSRF guard's `safeFetch` (src/connectors/ssrf.ts):
 // the host is resolved, refused when any address is internal, and the socket is
@@ -18,13 +25,21 @@
 // every string first. The URL itself is never logged.
 
 import { safeFetch, SsrfError } from '../../connectors/ssrf';
-import { webhookOf, webhookProblem } from '../../app/channels';
+import { webhookOf, webhookProblem, type Channel } from '../../app/channels';
+import { composeMessage, type MessageModel } from '../../analysis/subscriptionMessage';
+import { renderSlack, renderTeams } from '../../analysis/subscriptionRender';
+import * as say from '../../analysis/subscriptionText';
+import { sendEmail, setMailSleepForTest } from '../mail/emailChannel';
+import { figureDatasets } from './figureDatasets';
 
-export type PostCode = 'sent' | 'post_failed' | 'unreachable' | 'refused' | 'no_secret';
+export type PostCode = 'sent' | 'post_failed' | 'unreachable' | 'refused' | 'no_secret' | 'compute_failed'
+  | 'mail_off' | 'no_recipients' | 'rate_limited' | 'list_too_large' | 'tls_failed' | 'auth_failed' | 'mail_failed';
 export interface PostResult {
   ok: boolean;
   code: PostCode;
   status?: number;
+  /** Email only: some recipients got it and some did not (a batch failed, or the hourly budget ran out mid-send). */
+  partial?: { sent: number; total: number };
   attempts: number;
 }
 
@@ -46,9 +61,10 @@ export function useDeliveryLog(l: Log): void {
   log = l;
 }
 
-/** Test hook: how a wait is spent, so a suite does not sleep through a backoff. */
+/** Test hook: how a wait is spent, so a suite does not sleep through a backoff (webhook and email alike). */
 export function setSleepForTest(fn: (ms: number) => Promise<void>): void {
   sleep = fn;
+  setMailSleepForTest(fn);
 }
 
 /** `text` with the webhook URL, and its path and query, cut out. */
@@ -99,8 +115,64 @@ export async function postJson(url: string, body: string, channel: string): Prom
 }
 
 /** Post to a saved channel by id: reads its sealed URL here and nowhere else. */
-export async function postToChannel(channelId: string, channelName: string, payload: unknown): Promise<PostResult> {
+async function postToChannel(channelId: string, channelName: string, payload: unknown): Promise<PostResult> {
   const url = await webhookOf(channelId);
   if (!url) return { ok: false, code: 'no_secret', attempts: 0 };
   return postJson(url, JSON.stringify(payload), channelName);
+}
+
+/** What is being sent, by where it comes from. A caller never says which datasets it holds. */
+export type Delivery =
+  | { kind: 'test' }
+  | { kind: 'dashboard'; projectId: string; analysisId: string; message: MessageModel }
+  | { kind: 'alert'; projectId: string; ruleId: string; message: MessageModel };
+
+/** The message a channel's "Send a test message" sends: fixed words, no data. */
+export function testMessage(name: string): MessageModel {
+  return composeMessage({ title: say.testTitle(), subtitle: [], note: say.testBody(name), kpis: [], visuals: [], link: null, footer: '' });
+}
+
+/**
+ * ITEM 5's HOOK (docs/email/00-design.md §2): a refusal when any dataset the
+ * send's figures can come from carries a row policy — every channel kind, every
+ * source. Null (send) until then.
+ */
+export async function refuseFanOut(datasetIds: readonly string[]): Promise<PostResult | null> {
+  void datasetIds;
+  return null;
+}
+
+/**
+ * The datasets of one source, read once for every channel of one run or tick: a caller sending the same source to
+ * several channels passes one `memo` (run.ts per run, alertPosts.ts per tick). A failed read is memoised too, so
+ * every channel refuses alike.
+ */
+export type DatasetsMemo = Map<string, Promise<string[]>>;
+const sourceKey = (d: Delivery): string => (d.kind === 'test' ? 'test' : `${d.kind}:${d.projectId}:${d.kind === 'dashboard' ? d.analysisId : d.ruleId}`);
+
+/** Send one delivery to one channel. Never throws. */
+export async function deliver(channel: Channel, d: Delivery, memo?: DatasetsMemo): Promise<PostResult> {
+  let datasetIds: string[];
+  try {
+    const key = sourceKey(d);
+    let read = memo?.get(key);
+    if (!read) {
+      read = figureDatasets(d);
+      memo?.set(key, read);
+    }
+    datasetIds = await read;
+  } catch (err) {
+    log.warn({ channel: channel.id, error: err instanceof Error ? err.message : String(err) }, 'send refused: what its figures come from could not be read');
+    return { ok: false, code: 'compute_failed', attempts: 0 };
+  }
+  const refused = await refuseFanOut(datasetIds);
+  if (refused) return refused;
+  const message = d.kind === 'test' ? testMessage(channel.name) : d.message;
+  try {
+    if (channel.kind === 'email') return await sendEmail(channel, d, message);
+    return await postToChannel(channel.id, channel.name, (channel.kind === 'teams' ? renderTeams : renderSlack)(message).payload);
+  } catch (err) {
+    log.warn({ channel: channel.id, error: err instanceof Error ? err.message : String(err) }, 'send failed');
+    return { ok: false, code: 'unreachable', attempts: 0 };
+  }
 }

@@ -69,7 +69,8 @@ export interface Subscription {
   schedule: SubSchedule;
   timezone: string;
   channelIds: string[];
-  message: { title: string; note: string; includeLink: boolean };
+  /** `noteBy`: who last wrote the title or note — set by the server on save (subscription:save), never by a client. */
+  message: { title: string; note: string; includeLink: boolean; noteBy?: string };
   conditions: { skipUnchanged: boolean; onlyWhenRefreshed: boolean };
   enabled: boolean;
   /** The member whose access a run computes with. */
@@ -90,6 +91,8 @@ const iso = (v: unknown): string | undefined => (typeof v === 'string' && v.leng
 const CODES: ReadonlySet<string> = new Set([
   'sent', 'partial', 'unchanged', 'not_refreshed', 'missed', 'owner_removed', 'owner_no_access', 'dashboard_gone',
   'no_channels', 'no_content', 'compute_failed', 'post_failed', 'unreachable', 'refused', 'no_secret',
+  // email (docs/email): without them a stored run with one of these codes would be dropped on read
+  'mail_off', 'no_recipients', 'rate_limited', 'list_too_large', 'tls_failed', 'auth_failed', 'mail_failed', 'mail_partial',
 ]);
 const OUTCOMES: ReadonlySet<string> = new Set(['sent', 'skipped', 'failed', 'missed']);
 
@@ -158,7 +161,10 @@ export function definitionOf(data: Record<string, unknown>): Pick<Subscription, 
     schedule: sanitizeSubSchedule(data.schedule),
     timezone: sanitizeTimeZone(data.timezone),
     channelIds: ids(data.channelIds, MAX_CHANNELS),
-    message: { title: str(message.title, 150), note: str(message.note, 1000), includeLink: message.includeLink !== false },
+    message: {
+      title: str(message.title, 150), note: str(message.note, 1000), includeLink: message.includeLink !== false,
+      ...(str(message.noteBy, 320) ? { noteBy: str(message.noteBy, 320).toLowerCase() } : {}),
+    },
     conditions: { skipUnchanged: conditions.skipUnchanged === true, onlyWhenRefreshed: conditions.onlyWhenRefreshed === true },
     enabled: data.enabled !== false,
   };

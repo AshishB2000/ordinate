@@ -155,6 +155,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   const limits = registerLimits(app, cfg.limits, proxyList(cfg.auth.trustedProxies));
   // Request counts and latency for GET /metrics, which itself is served only on METRICS_PORT (./metrics.ts).
   registerRequestMetrics(app);
+  for (const w of cfg.mail?.warnings ?? []) app.log.warn(w); // the SMTP relay's startup warnings (./mail/mailEnv.ts)
 
   // Liveness: the process is up and serving. Checks nothing else on purpose —
   // a failing dependency must not make Kubernetes restart a healthy pod.
@@ -204,9 +205,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       orgConfig.useOrgConfig(pool, cfg.dataDir);
       await orgConfig.fresh(cfg.auth.org);
       (require('./jobs/schedules') as typeof import('./jobs/schedules')).wireSchedules(pool, cfg.auth.mode === 'dev');
-      // Subscriptions: scheduled sends to Slack / Teams, their webhook URLs in the encrypted store (none without a master key).
+      // Subscriptions: scheduled sends to Slack / Teams (URLs in the encrypted store, none without a master key) and email (cfg.mail).
       (require('./subscriptions/job') as typeof import('./subscriptions/job')).wireSubscriptions(
-        pool, cfg.auth.mode === 'dev', cfg.masterKey ? createSecretStore(pool, cfg.masterKey) : null, app.log);
+        pool, cfg, cfg.masterKey ? createSecretStore(pool, cfg.masterKey) : null, app.log);
       // S3 (T5.2): objects are registered in Postgres; old versions are collected by a job.
       if (cfg.storage.s3) {
         const storage = require('../engine/storage') as typeof import('../engine/storage');

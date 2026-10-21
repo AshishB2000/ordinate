@@ -129,7 +129,7 @@ function Row({
         <span className={s.chips}>
           {sub.channelIds.map((id) => {
             const c = channels.get(id);
-            return c ? <ChannelChip key={id} kind={c.kind} name={c.name} missing={!c.secretSet} /> : <ChannelChip key={id} kind="slack" name="Removed channel" missing />;
+            return c ? <ChannelChip key={id} kind={c.kind} name={c.name} missing={!c.ready} /> : <ChannelChip key={id} kind="slack" name="Removed channel" missing />;
           })}
         </span>
       </div>

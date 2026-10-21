@@ -42,8 +42,9 @@ export function mount(ui: ReactNode) {
 
 export const PID = '11111111-1111-4111-8111-111111111111';
 export const AID = '22222222-2222-4222-8222-222222222222';
-export const SLACK: Channel = { id: '33333333-3333-4333-8333-333333333333', name: '#sales-weekly', kind: 'slack', secretSet: true };
-export const TEAMS: Channel = { id: '44444444-4444-4444-8444-444444444444', name: 'Leadership', kind: 'teams', secretSet: true };
+export const SLACK: Channel = { id: '33333333-3333-4333-8333-333333333333', name: '#sales-weekly', kind: 'slack', secretSet: true, ready: true };
+export const TEAMS: Channel = { id: '44444444-4444-4444-8444-444444444444', name: 'Leadership', kind: 'teams', secretSet: true, ready: true };
+export const EMAIL: Channel = { id: '66666666-6666-4666-8666-666666666666', name: 'Sales leads', kind: 'email', secretSet: false, ready: true };
 export const CARDS = [
   { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', type: 'metric' as const, title: 'Revenue', sheet: 'Overview' },
   { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', type: 'visual' as const, title: 'Sales by region', sheet: 'Overview', chartType: 'bar' },
@@ -72,6 +73,7 @@ export function preview(over: Partial<Preview> = {}): { body: { ok: true } & Pre
       empty: null,
       slack: { model: MODEL, bytes: 1300, size: '1 KB', blocks: 7, notes: [] },
       teams: { model: { ...MODEL, title: 'Retail overview (Teams cut)' }, bytes: 3400, size: '3 KB', notes: ['Shortened to fit Teams (about 28 KB a message); the rest is in the dashboard.'] },
+      email: null,
       ...over,
     },
   };

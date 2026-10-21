@@ -8,18 +8,29 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { rpc, type RpcInput } from '../../api/client';
 import { useServerEvent } from '../../api/events';
 
-export type ChannelKind = 'slack' | 'teams';
+export type ChannelKind = 'slack' | 'teams' | 'email';
+/** An email channel's recipients: the org's people and teams, by id — never an address. */
+export interface EmailTo {
+  userIds: string[];
+  teamIds: string[];
+}
 export interface Channel {
   id: string;
   name: string;
   kind: ChannelKind;
-  /** A webhook URL is stored. The URL itself never reaches a browser. */
+  /** A webhook URL is stored (never for email, which has none). The URL itself never reaches a browser. */
   secretSet: boolean;
+  /** It can send now: its URL is stored, or — email — the server's mail is set up. */
+  ready: boolean;
+  /** Email, and only for an org admin: whom it names. */
+  to?: EmailTo;
 }
 export interface ChannelFrame {
   channels: Channel[];
   /** False when this server cannot keep a webhook URL (no database or no master key). */
   canStore: boolean;
+  /** The server can send email: a relay (SMTP_HOST) and the user directory. */
+  canEmail: boolean;
   /** The caller is an org admin: they may add, test and remove channels. */
   canManage: boolean;
 }
@@ -56,7 +67,8 @@ export interface Subscription {
   schedule: Schedule;
   timezone: string;
   channelIds: string[];
-  message: { title: string; note: string; includeLink: boolean };
+  /** `noteBy`: who last wrote the title or note (the server's, never sent back). */
+  message: { title: string; note: string; includeLink: boolean; noteBy?: string };
   conditions: { skipUnchanged: boolean; onlyWhenRefreshed: boolean };
   enabled: boolean;
   owner: string;
@@ -86,6 +98,8 @@ export interface MessageModel {
   title: string;
   subtitle: string[];
   note?: string;
+  /** Who wrote the note — an email says "Note from …". */
+  noteBy?: string;
   kpis: MessageKpi[];
   sections: MessageSection[];
   more: number;
@@ -117,6 +131,15 @@ export interface Preview {
   empty: string | null;
   slack: PlatformPreview | null;
   teams: PlatformPreview | null;
+  /** Null when this server sends no email. */
+  email: EmailPreview | null;
+}
+/** The email as the first email channel picked would get it. */
+export interface EmailPreview extends PlatformPreview {
+  /** The sender's name, shown above the title. */
+  brand: string;
+  /** Why the reader has it — or null when no email channel is picked yet. */
+  reason: string | null;
 }
 
 /** A refusal's words or a thrown error's. */
@@ -177,14 +200,14 @@ export function useDebounced<T>(value: T, ms = 400): T {
   return v;
 }
 
-/** The message a draft would send now, as the server composes it. The last answer stays up while the next one loads. */
-export function usePreview(projectId: string, draft: Draft | null) {
+/** The message a draft would send now, as the server composes it (`id`: the subscription being edited). The last answer stays up while the next one loads. */
+export function usePreview(projectId: string, draft: Draft | null, id?: string) {
   const settled = useDebounced(draft);
   return useQuery({
-    queryKey: ['subscription:preview', projectId, settled],
+    queryKey: ['subscription:preview', projectId, id ?? null, settled],
     enabled: !!settled,
     placeholderData: keepPreviousData,
-    queryFn: () => must<Preview>(rpc('subscription:preview', { projectId, draft: settled as Draft }), 'The preview could not be built.'),
+    queryFn: () => must<Preview>(rpc('subscription:preview', { projectId, draft: settled as Draft, ...(id ? { id } : {}) }), 'The preview could not be built.'),
   });
 }
 
@@ -269,6 +292,6 @@ export function newDraft(analysisId: string, name: string): Draft {
 export function draftOf(s: Subscription): Draft {
   return {
     name: s.name, analysisId: s.analysisId, content: s.content, viewId: s.viewId, schedule: s.schedule, timezone: s.timezone,
-    channelIds: s.channelIds, message: s.message, conditions: s.conditions, enabled: s.enabled,
+    channelIds: s.channelIds, message: { title: s.message.title, note: s.message.note, includeLink: s.message.includeLink }, conditions: s.conditions, enabled: s.enabled,
   };
 }

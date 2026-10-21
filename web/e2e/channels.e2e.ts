@@ -1,9 +1,14 @@
 // Channels and subscriptions end to end, on Postgres with the secrets store:
 // an org admin (header sign-in, as oauth2-proxy would) adds a Slack and a Teams
 // channel in Admin → Channels — a plain http:// URL is refused beside its field
-// — then makes a subscription to the sample dashboard from Reports →
-// Subscriptions (the dialog, the dashboard picked in it), sends it now, reads the run, switches it off, and
-// removes a channel past the warning that names the subscription.
+// — and an email list (picked from the org's people, sent a test), then makes
+// a subscription to the sample dashboard from Reports → Subscriptions (the
+// dialog, the dashboard picked in it), sends it now, reads the run, switches it
+// off, sends a second one by email (its Email preview first), and removes a
+// channel past the warning that names the subscription.
+//
+// EMAIL goes to an in-process fake relay (scripts/smtpFake.ts, compiled) on
+// loopback in plaintext mode — TLS is scripts/test-smtp.ts's job.
 //
 // NOTHING REACHES SLACK OR TEAMS. The webhook URLs are on the reserved
 // `.invalid` TLD, which never resolves: a send fails as "could not be reached",
@@ -17,8 +22,12 @@ import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { createRequire } from 'node:module';
 import pg from 'pg';
 import type { Page } from 'playwright';
+
+interface FakeRelay { port: number; txns: Array<{ rcpts: string[]; data: string }>; close(): Promise<void> }
+const { startFake } = createRequire(import.meta.url)('../../scripts/smtpFake.js') as { startFake: (o: { mode: 'none' }) => Promise<FakeRelay> };
 
 const ADMIN = 'admin@acme.test';
 const adminUrl = process.env.DATABASE_URL;
@@ -34,8 +43,13 @@ if (!adminUrl) {
   await root.query(`CREATE DATABASE ${dbName}`);
 
   const { e2e, screens, settled, configureServer, SCREENS } = await import('./fixtures.ts');
+  const relay = await startFake({ mode: 'none' });
   configureServer({
     env: {
+      SMTP_HOST: '127.0.0.1',
+      SMTP_PORT: String(relay.port),
+      SMTP_SECURITY: 'plaintext',
+      SMTP_FROM: 'Acme Analytics <bi@acme.test>',
       DATABASE_URL: scratch.toString(),
       AUTH_MODE: 'header',
       TRUSTED_PROXY_CIDRS: '127.0.0.1/32',
@@ -46,6 +60,7 @@ if (!adminUrl) {
     headers: { 'x-forwarded-email': ADMIN },
   });
   after(async () => {
+    await relay.close();
     await root.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
     await root.end();
   });
@@ -95,6 +110,23 @@ if (!adminUrl) {
     await add2.getByRole('button', { name: 'Add channel' }).click();
     await add2.waitFor({ state: 'detached' });
     await page.getByRole('row').filter({ hasText: 'Leadership' }).getByText('Teams').waitFor();
+
+    // An email list: people picked from the org, never a typed address; a test goes to the admin alone.
+    await page.getByRole('button', { name: 'Add a channel' }).click();
+    const add3 = page.getByRole('dialog', { name: 'Add a channel' });
+    await add3.getByRole('radio', { name: 'Email' }).check();
+    await add3.getByText(/reaches only those of them who can open its project at that moment/).waitFor();
+    await add3.getByLabel('Name').fill('Sales leads');
+    await add3.getByRole('checkbox', { name: ADMIN }).check();
+    await add3.getByText(/^Names 1 person\./).waitFor();
+    await screensInPlace(page, 'admin-channel-email');
+    await add3.getByRole('button', { name: 'Add channel' }).click();
+    await add3.waitFor({ state: 'detached' });
+    const mailRow = page.getByRole('row').filter({ hasText: 'Sales leads' });
+    await mailRow.getByText('1 person').waitFor();
+    await mailRow.getByRole('button', { name: 'Send a test email' }).click();
+    await page.getByText('Test email sent to you').waitFor({ timeout: 30_000 });
+    assert.deepEqual(relay.txns.at(-1)?.rcpts, [ADMIN], 'the test email went to the admin alone');
     // The URL was write-only: nothing on the page holds it.
     assert.equal((await page.content()).includes('e2e-secret'), false, 'no webhook URL in the page');
     await screens(page, 'admin-channels');
@@ -157,6 +189,29 @@ if (!adminUrl) {
     // A controlled switch: it shows the server's state, so it moves when the write has landed.
     await page.getByRole('switch', { name: 'Send Weekly board on its schedule' }).click();
     await page.getByRole('listitem', { name: 'Weekly board' }).getByText('Off — no next run').waitFor();
+
+    // ── By email: the Email preview, then a send that arrives at the relay ──
+    await page.getByRole('button', { name: 'New subscription' }).first().click();
+    const mdlg = page.getByRole('dialog', { name: 'New subscription' });
+    await mdlg.getByRole('combobox', { name: 'Dashboard' }).click();
+    await page.getByRole('option', { name: 'Retail overview' }).click();
+    await mdlg.getByTestId('preview-slack').getByText('$5.2M').first().waitFor({ timeout: 30_000 });
+    await mdlg.getByRole('button', { name: /^Where/ }).click();
+    await mdlg.getByRole('checkbox', { name: 'Sales leads' }).check();
+    await mdlg.getByRole('tab', { name: 'Email' }).click();
+    await mdlg.getByTestId('preview-email').getByText('$5.2M').first().waitFor({ timeout: 15_000 });
+    await mdlg.getByTestId('preview-email').getByText(/You receive this as a member of Sales leads/).waitFor({ timeout: 15_000 });
+    await screensInPlace(page, 'subscribe-email-preview');
+    await mdlg.getByRole('button', { name: /^Message/ }).click();
+    await mdlg.getByLabel('Subscription name').fill('Email board');
+    await mdlg.getByRole('button', { name: 'Subscribe' }).click();
+    await mdlg.waitFor({ state: 'detached' });
+    const sentBefore = relay.txns.length;
+    await page.getByRole('listitem', { name: 'Email board' }).getByRole('button', { name: 'Send now' }).click();
+    await page.getByRole('listitem', { name: 'Email board' }).getByText('Sent to 1 channel.').waitFor({ timeout: 60_000 });
+    assert.equal(relay.txns.length, sentBefore + 1, 'one email arrived');
+    assert.deepEqual(relay.txns.at(-1)?.rcpts, [ADMIN], 'to the one reader on the list');
+    await screens(page, 'subscriptions-list-email');
 
     // ── Removing a channel names what it breaks ────────────────────────
     await page.goto('/admin?tab=channels');

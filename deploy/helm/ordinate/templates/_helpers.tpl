@@ -41,7 +41,7 @@ every key of existingSecret (default: the Secret named like the release).
 */ -}}
 {{- define "ordinate.env" -}}
 {{- $secret := .Values.existingSecret | default (include "ordinate.fullname" .) -}}
-{{- $secretNames := list "DATABASE_URL" "ORDINATE_MASTER_KEY" "OIDC_CLIENT_SECRET" "AWS_ACCESS_KEY_ID" "AWS_SECRET_ACCESS_KEY" "AWS_SESSION_TOKEN" -}}
+{{- $secretNames := list "DATABASE_URL" "ORDINATE_MASTER_KEY" "OIDC_CLIENT_SECRET" "AWS_ACCESS_KEY_ID" "AWS_SECRET_ACCESS_KEY" "AWS_SESSION_TOKEN" "SMTP_PASSWORD" -}}
 {{- $owned := list "PORT" "METRICS_PORT" "DATA_DIR" "ORDINATE_ENV" -}}
 {{- range $k, $v := .Values.config }}
 {{- if has $k $secretNames }}{{ fail (printf "config.%s is a secret: put it in the existingSecret, never in values" $k) }}{{ end }}

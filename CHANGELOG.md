@@ -81,6 +81,13 @@ the desktop installers.
   the URL, so Copy link shares it and Back undoes an edit. Editors can save it as a visual or open it
   in the builder. With an AI model set up, an ask box hands plain words to the Assistant. See
   [`docs/explore/`](docs/explore/00-design.md).
+- **Email for subscriptions and alerts.** An org admin makes an email list in Admin → Channels from
+  the organization's people and teams (no typed addresses); a subscription or an alert sent to it
+  reaches only those of them who can open the dashboard's project at that moment, through the one SMTP
+  relay the operator configures (`SMTP_HOST`, `SMTP_FROM`; TLS required, `plaintext` only to a private
+  relay). The subscription preview has an Email tab; **Send a test email** goes to the admin alone.
+  **Send now** is limited to once a minute per subscription, for every channel kind.
+  See [`docs/server/email.md`](docs/server/email.md).
 
 ### Security — since the move to the web
 
