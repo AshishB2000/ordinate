@@ -113,6 +113,26 @@ const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 200)}`;
     ok('derived: a SQL dataset over Orders stays closed with rules of its own (its upstream has rules)', H.refused(await chart('east', sqlOver), 'derived'));
     await policy(sqlPlain, [{ teamId: W.team, values: ['East'] }]);
     ok('ceiling: a SQL dataset with rules of its own over a dataset without any is refused (its rows were mixed before they were stored)', H.refused(await chart('east', sqlPlain), 'pipeline'));
+    // A table replayed under a dashboard parameter is memoised per dataset (round 2, #16): never handed to a restricted caller.
+    const replay: typeof import('../src/data/paramReplay') = require('../src/data/paramReplay');
+    const paramsMod: typeof import('../src/analysis/params') = require('../src/analysis/params');
+    const dsMod: typeof import('../src/data/datasets') = require('../src/data/datasets');
+    const priced = await W.as('boss', async () => (await dsMod.saveDataset(P, { name: 'Priced', sourceKind: 'csv', columns: H.COLUMNS, rows: H.ROWS }))!.id);
+    await W.as('boss', () => dsMod.updateSteps(P, priced, [{ type: 'calculated_field', name: 'scaled', expression: '[sales] * [[k]]' }]));
+    await policy(priced, [{ teamId: W.team, values: ['East'] }]);
+    const kv = paramsMod.paramValues([{ name: 'k', kind: 'number', value: 2 }]);
+    const edReplay = await W.as('ed', () => replay.paramTable(P, priced, kv));
+    const eastReplay = await W.as('east', () => replay.paramTable(P, priced, kv).then((t) => (t ? 'answered' : 'none'), (err: unknown) => (rowAccess.isRowPolicyError(err) ? 'refused' : String(err))));
+    ok('net: a replay the editor memoised is refused to east, typed — the net runs before the memo', eastReplay === 'refused', eastReplay);
+    ok('NEGATIVE CONTROL: …the editor\'s replay is the whole table, West included, and memoised', !!edReplay && H.leaks(JSON.stringify(edReplay.rows)));
+
+    // The anomaly keys an alert last told of can name a value (round 2, #16): not in east's dataset list.
+    const recMod: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+    const auto = await W.as('boss', () => recMod.setAutoRefresh(P, sqlPlain, { every: 'daily', watch: true, lastAnomalyKeys: [`sales:${H.W_CANARY}_7`] }));
+    const listRow = async (who: string) => ((await W.call(who, 'dataset:list', { projectId: P })).body as { id: string; scoped?: boolean; autoRefresh?: { watch?: boolean } }[]).find((x) => x.id === sqlPlain);
+    const eastRow = await listRow('east');
+    ok('redact: east\'s dataset list keeps the schedule but not the anomaly keys', eastRow?.scoped === true && eastRow.autoRefresh?.watch === true && !H.leaks(JSON.stringify(eastRow)), JSON.stringify(eastRow));
+    ok('NEGATIVE CONTROL: the editor\'s list carries them', !!auto && H.leaks(JSON.stringify(await listRow('ed'))));
     const tab = await W.call('boss', 'dataset:rowPolicy', { projectId: P, datasetId: orders });
     ok('the tab lists the datasets built from Orders', [sqlOver, twoHops, unioned].every((id) => (tab.body?.builtFrom ?? []).some((x: { id: string }) => x.id === id)), show(tab));
 

@@ -359,11 +359,12 @@ export function register() {
     const list = await datasets.listDatasets(projectId);
     if (!(await restrictedOn(projectId))) return list;
     // Row access rules: `scoped` says the caller sees part of it (nothing about the rules leaves), and a failed
-    // refresh's text, which can quote a value, is not theirs to read (row-policy N2).
+    // refresh's text and the anomaly keys an alert last told of, which can quote a value, are not theirs to read (N2, #16).
     return Promise.all(list.map(async (d) => {
       if (!(await closedToCaller(projectId, d.id))) return d;
       const { lastRefreshError: _e2, ...rest } = d;
-      return { ...rest, scoped: true as const };
+      const auto = rest.autoRefresh ? (({ lastAnomalyKeys: _k, ...a }) => a)(rest.autoRefresh) : undefined;
+      return { ...rest, ...(auto ? { autoRefresh: auto } : {}), scoped: true as const };
     }));
   });
 

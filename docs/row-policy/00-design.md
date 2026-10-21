@@ -385,8 +385,8 @@ Handler paths are under `src/`.
 | **META** | | |
 | `ai:setMine` | `ipc/aiModels.ts:48` | the caller's own model pick |
 | `ai:status` | `ipc/aiModels.ts:42` | approved models, has-key flags |
-| `analysis:gallery` | `ipc/analysesServer.ts:54` | dashboard records (authored definitions, saved views) |
-| `analysis:open` | `ipc/analysesServer.ts:75` | dashboard + visual records (authored) |
+| `analysis:gallery` | `ipc/analysesServer.ts:54` | dashboard records (authored definitions, saved views); a preview visual's custom order and series colours dropped for a restricted caller (`rowDoors.visualForCaller`, round 2 #12) |
+| `analysis:open` | `ipc/analysesServer.ts:75` | dashboard + visual records (authored); each visual through `visualForCaller` (#12) |
 | `asset:read` | `ipc/analysesServer.ts:152` | an uploaded image |
 | `boundary:get` | `ipc/projectBoundaries.ts:25` | uploaded reference GeoJSON |
 | `boundary:list` | `ipc/projectBoundaries.ts:24` | boundary names and feature counts |
@@ -416,7 +416,7 @@ Handler paths are under `src/`.
 | `copilot:threads` | `ipc/copilot.ts:402` | own thread titles |
 | `dashboard:asOfStamps` | `ipc/dashboardsServer.ts:19` | snapshot times and names |
 | `dataset:columns` | `ipc/datasets.ts:371` | header: names, types, `rowCount` (ceiling); gains `scoped: true` for a restricted caller on a policy dataset |
-| `dataset:list` | `ipc/datasets.ts:352` | summaries: `rowCount`, `qualityFailing` count (ceiling); gains `scoped` |
+| `dataset:list` | `ipc/datasets.ts:352` | summaries: `rowCount`, `qualityFailing` count (ceiling); gains `scoped`; a restricted row drops `lastRefreshError` and `autoRefresh.lastAnomalyKeys` (N2, #16) |
 | `dataset:source` | `ipc/datasetViews.ts:88` | `{kind, label, refreshable}` |
 | `embed:columns` | `ipc/embed.ts:52` | lockable column names and types, no values |
 | `embed:status` | `ipc/embed.ts:47` | settings flags |
@@ -436,7 +436,7 @@ Handler paths are under `src/`.
 | `metricTree:suggest` | `ipc/metricTree.ts:416` | column names; its distinct-count read is `residentSource(…).catch(() => null)` → the net's refusal falls back to "every text column" (no value leaves) |
 | `onboarding:status` | `ipc/onboarding.ts:8` | step booleans |
 | `period:picker` | `ipc/visualsServer.ts:89` | calendar presets |
-| `pipelines:get` | `ipc/pipelines.ts:44` | pipeline graph, `rowCount` (ceiling) |
+| `pipelines:get` | `ipc/pipelines.ts:44` | pipeline graph, `rowCount` (ceiling); runs' `errors`/`warnings`/`note` blanked on a restricted caller's dataset and quality nodes (#14) |
 | `pipelines:preview` | `ipc/pipelines.ts:91` | cron times |
 | `plan:check` | `ipc/plan.ts:89` | plan step checks over metadata |
 | `prefs:get` | `ipc/prefs.ts:23` | formats, branding |
@@ -444,8 +444,8 @@ Handler paths are under `src/`.
 | `privacy:review` | `ipc/privacy.ts:44` | same, one dataset |
 | `privacy:summary` | `ipc/privacy.ts:68` | sensitive column names |
 | `project:access` | `server/authz/share.ts:76` | grantees |
-| `projects:list` | `ipc/projects.ts:37` | project records |
-| `projects:open` | `ipc/projects.ts:91` | project record |
+| `projects:list` | `ipc/projects.ts:37` | project records, never the colour map or dismissed insight ids (#11; the web reads `format:colors:get`) |
+| `projects:open` | `ipc/projects.ts:91` | project record, as `projects:list` (#11) |
 | `projects:overview` | `ipc/projects.ts:105` | record counts |
 | `projects:roles` | `server/authz/share.ts:57` | the caller's roles |
 | `publish:sites` | `ipc/publishServer.ts:77` | site manifests (the /p/ pages themselves: serve-time check, §Fan-out) |
@@ -481,9 +481,9 @@ Handler paths are under `src/`.
 | `tokens:list` | `server/auth/tokens.ts:75` | own tokens |
 | `tokens:revoke` | `server/auth/tokens.ts:99` | own token |
 | `trash:list` | `ipc/trash.ts:17` | trashed record names |
-| `versions:diff` | `ipc/versionDiff.ts:322` | structural sentences; an input table's diff is row/cell COUNTS (ceiling) |
+| `versions:diff` | `ipc/versionDiff.ts:322` | structural sentences; `type: 'dataset'` gated like `versions:get` (#13), and so `versions:figures` |
 | `versions:list` | `ipc/versions.ts:63` | version metas |
-| `visual:get` | `ipc/visuals.ts:552` | visual definition (authored) |
+| `visual:get` | `ipc/visuals.ts:552` | visual definition (authored), through `visualForCaller` (#12); `versions:get` of a visual too |
 | `visual:list` | `ipc/visuals.ts:550` | visual names |
 
 ### MCP tools (`POST /api/mcp`, as the token's user)
@@ -736,6 +736,12 @@ fail-open share-policy lookup in `dataSearchRun.ts:97` (fixed: a failed lookup r
 - **Derived datasets are closed, not filtered** (D14): a SQL, notebook, composed or combined dataset
   — or one whose steps look up another dataset — is refused to restricted viewers even when it has
   rules of its own (D16). Filtering through SQL is phase 2.
+- **Default order and colours**: a restricted viewer of a chart on a dataset with rules sees it in the
+  default category order and series colours — the custom order and per-series colours name values and
+  are dropped from what they are sent (`visualForCaller`). The other styling stays.
+- **Names someone saved**: a visual saved from an insight is named after the insight's title, and a
+  report's caption can be prefilled from a chart's figures; once saved, both are authored text, shown to
+  whoever can open the record, like any title.
 - **The caller's own history**: Assistant threads keep what was answered under the access they had then.
 - **Entitlement changes apply per request**; a published page was never built for a policy dataset.
 - **Phase 2**: per-recipient subscriptions and publish, "run as the viewer" in the warehouse,
