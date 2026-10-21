@@ -34,6 +34,7 @@ import { Client, type Notification, type Pool } from 'pg';
 import type { FastifyBaseLogger } from 'fastify';
 import { scrubbed } from '../db/pool';
 import { deliverLocal, setFanOut, type Target } from '../sse';
+import { runPodCommand, setPodCommandSender } from '../podCommands';
 import { POD } from './runner';
 
 export const CHANNEL = 'ordinate_events';
@@ -70,13 +71,15 @@ export async function startBus(pool: Pool, url: string, log: FastifyBaseLogger):
     deliverLocal(b.t, b.c, b.d);
   };
   const handle = async (payload: string): Promise<void> => {
-    let m: { p?: unknown; ref?: unknown } & Partial<Body>;
+    let m: { p?: unknown; ref?: unknown; cmd?: unknown } & Partial<Body>;
     try {
       m = JSON.parse(payload) as typeof m;
     } catch {
       return;
     }
     if (m.p === POD) return;
+    // A command for this process (../podCommands.ts), not an event for a stream.
+    if (typeof m.cmd === 'string') return runPodCommand(m.cmd, (m as { d?: unknown }).d);
     if (typeof m.ref !== 'string') return deliver(m);
     const r = await pool.query<{ body: string }>('SELECT body FROM event_payloads WHERE id = $1', [m.ref]);
     if (r.rows[0]) deliver(JSON.parse(r.rows[0].body) as Partial<Body>);
@@ -162,10 +165,17 @@ export async function startBus(pool: Pool, url: string, log: FastifyBaseLogger):
     flushing ??= flush().finally(() => { flushing = null; });
   });
 
+  // Commands to the other pods: one small NOTIFY each, never by reference (each is a few hundred bytes).
+  setPodCommandSender((cmd, d) => {
+    void pool.query('SELECT pg_notify($1, $2)', [CHANNEL, JSON.stringify({ p: POD, s: seq++, cmd, d })])
+      .catch((err: unknown) => log.warn({ err: scrubbed(err, url), cmd }, 'pod command could not be sent'));
+  });
+
   return {
     async stop() {
       stopped = true;
       setFanOut(null);
+      setPodCommandSender(null);
       if (retry) clearTimeout(retry);
       await flushing;
       await listener?.end().catch(() => undefined);

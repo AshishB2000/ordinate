@@ -148,3 +148,35 @@ export async function until<T>(fn: () => Promise<T> | T, ms: number, every = 100
   }
   return v;
 }
+
+export interface Stream {
+  /** Every event so far: its channel and decoded payload. */
+  readonly events: Array<{ channel: string; data: unknown }>;
+  close(): void;
+}
+
+/** A tab's event stream (GET /api/events?client=<id>), decoded as it arrives. */
+export async function openStream(base: string, who: Who, client: string): Promise<Stream> {
+  const ac = new AbortController();
+  const res = await fetch(`${base}/api/events?client=${client}`, { headers: who, signal: ac.signal });
+  const events: Array<{ channel: string; data: unknown }> = [];
+  let buf = '';
+  void (async () => {
+    try {
+      for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+        buf += Buffer.from(chunk).toString('utf8');
+        let at: number;
+        while ((at = buf.indexOf('\n\n')) >= 0) {
+          const frame = buf.slice(0, at);
+          buf = buf.slice(at + 2);
+          const channel = /^event: (.*)$/m.exec(frame)?.[1];
+          const data = /^data: (.*)$/m.exec(frame)?.[1];
+          if (channel && data !== undefined) events.push({ channel, data: wire.decode(data) });
+        }
+      }
+    } catch {
+      /* closed */
+    }
+  })();
+  return { events, close: () => ac.abort() };
+}

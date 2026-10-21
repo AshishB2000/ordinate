@@ -82,7 +82,7 @@ async function pass(name: 'file' | 's3', storage: { env: Record<string, string>;
   // NEGATIVE CONTROL: the in-process stores — no database — do not cross pods.
   try {
     const dir = H.tmp('anypod-memory');
-    const env = { ...BASE_ENV, DATA_DIR: dir };
+    const env = { ...BASE_ENV, DATA_DIR: dir, ANYPOD_SLOW_JOBS: 'sql-save' };
     const A = await H.startPod(env, PRELOAD);
     const B = await H.startPod(env, PRELOAD);
     await C.memoryControl(A, B);

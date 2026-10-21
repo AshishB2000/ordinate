@@ -2,10 +2,9 @@
 // card, a headline figure, a run's progress (from the Jobs stream the shell
 // already holds open — the job for THIS dataset) and its failure line.
 
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { rpc } from '../../../api/client';
-import { useServerEvent } from '../../../api/events';
-import type { Job } from '../../../api/jobs';
+import { useJobList, type Job } from '../../../api/jobs';
 import { Button } from '../../../ui/Button';
 import { Icon } from '../../../ui/icons/Icon';
 import s from './Segments.module.css';
@@ -33,15 +32,11 @@ export function Kpi({ value, label }: { value: string; label: string }) {
   );
 }
 
-/** This dataset's running analysis job, as the Jobs stream reports it. */
+/** This dataset's running analysis job, from the merged Jobs list (every pod's pushes, src/api/jobs.ts). */
 export function useDatasetJob(datasetId: string, watching: boolean): Job | null {
-  const [job, setJob] = useState<Job | null>(null);
-  useServerEvent('jobs:changed', (p) => {
-    if (!watching) return;
-    const snap = p as { active?: Array<Job & { datasetId?: string }> } | null;
-    setJob((snap?.active ?? []).find((j) => j.kind === 'analysis' && j.datasetId === datasetId) ?? null);
-  });
-  return watching ? job : null;
+  const { data } = useJobList();
+  if (!watching) return null;
+  return ((data?.active ?? []) as Array<Job & { datasetId?: string }>).find((j) => j.kind === 'analysis' && j.datasetId === datasetId) ?? null;
 }
 
 /** Progress, its note and Cancel (segments.ts sgProgressBox). */

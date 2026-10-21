@@ -2,7 +2,7 @@
 // pass (two pods on one database, file or S3 storage) and asserts with `ok`.
 // Numbers are the design's (docs/any-pod/00-design.md §6).
 
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { ok } from './selfcheck';
 import * as H from './podHarness';
 
@@ -321,7 +321,34 @@ export async function planAcrossPods(p: Pass): Promise<void> {
   await D.stop();
 }
 
-export const CASES: Array<(p: Pass) => Promise<void>> = [crossPodImport, rowIsTruth, planAcrossPods, takeRace, wrongUser, expired, exportAndBackup, sweepSparesTaken, abortedDownload, orgWall];
+// ── 5. Cancel on B stops a job running on A, seen from a reloaded tab on B ─
+type JobView = { id: string; kind: string; state: string };
+const jobsIn = (events: H.Stream['events']): JobView[] =>
+  events.filter((e) => e.channel === 'jobs:changed').flatMap((e) => {
+    const s = e.data as { active?: JobView[]; recent?: JobView[] };
+    return [...(s.active ?? []), ...(s.recent ?? [])];
+  });
+
+export async function cancelAcrossPods(p: Pass): Promise<void> {
+  const pid = await projectOf(p, U1);
+  // A query job on A, from a tab that is then "reloaded" (the preload holds sql-save jobs until cancelled).
+  const running = H.rpc(p.A.base, U1, 'sql:prepareSave', { projectId: pid, sql: 'SELECT 1 AS n' }, randomUUID());
+  await H.sleep(500);
+  const tab = await H.openStream(p.B.base, U1, randomUUID()); // the new tab, its stream on B
+  await H.sleep(300);
+  const listed = await H.rpc(p.B.base, U1, 'jobs:list', undefined);
+  const seen = await H.until(() => jobsIn(tab.events).find((j) => j.kind === 'sql-save' && j.state === 'running'), 5_000);
+  ok(`[${p.name}] 5: jobs:list on B (a reloaded tab) shows the job running on A — pushed by A over the bus`,
+    !!seen && listed.body?.active?.length === 0, JSON.stringify({ seen, b: listed.body }));
+  const cancel = seen ? await H.rpc(p.B.base, U1, 'jobs:cancel', { id: seen.id }) : null;
+  const answer = await running;
+  const landed = await H.until(() => jobsIn(tab.events).some((j) => j.id === seen?.id && j.state === 'cancelled'), 5_000);
+  tab.close();
+  ok(`[${p.name}] 5: Cancel on B stops it on A: A's call answers cancelled, and the tab on B sees it land`,
+    cancel?.body?.ok === true && answer.body?.canceled === true && landed, JSON.stringify({ cancel: cancel?.body, answer: answer.body, landed }));
+}
+
+export const CASES: Array<(p: Pass) => Promise<void>> = [crossPodImport, rowIsTruth, planAcrossPods, cancelAcrossPods, takeRace, wrongUser, expired, exportAndBackup, sweepSparesTaken, abortedDownload, orgWall];
 
 // ── 9. NEGATIVE CONTROL: no database, the Map — a take does not cross pods ─
 export async function memoryControl(A: H.Pod, B: H.Pod): Promise<void> {
@@ -331,4 +358,10 @@ export async function memoryControl(A: H.Pod, B: H.Pod): Promise<void> {
   const onB = await importGeo(B, who, pid, tok);
   const onA = await importGeo(A, who, pid, tok);
   ok('[memory] 9: NEGATIVE CONTROL — without a database an upload on A is unknown on B (control: on A it works)', onB.error === TOKEN_GONE && onA.ok === true, JSON.stringify([onB, onA]));
+  const running = H.rpc(A.base, who, 'sql:prepareSave', { projectId: pid, sql: 'SELECT 1 AS n' });
+  const job = await H.until(async () => ((await H.rpc(A.base, who, 'jobs:list', undefined)).body?.active as JobView[] | undefined)?.find((j) => j.kind === 'sql-save'), 5_000);
+  const cancel = job ? await H.rpc(B.base, who, 'jobs:cancel', { id: job.id }) : null;
+  const answer = await running;
+  ok('[memory] 5: NEGATIVE CONTROL — without the bus a Cancel on B cannot reach A: refused, and A\'s job runs to the end', !!job && cancel?.body?.ok === false && answer.body?.canceled !== true && answer.body?.ok !== false,
+    JSON.stringify({ cancel: cancel?.body, answer: answer.body?.ok }));
 }
