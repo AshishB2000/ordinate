@@ -75,6 +75,8 @@ the desktop installers.
   (`?view=`); ⌘K opens a view in place, a phone picks one in its Filters sheet, and a published
   page offers it. See [`docs/dashboard-filters/`](docs/dashboard-filters/00-design.md).
 
+- **Row access rules.** A project admin can limit what each project viewer sees in a dataset to the rows whose chosen column holds their values — by person or by team — from the dataset's new **Row access** tab. Every chart, KPI, answer, data grid, filter list and column panel then shows that viewer only their rows; readers that work over the whole table (SQL, statistics, drivers, segments, insights, quality results, snapshot diffs, Prepare previews, exports) are refused with a sentence that says why, and published links, embeds, subscriptions and alerts are off for such a dataset. Live datasets bind and byte-compare the rule's values on every warehouse. See [`docs/server/row-level-security.md`](docs/server/row-level-security.md).
+
 ### Security — since the move to the web
 
 - **SQL over datasets is checked against DuckDB's own reading of the query.** A query could reach
@@ -83,6 +85,8 @@ the desktop installers.
   a catalog view, or a table function other than `range`, `generate_series`, `unnest`,
   `json_each`, `json_tree`, `repeat` and `repeat_row` are now refused, so their refresh will fail:
   list the PIVOT values (`ON col IN (…)`) or query the project's datasets instead.
+
+- **Embeds refuse more datasets that store values computed across rows.** A locked embed tile is now refused when its dataset was built by SQL, a notebook or the composer, when a step looks up another dataset, or when a group-by, pivot or keyed dedupe does not keep every locked column — each could carry another customer's rows or totals into the view. (The same rule backs row access rules.)
 
 ### Fixed — since the move to the web
 
@@ -96,6 +100,7 @@ the desktop installers.
   the same second keep both changes. A save that waits more than 15 s says "try again". See
   [`docs/record-locks/00-design.md`](docs/record-locks/00-design.md).
 - A new project's first alert rule could appear in the next new project's alerts.
+- A dashboard whose prepare steps read a parameter could be served another parameter value's cached figure, and the data search read personal and financial columns when the share-policy lookup failed (F21). A grid request with no page window counted every row instead of the filtered ones.
 
 ### Added
 - **The app is no longer empty on first launch.** A bundled sample project — 5,000 rows of generated

@@ -18,6 +18,7 @@ New here? Start with the [README](../README.md). To run Ordinate, go to the
 | [`first-run-pass/`](first-run-pass/findings.md) | **The first-run pass**: a fresh install walked as an admin, an editor and a viewer; what was rough, what fixed it, and what is still open. |
 | [`analysis/`](analysis/00-model.md) | The analysis and dashboard record model (an analysis is the authoring surface; a dashboard is a by-value snapshot) and the authoring surface. Still the spec. |
 | [`automation.md`](automation.md) | The MCP endpoint and the command registry. Generated from `src/automation/registry.ts`; do not edit by hand. |
+| [`row-policy/`](row-policy/00-design.md) | **Row access rules**: a viewer sees only their rows of a dataset, enforced at the figure doors with a storage net behind them; every read channel inventoried; fan-out refused in phase 1. Operator guide: [`server/row-level-security.md`](server/row-level-security.md). |
 
 ## History (the desktop era)
 

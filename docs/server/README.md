@@ -30,6 +30,7 @@ flowchart LR
 | Plan capacity | [sizing.md](sizing.md): measured numbers and starting points |
 | Protect the data | [backup-restore.md](backup-restore.md): Postgres, the bucket, the master key |
 | Move between versions | [upgrade.md](upgrade.md): releases, migrations, rollbacks |
+| Limit the rows each viewer sees | [row-level-security.md](row-level-security.md): row access rules per person or team, who is restricted, what is off in phase 1 |
 
 ## What you get from a release
 

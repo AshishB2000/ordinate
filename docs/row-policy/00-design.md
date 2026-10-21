@@ -77,7 +77,7 @@ left room.
 | D10 | **Fan-out refuses for everyone** in phase 1: publish (`/p/`), signed embeds, subscriptions (every channel — item 4's email included, inside its shared `deliver()`), alerts. Mechanism: a **fan-out scope** around each build — per RULE for alerts (refutation N1) — in which doors and the net refuse ANY policy or policy-derived dataset and record every dataset id they touch, plus ONE exported function, `assertFanOutAllowed(projectId, datasetIds)`, at each send point. A published site records the dataset ids its build read; `/p/` stops serving a site once one of them is policy-closed (own rules or derived), and a site published before this change (no recorded ids) is not served while its project has any policy-closed dataset, until it is re-published (N5). A cached embed page re-checks its recorded ids on every hit. | They compute once, as the publisher or the system, and reach people whose entitlement differs. A snapshot built before the rules must not outlive them. |
 | D11 | **Exports refuse a restricted caller** (`dashboard:exportHtml`, `story:export`, `report:build`, `report:preview`) through an **export scope**; editors export as today. `visual:rowsDownload` is a locked reader, not an export. | Their builders mix door figures with whole-dataset parts (control values, Summary card, stats tiles); refusing is the honest phase-1 answer. |
 | D12 | **Caches key on the lock**: it is part of `filters`, which `queryCache.cacheKey` stringifies with sorted keys under the org id (arrays keep order, so `[lock, …f]` never collides with `f`); the Live executor's key carries the IR, which carries it. A restricted caller never reaches the `insights` cache (keyed by dataset alone) for a policy dataset. No cache needs invalidating when rules change: a changed entitlement is a different key. | "A restricted viewer never reads an unrestricted cached answer, and vice versa." |
-| D13 | **Live**: the lock compiles to bound parameters like every value, and compares **binary** per dialect (refutation S3): DuckDB `CAST(x AS BLOB)`, BigQuery `CAST(x AS BYTES)`, Databricks `CAST(x AS BINARY)`, Snowflake `COLLATE(x, 'utf8')`, the Postgres/Redshift dialect `md5(x)` (byte-based in both; Postgres has no `COLLATE()` function and Redshift no `COLLATE "C"`), ClickHouse plain `=`/`IN` (String compares bytes). A dialect without a known binary form refuses a policy (`column`). The two Live lookups that run without the question's filters — the latest date that anchors a relative period, and the stored spelling of a typed value (`liveCaseFix`) — compile with the lock as their WHERE. The stored profile sample (`live.profile`) is never shown to a restricted caller. | Parity with the extract path (JS string equality), on warehouses whose default collation may be case-insensitive. |
+| D13 | **Live**: the lock compiles to bound parameters like every value, and compares **binary** per dialect (refutation S3): DuckDB `encode(x)` (a VARCHAR→BLOB cast would parse `\x41` escapes), BigQuery `CAST(x AS BYTES)`, Databricks `CAST(x AS BINARY)`, Snowflake `COLLATE(x, 'utf8')`, the Postgres/Redshift dialect `md5(x)` (byte-based in both; Postgres has no `COLLATE()` function and Redshift no `COLLATE "C"`), ClickHouse plain `=`/`IN` (String compares bytes). A dialect without a known binary form refuses a policy (`column`). The two Live lookups that run without the question's filters — the latest date that anchors a relative period, and the stored spelling of a typed value (`liveCaseFix`) — compile with the lock as their WHERE. The stored profile sample (`live.profile`) is never shown to a restricted caller. | Parity with the extract path (JS string equality), on warehouses whose default collation may be case-insensitive. |
 | D14 | **Derived datasets fail closed** (refutation B2; the earlier "trusted to editors" is withdrawn). The effective policy of a dataset is its own if it has one; otherwise, if its transitive upstream (origin parents — combined, composed, sql, notebook deps — and Prepare `union`/`lookup_join` references, `MAX_DEPTH` 16, a visited set, memoised per request) contains a policy dataset, it is **closed** to restricted callers and inside every fan-out scope (reason `derived`). One small exported closure helper, `upstreamIds` in `src/data/upstream.ts`, built on `originParents` + `stepRefIds` (the primitives `stepRefs.buildsOn` walks); item 4's `deliver()` will share it at integration. A copy of a policy dataset (`dataset:copyLive`, any extract copy) carries the same `rowPolicy`. The Row access tab lists the datasets built from this one. | A SQL dataset over a policy dataset must not be the way around it. |
 | D15 | **One refusal code**, `row_policy` (HTTP 409 from the route, or `{ok:false, code:'row_policy', reason, error}` inside a reply, per item in a batch), a machine `reason`, and a fixed catalog sentence per reason (`t()`; the reply never names another team or value). The route maps `RowPolicyError` like `LiveDatasetError` and tags caught refusals like `tagLiveRefusals`. A catch that turns an error into `[]`/`null` rethrows `RowPolicyError`. | The Live safety net's shape, which the web already renders. |
 | D16 | **The policy column must be declared `text`**; values match cells **exactly** (case and spaces), blank values are dropped, and a null or blank cell is in no one's rows. `storesCrossRow` becomes an **allow-list** over the steps AND the origin (refutation B3): row-local steps pass; `window`, `group_aggregate` and `pivot` pass only when partitioned/grouped by every locked column; `dedupe_key` only when its key includes every locked column; `segment`, `text_terms`, `lookup_join`, LOD fields and any step type added later store a cross-row value; so does an origin of kind `sql`, `notebook`, `composed` or `combined` (conservative on purpose: such a dataset with its own rules is refused to restricted viewers in phase 1 — a ceiling). | No number/date coercion edge cases in three engines; a new step type fails closed. Tightens embeds the same way (D1). |
@@ -152,13 +152,12 @@ net, never in a handler or the route).
 - **`pageFor`** (`src/ipc/datasets.ts:198`): `req.filters = [...lock.steps, ...req.filters]` inside a
   lock scope; both `readPage` and `pageRowsJs` honour `filters`. A `rowFilter` (quality failing rows)
   under a lock refuses (its predicate is computed over the whole table and a referenced dataset).
-- **The locked distinct reader**: `readDistinctPage` and `distinctValuesPageJs` move out of
-  `src/engine/datasetPage.ts` (790 lines) into `src/engine/datasetDistinct.ts` (re-exported, no
-  behaviour change), and the resident query gains an optional filter list (the lock's WHERE, through
-  `residentFilter`'s predicates), differential-tested against `distinctValuesPageJs` over the locked
-  fold. One helper, `distinctFor(projectId, datasetId, column, req)`, applies the caller's lock and is
-  used by `dataset:distinct`, `metrics.distinctValues` (`metrics.ts:283`), `scorecards.topDimension`
-  (`scorecards.ts:339`) and `alertStore.distinctValues` (`alertStore.ts:352`). On the policy column it
+- **The locked distinct reader**: `DistinctRequest` gains `filters` — `filterPredicates` in the
+  resident query, the fold in its JS reference (`datasetPage.ts`, +4 lines; a split would have had to
+  share the module's ordinal-fallback state) — and one helper in its own file, `distinctFor(projectId,
+  datasetId, column, req)` (`src/ipc/distinctFor.ts`), applies the caller's lock: `dataset:distinct`,
+  `metrics.distinctValues` (`metrics.ts:283`) and `scorecards.topDimension` (`scorecards.ts:339`).
+  `alertStore.distinctValues` is not a viewer's (alerts run in a fan-out scope): the net covers it. On the policy column it
   returns the entitled values that exist; on any other text column, the values that exist under the
   lock — what `lockedOptions` gives an embed's filter bar.
 - **`dataset:profile`** (`src/ipc/datasetViews.ts:98`): under a lock `figuresFor` skips the resident
@@ -362,7 +361,7 @@ Handler paths are under `src/`.
 | `formula:check` | `ipc/formula.ts:191` | 8 sample rows via `pageFor` + `lodPreview` (whole-table LOD values): an authoring check — refused whole, typed |
 | `summary:compute` | `ipc/summary.ts:255` | insights cache, stored quality results and alert events, `driversFor`: refused when any dataset it reads has a policy (the embed lock refuses the Summary card the same way) |
 | `summary:rewrite` | `ipc/summary.ts:275` | same facts, then a model |
-| `copilot:ask` | `ipc/copilot.ts:459` | `buildFacts`: a context naming a policy dataset (dataset, visual, analysis, capture, stats, drivers, scenario) refuses; the plain-ask inventory skips policy datasets; the ledger carries only facts that were allowed |
+| `copilot:ask` | `ipc/copilot.ts:459` | `buildFacts`: a dataset or capture context over a policy dataset refuses (whole-dataset summaries, sample rows, insights, a Live sample); visual, analysis and scorecard contexts are door figures (locked); stats, drivers and scenario contexts refuse through the net; the plain-ask inventory drops a policy dataset's Live sample notes; the ledger carries only facts that were allowed |
 | `versions:get` | `ipc/versions.ts:66` | stored version file: an input table's version carries the full table (inputTable/store.ts:102) → refused for `type:'dataset'` on a policy dataset |
 | `prepare:get` | `ipc/preparePower.ts:135` | returns the step BODIES (a filter or replace step can name other teams' values) and per-step counts → refused for a restricted caller on a policy or policy-derived dataset (refutation S2) |
 | **SKIP** | | |
@@ -647,8 +646,8 @@ House style: differential with `Object.is`, every guard with a negative control,
    survives is folded in before any code.
 2. **F21**: `stableStringify` keeps a `Map`'s entries; the withheld-columns catch fails closed. Tests.
 3. **Moves, no behaviour change**: `lockStep`/`storesCrossRow`/`makeLock` → `src/data/rowLock.ts`
-   (embedLock re-exports); `readDistinctPage`/`distinctValuesPageJs` → `src/engine/datasetDistinct.ts`.
-   `test-embedLock`, `test-datasetPage` green before and after.
+   (embedLock re-exports); the distinct readers take a `filters` list. `test-embedLock`,
+   `test-datasetPage` green before and after.
 4. **The policy**: `src/data/rowPolicy.ts` (sanitizer, `entitlement`, the writer-steps hash),
    `src/data/upstream.ts` (the closure), the `storesCrossRow` allow-list over steps and origin,
    `writeRecordKeepingPolicy` in `datasetRecord.ts` (B1), the three `datasets.ts` lines,
@@ -688,6 +687,18 @@ House style: differential with `Object.is`, every guard with a negative control,
       `model.datasetIds` (one line), drop the interim call in `run.ts`/`alertPosts.ts`; add the email
       channel to the fan-out cases (a subscription and an alert on a policy dataset send no email).
     - Re-run every gate on the merged tree.
+
+## As built (Phase B)
+
+- **Suites**: `scripts/test-rowPolicy.ts` (pure), `scripts/test-rowPolicyLive.ts` (pure, compiled SQL per
+  dialect), `scripts/test-rowPolicySafetyNet.ts` and `scripts/test-rowPolicyFanOut.ts` (DB, over the real
+  route; shared world in `scripts/rowPolicyHarness.ts`, the inventory as code in
+  `scripts/rowPolicyReaders.ts`), `web/src/features/data/rowAccess.test.tsx`, `web/e2e/row-access.e2e.ts`.
+- **Found while building, fixed**: `pageRowsJs` dropped the filters when a request had no page
+  window, so a grid request without one counted the whole table (a count leak under a lock);
+  `alertStore`'s period and anomaly catches, and the scorecard's figure catch, swallowed a refusal.
+- **Item 4 interim**: `assertFanOutAllowed` is called in `subscriptions/run.ts` (`buildSendable`, before
+  any post), `alertPosts.ts` (per event), `publishHosted` and the embed build.
 
 ## Refutation round
 
