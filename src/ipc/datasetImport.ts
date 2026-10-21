@@ -74,7 +74,7 @@ export function register(): void {
         ok: true,
         fileName,
         sourceKind: storedKind(kind),
-        preview: importStage.previewOf(parsed, importStage.put(parsed)),
+        preview: importStage.previewOf(parsed, await importStage.put(parsed)),
       };
     } catch (err: any) {
       if (err instanceof jobs.JobCancelled || (err && err.name === 'JobCancelled')) return { ok: true, canceled: true };
@@ -96,7 +96,7 @@ export function register(): void {
       // On the server pasted rows are STAGED like a file's, so the composer's
       // preview and save never send them back over HTTP (the desktop renderer
       // keeps sending its inline rows, as before).
-      return { ok: true, preview: serverDataDir() !== null ? importStage.previewOf(parsed, importStage.put(parsed)) : parsed };
+      return { ok: true, preview: serverDataDir() !== null ? importStage.previewOf(parsed, await importStage.put(parsed)) : parsed };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to parse the pasted text' };
     }

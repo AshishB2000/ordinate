@@ -371,11 +371,11 @@ to `parquetStore.ts` (377 lines):
 
 The decoder then runs over the rows in place, with no second array.
 
-**One NDJSON line is one row, and `read_json` refuses an object over `maximum_object_size`
-(16 MB by default).** So a single row over 16 MB, from very wide tables or huge cells, would fail
-the COPY, and the dataset save path has the same limit today. `readJsonSql` passes
-`maximum_object_size` = 1 GiB. A test writes a 20 MB row through both the stage and the dataset
-writer (condition 4).
+**One NDJSON line is one row, and `read_json` documents a `maximum_object_size` (16 MB by
+default)** (condition 4). Measured on the bundled DuckDB, a 20 MB row reads with explicit
+`columns=` and no option set, so `readJsonSql` is unchanged. `test-stageParquet` writes a 20 MB row
+through both the stage and the dataset writer, so a DuckDB upgrade that starts enforcing the
+default fails that test instead of an import.
 
 **Parse metadata** goes in the stage row as JSON text:
 `{ v: 1, columns: [{name, type}], rowCount, warnings, sheetNames? }`. It is `text`, not `jsonb`:
@@ -411,9 +411,15 @@ and NUL to ASCII, so names round-trip exactly.
 - **The async API.** `put`, `get` and `drop` become async; every caller adds `await` and grows no
   lines (`datasets.ts` stays at 747). `get` returns the full `rowCount` with up to `limit` rows, so
   `resolveRef` computes `truncated` from `rowCount`. Without the DB, the Map path is today's code.
-- **Cost, measured in Phase B for the PR body:** the write at 1M rows on the parse path (it adds
-  to the parse RPC; the composer's spinner covers it), the full read on Save, and RSS after a 1M-row
-  parse.
+- **Cost, measured** (`STAGE_MEASURE=1 node scripts/test-stageParquet.js`, this machine, under the
+  load of five parallel builds; the default `RPC_TIMEOUT_SECONDS` is 60):
+
+  | Table | Write (the parse RPC) | Full read (Save) | File |
+  |---|---|---|---|
+  | 1,000,000 × 10 | 2.1 s | 6.2 s | 6.5 MB |
+  | 20,000 × 1,000 | 7.4 s | 14.1 s | 15.7 MB |
+
+  Both stay well inside the 60 s RPC timeout. A preview reads only its `PREVIEW_PARENT_ROWS`.
 
 ### 3.5 Plan runs as records
 

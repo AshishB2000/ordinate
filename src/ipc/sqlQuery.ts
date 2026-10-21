@@ -86,7 +86,7 @@ export function register(): void {
       const res: any = await job.done;
       const rows = Array.isArray(res.rows) ? res.rows : [];
       const table = { columns: res.columns || [], rows, rowCount: rows.length, warnings: [] as string[] };
-      const stagedId = importStage.put(table);
+      const stagedId = await importStage.put(table);
       return { ...res, rows: rows.slice(0, importStage.PREVIEW_ROWS), rowCount: rows.length, stagedId };
     } catch (err: any) {
       if (err && err.name === 'JobCancelled') return { ok: false, canceled: true, error: 'Cancelled.' };

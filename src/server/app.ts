@@ -193,7 +193,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // Live warehouse statements counted per org per day across pods (L2.7): the daily limit holds org-wide.
       useLiveUsageDb(pool, cfg.auth.mode === 'dev');
       // Any pod serves any request (docs/any-pod): the abuse counters, file tokens and staged imports are rows, swept by a job.
-      (require('./sharedState') as typeof import('./sharedState')).wireSharedState(pool);
+      (require('./sharedState') as typeof import('./sharedState')).wireSharedState(pool, app.log);
       // Connection passwords/tokens: the encrypted store (T5.3), never the
       // per-org config.json. Without a master key there is no store, and a
       // connection secret is refused (src/app/configSecrets.ts).

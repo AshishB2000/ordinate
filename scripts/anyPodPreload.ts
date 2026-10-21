@@ -10,6 +10,7 @@
 //   ANYPOD_NONATOMIC_TAKE=1   NEGATIVE CONTROL: a token take that reads, then writes unconditionally
 //   ANYPOD_SLOW_JOBS=a,b      jobs of these kinds wait ANYPOD_SLOW_MS (or until cancelled) before running
 //   ANYPOD_OFFER_LOG=1        every offered download logs its bytes' sha256 (`anypod:offered`)
+//   ANYPOD_TAKE_LOG=1         every token take that WON logs its hash (`anypod:took`)
 
 export {}; // module scope — sibling scripts share top-level names
 
@@ -88,5 +89,15 @@ if (env.ANYPOD_OFFER_LOG === '1') {
     const sha = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
     process.stdout.write(JSON.stringify({ msg: 'anypod:offered', sha }) + '\n');
     return real(file, name, sha256);
+  };
+}
+
+if (env.ANYPOD_TAKE_LOG === '1') {
+  // After any override above: counts what a take returned, whatever the handler does next.
+  const inner = fileTokens.takeRow;
+  (fileTokens as { takeRow: typeof inner }).takeRow = async (org, user, kind, hash) => {
+    const row = await inner(org, user, kind, hash);
+    if (row) process.stdout.write(JSON.stringify({ msg: 'anypod:took', hash: hash.toString('hex') }) + '\n');
+    return row;
   };
 }

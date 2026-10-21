@@ -71,15 +71,15 @@ async function resolveRef(projectId: string, ref: TableRef, sample: number | nul
   const inline = ref && (ref.inline as any);
   // A staged file import (./datasetImport.ts): the full table is already in
   // main; the renderer only holds its display slice and this id.
-  const stagedTable = inline ? importStage.get(inline.stagedId) : null;
+  const stagedTable = inline ? await importStage.get(inline.stagedId, sample) : null;
   // A staged ref whose table is gone — expired, saved, or another org's or
   // user's (importStage is per owner) — fails the chain. Falling through to the
   // inline rows would preview, or save, the 2,000-row display slice.
   if (inline && inline.stagedId != null && !stagedTable) return null;
   if (stagedTable) {
-    const truncated = sample !== null && stagedTable.rows.length > sample;
+    const truncated = sample !== null && stagedTable.rowCount > sample;
     return {
-      table: { columns: stagedTable.columns, rows: truncated ? stagedTable.rows.slice(0, sample as number) : stagedTable.rows },
+      table: { columns: stagedTable.columns, rows: stagedTable.rows }, // already the first `sample` rows
       name: typeof inline.name === 'string' && inline.name ? inline.name : 'This import',
       id: null,
       truncated,
@@ -238,7 +238,7 @@ export async function composeSave(
       // A saved dataset copied as is (no joins, so no `composed` origin to name it): born with its row access rules.
       const saved = r.baseRes.id ? await savedFrom(projectId, r.baseRes.id, save) : await save();
       if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
-      importStage.drop(base && base.inline && base.inline.stagedId);
+      await importStage.drop(base && base.inline && base.inline.stagedId);
       progress(0.88, 'Applying the column mapping');
       const withSteps = await applyInitialSteps(projectId, saved.id, steps);
       const retyped = await applyRetype(projectId, saved.id, retype);
@@ -264,7 +264,7 @@ export async function composeSave(
         origin: keptOrigin,
       });
       if (!savedBase) return { ok: false, error: 'Invalid project, or the project no longer exists' };
-      importStage.drop(base && base.inline && base.inline.stagedId);
+      await importStage.drop(base && base.inline && base.inline.stagedId);
       baseId = savedBase.id;
       alsoSaved = savedBase.name;
     }

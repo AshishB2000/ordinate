@@ -83,8 +83,13 @@ async function race(p: Pass, A: H.Pod, B: H.Pod): Promise<{ won: number; waited:
     const waited = !!(await H.until(async () => Number((await p.db.pool.query(
       `SELECT count(*) AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`)).rows[0].n) >= 2, 15_000));
     await side.query('COMMIT');
-    const r = await Promise.all(fired);
-    return { won: r.filter((x) => x.error !== TOKEN_GONE).length, waited };
+    await Promise.all(fired);
+    await H.sleep(200); // the last log lines
+    const hex = hashOf(tok).toString('hex');
+    // Takes that won, as each pod logged them (the preload) — not import replies: with a broken take
+    // both win, and then one import can still lose the race for the file the other deleted.
+    const won = [A, B].reduce((n, pod) => n + pod.lines().filter((l) => l.msg === 'anypod:took' && l.hash === hex).length, 0);
+    return { won, waited };
   } finally {
     side.release();
   }
@@ -199,7 +204,78 @@ export async function orgWall(p: Pass): Promise<void> {
     theirs.ok === false && mine.ok === true, JSON.stringify([theirs, mine]));
 }
 
-export const CASES: Array<(p: Pass) => Promise<void>> = [takeRace, wrongUser, expired, exportAndBackup, sweepSparesTaken, abortedDownload, orgWall];
+// ── 1. Upload on A → parse on B → save on A = a one-pod import ───────────
+const STAGE_GONE = 'This import is no longer available — bring the file in again.';
+
+/** A CSV that bites: leading zeros, −0, 1e21, a float sum, empties, NBSP, a tab, a BOM inside a cell, duplicate and quoted headers. */
+function nastyCsv(rows: number, width: number): Buffer {
+  const extra = Math.max(0, width - 6);
+  const head = ['"Name ""X"""', 'n', 'n', 'code', 'blank', 'ws', ...Array.from({ length: extra }, (_, i) => `x${i}`)];
+  const line = (i: number): string => [
+    `"row ${i}"`,
+    ['-0', '1e21', String(0.1 + 0.2), String(i)][i % 4],
+    String(i * 1.5),
+    `"00${i % 10}"`,
+    ['"  "', '', '"﻿bom"'][i % 3],
+    `" a\tb${i % 7}"`,
+    ...Array.from({ length: extra }, (_, c) => `v${i}-${c}`),
+  ].join(',');
+  return Buffer.from([head.join(','), ...Array.from({ length: rows }, (_, i) => line(i))].join('\n'));
+}
+
+/** Every row of a saved dataset, through dataset:page (wire-encoded: −0 and the rest survive). */
+async function rowsOf(pod: H.Pod, projectId: string, datasetId: string): Promise<unknown[][]> {
+  const out: unknown[][] = [];
+  for (let offset = 0; ; offset += 5_000) {
+    const page = (await H.rpc(pod.base, U1, 'dataset:page', { projectId, datasetId, offset, limit: 5_000 })).body as { rows?: unknown[][] };
+    if (!page.rows?.length) return out;
+    out.push(...page.rows);
+  }
+}
+const sameRows = (a: unknown[][], b: unknown[][]): boolean => a.length === b.length && a.every((r, i) => r.length === b[i].length && r.every((v, c) => Object.is(v, b[i][c])));
+
+/** Upload on `up`, parse on `parse`, save on `save`: the preview, and the saved dataset's columns and rows. */
+async function importVia(p: Pass, up: H.Pod, parse: H.Pod, save: H.Pod, csv: Buffer, name: string) {
+  const pid = await projectOf(p, U1);
+  const tok = await H.upload(up.base, U1, csv, name + '.csv');
+  const parsed = await H.rpc(parse.base, U1, 'dataset:pickAndParse', { fileToken: tok });
+  const stagedId = parsed.body?.preview?.stagedId as string;
+  const preview = await H.rpc(parse.base, U1, 'dataset:composePreview', { projectId: pid, base: { inline: { name, stagedId } }, joins: [], offset: 0, limit: 50 });
+  const saved = await saveStaged(save, U1, pid, name, stagedId);
+  const ds = saved.body?.dataset as { id: string; columns: unknown } | undefined;
+  return { preview: (preview.body?.rows ?? []) as unknown[][], saved: saved.body, columns: ds?.columns, rows: ds ? await rowsOf(save, pid, ds.id) : [] };
+}
+
+export async function crossPodImport(p: Pass): Promise<void> {
+  for (const [label, rows, width] of [['small (this pod also keeps it in memory)', 400, 6], ['30,000 × 10 (past the memory cap: Parquet only)', 30_000, 10]] as const) {
+    const csv = nastyCsv(rows, width);
+    const one = await importVia(p, p.A, p.A, p.A, csv, `one-${rows}`);
+    const cross = await importVia(p, p.A, p.B, p.A, csv, `cross-${rows}`);
+    ok(`[${p.name}] 1: ${label} — upload on A, parse on B, save on A gives the one-pod import: columns, types and every cell (Object.is)`,
+      cross.rows.length === rows && JSON.stringify(cross.columns) === JSON.stringify(one.columns) && sameRows(cross.rows, one.rows),
+      JSON.stringify({ n: [one.rows.length, cross.rows.length], saved: cross.saved?.ok }).slice(0, 300));
+    ok(`[${p.name}] 1: ${label} — the composer's preview on B (a limited read of the stage) equals the one-pod preview`,
+      cross.preview.length === Math.min(50, rows) && sameRows(cross.preview, one.preview));
+  }
+}
+
+// ── 11. The row is the truth: saved on B, the stage is gone on A ─────────
+export async function rowIsTruth(p: Pass): Promise<void> {
+  const pid = await projectOf(p, U1);
+  const tok = await H.upload(p.A.base, U1, nastyCsv(20, 6), 'truth.csv');
+  const stagedId = (await H.rpc(p.A.base, U1, 'dataset:pickAndParse', { fileToken: tok })).body?.preview?.stagedId as string;
+  const onB = await saveStaged(p.B, U1, pid, 'truth', stagedId);
+  const againOnA = await saveStaged(p.A, U1, pid, 'truth again', stagedId);
+  ok(`[${p.name}] 11: parsed on A (kept in A's memory), saved on B, saved again on A: GONE — the row is the truth`,
+    onB.body?.ok === true && againOnA.body?.ok === false && againOnA.body.error === STAGE_GONE, JSON.stringify([onB.body?.ok, againOnA.body]));
+  const tok2 = await H.upload(p.A.base, U1, nastyCsv(20, 6), 'mine.csv');
+  const mine = (await H.rpc(p.B.base, U1, 'dataset:pickAndParse', { fileToken: tok2 })).body?.preview?.stagedId as string;
+  const other = await H.rpc(p.A.base, U2, 'dataset:composePreview', { projectId: pid, base: { inline: { name: 'x', stagedId: mine } }, joins: [], offset: 0, limit: 5 });
+  const foreign = await H.rpc(p.A.base, G1, 'dataset:composePreview', { projectId: await projectOf(p, G1), base: { inline: { name: 'x', stagedId: mine } }, joins: [], offset: 0, limit: 5 });
+  ok(`[${p.name}] stage wall: another user's, and another org's, read of a stage is GONE`, other.body?.error === STAGE_GONE && foreign.body?.error === STAGE_GONE, JSON.stringify([other.body, foreign.body]).slice(0, 300));
+}
+
+export const CASES: Array<(p: Pass) => Promise<void>> = [crossPodImport, rowIsTruth, takeRace, wrongUser, expired, exportAndBackup, sweepSparesTaken, abortedDownload, orgWall];
 
 // ── 9. NEGATIVE CONTROL: no database, the Map — a take does not cross pods ─
 export async function memoryControl(A: H.Pod, B: H.Pod): Promise<void> {
