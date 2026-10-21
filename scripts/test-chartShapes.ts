@@ -327,10 +327,12 @@ function doorProblem(data: Any, type: string, ask: Any = {}): string {
   {
     const r = (await post('visual:data', { projectId: P, datasetId: s.extractId, encoding: BY_CAT, chartType: 'pareto' })).value;
     const skipped = { ...r.data, figures: undefined };
-    const stale = { ...r.data, series: [{ ...r.data.series[0], values: r.data.series[0].values.map((v: number) => v * 2) }] };
+    // A step after withFigures (a Share policy mask) blanked a value: the figures are still the unmasked series'.
+    const s0 = r.data.series[0];
+    const stale = { ...r.data, series: [{ ...s0, values: s0.values.map((v: number, i: number) => (i === 0 ? null : v)) }] };
     const plain = (await post('visual:data', { projectId: P, datasetId: s.extractId, encoding: BY_CAT })).value;
     ok('control: a reply without figures fails the door check', !!doorProblem(skipped, 'pareto'));
-    ok('control: figures computed before the series changed fail it too', !!doorProblem(stale, 'pareto') || show(stale.figures) !== show(chartShapes('pareto', stale)));
+    ok('control: figures computed before a mask changed the series fail it too', !!doorProblem(stale, 'pareto'), show(stale));
     ok('control: without a chartType the same request carries no figures', plain.ok === true && !('figures' in plain.data));
   }
 
