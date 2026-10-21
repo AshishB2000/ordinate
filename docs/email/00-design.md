@@ -83,9 +83,10 @@ export async function deliver(channel: Channel, delivery: Delivery): Promise<Pos
 1. `datasetIds = await figureDatasets(delivery)` (`src/server/subscriptions/figureDatasets.ts`). If it
    throws, or the record the source names is gone, the result is `compute_failed` and **nothing is
    sent**.
-2. `const refused = await refuseFanOut(datasetIds)`. This is **ITEM 5's hook point**, a named function
-   in `deliver.ts` that returns `null` today. Item 5 makes it return `{ok: false, code: 'row_policy'}` for
-   a policy dataset. It runs before a recipient is resolved, a webhook URL is read or a socket opened.
+2. `const refused = await refuseFanOut(delivery, datasetIds)`. This is **ITEM 5's refusal**
+   (docs/row-policy/00-design.md): `{ok: false, code: 'row_policy'}` for a policy or policy-derived
+   dataset, `compute_failed` when the check cannot be made. It runs before a recipient is resolved, a
+   webhook URL is read or a socket opened.
 3. Route by `channel.kind`. Slack and Teams render with `renderSlack` / `renderTeams` and post through
    `postToChannel`. Email goes to `src/server/mail/emailChannel.ts`. A test composes `testMessage(name)`
    here.

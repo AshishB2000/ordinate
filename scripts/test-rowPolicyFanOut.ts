@@ -42,8 +42,8 @@ const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 200)}`;
       const delta = H.diff(a.body, b.body, { [truth]: d });
       ok(label, a.status === 200 && a.body?.ok === true && delta === '', `${delta} | ${show(a)}`);
     };
-    const dashOn = async (d: string): Promise<string> => {
-      const v = await W.call('boss', 'visual:save', { projectId: P, datasetId: d, name: 'Sales', chartType: 'bar', encoding: enc });
+    const dashOn = async (d: string, chartType = 'bar'): Promise<string> => {
+      const v = await W.call('boss', 'visual:save', { projectId: P, datasetId: d, name: 'Sales', chartType, encoding: enc });
       const a = await W.call('boss', 'analysis:create', { projectId: P, name: 'Board', sheets: [{ name: 'One', cards: [
         { id: crypto.randomUUID(), type: 'visual', layout: { x: 0, y: 0, w: 6, h: 4 }, visualId: String(v.body?.visual?.id ?? v.body?.id) },
         { id: crypto.randomUUID(), type: 'metric', layout: { x: 6, y: 0, w: 3, h: 4 }, metric: { datasetId: d, column: 'sales', aggregation: 'sum', label: 'Sales' } },
@@ -60,6 +60,13 @@ const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 200)}`;
     ok('fan-out: the Publish dialog refuses a dashboard over Orders — for an admin too', H.refused(plan, 'fanout'), show(plan));
     const pub = await W.call('boss', 'publish:run', target(onOrders));
     ok('fan-out: …and so does publishing it', H.refused(pub, 'fanout'), show(pub));
+    // The published figures (item 1: a waterfall's levels, a Pareto's share) come off the same doors, in the same scope.
+    for (const t of ['waterfall', 'pareto']) {
+      const figured = await W.call('boss', 'publish:run', target(await dashOn(orders, t)));
+      ok(`fan-out: a ${t} over Orders is refused before its figures reach a /p/ page`, H.refused(figured, 'fanout'), show(figured));
+      const plainFig = await W.call('boss', 'publish:plan', target(await dashOn(plain, t)));
+      ok(`NEGATIVE CONTROL: a ${t} over the plain dataset is planned`, plainFig.body?.ok === true, show(plainFig));
+    }
     const site = await W.call('boss', 'publish:run', target(onPlain));
     const siteId = String(site.body?.site?.id ?? '');
     ok('NEGATIVE CONTROL: a dashboard over a dataset without rules publishes, and records what it read', site.body?.ok === true && JSON.stringify(site.body.site.datasetIds) === JSON.stringify([plain]), show(site));

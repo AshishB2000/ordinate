@@ -697,8 +697,45 @@ House style: differential with `Object.is`, every guard with a negative control,
 - **Found while building, fixed**: `pageRowsJs` dropped the filters when a request had no page
   window, so a grid request without one counted the whole table (a count leak under a lock);
   `alertStore`'s period and anomaly catches, and the scorecard's figure catch, swallowed a refusal.
-- **Item 4 interim**: `assertFanOutAllowed` is called in `subscriptions/run.ts` (`buildSendable`, before
-  any post), `alertPosts.ts` (per event), `publishHosted` and the embed build.
+- **Integrated with items 1–4**: `deliver()`'s `refuseFanOut(delivery, datasetIds)` is the row-policy
+  check — the one door every subscription run, fired alert and channel test passes; it answers
+  `row_policy` (a run code beside the email codes) for a policy or policy-derived dataset, and
+  `compute_failed` when the check itself fails. Subscription preview and save ask
+  `dashboardSendRefusal` of the dashboard's DEFINITION (`figureDatasets`): no figure computed, no
+  warehouse called. The interim checks (`buildSendable`, the per-event check in `alertPosts.ts`) are
+  gone; `publishHosted`, the embed build and the per-rule alert scope keep their own. The lineage
+  graph (and so `figureDatasets` and the pipeline) draws its dataset edges from
+  `upstream.parentsOfRecord` — one lenient definition, read as stored, so an origin that would not
+  sanitize still names its parents (`test-rowPolicy` pins the agreement on composed, sql, union and
+  lookup_join). An older `/p/` site has its datasets worked out once from the definitions it was
+  published with (`datasetsOfRoot`) and kept on its manifest; one with a story or scorecard falls back
+  to the project-wide check, remembered for 15 s per pod and forgotten when this pod saves rules.
+  Explore's suggestions are metadata (META); its page shows the chip and the access state; the
+  drawn figures (a waterfall's levels, a Pareto's share) come off the locked series and equal the
+  explicit-filter figures with `Object.is` (`test-rowPolicySafetyNet`).
+
+## Review round 2
+
+Each fix is pinned by a test with a negative control that fails without it.
+
+| # | What was wrong | Now |
+|---|---|---|
+| 1 | A read error on a record (not ENOENT) read as "no rules"; a failed read was memoised. | ENOENT → no rules; unparseable → closed; any other error refuses (`unreadable`), never memoised; copies refuse when the source's rules cannot be read. |
+| 2 | A lock on a column that is gone was skipped by the JS fold, the resident filter and the Live adapter. | `lock: true` on a missing column refuses (`column`) in all three. |
+| 3 | RFM and composer saves made a dataset from a ruled one without its rules. | Born with them (`savedFrom`), or closed rules for a derived source. |
+| 4 | A dataset with its own rules skipped the upstream walk. | Upstream always walked: other rules upstream → `derived`. |
+| 5 | `LiveRefusal` took a `row` prop the callers had to pass. | Reads row-vs-Live from the refusal itself. |
+| 6 | `metric:check` was exempt in the safety net. | A door like the others (`sum(sales)`). |
+| 7 | Live lock SQL was checked by regex; only DuckDB ran. | Exact clause per dialect; the `md5` form runs on a real Postgres column with a case-insensitive collation. |
+| 8 | Entitlement dedupe was O(n²). | A Set. |
+| 9 | `subscription:save` rebuilt the dashboard to refuse it. | Asked of the definition (`dashboardSendRefusal`). |
+| 10 | The legacy `/p/` check walked every dataset per fetch. | Backfilled once; else a 15 s per-pod memory forgotten on a rule save. |
+| 11 | `projects:list`/`:open` sent the colour map and dismissed insight ids. | Never sent. |
+| 12 | A visual's custom order and series colours rode out to a restricted viewer. | Dropped for that caller (`visualForCaller`) in `visual:get`, thumbs, the gallery, `analysis:open` and a visual's version. |
+| 13 | `versions:diff` of a dataset was not gated. | Gated like `versions:get` (and `:figures`). |
+| 14 | A pipeline run's errors could quote a value. | Blanked on a restricted caller's dataset and quality nodes. |
+| 15 | Sentiment and keyword-rule steps wrote `<col>_sentiment` / `<col>_category` unseen. | Counted as writers. |
+| 16 | Anomaly keys in the list; a parameter replay served from its memo. | Keys dropped; the net runs before the memo. |
 
 ## Refutation round
 

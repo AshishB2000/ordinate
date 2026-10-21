@@ -65,6 +65,9 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     const DIFFERENTIAL: [string, string, Payload][] = [
       ['chart', 'visual:data', (d) => ({ projectId: P, datasetId: d, encoding: enc })],
       ['chart by month', 'visual:data', (d) => ({ projectId: P, datasetId: d, encoding: byMonth })],
+      // The drawn figures (item 1) come LAST, off the locked series: a waterfall's levels and a Pareto's order and share.
+      ['waterfall figures', 'visual:data', (d) => ({ projectId: P, datasetId: d, encoding: enc, chartType: 'waterfall', waterfallTotals: [] })],
+      ['Pareto figures', 'visual:data', (d) => ({ projectId: P, datasetId: d, encoding: enc, chartType: 'pareto' })],
       ['pivot', 'visual:data', (d) => ({ projectId: P, datasetId: d, encoding: { ...enc, pivot: { rows: [{ column: 'customer' }], columns: [], values: [{ column: 'sales', aggregation: 'sum' }] } } })],
       ['cohort', 'visual:data', (d) => ({ projectId: P, datasetId: d, encoding: { ...enc, cohort: { entity: 'customer', date: 'day', grain: 'month' } } })],
       ['event funnel', 'visual:data', (d) => ({ projectId: P, datasetId: d, encoding: { ...enc, eventFunnel: { entity: 'customer', event: 'region', time: 'day', steps: ['North', 'East'] } } })],
@@ -102,6 +105,12 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       const d = diff(mine, truth);
       ok(`door: ${label} (${channel}) — east on Orders ≡ the editor on East's rows`, mine.status === 200 && truth.status === 200 && d === '', `${d} | ${mine.status} ${mine.text.slice(0, 200)}`);
       ok(`NEGATIVE CONTROL: ${label} — the editor on Orders sees more`, diff(whole, truth) !== '', `${whole.text.slice(0, 200)} | ${truth.text.slice(0, 200)}`);
+    }
+    const figs = async (who: string, d: string, chartType: string) => (await W.call(who, 'visual:data', { projectId: P, datasetId: d, encoding: enc, chartType })).body?.data?.figures;
+    for (const t of ['waterfall', 'pareto']) {
+      const mine = await figs('east', orders, t);
+      ok(`figures: east's ${t} carries figures computed over East's rows (compared above, Object.is)`, !!mine && Object.keys(mine).length > 0, JSON.stringify(mine)?.slice(0, 160));
+      ok(`NEGATIVE CONTROL: the editor's ${t} figures over Orders differ from East's`, H.diff(await figs('ed', orders, t), await figs('ed', east, t), {}) !== '');
     }
     function diff(a: H.Reply, b: H.Reply): string {
       return H.diff(a.body, b.body, swap);
