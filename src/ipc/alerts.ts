@@ -6,9 +6,11 @@
 // a rule fired: those are alertStore's and alerts.ts's jobs respectively, and
 // this file exists so the renderer has doors into them.
 //
-// The one thing this file DOES own is delivery: `deliver()` is the single place
-// that turns fired events into the push each signed-in tab's bell repaints
-// from, and it is what both the server's tick and a manual "evaluate now" call.
+// Delivery is not this file's: a rule's fired events go through
+// server/jobs/schedules.ts `deliverFired` — the push AND the posts to the rule's
+// channels, the same on every path as on the tick (docs/notifications §5.3).
+// `pushAlertEvents` is the push alone, for quality and pipeline events, which no
+// rule's channels name.
 //
 // THE EXPLAIN PATH IS THE ONLY MODEL CALL, and it is asked for (`alerts:explain`):
 // the event is already on disk before `explainEvent` is called. It narrates
@@ -33,20 +35,17 @@ import { markSeenFor, perMember, seenView } from '../server/alertInbox';
 
 // ── Delivery ─────────────────────────────────────────────────────────────────
 
+const schedules = (): typeof import('../server/jobs/schedules') => require('../server/jobs/schedules');
+
 /**
- * Everything one evaluation produced, delivered once: every tab of the org gets
- * the push its bell repaints from, exactly what the tick job sends — only to
- * members who may read the project (T6.3), since an alert carries its figures.
- * Outside server mode (a plain-Node test) there is no one to tell. Returns how
- * many OS notifications were shown, which the server never does: 0.
+ * Events no rule's channels name — data-quality checks (analysis/qualityRun) and
+ * pipeline failures (app/pipelineRunner): the push alone, to members who may read
+ * the project (T6.3), with no figure from a dataset with row access rules.
+ * Outside server mode (a plain-Node test) there is no one to tell.
  */
-export async function deliver(projectId: string, events: AlertEvent[]): Promise<number> {
-  if (!Array.isArray(events) || events.length === 0) return 0;
-  if (serverDataDir() !== null) {
-    const pushable = await store.pushableEvents(projectId, events); // no figure from a dataset with row access rules
-    (require('../server/jobs/schedules') as typeof import('../server/jobs/schedules')).pushToReaders(projectId, 'alerts:fired', { projectId, events: pushable });
-  }
-  return 0;
+export async function pushAlertEvents(projectId: string, events: AlertEvent[]): Promise<void> {
+  if (!Array.isArray(events) || events.length === 0 || serverDataDir() === null) return;
+  await schedules().pushFired(projectId, events);
 }
 
 /**
@@ -69,7 +68,8 @@ export async function evaluateOnly(projectId: string, datasetId?: string): Promi
  */
 export async function evaluateAndDeliver(projectId: string, datasetId?: string): Promise<AlertEvent[]> {
   const fired = await evaluateOnly(projectId, datasetId);
-  await deliver(projectId, fired);
+  // What the tick does: the push (awaited, so the bell is right when a refresh answers) and the posts (never awaited).
+  if (fired.length && serverDataDir() !== null) await schedules().deliverFired(projectId, fired).pushed;
   return fired;
 }
 
