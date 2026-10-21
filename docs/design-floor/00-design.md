@@ -190,17 +190,21 @@ take screenshots.
 ```
 
 ```
-← Datasets                                          (12px, muted, arrow-left; a real <a>)
+← Datasets                                          (13px, muted, arrow-left; a real <a>)
 Orders  [CSV upload] [Live]                [Prepare] [View query] [New visual] [⋯]
 5,000 rows · 9 columns · refreshed 2h ago
 ```
 
 - `back` is `{ to, label }`, rendered by `BackLink` as a quiet crumb above the title: muted text, a
-  14px arrow-left, `label` naming the parent page as its own heading names it.
+  16px arrow-left, `label` naming the parent page as its own heading names it — except where this
+  page's title already is the parent's name (Prepare, an input table, a Live route over a dataset):
+  there the crumb says what kind of page it goes to, "Dataset", rather than repeat the title.
 - `title` is a string, or a node for an editable name (the analysis editor's rename button, a story
   or scorecard name input). It is always the page's one `<h1>`.
 - `status` is one or more chips right after the title (View only, a save state, Live, a source).
-- `sub` is a string sentence (`<p>`, ≤ 72ch, muted) or a node: the meta row a dataset page shows.
+- `sub` is a string sentence (`<p>`, ≤ 72ch, muted) or a node whose children stack (a sentence with
+  a bold name, the dataset page's row of facts, its status and lineage lines), each laying out its
+  own row.
 - `actions` sit right, wrap below on a narrow window, and hold **at most one primary**. `PageHead`
   checks after render and logs `console.error` when it finds two, so the e2e harness (which fails
   on any console error) and the Vitest catch a second primary on any screen.
@@ -315,14 +319,27 @@ fails if a main `NAV` entry is in no group or in two, or a group names a route `
    harness fails any page that logs one, so the rule holds on every screen the suite visits, not
    only in the Vitest.
 8. **The crumb is a quiet link, not a ghost button**: a 28px ghost button above a 20px title was the
-   heaviest thing in most headers. 12px `--muted` text and a 14px arrow, `--text` on hover, a 24px
-   hit area.
+   heaviest thing in most headers. 13px `--muted` text and a 16px arrow, `--text` on a `--surface-2`
+   fill on hover, a 24px hit area, its arrow on the title's left edge.
 9. **`useCameFrom` reads router state**, set by the openers that are not the parent. No history
    sniffing: a crumb must name its target, and only the opener knows the name.
 10. **`BackLink` is exported** for the phone dashboard's icon-only bar, so even that back link comes
     from `blocks.tsx`; the phone keeps its 44px target and its "Back to Analyses" name.
 11. **The nav's foot keeps its order** (Settings, Admin, Trash, as `nav.ts` lists them); "the bottom
     stays as it is" wins over the spec's listing order.
+12. **The tone inks are theme tokens too.** A preset that redefines `--ok` must redefine `--ok-text`
+    (`scripts/test-dashboardStyleCss` holds every preset to the dark theme's token set), so the four
+    inks join `AXIS_TOKENS` (`src/analysis/themeModel.ts`) and the browser's copy, and each built-in
+    theme carries them; a custom theme saved before inherits the app's.
+13. **A header picker has no visible label.** The dataset pickers in the visual builder's and the
+    analytics workbenches' headers take `aria-label="Dataset"`, so they are a control's height and sit
+    on the title's line beside the buttons; the dataset is what they show.
+14. **The crumb reached further than the spec's list**, where a page had no way back at all: version
+    history goes back to its record, an input table to its dataset, Metrics and Captures (reached
+    from the Data header) to Data, the scenarios list to Analytics. Get started's "Create a
+    dashboard" opens the wizard too, for the same reason Home → New → Dashboard does.
+15. **A header's primary sits last**, on the right edge: the Data header's order is Metrics, Paste
+    data, Connect a database, Import file.
 
 ## Steps
 

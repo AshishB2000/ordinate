@@ -90,6 +90,14 @@ the desktop installers.
   See [`docs/server/email.md`](docs/server/email.md).
 
 - **Row access rules.** A project admin can limit what each project viewer sees in a dataset to the rows whose chosen column holds their values — by person or by team — from the dataset's new **Row access** tab. Every chart, KPI, answer, data grid, filter list and column panel then shows that viewer only their rows; readers that work over the whole table (SQL, statistics, drivers, segments, insights, quality results, snapshot diffs, Prepare previews, exports) are refused with a sentence that says why, and published links, embeds, subscriptions and alerts are off for such a dataset. Live datasets bind and byte-compare the rule's values on every warehouse. See [`docs/server/row-level-security.md`](docs/server/row-level-security.md).
+- **One page header, the missing doors and a grouped nav.** Every detail page has the same header:
+  a crumb back to its parent above the title, chips after it, its actions on the right with at most
+  one primary. The analytics workbenches' "Close" is now a crumb back to where you opened them from
+  (a dataset, a dashboard, the Analytics hub). Data → Import lists **Database, warehouse or app** and
+  **From a URL**, the Data header and its empty state offer **Connect a database**, and Home → New →
+  Dashboard and the Dashboards page's new **Create dashboard** open the new-dashboard wizard (all for
+  editors). The rail groups its sections under **View** and **Build**. See
+  [`docs/design-floor/`](docs/design-floor/00-design.md).
 
 ### Security — since the move to the web
 
@@ -139,6 +147,11 @@ the desktop installers.
   a dashboard parameter's saved default, a visual's analytics overlays, and a report's discussion page
   and view, and a restore puts them back. See
   [`docs/edit-conflicts/00-design.md`](docs/edit-conflicts/00-design.md).
+- **Secondary text meets WCAG AA in both themes.** Table headers, KPI names and deltas, timestamps,
+  empty-state sentences and placeholders were as low as 1.7:1. The muted, dim and faint text colours
+  take the desktop's AA values (4.5:1 on every surface; faint, 3:1, is kept for disabled controls
+  and decorative icons), every Badge tone and grid type chip has an ink that reads on its own tint,
+  and the dashboard style presets follow. A test measures every pair, so it cannot regress.
 
 ### Added
 - **The app is no longer empty on first launch.** A bundled sample project — 5,000 rows of generated

@@ -23,6 +23,7 @@ New here? Start with the [README](../README.md). To run Ordinate, go to the
 | [`email/`](email/00-design.md) | **Email for subscriptions and alerts**: an email list of the org's people and teams, resolved at each send to those who can read the project then; our own SMTP client (TLS required, the operator's one relay); `deliver(channel, source)`, the one send door, which computes the datasets a send's figures come from. Operator guide: [`server/email.md`](server/email.md). |
 | [`explore/`](explore/00-design.md) | **Explore**: a question builder for everyone, no AI model needed — the fields of a dataset, a question in four wells, suggested questions from `starterPlan`'s ranking (`explore:suggest`), the answer and its table from `visual:data`, the question in the URL. |
 | [`row-policy/`](row-policy/00-design.md) | **Row access rules**: a viewer sees only their rows of a dataset, enforced at the figure doors with a storage net behind them; every read channel inventoried; fan-out refused in phase 1. Operator guide: [`server/row-level-security.md`](server/row-level-security.md). |
+| [`design-floor/`](design-floor/00-design.md) | **The design floor**: secondary text and every Badge tone at WCAG AA in both themes and every dashboard preset, measured by one test; one page header (a crumb to the parent, chips, actions with one primary) on every page, with a guard against hand-built back links; the doors to databases, URLs and the dashboard wizard; the nav grouped into View and Build. |
 
 ## History (the desktop era)
 
