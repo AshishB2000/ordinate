@@ -37,7 +37,7 @@ import { registerStatic, WEB_DIST } from './static';
 import { uploadCapMb } from './admin/org';
 import { registerMcpRoute } from '../automation/serverMcp';
 import { registerGeoRoutes } from './geo';
-import { registerRequestMetrics } from './metrics';
+import { registerRequestMetrics, watchPgPool } from './metrics';
 import { registerPublishedRoutes } from './published';
 import { maskEmbedTokens, maskEmbedUrl, registerEmbedRoutes } from './embed/route';
 import { useEmbedDb } from './embed/settings';
@@ -180,8 +180,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // `listen()` binds — so a pod whose schema is not current never serves, and
   // a failure (DB down, edited migration) rejects listen and exits main.ts 1.
   const dbUrl = cfg.databaseUrl;
-  const pool = dbUrl ? createPool(dbUrl, (err) => app.log.warn({ err }, 'postgres idle client error')) : null;
+  const pool = dbUrl ? createPool(dbUrl, (err) => app.log.warn({ err }, 'postgres idle client error'), cfg.pod.databasePoolMax) : null;
   dbPool = pool;
+  watchPgPool(pool); // ordinate_pg_pool_clients on /metrics
   appEnv = cfg;
   if (pool && dbUrl) {
     // Scheduled jobs and cross-pod events (./jobs/): started once the schema

@@ -126,7 +126,14 @@ export function acquire(org: string, _datasetId: string, signal?: AbortSignal): 
   });
 }
 
-/** In flight and waiting, per org — for a test, or a gauge one day. */
+/** Live statements in flight on this pod, every org together (/metrics: no org label). */
+export function inFlight(): number {
+  let n = 0;
+  for (const s of orgs.values()) n += s.running;
+  return n;
+}
+
+/** In flight and waiting, per org — for a test. */
 export function stats(org: string): { running: number; waiting: number } {
   const s = orgs.get(org);
   return { running: s?.running ?? 0, waiting: s?.queue.length ?? 0 };

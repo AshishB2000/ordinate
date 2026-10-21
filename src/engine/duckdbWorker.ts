@@ -81,10 +81,13 @@ interface CallMessage {
 }
 
 /** Async reply. Mirrors `WorkerReply` in src/duckdb.ts — change both together. */
-type AsyncReply =
+// `queued`: µs from the call's arrival here to its start — the pool's wait metric
+// (src/engine/duckdbPool.ts), on every reply, a skipped call's too.
+type AsyncReply = (
   | { id: number; ok: true; text: string; micros: number }
   | { id: number; ok: false; code: 'query'; message: string; micros: number }
-  | { id: number; ok: false; code: 'overflow'; need: number; micros: number };
+  | { id: number; ok: false; code: 'overflow'; need: number; micros: number }
+) & { queued?: number };
 
 // ES2024 growable SharedArrayBuffer — not in this project's ES2022 lib, so its
 // shape is declared locally (see the same declaration in src/duckdb.ts).
@@ -152,8 +155,8 @@ function fail(err: unknown): void {
 
 // ── Message loop ─────────────────────────────────────────────────────────────
 
-function handle(msg: CallMessage, from: Sender): Promise<void> {
-  return msg.id === undefined ? handleSync(msg) : handleAsync(msg, msg.id, from);
+function handle(msg: CallMessage, from: Sender, arrived: bigint): Promise<void> {
+  return msg.id === undefined ? handleSync(msg) : handleAsync(msg, msg.id, from, arrived);
 }
 
 /** Reply through the control block. The caller is parked in `Atomics.wait`. */
@@ -186,19 +189,20 @@ async function handleSync(msg: CallMessage): Promise<void> {
  * though only one of them has a buffer to overflow; `Buffer.byteLength` costs
  * ~1.3 ms on an 11 MB payload (~9 GB/s), i.e. nothing next to the query.
  */
-async function handleAsync(msg: CallMessage, id: number, from: Sender): Promise<void> {
+async function handleAsync(msg: CallMessage, id: number, from: Sender, arrived: bigint): Promise<void> {
   const t0 = process.hrtime.bigint();
+  const queued = Number((t0 - arrived) / 1000n);
   from.lastStarted = id;
   // Cancelled or timed out while queued, or its sender is gone: never start it.
-  // The caller already settled, so this reply is read by nobody.
+  // The caller already settled; only the wait metric reads this reply.
   if (from.closed || from.skip.delete(id)) {
-    from.post({ id, ok: false, code: 'query', message: 'cancelled before it started', micros: 0 });
+    from.post({ id, ok: false, code: 'query', message: 'cancelled before it started', micros: 0, queued });
     return;
   }
   // Async reply. `postMessage` is non-blocking on this side even when the main
   // thread is parked in `Atomics.wait` — the message lands in the port's queue
   // and is delivered when the main thread next reaches its event loop.
-  const reply = (m: AsyncReply): void => from.post(m);
+  const reply = (m: AsyncReply): void => from.post({ ...m, queued });
   const me: NonNullable<typeof running> = { from, id };
   running = me;
   try {
@@ -312,7 +316,8 @@ function listen(on: (fn: (msg: Inbound) => void) => void, post: (msg: AsyncReply
       attach(msg.port);
       return;
     }
-    queue = queue.then(() => (msg.kind === 'close' ? closeNow() : handle(msg, from))).catch(() => undefined);
+    const arrived = process.hrtime.bigint();
+    queue = queue.then(() => (msg.kind === 'close' ? closeNow() : handle(msg, from, arrived))).catch(() => undefined);
   });
   return from;
 }

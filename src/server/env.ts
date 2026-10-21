@@ -261,7 +261,7 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   });
   const storage = parseStorage(src, databaseUrl);
   const mail = parseMail({ SMTP_HOST: src.SMTP_HOST, SMTP_PORT: src.SMTP_PORT, SMTP_SECURITY: src.SMTP_SECURITY, SMTP_USER: src.SMTP_USER, SMTP_PASSWORD: src.SMTP_PASSWORD, SMTP_FROM: src.SMTP_FROM, RATE_LIMIT_EMAIL_ORG_PER_HOUR: src.RATE_LIMIT_EMAIL_ORG_PER_HOUR }, databaseUrl !== null);
-  const pod = parsePod({ SHUTDOWN_GRACE_SECONDS: src.SHUTDOWN_GRACE_SECONDS });
+  const pod = parsePod({ SHUTDOWN_GRACE_SECONDS: src.SHUTDOWN_GRACE_SECONDS, DATABASE_POOL_MAX: src.DATABASE_POOL_MAX });
   return Object.freeze({ port, metricsPort, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits, storage, testLiveFake, mail, pod });
 }
 

@@ -10,13 +10,17 @@ export interface PodEnv {
    * preStop wait: the chart enforces terminationGracePeriodSeconds − 5.
    */
   readonly shutdownGraceMs: number;
+  /** DATABASE_POOL_MAX: Postgres connections this pod's pool may open (./db/pool.ts). The bus holds one more. */
+  readonly databasePoolMax: number;
 }
 
 export const DEFAULT_SHUTDOWN_GRACE_SECONDS = 20;
+export const DEFAULT_DATABASE_POOL_MAX = 10;
 
 export function parsePod(src: Readonly<Record<string, string | undefined>>): PodEnv {
   return Object.freeze({
     shutdownGraceMs: wholeIn('SHUTDOWN_GRACE_SECONDS', src.SHUTDOWN_GRACE_SECONDS, DEFAULT_SHUTDOWN_GRACE_SECONDS, 1, 300) * 1000,
+    databasePoolMax: wholeIn('DATABASE_POOL_MAX', src.DATABASE_POOL_MAX, DEFAULT_DATABASE_POOL_MAX, 1, 1000),
   });
 }
 
