@@ -6,7 +6,9 @@
 // connections over the test harness's fake warehouse, then today's limit
 // reached), then creates a personal API token, uses it on /api/mcp
 // (initialize + a tool call; without it → 401) and revokes it from the UI
-// (→ 401). Admin → AI connects a STUB provider on loopback (an Anthropic API
+// (→ 401). Identity provider groups: the admin maps a group to a role and a
+// team, and a person the proxy signs in with that group gets both at once.
+// Admin → AI connects a STUB provider on loopback (an Anthropic API
 // look-alike in this process) with a write-only key, adds two of its models,
 // moves the default, and disconnects. A viewer gets the designed "admins
 // only" state. Screens in both themes go to web/e2e/__screens__/admin-*.png.
@@ -62,6 +64,8 @@ if (!adminUrl) {
       // Admin → AI: keys need the encrypted store; the stub provider is on loopback (SSRF guard, T6.1).
       ORDINATE_MASTER_KEY: randomBytes(32).toString('base64'),
       SSRF_ALLOW: '127.0.0.1/32',
+      // Identity provider groups (docs/sso-lifecycle): the proxy lists a person's groups in this header.
+      TRUSTED_GROUPS_HEADER: 'X-Forwarded-Groups',
     },
     headers: { 'x-forwarded-email': ADMIN },
   });
@@ -269,6 +273,41 @@ if (!adminUrl) {
     await confirm.getByRole('button', { name: 'Disconnect' }).click();
     await page.getByRole('heading', { name: 'No models yet' }).waitFor();
     await providers.getByText('Not connected').first().waitFor();
+  });
+
+  e2e('admin: identity provider groups — map a group; a header sign-in gets the mapped role and team', async ({ page, server }) => {
+    await page.goto('/admin');
+    await settled(page);
+    const panel = page.getByRole('region', { name: 'Identity provider groups' });
+    await panel.getByRole('heading', { name: 'No groups mapped yet' }).waitFor();
+    await screens(page, 'admin-idp-groups-empty');
+    await panel.getByRole('button', { name: 'Map a group' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Map a group' });
+    await dialog.getByLabel('Group').fill('bi-editors');
+    await dialog.getByRole('combobox', { name: 'Role' }).click();
+    await page.getByRole('option', { name: 'Editor' }).click();
+    await dialog.getByRole('combobox', { name: 'Team' }).click();
+    await page.getByRole('option', { name: 'Analysts' }).click();
+    await screens(page, 'admin-idp-groups-dialog');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await dialog.waitFor({ state: 'detached' });
+    await panel.getByRole('cell', { name: 'bi-editors', exact: true }).waitFor();
+
+    // Carol signs in through the proxy, in the mapped group: editor, and in Analysts.
+    const asCarol = { 'x-forwarded-email': 'carol@acme.test', 'x-forwarded-groups': 'bi-editors' };
+    const me = (await (await page.request.get(`${server.base}/api/auth/me`, { headers: asCarol })).json()) as { user: { role: string } };
+    assert.equal(me.user.role, 'editor', 'the mapped role, from the first request');
+    await page.reload();
+    await settled(page);
+    const carolRow = page.getByRole('row').filter({ hasText: 'carol@acme.test' });
+    await carolRow.getByText('From your identity provider').waitFor();
+    assert.equal(await page.getByRole('combobox', { name: 'Role of carol@acme.test' }).count(), 0, 'no role picker once roles follow the IdP');
+    await screens(page, 'admin-idp-groups');
+    await page.getByRole('tab', { name: 'Teams' }).click();
+    const analysts = page.getByRole('row').filter({ hasText: 'Analysts' });
+    await analysts.getByText('carol@acme.test').waitFor();
+    await analysts.getByText('From your identity provider').waitFor();
+    await screens(page, 'admin-teams-linked');
   });
 
   e2e('admin: a viewer gets the designed admins-only state and no Admin nav', async ({ page }) => {
