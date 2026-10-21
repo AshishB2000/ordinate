@@ -3,9 +3,10 @@
 // alert arrives as an `alerts:fired` push (to members who may read the
 // project, T6.3) and the list re-reads. Every figure in a message is the
 // server's sentence; the sparkline draws the rule's own stored history.
-// Snoozing, marking seen and changing a rule are writes: a viewer reads the
-// inbox and the rules. The bell is on every page, so it asks for the role only
-// once it is opened.
+// The badge and Mark seen are the CALLER's (docs/notifications): every reader
+// clears their own, never anyone else's. Snoozing and changing a rule are
+// writes that silence everyone, so they are an editor's and say so. The bell is
+// on every page, so it asks for the role only once it is opened.
 
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -203,12 +204,12 @@ function EventRow({ e, rule, projectId, canEdit, onClose }: { e: AlertEvent; rul
           <button
             type="button"
             className={s.linkBtn}
-            onClick={() => write.mutate({ channel: 'alerts:patch', input: { projectId, ruleId: rule.id, patch: { snoozedUntil: new Date(Date.now() + 86_400_000).toISOString() } } }, { onError: fail, onSuccess: () => toast('Snoozed for 24 hours') })}
+            onClick={() => write.mutate({ channel: 'alerts:patch', input: { projectId, ruleId: rule.id, patch: { snoozedUntil: new Date(Date.now() + 86_400_000).toISOString() } } }, { onError: fail, onSuccess: () => toast('Snoozed for everyone for 24 hours') })}
           >
-            Snooze 24h
+            Snooze for everyone · 24 h
           </button>
         )}
-        {!e.seen && canEdit && (
+        {!e.seen && (
           <button type="button" className={s.linkBtn} onClick={() => write.mutate({ channel: 'alerts:markSeen', input: { projectId, eventId: e.id } }, { onError: fail })}>
             Mark seen
           </button>
@@ -253,7 +254,7 @@ export function AlertsBell() {
       >
         <div className={s.inboxHead}>
           <span className={s.inboxTitle}>Alerts</span>
-          {unseen > 0 && projectId && canEdit && (
+          {unseen > 0 && projectId && (
             <Button size="sm" variant="ghost" onClick={() => write.mutate({ channel: 'alerts:markSeen', input: { projectId } })}>
               Mark all seen
             </Button>
