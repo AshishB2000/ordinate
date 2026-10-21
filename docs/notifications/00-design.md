@@ -485,7 +485,7 @@ false`. The picker excludes the caller.
 
 ### 5.12 Settings → You → Notifications
 
-A `Group` "Notifications" with one `Row` "Email me when someone mentions me" and a `Switch`. Description:
+A `Group` "Notifications" holding one `Switch` row (the primitive's own label and hint, as Admin → Organization's switches) "Email me when someone mentions me". Hint:
 "Mentions always reach you on Home and as a notice in your open tabs." When the server sends no email the
 switch is disabled and the description says "This server does not send email; mentions still reach you
 on Home and as a notice." Loading → a skeleton row; error → `ErrorState compact` with Retry; no database
