@@ -15,6 +15,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import * as format from '../src/app/format';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -31,6 +32,7 @@ const visuals: typeof import('../src/analysis/visuals') = require('../src/analys
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const pub: typeof import('../src/publish/publish') = require('../src/publish/publish');
 const { sanitizePage } = require('../src/publish/sanitize') as typeof import('../src/publish/sanitize');
+const { autoSchemeCss, sanitizeBundle } = require('../src/analysis/dashboardExport') as typeof import('../src/analysis/dashboardExport');
 const { pageHtml, scriptHashes, sizeCss } = require('../src/publish/siteHtml') as typeof import('../src/publish/siteHtml');
 const { BREAKPOINTS } = require('../src/analysis/sizeLayout') as { BREAKPOINTS: { phone: number } };
 
@@ -56,6 +58,7 @@ function phoneLeaks(css: string): string[] {
     .map((m) => m[0].trim());
 }
 const { vizDataFor } = require('../src/ipc/visuals') as typeof import('../src/ipc/visuals');
+const { chartShapes } = require('../src/analysis/chartShapes') as typeof import('../src/analysis/chartShapes');
 const { sanitizeEncoding } = visuals;
 
 function dataBlock(html: string): any { // any: the page's JSON, asserted field by field
@@ -118,6 +121,46 @@ async function main(): Promise<void> {
   ok('sanitize: a boundary key outside the vocabulary is dropped', !('http://x' in evil.geo));
   ok('sanitize: the style goes through sanitizeBundle (closed enums only)',
     evil.dashboard.style.theme === 'dark' && !('injected' in evil.dashboard.style));
+  // The chart's figures (analysis/chartShapes) are whitelisted field by field — never spread.
+  const figuresIn = {
+    waterfall: { from: 1, to: 3, leak: 'sk-live-w', steps: [{ label: 'East', start: 1, end: 3, value: 2, kind: 'up', src: 0, extra: 'sk-live-s' }, { label: 'x', start: 'NaN', end: Infinity, value: 1, kind: '<b>', src: 99_999_999 }] },
+    pareto: { order: [1, 0, 'x'], cumPct: [60, 100], count80: 1, total: 5, positives: 2, rows: [['secret']] },
+    sharePct: [[25, 'x'], [75, null]], histogram: [[{ from: 0, to: 1, count: 2, raw: [1, 2] }]],
+    funnel: { ofTopPct: [[100, 42]], spare: 1 }, bullet: { ofTargetPct: [90, null] }, calendar: { days: [19723, 1.5], values: [3, null] },
+    url: 'http://x', secret: 'sk-live-f',
+  };
+  const figPage = sanitizePage({ kind: 'dashboard', site: {}, dashboard: { name: 'F', keys: ['0'], controls: [], sheets: [{ name: 'S', cards: [
+    { kind: 'chart', chartType: 'waterfall', title: 'W', layout: {}, variants: [0], payloads: [{ labels: ['East'], series: [{ label: 'v', values: [2] }], figures: figuresIn }] },
+  ] }] } }) as any; // any: asserting a sanitizer's output shape
+  const figOut = figPage.dashboard.sheets[0].cards[0].payloads[0].figures;
+  ok('sanitize: a chart keeps its figures, field by field',
+    JSON.stringify(figOut.waterfall) === JSON.stringify({ from: 1, to: 3, steps: [{ label: 'East', start: 1, end: 3, value: 2, kind: 'up', src: 0 }, { label: 'x', start: 0, end: 0, value: 1, kind: 'up', src: -1 }] })
+    && JSON.stringify(figOut.pareto) === '{"order":[1,0,-1],"cumPct":[60,100],"count80":1,"total":5,"positives":2}'
+    && JSON.stringify(figOut.sharePct) === '[[25,0],[75,0]]' && JSON.stringify(figOut.histogram) === '[[{"from":0,"to":1,"count":2}]]'
+    && JSON.stringify(figOut.funnel) === '{"ofTopPct":[[100,42]]}' && JSON.stringify(figOut.bullet) === '{"ofTargetPct":[90,null]}'
+    && JSON.stringify(figOut.calendar) === '{"days":[19723,0],"values":[3,null]}', JSON.stringify(figOut));
+  ok('sanitize: an unknown sibling anywhere in the figures is stripped — no leak, no secret, no row, no URL',
+    !/sk-live|leak|extra|rows|raw|spare|"url"|"secret"|http/.test(JSON.stringify(figOut)), JSON.stringify(figOut));
+  ok('sanitize: …and the check sees one (negative control: the raw block carries them)', /sk-live|leak|extra|rows|raw|spare/.test(JSON.stringify(figuresIn)));
+  const bigPage = sanitizePage({ kind: 'dashboard', site: {}, dashboard: { name: 'B', keys: ['0'], controls: [], sheets: [{ name: 'S', cards: [
+    { kind: 'chart', chartType: 'histogram', title: 'H', layout: {}, variants: [0], payloads: [{ labels: [0], series: [{ label: 'n', values: [1] }],
+      figures: { histogram: [[{ from: 0, to: 1, count: 25_000 }, { from: 1, to: 2, count: -3 }, { from: 2, to: 3, count: NaN }]], pareto: { order: [0], cumPct: [100], count80: 25_000, total: 1, positives: 25_000 } } }] },
+  ] }] } }) as any; // any: asserting a sanitizer's output shape
+  const bigFig = bigPage.dashboard.sheets[0].cards[0].payloads[0].figures;
+  ok('sanitize: a count is a count, not an index — a 25,000-row bin and an 80% count past 20,000 survive; a negative or NaN is 0',
+    JSON.stringify(bigFig.histogram[0].map((b: any) => b.count)) === '[25000,0,0]' && bigFig.pareto.count80 === 25_000 && bigFig.pareto.positives === 25_000, JSON.stringify(bigFig));
+  const exported = sanitizeBundle({ pages: [{ cards: [{ kind: 'chart', chartType: 'bar', layout: {}, data: { labels: ['a'], series: [], figures: { sharePct: [[100]], token: 'sk-live-e' } } }] }] }) as any; // any: an export bundle
+  ok('sanitize: the export bundle keeps the same figures through the same whitelist, and strips the same strays',
+    JSON.stringify(exported.pages[0].cards[0].data.figures) === '{"sharePct":[[100]]}');
+  const kpiPage = sanitizePage({ kind: 'dashboard', site: {}, dashboard: { name: 'K', keys: ['0'], controls: [], sheets: [{ name: 'S', cards: [
+    { kind: 'metric', title: 'Total sales', layout: {}, variants: [0], payloads: [{ value: 5, display: '5', caption: 'c', subtitle: 'Sum of sales', label: 'x', token: 't' }] },
+  ] }] } }) as any; // any: asserting a sanitizer's output shape
+  ok('sanitize: a KPI keeps what it measures (its subtitle), and nothing else new',
+    JSON.stringify(kpiPage.dashboard.sheets[0].cards[0].payloads[0]) === '{"value":5,"display":"5","caption":"c","subtitle":"Sum of sales"}');
+  const scored = sanitizePage({ kind: 'scorecard', site: {}, scorecard: { name: 'Q', rows: [{ name: 'a', status: 'good' }, { name: 'b', status: 'off' }],
+    counts: { good: 1, warn: 0, off: 1, none: 'x', extra: 9 }, groups: [] } }) as any; // any: asserting a sanitizer's output shape
+  ok('sanitize: a scorecard carries the server\'s status counts (the page tallies nothing), integers only',
+    JSON.stringify(scored.scorecard.counts) === '{"good":1,"warn":0,"off":1,"none":0}', JSON.stringify(scored.scorecard.counts));
   const story = sanitizePage({ kind: 'story', site: {}, story: { name: 'S', blocks: [
     { kind: 'image', src: 'data:image/svg+xml;base64,PHN2Zz4=' },
     { kind: 'image', src: 'data:image/png;base64,iVBORw0KGgo=' },
@@ -168,8 +211,22 @@ async function main(): Promise<void> {
   ok('page: every region join in the client passes the shape names',
     joins.length > 0 && joins.every((c) => /,\s*shapeNames\)$/.test(c)) && /shapeNames = featureNameSet\(features\)/.test(assets.clientJs));
 
+  // Style Auto follows the reader's light or dark setting: a static @media block, no script, no inline style.
+  const autoHtml = pageHtml(sanitizePage({ kind: 'dashboard', site: {}, dashboard: { name: 'A', style: { theme: 'auto' }, keys: ['0'], controls: [], sheets: [] } }), assets, 'A');
+  const cleanHtml = pageHtml(sanitizePage({ kind: 'dashboard', site: {}, dashboard: { name: 'C', style: { theme: 'clean', chosen: true }, keys: ['0'], controls: [], sheets: [] } }), assets, 'C');
+  const darkBlock = /@media \(prefers-color-scheme: dark\) \{\s*\.dash-theme--auto \{ --bg: #18181b;/;
+  ok('page: an Auto dashboard carries the dark tokens for a dark reader, in its one pinned stylesheet',
+    /<html lang="en" class="dash-theme--auto /.test(autoHtml) && darkBlock.test(autoHtml) && /style-src 'sha256-/.test(autoHtml) && !/ style="/.test(autoHtml));
+  ok('page: …a dashboard styled Clean on purpose stays light (negative control)', !darkBlock.test(cleanHtml) && /class="dash-theme--clean /.test(cleanHtml));
+  // Under the dark block, density still wins over the theme for the KPI sizes (a compact KPI must not grow in the dark).
+  const kpiSizeIn = (css: string): string[] => [...css.matchAll(/--kpi-size: (\d+)px/g)].map((m) => m[1]);
+  const compactDark = autoSchemeCss({ theme: 'auto', density: 'compact', accent: 'blue' } as any, undefined, undefined); // any: a DashboardStyle literal
+  ok('page: a compact Auto dashboard keeps its compact KPI size in the dark (the last --kpi-size declared is 20px)',
+    kpiSizeIn(compactDark).at(-1) === '20' && compactDark.indexOf('.dash-density--compact') > compactDark.indexOf('.dash-theme--auto'), compactDark.replace(/\s+/g, ' ').slice(0, 300));
+  ok('page: …and a comfortable one keeps the theme\'s', kpiSizeIn(autoSchemeCss({ theme: 'auto', density: 'comfortable', accent: 'blue' } as any, undefined, undefined)).at(-1) === '30'); // any: as above
+
   // ── 3. The client core, jsdom-free ──────────────────────────────────────────
-  const ctx: any = {}; // any: a bare vm global the core's functions land on
+  const ctx: any = { OrdFormat: format }; // any: a bare vm global the core's functions land on; OrdFormat as the page binds it
   vm.createContext(ctx);
   vm.runInContext(assets.coreJs, ctx);
   ok('core: loads with no DOM at all', typeof ctx.pkComboIndex === 'function' && typeof ctx.pkChartConfig === 'function');
@@ -181,11 +238,49 @@ async function main(): Promise<void> {
   const fmt = (v: number) => String(v);
   ok('core: column → a vertical bar', ctx.pkChartConfig('column', p, [], fmt).type === 'bar' && ctx.pkChartConfig('column', p, [], fmt).options.indexAxis === 'x');
   ok('core: bar → horizontal', ctx.pkChartConfig('bar', p, [], fmt).options.indexAxis === 'y');
-  const pctCfg = ctx.pkChartConfig('pct_stacked_column', p, [], fmt);
-  ok('core: 100% stacked shares sum to 100 per label', pctCfg.data.datasets[0].data[0] + pctCfg.data.datasets[1].data[0] === 100 && pctCfg.options.scales.y.max === 100);
   ok('core: pie draws the first series', ctx.pkChartConfig('pie', p, [], fmt).data.datasets.length === 1);
-  const wf = ctx.pkChartConfig('waterfall', { labels: ['a', 'b'], series: [{ label: 'x', values: [5, -2] }] }, [], fmt);
-  ok('core: a waterfall floats each step from the running total', JSON.stringify(wf.data.datasets[0].data) === '[[0,5],[5,3]]');
+  // The figure types draw EXACTLY the payload's figures (analysis/chartShapes) — and nothing without them.
+  const served = (type: string, labels: any[], series: Array<{ label: string; values: any[] }>, ask: any = {}) => ({ // any: a published payload
+    labels, series, figures: chartShapes(type, { labels, series: series.map((x) => ({ name: x.label, values: x.values })) }, ask),
+  });
+  const pctPay = served('pct_stacked_column', ['a', 'b'], [{ label: 's1', values: [1, 2] }, { label: 's2', values: [2, 2] }]);
+  const pctCfg = ctx.pkChartConfig('pct_stacked_column', pctPay, [], fmt);
+  ok('core: a 100% stacked bar is the payload\'s unrounded share', pctCfg.data.datasets.every((d: any, i: number) => d.data.every((v: number, j: number) => Object.is(v, pctPay.figures!.sharePct![i][j])))
+    && Object.is(pctCfg.data.datasets[0].data[0], (1 / 3) * 100) && pctCfg.options.scales.y.max === 100);
+  const wfPay = served('waterfall', ['Opening', 'Sales', 'Total', 'Refunds'], [{ label: 'x', values: [50, 20, 999, -9] }]);
+  const wf = ctx.pkChartConfig('waterfall', wfPay, [], fmt);
+  ok('core: a waterfall draws the payload\'s steps — the Total row a total from 0, then a closing Total (the /p/ bug, fixed)',
+    JSON.stringify(wf.data.datasets[0].data) === '[[0,50],[50,70],[0,999],[999,990],[0,990]]' && JSON.stringify(wf.data.labels) === '["Opening","Sales","Total","Refunds","Total"]'
+    && JSON.stringify(wf.src) === '[0,1,2,3,-1]', JSON.stringify([wf.data, wf.src]));
+  const bridge = ctx.pkChartConfig('waterfall', served('waterfall', ['East', 'West'], [{ label: '2023', values: [10, 20] }, { label: '2024', values: [15, 12] }]), [], fmt);
+  ok('core: two series are the bridge the app draws', JSON.stringify(bridge.data.datasets[0].data) === '[[0,30],[30,35],[35,27],[0,27]]' && JSON.stringify(bridge.data.labels) === '["2023","East","West","2024"]');
+  const parPay = served('pareto', ['C', 'A', 'D', 'B'], [{ label: 'v', values: [10, 50, -5, 35] }]);
+  const par = ctx.pkChartConfig('pareto', parPay, [], fmt);
+  ok('core: a Pareto is sorted and its line is over the positive values (the two /p/ bugs, fixed)',
+    JSON.stringify(par.data.labels) === '["A","B","C","D"]' && JSON.stringify(par.data.datasets[0].data) === '[50,35,10,-5]'
+    && par.data.datasets[1].data === parPay.figures!.pareto!.cumPct && par.data.datasets[1].data[3] === 100 && JSON.stringify(par.src) === '[1,3,0,2]', JSON.stringify(par.data));
+  const hist = ctx.pkChartConfig('histogram', served('histogram', [0, 1, 2], [{ label: 'n', values: [1, 1, 9] }]), [], fmt);
+  ok('core: a histogram draws the payload\'s bins, as the app does (not its series as bars)', JSON.stringify(hist.data.datasets[0].data) === JSON.stringify(chartShapes('histogram', { labels: [0, 1, 2], series: [{ name: 'n', values: [1, 1, 9] }] })!.histogram![0].map((b) => b.count)));
+  ok('core: without its figures a figure type is not drawn — the card says so; it never works them out',
+    ['waterfall', 'pareto', 'pct_stacked_column', 'pct_stacked_bar', 'histogram'].every((t) => ctx.pkChartConfig(t, p, [], fmt) === null) && ctx.pkChartConfig('column', p, [], fmt) !== null);
+  const col = ctx.pkChartConfig('column', p, [], fmt);
+  ok('core: the app\'s axes — no gridlines down from the categories, no frame; the value axis keeps its lines',
+    col.options.scales.x.grid.display === false && col.options.scales.x.border.display === false && col.options.scales.y.grid === undefined && col.options.scales.x.ticks.maxRotation === 40);
+  ok('core: bars and lines carry value labels, as the app\'s do; a Pareto draws none on its bars (the app marks its 80%)',
+    col.plugins.some((x: any) => x.id === 'pkValueLabels') && ctx.pkChartConfig('line', p, [], fmt).plugins.some((x: any) => x.id === 'pkValueLabels') && !(par.plugins || []).some((x: any) => x.id === 'pkValueLabels'));
+  const labelled: string[] = [];
+  const fakeChart = (cfg: any) => ({ // any: the slice of a Chart.js chart the plugin reads
+    ctx: { save() {}, restore() {}, fillText: (t: string) => labelled.push(t) }, options: { indexAxis: cfg.options.indexAxis, color: '#000' }, data: cfg.data,
+    getDatasetMeta: (di: number) => ({ hidden: false, type: cfg.data.datasets[di].type || 'bar', data: cfg.data.datasets[di].data.map(() => ({ x: 0, y: 0, base: 0 })) }),
+  });
+  const draw3 = ctx.pkChartConfig('column', { labels: ['a', 'b', 'c'], series: [{ label: 'v', values: [5, 9, 1] }] }, [], fmt);
+  draw3.plugins.find((x: any) => x.id === 'pkValueLabels').afterDatasetsDraw(fakeChart(draw3));
+  ok('core: as the app labels by default — a series\' largest and smallest bar, not every bar', JSON.stringify(labelled) === '["9","1"]', JSON.stringify(labelled));
+  labelled.length = 0;
+  wf.plugins.find((x: any) => x.id === 'pkValueLabels').afterDatasetsDraw(fakeChart(wf));
+  ok('core: a waterfall labels its totals, and its largest rise and fall, signed', JSON.stringify(labelled) === '["+50","999","-9","990"]', JSON.stringify(labelled));
+  ok('core: a 100% axis reads 0–100%', pctCfg.options.scales.y.ticks.callback(40) === '40%');
+  ok('core: a month axis is named as the app names it', JSON.stringify(ctx.pkChartConfig('column', { labels: ['2024-01-01', '2024-02-01'], series: [{ label: 'v', values: [1, 2] }] }, [], fmt, (l: string[]) => l.map((x) => x.slice(0, 7))).data.labels) === '["2024-01","2024-02"]');
   ok('core: plugin types render as a table, maps and pivots as themselves',
     ctx.pkRenderKind('treemap') === 'table' && ctx.pkRenderKind('map_choropleth') === 'map' && ctx.pkRenderKind('pivot') === 'pivot' && ctx.pkRenderKind('line') === 'chart');
   const tm = ctx.pkTableModel(p, 'cat');
@@ -351,6 +446,31 @@ async function main(): Promise<void> {
   const single = await pub.dashboardPageHtml(proj.id, dash!.id);
   const one = dataBlock(single);
   ok('dashboardPageHtml: one self-contained page, default state only', one.kind === 'dashboard' && one.dashboard.keys.length === 1 && /default-src 'none'/.test(single));
+
+  // KPI subtitles (docs/chart-figures): an aggregation and a column — never a saved metric's filter or formula
+  // literal, never a column the Share policy marks. A published page reaches every link holder and an embed's customers.
+  const metricsStore: typeof import('../src/analysis/metrics') = require('../src/analysis/metrics');
+  const { resolveMetric } = require('../src/ipc/metrics') as typeof import('../src/ipc/metrics');
+  const CANARY = 'ana.canary@acme.test';
+  await catalog.setColumn(proj.id, ds!.id, 'region', { sensitivity: 'personal' } as any); // any: a ColumnPatch literal
+  const filtered = await metricsStore.saveMetric(proj.id, { name: 'Ana sales', datasetId: ds!.id, definition: { column: 'amount', aggregation: 'sum' },
+    filters: [{ type: 'filter', column: 'region', op: '=', value: CANARY }] } as any); // any: a record literal the saver sanitizes
+  const ratio = await metricsStore.saveMetric(proj.id, { name: 'Twice Ana', datasetId: ds!.id, definition: { formula: '[Ana sales] * 2' } } as any); // any: as above
+  const kpiCard = (metric: object, x: number) => ({ id: randomUUID(), type: 'metric', metric: { datasetId: ds!.id, ...metric }, layout: { x, y: 0, w: 3, h: 2 } });
+  const words = await analysis.saveAnalysis(proj.id, { name: 'KPI words', sheets: [{ id: randomUUID(), name: 'Main', cards: [
+    kpiCard({ metricId: filtered!.id, column: 'amount', aggregation: 'sum', label: 'Ana' }, 0),
+    kpiCard({ metricId: ratio!.id, column: 'amount', aggregation: 'sum', label: 'Twice' }, 3),
+    kpiCard({ column: 'region', aggregation: 'count', label: 'Regions' }, 6),
+    kpiCard({ column: 'amount', aggregation: 'sum', label: 'Total' }, 9),
+  ] }] } as any); // any: as above
+  const wordsHtml = await pub.dashboardPageHtml(proj.id, words!.id);
+  const subs = dataBlock(wordsHtml).dashboard.sheets[0].cards.map((c: any) => c.payloads[c.variants[0]].subtitle ?? ''); // any: a published card
+  ok('kpi subtitle: a saved metric says its aggregation and column; a formula metric and a marked column say nothing',
+    JSON.stringify(subs) === '["Sum of amount","","","Sum of amount"]', JSON.stringify(subs));
+  ok('kpi subtitle: a filter\'s literal and a formula\'s text appear nowhere in the published page (canary)', !wordsHtml.includes(CANARY) && !wordsHtml.includes('[Ana sales]'));
+  const forMembers = await resolveMetric(proj.id, filtered!.id);
+  ok('…while the app still describes the metric to its members, literal and all (control: the canary is real)', !!forMembers && forMembers.ok && forMembers.definitionText.includes(CANARY));
+  await catalog.setColumn(proj.id, ds!.id, 'region', { sensitivity: 'none' } as any); // any: as above
 
   await pub.storeConfig(cfg);
   const back = await pub.getStoredConfig(proj.id);

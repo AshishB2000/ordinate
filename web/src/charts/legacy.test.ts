@@ -22,7 +22,7 @@
 
 import { deepStrictEqual, notDeepStrictEqual } from 'node:assert/strict';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { golden } from '../test-golden';
+import { asRecordedPct, golden, served } from '../test-golden';
 import { buildChart } from './build';
 import { tableModel } from './table';
 import type { ChartDataShape, Cx } from './types';
@@ -111,7 +111,8 @@ describe('the port builds the desktop config, id by id', () => {
   for (const variant of Object.keys(OVERRIDES)) {
     for (const id of VIZ_IDS) {
       it(`${id} / ${variant}`, () => {
-        const data = DATA.get(id)!;
+        // What visual:data answers for the id now: the recorded series, and the server's figures for it.
+        const data = served(id, DATA.get(id)!, OVERRIDES[variant]);
         const old = G.configs[`${id} / ${variant}`];
         expect(old, 'recorded').not.toBeUndefined();
         const built = buildChart(canvasStub(), copy(data), id, copy(OVERRIDES[variant]));
@@ -128,6 +129,8 @@ describe('the port builds the desktop config, id by id', () => {
         }
         expect((old as { count: number }).count).toBe(1);
         const want = copy((old as { config: Cx }).config);
+        // The one deliberate divergence (docs/chart-figures): a 100%-stacked bar is the server's unrounded share.
+        asRecordedPct(id, built!.config);
         const got = norm(built!.config) as Cx;
         if (id === 'candlestick') {
           // The one divergence: x is the label index, not its text.
@@ -147,7 +150,7 @@ describe('the port builds the desktop config, id by id', () => {
   for (const id of ['line', 'column', 'combo', 'bar', 'histogram', 'scatter', 'candlestick'] as const) {
     for (const variant of ['default', 'custom'] as const) {
       it(`${id} / ${variant} with overlays, pins and events`, () => {
-        const data = copy(G.decorated[id]!);
+        const data = served(id, copy(G.decorated[id]!), OVERRIDES[variant]);
         expect((data.analytics ?? []).length).toBe(8);
         const overrides = {
           ...OVERRIDES[variant],

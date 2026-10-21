@@ -11,6 +11,7 @@
 
 import { z } from 'zod';
 import { byProjectId, FileToken, rpc, Steps, Uuid } from './contract';
+import { FigureAskFields } from './visuals';
 
 const Name = z.string().max(200);
 /** A sheet array: `sanitizePages` whitelists every card by type. */
@@ -42,6 +43,7 @@ const Tile = z.discriminatedUnion('kind', [
     encoding: Encoding,
     filters: Steps.optional(),
     analytics: z.array(z.looseObject({})).max(50).optional(),
+    ...FigureAskFields,
   }),
   z.strictObject({
     kind: z.literal('metric'),

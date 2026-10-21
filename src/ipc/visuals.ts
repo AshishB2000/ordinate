@@ -58,6 +58,8 @@ import type { LiveFailureCode } from '../engine/live/liveQuery';
 import { hasMetricMeasure, planMetricMeasures } from '../analysis/metricMeasures';
 import { metricMeasureData } from './vizMetricMeasures';
 import { withGeoSuggest } from '../analysis/geoHits';
+import { withFigures } from '../analysis/chartShapes';
+import { figureAsk } from '../analysis/figureAsk';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -600,7 +602,7 @@ export function register() {
   // here, after vizDataFor, so a cached answer is shaped on its way out and the
   // cache never holds a masked one (app/sharePolicy.ts).
   // `asOf` (view state, data/asOf.ts): every dataset read as of that time.
-  const vizData = async ({ projectId, datasetId, encoding, filters, params, share, analytics, asOf, currency }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
+  const vizData = async ({ projectId, datasetId, encoding, filters, params, share, analytics, asOf, currency, ...drawnAs }: any = {}) => withAsOf(projectId, asOf, () => fxScope(currency, async () => {
     try {
       // Sanitisation FIRST, always — the encoding and the filters are untrusted
       // renderer input, and both paths below consume the sanitized values.
@@ -622,7 +624,8 @@ export function register() {
       // The Analytics pane's overlays, resolved on the finished reply under the
       // same scope — AFTER the share policy, so an overlay can only name what
       // the shaped chart still shows.
-      const reply = withGeoSuggest(await withEvents(await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), flt, values), projectId, datasetId, flt), enc); // r8:events
+      // The figures the chart draws (analysis/chartShapes) come LAST, off the series as shaped: never more than they say.
+      const reply = withFigures(withGeoSuggest(await withEvents(await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), flt, values), projectId, datasetId, flt), enc), figureAsk(drawnAs.chartType, drawnAs)); // r8:events
       // A parameter that cannot be made well-typed is a VALIDATION message the
       // tile shows — never a silently empty chart. Dated last (L0.2), inside the
       // as-of scope, so a snapshot view says the snapshot's time.

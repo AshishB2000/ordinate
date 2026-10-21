@@ -103,6 +103,15 @@ the desktop installers.
   the same second keep both changes. A save that waits more than 15 s says "try again". See
   [`docs/record-locks/00-design.md`](docs/record-locks/00-design.md).
 - A new project's first alert rule could appear in the next new project's alerts.
+- **A published Pareto and waterfall showed different figures from the app.** The `/p/` page and
+  signed embeds worked them out a third time, differently: a Pareto drawn in arrival order, its
+  cumulative line dragged down by negatives, and a waterfall without its Total rows or its
+  last-year → this-year bridge. The server now computes a chart's drawn figures once (a waterfall's
+  levels, a Pareto's order and cumulative share, 100%-stacked shares — unrounded — a histogram's
+  bins, a funnel's and a bullet's percentages, a calendar's days) and the app, its captions, `/p/`
+  and embeds all draw them. The published page also reads like the app: "Jan 2023" months, value
+  labels, no vertical gridlines, KPI subtitles, and style Auto following the reader's light or dark
+  setting. See [`docs/chart-figures/00-design.md`](docs/chart-figures/00-design.md).
 
 ### Added
 - **The app is no longer empty on first launch.** A bundled sample project — 5,000 rows of generated

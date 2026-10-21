@@ -19,6 +19,7 @@ import { metricUsage } from '../analysis/metricUsage';
 import { importImage, readImageDataUrl } from '../app/projectAssets';
 import { FileTokenError, resolveUpload } from '../server/files';
 import { isLiveRefusalReply, liveRefusal } from '../data/liveDataset';
+import { figureAsk } from '../analysis/figureAsk';
 
 /** What a card needs of a Visual to draw it — the record minus its bookkeeping. */
 function visualDef(v: visuals.Visual) {
@@ -88,6 +89,7 @@ export function register(): void {
       if (it.kind === 'visual') {
         return call(e, 'visual:data', {
           projectId, datasetId: it.datasetId, encoding: it.encoding, filters: it.filters, params, analytics: it.analytics, asOf, currency,
+          ...figureAsk(it.chartType, it), // what the tile is drawn as: its figures come with it
         });
       }
       // A statistics card (statsTile.ts): the spec recomputed under the sheet's filters by stats:tile.

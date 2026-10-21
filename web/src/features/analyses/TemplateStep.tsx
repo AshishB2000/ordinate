@@ -13,6 +13,7 @@ import { fmtWith } from '../../charts/format';
 import type { ChartDataShape } from '../../charts/types';
 import { TypeBadge } from '../../ui/DataGrid/GridParts';
 import { Select } from '../../ui/Select';
+import { Skeleton } from '../../ui/Skeleton';
 import type { Agg, PlanPreview, Template } from './api';
 import { trimThumb } from './VisualTile';
 import s from './Wizard.module.css';
@@ -59,6 +60,29 @@ export function TemplateGallery({ templates, picked, onPick }: { templates: Temp
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * The gallery while the catalogue loads: the same cards in the same grid (the
+ * built-in subjects are six), so the layouts below do not move when it lands —
+ * a 127px jump under a pressed pointer lost the click on a layout card.
+ */
+export function TemplateGallerySkeleton() {
+  return (
+    <div className={s.tpls} role="status" aria-busy="true" aria-label="Reading your columns">
+      {Array.from({ length: 6 }, (_, i) => (
+        <span key={i} className={`${s.tpl} ${s.tplGhost}`} aria-hidden="true">
+          <Skeleton className={s.ghostArt} />
+          <span className={s.tplName}>
+            <Skeleton className={s.ghostLine} />
+          </span>
+          <span className={s.tplNeeds}>
+            <Skeleton className={s.ghostLine} />
+          </span>
+        </span>
+      ))}
     </div>
   );
 }

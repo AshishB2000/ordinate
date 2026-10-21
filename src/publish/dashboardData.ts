@@ -46,6 +46,9 @@ import type { ComboPlan, ControlDomain } from './combos';
 import { sanitizeRadiusValue } from '../analysis/geo/radius';
 import { lockedOptions, metricAllowed, visualAllowed, type Lock } from './embedLock';
 import { embedTileLocked } from '../server/embedMessages';
+import { withChartFigures, type ChartFigures } from '../analysis/chartShapes';
+import { figureAsk } from '../analysis/figureAsk';
+import { kpiSubtitle } from './kpiSubtitle';
 
 export interface PublishedControl {
   id: string;
@@ -183,9 +186,13 @@ export async function chartPayload(
     if ('hidden' in shaped) return { hidden: shaped.hidden };
     data = shaped;
   }
+  // The figures the chart draws, off the series as shaped for the page (analysis/chartShapes) — and so its caption's.
+  data = withChartFigures(data, figureAsk(chartType, overrides));
+  const { figures } = data as { figures?: ChartFigures };
   return {
     labels: data.labels,
     series: data.series.map((s) => ({ label: s.name, values: s.values })),
+    ...(figures ? { figures } : {}),
     ...(data.pivot ? { pivot: data.pivot } : {}),
     ...(data.geo ? { geo: data.geo } : {}),
     // r8:events — event markers, only while the shaped labels are still the ones they index.
@@ -460,16 +467,19 @@ export async function buildDashboard(
           done += plan.keys.length;
           continue;
         }
+        let subtitle: string | undefined;
         for (const scope of scopes) {
           if (ctx.checkCancelled) ctx.checkCancelled();
           const bound = resolveFilterParams(scope.filters, scope.params);
           let payload: any = null;
+          let viaMetric = false;
           try {
             if (m.metricId) {
               const r = await resolveMetric(projectId, m.metricId, { filters: bound.steps, params: scope.params });
               if (r && r.ok) {
                 if (!m.label && r.name) title = r.name;
                 payload = { value: r.value, display: r.display };
+                viaMetric = true;
               }
             }
             if (!payload) {
@@ -483,7 +493,13 @@ export async function buildDashboard(
             if (!isLiveFigureError(err)) throw err;
             payload = { error: err.message };
           }
-          if (!payload.error) payload.caption = tileCaption({ kpis: [{ label: title, value: payload.value }] });
+          if (!payload.error) {
+            payload.caption = tileCaption({ kpis: [{ label: title, value: payload.value }] });
+            // What it measures, under the figure as the app's KPI tile reads: an aggregation and a column, never a
+            // filter's or a formula's literal, never a column the Share policy marks (./kpiSubtitle).
+            if (subtitle === undefined) subtitle = await kpiSubtitle(projectId, m, title, viaMetric); // the same for every combination
+            if (subtitle) payload.subtitle = subtitle;
+          }
           base.variants.push(intern(store, payload));
           done++;
           if (ctx.progress) ctx.progress(done / total, `${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tile answers`);

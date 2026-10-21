@@ -146,7 +146,10 @@ export function sanitizePayload(raw: unknown): unknown {
   if (typeof o.error === 'string') return { error: str(o.error, MAX_LABEL) };
   if (Array.isArray(o.sentences)) return { sentences: arr(o.sentences, 5).map((x) => str(x, MAX_LABEL)) }; // a Summary card's
   if ('display' in o || ('value' in o && !('labels' in o))) {
-    return { value: num(o.value), display: str(o.display, 120), caption: str(o.caption, MAX_LABEL) };
+    // A KPI: its figure, its display, its sentence — and what it measures, when the server wrote that.
+    const kpi: Obj = { value: num(o.value), display: str(o.display, 120), caption: str(o.caption, MAX_LABEL) };
+    if (typeof o.subtitle === 'string' && o.subtitle) kpi.subtitle = str(o.subtitle, MAX_LABEL);
+    return kpi;
   }
   const data: ExportChartData = sanitizeChartData(o);
   const out: Obj = {
@@ -154,6 +157,8 @@ export function sanitizePayload(raw: unknown): unknown {
     series: data.series.map((s) => ({ label: s.label.slice(0, MAX_LABEL), values: s.values })),
     caption: str(o.caption, MAX_LABEL),
   };
+  // The figures the chart draws, as the export whitelist named them field by field (analysis/exportSanitize).
+  if (data.figures) out.figures = data.figures;
   if (o.pivot) out.pivot = sanitizePivot(o.pivot);
   if (o.geo) out.geo = sanitizeGeo(o.geo);
   if (typeof o.hidden === 'string') out.hidden = str(o.hidden, MAX_LABEL);
@@ -315,6 +320,7 @@ function sanitizeScorecard(raw: unknown): Obj {
         spark: arr(x.spark, 24).map(num), owner: str(x.owner, 80), group: str(x.group, 80),
       };
     }),
+    counts: (() => { const c = obj(o.counts); return { good: int(c.good, 0, 60, 0), warn: int(c.warn, 0, 60, 0), off: int(c.off, 0, 60, 0), none: int(c.none, 0, 60, 0) }; })(),
     groups: arr(o.groups, 60).map((g) => {
       const x = obj(g);
       return { group: str(x.group, 80), onTrack: int(x.onTrack, 0, 60, 0), scored: int(x.scored, 0, 60, 0), total: int(x.total, 0, 60, 0) };

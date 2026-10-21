@@ -231,6 +231,18 @@
 .blocked .tplNeeds {
   color: var(--warn);
 }
+/* The gallery while it loads (TemplateGallerySkeleton): each part holds its real height. */
+.tplGhost {
+  cursor: default;
+}
+.ghostArt {
+  height: 72px;
+}
+.ghostLine {
+  width: 55%;
+  height: 0.7lh;
+  margin-block: 0.15lh;
+}
 .art {
   display: grid;
   grid-template-columns: 1fr 1fr;
