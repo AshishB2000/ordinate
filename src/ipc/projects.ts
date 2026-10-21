@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { ipcMain } from './bus';
 import * as appPaths from '../app/paths';
 import { orgKey, serverDataDir } from '../server/context';
@@ -165,14 +165,14 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
         const tmp = target + '.partial';
         await recordFs.writeFile(tmp, bytes);
         await recordFs.rename(tmp, target);
-        return { path: target, counts: out.manifest.counts };
+        return { path: target, counts: out.manifest.counts, sha256: createHash('sha256').update(bytes).digest('hex') };
       },
       // A job's result reaches the tab over SSE: no path in it.
       resultOf: () => undefined,
     });
     try {
       const r = await job.done;
-      return { ok: true, counts: r.counts, ...offerDownload(r.path, safe + '.ordinate') };
+      return { ok: true, counts: r.counts, ...(await offerDownload(r.path, safe + '.ordinate', r.sha256)) };
     } catch (err: any) {
       await fs.promises.rm(target, { force: true }).catch(() => undefined);
       if (err instanceof jobs.JobCancelled) return { ok: false, canceled: true };
@@ -185,7 +185,7 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
     // the org's own temp copy, deleted once read.
     let upload: Upload;
     try {
-      upload = resolveUpload(fileToken);
+      upload = await resolveUpload(fileToken);
     } catch (err) {
       if (err instanceof FileTokenError) return { ok: false, error: 'That upload has expired. Choose the file again.' };
       throw err;

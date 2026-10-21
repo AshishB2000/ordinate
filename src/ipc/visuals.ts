@@ -358,10 +358,12 @@ export async function writeDrillCsv(
   columns: ParsedColumn[],
   total: number,
   shapeRow: (r: Cell[]) => Cell[] = (r) => r,
+  hash?: import('crypto').Hash,
 ): Promise<number> {
   const out = fs.createWriteStream(filePath, { encoding: 'utf8' });
   const write = (s: string): Promise<void> =>
     new Promise((resolve, reject) => {
+      hash?.update(s, 'utf8');
       out.once('error', reject);
       if (out.write(s)) resolve();
       else out.once('drain', () => resolve());

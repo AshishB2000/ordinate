@@ -1,4 +1,5 @@
 import { ipcMain } from './bus';
+import * as os from 'os';
 import * as path from 'path';
 import { parsePaste } from '../data/parse';
 import type { ParseResult } from '../data/parse';
@@ -19,6 +20,17 @@ import { resolveUpload, type Upload } from '../server/files';
 // and Cancel. The parsed table is then STAGED in main (src/data/importStage)
 // and the renderer receives a display slice plus a `stagedId`: the composer's
 // preview and Save resolve that id here, so the rows never cross IPC at all.
+
+/**
+ * An import failure as the browser may see it: the upload's server path put back as its own
+ * name, and any other server path (DATA_DIR, the temp dir) never — the generic sentence then.
+ */
+export function importError(err: unknown, upload: Upload | null, fallback: string): string {
+  let msg = err instanceof Error && typeof err.message === 'string' ? err.message : '';
+  if (upload) msg = msg.split(upload.path).join(upload.name);
+  const root = serverDataDir();
+  return msg && !(root && msg.includes(root)) && !msg.includes(os.tmpdir()) ? msg : fallback;
+}
 
 /** Parse one picked file as a job; resolves with the parse, rejects on error or cancel. */
 export function parseAsJob(
@@ -48,7 +60,7 @@ export function register(): void {
   ipcMain.handle('dataset:pickAndParse', async (_e, { sheetName, fileToken }: any = {}) => {
     let upload: Upload | null = null;
     try {
-      upload = resolveUpload(fileToken);
+      upload = await resolveUpload(fileToken);
       const chosenPath = upload.path;
 
       // An upload's own path is `upload-<hex>`: its kind comes from the client's name.
@@ -66,7 +78,7 @@ export function register(): void {
       };
     } catch (err: any) {
       if (err instanceof jobs.JobCancelled || (err && err.name === 'JobCancelled')) return { ok: true, canceled: true };
-      return { ok: false, error: err?.message || 'Failed to read or parse the file' };
+      return { ok: false, error: importError(err, upload, 'Failed to read or parse the file') };
     } finally {
       upload?.done();
     }

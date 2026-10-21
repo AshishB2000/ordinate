@@ -14,7 +14,7 @@
 // Plus the registrations the screen needs from modules other screens own too
 // (guarded: a second register() of a module throws).
 
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import * as path from 'path';
 import { ipcMain } from './bus';
 import { handlers } from '../server/rpc';
@@ -81,8 +81,9 @@ export function register(): void {
       if (counted.total === 0) return { ok: false, error: 'There are no rows to export.' };
       const shaper = await rowShaper(projectId, datasetId, meta.columns, 'export');
       const file = path.join(appPaths.temp(), `drill-${randomUUID()}.csv`);
-      const rows = await writeDrillCsv(file, projectId, datasetId, base, shaper.columns, counted.total, shaper.row);
-      return { ok: true, rows, ...offerDownload(file, csvFileName(name)) };
+      const hash = createHash('sha256'); // as it is written: no second read before an S3 upload
+      const rows = await writeDrillCsv(file, projectId, datasetId, base, shaper.columns, counted.total, shaper.row, hash);
+      return { ok: true, rows, ...(await offerDownload(file, csvFileName(name), hash.digest('hex'))) };
     } catch (err: unknown) {
       return { ok: false, error: err instanceof Error ? err.message : 'Failed to export the rows' };
     }

@@ -142,7 +142,7 @@ export function register(): void {
   ipcMain.handle('asset:importImage', async (_e, { projectId, fileToken }: any = {}) => {
     let up;
     try {
-      up = resolveUpload(fileToken);
+      up = await resolveUpload(fileToken);
     } catch (err) {
       if (err instanceof FileTokenError) return { ok: false, error: 'That upload has expired. Choose the image again.' };
       throw err;

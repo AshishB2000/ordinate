@@ -137,10 +137,10 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
   ok('sweep: an hour-old abandoned upload is deleted', uploadsIn('org-a').length === 0);
 
   // Download
-  const produced = context.runInContext(as('org-a'), 'export', () => {
+  const produced = await context.runInContext(as('org-a'), 'export', async () => {
     const p = path.join(appPaths.temp(), 'export-test.bin');
     fs.writeFileSync(p, 'a,b\n1,2\n');
-    return { p, ...files.offerDownload(p, 'rapport "Q1"\r\nSet-Cookie: x=1 — é.csv') };
+    return { p, ...(await files.offerDownload(p, 'rapport "Q1"\r\nSet-Cookie: x=1 — é.csv')) };
   });
   const dl = (org: string) => fetch(`${base}/api/files/${produced.downloadToken}`, { headers: hdr(org) });
   ok('download from org-b: 404', (await dl('org-b')).status === 404);

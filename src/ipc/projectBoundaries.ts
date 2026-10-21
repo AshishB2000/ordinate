@@ -10,7 +10,7 @@ export function register(): void {
     try {
       // The file was uploaded first (POST /api/files) and arrives as a
       // single-use token; the client's filename is display text only.
-      const upload = resolveUpload(fileToken);
+      const upload = await resolveUpload(fileToken);
       try {
         const res = await importBoundaryFile(projectId, upload.path);
         return 'error' in res ? { ok: false, error: res.error } : { ok: true, boundary: res };
