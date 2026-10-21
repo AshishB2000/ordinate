@@ -80,6 +80,7 @@ Line numbers below are this tree's. Where the spec's numbers drifted it says so.
 | `src/server/jobs/bus.ts:166-175` | `stop()`: `setFanOut(null)`, awaits the pending NOTIFY flush, ends LISTEN. After it, a push to a tab whose stream is on another pod goes nowhere. |
 | `src/server/limits.ts:136-156` | `untilAborted`: races the handler against the request signal; the handler runs on, untracked. |
 | Fastify 5.12.5 | `close()` sets `closing`, runs `preClose`, `server.close()` + `closeIdleConnections()` (`forceCloseConnections: 'idle'` default), answers NEW requests 503 with `Connection: close` (`lib/route.js:479-498`). Keep-alive timeout is 72 s. |
+| DuckDB work owned by no request, job or handler (refutation B1) | runner claims (`runner.ts:136`); subscriptions (`subscriptions/run.ts:124`); the debounced republish (`publish/hosted.ts:322-325`); fresh-on-ask (`data/freshOnAsk.ts:160-175`); refresh-URL follow-ups (`hooks/act.ts:69`); SQL dependents (`data/datasetDependents.ts:41`). None carries a signal; the per-query timeout is 60 s. |
 
 ### 2.2 DuckDB close paths
 
@@ -100,6 +101,7 @@ Line numbers below are this tree's. Where the spec's numbers drifted it says so.
 | `src/engine/duckdbWorker.ts:236-253` | `interrupt`/`stopRunning`: re-sends `connection.interrupt()` every 10 ms until the call settles. `:194` skips a call whose sender is `closed`. `:287-317` the message loop; `close` is queued (`:299`), `interrupt` and `port` are handled at once. |
 | `src/engine/computePool.ts:161-165` | `shutdown()` terminates every compute thread. Never called. On the server a compute thread never loads DuckDB itself (`computeWorker.ts:10-12`, a leased port per op), so terminating one is safe; its port closing makes the org worker stop what that port was running (`duckdbWorker.ts:308-311`). |
 | `src/engine/regexPool.ts:171` | JS-only threads; not on the shutdown path (they die with the process). |
+| `src/engine/s3.ts:36-49` (refutation M1) | S3 mode: a private DuckDB instance ON THE MAIN THREAD resolves credentials (`resolveCreds`, re-run every 5 min and after a 403, reached from `storage.ts:135` `void cache.fill`). Never closed; `process.exit` runs around it. |
 
 ### 2.3 Jobs (`src/app/jobs.ts`, 496 lines)
 
@@ -196,10 +198,11 @@ failure is logged and the sequence continues — nothing may skip the DuckDB clo
 | 3 | `jobs.drain(0.5 T)`: queued jobs cancelled now with the restart sentence; running jobs awaited | running jobs settle | `0.5 T` | `ctl.abort(reason)` on every running job, wait ≤ `min(1 s, 0.05 T)` more; a job still running then is finished `interrupted` with the same sentence and emitted |
 | 3b | `bus.stop()` (flushes the pending NOTIFYs) — AFTER the drain | the flush | `0.7 T` | move on |
 | 4 | `app.close()`: preClose ends every SSE stream; in-flight HTTP finishes | the close callback | `0.7 T` | abort every in-flight `/api/` request's signal with `Restarting` (the route answers 503 with the sentence; their DuckDB calls are interrupted by that same signal), wait ≤ 250 ms for the replies to flush, then `server.closeAllConnections()` |
-| 5 | detached work: `Promise.allSettled(set)` | every handler promise still running | `0.8 T` | `duck.interruptAll()`: refuse new calls, interrupt every running DuckDB call in every worker, skip every queued one |
-| 6 | `duck.closeAll(0.95 T)`: close posted through each worker's queue, each `'exit'` awaited | every DuckDB worker's `'exit'` | `0.95 T` | the survivors' orgs are returned |
+| 5 | detached work: `Promise.allSettled(set)` | every handler promise still running | `0.8 T` | move on |
+| 5b | `duck.interruptAll()` — **UNCONDITIONALLY**, whether step 5 settled or was capped (B1: runner claims, subscriptions, republish, fresh-on-ask, hook follow-ups and SQL dependents own DuckDB work no registry sees): refuse new calls, interrupt every running call in every worker, skip every queued one | — | — | — |
+| 6 | `duck.closeAll(0.95 T)`: close posted through each worker's queue, each `'exit'` awaited; then `s3.close()` (the main-thread credential instance, M1: awaits `resolving`, capped, then `closeSync` connection and instance) | every DuckDB worker's `'exit'` | `0.95 T` | the survivors' orgs are returned |
 | 6b | `computePool.shutdown()` then `pool.end()` | thread exits; pg clients released | `T` | move on (pg rolls back a dropped transaction) |
-| 7 | exit | — | — | 0; or, with a DuckDB survivor, log `{orgs}` at error and exit 1 |
+| 7 | exit | — | — | 0. With a DuckDB survivor (m7): log `{orgs}` at error, set `process.exitCode = 1` and KEEP awaiting `'exit'` (`closeWorker` refs the worker) — never `process.exit` around a live worker; the kubelet's SIGKILL comes after grace |
 
 At T = 20 s: jobs 10 s, HTTP until 14 s, detached until 16 s, DuckDB close until 19 s, Postgres until
 20 s. Why this split: jobs are the long tail (an import or a refresh runs for seconds to minutes),
@@ -236,8 +239,10 @@ Further decisions in this sequence:
   (a null pool reads as the no-database dev mode in several registrations).
 - **The `app.ts:462` hook goes.** Tests rely on `selfcheck.finish()` → `closeAll()`, which already
   closes every worker; an in-process `app.close()` no longer shuts DuckDB down under the test.
-- **Repeated signals are ignored** (`process.on`, logged once). The budget bounds the wait; a forced
-  exit is a SIGKILL away, and a second Ctrl-C exiting around a busy worker is the abort this fixes.
+- **Repeated signals are ignored until T** (`process.on`, logged once). After T a second signal
+  exits at once (local Ctrl-C with a wedged worker); before T it would be the abort this fixes.
+- **app.ts's preClose is skipped while draining** (M3): it runs inside `app.close()` and would
+  re-await an abandoned claim with no deadline. shutdown.ts owns the runner and the bus.
 - **The metrics listener is left open** until the exit, so `ordinate_draining 1` can be scraped.
 - **Compose gets `stop_grace_period: 30s`** (its 10 s default is below the budget). ECS already sets
   `stopTimeout: 30`. The chart adds `shutdownGraceSeconds: 20` beside
@@ -273,13 +278,15 @@ on reply close.
    `postMessage`, and the trap says it must never be reached on the server; removing it makes that
    true everywhere.
 5. A native step that ignores interrupts (a stuck httpfs read, an extension load during start-up)
-   leaves its worker alive at `0.95 T`: logged with its org, exit 1. That exit may itself abort
-   natively; the pod was going to be SIGKILLed anyway. It is the one known way to an abort and it is
-   logged first.
+   leaves its worker alive at `0.95 T`: logged with its org, `exitCode = 1`, and the process keeps
+   waiting for that worker's `'exit'` (m7) — the kubelet's SIGKILL ends it after grace. No
+   `process.exit` ever runs around a live worker.
 
 A job's DuckDB calls get the job's signal: `jobs.start` runs `spec.run` under
 `withAbort(ctl.signal)` (new in `context.ts`: the current store with
-`signal = AbortSignal.any([store.signal, ctl.signal])`; no store, no change). So `ctl.abort()` — a
+`signal = AbortSignal.any([store.signal, ctl.signal].filter(Boolean))` — `AbortSignal.any` throws on
+`undefined` (M4) and `RequestContext.signal` is optional, e.g. a scheduled refresh's context; no
+store, no change). So `ctl.abort()` — a
 user's Cancel or the drain — interrupts the query the job is in. The request's signal still applies,
 as today.
 
@@ -302,14 +309,16 @@ as today.
 
 ### 3.4 The zip reader (`src/app/zipReader.ts`) and hostile input
 
-`openZip(source, policy)` where `source = { file, offset?, length? }` (a range lets restore read a
-STORED inner bundle in place) and `policy = { nameOk(name), capOf(name), maxEntries, maxTotal }`.
-It opens one `FileHandle` (no TOCTOU between checks and reads), validates the whole structure with
-positioned reads, and inflates NOTHING. Then:
-`read(entry)` → Buffer (≤ its cap, `zlib.inflateRaw` async with `maxOutputLength = usize`, CRC
-checked); `extract(entry, dest, signal)` → streamed `fh.createReadStream({start,end})` →
-`zlib.createInflateRaw()` → a counting/CRC `Transform` → `createWriteStream(dest, {flags:'wx'})`,
-`stream.pipeline` with the job's signal; `verify(entry)` → streamed CRC of a stored range.
+`openZip(source, policy)` where `source = { file } | { fh, offset, length }` (restore opens ONE
+`FileHandle` on the upload at job start and reads stored inner bundles in place through it, m5) and
+`policy = { nameOk(name), capOf(name), maxEntries, maxTotal }`. It validates the whole structure with
+positioned reads and inflates NOTHING. Every data read is a stream —
+`fh.createReadStream({start, end})` → (`zlib.createInflateRaw()` for method 8) → a counting/CRC
+`Transform` → a sink — never a whole-`csize` Buffer (B2):
+`read(entry)` → a capped in-memory collector (≤ `usize`, itself ≤ the kind's cap);
+`extract(entry, dest, signal)` → `createWriteStream(dest, {flags:'wx'})`; `verify(entry)` → CRC only.
+`stream.pipeline` takes the JOB's own `JobContext.signal` (never `ctx().signal`, which after
+`withAbort` also carries the RPC's 60 s timeout, m5).
 
 | Hostile input | Handling |
 |---|---|
@@ -321,7 +330,8 @@ checked); `extract(entry, dest, signal)` → streamed `fh.createReadStream({star
 | **Compression method** | 0 or 8 only, from the CD, before any read. |
 | **Names** | `nameLen ≤ 1024`; decoded with `TextDecoder('utf-8', {fatal:true})` (bit 11) or ASCII-only without bit 11; then `policy.nameOk`. Bundle: `ENTRY_RULES` (anchored, ASCII-only) AND canonical case: after removing the history timestamp (`KEY`, which legitimately has `T`/`Z`) no upper-case letter is allowed, so `DATASETS/x.JSON` cannot land beside `datasets/` on a case-insensitive volume or escape the record router (`isRecordPath` is case-sensitive). `..`, `/abs`, `\`, NUL, control chars and every non-ASCII trick fail the anchored ASCII rules; JS `/i` without `/u` never folds `ſ`/`K` (U+212A) to ASCII, pinned by a test. Backup: `backup.json` or `^[^/\\]+\.ordinate$`; these names are keys, NEVER paths (an inner bundle is read in place or extracted to a UUID-named temp file). |
 | **Duplicates** | Key `name.normalize('NFC').toLowerCase()`; a second one → refused (covers case and NFC/NFD variants). |
-| **Declared sizes** | Per entry `usize ≤ policy.capOf(name)`; Σ usize ≤ `maxTotal` (4 GiB − 1); stored ⇒ `csize === usize`; deflate ⇒ `csize ≤ source length`. All from the CD, before any data read. |
+| **Declared sizes** | Per entry `usize ≤ policy.capOf(name)`; Σ usize ≤ `maxTotal` (4 GiB − 1); stored ⇒ `csize === usize`; deflate ⇒ `csize ≤ usize + 5·⌈usize/16383⌉ + 64` (B2: deflate's worst-case expansion; zlib ignores trailing bytes and empty stored blocks are legal, so a 1 KB entry could otherwise drag 199 MB through memory). All from the CD, before any data read. |
+| **Deflate stream ends early** | The inflater must consume all `csize` input bytes: a stream that reaches its end with input left over (`bytesWritten < csize`) is refused (B2). |
 | **Local header vs CD** | Each local header (30 bytes + name) read at its CD offset: signature, flags, method, CRC, csize, usize, name length and name BYTES must equal the CD's. The local extra length is read for the data offset; extra CONTENTS are ignored everywhere (nothing we use comes from them, so a zip64 or timestamp extra cannot change a decision). |
 | **Overlapping entries** | Every `[localOffset, dataStart + csize)` lies inside `[0, cdOffset)`; sorted by offset, each ends at or before the next starts. Kills the overlapping-data (non-recursive) zip bomb and any entry pointing into the directory. |
 | **Actual vs declared size** | JSON/asset: `maxOutputLength = usize` (zlib refuses more), then `length === usize`. Streamed: the Transform counts and destroys the pipeline the moment output exceeds `usize`; at the end the count must equal `usize`. The partial file is deleted. |
@@ -337,8 +347,8 @@ every caller and test keeps `bundle.importBundle`):
 2. `manifest.json` read (≤ 1 MiB, as `peekManifest`); format/version check; counts from CD NAMES; the
    alerts count from `alerts.json`; manifest mismatch → refused.
 3. **Pass 1 over the in-memory kinds** (JSON and assets), one entry at a time: read (inflate, size,
-   CRC), scan UUIDs on `buf.toString('latin1')`, keep only ids already in use here (`idsInUse()`),
-   drop the buffer.
+   CRC), scan UUIDs with a `re.exec`/`lastIndex` loop over the latin1 view (no match array), keep only
+   ids already in use here (`idsInUse()`), drop the buffer.
 4. **Stage the streamed kinds** (Parquet) into `temp()/bundle-<uuid>/<n>` (UUID-named files, never
    entry names).
 5. Only now `createProject`; **pass 2** re-reads each JSON entry, swaps ids and writes the record;
@@ -348,9 +358,13 @@ every caller and test keeps `bundle.importBundle`):
    the handle.
 
 So nothing is created until every entry has been inflated and checked. JSON is inflated twice
-(CPU, not memory). The id swap runs on latin1 text: byte-exact for any input (UTF-8 multi-byte
-sequences are ≥ 0x80 and never match `[0-9a-f-]`) and a one-byte V8 string, half the memory of the
-UTF-16 decode it replaces. `importBundle(Buffer)` stays for the tests: it writes the bytes to a temp
+(CPU, not memory). **The id swap is IN PLACE on the inflated Buffer** (B3): a UUID is always 36
+bytes and latin1 offsets equal byte offsets, so each match is overwritten with `buf.write(new, i,
+'latin1')` — byte-exact for any input (UTF-8 multi-byte sequences are ≥ 0x80 and never match
+`[0-9a-f-]`), no string copy. Measured by the refuter: 44 MB peak and ~250 ms per pass for a 32 MiB
+entry of one repeated UUID, against 417 MB for the string swap. Both loops `await setImmediate`
+about every 10 ms, and a module-level mutex lets only ONE in-memory JSON entry be processed at a time
+across all jobs, so three concurrent imports cost one entry's memory. `importBundle(Buffer)` stays for the tests: it writes the bytes to a temp
 file and imports that, so every existing hostile-bundle test now runs through the new reader.
 
 The ENTRY_RULES, caps, `BUNDLE_FORMAT` and `ruleFor` move to a leaf `src/app/bundleRules.ts`
@@ -366,7 +380,16 @@ about 360.
 | Assets (`assets/<id>.png|jpg|svg`) | **5 MiB** | `projectAssets.MAX_ASSET_BYTES`; `writeBlob` refuses more anyway. Refused from the CD now, not after half the project is written. |
 | Parquet | 1 GiB (unchanged `MAX_ENTRY_BYTES`) | streamed; never in memory. |
 | Total | 4 GiB − 1 (unchanged) | now a DISK bound (staging + project), not memory. |
-| Backup inner bundle | 4 GiB − 1 | read in place (stored) or streamed to temp (a deflated one from an older backup). |
+| Backup inner bundle | 4 GiB − 1 | read in place (stored) or streamed to temp (a deflated one from an older backup). ONE byte budget (`MAX_TOTAL_BYTES`) is threaded through all of a restore's inner imports (m6), not 4 GiB each. |
+
+**The JSON cap holds on both sides (m4).** About 20 CJK characters per cell already passes 32 MiB in
+UTF-8, so a cap only on import would let us write backups our own restore refuses. Decision: the cap
+is enforced where every record is written — `recordFs.writeFile` refuses a `.json` record body over
+`RECORD_MAX_BYTES` (the same 32 MiB constant, in `bundleRules.ts`) with a catalog sentence. A
+dataset or project record that large fails its save loudly; a VERSION that large is not recorded
+(`versions.record` already logs and never fails the save it rides on), so an input table's save still
+lands and only that history step is missing. `exportProject` refuses an over-cap JSON entry left by an
+older version with the same sentence, so a backup fails when it is taken, not when it is restored.
 
 ### 3.6 Backup, restore, export
 
@@ -385,7 +408,13 @@ about 360.
   `temp()/restore-<uuid>.ordinate` and imported from there, then deleted. The RPC still awaits the
   job and calls `up.done()` in `finally`, so the file lives exactly as long as the job. A refused
   backup is now a failed `restore` job carrying the sentence; the reply shape is unchanged.
-  `readBackup` (exported, no caller outside the file) is replaced by the job's reader.
+  `readBackup` (exported, no caller outside the file) is replaced by the job's reader. The job opens
+  ONE `FileHandle` on the upload at its start and every inner read goes through it (m5), so the file
+  stays readable even if something unlinks it; and `files.ts sweep()` no longer deletes a USED
+  token's file until a day past its expiry (a job may still be reading it; `done()` deletes it).
+- **Crash leftovers (m6):** at boot, `bundle-*`, `restore-*`, `backup-*` and `export-*` entries in
+  every org's temp dir older than 24 h are removed (24 h, so a sibling pod's live file on a shared
+  RWX volume is never touched).
 - **`projects:export`**: `applyToBundle` uses `readZipAsync` / `writeZipAsync` (inflate and deflate on
   libuv's pool, never the main thread). Its input is our own freshly written bundle, so the old
   in-memory reader is fine there. **Ceiling, stated:** one project's export is built in memory
@@ -403,9 +432,9 @@ about 360.
 |---|---|---|
 | `ordinate_duckdb_queue_depth` | gauge | Σ over org workers of calls handed to the worker that have not started: `waiting − 1` for a ready worker with a call running, `waiting` while it starts. Compute-thread calls over a leased port are not visible on the main thread (counted by the compute-pool series). |
 | `ordinate_duckdb_busy_workers` | gauge | workers that are not `idle()` (a call waiting, in flight, or leased). |
-| `ordinate_duckdb_wait_seconds` | histogram (the request buckets) | **worker-measured**: the worker stamps each message's arrival and every async reply (including "cancelled before it started") carries `queued` µs; the main side observes it before matching the id, so a call cancelled while still queued is counted too. Plus the main-side wait for a starting worker's `ready`. |
+| `ordinate_duckdb_wait_seconds` | histogram (the request buckets) | **worker-measured**: the worker stamps each message's arrival and every async reply (including "cancelled before it started") carries `queued` µs. ONE observation per call (m1): the main-side wait for a starting worker's `ready` plus the worker's `queued`, observed when the reply lands (also for an id already settled by a cancel, so a call cancelled while queued is counted). |
 | `ordinate_pg_pool_clients{state="total|idle|waiting"}` | gauge | pg's `totalCount`, `idleCount`, `waitingCount`; the pool is handed to metrics by app.ts after `createPool`. Absent without a database. |
-| `ordinate_event_loop_delay_seconds{quantile="0.5|0.9|0.99|1"}` | gauge | `perf_hooks.monitorEventLoopDelay({resolution: 10})`, started with the metrics listener, **reset after each scrape** (prom-client's practice); `1` is the max. A gauge, not a summary: a reset window cannot honestly carry `_sum`/`_count` counters. |
+| `ordinate_event_loop_delay_seconds{quantile="0.5|0.9|0.99|1"}` | gauge | `perf_hooks.monitorEventLoopDelay({resolution: 10})`, started with the metrics listener, **rotated on a fixed, unref'd 30 s timer**; a scrape reports the last COMPLETED window and is read-only (m1: the chart's own annotations put two scrapers on each pod — pod and Service — so a reset-on-scrape window would halve unpredictably). `1` is the max. A gauge, not a summary: a windowed value cannot honestly carry `_sum`/`_count` counters. |
 | `process_resident_memory_bytes`, `nodejs_heap_used_bytes`, `nodejs_external_memory_bytes` | gauge | `process.memoryUsage()` |
 | `ordinate_sse_streams` | gauge | `streamCount()` |
 | `ordinate_live_queries_in_flight` | gauge | new `liveBudget.inFlight()`: Σ running over orgs |
@@ -464,18 +493,32 @@ No org label anywhere. The DuckDB stats live in `duckdbPool.ts` (`poolStats()`, 
   recording logger, restored in `finally`); their negative controls stay (the planted path / the warn
   line must still be seen).
 
-### 3.10 The negative-control abort count
+### 3.10 The SIGTERM scenarios and the negative-control abort count
+
+`test-server-boot` signals the server in three KINDS (refutation M2), each only once `/metrics`
+shows `ordinate_duckdb_busy_workers 1` (kinds a, b) and ~200 ms more:
+
+- **a. query and job in flight** (≥ 20 per mode): the in-process job (`sql:prepareSave`, a slow
+  `range()` cross join) is submitted FIRST, so its query is the one RUNNING in the org worker; then
+  `sql:run` with the same SQL queues behind it and its HTTP stays open. Checks: exit 0, no abort,
+  `/readyz` 503 seen, the job's `jobs:changed` frame says `cancelled` with the restart sentence, gone
+  within T + 3 s.
+- **b. HTTP finished, DuckDB busy:** the client destroys its `sql:run` socket at the signal; the
+  interrupted query is still unwinding in the worker when the process decides to exit.
+- **c. idle worker:** one quick query, then the signal (`duckdbClose.ts:10-12`: 33 aborts in 280
+  exits around an idle worker).
+
+Plus, in the DB mode with the MinIO env present, one kind-a iteration on `STORAGE_URL=s3://…` after a
+read that makes `s3.ts` open its main-thread instance (M1).
 
 The emitted `src/server/main.js` and `app.js` are gitignored build output, so the old behaviour is
 restored without touching tracked files: after `npm run build:ts`, a scratch script (in the
 scratchpad) rewrites the emitted `main.js` SIGTERM handler back to `app.close().then(() =>
 process.exit(0), () => process.exit(1))` and re-adds `app.addHook('onClose', async () =>
-duck.shutdown())` to the emitted `app.js`. Then `node scripts/test-server-boot.js` runs its SIGTERM
-loop unchanged, in both modes, and the counts are taken from its per-iteration lines:
-**aborts** (exit by `SIGABRT`/134, or `libc++abi`/`Napi::Error` in stderr) and **overruns** (still
-alive at `SHUTDOWN_GRACE_SECONDS + 3 s`, then SIGKILLed by the test, as the kubelet would). Then
-`npm run build:ts` again restores the real build. Both numbers go in the PR body. If the old path
-shows 0 aborts, that is reported as measured, with the overrun count as the discriminating number.
+duck.shutdown())` to the emitted `app.js`. Then the same loop runs over all three kinds, and per
+kind it reports **aborts** (exit by `SIGABRT`/134, or `libc++abi`/`Napi::Error` in stderr) and
+**overruns** (still alive at T + 3 s, then SIGKILLed by the test as the kubelet would). Then
+`npm run build:ts` restores the real build. Old vs new, per kind, goes in the PR body.
 
 ## 4. Steps, in commit order
 
@@ -521,9 +564,10 @@ Each step is a small series of commits; every commit builds and its suites pass.
 | gone within `SHUTDOWN_GRACE_SECONDS + 3 s` | same | signal → `'exit'` timing; past it the test SIGKILLs and fails the iteration |
 | ≥ 20 repeats in one run | same | 20 sequential iterations per mode; one aggregate `ok` ("20 of 20") with per-iteration detail on failure |
 | NEGATIVE CONTROL: old `shutdown()` restored, count aborts | scratch run, §3.10 | aborts and overruns, both modes, in the PR body |
-| ~4 MB bundle declaring ~4 GiB: refused, or streamed with RSS growth < 256 MB | `test-bundleMemory.ts`, both modes | 4 Parquet entries of 1 GiB − 1 zeros (deflated ~1 MB each; true sizes and CRCs; a valid manifest): import streams them; RSS sampled every 5 ms; max − baseline < 256 MB; the 4 GiB lands in staging/project and is deleted after |
+| ~4 MB bundle declaring ~4 GiB: refused, or streamed with RSS growth < 256 MB | `test-bundleMemory.ts`, both modes | Parquet entries 3 × 1 GiB + (1 GiB − 64 KiB) of zeros (fits `MAX_TOTAL_BYTES`; true sizes and CRCs; a valid manifest), m2: the import STREAMS them; asserted that the inflater ran and staging reached ~4 GiB (sampled), RSS sampled every 5 ms, max − baseline < 256 MB; `df` checked first (skip, reported, under 6 GiB free); deleted after |
+| JSON bomb (B3) | same | ~40 × 32 MiB entries of one in-use UUID (~4 MB zipped): RSS growth < 256 MB through both passes |
 | unknown entry refused before one byte is inflated | same | spy on `zlib.createInflateRaw` and `zlib.inflateRaw` (wrapped on the shared module object): 0 calls; CONTROL: the same bundle without the stray entry → calls > 0 |
-| an entry that inflates past its declared size is refused | same | one Parquet (streamed) and one JSON (in memory) variant; no project created, staging empty |
+| an entry that inflates past its declared size is refused | same | one Parquet (streamed) and one JSON (in memory) variant, each with the CD's CRC set to the CRC of the FULL inflated output (m3), so only the size check can refuse; the size sentence asserted; the staged file never exceeded `usize` + one chunk; no project created, staging empty |
 | a real large bundle round-trips byte-identical (control) | same | a project with a ~200 000-row dataset (+ source Parquet, records, a version, an asset) exported, imported into a FRESH org (no remap); every imported file ≡ its entry (`Buffer.equals`); differential: `readZip` (old reader) and `openZip` read identical entry lists and bytes |
 | backup + restore of several projects: RSS bounded, byte-identical | same | 12 projects × ~30 MB incompressible Parquet (≈ 360 MB backup): RSS growth < 256 MB during backup and during restore; every restored file ≡ its source; the backup's inner bundles are method 0 |
 | every new series present and parseable | `test-promMetrics.ts` | the existing validator over the full exposition, each new family named |
@@ -536,20 +580,26 @@ Added beyond the spec's list, each guard with its negative control:
 
 - `scripts/test-zipReader.ts`: one crafted zip per row of §3.4's table (zip64 markers and locator,
   multi-disk, CD gap/outside, flags incl. bit 3, method 12/99, invalid UTF-8, non-ASCII without bit 11,
-  `../x`, `/x`, `a\b`, `DATASETS/<id>.JSON`, `dataſets/…`, NFC/NFD and case duplicates, a local header
+  a deflate entry whose `csize` passes `usize + 5·⌈usize/16383⌉ + 64`, a stream that ends before
+  `csize` is consumed (B2), `../x`, `/x`, `a\b`, `DATASETS/<id>.JSON`, `dataſets/…`, NFC/NFD and case duplicates, a local header
   differing in each field, overlapping and directory-pointing entries, stored `csize ≠ usize`, short
   and long inflation, CRC, truncated deflate, forged EOCD in a comment, EOCD comment not reaching EOF);
   CONTROL: the untouched valid zip opens and reads.
-- `test-duckdbPool.ts`: `interruptAll` stops the `LONG` query and skips the queued ones, then
+- `test-duckdbPool.ts` (B1): a query started with NO signal (as a runner claim runs) is stopped by
+  `interruptAll` + `closeEvery` well before `closeEvery`'s deadline; `interruptAll` stops the `LONG` query and skips the queued ones, then
   `closeEvery(+2 s)` returns no survivor; CONTROL: without `interruptAll`, `closeEvery(+300 ms)`
   returns that org as a survivor and does not wait longer; a call after `interruptAll` rejects
   `unavailable` and spawns no worker.
-- `test-jobs.ts`: refusal while draining (CONTROL: submit works after `refuseNew(null)`); queued
+- `test-jobs.ts`: a job submitted from a signal-less `runInContext` (the scheduled refresh path, M4)
+  runs and is cancellable; refusal while draining (CONTROL: submit works after `refuseNew(null)`); queued
   cancelled at once; running cancelled at the deadline with the reason's sentence even when the run
   throws something else; a job that ignores its signal ends `interrupted`; a job inside a routed
   DuckDB call (a ~2 s query) cancelled at 200 ms ends `cancelled` within 500 ms (CONTROL: the same job
   left alone ends `done` after ~2 s, so the Cancel is what stopped the query).
 - `ZipFileWriter` ≡ `writeZip` byte-for-byte (differential).
+- `recordFs.writeFile` refuses a `.json` record over `RECORD_MAX_BYTES` (a ~20-character CJK cell
+  table measured in UTF-8), CONTROL: one byte under is written (m4).
+- `files.ts`: an expired but USED token's file survives a sweep; an unused one does not (m5).
 
 Gates: `npm run build:ts`; `npm test` without and with `DATABASE_URL`, and in the CI env (password
 Postgres + MinIO); `npm run lint` 0; `check-contracts` 0 unresolved; `test-file-size`;
@@ -565,8 +615,8 @@ Postgres + MinIO); `npm run lint` 0; `check-contracts` 0 unresolved; `test-file-
   `null` → hydrate). After `interruptAll` that fallback's own reads reject `unavailable` at once, so it
   fails fast instead of burning CPU — but a CPU-bound fold already running would delay the exit;
   bounded by the budget, logged.
-- **`exit 1` may itself abort** when a worker ignores the interrupt (§3.2.5). Logged first; Kubernetes
-  would SIGKILL next.
+- **A worker that ignores the interrupt** keeps the process alive past T with `exitCode = 1` (§3.2.5,
+  m7) until the kubelet's SIGKILL: no native abort, but a SIGKILL. Logged with its org first.
 - **Job Cancel now interrupts DuckDB.** A user's Cancel on a job mid-query stops the query (new, and
   the point); the job ends `cancelled`, as it already did when it reached `checkCancelled`.
 - **The scheduled runner's reschedule skip** while draining changes a failed-during-shutdown run from
