@@ -542,10 +542,10 @@ are looked at.
 - **A per-org brand name, the logo, PDF and attachments, per-recipient figures** (item 5 phase 2), and
   report schedules.
 - `env.ts` sits at ~502 lines (soft limit 500), and the parsing itself lives in `mail/mailEnv.ts`.
-- **Alerts fired outside the tick reach no channel today, of any kind** (refutation 14). That covers
-  "Check now" in the inbox, MCP, and a manual refresh: `evaluateAndDeliver`, `src/ipc/alerts.ts:66`, which
-  only pushes over SSE. Only the scheduled tick's `deliverTickAlerts` posts. This is unchanged here and
-  is Out.
+- ~~**Alerts fired outside the tick reach no channel today, of any kind** (refutation 14).~~ Closed by
+  docs/notifications (§5.3): every path that fires a rule delivers through the tick's `deliverFired`, and
+  each event is posted at most once (`alert_posts`). A mention's email to its one person also goes
+  through `deliver()`, as `kind: 'mention'`, with its own budget kind.
 - **A visual trashed mid-send** is missing from `figureDatasets` (§2's ceiling). It is named in R18.
 
 ## 13. Threat-model changes (written in step 9)

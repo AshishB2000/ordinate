@@ -64,7 +64,7 @@ Every place a rule's events are produced, and what delivers them today:
 | Snapshot restore | `ipc/snapshots.ts:170` → `afterRefresh` | the request | push only |
 | Fresh on ask | `data/freshOnAsk.ts:175` (`pull` → `afterRefresh`) | detached **system** identity in the org (`:146-149`) | push only |
 | Refresh-hook URLs | `server/hooks/act.ts:69` (`start.done.then(… afterRefresh)`) | the hook creator, `runInContext` at `hooks/route.ts:193`; the `.then` continuation keeps it | push only |
-| MCP refresh | `automation/handlers.ts:153` → `evaluateAndDeliver` | the request (bearer token's user) | push only |
+| MCP refresh | `automation/handlers.ts:153` → `evaluateAndDeliver` | the caller's (no `/api/mcp` tool exposes it: the registry's `datasets refresh` has no `tool`, so `SERVER_COMMANDS` drops it — found while building; the test drives the handler as its member) | push only |
 | Pipeline alert node | `app/pipelineRunner.ts:101` → `evaluateAndDeliver` inside `asJob` | the app job, which binds the submitter's context (`app/jobs.ts:232`): a `pipelines:run` request, or the tick for a cron run (`schedules.ts:126`) | push only |
 | `alerts:evaluate` | `ipc/alerts.ts:207-215` | — | **dead** (no contract): Out |
 

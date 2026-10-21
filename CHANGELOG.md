@@ -9,6 +9,24 @@ All notable changes to Ordinate are documented here. Format based on
 
 ## [Unreleased]
 
+### Notifications that reach the right person
+
+- **Your own alert inbox.** The bell's badge counts the alerts *you* have not seen in the project; every
+  reader (viewers too) has Mark seen and Mark all seen, which clear your badge only. Snooze stays an
+  editor's and says so: "Snooze for everyone · 24 h". Nobody's badge lights up on upgrade (migration
+  0020, `alert_inbox`). A page that leaves the app (publish, embed, a report) names alerts by the data,
+  never by one person's inbox.
+- **One alert send path.** A rule's Slack / Teams / email channels now get its post however it fired —
+  a ↻, an input-table save, a snapshot restore, fresh on ask, a refresh URL, a pipeline's alert step —
+  not only on the schedule, and each event at most once across paths and pods (`alert_posts`).
+- **A scheduled send of a dashboard with row access rules computes nothing**: it is skipped as
+  `row_policy` before any figure is resolved.
+- **@mentions in comments.** Typing @ lists up to 8 people who can read the project now; a mention shows
+  as "@Name" (or "@former member" once they lost access); anyone else is refused. The person gets a
+  notice in their open tabs with Open, an email (Settings → You → "Email me when someone mentions me",
+  on by default; budget kind `mention`, audited per recipient) and a row in Home's new "Mentioned you".
+  Off without a database. See `docs/notifications/00-design.md`.
+
 ### Breaking — Ordinate is now a self-hosted web app (Phase 7)
 
 The Electron desktop app is gone. Ordinate is a server a company runs in its own infrastructure,
