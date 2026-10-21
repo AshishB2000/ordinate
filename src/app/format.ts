@@ -370,6 +370,16 @@ export function formatDateRange(from?: string, to?: string): string {
 
 // ── A chart's figures as text ───────────────────────────────────────────────
 
+/** A share already in percent (a server figure) as the app writes it — 33.3% — or '' for no figure. */
+export function formatPct(v: unknown): string {
+  return typeof v === 'number' && Number.isFinite(v) ? formatNumber(v, { maxDecimals: 1 }) + '%' : '';
+}
+
+/** A waterfall step's name: the category it came from (`src`, an index into `labels`), or its own (a total). */
+export function stepLabel(step: { src: number; label: string }, labels: readonly unknown[]): string {
+  return step.src >= 0 && step.src < labels.length ? String(labels[step.src] ?? '') : step.label;
+}
+
 /**
  * What a waterfall, a Pareto, a 100%-stacked chart or a histogram draws, as
  * lines of text — what a screen reader hears beside the canvas, the same in
@@ -380,11 +390,11 @@ export function formatDateRange(from?: string, to?: string): string {
 export function figureLines(chartType: string, labels: unknown[], series: Array<{ name?: string; label?: string; values?: unknown[] }>, f: ChartFigures | undefined): string[] {
   if (!f) return [];
   const n = (v: unknown): string => (typeof v === 'number' ? formatCompact(v) : '—');
-  const pct = (v: unknown): string => (typeof v === 'number' ? formatNumber(v, { maxDecimals: 1 }) + '%' : '—');
+  const pct = (v: unknown): string => formatPct(v) || '—';
   const at = (i: number): string => String(labels[i] ?? '');
   if (chartType === 'waterfall' && f.waterfall) {
     return f.waterfall.steps.map((s) => {
-      const label = s.src >= 0 && s.src < labels.length ? at(s.src) : s.label;
+      const label = stepLabel(s, labels);
       return s.kind === 'up' || s.kind === 'down' ? `${label}: ${s.value > 0 ? '+' : ''}${n(s.value)} → ${n(s.end)}` : `${label}: ${n(s.end)}`;
     });
   }

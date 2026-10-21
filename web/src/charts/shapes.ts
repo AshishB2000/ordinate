@@ -7,6 +7,7 @@
 // drawing geometry (their tooltips show the raw figure).
 
 import type { ChartFigures } from '../../../src/analysis/chartShapes.ts';
+import { stepLabel } from '../../../src/app/format.ts';
 import type { ChartTypeSpec } from './typeSpec';
 import type { Cx } from './types';
 
@@ -81,7 +82,7 @@ const num = (v: Cx): number | null => (typeof v === 'number' && Number.isFinite(
 export function waterfallFromFigures(f: NonNullable<ChartFigures['waterfall']>, labels: Cx[]): WaterfallShape {
   const steps = f.steps;
   return {
-    labels: steps.map((s) => (s.src >= 0 && s.src < labels.length ? String(labels[s.src]) : s.label)),
+    labels: steps.map((s) => stepLabel(s, labels)),
     base: steps.map((s) => s.start),
     delta: steps.map((s) => s.value),
     kind: steps.map((s) => s.kind),

@@ -17,7 +17,7 @@
 // picture, not as body prose, and the examples in the spec are written that
 // way. A page that needs a paragraph gets a Notes page.
 
-import { asMonthLabels, formatCompact } from '../app/format';
+import { asMonthLabels, formatCompact, stepLabel } from '../app/format';
 import type { ChartData } from './vizData';
 import type { ChartFigures } from './chartShapes';
 import type { PivotGrid } from './pivotData';
@@ -460,7 +460,7 @@ function waterfallCaption(data: CaptionData | null | undefined, measure: string,
   const labels = (data && Array.isArray(data.labels)) ? data.labels : [];
   // The rises and falls the chart draws, each named as its bar is (a month as "Jan 2023").
   const steps = f ? f.steps.filter((s) => s.kind === 'up' || s.kind === 'down')
-    .map((s) => ({ label: s.src >= 0 && s.src < labels.length ? String(labels[s.src]) : s.label, value: s.value })) : [];
+    .map((s) => ({ label: stepLabel(s, labels), value: s.value })) : [];
   if (!f || !steps.length) return genericCaption(pairs, measure);
   let big = steps[0];
   for (const s of steps) if (Math.abs(s.value) > Math.abs(big.value)) big = s;

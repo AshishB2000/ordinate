@@ -22,9 +22,7 @@ export function fmtWith(v: Cx, mode: string): string {
 }
 
 /** A share already in percent (the server's figures) as the formatter writes it: 33.3%. Nothing for no figure. */
-export function pctText(v: Cx): string {
-  return typeof v === 'number' && Number.isFinite(v) ? OrdFormat.formatNumber(v, { maxDecimals: 1 }) + '%' : '';
-}
+export const pctText: (v: Cx) => string = OrdFormat.formatPct;
 
 /** A histogram bin's label from the server's edges: "1.2K–2.4K", or the one value every number shared. */
 export function binLabel(b: { from: number; to: number }): string {

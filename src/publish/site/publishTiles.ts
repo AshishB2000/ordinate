@@ -13,6 +13,7 @@ declare const OrdFormat: {
   formatValue(v: unknown, mode?: string): string; formatNumber(v: unknown, opts?: { decimals?: number; maxDecimals?: number }): string;
   formatPercent(v: unknown, decimals?: number): string; asMonthLabels(labels: any[]): any[]; setFormatPrefs(p: unknown): void;
   figureLines(chartType: string, labels: any[], series: any[], figures: any): string[];
+  formatPct(v: unknown): string; stepLabel(step: { src: number; label: string }, labels: readonly unknown[]): string;
 };
 
 const pcCharts: any[] = [];
@@ -29,11 +30,6 @@ function pcFmt(v: number): string {
 }
 
 let pcFigures = 0;
-
-/** A share in percent (the payload's figures) as the app's formatter writes it: 33.3%. */
-function pcShare(v: number): string {
-  try { return OrdFormat.formatNumber(v, { maxDecimals: 1 }) + '%'; } catch (_) { return String(v) + '%'; }
-}
 
 /** Chart.js's own ink — ticks, legends, gridlines — from the page's tokens, read when a chart is drawn (the style's light or dark). */
 function pcInk(): void {
@@ -137,7 +133,7 @@ function pcChartBody(card: { chartType: string; category?: string; title?: strin
   canvas.setAttribute('aria-label', card.title || 'Chart');
   holder.appendChild(canvas);
   // A figure type whose figures this page does not carry (published before they existed): say so, never work them out.
-  const cfg = pkChartConfig(card.chartType, payload, pcRamp(), pcFmt, pcMonths, pcShare);
+  const cfg = pkChartConfig(card.chartType, payload, pcRamp(), pcFmt, pcMonths, OrdFormat.formatPct);
   if (!cfg) return pcEl('div', 'pub-broken', 'This chart needs a newer publish to draw — publish the dashboard again.');
   const src: number[] | undefined = cfg.src;
   delete cfg.src;

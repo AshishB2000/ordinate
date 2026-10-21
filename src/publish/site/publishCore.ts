@@ -176,7 +176,7 @@ function pkChartConfig(
     return {
       type: 'bar',
       data: {
-        labels: steps.map((x) => (x.src >= 0 && x.src < labels.length ? labels[x.src] : x.label)),
+        labels: steps.map((x) => OrdFormat.stepLabel(x, labels)),
         datasets: [{
           label: series[0] ? series[0].label : '', data: steps.map((x) => [x.start, x.end]),
           backgroundColor: steps.map((x) => (x.kind === 'up' ? PK_UP : x.kind === 'down' ? PK_DOWN : colors[0])),

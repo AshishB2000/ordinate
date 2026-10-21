@@ -15,6 +15,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import * as format from '../src/app/format';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -225,7 +226,7 @@ async function main(): Promise<void> {
   ok('page: …and a comfortable one keeps the theme\'s', kpiSizeIn(autoSchemeCss({ theme: 'auto', density: 'comfortable', accent: 'blue' } as any, undefined, undefined)).at(-1) === '30'); // any: as above
 
   // ── 3. The client core, jsdom-free ──────────────────────────────────────────
-  const ctx: any = {}; // any: a bare vm global the core's functions land on
+  const ctx: any = { OrdFormat: format }; // any: a bare vm global the core's functions land on; OrdFormat as the page binds it
   vm.createContext(ctx);
   vm.runInContext(assets.coreJs, ctx);
   ok('core: loads with no DOM at all', typeof ctx.pkComboIndex === 'function' && typeof ctx.pkChartConfig === 'function');
