@@ -31,6 +31,7 @@
 //     text cells with Date.parse, which SQL has no twin of).
 
 import type { ParsedColumn } from '../../data/parse';
+import { RowPolicyError } from '../../data/rowPolicyError';
 import type { Cell, FilterStep } from '../../data/transforms';
 import type { VizEncoding } from '../../analysis/visuals';
 import type { AnswerPeriod, AnswerSpec } from '../../ai/answerSpec';
@@ -85,10 +86,10 @@ export type CompareOp = '=' | '!=' | '>' | '<' | '>=' | '<=';
  * resolves with one MAX() query (`resolvePeriods`) before compiling.
  */
 export type LiveFilter =
-  | { kind: 'compare'; column: string; op: CompareOp; value: Cell }
+  | { kind: 'compare'; column: string; op: CompareOp; value: Cell; binary?: true }
   | { kind: 'contains'; column: string; value: string }
   | { kind: 'empty'; column: string; negate: boolean }
-  | { kind: 'in'; column: string; values: Cell[]; negate: boolean }
+  | { kind: 'in'; column: string; values: Cell[]; negate: boolean; binary?: true }
   | { kind: 'range'; column: string; from?: string; to?: string }
   | { kind: 'latest'; column: string; period: AnswerPeriod; yearsBack: number };
 
@@ -188,6 +189,8 @@ export function isRefusal(v: unknown): v is LiveRefusal {
 export type LiveAdapted = { ok: true; ir: LiveIR; warnings: string[] } | LiveRefusal;
 
 export interface AdaptOpts {
+  /** A row access lock for an answer (row-policy D13): its steps join the IR's filters, never the spec's (so no label names them). */
+  lock?: readonly FilterStep[];
   /** "Today" for a stored relative period (`dateIntel.resolvePeriod`); the server clock when absent. */
   today?: string;
   /** The week calendar to roll dates up under; the workspace setting when absent. */
@@ -229,6 +232,7 @@ export function adaptFilter(
 ): LiveFilter | null | LiveRefusal {
   if (!s || typeof s !== 'object' || s.type !== 'filter') return null;
   const col = columnOf(columns, s.column);
+  if (!col && s.lock === true) throw new RowPolicyError('column'); // a row access lock never skips (docs/row-policy D6)
   if (!col) {
     warnings.push(`Filter skipped: unknown column "${s.column}"`);
     return null;
@@ -263,7 +267,7 @@ export function adaptFilter(
         warnings.push(emptyListWarning(s.column, s.op));
         return null;
       }
-      return { kind: 'in', column, values: values.map((v) => (v === undefined ? null : v)), negate: s.op === 'not in' };
+      return { kind: 'in', column, values: values.map((v) => (v === undefined ? null : v)), negate: s.op === 'not in', ...(s.lock === true ? { binary: true as const } : {}) };
     }
     case 'is_empty':
     case 'not_empty':
@@ -272,7 +276,7 @@ export function adaptFilter(
       if (col.type === 'number') return refuse('containsNumber', column);
       return { kind: 'contains', column, value: cellText(s.value) };
     default:
-      return { kind: 'compare', column, op: s.op as CompareOp, value: s.value === undefined ? null : s.value };
+      return { kind: 'compare', column, op: s.op as CompareOp, value: s.value === undefined ? null : s.value, ...(s.lock === true ? { binary: true as const } : {}) };
   }
 }
 
@@ -411,6 +415,12 @@ export function fromAnswerSpec(spec: AnswerSpec, columns: LiveColumn[], opts: Ad
     const out = adaptFilter(step, columns, opts, warnings);
     if (isRefusal(out)) return out;
     if (out) ir.filters.push(out);
+  }
+  for (const s of opts.lock ?? []) {
+    const out = adaptFilter(s, columns, opts, warnings);
+    if (isRefusal(out)) return out;
+    if (!out) return refuse('unknownColumn', s.column); // a lock never skips
+    ir.filters.push(out);
   }
 
   if (ir.category && ir.category.kind !== 'date') {

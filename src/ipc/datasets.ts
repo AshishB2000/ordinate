@@ -1,4 +1,7 @@
 import { ipcMain } from './bus';
+import { withLockOf } from './rowDoors';
+import { RowPolicyError, closedToCaller, isRowPolicyError, restrictedOn, withLockSteps } from '../data/rowAccess';
+import { distinctFor } from './distinctFor';
 // One parser and one byte ceiling, shared with the refresh service — see
 // src/fileImport.ts for why they moved out of this file.
 import * as importIpc from './datasetImport';
@@ -20,8 +23,6 @@ import {
   readPage,
   pageRowsJs,
   PageRequest,
-  readDistinctPage,
-  distinctValuesPageJs,
   MAX_DISTINCT,
 } from '../engine/datasetPage';
 import { medianOf } from '../data/columnProfile';
@@ -195,12 +196,17 @@ export type PageReply =
  * `op` names the call site for `residentTrace`, so a fast path that silently
  * stops firing is visible per feature rather than pooled.
  */
-export async function pageFor(
-  projectId: string,
-  datasetId: string,
-  req: PageRequest,
-  op: string,
-): Promise<PageReply> {
+export function pageFor(projectId: string, datasetId: string, req: PageRequest, op: string): Promise<PageReply> {
+  // Row access rules (docs/row-policy D7): the caller's lock first in `filters`, which both paths below honour.
+  // A quality rule's row filter is computed over the whole table (and another dataset): never under a lock.
+  return withLockOf(projectId, datasetId, (lock) => {
+    if (!lock) return pageForUnlocked(projectId, datasetId, req, op);
+    if (req.rowFilter) throw new RowPolicyError('reader');
+    return pageForUnlocked(projectId, datasetId, { ...req, filters: withLockSteps(lock, req.filters) }, op);
+  });
+}
+
+async function pageForUnlocked(projectId: string, datasetId: string, req: PageRequest, op: string): Promise<PageReply> {
   const src = await datasets.residentSource(projectId, datasetId);
   if (src) {
     const fast = await readPage(src, req);
@@ -350,7 +356,16 @@ export function register() {
 
   // On the server a capture summary carries `hasImage`, never its crop path (datasetSummary.ts).
   ipcMain.handle('dataset:list', async (_e, { projectId }: any = {}) => {
-    return datasets.listDatasets(projectId);
+    const list = await datasets.listDatasets(projectId);
+    if (!(await restrictedOn(projectId))) return list;
+    // Row access rules: `scoped` says the caller sees part of it (nothing about the rules leaves), and a failed
+    // refresh's text and the anomaly keys an alert last told of, which can quote a value, are not theirs to read (N2, #16).
+    return Promise.all(list.map(async (d) => {
+      if (!(await closedToCaller(projectId, d.id))) return d;
+      const { lastRefreshError: _e2, ...rest } = d;
+      const auto = rest.autoRefresh ? (({ lastAnomalyKeys: _k, ...a }) => a)(rest.autoRefresh) : undefined;
+      return { ...rest, ...(auto ? { autoRefresh: auto } : {}), scoped: true as const };
+    }));
   });
 
   ipcMain.handle('dataset:get', async (_e, { projectId, id }: any = {}) => datasets.getDataset(projectId, id));
@@ -371,7 +386,8 @@ export function register() {
   ipcMain.handle('dataset:columns', async (_e, { projectId, id }: any = {}) => {
     const meta = await datasets.getDatasetMeta(projectId, id);
     // `mode: 'live'` so a screen knows before it asks for rows a Live dataset does not keep (L2.1).
-    return meta ? { ...headerOf(meta), ...(isLive(meta) ? { mode: 'live' as const } : {}) } : null;
+    const scoped = meta && (await closedToCaller(projectId, id)) ? { scoped: true as const } : {}; // row access rules restrict the caller here
+    return meta ? { ...headerOf(meta), ...(isLive(meta) ? { mode: 'live' as const } : {}), ...scoped } : null;
   });
 
   // A delete is a move to the Trash (src/app/trash.ts), taking the dataset's
@@ -469,23 +485,10 @@ export function register() {
       const live = await liveDistinct(projectId, datasetId, col, req);
       if (live) return live;
 
-      const src = await datasets.residentSource(projectId, datasetId);
-      if (src) {
-        const fast = await readDistinctPage(src, col, req);
-        if (fast) {
-          trace.record('datasetDistinct', 'resident');
-          return fast;
-        }
-        trace.record('datasetDistinct', 'failed', `limit=${cap}`);
-      } else {
-        trace.record('datasetDistinct', 'skipped');
-      }
-
-      const ds = await datasets.getDataset(projectId, datasetId);
-      if (!ds) return { values: [], total: 0 };
-      return distinctValuesPageJs(ds.columns, ds.rows, col, req);
+      // Under the caller's row access lock (./distinctFor): only values that exist in their rows.
+      return (await distinctFor(projectId, datasetId, col, req, 'datasetDistinct')) ?? { values: [], total: 0 };
     } catch (err) {
-      if (isLiveDatasetError(err)) throw err; // D6: "no values" would be a silent answer for a Live dataset
+      if (isLiveDatasetError(err) || isRowPolicyError(err)) throw err; // D6: "no values" would be a silent answer
       return { values: [], total: 0 };
     }
   });

@@ -90,7 +90,7 @@ const iso = (v: unknown): string | undefined => (typeof v === 'string' && v.leng
 
 const CODES: ReadonlySet<string> = new Set([
   'sent', 'partial', 'unchanged', 'not_refreshed', 'missed', 'owner_removed', 'owner_no_access', 'dashboard_gone',
-  'no_channels', 'no_content', 'compute_failed', 'post_failed', 'unreachable', 'refused', 'no_secret',
+  'no_channels', 'no_content', 'compute_failed', 'post_failed', 'unreachable', 'refused', 'no_secret', 'row_policy',
   // email (docs/email): without them a stored run with one of these codes would be dropped on read
   'mail_off', 'no_recipients', 'rate_limited', 'list_too_large', 'tls_failed', 'auth_failed', 'mail_failed', 'mail_partial',
 ]);

@@ -10,6 +10,7 @@
 // heterogeneous datasets.
 
 import type { ColumnType, ParsedColumn } from '../data/parse';
+import { RowPolicyError } from '../data/rowPolicyError';
 import { coerceValue } from '../data/parse';
 import type { Cell, FilterStep } from '../data/transforms';
 import type { FilterOp } from '../data/filterOps';
@@ -59,6 +60,7 @@ export function filterPredicates(
 export function filterPredicate(cols: ParsedColumn[], s: FilterStep, params: duck.DuckValue[]): string | null {
   if (!s || typeof s !== 'object' || s.type !== 'filter') return null;
   const ci = colIndex(cols, s.column);
+  if (ci < 0 && s.lock) throw new RowPolicyError('column'); // a row access lock never skips (docs/row-policy D6)
   if (ci < 0) return null; // "Filter skipped: unknown column"
   if (!FILTER_OPS.has(s.op)) return null; // "Filter skipped: unknown operator"
 

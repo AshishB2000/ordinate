@@ -113,7 +113,7 @@ export function Answer({ projectId, datasetId, datasetName, live, isDate, canEdi
         )}
         <div className={answer.isFetching && data ? `${s.chart} ${s.dim}` : s.chart} aria-busy={answer.isFetching || undefined}>
           {refusal !== null ? (
-            <LiveRefusal message={refusal} projectId={projectId} datasetId={datasetId} />
+            <LiveRefusal refusal={answer.error} projectId={projectId} datasetId={datasetId} />
           ) : answer.isError ? (
             <ErrorState compact heading={3} title="This question could not be answered" message={answer.error.message} onRetry={() => void answer.refetch()} />
           ) : !reply || !data || (FIGURE_TYPES.has(current) && reply.ask !== figureAskKey(current)) ? (

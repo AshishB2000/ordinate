@@ -14,6 +14,7 @@
 // whitelists every page before it is stored.
 
 import * as fs from 'fs';
+import { assertFanOutAllowed, exportScope, fanOutScope } from '../data/rowAccess';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import type { Pool } from 'pg';
@@ -67,7 +68,10 @@ export function register(pool: () => Pool | null): void {
     const clean = sanitizePublishConfig({ ...t, outDir: appPaths.temp() });
     if ('error' in clean) return { ok: false, error: clean.error };
     try {
-      return { ok: true, plan: await planPublish(clean) };
+      // Built as the publish would be (docs/row-policy D10): the dialog says why before anything is written.
+      const { value: plan, datasets: read } = await fanOutScope(() => planPublish(clean));
+      await assertFanOutAllowed(clean.projectId, read);
+      return { ok: true, plan };
     } catch (err: any) { // any: a builder's throw
       return { ok: false, error: err?.message || 'Could not size the site.' };
     }
@@ -118,7 +122,8 @@ export function register(pool: () => Pool | null): void {
   ipcMain.handle('dashboard:exportHtml', async (_e, { projectId, id }: { projectId: string; id: string }) => {
     const a = await analysis.getAnalysis(projectId, id);
     if (!a) return { ok: false, error: 'That dashboard could not be loaded.' };
-    const html = await dashboardPageHtml(projectId, id);
+    // An export (docs/row-policy D11): refused to a caller row access rules restrict; editors export as before.
+    const html = (await exportScope(() => dashboardPageHtml(projectId, id))).value;
     const file = path.join(appPaths.temp(), `export-${randomUUID()}.html`);
     await fs.promises.mkdir(path.dirname(file), { recursive: true });
     await fs.promises.writeFile(file, html, { mode: 0o600 });

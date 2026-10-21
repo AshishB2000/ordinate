@@ -209,7 +209,7 @@ export function VisualTileBody({
     }
     // Off for a Live dataset (L2.6): the server's reason and a copy, not a retry that would refuse again.
     const live = liveRefusalOf(q.isError ? q.error : q.data);
-    if (live !== null) return <LiveRefusal message={live} projectId={projectId} datasetId={def.datasetId} />;
+    if (live !== null) return <LiveRefusal refusal={q.isError ? q.error : q.data} projectId={projectId} datasetId={def.datasetId} />;
     return <ErrorState compact heading={3} title="No data for this chart" message={message} onRetry={() => void q.refetch()} />;
   }
   // A held answer for another ask (the type or a figure override just changed): loading, never drawn as this one.

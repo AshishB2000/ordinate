@@ -19,6 +19,8 @@
 // grouped query per metric is the upgrade if that ever shows.
 
 import { ipcMain } from './bus';
+import { ROW_POLICY_CODE, closedToCaller, isRowPolicyError } from '../data/rowAccess';
+import { distinctFor } from './distinctFor';
 
 import * as scorecards from '../analysis/scorecards';
 import * as metrics from '../analysis/metrics';
@@ -33,7 +35,6 @@ import type { PeriodWindow, RowStatus, Scorecard, ScorecardRow, ScorePeriod, Gro
 import { resolveOverlays } from '../analysis/analytics';
 import type { ResolvedOverlay } from '../analysis/analytics';
 import { forecastSeries } from '../analysis/forecast';
-import { readDistinctPage, distinctValuesPageJs } from '../engine/datasetPage';
 import * as alertStore from '../analysis/alertStore';
 import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
@@ -176,6 +177,7 @@ const figureKey = (metricId: string, col: string | null, w: PeriodWindow | null)
 function refusalOf(err: unknown): FigureRefusal | null {
   if (isLiveFigureError(err)) return { ...liveCodeOf(err), code: err.failure.code, error: err.failure.error };
   if (isLiveDatasetError(err)) return { code: LIVE_DATASET_CODE, error: err.message };
+  if (isRowPolicyError(err)) return { code: ROW_POLICY_CODE, error: err.message }; // row access rules: said, never a silent blank
   return null;
 }
 
@@ -325,7 +327,8 @@ export async function computeScorecard(projectId: string, sc: Scorecard, offset 
     if (def.group) row.group = def.group;
     if (m.direction) row.direction = m.direction;
     const alert = latestAlertFor(alerts, m.id);
-    if (alert) row.alert = alert;
+    // A stored alert sentence carries a whole-dataset figure: not to a caller the dataset's row access rules restrict.
+    if (alert && !(await closedToCaller(projectId, m.datasetId))) row.alert = alert;
     const threads = talk.get(m.id);
     if (threads) row.comments = threads;
     rows.push(row);
@@ -341,15 +344,9 @@ async function topDimension(projectId: string, datasetId: string): Promise<strin
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta) return null;
   const texts = meta.columns.filter((c) => c.type === 'text').slice(0, 12);
-  const src = await datasets.residentSource(projectId, datasetId).catch(() => null);
-  let ds: Awaited<ReturnType<typeof datasets.getDataset>> | undefined;
   for (const c of texts) {
-    let values: string[] | null = null;
-    if (src) { const r = await readDistinctPage(src, c.name, { limit: 51 }); values = r ? r.values : null; }
-    if (values === null) {
-      if (ds === undefined) ds = await datasets.getDataset(projectId, datasetId);
-      values = ds ? distinctValuesPageJs(ds.columns, ds.rows, c.name, { limit: 51, search: '' }).values : [];
-    }
+    // Under the caller's row access lock (./distinctFor): the values their rows hold.
+    const values = (await distinctFor(projectId, datasetId, c.name, { limit: 51, search: '' }))?.values ?? [];
     if (values.length >= 2 && values.length <= 50) return c.name;
   }
   return null;

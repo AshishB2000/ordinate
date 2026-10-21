@@ -17,6 +17,7 @@
 //   story:export       a story as report pages (audited)
 
 import { ipcMain } from './bus';
+import { exportScope } from '../data/rowAccess';
 import { handlers } from '../server/rpc';
 import * as appPaths from '../app/paths';
 import * as reportSpec from '../analysis/reportSpec';
@@ -217,8 +218,9 @@ export function register(): void {
     return { ok: true, report: publicReport(r), dashboard: a && a.id ? { id: a.id, name: a.name } : null, sheets, views, missing: !a, tag: t.tag };
   });
 
+  // A report's pages are an export (docs/row-policy D11): refused to a caller row access rules restrict.
   const pagesHandler = async (event: unknown, { projectId, id, draft, page }: any = {}) => // any: the contract's parsed input
-    reportPages(event, projectId, id, draft, typeof page === 'number' ? page : undefined);
+    (await exportScope(() => reportPages(event, projectId, id, draft, typeof page === 'number' ? page : undefined))).value;
   ipcMain.handle('report:preview', pagesHandler);
   ipcMain.handle('report:build', pagesHandler);
 
@@ -250,7 +252,7 @@ export function register(): void {
     const s = await stories.getStory(projectId, id);
     if (!s) return { ok: false, error: 'That story could not be opened.' };
     const deps = pageDeps(event, projectId);
-    const pages = await storyReportPages(s.name, s.blocks as never, deps, projectId);
+    const pages = (await exportScope(() => storyReportPages(s.name, s.blocks as never, deps, projectId))).value; // an export (row-policy D11)
     return { ok: true, name: s.name, pages, share: await shareNote(event, projectId, deps.datasets), date: deps.today() };
   });
 }

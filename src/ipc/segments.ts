@@ -14,6 +14,7 @@
 // here computes a figure: it routes, and the modules above do the math.
 
 import { ipcMain } from './bus';
+import { savedFrom } from '../data/rowAccess';
 import * as datasets from '../data/datasets';
 import * as transforms from '../data/transforms';
 import * as jobs from '../app/jobs';
@@ -189,7 +190,8 @@ export function register(): void {
       const agg = await rfmCustomers(meta.projectId, meta.id, s);
       if (!agg || !agg.customers.length) return { ok: false, error: 'There are no customers to save.' };
       const t = rfmTable(agg, s.id);
-      const saved = await datasets.saveDataset(meta.projectId, { name: `${meta.name} — RFM`, sourceKind: 'combined', columns: t.columns, rows: t.rows });
+      // Made from the source's rows: born with its row access rules (closed: the RFM table has no rule column).
+      const saved = await savedFrom(meta.projectId, meta.id, () => datasets.saveDataset(meta.projectId, { name: `${meta.name} — RFM`, sourceKind: 'combined', columns: t.columns, rows: t.rows }));
       if (!saved) return { ok: false, error: 'Could not save the dataset' };
       return { ok: true, dataset: { id: saved.id, name: saved.name, rowCount: saved.rowCount } };
     } catch (err) {

@@ -22,6 +22,7 @@ import type { ParsedColumn } from './parse';
 import { bindStepParams, stepsUseParams } from '../analysis/params';
 import type { ParamValues } from '../analysis/params';
 import { orgKey } from '../server/context';
+import { gateRows } from './rowAccess';
 
 export interface ReplayedTable {
   columns: ParsedColumn[];
@@ -41,6 +42,8 @@ export async function paramTable(projectId: string, datasetId: string, values: P
   if (!values || values.size === 0) return null;
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   if (!meta || !stepsUseParams(meta.steps)) return null;
+  // The storage net BEFORE the memo: a table replayed for one caller is never handed to another the rules restrict.
+  await gateRows(projectId, datasetId);
   const key = JSON.stringify([meta.updatedAt, [...values.entries()]]);
   const hit = memo.get(orgKey(projectId + '/' + datasetId));
   if (hit && hit.key === key) return hit.table;

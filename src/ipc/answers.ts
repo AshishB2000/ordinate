@@ -17,6 +17,8 @@
 // the guard is a safety control and there is exactly one of it.
 
 import { ipcMain } from './bus';
+import { lockedTable, withLockOf } from './rowDoors';
+import type { Lock } from '../data/rowLock';
 import * as execConfig from '../app/execConfig';
 import * as copilot from '../ai/copilot';
 import * as datasets from '../data/datasets';
@@ -136,15 +138,22 @@ function ranked(data: ChartData, top?: number): ChartData {
  * spec is drawn as it stands, so a reload and an explained tile show what they
  * showed.
  */
-export async function computeCard(projectId: string, asked: AnswerSpec, loose = false): Promise<Built | Failure> {
+/** THE answer door: row access rules first (./rowDoors — a refusal throws), then the body with the caller's lock. */
+export function computeCard(projectId: string, asked: AnswerSpec, loose = false): Promise<Built | Failure> {
+  return withLockOf(projectId, asked && asked.datasetId, (lock) => computeCardWith(projectId, asked, loose, lock));
+}
+
+async function computeCardWith(projectId: string, asked: AnswerSpec, loose: boolean, lock: Lock | null): Promise<Built | Failure> {
   // A Live dataset is asked of its warehouse (L2.4, ./liveAnswers): ranked and cut there, never hydrated here.
-  const live = await liveCardFor(projectId, asked);
+  const live = await liveCardFor(projectId, asked, lock ? lock.steps : []);
   if (live) return live;
   await ensureFresh(projectId, [asked.datasetId]); // L3.1 fresh on ask: before the rows are read
   // ponytail: hydrates the dataset (periods, value matching and split chips all
   // read cells); a resident distinct-values query when answers over 1M rows feel slow.
-  const ds = await datasets.getDataset(projectId, asked.datasetId);
-  if (!ds) return { ok: false, reason: 'The dataset this answer was built on no longer exists.' };
+  const stored = await datasets.getDataset(projectId, asked.datasetId);
+  if (!stored) return { ok: false, reason: 'The dataset this answer was built on no longer exists.' };
+  // Under a row access lock every helper below (value matching, period anchors, nearest values) sees entitled rows only.
+  const ds = lockedTable(stored, lock);
   const has = (n: string): boolean => ds.columns.some((c) => c.name === n);
   const used = [asked.category, ...asked.measures.map((m) => m.column), ...asked.filters.map((f) => f.column)]
     .concat(asked.series ? [asked.series] : []);

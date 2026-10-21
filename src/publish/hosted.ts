@@ -17,6 +17,8 @@
 // when it was published, and only a re-publish changes them.
 
 import * as fs from 'fs';
+import { anyPolicyClosedRecently, assertFanOutAllowed, fanOutScope, policyClosed } from '../data/rowAccess';
+import { datasetsOfRoot } from '../server/subscriptions/figureDatasets';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as appPaths from '../app/paths';
@@ -48,6 +50,8 @@ export interface HostedSite {
   readonly bytes: number;
   readonly combos: number;
   readonly pages: HostedPage[];
+  /** The datasets the build read (row-policy D10): the page is not served once one has row access rules. Absent before. */
+  readonly datasetIds?: readonly string[];
   /** What to build again on Re-publish. */
   readonly config: Pick<PublishConfig, 'dashboardIds' | 'storyIds' | 'scorecardIds' | 'options' | 'brands'>;
 }
@@ -81,6 +85,47 @@ export async function getSite(id: string): Promise<HostedSite | null> {
   if (!isValidId(id)) return null;
   const m = await readJson<HostedSite>(manifestPath(id));
   return m && m.id === id ? m : null;
+}
+
+/**
+ * May `site` still be served (docs/row-policy D10)? Not once a dataset its build read has row access
+ * rules (or is built from one). A site published before builds were recorded has its datasets worked
+ * out ONCE from the dashboards it was published with, and kept (round 2, #10); one that cannot be
+ * (a story or scorecard, no stored definitions) is not served while its project has any such dataset.
+ */
+export async function servable(site: HostedSite): Promise<boolean> {
+  try {
+    const ids = Array.isArray(site.datasetIds) ? site.datasetIds : await backfillDatasets(site);
+    if (ids === null) return !(await anyPolicyClosedRecently(site.projectId));
+    for (const id of ids) if (await policyClosed(site.projectId, id)) return false;
+    return true;
+  } catch {
+    return false; // rules that cannot be read: not served
+  }
+}
+
+/**
+ * The datasets an older site's dashboards can show, from the definitions it was PUBLISHED with
+ * (item 4's walk: lineage upstream and relationships, an over-approximation), written onto its
+ * manifest so the next fetch reads them there. Null when they cannot be worked out.
+ */
+async function backfillDatasets(site: HostedSite): Promise<readonly string[] | null> {
+  if (site.config.storyIds.length || site.config.scorecardIds.length) return null;
+  const defs = await getDefs(site.id);
+  if (!defs) return null;
+  const ids = new Set<string>();
+  for (const dashId of site.config.dashboardIds) {
+    const def = defs[dashId];
+    if (!def) return null; // a dashboard the build kept no definition of: cannot say what it showed
+    for (const d of await datasetsOfRoot(site.projectId, 'dashboard', dashId, def.analysis, def.visuals)) ids.add(d);
+  }
+  const datasetIds = [...ids];
+  // Kept only on the manifest it was worked out from: a re-publish meanwhile recorded its own.
+  await recordFs.locked(manifestPath(site.id), async () => {
+    const now = await getSite(site.id);
+    if (now && !Array.isArray(now.datasetIds) && now.publishedAt === site.publishedAt) await writeJson(manifestPath(site.id), { ...now, datasetIds });
+  });
+  return datasetIds;
 }
 
 /** One page's HTML, or null. */
@@ -148,7 +193,10 @@ export async function publishHosted(
   // ponytail: read just before the pages build; an edit landing in that window can reach the /p/ page but not the embed. One read for both if it matters.
   const defs = await definitions(config.projectId, config.dashboardIds);
   // Built OUTSIDE the lock (every figure is computed here); only the switch below holds the site.
-  const { pages, index, combos } = await buildPages(config, opts.progress ?? {}, policyOutgoing(config.projectId, 'publish'));
+  // A fan-out (docs/row-policy D10): a dataset with row access rules — or built from one — refuses the whole publish.
+  const { value: built, datasets: read } = await fanOutScope(() => buildPages(config, opts.progress ?? {}, policyOutgoing(config.projectId, 'publish')));
+  await assertFanOutAllowed(config.projectId, read);
+  const { pages, index, combos } = built;
   const files = [{ file: 'index.html', html: index }, ...pages.map((p) => ({ file: p.file, html: p.html }))];
   return recordFs.locked(manifestPath(id), async () => {
     // Read again under the lock: a site taken down meanwhile stays down, and
@@ -167,6 +215,7 @@ export async function publishHosted(
       bytes: files.reduce((n, f) => n + Buffer.byteLength(f.html), 0),
       combos,
       pages: pages.map((p) => ({ file: p.file, kind: p.kind, name: p.name })),
+      datasetIds: [...new Set(read)],
       config: { dashboardIds: config.dashboardIds, storyIds: config.storyIds, scorecardIds: config.scorecardIds, options: config.options, ...(config.brands ? { brands: config.brands } : {}) },
     };
     await writeJson(manifestPath(id), site);

@@ -118,7 +118,7 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
         ) : !b.complete ? (
           <StageNote>Pick a category and at least one measure to draw a chart.</StageNote>
         ) : b.preview.isError && !reply && liveRefusalOf(b.preview.error) !== null ? (
-          <LiveRefusal message={liveRefusalOf(b.preview.error) ?? ''} projectId={projectId} datasetId={b.datasetId} />
+          <LiveRefusal refusal={b.preview.error} projectId={projectId} datasetId={b.datasetId} />
         ) : b.preview.isError && !reply ? (
           <ErrorState compact heading={3} title="Could not compute the visual" message={b.preview.error.message} onRetry={() => void b.preview.refetch()} />
         ) : !reply || !data ? (

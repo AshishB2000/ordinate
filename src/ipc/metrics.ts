@@ -25,6 +25,8 @@
 // number that is wrong in a way no one can see.
 
 import { ipcMain } from './bus';
+import { distinctFor } from './distinctFor';
+import { isRowPolicyError } from '../data/rowAccess';
 
 import * as metrics from '../analysis/metrics';
 import type { Metric, MetricDefinition } from '../analysis/metrics';
@@ -38,7 +40,6 @@ import { bindFormulaText, paramValues, resolveFilterParams } from '../analysis/p
 import type { ParamValues } from '../analysis/params';
 import { sanitizeDashboardFilters } from '../analysis/dashboards';
 import * as datasets from '../data/datasets';
-import { readDistinctPage, distinctValuesPageJs } from '../engine/datasetPage';
 import { periodPlan } from '../analysis/insightsAgg';
 import type { FilterStep } from '../data/transforms';
 import { relatedColumnNames } from './relationships';
@@ -283,18 +284,13 @@ export function nameTakenMessage(name: unknown): string {
  *  `distinctValues` — same two calls, same "null means we could not read it". */
 async function distinctValues(projectId: string, datasetId: string, column: string): Promise<string[] | null> {
   try {
-    const src = await datasets.residentSource(projectId, datasetId);
-    if (src) {
-      const fast = await readDistinctPage(src, column, { limit: SERIES_SCAN, search: '' });
-      if (fast) return fast.values;
-    }
-    const ds = await datasets.getDataset(projectId, datasetId);
-    if (!ds) return null;
-    return distinctValuesPageJs(ds.columns, ds.rows, column, { limit: SERIES_SCAN, search: '' }).values;
+    // Under the caller's row access lock (./distinctFor): the periods their rows hold.
+    const r = await distinctFor(projectId, datasetId, column, { limit: SERIES_SCAN, search: '' });
+    return r ? r.values : null;
   } catch (err) {
     // D6: "no series" would be a silent blank for a Live dataset — its sparkline
-    // is not routed (one statement per point; L2.4 log), so it refuses, typed.
-    if (isLiveDatasetError(err)) throw err;
+    // is not routed (one statement per point; L2.4 log), so it refuses, typed. So does a row access refusal.
+    if (isLiveDatasetError(err) || isRowPolicyError(err)) throw err;
     return null;
   }
 }

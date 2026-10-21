@@ -86,6 +86,12 @@ export interface SqlDialect {
   toInt(x: string): string;
   /** A column read as text. */
   text(col: string): string;
+  /**
+   * A text expression as BYTES for an exact comparison, whatever the
+   * warehouse's collation (a row access lock, row-policy D13): applied to the
+   * column and to every bound value alike. Required, so no dialect ships without one.
+   */
+  binary(x: string): string;
   /** A column declared `number`: its value as a finite double, else NULL. */
   number(col: string, storedAsText: boolean): string;
   /** A column declared `date`: a DATE, else NULL. */

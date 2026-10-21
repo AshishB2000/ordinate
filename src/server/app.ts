@@ -42,6 +42,8 @@ import { maskEmbedTokens, maskEmbedUrl, registerEmbedRoutes } from './embed/rout
 import { useEmbedDb } from './embed/settings';
 import { isLiveDatasetError, LIVE_DATASET_CODE, liveRefusalsRaised, tagLiveRefusals } from '../data/liveDataset';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
+import { isRowPolicyError, ROW_POLICY_CODE, rowPolicyRaised, tagRowPolicyRefusals } from '../data/rowAccess';
+import { seedRank, register as registerCaller } from './authz/caller';
 import { isRecordChanged } from '../app/editConflict';
 import { HOOK_ROUTE, maskHookTokens, maskHookUrl, registerRefreshHookRoute } from './hooks/route';
 import * as fs from 'fs';
@@ -375,18 +377,21 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       return reply.code(403).send({ error: 'forbidden' });
     }
 
+    if (decision.projectId && typeof decision.rank === 'number') seedRank(decision.projectId, decision.rank); // row access rules ask the same rank
     const handler = handlers.get(channel);
     if (!handler) return reply.code(501).send({ error: 'channel not available on this server' });
     try {
       // Raced against the request's signal: past RPC_TIMEOUT_SECONDS → 504, and
       // the same signal has interrupted the handler's DuckDB queries (T4.3).
       const refusals = liveRefusalsRaised();
+      const rowRefusals = rowPolicyRaised();
       let result: unknown = await untilAborted(Promise.resolve(handler(SERVER_EVENT, ...(args.length ? [parsed.data] : []))), who.signal);
       const created = 'creates' in contract && contract.creates ? contract.creates(result) : undefined;
       if (created) await grantCreator(pool, who, created);
       if ('visible' in contract && contract.visible) result = contract.visible(result, await readable(pool, who));
       // D6: a Live refusal a handler caught keeps its type (src/data/liveDataset.ts).
       if (liveRefusalsRaised() !== refusals) tagLiveRefusals(result);
+      if (rowPolicyRaised() !== rowRefusals) tagRowPolicyRefusals(result); // a row access refusal a handler caught keeps its type
       const body = encode(result);
       await record('ok', decision.projectId, created ? [created] : []);
       return reply.type('application/json').send(body);
@@ -401,6 +406,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         // 409 with the catalog's sentence (no id, no SQL), never a figure from zero rows.
         await record('error', decision.projectId);
         return reply.code(409).send({ error: LIVE_DATASET_CODE, code: LIVE_DATASET_CODE, message: err.message });
+      }
+      if (isRowPolicyError(err)) {
+        // Row access rules (docs/row-policy): a typed 409 with the catalog's sentence — never a figure, never another team's value.
+        await record('error', decision.projectId);
+        return reply.code(409).send({ error: ROW_POLICY_CODE, code: ROW_POLICY_CODE, reason: err.reason, message: err.message });
       }
       if ((err as { code?: unknown } | null)?.code === 'ERECORDBUSY') {
         // Another save held the record past the lock wait (src/app/recordFs.ts):
@@ -473,6 +483,8 @@ export function registerHandlers(): void {
     (require(mod) as { register: () => void }).register();
   }
   (require('./authz/share') as typeof import('./authz/share')).register(() => dbPool);
+  registerCaller(() => dbPool); // row access rules: who is a project viewer
+  (require('../ipc/rowPolicy') as typeof import('../ipc/rowPolicy')).register(() => dbPool); // …and the admin's Row access tab
   // Admin and personal API tokens (T3.4). The env is read per call, like the pool.
   const env = (): ServerEnv => {
     if (!appEnv) throw new Error('no app built');

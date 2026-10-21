@@ -15,6 +15,7 @@
 //     runAsPublished, so a Live figure is never fresher than the /p/ floor.
 
 import { orgKey } from '../server/context';
+import { assertFanOutAllowed, fanOutScope } from '../data/rowAccess';
 import * as recordFs from '../app/recordFs';
 import { getFormatPrefs } from '../app/format';
 import { listThemes } from '../app/themeStore';
@@ -35,9 +36,9 @@ const CACHE_MS = 5 * 60_000;
 // ponytail: a page can be a few MB, so a small count cap; a byte budget if embeds are many and large.
 const CACHE_MAX = 32;
 
-export type EmbedBuild = { html: string } | { missing: 'gone' | 'republish' };
+export type EmbedBuild = { html: string; datasets?: string[] } | { missing: 'gone' | 'republish' };
 
-const cache = new Map<string, { at: number; html: string }>();
+const cache = new Map<string, { at: number; html: string; datasets: string[] }>();
 const inflight = new Map<string, Promise<EmbedBuild>>();
 
 /** Test hook: forget every built page. */
@@ -56,7 +57,9 @@ async function build(site: HostedSite, dashboardId: string, c: EmbedClaims): Pro
   if (!def) return { missing: 'republish' };
   const lock = makeLock(c.params);
   const max = Math.min(site.config.options.maxCombos || DEFAULT_MAX_COMBOS, EMBED_MAX_COMBOS);
-  const d = await recordFs.withReadMemo(() => buildDashboard(site.projectId, dashboardId, max, {}, policyOutgoing(site.projectId, 'publish'), { def, lock }));
+  // A fan-out (docs/row-policy D10): a dataset with row access rules — or built from one — refuses the embed.
+  const { value: d, datasets } = await fanOutScope(() => recordFs.withReadMemo(() => buildDashboard(site.projectId, dashboardId, max, {}, policyOutgoing(site.projectId, 'publish'), { def, lock })));
+  await assertFanOutAllowed(site.projectId, datasets);
   if (!d) return { missing: 'gone' };
   const raw = (d.style || {}) as { themeId?: string };
   // A token's theme wins over the dashboard's (and its workspace theme and brand ramp, which were made for the other one).
@@ -75,14 +78,17 @@ async function build(site: HostedSite, dashboardId: string, c: EmbedClaims): Pro
     geo,
     embed: { hideTitle: c.hide.includes('title'), hideFilters: c.hide.includes('filters') },
   });
-  return { html: pageHtml(page, readAssets(), d.name) };
+  return { html: pageHtml(page, readAssets(), d.name), datasets };
 }
 
 /** The page for `dashboardId` of `site` under the token's claims — cached, one build at a time per key. */
 export async function embedHtml(site: HostedSite, dashboardId: string, claims: EmbedClaims): Promise<EmbedBuild> {
   const key = keyOf(site, dashboardId, claims);
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_MS) return { html: hit.html };
+  if (hit && Date.now() - hit.at < CACHE_MS) {
+    await assertFanOutAllowed(site.projectId, hit.datasets); // rules set since it was built: refused on every pod at once
+    return { html: hit.html };
+  }
   let p = inflight.get(key);
   if (!p) {
     p = build(site, dashboardId, claims).finally(() => inflight.delete(key));
@@ -91,7 +97,7 @@ export async function embedHtml(site: HostedSite, dashboardId: string, claims: E
   const out = await p;
   if ('html' in out) {
     cache.delete(key);
-    cache.set(key, { at: Date.now(), html: out.html });
+    cache.set(key, { at: Date.now(), html: out.html, datasets: out.datasets ?? [] });
     while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value as string);
   }
   return out;

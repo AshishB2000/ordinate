@@ -33,6 +33,8 @@ import { cardFacts, describeAnswer, withheldFilters } from '../ai/answerFacts';
 import { liveWithheld } from './liveProfile';
 import { liveAnswer, liveLookup } from '../engine/live/liveQuery';
 import type { LiveFailure } from '../engine/live/liveQuery';
+import { adaptFilter, isRefusal, refuse } from '../engine/live/liveSpec';
+import type { LiveFilter } from '../engine/live/liveSpec';
 import type { PeriodRange } from '../engine/live/evaluate';
 import { compileCaseMatches } from '../engine/live/compile';
 import { answerNames, missingRefusal } from '../engine/live/liveMissing';
@@ -68,7 +70,7 @@ function fail(f: LiveFailure): Failure {
  * question in another order is the same statement. A value nothing matches is
  * left as asked (the chart then says so, as the extract's does).
  */
-export async function liveCaseFix(projectId: string, datasetId: string, columns: ParsedColumn[], filters: AnswerFilter[]): Promise<{ ok: true; filters: AnswerFilter[] } | LiveFailure> {
+export async function liveCaseFix(projectId: string, datasetId: string, columns: ParsedColumn[], filters: AnswerFilter[], lock: readonly FilterStep[] = []): Promise<{ ok: true; filters: AnswerFilter[] } | LiveFailure> {
   const asked = new Map<string, Set<string>>();
   for (const f of filters) {
     if ('period' in f || !CASE_OPS.has(f.op)) continue;
@@ -81,7 +83,16 @@ export async function liveCaseFix(projectId: string, datasetId: string, columns:
   if (!asked.size) return { ok: true, filters };
   const stored = new Map<string, Map<string, string>>();
   for (const [column, keys] of asked) {
-    const r = await liveLookup(projectId, datasetId, (t) => compileCaseMatches(column, [...keys].sort(), t.env));
+    // Under a row access lock the stored spellings come from the caller's rows only (row-policy D13).
+    const r = await liveLookup(projectId, datasetId, (t) => {
+      const locked: LiveFilter[] = [];
+      for (const s of lock) {
+        const f = adaptFilter(s, t.columns, {}, []);
+        if (!f || isRefusal(f)) return isRefusal(f) ? f : refuse('unknownColumn', s.column); // a lock never skips
+        locked.push(f);
+      }
+      return compileCaseMatches(column, [...keys].sort(), t.env, locked);
+    });
     if (!r.ok) return r;
     const byKey = new Map<string, string>();
     for (const row of r.rows) {
@@ -148,7 +159,7 @@ function cardLabels(spec: AnswerSpec, columns: ParsedColumn[], answered: string[
 }
 
 /** `computeCard` for a Live dataset, or null when the dataset is not Live. */
-export async function liveCardFor(projectId: string, spec: AnswerSpec): Promise<Built | Failure | null> {
+export async function liveCardFor(projectId: string, spec: AnswerSpec, lock: readonly FilterStep[] = []): Promise<Built | Failure | null> {
   const meta = await datasets.getDatasetMeta(projectId, spec && spec.datasetId);
   if (!meta || !isLive(meta)) return null;
   // A column the warehouse dropped (L2.5): said as exactly that, typed — before the case fix asks anything.
@@ -160,9 +171,9 @@ export async function liveCardFor(projectId: string, spec: AnswerSpec): Promise<
   const missing = used.find((n) => !has(n));
   if (missing) return { ok: false, reason: `"${missing}" is no longer a column of ${meta.name}.` };
 
-  const fixed = await liveCaseFix(projectId, meta.id, meta.columns, spec.filters);
+  const fixed = await liveCaseFix(projectId, meta.id, meta.columns, spec.filters, lock);
   if (!fixed.ok) return fail(fixed);
-  const r = await liveAnswer(projectId, { ...spec, filters: fixed.filters });
+  const r = await liveAnswer(projectId, { ...spec, filters: fixed.filters }, { lock });
   if (!r.ok) return fail(r);
 
   const catCol = meta.columns.find((c) => c.name === spec.category);

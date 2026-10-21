@@ -12,6 +12,7 @@
 // src/data/asOf.ts. Every figure here is computed by the app; nothing is stored.
 
 import { ipcMain } from './bus';
+import { gateRows } from '../data/rowAccess';
 import * as datasets from '../data/datasets';
 import * as snapshots from '../data/snapshots';
 import { isEligible } from '../data/snapshotNames';
@@ -154,6 +155,7 @@ export function register(deps: { headless?: boolean }): void {
   ipcMain.handle('snapshots:diff', async (_e, { projectId, datasetId, stamp, key, limit }: any = {}) => {
     try {
       requireExtract(await datasets.getDatasetMeta(projectId, datasetId));
+      await gateRows(projectId, datasetId); // snapshot files are read by path, never through the storage net (row-policy D9)
       return await diffSnapshot(projectId, datasetId, stamp, key, limit);
     } catch (err: any) {
       return fail(err?.message || 'Could not compare the snapshot');

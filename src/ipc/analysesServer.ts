@@ -19,6 +19,7 @@ import { metricUsage } from '../analysis/metricUsage';
 import { importImage, readImageDataUrl } from '../app/projectAssets';
 import { FileTokenError, resolveUpload } from '../server/files';
 import { isLiveRefusalReply, liveRefusal } from '../data/liveDataset';
+import { visualForCaller } from './rowDoors';
 import { figureAsk } from '../analysis/figureAsk';
 
 /** What a card needs of a Visual to draw it — the record minus its bookkeeping. */
@@ -61,7 +62,7 @@ export function register(): void {
         if (c.type !== 'visual' || !c.visualId) continue;
         // A dangling visualId is a hole in the sheet, not a card to draw.
         const v = await visuals.getVisual(projectId, c.visualId);
-        if (v) previews.push(visualDef(v));
+        if (v) previews.push(visualDef(await visualForCaller(projectId, v)));
         if (previews.length >= PREVIEW_MAX) break;
       }
       // The sheets' ids and names: a navigation card's target picker (actionEditor.ts aeTargetFields).
@@ -81,7 +82,7 @@ export function register(): void {
     for (const s of await visuals.listVisuals(projectId)) {
       // Each with its tag: the dashboard's Interactions write a visual's overrides with it as `base`.
       const v = await visuals.readVisual(projectId, s.id);
-      if (v) defs.push({ ...visualDef(v.rec), tag: v.tag });
+      if (v) defs.push({ ...visualDef(await visualForCaller(projectId, v.rec)), tag: v.tag });
     }
     return { ok: true, analysis: t.rec, visuals: defs, tag: t.tag };
   });

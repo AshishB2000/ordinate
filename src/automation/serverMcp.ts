@@ -25,6 +25,7 @@ import { z } from 'zod';
 import type { ProjectScoped } from '../api/contract';
 import { audit, type Outcome } from '../server/authz/audit';
 import { authorize, readable } from '../server/authz/index';
+import { seedRank } from '../server/authz/caller';
 import { ctx } from '../server/context';
 import { sameOrigin } from '../server/csrf';
 import { MAX_BODY } from './httpTransport';
@@ -79,9 +80,10 @@ export function registerMcpRoute(app: FastifyInstance, pool: () => Pool | null, 
               allow: async (c, id) => {
                 projectId = id;
                 const check: ProjectScoped = { access: c.readOnly ? 'read' : 'write', input: z.unknown(), project: () => id };
-                const yes = (await authorize(check, null, who, db)).ok;
-                if (!yes) outcome = 'denied';
-                return yes;
+                const decision = await authorize(check, null, who, db);
+                if (!decision.ok) outcome = 'denied';
+                else if (typeof decision.rank === 'number') seedRank(id, decision.rank); // row access rules ask the same rank
+                return decision.ok;
               },
             };
             try {

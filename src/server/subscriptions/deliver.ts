@@ -31,8 +31,9 @@ import { renderSlack, renderTeams } from '../../analysis/subscriptionRender';
 import * as say from '../../analysis/subscriptionText';
 import { sendEmail, setMailSleepForTest } from '../mail/emailChannel';
 import { figureDatasets } from './figureDatasets';
+import { assertFanOutAllowed, isRowPolicyError, type RowPolicyError } from '../../data/rowAccess';
 
-export type PostCode = 'sent' | 'post_failed' | 'unreachable' | 'refused' | 'no_secret' | 'compute_failed'
+export type PostCode = 'sent' | 'post_failed' | 'unreachable' | 'refused' | 'no_secret' | 'compute_failed' | 'row_policy'
   | 'mail_off' | 'no_recipients' | 'rate_limited' | 'list_too_large' | 'tls_failed' | 'auth_failed' | 'mail_failed';
 export interface PostResult {
   ok: boolean;
@@ -133,13 +134,34 @@ export function testMessage(name: string): MessageModel {
 }
 
 /**
- * ITEM 5's HOOK (docs/email/00-design.md §2): a refusal when any dataset the
- * send's figures can come from carries a row policy — every channel kind, every
- * source. Null (send) until then.
+ * ITEM 5's refusal (docs/email/00-design.md §2, docs/row-policy D10): a send whose figures can come from a
+ * dataset with row access rules — or one built from one — is refused, for every owner, channel kind and
+ * source. Rules that cannot be read refuse too (`row_policy`); any other failure is `compute_failed`.
  */
-export async function refuseFanOut(datasetIds: readonly string[]): Promise<PostResult | null> {
-  void datasetIds;
-  return null;
+export async function refuseFanOut(d: Delivery, datasetIds: readonly string[]): Promise<PostResult | null> {
+  if (d.kind === 'test') return null;
+  try {
+    await assertFanOutAllowed(d.projectId, datasetIds);
+    return null;
+  } catch (err) {
+    if (isRowPolicyError(err)) return { ok: false, code: 'row_policy', attempts: 0 };
+    log.warn({ error: err instanceof Error ? err.message : String(err) }, 'send refused: its row access rules could not be checked');
+    return { ok: false, code: 'compute_failed', attempts: 0 };
+  }
+}
+
+/**
+ * The same refusal asked of a dashboard from its DEFINITION — nothing computed, no warehouse called —
+ * before a subscription is previewed or saved. The RowPolicyError, or null when it may be sent.
+ */
+export async function dashboardSendRefusal(projectId: string, analysisId: string): Promise<RowPolicyError | null> {
+  try {
+    await assertFanOutAllowed(projectId, await figureDatasets({ kind: 'dashboard', projectId, analysisId }));
+    return null;
+  } catch (err) {
+    if (isRowPolicyError(err)) return err;
+    throw err;
+  }
 }
 
 /**
@@ -165,7 +187,7 @@ export async function deliver(channel: Channel, d: Delivery, memo?: DatasetsMemo
     log.warn({ channel: channel.id, error: err instanceof Error ? err.message : String(err) }, 'send refused: what its figures come from could not be read');
     return { ok: false, code: 'compute_failed', attempts: 0 };
   }
-  const refused = await refuseFanOut(datasetIds);
+  const refused = await refuseFanOut(d, datasetIds);
   if (refused) return refused;
   const message = d.kind === 'test' ? testMessage(channel.name) : d.message;
   try {

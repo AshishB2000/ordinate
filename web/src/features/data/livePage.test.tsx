@@ -81,7 +81,7 @@ describe('a Live dataset’s page', () => {
     expect(within(off).getAllByRole('listitem')).toHaveLength(6);
     expect(screen.getAllByRole('button', { name: 'Make a copy' }).length).toBeGreaterThan(0);
     // The tabs that read rows are there, each saying why it is off.
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Data', 'Schema', 'Columns', 'Quality', 'Insights', 'Snapshots']);
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Data', 'Schema', 'Columns', 'Quality', 'Insights', 'Snapshots', 'Row access']); // an admin's page: the Row access tab too (docs/row-policy)
     expect(readersCalled(calls)).toEqual([]);
   });
 

@@ -11,6 +11,7 @@
 // path, so a record path can never escape userData/projects/<projectId>/datasets.
 
 import * as fs from 'fs';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import * as storage from '../engine/storage';
@@ -264,4 +265,59 @@ export function serialized<T>(file: string, apply: (raw: Record<string, unknown>
       return false;
     }
   }).catch(() => false);
+}
+
+const firstWritePolicy = new AsyncLocalStorage<{ rowPolicy: unknown }>();
+
+/**
+ * Runs `fn` (a save that creates ONE new dataset) so that dataset's FIRST record write already
+ * carries `rowPolicy` — "Make a copy" of a dataset with row access rules (docs/row-policy D14).
+ */
+export function withFirstWritePolicy<T>(rowPolicy: unknown, fn: () => Promise<T>): Promise<T> {
+  return firstWritePolicy.run({ rowPolicy }, fn);
+}
+
+/**
+ * A data write's record write (`datasets.persist`): a LOCKED read-merge-write
+ * that copies `rowPolicy` from the STORED record and never from what the writer
+ * holds — the in-memory Dataset does not carry it. So rules an admin saves while
+ * a long fold runs survive that fold's write, and narrowed rules are never
+ * widened back (docs/row-policy/00-design.md D2b). A record that is missing or
+ * unreadable has no rules to keep.
+ */
+export async function writeRecordKeepingPolicy(file: string, obj: object): Promise<void> {
+  const first = firstWritePolicy.getStore();
+  await recordFs.locked(file, async () => {
+    let stored: Record<string, unknown> | null = null;
+    try {
+      stored = JSON.parse(await recordFs.readFile(file, 'utf8')) as Record<string, unknown>;
+    } catch {
+      stored = null; // a first save, or a record no reader can open
+    }
+    const next: Record<string, unknown> = { ...(obj as Record<string, unknown>) };
+    delete next.rowPolicy;
+    if (stored && typeof stored === 'object') {
+      if (Object.prototype.hasOwnProperty.call(stored, 'rowPolicy')) next.rowPolicy = stored.rowPolicy;
+    } else if (first !== undefined) {
+      next.rowPolicy = first.rowPolicy; // a copy of a dataset with rules is born with them: no moment without
+    }
+    await writeJsonAtomic(file, next);
+  });
+}
+
+/**
+ * The record's stored `rowPolicy` (undefined when it has none) — what a copy is born with. A record that is
+ * not there has none; any other failure THROWS, so the copy refuses rather than being born without rules.
+ */
+export async function storedRowPolicy(projectId: string, id: string): Promise<unknown> {
+  if (!isValidId(projectId) || !isValidId(id)) return undefined;
+  let text: string;
+  try {
+    text = await recordFs.readFile(datasetFilePath(projectId, id), 'utf8');
+  } catch (err) {
+    if ((err as { code?: unknown } | null)?.code === 'ENOENT') return undefined;
+    throw err;
+  }
+  const raw = JSON.parse(text) as Record<string, unknown> | null; // a record that does not parse: throws too
+  return raw && typeof raw === 'object' ? raw.rowPolicy : undefined;
 }

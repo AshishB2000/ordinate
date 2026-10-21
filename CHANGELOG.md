@@ -89,6 +89,8 @@ the desktop installers.
   **Send now** is limited to once a minute per subscription, for every channel kind.
   See [`docs/server/email.md`](docs/server/email.md).
 
+- **Row access rules.** A project admin can limit what each project viewer sees in a dataset to the rows whose chosen column holds their values — by person or by team — from the dataset's new **Row access** tab. Every chart, KPI, answer, data grid, filter list and column panel then shows that viewer only their rows; readers that work over the whole table (SQL, statistics, drivers, segments, insights, quality results, snapshot diffs, Prepare previews, exports) are refused with a sentence that says why, and published links, embeds, subscriptions and alerts are off for such a dataset. Live datasets bind and byte-compare the rule's values on every warehouse. See [`docs/server/row-level-security.md`](docs/server/row-level-security.md).
+
 ### Security — since the move to the web
 
 - **SQL over datasets is checked against DuckDB's own reading of the query.** A query could reach
@@ -97,6 +99,13 @@ the desktop installers.
   a catalog view, or a table function other than `range`, `generate_series`, `unnest`,
   `json_each`, `json_tree`, `repeat` and `repeat_row` are now refused, so their refresh will fail:
   list the PIVOT values (`ON col IN (…)`) or query the project's datasets instead.
+
+- **`projects:list` and `projects:open` no longer return a project's colour map or its dismissed
+  insight ids** (either can name a value from the data). The colour map is read with
+  `format:colors:get`, as the app already does. A subscription or alert over a dataset with row access
+  rules now records the run code `row_policy`.
+
+- **Embeds refuse more datasets that store values computed across rows.** A locked embed tile is now refused when its dataset was built by SQL, a notebook or the composer, when a step looks up another dataset, or when a group-by, pivot or keyed dedupe does not keep every locked column — each could carry another customer's rows or totals into the view. (The same rule backs row access rules.)
 
 ### Fixed — since the move to the web
 
@@ -110,6 +119,7 @@ the desktop installers.
   the same second keep both changes. A save that waits more than 15 s says "try again". See
   [`docs/record-locks/00-design.md`](docs/record-locks/00-design.md).
 - A new project's first alert rule could appear in the next new project's alerts.
+- A dashboard whose prepare steps read a parameter could be served another parameter value's cached figure, and the data search read personal and financial columns when the share-policy lookup failed (F21). A grid request with no page window counted every row instead of the filtered ones.
 - **A published Pareto and waterfall showed different figures from the app.** The `/p/` page and
   signed embeds worked them out a third time, differently: a Pareto drawn in arrival order, its
   cumulative line dragged down by negatives, and a waterfall without its Total rows or its

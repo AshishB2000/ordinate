@@ -230,7 +230,8 @@ export async function readPage(src: PageSource, req: PageRequest): Promise<PageR
  */
 export function pageRowsJs(columns: ParsedColumn[], rows: Cell[][], req: PageRequest): PageResult {
   const cols = Array.isArray(columns) ? columns : [];
-  const r = normalize(cols, req) ?? { offset: 0, limit: 0, needle: '', sort: null, filters: [] };
+  // An unreadable window still counts only the FILTERED rows (a row access lock is a filter): never the whole table.
+  const r = normalize(cols, req) ?? { offset: 0, limit: 0, needle: '', sort: null, filters: Array.isArray(req?.filters) ? req.filters : [], rowFilter: req?.rowFilter };
 
   let list: Cell[][] = (Array.isArray(rows) ? rows : []).map((row) => (Array.isArray(row) ? row : []));
   const keep = r.rowFilter ? r.rowFilter.keepFor(cols, list) : null;
@@ -656,6 +657,8 @@ export interface DistinctRequest {
   /** Case-insensitive substring match, applied IN SQL. Blank/absent = no filter. */
   search?: string;
   limit?: number;
+  /** Rows to keep first (a row access lock): `filterPredicates` here, the fold in the JS reference. */
+  filters?: FilterStep[];
 }
 
 /**
@@ -705,6 +708,7 @@ export async function readDistinctPage(
     // whitespace-only value IS a legitimate option; matching the original
     // matters more than being internally consistent.
     let where = `${p} IS NOT NULL AND CAST(${p} AS VARCHAR) <> ''`;
+    for (const pred of filterPredicates(cols, req?.filters ?? [], params)) where += ` AND ${pred}`;
     if (search !== '') {
       // Parameterised, never interpolated: a search box is untrusted input.
       // `lower()` on both sides, matching the JS reference's toLowerCase().
@@ -777,7 +781,7 @@ export function distinctValuesPageJs(
 
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const r of Array.isArray(rows) ? rows : []) {
+  for (const r of req?.filters?.length ? applyPipeline({ columns: cols, rows }, req.filters).rows : Array.isArray(rows) ? rows : []) {
     const cell = r ? r[ci] : null;
     if (cell == null || cell === '') continue;
     const s = String(cell);

@@ -29,7 +29,8 @@ const NEED: Readonly<Record<string, number>> = { read: 1, write: 2, admin: 3 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export type Decision = { readonly ok: true; readonly projectId: string | null } | { readonly ok: false; readonly projectId: string | null };
+/** `rank` (project channels): the caller's effective rank on the project — row access rules reuse it (./caller.ts). */
+export type Decision = { readonly ok: true; readonly projectId: string | null; readonly rank?: number } | { readonly ok: false; readonly projectId: string | null };
 
 const deny = (projectId: string | null = null): Decision => ({ ok: false, projectId });
 
@@ -49,8 +50,8 @@ async function projectExists(id: string): Promise<boolean> {
   return (await projects.getProject(id)) !== null;
 }
 
-/** The caller's best grant rank on `projectId` (0 = none), by user and through teams. */
-async function grantRank(pool: Pool | null, who: Identity, projectId: string): Promise<number> {
+/** The caller's best grant rank on `projectId` (0 = none), by user and through teams. Throws on a database error. */
+export async function grantRank(pool: Pool | null, who: Identity, projectId: string): Promise<number> {
   if (!pool) return 0;
   const r = await pool.query<{ rank: number | null }>(
     `SELECT max(CASE g.role WHEN 'admin' THEN 3 WHEN 'editor' THEN 2 WHEN 'viewer' THEN 1 ELSE 0 END)::int AS rank
@@ -76,7 +77,7 @@ export async function authorize(contract: Contract, input: unknown, who: Identit
     projectId = raw.toLowerCase();
     if (!(await projectExists(projectId))) return deny(projectId);
     const rank = who.user.role === 'admin' ? RANK.admin : await grantRank(pool, who, projectId);
-    return rank >= need ? { ok: true, projectId } : deny(projectId);
+    return rank >= need ? { ok: true, projectId, rank } : deny(projectId);
   } catch {
     return deny(projectId);
   }

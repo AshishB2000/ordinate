@@ -147,6 +147,30 @@ describe('Explore: what a figure can come back as', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
+  it('a row access refusal renders the access state with the server’s sentence — no retry, no copy', async () => {
+    const why = 'Your access to this dataset covers only some of its rows, so this question is off for you.';
+    serve('viewer', { 'visual:data': { body: { ok: false, code: 'row_policy', reason: 'column', error: why } } });
+    renderApp(url(REGION_Q));
+    expect(await screen.findByRole('heading', { name: 'Limited by your access' })).toBeTruthy();
+    expect(screen.getByText(why)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Make a copy/ })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Off for this Live dataset' })).toBeNull();
+  });
+
+  it('a dataset the viewer sees part of carries the chip', async () => {
+    serve('viewer', { 'dataset:list': { body: [{ id: DID, name: 'Retail orders', sourceKind: 'csv', rowCount: 5000, columnCount: 5, updatedAt: '', scoped: true }] } });
+    renderApp(url(REGION_Q));
+    expect(await screen.findByText('Rows limited to your access')).toBeTruthy();
+  });
+
+  it('CONTROL: one they see whole does not', async () => {
+    serve('viewer');
+    renderApp(url(REGION_Q));
+    await answerTitle();
+    expect(screen.queryByText('Rows limited to your access')).toBeNull();
+  });
+
   it('CONTROL: an ordinary failure is an error with Try again', async () => {
     serve('viewer', { 'visual:data': { body: { ok: false, error: 'That column is gone.' } } });
     renderApp(url(REGION_Q));

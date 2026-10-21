@@ -89,7 +89,7 @@ export function MetricBody({ card }: { card: Card }) {
   const t = q.data;
   // Off for a Live dataset (L2.6): the server's reason and a copy.
   const live = liveRefusalOf(q.isError ? q.error : t);
-  if (live !== null) return <LiveRefusal message={live} projectId={ed.projectId} datasetId={m.datasetId} />;
+  if (live !== null) return <LiveRefusal refusal={q.isError ? q.error : t} projectId={ed.projectId} datasetId={m.datasetId} />;
   if (q.isError || !t || !t.ok) {
     return (
       <div className={s.metric}>

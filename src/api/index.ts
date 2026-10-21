@@ -44,6 +44,7 @@ import { rebuild } from './rebuild';
 import { embed } from './embed';
 import { metricTree } from './metricTree';
 import { explore } from './explore';
+import { rowPolicy } from './rowPolicy';
 
 export const contracts = {
   ...projects,
@@ -89,6 +90,7 @@ export const contracts = {
   ...embed,
   ...metricTree,
   ...explore,
+  ...rowPolicy,
 } as const;
 
 export type Channel = keyof typeof contracts;

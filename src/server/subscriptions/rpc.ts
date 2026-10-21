@@ -22,7 +22,7 @@ import { ctx } from '../context';
 import { dashboardLink } from '../publicUrl';
 import { registry } from '../rpc';
 import { brandName, knownRecipients, mailReady, previewEmail } from '../mail/emailChannel';
-import { deliver } from './deliver';
+import { dashboardSendRefusal, deliver } from './deliver';
 import { buildMessage, ownerIdentity, runSubscription } from './run';
 
 /** "Send now" at most once a minute per subscription, per pod. */
@@ -169,6 +169,9 @@ export function register(): void {
       // Whether a link CAN be sent, and the sentence for when it cannot.
       linkNote: dashboardLink(projectId, a.id) ? null : say.noLinkNote(),
     };
+    // A dashboard over a dataset with row access rules: the dialog says why, before anything is computed (row-policy D10).
+    const refusal = await dashboardSendRefusal(projectId, a.id);
+    if (refusal) return { ok: true as const, ...frame, empty: refusal.message, code: refusal.code, slack: null, teams: null, email: null };
     // The note's writer as saving this draft would record it (`id`: the subscription being edited).
     const cur = id ? await store.getSubscription(projectId, id) : null;
     const def = store.definitionOf({ ...draft, viewId: draft.viewId ?? null, message: withNoteBy(draft.message, cur, ctx().user.email) });
@@ -194,6 +197,9 @@ export function register(): void {
     const known = new Set((await listChannels()).map((c) => c.id));
     const channelIds = subscription.channelIds.filter((c) => known.has(c.toLowerCase()));
     if (!channelIds.length) return { ok: false as const, error: say.subscriptionNeedsChannel() };
+    // Refused up front, as the preview says — from the definition, nothing computed (row-policy D10, round 2 #9).
+    const refusal = await dashboardSendRefusal(projectId, subscription.analysisId);
+    if (refusal) return { ok: false as const, error: refusal.message };
     const who = ctx();
     const cur = id ? await store.getSubscription(projectId, id) : null;
     if (id && !cur) return { ok: false as const, error: say.subscriptionGone() };

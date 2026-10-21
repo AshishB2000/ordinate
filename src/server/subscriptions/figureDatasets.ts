@@ -60,14 +60,24 @@ export function collectIds(v: unknown, out: Found, key = '', depth = 0): void {
 
 const present = <T>(xs: Array<T | null>): T[] => xs.filter((x): x is T => x !== null);
 
-export async function figureDatasets(d: Delivery): Promise<string[]> {
-  if (d.kind === 'test') return [];
-  const pid = d.projectId;
-  const root = d.kind === 'dashboard'
-    ? await analysis.getAnalysis(pid, d.analysisId)
-    : (await alertStore.load(pid)).rules.find((r) => r.id === d.ruleId) ?? null;
-  if (!root) throw new Error('the dashboard or alert rule this send is from is gone');
+/** Where a send's figures come from: a Delivery, or a dashboard asked before anything is built (deliver.dashboardSendRefusal). */
+export type FigureSource = { kind: 'test' } | Pick<Extract<Delivery, { kind: 'dashboard' }>, 'kind' | 'projectId' | 'analysisId'> | Pick<Extract<Delivery, { kind: 'alert' }>, 'kind' | 'projectId' | 'ruleId'>;
 
+export async function figureDatasets(d: FigureSource): Promise<string[]> {
+  if (d.kind === 'test') return [];
+  const root = d.kind === 'dashboard'
+    ? await analysis.getAnalysis(d.projectId, d.analysisId)
+    : (await alertStore.load(d.projectId)).rules.find((r) => r.id === d.ruleId) ?? null;
+  if (!root) throw new Error('the dashboard or alert rule this send is from is gone');
+  return datasetsOfRoot(d.projectId, d.kind, d.kind === 'dashboard' ? d.analysisId : d.ruleId, root);
+}
+
+/**
+ * The same walk from a root already in hand — a dashboard as it was PUBLISHED, with the visuals it was
+ * published with (`published`, read before the store): src/publish/hosted.ts backfills an older site's
+ * datasets with it (row-policy round 2, #10).
+ */
+export async function datasetsOfRoot(pid: string, kind: 'dashboard' | 'alert', rootId: string, root: object, published: Readonly<Record<string, visuals.Visual>> = {}): Promise<string[]> {
   const found: Found = { all: new Set(), datasets: new Set(), visuals: new Set() };
   collectIds(root, found);
   const vis = new Map<string, visuals.Visual>();
@@ -75,7 +85,7 @@ export async function figureDatasets(d: Delivery): Promise<string[]> {
   for (let next = [...found.visuals]; next.length; next = [...found.visuals].filter((id) => !tried.has(id))) {
     for (const id of next) {
       tried.add(id);
-      const v = await visuals.getVisual(pid, id);
+      const v = Object.prototype.hasOwnProperty.call(published, id) ? published[id] : await visuals.getVisual(pid, id);
       if (v) {
         vis.set(id, v);
         collectIds(v, found);
@@ -89,7 +99,7 @@ export async function figureDatasets(d: Delivery): Promise<string[]> {
   ]);
   const graph = buildGraph({
     datasets: present(metas), visuals: [...vis.values()], metrics: present(mets), reports: [],
-    dashboards: d.kind === 'dashboard' ? [root] : [], alerts: d.kind === 'alert' ? [root] : [],
+    dashboards: kind === 'dashboard' ? [root] : [], alerts: kind === 'alert' ? [root] : [],
   });
   const nodes = new Set(graph.nodes.map((n) => n.id));
   const up = new Map<string, string[]>();
@@ -111,7 +121,7 @@ export async function figureDatasets(d: Delivery): Promise<string[]> {
       if (own) stack.push(own);
     }
   };
-  climb(`${d.kind === 'dashboard' ? 'dashboard' : 'alert'}:${d.kind === 'dashboard' ? d.analysisId : d.ruleId}`);
+  climb(`${kind}:${rootId}`);
   for (const id of found.all) for (const kind of ['dataset', 'metric', 'visual']) if (nodes.has(`${kind}:${id}`)) climb(`${kind}:${id}`);
   for (const id of found.datasets) climb(`dataset:${id}`);
 

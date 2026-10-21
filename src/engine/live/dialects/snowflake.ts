@@ -28,6 +28,7 @@ export const snowflakeDialect: SqlDialect = {
   toDouble: (x) => `CAST(${x} AS DOUBLE)`,
   toInt: (x) => `CAST(${x} AS INTEGER)`,
   text: (c) => `CAST(${c} AS VARCHAR)`,
+  binary: (x) => `TO_BINARY(${x}, 'UTF-8')`,
   number: (c, storedAsText) => finiteBySubtraction(storedAsText ? `TRY_TO_DOUBLE(TO_VARCHAR(${c}))` : `CAST(${c} AS DOUBLE)`),
   date: (c, storedAsText, sourceType) => {
     if (storedAsText) return `TRY_TO_DATE(TO_VARCHAR(${c}))`;

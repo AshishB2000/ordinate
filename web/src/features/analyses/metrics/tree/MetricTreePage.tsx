@@ -126,7 +126,7 @@ function TreePage({ projectId, metricId }: { projectId: string; metricId: string
   let body;
   if (!input) body = <p className={s.wait}>Pick both dates to compare.</p>;
   else if (q.isPending || roles.isPending) body = <TreeSkeleton />;
-  else if (q.isError && live) body = <LiveRefusal projectId={projectId} message={live} />;
+  else if (q.isError && live) body = <LiveRefusal projectId={projectId} refusal={q.error} />;
   else if (q.isError) body = <ErrorState title="The tree could not be computed" message={q.error.message} onRetry={() => void q.refetch()} />;
   else if (data) {
     body = (

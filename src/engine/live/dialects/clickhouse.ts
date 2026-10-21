@@ -36,6 +36,8 @@ export const clickhouseDialect: SqlDialect = {
   toDouble: (x) => `toFloat64(${x})`,
   toInt: (x) => `toInt64(${x})`,
   text: (c) => `CAST(${c} AS Nullable(String))`,
+  // A String compares byte for byte; ClickHouse applies no collation to `=` or `IN`.
+  binary: (x) => x,
   number: (c) => {
     const v = `accurateCastOrNull(${c}, 'Float64')`;
     return `CASE WHEN isFinite(${v}) THEN ${v} END`;

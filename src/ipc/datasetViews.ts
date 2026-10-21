@@ -33,6 +33,9 @@ import { vizDataFor } from './visuals';
 import { getConnector, isLiveOffered } from '../connectors';
 import { isLive, requireExtract } from '../data/liveDataset';
 import { liveColumnProfile } from './liveProfile';
+import { lockedTable, withLockOf } from './rowDoors';
+import { RowPolicyError } from '../data/rowAccess';
+import type { Lock } from '../data/rowLock';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
@@ -40,12 +43,15 @@ interface Figures {
   summary: ColumnSummary | undefined;
   median: number | null;
   distinct: number | null;
+  /** Rows the figures are over, when that is not the record's count (a row access lock). */
+  rows?: number;
 }
 
 /** The column's summary, median (numbers) and distinct total (numbers — a summary has none), resident first. */
-async function figuresFor(projectId: string, datasetId: string, column: string, type: string): Promise<Figures | null> {
+async function figuresFor(projectId: string, datasetId: string, column: string, type: string, lock: Lock | null): Promise<Figures | null> {
   const num = type === 'number';
-  const src = await datasets.residentSource(projectId, datasetId);
+  // Under a row access lock the resident summaries (which take no filters) are skipped: the fold below is locked.
+  const src = lock ? null : await datasets.residentSource(projectId, datasetId);
   if (src) {
     const i = src.columns.findIndex((c) => c.name === column);
     const sums = await computeColumnSummariesResident(src);
@@ -59,14 +65,16 @@ async function figuresFor(projectId: string, datasetId: string, column: string, 
   } else {
     trace.record('datasetProfile', 'skipped');
   }
-  const ds = await datasets.getDataset(projectId, datasetId);
-  if (!ds) return null;
+  const stored = await datasets.getDataset(projectId, datasetId);
+  if (!stored) return null;
+  const ds = lockedTable(stored, lock);
   const c = ds.columns.findIndex((x) => x.name === column);
   if (c < 0) return null;
   return {
     summary: computeColumnSummary(ds.columns[c], ds.rows.map((row) => (row ? row[c] ?? null : null))),
     median: num ? medianOf(ds.columns, ds.rows, column) : null,
     distinct: num ? distinctValuesPageJs(ds.columns, ds.rows, column, { limit: 1 }).total : null,
+    ...(lock ? { rows: ds.rows.length } : {}),
   };
 }
 
@@ -103,23 +111,28 @@ export function register(): void {
       const meta = await datasets.getDatasetMeta(p, d);
       const col = meta?.columns.find((c) => c.name === name);
       if (!meta || !col) return { ok: false, error: 'That column is not in this dataset.' };
-      // A profiled Live dataset: the panel from its sample (L2.5). Unprofiled, it is
-      // refused here, typed (D6) — the chart door below would route it to the warehouse (L2.4).
-      const live = liveColumnProfile(meta, name);
-      if (live) return live;
-      requireExtract(meta);
-      // The distribution through `visual:data`'s own path: count of the column
-      // itself, a number column in PROFILE_BINS buckets, a date by month.
-      const encoding = sanitizeEncoding({
-        category: name,
-        values: [{ column: name, aggregation: 'count' }],
-        ...(col.type === 'number' ? { bins: PROFILE_BINS } : col.type === 'date' ? { grain: 'month' } : {}),
+      // Row access rules (docs/row-policy D7): the caller's lock, in its scope — the panel is over their rows.
+      return await withLockOf(p, d, async (lock) => {
+        // A profiled Live dataset: the panel from its sample (L2.5) — never under a lock (a sample of every row).
+        // Unprofiled, it is refused here, typed (D6) — the chart door below would route it to the warehouse (L2.4).
+        if (lock && isLive(meta)) throw new RowPolicyError('reader');
+        const live = liveColumnProfile(meta, name);
+        if (live) return live;
+        requireExtract(meta);
+        // The distribution through `visual:data`'s own path: count of the column
+        // itself, a number column in PROFILE_BINS buckets, a date by month.
+        const encoding = sanitizeEncoding({
+          category: name,
+          values: [{ column: name, aggregation: 'count' }],
+          ...(col.type === 'number' ? { bins: PROFILE_BINS } : col.type === 'date' ? { grain: 'month' } : {}),
+        });
+        const [figures, viz] = await Promise.all([figuresFor(p, d, name, col.type, lock), vizDataFor(p, d, encoding, [])]);
+        if (!figures) return { ok: false, error: 'Dataset not found' };
+        if (!viz.ok && viz.code === 'row_policy') return viz;
+        const series = viz.ok ? viz.data.series[0] : undefined;
+        const counts = viz.ok && series ? { labels: viz.data.labels, values: series.values } : null;
+        return { ok: true, profile: columnProfile({ name, type: col.type }, figures.rows ?? meta.rowCount, figures.summary, figures, counts) };
       });
-      const [figures, viz] = await Promise.all([figuresFor(p, d, name, col.type), vizDataFor(p, d, encoding, [])]);
-      if (!figures) return { ok: false, error: 'Dataset not found' };
-      const series = viz.ok ? viz.data.series[0] : undefined;
-      const counts = viz.ok && series ? { labels: viz.data.labels, values: series.values } : null;
-      return { ok: true, profile: columnProfile({ name, type: col.type }, meta.rowCount, figures.summary, figures, counts) };
     } catch (err: unknown) {
       return { ok: false, error: (err as Error)?.message || 'Could not profile the column' };
     }

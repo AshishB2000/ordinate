@@ -38,11 +38,25 @@ const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 export function liveRefusalOf(x: unknown): string | null {
   if (!x || typeof x !== 'object') return null;
   const o = x as { ok?: unknown; code?: unknown; error?: unknown; reason?: unknown; message?: unknown };
-  if (!LIVE_OFF_CODES.has(text(o.code))) return null;
+  const row = text(o.code) === ROW_OFF_CODE;
+  if (!LIVE_OFF_CODES.has(text(o.code)) && !row) return null;
   if (!(x instanceof Error) && o.ok !== false) return null;
   // `reason` is a sentence on an answer card, a machine code beside `error` on a chart refusal.
   const reason = text(o.reason);
-  return text(o.error) || text(o.message) || (/\s/.test(reason) ? reason : '') || LIVE_OFF_FALLBACK;
+  return text(o.error) || text(o.message) || (/\s/.test(reason) ? reason : '') || (row ? ROW_OFF_FALLBACK : LIVE_OFF_FALLBACK);
+}
+
+/**
+ * Row access rules (docs/row-policy): a figure refused because the caller's access
+ * covers only some of the dataset's rows. Drawn by the same refusal state —
+ * the server's sentence, never a retry — but about access, with no "Make a copy".
+ */
+export const ROW_OFF_CODE = 'row_policy';
+export const ROW_OFF_FALLBACK = 'Your access to this dataset covers only some of its rows, so this is off for you.';
+
+/** Is `x` (a reply, a thrown RpcError or a LiveRefusalError) a row access refusal? */
+export function isRowRefusal(x: unknown): boolean {
+  return !!x && typeof x === 'object' && text((x as { code?: unknown }).code) === ROW_OFF_CODE && liveRefusalOf(x) !== null;
 }
 
 /** When a refusal arrives without a sentence (never expected): what it means, in the catalog's words. */

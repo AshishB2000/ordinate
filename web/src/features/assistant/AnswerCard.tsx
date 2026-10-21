@@ -101,7 +101,7 @@ export function AnswerCard({
     return (
       <div className={`${s.card} ${s.error}`}>
         <div className={s.title}>{title}</div>
-        <LiveRefusal message={live} projectId={projectId} datasetId={spec.datasetId} />
+        <LiveRefusal refusal={q.isError ? q.error : card} projectId={projectId} datasetId={spec.datasetId} />
       </div>
     );
   }

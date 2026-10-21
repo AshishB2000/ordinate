@@ -1,4 +1,5 @@
 import { ipcMain } from './bus';
+import { lockedViz, visualForCaller } from './rowDoors';
 import * as fs from 'fs';
 import * as visuals from '../analysis/visuals';
 import * as answerKey from '../data/answerKey';
@@ -403,7 +404,7 @@ export type VizDataReply =
       geoSuggest?: { level: 'us_state' | 'country' };
     }
   // `code`: a Live dataset's typed failure (./liveRoute) — refused, unavailable, failed, timed out.
-  | { ok: false; error: string; tooLarge?: true; code?: LiveFailureCode; reason?: string };
+  | { ok: false; error: string; tooLarge?: true; code?: LiveFailureCode | 'row_policy'; reason?: string };
 
 /** The JS fallback's cost ceiling (below): a reply when it is exceeded, else null. */
 async function overCeiling(projectId: string, datasetId: string, max?: number): Promise<VizDataReply | null> {
@@ -437,12 +438,18 @@ async function overCeiling(projectId: string, datasetId: string, max?: number): 
  * resident in main's heap. Above the ceiling the honest answer is "no preview
  * for this card", never a slow one and never a guessed one.
  */
-export async function vizDataFor(
+type VizOpts = { maxHydrateRows?: number; params?: ParamValues; sample?: boolean };
+/** THE chart door: row access rules first (./rowDoors), then the unchanged body below. */
+export function vizDataFor(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[], opts: VizOpts = {}): Promise<VizDataReply> {
+  return lockedViz(projectId, datasetId, encoding, filters, opts, vizDataForUnlocked);
+}
+
+async function vizDataForUnlocked(
   projectId: string,
   datasetId: string,
   encoding: VizEncoding,
   filters: FilterStep[],
-  opts: { maxHydrateRows?: number; params?: ParamValues; sample?: boolean } = {},
+  opts: VizOpts,
 ): Promise<VizDataReply> {
   // A measure that IS a formula metric: its totals come back through this door, then the formula runs per cell (./vizMetricMeasures).
   const planned = hasMetricMeasure(encoding) ? await planMetricMeasures(projectId, datasetId, encoding, opts.params) : null;
@@ -552,7 +559,7 @@ export async function saveNewVisual(projectId: string, input: Parameters<typeof 
 export function register() {
   ipcMain.handle('visual:list', async (_e, { projectId }: any = {}) => visuals.listVisuals(projectId));
 
-  ipcMain.handle('visual:get', async (_e, { projectId, id }: any = {}) => recordReply(await visuals.readVisual(projectId, id)));
+  ipcMain.handle('visual:get', async (_e, { projectId, id }: any = {}) => visualForCaller(projectId, recordReply(await visuals.readVisual(projectId, id))));
 
   ipcMain.handle('visual:save', async (_e, { projectId, datasetId, name, chartType, encoding, overrides, filters, analytics }: any = {}) => {
     try {

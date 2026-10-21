@@ -40,7 +40,7 @@
 import type { DateGrain } from '../../analysis/categoryKey';
 import { CATEGORY_CAP, DATE_GRAINS, OTHER_LABEL } from '../../analysis/categoryKey';
 import type { WeekCal } from '../../analysis/retailCalendar';
-import type { LiveColumn, LiveIR, LiveMeasure, LiveRefusal } from './liveSpec';
+import type { LiveColumn, LiveFilter, LiveIR, LiveMeasure, LiveRefusal } from './liveSpec';
 import { LIVE_AGGS, NUMERIC_AGGS, columnOf, isRefusal, refuse } from './liveSpec';
 import type { CompileDialectId, SqlDialect } from './dialect';
 import { dialectFor } from './dialects';
@@ -203,8 +203,12 @@ export function latestColumns(ir: LiveIR): string[] {
  * `answerSpec.latestDate` reads every cell of the column, not the filtered ones.
  */
 export function compileLatestDates(ir: LiveIR, env: CompileEnv): Compiled {
-  const p = prepare({ ...ir, filters: [] }, env);
+  // Only a row access lock narrows the anchor: "last quarter" ends at the latest date the caller may see (row-policy D13).
+  const locked: LiveIR = { ...ir, filters: ir.filters.filter((f) => 'binary' in f && f.binary === true) };
+  const p = prepare(locked, env);
   if (isRefusal(p)) return p;
+  const where = whereOf(p, locked);
+  if (isRefusal(where)) return where;
   const names = latestColumns(ir);
   if (names.length === 0) return refuse('badQuery');
   const sel: string[] = [];
@@ -217,7 +221,7 @@ export function compileLatestDates(ir: LiveIR, env: CompileEnv): Compiled {
     sel.push(`${p.c.d.epochDay(`max(${dateOf(p.c, col)})`)} AS o_l${i}`);
     cols.push(`o_l${i}`);
   }
-  return { ok: true, query: p.c.b.finish(`SELECT ${sel.join(', ')} FROM ${p.from}`, p.c.d, cols) };
+  return { ok: true, query: p.c.b.finish(`SELECT ${sel.join(', ')} FROM ${p.from}${where}`, p.c.d, cols) };
 }
 
 /** min/max of the FILTERED numeric category cells → `categoryKey.binPlan`. */
@@ -430,8 +434,9 @@ export const CASE_FIX_LIMIT = 20;
  * in the warehouse's order — a named divergence (docs/live-data/log.md, L2.4).
  * Bounded at CASE_FIX_LIMIT rows per distinct key.
  */
-export function compileCaseMatches(column: string, keys: string[], env: CompileEnv): Compiled {
-  const probe: LiveIR = { kind: 'chart', category: { column, kind: 'text' }, measures: [], filters: [], order: 'natural', weekCal: null };
+export function compileCaseMatches(column: string, keys: string[], env: CompileEnv, lock: LiveFilter[] = []): Compiled {
+  // `lock`: a row access lock (row-policy D13) — the stored spellings come from the caller's rows only.
+  const probe: LiveIR = { kind: 'chart', category: { column, kind: 'text' }, measures: [], filters: lock, order: 'natural', weekCal: null };
   const p = prepare(probe, env);
   if (isRefusal(p)) return p;
   const col = columnOf(p.c.columns, column)!;
@@ -443,6 +448,8 @@ export function compileCaseMatches(column: string, keys: string[], env: CompileE
   const v = keyText(c, col);
   const distinct = [...new Set(keys)];
   const asked = distinct.map((k) => c.b.bind('text', k)).join(', ');
-  const sql = `SELECT DISTINCT ${c.d.label(v)} AS o_v FROM ${p.from} WHERE ${c.d.caseKey(v, c.b)} IN (${asked}) ORDER BY o_v LIMIT ${CASE_FIX_LIMIT * distinct.length}`;
+  const locked = whereOf(p, probe);
+  if (isRefusal(locked)) return locked;
+  const sql = `SELECT DISTINCT ${c.d.label(v)} AS o_v FROM ${p.from} WHERE ${c.d.caseKey(v, c.b)} IN (${asked})${locked ? ` AND ${locked.slice(' WHERE '.length)}` : ''} ORDER BY o_v LIMIT ${CASE_FIX_LIMIT * distinct.length}`;
   return { ok: true, query: c.b.finish(sql, c.d, ['o_v']) };
 }

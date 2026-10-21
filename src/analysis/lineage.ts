@@ -26,7 +26,7 @@
 // metric formula naming itself through another metric) is dropped while
 // ordering, so every edge in the output points left to right.
 
-import { stepRefIds } from '../data/stepTypes';
+import { parentsOfRecord } from '../data/upstream';
 
 export type LineageKind =
   | 'source' | 'dataset' | 'prepare' | 'calc' | 'metric' | 'visual' | 'dashboard' | 'report' | 'alert';
@@ -175,9 +175,9 @@ export function buildGraph(input: LineageInput): LineageGraph {
     const did = str(d.id);
     const target = 'dataset:' + did;
     if (!nodes.has(target)) continue;
-    // A union / lookup step READS another dataset, so it is built from it — as a
-    // combined dataset is from its parents — and counts in that one's "Used in".
-    for (const ref of stepRefIds(arr(d.steps))) link('dataset:' + ref, target);
+    // Built from: its origin's parents, and a union / lookup step READS another dataset, so it counts in that
+    // one's "Used in" — the ONE definition row access rules close over (src/data/upstream.ts).
+    for (const p of parentsOfRecord(d)) link('dataset:' + p, target);
     const o: Rec = d.origin || {};
     let sid = '';
     if (o.kind === 'connection') {
@@ -207,14 +207,8 @@ export function buildGraph(input: LineageInput): LineageGraph {
         name: notebookName.get(str(o.notebookId)) || 'Deleted notebook', sub: 'Notebook',
         ref: notebookName.has(str(o.notebookId)) ? { type: 'notebook', id: str(o.notebookId) } : undefined,
       });
-      for (const p of arr(o.deps)) link('dataset:' + str(p), target);
     } else if (o.kind === 'combined' || o.kind === 'composed' || o.kind === 'sql') {
-      // A SQL dataset is built from the datasets its query names (`deps`), as a combine is from its parents.
-      const parents = o.kind === 'combined'
-        ? [str(o.leftId), str(o.rightId)]
-        : o.kind === 'sql' ? arr(o.deps).map(str) : [str(o.baseId), ...arr(o.joins).map((j) => str(j && j.datasetId))];
-      for (const p of parents) link('dataset:' + p, target);
-      continue;
+      continue; // its parents are its sources, linked above
     } else {
       sid = add({
         id: 'source:import:' + did, kind: 'source',

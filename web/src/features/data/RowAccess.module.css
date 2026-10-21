@@ -1,0 +1,180 @@
+/* The Row access tab (RowAccessTab.tsx): the rules beside a "who sees what" card. */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  gap: var(--sp-24);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  min-width: 0;
+}
+
+.warn {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: flex-start;
+  margin: 0;
+  padding: var(--sp-12);
+  border: 1px solid var(--warn);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--text-strong);
+  font-size: var(--t-13);
+}
+.warn > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--warn);
+}
+
+.rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rule {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+}
+.ruleHead {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: flex-end;
+}
+.ruleHead > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.values {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: 28px;
+  padding: 0 var(--sp-4) 0 var(--sp-12);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--text-strong);
+  font-size: var(--t-13);
+}
+.none {
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.adders {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-8);
+}
+@media (max-width: 600px) {
+  .adders {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.typed {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: flex-end;
+}
+.typed > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  align-items: center;
+}
+.grow {
+  flex: 1;
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  padding: var(--sp-16);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+}
+.sumTitle {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.sumList,
+.built {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--t-13);
+  color: var(--muted);
+}
+.sumList > li {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: flex-start;
+}
+.sumList svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--text-faint);
+}
+.sumNote {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
+
+/* A viewer's chip and off states (DatasetPage) */
+.scoped {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: 22px;
+  padding: 0 var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--t-12);
+}

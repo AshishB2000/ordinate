@@ -15,6 +15,7 @@ import { Sheet } from '../../ui/Sheet';
 import { Skeleton, SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { useCanEdit } from '../projects/api';
+import { ScopedChip } from '../data/RowAccessOff';
 import { Answer } from './Answer';
 import { useExploreFields, type Suggestion } from './api';
 import { AskBox } from './AskBox';
@@ -73,6 +74,7 @@ export function Explorer({ projectId, datasets, dataset }: { projectId: string; 
               Live
             </span>
           )}
+          {dataset.scoped && <ScopedChip />}
         </p>
       </header>
       <AskBox projectId={projectId} />

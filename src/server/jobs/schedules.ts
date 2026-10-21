@@ -32,6 +32,7 @@
 // model call (T2.12 routes AI keys first).
 
 import * as scheduler from '../../app/refreshScheduler';
+import { policyClosed } from '../../data/rowAccess';
 import type { TickAlerts } from '../../app/refreshScheduler';
 import * as config from '../../app/config';
 import * as pipelineRunner from '../../app/pipelineRunner';
@@ -84,7 +85,8 @@ export function pushToWriters(projectId: string, channel: string, payload: unkno
  * never awaited by the tick. Returns the posts in flight, for a test to wait on.
  */
 export function deliverTickAlerts(batches: TickAlerts[], push: (projectId: string, channel: string, payload: unknown) => void): Promise<number>[] {
-  for (const b of batches) push(b.projectId, 'alerts:fired', b);
+  // No figure from a dataset with row access rules reaches the readers' bells (docs/row-policy, "Pushes").
+  for (const b of batches) void alertStore.pushableEvents(b.projectId, b.events).then((events) => push(b.projectId, 'alerts:fired', { ...b, events })).catch(() => undefined);
   // Lazy: that module reaches back here (through ./run) for `toReaders`.
   const { postFiredAlerts } = require('../subscriptions/alertPosts') as typeof import('../subscriptions/alertPosts');
   return batches.map((b) => postFiredAlerts(b.projectId, b.events));
@@ -104,7 +106,8 @@ export function wireSchedules(pool: Pool, devAuth: boolean): void {
 
   scheduler.setEnabledCheck(() => config.get().autoRefresh !== false);
   scheduler.onRefreshed((o) => {
-    if (!o.ok) push(o.projectId, 'hub:dataset-refreshed', { ...o, error: redactOriginText(o.error ?? 'Refresh failed.') });
+    // A failure's text can quote a value: none from a dataset with row access rules reaches every reader (row-policy N2).
+    if (!o.ok) void policyClosed(o.projectId, o.datasetId).then((closed) => push(o.projectId, 'hub:dataset-refreshed', { ...o, error: closed ? 'Refresh failed.' : redactOriginText(o.error ?? 'Refresh failed.') })).catch(() => undefined);
     // A published site that reads it, opted in, is rebuilt at its link (T2.9; the desktop's job hook).
     if (o.ok) scheduleRepublish(o.projectId, o.datasetId);
     const { org, user, requestId } = ctx(); // the tick's: the job identity, for this org

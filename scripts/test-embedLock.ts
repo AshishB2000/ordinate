@@ -294,6 +294,19 @@ async function main(): Promise<void> {
       await coveredWith([{ type: 'window', fn: 'running_sum', as: 'cum', column: 'amount', partitionBy: ['region'] }]));
     ok('cross-row: a stored LOD field (a FIXED total) is NOT covered',
       !(await coveredWith([{ type: 'calculated_field', name: 'all_total', expression: '{FIXED : SUM([amount])}' }])));
+    // The allow-list (docs/row-policy D16, shared with row access rules): keyed steps pass only on the locked column.
+    ok('cross-row: a group-by that KEEPS the locked column is covered',
+      await coveredWith([{ type: 'group_aggregate', groupBy: ['region'], aggregations: [{ column: 'amount', fn: 'sum', as: 'total' }] }]));
+    ok('cross-row: a dedupe keyed WITHOUT the locked column is NOT covered — the row kept may be another region\'s',
+      !(await coveredWith([{ type: 'dedupe_key', columns: ['amount'], keep: 'first' }])));
+    ok('cross-row: …keyed WITH it, it is covered (control)', await coveredWith([{ type: 'dedupe_key', columns: ['region', 'amount'], keep: 'first' }]));
+    ok('cross-row: a lookup into another dataset is NOT covered (its rows were joined before any filter)',
+      !(await coveredWith([{ type: 'lookup_join', datasetId: ledger, leftKey: 'region', rightKey: 'region', columns: ['amount'] }])));
+    ok('cross-row: a row-local step (a calculated field) stays covered', await coveredWith([{ type: 'calculated_field', name: 'double', expression: '[amount] * 2' }]));
+    ok('cross-row (pure): lookup_join, text_terms and an unknown step type are cross-row; a SQL origin is too',
+      lockMod.storesCrossRow([{ type: 'lookup_join' } as never], ['region']) && lockMod.storesCrossRow([{ type: 'text_terms' } as never], ['region'])
+        && lockMod.storesCrossRow([{ type: 'a_step_added_later' } as never], ['region']) && lockMod.storesCrossRow([], ['region'], { kind: 'sql' })
+        && !lockMod.storesCrossRow([], ['region'], { kind: 'connection' }));
     ok('cross-row: the steps really stored (the record names them)', ((await inOrg(() => datasets.getDatasetMeta(pid, ledger)))?.steps ?? []).length === 1);
 
     // ── No widening before anything is built ────────────────────────────

@@ -63,7 +63,7 @@ async function main(): Promise<void> {
       if (!a) throw new Error('analysis');
       return a.id;
     };
-    const of = (analysisId: string): Promise<string[]> => fd.figureDatasets({ kind: 'dashboard', projectId: pid, analysisId, message: {} as never });
+    const of = (analysisId: string): Promise<string[]> => fd.figureDatasets({ kind: 'dashboard', projectId: pid, analysisId });
     const visual = async (datasetId: string, extra: object = {}): Promise<string> => {
       const v = await visuals.saveVisual(pid, { name: 'V', datasetId, chartType: 'bar', encoding: { category: 'k', values: [{ column: 'v', aggregation: 'sum' }] }, filters: [], ...extra } as never);
       if (!v) throw new Error('visual');
@@ -140,12 +140,12 @@ async function main(): Promise<void> {
     const alertDs = await ds('AlertDs');
     const rule = await alertStore.saveRule(pid, { name: 'R', datasetId: alertDs, metric: { column: 'v', aggregation: 'sum', metricId: m2.id }, compare: 'threshold', threshold: { op: '>', value: 1 }, enabled: true });
     if (!rule) throw new Error('rule');
-    const alertSet = await fd.figureDatasets({ kind: 'alert', projectId: pid, ruleId: rule.id, message: {} as never });
+    const alertSet = await fd.figureDatasets({ kind: 'alert', projectId: pid, ruleId: rule.id });
     ok('an alert rule: its dataset and its saved metric\'s upstream', same(alertSet, [alertDs, mDs2, mDs1]), alertSet);
 
     // ── Edges ──────────────────────────────────────────────────────────────
     ok('a test send reads no dataset', same(await fd.figureDatasets({ kind: 'test' }), []));
-    const gone = await fd.figureDatasets({ kind: 'dashboard', projectId: pid, analysisId: crypto.randomUUID(), message: {} as never }).then(() => 'resolved', () => 'threw');
+    const gone = await fd.figureDatasets({ kind: 'dashboard', projectId: pid, analysisId: crypto.randomUUID() }).then(() => 'resolved', () => 'threw');
     ok('a dashboard that is gone throws', gone === 'threw');
     const deep: Record<string, unknown> = {};
     let cur = deep;

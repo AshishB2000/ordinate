@@ -41,7 +41,7 @@ import type { InputBlock } from './inputTable/columns';
 // 800-line cap; the writers are re-exported so `datasets.markRefresh` etc. keep
 // working for every caller.
 import {
-  datasetsDir, datasetFilePath, parquetPath, sourceParquetPath, writeJsonAtomic, sanitizeAutoRefresh, tablePath, hasTable,
+  datasetsDir, datasetFilePath, parquetPath, sourceParquetPath, writeRecordKeepingPolicy, sanitizeAutoRefresh, tablePath, hasTable,
 } from './datasetRecord';
 import * as storage from '../engine/storage';
 import * as appPaths from '../app/paths';
@@ -57,6 +57,7 @@ import { scheduleIndex, removeIndex } from '../engine/dataSearchResident'; // ‚å
 import { applyLive, isLive, isLiveDatasetError, LiveDatasetError } from './liveDataset'; // Live: schema only, getDataset refuses
 import type { DatasetMode, LiveSettings } from './liveDataset';
 import { applyFreshOnAsk, type FreshOnAsk } from './freshOnAskRule';
+import { gateRows } from './rowAccess'; // row access rules: the storage net (docs/row-policy D8)
 export type { DatasetOrigin } from './datasetOrigin';
 export type { DatasetSummary } from './datasetSummary';
 export { sanitizeOrigin };
@@ -228,7 +229,7 @@ async function persistNow(projectId: string, dataset: Dataset, explicit: parquet
   queryCache.invalidateDataset(dataset.id, projectId);
   const file = datasetFilePath(projectId, dataset.id);
   if (!(await parquetStore.isSupportedAsync())) {
-    await writeJsonAtomic(file, dataset); // v2, rows inline
+    await writeRecordKeepingPolicy(file, dataset); // v2, rows inline
     return;
   }
   // The derived table is the bulk of a first save; the source (when a pipeline
@@ -273,7 +274,7 @@ async function persistNow(projectId: string, dataset: Dataset, explicit: parquet
   delete meta.rows;
   if (!dataset.source) delete meta.source;
   if (version) meta.storageVersion = version;
-  await writeJsonAtomic(file, meta);
+  await writeRecordKeepingPolicy(file, meta); // keeps the STORED row access rules (row-policy D2b)
   if (!version) scheduleIndex({ parquetPath: parquetPath(projectId, dataset.id), columns: dataset.columns }); // save AND refresh land here
 }
 
@@ -473,6 +474,7 @@ export async function residentSource(
   projectId: string,
   id: string,
 ): Promise<{ parquetPath: string; columns: ParsedColumn[] } | null> {
+  await gateRows(projectId, id); // before the as-of hook: a restricted viewer reads rows only through a locked door
   const past = await asOf.residentHook(projectId, id); // inside an as-of read: the snapshot's file
   if (past !== undefined) return past;
   if (!parquetStore.isSupported()) return null;
@@ -483,6 +485,7 @@ export async function residentSource(
 
 export async function getDataset(projectId: string, id: string): Promise<Dataset | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
+  await gateRows(projectId, id); // before the as-of hook and the publish memo (row-policy D8)
   const past = await asOf.datasetHook(projectId, id); // inside an as-of read: the snapshot's rows
   if (past !== undefined) return past;
   // Inside recordFs.withReadMemo (a publish) the table is hydrated once, not once per tile per combination.

@@ -29,6 +29,7 @@ import { describePeriod, getCalendar, resolvePeriodNow, sanitizePeriod, type Per
 import { pageFor } from './datasets';
 import { csvFileName, writeDrillCsv } from './visuals';
 import { drillFilters } from './drillScope';
+import { visualForCaller } from './rowDoors';
 
 /** The picker's quick picks, short to long (periodPicker.ts PP_GROUPS). */
 const PERIOD_GROUPS: { title: string; items: PeriodSpec[] }[] = [
@@ -59,7 +60,7 @@ export function register(): void {
         const v = await visuals.getVisual(projectId, id);
         if (!v) return { id, ok: false, error: 'That visual no longer exists.' };
         const reply = (await data(e, { projectId, datasetId: v.datasetId, encoding: v.encoding, filters: v.filters, ...figureAsk(v.chartType, v.overrides) })) as object;
-        return { ...reply, id, chartType: v.chartType, overrides: v.overrides };
+        return { ...reply, id, chartType: v.chartType, overrides: (await visualForCaller(projectId, v)).overrides };
       }),
     );
   });

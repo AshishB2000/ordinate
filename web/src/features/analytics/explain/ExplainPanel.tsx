@@ -95,7 +95,7 @@ export function ExplainPanel({ target, onClose }: { target: ExplainTarget; onClo
           <DriversPending />
         ) : live !== null ? (
           <div className={`${s.state} ${s.framed}`}>
-            <LiveRefusal message={live} projectId={target.projectId} datasetId={target.datasetId} />
+            <LiveRefusal refusal={q.isError ? q.error : r} projectId={target.projectId} datasetId={target.datasetId} />
           </div>
         ) : q.isError || !r ? (
           <div className={s.state}>

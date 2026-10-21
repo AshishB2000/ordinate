@@ -11,6 +11,8 @@ export type RunCode =
   | 'sent' | 'partial' | 'unchanged' | 'not_refreshed' | 'missed'
   | 'owner_removed' | 'owner_no_access' | 'dashboard_gone' | 'no_channels' | 'no_content' | 'compute_failed'
   | 'post_failed' | 'unreachable' | 'refused' | 'no_secret'
+  // row access rules (docs/row-policy D10)
+  | 'row_policy'
   // email (docs/email/00-design.md §9)
   | 'mail_off' | 'no_recipients' | 'rate_limited' | 'list_too_large' | 'tls_failed' | 'auth_failed' | 'mail_failed' | 'mail_partial';
 
@@ -69,6 +71,7 @@ export function runText(code: RunCode, d: RunDetail = {}): string {
     case 'post_failed': return t('subscriptionText.not_delivered_answered_http', { channel, status });
     case 'unreachable': return t('subscriptionText.not_delivered_could_not_be_reached', { channel });
     case 'refused': return t('subscriptionText.not_delivered_the_address_of_is', { channel });
+    case 'row_policy': return t('subscriptionText.not_sent_this_dashboard_reads_a');
     case 'mail_off': return t('subscriptionText.not_sent_email_is_not_set');
     case 'no_recipients': return t('subscriptionText.not_sent_to_nobody_on_it', { channel });
     case 'rate_limited': return t('subscriptionText.not_sent_to_this_organization_reached', { channel });

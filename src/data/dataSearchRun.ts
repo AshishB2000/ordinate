@@ -19,6 +19,7 @@
 // it sits next to the Parquet that holds the same cells.
 
 import * as datasets from './datasets';
+import { closedToCaller } from './rowAccess';
 import { tablePath } from './datasetRecord';
 import * as projects from '../app/projects';
 import * as privacyStore from '../app/privacyStore';
@@ -94,7 +95,8 @@ export async function runSearch(opts: RunOpts): Promise<DataSearchReply> {
       if (cancelled()) return { ...out, ok: false, cancelled: true };
       const meta = await datasets.getDatasetMeta(project.id, summary.id);
       if (!meta || isLive(meta)) continue; // a Live dataset holds no values here to search
-      const exclude = excludedColumns(exportAction, await withheldColumns(project.id, meta.id).catch(() => new Set<string>()));
+      if (await closedToCaller(project.id, meta.id)) continue; // row access rules: its value index is every row's (row-policy SKIP)
+      const exclude = excludedColumns(exportAction, await withheldColumns(project.id, meta.id));
       let found;
       if (meta.resident && resident) {
         const src = { parquetPath: tablePath(project.id, meta.id, meta.storageVersion), columns: meta.columns };

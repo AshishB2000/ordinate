@@ -20,6 +20,7 @@
 // never treated as 1), which pairs, and whether the sample rates answered.
 
 import { AsyncLocalStorage } from 'async_hooks';
+import { gateRows } from '../data/rowAccess';
 import { randomUUID } from 'crypto';
 import * as datasets from '../data/datasets';
 import * as fxStore from '../app/fxStore';
@@ -110,6 +111,7 @@ const rateCache = new Map<string, fx.RateTable>();
 async function jsRates(projectId: string, ctx: FxCtx): Promise<{ table: fx.RateTable; sample: boolean }> {
   if (ctx.rates.kind === 'dataset') {
     const k = orgKey(projectId) + '/' + ctx.rates.datasetId + '@' + ctx.rates.updatedAt + JSON.stringify(ctx.rates.map);
+    await gateRows(projectId, ctx.rates.datasetId); // a rates table with row access rules: as its rows, also on a cache hit
     const hit = rateCache.get(k);
     if (hit) return { table: hit, sample: false };
     const ds = await datasets.getDataset(projectId, ctx.rates.datasetId);
