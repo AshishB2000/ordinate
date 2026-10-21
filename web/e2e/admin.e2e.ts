@@ -288,7 +288,6 @@ if (!adminUrl) {
     await page.getByRole('option', { name: 'Editor' }).click();
     await dialog.getByRole('combobox', { name: 'Team' }).click();
     await page.getByRole('option', { name: 'Analysts' }).click();
-    await screens(page, 'admin-idp-groups-dialog');
     await dialog.getByRole('button', { name: 'Save' }).click();
     await dialog.waitFor({ state: 'detached' });
     await panel.getByRole('cell', { name: 'bi-editors', exact: true }).waitFor();
