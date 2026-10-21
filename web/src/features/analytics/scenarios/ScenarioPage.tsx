@@ -166,7 +166,7 @@ function Editor({ projectId, sc, readOnly }: { projectId: string; sc: Scenario; 
         ) : !res.ok && liveRefusalOf(res) !== null ? (
           // A metric on a Live dataset (L2.6): the server's reason — the copy is made from the dataset's own page.
           <div className={s.results}>
-            <LiveRefusal title={LIVE_OFF.scenarios.title} message={`${LIVE_OFF.scenarios.why} ${liveRefusalOf(res) ?? ''}`} projectId={projectId} />
+            <LiveRefusal refusal={res} liveTitle={LIVE_OFF.scenarios.title} liveMessage={`${LIVE_OFF.scenarios.why} ${liveRefusalOf(res) ?? ''}`} projectId={projectId} />
           </div>
         ) : !res.ok ? (
           <div className={s.results}>

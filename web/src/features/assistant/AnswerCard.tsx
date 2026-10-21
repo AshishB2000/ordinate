@@ -28,7 +28,7 @@ import { Skeleton } from '../../ui/Skeleton';
 import { AsOfCaption } from '../../ui/AsOf';
 import type { AsOf } from '../../ui/asOfView';
 import { LiveRefusal } from '../live/LiveOff';
-import { isRowRefusal, liveRefusalOf } from '../live/refusal';
+import { liveRefusalOf } from '../live/refusal';
 import { DidYouMean, type MeantOption } from './DidYouMean';
 import { RememberName, type CardLearn } from './RememberName';
 import { SaveAsVisual } from './SaveAsVisual';
@@ -101,7 +101,7 @@ export function AnswerCard({
     return (
       <div className={`${s.card} ${s.error}`}>
         <div className={s.title}>{title}</div>
-        <LiveRefusal message={live} projectId={projectId} datasetId={spec.datasetId} row={isRowRefusal(q.isError ? q.error : card)} />
+        <LiveRefusal refusal={q.isError ? q.error : card} projectId={projectId} datasetId={spec.datasetId} />
       </div>
     );
   }

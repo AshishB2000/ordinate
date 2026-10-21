@@ -13,7 +13,7 @@ import { EmptyState, ErrorState } from '../../../../ui/States';
 import { Icon } from '../../../../ui/icons/Icon';
 import { usable } from '../../../dashboards/CompareBar';
 import { LiveRefusal } from '../../../live/LiveOff';
-import { isRowRefusal, liveRefusalOf } from '../../../live/refusal';
+import { liveRefusalOf } from '../../../live/refusal';
 import { useTile, type Card, type TileRequest } from '../../api';
 import type { Doc } from '../../editor/doc';
 import { useEditor } from '../../editor/context';
@@ -42,7 +42,7 @@ export function MetricTreeBody({ card }: { card: Card }) {
   if (!spec) return <p className={s.note}>This card has no metric.</p>;
   if (q.isPending) return <TreeSkeleton compact />;
   const live = q.isError ? null : liveRefusalOf(q.data);
-  if (live) return <LiveRefusal projectId={ed.projectId} message={live} row={isRowRefusal(q.data)} />;
+  if (live) return <LiveRefusal projectId={ed.projectId} refusal={q.data} />;
   if (q.isError || !q.data.ok) {
     return <ErrorState compact heading={3} title="Could not compute this tree" message={q.isError ? q.error.message : q.data.ok ? '' : q.data.error} onRetry={() => void q.refetch()} />;
   }

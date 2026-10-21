@@ -6,6 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderApp, serveRpc, type RpcReply } from '../../test-utils';
@@ -104,18 +105,23 @@ describe('a viewer the rules restrict', () => {
 
 describe('a refused figure', () => {
   const refusal = { ok: false, code: 'row_policy', reason: 'reader', error: 'This reads the whole dataset, and your access covers only some of its rows, so it\'s off for you.' };
-  it('is recognised, and drawn about access with no Make a copy', () => {
+  const wrap = (node: ReactNode) => render(<QueryClientProvider client={new QueryClient()}><MemoryRouter>{node}</MemoryRouter></QueryClientProvider>);
+  it('is recognised, and drawn about access with no Make a copy — read from the refusal itself', () => {
     expect(isRowRefusal(refusal)).toBe(true);
     expect(liveRefusalOf(refusal)).toBe(refusal.error);
-    expect(isRowRefusal({ ok: false, code: 'live_dataset', error: 'Live.' })).toBe(false); // control
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter>
-          <LiveRefusal message={refusal.error} projectId={P} datasetId={D} row />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
+    // A page that words Live refusals its own way (Scenarios) still shows a row access refusal as one.
+    wrap(<LiveRefusal refusal={refusal} projectId={P} datasetId={D} liveTitle="Scenarios are off for Live datasets" liveMessage="Live words" />);
     expect(screen.getByText('Limited by your access')).toBeTruthy();
+    expect(screen.getByText(refusal.error)).toBeTruthy();
+    expect(screen.queryByText('Live words')).toBeNull();
     expect(screen.queryByRole('button', { name: /copy/i })).toBeNull();
+  });
+  it('NEGATIVE CONTROL: a Live refusal keeps its own heading and words', () => {
+    const live = { ok: false, code: 'live_dataset', error: 'This is a Live dataset.' };
+    expect(isRowRefusal(live)).toBe(false);
+    wrap(<LiveRefusal refusal={live} projectId={P} datasetId={D} liveTitle="Scenarios are off for Live datasets" liveMessage="Live words" />);
+    expect(screen.getByText('Scenarios are off for Live datasets')).toBeTruthy();
+    expect(screen.getByText('Live words')).toBeTruthy();
+    expect(screen.queryByText('Limited by your access')).toBeNull();
   });
 });

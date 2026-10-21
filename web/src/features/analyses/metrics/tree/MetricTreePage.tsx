@@ -18,7 +18,7 @@ import { Icon } from '../../../../ui/icons/Icon';
 import { CompareControl, usable } from '../../../dashboards/CompareBar';
 import type { Compare } from '../../../dashboards/useViewer';
 import { LiveRefusal } from '../../../live/LiveOff';
-import { isRowRefusal, liveRefusalOf } from '../../../live/refusal';
+import { liveRefusalOf } from '../../../live/refusal';
 import { useRoles } from '../../../projects/api';
 import { saveTree, useSuggest, useTree, type ComputeInput, type PeriodKey, type TreeSpec } from './api';
 import { AddTreeToDashboard } from './AddTreeToDashboard';
@@ -110,7 +110,7 @@ function TreePage({ projectId, metricId }: { projectId: string; metricId: string
   let body;
   if (!input) body = <p className={s.wait}>Pick both dates to compare.</p>;
   else if (q.isPending || roles.isPending) body = <TreeSkeleton />;
-  else if (q.isError && live) body = <LiveRefusal projectId={projectId} message={live} row={isRowRefusal(q.error)} />;
+  else if (q.isError && live) body = <LiveRefusal projectId={projectId} refusal={q.error} />;
   else if (q.isError) body = <ErrorState title="The tree could not be computed" message={q.error.message} onRetry={() => void q.refetch()} />;
   else if (data) {
     body = (

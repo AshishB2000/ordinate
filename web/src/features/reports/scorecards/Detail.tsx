@@ -54,7 +54,7 @@ export function Detail({ projectId, scorecardId, metricId, offset, onClose }: { 
           </div>
         </div>
       ) : q.isError && liveRefusalOf(q.error) !== null ? (
-        <LiveRefusal message={liveRefusalOf(q.error) ?? ''} projectId={projectId} />
+        <LiveRefusal refusal={q.error} projectId={projectId} />
       ) : q.isError ? (
         <ErrorState compact heading={3} title="Could not load this metric" message={q.error.message} onRetry={() => void q.refetch()} />
       ) : (

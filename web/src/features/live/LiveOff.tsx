@@ -4,7 +4,7 @@
 //
 //   <LiveOff feature>         a tab or a panel: the feature's own words
 //   <LiveOffPage feature>     a route (prepare, a workbench): the same, as a page
-//   <LiveRefusal message>     any figure the server refused, typed (./refusal.ts):
+//   <LiveRefusal refusal>     any figure the server refused, typed (./refusal.ts):
 //                             the SERVER's sentence, compact, for a card or a tile
 //   <LiveRefusalLine message> the same sentence as one line, for a table row
 //
@@ -24,6 +24,7 @@ import { toast } from '../../ui/Toast';
 import { rowsText } from '../data/format';
 import { useCanEdit } from '../projects/api';
 import { LIVE_OFF, type LiveOffFeature } from './offFeatures';
+import { isRowRefusal, liveRefusalOf } from './refusal';
 import s from './Live.module.css';
 
 type CopyReply = { ok: true; dataset: { id: string; name: string; rowCount: number }; warnings?: string[] } | { ok: false; error?: string; code?: string };
@@ -131,21 +132,26 @@ export function LiveOffPage({ title, projectId, datasetId, feature }: { title: s
  * sentence, and — when the dataset is known — "Make a copy". Compact, for a
  * dashboard tile, a KPI card, an answer card or the builder's stage.
  */
-export function LiveRefusal({ message, projectId, datasetId, title, row = false }: {
-  message: string;
+export function LiveRefusal({ refusal, projectId, datasetId, liveTitle, liveMessage }: {
+  /** The refused reply or the thrown error itself: whether it is Live's or a row access refusal is read from it. */
+  refusal: unknown;
   projectId: string;
   datasetId?: string;
-  title?: string;
-  /** A row access refusal (./refusal isRowRefusal): about the caller's access — no copy to offer. */
-  row?: boolean;
+  /** A Live refusal's own heading / sentence on a page that words it (a row access refusal keeps the server's). */
+  liveTitle?: string;
+  liveMessage?: string;
 }) {
+  const row = isRowRefusal(refusal);
+  const sentence = liveRefusalOf(refusal) ?? '';
+  const message = row ? sentence : liveMessage ?? sentence;
+  const title = row ? 'Limited by your access' : liveTitle ?? 'Off for this Live dataset';
   return (
     <div className={s.refusal} data-live-refusal="" data-row-refusal={row ? '' : undefined}>
       <EmptyState
         compact
         heading={3}
         icon={row ? 'lock' : 'zap'}
-        title={title ?? (row ? 'Limited by your access' : 'Off for this Live dataset')}
+        title={title}
         actions={datasetId && !row ? <MakeCopyButton projectId={projectId} datasetId={datasetId} variant="secondary" size="sm" /> : undefined}
       >
         {message}

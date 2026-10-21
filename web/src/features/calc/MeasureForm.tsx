@@ -192,7 +192,7 @@ export function useMeasureForm({ projectId, datasetId, columns, metrics, existin
                 <Skeleton className={c.previewSkeleton} />
               </span>
             ) : live ? (
-              <LiveRefusal message={live} projectId={projectId} datasetId={datasetId} />
+              <LiveRefusal refusal={check} projectId={projectId} datasetId={datasetId} />
             ) : check.valid && check.preview ? (
               <>
                 <span className={checking ? `${c.previewValue} ${c.stale}` : c.previewValue}>{check.preview.display}</span>
