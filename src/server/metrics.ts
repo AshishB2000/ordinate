@@ -24,6 +24,7 @@ import * as computePool from '../engine/computePool';
 import * as residentTrace from '../engine/residentTrace';
 import * as jobs from '../app/jobs';
 import { runStats } from './jobs/runner';
+import { idpSyncCounts } from './auth/idpGroups';
 import { RPC_ROUTE } from './limits';
 
 /** A Live question's outcomes (residentTrace, docs/live-data/00-plan.md L2.3). */
@@ -141,6 +142,8 @@ export function metricsText(): string {
       : (['resident', 'skipped', 'failed'] as const);
     for (const outcome of outcomes) out.push(`ordinate_resident_calls_total${labels({ op, outcome })} ${c[outcome]}`);
   }
+  family(out, 'ordinate_idp_sync_total', 'counter', 'IdP group syncs on this pod, by outcome: applied, unchanged, kept (the last admin), absent or overage (nothing changed).');
+  for (const [outcome, n] of idpSyncCounts()) out.push(`ordinate_idp_sync_total${labels({ outcome })} ${n}`);
   return out.join('\n') + '\n';
 }
 

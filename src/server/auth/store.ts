@@ -52,6 +52,8 @@ export function domainAllowed(allowed: readonly string[], email: string): boolea
 export async function provision(pool: Pool, auth: AuthEnv, email: string): Promise<Member | Refusal> {
   if (!domainAllowed(auth.allowedDomains, email)) return 'domain';
   const isAdmin = auth.adminEmail === email;
+  // The org (re)gains its break-glass admin: a last admin the IdP sync kept is evaluated again (./idpGroups.ts).
+  if (isAdmin) await pool.query(CLEAR_KEPT, [auth.org]);
   const r = await pool.query<{ id: string; role: Role; disabled: boolean }>(
     `INSERT INTO users (org_id, email, role, last_login_at) VALUES ($1, $2, $3, now())
      ON CONFLICT (org_id, email) DO UPDATE
@@ -64,18 +66,24 @@ export async function provision(pool: Pool, auth: AuthEnv, email: string): Promi
   return { userId: row.id, identity: { user: { email, role: row.role }, org: { id: auth.org } } };
 }
 
+/** A known member as header mode reads it per request: who, their row, and their last group sync's digest. */
+export interface Known extends Member {
+  readonly digest: string | null;
+}
+
 /**
  * The member for `email` if it exists, is enabled and has signed in before —
  * no write (header mode asks this per request). An invited member (T3.4: a row
  * with no last_login_at yet) is not returned, so their first request goes
  * through `provision`, which stamps the sign-in and keeps the invited role.
  */
-export async function member(pool: Pool, auth: AuthEnv, email: string): Promise<Identity | null> {
-  const r = await pool.query<{ role: Role }>('SELECT role FROM users WHERE org_id = $1 AND email = $2 AND disabled_at IS NULL AND last_login_at IS NOT NULL', [
-    auth.org,
-    email,
-  ]);
-  return r.rows[0] ? { user: { email, role: r.rows[0].role }, org: { id: auth.org } } : null;
+export async function member(pool: Pool, auth: AuthEnv, email: string): Promise<Known | null> {
+  const r = await pool.query<{ id: string; role: Role; digest: string | null }>(
+    'SELECT id::text, role, idp_groups_digest AS digest FROM users WHERE org_id = $1 AND email = $2 AND disabled_at IS NULL AND last_login_at IS NOT NULL',
+    [auth.org, email],
+  );
+  const row = r.rows[0];
+  return row ? { userId: row.id, digest: row.digest, identity: { user: { email, role: row.role }, org: { id: auth.org } } } : null;
 }
 
 /**

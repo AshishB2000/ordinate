@@ -11,10 +11,18 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
+import { Writable } from 'stream';
+import { Client, Pool } from 'pg';
+import type { FastifyInstance } from 'fastify';
+import { startMockOidc, type MockOidc } from './mockOidc';
 
 const idp: typeof import('../src/server/auth/idpGroups') = require('../src/server/auth/idpGroups');
 const idpEnv: typeof import('../src/server/idpEnv') = require('../src/server/idpEnv');
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
+const appMod: typeof import('../src/server/app') = require('../src/server/app');
+const store: typeof import('../src/server/auth/store') = require('../src/server/auth/store');
+const context: typeof import('../src/server/context') = require('../src/server/context');
+const caller: typeof import('../src/server/authz/caller') = require('../src/server/authz/caller');
 
 type Mapping = import('../src/server/auth/idpGroups').GroupMapping;
 const throws = (fn: () => unknown, re: RegExp): boolean => {
@@ -84,8 +92,169 @@ function pure(): void {
     ['0', '3651', 'x', '1.5'].every((v) => throws(() => idpEnv.apiTokenMaxDays(v), /API_TOKEN_MAX_DAYS/)) && idpEnv.apiTokenMaxDays('1') === 1 && idpEnv.apiTokenMaxDays('3650') === 3650);
 }
 
+const SECRET = 'idp-groups-client-secret';
+const sink = new Writable({ write: (_c, _e, cb) => cb() });
+
+async function db(): Promise<void> {
+  const adminUrl = process.env.DATABASE_URL;
+  if (!adminUrl) {
+    console.log('skip idp groups DB checks: DATABASE_URL is unset (set it to a Postgres this suite may CREATE DATABASE on)');
+    return;
+  }
+  const dbName = `ordinate_idp_${process.pid}_${Date.now()}`;
+  const scratch = new URL(adminUrl);
+  scratch.pathname = '/' + dbName;
+  const root = new Client({ connectionString: adminUrl });
+  await root.connect();
+  await root.query(`CREATE DATABASE ${dbName}`);
+  const pool = new Pool({ connectionString: scratch.toString(), max: 6 });
+  pool.on('error', () => undefined); // an idle client cut by the DROP DATABASE … WITH (FORCE) teardown
+  let mock: MockOidc | null = null;
+  const apps: FastifyInstance[] = [];
+  appMod.registerHandlers(); // the admin channels and the row-access caller read the built app's pool
+  try {
+    await oidcPart(scratch.toString(), pool, apps, (m) => (mock = m));
+    await headerPart(scratch.toString(), pool, apps);
+  } finally {
+    for (const a of apps) await a.close().catch(() => undefined);
+    await (mock as MockOidc | null)?.close();
+    await pool.end();
+    await root.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
+    await root.end();
+  }
+}
+
+const q = async <T = Record<string, unknown>>(pool: Pool, sql: string, args: unknown[] = []): Promise<T[]> => (await pool.query(sql, args)).rows as T[];
+const roleOf = async (pool: Pool, email: string) => (await q<{ role: string }>(pool, 'SELECT role FROM users WHERE email = $1', [email]))[0]?.role;
+const teamsOf = async (pool: Pool, email: string) =>
+  (await q<{ name: string }>(pool, 'SELECT t.name FROM team_members m JOIN teams t ON t.id = m.team_id JOIN users u ON u.id = m.user_id WHERE u.email = $1 ORDER BY t.name', [email])).map((r) => r.name).join(',');
+const team = async (pool: Pool, org: string, name: string) => (await q<{ id: string }>(pool, 'INSERT INTO teams (org_id, name) VALUES ($1, $2) RETURNING id::text', [org, name]))[0].id;
+const mapGroup = async (pool: Pool, org: string, group: string, role: string | null, teamId: string | null) =>
+  pool.query('INSERT INTO idp_groups (org_id, group_name, role, team_id) VALUES ($1, $2, $3, $4) ON CONFLICT (org_id, group_name) DO UPDATE SET role = $3, team_id = $4', [org, group, role, teamId]);
+
+// ── c, d. OIDC ─────────────────────────────────────────────────────────────
+async function oidcPart(url: string, pool: Pool, apps: FastifyInstance[], keep: (m: MockOidc) => void): Promise<void> {
+  const idp = await startMockOidc({ clientId: 'ordinate-test', clientSecret: SECRET });
+  keep(idp);
+  const cfg = envMod.parseEnv({
+    LOG_LEVEL: 'silent', DATABASE_URL: url, AUTH_MODE: 'oidc', OIDC_ISSUER: idp.issuer, OIDC_CLIENT_ID: 'ordinate-test',
+    OIDC_CLIENT_SECRET: SECRET, OIDC_REDIRECT_URL: 'http://127.0.0.1:1/api/auth/callback', ORDINATE_ORG: 'acme',
+    ORDINATE_ADMIN_EMAIL: 'boss@acme.test', OIDC_GROUPS_CLAIM: 'groups', OIDC_EXTRA_SCOPES: 'groups',
+  });
+  const app = appMod.buildApp(cfg, sink);
+  apps.push(app);
+  await app.ready();
+  const signIn = async (email: string, claims: Record<string, unknown>) => {
+    idp.extraClaims = claims;
+    const login = await app.inject({ method: 'GET', url: '/api/auth/login' });
+    const tx = login.cookies.find((c) => c.name === 'ordinate_login');
+    const back = new URL(await idp.approve(String(login.headers.location), email));
+    const cb = await app.inject({ method: 'GET', url: back.pathname + back.search, headers: tx ? { cookie: `ordinate_login=${tx.value}` } : {} });
+    return { login, cb, id: cb.cookies.find((c) => c.name === 'ordinate_session' && c.value)?.value };
+  };
+  const analysts = await team(pool, 'acme', 'Analysts');
+  const sales = await team(pool, 'acme', 'Sales');
+  const manual = await team(pool, 'acme', 'Manual');
+  await mapGroup(pool, 'acme', 'bi-editors', 'editor', analysts);
+  await mapGroup(pool, 'acme', 'bi-admins', 'admin', null);
+  await mapGroup(pool, 'acme', 'sales', null, sales);
+
+  const first = await signIn('carol@acme.test', { groups: ['bi-editors'] });
+  ok('oidc: the authorize URL asks for OIDC_EXTRA_SCOPES', new URL(String(first.login.headers.location)).searchParams.get('scope') === 'openid email profile groups');
+  ok('oidc: a sign-in with groups sets the mapped role and linked team, before the session', !!first.id && (await roleOf(pool, 'carol@acme.test')) === 'editor' && (await teamsOf(pool, 'carol@acme.test')) === 'Analysts');
+  await pool.query(`INSERT INTO team_members (team_id, user_id) SELECT $1, id FROM users WHERE email = 'carol@acme.test'`, [manual]);
+  await signIn('carol@acme.test', { groups: ['sales', 'bi-admins'] });
+  ok('oidc: moving between groups changes role and teams at the next sign-in; a manual team is untouched',
+    (await roleOf(pool, 'carol@acme.test')) === 'admin' && (await teamsOf(pool, 'carol@acme.test')) === 'Manual,Sales', await teamsOf(pool, 'carol@acme.test'));
+  await signIn('dave@acme.test', { groups: ['bi-editors', 'sales'] });
+  const before = `${await roleOf(pool, 'dave@acme.test')}|${await teamsOf(pool, 'dave@acme.test')}`;
+  const absent = await signIn('dave@acme.test', {});
+  const overage = await signIn('dave@acme.test', { _claim_names: { groups: 'src1' }, _claim_sources: { src1: { endpoint: 'https://graph.example/x' } } });
+  const malformed = await signIn('dave@acme.test', { groups: ['sales', 7] });
+  ok('oidc: an absent claim, Entra\'s overage and a malformed claim change nothing (and still sign in)',
+    !!absent.id && !!overage.id && !!malformed.id && `${await roleOf(pool, 'dave@acme.test')}|${await teamsOf(pool, 'dave@acme.test')}` === before, before);
+  await signIn('dave@acme.test', { groups: [] });
+  ok('NEGATIVE CONTROL: an explicit empty list demotes to viewer and leaves every linked team', (await roleOf(pool, 'dave@acme.test')) === 'viewer' && (await teamsOf(pool, 'dave@acme.test')) === '');
+  await signIn('boss@acme.test', { groups: [] });
+  ok('oidc: the break-glass admin stays admin with no mapped group', (await roleOf(pool, 'boss@acme.test')) === 'admin');
+  const rows = await q<{ actor: string; outcome: string; targets: string[] }>(pool, `SELECT actor, outcome, target_ids::text[] AS targets FROM audit_log WHERE channel = 'idp:sync' ORDER BY id`);
+  ok('audit: one idp:sync row per sign-in that changed something, naming the member and the teams',
+    rows.filter((r) => r.actor === 'carol@acme.test').length === 2 && rows.filter((r) => r.actor === 'dave@acme.test').length === 2
+      && rows.some((r) => r.actor === 'carol@acme.test' && r.targets.includes(sales) && r.targets.includes(analysts)), JSON.stringify(rows));
+  await app.close();
+}
+
+// ── e–i. Header mode ───────────────────────────────────────────────────────
+async function headerPart(url: string, pool: Pool, apps: FastifyInstance[]): Promise<void> {
+  const cfg = envMod.parseEnv({
+    LOG_LEVEL: 'silent', DATABASE_URL: url, AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: '127.0.0.1/32', ORDINATE_ORG: 'hdr',
+    ORDINATE_ADMIN_EMAIL: 'root@hdr.test', TRUSTED_GROUPS_HEADER: 'X-Forwarded-Groups',
+  });
+  const app = appMod.buildApp(cfg, sink);
+  apps.push(app);
+  await app.ready();
+  const me = async (email: string, groups?: string, peer = '127.0.0.1', extra: Record<string, string> = {}) => {
+    const r = await app.inject({ method: 'GET', url: '/api/auth/me', remoteAddress: peer, headers: { 'x-forwarded-email': email, ...(groups !== undefined ? { 'x-forwarded-groups': groups } : {}), ...extra } });
+    return (r.json() as { user: { role: string } | null }).user?.role ?? null;
+  };
+  const xmin = async (email: string) => (await q<{ x: string }>(pool, 'SELECT xmin::text AS x FROM users WHERE email = $1', [email]))[0]?.x;
+  const ops = await team(pool, 'hdr', 'Ops');
+  await mapGroup(pool, 'hdr', 'ops', 'editor', ops);
+  await mapGroup(pool, 'hdr', 'admins', 'admin', null);
+  ok('header: the break-glass admin signs in (another admin, so the demotions below are not the last admin\'s)', (await me('root@hdr.test', 'ops')) === 'admin');
+
+  ok('header: groups from a trusted peer apply (role and linked team)', (await me('erin@hdr.test', 'ops')) === 'editor' && (await teamsOf(pool, 'erin@hdr.test')) === 'Ops');
+  const x0 = await xmin('erin@hdr.test');
+  for (let i = 0; i < 3; i++) await me('erin@hdr.test', ' ops ');
+  ok('header: the same groups again write nothing (the users row is untouched over 3 requests)', (await xmin('erin@hdr.test')) === x0, `${x0}`);
+  await me('erin@hdr.test');
+  ok('header: a missing header writes nothing and changes nothing (m5)', (await xmin('erin@hdr.test')) === x0 && (await roleOf(pool, 'erin@hdr.test')) === 'editor');
+  ok('header: the same header from an UNTRUSTED peer is not believed: 401, nothing written',
+    (await me('erin@hdr.test', 'admins', '203.0.113.9')) === null && (await roleOf(pool, 'erin@hdr.test')) === 'editor' && (await xmin('erin@hdr.test')) === x0);
+  ok('NEGATIVE CONTROL: from the trusted peer, the same header promotes', (await me('erin@hdr.test', 'admins')) === 'admin');
+  await me('erin@hdr.test', 'ops');
+  // A bearer request is decided by its token alone: a groups header beside it is never read.
+  const userId = (await q<{ id: string }>(pool, `SELECT id::text FROM users WHERE email = 'erin@hdr.test'`))[0].id;
+  const token = 'ord_' + 'A'.repeat(43);
+  await pool.query(`INSERT INTO api_tokens (user_id, name, token_hash, prefix, expires_at) VALUES ($1, 't', $2, 'ord_AAAAAAAA', now() + interval '1 day')`, [userId, store.hashId(token)]);
+  const x1 = await xmin('erin@hdr.test');
+  const bearer = async (peer: string) => {
+    const r = await app.inject({ method: 'GET', url: '/api/auth/me', remoteAddress: peer, headers: { 'x-forwarded-email': 'erin@hdr.test', 'x-forwarded-groups': 'admins', authorization: `Bearer ${token}` } });
+    return (r.json() as { user: { role: string } | null }).user?.role ?? `${r.statusCode} ${r.body}`;
+  };
+  const b1 = await bearer('127.0.0.1');
+  ok('header: bearer + groups header from a trusted peer → the token\'s current role, groups ignored', b1 === 'editor', String(b1));
+  ok('header: bearer + groups header from an untrusted peer → the same, groups ignored', (await bearer('203.0.113.9')) === 'editor' && (await roleOf(pool, 'erin@hdr.test')) === 'editor' && (await xmin('erin@hdr.test')) !== undefined && x1 !== undefined);
+
+  // M1: the break-glass admin is restored in one request even when the digest matches.
+  await pool.query(`UPDATE users SET role = 'viewer' WHERE email = 'root@hdr.test'`);
+  ok('header: a demoted break-glass admin is admin again after one request (digest unchanged)', (await me('root@hdr.test', 'ops')) === 'admin');
+
+  // 1i: the teams memo. A sync inside a request context forgets it.
+  const idpMod: typeof import('../src/server/auth/idpGroups') = require('../src/server/auth/idpGroups');
+  const P = '0b3c7c3e-6c2a-4c8e-9d7a-2f0d1c9b8a01';
+  const fred = { user: { email: 'fred@hdr.test', role: 'viewer' as const }, org: { id: 'hdr' } };
+  await me('fred@hdr.test', 'ops');
+  const fredId = (await q<{ id: string }>(pool, `SELECT id::text FROM users WHERE email = 'fred@hdr.test'`))[0].id;
+  const inside = await context.runInContext(fred, 'memo-test', async () => {
+    const a = (await caller.callerOn(P)).teamIds.length;
+    await idpMod.applyIdpGroups(pool, cfg.auth, { userId: fredId, email: 'fred@hdr.test' }, [], { compare: false, log: app.log });
+    return [a, (await caller.callerOn(P)).teamIds.length];
+  });
+  ok('memo: a sync inside a request leaves no stale teams (1 → 0 in the same request)', inside[0] === 1 && inside[1] === 0, JSON.stringify(inside));
+  await me('fred@hdr.test', 'ops');
+  const stale = await context.runInContext(fred, 'memo-control', async () => {
+    const a = (await caller.callerOn(P)).teamIds.length;
+    await pool.query('DELETE FROM team_members WHERE user_id = $1', [fredId]);
+    return [a, (await caller.callerOn(P)).teamIds.length];
+  });
+  ok('NEGATIVE CONTROL: a raw change without the forget is still memoised (1 → 1)', stale[0] === 1 && stale[1] === 1, JSON.stringify(stale));
+  await app.close();
+}
+
 (async () => {
   pure();
+  await db();
   finish();
 })().catch((err: unknown) => {
   console.error(err);
