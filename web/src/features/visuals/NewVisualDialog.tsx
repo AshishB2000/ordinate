@@ -26,6 +26,7 @@ import { suggestCharts, type Encoding, type SuggestReply, type Suggestion } from
 import { countNumericSeries, eligibleChartTypes } from './eligibility';
 import { typeLabel } from './model';
 import s from './NewVisual.module.css';
+import { figureAsk } from '../../../../src/analysis/figureAsk.ts';
 
 export type NewChoice =
   | { kind: 'manual'; datasetId: string }
@@ -225,8 +226,8 @@ function Proposals({ projectId, datasetId, intent, asked, onUse, onManual, onReg
 /** One proposal, drawn from app-computed data; unpickable until it provably draws. */
 function Option({ projectId, datasetId, option, onUse }: { projectId: string; datasetId: string; option: Suggestion; onUse: (c: NewChoice) => void }) {
   const q = useQuery({
-    queryKey: ['visual:data', projectId, datasetId, option.encoding],
-    queryFn: () => loadVizData({ projectId, datasetId, encoding: option.encoding as Parameters<typeof loadVizData>[0]['encoding'] }),
+    queryKey: ['visual:data', projectId, datasetId, option.encoding, option.chartType],
+    queryFn: () => loadVizData({ projectId, datasetId, encoding: option.encoding as Parameters<typeof loadVizData>[0]['encoding'], ...figureAsk(option.chartType) }),
     retry: false,
   });
   const res = q.data && q.data.ok ? q.data : null;

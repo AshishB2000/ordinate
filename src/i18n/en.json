@@ -349,6 +349,8 @@
   "pivotRender.pick_a_row_dimension_and_at": "Pick a row dimension and at least one value to build a pivot.",
   "pivotRender.showing_the_first_row_groups_and": "Showing the first {p0} row groups and {p1} column groups — narrow the pivot with a filter or Top N to see the rest.",
   "pivotRender.sort_by": "Sort by {p0}{p1}",
+  "publishMessages.maximum_of": "Maximum of {column}",
+  "publishMessages.minimum_of": "Minimum of {column}",
   "rebuildMessages.a_date_range_needs_a_date": "A date range needs a date column, but \"{column}\" is {type}.",
   "rebuildMessages.needs_a_number_column_but_is": "{aggregation} needs a number column, but \"{column}\" is {type}.",
   "rebuildMessages.no_column_like_in_this_dataset": "No column like \"{said}\" in this dataset. Pick one.",

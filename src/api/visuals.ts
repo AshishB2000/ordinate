@@ -51,6 +51,17 @@ const Encoding = z.looseObject({
   geo: Geo.optional(),
 });
 
+/**
+ * What the chart is drawn as, for a type whose drawn figures the server computes
+ * (src/analysis/figureAsk.ts): the reply then carries `data.figures`. Sent only
+ * for those types; the two overrides that change a figure travel with it.
+ */
+export const FigureAskFields = {
+  chartType: z.string().min(1).max(64).optional(),
+  waterfallTotals: z.array(z.string().max(200)).max(200).optional(),
+  bulletTarget: z.number().finite().optional(),
+};
+
 const VizDataInput = z.strictObject({
   projectId: Uuid,
   datasetId: Uuid,
@@ -66,6 +77,7 @@ const VizDataInput = z.strictObject({
   share: z.literal('export').optional(),
   // T2.11: "As of" — every dataset read as it was at this time (src/data/asOf.ts; view state, never saved).
   asOf: z.string().max(40).optional(),
+  ...FigureAskFields,
 });
 
 /** What a visual IS, as `visual:save` stores it; `visual:update` takes any part of it. */

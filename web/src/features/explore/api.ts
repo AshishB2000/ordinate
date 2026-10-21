@@ -9,6 +9,7 @@ import { rpc, RpcError } from '../../api/client';
 import { loadVizData } from '../../api/visuals';
 import { replyError } from '../live/refusal';
 import type { Encoding, FilterStep, Preview } from '../visuals/api';
+import { figureAskKey, type FigureAsk } from '../../../../src/analysis/figureAsk.ts';
 import type { Field } from './spec';
 
 export interface Suggestion {
@@ -51,8 +52,8 @@ export function useExploreFields(projectId: string, datasetId: string) {
   });
 }
 
-/** One question as `visual:data` takes it. */
-export interface Ask {
+/** One question as `visual:data` takes it; a figure type also names itself (figureAsk), or its figures are not sent. */
+export interface Ask extends Partial<FigureAsk> {
   projectId: string;
   datasetId: string;
   encoding: Encoding;
@@ -74,7 +75,7 @@ export function useAnswer(ask: Ask | undefined, keep = true) {
         : async () => {
             const r = (await loadVizData(ask)) as ({ ok: true } & Preview) | { ok: false; error: string };
             if (!r.ok) throw replyError(r, 'Could not answer this question.');
-            return r;
+            return { ...r, ask: figureAskKey(ask.chartType, ask) }; // which figures it answers: a held one is never drawn as another type's
           },
     placeholderData: keep ? (prev) => prev : undefined,
     staleTime: 30_000,
