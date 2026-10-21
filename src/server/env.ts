@@ -10,6 +10,7 @@ import { BlockList, isIP } from 'net';
 import * as os from 'os';
 import * as path from 'path';
 import { EnvError } from './envError';
+import { apiTokenMaxDays, extraScopes, groupsFrom, type GroupsFrom } from './idpEnv';
 import { liveDailyQueryLimit, liveMaxConcurrent, liveMinCacheAgePublicSec, liveQueryTimeoutMs, maxBytesBilled } from './liveEnv';
 import { publicOrigin } from './publicUrl';
 import { parseMail, type MailEnv } from './mail/mailEnv';
@@ -125,6 +126,8 @@ export interface OidcEnv {
   readonly clientSecret: string;
   /** This server's callback, exactly as registered at the IdP: https://<host>/api/auth/callback. */
   readonly redirectUrl: string;
+  /** OIDC_EXTRA_SCOPES: sent after `openid email profile` (./idpEnv.ts). */
+  readonly extraScopes: readonly string[];
 }
 
 export interface AuthEnv {
@@ -141,6 +144,10 @@ export interface AuthEnv {
   readonly oidc: OidcEnv | null;
   /** CIDRs of the proxies in front (TRUSTED_PROXY_CIDRS): in header mode they may assert X-Forwarded-Email; in every mode their X-Forwarded-For names the client for rate limits. */
   readonly trustedProxies: readonly string[];
+  /** Where a person's IdP groups are read (OIDC_GROUPS_CLAIM / TRUSTED_GROUPS_HEADER), or null (./idpEnv.ts). */
+  readonly groupsFrom: GroupsFrom;
+  /** API_TOKEN_MAX_DAYS: the longest a personal API token lives. */
+  readonly apiTokenMaxDays: number;
 }
 
 const AUTH_MODES: readonly AuthMode[] = ['password', 'oidc', 'header', 'dev'];
@@ -472,6 +479,7 @@ function parseAuth(src: Readonly<Record<string, string | undefined>>, env: Ordin
       // Never echoed: only its presence is checked.
       clientSecret: required(src, 'OIDC_CLIENT_SECRET', why),
       redirectUrl: httpUrl('OIDC_REDIRECT_URL', required(src, 'OIDC_REDIRECT_URL', why), env),
+      extraScopes: extraScopes(mode, src.OIDC_EXTRA_SCOPES),
     });
   }
 
@@ -482,6 +490,9 @@ function parseAuth(src: Readonly<Record<string, string | undefined>>, env: Ordin
   const trustedProxies = csv(src.TRUSTED_PROXY_CIDRS);
   if (mode === 'header' && trustedProxies.length === 0) throw new EnvError('TRUSTED_PROXY_CIDRS is required when AUTH_MODE=header');
   proxyList(trustedProxies);
+  // IdP groups and token lifetimes (./idpEnv.ts): a groups variable in a mode that cannot read it is refused.
+  const groups = groupsFrom(mode, src.OIDC_GROUPS_CLAIM, src.TRUSTED_GROUPS_HEADER);
+  if (mode !== 'oidc') extraScopes(mode, src.OIDC_EXTRA_SCOPES);
 
   return Object.freeze({
     mode,
@@ -492,6 +503,8 @@ function parseAuth(src: Readonly<Record<string, string | undefined>>, env: Ordin
     sessionAbsoluteMs,
     oidc,
     trustedProxies: Object.freeze(trustedProxies),
+    groupsFrom: groups,
+    apiTokenMaxDays: apiTokenMaxDays(src.API_TOKEN_MAX_DAYS),
   });
 }
 
