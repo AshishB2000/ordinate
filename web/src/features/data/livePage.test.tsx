@@ -146,7 +146,7 @@ describe('routes that read rows, on a Live dataset', () => {
     const calls = serve();
     renderApp(`/data/${P}/${D}/prepare`);
     await screen.findByRole('heading', { name: 'Prepare steps and formulas are off for Live datasets' }, { timeout: LAZY });
-    expect(screen.getByRole('link', { name: 'Back to the dataset' }).getAttribute('href')).toBe(`/data/${P}/${D}`);
+    expect(screen.getByRole('link', { name: 'Dataset' }).getAttribute('href')).toBe(`/data/${P}/${D}`);
     expect(readersCalled(calls)).toEqual([]);
   });
 

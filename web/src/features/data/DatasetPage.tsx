@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useDatasetColumns, useDatasets, type DatasetSummary } from '../../api/datasets';
-import { ErrorState, Page, PageSkeleton } from '../../app/blocks';
+import { ErrorState, Page, PageHead, PageSkeleton } from '../../app/blocks';
 import { Button, buttonClass, IconButton } from '../../ui/Button';
 import { Icon } from '../../ui/icons/Icon';
 import { Menu } from '../../ui/Menu';
@@ -98,15 +98,12 @@ function Header({ projectId, id, name, rowCount, columnCount, live, scoped = fal
   const d = list.data?.find((x) => x.id === id);
   const outcome = refresh.state[id];
   return (
-    <header className={s.dsHead}>
-      <Link className={buttonClass('ghost', 'sm', s.back)} to={`/data/${projectId}`}>
-        <Icon name="arrow-left" />
-        <span>Datasets</span>
-      </Link>
-      <div className={s.dsTop}>
-        <div className={s.dsIdent}>
-          <div className={s.dsTitleRow}>
-            <h1 className={s.title}>{name}</h1>
+    <>
+      <PageHead
+        back={{ to: `/data/${projectId}`, label: 'Datasets' }}
+        title={name}
+        status={
+          <>
             {source.data && (
               <span className={s.badge} title={source.data.refreshable ? 'Where the rows come from' : NOT_REFRESHABLE}>
                 {source.data.label}
@@ -115,99 +112,105 @@ function Header({ projectId, id, name, rowCount, columnCount, live, scoped = fal
             {live && <LiveBadge maxCacheAgeSec={source.data?.maxCacheAgeSec} />}
             {scoped && <ScopedChip />}
             <TagChips tags={tagsOf(tags.data, `dataset:${id}`)} max={4} />
-          </div>
-          <div className={s.dsMeta}>
-            <span>
-              {/* A Live dataset keeps no rows here: the badge and the freshness line say Live. */}
-              {live ? '' : `${rowsText(rowCount)} · `}
-              {formatNumber(columnCount)} {columnCount === 1 ? 'column' : 'columns'}
-            </span>
-            {d && (
-              <span className={s.freshLine} title={d.lastRefreshStatus === 'error' ? d.lastRefreshError || 'The last refresh failed.' : undefined}>
-                <QualityDot n={d.qualityFailing} />
-                {d.lastRefreshStatus === 'error' && <span className={s.failDot} role="img" aria-label="Last refresh failed" />}
-                {freshness(d)}
-                <BehindBadge behind={d.behindSchedule} />
+          </>
+        }
+        sub={
+          <>
+            <div className={s.dsMeta}>
+              <span>
+                {/* A Live dataset keeps no rows here: the badge and the freshness line say Live. */}
+                {live ? '' : `${rowsText(rowCount)} · `}
+                {formatNumber(columnCount)} {columnCount === 1 ? 'column' : 'columns'}
               </span>
+              {d && (
+                <span className={s.freshLine} title={d.lastRefreshStatus === 'error' ? d.lastRefreshError || 'The last refresh failed.' : undefined}>
+                  <QualityDot n={d.qualityFailing} />
+                  {d.lastRefreshStatus === 'error' && <span className={s.failDot} role="img" aria-label="Last refresh failed" />}
+                  {freshness(d)}
+                  <BehindBadge behind={d.behindSchedule} />
+                </span>
+              )}
+              {canEdit && d && <SchedulePicker projectId={projectId} d={d} />}
+              {/* A Live dataset's settings (L2.6): its cache age is its schedule; Refresh now resets the cache. */}
+              {live && <CacheAgePicker projectId={projectId} datasetId={id} name={name} maxCacheAgeSec={source.data?.maxCacheAgeSec ?? d?.maxCacheAgeSec} />}
+              <LiveSwitch projectId={projectId} datasetId={id} name={name} live={live} canGoLive={!!source.data?.canGoLive} rowCount={rowCount} />
+              {canEdit && d && <IncrementalButton projectId={projectId} d={d} />}
+              {canEdit && d && <FreshOnAskPicker projectId={projectId} d={d} />}
+              {canEdit && d && <WatchToggle projectId={projectId} d={d} />}
+              {lineage.data && (
+                <button type="button" className={s.usedIn} onClick={() => setGraph(true)}>
+                  <Icon name="lineage" size={16} />
+                  {usedInText(lineage.data.usedIn) || 'Not used yet'}
+                </button>
+              )}
+              {live ? (
+                <RefreshNow projectId={projectId} datasetId={id} />
+              ) : (
+                canEdit &&
+                d?.originKind && (
+                  <Button size="sm" icon="refresh" loading={outcome?.busy} onClick={() => void refresh.run(id)}>
+                    Refresh
+                  </Button>
+                )
+              )}
+            </div>
+            {outcome?.message && (
+              <p className={outcome.error ? s.rowError : s.rowNote} role="status">
+                {outcome.message}
+              </p>
             )}
-            {canEdit && d && <SchedulePicker projectId={projectId} d={d} />}
-            {/* A Live dataset's settings (L2.6): its cache age is its schedule; Refresh now resets the cache. */}
-            {live && <CacheAgePicker projectId={projectId} datasetId={id} name={name} maxCacheAgeSec={source.data?.maxCacheAgeSec ?? d?.maxCacheAgeSec} />}
-            <LiveSwitch projectId={projectId} datasetId={id} name={name} live={live} canGoLive={!!source.data?.canGoLive} rowCount={rowCount} />
-            {canEdit && d && <IncrementalButton projectId={projectId} d={d} />}
-            {canEdit && d && <FreshOnAskPicker projectId={projectId} d={d} />}
-            {canEdit && d && <WatchToggle projectId={projectId} d={d} />}
-            {lineage.data && (
-              <button type="button" className={s.usedIn} onClick={() => setGraph(true)}>
-                <Icon name="lineage" size={16} />
-                {usedInText(lineage.data.usedIn) || 'Not used yet'}
-              </button>
-            )}
-            {live ? (
-              <RefreshNow projectId={projectId} datasetId={id} />
-            ) : (
-              canEdit &&
-              d?.originKind && (
-                <Button size="sm" icon="refresh" loading={outcome?.busy} onClick={() => void refresh.run(id)}>
-                  Refresh
-                </Button>
-              )
-            )}
-          </div>
-          {outcome?.message && (
-            <p className={outcome.error ? s.rowError : s.rowNote} role="status">
-              {outcome.message}
-            </p>
-          )}
-          {list.data && <LineageLine projectId={projectId} id={id} list={list.data} />}
-        </div>
-        <div className={s.dsActions}>
-          {/* The reversible step pipeline (T2.6): its own page, the rows beside the steps. Off for Live (L2.1). */}
-          {canEdit && !live && (
-            <Link className={buttonClass('secondary', 'sm')} to={`/data/${projectId}/${id}/prepare`}>
-              <Icon name="sliders" />
-              <span>Prepare</span>
-            </Link>
-          )}
-          {/* A SQL dataset's own statement, in the SQL workbench (queryTab.ts qtOpenWithSql, T2.11). */}
-          {d?.originKind === 'sql' && (
-            <Link className={buttonClass('secondary', 'sm')} to={`/analytics/${projectId}/sql?dataset=${id}`}>
-              <Icon name="code" />
-              <span>View query</span>
-            </Link>
-          )}
-          {canEdit && (
-            <>
-              <Link className={buttonClass('primary', 'sm')} to={`/visuals?project=${projectId}&datasetId=${id}`}>
-                New visual
+            {list.data && <LineageLine projectId={projectId} id={id} list={list.data} />}
+          </>
+        }
+        actions={
+          <>
+            {/* The reversible step pipeline (T2.6): its own page, the rows beside the steps. Off for Live (L2.1). */}
+            {canEdit && !live && (
+              <Link className={buttonClass('secondary', 'sm')} to={`/data/${projectId}/${id}/prepare`}>
+                <Icon name="sliders" />
+                <span>Prepare</span>
               </Link>
-              {/* The dashboard wizard on this dataset, at "Start from" (T2.8; dsExplorer's "New dashboard"). */}
-              <Link className={buttonClass('secondary', 'sm')} to={`/analyses?project=${projectId}&new=1&dataset=${id}`}>
-                New dashboard
+            )}
+            {/* A SQL dataset's own statement, in the SQL workbench (queryTab.ts qtOpenWithSql, T2.11): its crumb comes back here. */}
+            {d?.originKind === 'sql' && (
+              <Link className={buttonClass('secondary', 'sm')} to={`/analytics/${projectId}/sql?dataset=${id}`} state={{ back: { to: `/data/${projectId}/${id}`, label: name } }}>
+                <Icon name="code" />
+                <span>View query</span>
               </Link>
-            </>
-          )}
-          <CommentDoor projectId={projectId} kind="dataset" id={id} />
-          <RecordDetails projectId={projectId} kind="dataset" id={id} name={name} trigger={<Button size="sm" icon="info">Details</Button>} />
-          <Menu
-            align="end"
-            label="More dataset actions"
-            trigger={<IconButton icon="more-horizontal" size="sm" label="More dataset actions" />}
-            items={[
-              { label: 'Lineage', icon: 'lineage', onSelect: () => setGraph(true) },
-              // A URL dbt or Airflow calls to refresh it (live data L0.5): only where there is a source to refresh from.
-              ...(canEdit && (d?.originKind || live) ? [{ label: 'Refresh URL…', icon: 'link' as const, onSelect: () => setHooks(true) }] : []),
-              ...(canEdit && source.data?.canGoLive ? [{ label: 'Switch to Live…', icon: 'zap' as const, onSelect: () => setGoLive(true) }] : []),
-              { label: 'Pipeline history', icon: 'history', onSelect: () => void navigate(`/versions/${projectId}/dataset/${id}`) },
-              ...(canEdit ? [{ kind: 'separator' as const }, { label: 'Move to Trash', icon: 'trash' as const, danger: true, disabled: !d, onSelect: () => d && remove(d) }] : []),
-            ]}
-          />
-        </div>
-      </div>
+            )}
+            {canEdit && (
+              <>
+                <Link className={buttonClass('primary', 'sm')} to={`/visuals?project=${projectId}&datasetId=${id}`}>
+                  New visual
+                </Link>
+                {/* The dashboard wizard on this dataset, at "Start from" (T2.8; dsExplorer's "New dashboard"). */}
+                <Link className={buttonClass('secondary', 'sm')} to={`/analyses?project=${projectId}&new=1&dataset=${id}`}>
+                  New dashboard
+                </Link>
+              </>
+            )}
+            <CommentDoor projectId={projectId} kind="dataset" id={id} />
+            <RecordDetails projectId={projectId} kind="dataset" id={id} name={name} trigger={<Button size="sm" icon="info">Details</Button>} />
+            <Menu
+              align="end"
+              label="More dataset actions"
+              trigger={<IconButton icon="more-horizontal" size="sm" label="More dataset actions" />}
+              items={[
+                { label: 'Lineage', icon: 'lineage', onSelect: () => setGraph(true) },
+                // A URL dbt or Airflow calls to refresh it (live data L0.5): only where there is a source to refresh from.
+                ...(canEdit && (d?.originKind || live) ? [{ label: 'Refresh URL…', icon: 'link' as const, onSelect: () => setHooks(true) }] : []),
+                ...(canEdit && source.data?.canGoLive ? [{ label: 'Switch to Live…', icon: 'zap' as const, onSelect: () => setGoLive(true) }] : []),
+                { label: 'Pipeline history', icon: 'history', onSelect: () => void navigate(`/versions/${projectId}/dataset/${id}`) },
+                ...(canEdit ? [{ kind: 'separator' as const }, { label: 'Move to Trash', icon: 'trash' as const, danger: true, disabled: !d, onSelect: () => d && remove(d) }] : []),
+              ]}
+            />
+          </>
+        }
+      />
       {graph && <LineageDrawer projectId={projectId} id={id} name={name} onClose={() => setGraph(false)} />}
       {goLive && <SwitchToLiveDialog projectId={projectId} datasetId={id} name={name} rowCount={rowCount} onClose={() => setGoLive(false)} />}
       {hooks && <RefreshUrlDialog projectId={projectId} target={{ datasetId: id }} name={name} live={live} onClose={() => setHooks(false)} />}
-    </header>
+    </>
   );
 }
 

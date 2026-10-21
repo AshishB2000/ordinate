@@ -13,11 +13,11 @@
 // screens never meet the refusal at all.
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import { rpc } from '../../api/client';
 import { useDatasets } from '../../api/datasets';
 import { Page } from '../../app/blocks';
-import { Button, buttonClass } from '../../ui/Button';
+import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/icons/Icon';
 import { EmptyState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
@@ -115,13 +115,7 @@ export function LiveOff({ projectId, datasetId, feature, heading = 2, compact }:
 /** A route over a Live dataset (prepare, a workbench): the page's title, the dataset's way back, and <LiveOff>. */
 export function LiveOffPage({ title, projectId, datasetId, feature }: { title: string; projectId: string; datasetId: string; feature: LiveOffFeature }) {
   return (
-    <Page title={title}>
-      <div className={s.pageBack}>
-        <Link className={buttonClass('ghost', 'sm')} to={`/data/${projectId}/${datasetId}`}>
-          <Icon name="arrow-left" />
-          <span>Back to the dataset</span>
-        </Link>
-      </div>
+    <Page title={title} back={{ to: `/data/${projectId}/${datasetId}`, label: 'Dataset' }}>
       <LiveOff projectId={projectId} datasetId={datasetId} feature={feature} />
     </Page>
   );

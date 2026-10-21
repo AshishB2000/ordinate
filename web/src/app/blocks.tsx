@@ -38,7 +38,7 @@ export interface PageHeadProps {
 export function BackLink({ to, label, iconOnly = false, className }: Back & { iconOnly?: boolean; className?: string }) {
   return (
     <Link className={className ?? s.back} to={to} aria-label={iconOnly ? `Back to ${label}` : undefined}>
-      <Icon name="arrow-left" size={iconOnly ? 20 : 14} />
+      <Icon name="arrow-left" size={iconOnly ? 20 : 16} />
       {!iconOnly && <span>{label}</span>}
     </Link>
   );

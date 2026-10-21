@@ -2,12 +2,6 @@
    (row counts, rule rows, previews), text.css (the text steps and profile) and
    geo.css's spatial tiles. Tokens only, so both themes hold. */
 
-.crumbs {
-  display: flex;
-  gap: var(--sp-4);
-  margin-top: calc(-1 * var(--sp-16));
-}
-
 /* The rail beside the rows: the steps on the left, the prepared table filling the rest. */
 .layout {
   display: flex;

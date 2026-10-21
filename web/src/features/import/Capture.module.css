@@ -2,17 +2,6 @@
    reading scrolls), what was read out of it on the right. Tokens only: both
    themes follow. */
 
-.bar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--sp-12);
-  margin-top: calc(var(--sp-8) * -1);
-}
-.when {
-  color: var(--muted);
-  font-size: var(--t-12);
-}
 
 .layout {
   display: grid;

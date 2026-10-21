@@ -5,6 +5,7 @@
 
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useDatasets } from '../../api/datasets';
+import { Page } from '../../app/blocks';
 import { buttonClass } from '../../ui/Button';
 import { Icon } from '../../ui/icons/Icon';
 import { Tab, TabList, TabPanel, Tabs } from '../../ui/Tabs';
@@ -15,7 +16,6 @@ import { DataSearch } from './DataSearch';
 import { useCanEdit } from '../projects/api';
 import { useAdoptProject } from '../projects/current';
 import { RelationshipsTab } from './RelationshipsTab';
-import s from './Data.module.css';
 
 const TABS = ['datasets', 'captures', 'catalog', 'relationships'] as const;
 type TabId = (typeof TABS)[number];
@@ -47,13 +47,11 @@ export default function DataSection() {
     }, { replace: true });
 
   return (
-    <div className={s.page}>
-      <header className={s.head}>
-        <div className={s.headText}>
-          <h1 className={s.title}>Data</h1>
-          <p className={s.sub}>{SUB[tab]}</p>
-        </div>
-        <div className={s.headTools}>
+    <Page
+      title="Data"
+      sub={SUB[tab]}
+      actions={
+        <>
           {/* The project's metrics (T2.8): the desktop's Metrics tab under Data, on its own route. */}
           <Link className={buttonClass('ghost')} to={`/data/metrics?project=${projectId}`}>
             <Icon name="target" />
@@ -61,16 +59,17 @@ export default function DataSection() {
           </Link>
           {tab === 'datasets' && !empty && canEdit && (
             <>
-              <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
-                Import file
-              </Link>
               <Link className={buttonClass('ghost')} to={`/data/import?project=${projectId}&source=paste`}>
                 Paste data
               </Link>
+              <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
+                Import file
+              </Link>
             </>
           )}
-        </div>
-      </header>
+        </>
+      }
+    >
       <DataSearch projectId={projectId} />
       <Tabs value={tab} onValueChange={setTab}>
         <TabList label="Data views">
@@ -100,6 +99,6 @@ export default function DataSection() {
           <RelationshipsTab projectId={projectId} />
         </TabPanel>
       </Tabs>
-    </div>
+    </Page>
   );
 }
