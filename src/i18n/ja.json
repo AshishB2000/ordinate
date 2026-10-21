@@ -433,6 +433,7 @@
   "rowAccessMessages.looking_at_past_data_is_off": "行アクセスルールのあるデータセットでは、過去の時点のデータは表示できません。",
   "rowAccessMessages.pick_a_text_column_of_this": "ルールには、このデータセットのテキスト列を選んでください。",
   "rowAccessMessages.row_access_rules_need_the_server": "行アクセスルールには、サーバーのユーザーディレクトリ (DATABASE_URL) が必要です。",
+  "rowAccessMessages.the_row_access_rules_of_this": "このデータセットの行アクセスルールを今は読み取れないため、閲覧できません。しばらくしてからもう一度お試しください。",
   "rowAccessMessages.this_dataset_is_built_from_a": "このデータセットは行アクセスルールのあるデータセットから作られているため、プロジェクト管理者が独自のルールを設定するまで閲覧できません。",
   "rowAccessMessages.this_dataset_s_row_access_rules": "このデータセットの行アクセスルールが、もう存在しない列を指定しているため、プロジェクト管理者が修正するまで閲覧できません。",
   "rowAccessMessages.this_dataset_stores_values_computed": "このデータセットにはすべての行をもとに計算した値が保存されているため、あなたが見られる行だけに絞ることができません。",

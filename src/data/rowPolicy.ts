@@ -18,6 +18,7 @@ import type { TransformStep } from './transforms';
 import { sanitizeSteps } from './transforms';
 import { stepsUseParams } from '../analysis/params';
 import { storesCrossRow } from './rowLock';
+import { categoryColumnName, sentimentColumnName } from './textStepTypes';
 
 export interface RowRule {
   readonly userId?: string;
@@ -62,13 +63,13 @@ export function parseRules(column: unknown, rules: unknown): { ok: true; column:
     const team = isValidId(raw.teamId) ? raw.teamId.toLowerCase() : null;
     if ((user === null) === (team === null)) return { ok: false, problem: 'member' }; // exactly one
     if (!Array.isArray(raw.values) || raw.values.length > MAX_VALUES) return { ok: false, problem: 'values' };
-    const values: string[] = [];
+    const values = new Set<string>();
     for (const v of raw.values) {
       if (typeof v !== 'string' || v.length > MAX_VALUE_CHARS || paramRefs(v).length > 0) return { ok: false, problem: 'value' };
-      if (v.trim() !== '' && !values.includes(v)) values.push(v);
+      if (v.trim() !== '') values.add(v);
     }
-    if (!values.length) return { ok: false, problem: 'values' };
-    out.push(user ? { userId: user, values } : { teamId: team as string, values });
+    if (!values.size) return { ok: false, problem: 'values' };
+    out.push(user ? { userId: user, values: [...values] } : { teamId: team as string, values: [...values] });
   }
   return { ok: true, column, rules: out };
 }
@@ -98,13 +99,13 @@ export function entitlement(policy: RowPolicy | null, userId: string | null, tea
   if (!policy) return 'all';
   const user = userId ? userId.toLowerCase() : null;
   const teams = new Set(teamIds.map((t) => t.toLowerCase()));
-  const out: string[] = [];
+  const out = new Set<string>(); // insertion order: rule order
   for (const r of policy.rules) {
     const mine = (r.userId !== undefined && r.userId === user) || (r.teamId !== undefined && teams.has(r.teamId));
     if (!mine) continue;
-    for (const v of r.values) if (v.trim() !== '' && !out.includes(v)) out.push(v);
+    for (const v of r.values) if (v.trim() !== '') out.add(v);
   }
-  return out.length ? out : 'none';
+  return out.size ? [...out] : 'none';
 }
 
 /** Steps that may READ the rule column but never write it. */
@@ -133,6 +134,9 @@ export function columnWriters(steps: readonly TransformStep[] | undefined, colum
     if (NON_WRITERS.has(t)) return false;
     if (UNNAMED_WRITERS.has(t)) return true;
     if (t === 'trim' && (s.column === undefined || s.column === null || s.column === '')) return true;
+    // A step whose output name defaults from its input (`<col>_sentiment`, `<col>_category`) writes that name.
+    if (t === 'text_sentiment' && sentimentColumnName(s as never) === column) return true;
+    if (t === 'keyword_rules' && categoryColumnName(s as never) === column) return true;
     return mentions(s, column);
   });
 }

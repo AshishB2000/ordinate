@@ -430,6 +430,7 @@
   "rowAccessMessages.looking_at_past_data_is_off": "Looking at past data is off for datasets with row access rules.",
   "rowAccessMessages.pick_a_text_column_of_this": "Pick a text column of this dataset for the rules.",
   "rowAccessMessages.row_access_rules_need_the_server": "Row access rules need the server's user directory (DATABASE_URL).",
+  "rowAccessMessages.the_row_access_rules_of_this": "The row access rules of this dataset could not be read just now, so it is closed to you. Try again in a moment.",
   "rowAccessMessages.this_dataset_is_built_from_a": "This dataset is built from a dataset with row access rules, so it's closed to you until a project admin gives it rules of its own.",
   "rowAccessMessages.this_dataset_s_row_access_rules": "This dataset's row access rules name a column it no longer has, so it is closed to you until a project admin fixes them.",
   "rowAccessMessages.this_dataset_stores_values_computed": "This dataset stores values computed across all of its rows, so it can't be limited to the rows you can see.",

@@ -433,6 +433,7 @@
   "rowAccessMessages.looking_at_past_data_is_off": "Der Blick auf frühere Daten ist für Datensätze mit Zeilenzugriffsregeln ausgeschaltet.",
   "rowAccessMessages.pick_a_text_column_of_this": "Wählen Sie für die Regeln eine Textspalte dieses Datensatzes.",
   "rowAccessMessages.row_access_rules_need_the_server": "Zeilenzugriffsregeln brauchen das Benutzerverzeichnis des Servers (DATABASE_URL).",
+  "rowAccessMessages.the_row_access_rules_of_this": "Die Zeilenzugriffsregeln dieses Datensatzes konnten gerade nicht gelesen werden, daher ist er für Sie gesperrt. Versuchen Sie es gleich noch einmal.",
   "rowAccessMessages.this_dataset_is_built_from_a": "Dieser Datensatz wird aus einem Datensatz mit Zeilenzugriffsregeln gebildet und ist daher für Sie gesperrt, bis ein Projektadmin ihm eigene Regeln gibt.",
   "rowAccessMessages.this_dataset_s_row_access_rules": "Die Zeilenzugriffsregeln dieses Datensatzes nennen eine Spalte, die er nicht mehr hat. Er bleibt für Sie gesperrt, bis ein Projektadmin sie korrigiert.",
   "rowAccessMessages.this_dataset_stores_values_computed": "Dieser Datensatz speichert Werte, die über alle seine Zeilen berechnet wurden, und lässt sich daher nicht auf die Zeilen beschränken, die Sie sehen dürfen.",

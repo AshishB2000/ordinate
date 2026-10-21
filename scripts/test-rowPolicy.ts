@@ -108,6 +108,26 @@ const TEAM = '33333333-3333-4333-8333-333333333333';
     access.withLockSteps(l, [{ type: 'rename_column', from: 'region', to: 'r' }, ...user] as never[]).every((s) => s.type === 'filter'));
   ok('lock: one value is `=`, several are `in`, both context', lock.lockStep('region', ['East']).op === '=' && lock.lockStep('region', ['a', 'b']).op === 'in' && l.steps[0].context === true);
 
+  // ── A lock that cannot be honoured refuses in every engine (round 2, #2) ──
+  const rf: typeof import('../src/engine/residentFilter') = require('../src/engine/residentFilter');
+  const live: typeof import('../src/engine/live/liveSpec') = require('../src/engine/live/liveSpec');
+  const missing = { ...lock.lockStep('zone', ['East']) };
+  const plainMissing = { type: 'filter', column: 'zone', op: '=', value: 'East' } as never;
+  const table = { columns: [{ name: 'region', type: 'text' as const }], rows: [['East'], ['West']] };
+  const reason = (fn: () => unknown): string => { try { fn(); return 'answered'; } catch (err) { return access.isRowPolicyError(err) ? err.reason : String(err); } };
+  ok('JS fold: a lock on a column the table lacks refuses (column), never "Filter skipped"', reason(() => transforms.applyPipeline(table, [missing])) === 'column');
+  ok('NEGATIVE CONTROL: the same filter without the lock mark is skipped, every row kept', transforms.applyPipeline(table, [plainMissing]).rows.length === 2);
+  ok('resident filter: a lock on a missing column refuses', reason(() => rf.filterPredicate(table.columns, missing, [])) === 'column');
+  ok('NEGATIVE CONTROL: …without the mark it applies nothing (null), as before', rf.filterPredicate(table.columns, plainMissing, []) === null);
+  ok('Live spec: a lock on a missing column refuses', reason(() => live.adaptFilter(missing, [{ name: 'region', type: 'text' }], {}, [])) === 'column');
+  ok('NEGATIVE CONTROL: …without the mark it is skipped with the warning, as before', live.adaptFilter(plainMissing, [{ name: 'region', type: 'text' }], {}, []) === null);
+
+  // ── Steps whose output name defaults from their input write that name (round 2, #15) ──
+  ok('writers: a sentiment step writes <column>_sentiment, a keyword-rules step <column>_category, unnamed',
+    policy.columnWriters([{ type: 'text_sentiment', column: 'notes' } as never], 'notes_sentiment').length === 1
+      && policy.columnWriters([{ type: 'keyword_rules', column: 'notes', rules: [] } as never], 'notes_category').length === 1);
+  ok('NEGATIVE CONTROL: …and not another column', policy.columnWriters([{ type: 'text_sentiment', column: 'notes' } as never], 'region').length === 0);
+
   // ── The refusal's sentence is how a caught one is typed again ───────────
   const reply = [{ ok: false, error: new access.RowPolicyError('none').message }, { ok: false, error: 'something else' }];
   access.tagRowPolicyRefusals(reply);

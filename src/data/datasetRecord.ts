@@ -305,13 +305,19 @@ export async function writeRecordKeepingPolicy(file: string, obj: object): Promi
   });
 }
 
-/** The record's stored `rowPolicy` as it is on disk (undefined when it has none) — what a copy is born with. */
+/**
+ * The record's stored `rowPolicy` (undefined when it has none) — what a copy is born with. A record that is
+ * not there has none; any other failure THROWS, so the copy refuses rather than being born without rules.
+ */
 export async function storedRowPolicy(projectId: string, id: string): Promise<unknown> {
   if (!isValidId(projectId) || !isValidId(id)) return undefined;
+  let text: string;
   try {
-    const raw = JSON.parse(await recordFs.readFile(datasetFilePath(projectId, id), 'utf8')) as Record<string, unknown> | null;
-    return raw && typeof raw === 'object' ? raw.rowPolicy : undefined;
-  } catch {
-    return undefined;
+    text = await recordFs.readFile(datasetFilePath(projectId, id), 'utf8');
+  } catch (err) {
+    if ((err as { code?: unknown } | null)?.code === 'ENOENT') return undefined;
+    throw err;
   }
+  const raw = JSON.parse(text) as Record<string, unknown> | null; // a record that does not parse: throws too
+  return raw && typeof raw === 'object' ? raw.rowPolicy : undefined;
 }

@@ -433,6 +433,7 @@
   "rowAccessMessages.looking_at_past_data_is_off": "Ver datos pasados está desactivado para los conjuntos de datos con reglas de acceso a filas.",
   "rowAccessMessages.pick_a_text_column_of_this": "Elige una columna de texto de este conjunto de datos para las reglas.",
   "rowAccessMessages.row_access_rules_need_the_server": "Las reglas de acceso a filas necesitan el directorio de usuarios del servidor (DATABASE_URL).",
+  "rowAccessMessages.the_row_access_rules_of_this": "Las reglas de acceso a filas de este conjunto de datos no se pudieron leer ahora mismo, así que está cerrado para ti. Inténtalo de nuevo en un momento.",
   "rowAccessMessages.this_dataset_is_built_from_a": "Este conjunto de datos se crea a partir de uno con reglas de acceso a filas, así que está cerrado para ti hasta que un administrador del proyecto le dé reglas propias.",
   "rowAccessMessages.this_dataset_s_row_access_rules": "Las reglas de acceso a filas de este conjunto de datos nombran una columna que ya no tiene, así que está cerrado para ti hasta que un administrador del proyecto las corrija.",
   "rowAccessMessages.this_dataset_stores_values_computed": "Este conjunto de datos guarda valores calculados sobre todas sus filas, así que no se puede limitar a las filas que puedes ver.",

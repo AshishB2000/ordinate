@@ -110,9 +110,37 @@ const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 200)}`;
     const sqlPlain = await derive('Over plain', { kind: 'sql', sql: 'SELECT * FROM "Plain"', deps: [plain] }, H.ROWS.map((r) => r.map((c) => (typeof c === 'string' ? c.replace(H.W_CANARY, 'w') : c))));
     ok('NEGATIVE CONTROL: a SQL dataset over a dataset without rules answers east', (await chart('east', sqlPlain)).body?.ok === true);
     await policy(sqlOver, [{ teamId: W.team, values: ['East'] }]);
-    ok('ceiling: a SQL dataset with rules of its own is refused (its rows were mixed before they were stored)', H.refused(await chart('east', sqlOver), 'pipeline'));
+    ok('derived: a SQL dataset over Orders stays closed with rules of its own (its upstream has rules)', H.refused(await chart('east', sqlOver), 'derived'));
+    await policy(sqlPlain, [{ teamId: W.team, values: ['East'] }]);
+    ok('ceiling: a SQL dataset with rules of its own over a dataset without any is refused (its rows were mixed before they were stored)', H.refused(await chart('east', sqlPlain), 'pipeline'));
     const tab = await W.call('boss', 'dataset:rowPolicy', { projectId: P, datasetId: orders });
     ok('the tab lists the datasets built from Orders', [sqlOver, twoHops, unioned].every((id) => (tab.body?.builtFrom ?? []).some((x: { id: string }) => x.id === id)), show(tab));
+
+    // A dataset with rules of its own, built from another with rules: closed all the same (round 2, #4).
+    await policy(unioned, [{ teamId: W.team, values: ['East'] }]);
+    ok('derived: rules of its own do not open a dataset whose upstream has rules (A union B, both with rules)', H.refused(await chart('east', unioned), 'derived'));
+
+    // ── A record that cannot be read is closed, never "no rules" (round 2, #1) ──
+    const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
+    const realRead = recordFs.readFile;
+    const failing = (target: string) => {
+      (recordFs as { readFile: unknown }).readFile = (async (p: string, ...rest: unknown[]) => {
+        if (String(p).endsWith(`${target}.json`)) throw Object.assign(new Error('EIO: the disk is gone'), { code: 'EIO' });
+        return (realRead as (...a: unknown[]) => Promise<string>)(p, ...rest);
+      }) as typeof recordFs.readFile;
+    };
+    failing(orders);
+    const broken = await chart('east', orders);
+    (recordFs as { readFile: unknown }).readFile = realRead;
+    ok('unreadable: a failing read of Orders\' record refuses east, typed — never "no rules"', H.refused(broken, 'unreadable') && !H.leaks(broken.text), show(broken));
+    ok('…and the failure was not remembered: the next ask (same rules) is locked again', (await chart('east', orders)).body?.ok === true);
+    const ghost = await chart('east', crypto.randomUUID());
+    ok('NEGATIVE CONTROL: a dataset with no record at all (ENOENT) is "not found", not a row access refusal', !H.refused(ghost) && ghost.body?.ok === false, show(ghost));
+    failing(orders);
+    const rec: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
+    const copyRefused: string = await W.as('boss', () => rec.storedRowPolicy(P, orders).then(() => 'read', (err: Error) => err.message));
+    (recordFs as { readFile: unknown }).readFile = realRead;
+    ok('unreadable: what a copy is born with cannot be read → the copy refuses (no copy without rules)', /EIO/.test(copyRefused));
 
     // ── 3. Writers pinned; the column and the pipeline fail closed ──────
     const fresh = async (name: string) => {

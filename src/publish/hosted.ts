@@ -92,9 +92,13 @@ export async function getSite(id: string): Promise<HostedSite | null> {
  * project has any such dataset — re-publishing records its datasets (and refuses if it reads one).
  */
 export async function servable(site: HostedSite): Promise<boolean> {
-  if (!Array.isArray(site.datasetIds)) return !(await anyPolicyClosed(site.projectId));
-  for (const id of site.datasetIds) if (await policyClosed(site.projectId, id)) return false;
-  return true;
+  try {
+    if (!Array.isArray(site.datasetIds)) return !(await anyPolicyClosed(site.projectId));
+    for (const id of site.datasetIds) if (await policyClosed(site.projectId, id)) return false;
+    return true;
+  } catch {
+    return false; // rules that cannot be read: not served
+  }
 }
 
 /** One page's HTML, or null. */

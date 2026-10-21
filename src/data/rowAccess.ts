@@ -31,80 +31,10 @@ import type { FilterStep } from './transforms';
 import { makeLock, type Lock } from './rowLock';
 import { entitlement, policyFromRecord, ruleState, type RowPolicy } from './rowPolicy';
 import { parentsOfRecord, upstreamIds } from './upstream';
-import * as msg from './rowAccessMessages';
 
-export const ROW_POLICY_CODE = 'row_policy';
-export type RowPolicyReason = 'none' | 'column' | 'pipeline' | 'reader' | 'related' | 'asOf' | 'fanout' | 'export' | 'derived';
-
-const SENTENCES: Record<RowPolicyReason, () => string> = {
-  none: msg.rowNoneMessage,
-  column: msg.rowColumnMessage,
-  pipeline: msg.rowPipelineMessage,
-  reader: msg.rowReaderMessage,
-  related: msg.rowRelatedMessage,
-  asOf: msg.rowAsOfMessage,
-  fanout: msg.rowFanOutMessage,
-  export: msg.rowExportMessage,
-  derived: msg.rowDerivedMessage,
-};
-
-let raised = 0;
-
-/** A refusal: the route answers it 409 `row_policy` with its sentence. Never caught to become an empty answer. */
-export class RowPolicyError extends Error {
-  readonly code = ROW_POLICY_CODE;
-  readonly reason: RowPolicyReason;
-  constructor(reason: RowPolicyReason) {
-    super(SENTENCES[reason]());
-    this.name = 'RowPolicyError';
-    this.reason = reason;
-    raised++;
-  }
-}
-
-/** True for a RowPolicyError — by class, or by name and code when it crossed a module copy. */
-export function isRowPolicyError(err: unknown): err is RowPolicyError {
-  if (err instanceof RowPolicyError) return true;
-  const e = err as { name?: unknown; code?: unknown } | null;
-  return !!e && typeof e === 'object' && e.name === 'RowPolicyError' && e.code === ROW_POLICY_CODE;
-}
-
-/** How many refusals this process has raised — the route walks a reply for them only when this moved. */
-export function rowPolicyRaised(): number {
-  return raised;
-}
-
-/** The refusal as a reply, for a handler or a door whose contract answers `{ok:false, error}`. */
-export function rowPolicyRefusal(reason: RowPolicyReason): { ok: false; code: typeof ROW_POLICY_CODE; reason: RowPolicyReason; error: string } {
-  return { ok: false, code: ROW_POLICY_CODE, reason, error: SENTENCES[reason]() };
-}
-
-/**
- * Type the refusals a handler caught: every `{ok:false}` whose `error` (or
- * `reason`) IS one of the sentences gets the code and the reason — per item in
- * a batch, a few levels deep, as `tagLiveRefusals` does. Mutates and returns.
- */
-export function tagRowPolicyRefusals<T>(reply: T, depth = 3): T {
-  const bySentence = new Map((Object.keys(SENTENCES) as RowPolicyReason[]).map((r) => [SENTENCES[r](), r]));
-  const walk = (v: unknown, d: number): void => {
-    if (d < 0 || !v || typeof v !== 'object' || ArrayBuffer.isView(v)) return;
-    if (Array.isArray(v)) {
-      for (const item of v) walk(item, d - 1);
-      return;
-    }
-    const o = v as Record<string, unknown>;
-    const said = typeof o.error === 'string' ? o.error : typeof o.reason === 'string' ? o.reason : '';
-    const reason = o.ok === false && o.code === undefined ? bySentence.get(said) : undefined;
-    if (reason) {
-      o.code = ROW_POLICY_CODE;
-      if (typeof o.reason !== 'string') o.reason = reason; // an answer card's `reason` is its sentence: kept
-      if (typeof o.error !== 'string') o.error = said;
-    }
-    for (const x of Object.values(o)) if (x && typeof x === 'object') walk(x, d - 1);
-  };
-  walk(reply, depth);
-  return reply;
-}
+export { ROW_POLICY_CODE, RowPolicyError, isRowPolicyError, rowPolicyRaised, rowPolicyRefusal, tagRowPolicyRefusals } from './rowPolicyError';
+export type { RowPolicyReason } from './rowPolicyError';
+import { RowPolicyError, isRowPolicyError, type RowPolicyReason } from './rowPolicyError';
 
 // ── Scopes ──────────────────────────────────────────────────────────────────
 
@@ -170,6 +100,13 @@ function memoOf<T>(m: WeakMap<object, Map<string, T>>): Map<string, T> {
   return inner;
 }
 
+/** What a record that does not parse reads as: rules that do not sanitize, so CLOSED (rowPolicy.policyFromRecord). */
+const CORRUPT: Raw = Object.freeze({ rowPolicy: '\u0000unparseable' });
+
+/**
+ * The record as stored. A record that is not there (ENOENT) has no rules: null. One that does not parse is
+ * CLOSED. Any other failure REJECTS — never "no rules" — and is not remembered, so the next ask reads again.
+ */
 function readRaw(projectId: string, id: string): Promise<Raw | null> {
   const memo = memoOf(reads);
   const key = `${projectId}\0${id}`;
@@ -177,12 +114,20 @@ function readRaw(projectId: string, id: string): Promise<Raw | null> {
   if (!hit) {
     hit = recordFs.readFile(datasetFilePath(projectId, id), 'utf8').then(
       (text) => {
-        const raw: unknown = JSON.parse(text);
-        return raw && typeof raw === 'object' ? (raw as Raw) : null;
+        try {
+          const raw: unknown = JSON.parse(text);
+          return raw && typeof raw === 'object' ? (raw as Raw) : CORRUPT;
+        } catch {
+          return CORRUPT;
+        }
       },
-      () => null,
+      (err: unknown) => {
+        if ((err as { code?: unknown } | null)?.code === 'ENOENT') return null;
+        throw err;
+      },
     );
     memo.set(key, hit);
+    hit.catch(() => memo.delete(key));
   }
   return hit;
 }
@@ -190,26 +135,44 @@ function readRaw(projectId: string, id: string): Promise<Raw | null> {
 async function effectiveUncached(projectId: string, id: string): Promise<Effective> {
   const raw = await readRaw(projectId, id);
   const own = raw ? policyFromRecord(raw) : null;
-  if (raw && own) return { kind: 'own', policy: own, raw };
+  // Upstream FIRST, even for a dataset with rules of its own (refutation round 2, #4): rows another
+  // dataset's rules govern are not this dataset's rules' to hand out — closed, in phase 1.
   const up = await upstreamIds(id, async (p) => (isValidId(p) ? parentsOfRecord(await readRaw(projectId, p)) : []));
   for (const p of up.ids) {
     const r = isValidId(p) ? await readRaw(projectId, p) : null;
     if (r && policyFromRecord(r)) return { kind: 'derived' };
   }
   // A chain longer than the walk is unknown, never clean (fail closed).
-  return up.complete ? { kind: 'none' } : { kind: 'derived' };
+  if (!up.complete) return { kind: 'derived' };
+  return raw && own ? { kind: 'own', policy: own, raw } : { kind: 'none' };
 }
 
-/** The rules that govern `id`: its own, closed because of an upstream dataset's, or none. Once per request. */
+/**
+ * The rules that govern `id`: its own, closed because of an upstream dataset's, or none. Once per request.
+ * A record that cannot be read is refused (`unreadable`), never "no rules"; a failure is not remembered.
+ */
 function effective(projectId: string, id: string): Promise<Effective> {
   const memo = memoOf(effects);
   const key = `${projectId}\0${id}`;
   let hit = memo.get(key);
   if (!hit) {
-    hit = effectiveUncached(projectId, id);
+    hit = effectiveUncached(projectId, id).catch((err: unknown) => {
+      throw isRowPolicyError(err) ? err : new RowPolicyError('unreadable');
+    });
     memo.set(key, hit);
+    hit.catch(() => memo.delete(key));
   }
   return hit;
+}
+
+/** `effective`, with a failure refused through the scope (so a fan-out build remembers it). */
+async function effectiveOrRefuse(projectId: string, id: string): Promise<Effective> {
+  try {
+    return await effective(projectId, id);
+  } catch (err) {
+    if (isRowPolicyError(err)) refuse(err.reason);
+    throw err;
+  }
 }
 
 /** Is `id` governed by rules — its own, or an upstream dataset's? For the admin screens and the fan-out checks. */
@@ -242,7 +205,7 @@ export async function rowLockFor(projectId: string, datasetId: string): Promise<
   const out = scopes.getStore()?.out;
   const caller = await callerOn(projectId);
   if (!caller.restricted && out?.kind !== 'fanout') return null;
-  const eff = await effective(projectId, datasetId);
+  const eff = await effectiveOrRefuse(projectId, datasetId);
   if (out) out.datasets.add(datasetId);
   if (eff.kind === 'none') return null;
   if (out?.kind === 'fanout') refuse('fanout');
@@ -261,7 +224,13 @@ async function closedReason(projectId: string, id: string): Promise<RowPolicyRea
   if (scope?.locked === id && out?.kind !== 'fanout') return null;
   const caller = await callerOn(projectId);
   if (!caller.restricted && out?.kind !== 'fanout') return null;
-  const eff = await effective(projectId, id);
+  let eff: Effective;
+  try {
+    eff = await effective(projectId, id);
+  } catch (err) {
+    if (isRowPolicyError(err)) return err.reason; // unreadable: closed
+    throw err;
+  }
   if (eff.kind === 'none') return null;
   if (out?.kind === 'fanout') return 'fanout';
   if (!caller.restricted) return null;

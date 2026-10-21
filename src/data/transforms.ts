@@ -14,6 +14,7 @@
 //      parse.coerceValue, so "007"/zips/>15-digit ids never corrupt to numbers.
 
 import type { ParsedColumn } from './parse';
+import { RowPolicyError, isRowPolicyError } from './rowPolicyError';
 import { detectColumnType, coerceValue } from './parse';
 import { compile } from '../formula/formula';
 import type { FValue } from '../formula/formula';
@@ -265,6 +266,7 @@ export function foldStep(t: TableData, step: TransformStep, ctx: PipelineCtx, me
   try {
     return dispatch(t, step, ctx, memo);
   } catch (e) {
+    if (isRowPolicyError(e)) throw e; // a lock that cannot be honoured refuses the figure: never a skipped step
     // Defense in depth: no step should throw, but if one does, skip it.
     const msg = e instanceof Error ? e.message : 'unknown error';
     return skip(t, `Step "${step && step.type}" skipped: ${msg}`);
@@ -356,6 +358,7 @@ function stepCalculatedField(t: TableData, s: CalculatedFieldStep): StepResult {
 
 function stepFilter(t: TableData, s: FilterStep): StepResult {
   const ci = colIndex(t.columns, s.column);
+  if (ci < 0 && s.lock) throw new RowPolicyError('column'); // a row access lock never skips (docs/row-policy D6)
   if (ci < 0) return skip(t, `Filter skipped: unknown column "${s.column}"`);
   if (!FILTER_OPS.has(s.op)) return skip(t, `Filter skipped: unknown operator "${s.op}"`);
 

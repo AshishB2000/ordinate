@@ -31,6 +31,7 @@
 //     text cells with Date.parse, which SQL has no twin of).
 
 import type { ParsedColumn } from '../../data/parse';
+import { RowPolicyError } from '../../data/rowPolicyError';
 import type { Cell, FilterStep } from '../../data/transforms';
 import type { VizEncoding } from '../../analysis/visuals';
 import type { AnswerPeriod, AnswerSpec } from '../../ai/answerSpec';
@@ -231,6 +232,7 @@ export function adaptFilter(
 ): LiveFilter | null | LiveRefusal {
   if (!s || typeof s !== 'object' || s.type !== 'filter') return null;
   const col = columnOf(columns, s.column);
+  if (!col && s.lock === true) throw new RowPolicyError('column'); // a row access lock never skips (docs/row-policy D6)
   if (!col) {
     warnings.push(`Filter skipped: unknown column "${s.column}"`);
     return null;

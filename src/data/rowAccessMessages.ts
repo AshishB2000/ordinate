@@ -68,3 +68,8 @@ export function rowBadColumnMessage(): string {
 export function rowBadValuesMessage(): string {
   return t('rowAccessMessages.each_rule_needs_at_least_one');
 }
+
+/** The record holding the rules could not be read: closed until it can be. */
+export function rowUnreadableMessage(): string {
+  return t('rowAccessMessages.the_row_access_rules_of_this');
+}
