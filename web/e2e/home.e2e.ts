@@ -188,3 +188,14 @@ async function screensOpen(page: Page, name: string, open: () => Promise<void>):
   await page.reload();
   await settled(page);
 }
+
+e2e('Home → New → Dashboard opens the new-dashboard wizard, in Home\'s project', async ({ page, server }) => {
+  await page.goto('/');
+  await settled(page);
+  await page.getByRole('button', { name: 'New', exact: true }).click();
+  await page.getByRole('menu', { name: 'New' }).getByRole('menuitem', { name: 'Dashboard' }).click();
+  await page.getByRole('dialog', { name: 'Create dashboard' }).waitFor();
+  const url = new URL(page.url());
+  assert.equal(url.pathname, '/analyses');
+  assert.equal(url.searchParams.get('project'), server.sample.projectId);
+});
