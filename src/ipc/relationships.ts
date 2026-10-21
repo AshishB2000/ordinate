@@ -174,6 +174,14 @@ export async function relatedColumnNames(projectId: string, datasetId: string): 
   return relatedColumnGroups(datasetId, live(list, infos), infos).flatMap((g) => g.columns.map((c) => c.name));
 }
 
+/** Every dataset reachable from `datasetId` through the project's relationships: what a related question may read. */
+export async function relatedDatasetIds(projectId: string, datasetId: string): Promise<string[]> {
+  const list = await rels.listRelationships(projectId);
+  if (list.length === 0) return [];
+  const infos = await modelInfos(projectId, datasetId, list);
+  return relatedColumnGroups(datasetId, live(list, infos), infos).map((g) => g.datasetId).filter((id) => id !== datasetId);
+}
+
 interface SideRef { parquetPath: string; index: number; type: 'text' | 'number' | 'date' }
 
 async function side(projectId: string, info: DsInfo, column: string): Promise<{ ref: SideRef | null; cells: () => Promise<any[]> }> {

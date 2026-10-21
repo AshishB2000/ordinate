@@ -17,6 +17,10 @@
 //    locked reply; a raw y2 name planted in a VERSION (normalize would clamp a
 //    live record) is dropped. NEGATIVE CONTROL: the editor gets the planted name.
 // 4. TAGS: east's tags are of what east was sent, never the stored ones.
+// 5. B1, THE RELATED GATE: a chart or KPI on a dataset WITHOUT rules whose
+//    question reaches a related dataset WITH rules is refused to east — even
+//    after the editor warmed the answer cache with the joined labels and
+//    figures. NEGATIVE CONTROL: with the gate off, the warm cache leaks them.
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-rowPolicyLabels.js
 
@@ -27,6 +31,8 @@ import * as H from './rowPolicyHarness';
 const versionsMod: typeof import('../src/app/versions') = require('../src/app/versions');
 const visualsMod: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
 const tags: typeof import('../src/app/editConflict') = require('../src/app/editConflict');
+const doors: typeof import('../src/ipc/rowDoors') = require('../src/ipc/rowDoors');
+const datasetsMod: typeof import('../src/data/datasets') = require('../src/data/datasets');
 
 const totalsOf = (r: H.Reply): string[] =>
   ((r.body?.data?.figures?.waterfall?.steps ?? []) as { label: string; kind: string }[]).filter((s) => s.kind === 'total').map((s) => s.label);
@@ -123,6 +129,45 @@ const totalsOf = (r: H.Reply): string[] =>
     const vt = (b: { visuals: { id: string; tag: string }[] }) => b.visuals.find((x) => x.id === wf)?.tag;
     ok('tag: analysis:open\'s visual and dashboard tags are of what east was sent',
       vt(openEast) !== vt(openEd) && openEast.tag !== openEd.tag && openEast.tag === tags.contentTag('dashboard', openEast.analysis));
+
+    // ── 5. B1: the related gate ──────────────────────────────────────────
+    // custDim (RULES): one row per customer key, its label and score — West's label is a canary.
+    // facts (NO rules): rows keyed by customer; its chart's category comes from custDim.
+    const keyOf = (i: number) => `k${i}`;
+    const dimRows = Array.from({ length: 8 }, (_, i) => [keyOf(i), i < 4 ? 'East' : 'West', i < 4 ? `east label ${i}` : canary(20 + i), i < 4 ? 1 : 1000]);
+    const factRows = Array.from({ length: 32 }, (_, i) => [keyOf(i % 8), (i * 13) % 50]);
+    const custDim = await W.as('boss', async () => (await datasetsMod.saveDataset(P, { name: 'Customers', sourceKind: 'csv',
+      columns: [{ name: 'key', type: 'text' }, { name: 'region', type: 'text' }, { name: 'label', type: 'text' }, { name: 'score', type: 'number' }], rows: dimRows }))!.id);
+    const facts = await W.as('boss', async () => (await datasetsMod.saveDataset(P, { name: 'Facts', sourceKind: 'csv',
+      columns: [{ name: 'key', type: 'text' }, { name: 'amount', type: 'number' }], rows: factRows }))!.id);
+    const rules = await W.call('boss', 'dataset:setRowPolicy', { projectId: P, datasetId: custDim, policy: { column: 'region', rules: H.RULES(W.team, W.uid.west) } });
+    const rel = await W.call('boss', 'relationship:save', { projectId: P, relationship: { from: { datasetId: facts, column: 'key' }, to: { datasetId: custDim, column: 'key' }, cardinality: 'many_to_one' } });
+    ok('B1 setup: a dataset with rules, a related one without, a relationship', rules.body?.ok === true && rel.body?.ok !== false && rel.status === 200, `${rules.text.slice(0, 120)} ${rel.text.slice(0, 120)}`);
+    const relEnc = { category: 'label', categoryDatasetId: custDim, values: [{ column: 'amount', aggregation: 'sum' }] };
+    const relAsk = { projectId: P, datasetId: facts, encoding: relEnc };
+    const kpi = { projectId: P, datasetId: facts, column: 'score', aggregation: 'sum' };
+    const warmChart = await W.call('ed', 'visual:data', relAsk);
+    const warmKpi = await W.call('ed', 'dashboard:metric', kpi);
+    ok('B1 control: the editor\'s joined chart carries the West label (the cache is now warm with it)', warmChart.body?.ok === true && H.leaks(warmChart.text), warmChart.text.slice(0, 200));
+    ok('B1 control: the editor\'s related KPI counts West\'s score', warmKpi.body?.ok === true && typeof warmKpi.body.value === 'number' && warmKpi.body.value >= 1000, warmKpi.text.slice(0, 160));
+    const eastChart = await W.call('east', 'visual:data', relAsk);
+    const eastKpi = await W.call('east', 'dashboard:metric', kpi);
+    ok('B1: east\'s chart reaching the ruled dataset is refused `related`, warm cache or not', H.refused(eastChart, 'related') && !H.leaks(eastChart.text), `${eastChart.status} ${eastChart.text.slice(0, 200)}`);
+    ok('B1: east\'s KPI reaching the ruled dataset is refused `related`', H.refused(eastKpi, 'related'), `${eastKpi.status} ${eastKpi.text.slice(0, 200)}`);
+    const relVis = await W.call('boss', 'visual:save', { projectId: P, datasetId: facts, name: 'Joined', chartType: 'bar', encoding: relEnc, overrides: { sort: 'custom', sortOrder: [canary(30)] } });
+    const relId = String(relVis.body?.visual?.id ?? relVis.body?.id ?? '');
+    const relGet = await W.call('east', 'visual:get', { projectId: P, id: relId });
+    ok('B1: a visual whose labels come from the ruled related dataset comes to east without them', relGet.status === 200 && !H.leaks(relGet.text) && relGet.body?.overrides?.sortOrder === undefined, relGet.text.slice(0, 200));
+    ok('NEGATIVE CONTROL: …the editor gets them', H.leaks((await W.call('ed', 'visual:get', { projectId: P, id: relId })).text));
+    doors.setRelatedGateForTest(false);
+    try {
+      const leaked = await W.call('east', 'visual:data', relAsk);
+      const leakedKpi = await W.call('east', 'dashboard:metric', kpi);
+      ok('NEGATIVE CONTROL: with the gate off, the warm cache hands east the West label', H.leaks(leaked.text), `${leaked.status} ${leaked.text.slice(0, 200)}`);
+      ok('NEGATIVE CONTROL: with the gate off, east\'s KPI is the editor\'s, West\'s score included', leakedKpi.body?.value === warmKpi.body.value, leakedKpi.text.slice(0, 160));
+    } finally {
+      doors.setRelatedGateForTest(true);
+    }
   } finally {
     await W.close();
   }

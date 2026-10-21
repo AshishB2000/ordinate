@@ -107,6 +107,17 @@ the desktop installers.
 
 - **Embeds refuse more datasets that store values computed across rows.** A locked embed tile is now refused when its dataset was built by SQL, a notebook or the composer, when a step looks up another dataset, or when a group-by, pivot or keyed dedupe does not keep every locked column — each could carry another customer's rows or totals into the view. (The same rule backs row access rules.)
 
+- **A restricted viewer no longer receives a related dataset's rows through a cached chart or KPI.** A chart or
+  KPI on a dataset without row access rules whose question reached a related dataset with rules was
+  answered from the answer cache an editor had warmed, labels and figures included. It is now refused
+  (`related`) before the cache is asked, and its stored labels are not sent either.
+
+- **Charts no longer send a restricted viewer category labels from other teams' rows.** A waterfall's
+  totals, a drivers tile's path and an inline dashboard card's styling are dropped for that viewer on
+  every path that returns a visual (as a custom order and series colours already were); the waterfall
+  still marks its own totals, filled in by the server from the saved visual. Edit tags returned to that
+  viewer are of what they were sent.
+
 ### Fixed — since the move to the web
 
 - **Two saves of one record no longer lose one, on any number of pods.** Comments, alert rules and

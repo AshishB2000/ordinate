@@ -30,7 +30,7 @@ import type { DriversEncoding } from '../analysis/driverScope';
 import { contentTag } from '../app/editConflict';
 import type { SaveKind } from '../analysis/recordDiff';
 import { isValidId } from '../app/ids';
-import { relatedColumnNames } from './relationships';
+import { relatedColumnNames, relatedDatasetIds } from './relationships';
 
 /** Every string a question names (encoding, filters, a metric spec): the columns it may reach. */
 function namesIn(v: unknown, out: Set<string> = new Set()): Set<string> {
@@ -40,15 +40,47 @@ function namesIn(v: unknown, out: Set<string> = new Set()): Set<string> {
   return out;
 }
 
+/** The datasets the question names by id: its category's, its series', its measures' — other than its own. */
+function namedDatasets(datasetId: string, encoding: VizEncoding | null): string[] {
+  if (!encoding) return [];
+  const ids = [encoding.categoryDatasetId, encoding.seriesDatasetId, ...(Array.isArray(encoding.values) ? encoding.values.map((v) => v && v.datasetId) : [])];
+  return [...new Set(ids.filter((o): o is string => typeof o === 'string' && !!o && o !== datasetId))];
+}
+
 /** Does the question reach another dataset? Conservative: any name a relationship would supply counts. */
 async function reachesOther(projectId: string, datasetId: string, encoding: VizEncoding | null, rest: unknown): Promise<boolean> {
-  if (encoding && (hasMetricMeasure(encoding) || [encoding.categoryDatasetId, encoding.seriesDatasetId].some((o) => !!o && o !== datasetId))) return true;
+  return (!!encoding && hasMetricMeasure(encoding)) || reachesDataset(projectId, datasetId, encoding, rest);
+}
+
+/** `reachesOther` without the metric measures, which are planned over this same dataset (analysis/metricMeasures). */
+async function reachesDataset(projectId: string, datasetId: string, encoding: VizEncoding | null, rest: unknown): Promise<boolean> {
+  if (namedDatasets(datasetId, encoding).length) return true;
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   const own = new Set((meta?.columns ?? []).map((c) => c.name));
   const foreign = [...namesIn([encoding, rest])].filter((n) => !own.has(n));
   if (!foreign.length) return false;
   const related = new Set(await relatedColumnNames(projectId, datasetId));
   return foreign.some((n) => related.has(n));
+}
+
+// Test seam: the related-dataset gate's negative control turns it off (scripts/test-rowPolicyLabels).
+let relatedGate = true;
+export function setRelatedGateForTest(on: boolean): void {
+  relatedGate = on;
+}
+
+/**
+ * B1: a restricted caller whose question reaches ANOTHER dataset that is closed to them — by id, or through
+ * a name a related dataset supplies. Asked when nothing restricts them on the base dataset, BEFORE the body
+ * and its answer cache: that cache is keyed by the base dataset and the question alone, so an editor's
+ * answer joined over a dataset with rules would otherwise be handed to them. Conservative: every dataset the
+ * relationships reach is checked, plus the ones named by id.
+ */
+async function relatedClosed(projectId: string, datasetId: string, encoding: VizEncoding | null, rest: unknown): Promise<boolean> {
+  if (!relatedGate || !(await restrictedOn(projectId)) || !(await reachesDataset(projectId, datasetId, encoding, rest))) return false;
+  const ids = new Set([...namedDatasets(datasetId, encoding), ...(await relatedDatasetIds(projectId, datasetId))]);
+  for (const id of ids) if (await closedToCaller(projectId, id)) return true;
+  return false;
 }
 
 type Refusal = ReturnType<typeof rowPolicyRefusal>;
@@ -76,7 +108,10 @@ export async function lockedViz<O extends { sample?: boolean }, R>(
 ): Promise<R | Refusal> {
   const lock = await lockOrRefusal(projectId, datasetId);
   if (isRefusal(lock)) return lock;
-  if (!lock) return body(projectId, datasetId, encoding, filters, opts);
+  if (!lock) {
+    if (await relatedClosed(projectId, datasetId, encoding, filters)) return rowPolicyRefusal('related');
+    return body(projectId, datasetId, encoding, filters, opts);
+  }
   if (encoding && encoding.drivers) return rowPolicyRefusal('reader');
   if (await reachesOther(projectId, datasetId, encoding, filters)) return rowPolicyRefusal('related');
   // The builder's sample is drawn over the whole table and reports its size: never under a lock.
@@ -93,7 +128,10 @@ export async function lockedMetric<S extends { column: string }, P, R>(
   body: (projectId: string, datasetId: string, spec: S, filters: FilterStep[], params: P) => Promise<R>,
 ): Promise<R> {
   const lock = await rowLockFor(projectId, datasetId);
-  if (!lock) return body(projectId, datasetId, spec, filters, params);
+  if (!lock) {
+    if (await relatedClosed(projectId, datasetId, null, [spec.column, filters])) throw new RowPolicyError('related');
+    return body(projectId, datasetId, spec, filters, params);
+  }
   if (await reachesOther(projectId, datasetId, null, [spec.column, filters])) throw new RowPolicyError('related');
   return withRowLock(datasetId, () => body(projectId, datasetId, spec, withLockSteps(lock, filters), params));
 }
@@ -144,13 +182,16 @@ function withoutLabels<T extends VisualLike>(v: T): T {
 
 /**
  * A visual as a restricted caller gets it (round 2 #12, R19): on a dataset with rules — or one they cannot
- * name (a version of a deleted visual) — without the labels `withoutLabels` drops. CEILING: that caller
+ * name (a version of a deleted visual), or reaching a related dataset closed to them (B1) — without the
+ * labels `withoutLabels` drops. CEILING: that caller
  * sees the default order and colours; the waterfall still marks its totals, which the server fills from the
  * stored record (`storedFigureAsk`). Every other caller gets the record unchanged (the same object).
  */
 export async function visualForCaller<T extends VisualLike | null>(projectId: string, v: T): Promise<T> {
   if (!v || !(await restrictedOn(projectId))) return v;
-  const closed = typeof v.datasetId === 'string' && v.datasetId ? await closedToCaller(projectId, v.datasetId) : true;
+  const ds = typeof v.datasetId === 'string' && v.datasetId ? v.datasetId : null;
+  const enc = (v.encoding ?? null) as VizEncoding | null;
+  const closed = !ds || (await closedToCaller(projectId, ds)) || (await relatedClosed(projectId, ds, enc, (v as { filters?: unknown }).filters));
   return closed ? withoutLabels(v) : v;
 }
 
