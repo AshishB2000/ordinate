@@ -125,7 +125,7 @@ th.num {
   font-weight: 600;
 }
 .unused {
-  color: var(--text-faint);
+  color: var(--text-dim);
 }
 .actions {
   width: 40px;

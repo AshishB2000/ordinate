@@ -682,7 +682,7 @@ a.lineChip:hover {
   color: var(--accent);
 }
 .lineGone {
-  color: var(--text-faint);
+  color: var(--text-dim);
   border-style: dashed;
 }
 

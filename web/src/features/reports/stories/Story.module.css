@@ -192,7 +192,7 @@
   outline: var(--focus-ring-w) solid var(--focus-ring);
 }
 .placeholder {
-  color: var(--text-faint);
+  color: var(--text-dim);
   font-size: var(--t-15);
   line-height: 1.6;
 }

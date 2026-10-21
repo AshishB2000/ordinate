@@ -245,7 +245,7 @@
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .input::placeholder {
-  color: var(--text-faint);
+  color: var(--text-dim);
 }
 .input::selection {
   background: var(--accent-soft);
