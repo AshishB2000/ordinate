@@ -2,10 +2,6 @@
    event table, the kind marks and chips, and the editor's fields. Tokens
    only — both themes follow. */
 
-/* The title block takes the row, so the head's actions stay on its right. */
-.identGrow {
-  flex: 1 1 360px;
-}
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;

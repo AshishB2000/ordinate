@@ -167,7 +167,7 @@ function Workbench({ projectId, datasetId, ds }: { projectId: string; datasetId:
   const sub = `${ds.name} · ${formatNumber(ds.rowCount)} rows · every figure computed by the app`;
   return (
     <div className={a.wb}>
-      <WorkbenchHead icon="activity" title="Statistics" sub={sub} projectId={projectId} datasetId={datasetId} kind="stats" back={{ to: `/analytics?project=${projectId}`, label: 'Close' }} />
+      <WorkbenchHead icon="activity" title="Statistics" sub={sub} projectId={projectId} datasetId={datasetId} kind="stats" />
       <div className={a.tabs}>
         <Tabs value={tab} onValueChange={(v) => setTab(v as StatsKind)}>
           <TabList label="Analyses">

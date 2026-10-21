@@ -8,8 +8,7 @@ import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
-import { ErrorState, PageSkeleton } from '../../../app/blocks';
-import { buttonClass } from '../../../ui/Button';
+import { ErrorState, PageHead, PageSkeleton } from '../../../app/blocks';
 import { SkeletonTable } from '../../../ui/Skeleton';
 import { Icon } from '../../../ui/icons/Icon';
 import { useAdoptProject } from '../../projects/current';
@@ -110,14 +109,12 @@ function Compare({ projectId }: { projectId: string }) {
   else body = <Table res={q.data} projectId={projectId} />;
   return (
     <div className={s.page}>
-      <div className={s.head}>
-        <Link className={buttonClass('secondary', 'sm')} to={`/analytics/scenarios/${projectId}`}>
-          <Icon name="arrow-left" />
-          Back
-        </Link>
-        <h1 className={s.cmpTitle}>Compare scenarios</h1>
-        <span className={s.cmpCount} aria-live="polite">{`${chosen.length} of ${MAX} picked`}</span>
-      </div>
+      <PageHead
+        className={s.head}
+        back={{ to: `/analytics/scenarios/${projectId}`, label: 'Scenarios' }}
+        title="Compare scenarios"
+        status={<span className={s.cmpCount} aria-live="polite">{`${chosen.length} of ${MAX} picked`}</span>}
+      />
       {all.length > 0 && (
         <div className={s.cmpPick} role="group" aria-label="Scenarios to compare">
           {all.map((x) => {

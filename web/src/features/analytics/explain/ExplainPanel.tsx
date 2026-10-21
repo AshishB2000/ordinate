@@ -11,7 +11,7 @@
 // server's sentence — never an empty panel.
 
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { Button } from '../../../ui/Button';
 import { Drawer } from '../../../ui/Dialog';
 import { Select } from '../../../ui/Select';
@@ -28,6 +28,8 @@ import s from './Explain.module.css';
 /** What a tile hands over: the SAME definition, filters and view state that drew it, and the point (or none). */
 export interface ExplainTarget {
   name: string;
+  /** The dashboard it was asked on: the Drivers workbench's crumb back. */
+  dashboard?: string;
   projectId: string;
   datasetId: string;
   encoding: VisualDef['encoding'];
@@ -42,6 +44,7 @@ export interface ExplainTarget {
 
 export function ExplainPanel({ target, onClose }: { target: ExplainTarget; onClose: () => void }) {
   const navigate = useNavigate();
+  const here = useLocation();
   // The reader's picks, as the labels the server listed. Absent = the server's default (latest period; the one before it).
   const [pick, setPick] = useState<{ bucket?: string; baseline?: string }>({ bucket: target.point.bucket });
   const request = useMemo<PointRequest>(
@@ -114,7 +117,10 @@ export function ExplainPanel({ target, onClose }: { target: ExplainTarget; onClo
             request={r.result.spec}
             readOnly={target.readOnly}
             actions={(res) => (
-              <Button icon="external-link" onClick={() => void navigate(`/analytics/${target.projectId}/${target.datasetId}/drivers`, { state: { request: res.spec } })}>
+              <Button
+                icon="external-link"
+                onClick={() => void navigate(`/analytics/${target.projectId}/${target.datasetId}/drivers`, { state: { request: res.spec, back: { to: here.pathname + here.search, label: target.dashboard || 'Dashboard' } } })}
+              >
                 Open in Analytics
               </Button>
             )}

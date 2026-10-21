@@ -48,6 +48,7 @@ export function drillTarget(ed: EditorApi, cardId: string, def: VisualDef, mark:
 export function explainTarget(ed: EditorApi, cardId: string, def: VisualDef, point: Partial<ChartPoint>): ExplainTarget {
   return {
     name: def.name || 'Visual',
+    dashboard: ed.doc.name,
     projectId: ed.projectId,
     datasetId: def.datasetId,
     encoding: def.encoding,

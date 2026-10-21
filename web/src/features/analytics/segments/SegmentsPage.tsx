@@ -121,7 +121,6 @@ function Segments({ projectId, datasetId, ds }: { projectId: string; datasetId: 
         projectId={projectId}
         datasetId={datasetId}
         kind="segments"
-        back={{ to: `/data/${projectId}/${datasetId}`, label: `Back to ${ds.name}` }}
       />
       <div className={s.page}>
         <Tabs value={tab} onValueChange={setTab}>

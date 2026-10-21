@@ -6,13 +6,14 @@
 // sends each event's "when" line and day count with the list.
 
 import { useRef, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { useParams } from 'react-router';
 import { formatNumber } from '../../../../../src/app/format.ts';
 import { useDatasets } from '../../../api/datasets';
-import { Button, buttonClass, IconButton } from '../../../ui/Button';
+import { PageHead } from '../../../app/blocks';
+import { Marked, useWorkbenchBack } from '../Workbench';
+import { Button, IconButton } from '../../../ui/Button';
 import { Switch } from '../../../ui/Choice';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
-import { Icon } from '../../../ui/icons/Icon';
 import { SkeletonRows } from '../../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../../ui/States';
 import { toast } from '../../../ui/Toast';
@@ -84,6 +85,7 @@ export default function EventsPage() {
   const file = useRef<HTMLInputElement>(null);
   // Adding, importing, editing and deleting events, and the calendars, are an editor's: a viewer reads them.
   const canEdit = useCanEdit(projectId);
+  const back = useWorkbenchBack(projectId);
 
   const remove = async (e: ProjectEvent) => {
     setDeleting(null);
@@ -122,24 +124,19 @@ export default function EventsPage() {
 
   return (
     <div className={a.wb}>
-      <header className={a.head}>
-        <div className={`${a.ident} ${s.identGrow}`}>
-          <h1 className={a.title}>
-            <span className={a.mark} aria-hidden="true">
-              <Icon name="calendar" />
-            </span>
-            Events
-          </h1>
-          <p className={a.sub}>Launches, campaigns, incidents and holidays — marked on every chart with a date axis, and named when a figure changes during one.</p>
-        </div>
-        <div className={a.actions}>
-          {canEdit && (
+      <PageHead
+        className={a.head}
+        back={back}
+        title={<Marked icon="calendar">Events</Marked>}
+        sub="Launches, campaigns, incidents and holidays — marked on every chart with a date axis, and named when a figure changes during one."
+        actions={
+          canEdit && (
             <>
-              <Button variant="primary" icon="plus" onClick={() => setEditing('new')}>
-                New event
-              </Button>
               <Button icon="upload" onClick={() => file.current?.click()}>
                 Import CSV
+              </Button>
+              <Button variant="primary" icon="plus" onClick={() => setEditing('new')}>
+                New event
               </Button>
               <input
                 ref={file}
@@ -154,13 +151,9 @@ export default function EventsPage() {
                 }}
               />
             </>
-          )}
-          <Link className={buttonClass('secondary')} to={`/analytics?project=${projectId}`}>
-            <Icon name="x" />
-            Analytics
-          </Link>
-        </div>
-      </header>
+          )
+        }
+      />
 
       <div className={s.layout}>
         <section className={all.length ? s.main : s.mainBare} aria-label="Events list">

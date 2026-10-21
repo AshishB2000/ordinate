@@ -70,7 +70,7 @@ function List({ projectId }: { projectId: string }) {
   const canEdit = useCanEdit(projectId);
   const list = q.data ?? [];
   return (
-    <Page title="Scenarios" sub="What-if: drivers move a metric’s inputs, never the stored data. Open one to tune it, or compare up to four side by side.">
+    <Page back={{ to: `/analytics?project=${projectId}`, label: 'Analytics' }} title="Scenarios" sub="What-if: drivers move a metric’s inputs, never the stored data. Open one to tune it, or compare up to four side by side.">
       {q.isPending ? (
         <SkeletonRows rows={4} label="Loading scenarios" />
       ) : q.isError ? (

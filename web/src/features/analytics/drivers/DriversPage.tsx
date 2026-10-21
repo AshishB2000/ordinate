@@ -58,7 +58,6 @@ function Drivers({ projectId, datasetId, ds }: { projectId: string; datasetId: s
         projectId={projectId}
         datasetId={datasetId}
         kind="drivers"
-        back={{ to: `/analytics?project=${projectId}`, label: 'Close' }}
       />
       {!nums.length || !dates.length ? (
         <div className={a.state}>
