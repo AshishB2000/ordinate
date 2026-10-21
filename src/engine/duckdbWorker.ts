@@ -239,6 +239,17 @@ function interrupt(from: Sender, id: number): void {
 }
 
 /**
+ * Server shutdown (src/server/shutdown.ts via duckdbClose `stopEvery`): every
+ * sender is closed, so each queued call is skipped when its turn comes, and the
+ * running call is interrupted. Handled at once, like `interrupt`; the queued
+ * `close` that follows then exits through `closeNow` — never `terminate()`.
+ */
+function stopAll(): void {
+  for (const s of senders) s.closed = true;
+  stopRunning();
+}
+
+/**
  * Interrupt the running call, and KEEP interrupting it until it settles. DuckDB
  * drops an interrupt that arrives while nothing is executing (it clears the flag
  * when a query begins), and one call is several native steps — extract, prepare,
@@ -284,12 +295,17 @@ const ready = (async () => {
 // exit path already replies, and the `catch` here only keeps the queue alive.
 let queue: Promise<void> = ready;
 
-type Inbound = CallMessage | { kind: 'close' } | { kind: 'interrupt'; id: number } | { kind: 'port'; port: MessagePort };
+type Inbound = CallMessage | { kind: 'close' } | { kind: 'stop' } | { kind: 'interrupt'; id: number } | { kind: 'port'; port: MessagePort };
+
+/** Every sender this worker has served — what `stop` closes. */
+const senders = new Set<Sender>();
 
 function listen(on: (fn: (msg: Inbound) => void) => void, post: (msg: AsyncReply) => void): Sender {
   const from: Sender = { post, skip: new Set(), lastStarted: 0, closed: false };
+  senders.add(from);
   on((msg) => {
     if (msg.kind === 'interrupt') return interrupt(from, msg.id);
+    if (msg.kind === 'stop') return stopAll();
     // A compute thread's own line to this worker (src/engine/duckdbPool.ts
     // `lease`): same queue, same connection, replies on that port.
     if (msg.kind === 'port') {

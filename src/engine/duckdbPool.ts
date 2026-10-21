@@ -100,6 +100,8 @@ export class DuckPool {
   // Map order is recency order: a use moves the entry to the end.
   private readonly workers = new Map<string, OrgWorker>();
   private binding: boolean | null = null;
+  /** Set by interruptAll(): the process is ending; no worker starts again. */
+  private stopped = false;
   private readonly sweep: NodeJS.Timeout;
 
   constructor(private readonly cfg: PoolConfig) {
@@ -164,8 +166,20 @@ export class DuckPool {
     for (const org of this.workers.keys()) this.close(org); // deleting the current key mid-iteration is safe
   }
 
+  /**
+   * Server shutdown (src/server/shutdown.ts): every call still waiting on a
+   * worker settles now, and no worker starts again. The workers themselves are
+   * told to stop by duckdbClose `stopEvery` (the caller), then closed.
+   */
+  interruptAll(): void {
+    this.stopped = true;
+    const err = new duck.DuckDBError('unavailable', 'DuckDB is shutting down');
+    for (const w of this.workers.values()) w.client.fail(err);
+  }
+
   private get(org: string): OrgWorker {
     if (org !== PROBE_KEY && !ORG_RE.test(org)) throw new duck.DuckDBError('query', 'invalid org id');
+    if (this.stopped) throw new duck.DuckDBError('unavailable', 'DuckDB is shutting down');
     const hit = this.workers.get(org);
     if (hit) {
       this.workers.delete(org);
@@ -194,7 +208,7 @@ export class DuckPool {
         setup: org === PROBE_KEY ? lockedSetup(this.cfg, [], undefined, this.cfg.s3 ? workerSetup(this.cfg.s3, null) : []) : orgSetup(this.cfg, org),
       },
     });
-    track(worker); // the process exits only after it has (duck.closeAll)
+    track(worker, org === PROBE_KEY ? 'probe' : org); // the process exits only after it has (duck.closeAll)
     const client = new DuckClient(worker, this.cfg.queryTimeoutMs);
     const ready = new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new duck.DuckDBError('unavailable', 'DuckDB worker did not start')), STARTUP_TIMEOUT_MS);
@@ -297,6 +311,7 @@ export function routeByOrg(cfg: PoolConfig): DuckPool {
     probe: () => pool.probe(),
     lease: () => pool.lease(ctx().org.id),
     shutdown: () => pool.shutdown(),
+    interrupt: () => pool.interruptAll(),
   });
   return pool;
 }
