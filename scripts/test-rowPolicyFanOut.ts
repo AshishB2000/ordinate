@@ -120,6 +120,21 @@ const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 200)}`;
     await policy(unioned, [{ teamId: W.team, values: ['East'] }]);
     ok('derived: rules of its own do not open a dataset whose upstream has rules (A union B, both with rules)', H.refused(await chart('east', unioned), 'derived'));
 
+    // New datasets made from a dataset's rows are born with its rules (round 2, #3).
+    const rulesOf = async (id: string) => (await W.call('boss', 'dataset:rowPolicy', { projectId: P, datasetId: id })).body?.policy;
+    const copied2 = await W.call('ed', 'dataset:composeSave', { projectId: P, name: 'Orders copy', base: { datasetId: orders }, joins: [], steps: [] });
+    const copyOf = String(copied2.body?.dataset?.id ?? '');
+    ok('saved as a new dataset (composer, no joins): born with Orders\' rules — east sees East only', (await rulesOf(copyOf))?.column === 'region', show(copied2));
+    await same('east', copyOf, east, 'saved copy: east on it ≡ the East subset');
+    const rfm = await W.call('ed', 'segments:rfmSave', { projectId: P, datasetId: orders, spec: { id: 'customer', date: 'day', amount: 'sales' } });
+    const rfmId = String(rfm.body?.dataset?.id ?? '');
+    ok('RFM saved from Orders: born with its rules, so closed to east (the RFM table has no rule column)', (await rulesOf(rfmId))?.column === 'region'
+      && H.refused(await W.call('east', 'dashboard:metric', { projectId: P, datasetId: rfmId, column: 'monetary', aggregation: 'sum' }), 'column'), show(rfm));
+    const rfmPlain = await W.call('ed', 'segments:rfmSave', { projectId: P, datasetId: plain, spec: { id: 'customer', date: 'day', amount: 'sales' } });
+    ok('NEGATIVE CONTROL: RFM saved from a dataset without rules has none', (await rulesOf(String(rfmPlain.body?.dataset?.id ?? ''))) === null, show(rfmPlain));
+    const fromDerived = await W.call('ed', 'segments:rfmSave', { projectId: P, datasetId: twoHops, spec: { id: 'customer', date: 'day', amount: 'sales' } });
+    ok('RFM saved from a DERIVED dataset (no rules of its own) is born closed, never open', H.refused(await W.call('east', 'dashboard:metric', { projectId: P, datasetId: String(fromDerived.body?.dataset?.id ?? ''), column: 'monetary', aggregation: 'sum' })), show(fromDerived));
+
     // ── A record that cannot be read is closed, never "no rules" (round 2, #1) ──
     const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
     const realRead = recordFs.readFile;

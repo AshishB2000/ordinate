@@ -25,7 +25,7 @@ import { callerOn } from '../server/authz/caller';
 import * as recordFs from '../app/recordFs';
 import { isValidId } from '../app/ids';
 import { stableStringify } from '../engine/queryCache';
-import { datasetFilePath } from './datasetRecord';
+import { datasetFilePath, storedRowPolicy, withFirstWritePolicy } from './datasetRecord';
 import { asOfIso } from './asOf';
 import type { FilterStep } from './transforms';
 import { makeLock, type Lock } from './rowLock';
@@ -287,4 +287,22 @@ export async function anyPolicyClosed(projectId: string): Promise<boolean> {
   const datasets = require('./datasets') as typeof import('./datasets');
   for (const d of await datasets.listDatasets(projectId)) if (await policyClosed(projectId, d.id)) return true;
   return false;
+}
+
+/**
+ * The rules a NEW dataset made from `sourceId`'s rows is born with (round 2, #3): none when the source has
+ * none; the source's own stored rules; or, for a source closed by an upstream dataset's rules, rules that
+ * open nothing (a closed policy). Pass the result to `datasetRecord.withFirstWritePolicy` around the save.
+ * A source whose rules cannot be read THROWS — no copy is made without them.
+ */
+export async function rulesForCopyOf(projectId: string, sourceId: string): Promise<unknown> {
+  if (!(await policyClosed(projectId, sourceId))) return undefined;
+  const own = await storedRowPolicy(projectId, sourceId);
+  return own !== undefined ? own : { column: '', rules: [], stepsHash: '' };
+}
+
+/** Saves a new dataset made from `sourceId`'s rows so that its first record write carries `rulesForCopyOf`. */
+export async function savedFrom<T>(projectId: string, sourceId: string, save: () => Promise<T>): Promise<T> {
+  const rules = await rulesForCopyOf(projectId, sourceId);
+  return rules === undefined ? save() : withFirstWritePolicy(rules, save);
 }

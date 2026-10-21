@@ -8,6 +8,7 @@
 // chain and paints what comes back; it never computes a joined row.
 
 import { ipcMain } from './bus';
+import { savedFrom } from '../data/rowAccess';
 import * as datasets from '../data/datasets';
 import * as combine from '../data/combine';
 import * as history from '../app/history';
@@ -226,7 +227,7 @@ export async function composeSave(
 
     // No joins: an ordinary save. Same rows, same origin, same speed as before.
     if (!list.length) {
-      const saved = await datasets.saveDataset(projectId, {
+      const save = () => datasets.saveDataset(projectId, {
         name: finalName,
         sourceKind: sourceKind || (r.baseRes.id ? 'combined' : 'csv'),
         columns: r.baseRes.table.columns,
@@ -234,6 +235,8 @@ export async function composeSave(
         origin: keptOrigin,
         capture: captureLink ?? undefined,
       }, writing);
+      // A saved dataset copied as is (no joins, so no `composed` origin to name it): born with its row access rules.
+      const saved = r.baseRes.id ? await savedFrom(projectId, r.baseRes.id, save) : await save();
       if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
       importStage.drop(base && base.inline && base.inline.stagedId);
       progress(0.88, 'Applying the column mapping');
