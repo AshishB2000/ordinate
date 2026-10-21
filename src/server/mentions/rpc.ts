@@ -54,20 +54,22 @@ export async function homeMentions(): Promise<{ available: boolean; items: HomeM
   const rows = await listMine(HOME_READ);
   const byProject = new Map<string, Comment[]>();
   const readersOf = new Map<string, Set<string> | null>();
+  const namesOf = new Map<string, Record<string, { name: string; analysisId?: string }>>();
   const { targetNames } = require('../../ipc/comments') as typeof import('../../ipc/comments'); // lazy: that module starts the notices
   const items: HomeMention[] = [];
   for (const row of rows) {
     if (items.length >= HOME_MAX) break;
     if (!byProject.has(row.projectId)) {
       const r = await comments.list(row.projectId).catch(() => null);
-      byProject.set(row.projectId, r && r.ok ? r.comments : []);
+      const list = r && r.ok ? r.comments : [];
+      byProject.set(row.projectId, list);
       readersOf.set(row.projectId, await currentReaders(row.projectId));
+      namesOf.set(row.projectId, await targetNames(row.projectId, list).catch(() => ({})));
     }
     const c = byProject.get(row.projectId)!.find((x) => x.id === row.commentId);
     const body = !c ? null : row.pieceId === c.id ? c.body : c.replies.find((r) => r.id === row.pieceId && !r.deletedAt)?.body ?? null;
     if (!c || body === null || !mentionsIn(body).includes(me)) continue; // deleted, or edited to no longer name the caller
-    const names = await targetNames(row.projectId, [c]).catch(() => ({} as Record<string, { name: string; analysisId?: string }>));
-    const on = names[`${c.target.kind}:${c.target.id}`] ?? { name: aDeletedRecord() };
+    const on = namesOf.get(row.projectId)?.[`${c.target.kind}:${c.target.id}`] ?? { name: aDeletedRecord() };
     items.push({
       projectId: row.projectId, id: row.pieceId, commentId: row.commentId, target: c.target, on,
       by: personName(row.author), snippet: commentSnippet(body, labelFor(peopleIn([body], readersOf.get(row.projectId) ?? null)), SNIPPET),
