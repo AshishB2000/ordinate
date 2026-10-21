@@ -50,6 +50,11 @@ for key in DATABASE_URL ORDINATE_MASTER_KEY OIDC_CLIENT_SECRET AWS_SECRET_ACCESS
   fi
 done
 echo "ok: secrets only by reference (envFrom secretRef), secret names refused in values"
+if helm template "$REL" "$CHART" --set terminationGracePeriodSeconds=25 >/dev/null 2>&1; then
+  echo "shutdownGraceSeconds 20 with a 25 s grace rendered: the chart must refuse grace − preStop ≤ budget" >&2; exit 1
+fi
+helm template "$REL" "$CHART" --set terminationGracePeriodSeconds=26 >/dev/null
+echo "ok: the shutdown budget stays below terminationGracePeriodSeconds − the 5 s preStop"
 
 step "kind cluster $CLUSTER"
 kind get clusters | grep -qx "$CLUSTER" || kind create cluster --name "$CLUSTER" --wait 120s

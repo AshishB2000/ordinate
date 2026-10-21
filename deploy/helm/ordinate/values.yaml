@@ -187,8 +187,14 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# Long enough for the request in flight and a scheduled job's current tick.
+# What the kubelet allows from the start of the preStop hook (a 5 s sleep, so
+# endpoints drop this pod first) to SIGKILL.
 terminationGracePeriodSeconds: 30
+# The server's own shutdown budget (SHUTDOWN_GRACE_SECONDS), from SIGTERM: stop
+# taking jobs, finish or cancel what runs, close every DuckDB worker cleanly.
+# It must stay BELOW terminationGracePeriodSeconds − 5 (the preStop sleep), or
+# the kubelet kills the pod mid-shutdown; the chart refuses to render otherwise.
+shutdownGraceSeconds: 20
 
 podSecurityContext:
   runAsNonRoot: true

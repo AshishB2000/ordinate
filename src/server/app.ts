@@ -6,7 +6,7 @@
 // tests, not a deploy.
 
 import { fastify, type FastifyInstance, type FastifyRequest } from 'fastify';
-import { probe, shutdown } from '../engine/duckdb';
+import { probe } from '../engine/duckdb';
 import { contractFor } from '../api/index';
 import { proxyList, type ServerEnv } from './env';
 import { ctx, runInContext, type Identify } from './context';
@@ -17,6 +17,7 @@ import { cookieNames } from './auth/cookies';
 import { registerSecurityHeaders } from './headers';
 import { registerCsrf } from './csrf';
 import { registerLimits, RPC_ROUTE, RpcTimeout, untilAborted } from './limits';
+import { isDraining, isRestarting, trackRequest } from './lifecycle';
 import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
 import { useRecordDb } from '../app/recordFs';
@@ -91,6 +92,18 @@ export const REDACT_PATHS: readonly string[] = SECRET_KEYS.flatMap((k) => {
 const STORAGE_GC_EVERY_MS = 15 * 60_000;
 let dbPool: Pool | null = null;
 let appEnv: ServerEnv | null = null;
+/** The scheduled-job runner and the cross-pod bus, once started: ./shutdown.ts stops them in its own order. */
+let bg: { runner: { stop(): Promise<void> } | null; bus: { stop(): Promise<void> } | null } = { runner: null, bus: null };
+
+/** The runner and bus of the app built last (./shutdown.ts). */
+export function background(): typeof bg {
+  return bg;
+}
+
+/** The Postgres pool of the app built last, or null without DATABASE_URL (./shutdown.ts ends it, last). Never nulled: a null pool reads as no database. */
+export function appPool(): Pool | null {
+  return dbPool;
+}
 
 /**
  * The org role a non-RPC /api/ route needs: uploading stages data (write); the
@@ -221,14 +234,20 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       }
       bus = await (require('./jobs/bus') as typeof import('./jobs/bus')).startBus(pool, dbUrl, app.log);
       jobs = (require('./jobs/runner') as typeof import('./jobs/runner')).startRunner(pool, cfg.dataDir, app.log);
+      bg = { runner: jobs, bus };
     });
-    // preClose, not onClose: onClose hooks run last-registered first, so
-    // DuckDB's shutdown (below) would close under a tick still running.
+    // An app closed on its own (the tests) stops its runner and bus here. A
+    // draining server has already (./shutdown.ts), under deadlines this cannot keep.
     app.addHook('preClose', async () => {
+      if (isDraining()) return;
       await jobs?.stop();
       await bus?.stop();
     });
+    // …and un-wires its stores. Never while draining: a handler that outlived its
+    // reply would then save a record to this pod's disk and lose it. ./shutdown.ts
+    // ends the pool last instead, so anything later fails loudly.
     app.addHook('onClose', async () => {
+      if (isDraining()) return;
       useRecordDb(null);
       useBlobDb(null);
       useMaskSaltStore(null);
@@ -260,7 +279,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // any of the app loads: no flash of the shell, no burst of 401s.
   // A settings change made by this request is in Postgres before its reply goes out (./orgConfig.ts).
   const orgOf = new WeakMap<object, string>();
-  app.addHook('onSend', async (req) => {
+  app.addHook('onSend', async (req, reply) => {
+    // Draining: every answer closes its socket, so a keep-alive client reconnects elsewhere and close() never waits on it.
+    if (isDraining()) void reply.header('connection', 'close');
     const org = orgOf.get(req);
     if (org) await orgConfig.flushed(org);
   });
@@ -302,7 +323,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         // An RPC also aborts it past RPC_TIMEOUT_SECONDS (the route answers 504).
         const ac = new AbortController();
         const limit = req.routeOptions.url === RPC_ROUTE ? setTimeout(() => ac.abort(new RpcTimeout()), cfg.limits.rpcTimeoutMs) : undefined;
+        const untrack = trackRequest(ac); // the shutdown's HTTP deadline aborts what is still running (./shutdown.ts)
         reply.raw.once('close', () => {
+          untrack();
           clearTimeout(limit);
           if (!reply.raw.writableFinished) ac.abort();
         });
@@ -322,6 +345,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // empty probe worker and asks it (awaited, not blocking); once any worker has
   // started it is a state check.
   app.get('/readyz', async (_req, reply) => {
+    if (isDraining()) return reply.code(503).send({ ok: false, draining: true });
     const duckdb = await probe();
     const checks: Record<string, boolean> = { duckdb };
     if (pool) checks.postgres = await ping(pool);
@@ -396,6 +420,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       await record('ok', decision.projectId, created ? [created] : []);
       return reply.type('application/json').send(body);
     } catch (err) {
+      if (isRestarting(err)) {
+        // The pod is stopping (./shutdown.ts): a job it refused, or a request still running at its deadline.
+        await record('error', decision.projectId);
+        return reply.code(503).send({ error: 'restarting', code: 'restarting', message: err.message });
+      }
       if (err instanceof RpcTimeout) {
         req.log.warn({ channel, limitMs: cfg.limits.rpcTimeoutMs }, 'rpc timed out');
         await record('error', decision.projectId);
@@ -458,8 +487,6 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
 
   // Signed embedding at /embed/<token> (docs/embed): off until an org admin turns it on; the only route another site may frame.
   registerEmbedRoutes(app, { pool: () => pool, identify, tokenPerMinute: cfg.limits.embedPerMinute, orgPerMinute: cfg.limits.embedOrgPerMinute });
-
-  app.addHook('onClose', async () => shutdown());
 
   // The web app, when it has been built (`npm --prefix web run build`). In dev
   // the Vite server serves it instead and proxies /api here.

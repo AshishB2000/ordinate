@@ -254,6 +254,8 @@
   "insights.of_are_of": "{head} de {n} {catCol} suman el {p3} de {measure}",
   "insights.the_top_of_values_in_carry": "Los {head} principales de {n} valores de \"{catCol}\" suman {cum} de {total} de {measure} total ({p6}). El mayor, \"{p7}\", supone por sí solo el {p8}.",
   "insights.trended_over_periods": "{measure} tuvo una tendencia {p1, select, true {al alza} other {a la baja}} del {ratio} a lo largo de {n} periodos",
+  "lifecycleMessages.ordinate_is_restarting_try_again_in": null,
+  "lifecycleMessages.ordinate_restarted_while_this_was": null,
   "liveMessages.live_datasets_ask_this_connection_switch": "{count} conjuntos de datos en vivo consultan esta conexión. Cámbielos a “Copy the data” antes de desmarcar “{label}”.",
   "liveMessages.live_is_off_for_this_connection": "El modo en vivo está desactivado para esta conexión. Marque primero “{label}”: las preguntas en vivo se ejecutan en cada vista, así que no deben llegar a una base de datos principal.",
   "liveMessages.one_live_dataset_asks_this_connection": "Un conjunto de datos en vivo consulta esta conexión. Cámbielo a “Copy the data” antes de desmarcar “{label}”.",

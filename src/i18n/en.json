@@ -251,6 +251,8 @@
   "insights.of_are_of": "{head} of {n} {catCol} are {p3} of {measure}",
   "insights.the_top_of_values_in_carry": "The top {head} of {n} values in \"{catCol}\" carry {cum} of {total} total {measure} ({p6}). The largest, \"{p7}\", is {p8} on its own.",
   "insights.trended_over_periods": "{measure} trended {p1, select, true {up} other {down}} {ratio} over {n} periods",
+  "lifecycleMessages.ordinate_is_restarting_try_again_in": "Ordinate is restarting. Try again in a minute.",
+  "lifecycleMessages.ordinate_restarted_while_this_was": "Ordinate restarted while this was running. Run it again.",
   "liveMessages.live_datasets_ask_this_connection_switch": "{count} Live datasets ask this connection. Switch them to “Copy the data” before unticking “{label}”.",
   "liveMessages.live_is_off_for_this_connection": "Live is off for this connection. Tick “{label}” on it first: Live questions run on every view, so they must not reach a primary database.",
   "liveMessages.one_live_dataset_asks_this_connection": "One Live dataset asks this connection. Switch it to “Copy the data” before unticking “{label}”.",

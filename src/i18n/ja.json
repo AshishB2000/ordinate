@@ -254,6 +254,8 @@
   "insights.of_are_of": "{n}個の{catCol}のうち上位{head}個で、{measure}の{p3}を占めます",
   "insights.the_top_of_values_in_carry": "「{catCol}」の{n}個の値のうち上位{head}個で、{measure}の合計{total}のうち{cum}（{p6}）を占めます。最大の「{p7}」だけで{p8}です。",
   "insights.trended_over_periods": "{measure}は{n}期間で{ratio}{p1, select, true {上昇} other {下降}}傾向です",
+  "lifecycleMessages.ordinate_is_restarting_try_again_in": null,
+  "lifecycleMessages.ordinate_restarted_while_this_was": null,
   "liveMessages.live_datasets_ask_this_connection_switch": "{count} 件のライブデータセットがこの接続に問い合わせています。「{label}」のチェックを外す前に、それらを「Copy the data」に切り替えてください。",
   "liveMessages.live_is_off_for_this_connection": "この接続ではライブがオフです。先に「{label}」にチェックを入れてください。ライブの質問は表示のたびに実行されるため、プライマリデータベースに届いてはいけません。",
   "liveMessages.one_live_dataset_asks_this_connection": "1 件のライブデータセットがこの接続に問い合わせています。「{label}」のチェックを外す前に、それを「Copy the data」に切り替えてください。",
