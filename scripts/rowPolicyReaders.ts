@@ -9,6 +9,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'ai:setMine': 'META',
   'ai:status': 'META',
   'alerts:list': 'REDACT',
+  'alerts:markSeen': 'META', // writes the caller's own seen state; returns no row or figure
   'alerts:test': 'FANOUT',
   'analysis:draft': 'NET',
   'analysis:gallery': 'REDACT',

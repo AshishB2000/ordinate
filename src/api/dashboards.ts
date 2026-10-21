@@ -10,8 +10,9 @@
 // The author is the signed-in user (ctx().user, src/app/comments.ts), never a
 // name the browser sends; edit and delete refuse anyone but the author.
 //
-// Alerts (src/ipc/alerts.ts): reading the inbox is `read`; rules and their
-// state are the project's records, so changing them is `write`.
+// Alerts (src/ipc/alerts.ts): reading the inbox, and marking what YOU have seen
+// in it, is `read`; rules and their state are the project's records, so
+// changing them is `write`.
 
 import { z } from 'zod';
 import { byProjectId, rpc, Steps, Uuid } from './contract';
@@ -103,7 +104,8 @@ export const dashboards = {
   'alerts:delete': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, ruleId: Uuid }), project: byProjectId }),
   // Whether a rule WOULD fire now — reads only.
   'alerts:test': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, rule: Rule }), project: byProjectId }),
-  'alerts:markSeen': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, eventId: Uuid.optional() }), project: byProjectId }),
+  // The caller's OWN inbox (src/server/alertInbox.ts): any reader, never anyone else's badge.
+  'alerts:markSeen': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, eventId: Uuid.optional() }), project: byProjectId }),
   'alerts:setDigest': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, on: z.boolean() }), project: byProjectId }),
   // An alert's "Why": the change the rule caught, broken down by what drove it (src/ipc/drivers.ts, T2.10's engine).
   'drivers:explainAlert': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, ruleId: Uuid }), project: byProjectId }),

@@ -29,6 +29,7 @@ import { askCopilot } from '../ai/analyze';
 import { buildFacts, guardAnswer } from './copilot';
 import { serverDataDir } from '../server/context';
 import { liveCodeOf } from './liveRoute';
+import { markSeenFor, perMember, seenView } from '../server/alertInbox';
 
 // ── Delivery ─────────────────────────────────────────────────────────────────
 
@@ -141,17 +142,20 @@ export function register(): void {
 
   // The inbox and the rules page read the same payload: one file, two surfaces.
   // `unseen` is derived here rather than counted in the renderer so the bell and
-  // the list can never disagree about what "unread" means.
+  // the list can never disagree about what "unread" means. `seen` is the
+  // CALLER's (src/server/alertInbox.ts): one member's click never clears another's.
   ipcMain.handle('alerts:list', async (_e, { projectId }: any = {}) => {
     try {
       await store.syncWatchRules(projectId);
       const file = await redactAlerts(projectId, await store.load(projectId));
+      const seen = await seenView(projectId);
+      const events = file.events.map((ev) => ({ ...ev, seen: seen(ev) }));
       return {
         ok: true,
         rules: file.rules,
-        events: file.events,
+        events,
         digest: file.digest,
-        unseen: file.events.filter((ev) => !ev.seen).length,
+        unseen: events.filter((ev) => !ev.seen).length,
       };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not read alerts' };
@@ -214,9 +218,12 @@ export function register(): void {
     }
   });
 
+  // Any reader marks their OWN inbox (a row of alert_inbox); without a database
+  // there is one identity, and the shared flag is its inbox.
   ipcMain.handle('alerts:markSeen', async (_e, { projectId, eventId }: any = {}) => {
     try {
       const id = typeof eventId === 'string' && eventId ? eventId : undefined;
+      if (perMember()) return { ok: await markSeenFor(projectId, (await store.load(projectId)).events, id) };
       return { ok: await store.markSeen(projectId, id) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not update the inbox' };
