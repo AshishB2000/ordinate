@@ -198,8 +198,9 @@ type FigureBlock = { id: string; kind: string; visualId?: string; metricId?: str
 
 export function register(): void {
   ipcMain.handle('reports:open', async (_e, { projectId, id }: any = {}) => {
-    const r = await reportSpec.getReport(projectId, id);
-    if (!r) return { ok: false, error: 'That report is gone.' };
+    const t = await reportSpec.readReport(projectId, id);
+    if (!t) return { ok: false, error: 'That report is gone.' };
+    const r = t.rec;
     const a = await analysisFor(projectId, r);
     const sheets = [];
     for (const s of a ? a.sheets : []) {
@@ -212,7 +213,8 @@ export function register(): void {
       sheets.push({ name: s.name, cards });
     }
     const views = a && Array.isArray((a as { views?: unknown }).views) ? ((a as { views: Array<{ id: string; name: string }> }).views).map((v) => ({ id: v.id, name: v.name })) : [];
-    return { ok: true, report: publicReport(r), dashboard: a && a.id ? { id: a.id, name: a.name } : null, sheets, views, missing: !a };
+    // `tag`: the builder's base (src/app/editConflict.ts).
+    return { ok: true, report: publicReport(r), dashboard: a && a.id ? { id: a.id, name: a.name } : null, sheets, views, missing: !a, tag: t.tag };
   });
 
   const pagesHandler = async (event: unknown, { projectId, id, draft, page }: any = {}) => // any: the contract's parsed input

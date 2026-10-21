@@ -19,6 +19,7 @@ New here? Start with the [README](../README.md). To run Ordinate, go to the
 | [`analysis/`](analysis/00-model.md) | The analysis and dashboard record model (an analysis is the authoring surface; a dashboard is a by-value snapshot) and the authoring surface. Still the spec. |
 | [`automation.md`](automation.md) | The MCP endpoint and the command registry. Generated from `src/automation/registry.ts`; do not edit by hand. |
 | [`chart-figures/`](chart-figures/00-design.md) | **One set of figures**: a waterfall's levels, a Pareto's order and cumulative share, a 100%-stacked chart's shares (and a histogram's bins, a funnel's and bullet's percentages, a calendar's days) computed once on the server and drawn by the app, its captions, `/p/` and embeds alike; the published page brought level with the app. |
+| [`edit-conflicts/`](edit-conflicts/00-design.md) | **Edit conflicts**: every whole-document editor saves with a content tag, compared inside the record lock; a stale save is refused with a banner (Reload, or Save mine as a copy), and an open editor hears of another save at once. |
 | [`explore/`](explore/00-design.md) | **Explore**: a question builder for everyone, no AI model needed — the fields of a dataset, a question in four wells, suggested questions from `starterPlan`'s ranking (`explore:suggest`), the answer and its table from `visual:data`, the question in the URL. |
 
 ## History (the desktop era)

@@ -28,6 +28,8 @@ export interface Visual extends VisualSummary {
   overrides: Overrides;
   filters: FilterStep[];
   analytics?: Record<string, unknown>[];
+  /** The content tag (`visual:get`, and an update's reply): the builder's base (docs/edit-conflicts). */
+  tag?: string;
 }
 
 /** `visual:data` / `visual:preview`, with the builder's extras. */
@@ -176,14 +178,15 @@ export async function saveVisual(input: {
   return r as Visual;
 }
 
+/** A patch; with `base` (the builder's content tag) a save from a stale copy is refused 409 `record_changed`. The visual, with its new tag. */
 export async function updateVisual(
   projectId: string,
   id: string,
-  patch: Partial<Pick<Visual, 'name' | 'chartType' | 'encoding' | 'overrides' | 'filters' | 'favorite' | 'analytics'>>,
+  patch: Partial<Pick<Visual, 'name' | 'chartType' | 'encoding' | 'overrides' | 'filters' | 'favorite' | 'analytics'>> & { base?: string },
 ): Promise<Visual> {
-  const r = (await rpc('visual:update', { projectId, id, ...patch })) as { ok: true; visual: Visual } | Fail;
+  const r = (await rpc('visual:update', { projectId, id, ...patch })) as { ok: true; visual: Visual; tag?: string } | Fail;
   if (!r.ok) throw new Error(r.error || 'Could not update the visual.');
-  return r.visual;
+  return { ...r.visual, tag: r.tag };
 }
 
 export async function duplicateVisual(projectId: string, id: string): Promise<Visual> {

@@ -1,0 +1,82 @@
+/* The edit-conflict banner (./ConflictBanner.tsx): a warning band across the
+   top of an editor, or inside a dialog. Tokens only, so both themes follow;
+   the tint is the theme's --warn. */
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-16);
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: var(--r-md);
+  color: var(--text);
+}
+
+.icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--warn);
+}
+
+.text {
+  /* Basis 0: when the banner wraps (a dialog, a phone) the text stays beside its icon; only the actions wrap. */
+  flex: 1 1 0;
+  min-width: 0;
+  padding-top: var(--sp-4);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--t-13);
+  font-weight: 600;
+  line-height: var(--lh-body);
+  color: var(--text-strong);
+}
+
+.body {
+  margin: var(--sp-4) 0 0;
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+
+.error {
+  margin: var(--sp-8) 0 0;
+  font-size: var(--t-12);
+  line-height: var(--lh-body);
+  color: var(--error);
+}
+
+.actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  align-items: center;
+  align-self: center;
+}
+
+/* In a dialog, and on a narrow screen: the actions go under the text. */
+.compact {
+  flex-wrap: wrap;
+}
+.compact .actions {
+  flex-basis: 100%;
+  justify-content: flex-end;
+}
+@media (max-width: 640px) {
+  .banner {
+    flex-wrap: wrap;
+  }
+  .actions {
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
+}

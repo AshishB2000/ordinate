@@ -27,6 +27,8 @@ export interface VisualDef {
   filters: Step[];
   analytics?: Record<string, unknown>[];
   updatedAt: string;
+  /** The visual's content tag (src/app/editConflict.ts): the dashboard's Interactions send it as `base`. */
+  tag?: string;
 }
 
 export type ControlKind = 'dropdown' | 'multi' | 'date_range' | 'parameter' | 'radius';
@@ -157,7 +159,8 @@ export function useGallery(projectId: string) {
   return useQuery(galleryQuery(projectId));
 }
 
-export type OpenReply = { ok: true; analysis: Analysis; visuals: VisualDef[] } | { ok: false; error: string };
+/** `tag`: the record's content tag, the editor's first base (src/app/editConflict.ts). */
+export type OpenReply = { ok: true; analysis: Analysis; visuals: VisualDef[]; tag?: string } | { ok: false; error: string };
 
 /** `analysis:open` — the record and every visual it could show. Never refetched under an open editor. */
 export function useOpenAnalysis(projectId: string, id: string) {

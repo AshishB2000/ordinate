@@ -362,3 +362,9 @@
   border-radius: var(--r-md);
   background: var(--surface-2);
 }
+
+/* ── the edit-conflict banner (editConflicts/ConflictBanner): under the head, across the sheet ── */
+.conflict {
+  flex: 0 0 auto;
+  padding: var(--sp-12) var(--sp-16) 0;
+}

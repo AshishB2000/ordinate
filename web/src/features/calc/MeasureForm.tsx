@@ -17,6 +17,8 @@ import { Kbd } from '../../ui/Kbd';
 import { Skeleton } from '../../ui/Skeleton';
 import { Icon } from '../../ui/icons/Icon';
 import { isFormula, type Metric, type MetricFormat, type MetricSummary } from '../analyses/metrics/api';
+import { ConflictBanner } from '../editConflicts/ConflictBanner';
+import { useEditGuard } from '../editConflicts/useEditGuard';
 import { DirectionSelect, FormatFields, saveMetric, type Direction } from '../analyses/metrics/parts';
 import { LiveRefusal } from '../live/LiveOff';
 import { liveRefusalOf } from '../live/refusal';
@@ -36,16 +38,19 @@ export interface MeasureFormProps {
   columns: readonly Column[];
   /** The project's metrics (every dataset's); this dataset's are offered as operands. */
   metrics: readonly MetricSummary[];
-  /** A formula metric being edited. */
+  /** A formula metric being edited — with its `tag` (metric:get), the save's base. */
   existing?: MetricSummary;
+  /** The banner's Reload: the metric read again, in a new form. Without one, Reload closes the form. */
+  onReload?: () => void;
   /** Opened from a chart: every operand must be this dataset's. */
   chart: boolean;
   onSaved: (metric: Metric) => void;
   onClose: () => void;
 }
 
-export function useMeasureForm({ projectId, datasetId, columns, metrics, existing, chart, onSaved, onClose }: MeasureFormProps): { body: ReactNode; footer: ReactNode } {
+export function useMeasureForm({ projectId, datasetId, columns, metrics, existing, chart, onSaved, onClose, onReload }: MeasureFormProps): { body: ReactNode; footer: ReactNode } {
   const id = existing?.id ?? '';
+  const guard = useEditGuard({ projectId, type: 'metric', id: id || undefined }, existing?.tag);
   const [name, setName] = useState(existing?.name ?? '');
   const [formula, setFormula] = useState(existing && isFormula(existing.definition) ? existing.definition.formula : '');
   const [format, setFormat] = useState<MetricFormat>({ kind: 'number', decimals: 0, ...existing?.format });
@@ -92,19 +97,31 @@ export function useMeasureForm({ projectId, datasetId, columns, metrics, existin
   async function save() {
     if (reason || saving) return;
     setSaving(true);
-    const r = await saveMetric(projectId, id, datasetId, { name: name.trim(), definition: { formula: formula.trim() }, format, description, direction });
+    const r = await saveMetric(projectId, id, datasetId, { name: name.trim(), definition: { formula: formula.trim() }, format, description, direction }, guard);
     setSaving(false);
+    if ('changed' in r) return; // the banner
     // In the dialog, beside its field: the work is still in these boxes.
     if ('error' in r) return setRefused(r);
     onSaved(r.metric);
     onClose();
   }
+  // Save mine as a copy: this formula as a new measure (a duplicate name is refused as ever).
+  const copy = async () => {
+    const r = await saveMetric(projectId, '', datasetId, { name: `${name.trim() || 'Measure'} (copy)`.slice(0, 200), definition: { formula: formula.trim() }, format, description, direction });
+    if ('error' in r) throw new Error(r.error);
+    if ('metric' in r) {
+      onSaved(r.metric);
+      onClose();
+    }
+  };
 
   const own = metrics.filter((m) => m.datasetId === datasetId && m.id !== id);
   const allDocs = AGG_DOCS.concat((docs.data ?? []).filter((d) => d.category !== 'lod'));
   const live = check && check.valid && !check.ok ? liveRefusalOf(check) : null;
 
   const body = (
+    <>
+    {guard.changed && <ConflictBanner compact noun="metric" onReload={onReload ?? onClose} onCopy={copy} />}
     <div className={c.work}>
       <FormulaSide
         columns={columns}
@@ -214,6 +231,7 @@ export function useMeasureForm({ projectId, datasetId, columns, metrics, existin
         </div>
       </div>
     </div>
+    </>
   );
 
   const footer = (
@@ -225,7 +243,7 @@ export function useMeasureForm({ projectId, datasetId, columns, metrics, existin
         <Button>Cancel</Button>
       </DialogClose>
       <span title={reason} className={f.saveWrap}>
-        <Button variant="primary" disabled={!!reason} loading={saving} title={reason} onClick={() => void save()}>
+        <Button variant="primary" disabled={!!reason || guard.changed} loading={saving} title={reason} onClick={() => void save()}>
           {id ? 'Save measure' : 'Create measure'}
         </Button>
       </span>

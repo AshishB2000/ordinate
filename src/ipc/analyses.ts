@@ -18,6 +18,7 @@ import * as trash from '../app/trash';
 import { randomUUID } from 'crypto';
 import { applyViewOp } from '../analysis/savedViews';
 import { dashboardGone } from '../analysis/savedViewMessages';
+import { contentTag, isRecordChanged } from '../app/editConflict';
 
 // Analyses IPC — list/get/create/rename/update/delete an Analysis (the AUTHORING
 // container), plus the AI layout draft channel `analysis:draft` (MOVED from the
@@ -98,16 +99,19 @@ export function register() {
   });
 
   // Mirrors dashboard:update exactly — a supplied array REPLACES the stored one
-  // wholesale; it is never patch-merged.
-  ipcMain.handle('analysis:update', async (_e, { projectId, id, name, sheets, filters, style, parameters }: any = {}) => {
+  // wholesale; it is never patch-merged. `base` (the editor's content tag): a
+  // copy older than the record is refused, 409 record_changed (src/app/editConflict.ts);
+  // the reply's `tag` is the editor's next base.
+  ipcMain.handle('analysis:update', async (_e, { projectId, id, base, name, sheets, filters, style, parameters }: any = {}) => {
     try {
       const before = await analysis.getAnalysis(projectId, id);
-      const updated = await analysis.updateAnalysis(projectId, id, { name, sheets, filters, style, parameters });
+      const updated = await analysis.updateAnalysis(projectId, id, { name, sheets, filters, style, parameters }, base);
       // Every save is a version (src/app/versions.ts) — the autosave included;
       // one that changed nothing versioned is dropped there, not here.
       if (updated) await versions.record(projectId, 'dashboard', updated, { before });
-      return updated ? { ok: true, analysis: updated } : { ok: false, error: 'Could not update the analysis' };
+      return updated ? { ok: true, analysis: updated, tag: contentTag('dashboard', updated) } : { ok: false, error: 'Could not update the analysis' };
     } catch (err: any) {
+      if (isRecordChanged(err)) throw err; // the route's 409, with the current tag
       return { ok: false, error: err?.message || 'Failed to update the analysis' };
     }
   });
@@ -115,11 +119,9 @@ export function register() {
   // A saved-view edit: read, apply, write the list back, holding the record
   // (recordFs.locked, every pod), so two view edits never drop one. Not a
   // version — a view is a reader's state; the sheets and name are left byte for
-  // byte. A hold that could not be had is the lock's own sentence.
-  // ponytail: the autosave (`analysis:update`) takes no lock — whole documents
-  // stay last-writer-wins (docs/record-locks); one editor's client queues its
-  // saves behind its view ops, but another editor's save can still write back
-  // the list it read. An `updated_at` compare-and-swap is the upgrade.
+  // byte. A hold that could not be had is the lock's own sentence. Views are
+  // not content, so the reply's `tag` is the record's as it was: the editor
+  // CHECKS it against its base and never adopts it (docs/edit-conflicts).
   ipcMain.handle('analysis:view', async (_e, { projectId, id, op }: any = {}) =>
     analysis.lockedAnalysis(projectId, id, async () => {
       const a = await analysis.getAnalysis(projectId, id);
@@ -127,7 +129,7 @@ export function register() {
       const r = applyViewOp(a, op, a, new Date().toISOString(), randomUUID);
       if (!r.ok) return r;
       const saved = await analysis.updateAnalysis(projectId, id, { views: r.views, defaultViewId: r.defaultViewId });
-      return saved ? { ok: true, views: saved.views, defaultViewId: saved.defaultViewId, viewId: r.viewId } : { ok: false, error: dashboardGone() };
+      return saved ? { ok: true, views: saved.views, defaultViewId: saved.defaultViewId, viewId: r.viewId, tag: contentTag('dashboard', saved) } : { ok: false, error: dashboardGone() };
     }).catch((err: Error & { code?: string }) => {
       if (err.code === 'ERECORDBUSY' || err.code === 'ERECORDROLLEDBACK') return { ok: false, error: err.message };
       throw err;

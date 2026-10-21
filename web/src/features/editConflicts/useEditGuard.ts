@@ -1,0 +1,144 @@
+// The ONE save queue every whole-document editor writes through
+// (docs/edit-conflicts/00-design.md). It holds the record's content tag the
+// editor's copy was built on, sends it as `base`, and takes the next one from
+// each successful update reply — so a tab never conflicts with itself. A 409
+// `record_changed` (another tab or person saved first) sets `changed`: every
+// save after it is refused here, unsent, until the editor is reloaded. The
+// server's `hub:record-saved` push sets it sooner, when another save moved the
+// record's tag.
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { RpcError } from '../../api/client';
+import { useServerEvent } from '../../api/events';
+
+/** A whole-document editor's save channel — the server's `SaveKind` (src/analysis/recordDiff.ts SAVE_KEYS): a metric has two, its fields and its tree. */
+export type GuardType = 'dashboard' | 'visual' | 'metric' | 'metricTree' | 'report' | 'story' | 'scorecard' | 'scenario';
+
+/** src/app/editConflict.ts SAVED_CHANNEL. */
+export const SAVED_CHANNEL = 'hub:record-saved';
+
+export interface EditGuard {
+  /** Another writer changed the record under this editor: saves are refused here until it is reloaded. */
+  readonly changed: boolean;
+  /**
+   * One save of the editor's document, after every write queued so far, sent with the current base; the
+   * reply's `tag` becomes the next base. Null — and nothing sent — once `changed`; a 409 `record_changed`
+   * sets `changed` and resolves null. Any other failure rejects as it would without the guard.
+   */
+  save<T>(send: (base: string | undefined) => Promise<T>): Promise<T | null>;
+  /**
+   * Another write to the record in the same queue (a saved-view op). Its reply's `tag` is a CHECK, never
+   * adopted: such a write changes no content, so a tag that differs means someone else saved.
+   */
+  queue<T>(write: () => Promise<T>): Promise<T>;
+}
+
+export const isRecordChanged = (err: unknown): boolean => err instanceof RpcError && err.status === 409 && err.code === 'record_changed';
+
+export const tagOf = (reply: unknown): string | undefined => {
+  const t = reply && typeof reply === 'object' ? (reply as { tag?: unknown }).tag : undefined;
+  return typeof t === 'string' && t ? t : undefined;
+};
+
+/**
+ * `id` undefined: a record not saved yet — nothing to guard, no base sent. `tag`: from the reply the editor opened
+ * with; the first one its host has is kept (a host whose reply lands after mount passes it when it does), and after
+ * that only this editor's own saves move it.
+ */
+export function useEditGuard(record: { projectId: string; type: GuardType; id: string | undefined }, tag: string | undefined): EditGuard {
+  const base = useRef<string | undefined>(undefined);
+  // Every tag this editor's own saves produced: its own push, landing before or after the reply, is not news.
+  const own = useRef(new Set<string>());
+  if (base.current === undefined && tag) {
+    base.current = tag;
+    own.current.add(tag);
+  }
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
+  const stale = useRef(false);
+  const [changed, setChanged] = useState(false);
+
+  const flag = useCallback(() => {
+    if (stale.current) return;
+    stale.current = true;
+    setChanged(true);
+  }, []);
+
+  const enqueue = useCallback(<T,>(w: () => Promise<T>): Promise<T> => {
+    const p = chain.current.then(w);
+    chain.current = p.catch(() => undefined);
+    return p;
+  }, []);
+
+  const save = useCallback(
+    <T,>(send: (b: string | undefined) => Promise<T>): Promise<T | null> =>
+      enqueue(async () => {
+        if (stale.current) return null;
+        try {
+          const r = await send(base.current);
+          const t = tagOf(r);
+          if (t) {
+            base.current = t;
+            own.current.add(t);
+          }
+          return r;
+        } catch (err) {
+          if (!isRecordChanged(err)) throw err;
+          flag();
+          return null;
+        }
+      }),
+    [enqueue, flag],
+  );
+
+  const queue = useCallback(
+    <T,>(write: () => Promise<T>): Promise<T> =>
+      enqueue(async () => {
+        const r = await write();
+        const t = tagOf(r);
+        if (t && base.current && t !== base.current) flag();
+        return r;
+      }),
+    [enqueue, flag],
+  );
+
+  const { projectId, type, id } = record;
+  useServerEvent(SAVED_CHANNEL, (p) => {
+    const s = p && typeof p === 'object' ? (p as { projectId?: unknown; type?: unknown; id?: unknown; tag?: unknown }) : null;
+    if (!s || !id || s.projectId !== projectId || s.type !== type || s.id !== id || typeof s.tag !== 'string') return;
+    const pushed = s.tag;
+    // Checked after this editor's queued saves land, so the push of one still in flight finds its tag in `own`.
+    void enqueue(async () => {
+      // No base (a reply without a tag): nothing to compare with, and the save will not be checked either.
+      if (base.current && pushed !== base.current && !own.current.has(pushed)) flag();
+    });
+  });
+
+  return { changed, save, queue };
+}
+
+/**
+ * A page's Reload after a conflict: read the record again, then mount a NEW editor on it — the host keys its editor
+ * with `gen`. (Resetting the query is not enough: a fast reply lands before the page ever renders its skeleton, and
+ * the old editor, still holding its document and its paused guard, would stay.)
+ */
+export function useReload(queryKey: QueryKey): { gen: number; reload: () => void } {
+  const client = useQueryClient();
+  const [gen, setGen] = useState(0);
+  const key = JSON.stringify(queryKey);
+  const reload = useCallback(() => {
+    void client.refetchQueries({ queryKey: JSON.parse(key) as QueryKey, exact: true }).finally(() => setGen((g) => g + 1));
+  }, [client, key]);
+  return { gen, reload };
+}
+
+/**
+ * An editor page's open query is dropped when the page is left, so the next open reads the record afresh: what it
+ * shows and the tag its saves send then come from one reply (as `AuthoringPage` does for a dashboard). `gcTime: 0`
+ * alone is not enough — a quick back-and-forth remounts before the cache is collected.
+ */
+export function useDropOnLeave(queryKey: QueryKey): void {
+  const client = useQueryClient();
+  const key = JSON.stringify(queryKey);
+  useEffect(() => () => client.removeQueries({ queryKey: JSON.parse(key) as QueryKey, exact: true }), [client, key]);
+}

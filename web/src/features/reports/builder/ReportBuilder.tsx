@@ -5,8 +5,8 @@
 // the print theme — so what is on screen is what the file will say. Generate
 // saves first, then builds the whole file (export/generate.ts).
 
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useBlocker, useParams } from 'react-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useBlocker, useNavigate, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
 import { ErrorState, PageSkeleton } from '../../../app/blocks';
@@ -28,6 +28,8 @@ import { PageList } from './PageList';
 import { PreviewSheet } from './PreviewSheet';
 import { SettingsPane } from './SettingsPane';
 import s from './Builder.module.css';
+import { ConflictBanner } from '../../editConflicts/ConflictBanner';
+import { useDropOnLeave, useEditGuard, useReload } from '../../editConflicts/useEditGuard';
 
 const FORMAT_WORD = { pdf: 'PDF', pptx: 'PowerPoint', docx: 'Word' } as const;
 
@@ -41,7 +43,7 @@ function useSettled<T>(value: T, ms: number): T {
   return v;
 }
 
-function Builder({ projectId, opened }: { projectId: string; opened: OpenReport }) {
+function Builder({ projectId, opened, onReload }: { projectId: string; opened: OpenReport; onReload: () => void }) {
   const client = useQueryClient();
   const [report, setReport] = useState<Report>(opened.report);
   const [selected, setSelected] = useState(0);
@@ -51,7 +53,11 @@ function Builder({ projectId, opened }: { projectId: string; opened: OpenReport 
   const { hooks, dialog } = useGenerateHooks();
   // A viewer may look and generate the file as saved; Save is an editor's.
   const canEdit = useCanEdit(projectId);
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && currentLocation.pathname !== nextLocation.pathname);
+  // Saves send the tag the report was opened with (docs/edit-conflicts); refused, nothing more is sent until Reload.
+  const guard = useEditGuard({ projectId, type: 'report', id: opened.report.id }, opened.tag);
+  const navigate = useNavigate();
+  const leaving = useRef(false); // "Save mine as a copy" is not leaving the work behind: no "Discard?" on its way out
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && !leaving.current && currentLocation.pathname !== nextLocation.pathname);
 
   const edit = (next: Report, sel = selected) => {
     setReport(next);
@@ -82,7 +88,8 @@ function Builder({ projectId, opened }: { projectId: string; opened: OpenReport 
   const save = async (): Promise<boolean> => {
     setBusy('save');
     try {
-      const r = (await rpc('reports:update', { projectId, id: report.id, patch: draftOf(report) })) as { ok: boolean; report?: Report; error?: string };
+      const r = (await guard.save((base) => rpc('reports:update', { projectId, id: report.id, base, patch: draftOf(report) }))) as { ok: boolean; report?: Report; error?: string; tag?: string } | null;
+      if (!r) return false; // changed elsewhere: the banner
       if (!r.ok || !r.report) {
         toast(failure(r, 'Could not save.'), { kind: 'error' });
         return false;
@@ -111,6 +118,19 @@ function Builder({ projectId, opened }: { projectId: string; opened: OpenReport 
     } else if (!out.cancelled) toast(out.error || 'Couldn’t build the report.', { kind: 'error' });
   };
 
+  const conflict = {
+    // A duplicate of the stored report, then this draft written onto it (nobody else can hold it yet).
+    copy: async () => {
+      const d = (await rpc('reports:duplicate', { projectId, id: report.id })) as { ok: boolean; report?: Report; error?: string };
+      if (!d.ok || !d.report) throw new Error(failure(d, 'The copy could not be saved.'));
+      const u = (await rpc('reports:update', { projectId, id: d.report.id, patch: { ...draftOf(report), name: `${report.name} (copy)`.slice(0, 200) } })) as { ok: boolean; error?: string };
+      if (!u.ok) throw new Error(failure(u, 'The copy could not be saved.'));
+      void client.invalidateQueries({ queryKey: ['reports:list', projectId] });
+      leaving.current = true;
+      await navigate(`/reports/${projectId}/${d.report.id}`);
+    },
+  };
+
   const captionable = page && page.kind !== 'notes' && raw && (raw.kind === 'tile' || raw.kind === 'sheet' || raw.kind === 'summary');
   return (
     <div className={s.builder}>
@@ -129,7 +149,7 @@ function Builder({ projectId, opened }: { projectId: string; opened: OpenReport 
             History
           </Link>
           {canEdit && (
-            <Button onClick={() => void save().then((ok) => ok && toast('Report saved', { kind: 'success' }))} loading={busy === 'save'} disabled={!dirty || !!busy}>
+            <Button onClick={() => void save().then((ok) => ok && toast('Report saved', { kind: 'success' }))} loading={busy === 'save'} disabled={!dirty || !!busy || guard.changed}>
               Save
             </Button>
           )}
@@ -138,6 +158,11 @@ function Builder({ projectId, opened }: { projectId: string; opened: OpenReport 
           </Button>
         </div>
       </header>
+      {guard.changed && canEdit && (
+        <div className={s.conflict}>
+          <ConflictBanner noun="report" onReload={onReload} onCopy={conflict.copy} />
+        </div>
+      )}
       {opened.missing && !report.scorecardId && (
         <p className={s.banner} role="status">
           The dashboard this report prints has been deleted. Its pages are kept; only Notes pages still have something to print.
@@ -221,6 +246,8 @@ export default function ReportBuilderPage() {
   const { projectId = '', reportId = '' } = useParams();
   useAdoptProject(projectId);
   const q = useOpenReport(projectId, reportId);
+  const { gen, reload } = useReload(['reports:open', projectId, reportId]);
+  useDropOnLeave(['reports:open', projectId, reportId]);
   if (q.isPending) return <PageSkeleton />;
   if (q.isError || !q.data.ok) {
     return (
@@ -229,5 +256,5 @@ export default function ReportBuilderPage() {
       </div>
     );
   }
-  return <Builder key={reportId} projectId={projectId} opened={q.data} />;
+  return <Builder key={`${reportId}:${gen}`} projectId={projectId} opened={q.data} onReload={reload} />;
 }

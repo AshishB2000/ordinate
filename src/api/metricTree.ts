@@ -4,7 +4,7 @@
 // and sentence is the server's. The tree is stored on the metric's record.
 
 import { z } from 'zod';
-import { byProjectId, rpc, Steps, Uuid } from './contract';
+import { Base, byProjectId, rpc, Steps, Uuid } from './contract';
 
 /**
  * One node: analysis/metricTree.sanitizeTree owns the limits (depth, parts,
@@ -62,7 +62,8 @@ export const metricTree = {
   // Save (or clear, with null) the metric's tree on its record — a version, like every metric edit.
   'metricTree:save': rpc({
     access: 'write',
-    input: z.strictObject({ projectId: Uuid, id: Uuid, tree: TreeNode.nullable() }),
+    // `base`: the metric's tag the editor opened with (contract.ts Base) — the tree is part of the metric.
+    input: z.strictObject({ projectId: Uuid, id: Uuid, base: Base.optional(), tree: TreeNode.nullable() }),
     project: byProjectId,
   }),
   // "Add to dashboard": a Metric tree card at the foot of an existing dashboard (`analysisId`) or a new one (`name`).

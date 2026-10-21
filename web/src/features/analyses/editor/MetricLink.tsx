@@ -26,9 +26,9 @@ export function MetricLink({ card }: { card: Card }) {
 
   const editMetric = async () => {
     try {
-      const r = (await rpc('metric:get', { projectId: ed.projectId, id: m.metricId as string })) as { ok: boolean; metric?: Metric; error?: string };
+      const r = (await rpc('metric:get', { projectId: ed.projectId, id: m.metricId as string })) as { ok: boolean; metric?: Metric; error?: string; tag?: string };
       if (!r.ok || !r.metric) throw new Error(r.error);
-      setEditing(r.metric);
+      setEditing({ ...r.metric, tag: r.tag }); // the tag: the editor's base (docs/edit-conflicts)
     } catch (err) {
       toast(failure(err, 'That metric could not be read.'), { kind: 'error' });
     }

@@ -13,7 +13,7 @@
 // a dataset, a visual, a dashboard card, a scenario — is `write`.
 
 import { z } from 'zod';
-import { byProjectId, rpc, Uuid } from './contract';
+import { Base, byProjectId, rpc, Uuid } from './contract';
 
 const Column = z.string().min(1).max(512);
 /** Dashboard-style filter steps; the handlers re-run them through sanitizeDashboardFilters. */
@@ -133,6 +133,7 @@ export const analytics = {
     input: z.strictObject({
       projectId: Uuid,
       id: Uuid,
+      base: Base.optional(), // the editor's tag (contract.ts Base)
       patch: z.strictObject({ name: z.string().max(200).optional(), ...ScenarioDraft }),
     }),
     project: byProjectId,

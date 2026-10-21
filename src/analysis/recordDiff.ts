@@ -23,11 +23,14 @@ type Rec = Record<string, any>;
 
 export type DiffType = 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report';
 
+// A version's content: everything a save of the record can change that a
+// restore should put back. (Parameters, a visual's overlays and a report's
+// discussion page and view joined with docs/edit-conflicts.)
 const CONTENT_KEYS: Record<DiffType, string[]> = {
-  dashboard: ['name', 'sheets', 'filters', 'style'],
-  visual: ['name', 'chartType', 'encoding', 'overrides', 'filters'],
+  dashboard: ['name', 'sheets', 'filters', 'style', 'parameters'],
+  visual: ['name', 'chartType', 'encoding', 'overrides', 'filters', 'analytics'],
   metric: ['name', 'definition', 'filters', 'format', 'description', 'direction', 'tree'],
-  report: ['name', 'analysisId', 'format', 'pages', 'cover', 'paper', 'includeFilters', 'narrative', 'schedule'],
+  report: ['name', 'analysisId', 'format', 'pages', 'cover', 'paper', 'includeFilters', 'narrative', 'schedule', 'discussion', 'viewId'],
   // A dataset's version is its PREPARE PIPELINE. The table is data, not a
   // definition — restoring a version never touches the source Parquet. The one
   // exception is an INPUT table (src/data/inputTable/), whose data is authored
@@ -35,15 +38,52 @@ const CONTENT_KEYS: Record<DiffType, string[]> = {
   dataset: ['steps', 'table'],
 };
 
+/** A whole-document editor's save channel (src/app/editConflict.ts). A metric has two: its fields, and its tree. */
+export type SaveKind = 'dashboard' | 'visual' | 'metric' | 'metricTree' | 'report' | 'story' | 'scorecard' | 'scenario';
+
+/**
+ * What each editor's save can write — replace-or-keep — and so all its
+ * conflict tag covers: another writer's change to a key outside it (a report's
+ * schedule from Pipelines, a metric's tree from the tree editor, a visual's
+ * star) cannot be overwritten by this save, so it never makes the editor stale.
+ */
+export const SAVE_KEYS: Record<SaveKind, readonly string[]> = {
+  dashboard: ['name', 'sheets', 'filters', 'style', 'parameters'], // analysis:update
+  visual: ['name', 'chartType', 'encoding', 'overrides', 'filters', 'analytics'], // visual:update, not `favorite`
+  metric: ['name', 'definition', 'filters', 'format', 'description', 'direction'], // metric:update: no `tree`
+  metricTree: ['tree'], // metricTree:save
+  report: ['name', 'format', 'pages', 'cover', 'paper', 'includeFilters', 'narrative', 'discussion', 'viewId'], // reports:update: no `schedule`, no `analysisId`
+  story: ['name', 'blocks'],
+  scorecard: ['name', 'period', 'rows', 'description'],
+  scenario: ['name', 'baseMetricIds', 'drivers'],
+};
+
+/** What an absent key means — its store's own default — so a version saved
+ *  before the key was content reads the same as a record that has it empty. */
+const ABSENT: Partial<Record<DiffType, Rec>> = {
+  dataset: { steps: [] },
+  dashboard: { parameters: [] },
+  visual: { analytics: [] },
+  report: { discussion: false, viewId: '' },
+};
+
 /** The versioned fields of a record, in a fixed key order. Absent keys stay
- *  absent (a cleared description is a change, not a null). */
+ *  absent (a cleared description is a change, not a null), except the defaults above. */
 export function contentOf(type: DiffType, rec: unknown): Rec {
   const src: Rec = rec && typeof rec === 'object' ? (rec as Rec) : {};
   const out: Rec = {};
   for (const k of CONTENT_KEYS[type]) {
     if (src[k] !== undefined) out[k] = src[k];
   }
-  if (type === 'dataset' && !Array.isArray(out.steps)) out.steps = [];
+  for (const [k, v] of Object.entries(ABSENT[type] ?? {})) if (out[k] === undefined) out[k] = v;
+  return out;
+}
+
+/** The keys one save channel writes, as stored (absent stays absent). */
+export function savedPart(kind: SaveKind, rec: unknown): Rec {
+  const src: Rec = rec && typeof rec === 'object' ? (rec as Rec) : {};
+  const out: Rec = {};
+  for (const k of SAVE_KEYS[kind]) if (src[k] !== undefined) out[k] = src[k];
   return out;
 }
 
@@ -150,6 +190,7 @@ function diffDashboard(a: Rec, b: Rec, parts: string[]): void {
 
   listChange(arr(a.filters), arr(b.filters), 'filter', parts);
   if (!same(a.style, b.style)) parts.push('changed the style');
+  if (!same(arr(a.parameters), arr(b.parameters))) parts.push('changed the parameters');
 }
 
 function diffVisual(a: Rec, b: Rec, parts: string[]): void {
@@ -166,6 +207,7 @@ function diffVisual(a: Rec, b: Rec, parts: string[]): void {
   if (!same(ea.pivot, eb.pivot)) parts.push('changed the pivot layout');
   listChange(arr(a.filters), arr(b.filters), 'filter', parts);
   if (!same(a.overrides, b.overrides)) parts.push('changed the styling');
+  if (!same(arr(a.analytics), arr(b.analytics))) parts.push('changed the analytics');
 }
 
 function diffMetric(a: Rec, b: Rec, parts: string[]): void {
@@ -210,6 +252,8 @@ function diffReport(a: Rec, b: Rec, parts: string[]): void {
   if (!same(a.schedule, b.schedule)) parts.push(b.schedule && b.schedule.cadence !== 'off' ? 'changed the schedule' : 'turned off the schedule');
   if (!!a.includeFilters !== !!b.includeFilters) parts.push(b.includeFilters ? 'printed the filters' : 'stopped printing the filters');
   if (!!a.narrative !== !!b.narrative) parts.push(b.narrative ? 'added the narrative page' : 'removed the narrative page');
+  if (!!a.discussion !== !!b.discussion) parts.push(b.discussion ? 'added the discussion page' : 'removed the discussion page');
+  if ((a.viewId || '') !== (b.viewId || '')) parts.push('changed the dashboard view');
 }
 
 function diffDataset(a: Rec, b: Rec, parts: string[]): void {

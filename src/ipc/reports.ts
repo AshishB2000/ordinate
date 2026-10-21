@@ -7,6 +7,7 @@ import { serverDataDir } from '../server/context';
 import { displayNames } from '../app/catalog';
 import * as versions from '../app/versions';
 import * as trash from '../app/trash';
+import { contentTag } from '../app/editConflict';
 
 // Reports IPC — the record's CRUD and the app-written caption.
 //
@@ -65,11 +66,12 @@ export function register() {
     return report ? { ok: true, report: publicReport(report) } : { ok: false, error: 'Could not create the report.' };
   });
 
-  ipcMain.handle('reports:update', async (_e, { projectId, id, patch }: any = {}) => {
+  // `base`: a stale copy is 409 record_changed (thrown to the route); `tag` is the next base.
+  ipcMain.handle('reports:update', async (_e, { projectId, id, base, patch }: any = {}) => {
     const before = await reportSpec.getReport(String(projectId || ''), String(id || ''));
-    const r = await reportSpec.updateReport(String(projectId || ''), String(id || ''), patch || {});
+    const r = await reportSpec.updateReport(String(projectId || ''), String(id || ''), patch || {}, base);
     if (r) await versions.record(String(projectId), 'report', r, { before });
-    return r ? { ok: true, report: publicReport(r) } : { ok: false, error: 'Report not found.' };
+    return r ? { ok: true, report: publicReport(r), tag: contentTag('report', r) } : { ok: false, error: 'Report not found.' };
   });
 
   ipcMain.handle('reports:delete', async (_e, { projectId, id }: any = {}) =>

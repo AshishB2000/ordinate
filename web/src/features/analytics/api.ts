@@ -237,6 +237,8 @@ export interface Scenario {
   name: string;
   baseMetricIds: string[];
   drivers: ScenarioDriver[];
+  /** The content tag (`scenario:get`): the editor's base (docs/edit-conflicts). */
+  tag?: string;
 }
 export interface ScenarioSummary {
   id: string;
