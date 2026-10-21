@@ -60,7 +60,7 @@ export function PageHead({ title, sub, back, status, actions, className }: PageH
             <h1 className={s.title}>{title}</h1>
             {status}
           </div>
-          {sub != null && sub !== '' && (typeof sub === 'string' ? <p className={s.sub}>{sub}</p> : <div className={`${s.sub} ${s.meta}`}>{sub}</div>)}
+          {sub != null && sub !== false && sub !== '' && (typeof sub === 'string' ? <p className={s.sub}>{sub}</p> : <div className={`${s.sub} ${s.meta}`}>{sub}</div>)}
         </div>
         {actions && (
           <div ref={bar} className={s.actions}>
