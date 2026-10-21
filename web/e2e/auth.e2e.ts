@@ -108,7 +108,7 @@ const browser = await chromium.launch(process.env.E2E_CHROMIUM ? { executablePat
 
 try {
   check('server: starts with AUTH_MODE=oidc against a fresh database', await listening, serverOut);
-  const context = await browser.newContext({ colorScheme: 'light', viewport: { width: 1280, height: 800 } });
+  const context = await browser.newContext({ colorScheme: 'light', reducedMotion: 'reduce', viewport: { width: 1280, height: 800 } });
   const harvest = async (): Promise<void> => {
     for (const c of await context.cookies()) seen.add(c.value);
   };

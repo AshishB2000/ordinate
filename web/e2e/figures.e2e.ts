@@ -33,7 +33,6 @@ const listed = (page: Page, card: string) => page.locator(card).locator('[data-f
 
 e2e('figures: a Pareto and a waterfall read the same in the app and on the published page', async ({ page, server }) => {
   const pid = server.sample.projectId;
-  await page.emulateMedia({ reducedMotion: 'reduce' }); // the charts draw their final frame at once: the screenshots show the figures, not an animation
   await page.goto(`/analyses?project=${pid}`);
   await settled(page);
   const datasets = (await call(page, 'dataset:list', { projectId: pid })) as { id: string; name: string }[];

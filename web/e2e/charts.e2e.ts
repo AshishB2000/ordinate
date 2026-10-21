@@ -61,8 +61,6 @@ async function pngOf(page: Page, id: string) {
 }
 
 e2e('every chart id renders from the API, in both themes', async ({ page, rpc }) => {
-  // The final frame at once: no Chart.js animation, no CSS fade (base.css).
-  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/dev/charts');
   await settled(page);
 

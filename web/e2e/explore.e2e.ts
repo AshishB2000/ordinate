@@ -88,9 +88,8 @@ function project(s: Session): Promise<{ pid: string; did: string }> {
   return ready;
 }
 
-/** Signs `who` in (header mode), and draws every chart's final frame: a screenshot never catches a bar mid-grow. */
+/** Signs `who` in (header mode). */
 const signIn = async (page: Page, who: string) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
   if (adminUrl) await page.setExtraHTTPHeaders({ 'x-forwarded-email': who });
 };
 

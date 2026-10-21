@@ -102,7 +102,6 @@ e2e('the Data section: list, search, dataset page, quality, columns, catalog, re
   const ids = seed(s);
   const pid = s.server.sample.projectId;
   const bodies = replies(page);
-  await page.emulateMedia({ reducedMotion: 'reduce' });
 
   // ── 1. The list ─────────────────────────────────────────────────────────
   await page.goto('/data');
@@ -284,7 +283,6 @@ e2e('fresh on ask and incremental refresh: set them beside the schedule, and see
   const ids = seed(s);
   const pid = s.server.sample.projectId;
   const bodies = replies(page);
-  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(`/data/${pid}/${ids.liveId}`);
   await settled(page);
   await page.getByRole('heading', { level: 1, name: 'Live orders' }).waitFor();
