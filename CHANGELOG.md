@@ -100,6 +100,11 @@ the desktop installers.
   `json_each`, `json_tree`, `repeat` and `repeat_row` are now refused, so their refresh will fail:
   list the PIVOT values (`ON col IN (…)`) or query the project's datasets instead.
 
+- **`projects:list` and `projects:open` no longer return a project's colour map or its dismissed
+  insight ids** (either can name a value from the data). The colour map is read with
+  `format:colors:get`, as the app already does. A subscription or alert over a dataset with row access
+  rules now records the run code `row_policy`.
+
 - **Embeds refuse more datasets that store values computed across rows.** A locked embed tile is now refused when its dataset was built by SQL, a notebook or the composer, when a step looks up another dataset, or when a group-by, pivot or keyed dedupe does not keep every locked column — each could carry another customer's rows or totals into the view. (The same rule backs row access rules.)
 
 ### Fixed — since the move to the web
