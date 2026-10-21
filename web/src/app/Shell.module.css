@@ -165,7 +165,24 @@
 .nav {
   display: flex;
   flex-direction: column;
+  gap: var(--sp-12);
+}
+/* A group of sections (navGroups.ts) under its small label. */
+.group {
+  display: flex;
+  flex-direction: column;
   gap: 1px;
+}
+.groupLabel {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--sp-8);
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
 }
 .bottom {
   margin-top: auto;
@@ -232,13 +249,19 @@
     justify-content: center;
     padding: 0;
   }
-  .navLabel {
+  .navLabel,
+  .groupLabel {
     position: absolute;
     width: 1px;
     height: 1px;
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+  }
+  /* Folded to icons, a group is told from the next by a hairline. */
+  .group + .group {
+    padding-top: var(--sp-12);
+    border-top: 1px solid var(--border-hairline);
   }
   .projectName {
     display: none;

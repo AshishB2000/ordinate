@@ -3,6 +3,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { renderApp, stubFetch } from '../test-utils';
 import { media } from '../test-setup';
 import { NAV } from './nav';
+import { NAV_GROUPS } from './navGroups';
 import { RouteError } from './errors';
 
 afterEach(() => {
@@ -16,10 +17,14 @@ describe('shell', () => {
     stubFetch(200, []);
     renderApp('/');
     const nav = screen.getByRole('navigation', { name: 'Sections' });
-    // The rail draws the main items, then the `bottom` ones pinned to its foot
-    // (NAV is append-only, so a later main item can follow a bottom one in it).
-    const shown = [...NAV.filter((n) => !n.bottom), ...NAV.filter((n) => n.bottom)];
+    // The rail draws its groups in order (navGroups.ts: View, then Build), then
+    // the `bottom` items pinned to its foot — not NAV's append-only order.
+    const shown = [...NAV_GROUPS.flatMap((g) => g.items.map((to) => NAV.find((n) => n.to === to)!)), ...NAV.filter((n) => n.bottom)];
     expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(shown.map((n) => n.label));
+    expect(within(nav).getAllByRole('link').slice(0, 4).map((a) => a.textContent)).toEqual(['Home', 'Explore', 'Dashboards', 'Reports']);
+    for (const g of NAV_GROUPS) {
+      expect(within(within(nav).getByRole('group', { name: g.label })).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(g.items);
+    }
     expect(screen.getByRole('search')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Account and theme' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Switch project/ })).toBeTruthy();
