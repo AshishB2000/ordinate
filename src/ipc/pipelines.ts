@@ -24,6 +24,7 @@ import { sanitizePolicy } from '../app/pipelines';
 import { describeCron, isValidTimeZone, nextCronRun, parseCron } from '../app/pipelineCron';
 import { isAutoRefreshEvery, needsIncremental } from '../data/refreshCadence';
 import { fastCadenceNeedsIncremental } from '../data/refreshMessages';
+import { closedToCaller } from '../data/rowAccess';
 
 const fail = (err: unknown, fallback: string): { ok: false; error: string } =>
   ({ ok: false, error: err instanceof Error && err.message ? err.message : fallback });
@@ -40,13 +41,25 @@ export function preview(cron: unknown, tz: unknown, from = Date.now(), n = 3): {
   return { ok: true, text: describeCron(cron), next };
 }
 
+/**
+ * A refresh or a quality run's errors and warnings can quote values from every row: blanked on the nodes of a
+ * dataset the caller's row access rules restrict (round 2, #14). The status, timing and counts stay.
+ */
+async function quietRuns<V extends { nodes: Array<{ kind: string; ref?: { type: string; id: string }; runs: store.NodeRun[] }> }>(projectId: string, view: V): Promise<V> {
+  const nodes = await Promise.all(view.nodes.map(async (n) => (
+    (n.kind === 'dataset' || n.kind === 'quality') && n.ref?.type === 'dataset' && (await closedToCaller(projectId, n.ref.id))
+      ? { ...n, runs: n.runs.map((r) => ({ ...r, errors: [], warnings: [], ...(r.note ? { note: '' } : {}) })) }
+      : n)));
+  return { ...view, nodes };
+}
+
 export function register(deps: { headless?: boolean }): void {
   ipcMain.handle('pipelines:get', async (_e, { projectId }: any = {}) => {
     try {
       if (!isValidId(projectId)) return { ok: false, error: 'Unknown project.' };
       const view = await loadView(projectId);
       if (!view.ok) return view; // a loop names the records, never an origin
-      return { ...maskView(withSummary(view)), live: maskKeys(runner.liveState(projectId)) };
+      return { ...maskView(withSummary(await quietRuns(projectId, view))), live: maskKeys(runner.liveState(projectId)) };
     } catch (err) {
       return fail(err, 'Could not read the pipeline.');
     }

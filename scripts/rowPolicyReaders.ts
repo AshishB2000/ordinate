@@ -97,7 +97,7 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'metricTree:suggest': 'META',
   'onboarding:status': 'META',
   'period:picker': 'META',
-  'pipelines:get': 'META',
+  'pipelines:get': 'REDACT',
   'pipelines:preview': 'META',
   'plan:check': 'META',
   'prefs:get': 'META',

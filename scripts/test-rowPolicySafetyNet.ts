@@ -172,6 +172,19 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     ok('redact: projects:list and projects:open carry no colour map and no dismissed insight ids', projOpen.body?.id === P
       && !/colorMap|dismissedInsights/.test(projList.text + projOpen.text));
     ok('NEGATIVE CONTROL: the stored project holds both, with the West value', H.leaks(JSON.stringify(await W.as('boss', () => projectsMod.getProject(P)))));
+    // A run's errors and warnings can quote values (round 2, #14): blank on Orders' dataset and quality nodes for east.
+    const pipeStore: typeof import('../src/app/pipelineStore') = require('../src/app/pipelineStore');
+    const at = new Date().toISOString();
+    const run = (nodeId: string) => ({ nodeId, id: crypto.randomUUID(), runId: crypto.randomUUID(), trigger: 'manual' as const, status: 'failed' as const,
+      startedAt: at, finishedAt: at, durationMs: 1, attempts: 1, warnings: [`${H.W_CANARY}_5 looks odd`], errors: [`no row for ${H.W_CANARY}_6`] });
+    await W.as('boss', () => pipeStore.appendRuns(P, [run(`dataset:${orders}`), run(`quality:${orders}`)]));
+    const pipeEast = await W.call('east', 'pipelines:get', { projectId: P });
+    const pipeEd = await W.call('ed', 'pipelines:get', { projectId: P });
+    eastReplies.push(pipeEast.text);
+    const failedRuns = (r: H.Reply) => (r.body?.nodes as { runs: { status: string }[] }[] | undefined ?? []).flatMap((n) => n.runs).filter((x) => x.status === 'failed').length;
+    ok('redact: pipelines:get keeps east\'s failed runs on Orders but not their errors or warnings', pipeEast.body?.ok === true && failedRuns(pipeEast) === 2 && !H.leaks(pipeEast.text), pipeEast.text.slice(0, 160));
+    ok('NEGATIVE CONTROL: the editor reads both runs\' errors and warnings', failedRuns(pipeEd) === 2 && pipeEd.text.includes(`${H.W_CANARY}_5`) && pipeEd.text.includes(`${H.W_CANARY}_6`));
+
     // A visual's custom order and series colours name values (round 2, #12): east gets the record without them.
     const vis = recs[orders].visualId;
     const styled = { sort: 'custom', sortOrder: [`${H.W_CANARY}_3`, 'East'], seriesColors: { [`${H.W_CANARY}_4`]: 'chart-2' } };
