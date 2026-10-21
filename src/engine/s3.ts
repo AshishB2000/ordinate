@@ -2,8 +2,13 @@
 //
 // DuckDB's httpfs does every read and write of a table (src/engine/storage.ts).
 // What SQL cannot do is fetch an object's exact bytes into the local cache,
-// delete an object (GC) or make a bucket (tests, the bench). Those three are
-// here: SigV4-signed `fetch`, ~40 lines of stdlib crypto.
+// delete an object (GC), make a bucket (tests, the bench), or move a file's
+// raw bytes to and from the org's staging prefix (uploads and downloads that
+// any pod serves, docs/any-pod/00-design.md §3.2). Those are here: SigV4-signed
+// requests, ~40 lines of stdlib crypto. A PUT signs the body's real sha256 and
+// goes through http(s).request with an explicit Content-Length: S3 refuses a
+// chunked body, and fetch's 300 s headers/body timers would bound a slow
+// multi-GB upload; a plain request has no such timer.
 //
 // CREDENTIALS come from the SAME chain the org workers use — DuckDB's `aws`
 // extension, `PROVIDER credential_chain` (env, shared config, web identity /
@@ -19,6 +24,8 @@
 
 import { createHash, createHmac, randomUUID } from 'crypto';
 import * as fs from 'fs';
+import * as http from 'http';
+import * as https from 'https';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import type { S3Env } from '../server/env';
@@ -81,14 +88,14 @@ export function objectUrl(cfg: S3Env, key: string): URL {
   return new URL(`${cfg.useSsl ? 'https' : 'http'}://${host}/${path}`);
 }
 
-/** SigV4 headers for a body-less request (UNSIGNED-PAYLOAD, which S3 accepts). Exported for the tests. */
-export function signedHeaders(cfg: S3Env, method: string, url: URL, creds: Creds, now = new Date()): Record<string, string> {
+/** SigV4 headers: a body-less request is UNSIGNED-PAYLOAD (S3 accepts it); a PUT names its body's sha256. Exported for the tests. */
+export function signedHeaders(cfg: S3Env, method: string, url: URL, creds: Creds, now = new Date(), payloadHash = 'UNSIGNED-PAYLOAD'): Record<string, string> {
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
   const day = amzDate.slice(0, 8);
-  const headers: Record<string, string> = { host: url.host, 'x-amz-content-sha256': 'UNSIGNED-PAYLOAD', 'x-amz-date': amzDate };
+  const headers: Record<string, string> = { host: url.host, 'x-amz-content-sha256': payloadHash, 'x-amz-date': amzDate };
   if (creds.token) headers['x-amz-security-token'] = creds.token;
   const names = Object.keys(headers).sort();
-  const canonical = [method, url.pathname, '', names.map((n) => `${n}:${headers[n]}\n`).join(''), names.join(';'), 'UNSIGNED-PAYLOAD'].join('\n');
+  const canonical = [method, url.pathname, '', names.map((n) => `${n}:${headers[n]}\n`).join(''), names.join(';'), payloadHash].join('\n');
   const scope = `${day}/${cfg.region}/s3/aws4_request`;
   const toSign = ['AWS4-HMAC-SHA256', amzDate, scope, createHash('sha256').update(canonical).digest('hex')].join('\n');
   let key: Buffer = hmac('AWS4' + creds.secret, day);
@@ -114,7 +121,7 @@ export async function download(cfg: S3Env, key: string, file: string): Promise<n
   const res = await send(cfg, 'GET', key);
   if (res.status !== 200 || !res.body) {
     await res.body?.cancel();
-    throw new Error(`S3 GET failed: HTTP ${res.status}`);
+    throw Object.assign(new Error(`S3 GET failed: HTTP ${res.status}`), { status: res.status });
   }
   const tmp = `${file}.${randomUUID()}.tmp`;
   try {
@@ -142,4 +149,38 @@ export async function createBucket(cfg: S3Env): Promise<void> {
   const res = await send(cfg, 'PUT', '');
   const body = await res.text();
   if (res.status !== 200 && !/BucketAlreadyOwnedByYou/.test(body)) throw new Error(`S3 create bucket failed: HTTP ${res.status}`);
+}
+
+/** Upload `file` (`size` bytes whose sha256 is `sha256`, hex) as `key`. Throws on anything but 200. */
+export async function put(cfg: S3Env, key: string, file: string, sha256: string, size: number): Promise<void> {
+  let status = await putWithCreds(cfg, key, file, sha256, size, await credsFor(cfg));
+  if (status === 403) status = await putWithCreds(cfg, key, file, sha256, size, await credsFor(cfg, true));
+  if (status !== 200) throw new Error(`S3 PUT failed: HTTP ${status}`);
+}
+
+/** One signed PUT with these credentials; the HTTP status. Exported for the tests (a local server, fake keys). */
+export function putWithCreds(cfg: S3Env, key: string, file: string, sha256: string, size: number, creds: Creds): Promise<number> {
+  const url = objectUrl(cfg, key);
+  const headers = { ...signedHeaders(cfg, 'PUT', url, creds, new Date(), sha256), 'content-length': String(size) };
+  return new Promise<number>((resolve, reject) => {
+    const req = (url.protocol === 'https:' ? https : http).request(url, { method: 'PUT', headers }, (res) => {
+      res.resume(); // the body is an XML error at most: never read, never logged
+      res.on('end', () => resolve(res.statusCode ?? 0));
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    const body = fs.createReadStream(file);
+    body.on('error', (err) => req.destroy(err));
+    body.pipe(req);
+  });
+}
+
+/** An object's bytes as a stream, and its size. Throws on anything but 200 (`status` on the error). */
+export async function open(cfg: S3Env, key: string): Promise<{ body: Readable; size: number }> {
+  const res = await send(cfg, 'GET', key);
+  if (res.status !== 200 || !res.body) {
+    await res.body?.cancel();
+    throw Object.assign(new Error(`S3 GET failed: HTTP ${res.status}`), { status: res.status });
+  }
+  return { body: Readable.fromWeb(res.body as import('stream/web').ReadableStream), size: Number(res.headers.get('content-length') ?? 0) };
 }
