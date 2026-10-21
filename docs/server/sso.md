@@ -15,9 +15,11 @@ move off it.
 
 In both SSO modes, the identity is the **email address**, lower-cased. The first time an address signs
 in, it joins the deployment's org (`ORDINATE_ORG`) as a **viewer**. `ORDINATE_ADMIN_EMAIL` is made
-admin at every sign-in, and admins grant roles in Admin. `ALLOWED_EMAIL_DOMAINS` refuses every other
-domain. A disabled user is refused, and their sessions are deleted. Personal API tokens
-(`Authorization: Bearer ord_…`) work in both modes.
+admin at every sign-in, and admins grant roles in Admin, or let the IdP's groups decide roles and
+teams ([below](#groups-roles-and-teams-from-the-idp)). `ALLOWED_EMAIL_DOMAINS` refuses every other
+domain. Disabling someone in Admin ends their sessions, revokes their API tokens for good and closes
+their open tabs' event streams on every pod. Personal API tokens (`Authorization: Bearer ord_…`) work
+in both modes, and every token expires ([Leavers](#leavers-sessions-tokens-and-disable)).
 
 Everything below about Ordinate's side is read from `src/server/auth/` and `src/server/env.ts`. The
 OIDC flow is tested end to end against a mock IdP that checks PKCE and the client secret
@@ -175,12 +177,94 @@ networkPolicy:
 This needs a CNI that enforces NetworkPolicy. The chart's NetworkPolicy was proven on kind with
 kindnet (T7.2). Prefer `oidc` mode there: it has no proxy to trust.
 
+## Groups, roles and teams from the IdP
+
+Once the server reads a person's groups, an admin maps them in **Admin → People → Identity provider
+groups**: a group to an org role, to a team, or both. The rules:
+
+- **The highest mapped role wins**; someone in no mapped group is a **viewer**.
+  `ORDINATE_ADMIN_EMAIL` is always admin. The org's **last admin is never demoted**: the role is kept,
+  an error is logged and the audit log gets an `idp:sync` row with outcome `denied`.
+- **A team linked to a group holds exactly the IdP's members.** Its member picker is hidden in
+  Admin → Teams. Teams no group links stay manual.
+- **Once any group maps a role, every role follows the IdP.** The role picker is hidden in Admin →
+  People and `admin:setRole` is refused (409). Invite still works; the first sign-in sets the role.
+- **Group names are matched exactly**, as the IdP sends them: case and inner spaces count; leading and
+  trailing spaces do not.
+- **When it applies.** OIDC: at every sign-in, before the session starts. Header mode: on the first
+  request whose groups differ from the last ones applied (a digest is compared per request; nothing is
+  written while they are the same). A change to the map applies at once to everyone whose groups the
+  server has seen, and empties then refills a team whose links changed.
+- **A missing list changes nothing.** If the claim is absent, malformed, or Entra ID reports a group
+  overage, or the header is missing, the person keeps their role and teams, a warning is logged (once
+  an hour per person per pod) and `ordinate_idp_sync_total{outcome="absent"|"overage"}` counts it. Only
+  an explicit list, an empty one included, changes anything. So make sure your IdP always sends the
+  claim: someone moved out of every group whose IdP stops sending it keeps their role until it does.
+- Every change is an `idp:sync` row in the audit log, naming the person and the teams.
+
+### OIDC
+
+Set `OIDC_GROUPS_CLAIM` to the claim that lists groups. Ordinate reads it from the **ID token** only
+(the signed token, verified at sign-in), never from userinfo, so configure the IdP to put it there.
+
+- **Okta.** In the app's **Sign On** tab (org authorization server) or the custom authorization
+  server's **Claims** tab, add a `groups` claim, **Include in token type: ID Token**, with a filter that
+  matches your groups. Use a filter that always matches one group everyone has (`Everyone`), so the
+  claim is never left out. A custom authorization server that ties the claim to a scope needs
+  `OIDC_EXTRA_SCOPES=groups`.
+- **Microsoft Entra ID.** Under **Token configuration**, add a groups claim. Entra ID sends group
+  **object ids** (map those, not display names). A person in more than 200 groups gets an *overage*
+  marker (`_claim_names`) instead of the list, and Ordinate then changes nothing for them, at every
+  sign-in. Avoid it with **Groups assigned to the application**, or use **app roles**:
+  `OIDC_GROUPS_CLAIM=roles`, which has no overage.
+- **Keycloak.** On the client's dedicated scope, add a **Group Membership** mapper with token claim
+  name `groups` and **Add to ID token** on. With **Full group path** on, groups read `/team/sub-team`.
+- **Auth0.** An Action adds a namespaced claim to the ID token, for example
+  `https://ordinate.example.com/groups`; set `OIDC_GROUPS_CLAIM` to that name.
+
+### Header mode
+
+Set `TRUSTED_GROUPS_HEADER` to the header your proxy lists groups in, comma-separated. oauth2-proxy
+sends `X-Forwarded-Groups` with `--pass-user-headers=true`. It is believed only from a peer in
+`TRUSTED_PROXY_CIDRS`, exactly like `X-Forwarded-Email`, and never on a request carrying an API token.
+
+**Two requirements, because Ordinate cannot check either:**
+
+1. **The proxy must set or strip the header on every request.** A proxy that passes a client's own
+   `X-Forwarded-Groups` through lets anyone claim an admin-mapped group. oauth2-proxy 7 removes the
+   headers it injects from the incoming request; nginx `auth_request`, Traefik ForwardAuth and other
+   proxies must be configured to.
+2. **The proxy must admit only members of an allowed group** (oauth2-proxy `--allowed-group`), so a
+   person removed from your groups is stopped at the proxy, not left with whatever role they had when
+   their header was last read.
+
+A group name that contains a comma cannot be mapped in header mode.
+
+## Leavers: sessions, tokens and disable
+
+Without SCIM (phase 2), Ordinate learns of a leaver only when they next sign in, so a leaver's access
+lasts at most one session and one token:
+
+- **Sessions.** A session lasts `SESSION_IDLE_MINUTES` without a request and `SESSION_ABSOLUTE_HOURS` in
+  all (7 days by default). Roles and teams are read again at each sign-in, so under SSO set
+  `SESSION_ABSOLUTE_HOURS=12`: a group change then reaches everyone within half a day.
+- **API tokens expire.** A new token lives 30, 90 or 365 days, up to `API_TOKEN_MAX_DAYS` (365). A
+  token made before tokens had an end expires `API_TOKEN_MAX_DAYS` after it was made; lowering the
+  maximum shortens every token. A token acts with its owner's current role.
+- **Disable is final and immediate.** Disabling someone in Admin → People ends their sessions,
+  revokes every API token of theirs (enabling them again does not bring one back) and closes their
+  open event streams on every pod within a second (a 30-second sweep catches a missed message). Signing
+  out everywhere, and a password reset, close streams too. A refresh URL a disabled person made stops
+  while they are disabled and works again if they are enabled; revoke it in the dataset's panel.
+
 ## Password sign-in (for trying Ordinate out)
 
 `AUTH_MODE=password` is the default, so a server nobody has configured yet asks for a password
 instead of letting anyone in. It needs Postgres (`DATABASE_URL`). At every start the server logs a
 warning that this mode is for trying Ordinate out. Move to `oidc` or `header` before real use:
-password sign-in has no MFA, and leavers have to be disabled in Ordinate by hand.
+password sign-in has no MFA, and every leaver has to be disabled in Ordinate by hand. Under SSO a
+leaver can no longer sign in, but a session they already hold and their API tokens keep working until
+they end: see [Leavers](#leavers-sessions-tokens-and-disable).
 
 **First admin.** While no enabled admin has a password, each pod logs a one-time setup code at
 startup, for example `First-run setup code: K7QM-2XRA-V9TD`. Only its sha256 is stored. The sign-in

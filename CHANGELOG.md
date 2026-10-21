@@ -91,6 +91,29 @@ the desktop installers.
 
 - **Row access rules.** A project admin can limit what each project viewer sees in a dataset to the rows whose chosen column holds their values — by person or by team — from the dataset's new **Row access** tab. Every chart, KPI, answer, data grid, filter list and column panel then shows that viewer only their rows; readers that work over the whole table (SQL, statistics, drivers, segments, insights, quality results, snapshot diffs, Prepare previews, exports) are refused with a sentence that says why, and published links, embeds, subscriptions and alerts are off for such a dataset. Live datasets bind and byte-compare the rule's values on every warehouse. See [`docs/server/row-level-security.md`](docs/server/row-level-security.md).
 
+### Added — identity provider groups, token expiry, disable that sticks
+
+- **Roles and teams from your identity provider.** Set `OIDC_GROUPS_CLAIM` (OIDC) or
+  `TRUSTED_GROUPS_HEADER` (header mode), then map groups to an org role and to teams in Admin → People
+  → Identity provider groups. Applied at every sign-in (header mode: whenever the groups change); a
+  missing claim, a malformed one or Entra ID's group overage changes nothing; the org's last admin is
+  kept. Once a group maps a role, roles are no longer set by hand, and a linked team's members come
+  from the IdP. `OIDC_EXTRA_SCOPES` asks for scopes an IdP needs to send groups. Migration 0019.
+- **API tokens expire.** A new token lives 30, 90 or 365 days, up to `API_TOKEN_MAX_DAYS` (default
+  365); the API tokens page shows each token's end.
+- **Disabling someone closes their open tabs' event streams on every pod**, within a second, as do
+  signing out everywhere and a password reset.
+
+### Changed — identity provider groups, token expiry, disable that sticks
+
+- **Tokens made before this release now expire `API_TOKEN_MAX_DAYS` after they were made** (365 days
+  by default); one older than that stops working at once. Lowering the maximum shortens every token.
+  `tokens:create` now requires `expiresInDays`.
+- **Disabling someone revokes their API tokens for good**: enabling them again no longer brings a token
+  back.
+- **The last-admin rule counts only admins who have signed in**: an invited admin who has not signed in
+  yet no longer lets the last signed-in admin be demoted or disabled.
+
 ### Security — since the move to the web
 
 - **SQL over datasets is checked against DuckDB's own reading of the query.** A query could reach
