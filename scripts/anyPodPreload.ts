@@ -8,7 +8,9 @@
 //   ANYPOD_FAST_RUNNER=1      scheduled jobs poll every 200 ms
 //   ANYPOD_MEMORY_COUNTERS=1  NEGATIVE CONTROL: the abuse counters stay in this process
 //   ANYPOD_NONATOMIC_TAKE=1   NEGATIVE CONTROL: a token take that reads, then writes unconditionally
-//   ANYPOD_SLOW_JOBS=a,b      jobs of these kinds wait ANYPOD_SLOW_MS (or until cancelled) before running
+//   ANYPOD_SLOW_JOBS=a,b      jobs of these kinds — or whose label names a file with `slow` in it —
+//                             wait ANYPOD_SLOW_MS (or until cancelled) before running
+//   ANYPOD_NO_PLAN_LEASE=1    NEGATIVE CONTROL: a plan step claim that ignores a live lease
 //   ANYPOD_OFFER_LOG=1        every offered download logs its bytes' sha256 (`anypod:offered`)
 //   ANYPOD_TAKE_LOG=1         every token take that WON logs its hash (`anypod:took`)
 
@@ -67,7 +69,7 @@ const slow = new Set((env.ANYPOD_SLOW_JOBS ?? '').split(',').filter(Boolean));
 if (slow.size) {
   const real = jobs.submit;
   (jobs as { submit: typeof real }).submit = (spec) => {
-    if (!slow.has(spec.kind)) return real(spec);
+    if (!slow.has(spec.kind) && !/slow/.test(spec.label)) return real(spec);
     return real({
       ...spec,
       cancellable: true,
@@ -99,5 +101,22 @@ if (env.ANYPOD_TAKE_LOG === '1') {
     const row = await inner(org, user, kind, hash);
     if (row) process.stdout.write(JSON.stringify({ msg: 'anypod:took', hash: hash.toString('hex') }) + '\n');
     return row;
+  };
+}
+
+if (env.ANYPOD_NO_PLAN_LEASE === '1') {
+  const planStore: typeof import('../src/ai/planStore') = require('../src/ai/planStore');
+  (planStore as { claim: typeof planStore.claim }).claim = async (projectId, runId, kind, begin) => {
+    const id = crypto.randomUUID();
+    const r = await planStore.update(projectId, runId, (run, now) => {
+      const before = structuredClone(run);
+      delete run.lease; // the guard, switched off: a live lease is ignored
+      if (run.state === 'running') run.state = 'paused';
+      run.status = run.status.map((s) => (s === 'running' ? 'pending' : s));
+      const index = begin(run);
+      if (index >= 0) run.lease = { claim: id, until: now + planStore.LEASE_MS, kind, prev: before.state };
+      return { busy: false, index, before };
+    });
+    return r && { run: r.run, claim: id, ...r.out };
   };
 }

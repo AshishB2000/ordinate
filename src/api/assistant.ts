@@ -27,14 +27,6 @@ const Context = z.strictObject({
   stats: z.looseObject({}).optional(),
 });
 
-/**
- * The project a plan run belongs to, for the plan channels' scope check. The
- * runs live in src/ipc/plan.ts, which installs this when it registers — a
- * contract file never imports a handler (the web type-checks this file).
- */
-export const planRuns: { project(runId: string): string | null } = { project: () => null };
-const byRun = (i: { runId: string }): string | null => planRuns.project(i.runId);
-
 export const assistant = {
   // Readiness, has-key flags, the org's allowed providers. Never a key.
   'key:status': rpc({ access: 'read', org: true, input: z.undefined() }),
@@ -109,10 +101,12 @@ export const assistant = {
     input: z.strictObject({ projectId: Uuid, threadId: z.union([Uuid, z.literal('')]).optional(), intent: z.string().max(400).optional(), steps: Steps }),
     project: byProjectId,
   }),
+  // A run is a record under its project (src/ai/planStore.ts): every call names the project, which is the
+  // scope checked here, and the handler reads the run from exactly that project — any pod may answer.
   // plan:next may hand over the upload an import step reads (POST /api/files).
-  'plan:next': rpc({ access: 'write', input: z.strictObject({ runId: Uuid, fileToken: FileToken.optional() }), project: byRun }),
-  'plan:skip': rpc({ access: 'write', input: z.strictObject({ runId: Uuid, index: z.number().int().min(0).max(49) }), project: byRun }),
-  'plan:fix': rpc({ access: 'write', input: z.strictObject({ runId: Uuid, index: z.number().int().min(0).max(49) }), project: byRun }),
-  'plan:stop': rpc({ access: 'write', input: z.strictObject({ runId: Uuid }), project: byRun }),
-  'plan:undo': rpc({ access: 'write', input: z.strictObject({ runId: Uuid }), project: byRun }),
+  'plan:next': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, runId: Uuid, fileToken: FileToken.optional() }), project: byProjectId }),
+  'plan:skip': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, runId: Uuid, index: z.number().int().min(0).max(49) }), project: byProjectId }),
+  'plan:fix': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, runId: Uuid, index: z.number().int().min(0).max(49) }), project: byProjectId }),
+  'plan:stop': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, runId: Uuid }), project: byProjectId }),
+  'plan:undo': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, runId: Uuid }), project: byProjectId }),
 } as const;

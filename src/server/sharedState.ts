@@ -1,6 +1,6 @@
 // What every pod shares through Postgres so that any pod can serve any request
 // (docs/any-pod/00-design.md): the abuse counters, the file tokens, the staged
-// imports, and the job that sweeps what has expired. Wired once the schema is current (./app.ts); without
+// imports, the plan-run clock, and the job that sweeps what has expired. Wired once the schema is current (./app.ts); without
 // DATABASE_URL nothing here runs and each store keeps its in-process copy.
 
 import type { Pool } from 'pg';
@@ -8,6 +8,7 @@ import { ctx } from './context';
 import * as counters from './counters';
 import * as fileTokens from './fileTokens';
 import * as stageStore from '../data/stageStore';
+import * as planStore from '../ai/planStore';
 import { defineJob } from './jobs/runner';
 
 /** How often each org's expired tokens, stages, counter windows and plan runs are swept. */
@@ -23,6 +24,7 @@ export async function sweepOrg(p: Pool): Promise<void> {
     () => counters.sweepEnded(p, org),
     () => fileTokens.sweep(p, org),
     () => stageStore.sweep(p, org),
+    () => planStore.prune(),
   ];
   const errors: unknown[] = [];
   for (const part of parts) await part().catch((err: unknown) => errors.push(err));
@@ -34,6 +36,7 @@ export function wireSharedState(p: Pool, log: stageStore.Log): void {
   counters.useCounterDb(p);
   fileTokens.useFileTokenDb(p);
   stageStore.useStageDb(p, log);
+  planStore.usePlanDb(p, log);
   if (defined) return; // a second app in one process (tests) shares the kind
   defined = true;
   defineJob('shared:sweep', {
@@ -48,4 +51,5 @@ export function unwireSharedState(): void {
   counters.useCounterDb(null);
   fileTokens.useFileTokenDb(null);
   stageStore.useStageDb(null);
+  planStore.usePlanDb(null);
 }

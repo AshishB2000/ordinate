@@ -275,7 +275,53 @@ export async function rowIsTruth(p: Pass): Promise<void> {
   ok(`[${p.name}] stage wall: another user's, and another org's, read of a stage is GONE`, other.body?.error === STAGE_GONE && foreign.body?.error === STAGE_GONE, JSON.stringify([other.body, foreign.body]).slice(0, 300));
 }
 
-export const CASES: Array<(p: Pass) => Promise<void>> = [crossPodImport, rowIsTruth, takeRace, wrongUser, expired, exportAndBackup, sweepSparesTaken, abortedDownload, orgWall];
+// ── 4. A plan run started on A advances on B; undo on A ──────────────────
+const PLAN_CSV = Buffer.from('region,amount\nNorth,10\nSouth,32\n');
+const PLAN_STEPS = (name: string) => [
+  { kind: 'import', file: 'plan.csv', name },
+  { kind: 'metric', dataset: name, name: name + ' total', column: 'amount', aggregation: 'sum' },
+];
+const datasetsNamed = async (pod: H.Pod, pid: string, name: string): Promise<number> =>
+  ((await H.rpc(pod.base, U1, 'dataset:list', { projectId: pid })).body as Array<{ name: string }>).filter((d) => d.name === name).length;
+
+/** Next fired on `first`, then on `second` while the (slowed) import runs: the replies, and how many imports landed. */
+async function racedNext(p: Pass, first: H.Pod, second: H.Pod, name: string) {
+  const pid = await projectOf(p, U1);
+  const start = await H.rpc(p.A.base, U1, 'plan:start', { projectId: pid, intent: 'any pod', steps: PLAN_STEPS(name) });
+  const runId = start.body?.runId as string;
+  // A file name with `slow` in it: the preload holds its parse job ~4 s, so the second Next lands mid-step.
+  const [t1, t2] = [await H.upload(p.A.base, U1, PLAN_CSV, 'plan-slow.csv'), await H.upload(p.A.base, U1, PLAN_CSV, 'plan-slow.csv')];
+  const one = H.rpc(first.base, U1, 'plan:next', { projectId: pid, runId, fileToken: t1 });
+  await H.sleep(600);
+  const two = await H.rpc(second.base, U1, 'plan:next', { projectId: pid, runId, fileToken: t2 });
+  const r1 = await one;
+  return { pid, runId, r1: r1.body, r2: two.body, imports: await datasetsNamed(p.A, pid, name) };
+}
+
+export async function planAcrossPods(p: Pass): Promise<void> {
+  const raced = await racedNext(p, p.B, p.A, 'Planned');
+  ok(`[${p.name}] 4: a plan started on A runs its import step on B (A's upload), and a Next on A meanwhile is told the step is still running`,
+    raced.r1?.ok === true && raced.r1.ran === 0 && raced.r1.status[0] === 'done' && raced.r2?.ok === false && /still working/.test(raced.r2.error) && raced.imports === 1,
+    JSON.stringify({ r1: raced.r1?.status ?? raced.r1, r2: raced.r2?.error ?? raced.r2, imports: raced.imports }));
+  const next = await H.rpc(p.A.base, U1, 'plan:next', { projectId: raced.pid, runId: raced.runId });
+  const undo = await H.rpc(p.A.base, U1, 'plan:undo', { projectId: raced.pid, runId: raced.runId });
+  const metrics = (await H.rpc(p.B.base, U1, 'metric:list', { projectId: raced.pid })).body?.metrics as Array<{ name: string }> | undefined;
+  ok(`[${p.name}] 4: …its metric step runs on A, and undo on A takes back what both pods made`,
+    next.body?.status?.[1] === 'done' && undo.body?.state === 'undone' && undo.body.undo?.undone === 2 && undo.body.undo.failed.length === 0
+      && (await datasetsNamed(p.B, raced.pid, 'Planned')) === 0 && !(metrics ?? []).some((m) => m.name === 'Planned total'),
+    JSON.stringify({ next: next.body?.status, undo: undo.body?.undo ?? undo.body }));
+  const elsewhere = await H.rpc(p.B.base, U2, 'plan:next', { projectId: raced.pid, runId: raced.runId });
+  ok(`[${p.name}] 4: another user's call on the run finds nothing`, elsewhere.body?.ok === false && /has ended/.test(elsewhere.body.error));
+  if (p.name !== 'file') return;
+  const C = await p.startPod({ ANYPOD_NO_PLAN_LEASE: '1' });
+  const D = await p.startPod({ ANYPOD_NO_PLAN_LEASE: '1' });
+  const broken = await racedNext(p, C, D, 'Twice');
+  ok('[file] 4: NEGATIVE CONTROL — with the lease ignored, the same two Nexts both run the import: two datasets', broken.imports === 2, JSON.stringify({ imports: broken.imports }));
+  await C.stop();
+  await D.stop();
+}
+
+export const CASES: Array<(p: Pass) => Promise<void>> = [crossPodImport, rowIsTruth, planAcrossPods, takeRace, wrongUser, expired, exportAndBackup, sweepSparesTaken, abortedDownload, orgWall];
 
 // ── 9. NEGATIVE CONTROL: no database, the Map — a take does not cross pods ─
 export async function memoryControl(A: H.Pod, B: H.Pod): Promise<void> {
