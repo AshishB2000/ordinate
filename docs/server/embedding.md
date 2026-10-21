@@ -122,7 +122,7 @@ after. Turning embedding off stops every embed at once, too.
 ## Limits, audit, logs
 
 - Views per token: `RATE_LIMIT_EMBED_PER_MINUTE` (120); per organization:
-  `RATE_LIMIT_EMBED_ORG_PER_MINUTE` (1,200); per client IP: the RPC budget. All per pod. Over → `429`.
+  `RATE_LIMIT_EMBED_ORG_PER_MINUTE` (1,200); per client IP: the RPC budget. The token and organization limits are counted across every pod; the per-IP one in each pod. Over → `429`.
 - Every view whose signature checks out is an audit row (Admin → Audit log → **Embed views**): the
   link and dashboard ids and the outcome, actor `embed`. Never the token.
 - The token is masked in the request log (`/embed/[redacted]`); the secret is in no log line and in

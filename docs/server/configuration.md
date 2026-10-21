@@ -80,8 +80,8 @@ from these tables, or when a table names one that no code reads.
 | `RATE_LIMIT_LOGIN_PER_MINUTE` | Sign-in starts plus IdP callbacks, per client IP. Calls of [refresh URLs](live-data.md#refresh-url) get a bucket of their own of the same size. | `60` | — | no |
 | `RATE_LIMIT_RPC_PER_MINUTE` | RPC and `/api/mcp` calls per signed-in user, across all their tabs and tokens. | `1200` | — | no |
 | `RATE_LIMIT_RPC_IP_PER_MINUTE` | RPC and `/api/mcp` calls per client IP. | `3000` | — | no |
-| `RATE_LIMIT_EMBED_PER_MINUTE` | Views of one [embed](embedding.md) link (one signed token), per pod. Embed views per client IP also share a bucket the size of `RATE_LIMIT_RPC_IP_PER_MINUTE`. | `120` | — | no |
-| `RATE_LIMIT_EMBED_ORG_PER_MINUTE` | [Embed](embedding.md) views per organization, every token together, per pod. | `1200` | — | no |
+| `RATE_LIMIT_EMBED_PER_MINUTE` | Views of one [embed](embedding.md) link (one signed token) per minute, counted across every pod. Embed views per client IP also share a bucket the size of `RATE_LIMIT_RPC_IP_PER_MINUTE`. | `120` | — | no |
+| `RATE_LIMIT_EMBED_ORG_PER_MINUTE` | [Embed](embedding.md) views per organization per minute, every token together, counted across every pod. | `1200` | — | no |
 | `SSRF_ALLOW` | Comma-separated CIDRs that connectors, URL sources and AI gateways may reach even though they are private, loopback or link-local. Everything else in those ranges, including cloud metadata, is refused before a socket opens. List your internal database subnets here. `0.0.0.0/0` turns the guard off. | unset: no private range allowed | a connector reads a database inside your VPC | no |
 
 ## Email
@@ -98,7 +98,7 @@ organization's people and teams. See [email.md](email.md).
 | `SMTP_USER` | The SMTP AUTH user (PLAIN or LOGIN). Unset: no AUTH, for a relay that trusts the pod's address. | unset | the relay asks for AUTH | no |
 | `SMTP_PASSWORD` | The SMTP AUTH password. It never appears in a log line, an error or a browser. | unset | `SMTP_USER` is set | yes |
 | `SMTP_FROM` | The sender: `bi@example.com` or `Acme Analytics <bi@example.com>`. Its name is shown as the email's brand. Bounces go to this address. | unset | `SMTP_HOST` is set | no |
-| `RATE_LIMIT_EMAIL_ORG_PER_HOUR` | Email recipients per organization per hour, in each pod, counted separately for subscriptions and for alerts. One project may use at most half of it, so a list larger than half can never go out, and its run says so. Charged per message for the recipients the relay accepted. | `1000` | — | no |
+| `RATE_LIMIT_EMAIL_ORG_PER_HOUR` | Email recipients per organization per hour, counted across every pod and separately for subscriptions and for alerts. The hour starts at its first email (not a rolling hour), so up to twice this can go out in the minutes around its end. One project may use at most half of it, so a list larger than half can never go out, and its run says so. Charged per message for the recipients the relay accepted. | `1000` | — | no |
 
 ## Warehouses and live data
 

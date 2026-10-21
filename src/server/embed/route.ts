@@ -24,12 +24,13 @@
 // The page's header CSP is its own pinned policy plus `frame-ancestors <the
 // org's origins>`, and no X-Frame-Options: the ONE route that may be framed.
 
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { isRowPolicyError } from '../../data/rowAccess';
 import type { Pool } from 'pg';
 import { runAsPublished, type Identify, type Identity } from '../context';
 import { readable } from '../authz/index';
 import { audit, type Outcome } from '../authz/audit';
+import * as counters from '../counters';
 import { pageCsp } from '../published';
 import { readSettings, secretOf } from './settings';
 import { previewKey, readHeader, tokenFingerprint, verifyToken, MAX_TTL_SEC, type TokenRefusal } from './token';
@@ -71,20 +72,14 @@ const CLAIM_SENTENCE: Record<Exclude<TokenRefusal, 'bad' | 'signature'>, () => s
   claims: embedInvalid,
 };
 
-type Limiter = (req: FastifyRequest) => Promise<{ isAllowed: true } | { isAllowed: false; isExceeded: boolean; ttlInSeconds: number }>;
-
 export function registerEmbedRoutes(app: FastifyInstance, opts: EmbedRouteOptions): void {
-  const keys = new WeakMap<FastifyRequest, { token: string; org: string }>();
-  let perToken: Limiter | null = null;
-  let perOrg: Limiter | null = null;
-  const over = async (req: FastifyRequest): Promise<number> => {
-    perToken ??= app.createRateLimit({ max: opts.tokenPerMinute, timeWindow: MINUTE, keyGenerator: (r) => 'embed-token:' + (keys.get(r)?.token ?? '') });
-    perOrg ??= app.createRateLimit({ max: opts.orgPerMinute, timeWindow: MINUTE, keyGenerator: (r) => 'embed-org:' + (keys.get(r)?.org ?? '') });
-    for (const limiter of [perToken, perOrg]) {
-      const r = await limiter(req);
-      if (!r.isAllowed && r.isExceeded) return Math.max(1, r.ttlInSeconds);
-    }
-    return 0;
+  // The per-token and per-org views, counted across pods (../counters.ts): both or neither. Seconds to wait, or 0.
+  const over = async (org: string, fingerprint: string): Promise<number> => {
+    const r = await counters.take(org, [
+      { key: 'embed-token:' + fingerprint, limit: opts.tokenPerMinute, windowMs: MINUTE },
+      { key: 'embed-org', limit: opts.orgPerMinute, windowMs: MINUTE },
+    ]);
+    return r.ok ? 0 : r.retryAfterSec;
   };
 
   const refuse = (reply: FastifyReply, code: number, message: string, ancestors: readonly string[]) => {
@@ -137,8 +132,13 @@ export function registerEmbedRoutes(app: FastifyInstance, opts: EmbedRouteOption
     const preview = previewSigned;
     const ancestors = preview ? [SELF] : settings.enabled ? settings.origins : [];
 
-    keys.set(req, { token: tokenFingerprint(token), org });
-    const wait = await over(req);
+    let wait: number;
+    try {
+      wait = await over(org, tokenFingerprint(token));
+    } catch (err) {
+      req.log.error({ err }, 'embed: the view limit could not be checked');
+      return refuse(reply, 503, embedFailed(), ancestors);
+    }
     if (wait) {
       await record('denied');
       reply.header('retry-after', wait);

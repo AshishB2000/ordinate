@@ -36,7 +36,7 @@ import { ctx } from '../context';
 import type { Delivery, PostCode, PostResult } from '../subscriptions/deliver';
 import { isMailAddress, type MailEnv } from './mailEnv';
 import { buildMime, MailError, type MailErrorKind } from './mime';
-import { hold, projectShare, resetBudgetsForTest, sendBuckets, testBucket, type Bucket } from './budget';
+import { hold, projectShare, resetBudgetsForTest, sendBuckets, testBucket, type Bucket, type Hold } from './budget';
 import { MAX_RCPT, sendOnce, useRelay } from './smtp';
 
 export { TEST_EMAILS_PER_HOUR } from './budget';
@@ -78,8 +78,8 @@ export function brandName(): string {
 export function setMailSleepForTest(fn: (ms: number) => Promise<void>): void {
   sleep = fn;
 }
-export function resetLimitsForTest(): void {
-  resetBudgetsForTest();
+export function resetLimitsForTest(org?: string): Promise<void> {
+  return resetBudgetsForTest(org);
 }
 
 const PICKED = `FROM users u
@@ -144,6 +144,11 @@ export interface BatchOutcome {
   error: MailError | null;
 }
 
+/** A refund that cannot reach the counter is logged, never thrown: the batch's outcome stands. */
+async function giveBack(held: Hold | null, n: number): Promise<void> {
+  if (held && n > 0) await held.refund(n).catch((err: unknown) => log.warn({ err }, 'email budget refund failed'));
+}
+
 /**
  * `data` to `to` in messages of ≤ MAX_RCPT. Each batch is held against `budget`
  * first (when given), retried only when that cannot deliver twice, and given
@@ -154,7 +159,7 @@ export async function sendBatches(to: readonly string[], data: string, channelId
   const out: BatchOutcome = { accepted: 0, rejected: 0, attempts: 0, failedBatches: 0, limited: false, error: null };
   for (let i = 0; i < to.length; i += MAX_RCPT) {
     const batch = to.slice(i, i + MAX_RCPT);
-    const held = budget ? hold(budget, batch.length) : null;
+    const held = budget ? await hold(budget, batch.length) : null;
     if (budget && !held) {
       out.limited = true;
       log.warn({ channel: channelId, unsent: to.length - i }, 'email stopped: the hourly email budget ran out');
@@ -168,7 +173,7 @@ export async function sendBatches(to: readonly string[], data: string, channelId
         const r = await sendOnce(batch, data);
         out.accepted += r.accepted;
         out.rejected += r.rejected.length;
-        held?.refund(batch.length - r.accepted);
+        await giveBack(held, batch.length - r.accepted);
         log.info({ channel: channelId, recipients: batch.length, accepted: r.accepted, rejected: r.rejected.map((x) => x.code), ms: Date.now() - t0 }, 'email sent');
         break;
       } catch (err) {
@@ -177,7 +182,7 @@ export async function sendBatches(to: readonly string[], data: string, channelId
         const transient = (e.kind === 'unreachable' || e.kind === 'timeout' || e.kind === 'temporary') && !e.afterDot;
         if (!transient || attempt >= MAX_ATTEMPTS) {
           // After the final dot the relay may have it: keep it charged. Otherwise it cost nothing.
-          if (!e.afterDot) held?.refund(batch.length);
+          if (!e.afterDot) await giveBack(held, batch.length);
           out.failedBatches++;
           out.error ??= e;
           fatal = RELAY_WIDE.has(e.kind);

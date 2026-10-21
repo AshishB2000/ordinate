@@ -1,4 +1,5 @@
-// Hourly email budgets, per pod (docs/email/00-design.md D6; the R8 ceiling):
+// Hourly email budgets, ACROSS PODS (docs/email/00-design.md D6; the shared
+// counter, docs/any-pod/00-design.md §3.8):
 //
 //   org      RATE_LIMIT_EMAIL_ORG_PER_HOUR recipients per org and kind
 //            (subscriptions and alerts apart, so one cannot starve the other)
@@ -9,18 +10,16 @@
 // A batch HOLDS its recipients in every bucket before it is sent (all or none,
 // so two sends at once cannot both pass the check), and gives back what the
 // relay did not accept — a failed batch costs nothing.
+//
+// The hour is a window that opens at a bucket's first charge (../counters.ts),
+// not a rolling hour: at a window's end a full hour's budget is free again.
+// A bucket's key is `<org>\0<the rest>`; every kind goes through the same
+// counter under `mail:<the rest>`, so a new kind needs nothing here but its key.
+
+import * as counters from '../counters';
 
 const HOUR = 3_600_000;
 export const TEST_EMAILS_PER_HOUR = 10;
-
-interface Charge { at: number; n: number }
-const used = new Map<string, Charge[]>();
-
-function charges(key: string, now: number): Charge[] {
-  const live = (used.get(key) ?? []).filter((c) => now - c.at < HOUR && c.n > 0);
-  used.set(key, live);
-  return live;
-}
 
 export type Bucket = readonly [key: string, limit: number];
 
@@ -40,20 +39,31 @@ export function testBucket(org: string): Bucket[] {
 
 export interface Hold {
   /** Give back `n` of what was held (the recipients the relay did not take). */
-  refund(n: number): void;
+  refund(n: number): Promise<void>;
+}
+
+/** The org every bucket names — one hold is one org's. */
+function orgOf(buckets: readonly Bucket[]): string {
+  const orgs = new Set(buckets.map(([key]) => key.slice(0, key.indexOf('\0'))));
+  if (orgs.size !== 1 || buckets.some(([key]) => key.indexOf('\0') <= 0)) throw new Error('email budget: one hold, one org');
+  return [...orgs][0];
 }
 
 /** Holds `n` in every bucket, or nothing and null when any of them lacks the room. */
-export function hold(buckets: readonly Bucket[], n: number, now = Date.now()): Hold | null {
-  if (buckets.some(([key, limit]) => charges(key, now).reduce((sum, c) => sum + c.n, 0) + n > limit)) return null;
-  const held = buckets.map(([key]) => {
-    const c: Charge = { at: now, n };
-    (used.get(key) as Charge[]).push(c);
-    return c;
-  });
-  return { refund: (k) => { for (const c of held) c.n = Math.max(0, c.n - k); } };
+export async function hold(buckets: readonly Bucket[], n: number): Promise<Hold | null> {
+  if (!buckets.length) return { refund: async () => undefined };
+  const org = orgOf(buckets);
+  const taken = await counters.take(org, buckets.map(([key, limit]) => ({
+    key: 'mail:' + key.slice(key.indexOf('\0') + 1).split('\0').join(':'),
+    limit,
+    windowMs: HOUR,
+  })), n);
+  if (!taken.ok) return null;
+  return { refund: (k) => counters.give(org, taken.windows, k) };
 }
 
-export function resetBudgetsForTest(): void {
-  used.clear();
+/** Test hook: every budget in memory; with `org`, that org's budgets in Postgres too. */
+export async function resetBudgetsForTest(org?: string): Promise<void> {
+  counters.resetMemoryForTest();
+  if (org) await counters.forgetForTest(org, 'mail:');
 }

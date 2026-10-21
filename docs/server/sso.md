@@ -208,7 +208,7 @@ also signs them out everywhere.
 |---|---|
 | Storage | scrypt (N=2^15, r=8, p=1, 16-byte salt), from Node's own `crypto`. A password is never stored, logged or audited. |
 | Length | 10 to 256 characters. |
-| Wrong passwords | A wrong email and a wrong password get the same answer. After 10 wrong passwords in 15 minutes, the account is locked until the window ends (per pod). `RATE_LIMIT_LOGIN_PER_MINUTE` also covers the password routes, per client IP. |
+| Wrong passwords | A wrong email and a wrong password get the same answer. Ten attempts per account in 15 minutes may be checked, counted across every pod and charged before the password is checked; the next is refused (`locked`, with `Retry-After`) until the window ends, and a right password clears the count. `RATE_LIMIT_LOGIN_PER_MINUTE` also covers the password routes, per client IP. |
 | Changing a password | Asks for the current one, and signs out every other session of the account. |
 | Sessions | The same session cookie as `oidc`, rotated at every sign-in, under `SESSION_IDLE_MINUTES` and `SESSION_ABSOLUTE_HOURS`. |
 | Audit | Sign-ins (`login`), password changes (`password_change`), and the admin's `admin:addUser` / `admin:resetPassword` calls. |
