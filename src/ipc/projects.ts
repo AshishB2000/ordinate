@@ -29,12 +29,22 @@ const seeding = new Map<string, Promise<SeedReply>>();
 // Export and import are the T0.4 file flows, and the path never comes from a
 // client: an export answers with a download token, an import takes an upload's
 // file token.
+/**
+ * A project as a browser gets it: never the colour map (values drawn from every row; the web reads
+ * `format:colors:get`, which redacts it) nor the dismissed insight ids (they can name a value) — row-policy round 2, #11.
+ */
+function forBrowser(p: projects.Project | null): Omit<projects.Project, 'colorMap' | 'dismissedInsights'> | null {
+  if (!p) return null;
+  const { colorMap: _map, dismissedInsights: _dismissed, ...rest } = p;
+  return rest;
+}
+
 export function register({ onActive }: { onActive?: (id: string) => void } = {}) {
   const active = (id: unknown): void => {
     if (typeof onActive === 'function' && typeof id === 'string' && id) onActive(id);
   };
 
-  ipcMain.handle('projects:list', async () => projects.listProjects());
+  ipcMain.handle('projects:list', async () => (await projects.listProjects()).map(forBrowser));
 
   // ponytail: untrusted renderer payloads — any.
   ipcMain.handle('projects:create', async (_e, { name }: any) => {
@@ -94,7 +104,7 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
       active(project.id);
       await projects.touchOpened(project.id);
     }
-    return project;
+    return forBrowser(project);
   });
 
   /**

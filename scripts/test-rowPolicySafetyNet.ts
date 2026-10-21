@@ -127,6 +127,7 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
       ['segments: RFM', 'segments:rfm', { projectId: P, datasetId: orders, spec: { id: 'customer', date: 'day', amount: 'sales' } }],
       ['snapshot diff', 'snapshots:diff', { projectId: P, datasetId: orders, stamp: '2024-01-01T00-00-00-000Z' }],
       ['a dataset version', 'versions:get', { projectId: P, type: 'dataset', id: orders, key: 'k' }],
+      ['two dataset versions compared', 'versions:diff', { projectId: P, type: 'dataset', id: orders, from: 'k', to: 'k2' }],
       ['templates', 'template:list', { projectId: P, datasetId: orders }],
       ['Summary card', 'summary:compute', { projectId: P, pages: [{ cards: [{ id: crypto.randomUUID(), type: 'metric', layout: { x: 0, y: 0, w: 3, h: 2 }, metric: { datasetId: orders, column: 'sales', aggregation: 'sum' } }] }] }],
       ['export: dashboard HTML', 'dashboard:exportHtml', { projectId: P, id: recs[orders].dash }],
@@ -163,6 +164,30 @@ const unclassified = (contracts: Record<string, { access: string }>): string[] =
     eastReplies.push(colors.text);
     ok('redact: the colour map is empty for east', colors.status === 200 && JSON.stringify(colors.body) === '{}');
     ok('NEGATIVE CONTROL: the editor\'s colour map holds the West value', (await W.call('ed', 'format:colors:get', { projectId: P })).text.includes(H.W_CANARY));
+    const projectsMod: typeof import('../src/app/projects') = require('../src/app/projects');
+    await W.as('boss', () => projectsMod.setInsightDismissed(P, `outlier:customer:${H.W_CANARY}_2`, true));
+    const projList = await W.call('east', 'projects:list', {});
+    const projOpen = await W.call('east', 'projects:open', { id: P });
+    eastReplies.push(projList.text, projOpen.text);
+    ok('redact: projects:list and projects:open carry no colour map and no dismissed insight ids', projOpen.body?.id === P
+      && !/colorMap|dismissedInsights/.test(projList.text + projOpen.text));
+    ok('NEGATIVE CONTROL: the stored project holds both, with the West value', H.leaks(JSON.stringify(await W.as('boss', () => projectsMod.getProject(P)))));
+    // A visual's custom order and series colours name values (round 2, #12): east gets the record without them.
+    const vis = recs[orders].visualId;
+    const styled = { sort: 'custom', sortOrder: [`${H.W_CANARY}_3`, 'East'], seriesColors: { [`${H.W_CANARY}_4`]: 'chart-2' } };
+    await W.call('boss', 'visual:update', { projectId: P, id: vis, overrides: styled });
+    const vkeys = ((await W.call('boss', 'versions:list', { projectId: P, type: 'visual', id: vis })).body as { key: string }[]).map((x) => x.key);
+    const VIS: [string, unknown][] = [
+      ['visual:get', { projectId: P, id: vis }], ['visual:thumbs', { projectId: P, ids: [vis] }], ['analysis:gallery', { projectId: P }],
+      ['analysis:open', { projectId: P, id: recs[orders].dash }], ['versions:get', { projectId: P, type: 'visual', id: vis, key: vkeys[0] }],
+    ];
+    for (const [channel, payload] of VIS) {
+      const mine = await W.call('east', channel, payload);
+      const theirs = await W.call('ed', channel, payload);
+      eastReplies.push(mine.text);
+      ok(`redact: ${channel} — east gets the visual without its custom order or series colours`, mine.status === 200 && !H.leaks(mine.text), mine.text.slice(0, 160));
+      ok(`NEGATIVE CONTROL: ${channel} — the editor gets them`, H.leaks(theirs.text), `${vkeys.length} ${theirs.text.slice(0, 160)}`);
+    }
 
     // ── The rules are an admin's ────────────────────────────────────────
     for (const who of ['ed', 'east']) {

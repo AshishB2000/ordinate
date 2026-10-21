@@ -1,5 +1,5 @@
 import { ipcMain } from './bus';
-import { lockedViz } from './rowDoors';
+import { lockedViz, visualForCaller } from './rowDoors';
 import * as fs from 'fs';
 import * as visuals from '../analysis/visuals';
 import * as answerKey from '../data/answerKey';
@@ -556,7 +556,7 @@ export async function saveNewVisual(projectId: string, input: Parameters<typeof 
 export function register() {
   ipcMain.handle('visual:list', async (_e, { projectId }: any = {}) => visuals.listVisuals(projectId));
 
-  ipcMain.handle('visual:get', async (_e, { projectId, id }: any = {}) => visuals.getVisual(projectId, id));
+  ipcMain.handle('visual:get', async (_e, { projectId, id }: any = {}) => visualForCaller(projectId, await visuals.getVisual(projectId, id)));
 
   ipcMain.handle('visual:save', async (_e, { projectId, datasetId, name, chartType, encoding, overrides, filters, analytics }: any = {}) => {
     try {

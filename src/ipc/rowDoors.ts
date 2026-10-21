@@ -20,9 +20,9 @@ import * as datasets from '../data/datasets';
 import type { FilterStep } from '../data/transforms';
 import { applyPipeline } from '../data/transforms';
 import type { Lock } from '../data/rowLock';
-import { RowPolicyError, isRowPolicyError, rowLockFor, rowPolicyRefusal, withLockSteps, withRowLock } from '../data/rowAccess';
+import { RowPolicyError, closedToCaller, isRowPolicyError, restrictedOn, rowLockFor, rowPolicyRefusal, withLockSteps, withRowLock } from '../data/rowAccess';
 import { hasMetricMeasure } from '../analysis/metricMeasures';
-import type { VizEncoding } from '../analysis/visuals';
+import type { VizEncoding, VizOverrides } from '../analysis/visuals';
 import { relatedColumnNames } from './relationships';
 
 /** Every string a question names (encoding, filters, a metric spec): the columns it may reach. */
@@ -104,3 +104,17 @@ export function lockedTable<T extends { columns: datasets.Dataset['columns']; ro
   return { ...ds, rows: t.rows, rowCount: t.rows.length, source: undefined };
 }
 
+
+/**
+ * A visual as a restricted caller on a dataset with rules gets it (round 2, #12): without the custom category
+ * order or the per-series colours, which name values from every row. CEILING: that caller sees the default
+ * order and colours. Every other caller gets the record unchanged.
+ */
+export async function visualForCaller<T extends { datasetId?: unknown; overrides?: VizOverrides } | null>(projectId: string, v: T): Promise<T> {
+  if (!v || !v.overrides) return v;
+  // A dataset that cannot be named (a version of a deleted visual): closed to anyone restricted on the project.
+  const closed = typeof v.datasetId === 'string' && v.datasetId ? await closedToCaller(projectId, v.datasetId) : await restrictedOn(projectId);
+  if (!closed) return v;
+  const { sortOrder: _order, seriesColors: _colors, ...overrides } = v.overrides;
+  return { ...v, overrides };
+}

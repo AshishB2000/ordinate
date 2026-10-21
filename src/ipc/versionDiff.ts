@@ -18,6 +18,7 @@ import { t } from '../app/i18n';
 import { computeCardMetric } from './dashboards';
 import { previewDefinition, resolveMetric } from './metrics';
 import { liveCodeOf } from './liveRoute';
+import { gateRows } from '../data/rowAccess';
 
 // What changed between two saved versions (docs/version-diff/00-design.md).
 //
@@ -205,6 +206,8 @@ async function readPair(input: Input): Promise<Pair | { ok: false; error: string
   const id = String(input.id || '');
   const type = input.type;
   if (!versions.isVersionType(type)) return { ok: false, error: M.versionGone() };
+  // A dataset's versions are its whole table (row-policy D9). A visual's diff never words its overrides' values.
+  if (type === 'dataset') await gateRows(projectId, id);
   const keys: [string, string] = [String(input.from || ''), String(input.to || '')];
   const [a, b] = await Promise.all(keys.map((k) => versions.get(projectId, type, id, k)));
   if (!a || !b) return { ok: false, error: M.versionGone() };

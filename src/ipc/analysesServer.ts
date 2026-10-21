@@ -19,6 +19,7 @@ import { metricUsage } from '../analysis/metricUsage';
 import { importImage, readImageDataUrl } from '../app/projectAssets';
 import { FileTokenError, resolveUpload } from '../server/files';
 import { isLiveRefusalReply, liveRefusal } from '../data/liveDataset';
+import { visualForCaller } from './rowDoors';
 
 /** What a card needs of a Visual to draw it — the record minus its bookkeeping. */
 function visualDef(v: visuals.Visual) {
@@ -60,7 +61,7 @@ export function register(): void {
         if (c.type !== 'visual' || !c.visualId) continue;
         // A dangling visualId is a hole in the sheet, not a card to draw.
         const v = await visuals.getVisual(projectId, c.visualId);
-        if (v) previews.push(visualDef(v));
+        if (v) previews.push(visualDef(await visualForCaller(projectId, v)));
         if (previews.length >= PREVIEW_MAX) break;
       }
       // The sheets' ids and names: a navigation card's target picker (actionEditor.ts aeTargetFields).
@@ -78,7 +79,7 @@ export function register(): void {
     const defs: VisualDef[] = [];
     for (const s of await visuals.listVisuals(projectId)) {
       const v = await visuals.getVisual(projectId, s.id);
-      if (v) defs.push(visualDef(v));
+      if (v) defs.push(visualDef(await visualForCaller(projectId, v)));
     }
     return { ok: true, analysis: a, visuals: defs };
   });
