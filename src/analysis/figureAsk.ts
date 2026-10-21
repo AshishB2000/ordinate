@@ -38,3 +38,12 @@ export function figureAsk(chartType: unknown, overrides?: unknown): FigureAsk | 
   if (chartType === 'bullet' && typeof o.bulletTarget === 'number' && Number.isFinite(o.bulletTarget)) ask.bulletTarget = o.bulletTarget;
   return ask;
 }
+
+/**
+ * The ask as a key: which figures a reply answers. A held reply (the last answer kept on screen while the
+ * next computes) answers an older ask when the type or a figure override changed; the web shows it as
+ * loading, never draws it as the answer (its figures belong to the other ask, or are missing).
+ */
+export function figureAskKey(chartType: unknown, overrides?: unknown): string {
+  return JSON.stringify(figureAsk(chartType, overrides));
+}

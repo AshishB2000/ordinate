@@ -27,8 +27,7 @@ import { LiveOff, LiveRefusal } from '../live/LiveOff';
 import { LIVE_OFF_CHARTS } from '../live/offFeatures';
 import { liveRefusalOf } from '../live/refusal';
 import s from './Builder.module.css';
-import { figuresMissing } from '../../charts/shapes';
-import { resolveChartType } from '../../charts/typeSpec';
+import { FIGURE_TYPES, figureAskKey } from '../../../../src/analysis/figureAsk.ts';
 
 /** "+ More" on a Live dataset: every chart but the grid engines, which are off for Live (L2.6). */
 const LIVE_POOL: readonly string[] = PICKER_POOL.filter((t) => !LIVE_OFF_CHARTS.has(t));
@@ -126,8 +125,9 @@ export function Stage({ projectId, b }: { projectId: string; b: Builder }) {
           <SkeletonBlock label="Computing the visual" />
         ) : recommended.length === 0 ? (
           <StageNote>Pick a category and at least one measure to draw a chart.</StageNote>
-        ) : b.preview.isFetching && figuresMissing(resolveChartType(current), data.figures ?? {}) ? (
-          // Switched to a type whose figures the server computes: the answer that carries them is on its way.
+        ) : FIGURE_TYPES.has(current) && (reply as { ask?: string }).ask !== figureAskKey(b.chartType, b.overrides) ? (
+          // The answer on screen is for another figure ask (the type or a figure override just changed — including
+          // the settle before the request goes): the one that carries this chart's figures is on its way.
           <SkeletonBlock label="Computing the visual" />
         ) : (
           <ChartStage

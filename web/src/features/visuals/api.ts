@@ -9,7 +9,7 @@ import { rpc, RpcError } from '../../api/client';
 import { replyError } from '../live/refusal';
 import type { VizData } from '../../api/visuals';
 import type { Overrides } from '../../charts/types';
-import type { FigureAsk } from '../../../../src/analysis/figureAsk.ts';
+import { figureAskKey, type FigureAsk } from '../../../../src/analysis/figureAsk.ts';
 
 export type Agg = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
 
@@ -201,7 +201,7 @@ async function rpcPreview(req: { projectId: string; datasetId: string; encoding:
   const r = (await rpc(req.asOf ? 'visual:data' : 'visual:preview', req)) as ({ ok: true } & Preview) | Fail;
   // An "off for Live" refusal keeps its code, so the stage can offer a copy (../live/refusal.ts).
   if (!r.ok) throw replyError(r, 'Could not compute the visual.');
-  return r;
+  return { ...r, ask: figureAskKey(req.chartType, req) }; // which figures it answers (the stage never draws a held one as another's)
 }
 
 /** The chart's figures shaped by the project's Share policy — what "Copy data" puts on the clipboard. */
