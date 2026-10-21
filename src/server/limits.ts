@@ -26,9 +26,10 @@
 // one of them. Behind an ingress without TRUSTED_PROXY_CIDRS every caller
 // shares the ingress's address, and so one per-IP bucket: set it there.
 //
-// ponytail: counters live in this process (@fastify/rate-limit's LRU store, 5,000
-// keys per limit), so N pods allow N × the limit. A shared store (the plugin
-// takes one) when that matters.
+// Per pod ON PURPOSE (threat model R8): these buckets protect this pod's CPU, so
+// they live in this process (@fastify/rate-limit's LRU store, 5,000 keys per
+// limit) and N pods allow N × them. The limits that must hold across pods — the
+// password lockout, email, Send now, embed per token and org — are ./counters.ts.
 
 import rateLimit, { normalizeIP } from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';

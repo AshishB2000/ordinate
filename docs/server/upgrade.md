@@ -105,6 +105,13 @@ The limits:
   format version. An older server refuses such a file as "from a newer version".
 - **Skipping releases** (0.2 → 0.5) is fine. Missing migrations apply in order, in one transaction.
 
+## Sticky sessions are no longer needed (`0021_any_pod`)
+
+Releases before `0021_any_pod` held uploads, downloads, staged imports and Assistant plan runs on the
+pod that started them: keep sticky sessions on those. From this release any pod serves any request.
+Remove the stickiness after the rollout, and add the S3 lifecycle rules in
+[eks.md](eks.md#2-s3-and-irsa).
+
 ## Logos, pictures and masking keys move into Postgres (`0018_blobs`)
 
 Earlier releases kept three things as files under `DATA_DIR` on the pod that made them: the

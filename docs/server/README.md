@@ -71,12 +71,10 @@ The threat model (`docs/phase-7-web/threat-model.md`) names the test behind each
 
 Report a vulnerability as described in [`SECURITY.md`](../../SECURITY.md).
 
-## Three things that bite on day one
+## Two things that bite on day one
 
 1. **`ORDINATE_MASTER_KEY` is irreplaceable.** Back it up outside the cluster. Without it, every
    stored connection password and AI key is unreadable, even from a good database backup.
-2. **More than one pod needs sticky sessions** at the load balancer. Uploads, downloads and AI plan
-   runs are held by the pod that started them.
-3. **A private-CA Postgres (Amazon RDS, Cloud SQL) needs its CA**, or `sslmode=no-verify`. With
+2. **A private-CA Postgres (Amazon RDS, Cloud SQL) needs its CA**, or `sslmode=no-verify`. With
    `sslmode=require` and nothing else, the pod exits at boot. See
    [configuration.md](configuration.md#tls-to-postgres).

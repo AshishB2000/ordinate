@@ -139,6 +139,23 @@ the desktop installers.
   a dashboard parameter's saved default, a visual's analytics overlays, and a report's discussion page
   and view, and a restore puts them back. See
   [`docs/edit-conflicts/00-design.md`](docs/edit-conflicts/00-design.md).
+- **Any pod serves any request: no sticky sessions.** The chart's default of 2 replicas failed at
+  random: an upload, its parse and its save, an export and its download, a backup and its restore, or
+  an Assistant plan's steps landing on different pods. These now work on any pod:
+  - upload and download tokens are rows in Postgres (their sha256 only), and their bytes sit in the
+    org's staging area (the shared `DATA_DIR`, or `orgs/<org>/staging/` on S3);
+  - a staged import is a Parquet file any pod saves;
+  - an Assistant plan run is a record;
+  - Cancel and the Jobs list reach every pod;
+  - the sample seed and a pipeline run are one at a time across pods.
+
+  The password lockout, the email budgets, Send now and the embed limits now count across pods, so
+  N pods no longer allow N times each limit. See [`docs/any-pod/00-design.md`](docs/any-pod/00-design.md).
+  - **Changed:** an email budget's hour now starts at its first email rather than rolling, so up to
+    twice the limit can go out in the minutes around its end.
+  - **Changed:** each password attempt is charged before it is checked, so at most 10 are ever
+    checked in 15 minutes.
+  - **Changed:** the `plan:*` RPCs take `projectId`.
 
 ### Added
 - **The app is no longer empty on first launch.** A bundled sample project — 5,000 rows of generated

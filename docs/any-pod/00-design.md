@@ -758,7 +758,7 @@ the alerts again.
 - **`liveState` stays this pod's view, and says so.** `pipelines:get`'s `live` holds the node
   states of a run on THIS pod. The running pod pushes `pipelines:changed` with the full live map to
   every tab of the org at each node's start and finish, and that completes a page opened on another
-  pod within one node. The `ipc/pipelines.ts` header says this.
+  pod within one node. The comment on `live` (`pipelineRunner.ts`) says this.
 - Test: two pods start the same pipeline at once: one runs and one gets "already running". The
   negative control is the preload passing the lock through, which gives two runs.
 
@@ -774,8 +774,8 @@ own `DATA_DIR` and no S3, so tables already differ between pods. A render failur
   `hpa.enabled`, "each of the N pods has its own disk, so a table, an upload or an import made on
   one is missing on the others".
 - The existing-claim branch already says "ReadWriteMany".
-- **The server logs one startup line naming its storage mode** (`S3` or `DATA_DIR`). It cannot see
-  the replica count, so it does not guess. The docs carry the rule.
+- **No server-side guess.** A pod cannot see the replica count, so the NOTES warning and the
+  operator docs (`sizing.md`, `values.yaml`) carry the rule.
 
 ## 4. Migration `0021_any_pod.sql`
 
@@ -900,7 +900,9 @@ runs both ways at the end.
    - Code: `planRun` (`beginStep` / `endStep` / `recoverStep`); `src/ai/planStore.ts` (path,
      sanitize, claim, heartbeat, apply, prune); `plan.ts`; the `projectId` contracts in
      `assistant.ts`; `PlanCard.tsx`; plan runs in the sweep.
-   - Tests: extend `test-planRun`; test-anyPod case 4 and the concurrent-Next check.
+   - Tests: `scripts/test-planStore.ts` (claim/busy, the fence keeps touches, stale-lease recovery,
+     ownership, caps and TTL; `test-planRun` keeps passing on the split); test-anyPod case 4 and the
+     concurrent-Next check with its negative control.
 7. **Jobs over the bus.**
    - Code: `podCommands.ts`; `bus.ts`; `ipc/jobs.ts`; `web/src/api/jobs.ts` (the merge,
      `useJobList`); `SegmentsParts.tsx`.
@@ -909,8 +911,8 @@ runs both ways at the end.
    - Code: `drivers.ts` (`remember` / `recall`, `driversFor`'s option); `copilot.ts:310`;
      `refreshLock.ts` (`withOrgLock`); `projects.ts`.
    - Code: `pipelineRunner.runFrom` under `withOrgTryLock('pipeline:<id>')`.
-   - Tests: `test-drivers`; two-pod seed and pipeline races in test-anyPod, each with its negative
-     control.
+   - Tests: `test-drivers` (a token from the panel door, none from a tile; recall across projects);
+     two-pod seed and pipeline races in test-anyPod, each with its negative control.
 9. **Docs.**
    - Every row of the table in §2, with each "per pod" line made true.
    - `docs/server/README.md`'s day-one list loses its sticky item (two things now).
