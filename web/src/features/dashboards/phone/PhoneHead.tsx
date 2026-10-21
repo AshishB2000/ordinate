@@ -5,7 +5,7 @@
 // sideways. It stays put while the sheet scrolls under it.
 
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { BackLink } from '../../../app/blocks';
 import { IconButton } from '../../../ui/Button';
 import { Menu } from '../../../ui/Menu';
 import { toast } from '../../../ui/Toast';
@@ -48,9 +48,7 @@ export function PhoneHead() {
   return (
     <header className={s.head}>
       <div className={s.bar}>
-        <Link className={s.tap} to={`/analyses?project=${ed.projectId}`} aria-label="Back to Analyses">
-          <Icon name="chevron-left" size={20} />
-        </Link>
+        <BackLink iconOnly className={s.tap} to={`/analyses?project=${ed.projectId}`} label="Analyses" />
         <div className={s.ident}>
           <h1 className={s.name}>{ed.doc.name}</h1>
           {(stamp || ed.readOnly) && (

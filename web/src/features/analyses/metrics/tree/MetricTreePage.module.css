@@ -1,18 +1,5 @@
-/* The metric tree page: back link, the period toolbar, the server's headline,
+/* The metric tree page: the period toolbar, the server's headline,
    and the canvas the tree is drawn on. */
-
-.back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  align-self: flex-start;
-  margin-top: calc(-1 * var(--sp-16));
-  font-size: var(--t-12);
-  color: var(--muted);
-  text-decoration: none;
-}
-
-.back:hover { color: var(--text); }
 
 .toolbar {
   display: flex;

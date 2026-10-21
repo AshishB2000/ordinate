@@ -6,7 +6,7 @@
 // viewer's tree-less metric asks the server for no suggestions.
 
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Page } from '../../../../app/blocks';
 import { Button } from '../../../../ui/Button';
@@ -14,7 +14,6 @@ import { Input } from '../../../../ui/Field';
 import { Select } from '../../../../ui/Select';
 import { EmptyState, ErrorState } from '../../../../ui/States';
 import { toast } from '../../../../ui/Toast';
-import { Icon } from '../../../../ui/icons/Icon';
 import { CompareControl, usable } from '../../../dashboards/CompareBar';
 import type { Compare } from '../../../dashboards/useViewer';
 import { LiveRefusal } from '../../../live/LiveOff';
@@ -153,10 +152,7 @@ function TreePage({ projectId, metricId }: { projectId: string; metricId: string
   }
 
   return (
-    <Page title={name} sub="Why it moved: the parts it is made of, and how much of the change each one explains.">
-      <Link className={s.back} to={`/data/metrics?project=${projectId}`}>
-        <Icon name="arrow-left" size={16} /> Metrics
-      </Link>
+    <Page back={{ to: `/data/metrics?project=${projectId}`, label: 'Metrics' }} title={name} sub="Why it moved: the parts it is made of, and how much of the change each one explains.">
       <div className={s.toolbar} role="toolbar" aria-label="Period">
         <Select size="sm" aria-label="Period" value={period.key} options={PERIODS} onValueChange={(k) => setPeriod((p) => ({ ...p, key: k as PeriodKey }))} />
         {period.key === 'custom' && (

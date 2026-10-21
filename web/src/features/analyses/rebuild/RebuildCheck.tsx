@@ -6,7 +6,7 @@
 
 import type { ReactNode } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { ErrorState, Page } from '../../../app/blocks';
+import { ErrorState, Page, type Back } from '../../../app/blocks';
 import { Badge } from '../../../ui/Badge';
 import { Button } from '../../../ui/Button';
 import { Input } from '../../../ui/Field';
@@ -52,7 +52,7 @@ export function RebuildCheck({
   building: boolean;
   onCreate: () => void;
   onRestart: () => void;
-  back: ReactNode;
+  back: Back;
 }) {
   const m = match.data?.ok ? match.data : null;
   const read = reading.tiles as (Reading['tiles'][number] & { id: number; box: ShotTile['box'] })[];
@@ -86,14 +86,16 @@ export function RebuildCheck({
   }
 
   return (
-    <Page title="Check the rebuild" sub="Each tile the model found, matched to your columns. Change any match, drop what you do not need, then create the dashboard.">
-      <div className={s.bar}>
-        {back}
-        <span className={s.spacer} />
+    <Page
+      back={back}
+      title="Check the rebuild"
+      sub="Each tile the model found, matched to your columns. Change any match, drop what you do not need, then create the dashboard."
+      actions={
         <Button variant="ghost" size="sm" icon="camera" onClick={onRestart}>
           Another screenshot
         </Button>
-      </div>
+      }
+    >
       <div className={s.layout}>
         <div className={s.left}>
           <section className={s.shotCard} aria-label="Screenshot">
