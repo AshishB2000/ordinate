@@ -18,6 +18,8 @@
 //   rls        as an ordinary role: no rows without the setting, another org's
 //              invisible, a write for another org refused, the store's own
 //              statements pass (alert_inbox, alert_posts)
+//   legacy     an imported event with an upper-case id or an unreadable time is
+//              normalised on load, so a member can mark it seen (one and all)
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-alertInbox.js
 
@@ -27,6 +29,10 @@ import { finish, ok } from './selfcheck';
 import { BOSS, ORG, ordinaryRole, refusedAs, seenAs, show, withServer, type Bench, type Identity } from './notifyHarness';
 
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
+const alerts: typeof import('../src/analysis/alerts') = require('../src/analysis/alerts');
+const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
+const appPaths: typeof import('../src/app/paths') = require('../src/app/paths');
+const path: typeof import('path') = require('path');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
 const summary: typeof import('../src/ipc/summary') = require('../src/ipc/summary');
@@ -125,6 +131,21 @@ async function suite(b: Bench): Promise<void> {
   await b.run(BOSS, () => alertStore.patchRule(pid, rule!.id, { enabled: false }));
   await b.as('boss').call('dataset:refresh', { projectId: pid, id: C });
   ok('summary: a refresh that fires nothing retires the alert from outbound pages', !(await outbound(ANN)).some((s) => s.kind === 'alert'));
+
+  // ── legacy ───────────────────────────────────────────────────────────
+  const UP = randomUUID().toUpperCase();
+  const JUNK = randomUUID();
+  const file = await b.run(BOSS, () => alertStore.load(pid));
+  const legacy = { ...file, events: [{ ...event(C), id: UP }, { ...event(C), id: JUNK, at: 'last tuesday' }, ...file.events] };
+  await b.run(BOSS, () => recordFs.writeFile(path.join(appPaths.userData(), 'projects', pid, 'alerts.json'), JSON.stringify(legacy), 'utf8'));
+  const shown = (await list('ben')).events;
+  ok('legacy: an upper-case id is listed lower-cased, an unreadable time as the epoch', shown.some((e) => e.id === UP.toLowerCase()) && shown.find((e) => e.id === JUNK)?.at === new Date(0).toISOString(), show(shown.slice(0, 3)));
+  await b.as('ben').call('alerts:markSeen', { projectId: pid, eventId: UP.toLowerCase() });
+  ok('legacy: the upper-case one, marked seen by the id the list gave, stays seen', (await seenOf('ben', UP.toLowerCase())) === true);
+  await b.as('ben').call('alerts:markSeen', { projectId: pid });
+  ok('legacy: Mark all seen covers the one with an unreadable time', (await seenOf('ben', JUNK)) === true && (await list('ben')).unseen === 0, show((await list('ben')).events.filter((e) => !e.seen)));
+  ok('legacy (pure): sanitizeEvent keeps an id lower-case and a time canonical', alerts.sanitizeEvent({ ...event(C), id: UP, at: '2026-01-02T03:04:05Z' })?.id === UP.toLowerCase()
+    && alerts.sanitizeEvent({ ...event(C), at: '2026-01-02T03:04:05Z' })?.at === '2026-01-02T03:04:05.000Z');
 
   // ── rls ──────────────────────────────────────────────────────────────
   await b.pool.query(`INSERT INTO orgs (id, name) VALUES ('globex', 'globex') ON CONFLICT DO NOTHING`);
