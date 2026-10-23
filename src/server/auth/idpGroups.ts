@@ -155,10 +155,13 @@ const RETRY = Symbol('retry under the exclusive lock');
 /**
  * One member's sync inside a people-lock transaction. Null: not an enabled member (any more). RETRY: the
  * read says an admin would be demoted and this is the shared lock — decide again under the exclusive one.
+ * `fresh`: the list was just read from the IdP (a sign-in) — stamped `idp_groups_at`, and it may GRANT. A
+ * stored list re-applied after a map change (`fresh` false) may grant only when `grants` (read within a
+ * session lifetime, S-L3); otherwise it only takes away, and the member is re-read at their next request.
  */
 async function applyLocked(
   c: PoolClient, org: string, userId: string, groups: readonly string[], breakGlass: boolean,
-  mode: 'shared' | 'exclusive', compare: boolean, map?: readonly GroupMapping[], email = '',
+  mode: 'shared' | 'exclusive', compare: boolean, map?: readonly GroupMapping[], email = '', fresh = true, grants = true,
 ): Promise<Applied | null | typeof RETRY> {
   const r = await c.query<{ role: Role; digest: string | null }>(
     'SELECT role, idp_groups_digest AS digest FROM users WHERE org_id = $1 AND id = $2 AND disabled_at IS NULL FOR UPDATE', [org, userId]);
@@ -169,6 +172,12 @@ async function applyLocked(
   const out = rolesAndTeams(groups, map ?? (await readMap(c, org)), breakGlass);
   let role = out.role ?? row.role;
   let kept = false;
+  // Grants withheld (S-L3): never a higher role from a stale list.
+  let withheld = false;
+  if (!grants && RANK[role] > RANK[row.role]) {
+    role = row.role;
+    withheld = true;
+  }
   if (row.role === 'admin' && role !== 'admin') {
     if (mode === 'shared') return RETRY;
     const n = await c.query<{ n: string }>(`SELECT ${OTHER_ADMINS} AS n`, [org, userId]);
@@ -182,11 +191,18 @@ async function applyLocked(
   const cur = await c.query<{ team: string }>('SELECT team_id::text AS team FROM team_members WHERE user_id = $1 AND team_id = ANY($2::uuid[])', [userId, out.linked]);
   const now = new Set(cur.rows.map((x) => x.team));
   const want = new Set(out.teams);
-  const added = out.teams.filter((t) => !now.has(t));
+  const adds = out.teams.filter((t) => !now.has(t));
+  const added = grants ? adds : [];
+  if (adds.length && !grants) withheld = true;
   const removed = [...now].filter((t) => !want.has(t)).sort();
   if (added.length) await c.query('INSERT INTO team_members (team_id, user_id) SELECT unnest($1::uuid[]), $2 ON CONFLICT DO NOTHING', [added, userId]);
   if (removed.length) await c.query('DELETE FROM team_members WHERE user_id = $1 AND team_id = ANY($2::uuid[])', [userId, removed]);
-  await c.query('UPDATE users SET idp_groups = $3, idp_groups_digest = $4 WHERE org_id = $1 AND id = $2', [org, userId, groups, kept ? 'kept:' + d : d]);
+  // A withheld grant: no digest, so header mode re-reads the groups at the member's next request.
+  const digest = withheld ? null : kept ? 'kept:' + d : d;
+  await c.query(
+    `UPDATE users SET idp_groups = $3, idp_groups_digest = $4, idp_groups_at = CASE WHEN $5 THEN now() ELSE idp_groups_at END WHERE org_id = $1 AND id = $2`,
+    [org, userId, groups, digest, fresh],
+  );
   return { role, roleChanged: role !== row.role, added, removed, kept };
 }
 
@@ -231,15 +247,18 @@ export async function applyIdpGroups(
  */
 export async function reapplyAll(c: PoolClient, auth: AuthEnv, org: string): Promise<Array<{ userId: string; email: string; applied: Applied }>> {
   const map = await readMap(c, org);
-  const users = await c.query<{ id: string; email: string; groups: string[] }>(
-    'SELECT id::text, email, idp_groups AS groups FROM users WHERE org_id = $1 AND disabled_at IS NULL AND idp_groups IS NOT NULL ORDER BY email', [org]);
+  // `fresh`: the list was read within a session lifetime — only such a list may GRANT (S-L3).
+  const users = await c.query<{ id: string; email: string; groups: string[]; fresh: boolean }>(
+    `SELECT id::text, email, idp_groups AS groups, coalesce(idp_groups_at > now() - $2 * interval '1 millisecond', false) AS fresh
+       FROM users WHERE org_id = $1 AND disabled_at IS NULL AND idp_groups IS NOT NULL ORDER BY email`, [org, auth.sessionAbsoluteMs]);
   // Promotions to admin FIRST (C3): a change that makes someone admin must count them before it decides
   // whether anyone else is the org's last admin — otherwise the outcome depended on the email order.
-  const becomesAdmin = (u: { email: string; groups: string[] }) => rolesAndTeams(u.groups, map, auth.adminEmail === u.email).role === 'admin';
+  const becomesAdmin = (u: { email: string; groups: string[]; fresh: boolean }) =>
+    (u.fresh || auth.adminEmail === u.email) && rolesAndTeams(u.groups, map, auth.adminEmail === u.email).role === 'admin';
   const ordered = [...users.rows.filter(becomesAdmin), ...users.rows.filter((u) => !becomesAdmin(u))];
   const out: Array<{ userId: string; email: string; applied: Applied }> = [];
   for (const u of ordered) {
-    const a = await applyLocked(c, org, u.id, u.groups, auth.adminEmail === u.email, 'exclusive', false, map, u.email);
+    const a = await applyLocked(c, org, u.id, u.groups, auth.adminEmail === u.email, 'exclusive', false, map, u.email, false, u.fresh);
     if (a && a !== RETRY) out.push({ userId: u.id, email: u.email, applied: a });
   }
   return out;

@@ -1,7 +1,7 @@
 -- IdP groups → org role and teams (docs/sso-lifecycle/00-design.md).
 --
--- Additive only: a new table and two new nullable columns. An older release
--- ignores all three: it never reads groups, and keeps roles and teams as stored.
+-- Additive only: a new table and three new nullable columns. An older release
+-- ignores all four: it never reads groups, and keeps roles and teams as stored.
 --
 -- One row per (org, group): the group maps to an org role, a team, or both.
 -- The name is stored as sign-in compares it (Unicode NFC, trimmed) and is
@@ -22,7 +22,11 @@ CREATE TABLE idp_groups (
 
 -- A member's last EXPLICIT group list as sign-in read it (canonical, sorted),
 -- so a mapping change re-applies every synced member at once. NULL = none seen.
+-- idp_groups_at: when that list was read. A mapping change takes privileges
+-- away from every list, but GRANTS only from one read within a session
+-- lifetime (SESSION_ABSOLUTE_HOURS); an older one waits for the next sign-in.
 ALTER TABLE users ADD COLUMN idp_groups text[];
+ALTER TABLE users ADD COLUMN idp_groups_at timestamptz;
 
 -- What header mode compares per request (writes only on change): the hex
 -- sha256 of [break-glass flag, ...idp_groups], or 'kept:<sha>' when the last

@@ -354,13 +354,34 @@ async function headerPart(url: string, pool: Pool, apps: FastifyInstance[]): Pro
   await pool.query(`INSERT INTO orgs (id, name) VALUES ($1, $1)`, [lone3]);
   const auth3 = { ...cfg.auth, org: lone3, adminEmail: null };
   const member3 = async (email: string, role: string, groups: string[]) =>
-    (await q<{ id: string }>(pool, `INSERT INTO users (org_id, email, role, last_login_at, idp_groups) VALUES ($1, $2, $3, now(), $4) RETURNING id::text`, [lone3, email, role, groups]))[0].id;
+    (await q<{ id: string }>(pool, `INSERT INTO users (org_id, email, role, last_login_at, idp_groups, idp_groups_at) VALUES ($1, $2, $3, now(), $4, now()) RETURNING id::text`, [lone3, email, role, groups]))[0].id;
   await member3('kim@hdr.test', 'admin', ['staff']);
   await member3('zed@hdr.test', 'viewer', ['admins']);
   await pool.query(`INSERT INTO idp_groups (org_id, group_name, role) VALUES ($1, 'staff', 'viewer'), ($1, 'admins', 'admin')`, [lone3]);
   await store.withPeopleLock(pool, lone3, 'exclusive', (c) => idpMod.reapplyAll(c, auth3, lone3));
   const roles3 = await q<{ email: string; role: string }>(pool, 'SELECT email, role FROM users WHERE org_id = $1 ORDER BY email', [lone3]);
   ok('C3: a map change applies promotions first — Zed is admin, so Kim is demoted, not kept', JSON.stringify(roles3.map((r) => r.role)) === '["viewer","admin"]', JSON.stringify(roles3));
+
+  // S-L3: a map change grants nothing from a STALE group list (older than SESSION_ABSOLUTE_HOURS); it still takes away.
+  const lone4 = `lone4-${Date.now()}`;
+  await pool.query(`INSERT INTO orgs (id, name) VALUES ($1, $1)`, [lone4]);
+  const auth4 = { ...cfg.auth, org: lone4, adminEmail: null };
+  const fin = await team(pool, lone4, 'Finance');
+  const member4 = async (email: string, role: string, groups: string[], ageHours: number) =>
+    (await q<{ id: string }>(pool, `INSERT INTO users (org_id, email, role, last_login_at, idp_groups, idp_groups_at, idp_groups_digest)
+      VALUES ($1, $2, $3, now(), $4, now() - $5 * interval '1 hour', 'x') RETURNING id::text`, [lone4, email, role, groups, ageHours]))[0].id;
+  const maxAge = cfg.auth.sessionAbsoluteMs / 3_600_000;
+  await member4('fresh@hdr.test', 'viewer', ['finance'], 1);
+  await member4('stale@hdr.test', 'viewer', ['finance'], maxAge + 1);
+  await member4('demote@hdr.test', 'editor', ['other'], maxAge + 1);
+  await pool.query(`INSERT INTO idp_groups (org_id, group_name, role, team_id) VALUES ($1, 'finance', 'editor', $2)`, [lone4, fin]);
+  await store.withPeopleLock(pool, lone4, 'exclusive', (c) => idpMod.reapplyAll(c, auth4, lone4));
+  const four = async (email: string) => (await q<{ role: string; d: string | null }>(pool, 'SELECT role, idp_groups_digest AS d FROM users WHERE org_id = $1 AND email = $2', [lone4, email]))[0];
+  const teams4 = async (email: string) => (await q(pool, 'SELECT 1 FROM team_members m JOIN users u ON u.id = m.user_id WHERE u.org_id = $1 AND u.email = $2', [lone4, email])).length;
+  ok('S-L3: a member whose groups were read recently gets the new grant (role and team)', (await four('fresh@hdr.test')).role === 'editor' && (await teams4('fresh@hdr.test')) === 1);
+  ok('S-L3: a member whose groups are older than a session gets NO grant from them, and is re-read at their next request',
+    (await four('stale@hdr.test')).role === 'viewer' && (await teams4('stale@hdr.test')) === 0 && (await four('stale@hdr.test')).d === null);
+  ok('S-L3: a reduction applies to a stale member too (no mapped group → viewer)', (await four('demote@hdr.test')).role === 'viewer');
 
   // ── g. Three demotions racing: the people lock keeps exactly one admin (a deterministic barrier) ──
   const race = async (lock: boolean): Promise<number> => {
