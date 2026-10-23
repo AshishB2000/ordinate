@@ -677,6 +677,8 @@ machine; it needs its private maps); `bundle.ts` 522 → ~360; `env.ts` 503 → 
 - The JSON-bomb case measures pass 1 over 40 × 32 MiB with a bundle refused after pass 1 (its table
   fails its CRC), so nothing writes 1.3 GB into Postgres; the in-place swap is measured on three
   32 MiB records imported for real.
+- The DuckDB shutdown cases are their own suite, `scripts/test-duckdbShutdown.ts`: `interruptAll()` is
+  final for its process, so it cannot share one with `test-duckdbPool`'s other sections.
 - `jobs.ts` treats a DuckDB `cancelled` rejection as an abort (`isAbort`), or a user's Cancel of a job
   inside a query (now interrupted through `withAbort`) would read as an error.
 
