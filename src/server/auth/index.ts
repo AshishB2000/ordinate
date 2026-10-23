@@ -69,7 +69,8 @@ function headerIdentify(pool: Pool, auth: AuthEnv, log: SyncLog): Identify {
     }
     const d = digestOf(groups, auth.adminEmail === email);
     if (who.digest === d || who.digest === 'kept:' + d) return who.identity; // applied already: no write per request
-    const key = `${auth.org}\n${email}`;
+    // Keyed with the digest too: a request with DIFFERENT groups never joins another's sync (C7).
+    const key = `${auth.org}\n${email}\n${d}`;
     let p = inflight.get(key);
     if (!p) {
       const { userId, identity } = who;

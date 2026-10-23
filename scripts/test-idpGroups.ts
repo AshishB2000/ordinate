@@ -227,7 +227,7 @@ async function headerPart(url: string, pool: Pool, apps: FastifyInstance[]): Pro
   };
   const b1 = await bearer('127.0.0.1');
   ok('header: bearer + groups header from a trusted peer → the token\'s current role, groups ignored', b1 === 'editor', String(b1));
-  ok('header: bearer + groups header from an untrusted peer → the same, groups ignored', (await bearer('203.0.113.9')) === 'editor' && (await roleOf(pool, 'erin@hdr.test')) === 'editor' && (await xmin('erin@hdr.test')) !== undefined && x1 !== undefined);
+  ok('header: bearer + groups header from an untrusted peer → the same, groups ignored', (await bearer('203.0.113.9')) === 'editor' && (await roleOf(pool, 'erin@hdr.test')) === 'editor' && (await xmin('erin@hdr.test')) === x1, `${x1}`);
 
   // M1: the break-glass admin is restored in one request even when the digest matches.
   await pool.query(`UPDATE users SET role = 'viewer' WHERE email = 'root@hdr.test'`);
@@ -296,6 +296,24 @@ async function headerPart(url: string, pool: Pool, apps: FastifyInstance[]): Pro
   ok('map: a viewer cannot read or change it (403)', (await rpc('admin:idpGroups', undefined, 'erin@hdr.test')).status === 403
     && (await rpc('admin:setIdpGroup', { group: 'y', role: 'admin', teamId: null }, 'erin@hdr.test')).status === 403);
   await rpc('admin:setIdpGroup', { group: 'admins', role: 'admin', teamId: null });
+
+  // C7: two requests of one person with DIFFERENT groups at once: each runs its own sync, neither joins the other's.
+  await me('hank@hdr.test', 'misc');
+  let held = 0;
+  idpMod.setSyncBarrierForTest(async (email) => {
+    if (email !== 'hank@hdr.test' || held++ > 0) return;
+    // Hold the first sync until the second one is waiting on the database (it never gets there if it joined).
+    for (let i = 0; i < 200; i++) {
+      if ((await q(pool, `SELECT 1 FROM pg_locks WHERE NOT granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`)).length) break;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  });
+  try {
+    const [asOps, asAdmins] = await Promise.all([me('hank@hdr.test', 'ops'), me('hank@hdr.test', 'admins')]);
+    ok('C7: concurrent requests with different groups each get their own sync (ops → editor, admins → admin)', asOps === 'editor' && asAdmins === 'admin', `${asOps} ${asAdmins}`);
+  } finally {
+    idpMod.setSyncBarrierForTest(null);
+  }
 
   // ── M3: a kept last admin is evaluated again once the org gains an admin ──
   const lone = `lone-${Date.now()}`;
