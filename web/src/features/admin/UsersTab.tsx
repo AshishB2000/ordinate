@@ -84,7 +84,14 @@ function InviteDialog({ managed }: { managed: boolean }) {
   );
 }
 
-function UserRow({ u, me, onReset, managed }: { u: AdminUser; me: string | undefined; onReset?: (u: AdminUser) => void; managed: boolean }) {
+/**
+ * `role`: how the role cell is drawn — the picker (roles are manual), from the IdP (managed), or plain text
+ * while it is not yet known whether the IdP decides (the groups are loading, or failed to load): never a live
+ * picker that could change a role the IdP owns (C5).
+ */
+type RoleCell = 'picker' | 'idp' | 'text';
+
+function UserRow({ u, me, onReset, role: cell }: { u: AdminUser; me: string | undefined; onReset?: (u: AdminUser) => void; role: RoleCell }) {
   const setRole = useWrite('admin:setRole', ['admin:users']);
   const setDisabled = useWrite('admin:setDisabled', ['admin:users']);
   const self = u.email === me;
@@ -97,11 +104,11 @@ function UserRow({ u, me, onReset, managed }: { u: AdminUser; me: string | undef
         </span>
       </td>
       <td>
-        {managed ? (
-          // Hidden, never disabled (#307): the identity provider decides, so there is nothing to pick here.
+        {cell !== 'picker' ? (
+          // Hidden, never disabled (#307): the identity provider decides, or it is not known yet whether it does.
           <span className={s.cellRow}>
             <span className={s.strong}>{ROLES.find((r) => r.value === u.role)?.label ?? u.role}</span>
-            <span className={s.meta}>From your identity provider</span>
+            {cell === 'idp' && <span className={s.meta}>From your identity provider</span>}
           </span>
         ) : (
           <Select
@@ -148,6 +155,7 @@ export function UsersTab({ me, passwords = false, idp }: { me: string | undefine
   const users = useAdminUsers();
   const groups = useIdpGroups(!!idp);
   const managed = !!idp && groups.data?.roleManaged === true;
+  const roleCell: RoleCell = !idp ? 'picker' : !groups.isSuccess ? 'text' : managed ? 'idp' : 'picker';
   const [find, setFind] = useState('');
   const [resetting, setResetting] = useState<AdminUser | null>(null);
   const shown = users.data?.filter((u) => u.email.includes(find.trim().toLowerCase())) ?? [];
@@ -186,7 +194,7 @@ export function UsersTab({ me, passwords = false, idp }: { me: string | undefine
           </thead>
           <tbody>
             {shown.map((u) => (
-              <UserRow key={u.id} u={u} me={me} onReset={passwords ? setResetting : undefined} managed={managed} />
+              <UserRow key={u.id} u={u} me={me} onReset={passwords ? setResetting : undefined} role={roleCell} />
             ))}
           </tbody>
         </table>

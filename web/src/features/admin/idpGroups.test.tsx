@@ -71,6 +71,24 @@ describe('People: roles from the identity provider', () => {
     await waitFor(() => expect(calls.find((c) => c.channel === 'admin:invite')?.payload).toEqual({ email: 'sam@acme.test', role: 'viewer' }));
   });
 
+  it('shows no role picker while the identity provider groups are still loading (C5)', async () => {
+    serve(base(() => ({ status: 200, body: undefined })));
+    vi.stubGlobal('fetch', ((orig: typeof fetch) => async (url: string, init?: RequestInit) =>
+      decodeURIComponent(String(url)).includes('admin:idpGroups') ? new Promise<Response>(() => {}) : orig(url, init))(globalThis.fetch as typeof fetch));
+    renderApp('/admin');
+    await screen.findByText('carol@acme.test');
+    expect(within(row('carol@acme.test')).getByText('Editor')).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Role of carol@acme.test' })).toBeNull();
+  });
+
+  it('shows no role picker when the identity provider groups failed to load (C5)', async () => {
+    serve(base({ status: 500, body: { error: 'handler failed' } }));
+    renderApp('/admin');
+    await screen.findByRole('heading', { name: 'Identity provider groups could not be loaded' });
+    expect(within(row('carol@acme.test')).getByText('Editor')).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Role of carol@acme.test' })).toBeNull();
+  });
+
   it('a cancelled invite does not carry its role into the next one', async () => {
     serve(base({ body: groups({ roleManaged: false }) }));
     renderApp('/admin');
