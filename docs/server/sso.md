@@ -195,7 +195,11 @@ groups**: a group to an org role, to a team, or both. The rules:
 - **When it applies.** OIDC: at every sign-in, before the session starts. Header mode: on the first
   request whose groups differ from the last ones applied (a digest is compared per request; nothing is
   written while they are the same). A change to the map applies at once to everyone whose groups the
-  server has seen, and empties then refills a team whose links changed.
+  server has seen, and empties then refills a team whose links changed. It takes privileges away from
+  everyone, but grants them only from groups read within the last `SESSION_ABSOLUTE_HOURS`: someone
+  whose groups are older gets the new role or team at their next sign-in (or request, in header mode).
+- **A sync never blocks sign-in for long.** While an admin's map change holds the lock, a sign-in waits
+  at most a few seconds, then goes ahead with the stored role and teams; the next one syncs.
 - **A missing list changes nothing.** If the claim is absent, malformed, or Entra ID reports a group
   overage, or the header is missing, the person keeps their role and teams, a warning is logged (once
   an hour per person per pod) and `ordinate_idp_sync_total{outcome="absent"|"overage"}` counts it. Only
@@ -239,7 +243,10 @@ sends `X-Forwarded-Groups` with `--pass-user-headers=true`. It is believed only 
    person removed from your groups is stopped at the proxy, not left with whatever role they had when
    their header was last read.
 
-A group name that contains a comma cannot be mapped in header mode.
+**Map only groups your IdP admins control.** The header is comma-separated, so a group whose name
+contains a comma reads as several groups: one named `sales-emea,ordinate-admins` would grant whatever
+`ordinate-admins` is mapped to. Never map a name that a self-service or owner-renamable group could
+take.
 
 ## Leavers: sessions, tokens and disable
 

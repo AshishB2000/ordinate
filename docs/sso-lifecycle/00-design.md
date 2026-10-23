@@ -217,8 +217,11 @@ are stored in this form (the contract caps them at 256 characters, no control ch
   your IdP sends it".
 - **Trim and NFC** because surrounding whitespace and Unicode normal form are encoding accidents, not
   identity. Header values arrive as `a, b`.
-- A group name containing a comma can never match in header mode (the header is comma-separated, as
-  oauth2-proxy writes it). Nothing matches, so nothing is promoted. `sso.md` says so.
+- **A comma makes one group read as several in header mode** (the header is comma-separated, as
+  oauth2-proxy writes it): a group named `sales-emea,ordinate-admins` would grant `ordinate-admins`'s
+  role (review S-L4, corrected). So every mapped name must be a group only IdP admins create and name —
+  never a self-service or owner-renamable group. There is no encoded format for now. `sso.md` and R20(e)
+  say so.
 
 ### 3.5 Who "signs in through the IdP", for the `setRole` refusal
 
@@ -586,7 +589,7 @@ Each step is one or two small commits. Gates run after each.
 | 5 | Groups header on a bearer request | The token decides alone; groups are never read (`index.ts:91`). |
 | 6 | A client-sent `X-Forwarded-Groups` passed through the proxy | Outside Ordinate's reach: the same trust as `X-Forwarded-Email`. `sso.md`: the proxy must set or strip it on every request. oauth2-proxy 7 strips the headers it injects; others must be configured to. R20. |
 | 7 | Differently-cased or space-padded group | Exact, case-sensitive match after NFC + trim: no inherited role. |
-| 8 | A comma inside a group name in header mode | Splits into names that match nothing: no promotion. |
+| 8 | A comma inside a group name in header mode | Splits into several names, which CAN match a mapped one (S-L4): mapped names must be groups only IdP admins control (`sso.md`, R20(e)). |
 | 9 | DB error during the apply | OIDC: `/sign-in?error=failed`, no session. Header: identify throws → 503. Never proceeds on the old role with a half-applied sync (one transaction). |
 | 10 | Mapping variable unset | Dormant: nothing applied, nothing refused (manual as before); the panel says so. |
 | 11 | Demoting the last admin, including several admins demoted at once | Org people lock, then `keepLastAdmin` over signed-in admins only. Kept, error log, audit `denied`. |
@@ -787,3 +790,26 @@ what the design does now (this table supersedes §3, §5–§7 where they differ
 
 Steps (§5) gain step 1b, the B1 gate, right after the label filter. No `console.*` in `src/`: each
 module logs through the logger it is handed (`app.log`, the request's log).
+
+## 11. Review round (two reviewers, head 749f5509)
+
+Confirmed sound: the locks, the disable CTE and enable/setup revoke, the token `least()` rule and bounds,
+CLOSE routing, `visualId` scoping, recomputed tags, the groups header behind `isTrustedPeer`, bearer
+decided by the token alone, the claim parsing, NFC and case-sensitive matching, the admin contracts, the
+last-admin rule across pods, the R19 paths and the B1 gate's placement. Fixed, each with a test that
+fails before the fix:
+
+| Finding | What it was | What the code does now |
+|---|---|---|
+| C1 | The B1 gate checked every dataset reachable through relationships, so a star schema with rules on one dimension refused charts over the OPEN ones; `visualForCaller` over-stripped the same way. | Only what the body reads is gated: the datasets named by id and the join plan's tables (`chartReads` = `resolveVizJoin(...).plan.tables`, `metricReads` = `planTables` with `resolveColumnOwner`). Relationships are listed once per call. NEGATIVE CONTROL: east's chart, KPI and custom order over an open dimension. |
+| C2 | A kept marker survived the org gaining an admin through an invited admin's first sign-in (admin → admin). | `provision` clears `kept:` markers after the upsert whenever the member is an admin; every non-kept admin sync does too. |
+| C3 | The member-by-member re-apply was order-dependent. | Promotions to admin are counted first (kept in the set-based re-apply). |
+| C4 | An invite kept its role under IdP-managed roles. | Stored as viewer server-side; the web sends viewer and resets a cancelled invite. |
+| C5 | People drew the live role picker while `admin:idpGroups` loaded or failed. | The role is text until it is known who decides. |
+| C7 | Header single-flight joined requests with different groups. | Keyed by `org, email, digest`. |
+| C8 | The tokens page hid "New token" when the list failed. | The dialog uses the default maximum until the server's is known. |
+| C9 | Weak tests. | The bearer test asserts the row was not written (`xmin`); the reconnect refusal is checked on both pods. |
+| S-M1 / C6 | Re-applying 15,000 members held the exclusive lock 27.4 s here; 21 of 30 concurrent syncs could not get a pool connection and an unrelated `SELECT 1` timed out at 3 s. | The re-apply is set-based (`auth/idpReapply.ts`: four reads, the decision in memory, at most five writes, the audit in one statement): **1.5–1.8 s for 15,000 members, `SELECT 1` 16–23 ms, 30/30 syncs applied** (`scripts/measure-idpReapply.ts`). A sync takes one of 3 per-pod slots and waits at most 2 s for it and for the lock (`lock_timeout`); past that, header mode answers the member as stored (nothing written) and OIDC tries once more, then signs in with the stored role. An unchanged mapping re-applies nobody; an unchanged sync writes nothing. |
+| S-L3 | A map change granted from stale stored groups (a token-only leaver). | 0019 adds `users.idp_groups_at`. A re-apply always takes away; it GRANTS (role up, team adds) only from a list read within `SESSION_ABSOLUTE_HOURS`, and clears the digest of a member whose grant it withheld, so header mode re-reads them at their next request. |
+| S-L4 | A comma can grant a mapped group. | Design §3.4, R20(e) and `sso.md`: mapped names must be groups only IdP admins control. |
+| S-L5 | A bearer-token event stream outlived the token. | Streams record the token's hash; `tokens:revoke` closes that token's streams over the bus (`token:<hash>`); the sweep closes streams of revoked or expired tokens. |
