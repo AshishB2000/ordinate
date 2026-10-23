@@ -35,6 +35,17 @@ export function labelFor(people: Record<string, string>): (address: string) => s
   return (a) => '@' + (people[a] ?? formerMember());
 }
 
+/** The names `bodies` may show (`peopleIn`), reading the project's readers only when one of them mentions someone. A failed read names no one. */
+export async function peopleFor(projectId: string, bodies: string[]): Promise<Record<string, string>> {
+  if (!bodies.some((b) => b.includes('@('))) return {};
+  return peopleIn(bodies, await currentReaders(projectId).catch(() => null));
+}
+
+/** The label every server surface (Home's snippet, a report, an email) gives the mentions in `bodies`. */
+export async function labelsFor(projectId: string, bodies: string[]): Promise<(address: string) => string> {
+  return labelFor(await peopleFor(projectId, bodies));
+}
+
 /**
  * The check a comment write runs INSIDE its lock (app/comments.ts `mutate`), on
  * the body as stored and the body it replaces: refused (a sentence) when the

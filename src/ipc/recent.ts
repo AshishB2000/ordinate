@@ -10,7 +10,7 @@ import { ctx, serverDataDir } from '../server/context';
 import * as comments from '../app/comments';
 import { targetNames } from './comments';
 import { commentSnippet } from '../app/mentionToken';
-import { currentReaders, labelFor, peopleIn } from '../server/mentions/people';
+import { labelsFor } from '../server/mentions/people';
 
 // Home's IPC: the cross-project "Recent" list (see src/app/recent.ts:
 // metadata-only, never hydrates a table or computes a figure), the Starred
@@ -54,7 +54,7 @@ export function register() {
     let names: Record<string, { name: string; analysisId?: string }> = {};
     try { names = await targetNames(projectId, top); } catch (_) { /* names are a nicety */ }
     // A mention reads "@Ann Lee" for a current reader and "@former member" for anyone else — never an address.
-    const label = labelFor(top.some((c) => c.body.includes('@(')) ? peopleIn(top.map((c) => c.body), await currentReaders(projectId).catch(() => null)) : {});
+    const label = await labelsFor(projectId, top.map((c) => c.body));
     return {
       open: open.length,
       recent: top.map((c) => ({

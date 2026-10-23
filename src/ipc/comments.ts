@@ -30,7 +30,7 @@ import * as datasets from '../data/datasets';
 import * as stories from '../analysis/stories';
 import type { Comment } from '../app/commentModel';
 import type { Card } from '../analysis/dashboards';
-import { currentReaders, mentionGate, mentionsOn, peopleIn } from '../server/mentions/people';
+import { currentReaders, mentionGate, mentionsOn, peopleFor } from '../server/mentions/people';
 
 interface TargetInfo { name: string; analysisId?: string }
 
@@ -78,7 +78,7 @@ async function answer(projectId: string, res: comments.Result): Promise<unknown>
   let targets: Record<string, TargetInfo> = {};
   try { targets = await targetNames(projectId, res.comments); } catch (_) { /* names are a nicety */ }
   const bodies = res.comments.flatMap((c) => [c.body, ...c.replies.map((r) => r.body)]);
-  const people = bodies.some((b) => b.includes('@(')) ? peopleIn(bodies, await currentReaders(projectId).catch(() => null)) : {};
+  const people = await peopleFor(projectId, bodies);
   return { ok: true, comments: list, targets, mentions: mentionsOn(), people };
 }
 
