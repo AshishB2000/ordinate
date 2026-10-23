@@ -159,6 +159,25 @@ const totalsOf = (r: H.Reply): string[] =>
     const relGet = await W.call('east', 'visual:get', { projectId: P, id: relId });
     ok('B1: a visual whose labels come from the ruled related dataset comes to east without them', relGet.status === 200 && !H.leaks(relGet.text) && relGet.body?.overrides?.sortOrder === undefined, relGet.text.slice(0, 200));
     ok('NEGATIVE CONTROL: …the editor gets them', H.leaks((await W.call('ed', 'visual:get', { projectId: P, id: relId })).text));
+    // C1: a star schema — the same facts also relate to an OPEN dimension. Only what the question reads is gated.
+    const products = await W.as('boss', async () => (await datasetsMod.saveDataset(P, { name: 'Products', sourceKind: 'csv',
+      columns: [{ name: 'key', type: 'text' }, { name: 'pcat', type: 'text' }, { name: 'price', type: 'number' }],
+      rows: Array.from({ length: 8 }, (_, i) => [keyOf(i), `cat${i % 2}`, i]) }))!.id);
+    const relP = await W.call('boss', 'relationship:save', { projectId: P, relationship: { from: { datasetId: facts, column: 'key' }, to: { datasetId: products, column: 'key' }, cardinality: 'many_to_one' } });
+    const openEnc = { category: 'pcat', categoryDatasetId: products, values: [{ column: 'amount', aggregation: 'sum' }] };
+    const openChart = await W.call('east', 'visual:data', { projectId: P, datasetId: facts, encoding: openEnc });
+    const openTwin = await W.call('ed', 'visual:data', { projectId: P, datasetId: facts, encoding: openEnc });
+    ok('NEGATIVE CONTROL (C1): east\'s chart over the OPEN related dimension answers — the editor\'s answer, Object.is',
+      relP.status === 200 && openChart.body?.ok === true && H.diff(openChart.body?.data, openTwin.body?.data, {}) === '', openChart.text.slice(0, 200));
+    const openKpi = await W.call('east', 'dashboard:metric', { projectId: P, datasetId: facts, column: 'price', aggregation: 'sum' });
+    ok('NEGATIVE CONTROL (C1): east\'s KPI over the open dimension answers', openKpi.body?.ok === true && typeof openKpi.body.value === 'number', openKpi.text.slice(0, 160));
+    const openVis = await W.call('boss', 'visual:save', { projectId: P, datasetId: facts, name: 'By category', chartType: 'bar', encoding: openEnc, overrides: { sort: 'custom', sortOrder: ['cat1', 'cat0'] } });
+    const openGet = await W.call('east', 'visual:get', { projectId: P, id: String(openVis.body?.visual?.id ?? openVis.body?.id ?? '') });
+    ok('NEGATIVE CONTROL (C1): a visual over the open dimension keeps its custom order for east', JSON.stringify(openGet.body?.overrides?.sortOrder) === '["cat1","cat0"]', openGet.text.slice(0, 200));
+    ok('B1 (with an open dimension beside it): the chart over the ruled dimension is still refused', H.refused(await W.call('east', 'visual:data', relAsk), 'related'));
+    // The relationship just saved moved the project's cache dependency: the editor warms the answers again.
+    await W.call('ed', 'visual:data', relAsk);
+    await W.call('ed', 'dashboard:metric', kpi);
     doors.setRelatedGateForTest(false);
     try {
       const leaked = await W.call('east', 'visual:data', relAsk);

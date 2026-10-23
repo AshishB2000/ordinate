@@ -30,7 +30,7 @@ import type { DriversEncoding } from '../analysis/driverScope';
 import { contentTag } from '../app/editConflict';
 import type { SaveKind } from '../analysis/recordDiff';
 import { isValidId } from '../app/ids';
-import { relatedColumnNames, relatedDatasetIds } from './relationships';
+import { chartReads, metricReads, relatedColumnNames } from './relationships';
 
 /** Every string a question names (encoding, filters, a metric spec): the columns it may reach. */
 function namesIn(v: unknown, out: Set<string> = new Set()): Set<string> {
@@ -49,12 +49,7 @@ function namedDatasets(datasetId: string, encoding: VizEncoding | null): string[
 
 /** Does the question reach another dataset? Conservative: any name a relationship would supply counts. */
 async function reachesOther(projectId: string, datasetId: string, encoding: VizEncoding | null, rest: unknown): Promise<boolean> {
-  return (!!encoding && hasMetricMeasure(encoding)) || reachesDataset(projectId, datasetId, encoding, rest);
-}
-
-/** `reachesOther` without the metric measures, which are planned over this same dataset (analysis/metricMeasures). */
-async function reachesDataset(projectId: string, datasetId: string, encoding: VizEncoding | null, rest: unknown): Promise<boolean> {
-  if (namedDatasets(datasetId, encoding).length) return true;
+  if ((encoding && hasMetricMeasure(encoding)) || namedDatasets(datasetId, encoding).length) return true;
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   const own = new Set((meta?.columns ?? []).map((c) => c.name));
   const foreign = [...namesIn([encoding, rest])].filter((n) => !own.has(n));
@@ -70,18 +65,22 @@ export function setRelatedGateForTest(on: boolean): void {
 }
 
 /**
- * B1: a restricted caller whose question reaches ANOTHER dataset that is closed to them — by id, or through
- * a name a related dataset supplies. Asked when nothing restricts them on the base dataset, BEFORE the body
- * and its answer cache: that cache is keyed by the base dataset and the question alone, so an editor's
- * answer joined over a dataset with rules would otherwise be handed to them. Conservative: every dataset the
- * relationships reach is checked, plus the ones named by id.
+ * B1: a restricted caller whose question READS another dataset that is closed to them. Asked when nothing
+ * restricts them on the base dataset, BEFORE the body and its answer cache: that cache is keyed by the base
+ * dataset and the question alone, so an editor's answer joined over a dataset with rules would otherwise be
+ * handed to them. `reads` is exactly what the body reads — the datasets named by id and the join plan's
+ * tables (./relationships chartReads / metricReads) — so a star schema whose other dimensions are open
+ * still answers (C1).
  */
-async function relatedClosed(projectId: string, datasetId: string, encoding: VizEncoding | null, rest: unknown): Promise<boolean> {
-  if (!relatedGate || !(await restrictedOn(projectId)) || !(await reachesDataset(projectId, datasetId, encoding, rest))) return false;
-  const ids = new Set([...namedDatasets(datasetId, encoding), ...(await relatedDatasetIds(projectId, datasetId))]);
-  for (const id of ids) if (await closedToCaller(projectId, id)) return true;
+async function relatedClosed(projectId: string, datasetId: string, reads: () => Promise<string[]>): Promise<boolean> {
+  if (!relatedGate || !(await restrictedOn(projectId))) return false;
+  for (const id of new Set(await reads())) if (id !== datasetId && (await closedToCaller(projectId, id))) return true;
   return false;
 }
+
+/** What a chart's question reads besides its own dataset. */
+const chartReadsOf = (projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[]) => async (): Promise<string[]> =>
+  [...namedDatasets(datasetId, encoding), ...(await chartReads(projectId, datasetId, encoding, filters))];
 
 type Refusal = ReturnType<typeof rowPolicyRefusal>;
 
@@ -109,7 +108,7 @@ export async function lockedViz<O extends { sample?: boolean }, R>(
   const lock = await lockOrRefusal(projectId, datasetId);
   if (isRefusal(lock)) return lock;
   if (!lock) {
-    if (await relatedClosed(projectId, datasetId, encoding, filters)) return rowPolicyRefusal('related');
+    if (await relatedClosed(projectId, datasetId, chartReadsOf(projectId, datasetId, encoding, filters))) return rowPolicyRefusal('related');
     return body(projectId, datasetId, encoding, filters, opts);
   }
   if (encoding && encoding.drivers) return rowPolicyRefusal('reader');
@@ -129,7 +128,7 @@ export async function lockedMetric<S extends { column: string }, P, R>(
 ): Promise<R> {
   const lock = await rowLockFor(projectId, datasetId);
   if (!lock) {
-    if (await relatedClosed(projectId, datasetId, null, [spec.column, filters])) throw new RowPolicyError('related');
+    if (await relatedClosed(projectId, datasetId, () => metricReads(projectId, datasetId, spec.column, filters))) throw new RowPolicyError('related');
     return body(projectId, datasetId, spec, filters, params);
   }
   if (await reachesOther(projectId, datasetId, null, [spec.column, filters])) throw new RowPolicyError('related');
@@ -190,8 +189,9 @@ function withoutLabels<T extends VisualLike>(v: T): T {
 export async function visualForCaller<T extends VisualLike | null>(projectId: string, v: T): Promise<T> {
   if (!v || !(await restrictedOn(projectId))) return v;
   const ds = typeof v.datasetId === 'string' && v.datasetId ? v.datasetId : null;
-  const enc = (v.encoding ?? null) as VizEncoding | null;
-  const closed = !ds || (await closedToCaller(projectId, ds)) || (await relatedClosed(projectId, ds, enc, (v as { filters?: unknown }).filters));
+  const filters = (v as { filters?: unknown }).filters;
+  const closed = !ds || (await closedToCaller(projectId, ds))
+    || (!!v.encoding && (await relatedClosed(projectId, ds, chartReadsOf(projectId, ds, v.encoding as VizEncoding, Array.isArray(filters) ? (filters as FilterStep[]) : []))));
   return closed ? withoutLabels(v) : v;
 }
 

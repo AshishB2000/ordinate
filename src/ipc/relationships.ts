@@ -91,6 +91,21 @@ function hasRefs(encoding: VizEncoding): boolean {
  * `visual:data` across relationships, or null when the visual needs no join.
  * Same reply shape as `ipc/visuals.vizDataFor`, which calls this first.
  */
+/** The join a chart's question needs (analysis/joinPlan resolveVizJoin), or null when it needs none. */
+async function vizJoin(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[]) {
+  const list = await rels.listRelationships(projectId);
+  if (list.length === 0 && !hasRefs(encoding)) return null;
+  const infos = await modelInfos(projectId, datasetId, list);
+  const join = resolveVizJoin(datasetId, encoding, filters, live(list, infos), infos);
+  return join ? { infos, join } : null;
+}
+
+/** The OTHER datasets a chart's question reads — its join plan's tables (row access rules gate exactly these). */
+export async function chartReads(projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[]): Promise<string[]> {
+  const j = await vizJoin(projectId, datasetId, encoding, filters);
+  return j && j.join.ok ? j.join.value.plan.tables.map((t) => t.datasetId).filter((id) => id !== datasetId) : [];
+}
+
 export async function joinedVizDataFor(
   projectId: string,
   datasetId: string,
@@ -98,11 +113,9 @@ export async function joinedVizDataFor(
   filters: FilterStep[],
   // ponytail: the `visual:data` reply envelope (VizDataReply in ipc/visuals.ts), or null
 ): Promise<any> {
-  const list = await rels.listRelationships(projectId);
-  if (list.length === 0 && !hasRefs(encoding)) return null;
-  const infos = await modelInfos(projectId, datasetId, list);
-  const join = resolveVizJoin(datasetId, encoding, filters, live(list, infos), infos);
-  if (!join) return null;
+  const vj = await vizJoin(projectId, datasetId, encoding, filters);
+  if (!vj) return null;
+  const { infos, join } = vj;
   if (!join.ok) return { ok: false, error: join.error };
   const j = join.value;
 
@@ -118,6 +131,27 @@ export async function joinedVizDataFor(
   return { ok: true, data: r.data, recommendedShape: r.recommendedShape, warnings: r.warnings, category: r.category };
 }
 
+/** The join a metric's column and filters need — each resolved to its NEAREST owner — or null when every one is the dataset's own. */
+async function metricJoin(projectId: string, datasetId: string, column: string, filters: FilterStep[]) {
+  const list = await rels.listRelationships(projectId);
+  if (list.length === 0) return null;
+  const infos = await modelInfos(projectId, datasetId, list);
+  const model = live(list, infos);
+  const needed = new Set<string>();
+  const owner = resolveColumnOwner(datasetId, column, model, infos);
+  if (owner && owner !== datasetId) needed.add(owner);
+  const filterOwners = filters.map((f) => (f && typeof f.column === 'string' ? resolveColumnOwner(datasetId, f.column, model, infos) : null));
+  for (const o of filterOwners) if (o && o !== datasetId) needed.add(o);
+  if (needed.size === 0) return null;
+  return { infos, owner, filterOwners, planned: planTables(datasetId, [...needed], model) };
+}
+
+/** The OTHER datasets a metric reads — its join plan's tables (row access rules gate exactly these). */
+export async function metricReads(projectId: string, datasetId: string, column: string, filters: FilterStep[]): Promise<string[]> {
+  const mj = await metricJoin(projectId, datasetId, column, filters);
+  return mj && mj.planned.ok ? mj.planned.value.tables.map((t) => t.datasetId).filter((id) => id !== datasetId) : [];
+}
+
 /**
  * A metric's number across relationships, or null when the metric's column and
  * every filter column are its own dataset's. A column the dataset lacks
@@ -130,18 +164,9 @@ export async function joinedMetricFor(
   spec: { column: string; aggregation: MetricAggregation },
   filters: FilterStep[],
 ): Promise<{ ok: boolean; value: number | null } | null> {
-  const list = await rels.listRelationships(projectId);
-  if (list.length === 0) return null;
-  const infos = await modelInfos(projectId, datasetId, list);
-  const model = live(list, infos);
-  const needed = new Set<string>();
-  const owner = resolveColumnOwner(datasetId, spec.column, model, infos);
-  if (owner && owner !== datasetId) needed.add(owner);
-  const filterOwners = filters.map((f) => (f && typeof f.column === 'string' ? resolveColumnOwner(datasetId, f.column, model, infos) : null));
-  for (const o of filterOwners) if (o && o !== datasetId) needed.add(o);
-  if (needed.size === 0) return null;
-
-  const planned = planTables(datasetId, [...needed], model);
+  const mj = await metricJoin(projectId, datasetId, spec.column, filters);
+  if (!mj) return null;
+  const { infos, owner, filterOwners, planned } = mj;
   if (!planned.ok) return { ok: true, value: null };
   const plan = planned.value;
   const layout = mergedLayout(plan, infos);
@@ -172,14 +197,6 @@ export async function relatedColumnNames(projectId: string, datasetId: string): 
   if (list.length === 0) return [];
   const infos = await modelInfos(projectId, datasetId, list);
   return relatedColumnGroups(datasetId, live(list, infos), infos).flatMap((g) => g.columns.map((c) => c.name));
-}
-
-/** Every dataset reachable from `datasetId` through the project's relationships: what a related question may read. */
-export async function relatedDatasetIds(projectId: string, datasetId: string): Promise<string[]> {
-  const list = await rels.listRelationships(projectId);
-  if (list.length === 0) return [];
-  const infos = await modelInfos(projectId, datasetId, list);
-  return relatedColumnGroups(datasetId, live(list, infos), infos).map((g) => g.datasetId).filter((id) => id !== datasetId);
 }
 
 interface SideRef { parquetPath: string; index: number; type: 'text' | 'number' | 'date' }
