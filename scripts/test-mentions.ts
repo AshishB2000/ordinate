@@ -22,6 +22,8 @@
 //              one who still has access gets all three)
 //   names      comment:list's `people`, Home's snippet (labelled before its cut),
 //              a report's discussion page: "@Name" / "@former member"
+//   gone       deleting a comment or a reply deletes its mention rows; a mention
+//              edited out is marked seen when Home skips it; `unseen` is the DB's
 //   home       mentions:list unseen first, readable projects only; ids that repeat
 //              across projects are two rows, and mentions:seen marks one
 //   rls        `mentions` as an ordinary role
@@ -257,6 +259,29 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     const discussion = await b.run(me('bea'), () => reports.pageDeps({}, pid).comments());
     const text = JSON.stringify(discussion.comments.map((c) => [c.body, ...(c.replies ?? []).map((r) => r.body)]));
     ok('names: a report\'s discussion page says "@Bea" and "@former member", never an address', text.includes('@Bea') && text.includes('@former member') && !/@\([^)]*@/.test(text) && !text.includes('cal@acme'), text.slice(0, 300));
+
+    // ── gone ──────────────────────────────────────────────────────────────
+    const rowOfPiece = async (piece: string) => Number((await b.pool.query<{ n: string }>('SELECT count(*)::text AS n FROM mentions WHERE piece_id = $1', [piece])).rows[0].n);
+    const doomed = (await as('ann').call('comment:add', { projectId: pid, target, body: `delete me ${m('bea')}` })).body.comments.at(-1).id as string;
+    await settle();
+    ok('gone: setup — the mention has its row', (await rowOfPiece(doomed)) === 1);
+    await as('ann').call('comment:delete', { projectId: pid, id: doomed });
+    ok('gone: deleting the comment deletes its mention rows', (await rowOfPiece(doomed)) === 0);
+    const thread2 = (await as('ann').call('comment:add', { projectId: pid, target, body: 'a thread to reply in' })).body.comments.at(-1).id as string;
+    const rep = (await as('ann').call('comment:reply', { projectId: pid, id: thread2, body: `fyi ${m('bea')}` })).body.comments.find((c: { id: string }) => c.id === thread2).replies.at(-1).id as string;
+    await settle();
+    ok('gone: setup — the reply\'s mention has its row', (await rowOfPiece(rep)) === 1);
+    await as('ann').call('comment:deleteReply', { projectId: pid, id: thread2, replyId: rep });
+    ok('gone: deleting the reply deletes its mention rows', (await rowOfPiece(rep)) === 0);
+    const edited = (await as('ann').call('comment:add', { projectId: pid, target, body: `edit me ${m('bea')}` })).body.comments.at(-1).id as string;
+    await settle();
+    await as('ann').call('comment:edit', { projectId: pid, id: edited, body: 'edit me, no one now' });
+    const before = await b.pool.query<{ seen: boolean }>('SELECT seen_at IS NOT NULL AS seen FROM mentions WHERE piece_id = $1', [edited]);
+    const homeNow = (await as('bea').call('mentions:list')).body;
+    const afterGone = await b.pool.query<{ seen: boolean }>('SELECT seen_at IS NOT NULL AS seen FROM mentions WHERE piece_id = $1', [edited]);
+    const dbUnseen = Number((await b.pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM mentions WHERE user_email = $1 AND seen_at IS NULL`, [at('bea')])).rows[0].n);
+    ok('gone: a mention edited out is skipped by Home and marked seen, so it never hides what is new', before.rows[0]?.seen === false && afterGone.rows[0]?.seen === true && !homeNow.items.some((x: { id: string }) => x.id === edited), show([before.rows, afterGone.rows]));
+    ok('gone: `unseen` is the database\'s count after that', homeNow.unseen === dbUnseen, show([homeNow.unseen, dbUnseen]));
 
     // ── home ──────────────────────────────────────────────────────────────
     const h = (await as('bea').call('mentions:list')).body.items as Array<{ projectId: string; id: string; seen: boolean }>;

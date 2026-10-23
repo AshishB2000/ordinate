@@ -20,6 +20,8 @@ export interface HomeMention {
 export interface MentionList {
   available: boolean;
   items: HomeMention[];
+  /** The caller's unseen mentions in the database (some may not be among `items`). */
+  unseen: number;
 }
 export interface MentionPrefs {
   available: boolean;
@@ -36,7 +38,8 @@ export function useMentions() {
     queryFn: async (): Promise<MentionList> => {
       const r = (await rpc('mentions:list')) as Partial<MentionList> & { ok?: boolean; error?: string };
       if (r && r.ok === false) throw new Error(r.error || 'Could not read your mentions.');
-      return { available: r?.available === true, items: Array.isArray(r?.items) ? r.items : [] };
+      const items = Array.isArray(r?.items) ? r.items : [];
+      return { available: r?.available === true, items, unseen: typeof r?.unseen === 'number' ? r.unseen : items.filter((m) => !m.seen).length };
     },
   });
 }

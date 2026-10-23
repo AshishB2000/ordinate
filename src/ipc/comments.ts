@@ -31,6 +31,8 @@ import * as stories from '../analysis/stories';
 import type { Comment } from '../app/commentModel';
 import type { Card } from '../analysis/dashboards';
 import { currentReaders, mentionGate, mentionsOn, peopleFor } from '../server/mentions/people';
+import { forgetPieces } from '../server/mentions/store';
+import { notifyLog, why } from '../server/notifyLog';
 
 interface TargetInfo { name: string; analysisId?: string }
 
@@ -135,10 +137,19 @@ export function register(): void {
     write(pid(projectId), await comments.resolve(pid(projectId), id(cid))));
   ipcMain.handle('comment:reopen', async (_e, { projectId, id: cid }: any = {}) =>
     write(pid(projectId), await comments.reopen(pid(projectId), id(cid))));
-  ipcMain.handle('comment:delete', async (_e, { projectId, id: cid }: any = {}) =>
-    write(pid(projectId), await comments.remove(pid(projectId), id(cid))));
-  ipcMain.handle('comment:deleteReply', async (_e, { projectId, id: cid, replyId }: any = {}) =>
-    write(pid(projectId), await comments.removeReply(pid(projectId), id(cid), id(replyId))));
+  // A deleted piece is no one's mention any more: its rows go too (a failure only leaves them for Home to skip).
+  const forget = (projectId: string, which: Parameters<typeof forgetPieces>[1]) =>
+    forgetPieces(projectId, which).catch((err: unknown) => notifyLog().warn({ error: why(err) }, 'mentions of a deleted comment not removed'));
+  ipcMain.handle('comment:delete', async (_e, { projectId, id: cid }: any = {}) => {
+    const res = await comments.remove(pid(projectId), id(cid));
+    if (res.ok) await forget(pid(projectId), { commentId: id(cid) });
+    return write(pid(projectId), res);
+  });
+  ipcMain.handle('comment:deleteReply', async (_e, { projectId, id: cid, replyId }: any = {}) => {
+    const res = await comments.removeReply(pid(projectId), id(cid), id(replyId));
+    if (res.ok) await forget(pid(projectId), { pieceId: id(replyId) });
+    return write(pid(projectId), res);
+  });
 
   // ── Settings → General → Collaboration ──
   ipcMain.handle('profile:setDisplayName', async (_e, name: unknown) => {

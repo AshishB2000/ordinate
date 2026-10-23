@@ -11,7 +11,7 @@ import { mailReady } from '../mail/emailChannel';
 import { aDeletedRecord, mentionsOff } from '../mentionMessages';
 import { registry } from '../rpc';
 import { currentReaders, labelFor, mentionsOn, peopleIn } from './people';
-import { emailMe, listMine, markSeen, setEmailMe } from './store';
+import { emailMe, listMine, markGone, markSeen, setEmailMe, unseenCount } from './store';
 
 /** People the picker offers. */
 export const PICKER_MAX = 8;
@@ -47,9 +47,14 @@ export interface HomeMention {
   seen: boolean;
 }
 
-/** The caller's "Mentioned you": unseen first, each read from the comment as it is now. */
-export async function homeMentions(): Promise<{ available: boolean; items: HomeMention[] }> {
-  if (!mentionsOn()) return { available: false, items: [] };
+/**
+ * The caller's "Mentioned you": unseen first, each read from the comment as it is
+ * now. A row whose piece is gone (deleted, or edited to no longer name the
+ * caller) is marked seen, so it never hides what is new; `unseen` is the
+ * database's count after that, which is what Mark all seen answers to.
+ */
+export async function homeMentions(): Promise<{ available: boolean; items: HomeMention[]; unseen: number }> {
+  if (!mentionsOn()) return { available: false, items: [], unseen: 0 };
   const me = normalize(ctx().user.email);
   const rows = await listMine(HOME_READ);
   const byProject = new Map<string, Comment[]>();
@@ -57,6 +62,7 @@ export async function homeMentions(): Promise<{ available: boolean; items: HomeM
   const namesOf = new Map<string, Record<string, { name: string; analysisId?: string }>>();
   const { targetNames } = require('../../ipc/comments') as typeof import('../../ipc/comments'); // lazy: that module starts the notices
   const items: HomeMention[] = [];
+  const gone: Array<{ projectId: string; pieceId: string }> = [];
   for (const row of rows) {
     if (items.length >= HOME_MAX) break;
     if (!byProject.has(row.projectId)) {
@@ -68,7 +74,10 @@ export async function homeMentions(): Promise<{ available: boolean; items: HomeM
     }
     const c = byProject.get(row.projectId)!.find((x) => x.id === row.commentId);
     const body = !c ? null : row.pieceId === c.id ? c.body : c.replies.find((r) => r.id === row.pieceId && !r.deletedAt)?.body ?? null;
-    if (!c || body === null || !mentionsIn(body).includes(me)) continue; // deleted, or edited to no longer name the caller
+    if (!c || body === null || !mentionsIn(body).includes(me)) {
+      if (!row.seen) gone.push({ projectId: row.projectId, pieceId: row.pieceId }); // deleted, or edited to no longer name the caller
+      continue;
+    }
     const on = namesOf.get(row.projectId)?.[`${c.target.kind}:${c.target.id}`] ?? { name: aDeletedRecord() };
     items.push({
       projectId: row.projectId, id: row.pieceId, commentId: row.commentId, target: c.target, on,
@@ -76,7 +85,8 @@ export async function homeMentions(): Promise<{ available: boolean; items: HomeM
       at: row.at, seen: row.seen,
     });
   }
-  return { available: true, items };
+  await markGone(gone);
+  return { available: true, items, unseen: await unseenCount() };
 }
 
 export function register(): void {

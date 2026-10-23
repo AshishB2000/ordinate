@@ -27,7 +27,8 @@ export function MentionedYou() {
   const navigate = useNavigate();
   if (q.isSuccess && !q.data.available) return null;
   const items = q.data?.items ?? [];
-  const fresh = items.filter((m) => !m.seen).length;
+  // The database's count: Mark all seen stays offered while any unseen row is left, shown here or not.
+  const fresh = q.data?.unseen ?? 0;
   const projectName = (id: string) => projects.data?.find((p) => p.id === id)?.name;
   const open = (m: HomeMention) => {
     const href = threadPath(m.projectId, m.target, m.on.analysisId);

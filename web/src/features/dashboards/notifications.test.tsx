@@ -90,6 +90,12 @@ describe('Home: Mentioned you', () => {
     await waitFor(() => expect(calls.some((c) => c.channel === 'mentions:seen' && JSON.stringify(c.payload) === JSON.stringify({ through: '2026-10-20T11:00:00Z' }))).toBe(true));
   });
 
+  it('Mark all seen stays offered while the database still has unseen rows, even when none is drawn as new', async () => {
+    home({ 'mentions:list': { body: { ok: true, available: true, items: [item(C2, true, 'Cal')], unseen: 3 } }, 'mentions:seen': { body: { ok: true } } });
+    expect(await screen.findByRole('button', { name: 'Mark all seen' })).toBeTruthy();
+    expect(screen.getByText('3 new')).toBeTruthy();
+  });
+
   it('empty: says what will show up there', async () => {
     home({ 'mentions:list': { body: { ok: true, available: true, items: [] } } });
     expect(await screen.findByRole('heading', { name: 'No mentions yet' })).toBeTruthy();

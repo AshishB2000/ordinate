@@ -9,6 +9,13 @@ import { inOrg, orgDb } from '../db/inOrg';
 /** Rows kept per member, newest first. */
 export const MAX_ROWS = 200;
 
+/** authz `readable`'s rule in SQL, for the caller ($1 org, $2 email, $3 is an org admin): every project, or a direct or team grant. */
+const READABLE = `$3::boolean OR m.project_id IN (
+                SELECT g.project_id FROM users u
+                  JOIN project_grants g ON g.org_id = u.org_id
+                   AND (g.user_id = u.id OR g.team_id IN (SELECT team_id FROM team_members WHERE user_id = u.id))
+                 WHERE u.org_id = $1 AND u.email = $2 AND u.disabled_at IS NULL)`;
+
 export interface MentionRow {
   projectId: string;
   pieceId: string;
@@ -61,17 +68,50 @@ export async function listMine(limit: number): Promise<MentionRow[]> {
       `SELECT m.project_id::text, m.piece_id::text, m.comment_id::text, m.author, m.created_at, m.seen_at
          FROM mentions m
         WHERE m.org_id = $1 AND m.user_email = $2
-          AND ($3::boolean OR m.project_id IN (
-                SELECT g.project_id FROM users u
-                  JOIN project_grants g ON g.org_id = u.org_id
-                   AND (g.user_id = u.id OR g.team_id IN (SELECT team_id FROM team_members WHERE user_id = u.id))
-                 WHERE u.org_id = $1 AND u.email = $2 AND u.disabled_at IS NULL))
+          AND (${READABLE})
         ORDER BY (m.seen_at IS NULL) DESC, m.created_at DESC
         LIMIT $4`,
       [org, user.email, user.role === 'admin', limit],
     ),
   );
   return r.rows.map((x) => ({ projectId: x.project_id, pieceId: x.piece_id, commentId: x.comment_id, author: x.author, at: x.created_at.toISOString(), seen: x.seen_at !== null }));
+}
+
+/**
+ * A deleted comment (every piece of its thread) or reply is no one's mention any
+ * more: its rows go, for every member named in it. Not a caller-bound write —
+ * the delete itself was the author's, checked by app/comments.ts.
+ */
+export async function forgetPieces(projectId: string, which: { commentId: string } | { pieceId: string }): Promise<void> {
+  if (!orgDb()) return;
+  const [col, id] = 'commentId' in which ? ['comment_id', which.commentId] : ['piece_id', which.pieceId];
+  await inOrg((c, org) => c.query(`DELETE FROM mentions WHERE org_id = $1 AND project_id = $2 AND ${col} = $3`, [org, projectId, id]));
+}
+
+/** The caller's rows Home found gone (deleted since, or edited to no longer name them): seen, so they never hide what is new. */
+export async function markGone(rows: Array<{ projectId: string; pieceId: string }>): Promise<void> {
+  if (!rows.length) return;
+  await inOrg((c, org) =>
+    c.query(
+      `UPDATE mentions SET seen_at = now()
+        WHERE org_id = $1 AND user_email = $2 AND seen_at IS NULL
+          AND (project_id, piece_id) IN (SELECT * FROM unnest($3::uuid[], $4::uuid[]))`,
+      [org, ctx().user.email, rows.map((r) => r.projectId), rows.map((r) => r.pieceId)],
+    ),
+  );
+}
+
+/** How many of the caller's rows are unseen, on projects they may read now (as `listMine` filters them). */
+export async function unseenCount(): Promise<number> {
+  const { user } = ctx();
+  const r = await inOrg((c, org) =>
+    c.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM mentions m
+        WHERE m.org_id = $1 AND m.user_email = $2 AND m.seen_at IS NULL AND (${READABLE})`,
+      [org, user.email, user.role === 'admin'],
+    ),
+  );
+  return r.rows[0]?.n ?? 0;
 }
 
 /** Mark the caller's row of one piece seen — or all of theirs made up to `through` (the newest Home showed them). */
