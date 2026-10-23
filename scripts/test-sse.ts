@@ -264,7 +264,7 @@ const findJob = (e: Ev, id: string): Job | undefined => {
   const G2 = await openTab(randomUUID(), 'org-a', 'gina');
   const H = await openTab(randomUUID(), 'org-a', 'hal');
   const Gb = await openTab(randomUUID(), 'org-b', 'gina');
-  sse.publish({ org: 'org-a', user: 'gina@org-a' }, sse.CLOSE, 'x');
+  sse.publish({ org: 'org-a', user: 'gina@org-a' }, sse.CLOSE, '');
   ok('close: publish never sends CLOSE (no stream ends, nothing fanned out)', !(await Promise.race([G1.ended.then(() => true), sleep(300).then(() => false)])) && fanned.length === 0);
   sse.closeStreamsOf('org-a', 'gina@org-a');
   ok('close: every stream of that user on this pod ends', await Promise.race([Promise.all([G1.ended, G2.ended]).then(() => true), sleep(2000).then(() => false)]));

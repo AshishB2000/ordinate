@@ -9,7 +9,8 @@
 // Part B — the sweep (./src/server/streamSweep.ts), in-process under OIDC with
 // sessions: a stream whose session is gone, or whose user was disabled with no
 // bus message at all, is closed by one pass; a live one is not (control). A
-// close that keeps one session keeps exactly that session's stream.
+// close that keeps one session keeps exactly that session's stream. A stream
+// opened with an API token ends when the token is revoked, or expires (S-L5).
 //
 //   npm run build:ts && DATABASE_URL=… node scripts/test-disable-pods.js
 
@@ -142,6 +143,7 @@ async function partB(url: string, pool: Pool): Promise<void> {
   const idp = await startMockOidc({ clientId: 'ordinate-test', clientSecret: 'sweep-secret' });
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-sweep-'));
   context.enterServerMode(data);
+  appMod.registerHandlers(); // tokens:revoke below
   const cfg = envMod.parseEnv({
     LOG_LEVEL: 'silent', DATA_DIR: data, DATABASE_URL: url, AUTH_MODE: 'oidc', OIDC_ISSUER: idp.issuer, OIDC_CLIENT_ID: 'ordinate-test',
     OIDC_CLIENT_SECRET: 'sweep-secret', OIDC_REDIRECT_URL: 'http://127.0.0.1:1/api/auth/callback', ORDINATE_ORG: 'acme',
@@ -166,7 +168,7 @@ async function partB(url: string, pool: Pool): Promise<void> {
     const fr = await openStream(base, asSession(f1));
     ok('sweep: three session-bound streams open', [e1, e2, fr].every((s) => s.status === 200));
     ok('NEGATIVE CONTROL: a pass over live sessions closes nothing', (await sweep.sweepStreams(pool, cfg.auth.sessionIdleMs)) === 0);
-    sse.closeStreamsOf('acme', 'erin@acme.test', store.hashId(s1));
+    sse.closeStreamsOf('acme', 'erin@acme.test', { keepSession: store.hashId(s1) });
     ok('keep: a close that keeps a session ends the other session\'s stream…', (await within(e2.ended, 2000)) !== null);
     ok('keep: …and keeps exactly that session\'s stream', (await within(e1.ended, 300)) === null);
     await pool.query('DELETE FROM sessions WHERE id_hash = $1', [store.hashId(s1)]); // signed out, no message to any stream
@@ -174,6 +176,30 @@ async function partB(url: string, pool: Pool): Promise<void> {
     const closed = await sweep.sweepStreams(pool, cfg.auth.sessionIdleMs);
     ok('sweep: one pass closes the stream whose session is gone and the disabled user\'s', closed === 2 && (await within(e1.ended, 2000)) !== null && (await within(fr.ended, 2000)) !== null, String(closed));
     ok('sweep: nothing left open on this pod', sse.streamCount() === 0, String(sse.streamCount()));
+
+    // S-L5: a stream opened with an API token ends when the token is revoked, or expires.
+    const g1 = await signIn('gwen@acme.test');
+    const gwen = (await pool.query<{ id: string }>(`SELECT id::text FROM users WHERE email = 'gwen@acme.test'`)).rows[0].id;
+    const tokenRow = async (t: string) => (await pool.query<{ id: string }>(
+      `INSERT INTO api_tokens (user_id, name, token_hash, prefix, expires_at) VALUES ($1, 't', $2, $3, now() + interval '1 day') RETURNING id::text`,
+      [gwen, store.hashId(t), t.slice(0, 12)])).rows[0].id;
+    const t1 = 'ord_' + 'R'.repeat(43);
+    const t2 = 'ord_' + 'S'.repeat(43);
+    const t3 = 'ord_' + 'T'.repeat(43);
+    const id1 = await tokenRow(t1);
+    await tokenRow(t2);
+    await tokenRow(t3);
+    const byToken = (t: string) => openStream(base, { authorization: `Bearer ${t}` });
+    const [b1, b2, b3] = [await byToken(t1), await byToken(t2), await byToken(t3)];
+    ok('tokens: three streams opened with API tokens', [b1, b2, b3].every((x) => x.status === 200));
+    const revoke = await app.inject({ method: 'POST', url: '/api/rpc/tokens:revoke',
+      headers: withCsrf({ 'content-type': 'application/json', cookie: `ordinate_session=${g1}` }), payload: wire.encode({ args: [{ id: id1 }] }) });
+    ok('tokens: revoking a token ends the stream opened with it, at once', revoke.statusCode === 200 && (await within(b1.ended, 2000)) !== null, revoke.body);
+    ok('NEGATIVE CONTROL: the streams of her other tokens stay open', (await within(b2.ended, 300)) === null && (await within(b3.ended, 10)) === null);
+    await pool.query(`UPDATE api_tokens SET expires_at = now() - interval '1 minute' WHERE token_hash = $1`, [store.hashId(t2)]);
+    const swept = await sweep.sweepStreams(pool, cfg.auth.sessionIdleMs, cfg.auth.apiTokenMaxDays);
+    ok('tokens: one sweep ends the stream of a token that expired; a live one stays', swept === 1 && (await within(b2.ended, 2000)) !== null && (await within(b3.ended, 300)) === null, String(swept));
+    b3.close();
   } finally {
     await app.close();
     await idp.close();

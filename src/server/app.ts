@@ -227,7 +227,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       }
       bus = await (require('./jobs/bus') as typeof import('./jobs/bus')).startBus(pool, dbUrl, app.log);
       // The backstop for a stream close the bus lost (docs/sso-lifecycle §3.9).
-      sweep = (require('./streamSweep') as typeof import('./streamSweep')).startStreamSweep(pool, cfg.auth.sessionIdleMs, app.log);
+      sweep = (require('./streamSweep') as typeof import('./streamSweep')).startStreamSweep(pool, cfg.auth.sessionIdleMs, cfg.auth.apiTokenMaxDays, app.log);
       jobs = (require('./jobs/runner') as typeof import('./jobs/runner')).startRunner(pool, cfg.dataDir, app.log);
     });
     // preClose, not onClose: onClose hooks run last-registered first, so
@@ -324,12 +324,14 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     );
   });
 
-  // Each stream remembers its session (session sign-in modes), so the sweep below ends it with its session.
+  // Each stream remembers its session (session sign-in modes) and its API token, so the sweep below and a
+  // revoke end it with them (docs/sso-lifecycle §3.9).
   const sessionCookie = cookieNames(cfg.env === 'prod').session;
   const sessionModes = cfg.auth.mode === 'oidc' || cfg.auth.mode === 'password';
   registerEvents(app, (req) => {
     const id = sessionModes ? req.cookies?.[sessionCookie] : undefined;
-    return typeof id === 'string' && id ? hashId(id) : null;
+    const bearer = typeof req.headers.authorization === 'string' ? /^Bearer\s+(ord_\S+)\s*$/i.exec(req.headers.authorization)?.[1] : undefined;
+    return { session: typeof id === 'string' && id ? hashId(id) : null, token: bearer ? hashId(bearer) : null };
   });
 
   // Readiness: can this pod answer queries? DuckDB, plus Postgres when

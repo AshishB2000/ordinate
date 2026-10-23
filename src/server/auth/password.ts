@@ -175,7 +175,7 @@ export function registerPassword(app: FastifyInstance, cfg: ServerEnv, pool: Poo
     }
     // Whoever else held a session on the old password is out — with their open event streams; this browser stays in.
     await endOtherSessions(pool, c.userId, sid);
-    closeStreamsOf(who.org.id, email, sid ? hashId(sid) : '');
+    closeStreamsOf(who.org.id, email, { keepSession: sid ? hashId(sid) : undefined });
     req.log.info('password changed');
     await trail(req, email, 'password_change', 'ok');
     return { ok: true };

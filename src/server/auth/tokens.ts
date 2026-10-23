@@ -18,6 +18,7 @@ import type { Pool } from 'pg';
 import { ctx, type Identity, type Role } from '../context';
 import { registry } from '../rpc';
 import { hashId } from './store';
+import { closeStreamsOf } from '../sse';
 
 const TOKEN_RE = /^ord_[A-Za-z0-9_-]{43}$/;
 const BEARER_RE = /^Bearer\s+(\S+)\s*$/i;
@@ -117,10 +118,12 @@ export function register(pool: () => Pool | null, maxDays: () => number): void {
   });
 
   registry.handle('tokens:revoke', async (_e, { id }: { id: string }) => {
-    const r = await db().query('UPDATE api_tokens SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL', [
+    const r = await db().query<{ hash: string }>('UPDATE api_tokens SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL RETURNING token_hash AS hash', [
       id,
       await me(db()),
     ]);
+    // An event stream opened with it ends now, on every pod (S-L5).
+    if (r.rows[0]) closeStreamsOf(ctx().org.id, ctx().user.email, { token: r.rows[0].hash });
     return { ok: r.rowCount === 1 };
   });
 }
