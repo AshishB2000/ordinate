@@ -29,7 +29,7 @@ import { setupOpen } from './passwordStore';
 import { hasBearer, tokenIdentity } from './tokens';
 import { closeStreamsOf } from '../sse';
 import { endAllSessions, endSession, ensureOrg, member, normalEmail, provision, sessionIdentity } from './store';
-import { applyIdpGroups, countSync, digestOf, groupsFromHeader, oncePerHour, type SyncLog } from './idpGroups';
+import { applyIdpGroups, countSync, digestOf, groupsFromHeader, isSyncBusy, oncePerHour, type SyncLog } from './idpGroups';
 
 /**
  * Is `peer` (a socket's remoteAddress) inside the trusted list? An IPv4 peer
@@ -76,6 +76,13 @@ function headerIdentify(pool: Pool, auth: AuthEnv, log: SyncLog): Identify {
       const { userId, identity } = who;
       p = applyIdpGroups(pool, auth, { userId, email }, groups, { compare: true, log })
         .then((role) => (role ? { ...identity, user: { email, role } } : null))
+        .catch((err: unknown) => {
+          if (!isSyncBusy(err)) throw err;
+          // Busy (an admin's map change holds the lock): the member as stored, nothing written; the next request syncs.
+          countSync('busy');
+          if (oncePerHour(`busy\n${auth.org}\n${email}`)) log.warn({}, 'idp groups sync busy: the stored role answered this request');
+          return identity;
+        })
         .finally(() => inflight.delete(key));
       inflight.set(key, p);
     }

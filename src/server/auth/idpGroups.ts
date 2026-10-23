@@ -116,7 +116,7 @@ export function keepLastAdmin(current: Role, next: Role, otherAdmins: number): R
 
 /** Sync outcomes on this pod, for /metrics (`ordinate_idp_sync_total`). */
 const counts = new Map<string, number>();
-export const countSync = (outcome: 'applied' | 'unchanged' | 'absent' | 'overage' | 'kept'): void => void counts.set(outcome, (counts.get(outcome) ?? 0) + 1);
+export const countSync = (outcome: 'applied' | 'unchanged' | 'absent' | 'overage' | 'kept' | 'busy'): void => void counts.set(outcome, (counts.get(outcome) ?? 0) + 1);
 export const idpSyncCounts = (): ReadonlyMap<string, number> => counts;
 
 /** Once per person per hour per pod: a kept admin's error and audit row, an absent claim's warning. */
@@ -163,8 +163,9 @@ async function applyLocked(
   c: PoolClient, org: string, userId: string, groups: readonly string[], breakGlass: boolean,
   mode: 'shared' | 'exclusive', compare: boolean, map?: readonly GroupMapping[], email = '', fresh = true, grants = true,
 ): Promise<Applied | null | typeof RETRY> {
-  const r = await c.query<{ role: Role; digest: string | null }>(
-    'SELECT role, idp_groups_digest AS digest FROM users WHERE org_id = $1 AND id = $2 AND disabled_at IS NULL FOR UPDATE', [org, userId]);
+  const r = await c.query<{ role: Role; digest: string | null; groups: string[] | null; recent: boolean }>(
+    `SELECT role, idp_groups_digest AS digest, idp_groups AS groups, coalesce(idp_groups_at > now() - interval '1 hour', false) AS recent
+       FROM users WHERE org_id = $1 AND id = $2 AND disabled_at IS NULL FOR UPDATE`, [org, userId]);
   const row = r.rows[0];
   if (!row) return null;
   const d = digestOf(groups, breakGlass);
@@ -199,7 +200,9 @@ async function applyLocked(
   if (removed.length) await c.query('DELETE FROM team_members WHERE user_id = $1 AND team_id = ANY($2::uuid[])', [userId, removed]);
   // A withheld grant: no digest, so header mode re-reads the groups at the member's next request.
   const digest = withheld ? null : kept ? 'kept:' + d : d;
-  await c.query(
+  // Nothing changed and the list was stamped within the hour: no write at all (S-M1).
+  const same = digest === row.digest && JSON.stringify(row.groups) === JSON.stringify(groups) && (!fresh || row.recent);
+  if (!same) await c.query(
     `UPDATE users SET idp_groups = $3, idp_groups_digest = $4, idp_groups_at = CASE WHEN $5 THEN now() ELSE idp_groups_at END WHERE org_id = $1 AND id = $2`,
     [org, userId, groups, digest, fresh],
   );
@@ -220,48 +223,81 @@ export async function reportSync(pool: Pool, org: string, userId: string, email:
     .catch((err: unknown) => log.error({ err: { name: (err as Error | null)?.name } }, 'audit write failed'));
 }
 
+// ── Throttling (S-M1): a sync never holds a pool connection for long ─────────
+// At most SYNC_SLOTS syncs at once per pod (the pool has 10 connections), each waiting at most `waitMs` for
+// a slot and `lockMs` for the people lock or its member's row. Past either it is BUSY: header mode answers
+// with the member as stored (nothing written), OIDC tries once more and then signs in with the stored role.
+const SYNC_SLOTS = 3;
+let timing = { waitMs: 2_000, lockMs: 2_000 };
+/** Test seam: shorter waits. */
+export function setSyncTimingForTest(t: { waitMs: number; lockMs: number } | null): void {
+  timing = t ?? { waitMs: 2_000, lockMs: 2_000 };
+}
+let inUse = 0;
+const queue: Array<() => void> = [];
+
+function takeSlot(): Promise<boolean> {
+  if (inUse < SYNC_SLOTS) {
+    inUse++;
+    return Promise.resolve(true);
+  }
+  return new Promise((resolve) => {
+    const wake = (): void => {
+      clearTimeout(timer);
+      inUse++;
+      resolve(true);
+    };
+    const timer = setTimeout(() => {
+      queue.splice(queue.indexOf(wake), 1);
+      resolve(false);
+    }, timing.waitMs);
+    queue.push(wake);
+  });
+}
+
+function freeSlot(): void {
+  inUse--;
+  queue.shift()?.();
+}
+
+/** A sync that could not run in time: the member is answered as stored. */
+export class SyncBusyError extends Error {
+  readonly code = 'EIDPBUSY';
+  constructor() {
+    super('identity provider group sync is busy');
+    this.name = 'SyncBusyError';
+  }
+}
+export const isSyncBusy = (err: unknown): err is SyncBusyError => (err as { code?: unknown } | null)?.code === 'EIDPBUSY';
+
 /**
  * Applies an explicit group list to one member. `compare` (header mode): a stored digest equal to this
  * one — a parallel request already applied it — changes nothing. Returns the member's role after, or null
- * when they are not an enabled member. A DB error THROWS: sign-in refuses rather than proceed half-synced.
+ * when they are not an enabled member. THROWS SyncBusyError when it could not run in time (see above), and
+ * any other DB error: sign-in refuses rather than proceed half-synced.
  */
 export async function applyIdpGroups(
   pool: Pool, auth: AuthEnv, who: { userId: string; email: string }, groups: readonly string[],
   o: { compare: boolean; log: SyncLog; requestId?: string },
 ): Promise<Role | null> {
   const breakGlass = auth.adminEmail === who.email;
-  const run = (mode: 'shared' | 'exclusive') =>
-    withPeopleLock(pool, auth.org, mode, (c) => applyLocked(c, auth.org, who.userId, groups, breakGlass, mode, o.compare, undefined, who.email));
-  let a = await run('shared');
-  if (a === RETRY) a = await run('exclusive');
+  if (!(await takeSlot())) throw new SyncBusyError();
+  let a: Applied | null | typeof RETRY;
+  try {
+    const run = (mode: 'shared' | 'exclusive') =>
+      withPeopleLock(pool, auth.org, mode, (c) => applyLocked(c, auth.org, who.userId, groups, breakGlass, mode, o.compare, undefined, who.email), timing.lockMs);
+    a = await run('shared');
+    if (a === RETRY) a = await run('exclusive');
+  } catch (err) {
+    if ((err as { code?: unknown } | null)?.code === '55P03') throw new SyncBusyError(); // lock_timeout
+    throw err;
+  } finally {
+    freeSlot();
+  }
   if (a === null || a === RETRY) return null;
   forgetCaller(); // a sync inside a request (none today) must not leave its teams memo stale
   await reportSync(pool, auth.org, who.userId, who.email, a, o.log, o.requestId);
   return a.role;
-}
-
-/**
- * Every enabled member with a stored group list, applied again with the CURRENT map — inside the caller's
- * exclusive people-lock transaction (`admin:setIdpGroup`). Returns what each change needs reported.
- * ponytail: one pass over the org's synced members per mapping change; set-based if an org outgrows it.
- */
-export async function reapplyAll(c: PoolClient, auth: AuthEnv, org: string): Promise<Array<{ userId: string; email: string; applied: Applied }>> {
-  const map = await readMap(c, org);
-  // `fresh`: the list was read within a session lifetime — only such a list may GRANT (S-L3).
-  const users = await c.query<{ id: string; email: string; groups: string[]; fresh: boolean }>(
-    `SELECT id::text, email, idp_groups AS groups, coalesce(idp_groups_at > now() - $2 * interval '1 millisecond', false) AS fresh
-       FROM users WHERE org_id = $1 AND disabled_at IS NULL AND idp_groups IS NOT NULL ORDER BY email`, [org, auth.sessionAbsoluteMs]);
-  // Promotions to admin FIRST (C3): a change that makes someone admin must count them before it decides
-  // whether anyone else is the org's last admin — otherwise the outcome depended on the email order.
-  const becomesAdmin = (u: { email: string; groups: string[]; fresh: boolean }) =>
-    (u.fresh || auth.adminEmail === u.email) && rolesAndTeams(u.groups, map, auth.adminEmail === u.email).role === 'admin';
-  const ordered = [...users.rows.filter(becomesAdmin), ...users.rows.filter((u) => !becomesAdmin(u))];
-  const out: Array<{ userId: string; email: string; applied: Applied }> = [];
-  for (const u of ordered) {
-    const a = await applyLocked(c, org, u.id, u.groups, auth.adminEmail === u.email, 'exclusive', false, map, u.email, false, u.fresh);
-    if (a && a !== RETRY) out.push({ userId: u.id, email: u.email, applied: a });
-  }
-  return out;
 }
 
 /** Roles follow the IdP: the server reads groups and some group maps a role (docs §3.5). */

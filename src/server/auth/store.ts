@@ -171,10 +171,14 @@ export function setPeopleLockForTest(on: boolean): void {
  * EXCLUSIVE for an admin's change to roles, teams or the group map, and for a sync that demotes an admin. So
  * the last-admin rule holds when several demotions race, and a sync never applies a map being replaced.
  */
-export async function withPeopleLock<T>(pool: Pool, org: string, mode: 'shared' | 'exclusive', fn: (c: PoolClient) => Promise<T>): Promise<T> {
+export async function withPeopleLock<T>(
+  pool: Pool, org: string, mode: 'shared' | 'exclusive', fn: (c: PoolClient) => Promise<T>, lockTimeoutMs?: number,
+): Promise<T> {
   const c = await pool.connect();
   try {
     await c.query('BEGIN');
+    // A sync gives up (55P03) rather than queue behind a long admin change and hold a pool connection (S-M1).
+    if (lockTimeoutMs) await c.query(`SET LOCAL lock_timeout = '${Math.max(1, Math.floor(lockTimeoutMs))}ms'`);
     if (peopleLock) await c.query(`SELECT ${mode === 'shared' ? 'pg_advisory_xact_lock_shared' : 'pg_advisory_xact_lock'}(hashtextextended($1, 0))`, ['people:' + org]);
     const out = await fn(c);
     await c.query('COMMIT');

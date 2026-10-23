@@ -18,6 +18,7 @@ import type { FastifyInstance } from 'fastify';
 import { startMockOidc, type MockOidc } from './mockOidc';
 
 const idp: typeof import('../src/server/auth/idpGroups') = require('../src/server/auth/idpGroups');
+const reapply: typeof import('../src/server/auth/idpReapply') = require('../src/server/auth/idpReapply');
 const idpEnv: typeof import('../src/server/idpEnv') = require('../src/server/idpEnv');
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');
@@ -137,6 +138,7 @@ const mapGroup = async (pool: Pool, org: string, group: string, role: string | n
 
 // ── c, d. OIDC ─────────────────────────────────────────────────────────────
 async function oidcPart(url: string, pool: Pool, apps: FastifyInstance[], keep: (m: MockOidc) => void): Promise<void> {
+  const idpMod: typeof import('../src/server/auth/idpGroups') = require('../src/server/auth/idpGroups');
   const idp = await startMockOidc({ clientId: 'ordinate-test', clientSecret: SECRET });
   keep(idp);
   const cfg = envMod.parseEnv({
@@ -178,6 +180,21 @@ async function oidcPart(url: string, pool: Pool, apps: FastifyInstance[], keep: 
     !!absent.id && !!overage.id && !!malformed.id && `${await roleOf(pool, 'dave@acme.test')}|${await teamsOf(pool, 'dave@acme.test')}` === before, before);
   await signIn('dave@acme.test', { groups: [] });
   ok('NEGATIVE CONTROL: an explicit empty list demotes to viewer and leaves every linked team', (await roleOf(pool, 'dave@acme.test')) === 'viewer' && (await teamsOf(pool, 'dave@acme.test')) === '');
+  // S-M1: an OIDC sign-in under a held people lock tries twice, then signs in with the stored role.
+  idpMod.setSyncTimingForTest({ waitMs: 300, lockMs: 300 });
+  const holder = new Client({ connectionString: url });
+  await holder.connect();
+  try {
+    await holder.query('BEGIN');
+    await holder.query(`SELECT pg_advisory_xact_lock(hashtextextended('people:acme', 0))`);
+    const busy = await signIn('dave@acme.test', { groups: ['bi-admins'] });
+    ok('S-M1: an OIDC sign-in while the lock is held still signs in, with the stored role (viewer), nothing synced',
+      !!busy.id && (await roleOf(pool, 'dave@acme.test')) === 'viewer', String(busy.cb.headers.location));
+  } finally {
+    await holder.query('ROLLBACK').catch(() => undefined);
+    await holder.end();
+    idpMod.setSyncTimingForTest(null);
+  }
   await signIn('boss@acme.test', { groups: [] });
   ok('oidc: the break-glass admin stays admin with no mapped group', (await roleOf(pool, 'boss@acme.test')) === 'admin');
   const rows = await q<{ actor: string; outcome: string; targets: string[] }>(pool, `SELECT actor, outcome, target_ids::text[] AS targets FROM audit_log WHERE channel = 'idp:sync' ORDER BY id`);
@@ -298,6 +315,34 @@ async function headerPart(url: string, pool: Pool, apps: FastifyInstance[]): Pro
   ok('map: Ops, no longer linked by ops, is emptied (unlink clears too)', (await q(pool, 'SELECT 1 FROM team_members WHERE team_id = $1', [ops])).length === 0);
   const badTeam = await rpc('admin:setIdpGroup', { group: 'x', role: null, teamId: crypto.randomUUID() });
   ok('map: a team from nowhere is refused, nothing written', badTeam.body?.ok === false && badTeam.body.error === 'unknown team' && (await q(pool, `SELECT 1 FROM idp_groups WHERE group_name = 'x'`)).length === 0);
+  // S-M1: the same mapping again writes nothing and re-applies nobody.
+  const xErin = await xmin('erin@hdr.test');
+  const auditBefore = (await q(pool, `SELECT 1 FROM audit_log WHERE channel = 'idp:sync'`)).length;
+  await rpc('admin:setIdpGroup', { group: 'ops', role: 'editor', teamId: ana });
+  ok('S-M1: saving an unchanged mapping re-applies nobody (no member written, no idp:sync row)',
+    (await xmin('erin@hdr.test')) === xErin && (await q(pool, `SELECT 1 FROM audit_log WHERE channel = 'idp:sync'`)).length === auditBefore);
+  // S-M1: a sync that cannot get the people lock in time answers the member AS STORED and writes nothing.
+  idpMod.setSyncTimingForTest({ waitMs: 300, lockMs: 300 });
+  const holder = new Client({ connectionString: url });
+  await holder.connect();
+  try {
+    await holder.query('BEGIN');
+    await holder.query(`SELECT pg_advisory_xact_lock(hashtextextended('people:hdr', 0))`);
+    const x2 = await xmin('erin@hdr.test');
+    const t0 = performance.now();
+    const busyRole = await me('erin@hdr.test', 'misc'); // an unmapped group: synced, she would be a viewer
+    const took = performance.now() - t0;
+    ok(`S-M1: header mode under a held lock answers the stored role within the lock timeout (${Math.round(took)} ms), nothing written`,
+      busyRole === 'editor' && took < 2000 && (await xmin('erin@hdr.test')) === x2, `${busyRole} ${Math.round(took)}`);
+    await holder.query('ROLLBACK');
+    const freed = await me('erin@hdr.test', 'misc');
+    ok('S-M1: …and once the lock is free the next request syncs (misc → viewer)', freed === 'viewer', String(freed));
+    await me('erin@hdr.test', 'ops');
+  } finally {
+    await holder.end();
+    idpMod.setSyncTimingForTest(null);
+  }
+
   ok('map: a viewer cannot read or change it (403)', (await rpc('admin:idpGroups', undefined, 'erin@hdr.test')).status === 403
     && (await rpc('admin:setIdpGroup', { group: 'y', role: 'admin', teamId: null }, 'erin@hdr.test')).status === 403);
   await rpc('admin:setIdpGroup', { group: 'admins', role: 'admin', teamId: null });
@@ -309,7 +354,8 @@ async function headerPart(url: string, pool: Pool, apps: FastifyInstance[]): Pro
     if (email !== 'hank@hdr.test' || held++ > 0) return;
     // Hold the first sync until the second one is waiting on the database (it never gets there if it joined).
     for (let i = 0; i < 200; i++) {
-      if ((await q(pool, `SELECT 1 FROM pg_locks WHERE NOT granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`)).length) break;
+      // A row-lock wait is a `transactionid` lock, which names no database.
+      if ((await q(pool, `SELECT 1 FROM pg_locks WHERE NOT granted AND locktype IN ('transactionid', 'tuple', 'advisory')`)).length) break;
       await new Promise((r) => setTimeout(r, 10));
     }
   });
@@ -358,7 +404,7 @@ async function headerPart(url: string, pool: Pool, apps: FastifyInstance[]): Pro
   await member3('kim@hdr.test', 'admin', ['staff']);
   await member3('zed@hdr.test', 'viewer', ['admins']);
   await pool.query(`INSERT INTO idp_groups (org_id, group_name, role) VALUES ($1, 'staff', 'viewer'), ($1, 'admins', 'admin')`, [lone3]);
-  await store.withPeopleLock(pool, lone3, 'exclusive', (c) => idpMod.reapplyAll(c, auth3, lone3));
+  await store.withPeopleLock(pool, lone3, 'exclusive', (c) => reapply.reapplyAll(c, auth3, lone3));
   const roles3 = await q<{ email: string; role: string }>(pool, 'SELECT email, role FROM users WHERE org_id = $1 ORDER BY email', [lone3]);
   ok('C3: a map change applies promotions first — Zed is admin, so Kim is demoted, not kept', JSON.stringify(roles3.map((r) => r.role)) === '["viewer","admin"]', JSON.stringify(roles3));
 
@@ -375,7 +421,7 @@ async function headerPart(url: string, pool: Pool, apps: FastifyInstance[]): Pro
   await member4('stale@hdr.test', 'viewer', ['finance'], maxAge + 1);
   await member4('demote@hdr.test', 'editor', ['other'], maxAge + 1);
   await pool.query(`INSERT INTO idp_groups (org_id, group_name, role, team_id) VALUES ($1, 'finance', 'editor', $2)`, [lone4, fin]);
-  await store.withPeopleLock(pool, lone4, 'exclusive', (c) => idpMod.reapplyAll(c, auth4, lone4));
+  await store.withPeopleLock(pool, lone4, 'exclusive', (c) => reapply.reapplyAll(c, auth4, lone4));
   const four = async (email: string) => (await q<{ role: string; d: string | null }>(pool, 'SELECT role, idp_groups_digest AS d FROM users WHERE org_id = $1 AND email = $2', [lone4, email]))[0];
   const teams4 = async (email: string) => (await q(pool, 'SELECT 1 FROM team_members m JOIN users u ON u.id = m.user_id WHERE u.org_id = $1 AND u.email = $2', [lone4, email])).length;
   ok('S-L3: a member whose groups were read recently gets the new grant (role and team)', (await four('fresh@hdr.test')).role === 'editor' && (await teams4('fresh@hdr.test')) === 1);

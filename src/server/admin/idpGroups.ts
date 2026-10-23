@@ -14,7 +14,8 @@ import type { Pool } from 'pg';
 import { ctx, type Role } from '../context';
 import type { AuthEnv } from '../env';
 import { registry } from '../rpc';
-import { canonGroup, readMap, reapplyAll, reportSync, roleManaged, type SyncLog } from '../auth/idpGroups';
+import { canonGroup, readMap, roleManaged, type SyncLog } from '../auth/idpGroups';
+import { reapplyAll, reportMany } from '../auth/idpReapply';
 import { withPeopleLock } from '../auth/store';
 
 export interface IdpGroupsView {
@@ -62,8 +63,10 @@ export function register(pool: () => Pool | null, auth: () => AuthEnv, log: () =
     const { org: { id: org }, requestId } = ctx();
     const done = await withPeopleLock(db(), org, 'exclusive', async (c) => {
       if (input.teamId && (await c.query('SELECT 1 FROM teams WHERE org_id = $1 AND id = $2', [org, input.teamId])).rowCount !== 1) return null;
-      const old = await c.query<{ teamId: string | null }>('SELECT team_id::text AS "teamId" FROM idp_groups WHERE org_id = $1 AND group_name = $2', [org, group]);
+      const old = await c.query<{ role: Role | null; teamId: string | null }>('SELECT role, team_id::text AS "teamId" FROM idp_groups WHERE org_id = $1 AND group_name = $2', [org, group]);
       const before = old.rows[0]?.teamId ?? null;
+      // The same mapping again: nothing to write, nobody to re-apply (S-M1).
+      if ((old.rows[0]?.role ?? null) === input.role && before === input.teamId) return [];
       if (!input.role && !input.teamId) await c.query('DELETE FROM idp_groups WHERE org_id = $1 AND group_name = $2', [org, group]);
       else {
         await c.query(
@@ -78,7 +81,7 @@ export function register(pool: () => Pool | null, auth: () => AuthEnv, log: () =
       return reapplyAll(c, a, org);
     });
     if (!done) return { ok: false as const, error: 'unknown team' };
-    for (const r of done) await reportSync(db(), org, r.userId, r.email, r.applied, log() ?? SILENT, requestId);
+    await reportMany(db(), org, done, log() ?? SILENT, requestId);
     return { ok: true as const };
   });
 }

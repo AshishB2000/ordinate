@@ -20,7 +20,7 @@ import type { Pool } from 'pg';
 import type { ServerEnv } from '../env';
 import { audit, type Outcome } from '../authz/audit';
 import { createSession, normalEmail, provision } from './store';
-import { applyIdpGroups, countSync, groupsFromClaims, oncePerHour } from './idpGroups';
+import { applyIdpGroups, countSync, groupsFromClaims, isSyncBusy, oncePerHour } from './idpGroups';
 import { cookieOpts, safeNext, type CookieNames } from './cookies';
 
 interface LoginTx {
@@ -151,13 +151,20 @@ export function registerOidc(app: FastifyInstance, cfg: ServerEnv, pool: Pool, n
     if (from && 'claim' in from) {
       const groups = groupsFromClaims(claims as Record<string, unknown> | undefined, from.claim);
       if (Array.isArray(groups)) {
-        let applied: typeof role | null;
+        let applied: typeof role | null = role;
+        const apply = () => applyIdpGroups(pool, cfg.auth, { userId: m.userId, email }, groups, { compare: false, log: req.log, requestId: String(req.id) });
         try {
-          applied = await applyIdpGroups(pool, cfg.auth, { userId: m.userId, email }, groups, { compare: false, log: req.log, requestId: String(req.id) });
+          applied = await apply().catch((err: unknown) => (isSyncBusy(err) ? apply() : Promise.reject(err))); // busy: once more
         } catch (err) {
-          req.log.error({ err: errInfo(err) }, 'oidc sign-in failed: the IdP groups could not be applied');
-          await trail(email, 'error');
-          return fail(reply, 'failed');
+          if (isSyncBusy(err)) {
+            // Still busy (an admin's map change holds the lock): signed in with the stored role; the next sign-in syncs.
+            countSync('busy');
+            req.log.warn({}, 'oidc groups sync busy: signed in with the stored role');
+          } else {
+            req.log.error({ err: errInfo(err) }, 'oidc sign-in failed: the IdP groups could not be applied');
+            await trail(email, 'error');
+            return fail(reply, 'failed');
+          }
         }
         if (!applied) return fail(reply, 'disabled');
         role = applied;
