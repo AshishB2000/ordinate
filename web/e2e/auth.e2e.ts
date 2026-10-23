@@ -179,6 +179,8 @@ try {
   await shoot('shell-signed-in-light.png');
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.reload();
+  // The page under the menu, loaded (not its skeleton), as in the light shot.
+  await page.waitForFunction(() => !!document.querySelector('main h1') && !document.querySelector('[aria-busy="true"]'));
   await page.getByRole('button', { name: 'Account and theme' }).click();
   await page.getByTestId('user-email').waitFor();
   await shoot('shell-signed-in-dark.png');
