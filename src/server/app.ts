@@ -6,7 +6,7 @@
 // tests, not a deploy.
 
 import { fastify, type FastifyInstance, type FastifyRequest } from 'fastify';
-import { probe } from '../engine/duckdb';
+import { probe, shutdown as duckShutdown } from '../engine/duckdb';
 import { contractFor } from '../api/index';
 import { proxyList, type ServerEnv } from './env';
 import { ctx, runInContext, type Identify } from './context';
@@ -491,6 +491,13 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
 
   // Signed embedding at /embed/<token> (docs/embed): off until an org admin turns it on; the only route another site may frame.
   registerEmbedRoutes(app, { pool: () => pool, identify, tokenPerMinute: cfg.limits.embedPerMinute, orgPerMinute: cfg.limits.embedOrgPerMinute });
+
+  // An app closed on its own (the in-process suites) lets its DuckDB go, as it always did: the next
+  // app starts a fresh, unhardened worker. A draining server never does this here — detached work may
+  // still need DuckDB — ./shutdown.ts interrupts and closes every worker last, and awaits each exit.
+  app.addHook('onClose', async () => {
+    if (!isDraining()) duckShutdown();
+  });
 
   // The web app, when it has been built (`npm --prefix web run build`). In dev
   // the Vite server serves it instead and proxies /api here.
