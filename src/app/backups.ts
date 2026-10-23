@@ -220,7 +220,7 @@ export async function restoreBackup(file: string, hooks: Hooks = {}): Promise<bu
   const manifest = await bundle.peekManifest(file);
   const parsed = parseBackupName(path.basename(file));
   if (!manifest || !parsed) return { ok: false, error: 'That backup could not be read.' };
-  return bundle.importBundle(await fs.promises.readFile(file), {
+  return bundle.importBundle({ file }, {
     ...hooks,
     name: restoredName(String(manifest.project && manifest.project.name || 'Project'), parsed.at),
   });
