@@ -18,6 +18,8 @@
 //   rls        as an ordinary role: no rows without the setting, another org's
 //              invisible, a write for another org refused, the store's own
 //              statements pass (alert_inbox, alert_posts)
+//   hiccup     the inbox store cannot answer: the bell and the Summary card still
+//              work, on the shared flag, and the log says so
 //   legacy     an imported event with an upper-case id or an unreadable time is
 //              normalised on load, so a member can mark it seen (one and all)
 //
@@ -131,6 +133,25 @@ async function suite(b: Bench): Promise<void> {
   await b.run(BOSS, () => alertStore.patchRule(pid, rule!.id, { enabled: false }));
   await b.as('boss').call('dataset:refresh', { projectId: pid, id: C });
   ok('summary: a refresh that fires nothing retires the alert from outbound pages', !(await outbound(ANN)).some((s) => s.kind === 'alert'));
+
+  // ── a database hiccup ────────────────────────────────────────────────
+  {
+    const appPool = orgDb.orgDb();
+    const { Pool } = require('pg') as typeof import('pg');
+    const dead = new Pool({ connectionString: 'postgres://nobody@127.0.0.1:1/none', connectionTimeoutMillis: 300 });
+    dead.on('error', () => undefined);
+    orgDb.useOrgDb(dead);
+    try {
+      const bell = await b.as('ben').call('alerts:list', { projectId: pid });
+      ok('hiccup: the inbox store cannot answer, and the bell still opens (on the shared flag)', bell.status === 200 && bell.body.ok === true && Array.isArray(bell.body.events), show(bell.body));
+      const card = await b.as('ben').call('summary:compute', { projectId: pid, analysisId: board!.id, pages: (await b.run(BOSS, () => analysis.getAnalysis(pid, board!.id)))!.sheets });
+      ok('hiccup: …and so does the Summary card', card.status === 200 && card.body.ok === true, show(card.body));
+      ok('hiccup: …and the log says why', b.log.some((l) => l.includes('alert inbox not read')));
+    } finally {
+      orgDb.useOrgDb(appPool);
+      await dead.end().catch(() => undefined);
+    }
+  }
 
   // ── legacy ───────────────────────────────────────────────────────────
   const UP = randomUUID().toUpperCase();

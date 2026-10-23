@@ -21,6 +21,7 @@ import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
 import { useRecordDb } from '../app/recordFs';
 import { useOrgDb } from './db/inOrg';
+import { useNotifyLog } from './notifyLog';
 import { useBlobDb } from '../app/blobStore';
 import { useMaskSaltStore } from '../app/privacyStore';
 import { useSecretStore } from '../app/configSecrets';
@@ -189,7 +190,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // runner: a job's handler reads records like a request does.
       useRecordDb(pool);
       useOrgDb(pool); // per-member alert inbox, alert post claims, mentions (0020): forced RLS, one org per transaction
-      (require('./mentions/notify') as typeof import('./mentions/notify')).useNotifyLog(app.log); // a failed mention notice, to the server's log
+      useNotifyLog(app.log); // a failed mention notice or inbox read, to the server's log
       useBlobDb(pool); // logos and Image-card pictures too (0018): nothing durable on this pod's disk
       // One refresh of a dataset at a time across pods (L0.4): an advisory lock per (org, dataset).
       useRefreshLockDb(pool);

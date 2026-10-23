@@ -14,23 +14,37 @@ import type { AlertEvent } from '../analysis/alerts';
 import { isValidId } from '../app/ids';
 import { ctx } from './context';
 import { inOrg, orgDb } from './db/inOrg';
+import { notifyLog, why } from './notifyLog';
 
 /** True when seen state is per member here (a database), false when it is the shared flag. */
 export function perMember(): boolean {
   return orgDb() !== null;
 }
 
-/** Has the CALLER seen an event of `projectId`? One read; the predicate is then pure. */
+const shared = (e: AlertEvent): boolean => e.seen;
+
+/**
+ * Has the CALLER seen an event of `projectId`? One read; the predicate is then
+ * pure. Never throws: a database that cannot answer falls back to the shared
+ * flag (and says so in the log), so a Postgres hiccup never takes down the bell
+ * or a Summary card.
+ */
 export async function seenView(projectId: string): Promise<(e: AlertEvent) => boolean> {
-  if (!perMember() || !isValidId(projectId)) return (e) => e.seen;
-  const r = await inOrg((c, org) =>
-    c.query<{ seen_through: Date | null; seen_ids: string[] }>(
-      'SELECT seen_through, seen_ids::text[] AS seen_ids FROM alert_inbox WHERE org_id = $1 AND user_email = $2 AND project_id = $3',
-      [org, ctx().user.email, projectId],
-    ),
-  );
+  if (!perMember() || !isValidId(projectId)) return shared;
+  let r: { rows: Array<{ seen_through: Date | null; seen_ids: string[] }> };
+  try {
+    r = await inOrg((c, org) =>
+      c.query<{ seen_through: Date | null; seen_ids: string[] }>(
+        'SELECT seen_through, seen_ids::text[] AS seen_ids FROM alert_inbox WHERE org_id = $1 AND user_email = $2 AND project_id = $3',
+        [org, ctx().user.email, projectId],
+      ),
+    );
+  } catch (err) {
+    notifyLog().warn({ projectId, error: why(err) }, 'alert inbox not read: showing the shared seen flag');
+    return shared;
+  }
   const row = r.rows[0];
-  if (!row) return (e) => e.seen;
+  if (!row) return shared;
   const through = row.seen_through ? row.seen_through.getTime() : null;
   const ids = new Set(row.seen_ids);
   return (e) => (through !== null && Date.parse(e.at) <= through) || ids.has(e.id);

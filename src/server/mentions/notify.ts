@@ -29,16 +29,7 @@ import { deliver } from '../subscriptions/deliver';
 import { orgDb } from '../db/inOrg';
 import { currentReaders, labelFor, peopleIn } from './people';
 import { recipient, recordMentions } from './store';
-
-export interface Log {
-  warn(obj: object, msg: string): void;
-}
-let log: Log = { warn: () => undefined };
-
-/** The server's logger (src/server/app.ts). */
-export function useNotifyLog(l: Log): void {
-  log = l;
-}
+import { notifyLog, why } from '../notifyLog';
 
 /** One stored comment or reply that names people. */
 export interface Piece {
@@ -71,7 +62,7 @@ export async function mentionsSettled(): Promise<void> {
 
 /** Tell `emails` (new mentions of `piece`, never its author). Never throws. */
 export function notifyMentions(piece: Piece, emails: string[]): Promise<void> {
-  const p = run(piece, emails).catch((err: unknown) => log.warn({ error: err instanceof Error ? err.message : String(err) }, 'mention notices failed'));
+  const p = run(piece, emails).catch((err: unknown) => notifyLog().warn({ error: why(err) }, 'mention notices failed'));
   inFlight.add(p);
   void p.finally(() => inFlight.delete(p));
   return p;
@@ -91,13 +82,13 @@ async function run(piece: Piece, emails: string[]): Promise<void> {
     try {
       publish({ org, user: email }, 'mentions:new', notice);
     } catch (err) {
-      log.warn({ error: err instanceof Error ? err.message : String(err) }, 'mention push failed');
+      notifyLog().warn({ error: why(err) }, 'mention push failed');
     }
   }
   if (!mailReady()) return;
   const words = commentSnippet(piece.body, labelFor(peopleIn([piece.body], readers)), 1000);
   for (const email of fresh) {
-    await mailOne(piece, email, notice, words).catch((err: unknown) => log.warn({ error: err instanceof Error ? err.message : String(err) }, 'mention email failed'));
+    await mailOne(piece, email, notice, words).catch((err: unknown) => notifyLog().warn({ error: why(err) }, 'mention email failed'));
   }
 }
 
