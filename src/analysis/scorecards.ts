@@ -16,6 +16,7 @@ import { isScorePeriod, sanitizeRows } from './scorecardModel';
 import type { Scorecard, ScorePeriod } from './scorecardModel';
 import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
+import { logger } from '../app/logger';
 
 export type { Scorecard } from './scorecardModel';
 
@@ -101,7 +102,7 @@ export async function listScorecards(projectId: string): Promise<ScorecardSummar
       if (!data || typeof data.id !== 'string') continue;
       out.push(summaryOf(normalize(data, projectId)));
     } catch (err: any) {
-      if (err.code !== 'ENOENT') console.error('[scorecards] Skipping corrupt or unreadable scorecard:', id, err.message);
+      if (err.code !== 'ENOENT') logger.error('[scorecards] Skipping corrupt or unreadable scorecard:', id, err.message);
     }
   }
   out.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());

@@ -10,22 +10,18 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount } from './selfcheck';
+import { captureLogs } from './logCapture';
 
 // ponytail: compiled sibling of ../src/residentTrace.ts.
 const trace: typeof import('../src/engine/residentTrace') = require('../src/engine/residentTrace');
 
-// Capture console.warn so the assertions can be about what a user would see.
-const realWarn = console.warn;
-let warnings: string[] = [];
+// Capture the server's warnings (src/app/logger.ts) so the assertions can be about what an operator would see.
 function captureWarnings<T>(fn: () => T): { result: T; warnings: string[] } {
-  warnings = [];
-  console.warn = (...args: unknown[]) => {
-    warnings.push(args.map(String).join(' '));
-  };
+  const cap = captureLogs();
   try {
-    return { result: fn(), warnings: warnings.slice() };
+    return { result: fn(), warnings: cap.at('warn') };
   } finally {
-    console.warn = realWarn;
+    cap.restore();
   }
 }
 

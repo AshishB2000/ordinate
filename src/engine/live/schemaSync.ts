@@ -57,6 +57,7 @@ import type { LiveTarget } from './liveTarget';
 import { liveTarget } from './liveTarget';
 import type { ProfileFigures } from './profileSql';
 import { compileProfile, compileSamplingKeyProbe, samplePercent, sampleRowsFor, samples, shapeProfile } from './profileSql';
+import { logger } from '../../app/logger';
 
 /** Why the sample was not read — typed as a live question's failure is. `error` is a catalog sentence. */
 export interface SampleFailure {
@@ -131,7 +132,7 @@ function callFailure(t: LiveTarget, err: unknown): SampleFailure {
       trace.recordLive(op, 'failed', 'timeout');
       return { ok: false, code: 'live_timeout', error: msg.liveSampleFailed() };
     default:
-      if (!(err instanceof LiveCallError)) console.warn(`[live] ${op} dataset ${t.datasetId}: failed — ${e.detail}`);
+      if (!(err instanceof LiveCallError)) logger.warn(`[live] ${op} dataset ${t.datasetId}: failed — ${e.detail}`);
       trace.recordLive(op, 'failed', 'warehouse error');
       return { ok: false, code: 'live_failed', error: msg.liveSampleFailed() };
   }
@@ -150,7 +151,7 @@ async function attempt(t: LiveTarget, env: CompileEnv, plan: SamplePlan, signal:
   }
   const est = await estimateLive(t.def, t.values, await t.secrets(), compiled.query.sql, compiled.query.params, { signal, timeoutMs: timeoutMs() });
   if (est && !est.ok) {
-    console.warn(`[live] ${opOf(t)} dataset ${t.datasetId}: estimate failed — ${est.error}`);
+    logger.warn(`[live] ${opOf(t)} dataset ${t.datasetId}: estimate failed — ${est.error}`);
     trace.recordLive(opOf(t), 'failed', 'estimate');
     return { outcome: { ok: false, code: 'live_failed', error: msg.liveSampleFailed() } };
   }
@@ -304,7 +305,7 @@ export async function syncLiveSchema(projectId: string, datasetId: string, signa
   // 1. The columns, as the dataset was created.
   const read = await readLiveSchema(projectId, origin.connId, origin.sql && origin.sql.trim() ? { query: origin.sql } : { table: origin.table });
   if (!read.ok) {
-    console.warn(`[live] ${opOf(t)} dataset ${datasetId}: describe failed — ${safeError(read.error)}`);
+    logger.warn(`[live] ${opOf(t)} dataset ${datasetId}: describe failed — ${safeError(read.error)}`);
     return { ok: false, code: 'live_failed', error: msg.liveSyncReadFailed() };
   }
   const next = read.columns;

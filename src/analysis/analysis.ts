@@ -44,6 +44,7 @@ export type { Page, Card, CardLayout, CardMetric, CardType, CardControl, Control
 import type { Page, DashboardStyle } from './dashboards';
 import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
+import { logger } from '../app/logger';
 
 export interface Analysis {
   /** Generated UUID — never derived from the name; it is a filesystem path. */
@@ -216,7 +217,7 @@ export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]
       });
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
-        console.error('[analysis] Skipping corrupt or unreadable analysis:', id, err.message);
+        logger.error('[analysis] Skipping corrupt or unreadable analysis:', id, err.message);
       }
     }
   }

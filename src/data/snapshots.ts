@@ -27,6 +27,7 @@ import { datasetsDir, parquetPath, sourceParquetPath } from './datasetRecord';
 import * as names from './snapshotNames';
 import type { ParsedColumn } from './parse';
 import * as recordFs from '../app/recordFs';
+import { logger } from '../app/logger';
 
 export interface SnapshotMeta {
   rowCount: number;
@@ -218,7 +219,7 @@ export async function keepAround(projectId: string, rec: Keepable, write: () => 
   try {
     pending = await begin(projectId, rec);
   } catch (err: any) {
-    console.error('[snapshots] could not copy the current table:', err?.message || err);
+    logger.error('[snapshots] could not copy the current table:', err?.message || err);
   }
   try {
     await write();
@@ -228,7 +229,7 @@ export async function keepAround(projectId: string, rec: Keepable, write: () => 
   }
   if (pending) {
     await pending.commit().catch((err: any) => {
-      console.error('[snapshots] could not keep a snapshot:', err?.message || err);
+      logger.error('[snapshots] could not keep a snapshot:', err?.message || err);
       return pending!.discard();
     });
   }

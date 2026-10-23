@@ -29,6 +29,7 @@ import * as net from 'net';
 import * as path from 'path';
 import type { ParsedColumn } from './parse';
 import type { Cell } from './transforms';
+import { logger } from '../app/logger';
 
 export type SensitiveKind =
   | 'email' | 'phone' | 'national_id' | 'card_number' | 'iban' | 'ip_address'
@@ -89,7 +90,7 @@ export function firstNameSet(): Set<string> {
   try {
     text = fs.readFileSync(file, 'utf8');
   } catch (err) {
-    console.error('[sensitivity] first-name list unreadable; person names will not be detected:', err instanceof Error ? err.message : err);
+    logger.error('[sensitivity] first-name list unreadable; person names will not be detected:', err instanceof Error ? err.message : err);
   }
   firstNames = new Set(text.split(/\r?\n/).map((l) => foldName(l.trim())).filter((l) => l && !l.startsWith('#')));
   return firstNames;

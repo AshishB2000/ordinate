@@ -42,6 +42,7 @@ import * as usage from '../../server/live/usageStore';
 import type { Ticket, UsageKey } from '../../server/live/usageStore';
 import { safeError } from '../../connectors/types';
 import * as msg from '../liveQueryMessages';
+import { logger } from '../../app/logger';
 
 /** A caller stopped waiting for a slot: its signal fired (it hung up, or every asker of a shared question did). */
 export class LiveQueueAbort extends Error {
@@ -192,7 +193,7 @@ export function setDailyCheckForTest(fn: DailyOverride | null): void {
 export function noteCall(ticket: Ticket | undefined, bytes: number | undefined): void {
   if (!ticket || bytes === undefined) return;
   void usage.addBytes(ticket, bytes).catch((err: unknown) => {
-    console.warn(`[live] usage: ${bytes} bytes of org ${ticket.org} not recorded — ${safeError(err)}`);
+    logger.warn(`[live] usage: ${bytes} bytes of org ${ticket.org} not recorded — ${safeError(err)}`);
   });
 }
 

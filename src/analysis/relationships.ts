@@ -20,6 +20,7 @@ import * as appPaths from '../app/paths';
 import { isValidId } from '../app/ids';
 import * as queryCache from '../engine/queryCache';
 import * as recordFs from '../app/recordFs';
+import { logger } from '../app/logger';
 
 export type Cardinality = 'many_to_one' | 'one_to_one';
 export const CARDINALITIES: readonly Cardinality[] = ['many_to_one', 'one_to_one'];
@@ -113,7 +114,7 @@ async function writeAll(projectId: string, list: Relationship[]): Promise<boolea
     queryCache.invalidateProject(projectId);
     return true;
   } catch (err: any) {
-    console.error('[relationships] Could not write relationships.json:', err && err.message);
+    logger.error('[relationships] Could not write relationships.json:', err && err.message);
     return false;
   }
 }

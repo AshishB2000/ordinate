@@ -29,6 +29,7 @@ import { withRefreshLock } from '../../server/jobs/refreshLock';
 import * as msg from '../liveProfileMessages';
 import type { SyncReply } from './schemaSync';
 import { syncLiveSchema } from './schemaSync';
+import { logger } from '../../app/logger';
 
 /** A Live dataset's schema is synced again after a day. */
 export const SYNC_EVERY_MS = 24 * 60 * 60 * 1000;
@@ -142,7 +143,7 @@ export async function queueDueSchemaSyncs(metas: readonly LiveSyncMeta[], now: n
       const s = await startSchemaSync(m.projectId, m.id, { scheduled: true, now });
       if (s?.status === 'queued') queued += 1;
     } catch (err: unknown) {
-      console.warn(`[live] the daily schema sync of dataset ${m.id} could not start: ${err instanceof Error ? err.message : String(err)}`);
+      logger.warn(`[live] the daily schema sync of dataset ${m.id} could not start: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   return queued;

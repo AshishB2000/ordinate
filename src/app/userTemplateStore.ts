@@ -19,6 +19,7 @@ import * as appPaths from './paths';
 import type { UserTemplate } from '../analysis/userTemplate';
 import { sanitizeUserTemplate } from '../analysis/userTemplateFile';
 import * as recordFs from './recordFs';
+import { logger } from './logger';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const MAX_TEMPLATES = 500;
@@ -56,7 +57,7 @@ export async function getTemplate(id: unknown): Promise<UserTemplate | null> {
     const t = sanitizeUserTemplate(JSON.parse(await recordFs.readFile(fileOf(id), 'utf8')), () => id);
     return t && t.id === id.toLowerCase() ? t : null;
   } catch (err: any) {
-    if (err && err.code !== 'ENOENT') console.error('[templates] skipping unreadable template', id, err.message);
+    if (err && err.code !== 'ENOENT') logger.error('[templates] skipping unreadable template', id, err.message);
     return null;
   }
 }
