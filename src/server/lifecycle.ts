@@ -46,13 +46,12 @@ export function abortRequests(reason: Error): number {
 }
 
 /** Counts `p` until it settles. `then(del, del)`, never `finally`: that would re-raise its rejection. */
-export function trackWork<T>(p: Promise<T>): Promise<T> {
+export function trackWork(p: Promise<unknown>): void {
   work.add(p);
   const del = (): void => {
     work.delete(p);
   };
   p.then(del, del);
-  return p;
 }
 
 /** Every tracked handler promise still running. */

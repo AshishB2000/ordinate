@@ -410,9 +410,9 @@ async function useScratchDb(adminUrl: string): Promise<void> {
 
 const adminUrl = process.env.DATABASE_URL;
 console.log(`     mode: ${adminUrl ? 'with DATABASE_URL (scratch database)' : 'without DATABASE_URL'}`);
-main(adminUrl)
+void main(adminUrl)
   .catch((err) => ok('threw: ' + String(err && (err as Error).stack), false))
-  .finally(async () => {
+  .then(async () => {
     if (dropDb) await dropDb().catch(() => undefined);
     fs.rmSync(DATA, { recursive: true, force: true });
     finish();

@@ -439,7 +439,11 @@ function start(e: Entry): void {
     .then(() => running_ctx.run(ctx, () => withAbort(ctl.signal, () => e.spec.run(ctx))))
     .then(
       (value) => {
-        if (FINAL.has(job.state)) return void (settle(), e.resolve(value)); // finished `interrupted` by drain
+        if (FINAL.has(job.state)) { // finished `interrupted` by drain
+          settle();
+          e.resolve(value);
+          return;
+        }
         let result: JobResult | undefined;
         try { result = e.spec.resultOf ? e.spec.resultOf(value) : undefined; } catch (_) { result = undefined; }
         job.progress = 1;
@@ -448,7 +452,11 @@ function start(e: Entry): void {
         e.resolve(value);
       },
       (err) => {
-        if (FINAL.has(job.state)) return void (settle(), e.reject(err)); // finished `interrupted` by drain
+        if (FINAL.has(job.state)) { // finished `interrupted` by drain
+          settle();
+          e.reject(err);
+          return;
+        }
         // A drain's abort: whatever the run threw (an interrupted query is a DuckDBError), it was the restart.
         const restart = drainReason !== null && ctl.signal.reason === drainReason;
         const cancelled = restart || err instanceof JobCancelled || (ctl.signal.aborted && isAbort(err));

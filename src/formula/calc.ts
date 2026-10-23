@@ -427,6 +427,9 @@ export function deriveChartData(extractedTable: any, columnRoles: any, dataShape
 
 // ── self-check: `node src/calc.js` ──────────────────────────────────────────
 // Hand-verifiable assertions so a regression in any calc fails loudly.
+// A CLI self-check (`node src/formula/calc.js`): its stdout is its interface. The one
+// place in src/ console is allowed (.oxlintrc.json no-console; docs/pod-lifecycle).
+/* oxlint-disable no-console */
 if (require.main === module) {
   // Explicit annotation (not a cast): assert.ok is an assertion function, and
   // TS requires the call target itself to carry a declared type (TS2775).
@@ -605,3 +608,4 @@ if (require.main === module) {
 
   console.log('\nALL CALC SELF-CHECKS PASSED');
 }
+/* oxlint-enable no-console */
