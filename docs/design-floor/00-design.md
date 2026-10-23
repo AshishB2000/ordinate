@@ -340,6 +340,13 @@ fails if a main `NAV` entry is in no group or in two, or a group names a route `
     dashboard" opens the wizard too, for the same reason Home → New → Dashboard does.
 15. **A header's primary sits last**, on the right edge: the Data header's order is Metrics, Paste
     data, Connect a database, Import file.
+16. **A list page's primary action is the header's** (found looking at the screenshots): Captures,
+    Metrics, Analyses, Visuals and Scenarios each had theirs on a bar of its own under the header,
+    a second header in effect. It moves into `actions`, and the list's count becomes a chip after
+    the title.
+17. **An editable name is as wide as the name** (`field-sizing: content`, falling back to the fixed
+    width where unsupported), so a story's, scorecard's or scenario's save status sits right after
+    it instead of 420px away.
 
 ## Steps
 
