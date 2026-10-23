@@ -188,7 +188,8 @@ groups**: a group to an org role, to a team, or both. The rules:
 - **A team linked to a group holds exactly the IdP's members.** Its member picker is hidden in
   Admin → Teams. Teams no group links stay manual.
 - **Once any group maps a role, every role follows the IdP.** The role picker is hidden in Admin →
-  People and `admin:setRole` is refused (409). Invite still works; the first sign-in sets the role.
+  People and `admin:setRole` is refused (409). Invite still works: the invitee is stored as a viewer,
+  and their groups raise them at a sign-in that carries the claim (one without it leaves them a viewer).
 - **Group names are matched exactly**, as the IdP sends them: case and inner spaces count; leading and
   trailing spaces do not.
 - **When it applies.** OIDC: at every sign-in, before the session starts. Header mode: on the first

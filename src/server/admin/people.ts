@@ -67,10 +67,12 @@ export function register(pool: () => Pool | null, allowedDomains: () => readonly
     // Sign-in would refuse this address anyway (ALLOWED_EMAIL_DOMAINS); say so now.
     const allowed = allowedDomains();
     if (allowed.length > 0 && !allowed.includes(domain)) return { ok: false, error: 'domain' };
-    // A pending member: no last_login_at until their first sign-in, which keeps the role set here.
+    // A pending member: no last_login_at until their first sign-in, which keeps the role set here — unless
+    // roles follow the IdP: then they join as a viewer, and only their groups raise them (C4).
+    const stored: Role = (await roleManaged(db(), auth(), org())) ? 'viewer' : role;
     const r = await db().query<{ id: string }>(
       `INSERT INTO users (org_id, email, role) VALUES ($1, $2, $3) ON CONFLICT (org_id, email) DO NOTHING RETURNING id`,
-      [org(), e, role],
+      [org(), e, stored],
     );
     return r.rows[0] ? { ok: true, id: r.rows[0].id } : { ok: false, error: 'exists' };
   });

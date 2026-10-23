@@ -32,21 +32,28 @@ function InviteDialog({ managed }: { managed: boolean }) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('viewer');
+  const reset = () => {
+    setEmail('');
+    setRole('viewer');
+  };
   const invite = useWrite('admin:invite', ['admin:users'], (r) => {
     if (!r.ok) return;
     toast(`Invited ${email.trim().toLowerCase()}. They join when they first sign in.`, { kind: 'success' });
     setOpen(false);
-    setEmail('');
-    setRole('viewer');
+    reset();
   });
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    invite.mutate({ email: email.trim(), role });
+    // Under IdP-managed roles the server stores a viewer whatever is sent; say so in the request too.
+    invite.mutate({ email: email.trim(), role: managed ? 'viewer' : role });
   };
   return (
     <Dialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) reset(); // a cancelled invite does not carry its role into the next one
+      }}
       trigger={
         <Button variant="primary" icon="plus">
           Invite people

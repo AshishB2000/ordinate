@@ -264,6 +264,9 @@ async function headerPart(url: string, pool: Pool, apps: FastifyInstance[]): Pro
   const refusedRole = await rpc('admin:setRole', { userId: erin, role: 'viewer' });
   ok('managed: admin:setRole is 409 idp_managed with the catalog sentence while a group maps a role',
     refusedRole.status === 409 && refusedRole.body.code === 'idp_managed' && /identity provider/.test(refusedRole.body.message) && (await roleOf(pool, 'erin@hdr.test')) === 'editor', JSON.stringify(refusedRole));
+  const invited = await rpc('admin:invite', { email: 'newbie@hdr.test', role: 'admin' });
+  ok('C4: while roles follow the IdP an invite is stored as a viewer, whatever role it names',
+    invited.body?.ok === true && (await roleOf(pool, 'newbie@hdr.test')) === 'viewer', `${JSON.stringify(invited)} ${await roleOf(pool, 'newbie@hdr.test')}`);
   const view = (await rpc('admin:idpGroups')).body;
   ok('admin:idpGroups: the source, the header, the map with team names, what is managed',
     view.source === 'header' && view.from === 'x-forwarded-groups' && view.roleManaged === true && view.linkedTeamIds.includes(ops)
@@ -272,6 +275,8 @@ async function headerPart(url: string, pool: Pool, apps: FastifyInstance[]): Pro
   await pool.query(`DELETE FROM idp_groups WHERE org_id = 'hdr' AND team_id IS NULL`);
   const allowed = await rpc('admin:setRole', { userId: erin, role: 'viewer' });
   ok('NEGATIVE CONTROL: with no group mapping a role, admin:setRole works (roles are manual)', allowed.body?.ok === true && (await roleOf(pool, 'erin@hdr.test')) === 'viewer', JSON.stringify(allowed));
+  await rpc('admin:invite', { email: 'newbie2@hdr.test', role: 'editor' });
+  ok('NEGATIVE CONTROL (C4): with roles manual, an invite keeps the role it names', (await roleOf(pool, 'newbie2@hdr.test')) === 'editor');
   const linkedRefused = await rpc('admin:teamMember', { teamId: ops, userId: erin, member: false });
   ok('managed: admin:teamMember is 409 idp_managed on a linked team', linkedRefused.status === 409 && linkedRefused.body.code === 'idp_managed' && (await teamsOf(pool, 'erin@hdr.test')) === 'Ops', JSON.stringify(linkedRefused));
   const manual = await team(pool, 'hdr', 'Manual');

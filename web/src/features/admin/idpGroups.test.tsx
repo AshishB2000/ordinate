@@ -71,6 +71,21 @@ describe('People: roles from the identity provider', () => {
     await waitFor(() => expect(calls.find((c) => c.channel === 'admin:invite')?.payload).toEqual({ email: 'sam@acme.test', role: 'viewer' }));
   });
 
+  it('a cancelled invite does not carry its role into the next one', async () => {
+    serve(base({ body: groups({ roleManaged: false }) }));
+    renderApp('/admin');
+    fireEvent.click(await screen.findByRole('button', { name: 'Invite people' }));
+    let dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('combobox', { name: 'Role' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Admin' }));
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: 'Role' }).textContent).toContain('Admin'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Invite people' }));
+    dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('combobox', { name: 'Role' }).textContent).toContain('Viewer');
+  });
+
   it('does not ask for groups under password sign-in', async () => {
     const calls = serve({ ...base({ body: groups() }), '/api/auth/me': { body: { ...ADMIN, mode: 'password' } } });
     renderApp('/admin');
