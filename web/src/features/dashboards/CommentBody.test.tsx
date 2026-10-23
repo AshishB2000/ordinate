@@ -102,6 +102,18 @@ describe('a comment body with mentions', () => {
     expect(draw('@(Ann.Lee@ACME.com)').textContent).toBe('@Ann Lee');
   });
 
+  it('a mention inside a {{token}} reads as its name, never a placeholder', () => {
+    const c = draw('{{ @(ann.lee@acme.com) }}');
+    expect(c.textContent).toBe('{{@Ann Lee}}');
+    expect(c.innerHTML).not.toMatch(/[\uE000\uE001]/);
+  });
+
+  it('a mention inside a link\'s target is put back as typed: the link goes where it was meant to', () => {
+    const c = draw('[profile](https://example.com/u/@(ann.lee@acme.com))');
+    expect(c.querySelector('a')?.getAttribute('href')).toBe('https://example.com/u/@(ann.lee@acme.com)');
+    expect(c.querySelector('a')?.textContent).toBe('profile');
+  });
+
   it('the text card\'s {{token}} still reads as typed in a comment', () => {
     expect(draw('{{Revenue}} @(ann.lee@acme.com)').textContent).toBe('{{Revenue}} @Ann Lee');
   });
