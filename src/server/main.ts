@@ -9,6 +9,7 @@ import { enterServerMode, identityFor } from './context';
 import { env, type ServerEnv } from './env';
 import { startMetricsServer } from './metrics';
 import { shutdown } from './shutdown';
+import { sweepLeftovers } from './files';
 import { closeAll, forbidSyncOnMainThread } from '../engine/duckdb';
 import { routeByOrg } from '../engine/duckdbPool';
 import * as storage from '../engine/storage';
@@ -46,6 +47,9 @@ if (cfg.testLiveFake) {
   (load(path.join(__dirname, '..', '..', 'scripts', 'liveFakeConnector.js')) as { registerLiveFake(): void }).registerLiveFake();
 }
 const app = buildApp(cfg);
+// What a crashed pod left in the org temp dirs (a bundle's staging, a backup…), a day old or more.
+const swept = sweepLeftovers(cfg.dataDir);
+if (swept) app.log.info({ swept }, 'removed temp files a crash left behind');
 
 // dev binds loopback only: dev mode runs every request as an admin (context.ts),
 // which must not be reachable from the LAN. prod runs in a container behind an
