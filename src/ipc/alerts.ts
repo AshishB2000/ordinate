@@ -220,10 +220,10 @@ export function register(): void {
 
   // Any reader marks their OWN inbox (a row of alert_inbox); without a database
   // there is one identity, and the shared flag is its inbox.
-  ipcMain.handle('alerts:markSeen', async (_e, { projectId, eventId }: any = {}) => {
+  ipcMain.handle('alerts:markSeen', async (_e, { projectId, eventId, through }: any = {}) => {
     try {
       const id = typeof eventId === 'string' && eventId ? eventId : undefined;
-      if (perMember()) return { ok: await markSeenFor(projectId, (await store.load(projectId)).events, id) };
+      if (perMember()) return { ok: await markSeenFor(projectId, (await store.load(projectId)).events, id, typeof through === 'string' ? through : undefined) };
       return { ok: await store.markSeen(projectId, id) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not update the inbox' };

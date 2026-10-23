@@ -10,11 +10,11 @@ import { rpc, Uuid } from './contract';
 
 export const notifications = {
   'mentions:list': rpc({ access: 'read', org: true, input: z.undefined() }),
-  // One row (both ids) or every row of the caller's (neither).
+  // One row (both ids), or every row of the caller's up to `through` — the newest one Home SHOWED them.
   'mentions:seen': rpc({
     access: 'read',
     org: true,
-    input: z.union([z.strictObject({ projectId: Uuid, id: Uuid }), z.strictObject({})]),
+    input: z.union([z.strictObject({ projectId: Uuid, id: Uuid }), z.strictObject({ through: z.string().max(40) })]),
   }),
   'mentions:prefs': rpc({ access: 'read', org: true, input: z.undefined() }),
   'mentions:setPrefs': rpc({ access: 'read', org: true, input: z.strictObject({ emailMe: z.boolean() }) }),

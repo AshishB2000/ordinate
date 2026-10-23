@@ -74,14 +74,16 @@ export async function listMine(limit: number): Promise<MentionRow[]> {
   return r.rows.map((x) => ({ projectId: x.project_id, pieceId: x.piece_id, commentId: x.comment_id, author: x.author, at: x.created_at.toISOString(), seen: x.seen_at !== null }));
 }
 
-/** Mark the caller's row of one piece seen — or, with neither id, all of theirs. */
-export async function markSeen(projectId?: string, pieceId?: string): Promise<void> {
-  const one = projectId && pieceId ? [projectId, pieceId] : [null, null];
+/** Mark the caller's row of one piece seen — or all of theirs made up to `through` (the newest Home showed them). */
+export async function markSeen(which: { projectId: string; pieceId: string } | { through: string }): Promise<void> {
+  const one = 'pieceId' in which ? [which.projectId, which.pieceId, null] : [null, null, Number.isFinite(Date.parse(which.through)) ? new Date(which.through).toISOString() : null];
+  if (one.every((x) => x === null)) return; // an unreadable time marks nothing
   await inOrg((c, org) =>
     c.query(
       `UPDATE mentions SET seen_at = now()
         WHERE org_id = $1 AND user_email = $2 AND seen_at IS NULL
-          AND ($3::uuid IS NULL OR (project_id = $3::uuid AND piece_id = $4::uuid))`,
+          AND (($3::uuid IS NOT NULL AND project_id = $3::uuid AND piece_id = $4::uuid)
+               OR ($5::timestamptz IS NOT NULL AND created_at <= LEAST($5::timestamptz, now())))`,
       [org, ctx().user.email, ...one],
     ),
   );

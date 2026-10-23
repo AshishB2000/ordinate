@@ -84,10 +84,10 @@ describe('Home: Mentioned you', () => {
     await waitFor(() => expect(calls.some((c) => c.channel === 'mentions:seen' && JSON.stringify(c.payload) === JSON.stringify({ projectId: P, id: C1 }))).toBe(true));
   });
 
-  it('Mark all seen marks every one of the caller\'s', async () => {
-    const { calls } = home({ 'mentions:list': { body: { ok: true, available: true, items: [item(C1, false, 'Ann')] } }, 'mentions:seen': { body: { ok: true } } });
+  it('Mark all seen marks the caller\'s mentions up to the newest one it SHOWED', async () => {
+    const { calls } = home({ 'mentions:list': { body: { ok: true, available: true, items: [item(C1, false, 'Ann'), { ...item(C2, false, 'Cal'), at: '2026-10-20T11:00:00Z' }] } }, 'mentions:seen': { body: { ok: true } } });
     fireEvent.click(await screen.findByRole('button', { name: 'Mark all seen' }));
-    await waitFor(() => expect(calls.some((c) => c.channel === 'mentions:seen' && JSON.stringify(c.payload) === '{}')).toBe(true));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'mentions:seen' && JSON.stringify(c.payload) === JSON.stringify({ through: '2026-10-20T11:00:00Z' }))).toBe(true));
   });
 
   it('empty: says what will show up there', async () => {

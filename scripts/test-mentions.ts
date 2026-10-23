@@ -262,6 +262,14 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     ok('home: mentions:seen {projectId, id} marks that one', h2.find((x) => x.id === h[0].id)?.seen === true && h2.filter((x) => !x.seen).length === h.filter((x) => !x.seen).length - 1);
     ok('home: another member cannot mark bea\'s row (their own rows only)', (await as('ann').call('mentions:seen', { projectId: h[1].projectId, id: h[1].id })).status === 200
       && (await as('bea').call('mentions:list')).body.items.find((x: { id: string }) => x.id === h[1].id)?.seen === h[1].seen);
+    const drawn = (await as('bea').call('mentions:list')).body.items as Array<{ id: string; at: string; seen: boolean }>;
+    const newestDrawn = drawn.reduce((m, x) => (x.at > m ? x.at : m), drawn[0].at);
+    await new Promise((r) => setTimeout(r, 20));
+    await as('ann').call('comment:add', { projectId: pid, target, body: `after the render ${m('bea')}` });
+    await settle();
+    await as('bea').call('mentions:seen', { through: newestDrawn });
+    const after = (await as('bea').call('mentions:list')).body.items as Array<{ id: string; seen: boolean; snippet: string }>;
+    ok('home: Mark all seen covers what Home drew — a mention that landed after it stays unseen', after.find((x) => x.snippet.startsWith('after the render'))?.seen === false && after.filter((x) => drawn.some((d) => d.id === x.id)).every((x) => x.seen), JSON.stringify(after.map((x) => [x.snippet.slice(0, 20), x.seen])));
     const pid2: string = (await as('boss').call('projects:create', { name: 'Elsewhere' })).body.id;
     const shared = randomUUID();
     await b.run(me('bea'), async () => {

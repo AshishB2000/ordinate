@@ -107,7 +107,8 @@ export const dashboards = {
   // Whether a rule WOULD fire now — reads only.
   'alerts:test': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, rule: Rule }), project: byProjectId }),
   // The caller's OWN inbox (src/server/alertInbox.ts): any reader, never anyone else's badge.
-  'alerts:markSeen': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, eventId: Uuid.optional() }), project: byProjectId }),
+  // `through`: Mark all seen covers the events the caller was SHOWN — the newest time the bell rendered.
+  'alerts:markSeen': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, eventId: Uuid.optional(), through: z.string().max(40).optional() }), project: byProjectId }),
   'alerts:setDigest': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, on: z.boolean() }), project: byProjectId }),
   // An alert's "Why": the change the rule caught, broken down by what drove it (src/ipc/drivers.ts, T2.10's engine).
   'drivers:explainAlert': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, ruleId: Uuid }), project: byProjectId }),

@@ -52,10 +52,12 @@ export async function seenView(projectId: string): Promise<(e: AlertEvent) => bo
 
 /**
  * Mark one of `events` (the project's stored inbox) seen for the caller — or,
- * with no id, all of them. The caller's row only; the events are not written.
- * `seen_ids` is pruned to the events still stored, so it never outgrows them.
+ * with no id, all of them up to `through` (the newest time the caller was shown;
+ * never past the newest stored), so an event that landed after the bell drew
+ * stays unseen. The caller's row only; the events are not written. `seen_ids`
+ * is pruned to the events still stored, so it never outgrows them.
  */
-export async function markSeenFor(projectId: string, events: AlertEvent[], eventId?: string): Promise<boolean> {
+export async function markSeenFor(projectId: string, events: AlertEvent[], eventId?: string, through?: string): Promise<boolean> {
   if (!isValidId(projectId)) return false;
   const live = events.map((e) => e.id);
   const email = ctx().user.email;
@@ -76,7 +78,8 @@ export async function markSeenFor(projectId: string, events: AlertEvent[], event
   }
   const times = events.map((e) => Date.parse(e.at)).filter(Number.isFinite);
   if (!times.length) return true;
-  const newest = new Date(Math.max(...times)).toISOString();
+  const shown = through === undefined ? NaN : Date.parse(through);
+  const newest = new Date(Number.isFinite(shown) ? Math.min(shown, Math.max(...times)) : Math.max(...times)).toISOString();
   await inOrg((c, org) =>
     c.query(
       `INSERT INTO alert_inbox (org_id, user_email, project_id, seen_through) VALUES ($1, $2, $3, $4::timestamptz)

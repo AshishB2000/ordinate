@@ -72,6 +72,8 @@ describe('the alert bell', () => {
     await waitFor(() => expect(calls.some((c) => c.channel === 'alerts:markSeen' && (c.payload as { eventId?: string }).eventId === 'e1')).toBe(true));
     fireEvent.click(within(inbox).getByRole('button', { name: 'Mark all seen' }));
     await waitFor(() => expect(calls.filter((c) => c.channel === 'alerts:markSeen').length).toBe(2));
+    // Mark all seen covers what the bell drew: the newest event's time goes with it.
+    expect(calls.filter((c) => c.channel === 'alerts:markSeen')[1]?.payload).toEqual({ projectId: P, through: '2026-10-01T10:00:00Z' });
     expect(calls.filter((c) => /^alerts:(patch|delete|setDigest|save)$/.test(c.channel))).toEqual([]);
     cleanup();
   }, 30_000);

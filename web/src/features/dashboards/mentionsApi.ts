@@ -41,11 +41,11 @@ export function useMentions() {
   });
 }
 
-/** Mark one of the caller's mentions seen (or, with no argument, all of them); the list re-reads. */
+/** Mark one of the caller's mentions seen, or all of them up to `through` (the newest one shown); the list re-reads. */
 export function useMentionSeen() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (one?: { projectId: string; id: string }) => rpc('mentions:seen', one ?? {}),
+    mutationFn: (which: { projectId: string; id: string } | { through: string }) => rpc('mentions:seen', which),
     onSettled: () => void client.invalidateQueries({ queryKey: MENTIONS_KEY }),
   });
 }

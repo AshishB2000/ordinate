@@ -18,6 +18,8 @@
 //   rls        as an ordinary role: no rows without the setting, another org's
 //              invisible, a write for another org refused, the store's own
 //              statements pass (alert_inbox, alert_posts)
+//   bounded    Mark all seen covers what the bell drew: an event stored after the
+//              render stays unseen (control: the drawn ones are seen)
 //   hiccup     the inbox store cannot answer: the bell and the Summary card still
 //              work, on the shared flag, and the log says so
 //   legacy     an imported event with an upper-case id or an unreadable time is
@@ -133,6 +135,17 @@ async function suite(b: Bench): Promise<void> {
   await b.run(BOSS, () => alertStore.patchRule(pid, rule!.id, { enabled: false }));
   await b.as('boss').call('dataset:refresh', { projectId: pid, id: C });
   ok('summary: a refresh that fires nothing retires the alert from outbound pages', !(await outbound(ANN)).some((s) => s.kind === 'alert'));
+
+  // ── mark all covers what was SHOWN ───────────────────────────────────
+  {
+    const rendered = (await list('ben')).events; // what ben's bell drew
+    const newestShown = rendered.reduce((m, e) => (e.at > m ? e.at : m), rendered[0].at);
+    const landed = event(C);
+    await b.run(BOSS, () => alertStore.recordEvents(pid, [landed])); // lands after the render, before the click
+    await b.as('ben').call('alerts:markSeen', { projectId: pid, through: newestShown });
+    ok('mark all (bounded): an event stored after the bell drew stays unseen', (await seenOf('ben', landed.id)) === false, newestShown);
+    ok('mark all (bounded) CONTROL: what the bell drew is seen', rendered.every((e) => e.seen) || (await list('ben')).events.filter((e) => e.id !== landed.id).every((e) => e.seen));
+  }
 
   // ── a database hiccup ────────────────────────────────────────────────
   {

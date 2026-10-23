@@ -52,6 +52,11 @@ const condition = (r: AlertRule): string => {
   if (r.threshold) return `${{ '<': 'Below', '<=': 'At or below', '>': 'Above', '>=': 'At or above' }[r.threshold.op]} ${r.threshold.value}`;
   return '';
 };
+/** Mark all seen covers what the bell SHOWED: the newest event it drew (an alert landing after that stays unseen). */
+const shownThrough = (events: AlertEvent[]): { through?: string } => {
+  const newest = events.reduce<string | undefined>((m, e) => (m === undefined || e.at > m ? e.at : m), undefined);
+  return newest ? { through: newest } : {};
+};
 const HOURS = Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${String(h).padStart(2, '0')}:00` }));
 
 function RulesDialog({ projectId, readOnly, onClose }: { projectId: string; readOnly: boolean; onClose: () => void }) {
@@ -258,7 +263,7 @@ export function AlertsBell() {
         <div className={s.inboxHead}>
           <span className={s.inboxTitle}>Alerts</span>
           {unseen > 0 && projectId && (
-            <Button size="sm" variant="ghost" onClick={() => write.mutate({ channel: 'alerts:markSeen', input: { projectId } })}>
+            <Button size="sm" variant="ghost" onClick={() => write.mutate({ channel: 'alerts:markSeen', input: { projectId, ...shownThrough(q.data?.events ?? []) } })}>
               Mark all seen
             </Button>
           )}

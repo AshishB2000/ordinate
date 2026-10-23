@@ -42,7 +42,7 @@ export function MentionedYou() {
         {fresh > 0 && <span className={s.homeNew}>{fresh} new</span>}
         {fresh > 0 && (
           <span className={s.homeAll}>
-            <Button size="sm" variant="ghost" icon="check" loading={seen.isPending} onClick={() => seen.mutate(undefined)}>
+            <Button size="sm" variant="ghost" icon="check" loading={seen.isPending} onClick={() => seen.mutate({ through: items.reduce((m, x) => (x.at > m ? x.at : m), items[0]?.at ?? '') })}>
               Mark all seen
             </Button>
           </span>

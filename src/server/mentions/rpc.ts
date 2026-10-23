@@ -82,9 +82,9 @@ export async function homeMentions(): Promise<{ available: boolean; items: HomeM
 export function register(): void {
   registry.handle('comment:mentionable', async (_e, { projectId, q }: { projectId: string; q: string }) => ({ ok: true as const, ...(await mentionable(projectId, q)) }));
   registry.handle('mentions:list', async () => ({ ok: true as const, ...(await homeMentions()) }));
-  registry.handle('mentions:seen', async (_e, input: { projectId?: string; id?: string } = {}) => {
+  registry.handle('mentions:seen', async (_e, input: { projectId: string; id: string } | { through: string }) => {
     if (!mentionsOn()) return { ok: true as const };
-    await markSeen(input.projectId, input.id);
+    await markSeen('through' in input ? { through: input.through } : { projectId: input.projectId, pieceId: input.id });
     return { ok: true as const };
   });
   registry.handle('mentions:prefs', async () => ({ ok: true as const, available: mentionsOn(), mail: mailReady(), emailMe: mentionsOn() ? await emailMe() : false }));
