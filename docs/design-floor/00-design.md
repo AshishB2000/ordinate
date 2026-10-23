@@ -343,7 +343,8 @@ fails if a main `NAV` entry is in no group or in two, or a group names a route `
 16. **A list page's primary action is the header's** (found looking at the screenshots): Captures,
     Metrics, Analyses, Visuals and Scenarios each had theirs on a bar of its own under the header,
     a second header in effect. It moves into `actions`, and the list's count becomes a chip after
-    the title.
+    the title. With nothing in the list, the empty state holds the create door and the header does
+    not repeat it (as the Data page already did).
 17. **An editable name is as wide as the name** (`field-sizing: content`, falling back to the fixed
     width where unsupported), so a story's, scorecard's or scenario's save status sits right after
     it instead of 420px away.
