@@ -112,7 +112,9 @@ function Gallery({ projectId }: { projectId: string }) {
       status={count > 0 && <span className={s.count}>{count === 1 ? '1 visual' : `${count} visuals`}</span>}
       sub={SUB}
       actions={
-        canEdit && (
+        // With nothing saved the empty state holds the doors: the header does not repeat them.
+        canEdit &&
+        list.data?.length !== 0 && (
           <Button variant="primary" icon="plus" onClick={() => setCreating({})}>
             New visual
           </Button>

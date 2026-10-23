@@ -291,7 +291,8 @@ function Gallery({ projectId }: { projectId: string }) {
       title="Analyses"
       status={count > 0 && <span className={s.count}>{count === 1 ? '1 dashboard' : `${count} dashboards`}</span>}
       sub="The dashboards you author: sheets of charts, metrics and text over your datasets."
-      actions={actions}
+      // With nothing authored the empty state holds the doors: the header does not repeat them.
+      actions={q.data?.length !== 0 && actions}
     >
       {body}
       {wizard && canEdit && <NewWizard projectId={projectId} datasetId={wizard.datasetId} initialStep={wizard.datasetId ? 2 : 1} onClose={() => setWizard(null)} />}
