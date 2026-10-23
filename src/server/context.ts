@@ -13,6 +13,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { EnvError, type ServerEnv } from './env';
 import { markServerMode } from './mode';
+import { readContextWith } from '../app/logger';
 
 /** The caller's browser tab — what an IPC `event.sender` was. */
 export interface Client {
@@ -78,6 +79,8 @@ const DEV: Identity = Object.freeze({
 });
 
 const als = new AsyncLocalStorage<RequestContext>();
+// Every logger.* line inside a request carries its id and org (src/app/logger.ts).
+readContextWith(() => als.getStore());
 let dataDir: string | null = null;
 
 /** Marks this process as the server, storing per-org data under `dir`. Once, at boot. */

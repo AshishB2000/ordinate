@@ -18,6 +18,7 @@ import { registerSecurityHeaders } from './headers';
 import { registerCsrf } from './csrf';
 import { registerLimits, RPC_ROUTE, RpcTimeout, untilAborted } from './limits';
 import { isDraining, isRestarting, trackRequest } from './lifecycle';
+import { useLogger } from '../app/logger';
 import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
 import { useRecordDb } from '../app/recordFs';
@@ -161,6 +162,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       ...(logStream ? { stream: logStream } : {}),
     },
   });
+
+  useLogger(app.log); // src/app/logger.ts: every logger.* line in the process goes through pino, redacted
 
   // T6.2, in this order and before sign-in's hook below: security headers on
   // every response, the CSRF check on every non-GET, the per-IP rate limits —
