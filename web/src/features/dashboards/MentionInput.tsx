@@ -54,7 +54,16 @@ export function MentionInput({ projectId, enabled, label, hint, value, onValueCh
     placeholderData: keepPreviousData,
     queryFn: async () => ((await rpc('comment:mentionable', { projectId, q })) as { people?: Person[] }).people ?? [],
   });
-  const items = open ? (people.data ?? []) : [];
+  // Only the answer to what is typed NOW may be picked: while the asked word trails the typed one, or the list on
+  // screen is the previous word's, Enter must never insert someone the server did not offer for this word.
+  const settled = open && q === at.q && people.isSuccess && !people.isPlaceholderData;
+  const items = settled ? people.data : [];
+  // A value changed from outside (Post cleared the box) ends any open mention.
+  const typed = useRef(value);
+  useEffect(() => {
+    if (value !== typed.current) setAt(null);
+    typed.current = value;
+  }, [value]);
 
   // Radix closes a drawer on Escape in the document's capture phase, before this box sees the key: the window's
   // capture phase comes first, so while the list is open it takes Escape (and marks it handled) instead.
@@ -73,6 +82,12 @@ export function MentionInput({ projectId, enabled, label, hint, value, onValueCh
     const el = input.current;
     if (!el || !at) return;
     const caret = el.selectionStart ?? value.length;
+    // The caret or the text may have moved since the list opened: insert only at the mention still being typed.
+    const now = mentionQuery(value, caret);
+    if (!now || now.from !== at.from) {
+      setAt(now);
+      return;
+    }
     const token = mentionToken(p.email) + ' ';
     onValueChange(value.slice(0, at.from) + token + value.slice(caret));
     setAt(null);
@@ -99,7 +114,7 @@ export function MentionInput({ projectId, enabled, label, hint, value, onValueCh
 
   const note = !open ? null : people.isError ? (
     <div className={s.listNoteError} role="status">Could not search people. Keep typing to try again.</div>
-  ) : people.isPending ? (
+  ) : !settled ? (
     <div className={s.listNote} role="status">Searching…</div>
   ) : !items.length ? (
     <div className={s.listNote} role="status">{q ? `No one who can read this project matches “${q}”.` : 'No one else can read this project yet.'}</div>
@@ -117,10 +132,18 @@ export function MentionInput({ projectId, enabled, label, hint, value, onValueCh
           ? { role: 'combobox', 'aria-expanded': open && items.length > 0, 'aria-controls': listId, 'aria-autocomplete': 'list' as const, 'aria-activedescendant': open && items.length ? `${listId}-${Math.min(active, items.length - 1)}` : undefined }
           : {})}
         onChange={(e) => {
+          typed.current = e.target.value;
           onValueChange(e.target.value);
           const found = enabled ? mentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length) : null;
           setAt(found);
           if (found?.q !== at?.q) setActive(0);
+        }}
+        onSelect={(e) => {
+          // The caret moved (Home, an arrow, a click): the mention is whatever is before it now.
+          if (!enabled) return;
+          const el = e.currentTarget;
+          const found = mentionQuery(el.value, el.selectionStart ?? el.value.length);
+          if (found?.from !== at?.from || found?.q !== at?.q) setAt(found);
         }}
         onKeyDown={keys}
         onClick={() => setAt(null)}
