@@ -231,8 +231,8 @@ async function storeChecks(): Promise<void> {
   }
   ok('publish: nothing picked is refused', 'error' in pub.sanitizePublishConfig({ projectId: pid, outDir: out }));
 
-  const bundleSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'app', 'bundle.ts'), 'utf8');
-  ok('bundle: scorecards travel in a project bundle', /\^scorecards\//.test(bundleSrc));
+  const bundleRules: typeof import('../src/app/bundleRules') = require('../src/app/bundleRules');
+  ok('bundle: scorecards travel in a project bundle', bundleRules.ruleFor(`scorecards/${U(1)}.json`)?.count === 'scorecards');
 }
 
 void (async () => {
