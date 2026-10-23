@@ -201,6 +201,17 @@ describe('API tokens', () => {
     await waitFor(() => expect(calls.find((c) => c.channel === 'tokens:create')?.payload).toEqual({ name: 'CI', expiresInDays: 365 }));
   });
 
+  it('still offers New token when the list failed to load (C8)', async () => {
+    const calls = serve({ '/api/auth/me': { body: VIEWER }, 'tokens:list': { status: 500, body: { error: 'handler failed' } }, 'tokens:create': { body: { ok: false, error: 'limit' } } });
+    renderApp('/tokens');
+    await screen.findByRole('heading', { name: 'Your tokens could not be loaded' });
+    fireEvent.click(screen.getByRole('button', { name: 'New token' }));
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'CI' } });
+    expect(screen.getByRole('combobox', { name: 'Expires after' }).textContent).toContain('90 days');
+    fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
+    await waitFor(() => expect(calls.find((c) => c.channel === 'tokens:create')?.payload).toEqual({ name: 'CI', expiresInDays: 90 }));
+  });
+
   it("offers nothing past the server's maximum, and the maximum itself", async () => {
     serve({ '/api/auth/me': { body: VIEWER }, 'tokens:list': listed([], 60) });
     renderApp('/tokens');

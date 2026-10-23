@@ -34,6 +34,8 @@ function expiryOptions(maxDays: number): number[] {
   if (maxDays < 365 && !out.includes(maxDays)) out.push(maxDays);
   return out.sort((a, b) => a - b);
 }
+/** API_TOKEN_MAX_DAYS' default, offered while the server's own maximum is not known. */
+const DEFAULT_MAX_DAYS = 365;
 const daysLabel = (d: number) => (d === 365 ? '1 year' : d === 1 ? '1 day' : `${d} days`);
 
 function CreateDialog({ maxDays }: { maxDays: number }) {
@@ -41,7 +43,9 @@ function CreateDialog({ maxDays }: { maxDays: number }) {
   const preferred = options.includes(90) ? 90 : options[options.length - 1];
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
-  const [days, setDays] = useState(preferred);
+  const [picked, setDays] = useState<number | null>(null);
+  // The pick, while the server still offers it (its maximum can arrive after the dialog opened); else the default.
+  const days = picked !== null && options.includes(picked) ? picked : preferred;
   const [made, setMade] = useState<{ token: string; expiresAt: string } | null>(null);
   const create = useWrite<'tokens:create', Created>('tokens:create', ['tokens:list'], (r) => {
     if (r.ok) setMade({ token: r.token, expiresAt: r.expiresAt });
@@ -51,7 +55,7 @@ function CreateDialog({ maxDays }: { maxDays: number }) {
     if (!o) {
       setMade(null); // gone from this page for good once the dialog closes
       setName('');
-      setDays(preferred);
+      setDays(null);
     }
   };
   const submit = (e: FormEvent) => {
@@ -219,7 +223,8 @@ function Tokens() {
         <div className={s.bar}>
           <h2 className={s.groupTitle}>Your tokens</h2>
           <div className={s.barEnd}>
-            {tokens.data && <CreateDialog maxDays={tokens.data.maxDays} />}
+            {/* The server's maximum once the list is in; until then (or if it failed) the default — the server enforces its own (C8). */}
+            <CreateDialog maxDays={tokens.data?.maxDays ?? DEFAULT_MAX_DAYS} />
           </div>
         </div>
         {body}
