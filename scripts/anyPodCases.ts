@@ -138,7 +138,7 @@ export async function sweepSparesTaken(p: Pass): Promise<void> {
   if (!zip) return ok(`[${p.name}] 12: a backup to restore`, false, JSON.stringify(backup.body));
   const tok = await H.upload(p.A.base, U1, zip, 'backup.zip');
   const key = (await rowOf(p, tok))?.storage_key ?? '';
-  const restoring = H.rpc(p.B.base, U1, 'backups:restore', { fileToken: tok, confirm: 'restore' }); // the preload holds the restore job ~4 s
+  const restoring = H.rpc(p.B.base, U1, 'backups:restore', { fileToken: tok, confirm: 'restore' }); // the preload holds the restore job ~8 s
   await H.until(async () => !!(await rowOf(p, tok))?.used_at, 5_000);
   await p.db.pool.query(`UPDATE file_tokens SET expires_at = now() - interval '1 day' WHERE token_hash = $1`, [hashOf(tok)]);
   const swept = await runSweep(p, 'acme');
@@ -291,7 +291,7 @@ async function racedNext(p: Pass, first: H.Pod, second: H.Pod, name: string) {
   const pid = await projectOf(p, U1);
   const start = await H.rpc(p.A.base, U1, 'plan:start', { projectId: pid, intent: 'any pod', steps: PLAN_STEPS(name) });
   const runId = start.body?.runId as string;
-  // A file name with `slow` in it: the preload holds its parse job ~4 s, so the second Next lands mid-step.
+  // A file name with `slow` in it: the preload holds its parse job ~8 s, so the second Next lands mid-step.
   const [t1, t2] = [await H.upload(p.A.base, U1, PLAN_CSV, 'plan-slow.csv'), await H.upload(p.A.base, U1, PLAN_CSV, 'plan-slow.csv')];
   const one = H.rpc(first.base, U1, 'plan:next', { projectId: pid, runId, fileToken: t1 });
   await H.sleep(600);
@@ -366,7 +366,7 @@ async function runBoth(p: Pass, A: H.Pod, B: H.Pod): Promise<Array<{ ok?: boolea
 export async function oneAtATime(p: Pass): Promise<void> {
   const seeded = await seedBoth(p.A, p.B, 'seedone');
   ok(`[${p.name}] sample:seed on A and B at once makes exactly one project (the other waits, then finds it)`, seeded.projects === 1, JSON.stringify(seeded));
-  // A pipeline with a slow node: the plan makes a dataset, its metric and an alert named "slow alert" (the preload holds its check ~4 s).
+  // A pipeline with a slow node: the plan makes a dataset, its metric and an alert named "slow alert" (the preload holds its check ~8 s).
   const pid = await projectOf(p, U1);
   const start = await H.rpc(p.A.base, U1, 'plan:start', { projectId: pid, intent: 'pipe', steps: [
     { kind: 'import', file: 'pipe.csv', name: 'Pipe' }, { kind: 'metric', dataset: 'Pipe', name: 'Pipe total', column: 'amount', aggregation: 'sum' },

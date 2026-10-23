@@ -51,7 +51,8 @@ async function pass(name: 'file' | 's3', storage: { env: Record<string, string>;
     const shared = H.tmp(`anypod-${name}`);
     const dirA = name === 'file' ? shared : H.tmp('anypod-a');
     const dirB = name === 'file' ? shared : H.tmp('anypod-b');
-    const env = { ...BASE_ENV, ...(storage?.env ?? {}), DATABASE_URL: db.url, ANYPOD_SLOW_JOBS: 'restore,sql-save' };
+    // 8 s: long enough that a case racing a held job (the sweep in 12, a second Next in 4) wins under load.
+    const env = { ...BASE_ENV, ...(storage?.env ?? {}), DATABASE_URL: db.url, ANYPOD_SLOW_JOBS: 'restore,sql-save', ANYPOD_SLOW_MS: '8000' };
     const A = await H.startPod({ ...env, DATA_DIR: dirA }, PRELOAD);
     const B = await H.startPod({ ...env, DATA_DIR: dirB }, PRELOAD);
     await C.seedMembers(db.pool);
