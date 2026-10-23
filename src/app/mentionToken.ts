@@ -10,8 +10,19 @@
 
 const MENTION = /(?<!\\)@\(([^\s()<>[\]@\\]{1,64}@[^\s()<>[\]@\\]{1,190})\)/g;
 const ESCAPED = /\\@\(/g;
-/** Private-use characters a body can never smuggle in (they are stripped first): the web's placeholder brackets. */
-const PUA = /[]/g;
+/** The web's placeholder brackets (U+E000, U+E001): a body can never hold them. */
+const PUA = /[\uE000\uE001]/g;
+
+/**
+ * A body with the placeholder brackets REPLACED (by U+FFFD), never deleted:
+ * deleting a character can join `@` and `(` into a token, or split a `\` from
+ * its `@`. Applied on write (app/commentModel.ts cleanBody) and again, for a
+ * body stored before that, by every function here — so the server and the web
+ * always read the same mentions.
+ */
+export function scrubPua(body: string): string {
+  return String(body ?? '').replace(PUA, '\uFFFD');
+}
 
 /** Distinct people one comment or reply may mention. */
 export const MAX_MENTIONS = 10;
@@ -29,7 +40,7 @@ export function mentionToken(address: string): string {
 /** Every mentioned address, normalised, once each, in order. */
 export function mentionsIn(body: string): string[] {
   const out: string[] = [];
-  for (const m of String(body ?? '').matchAll(MENTION)) {
+  for (const m of scrubPua(body).matchAll(MENTION)) {
     const a = normalize(m[1]);
     if (!out.includes(a)) out.push(a);
   }
@@ -44,7 +55,7 @@ export function tokenizable(address: string): boolean {
 
 /** `body` with every mention as `label(address)` and every escape as the literal `@(` — plain text. */
 export function withMentionLabels(body: string, label: (address: string) => string): string {
-  return String(body ?? '').replace(MENTION, (_m, a: string) => label(normalize(a))).replace(ESCAPED, '@(');
+  return scrubPua(body).replace(MENTION, (_m, a: string) => label(normalize(a))).replace(ESCAPED, '@(');
 }
 
 /**
@@ -70,15 +81,14 @@ export function commentSnippet(body: string, label: (address: string) => string,
  */
 export function protectMentions(body: string): { text: string; addresses: string[] } {
   const addresses: string[] = [];
-  const text = String(body ?? '')
-    .replace(PUA, '')
-    .replace(MENTION, (_m, a: string) => `${addresses.push(normalize(a)) - 1}`)
+  const text = scrubPua(body)
+    .replace(MENTION, (_m, a: string) => `\uE000${addresses.push(normalize(a)) - 1}\uE001`)
     .replace(ESCAPED, '@(');
   return { text, addresses };
 }
 
 /** The placeholders `protectMentions` left in a piece of parsed text. */
-export const PLACEHOLDER = /(\d+)/g;
+export const PLACEHOLDER = /\uE000(\d+)\uE001/g;
 
 /** A person's name as the server shows it: the address's local part, in words ("ann.lee@acme.com" → "Ann Lee"). */
 export function personName(address: string): string {

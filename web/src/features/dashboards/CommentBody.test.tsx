@@ -6,6 +6,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
+import { mentionsIn, protectMentions } from '../../../../src/app/mentionToken.ts';
 import { CommentBody } from './CommentBody';
 
 afterEach(cleanup);
@@ -64,10 +65,31 @@ describe('a comment body with mentions', () => {
     expect(a?.querySelector('span')).toBeNull();
   });
 
-  it('a forged placeholder character in a body is dropped, and cannot become a mention', () => {
-    const c = draw('0 plain');
+  it('a forged placeholder character in a body is replaced (U+FFFD), never a mention', () => {
+    const c = draw('\uE0000\uE001 plain');
     expect(c.querySelector('span[title]')).toBeNull();
-    expect(c.textContent).toBe('0 plain');
+    expect(c.textContent).toBe('\uFFFD0\uFFFD plain');
+  });
+
+  it('the server and the web read the SAME mentions, whatever private-use characters a body holds', () => {
+    const bodies = [
+      '\\\uE000@(ann.lee@acme.com)', // a backslash, then a placeholder bracket, then a mention
+      '@\uE000(ann.lee@acme.com)', // a bracket between @ and (
+      '@(ann.lee@acme.com\uE001)',
+      '@(ann\uE000.lee@acme.com)',
+      '\uE0000\uE001 @(ann.lee@acme.com)',
+      '\uE001@(bea@acme.com)\uE000',
+      '\\@(ann.lee@acme.com)',
+      '@(ann.lee@acme.com) and @(bea@acme.com)',
+    ];
+    for (const body of bodies) {
+      const server = mentionsIn(body); // what the server checks, stores and notifies
+      const named = Object.fromEntries([...server, ...protectMentions(body).addresses].map((a) => [a, 'Someone']));
+      const c = draw(body, named);
+      const chips = [...new Set([...c.querySelectorAll('span[title]')].map((x) => x.getAttribute('title')))];
+      expect(chips, JSON.stringify(body)).toEqual(server);
+      cleanup();
+    }
   });
 
   it('\\@(…) is an escaped literal: shown as typed, without the backslash, and no chip', () => {

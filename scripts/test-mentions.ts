@@ -66,8 +66,9 @@ function tokenCases(): void {
   ok('token: an underscore in an address survives a stray one before it', JSON.stringify(tok.mentionsIn('order_total is off @(first_last@acme.com)')) === '["first_last@acme.com"]');
   ok('token: a mention in link text is still one, labelled as words', tok.withMentionLabels('[see @(ann@acme.com)](https://x.test)', () => '@Ann') === '[see @Ann](https://x.test)');
   ok('token: no `<`, `[` or space inside: `@(<b>@x.com)` is text', tok.mentionsIn('@(<b>@x.com) @([a]@x.com) @(a b@x.com)').length === 0);
-  const forged = tok.protectMentions('0 @(ann@acme.com)');
-  ok('token: a forged placeholder is stripped before mentions are numbered', forged.addresses.length === 1 && (forged.text.match(//g) ?? []).length === 1 && forged.text.startsWith('0 '), JSON.stringify(forged));
+  const forged = tok.protectMentions('\uE0000\uE001 @(ann@acme.com)');
+  ok('token: a forged placeholder is replaced (U+FFFD), never deleted, before mentions are numbered', forged.addresses.length === 1 && (forged.text.match(/\uE000/g) ?? []).length === 1 && forged.text.startsWith('\uFFFD0\uFFFD '), JSON.stringify(forged));
+  ok('token: deleting nothing means no token is made — `@` + U+E000 + `(…)` is no mention', tok.mentionsIn('@\uE000(ann@acme.com)').length === 0 && tok.protectMentions('@\uE000(ann@acme.com)').addresses.length === 0);
   const long = 'x'.repeat(190) + ' @(ann.lee@acme.com) tail';
   const cut = tok.commentSnippet(long, () => '@Ann Lee', 200);
   ok('token: the label is applied BEFORE the cut — a mention straddling 200 is never half an address', !cut.includes('acme') && cut.includes('@Ann'), cut);
@@ -91,6 +92,9 @@ async function noDatabase(): Promise<void> {
     const add = await call('comment:add', { projectId: pid, target, body: `hi ${m('ann')}` });
     ok('no db: a body with a mention token is refused (no directory to check it against)', add.ok === false && add.error === msg.notAReader(), show(add));
     ok('no db: …and a body without one is stored', (await call('comment:add', { projectId: pid, target, body: 'plain words' })).ok === true);
+    const scrubbed = await call('comment:add', { projectId: pid, target, body: 'odd \uE000 bytes @\uE001(x)' });
+    const stored = scrubbed.comments?.at(-1)?.body as string | undefined;
+    ok('write: the web\'s placeholder characters are never stored — replaced by U+FFFD, not deleted', stored === 'odd \uFFFD bytes @\uFFFD(x)', JSON.stringify(stored));
     const picker = await call('comment:mentionable', { projectId: pid, q: '' });
     ok('no db: the picker never offers anyone', picker.ok && picker.available === false && picker.people.length === 0, show(picker));
     const home = await call('mentions:list', undefined);

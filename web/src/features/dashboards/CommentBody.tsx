@@ -15,7 +15,7 @@ import s from './Mentions.module.css';
 const FORMER = 'former member';
 /** The text card's `{{token}}` reads as typed in a comment. */
 const plain = (name: string) => ({ text: `{{${name}}}` });
-const SPLIT = /(\d+)/;
+const SPLIT = /\uE000(\d+)\uE001/;
 
 function walk(nodes: Inline[], words: (v: string) => string, inLink: boolean): Inline[] {
   return nodes.map((n): Inline => {
@@ -44,7 +44,7 @@ export function CommentBody({ text, people }: { text: string; people?: Record<st
   };
   const words = (v: string) => v.replace(PLACEHOLDER, (_m, n: string) => '@' + (nameOf(Number(n)) ?? FORMER));
   const chips = (v: string): ReactNode => {
-    if (!v.includes('')) return v;
+    if (!v.includes('\uE000')) return v;
     return v.split(SPLIT).map((part, i) => {
       if (i % 2 === 0) return part;
       const n = Number(part);
