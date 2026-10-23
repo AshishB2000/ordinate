@@ -363,22 +363,27 @@ async function runBoth(p: Pass, A: H.Pod, B: H.Pod): Promise<Array<{ ok?: boolea
   return (await Promise.all([H.rpc(A.base, U1, 'pipelines:run', { projectId: pid }), H.rpc(B.base, U1, 'pipelines:run', { projectId: pid })])).map((r) => r.body);
 }
 
-export async function oneAtATime(p: Pass): Promise<void> {
-  const seeded = await seedBoth(p.A, p.B, 'seedone');
-  ok(`[${p.name}] sample:seed on A and B at once makes exactly one project (the other waits, then finds it)`, seeded.projects === 1, JSON.stringify(seeded));
-  // A pipeline with a slow node: the plan makes a dataset, its metric and an alert named "slow alert" (the preload holds its check ~8 s).
-  const pid = await projectOf(p, U1);
+/** Makes `pid`'s pipeline slow: a plan imports a dataset, its metric and an alert named "slow alert" (the preload holds its check ~8 s). */
+async function slowPipeline(p: Pass, pid: string): Promise<string[] | undefined> {
   const start = await H.rpc(p.A.base, U1, 'plan:start', { projectId: pid, intent: 'pipe', steps: [
     { kind: 'import', file: 'pipe.csv', name: 'Pipe' }, { kind: 'metric', dataset: 'Pipe', name: 'Pipe total', column: 'amount', aggregation: 'sum' },
     { kind: 'alert', metric: 'Pipe total', op: '>', value: 1, name: 'slow alert' }] });
   const runId = start.body?.runId as string;
   await H.rpc(p.A.base, U1, 'plan:next', { projectId: pid, runId, fileToken: await H.upload(p.A.base, U1, PLAN_CSV, 'pipe.csv') });
   await H.rpc(p.A.base, U1, 'plan:next', { projectId: pid, runId });
-  const third = await H.rpc(p.A.base, U1, 'plan:next', { projectId: pid, runId });
+  return (await H.rpc(p.A.base, U1, 'plan:next', { projectId: pid, runId })).body?.status as string[] | undefined;
+}
+
+export async function oneAtATime(p: Pass): Promise<void> {
+  const seeded = await seedBoth(p.A, p.B, 'seedone');
+  ok(`[${p.name}] sample:seed on A and B at once makes exactly one project (the other waits, then finds it)`, seeded.projects === 1, JSON.stringify(seeded));
+  const pid = await projectOf(p, U1);
+  const made = await slowPipeline(p, pid);
   const runs = await runBoth(p, p.A, p.B);
   ok(`[${p.name}] a pipeline run on A and B at once: one runs, the other is told it is already running`,
-    third.body?.status?.[2] === 'done' && runs.filter((r) => r.ok === true).length === 1 && runs.some((r) => r.error === 'This pipeline is already running.'),
-    JSON.stringify({ plan: third.body?.status, runs }));
+    made?.[2] === 'done' && runs.filter((r) => r.ok === true).length === 1 && runs.some((r) => r.error === 'This pipeline is already running.'),
+    JSON.stringify({ plan: made, runs }));
+  if (p.name === 'file') await poolUnderLoad(p);
   if (p.name !== 'file') return;
   const C = await p.startPod({ ANYPOD_NO_ORG_LOCK: '1' });
   const D = await p.startPod({ ANYPOD_NO_ORG_LOCK: '1' });
@@ -388,6 +393,29 @@ export async function oneAtATime(p: Pass): Promise<void> {
     twice.projects === 2 && both.every((r) => r.ok === true), JSON.stringify({ twice, both }));
   await C.stop();
   await D.stop();
+}
+
+/**
+ * H1: ten slow pipeline runs asked of pod A at once leave its pool usable — a run holds no client
+ * while it works, and at most two run at once. (A session advisory lock per run held one client per
+ * run for its whole length: ten runs emptied the pool of ten.)
+ */
+async function poolUnderLoad(p: Pass): Promise<void> {
+  const pids: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const pid = (await H.rpc(p.A.base, U1, 'projects:create', { name: `Load ${i}` })).body.id as string;
+    await slowPipeline(p, pid);
+    pids.push(pid);
+  }
+  const probes = (): number[] => p.A.lines().filter((l) => l.msg === 'anypod:pool').map((l) => Number(l.ms));
+  const before = probes().length;
+  const runs = await Promise.all(pids.map((projectId) => H.rpc(p.A.base, U1, 'pipelines:run', { projectId })));
+  const during = probes().slice(before);
+  const sorted = [...during].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)] ?? -1;
+  ok(`[file] H1: 10 slow pipeline runs at once on pod A all run, and its pool stays usable throughout (SELECT 1 over ${during.length} probes: median ${median} ms, max ${sorted[sorted.length - 1]} ms)`,
+    runs.every((r) => r.body?.ok === true) && during.length > 20 && !during.includes(-1) && median < 100 && sorted[sorted.length - 1] < 1_000,
+    JSON.stringify({ runs: runs.map((r) => r.body?.ok ?? r.body), worst: sorted.slice(-5) }));
 }
 
 export const CASES: Array<(p: Pass) => Promise<void>> = [crossPodImport, rowIsTruth, planAcrossPods, cancelAcrossPods, oneAtATime, takeRace, wrongUser, expired, exportAndBackup, sweepSparesTaken, abortedDownload, orgWall];

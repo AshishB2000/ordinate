@@ -11,10 +11,11 @@
 //   ANYPOD_SLOW_JOBS=a,b      jobs of these kinds — or whose label names a file with `slow` in it —
 //                             wait ANYPOD_SLOW_MS (or until cancelled) before running
 //   ANYPOD_NO_PLAN_LEASE=1    NEGATIVE CONTROL: a plan step claim that ignores a live lease
-//   ANYPOD_NO_ORG_LOCK=1      NEGATIVE CONTROL: the sample-seed and pipeline locks just run (and the
+//   ANYPOD_NO_ORG_LOCK=1      NEGATIVE CONTROL: the sample-seed and pipeline leases just run (and the
 //                             seed waits 2 s first, so two lock-free seeds surely overlap)
 //   ANYPOD_OFFER_LOG=1        every offered download logs its bytes' sha256 (`anypod:offered`)
 //   ANYPOD_TAKE_LOG=1         every token take that WON logs its hash (`anypod:took`)
+//   ANYPOD_POOL_PROBE=1       every 200 ms, `SELECT 1` on the app's own pool, timed (`anypod:pool`, ms; -1 = failed)
 
 export {}; // module scope — sibling scripts share top-level names
 
@@ -124,13 +125,30 @@ if (env.ANYPOD_NO_PLAN_LEASE === '1') {
 }
 
 if (env.ANYPOD_NO_ORG_LOCK === '1') {
-  const locks: typeof import('../src/server/jobs/refreshLock') = require('../src/server/jobs/refreshLock');
-  (locks as { withOrgLock: typeof locks.withOrgLock }).withOrgLock = async (_name, fn) => ({ ran: true, value: await fn() });
-  (locks as { withOrgTryLock: typeof locks.withOrgTryLock }).withOrgTryLock = async (_name, fn) => ({ ran: true, value: await fn() });
+  const lease: typeof import('../src/app/runLease') = require('../src/app/runLease');
+  (lease as { withLease: typeof lease.withLease }).withLease = async (_file, fn) => ({ ran: true, value: await fn() });
+  (lease as { waitForLease: typeof lease.waitForLease }).waitForLease = async (_file, fn) => ({ ran: true, value: await fn() });
   const sample: typeof import('../src/app/sampleProject') = require('../src/app/sampleProject');
   const seed = sample.seedSampleProject;
   (sample as { seedSampleProject: typeof seed }).seedSampleProject = async (...args) => {
     await new Promise((r) => setTimeout(r, 2_000));
     return seed(...args);
+  };
+}
+
+if (env.ANYPOD_POOL_PROBE === '1') {
+  const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
+  const real = recordFs.useRecordDb;
+  (recordFs as { useRecordDb: typeof real }).useRecordDb = (pool) => {
+    real(pool);
+    if (!pool) return;
+    const probe = setInterval(() => {
+      const t0 = Date.now();
+      pool.query('SELECT 1').then(
+        () => process.stdout.write(JSON.stringify({ msg: 'anypod:pool', ms: Date.now() - t0 }) + '\n'),
+        () => process.stdout.write(JSON.stringify({ msg: 'anypod:pool', ms: -1 }) + '\n'),
+      );
+    }, 200);
+    probe.unref();
   };
 }

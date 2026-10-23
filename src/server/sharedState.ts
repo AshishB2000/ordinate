@@ -9,6 +9,7 @@ import * as counters from './counters';
 import * as fileTokens from './fileTokens';
 import * as stageStore from '../data/stageStore';
 import * as planStore from '../ai/planStore';
+import { useLeaseDb } from '../app/runLease';
 import { defineJob } from './jobs/runner';
 
 /** How often each org's expired tokens, stages, counter windows and plan runs are swept. */
@@ -37,6 +38,7 @@ export function wireSharedState(p: Pool, log: stageStore.Log): void {
   fileTokens.useFileTokenDb(p);
   stageStore.useStageDb(p, log);
   planStore.usePlanDb(p, log);
+  useLeaseDb(p);
   if (defined) return; // a second app in one process (tests) shares the kind
   defined = true;
   defineJob('shared:sweep', {
@@ -52,4 +54,5 @@ export function unwireSharedState(): void {
   fileTokens.useFileTokenDb(null);
   stageStore.useStageDb(null);
   planStore.usePlanDb(null);
+  useLeaseDb(null);
 }

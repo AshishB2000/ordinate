@@ -11,11 +11,11 @@ import * as jobs from '../app/jobs';
 import * as sharePolicy from '../app/sharePolicy';
 import { dropSalt } from '../app/privacyStore';
 import * as config from '../app/config';
-import { projectDir } from '../app/recordKinds';
+import { projectDir, projectsBase } from '../app/recordKinds';
 import { safetyBackup } from './backups';
 import * as recordFs from '../app/recordFs';
 import * as sample from '../app/sampleProject';
-import { withOrgLock } from '../server/jobs/refreshLock';
+import { waitForLease } from '../app/runLease';
 
 type SeedReply = { ok: true; projectId: string; analysisId?: string } | { ok: false; error: 'has_projects' | 'unavailable' };
 /** `sample:seed` calls in flight, by org. */
@@ -63,15 +63,15 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
   // data"). Refused once the org has any project, archived ones included, so a
   // second click or a second admin adds nothing. Callers that arrive while a
   // seed is running share its answer on this pod; across pods the seed holds
-  // the org's `sample:seed` advisory lock (docs/any-pod/00-design.md §3.9), so a
-  // second pod's caller waits, then finds the project. No lock in 30 s, or a lock
-  // that fails, answers `unavailable` — never a seed without it.
+  // the org's seed LEASE (src/app/runLease.ts; docs/any-pod/00-design.md §3.9), so
+  // a second pod's caller waits, then finds the project. No lease in 30 s, or a
+  // lease store that fails, answers `unavailable` — never a seed without it.
   ipcMain.handle('sample:seed', async () => {
     const key = orgKey('sample:seed');
     const running = seeding.get(key);
     if (running) return running;
     const run = (async (): Promise<SeedReply> => {
-      const seeded = await withOrgLock('sample:seed', async (): Promise<SeedReply> => {
+      const seeded = await waitForLease(path.join(projectsBase(), 'sample-seed.json'), async (): Promise<SeedReply> => {
         if ((await projects.listProjects()).length > 0) return { ok: false, error: 'has_projects' };
         const made = await sample.seedSampleProject({ again: true });
         if (!made.seeded || !made.projectId) return { ok: false, error: 'unavailable' };

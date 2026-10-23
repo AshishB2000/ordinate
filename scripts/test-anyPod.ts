@@ -23,7 +23,7 @@ const s3: typeof import('../src/engine/s3') = require('../src/engine/s3');
 
 const PRELOAD = path.join(__dirname, 'anyPodPreload.js');
 const BASE_ENV = {
-  AUTH_MODE: 'dev', ANYPOD_IDENTITY: '1', ANYPOD_FAST_RUNNER: '1', ANYPOD_OFFER_LOG: '1', ANYPOD_TAKE_LOG: '1',
+  AUTH_MODE: 'dev', ANYPOD_IDENTITY: '1', ANYPOD_FAST_RUNNER: '1', ANYPOD_OFFER_LOG: '1', ANYPOD_TAKE_LOG: '1', ANYPOD_POOL_PROBE: '1',
   RATE_LIMIT_RPC_PER_MINUTE: '100000', RATE_LIMIT_RPC_IP_PER_MINUTE: '100000', RATE_LIMIT_LOGIN_PER_MINUTE: '100000',
 };
 
