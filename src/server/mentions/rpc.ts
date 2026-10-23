@@ -18,6 +18,8 @@ export const PICKER_MAX = 8;
 /** Rows Home shows, and how many it reads to find them (pieces deleted since are skipped). */
 export const HOME_MAX = 20;
 const HOME_READ = 60;
+/** Projects one call reads comments from. */
+export const HOME_PROJECTS = 10;
 const SNIPPET = 200;
 
 /** Up to PICKER_MAX current readers matching `q`: filtered first (match, not the caller, a token can carry them), then cut. */
@@ -56,31 +58,42 @@ export interface HomeMention {
 export async function homeMentions(): Promise<{ available: boolean; items: HomeMention[]; unseen: number }> {
   if (!mentionsOn()) return { available: false, items: [], unseen: 0 };
   const me = normalize(ctx().user.email);
-  const rows = await listMine(HOME_READ);
-  const byProject = new Map<string, Comment[]>();
-  const readersOf = new Map<string, Set<string> | null>();
-  const namesOf = new Map<string, Record<string, { name: string; analysisId?: string }>>();
+  // One call reads at most HOME_PROJECTS projects' comments (the rows' first ones, unseen first): rows on others wait.
+  const projects = new Set<string>();
+  const rows = (await listMine(HOME_READ)).filter((r) => projects.has(r.projectId) || (projects.size < HOME_PROJECTS && !!projects.add(r.projectId)));
   const { targetNames } = require('../../ipc/comments') as typeof import('../../ipc/comments'); // lazy: that module starts the notices
-  const items: HomeMention[] = [];
+  const found = new Map<string, { c: Comment; body: string }>(); // project + piece → the comment as it is now
   const gone: Array<{ projectId: string; pieceId: string }> = [];
+  const names = new Map<string, Record<string, { name: string; analysisId?: string }>>();
+  const readersOf = new Map<string, Set<string> | null>();
+  for (const pid of projects) {
+    const r = await comments.list(pid).catch(() => null);
+    const list = r && r.ok ? r.comments : [];
+    const threads = new Map<string, Comment>();
+    for (const row of rows) {
+      if (row.projectId !== pid) continue;
+      const c = list.find((x) => x.id === row.commentId);
+      const body = !c ? null : row.pieceId === c.id ? c.body : c.replies.find((x) => x.id === row.pieceId && !x.deletedAt)?.body ?? null;
+      if (!c || body === null || !mentionsIn(body).includes(me)) {
+        if (!row.seen) gone.push({ projectId: pid, pieceId: row.pieceId }); // deleted, or edited to no longer name the caller
+        continue;
+      }
+      found.set(`${pid}:${row.pieceId}`, { c, body });
+      threads.set(c.id, c);
+    }
+    if (!threads.size) continue;
+    readersOf.set(pid, await currentReaders(pid).catch(() => null));
+    // Names only for the threads that mention the caller, not the project's every comment.
+    names.set(pid, await targetNames(pid, [...threads.values()]).catch(() => ({})));
+  }
+  const items: HomeMention[] = [];
   for (const row of rows) {
-    if (items.length >= HOME_MAX) break;
-    if (!byProject.has(row.projectId)) {
-      const r = await comments.list(row.projectId).catch(() => null);
-      const list = r && r.ok ? r.comments : [];
-      byProject.set(row.projectId, list);
-      readersOf.set(row.projectId, await currentReaders(row.projectId));
-      namesOf.set(row.projectId, await targetNames(row.projectId, list).catch(() => ({})));
-    }
-    const c = byProject.get(row.projectId)!.find((x) => x.id === row.commentId);
-    const body = !c ? null : row.pieceId === c.id ? c.body : c.replies.find((r) => r.id === row.pieceId && !r.deletedAt)?.body ?? null;
-    if (!c || body === null || !mentionsIn(body).includes(me)) {
-      if (!row.seen) gone.push({ projectId: row.projectId, pieceId: row.pieceId }); // deleted, or edited to no longer name the caller
-      continue;
-    }
-    const on = namesOf.get(row.projectId)?.[`${c.target.kind}:${c.target.id}`] ?? { name: aDeletedRecord() };
+    const hit = found.get(`${row.projectId}:${row.pieceId}`);
+    if (!hit || items.length >= HOME_MAX) continue;
+    const { c, body } = hit;
     items.push({
-      projectId: row.projectId, id: row.pieceId, commentId: row.commentId, target: c.target, on,
+      projectId: row.projectId, id: row.pieceId, commentId: row.commentId, target: c.target,
+      on: names.get(row.projectId)?.[`${c.target.kind}:${c.target.id}`] ?? { name: aDeletedRecord() },
       by: personName(row.author), snippet: commentSnippet(body, labelFor(peopleIn([body], readersOf.get(row.projectId) ?? null)), SNIPPET),
       at: row.at, seen: row.seen,
     });

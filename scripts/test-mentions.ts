@@ -26,6 +26,8 @@
 //              edited out is marked seen when Home skips it; `unseen` is the DB's
 //   home       mentions:list unseen first, readable projects only; ids that repeat
 //              across projects are two rows, and mentions:seen marks one
+//   bounded    one mentions:list reads at most 10 projects' comments, and names
+//              only the threads that mention the caller
 //   rls        `mentions` as an ordinary role
 //   slow mail  SMTP down, and SMTP stalling: comment:add answers at once, stores
 //              the comment once, and the row and the push still happen
@@ -312,6 +314,33 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     ok('home: mentions:seen marks the one in its project, not its twin', seenTwin.rows.find((r) => r.project_id === pid2)?.seen === true && seenTwin.rows.find((r) => r.project_id === pid)?.seen === false);
     ok('home: a project bea cannot read is not listed (her row there stays hidden)', !(await as('bea').call('mentions:list')).body.items.some((x: { projectId: string }) => x.projectId === pid2));
     ok('home: mentions:seen with half an id is refused by the contract', (await as('bea').call('mentions:seen', { id: shared })).status === 400);
+
+    // ── bounded reads ─────────────────────────────────────────────────────
+    {
+      const many: string[] = [];
+      for (let i = 0; i < 12; i++) many.push((await as('boss').call('projects:create', { name: `Wide ${i}` })).body.id);
+      for (const p of many) await b.run(me('ola', 'admin'), () => store.recordMentions({ projectId: p, pieceId: randomUUID(), commentId: randomUUID(), author: at('boss') }, [at('ola')]));
+      const board2 = await b.run(BOSS, () => analysis.saveAnalysis(many[0], { name: 'Wide board', sheets: [{ name: 'S', cards: [] }] } as never));
+      const t2 = { kind: 'analysis', id: board2!.id };
+      for (const body of ['plain one', 'plain two', `look ${m('ola')}`]) await as('boss').call('comment:add', { projectId: many[0], target: t2, body });
+      await settle();
+      const commentsMod: typeof import('../src/app/comments') = require('../src/app/comments');
+      const ipcComments: typeof import('../src/ipc/comments') = require('../src/ipc/comments');
+      const realList = commentsMod.list;
+      const realNames = ipcComments.targetNames;
+      const read = new Set<string>();
+      const named: number[] = [];
+      (commentsMod as { list: typeof realList }).list = async (projectId) => { read.add(projectId); return realList(projectId); };
+      (ipcComments as { targetNames: typeof realNames }).targetNames = async (projectId, list) => { named.push(list.length); return realNames(projectId, list); };
+      try {
+        const wide = (await as('ola').call('mentions:list')).body;
+        ok('bounded: one call reads comments from at most 10 projects', read.size === 10 && wide.items.length >= 1, show([read.size, wide.items.length]));
+        ok('bounded: record names are asked for the mentioned threads only (1 of the project\'s 3)', named.length >= 1 && named.every((n) => n === 1), show(named));
+      } finally {
+        (commentsMod as { list: typeof realList }).list = realList;
+        (ipcComments as { targetNames: typeof realNames }).targetNames = realNames;
+      }
+    }
 
     // ── rls ───────────────────────────────────────────────────────────────
     await b.pool.query(`INSERT INTO mentions (org_id, user_email, piece_id, project_id, comment_id, author) VALUES ('globex', 'gina@globex.test', $1, $1, $1, 'x@globex.test')`, [randomUUID()]);
