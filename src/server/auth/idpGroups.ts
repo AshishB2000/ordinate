@@ -233,8 +233,12 @@ export async function reapplyAll(c: PoolClient, auth: AuthEnv, org: string): Pro
   const map = await readMap(c, org);
   const users = await c.query<{ id: string; email: string; groups: string[] }>(
     'SELECT id::text, email, idp_groups AS groups FROM users WHERE org_id = $1 AND disabled_at IS NULL AND idp_groups IS NOT NULL ORDER BY email', [org]);
+  // Promotions to admin FIRST (C3): a change that makes someone admin must count them before it decides
+  // whether anyone else is the org's last admin — otherwise the outcome depended on the email order.
+  const becomesAdmin = (u: { email: string; groups: string[] }) => rolesAndTeams(u.groups, map, auth.adminEmail === u.email).role === 'admin';
+  const ordered = [...users.rows.filter(becomesAdmin), ...users.rows.filter((u) => !becomesAdmin(u))];
   const out: Array<{ userId: string; email: string; applied: Applied }> = [];
-  for (const u of users.rows) {
+  for (const u of ordered) {
     const a = await applyLocked(c, org, u.id, u.groups, auth.adminEmail === u.email, 'exclusive', false, map, u.email);
     if (a && a !== RETRY) out.push({ userId: u.id, email: u.email, applied: a });
   }

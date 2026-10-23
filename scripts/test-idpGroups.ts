@@ -326,6 +326,19 @@ async function headerPart(url: string, pool: Pool, apps: FastifyInstance[]): Pro
   ok('C2: an invited admin\'s first sign-in gains the org an admin — the kept admin\'s next sync demotes them',
     (await idpMod.applyIdpGroups(pool, auth2, { userId: kim2, email: 'kim@hdr.test' }, ['staff'], { compare: true, log: app.log })) === 'viewer');
 
+  // C3: one map change that promotes Zed and would demote Kim (the only admin): Kim goes, whatever the order.
+  const lone3 = `lone3-${Date.now()}`;
+  await pool.query(`INSERT INTO orgs (id, name) VALUES ($1, $1)`, [lone3]);
+  const auth3 = { ...cfg.auth, org: lone3, adminEmail: null };
+  const member3 = async (email: string, role: string, groups: string[]) =>
+    (await q<{ id: string }>(pool, `INSERT INTO users (org_id, email, role, last_login_at, idp_groups) VALUES ($1, $2, $3, now(), $4) RETURNING id::text`, [lone3, email, role, groups]))[0].id;
+  await member3('kim@hdr.test', 'admin', ['staff']);
+  await member3('zed@hdr.test', 'viewer', ['admins']);
+  await pool.query(`INSERT INTO idp_groups (org_id, group_name, role) VALUES ($1, 'staff', 'viewer'), ($1, 'admins', 'admin')`, [lone3]);
+  await store.withPeopleLock(pool, lone3, 'exclusive', (c) => idpMod.reapplyAll(c, auth3, lone3));
+  const roles3 = await q<{ email: string; role: string }>(pool, 'SELECT email, role FROM users WHERE org_id = $1 ORDER BY email', [lone3]);
+  ok('C3: a map change applies promotions first — Zed is admin, so Kim is demoted, not kept', JSON.stringify(roles3.map((r) => r.role)) === '["viewer","admin"]', JSON.stringify(roles3));
+
   // ── g. Three demotions racing: the people lock keeps exactly one admin (a deterministic barrier) ──
   const race = async (lock: boolean): Promise<number> => {
     const org = `race-${lock ? 'on' : 'off'}-${Date.now()}`;
