@@ -142,16 +142,20 @@ No cross-project IDOR was found in the 213 contracts reviewed at T6.3.
   Nothing has been tagged; cutting v0.1.0 is the user's call (log T7.3). `package.json` says 0.1.0,
   which `CHANGELOG.md` also uses for the desktop release; choose the first web version before
   tagging. The Firefox/WebKit nightly has no recorded run in `log.md`.
-- **Rare DuckDB native abort in CI.** `6cad8f2` covers a suite exiting during an in-flight call. A
-  `libc++abi … Napi::Error` at process exit was also seen in other suites (#221) and in
-  `datasetPageRpc` (log T7.2); whether every case is covered is unproven. Follow-up.
+- **~~Rare DuckDB native abort~~ — closed by `fix/pod-lifecycle` (batch 3).** `6cad8f2` covered a
+  suite exiting during an in-flight call; the server's own SIGTERM path still exited around its
+  workers. It now interrupts every DuckDB call and closes each worker through its queue before it
+  exits, and never exits around a live one. Measured with `SHUTDOWN_GRACE_SECONDS=2`: the old path
+  aborted 7 times in 100 signals with an interrupted query unwinding (`libc++abi … Napi::Error`) and
+  overran the budget in 40 of 40 with a query running; the new path, 0 aborts and 0 overruns in
+  241 (docs/pod-lifecycle/00-design.md §3.10).
 - **The automation CLI and stdio MCP** (`src/automation/cli.ts`, `argv.ts`) have no entry point
   since T8.1. HTTP MCP at `/api/mcp` is the live surface. Wire a Node entry or delete them.
 - **`test-backups` load flake:** fails once under full parallel load, passes alone (log T2.8, T2.13,
   T2.11, T7.2).
 - **Image headroom:** 582 MB against the 600 MB cap, 18 MB (11 MB at T7.1).
 - **Accepted risks** in the threat model: R2 (SQL gate is a deny-list lexer), R3 (bundle import can
-  inflate to 4 GB in memory), R13 (org editors may call org-level writes; user decision pending).
+  write 4 GB to disk; memory bounded since batch 3), R13 (org editors may call org-level writes; user decision pending).
   GitHub private vulnerability reporting must be switched on for `SECURITY.md`'s link to work. The
   MapLibre advisory allowlist entry is due for review by 2027-01-04.
 - **Functional gaps:** `pipelines:run` is one RPC (more than 60 s → 504); pipeline `report`/`publish`

@@ -656,3 +656,51 @@ logCapture}.ts`, `deploy/helm/ordinate/templates/{servicemonitor,prometheusrule}
 `duckdbClose.ts`); `app.ts` 560 → ~575; `jobs.ts` 496 → ~535 (drain belongs to the queue's state
 machine; it needs its private maps); `bundle.ts` 522 → ~360; `env.ts` 503 → ~506. No file passes
 800, none is admitted to the allowlist.
+
+## 8. As built (Phase B)
+
+**Order.** Steps ran 1 → 4.1 (metrics) → 2 → 3 → 4.2 → 5 → 6: the SIGTERM test signals only once
+`ordinate_duckdb_busy_workers` reads 1, so the metrics came first.
+
+**Where the build differs from the plan, and why:**
+
+- The zip reader streams ranges with its own positioned-read `Readable` (`rangeOf`), not
+  `FileHandle.createReadStream`: each of those leaves a `close` listener on the handle, and a bundle
+  reads thousands of entries through one (Node warned at 11).
+- The "before one byte is inflated" spy wraps `zlib.InflateRaw.prototype._transform` — every inflate,
+  stream or one-shot, goes through it. zlib's exports are read-only in Node 24.
+- `src/app/logger.ts` is a leaf: `src/server/context.ts` hands it a context reader when it loads.
+  Importing the context from the logger would have pulled it into the compute worker's import graph
+  (`test-computeWorker` forbids that).
+- The drafts (es/de/fr/ja) carry translations of the 25 new sentences: `test-i18n` holds each draft
+  at ≥ 90 % translated, and 25 new `null`s put them at 89 %.
+- The JSON-bomb case measures pass 1 over 40 × 32 MiB with a bundle refused after pass 1 (its table
+  fails its CRC), so nothing writes 1.3 GB into Postgres; the in-place swap is measured on three
+  32 MiB records imported for real.
+- `jobs.ts` treats a DuckDB `cancelled` rejection as an abort (`isAbort`), or a user's Cancel of a job
+  inside a query (now interrupted through `withAbort`) would read as an error.
+
+**Measured** (this Mac, `SHUTDOWN_GRACE_SECONDS=2`; an overrun is a process still alive at 5 s,
+SIGKILLed by the test as the kubelet would):
+
+| SIGTERM kind | old path: runs / aborts / overruns | new path: runs / aborts / overruns |
+|---|---|---|
+| query + job in flight | 40 / 0 / 40 | 41 / 0 / 0 (20 + 20 + 1 on S3) |
+| hung-up query unwinding | 100 / 7 / 3 | 100 / 0 / 0 |
+| idle worker | 100 / 0 / 0 | 100 / 0 / 0 |
+
+The new path's slowest exit with a job in flight was 1.68 s; hung-up and idle exits take under
+0.1 s. The old path's aborts were `libc++abi: terminating due to uncaught exception of type
+Napi::Error`. The idle kind did not abort sequentially in 100 runs on either path (the 33-in-280
+figure in `duckdbClose.ts` was measured 16 suites at a time).
+
+| Memory | without DB | with DB |
+|---|---|---|
+| 4 MB bundle declaring 4 GiB, streamed (staging peak ≈ 4 GiB) | RSS +12 MB | +15 MB |
+| 40 × 32 MiB records of an in-use id, pass 1 | +167 MB | +161 MB |
+| three 32 MiB records imported, ids swapped in place | +2 MB | +123 MB (each record also goes to Postgres as text) |
+| backup of 16 projects (279 MB, every bundle stored) | +8 to +107 MB | +64 MB |
+| restore of it into a fresh org | +27 MB | +3 MB |
+
+A full 10,000 × 50 input table of 22-character CJK cells is 33 MB of JSON: refused by the record
+writer, so never stored and never in a bundle.
