@@ -122,9 +122,11 @@ async function partA(url: string, pool: Pool): Promise<void> {
     ok(`disable: carol's stream on pod A ends within a second (${endA === null ? 'never' : Math.round(endA - t0) + ' ms'})`, endA !== null && endA - t0 < 1000);
     ok(`disable: …and on pod B, over the bus (${endB === null ? 'never' : Math.round(endB - t0) + ' ms'})`, endB !== null && endB - t0 < 1000);
     ok('NEGATIVE CONTROL: dave\'s stream on pod B stays open', (await within(daveB.ended, 500)) === null);
-    const again = await openStream(B, as('carol@acme.test'));
-    ok('disable: carol\'s reconnect is refused (401), on either pod', again.status === 401);
-    again.close();
+    const againA = await openStream(A, as('carol@acme.test'));
+    const againB = await openStream(B, as('carol@acme.test'));
+    ok('disable: carol\'s reconnect is refused (401) on pod A AND on pod B', againA.status === 401 && againB.status === 401, `${againA.status} ${againB.status}`);
+    againA.close();
+    againB.close();
     const t1 = now();
     const out = await post(A, '/api/auth/logout-everywhere', 'dave@acme.test');
     const endDave = await within(daveB.ended, 3000);
