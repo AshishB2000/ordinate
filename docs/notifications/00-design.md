@@ -288,8 +288,10 @@ normalize(address) = address.toLowerCase()   — the ONE normaliser; mentionsIn 
 - An address cannot contain `(`, `)`, `<`, `>`, `[`, `]` or whitespace (`mailEnv.ts`'s `LOCAL`/`LABEL`
   exclude them), and the regex refuses them inside the token. So the token holds no `[…](…)` link
   shape, no `<…>` autolink or tag, and nothing that ends early.
-- The web renderer never hands the address to the Markdown parser at all. `CommentBody` first strips
-  U+E000/U+E001 from the body (so a body cannot forge a placeholder), replaces every match with
+- The web renderer never hands the address to the Markdown parser at all. U+E000/U+E001 are REPLACED by
+  U+FFFD — on write (`cleanBody`) and again by every parser function for an older body, never deleted
+  (deleting a character could join `@` and `(` into a token) — so a body cannot forge a placeholder,
+  and the server and the web always read the same mentions. `CommentBody` then replaces every match with
   U+E000 + `<n>` + U+E001 — private-use characters and digits, none of which `mdParse` treats as
   markup or can escape — and only then calls `mdParse`. An underscore in `first_last@acme.com`
   therefore never pairs with another `_` (the bug a raw address in the text would have), and nothing
@@ -514,10 +516,10 @@ payloads (control: their in-app cards differ).
 
 | Channel | Contract |
 |---|---|
-| `alerts:markSeen` | `access: 'read'` (was `write`); input unchanged |
+| `alerts:markSeen` | `access: 'read'` (was `write`); `through?` — Mark all seen covers up to the newest time the bell drew |
 | `comment:mentionable` | `read`, `project: byProjectId`, `{ projectId: Uuid, q: string ≤ 100 }` |
 | `mentions:list` | `read`, `org: true`, `z.undefined()` |
-| `mentions:seen` | `read`, `org: true`, `{ projectId?: Uuid, id?: Uuid }` (both or neither) |
+| `mentions:seen` | `read`, `org: true`, `{ projectId, id }` (one row) or `{ through }` (every row up to the newest Home drew) |
 | `mentions:prefs` | `read`, `org: true`, `z.undefined()` |
 | `mentions:setPrefs` | `read`, `org: true`, `{ emailMe: boolean }` |
 
@@ -661,4 +663,21 @@ which still works.
 | m8 ids repeat across projects | `mentions` key includes `project_id`; `mentions:seen {projectId, id}`; `alert_posts` too (§4) |
 | m9 real paths | `test-alertDelivery` drives fresh-on-ask and the refresh URL for real and asserts the audit actor (§6) |
 | m10 re-stamp | stated and tested (§5.2) |
+
+## 9. Review round folded in
+
+| Finding | Change |
+|---|---|
+| S-M1 one viewer drains the mention budget | per hour: an author ≤ 20 mention emails and ≤ 60 notices, a recipient ≤ 10 emails, through `mail/budget.ts` (item 4 moves them with the rest); past a limit only the Home row (§7, R21) |
+| S-L1 / C3 placeholders disagree | U+E000/U+E001 replaced by U+FFFD on write and in every parser, never deleted; one test runs the same bodies through both parsers |
+| S-L2 deleted pieces hide Home's history | rows of a deleted comment or reply are deleted; rows Home finds gone are marked seen (caller-bound); `mentions:list` returns the database's `unseen`, which keeps Mark all seen offered |
+| S-L3 one call reads 60 projects | at most 10 projects per call; `targetNames` only for the mentioned threads |
+| C1 Enter takes a stale list | items shown and accepted only when the asked word is the typed one and the data is not a placeholder; "Searching…" otherwise |
+| C2 stale picker state | `accept` re-reads the caret and bails when the mention moved; `onSelect` follows the caret; a value changed from outside closes the list |
+| C4 placeholders in `{{token}}` and hrefs | a token's name reads as words; a link's target gets its `@(address)` back |
+| C5 Mark all seen marks the unseen-unseen | the bell and Home send the newest time they drew; the server marks up to the smaller of that and the newest stored |
+| C6 a Postgres hiccup fails the bell | `seenView` never throws: the shared flag, logged at warn |
+| C7 legacy ids and times | `sanitizeEvent` lower-cases the id and makes the time canonical (the epoch when unreadable: stable, unlike "now", which would re-unsee it on every read) |
+| R1 a sixth org-transaction helper | `inOrg` delegates to `hooks/store.ts` `within` (exported) |
+| R2 three copies of the label read | `peopleFor` / `labelsFor` in `mentions/people.ts` |
 
