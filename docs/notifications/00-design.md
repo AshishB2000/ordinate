@@ -610,9 +610,20 @@ payloads (control: their in-app cards differ).
   later event at or under a member's watermark. That needs both at once; accepted.
 
 **Budgets are per pod** until item 4, which moves every kind, `mention` included, to the shared
-counter. The flood is capped: at most 10 distinct mentions per piece (refused beyond, with a catalog
-sentence), and a person is notified once per piece, ever — removing and re-adding a mention finds the
-row already there and sends nothing.
+counter. The real bounds on a flood, per pod and per hour:
+
+- a piece names at most 10 people (refused beyond, with a catalog sentence), and a person is told once
+  per piece, ever: removing and re-adding a mention finds the row already there and sends nothing;
+- one author causes at most **20 mention emails** and **60 notices** (`mentions:new` pushes);
+- one recipient gets at most **10 mention emails**;
+- past any of these, only the Home row is written. Rows are not budgeted: each piece is a row, at most
+  200 kept per person;
+- the org's `mention` bucket (`RATE_LIMIT_EMAIL_ORG_PER_HOUR`, half per project) still applies after
+  the per-person ones.
+
+So one member alone can spend at most 20 of the org's mention emails an hour. Several members acting
+together can still spend the project's share (half the org's hourly limit, 500 at the default). The
+starvation test (`test-mentions` "flood") pins the single-member case.
 
 **At-most-once posts (§5.3)**: a crash between claim and post drops that post.
 

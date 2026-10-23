@@ -29,6 +29,9 @@
 //   bounded    one mentions:list reads at most 10 projects' comments, and names
 //              only the threads that mention the caller
 //   rls        `mentions` as an ordinary role
+//   flood      66 replies by one member mentioning three people: 20 emails (the
+//              author's hour), ≤ 10 to each, 60 notices, every Home row — and a
+//              legitimate mention elsewhere still gets its email
 //   slow mail  SMTP down, and SMTP stalling: comment:add answers at once, stores
 //              the comment once, and the row and the push still happen
 //
@@ -359,6 +362,33 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     } finally {
       orgDb.useOrgDb(appPool);
       await role.end();
+    }
+
+    // ── flood: one member cannot drain the mention budget ──────────────────
+    {
+      rewire({ RATE_LIMIT_EMAIL_ORG_PER_HOUR: '100' }); // a project's share: 50 an hour
+      email.resetLimitsForTest();
+      const spamThread = (await as('ted').call('comment:add', { projectId: pid, target, body: 'a thread' })).body.comments.at(-1).id as string;
+      const victims = ['ola', 'boss', 'aaa'];
+      const mail0 = fake.txns.length;
+      const push0 = pushes.filter((p) => p.channel === 'mentions:new').length;
+      const rows0 = Number((await b.pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM mentions WHERE author = $1`, [at('ted')])).rows[0].n);
+      for (let i = 0; i < 66; i++) {
+        await as('ted').call('comment:reply', { projectId: pid, id: spamThread, body: `urgent: click here ${m(victims[i % 3])}` });
+        await settle();
+      }
+      const spamMails = fake.txns.slice(mail0);
+      const per = victims.map((v) => spamMails.filter((t) => t.rcpts.includes(at(v))).length);
+      ok('flood: one author causes at most 20 mention emails an hour', spamMails.length === 20, String(spamMails.length));
+      ok('flood: one recipient gets at most 10 mention emails an hour', per.every((n) => n <= 10), show(per));
+      ok('flood: one author causes at most 60 mention notices an hour', pushes.filter((p) => p.channel === 'mentions:new').length - push0 === 60);
+      ok('flood: past the limits, every Home row is still written', Number((await b.pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM mentions WHERE author = $1`, [at('ted')])).rows[0].n) - rows0 === 66);
+      const bea0 = mailsTo('bea');
+      await as('ann').call('comment:add', { projectId: pid, target, body: `the real one ${m('bea')}` });
+      await settle();
+      ok('flood: a legitimate mention elsewhere still gets its email (not starved)', mailsTo('bea') === bea0 + 1);
+      rewire({});
+      email.resetLimitsForTest();
     }
 
     // ── slow mail (last: a stalled relay keeps a send open) ────────────────

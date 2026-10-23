@@ -13,6 +13,11 @@
 // ONCE PER PIECE. The `mentions` INSERT is the gate: the push and the email go
 // out only for the people it inserted a row for. If it fails, nothing is sent —
 // a repeat must never notify twice. After it, the push and the email fail apart.
+//
+// PER PERSON, PER HOUR (../mail/budget.ts): an author causes at most
+// MENTION_PUSHES_PER_AUTHOR notices and MENTION_EMAILS_PER_AUTHOR emails, and a
+// recipient gets at most MENTION_EMAILS_PER_RECIPIENT emails; past a limit only
+// the Home row is written. So one member cannot drain the org's mention budget.
 
 import type { Channel } from '../../app/channels';
 import type { CommentTarget } from '../../app/commentModel';
@@ -22,6 +27,7 @@ import { threadPath } from '../../app/threadPath';
 import { audit } from '../authz/audit';
 import { ctx } from '../context';
 import { mailReady } from '../mail/emailChannel';
+import { hold, mentionEmailBuckets, mentionPushBucket } from '../mail/budget';
 import { aDeletedRecord, mentionedYouOn, mentionEmailReason } from '../mentionMessages';
 import { appLink } from '../publicUrl';
 import { publish } from '../sse';
@@ -79,6 +85,10 @@ async function run(piece: Piece, emails: string[]): Promise<void> {
   const notice: MentionNotice = { projectId: piece.projectId, id: piece.id, commentId: piece.commentId, target: { kind: piece.target.kind, id: piece.target.id }, ...(where.analysisId ? { analysisId: where.analysisId } : {}), by: personName(piece.author), on: where.name };
   const org = ctx().org.id;
   for (const email of fresh) {
+    if (!hold(mentionPushBucket(org, piece.author), 1)) {
+      notifyLog().warn({ projectId: piece.projectId }, 'mention notice not pushed: its author reached the hourly limit (the Home row stands)');
+      continue;
+    }
     try {
       publish({ org, user: email }, 'mentions:new', notice);
     } catch (err) {
@@ -116,7 +126,13 @@ async function mailOne(piece: Piece, email: string, notice: MentionNotice, words
   });
   // A channel of one, made here and never saved: the send resolves it as it resolves any list (current reader, signed in, allowed domain).
   const one: Channel = { id: who.id, name: 'mention', kind: 'email', to: { userIds: [who.id], teamIds: [] }, createdBy: piece.author, createdAt: '', updatedAt: '' };
-  const r = await deliver(one, { kind: 'mention', projectId: piece.projectId, message, reason: mentionEmailReason(notice.by) });
   const { org, requestId } = ctx();
+  const held = hold(mentionEmailBuckets(org.id, piece.author, email), 1);
+  if (!held) {
+    notifyLog().warn({ projectId: piece.projectId }, 'mention email not sent: its author or recipient reached the hourly limit (the Home row stands)');
+    return;
+  }
+  const r = await deliver(one, { kind: 'mention', projectId: piece.projectId, message, reason: mentionEmailReason(notice.by) });
+  if (!r.ok) held.refund(1); // not sent: it cost the author and the recipient nothing
   await audit(orgDb(), { org: org.id, actor: piece.author, action: 'rpc', channel: 'comment:mention', projectId: piece.projectId, targets: [piece.commentId, piece.id, who.id], outcome: r.ok ? 'ok' : 'error', requestId }).catch(() => undefined);
 }
