@@ -52,8 +52,6 @@ export function domainAllowed(allowed: readonly string[], email: string): boolea
 export async function provision(pool: Pool, auth: AuthEnv, email: string): Promise<Member | Refusal> {
   if (!domainAllowed(auth.allowedDomains, email)) return 'domain';
   const isAdmin = auth.adminEmail === email;
-  // The org (re)gains its break-glass admin: a last admin the IdP sync kept is evaluated again (./idpGroups.ts).
-  if (isAdmin) await pool.query(CLEAR_KEPT, [auth.org]);
   const r = await pool.query<{ id: string; role: Role; disabled: boolean }>(
     `INSERT INTO users (org_id, email, role, last_login_at) VALUES ($1, $2, $3, now())
      ON CONFLICT (org_id, email) DO UPDATE
@@ -63,6 +61,9 @@ export async function provision(pool: Pool, auth: AuthEnv, email: string): Promi
   );
   const row = r.rows[0];
   if (row.disabled) return 'disabled';
+  // An admin just signed in — the break-glass one, or an invited admin's first sign-in (admin → admin, no
+  // role change): the org has a signed-in admin, so a last admin the IdP sync kept is evaluated again (C2).
+  if (row.role === 'admin') await pool.query(CLEAR_KEPT, [auth.org]);
   return { userId: row.id, identity: { user: { email, role: row.role }, org: { id: auth.org } } };
 }
 

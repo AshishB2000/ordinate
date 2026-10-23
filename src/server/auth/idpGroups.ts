@@ -176,10 +176,9 @@ async function applyLocked(
     kept = role === 'admin';
   }
   if (barrier) await barrier(email);
-  if (role !== row.role) {
-    await c.query('UPDATE users SET role = $3 WHERE org_id = $1 AND id = $2', [org, userId, role]);
-    if (role === 'admin') await c.query(CLEAR_KEPT, [org]);
-  }
+  if (role !== row.role) await c.query('UPDATE users SET role = $3 WHERE org_id = $1 AND id = $2', [org, userId, role]);
+  // A signed-in admin who was not kept: the org has another admin, so a kept one is evaluated again (C2).
+  if (role === 'admin' && !kept) await c.query(CLEAR_KEPT, [org]);
   const cur = await c.query<{ team: string }>('SELECT team_id::text AS team FROM team_members WHERE user_id = $1 AND team_id = ANY($2::uuid[])', [userId, out.linked]);
   const now = new Set(cur.rows.map((x) => x.team));
   const want = new Set(out.teams);

@@ -313,6 +313,19 @@ async function headerPart(url: string, pool: Pool, apps: FastifyInstance[]): Pro
   ok('last admin: the org gains an admin → the kept marker is cleared', (await q<{ d: string | null }>(pool, 'SELECT idp_groups_digest AS d FROM users WHERE id = $1', [kim]))[0].d === null);
   ok('last admin: …and the next sync demotes the kept admin', (await idpMod.applyIdpGroups(pool, loneAuth, { userId: kim, email: 'kim@hdr.test' }, ['staff'], { compare: true, log: app.log })) === 'viewer');
 
+  // C2: the org gains an admin through an INVITED admin's first sign-in (admin → admin: no role change).
+  const lone2 = `lone2-${Date.now()}`;
+  await pool.query(`INSERT INTO orgs (id, name) VALUES ($1, $1)`, [lone2]);
+  const auth2 = { ...cfg.auth, org: lone2, adminEmail: null };
+  await pool.query(`INSERT INTO idp_groups (org_id, group_name, role) VALUES ($1, 'staff', 'viewer'), ($1, 'admins', 'admin')`, [lone2]);
+  const kim2 = (await q<{ id: string }>(pool, `INSERT INTO users (org_id, email, role, last_login_at) VALUES ($1, 'kim@hdr.test', 'admin', now()) RETURNING id::text`, [lone2]))[0].id;
+  await idpMod.applyIdpGroups(pool, auth2, { userId: kim2, email: 'kim@hdr.test' }, ['staff'], { compare: true, log: app.log });
+  await pool.query(`INSERT INTO users (org_id, email, role) VALUES ($1, 'ivy@hdr.test', 'admin')`, [lone2]); // invited as admin, not signed in
+  const ivy = await store.provision(pool, auth2, 'ivy@hdr.test');
+  if (typeof ivy !== 'string') await idpMod.applyIdpGroups(pool, auth2, { userId: ivy.userId, email: 'ivy@hdr.test' }, ['admins'], { compare: true, log: app.log });
+  ok('C2: an invited admin\'s first sign-in gains the org an admin — the kept admin\'s next sync demotes them',
+    (await idpMod.applyIdpGroups(pool, auth2, { userId: kim2, email: 'kim@hdr.test' }, ['staff'], { compare: true, log: app.log })) === 'viewer');
+
   // ── g. Three demotions racing: the people lock keeps exactly one admin (a deterministic barrier) ──
   const race = async (lock: boolean): Promise<number> => {
     const org = `race-${lock ? 'on' : 'off'}-${Date.now()}`;
