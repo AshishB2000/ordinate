@@ -580,8 +580,8 @@ payloads (control: their in-app cards differ).
   org admins and the members of granted teams**. "Who has access" (`project:access`) lists direct
   grants and team names only, so this is a real widening, and the spec requires it. It is written
   into the new threat-model row as it is.
-- **Logging:** no `console.*` is added under `src/` (item 1 adds `no-console`): the new server modules
-  take an injected log (`useNotifyLog`, wired to `app.log` like `useDeliveryLog`).
+- **Logging:** no `console.*` under `src/` (item 1's `no-console`): the new server modules log through
+  item 1's `app/logger` (pino in the server, with the request's id and org).
 
 **Cross-org.**
 - Every new table is org-keyed with RLS forced, and `inOrg` refuses an org that fails `ORG_RE`.

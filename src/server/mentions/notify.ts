@@ -35,7 +35,7 @@ import { deliver } from '../subscriptions/deliver';
 import { orgDb } from '../db/inOrg';
 import { currentReaders, labelFor, peopleIn } from './people';
 import { recipient, recordMentions } from './store';
-import { notifyLog, why } from '../notifyLog';
+import { logger } from '../../app/logger';
 
 /** One stored comment or reply that names people. */
 export interface Piece {
@@ -68,7 +68,7 @@ export async function mentionsSettled(): Promise<void> {
 
 /** Tell `emails` (new mentions of `piece`, never its author). Never throws. */
 export function notifyMentions(piece: Piece, emails: string[]): Promise<void> {
-  const p = run(piece, emails).catch((err: unknown) => notifyLog().warn({ error: why(err) }, 'mention notices failed'));
+  const p = run(piece, emails).catch((err: unknown) => logger.warn('[mentions] notices failed:', err instanceof Error ? err.message : String(err)));
   inFlight.add(p);
   void p.finally(() => inFlight.delete(p));
   return p;
@@ -86,19 +86,19 @@ async function run(piece: Piece, emails: string[]): Promise<void> {
   const org = ctx().org.id;
   for (const email of fresh) {
     if (!hold(mentionPushBucket(org, piece.author), 1)) {
-      notifyLog().warn({ projectId: piece.projectId }, 'mention notice not pushed: its author reached the hourly limit (the Home row stands)');
+      logger.warn('[mentions] notice not pushed: its author reached the hourly limit (the Home row stands)');
       continue;
     }
     try {
       publish({ org, user: email }, 'mentions:new', notice);
     } catch (err) {
-      notifyLog().warn({ error: why(err) }, 'mention push failed');
+      logger.warn('[mentions] push failed:', err instanceof Error ? err.message : String(err));
     }
   }
   if (!mailReady()) return;
   const words = commentSnippet(piece.body, labelFor(peopleIn([piece.body], readers)), 1000);
   for (const email of fresh) {
-    await mailOne(piece, email, notice, words).catch((err: unknown) => notifyLog().warn({ error: why(err) }, 'mention email failed'));
+    await mailOne(piece, email, notice, words).catch((err: unknown) => logger.warn('[mentions] email failed:', err instanceof Error ? err.message : String(err)));
   }
 }
 
@@ -129,7 +129,7 @@ async function mailOne(piece: Piece, email: string, notice: MentionNotice, words
   const { org, requestId } = ctx();
   const held = hold(mentionEmailBuckets(org.id, piece.author, email), 1);
   if (!held) {
-    notifyLog().warn({ projectId: piece.projectId }, 'mention email not sent: its author or recipient reached the hourly limit (the Home row stands)');
+    logger.warn('[mentions] email not sent: its author or recipient reached the hourly limit (the Home row stands)');
     return;
   }
   const r = await deliver(one, { kind: 'mention', projectId: piece.projectId, message, reason: mentionEmailReason(notice.by) });

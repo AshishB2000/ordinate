@@ -14,7 +14,7 @@ import type { AlertEvent } from '../analysis/alerts';
 import { isValidId } from '../app/ids';
 import { ctx } from './context';
 import { inOrg, orgDb } from './db/inOrg';
-import { notifyLog, why } from './notifyLog';
+import { logger } from '../app/logger';
 
 /** True when seen state is per member here (a database), false when it is the shared flag. */
 export function perMember(): boolean {
@@ -40,7 +40,7 @@ export async function seenView(projectId: string): Promise<(e: AlertEvent) => bo
       ),
     );
   } catch (err) {
-    notifyLog().warn({ projectId, error: why(err) }, 'alert inbox not read: showing the shared seen flag');
+    logger.warn('[alerts] alert inbox not read, showing the shared seen flag:', projectId, err instanceof Error ? err.message : String(err));
     return shared;
   }
   const row = r.rows[0];

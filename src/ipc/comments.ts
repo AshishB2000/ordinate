@@ -32,7 +32,7 @@ import type { Comment } from '../app/commentModel';
 import type { Card } from '../analysis/dashboards';
 import { currentReaders, mentionGate, mentionsOn, peopleFor } from '../server/mentions/people';
 import { forgetPieces } from '../server/mentions/store';
-import { notifyLog, why } from '../server/notifyLog';
+import { logger } from '../app/logger';
 
 interface TargetInfo { name: string; analysisId?: string }
 
@@ -139,7 +139,7 @@ export function register(): void {
     write(pid(projectId), await comments.reopen(pid(projectId), id(cid))));
   // A deleted piece is no one's mention any more: its rows go too (a failure only leaves them for Home to skip).
   const forget = (projectId: string, which: Parameters<typeof forgetPieces>[1]) =>
-    forgetPieces(projectId, which).catch((err: unknown) => notifyLog().warn({ error: why(err) }, 'mentions of a deleted comment not removed'));
+    forgetPieces(projectId, which).catch((err: unknown) => logger.warn('[mentions] rows of a deleted comment not removed:', err instanceof Error ? err.message : String(err)));
   ipcMain.handle('comment:delete', async (_e, { projectId, id: cid }: any = {}) => {
     const res = await comments.remove(pid(projectId), id(cid));
     if (res.ok) await forget(pid(projectId), { commentId: id(cid) });
