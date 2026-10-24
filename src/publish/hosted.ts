@@ -31,6 +31,7 @@ import { buildPages, policyOutgoing, sanitizePublishConfig, type PublishConfig, 
 import type { PublishedDef } from './dashboardData';
 import type { Visual } from '../analysis/visuals';
 import { logger } from '../app/logger';
+import { isDraining, trackWork } from '../server/lifecycle';
 
 export type Access = 'org' | 'link';
 
@@ -322,7 +323,10 @@ export function scheduleRepublish(projectId: string, datasetId: string): void {
   const datasets = prev ? prev.datasets.add(datasetId) : new Set([datasetId]);
   const timer = setTimeout(() => {
     pending.delete(key);
+    // A pod shutting down starts no rebuild its Postgres pool may not outlive; a running one is awaited (step 5).
+    if (isDraining()) return;
     running = running.then(() => runInContext({ user: who.user, org: who.org }, 'republish', () => republishUsing(projectId, datasets))).catch(() => undefined);
+    trackWork(running);
   }, debounceMs);
   timer.unref();
   pending.set(key, { timer, datasets });

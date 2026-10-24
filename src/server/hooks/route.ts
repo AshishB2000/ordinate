@@ -66,6 +66,7 @@ import { runInContext, type Identity, type Role } from '../context';
 import { scrubbed } from '../db/pool';
 import { beginHook, claimHook, HOOK_ROUTE, isHookToken, PENDING_STALE_SEC, readHook, settleHook, type ClaimedHook, type HookResult, type HookState } from './store';
 import { runHookAction, targetDatasets, type HookStatus } from './act';
+import { trackWork } from '../lifecycle';
 
 export { HOOK_ROUTE };
 const HOOK_PATH = /^(\/api\/hooks\/refresh\/)[^?#]*/;
@@ -211,7 +212,7 @@ export function registerRefreshHookRoute(app: FastifyInstance, o: HookRouteOptio
       if (fired.status === 'queued') {
         // `running` before the answer, so a GET right behind it says so; the refreshes it queued end it.
         await beginHook(pool, hook).catch(unrecorded);
-        void Promise.all(fired.ends).then((results) => settleHook(pool, hook, worst(results), 'landed').catch(unrecorded));
+        trackWork(Promise.all(fired.ends).then((results) => settleHook(pool, hook, worst(results), 'landed').catch(unrecorded))); // awaited by a shutdown
       } else {
         // Nothing queued: all of it is over already.
         await settleHook(pool, hook, worst(await Promise.all(fired.ends)), 'at once').catch(unrecorded);

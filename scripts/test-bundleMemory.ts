@@ -3,7 +3,7 @@
 // (with it: a scratch database, records and pictures as rows).
 //
 //   bomb        a ~4 MB bundle that HONESTLY declares ~4 GiB of tables is
-//               STREAMED to disk (the inflater ran, staging reached ~4 GiB)
+//               STREAMED to disk (the inflater ran; all 4 GiB reached disk, counted exactly)
 //               with RSS growth under 256 MB
 //   json bomb   ~40 × 32 MiB records of one in-use id (~4 MB zipped): pass 1
 //               over all of them under 256 MB; three of them imported for
