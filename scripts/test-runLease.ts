@@ -72,8 +72,11 @@ process.on('unhandledRejection', () => { unhandled++; });
   await pstore.update(p.id, (s) => { s.schedule = { cron: '* * * * *', tz: 'UTC', paused: false, since: new Date(Date.now() - 3_600_000).toISOString() }; });
   const manual = await runner.runFrom(p.id, [], 'manual').catch((e: Error) => ({ rejected: e.message }));
   ok('a manual run with the database down answers ok:false — it never rejects', 'ok' in manual && manual.ok === false, JSON.stringify(manual));
+  const lifecycle: typeof import('../src/server/lifecycle') = require('../src/server/lifecycle');
   const ticked = await runner.tick(Date.now()).then(() => 'resolved', (e: Error) => 'rejected: ' + e.message);
-  await sleep(300); // the tick's own `void runFrom(…)`
+  const tracked = lifecycle.pendingWork().length;
+  await lifecycle.settleWork();
+  ok('the scheduled run is tracked work: a shutdown waits for it (settleWork)', tracked === 1 && lifecycle.pendingWork().length === 0, String(tracked));
   ok('a due pipeline\'s tick with the database down resolves, and nothing rejects unhandled (the pod lives)', ticked === 'resolved' && unhandled === 0, JSON.stringify({ ticked, unhandled }));
   lease.useLeaseDb(null);
   refreshLock.useRefreshLockDb(null);
