@@ -210,7 +210,16 @@ function Capture({ projectId, view }: { projectId: string; view: CaptureView }) 
       back={{ to: `/data/captures?project=${projectId}`, label: 'Captures' }}
       title={view.title}
       status={view.datasetId ? <Badge tone="accent">Dataset</Badge> : null}
-      sub={`${at && !Number.isNaN(at.getTime()) ? `Captured ${when.format(at)}. ` : ''}What the model read out of this screenshot. Every figure is computed by Ordinate from the table it extracted.`}
+      sub={
+        <p>
+          {at && !Number.isNaN(at.getTime()) && (
+            <>
+              <time dateTime={view.createdAt}>Captured {when.format(at)}</time>.{' '}
+            </>
+          )}
+          What the model read out of this screenshot. Every figure is computed by Ordinate from the table it extracted.
+        </p>
+      }
     >
       <div className={s.layout}>
         <Shot projectId={projectId} view={view} />

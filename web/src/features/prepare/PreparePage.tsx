@@ -163,10 +163,12 @@ function Prepare({ projectId, datasetId, state }: { projectId: string; datasetId
       title={state.name}
       sub={`Prepare · ${rows} · ${cols}`}
       actions={
-        <Link className={buttonClass('ghost', 'sm')} to={`/pipelines/${projectId}`}>
-          <Icon name="lineage" />
-          <span>Pipelines</span>
-        </Link>
+        <nav aria-label="Dataset">
+          <Link className={buttonClass('ghost', 'sm')} to={`/pipelines/${projectId}`}>
+            <Icon name="lineage" />
+            <span>Pipelines</span>
+          </Link>
+        </nav>
       }
     >
       <div className={s.layout}>
