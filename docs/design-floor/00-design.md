@@ -164,6 +164,15 @@ as a parameter (defaulting to today's), and the golden test passes the recorded 
 algorithm is still held to the desktop's answers with `Object.is`, and today's surfaces only change
 the input.
 
+The accent as **text** is a third input (review round). `--accent-text` reads `--brand-accent-2` in
+light and `--brand-dk-accent-fg` in dark, and a Badge or number chip draws it on the accent's own
+tint (8 % light, 16 % dark). The desktop walked the dark ink on three bare surfaces and never walked
+the light one, so `#2563eb`'s dark ink read 4.00 on surface-2's tint. Both are now walked to 4.5:1 on
+the tint composited over every surface of every sheet (`BRAND_INK_SURFACES`: bg, surface, surface-2/3,
+inset, surface-float of the app's sheets and the dashboard presets', read out of the CSS by
+`palette.test.ts`), starting from the desktop's answer. `null` for that parameter is the desktop's ink
+rule, which is what the golden test passes. Seven brand seeds join the contrast gate.
+
 ## 2. Settled screenshots
 
 `openSession()` (`web/e2e/fixtures.ts`) opens every context with `reducedMotion: 'reduce'`. The app
@@ -311,7 +320,7 @@ fails if a main `NAV` entry is in no group or in two, or a group names a route `
 3. **Tone inks are tokens, `--accent-text` follows the brand.** Light `--accent-text` falls back from
    `--brand-accent-2` and dark from `--brand-dk-accent-fg` (the brand ramp's "accent as text",
    computed but unused until now), so a workspace accent keeps its hue in a Badge. The gate checks
-   the app's own values; a brand's are walked by `palette.ts`. The accent axes of a dashboard
+   the app's own values; a brand's are walked by `palette.ts` on their tint over every surface. The accent axes of a dashboard
    preset do not redefine `--accent-text` (its `auto` axis paints light values on a dark app, an
    existing gap the chart-palette review owns), so a teal dashboard's accent Badge stays blue.
 4. **The dark sheet's accent ink is #8cbaff, not the desktop's #7cb0ff**: the smallest change that
@@ -335,7 +344,11 @@ fails if a main `NAV` entry is in no group or in two, or a group names a route `
 12. **The tone inks are theme tokens too.** A preset that redefines `--ok` must redefine `--ok-text`
     (`scripts/test-dashboardStyleCss` holds every preset to the dark theme's token set), so the four
     inks join `AXIS_TOKENS` (`src/analysis/themeModel.ts`) and the browser's copy, and each built-in
-    theme carries them; a custom theme saved before inherits the app's.
+    theme carries them. A custom theme gets them for its own lightness, never the app's: `deriveBase`
+    and `deriveAccent` derive the four (the accent's from its own hue, the tones from the app's),
+    walked to 4.5:1 on each tint over every surface the theme carries; a theme saved before them
+    gets the missing ones where it is drawn (`themeStyleVars`, used by the dashboard sheet and the
+    Settings preview), and `themeWarnings` (both copies) measures each ink on its tint (review round).
 13. **A header picker has no visible label.** The dataset pickers in the visual builder's and the
     analytics workbenches' headers take `aria-label="Dataset"`, so they are a control's height and sit
     on the title's line beside the buttons; the dataset is what they show.
@@ -353,6 +366,13 @@ fails if a main `NAV` entry is in no group or in two, or a group names a route `
 17. **An editable name is as wide as the name** (`field-sizing: content`, falling back to the fixed
     width where unsupported), so a story's, scorecard's or scenario's save status sits right after
     it instead of 420px away.
+18. **`deriveBase` walks the quiet text tones** (review round): `--muted` and `--text-dim` to 4.5:1,
+    `--text-faint` to 3:1, on every surface the theme derives, starting from the old mixes. A theme
+    built in the editor is now on the floor; a value typed into a token directly is still advice.
+19. **The contrast gate records one pre-existing pair** instead of hiding it: an `auto` sheet in a
+    dark app carries the light accent axis, so a teal brand's light ramp draws the date chip at 4.31
+    on the dark surface-3. `KNOWN` in `theme.contrast.test.ts` holds it exactly, so its fix (or a new
+    failure) shows.
 
 ## Steps
 
@@ -368,12 +388,14 @@ fails if a main `NAV` entry is in no group or in two, or a group names a route `
 6. The nav groups, the rail, `Shell.test.tsx` in group order.
 7. Every e2e screenshot re-taken and looked at, light and dark.
 
-## Not done here
+## Follow-ups (deferred)
 
 - `src/analysis/dashboardExport.ts` carries its own copy of the old text tokens for the exported
   HTML and `/p/` pages; raising them belongs with the `/p/` page work.
-- `deriveBase` (`themeModel.ts`) derives a custom theme's muted, dim and faint by fixed mixes that
-  miss the floor; the theme editor warns (advice, not a gate). A derivation that walks to 4.5:1 is
-  the follow-up.
-- About 246 `color: var(--accent)` declarations use the fill colour as text. Many are icons (3:1 is
+- Custom themes: `deriveBase` now walks the quiet text tones and the inks to the floor (decisions 12
+  and 18), but a value typed straight into a token is only warned about (advice, not a gate), and
+  `dashboardExport.ts`'s theme block does not yet fill a saved theme's missing inks.
+- About 245 `color: var(--accent)` declarations use the fill colour as text. Many are icons (3:1 is
   enough); the words among them should move to `--accent-text` one by one.
+- An `auto` dashboard sheet in a dark app carries the light accent axis (`styleClass`), so a brand's
+  light ramp is drawn on dark surfaces (decision 19); the chart-palette review owns it.
