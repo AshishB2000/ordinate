@@ -38,6 +38,7 @@ import { nextCronRun } from './pipelineCron';
 import { withLease } from './runLease';
 import { projectDir } from './recordKinds';
 import { logger } from './logger';
+import { trackWork } from '../server/lifecycle';
 
 /**
  * Projects with a run in flight ON THIS POD, and its nodes' live state. `pipelines:get` reads it, so
@@ -265,6 +266,7 @@ export async function tick(now = Date.now()): Promise<void> {
     // Stamp FIRST, win or lose — the scheduler's rule: a failing pipeline waits
     // for its next slot instead of retrying every minute.
     await store.update(p.id, (st) => { if (st.schedule) st.schedule.lastRunAt = new Date(now).toISOString(); });
-    void runFrom(p.id, [], 'schedule').catch(() => undefined); // never rejects; a failure is the run's own ok:false
+    // Tracked: a shutdown waits for a scheduled run as it does for a handler's (../server/lifecycle).
+    trackWork(runFrom(p.id, [], 'schedule').catch(() => undefined)); // never rejects; a failure is the run's own ok:false
   }
 }
