@@ -189,6 +189,23 @@ describe('Organization settings (Admin)', () => {
     expect(sent(calls, 'formats:set')).toEqual([{ currency: 'EUR' }]);
   });
 
+  it('Workspace: picking an accent with no accent and no rules yet leaves ONE Branding group, showing the pick', async () => {
+    const violet = { ...BRANDING, accent: '#7c3aed' };
+    const calls = serve({
+      '/api/auth/me': { body: ADMIN_DEV },
+      'key:status': { body: { globalRules: '', autoRefresh: true, notifications: { alerts: true } } },
+      'branding:set': { body: { ok: true, formats: FORMATS, branding: violet } },
+    });
+    renderApp('/admin?tab=workspace');
+    fireEvent.click(await screen.findByLabelText('Violet'));
+    const checked = () => screen.getAllByLabelText('Violet').map((b) => b.getAttribute('aria-checked'));
+    await waitFor(() => expect(checked()).toContain('true'));
+    // One Violet swatch, checked. Branding and the rules group were both keyed '' here, and the
+    // stale Branding stayed on the page beside the new one.
+    expect(checked()).toEqual(['true']);
+    expect(sent(calls, 'branding:set')).toEqual([{ accent: '#7c3aed' }]);
+  });
+
   it('Themes: the empty state, then Duplicate on a built-in saves a copy under a free name', async () => {
     const calls = serve({
       '/api/auth/me': { body: ADMIN_DEV },

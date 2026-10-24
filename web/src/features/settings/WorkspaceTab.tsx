@@ -371,9 +371,11 @@ export function WorkspaceTab() {
   return (
     <div className={s.stackPage}>
       <Formats f={p.formats} />
-      <Branding key={p.branding.accent} accent={p.branding.accent} style={p.branding.dashboardStyle} />
+      {/* Keyed by the saved value so a save resets the local field. Prefixed: with no accent and
+          no rules both were '', and duplicate sibling keys left the old Branding on the page. */}
+      <Branding key={`accent:${p.branding.accent}`} accent={p.branding.accent} style={p.branding.dashboardStyle} />
       <Assistant
-        key={o.globalRules}
+        key={`rules:${o.globalRules}`}
         rules={o.globalRules}
         autoRefresh={o.autoRefresh}
         alerts={o.notifications.alerts !== false}
