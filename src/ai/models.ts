@@ -8,6 +8,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as execConfig from '../app/execConfig';
 import { providerFetch } from './providerFetch';
+import { logger } from '../app/logger';
 
 const TIMEOUT_MS = 12000;
 export const BYOK: string[] = ['anthropic', 'openai', 'gemini', 'gateway'];
@@ -40,7 +41,7 @@ async function getJson(url: string, headers: Record<string, string>): Promise<Js
 // Log the underlying failure cause to the MAIN log (never reaches the renderer).
 function logFail(provider: string, r: JsonResult): void {
   const detail = String(r.bodyText || '').replace(/\s+/g, ' ').slice(0, 200);
-  console.warn(`[models] ${provider} list failed: status=${r.status || 'net'} ${detail}`);
+  logger.warn(`[models] ${provider} list failed: status=${r.status || 'net'} ${detail}`);
 }
 
 // Derive a clean {id,label}[] from each provider's response. Names are NOT

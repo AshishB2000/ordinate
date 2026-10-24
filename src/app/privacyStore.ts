@@ -37,6 +37,7 @@ import type { Cell, TransformStep } from '../data/transforms';
 import * as recordFs from './recordFs';
 import { ctx, orgKey, serverDataDir } from '../server/context';
 import type { MintingSecretStore } from '../server/secrets/store';
+import { logger } from './logger';
 
 export type ShareAction = 'mask' | 'drop' | 'include';
 export type SharePath = 'export' | 'report' | 'publish' | 'bundle';
@@ -67,7 +68,7 @@ async function readJson(file: string): Promise<unknown> {
     return JSON.parse(await recordFs.readFile(file, 'utf8'));
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
-    if (code !== 'ENOENT') console.error('[privacy] unreadable', path.basename(file), '— treating as empty');
+    if (code !== 'ENOENT') logger.error('[privacy] unreadable', path.basename(file), '— treating as empty');
     return null;
   }
 }
@@ -142,13 +143,13 @@ async function storedSalt(store: MintingSecretStore, projectId: string): Promise
     }
     if (legacy !== null && !SALT_RE.test(legacy)) {
       // As below: a damaged key is not replaced — every token hashed under it would change meaning.
-      console.error('[privacy] the masking key file is damaged; hash steps refuse until it is removed. Project', projectId);
+      logger.error('[privacy] the masking key file is damaged; hash steps refuse until it is removed. Project', projectId);
       return null;
     }
     if (legacy === null && !(await recordFs.exists(projectDir(projectId)))) return null;
     return await seedLocked(store, projectId, legacy ?? randomBytes(32).toString('hex'));
   } catch (_) {
-    console.error('[privacy] the masking key could not be read from the key store. Project', projectId);
+    logger.error('[privacy] the masking key could not be read from the key store. Project', projectId);
     return null;
   }
 }
@@ -175,7 +176,7 @@ export async function getSalt(projectId: string): Promise<string | null> {
       }
       // A damaged key is NOT silently replaced: every token hashed under it
       // would change meaning. The hash step refuses instead.
-      console.error('[privacy] the masking key is damaged; hash steps will refuse until it is removed');
+      logger.error('[privacy] the masking key is damaged; hash steps will refuse until it is removed');
       return null;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') return null;
@@ -361,7 +362,7 @@ export async function scanDataset(
       return pending;
     });
   } catch (err) {
-    console.error('[privacy] sensitivity scan failed:', err instanceof Error ? err.message : err);
+    logger.error('[privacy] sensitivity scan failed:', err instanceof Error ? err.message : err);
     return [];
   }
 }

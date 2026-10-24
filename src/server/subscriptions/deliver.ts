@@ -32,6 +32,7 @@ import * as say from '../../analysis/subscriptionText';
 import { sendEmail, setMailSleepForTest } from '../mail/emailChannel';
 import { figureDatasets } from './figureDatasets';
 import { assertFanOutAllowed, isRowPolicyError, type RowPolicyError } from '../../data/rowAccess';
+import { logger as appLogger } from '../../app/logger';
 
 export type PostCode = 'sent' | 'post_failed' | 'unreachable' | 'refused' | 'no_secret' | 'compute_failed' | 'row_policy'
   | 'mail_off' | 'no_recipients' | 'rate_limited' | 'list_too_large' | 'tls_failed' | 'auth_failed' | 'mail_failed';
@@ -55,7 +56,7 @@ const TIMEOUT_MS = 15_000;
 const BODY_LOGGED = 500;
 
 let sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-let log: Log = { warn: (obj, msg) => console.warn(msg, JSON.stringify(obj)) };
+let log: Log = { warn: (obj, msg) => appLogger.warn(msg, JSON.stringify(obj)) };
 
 /** The server's logger (src/server/app.ts); pino's redaction applies on top of the cut made here. */
 export function useDeliveryLog(l: Log): void {

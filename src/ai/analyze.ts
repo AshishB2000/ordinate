@@ -16,6 +16,7 @@ import { CHAT_SYSTEM_PROMPT, makeActionFilter, splitAction, type SuggestedAction
 import {
   EXPLAIN_SYSTEM_PROMPT, SUGGEST_STEPS_SYSTEM_PROMPT, SUGGEST_CHARTS_SYSTEM_PROMPT, SUGGEST_CALC_FIELD_SYSTEM_PROMPT,
 } from './prompts';
+import { logger } from '../app/logger';
 
 /** The one "no model is configured" reply. Six entry points returned this exact
  *  object; a seventh would have copied it too. */
@@ -302,28 +303,17 @@ export function parseReply(raw: string | null | undefined): any {
   if (headlineProse) {
     const check = verifyHeadlineNumbers(headlineProse);
     if (!check.ok) {
-      console.warn('[headline] dropping headline — untraceable figures:', check.stray);
+      logger.warn('[headline] dropping headline — untraceable figures:', check.stray);
       headlineProse = null;
     }
   }
 
-  // VERIFICATION (dev): dump the extraction + computed metrics to the main-process
-  // console so the raw numbers can be compared against the screenshot. Runs in main
-  // → shows in the `npm start` terminal. Not shown in the UI. Guarded so it can
-  // never break a turn.
+  // VERIFICATION (dev): the extraction's shape and which metrics were computed,
+  // at debug level (off at the default LOG_LEVEL=info). Shapes and counts only:
+  // never a cell, a column name or a figure — the screenshot is the user's data.
   try {
-    console.log(`[extract] dataShape=${dataShape} confidence=${extractionConfidence} ` +
-      `calcs=[${suggestedCalculations.join(', ') || '-'}]`);
-    console.log('[extract] columnRoles:', JSON.stringify(columnRoles));
-    console.log('[extract] columns:', JSON.stringify(columns));
-    console.log(`[extract] rows (${rows.length}):`, JSON.stringify(rows, null, 2));
-    if (extractionNotes) console.log('[extract] notes:', extractionNotes);
-    console.log(`[metrics] showing ${metrics.selected.length} of ${Object.keys(metrics.results).length} applicable:`,
-      metrics.selected.map(m => m.id).join(', ') || '(none)');
-    metrics.selected.forEach(m => console.log(`[metrics]   ${m.id}: ${m.lines.join(' | ')}`));
-    console.log('[headline] focus=[%s] angle=%s', headline.focus.join(', ') || '-', headline.angle || '(none)');
-    if (headlineProse) console.log('[headline] prose:', headlineProse.plain);
-    console.log('[chart] derived from extractedTable:', JSON.stringify(chartData));
+    logger.debug(`[extract] dataShape=${dataShape} confidence=${extractionConfidence} calcs=[${suggestedCalculations.join(', ') || '-'}] `
+      + `columns=${columns.length} rows=${rows.length} metrics=[${metrics.selected.map(m => m.id).join(', ') || '-'}] headline=${headlineProse ? 'yes' : 'no'}`);
   } catch (_) { /* logging must never affect the result */ }
 
   const result: any = {
@@ -501,7 +491,7 @@ async function callProvider(provider: string, systemPrompt: string, messages: Ne
         }
       } catch (_) {}
       if (errCode.length > 300) errCode = errCode.slice(0, 300) + '…';
-      console.error('[analyze]', adapter.label, 'error', res.status, errCode || '(no detail)');
+      logger.error('[analyze]', adapter.label, 'error', res.status, errCode || '(no detail)');
       const detail = `${adapter.label} · ${res.status}${errCode ? ' · ' + errCode : ''}`;
       if (res.status === 401 || res.status === 403) return { error: Object.assign(errAuth(), { detail }) };
       if (res.status === 429) return { error: Object.assign(errRateLimit(), { detail }) };
@@ -512,14 +502,14 @@ async function callProvider(provider: string, systemPrompt: string, messages: Ne
     // Cut off by the token cap → a distinct error, not the generic bad-reply (the
     // truncated body usually fails JSON.parse, so catch it here by stop reason).
     if (adapter.cutoff && adapter.cutoff(json)) {
-      console.error('[analyze]', adapter.label, 'response truncated by max_tokens cap');
+      logger.error('[analyze]', adapter.label, 'response truncated by max_tokens cap');
       return { error: errTruncated() };
     }
     return { rawText: adapter.extract(json) || '' };
   } catch (err: any) {
     clearTimeout(timer);
-    if (err.name === 'AbortError') { console.error('[analyze] request timed out'); return { error: errNetwork() }; }
-    console.error('[analyze] fetch error:', err && err.message);
+    if (err.name === 'AbortError') { logger.error('[analyze] request timed out'); return { error: errNetwork() }; }
+    logger.error('[analyze] fetch error:', err && err.message);
     return { error: errNetwork() };
   }
 }
@@ -823,7 +813,7 @@ export async function analyze(dataUrl: string): Promise<any> {
     }
     return result;
   } catch (err: any) {
-    console.error('[analyze] unexpected error:', err && err.message);
+    logger.error('[analyze] unexpected error:', err && err.message);
     return errUnknown();
   }
 }
@@ -848,7 +838,7 @@ export async function analyzeFollowup(existingMessages: any, userText: string): 
     }
     return result;
   } catch (err: any) {
-    console.error('[analyze] followup error:', err && err.message);
+    logger.error('[analyze] followup error:', err && err.message);
     return errUnknown();
   }
 }

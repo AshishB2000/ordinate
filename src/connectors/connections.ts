@@ -29,6 +29,7 @@ import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import type { ConnectorDef } from './types';
 import * as recordFs from '../app/recordFs';
+import { logger } from '../app/logger';
 
 /** v1's fixed union, kept ONLY so the migration can name what it reads. */
 export type LegacyConnectionKind = 'postgres' | 'url';
@@ -138,7 +139,7 @@ function registry(): Registry | null {
     try {
       registryCache = require('./index') as Registry;
     } catch (err: unknown) {
-      console.error('[connections] Connector registry unavailable:', err instanceof Error ? err.message : err);
+      logger.error('[connections] Connector registry unavailable:', err instanceof Error ? err.message : err);
       registryCache = null;
     }
   }
@@ -453,7 +454,7 @@ export async function listConnections(projectId: string): Promise<Connection[]> 
       out.push(normalize(data, projectId));
     } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't
       if (err.code !== 'ENOENT') {
-        console.error('[connections] Skipping corrupt or unreadable connection:', id, err.message);
+        logger.error('[connections] Skipping corrupt or unreadable connection:', id, err.message);
       }
     }
   }

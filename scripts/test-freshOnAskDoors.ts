@@ -59,6 +59,7 @@ let seq = 0;
 const inOrg = <T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<T> => context.runInContext(ADMIN, `t${++seq}`, fn, undefined, signal);
 
 // ── The fake source ──────────────────────────────────────────────────────────
+/** `signal`: a signal other than the running refresh JOB's own reached the fetch (a request's). The job's own is meant to: its Cancel or a drain stops the pull. */
 interface Seen { email: string; signal: boolean; asOf: string | undefined; fx: string }
 /** `calls`: the runs that reached the source — each incremental run asks first with its cursor pushed down (a `query`); a refused one retries with the bare table, which is not counted again. */
 interface Table { header: string[]; body: string[][]; delayMs: number; fail?: string; calls: number; seen: Seen[] }
@@ -78,7 +79,7 @@ connIpc.runSavedText = (async (_p: string, _c: string, sel: { table?: string; qu
   if (!t) return { ok: false, error: `no table ${name}` };
   if (sel.query !== undefined) t.calls++;
   const c = context.ctx();
-  t.seen.push({ email: c.user.email, signal: c.signal !== undefined, asOf: asOfMod.asOfIso(), fx: await fxQuery.fxTarget(projectId) });
+  t.seen.push({ email: c.user.email, signal: c.signal !== undefined && c.signal !== jobs.current()?.signal, asOf: asOfMod.asOfIso(), fx: await fxQuery.fxTarget(projectId) });
   await sleep(t.delayMs);
   if (t.fail) return { ok: false, error: t.fail };
   return { ok: true, header: t.header, body: t.body, truncated: false };

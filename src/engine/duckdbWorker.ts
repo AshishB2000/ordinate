@@ -81,10 +81,13 @@ interface CallMessage {
 }
 
 /** Async reply. Mirrors `WorkerReply` in src/duckdb.ts — change both together. */
-type AsyncReply =
+// `queued`: µs from the call's arrival here to its start — the pool's wait metric
+// (src/engine/duckdbPool.ts), on every reply, a skipped call's too.
+type AsyncReply = (
   | { id: number; ok: true; text: string; micros: number }
   | { id: number; ok: false; code: 'query'; message: string; micros: number }
-  | { id: number; ok: false; code: 'overflow'; need: number; micros: number };
+  | { id: number; ok: false; code: 'overflow'; need: number; micros: number }
+) & { queued?: number };
 
 // ES2024 growable SharedArrayBuffer — not in this project's ES2022 lib, so its
 // shape is declared locally (see the same declaration in src/duckdb.ts).
@@ -152,8 +155,8 @@ function fail(err: unknown): void {
 
 // ── Message loop ─────────────────────────────────────────────────────────────
 
-function handle(msg: CallMessage, from: Sender): Promise<void> {
-  return msg.id === undefined ? handleSync(msg) : handleAsync(msg, msg.id, from);
+function handle(msg: CallMessage, from: Sender, arrived: bigint): Promise<void> {
+  return msg.id === undefined ? handleSync(msg) : handleAsync(msg, msg.id, from, arrived);
 }
 
 /** Reply through the control block. The caller is parked in `Atomics.wait`. */
@@ -186,19 +189,20 @@ async function handleSync(msg: CallMessage): Promise<void> {
  * though only one of them has a buffer to overflow; `Buffer.byteLength` costs
  * ~1.3 ms on an 11 MB payload (~9 GB/s), i.e. nothing next to the query.
  */
-async function handleAsync(msg: CallMessage, id: number, from: Sender): Promise<void> {
+async function handleAsync(msg: CallMessage, id: number, from: Sender, arrived: bigint): Promise<void> {
   const t0 = process.hrtime.bigint();
+  const queued = Number((t0 - arrived) / 1000n);
   from.lastStarted = id;
   // Cancelled or timed out while queued, or its sender is gone: never start it.
-  // The caller already settled, so this reply is read by nobody.
+  // The caller already settled; only the wait metric reads this reply.
   if (from.closed || from.skip.delete(id)) {
-    from.post({ id, ok: false, code: 'query', message: 'cancelled before it started', micros: 0 });
+    from.post({ id, ok: false, code: 'query', message: 'cancelled before it started', micros: 0, queued });
     return;
   }
   // Async reply. `postMessage` is non-blocking on this side even when the main
   // thread is parked in `Atomics.wait` — the message lands in the port's queue
   // and is delivered when the main thread next reaches its event loop.
-  const reply = (m: AsyncReply): void => from.post(m);
+  const reply = (m: AsyncReply): void => from.post({ ...m, queued });
   const me: NonNullable<typeof running> = { from, id };
   running = me;
   try {
@@ -236,6 +240,17 @@ async function handleAsync(msg: CallMessage, id: number, from: Sender): Promise<
 function interrupt(from: Sender, id: number): void {
   if (running && running.from === from && running.id === id) stopRunning();
   else if (id > from.lastStarted) from.skip.add(id);
+}
+
+/**
+ * Server shutdown (src/server/shutdown.ts via duckdbClose `stopEvery`): every
+ * sender is closed, so each queued call is skipped when its turn comes, and the
+ * running call is interrupted. Handled at once, like `interrupt`; the queued
+ * `close` that follows then exits through `closeNow` — never `terminate()`.
+ */
+function stopAll(): void {
+  for (const s of senders) s.closed = true;
+  stopRunning();
 }
 
 /**
@@ -284,19 +299,25 @@ const ready = (async () => {
 // exit path already replies, and the `catch` here only keeps the queue alive.
 let queue: Promise<void> = ready;
 
-type Inbound = CallMessage | { kind: 'close' } | { kind: 'interrupt'; id: number } | { kind: 'port'; port: MessagePort };
+type Inbound = CallMessage | { kind: 'close' } | { kind: 'stop' } | { kind: 'interrupt'; id: number } | { kind: 'port'; port: MessagePort };
+
+/** Every sender this worker has served — what `stop` closes. */
+const senders = new Set<Sender>();
 
 function listen(on: (fn: (msg: Inbound) => void) => void, post: (msg: AsyncReply) => void): Sender {
   const from: Sender = { post, skip: new Set(), lastStarted: 0, closed: false };
+  senders.add(from);
   on((msg) => {
     if (msg.kind === 'interrupt') return interrupt(from, msg.id);
+    if (msg.kind === 'stop') return stopAll();
     // A compute thread's own line to this worker (src/engine/duckdbPool.ts
     // `lease`): same queue, same connection, replies on that port.
     if (msg.kind === 'port') {
       attach(msg.port);
       return;
     }
-    queue = queue.then(() => (msg.kind === 'close' ? closeNow() : handle(msg, from))).catch(() => undefined);
+    const arrived = process.hrtime.bigint();
+    queue = queue.then(() => (msg.kind === 'close' ? closeNow() : handle(msg, from, arrived))).catch(() => undefined);
   });
   return from;
 }

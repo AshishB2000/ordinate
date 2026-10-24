@@ -29,6 +29,7 @@
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import { withCsrf } from './csrfPair';
+import { captureLogs } from './logCapture';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -187,12 +188,11 @@ const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-incset-'));
   const realMeta = datasets.getDatasetMeta;
   const PLANTED = path.join(DATA, 'orgs', 'acme', 'planted-path.json');
   (datasets as { getDatasetMeta: unknown }).getDatasetMeta = async () => { throw new Error(`ENOENT: no such file, open '${PLANTED}'`); };
-  const quiet = console.error;
-  const logged: string[] = [];
-  console.error = (...a: unknown[]) => { logged.push(a.map(String).join(' ')); };
+  const cap = captureLogs();
   const thrownGet = await get(seed.orders);
   const thrownSet = await set(seed.orders, {});
-  console.error = quiet;
+  cap.restore();
+  const logged = cap.at('error');
   (datasets as { getDatasetMeta: unknown }).getDatasetMeta = realMeta;
   ok('a thrown error reaches the browser as the catalog\'s sentence, never its text (a path)',
     thrownGet.value?.ok === false && thrownGet.value.error === msg('could_not_read_the_incremental_refresh')

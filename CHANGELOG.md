@@ -91,6 +91,13 @@ the desktop installers.
 
 - **Row access rules.** A project admin can limit what each project viewer sees in a dataset to the rows whose chosen column holds their values — by person or by team — from the dataset's new **Row access** tab. Every chart, KPI, answer, data grid, filter list and column panel then shows that viewer only their rows; readers that work over the whole table (SQL, statistics, drivers, segments, insights, quality results, snapshot diffs, Prepare previews, exports) are refused with a sentence that says why, and published links, embeds, subscriptions and alerts are off for such a dataset. Live datasets bind and byte-compare the rule's values on every warehouse. See [`docs/server/row-level-security.md`](docs/server/row-level-security.md).
 
+- **What saturates, on `/metrics`.** The DuckDB queues (depth, busy workers, wait), the Postgres
+  pool (open, idle, waiting), event-loop delay, memory, open event streams, Live queries in flight
+  and whether the pod is draining — never by org. `DATABASE_POOL_MAX` sizes the Postgres pool (10
+  by default). The Helm chart can ship a ServiceMonitor and six alert rules
+  (`metrics.serviceMonitor.enabled`, `metrics.prometheusRule.enabled`, both off). See
+  [`docs/server/monitoring.md`](docs/server/monitoring.md).
+
 ### Added — identity provider groups, token expiry, disable that sticks
 
 - **Roles and teams from your identity provider.** Set `OIDC_GROUPS_CLAIM` (OIDC) or
@@ -141,6 +148,12 @@ the desktop installers.
   still marks its own totals, filled in by the server from the saved visual. Edit tags returned to that
   viewer are of what they were sent.
 
+- **A bundle or backup upload is checked before a byte is inflated.** Import and restore read the
+  file in place and refuse zip64, data descriptors, encryption, unknown methods, names off the
+  whitelist (in any case or Unicode form, or twice), lying sizes, overlapping entries and local
+  headers that disagree with the directory. A record over 32 MiB is never stored, so no bundle
+  Ordinate writes is one it would refuse.
+
 ### Fixed — since the move to the web
 
 - **Two saves of one record no longer lose one, on any number of pods.** Comments, alert rules and
@@ -173,6 +186,22 @@ the desktop installers.
   a dashboard parameter's saved default, a visual's analytics overlays, and a report's discussion page
   and view, and a restore puts them back. See
   [`docs/edit-conflicts/00-design.md`](docs/edit-conflicts/00-design.md).
+
+- **A rolling deploy stops a pod cleanly.** On SIGTERM the pod answers `/readyz` 503, refuses new
+  jobs ("Ordinate is restarting. Try again in a minute."), lets running jobs and requests finish,
+  cancels what is left at a deadline ("Ordinate restarted while this was running. Run it again."),
+  interrupts every DuckDB query and closes each worker through its own queue, then exits 0 inside
+  `SHUTDOWN_GRACE_SECONDS` (20 s). Measured: 0 native aborts in 241 signalled shutdowns; the old
+  path aborted 7 times in 100 with a query unwinding and overran in 40 of 40 with one running.
+  Compose now waits 30 s before killing. See [`docs/pod-lifecycle/`](docs/pod-lifecycle/00-design.md).
+- **A bundle import, a backup or a restore no longer holds the upload, or the org, in memory.**
+  Tables stream to disk; records are read one at a time; a backup holds one project at a time and
+  a restore runs inside its job. Measured: a 4 MB bundle declaring 4 GiB streams with RSS up 12 MB;
+  a 279 MB backup of 16 projects with RSS up at most 107 MB. A cancelled job now also stops the
+  DuckDB query it was in.
+- **Every server log line is JSON through pino**, with the request id and org inside a request; no
+  `console` call is left in `src/` (lint-enforced). The Assistant's screenshot dev dump no longer
+  writes extracted cells to the log.
 
 ### Added
 - **The app is no longer empty on first launch.** A bundled sample project — 5,000 rows of generated

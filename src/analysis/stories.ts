@@ -17,6 +17,7 @@ import { sanitizeBlocks, starterBlocks } from './storyModel';
 import type { StoryBlock } from './storyModel';
 import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
+import { logger } from '../app/logger';
 
 export interface Story {
   id: string;
@@ -107,7 +108,7 @@ export async function listStories(projectId: string): Promise<StorySummary[]> {
       const s = normalize(data, projectId);
       out.push({ id: s.id, name: s.name, blockCount: s.blocks.length, excerpt: excerptOf(s.blocks), updatedAt: s.updatedAt });
     } catch (err: any) {
-      if (err.code !== 'ENOENT') console.error('[stories] Skipping corrupt or unreadable story:', id, err.message);
+      if (err.code !== 'ENOENT') logger.error('[stories] Skipping corrupt or unreadable story:', id, err.message);
     }
   }
   out.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());

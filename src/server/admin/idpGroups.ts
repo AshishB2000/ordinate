@@ -17,6 +17,7 @@ import { registry } from '../rpc';
 import { canonGroup, readMap, roleManaged, type SyncLog } from '../auth/idpGroups';
 import { reapplyAll, reportMany } from '../auth/idpReapply';
 import { withPeopleLock } from '../auth/store';
+import { logger } from '../../app/logger';
 
 export interface IdpGroupsView {
   readonly mode: AuthEnv['mode'];
@@ -29,9 +30,10 @@ export interface IdpGroupsView {
   readonly linkedTeamIds: string[];
 }
 
-const SILENT: SyncLog = { warn: () => undefined, error: () => undefined };
+/** The one logger (../../app/logger), in the shape the sync reports take: inside the request, its lines carry reqId and org. */
+const LOG: SyncLog = { warn: (o, msg) => logger.warn(msg, o), error: (o, msg) => logger.error(msg, o) };
 
-export function register(pool: () => Pool | null, auth: () => AuthEnv, log: () => SyncLog | null): void {
+export function register(pool: () => Pool | null, auth: () => AuthEnv): void {
   const db = (): Pool => {
     const p = pool();
     if (!p) throw new Error('admin needs Postgres (DATABASE_URL)');
@@ -81,7 +83,7 @@ export function register(pool: () => Pool | null, auth: () => AuthEnv, log: () =
       return reapplyAll(c, a, org);
     });
     if (!done) return { ok: false as const, error: 'unknown team' };
-    await reportMany(db(), org, done, log() ?? SILENT, requestId);
+    await reportMany(db(), org, done, LOG, requestId);
     return { ok: true as const };
   });
 }

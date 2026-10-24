@@ -5,8 +5,8 @@
 // same way, so a module in this graph that cannot load there breaks the build's
 // tests, not a deploy.
 
-import { fastify, type FastifyBaseLogger, type FastifyInstance, type FastifyRequest } from 'fastify';
-import { probe, shutdown } from '../engine/duckdb';
+import { fastify, type FastifyInstance, type FastifyRequest } from 'fastify';
+import { probe, shutdown as duckShutdown } from '../engine/duckdb';
 import { contractFor } from '../api/index';
 import { proxyList, type ServerEnv } from './env';
 import { ctx, runInContext, type Identify } from './context';
@@ -19,6 +19,8 @@ import { cookieNames } from './auth/cookies';
 import { registerSecurityHeaders } from './headers';
 import { registerCsrf } from './csrf';
 import { registerLimits, RPC_ROUTE, RpcTimeout, untilAborted } from './limits';
+import { isDraining, isRestarting, trackRequest } from './lifecycle';
+import { useLogger } from '../app/logger';
 import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
 import { useRecordDb } from '../app/recordFs';
@@ -38,7 +40,7 @@ import { registerStatic, WEB_DIST } from './static';
 import { uploadCapMb } from './admin/org';
 import { registerMcpRoute } from '../automation/serverMcp';
 import { registerGeoRoutes } from './geo';
-import { registerRequestMetrics } from './metrics';
+import { registerRequestMetrics, watchPgPool } from './metrics';
 import { registerPublishedRoutes } from './published';
 import { maskEmbedTokens, maskEmbedUrl, registerEmbedRoutes } from './embed/route';
 import { useEmbedDb } from './embed/settings';
@@ -93,8 +95,18 @@ export const REDACT_PATHS: readonly string[] = SECRET_KEYS.flatMap((k) => {
 const STORAGE_GC_EVERY_MS = 15 * 60_000;
 let dbPool: Pool | null = null;
 let appEnv: ServerEnv | null = null;
-/** The built app's logger, for handlers registered once that log outside a request's (the IdP sync's reports). */
-let appLog: FastifyBaseLogger | null = null;
+/** The scheduled-job runner, the cross-pod bus and the stream sweep, once started: ./shutdown.ts stops them in its own order. */
+let bg: { runner: { stop(): Promise<void> } | null; bus: { stop(): Promise<void> } | null; sweep: { stop(): void } | null } = { runner: null, bus: null, sweep: null };
+
+/** The runner, bus and stream sweep of the app built last (./shutdown.ts). */
+export function background(): typeof bg {
+  return bg;
+}
+
+/** The Postgres pool of the app built last, or null without DATABASE_URL (./shutdown.ts ends it, last). Never nulled: a null pool reads as no database. */
+export function appPool(): Pool | null {
+  return dbPool;
+}
 
 /**
  * The org role a non-RPC /api/ route needs: uploading stages data (write); the
@@ -153,6 +165,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     },
   });
 
+  useLogger(app.log); // src/app/logger.ts: every logger.* line in the process goes through pino, redacted
+
   // T6.2, in this order and before sign-in's hook below: security headers on
   // every response, the CSRF check on every non-GET, the per-IP rate limits —
   // all three refuse without a database query.
@@ -171,10 +185,10 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // `listen()` binds — so a pod whose schema is not current never serves, and
   // a failure (DB down, edited migration) rejects listen and exits main.ts 1.
   const dbUrl = cfg.databaseUrl;
-  const pool = dbUrl ? createPool(dbUrl, (err) => app.log.warn({ err }, 'postgres idle client error')) : null;
+  const pool = dbUrl ? createPool(dbUrl, (err) => app.log.warn({ err }, 'postgres idle client error'), cfg.pod.databasePoolMax) : null;
   dbPool = pool;
+  watchPgPool(pool); // ordinate_pg_pool_clients on /metrics
   appEnv = cfg;
-  appLog = app.log;
   if (pool && dbUrl) {
     // Scheduled jobs and cross-pod events (./jobs/): started once the schema
     // is current, stopped on close after the job in flight finishes and
@@ -229,15 +243,21 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // The backstop for a stream close the bus lost (docs/sso-lifecycle §3.9).
       sweep = (require('./streamSweep') as typeof import('./streamSweep')).startStreamSweep(pool, cfg.auth.sessionIdleMs, cfg.auth.apiTokenMaxDays, app.log);
       jobs = (require('./jobs/runner') as typeof import('./jobs/runner')).startRunner(pool, cfg.dataDir, app.log);
+      bg = { runner: jobs, bus, sweep };
     });
-    // preClose, not onClose: onClose hooks run last-registered first, so
-    // DuckDB's shutdown (below) would close under a tick still running.
+    // An app closed on its own (the tests) stops its runner and bus here. A
+    // draining server has already (./shutdown.ts), under deadlines this cannot keep.
     app.addHook('preClose', async () => {
+      if (isDraining()) return;
       await jobs?.stop();
       await bus?.stop();
       sweep?.stop();
     });
+    // …and un-wires its stores. Never while draining: a handler that outlived its
+    // reply would then save a record to this pod's disk and lose it. ./shutdown.ts
+    // ends the pool last instead, so anything later fails loudly.
     app.addHook('onClose', async () => {
+      if (isDraining()) return;
       useRecordDb(null);
       useBlobDb(null);
       useMaskSaltStore(null);
@@ -269,7 +289,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // any of the app loads: no flash of the shell, no burst of 401s.
   // A settings change made by this request is in Postgres before its reply goes out (./orgConfig.ts).
   const orgOf = new WeakMap<object, string>();
-  app.addHook('onSend', async (req) => {
+  app.addHook('onSend', async (req, reply) => {
+    // Draining: every answer closes its socket, so a keep-alive client reconnects elsewhere and close() never waits on it.
+    if (isDraining()) void reply.header('connection', 'close');
     const org = orgOf.get(req);
     if (org) await orgConfig.flushed(org);
   });
@@ -311,7 +333,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         // An RPC also aborts it past RPC_TIMEOUT_SECONDS (the route answers 504).
         const ac = new AbortController();
         const limit = req.routeOptions.url === RPC_ROUTE ? setTimeout(() => ac.abort(new RpcTimeout()), cfg.limits.rpcTimeoutMs) : undefined;
+        const untrack = trackRequest(ac); // the shutdown's HTTP deadline aborts what is still running (./shutdown.ts)
         reply.raw.once('close', () => {
+          untrack();
           clearTimeout(limit);
           if (!reply.raw.writableFinished) ac.abort();
         });
@@ -339,6 +363,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // empty probe worker and asks it (awaited, not blocking); once any worker has
   // started it is a state check.
   app.get('/readyz', async (_req, reply) => {
+    if (isDraining()) return reply.code(503).send({ ok: false, draining: true });
     const duckdb = await probe();
     const checks: Record<string, boolean> = { duckdb };
     if (pool) checks.postgres = await ping(pool);
@@ -413,6 +438,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       await record('ok', decision.projectId, created ? [created] : []);
       return reply.type('application/json').send(body);
     } catch (err) {
+      if (isRestarting(err)) {
+        // The pod is stopping (./shutdown.ts): a job it refused, or a request still running at its deadline.
+        await record('error', decision.projectId);
+        return reply.code(503).send({ error: 'restarting', code: 'restarting', message: err.message });
+      }
       if (err instanceof RpcTimeout) {
         req.log.warn({ channel, limitMs: cfg.limits.rpcTimeoutMs }, 'rpc timed out');
         await record('error', decision.projectId);
@@ -481,7 +511,12 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // Signed embedding at /embed/<token> (docs/embed): off until an org admin turns it on; the only route another site may frame.
   registerEmbedRoutes(app, { pool: () => pool, identify, tokenPerMinute: cfg.limits.embedPerMinute, orgPerMinute: cfg.limits.embedOrgPerMinute });
 
-  app.addHook('onClose', async () => shutdown());
+  // An app closed on its own (the in-process suites) lets its DuckDB go, as it always did: the next
+  // app starts a fresh, unhardened worker. A draining server never does this here — detached work may
+  // still need DuckDB — ./shutdown.ts interrupts and closes every worker last, and awaits each exit.
+  app.addHook('onClose', async () => {
+    if (!isDraining()) duckShutdown();
+  });
 
   // The web app, when it has been built (`npm --prefix web run build`). In dev
   // the Vite server serves it instead and proxies /api here.
@@ -514,7 +549,7 @@ export function registerHandlers(): void {
   };
   (require('./admin/people') as typeof import('./admin/people')).register(() => dbPool, () => env().auth.allowedDomains, () => env().auth);
   // Identity provider groups (docs/sso-lifecycle): the map, and a re-apply of every synced member when it changes.
-  (require('./admin/idpGroups') as typeof import('./admin/idpGroups')).register(() => dbPool, () => env().auth, () => appLog);
+  (require('./admin/idpGroups') as typeof import('./admin/idpGroups')).register(() => dbPool, () => env().auth);
   (require('./admin/passwords') as typeof import('./admin/passwords')).register(() => dbPool, () => (appEnv ?? env()).auth.mode, () => env().auth.allowedDomains);
   (require('./admin/org') as typeof import('./admin/org')).register(() => dbPool, () => env().maxUploadMb);
   // Admin → Live usage (live data L2.7): Postgres's counts, or this pod's without it.

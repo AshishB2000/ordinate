@@ -11,6 +11,7 @@
 
 import type { Identity } from '../src/server/context';
 import type { LiveColumn } from '../src/engine/live/liveSpec';
+import { captureLogs } from './logCapture';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -122,15 +123,14 @@ export function liveCounts(): import('../src/engine/residentTrace').OpCounts {
   return trace.snapshot()['live:duckdb'] ?? { resident: 0, skipped: 0, failed: 0, lastFailure: null, hit: 0, miss: 0, warehouse: 0, stale: 0, refused: 0, cancelled: 0 };
 }
 
-/** Capture console.warn while `fn` runs. */
+/** The server's warnings (src/app/logger.ts) while `fn` runs. */
 export async function capturingWarn<T>(fn: () => Promise<T>): Promise<{ value: T; lines: string[] }> {
-  const lines: string[] = [];
-  const orig = console.warn;
-  console.warn = (...args: unknown[]) => { lines.push(args.map(String).join(' ')); };
+  const cap = captureLogs();
   try {
-    return { value: await fn(), lines };
+    const value = await fn();
+    return { value, lines: cap.at('warn') };
   } finally {
-    console.warn = orig;
+    cap.restore();
   }
 }
 

@@ -28,6 +28,7 @@ import type { FileRecordType } from './recordKinds';
 import { contentOf, sameContent, summarize } from '../analysis/recordDiff';
 import * as recordFs from './recordFs';
 import { ctx } from '../server/context';
+import { logger } from './logger';
 
 export const MAX_VERSIONS = 50;
 
@@ -119,7 +120,7 @@ export function record(
   // the same "newest" and both prune. Inside a store's own hold (an input-table
   // save) this is a SAVEPOINT, so a failure here never undoes that save.
   return recordFs.locked(dir, () => write(dir, type, rec, opts)).catch((err: Error) => {
-    console.error('[versions] could not record a version:', err && err.message);
+    logger.error('[versions] could not record a version:', err && err.message);
     return null;
   });
 }
@@ -193,7 +194,7 @@ async function write(
     }
     return toMeta(type, key, file);
   } catch (err: any) {
-    console.error('[versions] could not record a version:', err && err.message);
+    logger.error('[versions] could not record a version:', err && err.message);
     return null;
   }
 }

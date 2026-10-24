@@ -9,6 +9,7 @@ import { closedToCaller } from '../data/rowAccess';
 import { incrementalView, saveIncremental } from '../data/incrementalSettings';
 import type { IncrementalPatch } from '../data/incrementalSettings';
 import { incrementalNotRead, incrementalNotSaved } from '../data/incrementalMessages';
+import { logger } from '../app/logger';
 
 const why = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
@@ -22,7 +23,7 @@ export function register(): void {
       }
       return view;
     } catch (err) {
-      console.error('[incremental] incremental:get failed:', why(err));
+      logger.error('[incremental] incremental:get failed:', why(err));
       return { ok: false, error: incrementalNotRead() };
     }
   });
@@ -31,7 +32,7 @@ export function register(): void {
     try {
       return await saveIncremental(projectId, datasetId, patch);
     } catch (err) {
-      console.error('[incremental] incremental:set failed:', why(err));
+      logger.error('[incremental] incremental:set failed:', why(err));
       return { ok: false, error: incrementalNotSaved() };
     }
   });

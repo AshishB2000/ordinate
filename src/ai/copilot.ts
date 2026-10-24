@@ -310,7 +310,7 @@ export async function loadThreads(projectId: string): Promise<CopilotThread[]> {
     return normalize(JSON.parse(rawText));
   } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't
     if (err && err.code !== 'ENOENT') {
-      console.error('[copilot] Skipping corrupt or unreadable copilot.json:', projectId, err.message);
+      logger.error('[copilot] Skipping corrupt or unreadable copilot.json:', projectId, err.message);
     }
     return [];
   }
@@ -536,3 +536,4 @@ export {
   captureFacts,
   projectFacts,
 } from './copilotFacts';
+import { logger } from '../app/logger';

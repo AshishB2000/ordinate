@@ -13,10 +13,11 @@
 import { DuckDBError } from './duckdb';
 import type { DuckValue } from './duckdb';
 
-type Reply =
+type Reply = (
   | { id: number; ok: true; text: string }
   | { id: number; ok: false; code: 'query'; message: string }
-  | { id: number; ok: false; code: 'overflow'; need: number };
+  | { id: number; ok: false; code: 'overflow'; need: number }
+) & { queued?: number };
 
 /** What a Worker and a MessagePort both are, as far as this client needs. */
 interface Line {
@@ -38,10 +39,14 @@ export class DuckClient {
   private nextId = 1;
   private readonly pending = new Map<number, Pending>();
   private dead: DuckDBError | null = null;
+  /** Each call's wait before it was posted (a worker still starting), until its reply lands — settled or not. */
+  private readonly before = new Map<number, number>();
 
+  /** `onWait`: seconds from a call's start to DuckDB starting it, once per call that got a reply (the pool's metric). */
   constructor(
     private readonly to: Line,
     private readonly timeoutMs: number,
+    private readonly onWait?: (seconds: number) => void,
   ) {
     to.on('message', (m: unknown) => this.onReply(m as Reply));
     // A port's other end closed (the org worker exited or was evicted).
@@ -53,10 +58,11 @@ export class DuckClient {
     return this.pending.size;
   }
 
-  call(kind: 'query' | 'exec', sql: string, params: DuckValue[], signal?: AbortSignal): Promise<string> {
+  call(kind: 'query' | 'exec', sql: string, params: DuckValue[], signal?: AbortSignal, waitedMs = 0): Promise<string> {
     if (this.dead) return Promise.reject(this.dead);
     if (signal?.aborted) return Promise.reject(cancelled());
     const id = this.nextId++;
+    if (this.onWait) this.before.set(id, waitedMs);
     return new Promise<string>((resolve, reject) => {
       const stop = (err: DuckDBError): void => {
         if (!this.settle(id)) return;
@@ -79,6 +85,7 @@ export class DuckClient {
   /** Reject everything in flight and every later call (worker exit, eviction failure). */
   fail(err: DuckDBError): void {
     this.dead ??= err;
+    this.before.clear();
     for (const [id, p] of this.pending) {
       this.settle(id);
       p.reject(err);
@@ -97,6 +104,11 @@ export class DuckClient {
 
   private onReply(m: Reply): void {
     if (!m || typeof m.id !== 'number') return; // the pool's ready / init-error handshake
+    const waited = this.before.get(m.id);
+    if (waited !== undefined) {
+      this.before.delete(m.id);
+      if (typeof m.queued === 'number') this.onWait?.((waited + m.queued / 1000) / 1000);
+    }
     const p = this.settle(m.id);
     if (!p) return; // timed out or cancelled already
     if (m.ok) p.resolve(m.text);

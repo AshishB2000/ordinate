@@ -43,6 +43,7 @@ import type { FilterStep } from '../data/transforms';
 import * as recordFs from '../app/recordFs';
 import { isLiveDatasetError } from '../data/liveDataset';
 import { isLiveFigureError } from '../engine/live/liveFigureError';
+import { logger } from '../app/logger';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -115,7 +116,7 @@ async function save(projectId: string, file: AlertFile): Promise<boolean> {
     });
     return true;
   } catch (err: any) {
-    console.error('[alerts] Could not write alerts.json:', err && err.message);
+    logger.error('[alerts] Could not write alerts.json:', err && err.message);
     return false;
   }
 }
@@ -130,7 +131,7 @@ async function save(projectId: string, file: AlertFile): Promise<boolean> {
 function withAlerts<T>(projectId: string, fallback: T, fn: (file: AlertFile) => Promise<T>): Promise<T> {
   if (!UUID_RE.test(String(projectId || ''))) return fn(empty()); // nothing to hold: load and save refuse it too
   return recordFs.locked(alertsFile(projectId), async () => fn(await load(projectId))).catch((err: Error) => {
-    console.error('[alerts] Could not update alerts.json:', err && err.message);
+    logger.error('[alerts] Could not update alerts.json:', err && err.message);
     return fallback;
   });
 }

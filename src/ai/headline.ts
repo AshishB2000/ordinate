@@ -265,6 +265,9 @@ export function verifyHeadlineNumbers(prose: any): { ok: boolean; stray: string[
 }
 
 // ── self-check: `node src/headline.js` ──────────────────────────────────────
+// A CLI self-check (`node src/ai/headline.js`): its stdout is its interface. The one
+// place in src/ console is allowed (.oxlintrc.json no-console; docs/pod-lifecycle).
+/* oxlint-disable no-console */
 if (require.main === module) {
   // Explicit annotation (not a cast): assert.ok is an assertion function, and
   // TS requires the call target itself to carry a declared type (TS2775).
@@ -366,3 +369,4 @@ if (require.main === module) {
 
   console.log('\nALL HEADLINE SELF-CHECKS PASSED');
 }
+/* oxlint-enable no-console */

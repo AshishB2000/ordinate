@@ -90,6 +90,21 @@ interface OrgWorker {
   /** Out of the map; the exit is posted once `waiting` drains, so it queues behind every call already handed this worker. */
   closing: boolean;
   lastUsed: number;
+  /** `ready` has resolved: a waiting call is then running in DuckDB or queued there. */
+  started: boolean;
+}
+
+/** Seconds — the request histogram's buckets (src/server/metrics.ts). */
+export const WAIT_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60];
+
+/** What /metrics shows about the org workers (src/server/metrics.ts). No org in it, ever. */
+export interface PoolStats {
+  /** Calls handed to a worker that DuckDB has not started yet. */
+  queueDepth: number;
+  /** Workers with a call waiting, running or leased. */
+  busyWorkers: number;
+  /** Enqueue → start, one observation per answered call: counts per bucket (not cumulative), sum, count. */
+  wait: { buckets: number[]; sum: number; count: number };
 }
 
 const idle = (w: OrgWorker): boolean => w.waiting === 0 && w.client.busy === 0 && w.leases === 0;
@@ -99,7 +114,10 @@ const sqlStr = (s: string): string => `'${s.replace(/'/g, "''")}'`;
 export class DuckPool {
   // Map order is recency order: a use moves the entry to the end.
   private readonly workers = new Map<string, OrgWorker>();
+  private readonly wait = { buckets: WAIT_BUCKETS.map(() => 0), sum: 0, count: 0 };
   private binding: boolean | null = null;
+  /** Set by interruptAll(): the process is ending; no worker starts again. */
+  private stopped = false;
   private readonly sweep: NodeJS.Timeout;
 
   constructor(private readonly cfg: PoolConfig) {
@@ -110,9 +128,10 @@ export class DuckPool {
   async call(org: string, kind: 'query' | 'exec', sql: string, params: duck.DuckValue[], signal?: AbortSignal): Promise<string> {
     const w = this.get(org);
     w.waiting++;
+    const asked = Date.now();
     try {
       await w.ready;
-      return await w.client.call(kind, sql, params, signal);
+      return await w.client.call(kind, sql, params, signal, Date.now() - asked);
     } finally {
       w.waiting--;
       w.lastUsed = Date.now();
@@ -154,6 +173,23 @@ export class DuckPool {
     }
   }
 
+  stats(): PoolStats {
+    let queueDepth = 0;
+    let busyWorkers = 0;
+    for (const w of this.workers.values()) {
+      queueDepth += w.started ? Math.max(0, w.waiting - 1) : w.waiting;
+      if (!idle(w)) busyWorkers++;
+    }
+    return { queueDepth, busyWorkers, wait: { buckets: [...this.wait.buckets], sum: this.wait.sum, count: this.wait.count } };
+  }
+
+  private observeWait(seconds: number): void {
+    const i = WAIT_BUCKETS.findIndex((b) => seconds <= b);
+    if (i >= 0) this.wait.buckets[i] += 1;
+    this.wait.sum += seconds;
+    this.wait.count += 1;
+  }
+
   /** Orgs with a live worker, least recently used first (tests). */
   orgs(): string[] {
     return [...this.workers.keys()].filter((k) => k !== PROBE_KEY);
@@ -164,8 +200,20 @@ export class DuckPool {
     for (const org of this.workers.keys()) this.close(org); // deleting the current key mid-iteration is safe
   }
 
+  /**
+   * Server shutdown (src/server/shutdown.ts): every call still waiting on a
+   * worker settles now, and no worker starts again. The workers themselves are
+   * told to stop by duckdbClose `stopEvery` (the caller), then closed.
+   */
+  interruptAll(): void {
+    this.stopped = true;
+    const err = new duck.DuckDBError('unavailable', 'DuckDB is shutting down');
+    for (const w of this.workers.values()) w.client.fail(err);
+  }
+
   private get(org: string): OrgWorker {
     if (org !== PROBE_KEY && !ORG_RE.test(org)) throw new duck.DuckDBError('query', 'invalid org id');
+    if (this.stopped) throw new duck.DuckDBError('unavailable', 'DuckDB is shutting down');
     const hit = this.workers.get(org);
     if (hit) {
       this.workers.delete(org);
@@ -194,8 +242,8 @@ export class DuckPool {
         setup: org === PROBE_KEY ? lockedSetup(this.cfg, [], undefined, this.cfg.s3 ? workerSetup(this.cfg.s3, null) : []) : orgSetup(this.cfg, org),
       },
     });
-    track(worker); // the process exits only after it has (duck.closeAll)
-    const client = new DuckClient(worker, this.cfg.queryTimeoutMs);
+    track(worker, org === PROBE_KEY ? 'probe' : org); // the process exits only after it has (duck.closeAll)
+    const client = new DuckClient(worker, this.cfg.queryTimeoutMs, (seconds) => this.observeWait(seconds));
     const ready = new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new duck.DuckDBError('unavailable', 'DuckDB worker did not start')), STARTUP_TIMEOUT_MS);
       timer.unref();
@@ -215,7 +263,8 @@ export class DuckPool {
       this.forget(org, entry);
       worker.postMessage({ kind: 'close' }); // a worker that could not lock itself is never used
     });
-    const entry: OrgWorker = { worker, client, ready, leases: 0, waiting: 0, closing: false, lastUsed: Date.now() };
+    const entry: OrgWorker = { worker, client, ready, leases: 0, waiting: 0, closing: false, lastUsed: Date.now(), started: false };
+    void ready.then(() => { entry.started = true; }, () => undefined);
     const gone = (): void => {
       client.fail(new duck.DuckDBError('unavailable', 'the DuckDB worker stopped'));
       this.forget(org, entry);
@@ -286,8 +335,16 @@ function lockedSetup(cfg: Pick<PoolConfig, 'memoryLimit' | 'threads'>, dirs: str
  * Server boot: send every async DuckDB call to the caller's org worker. Outside
  * a request (no `ctx()`) a call rejects — a resident caller falls back to JS.
  */
+let routed: DuckPool | null = null;
+
+/** The routed pool's numbers for /metrics, or null when this process is not routed. */
+export function poolStats(): PoolStats | null {
+  return routed ? routed.stats() : null;
+}
+
 export function routeByOrg(cfg: PoolConfig): DuckPool {
   const pool = new DuckPool(cfg);
+  routed = pool;
   duck.setRouter({
     call: async (kind, sql, params) => {
       const c = ctx();
@@ -297,6 +354,7 @@ export function routeByOrg(cfg: PoolConfig): DuckPool {
     probe: () => pool.probe(),
     lease: () => pool.lease(ctx().org.id),
     shutdown: () => pool.shutdown(),
+    interrupt: () => pool.interruptAll(),
   });
   return pool;
 }

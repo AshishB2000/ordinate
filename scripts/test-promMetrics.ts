@@ -206,6 +206,78 @@ const value = (text: string, series: string): number | null => {
     ok('resident: cache sites count hit and miss', value(text, 'ordinate_resident_calls_total{op="cache:metricsTest:op",outcome="hit"}') === 1
       && value(text, 'ordinate_resident_calls_total{op="cache:metricsTest:op",outcome="miss"}') === 0);
     ok('scheduled jobs: the family is declared (no runs without Postgres)', text.includes('# TYPE ordinate_scheduled_job_runs_total counter'));
+
+    // ── What saturates (docs/server/monitoring.md) ──────────────────────────
+    for (const series of ['ordinate_duckdb_queue_depth', 'ordinate_duckdb_busy_workers', 'ordinate_duckdb_wait_seconds_count', 'ordinate_duckdb_wait_seconds_bucket{le="+Inf"}',
+      'ordinate_event_loop_delay_seconds{quantile="0.5"}', 'ordinate_event_loop_delay_seconds{quantile="0.99"}', 'ordinate_event_loop_delay_seconds{quantile="1"}',
+      'process_resident_memory_bytes', 'nodejs_heap_used_bytes', 'nodejs_external_memory_bytes', 'ordinate_sse_streams', 'ordinate_live_queries_in_flight', 'ordinate_draining']) {
+      ok(`saturation: ${series} is on /metrics`, value(text, series) !== null);
+    }
+    ok('saturation: resident memory is a real figure', (value(text, 'process_resident_memory_bytes') ?? 0) > 10_000_000);
+    ok('saturation: not draining', value(text, 'ordinate_draining') === 0);
+    ok('saturation: no org label anywhere', !/[{,]org="/.test(text));
+    ok('saturation: no Postgres pool family without DATABASE_URL', !text.includes('ordinate_pg_pool_clients'));
+    ok('env: DATABASE_POOL_MAX defaults to 10 and is read', envMod.parseEnv({ AUTH_MODE: 'dev' }).pod.databasePoolMax === 10
+      && envMod.parseEnv({ AUTH_MODE: 'dev', DATABASE_POOL_MAX: '3' }).pod.databasePoolMax === 3);
+    for (const bad of ['0', 'x', '1001', '2.5']) {
+      let refused = '';
+      try { envMod.parseEnv({ AUTH_MODE: 'dev', DATABASE_POOL_MAX: bad }); } catch (err) { refused = err instanceof envMod.EnvError ? err.message : ''; }
+      ok(`env: DATABASE_POOL_MAX=${bad} is refused, naming it`, refused.startsWith('DATABASE_POOL_MAX'), refused);
+    }
+
+    // The DuckDB queue: two calls behind a slow one in one org, then interrupted.
+    const duck: typeof import('../src/engine/duckdb') = require('../src/engine/duckdb');
+    const poolMod: typeof import('../src/engine/duckdbPool') = require('../src/engine/duckdbPool');
+    poolMod.routeByOrg({ dataDir: DATA, maxWorkers: 2, memoryLimit: '256MiB', threads: 1, queryTimeoutMs: 60_000, idleMs: 60_000 });
+    const inQ = <T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<T> =>
+      context.runInContext({ user: { email: 'q@test', role: 'admin' }, org: { id: 'queue' } }, 'r', fn, undefined, signal);
+    await inQ(() => duck.queryAsync('SELECT 1 AS warm'));
+    const idleText = metrics.metricsText();
+    ok('NEGATIVE CONTROL: an idle org worker shows queue 0, busy 0', value(idleText, 'ordinate_duckdb_queue_depth') === 0 && value(idleText, 'ordinate_duckdb_busy_workers') === 0);
+    const before = value(idleText, 'ordinate_duckdb_wait_seconds_count') ?? 0;
+    const stop = new AbortController();
+    const calls = [inQ(() => duck.queryAsync('SELECT count(*) AS n FROM range(10000000000) t(x) WHERE x % 7 = 3'), stop.signal),
+      inQ(() => duck.queryAsync('SELECT 2 AS b'), stop.signal), inQ(() => duck.queryAsync('SELECT 3 AS c'), stop.signal)].map((p) => p.catch(() => null));
+    await new Promise((r) => setTimeout(r, 300));
+    const busyText = metrics.metricsText();
+    ok('the DuckDB queue depth rises behind a slow query: 2 waiting, 1 busy worker',
+      value(busyText, 'ordinate_duckdb_queue_depth') === 2 && value(busyText, 'ordinate_duckdb_busy_workers') === 1, busyText.match(/^ordinate_duckdb_(queue|busy).*$/gm)?.join(' | '));
+    stop.abort();
+    await Promise.all(calls);
+    for (let i = 0; i < 40 && (value(metrics.metricsText(), 'ordinate_duckdb_wait_seconds_count') ?? 0) < before + 3; i++) await new Promise((r) => setTimeout(r, 25));
+    const after = metrics.metricsText();
+    ok('…and drains to 0 once interrupted', value(after, 'ordinate_duckdb_queue_depth') === 0 && value(after, 'ordinate_duckdb_busy_workers') === 0);
+    ok('wait: one observation per call — the two that waited are counted with their wait (≥ 0.25 s each)',
+      (value(after, 'ordinate_duckdb_wait_seconds_count') ?? 0) - before === 3 && (value(after, 'ordinate_duckdb_wait_seconds_sum') ?? 0) >= 0.5,
+      after.match(/^ordinate_duckdb_wait_seconds_(sum|count).*$/gm)?.join(' | '));
+    ok('format: still valid with the DuckDB series populated', validate(after).length === 0, validate(after).slice(0, 3).join('; '));
+
+    // DATABASE_POOL_MAX reaches the pool (no connection is made: pg connects on first use).
+    const sized = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA, DATABASE_URL: 'postgres://u@127.0.0.1:1/none', DATABASE_POOL_MAX: '3' }));
+    ok('DATABASE_POOL_MAX=3 → the app\'s pool max is 3', (appMod.appPool() as unknown as { options: { max: number } } | null)?.options.max === 3);
+    await sized.close();
+
+    // pg's own counts: exhausted → waiting rises.
+    const pgUrl = process.env.DATABASE_URL;
+    if (!pgUrl) {
+      console.log('skip pg pool checks: DATABASE_URL is unset');
+    } else {
+      const pg = (require('../src/server/db/pool') as typeof import('../src/server/db/pool')).createPool(pgUrl, () => undefined, 1);
+      metrics.watchPgPool(pg);
+      await pg.query('SELECT 1');
+      const idlePg = metrics.metricsText();
+      ok('NEGATIVE CONTROL: pg pool at idle — waiting 0', value(idlePg, 'ordinate_pg_pool_clients{state="waiting"}') === 0 && value(idlePg, 'ordinate_pg_pool_clients{state="total"}') === 1);
+      const held = await pg.connect();
+      const queued = pg.query('SELECT 1');
+      const fullPg = metrics.metricsText();
+      ok('pg pool exhausted → waiting 1, idle 0', value(fullPg, 'ordinate_pg_pool_clients{state="waiting"}') === 1 && value(fullPg, 'ordinate_pg_pool_clients{state="idle"}') === 0);
+      held.release();
+      await queued;
+      ok('…released → waiting 0', value(metrics.metricsText(), 'ordinate_pg_pool_clients{state="waiting"}') === 0);
+      ok('format: valid with the pg family', validate(metrics.metricsText()).length === 0);
+      await pg.end();
+      metrics.watchPgPool(null);
+    }
   } finally {
     mserver.close();
     await app.close();

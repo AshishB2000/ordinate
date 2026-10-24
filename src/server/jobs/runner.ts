@@ -46,6 +46,7 @@ import type { Pool } from 'pg';
 import type { FastifyBaseLogger } from 'fastify';
 import { runInContext, type Identity } from '../context';
 import * as orgConfig from '../orgConfig';
+import { isDraining } from '../lifecycle';
 
 export interface JobKind {
   /** Interval between the end of one run and the next. */
@@ -141,6 +142,10 @@ export async function runClaim(pool: Pool, c: Claim, log: FastifyBaseLogger): Pr
   } finally {
     clearInterval(hb);
   }
+  // Refused or interrupted by the shutdown (../shutdown.ts): not a run. The lease
+  // lapses and another pod retakes the row, as after a crash — never "failed,
+  // next interval", and never a query on the pool the shutdown is ending.
+  if (error !== null && isDraining()) return;
   const counted = `${c.kind}\n${error === null ? 'ok' : 'error'}`;
   runs.set(counted, (runs.get(counted) ?? 0) + 1);
   const every = def ? def.everyMs : 60_000;

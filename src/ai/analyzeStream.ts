@@ -30,6 +30,7 @@
 import { ADAPTERS, parseMaxTokens, errNetwork, errAuth, errRateLimit, errProvider, errTruncated } from './analyze';
 import type { NeutralMsg, ProviderOpts, CallResult, WireReq } from './analyze';
 import { providerFetch } from './providerFetch';
+import { logger } from '../app/logger';
 
 // Streaming can legitimately run longer than a buffered call (tokens trickle in),
 // but a copilot answer is short prose; keep the same 60s cap the buffered path
@@ -155,7 +156,7 @@ async function mapHttpError(label: string, res: any): Promise<any> {
     } catch (_) { errCode = (t || '').trim(); }
   } catch (_) { /* body already consumed / unreadable */ }
   if (errCode.length > 300) errCode = errCode.slice(0, 300) + '…';
-  console.error('[analyzeStream]', label, 'error', res.status, errCode || '(no detail)');
+  logger.error('[analyzeStream]', label, 'error', res.status, errCode || '(no detail)');
   const detail = `${label} · ${res.status}${errCode ? ' · ' + errCode : ''}`;
   if (res.status === 401 || res.status === 403) return Object.assign(errAuth(), { detail });
   if (res.status === 429) return Object.assign(errRateLimit(), { detail });
@@ -219,8 +220,8 @@ export async function streamProvider(
     return { rawText: acc.text };
   } catch (err: any) {
     clearTimeout(timer);
-    if (err && err.name === 'AbortError') { console.error('[analyzeStream] request timed out'); return { error: errNetwork() }; }
-    console.error('[analyzeStream] fetch error:', err && err.message);
+    if (err && err.name === 'AbortError') { logger.error('[analyzeStream] request timed out'); return { error: errNetwork() }; }
+    logger.error('[analyzeStream] fetch error:', err && err.message);
     return { error: errNetwork() };
   }
 }
