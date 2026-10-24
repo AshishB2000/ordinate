@@ -82,6 +82,15 @@ export function Page({ children, ...head }: Omit<PageHeadProps, 'className'> & {
 }
 
 /**
+ * The router state a link passes so the page it opens can crumb back here
+ * (useCameFrom). Never a blank name — an untitled record is named by its kind —
+ * because a blank crumb is refused and the reader would be sent to the parent.
+ */
+export function backTo(to: string, name: string | undefined, kind: string): { back: Back } {
+  return { back: { to, label: name?.trim() || kind } };
+}
+
+/**
  * The crumb for a page with more than one way in: the `state.back` its opener
  * passed (a link from somewhere that is not the parent), else the parent.
  */

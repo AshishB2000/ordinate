@@ -12,6 +12,7 @@
 
 import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
+import { backTo } from '../../../app/blocks';
 import { Button } from '../../../ui/Button';
 import { Drawer } from '../../../ui/Dialog';
 import { Select } from '../../../ui/Select';
@@ -119,7 +120,7 @@ export function ExplainPanel({ target, onClose }: { target: ExplainTarget; onClo
             actions={(res) => (
               <Button
                 icon="external-link"
-                onClick={() => void navigate(`/analytics/${target.projectId}/${target.datasetId}/drivers`, { state: { request: res.spec, back: { to: here.pathname + here.search, label: target.dashboard || 'Dashboard' } } })}
+                onClick={() => void navigate(`/analytics/${target.projectId}/${target.datasetId}/drivers`, { state: { request: res.spec, ...backTo(here.pathname + here.search, target.dashboard, 'Dashboard') } })}
               >
                 Open in Analytics
               </Button>

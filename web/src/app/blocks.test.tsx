@@ -4,7 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import type { ReactNode } from 'react';
 import { Badge } from '../ui/Badge';
 import { Button, buttonClass } from '../ui/Button';
-import { Page, PageHead, useCameFrom, type Back } from './blocks';
+import { backTo, Page, PageHead, useCameFrom, type Back } from './blocks';
 
 afterEach(() => {
   cleanup();
@@ -111,5 +111,14 @@ describe('useCameFrom', () => {
       expect(screen.getByText('Analytics → /analytics?project=p')).toBeTruthy();
       cleanup();
     }
+  });
+});
+
+describe('backTo', () => {
+  it('names the record, or its kind when it has no name — never a blank crumb useCameFrom would refuse', () => {
+    expect(backTo('/a', 'Sales', 'Dashboard')).toEqual({ back: { to: '/a', label: 'Sales' } });
+    expect(backTo('/a', '', 'Dashboard')).toEqual({ back: { to: '/a', label: 'Dashboard' } });
+    expect(backTo('/a', '   ', 'Dataset')).toEqual({ back: { to: '/a', label: 'Dataset' } });
+    expect(backTo('/a', undefined, 'Dataset')).toEqual({ back: { to: '/a', label: 'Dataset' } });
   });
 });

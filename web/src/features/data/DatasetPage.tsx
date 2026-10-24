@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useDatasetColumns, useDatasets, type DatasetSummary } from '../../api/datasets';
-import { ErrorState, Page, PageHead, PageSkeleton } from '../../app/blocks';
+import { backTo, ErrorState, Page, PageHead, PageSkeleton } from '../../app/blocks';
 import { Button, buttonClass, IconButton } from '../../ui/Button';
 import { Icon } from '../../ui/icons/Icon';
 import { Menu } from '../../ui/Menu';
@@ -173,7 +173,7 @@ function Header({ projectId, id, name, rowCount, columnCount, live, scoped = fal
             )}
             {/* A SQL dataset's own statement, in the SQL workbench (queryTab.ts qtOpenWithSql, T2.11): its crumb comes back here. */}
             {d?.originKind === 'sql' && (
-              <Link className={buttonClass('secondary', 'sm')} to={`/analytics/${projectId}/sql?dataset=${id}`} state={{ back: { to: `/data/${projectId}/${id}`, label: name } }}>
+              <Link className={buttonClass('secondary', 'sm')} to={`/analytics/${projectId}/sql?dataset=${id}`} state={backTo(`/data/${projectId}/${id}`, name, 'Dataset')}>
                 <Icon name="code" />
                 <span>View query</span>
               </Link>

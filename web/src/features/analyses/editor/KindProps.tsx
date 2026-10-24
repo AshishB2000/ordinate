@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { rpc } from '../../../api/client';
+import { backTo } from '../../../app/blocks';
 import { Button, buttonClass } from '../../../ui/Button';
 import { Checkbox } from '../../../ui/Choice';
 import { Input } from '../../../ui/Field';
@@ -236,7 +237,7 @@ export function StatsProps({ card }: { card: Card }) {
     <>
       <p className={s.note}>A statistics card stores only the analysis, and recomputes it under the sheet’s filters every time it is drawn.</p>
       {spec && (
-        <Link className={buttonClass('secondary', 'sm')} to={`/analytics/${ed.projectId}/${spec.datasetId}/stats`} state={{ back: { to: here.pathname + here.search, label: ed.doc.name } }}>
+        <Link className={buttonClass('secondary', 'sm')} to={`/analytics/${ed.projectId}/${spec.datasetId}/stats`} state={backTo(here.pathname + here.search, ed.doc.name, 'Dashboard')}>
           <Icon name="chart-bar" />
           <span>Open in Statistics</span>
         </Link>
