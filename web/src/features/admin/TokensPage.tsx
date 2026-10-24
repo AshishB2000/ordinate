@@ -1,13 +1,17 @@
 // API tokens (T3.4): every member's own personal tokens for the CLI, MCP
 // clients and scripts. A new token is shown ONCE, in the dialog that created
 // it — the server keeps only its hash and a short prefix, so the list can
-// name a token but never show it again. Revoking stops it at once.
+// name a token but never show it again. Revoking stops it at once. Every token
+// has an end (docs/sso-lifecycle): 30, 90 or 365 days, up to the server's
+// API_TOKEN_MAX_DAYS; one made before tokens had an end is marked.
 
 import { useState, type FormEvent } from 'react';
 import { Page } from '../../app/blocks';
+import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
 import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Input } from '../../ui/Field';
+import { Select } from '../../ui/Select';
 import { Icon } from '../../ui/icons/Icon';
 import { PageSkeleton, SkeletonTable } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
@@ -24,23 +28,39 @@ function copy(text: string) {
   );
 }
 
-function CreateDialog() {
+/** The lifetimes offered: 30, 90 and 365 days up to the server's maximum, and the maximum itself when it is shorter. */
+function expiryOptions(maxDays: number): number[] {
+  const out = [30, 90, 365].filter((d) => d <= maxDays);
+  if (maxDays < 365 && !out.includes(maxDays)) out.push(maxDays);
+  return out.sort((a, b) => a - b);
+}
+/** API_TOKEN_MAX_DAYS' default, offered while the server's own maximum is not known. */
+const DEFAULT_MAX_DAYS = 365;
+const daysLabel = (d: number) => (d === 365 ? '1 year' : d === 1 ? '1 day' : `${d} days`);
+
+function CreateDialog({ maxDays }: { maxDays: number }) {
+  const options = expiryOptions(maxDays);
+  const preferred = options.includes(90) ? 90 : options[options.length - 1];
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
-  const [made, setMade] = useState<string | null>(null);
+  const [picked, setDays] = useState<number | null>(null);
+  // The pick, while the server still offers it (its maximum can arrive after the dialog opened); else the default.
+  const days = picked !== null && options.includes(picked) ? picked : preferred;
+  const [made, setMade] = useState<{ token: string; expiresAt: string } | null>(null);
   const create = useWrite<'tokens:create', Created>('tokens:create', ['tokens:list'], (r) => {
-    if (r.ok) setMade(r.token);
+    if (r.ok) setMade({ token: r.token, expiresAt: r.expiresAt });
   });
   const close = (o: boolean) => {
     setOpen(o);
     if (!o) {
       setMade(null); // gone from this page for good once the dialog closes
       setName('');
+      setDays(null);
     }
   };
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    create.mutate({ name: name.trim() });
+    create.mutate({ name: name.trim(), expiresInDays: days });
   };
   return (
     <Dialog
@@ -73,11 +93,12 @@ function CreateDialog() {
       {made ? (
         <div className={s.dialogBody}>
           <div className={s.secret}>
-            <code data-testid="new-token">{made}</code>
-            <Button size="sm" icon="copy" onClick={() => copy(made)}>
+            <code data-testid="new-token">{made.token}</code>
+            <Button size="sm" icon="copy" onClick={() => copy(made.token)}>
               Copy
             </Button>
           </div>
+          <p className={s.lead}>It stops working on {fmtDate(made.expiresAt)}.</p>
           <p className={s.warn}>
             <Icon name="alert" size={16} />
             This is the only time the token is shown. Store it somewhere safe; if it is lost, revoke it and make a new one.
@@ -86,6 +107,12 @@ function CreateDialog() {
       ) : (
         <form id="token-form" className={s.dialogBody} onSubmit={submit}>
           <Input label="Name" placeholder="e.g. Laptop CLI" maxLength={100} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+          <Select
+            label="Expires after"
+            value={String(days)}
+            onValueChange={(v) => setDays(Number(v))}
+            options={options.map((d) => ({ value: String(d), label: daysLabel(d) }))}
+          />
         </form>
       )}
     </Dialog>
@@ -131,14 +158,24 @@ export default function TokensPage() {
   return <Tokens />;
 }
 
+/** When a token ends: the date, Expired, and a mark on one made before tokens had an end. */
+function Expiry({ t }: { t: ApiToken }) {
+  return (
+    <span className={s.cellRow}>
+      {t.expired ? <Badge tone="error">Expired</Badge> : <span className={s.meta}>{fmtDate(t.expiresAt)}</span>}
+      {t.legacy && <span className={s.meta}>Made before tokens expired</span>}
+    </span>
+  );
+}
+
 function Tokens() {
   const tokens = useTokens();
   const endpoint = `${window.location.origin}/api/mcp`;
   let body;
-  if (tokens.isPending) body = <SkeletonTable cols={4} rows={3} label="Loading your tokens" />;
+  if (tokens.isPending) body = <SkeletonTable cols={5} rows={3} label="Loading your tokens" />;
   else if (tokens.isError) {
     body = <ErrorState heading={3} title="Your tokens could not be loaded" message={tokens.error.message} onRetry={() => void tokens.refetch()} />;
-  } else if (tokens.data.length === 0) {
+  } else if (tokens.data.tokens.length === 0) {
     body = (
       <EmptyState heading={3} icon="terminal" title="No API tokens">
         Make one to use Ordinate from the command line, an MCP client or a script. It acts as you, with your role.
@@ -154,18 +191,22 @@ function Tokens() {
               <th scope="col">Token</th>
               <th scope="col">Created</th>
               <th scope="col">Last used</th>
+              <th scope="col">Expires</th>
               <th scope="col" className={s.actions}>
                 <span className={s.srOnly}>Actions</span>
               </th>
             </tr>
           </thead>
           <tbody>
-            {tokens.data.map((t) => (
+            {tokens.data.tokens.map((t) => (
               <tr key={t.id}>
                 <td className={s.strong}>{t.name}</td>
                 <td className={s.mono}>{t.prefix}…</td>
                 <td className={s.meta}>{fmtDate(t.createdAt)}</td>
                 <td className={s.meta}>{t.lastUsedAt ? fmtDateTime(t.lastUsedAt) : 'Never'}</td>
+                <td>
+                  <Expiry t={t} />
+                </td>
                 <td className={s.actions}>
                   <RevokeButton t={t} />
                 </td>
@@ -177,12 +218,13 @@ function Tokens() {
     );
   }
   return (
-    <Page title="API tokens" sub="Personal tokens act as you, with your current role, until you revoke them. Each is shown once.">
+    <Page title="API tokens" sub="Personal tokens act as you, with your current role, until they expire or you revoke them. Each is shown once.">
       <section className={s.section} aria-label="Your tokens">
         <div className={s.bar}>
           <h2 className={s.groupTitle}>Your tokens</h2>
           <div className={s.barEnd}>
-            <CreateDialog />
+            {/* The server's maximum once the list is in; until then (or if it failed) the default — the server enforces its own (C8). */}
+            <CreateDialog maxDays={tokens.data?.maxDays ?? DEFAULT_MAX_DAYS} />
           </div>
         </div>
         {body}

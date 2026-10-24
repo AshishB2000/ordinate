@@ -40,6 +40,7 @@ import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { sanitizeCompare } from './dateIntel';
 import type { CompareMode } from './dateIntel';
+import { logger } from '../app/logger';
 
 export type VizAggregation = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'none';
 
@@ -534,7 +535,7 @@ export async function listVisuals(projectId: string): Promise<VisualSummary[]> {
       });
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
-        console.error('[visuals] Skipping corrupt or unreadable visual:', id, err.message);
+        logger.error('[visuals] Skipping corrupt or unreadable visual:', id, err.message);
       }
     }
   }

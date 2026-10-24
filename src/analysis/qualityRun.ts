@@ -31,6 +31,7 @@ import type { DatasetQuality, QualityRule, RefTable, RuleResult } from './qualit
 import { evaluateRuleAsync, failingPredicateAsync } from '../data/regexOffThread';
 import { regexWorkerOnly } from '../data/regexMemo';
 import type { AlertEvent } from './alerts';
+import { logger } from '../app/logger';
 
 // ── Evaluation ───────────────────────────────────────────────────────────────
 
@@ -169,7 +170,7 @@ export async function runQualityChecks(
     if (opts.deliver !== false) await sink.deliver(projectId, events);
     return events;
   } catch (err: any) {
-    console.error('[quality] checks failed:', err && err.message);
+    logger.error('[quality] checks failed:', err && err.message);
     return [];
   }
 }

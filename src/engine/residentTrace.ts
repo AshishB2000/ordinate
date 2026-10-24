@@ -50,6 +50,8 @@
 //   'cancelled'  the caller hung up first. Counted apart from 'failed' so a
 //                closed tab never reads as a warehouse problem.
 
+import { logger } from '../app/logger';
+
 export type Outcome = 'resident' | 'skipped' | 'failed';
 export type LiveOutcome = 'hit' | 'warehouse' | 'stale' | 'refused' | 'failed' | 'cancelled';
 
@@ -99,7 +101,7 @@ export function record(op: string, outcome: Outcome, detail?: string): void {
   c.lastFailure = detail ?? null;
   if (warned.has(op)) return;
   warned.add(op);
-  console.warn(
+  logger.warn(
     `[resident] ${op}: the SQL path was chosen and returned null — falling back to the ` +
       `JS path, which is correct but orders of magnitude slower` +
       (detail ? ` (${detail})` : '') +
@@ -121,7 +123,7 @@ export function recordLive(op: string, outcome: LiveOutcome, detail?: string): v
   c.lastFailure = detail ?? null;
   if (warned.has(op)) return;
   warned.add(op);
-  console.warn(
+  logger.warn(
     `[live] ${op}: the warehouse did not answer and no cached answer existed, so a viewer saw an error` +
       (detail ? ` (${detail})` : '') +
       `. Further ${op} failures this session are counted, not logged (ordinate_resident_calls_total on /metrics).`,

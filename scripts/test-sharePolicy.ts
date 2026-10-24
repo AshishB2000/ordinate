@@ -21,6 +21,7 @@
 
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, failureCount, finish } from './selfcheck';
+import { captureLogs } from './logCapture';
 
 const fs: typeof import('fs') = require('fs');
 const os: typeof import('os') = require('os');
@@ -32,15 +33,8 @@ const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-share-out-'));
 const handlers: Map<string, (...a: any[]) => any> = require('../src/server/rpc').handlers;
 let savePath = '';
 
-// Every line the modules under test print, to prove the salt is never logged.
-const logged: string[] = [];
-for (const k of ['log', 'error', 'warn', 'info'] as const) {
-  const orig = console[k].bind(console);
-  console[k] = (...args: unknown[]) => {
-    logged.push(args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' '));
-    orig(...args);
-  };
-}
+// Every line the modules under test log (src/app/logger.ts), to prove the salt is never logged.
+const logged = captureLogs().lines;
 
 process.env.ORDINATE_LOCAL_DIR = tmpUserData;
 

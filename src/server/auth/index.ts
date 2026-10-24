@@ -19,7 +19,7 @@ import fastifyCookie from '@fastify/cookie';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { BlockList, isIP } from 'net';
 import type { Pool } from 'pg';
-import { identityFor, type Identify } from '../context';
+import { identityFor, type Identify, type Identity } from '../context';
 import { proxyList, type AuthEnv, type ServerEnv } from '../env';
 import { audit, type AuditAction } from '../authz/audit';
 import { cookieNames, cookieOpts, safeNext } from './cookies';
@@ -27,7 +27,9 @@ import { registerOidc } from './oidc';
 import { registerPassword } from './password';
 import { setupOpen } from './passwordStore';
 import { hasBearer, tokenIdentity } from './tokens';
+import { closeStreamsOf } from '../sse';
 import { endAllSessions, endSession, ensureOrg, member, normalEmail, provision, sessionIdentity } from './store';
+import { applyIdpGroups, countSync, digestOf, groupsFromHeader, isSyncBusy, oncePerHour, type SyncLog } from './idpGroups';
 
 /**
  * Is `peer` (a socket's remoteAddress) inside the trusted list? An IPv4 peer
@@ -39,18 +41,52 @@ export function isTrustedPeer(list: BlockList, peer: string | undefined): boolea
   return family !== 0 && list.check(peer as string, family === 6 ? 'ipv6' : 'ipv4');
 }
 
-function headerIdentify(pool: Pool, auth: AuthEnv): Identify {
+function headerIdentify(pool: Pool, auth: AuthEnv, log: SyncLog): Identify {
   const trusted = proxyList(auth.trustedProxies);
+  const groupsHeader = auth.groupsFrom && 'header' in auth.groupsFrom ? auth.groupsFrom.header : null;
+  // One sync per person at a time on this pod: a page load is ~25 parallel requests (docs/sso-lifecycle §3.10).
+  const inflight = new Map<string, Promise<Identity | null>>();
   return async (headers, peer) => {
     // The peer is the socket's address, handed in by app.ts — X-Forwarded-For
     // is never read: any client can write it.
     if (!isTrustedPeer(trusted, peer)) return null;
     const email = normalEmail(headers['x-forwarded-email']);
     if (!email) return null;
-    const known = await member(pool, auth, email);
-    if (known && !(auth.adminEmail === email && known.user.role !== 'admin')) return known;
-    const m = await provision(pool, auth, email);
-    return typeof m === 'string' ? null : m.identity;
+    let who = await member(pool, auth, email);
+    // The break-glass admin is made admin again by `provision` — before any digest could say "nothing changed".
+    if (!who || (auth.adminEmail === email && who.identity.user.role !== 'admin')) {
+      const m = await provision(pool, auth, email);
+      if (typeof m === 'string') return null;
+      who = { ...m, digest: null };
+    }
+    if (!groupsHeader) return who.identity;
+    // IdP groups (./idpGroups.ts): a missing header changes nothing and writes nothing.
+    const groups = groupsFromHeader(headers[groupsHeader]);
+    if (groups === 'absent') {
+      countSync('absent');
+      if (oncePerHour(`absent\n${auth.org}\n${email}`)) log.warn({ header: groupsHeader }, 'idp groups header absent: role and teams unchanged');
+      return who.identity;
+    }
+    const d = digestOf(groups, auth.adminEmail === email);
+    if (who.digest === d || who.digest === 'kept:' + d) return who.identity; // applied already: no write per request
+    // Keyed with the digest too: a request with DIFFERENT groups never joins another's sync (C7).
+    const key = `${auth.org}\n${email}\n${d}`;
+    let p = inflight.get(key);
+    if (!p) {
+      const { userId, identity } = who;
+      p = applyIdpGroups(pool, auth, { userId, email }, groups, { compare: true, log })
+        .then((role) => (role ? { ...identity, user: { email, role } } : null))
+        .catch((err: unknown) => {
+          if (!isSyncBusy(err)) throw err;
+          // Busy (an admin's map change holds the lock): the member as stored, nothing written; the next request syncs.
+          countSync('busy');
+          if (oncePerHour(`busy\n${auth.org}\n${email}`)) log.warn({}, 'idp groups sync busy: the stored role answered this request');
+          return identity;
+        })
+        .finally(() => inflight.delete(key));
+      inflight.set(key, p);
+    }
+    return p;
   };
 }
 
@@ -77,7 +113,7 @@ export function registerAuth(app: FastifyInstance, cfg: ServerEnv, pool: Pool | 
     const db = pool;
     identify =
       auth.mode === 'header'
-        ? headerIdentify(db, auth)
+        ? headerIdentify(db, auth, app.log)
         : async (headers) => {
             const id = cookieValue(headers.cookie, names.session);
             return id ? sessionIdentity(db, auth, id) : null;
@@ -88,7 +124,7 @@ export function registerAuth(app: FastifyInstance, cfg: ServerEnv, pool: Pool | 
   if (pool && !override) {
     const db = pool;
     const byMode = identify;
-    identify = (headers, peer) => (hasBearer(headers.authorization) ? tokenIdentity(db, headers.authorization as string) : byMode(headers, peer));
+    identify = (headers, peer) => (hasBearer(headers.authorization) ? tokenIdentity(db, headers.authorization as string, auth.apiTokenMaxDays) : byMode(headers, peer));
   }
 
   const who = (req: FastifyRequest) => identify(req.headers, req.socket.remoteAddress);
@@ -143,6 +179,7 @@ export function registerAuth(app: FastifyInstance, cfg: ServerEnv, pool: Pool | 
     const id = await who(req);
     if (!id) return reply.code(401).send({ error: 'not signed in' });
     const ended = pool ? await endAllSessions(pool, id.org.id, id.user.email) : 0;
+    closeStreamsOf(id.org.id, id.user.email); // and every open event stream of theirs, on every pod (R5)
     await trail(req, id.org.id, id.user.email, 'logout_everywhere');
     reply.clearCookie(names.session, cookieOpts(secure, '/'));
     return reply.send({ ended });

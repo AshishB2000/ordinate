@@ -17,6 +17,7 @@
 
 import { publish } from '../sse';
 import { liveUsageDb } from './usageStore';
+import { logger } from '../../app/logger';
 
 export const LIMIT_CHANNEL = 'live:daily-limit';
 
@@ -29,7 +30,7 @@ export interface LimitNotice {
 
 /** The log line and the push. Never throws: a notice that cannot be delivered must not fail the question. */
 export async function tellAdmins(org: string, n: LimitNotice): Promise<void> {
-  console.warn(
+  logger.warn(
     `[live] org ${org} reached LIVE_DAILY_QUERY_LIMIT (${n.limit} warehouse queries) on ${n.day} UTC: until 00:00 UTC its Live figures are cached answers labelled stale, or refused. Admin → Live usage shows where the queries went.`,
   );
   const notice: LimitNotice = { day: n.day, limit: n.limit };
@@ -42,6 +43,6 @@ export async function tellAdmins(org: string, n: LimitNotice): Promise<void> {
     );
     for (const { email } of r.rows) publish({ org, user: email }, LIMIT_CHANNEL, notice);
   } catch (err) {
-    console.warn(`[live] org ${org}: the daily-limit notice was not pushed — ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(`[live] org ${org}: the daily-limit notice was not pushed — ${err instanceof Error ? err.message : String(err)}`);
   }
 }

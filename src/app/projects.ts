@@ -13,6 +13,7 @@ import { sanitizeColorMap } from '../analysis/colorMap';
 import type { ColorMap } from '../analysis/colorMap';
 import * as recordFs from './recordFs';
 import { removeBlobsUnder } from './blobStore';
+import { logger } from './logger';
 
 export interface Project {
   id: string;
@@ -127,7 +128,7 @@ export async function listProjects(): Promise<Project[]> {
       // ENOENT = a project dir without a project.json (e.g. interrupted create).
       // Not corruption — skip quietly. Only log real damage.
       if (err.code !== 'ENOENT') {
-        console.error('[projects] Skipping corrupt or unreadable project:', id, err.message);
+        logger.error('[projects] Skipping corrupt or unreadable project:', id, err.message);
       }
     }
   }

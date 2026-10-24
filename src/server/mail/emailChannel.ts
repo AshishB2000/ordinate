@@ -38,6 +38,7 @@ import { isMailAddress, type MailEnv } from './mailEnv';
 import { buildMime, MailError, type MailErrorKind } from './mime';
 import { hold, projectShare, resetBudgetsForTest, sendBuckets, testBucket, type Bucket } from './budget';
 import { MAX_RCPT, sendOnce, useRelay } from './smtp';
+import { logger } from '../../app/logger';
 
 export { TEST_EMAILS_PER_HOUR } from './budget';
 
@@ -53,7 +54,7 @@ const RELAY_WIDE: ReadonlySet<MailErrorKind> = new Set(['tls', 'auth', 'refused'
 
 let relay: MailEnv | null = null;
 let directory: { pool: Pool | null; allowed: readonly string[] } = { pool: null, allowed: [] };
-let log: MailLog = { info: () => undefined, warn: (obj, msg) => console.warn(msg, JSON.stringify(obj)) };
+let log: MailLog = { info: () => undefined, warn: (obj, msg) => logger.warn(msg, JSON.stringify(obj)) };
 let sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Wiring (subscriptions/job.ts): the relay from the env, the user directory, ALLOWED_EMAIL_DOMAINS, the log. */

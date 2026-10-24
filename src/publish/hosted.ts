@@ -30,6 +30,7 @@ import { ctx, runInContext, serverDataDir } from '../server/context';
 import { buildPages, policyOutgoing, sanitizePublishConfig, type PublishConfig, type PublishProgress } from './publish';
 import type { PublishedDef } from './dashboardData';
 import type { Visual } from '../analysis/visuals';
+import { logger } from '../app/logger';
 
 export type Access = 'org' | 'link';
 
@@ -305,7 +306,7 @@ export async function republishUsing(projectId: string, datasetIds: ReadonlySet<
       await publishHosted({ projectId, ...site.config }, site.publishedBy, { id: site.id });
       done.push(site.id);
     } catch (err) {
-      console.error('[publish] re-publish after refresh failed:', err instanceof Error ? err.message : String(err));
+      logger.error('[publish] re-publish after refresh failed:', err instanceof Error ? err.message : String(err));
     }
   }
   return done;

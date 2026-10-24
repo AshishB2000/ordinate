@@ -347,8 +347,8 @@ async function resolverChecks(): Promise<void> {
   ok('get: a non-UUID id never touches a path', (await store.getScenario(pid, '../x')) === null && (await store.saveScenario('../..', { name: 'x' })) === null);
   fs.writeFileSync(path.join(tmp, 'projects', pid, 'scenarios', U(7) + '.json'), '{ not json');
   ok('list: a corrupt file is skipped, never fatal', (await store.listScenarios(pid)).length === 3);
-  const bundleSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'app', 'bundle.ts'), 'utf8');
-  ok('bundle: scenarios travel in a project bundle', /\^scenarios\//.test(bundleSrc));
+  const bundleRules: typeof import('../src/app/bundleRules') = require('../src/app/bundleRules');
+  ok('bundle: scenarios travel in a project bundle', bundleRules.ruleFor(`scenarios/${U(1)}.json`)?.count === 'scenarios');
 }
 
 void (async () => {

@@ -323,7 +323,7 @@ const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 200)}`;
     await same('east', copyId, east, 'copy: east on the copy ≡ the East subset');
 
     // ── 7. MCP: a token's tools take the same doors ─────────────────────
-    const token = String((await W.call('east', 'tokens:create', { name: 'robot' })).body?.token ?? '');
+    const token = String((await W.call('east', 'tokens:create', { name: 'robot', expiresInDays: 30 })).body?.token ?? '');
     const tool = async (name: string, args: Record<string, unknown>) => {
       const r = await W.app.inject({ method: 'POST', url: '/api/mcp', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, remoteAddress: '127.0.0.1', payload: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: { project: P, ...args } } }) });
       return r.body;

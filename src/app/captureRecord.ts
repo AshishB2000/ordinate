@@ -11,6 +11,7 @@
 
 import * as projects from './projects';
 import * as copilot from '../ai/copilot';
+import { logger } from './logger';
 
 // The result we persist per turn: the FULL analysis result minus the raw provider
 // thread (_messages is stored separately in thread.messages and never goes to the
@@ -75,7 +76,7 @@ export async function seedCaptureConversation(projectId: string | null, result: 
     }, thread.id);
     return thread.id;
   } catch (err: any) {
-    console.error('[capture] Could not seed the capture conversation:', err && err.message);
+    logger.error('[capture] Could not seed the capture conversation:', err && err.message);
     return null;
   }
 }

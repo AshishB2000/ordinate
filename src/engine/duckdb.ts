@@ -134,7 +134,7 @@
 import * as path from 'path';
 import { Worker, isMainThread } from 'worker_threads';
 import type { MessagePort } from 'worker_threads';
-import { closeEvery, closeWorker, track } from './duckdbClose';
+import { closeEvery, closeWorker, stopEvery, track } from './duckdbClose';
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -320,8 +320,14 @@ export interface Router {
   /** A port to the caller's org worker for a compute thread, released when its op ends. */
   lease?(): { port: MessagePort; timeoutMs: number; release(): void };
   shutdown?(): void;
+  /** Server shutdown: settle every call in flight and refuse new ones (duckdbPool `interruptAll`). */
+  interrupt?(): void;
 }
 let router: Router | null = null;
+// Set by interruptAll()/closeAll(): the process is ending, so a late call must
+// not start a worker the exit would then abort around (src/server/shutdown.ts).
+let closedForGood = false;
+const closing = (): DuckDBError => new DuckDBError('unavailable', 'DuckDB is shutting down');
 
 /** Route async calls through `r` (null restores this module's own worker). */
 export function setRouter(r: Router | null): void {
@@ -333,6 +339,7 @@ export const routed = (): boolean => router !== null;
 
 /** computePool: a port for its thread to the caller's org worker; null on the desktop. */
 export function leasePort(): ReturnType<NonNullable<Router['lease']>> | null {
+  if (closedForGood) throw closing();
   return router?.lease ? router.lease() : null;
 }
 
@@ -394,13 +401,22 @@ export function shutdown(): void {
 
 /**
  * Close every DuckDB worker on this thread — the bridge's and the per-org
- * pool's — through its own queue, and resolve once each has EXITED. The last
- * thing before `process.exit` (selfcheck `finish`): exiting around a live
- * worker, even an idle one, aborts the process (./duckdbClose.ts).
+ * pool's — through its own queue, and resolve once each has EXITED (or at
+ * `deadlineAt`, with the labels still alive). The last thing before an exit
+ * (selfcheck `finish`, src/server/shutdown.ts): exiting around a live worker,
+ * even an idle one, aborts the process (./duckdbClose.ts). No call starts after.
  */
-export function closeAll(): Promise<void> {
+export function closeAll(deadlineAt?: number): Promise<string[]> {
+  closedForGood = true;
   shutdown();
-  return closeEvery();
+  return closeEvery(deadlineAt);
+}
+
+/** Server shutdown: refuse every new call, interrupt every running one and skip every queued one, in every worker. */
+export function interruptAll(): void {
+  closedForGood = true;
+  router?.interrupt?.();
+  stopEvery();
 }
 
 /**
@@ -625,6 +641,7 @@ function callAsync(kind: 'query' | 'exec', sql: string, params?: readonly DuckVa
   } catch (err) {
     return Promise.reject(err);
   }
+  if (closedForGood) return Promise.reject(closing());
   if (router) return router.call(kind, sql, bound);
   // Post NOW when the bridge is already up, rather than after an `await` that
   // would defer it by a microtask. Otherwise a sync call issued later in the

@@ -34,6 +34,7 @@ import { downstream, runGraph } from './pipelines';
 import type { ExecResult, NodeOutcome, PipelineGraph, PipelineNode } from './pipelines';
 import { loadGraph } from './pipelineView';
 import { nextCronRun } from './pipelineCron';
+import { logger } from './logger';
 
 /** Projects with a run in flight, and its nodes' live state. */
 const live = new Map<string, Map<string, 'queued' | 'running'>>();
@@ -138,7 +139,7 @@ async function raiseFailures(projectId: string, graph: PipelineGraph, outcomes: 
     await require('../analysis/alertStore').recordEvents(projectId, events);
     await (require('../ipc/alerts') as typeof import('../ipc/alerts')).pushAlertEvents(projectId, events); // push only: no rule's channels
   } catch (err: unknown) {
-    console.error('[pipelines] could not raise the failure alert:', err instanceof Error ? err.message : err);
+    logger.error('[pipelines] could not raise the failure alert:', err instanceof Error ? err.message : err);
   }
 }
 

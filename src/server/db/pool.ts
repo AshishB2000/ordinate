@@ -7,12 +7,12 @@
 import { Pool } from 'pg';
 import { safeError } from '../../connectors/types';
 
-// Pool settings, per pod. 10 is pg's default and what a small RDS instance
-// (max_connections ≈ 80–100) tolerates at 5–8 replicas with headroom for
-// migrations and psql. ponytail: fixed values; a DATABASE_POOL_MAX env var
-// when an operator needs more replicas than connections allow.
+// Pool settings, per pod. `max` is DATABASE_POOL_MAX (10 by default: pg's own,
+// and what a small RDS instance, max_connections ≈ 80–100, tolerates at 5–8
+// replicas with headroom for migrations and psql). The bus holds one more
+// connection outside it (../jobs/bus.ts): size max_connections ≥ pods ×
+// (DATABASE_POOL_MAX + 1) (docs/server/sizing.md).
 const POOL = {
-  max: 10,
   idleTimeoutMillis: 30_000,
   // A dead DB fails /readyz in 3 s instead of hanging the probe.
   connectionTimeoutMillis: 3_000,
@@ -37,8 +37,8 @@ export function scrubbed(err: unknown, url: string): Error {
   return out;
 }
 
-export function createPool(url: string, onIdleError: (err: Error) => void): Pool {
-  const pool = new Pool({ connectionString: url, ...POOL });
+export function createPool(url: string, onIdleError: (err: Error) => void, max = 10): Pool {
+  const pool = new Pool({ connectionString: url, ...POOL, max });
   // Without a listener an idle client's error (DB restart, failover) is an
   // uncaught 'error' event and kills the process.
   pool.on('error', (err) => onIdleError(scrubbed(err, url)));

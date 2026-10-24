@@ -32,6 +32,7 @@ import { buildFacts, guardAnswer } from './copilot';
 import { serverDataDir } from '../server/context';
 import { liveCodeOf } from './liveRoute';
 import { markSeenFor, perMember, seenView } from '../server/alertInbox';
+import { logger } from '../app/logger';
 
 // ── Delivery ─────────────────────────────────────────────────────────────────
 
@@ -105,7 +106,7 @@ export async function explainEvent(projectId: string, event: AlertEvent): Promis
     }, thread.id);
     return thread.id;
   } catch (err: any) {
-    console.error('[alerts] Could not explain an alert:', err && err.message);
+    logger.error('[alerts] Could not explain an alert:', err && err.message);
     return null;
   }
 }

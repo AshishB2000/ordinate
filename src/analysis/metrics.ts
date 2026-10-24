@@ -31,6 +31,7 @@ import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { sanitizeTree } from './metricTree';
 import type { TreeNode } from './metricTree';
+import { logger } from '../app/logger';
 
 export type { MetricAggregation };
 
@@ -289,7 +290,7 @@ export async function listMetrics(projectId: string): Promise<MetricSummary[]> {
       out.push(toSummary(normalize(data, projectId)));
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
-        console.error('[metrics] Skipping corrupt or unreadable metric:', id, err.message);
+        logger.error('[metrics] Skipping corrupt or unreadable metric:', id, err.message);
       }
     }
   }

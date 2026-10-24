@@ -13,7 +13,7 @@ import { sanitizeOverlays } from '../analysis/analytics';
 import { stampAsOf } from '../data/figureAsOf';
 import { withGeoSuggest } from '../analysis/geoHits';
 import { withFigures } from '../analysis/chartShapes';
-import { figureAsk } from '../analysis/figureAsk';
+import { storedFigureAsk } from './rowDoors';
 
 // The visual BUILDER's preview — MAIN PROCESS. Split from ./visuals.ts at its cap.
 //
@@ -37,7 +37,7 @@ export function register(): void {
       const periods = await withPeriodOverlay(await run(projectId, datasetId, enc, bound.steps), projectId, datasetId, enc, bound.steps, run);
       // …and offers the map when the labels are places (analysis/geoHits) — what un-greys the builder's map chips.
       // …and the figures the chart draws, last, off the series as answered (analysis/chartShapes).
-      const reply = withFigures(withGeoSuggest(await withEvents(await withAnalytics(periods, projectId, sanitizeOverlays(analytics), bound.steps, values), projectId, datasetId, bound.steps), enc), figureAsk(drawnAs.chartType, drawnAs)); // r8:events
+      const reply = withFigures(withGeoSuggest(await withEvents(await withAnalytics(periods, projectId, sanitizeOverlays(analytics), bound.steps, values), projectId, datasetId, bound.steps), enc), await storedFigureAsk(projectId, datasetId, drawnAs)); // r8:events
       // Dated like `visual:data` (data/figureAsOf): the builder's preview says how fresh it is too.
       return await stampAsOf(reply.ok && bound.errors.length
         ? { ...reply, warnings: reply.warnings.concat(bound.errors), paramErrors: bound.errors }

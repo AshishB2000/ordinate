@@ -15,6 +15,8 @@ const Role = z.enum(['admin', 'editor', 'viewer']);
 const Name = z.string().trim().min(1).max(100);
 const When = z.iso.datetime({ offset: true });
 const TempPassword = z.string().max(1024);
+/** An IdP group's name as the IdP sends it: no control characters (it is compared, never interpreted). */
+const Group = z.string().trim().min(1).max(256).regex(/^[^\u0000-\u001f\u007f]+$/);
 
 const admin = <I extends z.ZodType>(input: I) => rpc({ access: 'admin', org: true, input });
 const adminList = <I extends z.ZodType>(input: I) => rpc({ access: 'admin', org: true, audit: 'denials', input });
@@ -64,4 +66,7 @@ export const adminContracts = {
   ),
   // Live usage (live data L2.7): warehouse queries and bytes per day per connection, the daily limit, today's count.
   'admin:liveUsage': adminList(z.undefined()),
+  // Identity provider groups (docs/sso-lifecycle): the map, and one group → a role and/or a team (both null removes it).
+  'admin:idpGroups': adminList(z.undefined()),
+  'admin:setIdpGroup': admin(z.strictObject({ group: Group, role: Role.nullable(), teamId: Uuid.nullable() })),
 } as const;

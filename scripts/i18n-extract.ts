@@ -375,6 +375,9 @@ export const MAIN_FILES = [
   'src/app/editConflictMessages.ts',
   'src/publish/publishMessages.ts',
   'src/server/mentionMessages.ts',
+  'src/server/lifecycleMessages.ts',
+  'src/app/bundleMessages.ts',
+  'src/server/idpMessages.ts',
 ];
 
 const MAIN_IMPORT = "import { t } from '../app/i18n';";

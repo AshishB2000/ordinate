@@ -56,6 +56,7 @@ import * as planBuild from '../analysis/planBuild';
 import { loadPlanContext } from '../analysis/analysisPlan';
 import type { AnalysisPlan, PlannedMetric, PlannedVisual } from '../analysis/analysisPlan';
 import { buildStarterPlan } from '../analysis/starterPlan';
+import { logger } from './logger';
 
 export const SAMPLE_DATASET_NAME = 'Retail orders';
 export const SAMPLE_DASHBOARD_NAME = 'Retail overview';
@@ -175,7 +176,7 @@ async function seedSampleMetrics(projectId: string, datasetId: string): Promise<
     // simple ones first is what makes the formulas resolve on the very first
     // read rather than on the second.
     if (!(await metrics.saveMetric(projectId, { ...input, datasetId }))) {
-      console.error('[sample] could not save the metric', input.name);
+      logger.error('[sample] could not save the metric', input.name);
     }
   }
 }
@@ -254,7 +255,7 @@ export async function seedSampleProject(opts: { again?: boolean } = {}): Promise
   if (!opts.again && config.get().sampleSeeded) return { seeded: false };
   const csv = sampleCsvPath();
   if (!fs.existsSync(csv)) {
-    console.error('[sample] bundled CSV missing at', csv, '— skipping seed');
+    logger.error('[sample] bundled CSV missing at', csv, '— skipping seed');
     return { seeded: false };
   }
   // First-run guidance starts with the first launch, and only then: an install
@@ -278,7 +279,7 @@ export async function seedSampleProject(opts: { again?: boolean } = {}): Promise
     rows: parsed.rows,
   });
   if (!ds) {
-    console.error('[sample] could not save the sample dataset');
+    logger.error('[sample] could not save the sample dataset');
     return { seeded: true, projectId: project.id };
   }
 
@@ -300,11 +301,11 @@ export async function seedSampleProject(opts: { again?: boolean } = {}): Promise
     const starred = execConfig.publicConfig().starred || [];
     config.setStarred([...starred, 'analysis:' + analysisId]);
     if (built.dropped.length) {
-      console.error('[sample] plan dropped', built.dropped.length, 'element(s):',
+      logger.error('[sample] plan dropped', built.dropped.length, 'element(s):',
         built.dropped.map((d) => d.message).join(' | '));
     }
   } else {
-    console.error('[sample] could not build the sample dashboard:', built.error);
+    logger.error('[sample] could not build the sample dashboard:', built.error);
   }
   // What the seed made, by id — the switcher's "Sample" badge and first-run
   // guidance both need to tell these apart from the user's own records.

@@ -23,6 +23,7 @@ import { randomBytes } from 'crypto';
 import type { Pool, QueryResult } from 'pg';
 import * as appPaths from './paths';
 import { ctx, serverDataDir } from '../server/context';
+import { logger } from './logger';
 
 const UUID = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
 const LOGO = new RegExp(`^branding/(?:logo|dash-${UUID})\\.(?:png|svg)$`);
@@ -113,7 +114,7 @@ export async function readBlob(p: string): Promise<Buffer | null> {
   const legacy = await disk(p);
   if (!legacy) return null;
   if (legacy.length > capOf(a.rel)!) {
-    console.warn('[blobs] a stored image is over its size limit and is not served:', a.rel);
+    logger.warn('[blobs] a stored image is over its size limit and is not served:', a.rel);
     return null;
   }
   await sql(a.db, 'INSERT INTO blobs (org_id, path, bytes) VALUES ($1, $2, $3) ON CONFLICT (org_id, path) DO NOTHING', [a.rel, legacy]);

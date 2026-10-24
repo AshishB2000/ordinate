@@ -73,6 +73,9 @@ services:
       dockerfile: deploy/Dockerfile
     image: ${ORDINATE_IMAGE:-ordinate:local}
     restart: unless-stopped
+    # Above SHUTDOWN_GRACE_SECONDS (20): Compose's own 10 s default would SIGKILL
+    # the server mid-shutdown (docs/server/configuration.md).
+    stop_grace_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
