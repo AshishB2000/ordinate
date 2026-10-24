@@ -310,7 +310,10 @@ function listen(on: (fn: (msg: Inbound) => void) => void, post: (msg: AsyncReply
   on((msg) => {
     if (msg.kind === 'interrupt') return interrupt(from, msg.id);
     if (msg.kind === 'stop') return stopAll();
-    if (msg.kind === 'senders') return void parentPort?.postMessage({ type: 'senders', n: senders.size }); // a test's count (duckdbPool sendersForTest)
+    if (msg.kind === 'senders') {
+      parentPort?.postMessage({ type: 'senders', n: senders.size }); // a test's count (duckdbPool sendersForTest)
+      return;
+    }
     // A compute thread's own line to this worker (src/engine/duckdbPool.ts
     // `lease`): same queue, same connection, replies on that port.
     if (msg.kind === 'port') {
