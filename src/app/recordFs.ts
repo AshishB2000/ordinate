@@ -53,7 +53,8 @@ import * as path from 'path';
 import type { Pool, PoolClient, QueryResult } from 'pg';
 import * as appPaths from './paths';
 import { ctx, orgKey, serverDataDir } from '../server/context';
-import { recordBusy, recordNotSaved } from './recordLockMessages';
+import { recordBusy, recordNotSaved, recordTooLarge } from './recordLockMessages';
+import { RECORD_MAX_BYTES } from './bundleRules';
 
 /** What a listing with `withFileTypes` returns — `fs.Dirent` satisfies it. */
 export interface Dirent {
@@ -363,6 +364,12 @@ export async function readFile(p: string, enc?: BufferEncoding): Promise<string 
 }
 
 export async function writeFile(p: string, data: string | Uint8Array, opts?: BufferEncoding | fs.WriteFileOptions): Promise<void> {
+  // No record past RECORD_MAX_BYTES is ever stored, so no bundle or backup we
+  // write holds one our own import would refuse (docs/pod-lifecycle §3.5).
+  const base = path.basename(p);
+  if (JSON_NAME.test(base) && !base.endsWith('.search.json') && (typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength) > RECORD_MAX_BYTES) {
+    throw new Error(recordTooLarge());
+  }
   forget();
   const a = rec(p);
   if (!a) return fs.promises.writeFile(p, data, opts);

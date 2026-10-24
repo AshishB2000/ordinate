@@ -29,6 +29,7 @@ flowchart LR
 | Send dashboards and alerts by email | [email.md](email.md): the SMTP relay (SES, Office 365, Postfix), TLS modes, who receives each send, limits |
 | Show dashboards inside your portal or app | [embedding.md](embedding.md): signed embed links, locked filters per customer, the allowed sites, rotating the secret |
 | Plan capacity | [sizing.md](sizing.md): measured numbers and starting points |
+| Watch it | [monitoring.md](monitoring.md): every metric, every alert and what to do, the shutdown |
 | Protect the data | [backup-restore.md](backup-restore.md): Postgres, the bucket, the master key |
 | Move between versions | [upgrade.md](upgrade.md): releases, migrations, rollbacks |
 | Limit the rows each viewer sees | [row-level-security.md](row-level-security.md): row access rules per person or team, who is restricted, what is off in phase 1 |

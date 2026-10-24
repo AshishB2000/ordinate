@@ -1,5 +1,6 @@
 // Sending one message to one channel — `deliver`, THE ONE DOOR every send goes
-// through: a subscription run, a fired alert, a channel test. It is the only
+// through: a subscription run, a fired alert, a channel test, and the email a
+// mention sends to its one person (a channel of one, made in memory: ../mentions/notify.ts). It is the only
 // module that reads a webhook URL (src/app/channels.ts webhookOf) and the only
 // way to the SMTP client (../mail/emailChannel.ts).
 //
@@ -32,6 +33,7 @@ import * as say from '../../analysis/subscriptionText';
 import { sendEmail, setMailSleepForTest } from '../mail/emailChannel';
 import { figureDatasets } from './figureDatasets';
 import { assertFanOutAllowed, isRowPolicyError, type RowPolicyError } from '../../data/rowAccess';
+import { logger as appLogger } from '../../app/logger';
 
 export type PostCode = 'sent' | 'post_failed' | 'unreachable' | 'refused' | 'no_secret' | 'compute_failed' | 'row_policy'
   | 'mail_off' | 'no_recipients' | 'rate_limited' | 'list_too_large' | 'tls_failed' | 'auth_failed' | 'mail_failed';
@@ -55,7 +57,7 @@ const TIMEOUT_MS = 15_000;
 const BODY_LOGGED = 500;
 
 let sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-let log: Log = { warn: (obj, msg) => console.warn(msg, JSON.stringify(obj)) };
+let log: Log = { warn: (obj, msg) => appLogger.warn(msg, JSON.stringify(obj)) };
 
 /** The server's logger (src/server/app.ts); pino's redaction applies on top of the cut made here. */
 export function useDeliveryLog(l: Log): void {
@@ -126,7 +128,9 @@ async function postToChannel(channelId: string, channelName: string, payload: un
 export type Delivery =
   | { kind: 'test' }
   | { kind: 'dashboard'; projectId: string; analysisId: string; message: MessageModel }
-  | { kind: 'alert'; projectId: string; ruleId: string; message: MessageModel };
+  | { kind: 'alert'; projectId: string; ruleId: string; message: MessageModel }
+  /** A comment's words to the person it names: no figure (no dataset to refuse), its own budget kind and reason line. */
+  | { kind: 'mention'; projectId: string; message: MessageModel; reason: string };
 
 /** The message a channel's "Send a test message" sends: fixed words, no data. */
 export function testMessage(name: string): MessageModel {
@@ -170,7 +174,7 @@ export async function dashboardSendRefusal(projectId: string, analysisId: string
  * every channel refuses alike.
  */
 export type DatasetsMemo = Map<string, Promise<string[]>>;
-const sourceKey = (d: Delivery): string => (d.kind === 'test' ? 'test' : `${d.kind}:${d.projectId}:${d.kind === 'dashboard' ? d.analysisId : d.ruleId}`);
+const sourceKey = (d: Delivery): string => (d.kind === 'test' || d.kind === 'mention' ? d.kind : `${d.kind}:${d.projectId}:${d.kind === 'dashboard' ? d.analysisId : d.ruleId}`);
 
 /** Send one delivery to one channel. Never throws. */
 export async function deliver(channel: Channel, d: Delivery, memo?: DatasetsMemo): Promise<PostResult> {
@@ -179,7 +183,7 @@ export async function deliver(channel: Channel, d: Delivery, memo?: DatasetsMemo
     const key = sourceKey(d);
     let read = memo?.get(key);
     if (!read) {
-      read = figureDatasets(d);
+      read = d.kind === 'mention' ? Promise.resolve([]) : figureDatasets(d);
       memo?.set(key, read);
     }
     datasetIds = await read;

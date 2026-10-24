@@ -62,6 +62,7 @@ export function headerOf(ds: { id: string; name: string; rowCount: number; colum
 }
 import { forClient } from './stepReply';
 import { MaskKeyUnavailableError } from '../app/privacyStore';
+import { logger } from '../app/logger';
 
 // Datasets (file-based data sources) IPC — pick+parse/paste/save/list/get/delete.
 // All are ipcMain.handle (request/response). Native open dialog runs in MAIN;
@@ -281,7 +282,7 @@ export async function afterRefresh(projectId: string, id: string): Promise<void>
   try {
     await require('./alerts').evaluateAndDeliver(projectId, id);
   } catch (err) {
-    console.error('[alerts] not evaluated:', err instanceof Error ? err.message : String(err));
+    logger.error('[alerts] not evaluated:', err instanceof Error ? err.message : String(err));
   }
   await runQualityChecks(projectId, id);
   // A site published with "Re-publish after data refreshes" that reads this

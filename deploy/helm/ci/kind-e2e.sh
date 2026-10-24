@@ -38,6 +38,13 @@ IMG_ARGS=(--set "image.repository=${IMAGE%:*}" --set "image.tag=${IMAGE##*:}")
 step "helm lint --strict"
 helm lint --strict "$CHART"
 helm lint --strict "$CHART" -f "$CI/values-kind.yaml" --set hpa.enabled=true --set networkPolicy.enabled=true --set ingress.enabled=true
+# The Prometheus Operator objects: rendered and linted only (kind has no such CRDs, so never applied below).
+MON=(--set metrics.serviceMonitor.enabled=true --set metrics.prometheusRule.enabled=true)
+helm lint --strict "$CHART" "${MON[@]}"
+kinds=$(helm template "$REL" "$CHART" "${MON[@]}" | grep -cE '^kind: (ServiceMonitor|PrometheusRule)$')
+[ "$kinds" = 2 ] || { echo "expected a ServiceMonitor and a PrometheusRule with both flags on, got $kinds" >&2; exit 1; }
+[ "$(helm template "$REL" "$CHART" | grep -cE '^kind: (ServiceMonitor|PrometheusRule)$')" = 0 ] || { echo "Prometheus Operator objects rendered with the flags off" >&2; exit 1; }
+echo "ok: ServiceMonitor and PrometheusRule render with their flags, and only then"
 
 step "no secret value or Secret object in any render"
 render=$(helm template "$REL" "$CHART" -f "$CI/values-kind.yaml" --set hpa.enabled=true --set networkPolicy.enabled=true --set ingress.enabled=true)
@@ -50,6 +57,11 @@ for key in DATABASE_URL ORDINATE_MASTER_KEY OIDC_CLIENT_SECRET AWS_SECRET_ACCESS
   fi
 done
 echo "ok: secrets only by reference (envFrom secretRef), secret names refused in values"
+if helm template "$REL" "$CHART" --set terminationGracePeriodSeconds=25 >/dev/null 2>&1; then
+  echo "shutdownGraceSeconds 20 with a 25 s grace rendered: the chart must refuse grace − preStop ≤ budget" >&2; exit 1
+fi
+helm template "$REL" "$CHART" --set terminationGracePeriodSeconds=26 >/dev/null
+echo "ok: the shutdown budget stays below terminationGracePeriodSeconds − the 5 s preStop"
 
 step "kind cluster $CLUSTER"
 kind get clusters | grep -qx "$CLUSTER" || kind create cluster --name "$CLUSTER" --wait 120s

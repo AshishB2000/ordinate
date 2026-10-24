@@ -38,10 +38,18 @@
 // targeted publish, and jobs tagged with it reach that tab the same way.
 // Without a fan-out (desktop, a server without DATABASE_URL) none of this runs.
 //
+// CLOSING (docs/sso-lifecycle §3.9, R5). `closeStreamsOf(org, email)` ends every
+// stream of that user, on this pod and — as the reserved channel CLOSE over the
+// same fan-out — on every other: a disable, logout-everywhere, a password reset
+// or change (that one keeps the stream of the session that made it: each stream
+// remembers the hash of the session — or of the API token — it opened under),
+// and a revoked token (that token's streams only). `publish` never sends
+// CLOSE. A message the bus lost is caught by ./streamSweep.ts.
+//
 // Must load in a plain Node process (scripts/test-server-boot.ts).
 
 import type { ServerResponse } from 'http';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { isValidId } from '../app/ids';
 import * as jobs from '../app/jobs';
 import { ctx, type Client, type Identity } from './context';
@@ -88,6 +96,10 @@ interface Stream extends Pushable {
   readonly owner: string;
   readonly org: string;
   readonly user: string;
+  /** The sha256 of the session the stream opened under (session sign-in modes), or null. */
+  readonly session: string | null;
+  /** The sha256 of the API token the stream opened with (`Authorization: Bearer`), or null. */
+  readonly token: string | null;
   push(channel: string, data: string): void;
   close(): void;
 }
@@ -108,8 +120,31 @@ export function setFanOut(fn: FanOut | null): void {
   fanOut = fn;
 }
 
+/**
+ * The reserved channel that CLOSES the target's streams instead of pushing to them. Its data says which:
+ * '' every one; `keep:<session sha256>` every one but that session's (a password change keeps the browser
+ * that made it); `token:<token sha256>` only those opened with that API token (it was revoked).
+ */
+export const CLOSE = 'auth:closed';
+
+/** Does a CLOSE with `data` end stream `s`? */
+function closes(s: Stream, data: string): boolean {
+  if (data.startsWith('keep:')) return s.session !== data.slice(5);
+  if (data.startsWith('token:')) return s.token === data.slice(6);
+  return true;
+}
+
 /** Delivers an encoded event to this pod's streams bound to `t`. Returns how many got it. */
 export function deliverLocal(t: Target, channel: string, data: string): number {
+  if (channel === CLOSE) {
+    let n = 0;
+    for (const s of byKey.values()) { // closing deletes the entry being visited: safe for a Map
+      if (s.org !== t.org || t.user === undefined || s.user !== t.user || !closes(s, data)) continue;
+      s.close();
+      n++;
+    }
+    return n;
+  }
   if (t.client !== undefined) {
     const s = byKey.get(t.client);
     if (!s || t.user === undefined || s.org !== t.org || s.user !== t.user) return 0;
@@ -125,8 +160,9 @@ export function deliverLocal(t: Target, channel: string, data: string): number {
   return n;
 }
 
-/** Sends one event to every stream bound to `t`, on this pod and (with a fan-out) every other. */
+/** Sends one event to every stream bound to `t`, on this pod and (with a fan-out) every other. Never CLOSE. */
 export function publish(t: Target, channel: string, payload?: unknown): void {
+  if (channel === CLOSE) return;
   const data = encode(payload);
   deliverLocal(t, channel, data);
   fanOut?.(t, channel, data);
@@ -150,6 +186,24 @@ function remoteClient(key: string, who: Identity): Pushable {
   return r;
 }
 
+/**
+ * Ends streams of `user` in `org`, on every pod: every one (they were disabled or signed out everywhere),
+ * every one but `keepSession`'s (a session's sha256: their password changed in that browser), or only those
+ * opened with `token` (a token's sha256: it was revoked). A browser reconnects to /api/events, which refuses
+ * it without a live session or token.
+ */
+export function closeStreamsOf(org: string, user: string, o: { keepSession?: string; token?: string } = {}): void {
+  const t: Target = { org, user };
+  const data = o.token ? `token:${o.token}` : o.keepSession ? `keep:${o.keepSession}` : '';
+  deliverLocal(t, CLOSE, data);
+  fanOut?.(t, CLOSE, data);
+}
+
+/** This pod's streams as the sweep sees them (./streamSweep.ts). */
+export function localStreams(): { org: string; user: string; session: string | null; token: string | null; close(): void }[] {
+  return [...byKey.values()];
+}
+
 /** Open streams in this process. */
 export function streamCount(): number {
   return byKey.size;
@@ -166,7 +220,7 @@ export function clientFor(key: unknown, who: Identity): Client | null {
   return fanOut && isValidId(key) ? remoteClient(key, who) : null;
 }
 
-function open(key: string, who: Identity, res: ServerResponse): Stream {
+function open(key: string, who: Identity, res: ServerResponse, cred: Credential): Stream {
   const owner = ownerOf(who);
   const id = nextId++;
   const queue: { channel: string; frame: string; slice: string }[] = [];
@@ -185,6 +239,8 @@ function open(key: string, who: Identity, res: ServerResponse): Stream {
     owner,
     org: who.org.id,
     user: who.user.email,
+    session: cred.session,
+    token: cred.token,
     send(channel: string, payload?: unknown): void {
       s.push(channel, encode(payload));
     },
@@ -229,8 +285,18 @@ function open(key: string, who: Identity, res: ServerResponse): Stream {
   return s;
 }
 
-/** Adds `GET /api/events`. Runs under app.ts's onRequest hook, so `ctx()` is the caller. */
-export function registerEvents(app: FastifyInstance): void {
+/** What a stream opened under: the sha256 of its session and of its API token, each or null. */
+export interface Credential {
+  readonly session: string | null;
+  readonly token: string | null;
+}
+
+/**
+ * Adds `GET /api/events`. Runs under app.ts's onRequest hook, so `ctx()` is the caller. `credentialOf`: the
+ * hashes of the session cookie and the bearer token the stream opens under, so the sweep and a revoke can
+ * end it with them.
+ */
+export function registerEvents(app: FastifyInstance, credentialOf: (req: FastifyRequest) => Credential = () => ({ session: null, token: null })): void {
   const mine = new Set<Stream>();
   app.get('/api/events', async (req, reply) => {
     const key = (req.query as { client?: unknown }).client;
@@ -243,7 +309,7 @@ export function registerEvents(app: FastifyInstance): void {
     // The security headers set at onRequest (./headers.ts) — writeHead bypasses Fastify's own.
     reply.raw.writeHead(200, { ...(reply.getHeaders() as import('http').OutgoingHttpHeaders), ...HEADERS });
     reply.raw.write(': open\n\n'); // first bytes now, so the browser fires `open`
-    const s = open(key, who, reply.raw);
+    const s = open(key, who, reply.raw, credentialOf(req));
     mine.add(s);
     s.once('destroyed', () => mine.delete(s));
     return reply;

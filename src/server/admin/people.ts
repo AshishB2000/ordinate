@@ -8,7 +8,12 @@
 
 import type { Pool } from 'pg';
 import { ctx, type Role } from '../context';
+import type { AuthEnv } from '../env';
 import { registry } from '../rpc';
+import { IdpManagedError, roleManaged, teamLinked } from '../auth/idpGroups';
+import { CLEAR_KEPT, OTHER_ADMINS, withPeopleLock } from '../auth/store';
+import { roleFromIdp, teamFromIdp } from '../idpMessages';
+import { closeStreamsOf } from '../sse';
 
 export interface UserRow {
   readonly id: string;
@@ -35,11 +40,8 @@ type Result = { ok: true } | { ok: false; error: string };
 
 const iso = (col: string, as: string) => `to_json(${col}) #>> '{}' AS "${as}"`;
 
-/** Other enabled admins than `userId` in the org — the last-admin guard's question. */
-const OTHER_ADMINS = `(SELECT count(*) FROM users o WHERE o.org_id = $1 AND o.id <> $2 AND o.role = 'admin' AND o.disabled_at IS NULL)`;
-
-/** `allowedDomains()`: ALLOWED_EMAIL_DOMAINS, read per call. */
-export function register(pool: () => Pool | null, allowedDomains: () => readonly string[]): void {
+/** `allowedDomains()`: ALLOWED_EMAIL_DOMAINS, read per call; `auth()`: whether roles and teams follow the IdP. */
+export function register(pool: () => Pool | null, allowedDomains: () => readonly string[], auth: () => AuthEnv): void {
   const db = (): Pool => {
     const p = pool();
     if (!p) throw new Error('admin needs Postgres (DATABASE_URL)');
@@ -65,35 +67,62 @@ export function register(pool: () => Pool | null, allowedDomains: () => readonly
     // Sign-in would refuse this address anyway (ALLOWED_EMAIL_DOMAINS); say so now.
     const allowed = allowedDomains();
     if (allowed.length > 0 && !allowed.includes(domain)) return { ok: false, error: 'domain' };
-    // A pending member: no last_login_at until their first sign-in, which keeps the role set here.
+    // A pending member: no last_login_at until their first sign-in, which keeps the role set here — unless
+    // roles follow the IdP: then they join as a viewer, and only their groups raise them (C4).
+    const stored: Role = (await roleManaged(db(), auth(), org())) ? 'viewer' : role;
     const r = await db().query<{ id: string }>(
       `INSERT INTO users (org_id, email, role) VALUES ($1, $2, $3) ON CONFLICT (org_id, email) DO NOTHING RETURNING id`,
-      [org(), e, role],
+      [org(), e, stored],
     );
     return r.rows[0] ? { ok: true, id: r.rows[0].id } : { ok: false, error: 'exists' };
   });
 
+  // Under the exclusive people lock (docs/sso-lifecycle §3.6): the last-admin rule holds against an IdP sync.
+  // Refused (409) while roles follow the IdP. The digest is cleared, so header mode re-checks this person.
   registry.handle('admin:setRole', async (_e, { userId, role }: { userId: string; role: Role }): Promise<Result> => {
-    const r = await db().query(
-      `UPDATE users SET role = $3 WHERE org_id = $1 AND id = $2 AND ($3 = 'admin' OR role <> 'admin' OR ${OTHER_ADMINS} > 0)`,
-      [org(), userId, role],
-    );
-    if (r.rowCount === 1) return { ok: true };
+    const updated = await withPeopleLock(db(), org(), 'exclusive', async (c) => {
+      if (await roleManaged(c, auth(), org())) throw new IdpManagedError(roleFromIdp());
+      const r = await c.query(
+        `UPDATE users SET role = $3, idp_groups_digest = NULL WHERE org_id = $1 AND id = $2 AND ($3 = 'admin' OR role <> 'admin' OR ${OTHER_ADMINS} > 0)`,
+        [org(), userId, role],
+      );
+      if (r.rowCount === 1 && role === 'admin') await c.query(CLEAR_KEPT, [org()]);
+      return r.rowCount === 1;
+    });
+    if (updated) return { ok: true };
     return { ok: false, error: (await exists(db(), org(), userId)) ? 'last-admin' : 'unknown' };
   });
 
+  // Disable is FINAL (docs/sso-lifecycle §3.8): in ONE statement the member is disabled, every token of theirs
+  // revoked (so re-enabling cannot revive one) and every session ended; then their event streams close on
+  // every pod. Enabling someone who was disabled revokes again — a token that escaped an older release's
+  // disable — and clears their digest, so header mode re-applies their groups. Under the exclusive people lock.
   registry.handle('admin:setDisabled', async (_e, { userId, disabled }: { userId: string; disabled: boolean }): Promise<Result> => {
     const self = await db().query('SELECT 1 FROM users WHERE org_id = $1 AND id = $2 AND email = $3', [org(), userId, ctx().user.email]);
     if (disabled && self.rowCount === 1) return { ok: false, error: 'self' };
-    const r = await db().query(
-      disabled
-        ? `UPDATE users SET disabled_at = coalesce(disabled_at, now()) WHERE org_id = $1 AND id = $2 AND (role <> 'admin' OR ${OTHER_ADMINS} > 0)`
-        : `UPDATE users SET disabled_at = NULL WHERE org_id = $1 AND id = $2`,
-      [org(), userId],
-    );
+    const r = await withPeopleLock(db(), org(), 'exclusive', async (c) => {
+      if (disabled) {
+        return c.query<{ email: string }>(
+          `WITH u AS (UPDATE users SET disabled_at = coalesce(disabled_at, now())
+                       WHERE org_id = $1 AND id = $2 AND (role <> 'admin' OR ${OTHER_ADMINS} > 0) RETURNING id, email),
+                t AS (UPDATE api_tokens SET revoked_at = now() WHERE user_id IN (SELECT id FROM u) AND revoked_at IS NULL),
+                s AS (DELETE FROM sessions WHERE user_id IN (SELECT id FROM u))
+           SELECT email FROM u`,
+          [org(), userId],
+        );
+      }
+      const on = await c.query<{ email: string; role: Role }>(
+        `WITH was AS (SELECT id FROM users WHERE org_id = $1 AND id = $2 AND disabled_at IS NOT NULL),
+              t AS (UPDATE api_tokens SET revoked_at = now() WHERE user_id IN (SELECT id FROM was) AND revoked_at IS NULL)
+         UPDATE users SET disabled_at = NULL, idp_groups_digest = NULL WHERE org_id = $1 AND id = $2 RETURNING email, role`,
+        [org(), userId],
+      );
+      if (on.rows[0]?.role === 'admin') await c.query(CLEAR_KEPT, [org()]); // the org gained an admin
+      return on;
+    });
     if (r.rowCount !== 1) return { ok: false, error: (await exists(db(), org(), userId)) ? 'last-admin' : 'unknown' };
-    // Signed out everywhere now, not at the next request (sessions and tokens already refuse a disabled user).
-    if (disabled) await db().query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+    // Their open event streams, on every pod (sessions and tokens already refuse them).
+    if (disabled) closeStreamsOf(org(), r.rows[0].email);
     return { ok: true };
   });
 
@@ -132,19 +161,26 @@ export function register(pool: () => Pool | null, allowedDomains: () => readonly
   registry.handle(
     'admin:teamMember',
     async (_e, { teamId, userId, member }: { teamId: string; userId: string; member: boolean }): Promise<Result> => {
-      // Both must be this org's: the SELECT finds nothing for another org's team or user.
-      const r = member
-        ? await db().query(
-            `INSERT INTO team_members (team_id, user_id)
-             SELECT t.id, u.id FROM teams t, users u WHERE t.id = $2 AND t.org_id = $1 AND u.id = $3 AND u.org_id = $1
-             ON CONFLICT DO NOTHING`,
-            [org(), teamId, userId],
-          )
-        : await db().query(
-            `DELETE FROM team_members m USING teams t WHERE m.team_id = t.id AND t.org_id = $1 AND m.team_id = $2 AND m.user_id = $3`,
-            [org(), teamId, userId],
-          );
-      if (r.rowCount === 1) return { ok: true };
+      // Under the exclusive people lock, so a team being linked cannot gain a manual member in between.
+      // Refused (409) on a linked team: its members come from the IdP.
+      const n = await withPeopleLock(db(), org(), 'exclusive', async (c) => {
+        if (await teamLinked(c, auth(), org(), teamId)) throw new IdpManagedError(teamFromIdp());
+        // Both must be this org's: the SELECT finds nothing for another org's team or user.
+        const r = member
+          ? await c.query(
+              `INSERT INTO team_members (team_id, user_id)
+               SELECT t.id, u.id FROM teams t, users u WHERE t.id = $2 AND t.org_id = $1 AND u.id = $3 AND u.org_id = $1
+               ON CONFLICT DO NOTHING`,
+              [org(), teamId, userId],
+            )
+          : await c.query(
+              `DELETE FROM team_members m USING teams t WHERE m.team_id = t.id AND t.org_id = $1 AND m.team_id = $2 AND m.user_id = $3`,
+              [org(), teamId, userId],
+            );
+        await c.query('UPDATE users SET idp_groups_digest = NULL WHERE org_id = $1 AND id = $2', [org(), userId]);
+        return r.rowCount;
+      });
+      if (n === 1) return { ok: true };
       // Already in (or already out) is fine; an id from nowhere is not.
       const known = await db().query(
         'SELECT 1 FROM teams t, users u WHERE t.id = $2 AND t.org_id = $1 AND u.id = $3 AND u.org_id = $1',

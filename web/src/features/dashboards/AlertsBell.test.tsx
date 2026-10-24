@@ -1,6 +1,7 @@
 // The top bar's bell is on every page: closed, it asks for no role (the shell
 // costs a page nothing more); opened by a project viewer, it reads the inbox
-// and the rules with nothing that writes. The editor's bell is the negative control.
+// and the rules, and marks what THEY have seen — nothing that changes a rule or
+// silences anyone. The editor's bell is the negative control.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -39,7 +40,7 @@ async function openBell() {
 }
 
 describe('the alert bell', () => {
-  it('closed, asks for no role; opened by a viewer, offers no Snooze, Mark seen or Mark all seen', async () => {
+  it('closed, asks for no role; opened by a viewer, offers Mark seen and Mark all seen but no Snooze', async () => {
     const calls = serveRpc(routes('viewer'));
     renderApp('/no-such-page');
     await screen.findByRole('button', { name: /^Alerts/ });
@@ -49,7 +50,9 @@ describe('the alert bell', () => {
     expect(await within(inbox).findByText('Revenue fell to 8.')).toBeTruthy();
     await waitFor(() => expect(calls.some((c) => c.channel === 'projects:roles')).toBe(true));
     await within(inbox).findByRole('button', { name: 'Rules' });
-    for (const name of ['Snooze 24h', 'Mark seen', 'Mark all seen', 'Manage rules']) expect(within(inbox).queryByRole('button', { name })).toBeNull();
+    for (const name of ['Snooze for everyone · 24 h', 'Manage rules']) expect(within(inbox).queryByRole('button', { name })).toBeNull();
+    expect(within(inbox).getByRole('button', { name: 'Mark seen' })).toBeTruthy(); // their own inbox
+    expect(within(inbox).getByRole('button', { name: 'Mark all seen' })).toBeTruthy();
     expect(within(inbox).getByRole('button', { name: 'Explain' })).toBeTruthy(); // reading is theirs
     fireEvent.click(within(inbox).getByRole('button', { name: 'Rules' }));
     const rules = await screen.findByRole('dialog', { name: 'Alert rules' });
@@ -61,12 +64,26 @@ describe('the alert bell', () => {
     expect(calls.filter((c) => /^alerts:(patch|markSeen|delete|setDigest|save)$/.test(c.channel))).toEqual([]);
   }, 30_000);
 
+  it('a viewer\'s Mark seen and Mark all seen write their own inbox (alerts:markSeen), never a rule', async () => {
+    const calls = serveRpc(routes('viewer', { 'alerts:markSeen': { body: { ok: true } } }));
+    renderApp('/no-such-page');
+    const inbox = await openBell();
+    fireEvent.click(await within(inbox).findByRole('button', { name: 'Mark seen' }));
+    await waitFor(() => expect(calls.some((c) => c.channel === 'alerts:markSeen' && (c.payload as { eventId?: string }).eventId === 'e1')).toBe(true));
+    fireEvent.click(within(inbox).getByRole('button', { name: 'Mark all seen' }));
+    await waitFor(() => expect(calls.filter((c) => c.channel === 'alerts:markSeen').length).toBe(2));
+    // Mark all seen covers what the bell drew: the newest event's time goes with it.
+    expect(calls.filter((c) => c.channel === 'alerts:markSeen')[1]?.payload).toEqual({ projectId: P, through: '2026-10-01T10:00:00Z' });
+    expect(calls.filter((c) => /^alerts:(patch|delete|setDigest|save)$/.test(c.channel))).toEqual([]);
+    cleanup();
+  }, 30_000);
+
   it('negative control: an editor\'s bell marks seen, snoozes and manages the rules', async () => {
     serveRpc(routes('editor'));
     renderApp('/no-such-page');
     const inbox = await openBell();
     expect(await within(inbox).findByRole('button', { name: 'Mark all seen' })).toBeTruthy();
-    expect(within(inbox).getByRole('button', { name: 'Snooze 24h' })).toBeTruthy();
+    expect(within(inbox).getByRole('button', { name: 'Snooze for everyone · 24 h' })).toBeTruthy();
     expect(within(inbox).getByRole('button', { name: 'Mark seen' })).toBeTruthy();
     fireEvent.click(within(inbox).getByRole('button', { name: 'Manage rules' }));
     const rules = await screen.findByRole('dialog', { name: 'Alert rules' });

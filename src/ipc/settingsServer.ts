@@ -18,13 +18,18 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { createHash, randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
 import { ipcMain } from './bus';
 import * as appPaths from '../app/paths';
 import * as config from '../app/config';
 import * as jobs from '../app/jobs';
 import * as projects from '../app/projects';
 import * as bundle from '../app/bundle';
+import { MAX_ENTRIES, MAX_TOTAL_BYTES, RECORD_MAX_BYTES } from '../app/bundleRules';
+import { notABackup } from '../app/bundleMessages';
+import { openZip, ZipRefused, type ZipEntryInfo, type ZipPolicy, type ZipReader, type ZipSource } from '../app/zipReader';
+import { ZipFileWriter } from '../app/zipWriter';
+import type { JobContext } from '../app/jobs';
 import { folderName, restoredName } from '../app/backups';
 import { LOGO_MAX_BYTES, readLogoDataUrl, saveLogo } from '../app/branding';
 import { FileTokenError, offerDownload, resolveUpload, type Upload } from '../server/files';
@@ -53,10 +58,15 @@ async function upload(token: unknown): Promise<Upload | null> {
   }
 }
 
-/** Every project → one zip in the org's temp(). The file is the download route's to delete. */
-async function writeBackup(job: { progress(p: number, note?: string): void; checkCancelled(): void }) {
+/**
+ * Every project → one zip in the org's temp(), written entry by entry: each
+ * project's bundle is added STORED (it is deflated already) the moment it is
+ * exported, so memory holds one project, never the org. backup.json goes last —
+ * its counts are known only then; a reader finds it by name. The file is the
+ * download route's to delete.
+ */
+export async function writeBackup(job: { progress(p: number, note?: string): void; checkCancelled(): void }) {
   const list = await projects.listProjects();
-  const entries: bundle.ZipEntry[] = [];
   const manifest: BackupManifest = {
     format: BACKUP_FORMAT,
     formatVersion: BACKUP_VERSION,
@@ -64,56 +74,115 @@ async function writeBackup(job: { progress(p: number, note?: string): void; chec
     exportedAt: new Date().toISOString(),
     projects: [],
   };
-  for (let i = 0; i < list.length; i++) {
-    const p = list[i];
-    const note = `${p.name} (${i + 1} of ${list.length})`;
-    // ponytail: every bundle is held in memory until the zip is written — fine
-    // for an org's records and Parquet up to a few GB; stream entries to disk if
-    // an org outgrows that.
-    const out = await bundle.exportProject(p.id, {
-      onProgress: (f) => job.progress((i + f) / Math.max(1, list.length), note),
-      checkCancelled: () => job.checkCancelled(),
-    });
-    if (!out) continue; // removed while the backup ran
-    const file = `${folderName(p)}.ordinate`;
-    entries.push({ name: file, data: out.bytes });
-    manifest.projects.push({ file, name: p.name, counts: out.manifest.counts });
-  }
-  entries.unshift({ name: MANIFEST, data: Buffer.from(JSON.stringify(manifest, null, 2), 'utf8') });
-  const bytes = await bundle.writeZipAsync(entries);
   const file = path.join(appPaths.temp(), `backup-${randomUUID()}.zip`);
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
-  await fs.promises.writeFile(file, bytes, { mode: 0o600 });
-  return { file, count: manifest.projects.length, at: manifest.exportedAt, sha256: createHash('sha256').update(bytes).digest('hex') };
+  const zip = await ZipFileWriter.create(file);
+  try {
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      const note = `${p.name} (${i + 1} of ${list.length})`;
+      // ponytail: one project's bundle is built in memory (~3× its size) — the
+      // export's ceiling; stream exportProject to a file if a project nears the pod's memory.
+      const out = await bundle.exportProject(p.id, {
+        onProgress: (f) => job.progress((i + f) / Math.max(1, list.length), note),
+        checkCancelled: () => job.checkCancelled(),
+      });
+      if (!out) continue; // removed while the backup ran
+      const name = `${folderName(p)}.ordinate`;
+      await zip.add(name, out.bytes, { store: true });
+      manifest.projects.push({ file: name, name: p.name, counts: out.manifest.counts });
+    }
+    await zip.add(MANIFEST, Buffer.from(JSON.stringify(manifest, null, 2), 'utf8'));
+    await zip.close();
+  } catch (err) {
+    await zip.abort();
+    throw err;
+  }
+  return { file, count: manifest.projects.length, at: manifest.exportedAt };
 }
 
-/** A backup file's projects, checked as a whole before anything is imported. */
-export async function readBackup(bytes: Buffer): Promise<{ manifest: BackupManifest; bundles: Map<string, Buffer> } | { error: string }> {
-  let entries: bundle.ZipEntry[];
+/** The reader's policy for a backup: backup.json and one bundle per project. The names are keys, never paths. */
+const BACKUP_POLICY: ZipPolicy = {
+  refuseName: (name) => (name === MANIFEST || /^[^/\\]+\.ordinate$/.test(name) ? null : notABackup()),
+  capOf: (name) => (name === MANIFEST ? RECORD_MAX_BYTES : MAX_TOTAL_BYTES),
+  maxEntries: MAX_ENTRIES,
+  maxTotal: MAX_TOTAL_BYTES,
+};
+
+/**
+ * Restore a backup file, INSIDE its job: checked as a whole first (its list and
+ * its files must be the same set), then each project imported as a new one. One
+ * handle on the upload for the whole run; a stored bundle is read in place, a
+ * deflated one (a backup an earlier version wrote) is unpacked to temp first. One byte budget across every project.
+ */
+export async function restoreBackupFile(file: string, j: JobContext): Promise<{ restored: Array<{ id: string; name: string }>; failed: Array<{ name: string; error: string }> }> {
+  const fh = await fs.promises.open(file, 'r');
   try {
-    entries = await bundle.readZipAsync(bytes);
-  } catch (_) {
-    return { error: 'That file is not an Ordinate backup.' };
+    let outer: ZipReader;
+    try {
+      outer = await openZip({ fh, offset: 0, length: (await fh.stat()).size }, BACKUP_POLICY);
+    } catch (err) {
+      if (err instanceof ZipRefused) throw new Error(notABackup());
+      throw err;
+    }
+    const head = outer.get(MANIFEST);
+    let manifest: BackupManifest;
+    try {
+      manifest = JSON.parse(head ? (await outer.read(head, j.signal)).toString('utf8') : '') as BackupManifest;
+    } catch (_) {
+      throw new Error('That file is not an Ordinate backup (no readable backup.json).');
+    }
+    if (!manifest || manifest.format !== BACKUP_FORMAT || manifest.formatVersion !== BACKUP_VERSION || !Array.isArray(manifest.projects)) {
+      throw new Error('That is not an Ordinate backup, or it is from a newer version.');
+    }
+    // The listed projects and the files present must be the same set: a file
+    // the manifest does not name is how a crafted backup would smuggle one in,
+    // and a listed file that is missing is a truncated backup.
+    const files = outer.entries.map((e) => e.name).filter((n) => n !== MANIFEST);
+    const listed = new Set(manifest.projects.map((p) => (p && typeof p.file === 'string' ? p.file : '')));
+    const same = listed.size === manifest.projects.length && listed.size === files.length && files.every((n) => listed.has(n));
+    if (!same) throw new Error('The backup does not match its own list of projects — it was refused as a whole.');
+
+    const at = new Date(manifest.exportedAt);
+    const when = Number.isFinite(at.getTime()) ? at : new Date();
+    const budget = { left: MAX_TOTAL_BYTES };
+    const restored: Array<{ id: string; name: string }> = [];
+    const failed: Array<{ name: string; error: string }> = [];
+    for (let i = 0; i < manifest.projects.length; i++) {
+      const p = manifest.projects[i];
+      const name = restoredName(String(p.name || 'Project'), when);
+      const e = outer.get(p.file) as ZipEntryInfo;
+      let tmp: string | null = null;
+      try {
+        let source: ZipSource;
+        if (e.method === 0) {
+          await outer.verify(e, j.signal);
+          source = outer.range(e);
+        } else {
+          tmp = path.join(appPaths.temp(), `restore-${randomUUID()}.ordinate`);
+          await outer.extract(e, tmp, j.signal);
+          source = { file: tmp };
+        }
+        const r = await bundle.importBundle(source, {
+          name,
+          budget,
+          signal: j.signal,
+          onProgress: (f, note) => j.progress((i + f) / manifest.projects.length, note),
+          checkCancelled: () => j.checkCancelled(),
+        });
+        if (r.ok && r.project) restored.push({ id: r.project.id, name: r.project.name });
+        else failed.push({ name, error: r.error || 'Could not be restored.' });
+      } catch (err) {
+        if (err instanceof ZipRefused) failed.push({ name, error: err.message });
+        else throw err;
+      } finally {
+        if (tmp) await fs.promises.rm(tmp, { force: true });
+      }
+    }
+    return { restored, failed };
+  } finally {
+    await fh.close().catch(() => undefined);
   }
-  const head = entries.find((e) => e.name === MANIFEST);
-  let manifest: BackupManifest;
-  try {
-    manifest = JSON.parse(head ? head.data.toString('utf8') : '') as BackupManifest;
-  } catch (_) {
-    return { error: 'That file is not an Ordinate backup (no readable backup.json).' };
-  }
-  if (!manifest || manifest.format !== BACKUP_FORMAT || manifest.formatVersion !== BACKUP_VERSION || !Array.isArray(manifest.projects)) {
-    return { error: 'That is not an Ordinate backup, or it is from a newer version.' };
-  }
-  const bundles = new Map<string, Buffer>();
-  for (const e of entries) if (e.name !== MANIFEST) bundles.set(e.name, e.data);
-  // The listed projects and the files present must be the same set: a file
-  // the manifest does not name is how a crafted backup would smuggle one in,
-  // and a listed file that is missing is a truncated backup.
-  const listed = new Set(manifest.projects.map((p) => (p && typeof p.file === 'string' ? p.file : '')));
-  const same = listed.size === manifest.projects.length && listed.size === bundles.size && [...bundles.keys()].every((n) => listed.has(n) && /^[^/\\]+\.ordinate$/.test(n));
-  if (!same) return { error: 'The backup does not match its own list of projects — it was refused as a whole.' };
-  return { manifest, bundles };
 }
 
 export function register(): void {
@@ -150,41 +219,23 @@ export function register(): void {
     try {
       const r = await job.done;
       const stamp = r.at.slice(0, 10);
-      return { ok: true, count: r.count, ...(await offerDownload(r.file, `Ordinate backup ${ctx().org.id} ${stamp}.zip`, r.sha256)) };
+      return { ok: true, count: r.count, ...(await offerDownload(r.file, `Ordinate backup ${ctx().org.id} ${stamp}.zip`)) };
     } catch (err) {
       if (err instanceof jobs.JobCancelled) return { ok: false, canceled: true };
       return { ok: false, error: err instanceof Error ? err.message : 'The backup failed.' };
     }
   });
 
+  // The RPC only resolves the upload and hands it to the job; the job reads it
+  // (restoreBackupFile). The upload is deleted when the job is over, never before.
   ipcMain.handle('backups:restore', async (_e, { fileToken }: { fileToken: string; confirm: 'restore' }) => {
     const up = await upload(fileToken);
     if (!up) return EXPIRED;
     try {
-      const read = await readBackup(await fs.promises.readFile(up.path));
-      if ('error' in read) return { ok: false, error: read.error };
-      const { manifest, bundles } = read;
-      const at = new Date(manifest.exportedAt);
-      const when = Number.isFinite(at.getTime()) ? at : new Date();
       const job = jobs.submit({
         kind: 'restore',
         label: 'Restore a backup',
-        run: async (j) => {
-          const restored: Array<{ id: string; name: string }> = [];
-          const failed: Array<{ name: string; error: string }> = [];
-          for (let i = 0; i < manifest.projects.length; i++) {
-            const p = manifest.projects[i];
-            const name = restoredName(String(p.name || 'Project'), when);
-            const r = await bundle.importBundle(bundles.get(p.file) as Buffer, {
-              name,
-              onProgress: (f, note) => j.progress((i + f) / manifest.projects.length, note),
-              checkCancelled: () => j.checkCancelled(),
-            });
-            if (r.ok && r.project) restored.push({ id: r.project.id, name: r.project.name });
-            else failed.push({ name, error: r.error || 'Could not be restored.' });
-          }
-          return { restored, failed };
-        },
+        run: (j) => restoreBackupFile(up.path, j),
         resultOf: (r) => ({ message: `${r.restored.length} project${r.restored.length === 1 ? '' : 's'} restored` }),
       });
       const r = await job.done;

@@ -108,7 +108,7 @@ export async function waiting(org: string, hexes: readonly string[]): Promise<Se
 
 // Never taken and expired (the grace lets a download that started just before
 // expiry finish), or taken long ago by a handler that never called done() (a crash).
-const DUE = `org_id = $1 AND ((used_at IS NULL AND expires_at < now() - interval '10 minutes') OR used_at < now() - interval '6 hours')`;
+const DUE = `org_id = $1 AND ((used_at IS NULL AND expires_at < now() - interval '10 minutes') OR used_at < now() - interval '24 hours')`; // a used upload: a restore job may read it for hours (files.ts USED_GRACE_MS)
 
 /** One sweep for `org`: each due row's bytes, then the row (./staging.ts `sweepRows`). */
 export async function sweep(p: Pool, org: string): Promise<number> {

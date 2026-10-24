@@ -43,3 +43,9 @@ export function dashboardLink(projectId: string, analysisId: string): string | n
   const origin = publicOrigin(process.env.ORDINATE_PUBLIC_URL, process.env.OIDC_REDIRECT_URL);
   return origin ? `${origin}/analyses/${projectId}/${analysisId}` : null;
 }
+
+/** `path` (an app route, "/…") at the public origin, or null when the server does not know it. */
+export function appLink(path: string): string | null {
+  const origin = publicOrigin(process.env.ORDINATE_PUBLIC_URL, process.env.OIDC_REDIRECT_URL);
+  return origin ? origin + path : null;
+}

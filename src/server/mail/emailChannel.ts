@@ -38,6 +38,7 @@ import { isMailAddress, type MailEnv } from './mailEnv';
 import { buildMime, MailError, type MailErrorKind } from './mime';
 import { hold, projectShare, resetBudgetsForTest, sendBuckets, testBucket, type Bucket, type Hold } from './budget';
 import { MAX_RCPT, sendOnce, useRelay } from './smtp';
+import { logger } from '../../app/logger';
 
 export { TEST_EMAILS_PER_HOUR } from './budget';
 
@@ -53,7 +54,7 @@ const RELAY_WIDE: ReadonlySet<MailErrorKind> = new Set(['tls', 'auth', 'refused'
 
 let relay: MailEnv | null = null;
 let directory: { pool: Pool | null; allowed: readonly string[] } = { pool: null, allowed: [] };
-let log: MailLog = { info: () => undefined, warn: (obj, msg) => console.warn(msg, JSON.stringify(obj)) };
+let log: MailLog = { info: () => undefined, warn: (obj, msg) => logger.warn(msg, JSON.stringify(obj)) };
 let sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Wiring (subscriptions/job.ts): the relay from the env, the user directory, ALLOWED_EMAIL_DOMAINS, the log. */
@@ -203,18 +204,19 @@ const CODE: Record<MailErrorKind, PostCode> = {
 };
 
 /** The org's look for an email: its accent and language. Never fails a send. */
-function look(channelName: string): { channelName: string; accent: string; brand: string; lang: string } {
+function look(channelName: string, reason?: string): { channelName: string; accent: string; brand: string; lang: string; reason?: string } {
+  const why = reason ? { reason } : {};
   try {
     const c = config.get();
-    return { channelName, accent: c.branding?.accent ?? '', brand: brandName(), lang: c.language || 'en' };
+    return { channelName, accent: c.branding?.accent ?? '', brand: brandName(), lang: c.language || 'en', ...why };
   } catch {
-    return { channelName, accent: '', brand: brandName(), lang: 'en' };
+    return { channelName, accent: '', brand: brandName(), lang: 'en', ...why };
   }
 }
 
-/** The email as the subscription preview shows it. */
-export function previewEmail(model: MessageModel, channelName: string): RenderedEmail {
-  return renderEmail(model, look(channelName));
+/** The email as the subscription preview shows it (`reason`: a mention's own line instead of the channel's). */
+export function previewEmail(model: MessageModel, channelName: string, reason?: string): RenderedEmail {
+  return renderEmail(model, look(channelName, reason));
 }
 
 
@@ -248,7 +250,7 @@ export async function sendEmail(c: Channel, d: Delivery, message: MessageModel):
   }
   let data: string;
   try {
-    const r = previewEmail(body, c.name);
+    const r = previewEmail(body, c.name, d.kind === 'mention' ? d.reason : undefined);
     data = buildMime({ from: cfg.from, subject: r.subject, text: r.text, html: r.html });
   } catch (err) {
     log.warn({ channel: c.id, error: err instanceof MailError ? err.detail : String(err) }, 'email not built');

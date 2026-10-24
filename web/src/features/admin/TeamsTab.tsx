@@ -9,7 +9,8 @@ import { Input } from '../../ui/Field';
 import { Menu } from '../../ui/Menu';
 import { SkeletonTable } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
-import { fmtDate, useAdminUsers, useTeams, useWrite, type Team } from './api';
+import { Badge } from '../../ui/Badge';
+import { fmtDate, useAdminUsers, useIdpGroups, useTeams, useWrite, type Team } from './api';
 import s from './Admin.module.css';
 
 /** Create (no `team`) or rename (`team`) — one name field. */
@@ -90,6 +91,9 @@ function MembersDialog({ team, onOpenChange }: { team: Team; onOpenChange: (o: b
 
 export function TeamsTab() {
   const teams = useTeams();
+  // A team linked to an identity provider group: its members come from the IdP, so there is no member picker.
+  const idp = useIdpGroups();
+  const linked = new Set(idp.data?.linkedTeamIds ?? []);
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState<Team | null>(null);
   const [members, setMembers] = useState<string | null>(null);
@@ -131,7 +135,12 @@ export function TeamsTab() {
           <tbody>
             {teams.data.map((t) => (
               <tr key={t.id}>
-                <td className={s.strong}>{t.name}</td>
+                <td>
+                  <span className={s.cellRow}>
+                    <span className={s.strong}>{t.name}</span>
+                    {linked.has(t.id) && <Badge icon="shield">From your identity provider</Badge>}
+                  </span>
+                </td>
                 <td>
                   {t.members.length === 0 ? (
                     <span className={s.meta}>No members</span>
@@ -151,7 +160,7 @@ export function TeamsTab() {
                     align="end"
                     trigger={<IconButton icon="more-horizontal" label={`Actions for ${t.name}`} size="sm" />}
                     items={[
-                      { label: 'Members…', icon: 'user', onSelect: () => setMembers(t.id) },
+                      ...(linked.has(t.id) ? [] : [{ label: 'Members…', icon: 'user' as const, onSelect: () => setMembers(t.id) }]),
                       { label: 'Rename…', icon: 'pencil', onSelect: () => setRenaming(t) },
                     ]}
                   />

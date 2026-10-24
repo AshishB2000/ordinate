@@ -6,20 +6,25 @@
 // tests, not a deploy.
 
 import { fastify, type FastifyInstance, type FastifyRequest } from 'fastify';
-import { probe, shutdown } from '../engine/duckdb';
+import { probe, shutdown as duckShutdown } from '../engine/duckdb';
 import { contractFor } from '../api/index';
 import { proxyList, type ServerEnv } from './env';
 import { ctx, runInContext, type Identify } from './context';
 import { authorize, grantCreator, orgAllows, readable } from './authz/index';
 import { audit, targetIds, type Outcome } from './authz/audit';
 import { registerAuth } from './auth/index';
+import { isIdpManaged } from './auth/idpGroups';
+import { hashId } from './auth/store';
 import { cookieNames } from './auth/cookies';
 import { registerSecurityHeaders } from './headers';
 import { registerCsrf } from './csrf';
 import { registerLimits, RPC_ROUTE, RpcTimeout, untilAborted } from './limits';
+import { isDraining, isRestarting, trackRequest } from './lifecycle';
+import { useLogger } from '../app/logger';
 import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
 import { useRecordDb } from '../app/recordFs';
+import { useOrgDb } from './db/inOrg';
 import { useBlobDb } from '../app/blobStore';
 import { useMaskSaltStore } from '../app/privacyStore';
 import { useSecretStore } from '../app/configSecrets';
@@ -36,7 +41,7 @@ import { registerStatic, WEB_DIST } from './static';
 import { uploadCapMb } from './admin/org';
 import { registerMcpRoute } from '../automation/serverMcp';
 import { registerGeoRoutes } from './geo';
-import { registerRequestMetrics } from './metrics';
+import { registerRequestMetrics, watchPgPool } from './metrics';
 import { registerPublishedRoutes } from './published';
 import { maskEmbedTokens, maskEmbedUrl, registerEmbedRoutes } from './embed/route';
 import { useEmbedDb } from './embed/settings';
@@ -91,6 +96,18 @@ export const REDACT_PATHS: readonly string[] = SECRET_KEYS.flatMap((k) => {
 const STORAGE_GC_EVERY_MS = 15 * 60_000;
 let dbPool: Pool | null = null;
 let appEnv: ServerEnv | null = null;
+/** The scheduled-job runner, the cross-pod bus and the stream sweep, once started: ./shutdown.ts stops them in its own order. */
+let bg: { runner: { stop(): Promise<void> } | null; bus: { stop(): Promise<void> } | null; sweep: { stop(): void } | null } = { runner: null, bus: null, sweep: null };
+
+/** The runner, bus and stream sweep of the app built last (./shutdown.ts). */
+export function background(): typeof bg {
+  return bg;
+}
+
+/** The Postgres pool of the app built last, or null without DATABASE_URL (./shutdown.ts ends it, last). Never nulled: a null pool reads as no database. */
+export function appPool(): Pool | null {
+  return dbPool;
+}
 
 /**
  * The org role a non-RPC /api/ route needs: uploading stages data (write); the
@@ -149,6 +166,8 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     },
   });
 
+  useLogger(app.log); // src/app/logger.ts: every logger.* line in the process goes through pino, redacted
+
   // T6.2, in this order and before sign-in's hook below: security headers on
   // every response, the CSRF check on every non-GET, the per-IP rate limits —
   // all three refuse without a database query.
@@ -167,8 +186,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // `listen()` binds — so a pod whose schema is not current never serves, and
   // a failure (DB down, edited migration) rejects listen and exits main.ts 1.
   const dbUrl = cfg.databaseUrl;
-  const pool = dbUrl ? createPool(dbUrl, (err) => app.log.warn({ err }, 'postgres idle client error')) : null;
+  const pool = dbUrl ? createPool(dbUrl, (err) => app.log.warn({ err }, 'postgres idle client error'), cfg.pod.databasePoolMax) : null;
   dbPool = pool;
+  watchPgPool(pool); // ordinate_pg_pool_clients on /metrics
   appEnv = cfg;
   if (pool && dbUrl) {
     // Scheduled jobs and cross-pod events (./jobs/): started once the schema
@@ -176,6 +196,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     // reschedules. Lazy requires: nothing loads them without a DB.
     let jobs: { stop(): Promise<void> } | null = null;
     let bus: { stop(): Promise<void> } | null = null;
+    let sweep: { stop(): void } | null = null;
     app.addHook('onReady', async () => {
       try {
         const r = await migrate(pool);
@@ -187,6 +208,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // only; recordFs ignores the pool under the desktop (T5.1). Before the
       // runner: a job's handler reads records like a request does.
       useRecordDb(pool);
+      useOrgDb(pool); // per-member alert inbox, alert post claims, mentions (0020): forced RLS, one org per transaction
       useBlobDb(pool); // logos and Image-card pictures too (0018): nothing durable on this pod's disk
       // One refresh of a dataset at a time across pods (L0.4): an advisory lock per (org, dataset).
       useRefreshLockDb(pool);
@@ -222,16 +244,26 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         });
       }
       bus = await (require('./jobs/bus') as typeof import('./jobs/bus')).startBus(pool, dbUrl, app.log);
+      // The backstop for a stream close the bus lost (docs/sso-lifecycle §3.9).
+      sweep = (require('./streamSweep') as typeof import('./streamSweep')).startStreamSweep(pool, cfg.auth.sessionIdleMs, cfg.auth.apiTokenMaxDays, app.log);
       jobs = (require('./jobs/runner') as typeof import('./jobs/runner')).startRunner(pool, cfg.dataDir, app.log);
+      bg = { runner: jobs, bus, sweep };
     });
-    // preClose, not onClose: onClose hooks run last-registered first, so
-    // DuckDB's shutdown (below) would close under a tick still running.
+    // An app closed on its own (the tests) stops its runner and bus here. A
+    // draining server has already (./shutdown.ts), under deadlines this cannot keep.
     app.addHook('preClose', async () => {
+      if (isDraining()) return;
       await jobs?.stop();
       await bus?.stop();
+      sweep?.stop();
     });
+    // …and un-wires its stores. Never while draining: a handler that outlived its
+    // reply would then save a record to this pod's disk and lose it. ./shutdown.ts
+    // ends the pool last instead, so anything later fails loudly.
     app.addHook('onClose', async () => {
+      if (isDraining()) return;
       useRecordDb(null);
+      useOrgDb(null);
       useBlobDb(null);
       useMaskSaltStore(null);
       useRefreshLockDb(null);
@@ -263,7 +295,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // any of the app loads: no flash of the shell, no burst of 401s.
   // A settings change made by this request is in Postgres before its reply goes out (./orgConfig.ts).
   const orgOf = new WeakMap<object, string>();
-  app.addHook('onSend', async (req) => {
+  app.addHook('onSend', async (req, reply) => {
+    // Draining: every answer closes its socket, so a keep-alive client reconnects elsewhere and close() never waits on it.
+    if (isDraining()) void reply.header('connection', 'close');
     const org = orgOf.get(req);
     if (org) await orgConfig.flushed(org);
   });
@@ -305,7 +339,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         // An RPC also aborts it past RPC_TIMEOUT_SECONDS (the route answers 504).
         const ac = new AbortController();
         const limit = req.routeOptions.url === RPC_ROUTE ? setTimeout(() => ac.abort(new RpcTimeout()), cfg.limits.rpcTimeoutMs) : undefined;
+        const untrack = trackRequest(ac); // the shutdown's HTTP deadline aborts what is still running (./shutdown.ts)
         reply.raw.once('close', () => {
+          untrack();
           clearTimeout(limit);
           if (!reply.raw.writableFinished) ac.abort();
         });
@@ -318,13 +354,22 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     );
   });
 
-  registerEvents(app);
+  // Each stream remembers its session (session sign-in modes) and its API token, so the sweep below and a
+  // revoke end it with them (docs/sso-lifecycle §3.9).
+  const sessionCookie = cookieNames(cfg.env === 'prod').session;
+  const sessionModes = cfg.auth.mode === 'oidc' || cfg.auth.mode === 'password';
+  registerEvents(app, (req) => {
+    const id = sessionModes ? req.cookies?.[sessionCookie] : undefined;
+    const bearer = typeof req.headers.authorization === 'string' ? /^Bearer\s+(ord_\S+)\s*$/i.exec(req.headers.authorization)?.[1] : undefined;
+    return { session: typeof id === 'string' && id ? hashId(id) : null, token: bearer ? hashId(bearer) : null };
+  });
 
   // Readiness: can this pod answer queries? DuckDB, plus Postgres when
   // configured. With per-org workers (T4.3) the first call starts a locked,
   // empty probe worker and asks it (awaited, not blocking); once any worker has
   // started it is a state check.
   app.get('/readyz', async (_req, reply) => {
+    if (isDraining()) return reply.code(503).send({ ok: false, draining: true });
     const duckdb = await probe();
     const checks: Record<string, boolean> = { duckdb };
     if (pool) checks.postgres = await ping(pool);
@@ -399,6 +444,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       await record('ok', decision.projectId, created ? [created] : []);
       return reply.type('application/json').send(body);
     } catch (err) {
+      if (isRestarting(err)) {
+        // The pod is stopping (./shutdown.ts): a job it refused, or a request still running at its deadline.
+        await record('error', decision.projectId);
+        return reply.code(503).send({ error: 'restarting', code: 'restarting', message: err.message });
+      }
       if (err instanceof RpcTimeout) {
         req.log.warn({ channel, limitMs: cfg.limits.rpcTimeoutMs }, 'rpc timed out');
         await record('error', decision.projectId);
@@ -420,6 +470,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         // a typed 409 with the catalog's sentence, never Postgres's text.
         await record('error', decision.projectId);
         return reply.code(409).send({ error: 'record_busy', code: 'record_busy', message: (err as Error).message });
+      }
+      if (isIdpManaged(err)) {
+        // A role or team the identity provider decides (docs/sso-lifecycle): a typed 409 with the catalog's sentence.
+        await record('denied', decision.projectId);
+        return reply.code(409).send({ error: err.code, code: err.code, message: err.message });
       }
       if (isRecordChanged(err)) {
         // A whole-document save from a stale copy (src/app/editConflict.ts): the record is
@@ -462,7 +517,12 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   // Signed embedding at /embed/<token> (docs/embed): off until an org admin turns it on; the only route another site may frame.
   registerEmbedRoutes(app, { pool: () => pool, identify, tokenPerMinute: cfg.limits.embedPerMinute, orgPerMinute: cfg.limits.embedOrgPerMinute });
 
-  app.addHook('onClose', async () => shutdown());
+  // An app closed on its own (the in-process suites) lets its DuckDB go, as it always did: the next
+  // app starts a fresh, unhardened worker. A draining server never does this here — detached work may
+  // still need DuckDB — ./shutdown.ts interrupts and closes every worker last, and awaits each exit.
+  app.addHook('onClose', async () => {
+    if (!isDraining()) duckShutdown();
+  });
 
   // The web app, when it has been built (`npm --prefix web run build`). In dev
   // the Vite server serves it instead and proxies /api here.
@@ -493,12 +553,14 @@ export function registerHandlers(): void {
     if (!appEnv) throw new Error('no app built');
     return appEnv;
   };
-  (require('./admin/people') as typeof import('./admin/people')).register(() => dbPool, () => env().auth.allowedDomains);
+  (require('./admin/people') as typeof import('./admin/people')).register(() => dbPool, () => env().auth.allowedDomains, () => env().auth);
+  // Identity provider groups (docs/sso-lifecycle): the map, and a re-apply of every synced member when it changes.
+  (require('./admin/idpGroups') as typeof import('./admin/idpGroups')).register(() => dbPool, () => env().auth);
   (require('./admin/passwords') as typeof import('./admin/passwords')).register(() => dbPool, () => (appEnv ?? env()).auth.mode, () => env().auth.allowedDomains);
   (require('./admin/org') as typeof import('./admin/org')).register(() => dbPool, () => env().maxUploadMb);
   // Admin → Live usage (live data L2.7): Postgres's counts, or this pod's without it.
   (require('./admin/liveUsage') as typeof import('./admin/liveUsage')).register();
-  (require('./auth/tokens') as typeof import('./auth/tokens')).register(() => dbPool);
+  (require('./auth/tokens') as typeof import('./auth/tokens')).register(() => dbPool, () => env().auth.apiTokenMaxDays);
   // Refresh URLs (live data L0.5): a project writer's, per dataset.
   (require('./hooks/rpc') as typeof import('./hooks/rpc')).register(() => dbPool, () => env().limits.refreshHookMinIntervalSec);
   // The Assistant dock (T2.12): conversations, answers, plans, provider keys.
@@ -560,4 +622,6 @@ export function registerHandlers(): void {
   (require('../ipc/rebuild') as typeof import('../ipc/rebuild')).register();
   // Metric trees (docs/metric-tree): a metric broken into its parts, its change attributed to them.
   (require('../ipc/metricTree') as typeof import('../ipc/metricTree')).register();
+  // @mentions (docs/notifications): the picker, the caller's "Mentioned you" and its email setting.
+  (require('./mentions/rpc') as typeof import('./mentions/rpc')).register();
 }

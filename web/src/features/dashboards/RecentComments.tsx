@@ -9,19 +9,14 @@ import type { RecentComment } from '../../api/home';
 import { ago } from '../../app/when';
 import { toast } from '../../ui/Toast';
 import { Icon, type IconName } from '../../ui/icons/Icon';
+import { threadPath } from '../../../../src/app/threadPath.ts';
 import s from './Comments.module.css';
 
 const ICON: Record<RecentComment['target']['kind'], IconName> = { dataset: 'database', story: 'file-text', visual: 'chart-bar', analysis: 'layout-dashboard', card: 'layout-dashboard' };
 
-/** Where a thread lives, as a route that opens it. */
+/** Where a thread lives, as a route that opens it (src/app/threadPath.ts — the mention email links the same way). */
 export function threadHref(projectId: string, c: RecentComment): string | null {
-  const q = `comment=${c.target.kind}:${c.target.id}`;
-  const t = c.target;
-  if (t.kind === 'dataset') return `/data/${projectId}/${t.id}?${q}`;
-  if (t.kind === 'visual') return `/visuals/${projectId}/${t.id}?${q}`;
-  if (t.kind === 'story') return `/stories/${projectId}/${t.id}?${q}`;
-  const aid = t.kind === 'analysis' ? t.id : c.on?.analysisId;
-  return aid ? `/analyses/${projectId}/${aid}?${q}` : null;
+  return threadPath(projectId, c.target, c.on?.analysisId);
 }
 
 export function RecentComments({ projectId, comments }: { projectId: string; comments: { open: number; recent: RecentComment[] } }) {

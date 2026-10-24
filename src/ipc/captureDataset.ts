@@ -7,6 +7,7 @@ import * as captureUpload from '../app/captureUpload';
 import { modelStatus } from '../ai/byok';
 import { resolveUpload, type Upload } from '../server/files';
 import type { ParsedColumn } from '../data/parse';
+import { logger } from '../app/logger';
 
 // Capture → dataset IPC — turns a capture's `extractedTable` into a saved,
 // reusable dataset (sourceKind 'capture') and supports recapture (replace/append).
@@ -197,7 +198,7 @@ export function register(deps: CaptureDeps = {}) {
       // never fail a save that worked.
       if (capture.entryId) {
         await history.setDatasetId(capture.entryId, saved.id)
-          .catch((e: any) => console.error('[history] setDatasetId failed:', e.message));
+          .catch((e: any) => logger.error('[history] setDatasetId failed:', e.message));
       }
       return { ok: true, dataset: saved, warnings };
     } catch (err: any) {

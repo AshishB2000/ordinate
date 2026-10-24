@@ -44,6 +44,7 @@ import type { DatasetMeta } from '../data/datasets';
 import * as catalog from '../app/catalog';
 import { liveDatasetMissing } from '../engine/liveQueryMessages';
 import { safeError } from '../connectors/types';
+import { logger } from '../app/logger';
 
 type Fail = { ok: false; error: string; code?: string };
 type Selection = { table?: string; query?: string };
@@ -195,7 +196,7 @@ export async function copyLiveDataset(p: Record<string, unknown>) {
   const ran = await fetchSelection(projectId, meta);
   if (!ran.ok) {
     if (!ran.source) return { ok: false, error: ran.error };
-    console.warn(`[live] make a copy of dataset ${id}: the source refused — ${ran.error}`);
+    logger.warn(`[live] make a copy of dataset ${id}: the source refused — ${ran.error}`);
     return { ok: false, error: msg.liveCopyReadFailedMessage() };
   }
   const save = () => datasets.saveDataset(projectId, {
@@ -210,7 +211,7 @@ export async function copyLiveDataset(p: Record<string, unknown>) {
   const saved = rules === undefined ? await save() : await withFirstWritePolicy(rules, save);
   if (!saved) return { ok: false, error: msg.liveCopySaveFailedMessage() };
   await copyColumnNotes(projectId, id, saved.id, saved.columns).catch((err: unknown) =>
-    console.warn(`[live] make a copy of dataset ${id}: column notes not copied — ${safeError(err)}`));
+    logger.warn(`[live] make a copy of dataset ${id}: column notes not copied — ${safeError(err)}`));
   await scanDataset(projectId, saved); // sensitivity proposals, as after any import; never throws
   return { ok: true, dataset: { id: saved.id, name: saved.name, rowCount: saved.rowCount }, warnings: ran.result.warnings ?? [] };
 }
@@ -268,7 +269,7 @@ export function register(): void {
     try {
       return await copyLiveDataset(payload);
     } catch (err: unknown) {
-      console.warn(`[live] make a copy failed — ${safeError(err)}`);
+      logger.warn(`[live] make a copy failed — ${safeError(err)}`);
       return { ok: false, error: msg.liveCopySaveFailedMessage() };
     }
   });

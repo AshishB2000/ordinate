@@ -39,6 +39,7 @@ import { inDashboardCurrency, metricCardFigures, savedScope, type SavedScope } f
 // rename — so a withheld column stays withheld under its new name.
 import { assistantColumnDocs as catalogColumns } from '../app/sharePolicy';
 import { liveCopilotFacts, liveInventoryNotes } from './liveProfile';
+import { logger } from '../app/logger';
 
 // Week 11 — persistent, context-aware AI Copilot IPC. All ipcMain.handle
 // (request/response). Every handler is wrapped so a throw becomes { ok:false, error }
@@ -114,7 +115,7 @@ export function guardAnswer(text: string, ledger: LedgerEntry[]): { text: string
   if (!guardWarned) {
     guardWarned = true;
     // Tokens only, never the answer or the facts: this runs over user data.
-    console.warn(
+    logger.warn(
       `[numbers] the assistant stated ${plural(audit.violations.length, 'figure')} not in the app's ledger ` +
         `(${tokens}). The answer is shown with a note appended. Further occurrences this session are not logged.`,
     );

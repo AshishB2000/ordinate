@@ -16,6 +16,7 @@ import { sanitizeBaseMetricIds, sanitizeDrivers } from './scenarioModel';
 import type { Scenario } from './scenarioModel';
 import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
+import { logger } from '../app/logger';
 
 export type { Scenario } from './scenarioModel';
 
@@ -97,7 +98,7 @@ export async function listScenarios(projectId: string): Promise<ScenarioSummary[
       if (!data || typeof data.id !== 'string') continue;
       out.push(summaryOf(normalize(data, projectId)));
     } catch (err: any) {
-      if (err.code !== 'ENOENT') console.error('[scenarios] Skipping corrupt or unreadable scenario:', id, err.message);
+      if (err.code !== 'ENOENT') logger.error('[scenarios] Skipping corrupt or unreadable scenario:', id, err.message);
     }
   }
   out.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());

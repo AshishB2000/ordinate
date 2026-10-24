@@ -27,13 +27,29 @@ import type { Worker } from 'worker_threads';
 // The bridge's per-call ceiling: past it a worker is wedged and waiting buys nothing.
 const GIVE_UP_MS = 120_000;
 
-// Every DuckDB worker started on this thread, until its 'exit'.
-const alive = new Set<Worker>();
+// Every DuckDB worker started on this thread, until its 'exit', with what it
+// serves (an org id, the readiness probe, or the bridge) for the shutdown log.
+const alive = new Map<Worker, string>();
 
 /** Count `w` as a DuckDB worker until it exits, so `closeEvery()` waits for it. */
-export function track(w: Worker): void {
-  alive.add(w);
+export function track(w: Worker, label = 'bridge'): void {
+  alive.set(w, label);
   w.once('exit', () => alive.delete(w));
+}
+
+/**
+ * Server shutdown: ask every tracked worker to stop — its running call is
+ * interrupted and every queued call skipped, at once, not through its queue
+ * (duckdbWorker `stopAll`). The worker stays alive until it is closed.
+ */
+export function stopEvery(): void {
+  for (const w of alive.keys()) {
+    try {
+      w.postMessage({ kind: 'stop' });
+    } catch {
+      /* already gone */
+    }
+  }
 }
 
 /** Ask `w` to exit through its own queue, and hold the event loop open until it has (bounded). */
@@ -41,7 +57,8 @@ export function closeWorker(w: Worker): void {
   try {
     w.postMessage({ kind: 'close' });
   } catch {
-    void w.terminate(); // port already gone ⇒ nothing native can be in flight
+    // The port is gone, so the worker is exiting on its own. Never `terminate()`:
+    // that is the abort this module exists to avoid.
     return;
   }
   // An `unref`ed orphan is NOT enough: the process ending around it aborts as
@@ -53,18 +70,25 @@ export function closeWorker(w: Worker): void {
 }
 
 /**
- * Close every tracked worker and resolve once each has EXITED — busy, idle,
- * starting, or already asked to close. A second close behind an earlier one is
- * never read: the first one exits.
+ * Close every tracked worker — busy, idle, starting, or already asked to
+ * close — and resolve once each has EXITED, or at `deadlineAt`, with the labels
+ * of the workers still alive then (none: every one is gone). A second close
+ * behind an earlier one is never read: the first one exits. A survivor stays
+ * ref'd (closeWorker): the caller decides what to do; it never terminates one.
  */
-export function closeEvery(): Promise<void> {
-  // Held open by a timer, not only the workers' refs: a pool worker's DuckClient
-  // unrefs it when its last reply lands. Bounded like closeWorker.
-  const hold = setTimeout(() => undefined, GIVE_UP_MS);
-  return Promise.all(
-    [...alive].map((w) => new Promise<void>((resolve) => {
-      w.once('exit', () => resolve());
-      closeWorker(w);
-    })),
-  ).then(() => clearTimeout(hold));
+export function closeEvery(deadlineAt = Date.now() + GIVE_UP_MS): Promise<string[]> {
+  const left = Math.max(0, deadlineAt - Date.now());
+  const exits = [...alive.keys()].map((w) => new Promise<void>((resolve) => {
+    w.once('exit', () => resolve());
+    closeWorker(w);
+  }));
+  return new Promise((resolve) => {
+    // Held open by this timer too, not only the workers' refs: a pool worker's
+    // DuckClient unrefs it when its last reply lands.
+    const cap = setTimeout(() => resolve([...alive.values()]), left);
+    void Promise.all(exits).then(() => {
+      clearTimeout(cap);
+      resolve([]);
+    });
+  });
 }

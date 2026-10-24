@@ -7,7 +7,7 @@
 // drifting clocks agree on whether a session is alive.
 
 import { createHash, randomBytes } from 'crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { Identity, Role } from '../context';
 import type { AuthEnv } from '../env';
 
@@ -61,7 +61,15 @@ export async function provision(pool: Pool, auth: AuthEnv, email: string): Promi
   );
   const row = r.rows[0];
   if (row.disabled) return 'disabled';
+  // An admin just signed in — the break-glass one, or an invited admin's first sign-in (admin → admin, no
+  // role change): the org has a signed-in admin, so a last admin the IdP sync kept is evaluated again (C2).
+  if (row.role === 'admin') await pool.query(CLEAR_KEPT, [auth.org]);
   return { userId: row.id, identity: { user: { email, role: row.role }, org: { id: auth.org } } };
+}
+
+/** A known member as header mode reads it per request: who, their row, and their last group sync's digest. */
+export interface Known extends Member {
+  readonly digest: string | null;
 }
 
 /**
@@ -70,12 +78,13 @@ export async function provision(pool: Pool, auth: AuthEnv, email: string): Promi
  * with no last_login_at yet) is not returned, so their first request goes
  * through `provision`, which stamps the sign-in and keeps the invited role.
  */
-export async function member(pool: Pool, auth: AuthEnv, email: string): Promise<Identity | null> {
-  const r = await pool.query<{ role: Role }>('SELECT role FROM users WHERE org_id = $1 AND email = $2 AND disabled_at IS NULL AND last_login_at IS NOT NULL', [
-    auth.org,
-    email,
-  ]);
-  return r.rows[0] ? { user: { email, role: r.rows[0].role }, org: { id: auth.org } } : null;
+export async function member(pool: Pool, auth: AuthEnv, email: string): Promise<Known | null> {
+  const r = await pool.query<{ id: string; role: Role; digest: string | null }>(
+    'SELECT id::text, role, idp_groups_digest AS digest FROM users WHERE org_id = $1 AND email = $2 AND disabled_at IS NULL AND last_login_at IS NOT NULL',
+    [auth.org, email],
+  );
+  const row = r.rows[0];
+  return row ? { userId: row.id, digest: row.digest, identity: { user: { email, role: row.role }, org: { id: auth.org } } } : null;
 }
 
 /**
@@ -139,4 +148,45 @@ export async function endAllSessions(pool: Pool, org: string, email: string): Pr
     email,
   ]);
   return r.rowCount ?? 0;
+}
+
+/**
+ * Other enabled admins than `$2` in org `$1` who have signed in: the last-admin rule's question, the ONE
+ * rule every path asks (Admin → People and the IdP sync). A pending invitee does not count: under IdP-managed
+ * roles their first sign-in replaces the role they were invited with.
+ */
+export const OTHER_ADMINS = `(SELECT count(*) FROM users o WHERE o.org_id = $1 AND o.id <> $2 AND o.role = 'admin' AND o.disabled_at IS NULL AND o.last_login_at IS NOT NULL)`;
+
+/** The org gained an admin: a last admin kept by the IdP sync is evaluated again at its next sync (`'kept:'` digests). */
+export const CLEAR_KEPT = `UPDATE users SET idp_groups_digest = NULL WHERE org_id = $1 AND idp_groups_digest LIKE 'kept:%'`;
+
+// Test seam: the people lock's negative control runs without it (scripts/test-idpGroups).
+let peopleLock = true;
+export function setPeopleLockForTest(on: boolean): void {
+  peopleLock = on;
+}
+
+/**
+ * One transaction under the org's PEOPLE LOCK (docs/sso-lifecycle/00-design.md §3.6): SHARED for an IdP sync,
+ * EXCLUSIVE for an admin's change to roles, teams or the group map, and for a sync that demotes an admin. So
+ * the last-admin rule holds when several demotions race, and a sync never applies a map being replaced.
+ */
+export async function withPeopleLock<T>(
+  pool: Pool, org: string, mode: 'shared' | 'exclusive', fn: (c: PoolClient) => Promise<T>, lockTimeoutMs?: number,
+): Promise<T> {
+  const c = await pool.connect();
+  try {
+    await c.query('BEGIN');
+    // A sync gives up (55P03) rather than queue behind a long admin change and hold a pool connection (S-M1).
+    if (lockTimeoutMs) await c.query(`SET LOCAL lock_timeout = '${Math.max(1, Math.floor(lockTimeoutMs))}ms'`);
+    if (peopleLock) await c.query(`SELECT ${mode === 'shared' ? 'pg_advisory_xact_lock_shared' : 'pg_advisory_xact_lock'}(hashtextextended($1, 0))`, ['people:' + org]);
+    const out = await fn(c);
+    await c.query('COMMIT');
+    return out;
+  } catch (err) {
+    await c.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    c.release();
+  }
 }

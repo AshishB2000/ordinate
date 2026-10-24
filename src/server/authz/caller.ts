@@ -44,6 +44,22 @@ const perRequest = <T>(m: WeakMap<object, Map<string, T>>): Map<string, T> => {
   return inner;
 };
 
+/**
+ * Forget this request's memo, if a request is current: an IdP sync just changed the caller's teams (or the
+ * team grants behind their rank). Syncs run before a request context exists (docs/sso-lifecycle §3.7), so
+ * this is the guard for one that ever runs inside one.
+ */
+export function forgetCaller(): void {
+  let store: object;
+  try {
+    store = ctx() as object;
+  } catch {
+    return; // outside a request on the server: no memo to drop
+  }
+  ranks.delete(store);
+  callers.delete(store);
+}
+
 /** The rank `authorize` computed for this request's project (the route calls this): no second query. */
 export function seedRank(projectId: string, rank: number): void {
   perRequest(ranks).set(projectId.toLowerCase(), rank);

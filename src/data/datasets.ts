@@ -58,6 +58,7 @@ import { applyLive, isLive, isLiveDatasetError, LiveDatasetError } from './liveD
 import type { DatasetMode, LiveSettings } from './liveDataset';
 import { applyFreshOnAsk, type FreshOnAsk } from './freshOnAskRule';
 import { gateRows } from './rowAccess'; // row access rules: the storage net (docs/row-policy D8)
+import { logger } from '../app/logger';
 export type { DatasetOrigin } from './datasetOrigin';
 export type { DatasetSummary } from './datasetSummary';
 export { sanitizeOrigin };
@@ -405,7 +406,7 @@ export async function listDatasets(projectId: string): Promise<DatasetSummary[]>
       out.push(summarize(normalize(data, projectId)));
     } catch (err: any) { // ponytail: fs errors carry .code, JSON errors don't
       if (err.code !== 'ENOENT') {
-        console.error('[datasets] Skipping corrupt or unreadable dataset:', id, err.message);
+        logger.error('[datasets] Skipping corrupt or unreadable dataset:', id, err.message);
       }
     }
   }

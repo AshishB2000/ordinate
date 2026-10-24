@@ -20,6 +20,7 @@ import type { Pool } from 'pg';
 import type { ServerEnv } from '../env';
 import { audit, type Outcome } from '../authz/audit';
 import { createSession, normalEmail, provision } from './store';
+import { applyIdpGroups, countSync, groupsFromClaims, isSyncBusy, oncePerHour } from './idpGroups';
 import { cookieOpts, safeNext, type CookieNames } from './cookies';
 
 interface LoginTx {
@@ -86,7 +87,7 @@ export function registerOidc(app: FastifyInstance, cfg: ServerEnv, pool: Pool, n
     };
     const url = client.buildAuthorizationUrl(conf, {
       redirect_uri: oidc.redirectUrl,
-      scope: 'openid email profile',
+      scope: ['openid email profile', ...oidc.extraScopes].join(' '),
       response_type: 'code',
       code_challenge: await client.calculatePKCECodeChallenge(tx.v),
       code_challenge_method: 'S256',
@@ -144,9 +145,37 @@ export function registerOidc(app: FastifyInstance, cfg: ServerEnv, pool: Pool, n
       await trail(email, 'denied');
       return fail(reply, m);
     }
+    // IdP groups (./idpGroups.ts), before the session exists: only an explicit list changes anything.
+    let role = m.identity.user.role;
+    const from = cfg.auth.groupsFrom;
+    if (from && 'claim' in from) {
+      const groups = groupsFromClaims(claims as Record<string, unknown> | undefined, from.claim);
+      if (Array.isArray(groups)) {
+        let applied: typeof role | null = role;
+        const apply = () => applyIdpGroups(pool, cfg.auth, { userId: m.userId, email }, groups, { compare: false, log: req.log, requestId: String(req.id) });
+        try {
+          applied = await apply().catch((err: unknown) => (isSyncBusy(err) ? apply() : Promise.reject(err))); // busy: once more
+        } catch (err) {
+          if (isSyncBusy(err)) {
+            // Still busy (an admin's map change holds the lock): signed in with the stored role; the next sign-in syncs.
+            countSync('busy');
+            req.log.warn({}, 'oidc groups sync busy: signed in with the stored role');
+          } else {
+            req.log.error({ err: errInfo(err) }, 'oidc sign-in failed: the IdP groups could not be applied');
+            await trail(email, 'error');
+            return fail(reply, 'failed');
+          }
+        }
+        if (!applied) return fail(reply, 'disabled');
+        role = applied;
+      } else {
+        countSync(groups);
+        if (oncePerHour(`${groups}\n${cfg.auth.org}\n${email}`)) req.log.warn({ claim: from.claim, reason: groups }, 'oidc groups claim absent: role and teams unchanged');
+      }
+    }
     const id = await createSession(pool, cfg.auth, m.userId, req.cookies[names.session]);
     reply.setCookie(names.session, id, { ...cookieOpts(secure, '/'), maxAge: Math.floor(cfg.auth.sessionAbsoluteMs / 1000) });
-    req.log.info({ role: m.identity.user.role }, 'signed in');
+    req.log.info({ role }, 'signed in');
     await trail(email, 'ok');
     return reply.redirect(tx.r);
   });

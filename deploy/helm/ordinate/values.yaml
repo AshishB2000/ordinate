@@ -96,7 +96,22 @@ metrics:
   enabled: true
   port: 9464
   # prometheus.io/* annotations on the pods and the metrics Service (no CRD needed).
+  # Turn them off when you use the ServiceMonitor below, or every pod is scraped twice.
   annotations: true
+  # A Prometheus Operator ServiceMonitor for the metrics Service (needs the CRD).
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    # Labels your Prometheus selects ServiceMonitors by, e.g. release: kube-prometheus-stack.
+    labels: {}
+  # Alert rules (a PrometheusRule, needs the CRD): DuckDB wait, the Postgres pool,
+  # event-loop lag, the 5xx ratio, memory near the limit, restarts. Each links its
+  # section of docs/server/monitoring.md. The memory and restart rules read
+  # cAdvisor and kube-state-metrics (kube-prometheus-stack ships both).
+  prometheusRule:
+    enabled: false
+    labels: {}
+    runbookBaseUrl: https://github.com/AshishB2000/ordinate/blob/develop/docs/server/monitoring.md
 
 ingress:
   enabled: false
@@ -187,8 +202,14 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# Long enough for the request in flight and a scheduled job's current tick.
+# What the kubelet allows from the start of the preStop hook (a 5 s sleep, so
+# endpoints drop this pod first) to SIGKILL.
 terminationGracePeriodSeconds: 30
+# The server's own shutdown budget (SHUTDOWN_GRACE_SECONDS), from SIGTERM: stop
+# taking jobs, finish or cancel what runs, close every DuckDB worker cleanly.
+# It must stay BELOW terminationGracePeriodSeconds − 5 (the preStop sleep), or
+# the kubelet kills the pod mid-shutdown; the chart refuses to render otherwise.
+shutdownGraceSeconds: 20
 
 podSecurityContext:
   runAsNonRoot: true

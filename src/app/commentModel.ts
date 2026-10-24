@@ -30,6 +30,7 @@
 // on one shared folder; a CRDT is the upgrade if edits ever race in earnest.
 
 import { isValidId } from './ids';
+import { scrubPua } from './mentionToken';
 
 export const TARGET_KINDS = ['analysis', 'card', 'visual', 'dataset', 'story'] as const;
 export type TargetKind = (typeof TARGET_KINDS)[number];
@@ -248,7 +249,8 @@ export function after(prev: string | undefined, now: string): string {
 }
 
 function cleanBody(body: unknown): string {
-  return typeof body === 'string' ? body.replace(/\r\n?/g, '\n').trim().slice(0, BODY_MAX) : '';
+  // The web's mention placeholders are never stored: replaced, not deleted (./mentionToken.ts scrubPua).
+  return typeof body === 'string' ? scrubPua(body.replace(/\r\n?/g, '\n')).trim().slice(0, BODY_MAX) : '';
 }
 
 export function makeComment(id: string, rawTarget: unknown, body: unknown, author: string, now: string): Comment | null {

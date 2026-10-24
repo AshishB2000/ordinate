@@ -1,7 +1,7 @@
 import { ipcMain } from './bus';
 import * as versions from '../app/versions';
 import { gateRows } from '../data/rowAccess';
-import { visualForCaller } from './rowDoors';
+import { dashboardForCaller, visualForCaller } from './rowDoors';
 import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
 import * as metrics from '../analysis/metrics';
@@ -72,6 +72,7 @@ export function register(): void {
     // An input table's version is its whole table: refused like its rows (row-policy D9).
     if (type === 'dataset') await gateRows(String(projectId || ''), String(id || ''));
     const v = await versions.get(String(projectId || ''), String(type || ''), String(id || ''), String(key || ''));
+    if (v && type === 'dashboard') return { ...v, record: await dashboardForCaller(String(projectId || ''), v.record) }; // inline card.visual (R19)
     if (!v || type !== 'visual') return v;
     // A version keeps no dataset id: the visual's own says whose rules apply (round 2, #12); a visual gone → closed to the restricted.
     const now = await visuals.getVisual(String(projectId || ''), String(id || ''));

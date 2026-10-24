@@ -39,6 +39,7 @@ import { PASSWORD_ROUTES } from './auth/password';
 import { ctx } from './context';
 import type { LimitsEnv } from './env';
 import { HOOK_ROUTE } from './hooks/store';
+import { trackWork } from './lifecycle';
 import { EMBED_ROUTE } from './embed/route';
 
 const MINUTE = 60_000;
@@ -132,9 +133,11 @@ export class RpcTimeout extends Error {
  * Settles with `work`, or rejects with the signal's reason once it aborts —
  * a time limit (RpcTimeout) or the caller hanging up. `work` itself cannot be
  * stopped; what it awaits on DuckDB is (the same signal interrupts the query
- * in the org worker), and its late result or error is dropped.
+ * in the org worker), and its late result or error is dropped. The shutdown
+ * waits for it either way (./lifecycle.ts trackWork).
  */
 export function untilAborted<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  trackWork(work); // the shutdown awaits it even after its reply was sent (./shutdown.ts)
   if (!signal) return work;
   if (signal.aborted) {
     work.catch(() => {});

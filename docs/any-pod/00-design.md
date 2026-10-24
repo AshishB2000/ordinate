@@ -718,7 +718,8 @@ statement is under RLS for that org. One pass never deletes anything still in us
 1. **File tokens.** A taken token belongs to its `done()`; item 1 streams a restore inside a long
    job. So the sweep takes rows with `used_at IS NULL AND expires_at < now() − 10 min` (never taken,
    and expired; the grace covers a download that started just before expiry), or
-   `used_at < now() − 6 h` (the crash backstop: no handler runs that long). It deletes the object,
+   `used_at < now() − 24 h` (the crash backstop, the same day item 1's `files.ts` gives a used upload: a
+   restore reads it inside a job for hours). It deletes the object,
    then the row.
 2. **Stages.** The same 10-minute grace after `expires_at`: object, then row.
 3. **Counters** whose `window_end < now()`: delete.

@@ -8,6 +8,11 @@ export function recordBusy(): string {
   return t('recordLockMessages.this_is_being_saved_by_someone');
 }
 
+/** A record body over RECORD_MAX_BYTES (./bundleRules.ts): never stored. */
+export function recordTooLarge(): string {
+  return t('recordLockMessages.this_is_too_large_to_save');
+}
+
 /** A statement inside the locked save failed and was swallowed: Postgres rolled the whole save back. */
 export function recordNotSaved(): string {
   return t('recordLockMessages.this_could_not_be_saved_try');

@@ -224,7 +224,7 @@ function allFiles(dir: string): string {
     const meta = await boss('ai:connect', { provider: 'gateway', baseUrl: 'http://169.254.169.254/v1', model: 'x' });
     ok('ssrf: a gateway at the metadata address fails its test and is not connected', meta.body.ok === false
       && (await q<{ verified_at: Date | null }>(`SELECT verified_at FROM org_ai_providers WHERE provider = 'gateway'`))[0]?.verified_at === null, show(meta.body));
-    ok('ssrf: …refused by the guard before any socket (its own sentence in the log, not a timeout)', printed.includes('169.254.169.254 is an internal address'));
+    ok('ssrf: …refused by the guard before any socket (its own sentence in the log, not a timeout)', (appLog + printed).includes('169.254.169.254 is an internal address')); // the server log is pino's (src/app/logger.ts)
     await boss('ai:disconnect', { provider: 'gateway' });
     const listed = await boss('ai:providerModels', { provider: 'anthropic' });
     ok('providerModels: the provider\'s live list, through the stored key', listed.body.ok === true && listed.body.models.map((m: { id: string }) => m.id).join() === 'claude-sonnet-a,claude-haiku-b', show(listed.body));

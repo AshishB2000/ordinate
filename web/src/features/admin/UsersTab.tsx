@@ -15,8 +15,9 @@ import { Select } from '../../ui/Select';
 import { SkeletonTable } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
-import { fmtDate, ROLES, useAdminUsers, useWrite, type AdminUser, type Role } from './api';
+import { fmtDate, ROLES, useAdminUsers, useIdpGroups, useWrite, type AdminUser, type Role } from './api';
 import { AddPersonDialog, ResetPasswordDialog } from './PasswordDialogs';
+import { IdpGroupsPanel } from './IdpGroupsPanel';
 import s from './Admin.module.css';
 
 function Status({ u }: { u: AdminUser }) {
@@ -26,32 +27,44 @@ function Status({ u }: { u: AdminUser }) {
   return <Badge tone="ok">Active</Badge>;
 }
 
-function InviteDialog() {
+/** `managed`: roles follow the identity provider — the first sign-in decides, so no role is asked for. */
+function InviteDialog({ managed }: { managed: boolean }) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('viewer');
+  const reset = () => {
+    setEmail('');
+    setRole('viewer');
+  };
   const invite = useWrite('admin:invite', ['admin:users'], (r) => {
     if (!r.ok) return;
     toast(`Invited ${email.trim().toLowerCase()}. They join when they first sign in.`, { kind: 'success' });
     setOpen(false);
-    setEmail('');
-    setRole('viewer');
+    reset();
   });
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    invite.mutate({ email: email.trim(), role });
+    // Under IdP-managed roles the server stores a viewer whatever is sent; say so in the request too.
+    invite.mutate({ email: email.trim(), role: managed ? 'viewer' : role });
   };
   return (
     <Dialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) reset(); // a cancelled invite does not carry its role into the next one
+      }}
       trigger={
         <Button variant="primary" icon="plus">
           Invite people
         </Button>
       }
       title="Invite someone"
-      description="They appear here as invited and get this role the first time they sign in with single sign-on."
+      description={
+        managed
+          ? 'They appear here as invited. Their role comes from your identity provider groups the first time they sign in.'
+          : 'They appear here as invited and get this role the first time they sign in with single sign-on.'
+      }
       footer={
         <>
           <DialogClose asChild>
@@ -65,13 +78,20 @@ function InviteDialog() {
     >
       <form id="invite-form" className={s.dialogBody} onSubmit={submit}>
         <Input label="Email" type="email" autoComplete="off" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
-        <Select label="Role" value={role} onValueChange={(v) => setRole(v as Role)} options={ROLES} />
+        {!managed && <Select label="Role" value={role} onValueChange={(v) => setRole(v as Role)} options={ROLES} />}
       </form>
     </Dialog>
   );
 }
 
-function UserRow({ u, me, onReset }: { u: AdminUser; me: string | undefined; onReset?: (u: AdminUser) => void }) {
+/**
+ * `role`: how the role cell is drawn — the picker (roles are manual), from the IdP (managed), or plain text
+ * while it is not yet known whether the IdP decides (the groups are loading, or failed to load): never a live
+ * picker that could change a role the IdP owns (C5).
+ */
+type RoleCell = 'picker' | 'idp' | 'text';
+
+function UserRow({ u, me, onReset, role: cell }: { u: AdminUser; me: string | undefined; onReset?: (u: AdminUser) => void; role: RoleCell }) {
   const setRole = useWrite('admin:setRole', ['admin:users']);
   const setDisabled = useWrite('admin:setDisabled', ['admin:users']);
   const self = u.email === me;
@@ -84,15 +104,23 @@ function UserRow({ u, me, onReset }: { u: AdminUser; me: string | undefined; onR
         </span>
       </td>
       <td>
-        <Select
-          size="sm"
-          className={s.roleSelect}
-          aria-label={`Role of ${u.email}`}
-          value={u.role}
-          options={ROLES}
-          disabled={setRole.isPending}
-          onValueChange={(v) => v !== u.role && setRole.mutate({ userId: u.id, role: v as Role })}
-        />
+        {cell !== 'picker' ? (
+          // Hidden, never disabled (#307): the identity provider decides, or it is not known yet whether it does.
+          <span className={s.cellRow}>
+            <span className={s.strong}>{ROLES.find((r) => r.value === u.role)?.label ?? u.role}</span>
+            {cell === 'idp' && <span className={s.meta}>From your identity provider</span>}
+          </span>
+        ) : (
+          <Select
+            size="sm"
+            className={s.roleSelect}
+            aria-label={`Role of ${u.email}`}
+            value={u.role}
+            options={ROLES}
+            disabled={setRole.isPending}
+            onValueChange={(v) => v !== u.role && setRole.mutate({ userId: u.id, role: v as Role })}
+          />
+        )}
       </td>
       <td>
         <Status u={u} />
@@ -122,9 +150,12 @@ function UserRow({ u, me, onReset }: { u: AdminUser; me: string | undefined; onR
   );
 }
 
-/** `passwords`: the server signs in with its own passwords (AUTH_MODE=password). */
-export function UsersTab({ me, passwords = false }: { me: string | undefined; passwords?: boolean }) {
+/** `passwords`: the server signs in with its own passwords (AUTH_MODE=password). `idp`: an IdP signs people in (oidc, header). */
+export function UsersTab({ me, passwords = false, idp }: { me: string | undefined; passwords?: boolean; idp?: 'oidc' | 'header' }) {
   const users = useAdminUsers();
+  const groups = useIdpGroups(!!idp);
+  const managed = !!idp && groups.data?.roleManaged === true;
+  const roleCell: RoleCell = !idp ? 'picker' : !groups.isSuccess ? 'text' : managed ? 'idp' : 'picker';
   const [find, setFind] = useState('');
   const [resetting, setResetting] = useState<AdminUser | null>(null);
   const shown = users.data?.filter((u) => u.email.includes(find.trim().toLowerCase())) ?? [];
@@ -163,7 +194,7 @@ export function UsersTab({ me, passwords = false }: { me: string | undefined; pa
           </thead>
           <tbody>
             {shown.map((u) => (
-              <UserRow key={u.id} u={u} me={me} onReset={passwords ? setResetting : undefined} />
+              <UserRow key={u.id} u={u} me={me} onReset={passwords ? setResetting : undefined} role={roleCell} />
             ))}
           </tbody>
         </table>
@@ -182,10 +213,11 @@ export function UsersTab({ me, passwords = false }: { me: string | undefined; pa
           value={find}
           onChange={(e) => setFind(e.target.value)}
         />
-        <div className={s.barEnd}>{passwords ? <AddPersonDialog /> : <InviteDialog />}</div>
+        <div className={s.barEnd}>{passwords ? <AddPersonDialog /> : <InviteDialog managed={managed} />}</div>
       </div>
       {body}
       {passwords && <ResetPasswordDialog user={resetting} onClose={() => setResetting(null)} />}
+      {idp && <IdpGroupsPanel mode={idp} />}
     </section>
   );
 }

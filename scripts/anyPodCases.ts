@@ -140,12 +140,13 @@ export async function sweepSparesTaken(p: Pass): Promise<void> {
   const key = (await rowOf(p, tok))?.storage_key ?? '';
   const restoring = H.rpc(p.B.base, U1, 'backups:restore', { fileToken: tok, confirm: 'restore' }); // the preload holds the restore job ~8 s
   await H.until(async () => !!(await rowOf(p, tok))?.used_at, 5_000);
-  await p.db.pool.query(`UPDATE file_tokens SET expires_at = now() - interval '1 day' WHERE token_hash = $1`, [hashOf(tok)]);
+  // Taken 7 h ago: a restore may read its upload inside a job for hours (item 1 gives a used upload a day).
+  await p.db.pool.query(`UPDATE file_tokens SET expires_at = now() - interval '1 day', used_at = now() - interval '7 hours' WHERE token_hash = $1`, [hashOf(tok)]);
   const swept = await runSweep(p, 'acme');
   const kept = !!(await rowOf(p, tok)) && (await bytesExist(p, 'acme', key));
   const r = await restoring;
   const gone = await H.until(async () => !(await rowOf(p, tok)) && !(await bytesExist(p, 'acme', key)), 5_000);
-  ok(`[${p.name}] 12: a token taken by a running restore survives the sweep (row and bytes), then done() removes both`, swept && kept && r.body?.ok === true && gone, JSON.stringify({ swept, kept, restore: r.body, gone }));
+  ok(`[${p.name}] 12: a token taken 7 h ago by a running restore survives the sweep (row and bytes), then done() removes both`, swept && kept && r.body?.ok === true && gone, JSON.stringify({ swept, kept, restore: r.body, gone }));
 }
 
 // ── 2 and 3. Export on A → download on B; backup on B → restore on A ─────

@@ -36,6 +36,7 @@ import { ctx, serverDataDir } from '../server/context';
 import { aliasCollision, MAX_ALIASES, sanitizeAliases } from './columnNames';
 import type { NamedColumn } from './columnNames';
 import { alreadyCalled, tooManyNames } from './columnNameMessages';
+import { logger } from './logger';
 
 // ── Kinds ────────────────────────────────────────────────────────────────────
 // A dashboard is stored as an Analysis record, so its kind is 'analysis' — the
@@ -240,7 +241,7 @@ export async function load(projectId: string): Promise<CatalogFile> {
   try {
     return sanitizeCatalog(JSON.parse(await recordFs.readFile(catalogPath(projectId), 'utf8')));
   } catch (err: any) {
-    if (err && err.code !== 'ENOENT') console.error('[catalog] unreadable catalog, treating as empty:', err.message);
+    if (err && err.code !== 'ENOENT') logger.error('[catalog] unreadable catalog, treating as empty:', err.message);
     return emptyCatalog();
   }
 }

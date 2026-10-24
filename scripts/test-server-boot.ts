@@ -4,6 +4,14 @@
 // shuts down cleanly. (Until the T8.1 cutover it also proved the server never
 // loaded the desktop runtime or src/cli; both are gone from the repository.)
 //
+// SIGTERM MID-FLIGHT (docs/pod-lifecycle/00-design.md §3.10): the real server,
+// signalled with a query and a job running (×20), with a hung-up query still
+// unwinding (×10), and with an idle worker (×10) — every time exit 0, no native
+// abort, gone within SHUTDOWN_GRACE_SECONDS + 3 s; with the job, /readyz 503
+// meanwhile and the job ending `cancelled` with the restart sentence. Without
+// DATABASE_URL in that mode; with it, on a scratch database (and one more run on
+// S3 when STORAGE_URL=s3://… is set, the CI env).
+//
 //   npm run build:ts && node scripts/test-server-boot.js
 
 export {}; // module scope — sibling test scripts share top-level names
@@ -14,6 +22,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { Writable } from 'stream';
+import { line, runOnce, type Kind, type Outcome } from './sigtermHarness';
 
 const envMod: typeof import('../src/server/env') = require('../src/server/env');
 const appMod: typeof import('../src/server/app') = require('../src/server/app');
@@ -175,6 +184,81 @@ function childEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   ok('prod with AUTH_MODE=dev: exits non-zero with one line naming sign-in', prodDev.status !== 0 && prodDev.status !== null && devOurs.length === 1 && devOurs[0].includes('sign-in'), prodDev.stderr);
 
   fs.rmSync(tmp, { recursive: true, force: true });
+
+  await sigtermMidFlight();
 })()
   .catch((err) => ok('suite ran to completion', false, err instanceof Error ? err.stack : err))
   .finally(finish);
+
+/** Every kind of SIGTERM, repeated, in this run's mode (with DATABASE_URL: a scratch database). */
+async function sigtermMidFlight(): Promise<void> {
+  const GRACE_S = 2;
+  const sentence = (require('../src/server/lifecycleMessages') as typeof import('../src/server/lifecycleMessages')).restartedWhileRunning();
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-sigterm-'));
+  const adminUrl = process.env.DATABASE_URL;
+  const mode = adminUrl ? 'with DATABASE_URL' : 'without DATABASE_URL';
+  const env = childEnv({ DATA_DIR: data, ORDINATE_ENV: 'dev', AUTH_MODE: 'dev' });
+  const { Client }: typeof import('pg') = require('pg');
+  let dbName = '';
+  if (adminUrl) {
+    dbName = `ordinate_boot_${process.pid}_${Date.now()}`;
+    const admin = new Client({ connectionString: adminUrl });
+    await admin.connect();
+    await admin.query(`CREATE DATABASE ${dbName}`);
+    await admin.end();
+    const u = new URL(adminUrl);
+    u.pathname = '/' + dbName;
+    env.DATABASE_URL = u.toString();
+    // The dev identity as a member, so a project it creates gets its creator grant.
+    const { Pool }: typeof import('pg') = require('pg');
+    const pool = new Pool({ connectionString: env.DATABASE_URL, max: 1 });
+    pool.on('error', () => undefined);
+    await (require('../src/server/db/migrate') as typeof import('../src/server/db/migrate')).migrate(pool);
+    await pool.query("INSERT INTO orgs (id, name) VALUES ('default', 'Default') ON CONFLICT DO NOTHING");
+    await pool.query("INSERT INTO users (org_id, email, role, last_login_at) VALUES ('default', 'dev@local', 'admin', now())");
+    await pool.end();
+  }
+  try {
+    const runs: Outcome[] = [];
+    for (const [kind, n] of [['inflight', 20], ['hungup', 10], ['idle', 10]] as Array<[Kind, number]>) {
+      for (let i = 0; i < n; i++) {
+        const o = await runOnce(kind, env, GRACE_S);
+        runs.push(o);
+        if (o.setupError || o.aborted || o.overran || o.code !== 0) console.log(`     ${mode} ${kind} #${i + 1}: ${line(o)}\n${o.stderrTail}`);
+      }
+    }
+    const s3 = (process.env.STORAGE_URL ?? '').startsWith('s3://') && adminUrl ? await s3Prefix() : null;
+    if (s3) runs.push({ ...(await runOnce('inflight', { ...env, STORAGE_URL: s3 }, GRACE_S, { s3Read: true })), kind: 'inflight' });
+    for (const kind of ['inflight', 'hungup', 'idle'] as Kind[]) {
+      const of = runs.filter((o) => o.kind === kind);
+      const clean = of.filter((o) => !o.setupError && o.code === 0 && !o.aborted && !o.overran && o.goneMs <= (GRACE_S + 3) * 1000);
+      console.log(`     SIGTERM ${mode}, ${kind}: ${of.length} runs, ${clean.length} clean, ${of.filter((o) => o.aborted).length} aborts, ${of.filter((o) => o.overran).length} overruns, `
+        + `${of.filter((o) => o.setupError).length} setup failures, slowest ${Math.max(0, ...of.map((o) => o.goneMs))} ms`);
+      ok(`SIGTERM ${mode}, ${kind}: ${clean.length} of ${of.length} exit 0 with no native abort, within SHUTDOWN_GRACE_SECONDS + 3 s`, of.length > 0 && clean.length === of.length);
+    }
+    const inflight = runs.filter((o) => o.kind === 'inflight');
+    ok(`SIGTERM ${mode}, inflight: /readyz answered 503 (draining) between the signal and the exit, every time`, inflight.every((o) => o.readyz503), inflight.filter((o) => !o.readyz503).map(line).join(' | '));
+    ok(`SIGTERM ${mode}, inflight: the job ended cancelled with "${sentence}", pushed to its tab, every time`,
+      inflight.every((o) => o.job?.state === 'cancelled' && o.job.error === sentence), inflight.filter((o) => o.job?.error !== sentence).map(line).join(' | '));
+    if (s3) ok('SIGTERM on S3 (the main-thread credential instance open): exit 0, no abort', inflight.at(-1)?.code === 0 && !inflight.at(-1)?.aborted, line(inflight.at(-1) as Outcome));
+    else console.log('     (no S3 run: STORAGE_URL=s3://… and DATABASE_URL are not both set)');
+  } finally {
+    fs.rmSync(data, { recursive: true, force: true });
+    if (dbName && adminUrl) {
+      const admin = new Client({ connectionString: adminUrl });
+      await admin.connect();
+      await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`).catch(() => undefined);
+      await admin.end();
+    }
+  }
+}
+
+/** A fresh prefix in the CI bucket (made if need be), as an s3:// URL. The test's own S3 lookup is closed after. */
+async function s3Prefix(): Promise<string> {
+  const s3: typeof import('../src/engine/s3') = require('../src/engine/s3');
+  const base = envMod.parseEnv(process.env).storage.s3!;
+  const prefix = `${base.prefix ? base.prefix + '/' : ''}boot-${process.pid}-${Date.now()}`;
+  await s3.createBucket({ ...base, prefix });
+  await s3.close(Date.now() + 5000);
+  return `s3://${base.bucket}/${prefix}`;
+}

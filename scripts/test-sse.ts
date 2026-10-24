@@ -5,6 +5,8 @@
 // C (another org) must receive nothing. Then: hijack attempts on A's client id,
 // cancel over the stream, backpressure (coalescing, never dropping a
 // completion, closing instead of growing), heartbeat, and the registry back to 0.
+// Closing a user's streams (docs/sso-lifecycle §3.9): only that user's, on this
+// pod and handed to the fan-out; a session kept; `publish` never sends CLOSE.
 //
 //   npm run build:ts && node scripts/test-sse.js
 
@@ -271,6 +273,25 @@ const findJob = (e: Ev, id: string): Job | undefined => {
   const A2 = await openTab(kA, 'org-a');
   ok('reopen by the same user: 200, the old stream is ended', A2.status === 200 && (await Promise.race([A.ended.then(() => true), sleep(2000).then(() => false)])));
   ok('reopen: a new numeric id (a job tagged with the old one cannot reach it)', sse.clientFor(kA, who('org-a'))!.id !== clientA.id && clientA.isDestroyed());
+
+  // ── Closing one user's streams (disable, logout-everywhere) ───────────────
+  const fanned: [string, string, string][] = [];
+  sse.setFanOut((t, c, d) => fanned.push([`${t.org}/${t.user ?? ''}`, c, d]));
+  const G1 = await openTab(randomUUID(), 'org-a', 'gina');
+  const G2 = await openTab(randomUUID(), 'org-a', 'gina');
+  const H = await openTab(randomUUID(), 'org-a', 'hal');
+  const Gb = await openTab(randomUUID(), 'org-b', 'gina');
+  sse.publish({ org: 'org-a', user: 'gina@org-a' }, sse.CLOSE, '');
+  ok('close: publish never sends CLOSE (no stream ends, nothing fanned out)', !(await Promise.race([G1.ended.then(() => true), sleep(300).then(() => false)])) && fanned.length === 0);
+  sse.closeStreamsOf('org-a', 'gina@org-a');
+  ok('close: every stream of that user on this pod ends', await Promise.race([Promise.all([G1.ended, G2.ended]).then(() => true), sleep(2000).then(() => false)]));
+  ok('close: …and the close is handed to the other pods', JSON.stringify(fanned) === JSON.stringify([['org-a/gina@org-a', sse.CLOSE, '']]), JSON.stringify(fanned));
+  ok('NEGATIVE CONTROL: another user, and the same name in another org, stay open',
+    !(await Promise.race([H.ended.then(() => true), Gb.ended.then(() => true), sleep(300).then(() => false)])) && sse.clientFor(undefined, who('org-a')) === null);
+  sse.deliverLocal({ org: 'org-a', user: 'hal@org-a' }, sse.CLOSE, '');
+  ok('close: a CLOSE from another pod (deliverLocal) ends the target\'s streams', await Promise.race([H.ended.then(() => true), sleep(2000).then(() => false)]));
+  sse.setFanOut(null);
+  Gb.close();
 
   // ── Closing frees the registry ────────────────────────────────────────────
   for (const t of [A2, B, C, D, P]) t.close();

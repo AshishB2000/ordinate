@@ -6,9 +6,11 @@
 // a rule fired: those are alertStore's and alerts.ts's jobs respectively, and
 // this file exists so the renderer has doors into them.
 //
-// The one thing this file DOES own is delivery: `deliver()` is the single place
-// that turns fired events into the push each signed-in tab's bell repaints
-// from, and it is what both the server's tick and a manual "evaluate now" call.
+// Delivery is not this file's: a rule's fired events go through
+// server/jobs/schedules.ts `deliverFired` — the push AND the posts to the rule's
+// channels, the same on every path as on the tick (docs/notifications §5.3).
+// `pushAlertEvents` is the push alone, for quality and pipeline events, which no
+// rule's channels name.
 //
 // THE EXPLAIN PATH IS THE ONLY MODEL CALL, and it is asked for (`alerts:explain`):
 // the event is already on disk before `explainEvent` is called. It narrates
@@ -29,23 +31,22 @@ import { askCopilot } from '../ai/analyze';
 import { buildFacts, guardAnswer } from './copilot';
 import { serverDataDir } from '../server/context';
 import { liveCodeOf } from './liveRoute';
+import { markSeenFor, perMember, seenView } from '../server/alertInbox';
+import { logger } from '../app/logger';
 
 // ── Delivery ─────────────────────────────────────────────────────────────────
 
+const schedules = (): typeof import('../server/jobs/schedules') => require('../server/jobs/schedules');
+
 /**
- * Everything one evaluation produced, delivered once: every tab of the org gets
- * the push its bell repaints from, exactly what the tick job sends — only to
- * members who may read the project (T6.3), since an alert carries its figures.
- * Outside server mode (a plain-Node test) there is no one to tell. Returns how
- * many OS notifications were shown, which the server never does: 0.
+ * Events no rule's channels name — data-quality checks (analysis/qualityRun) and
+ * pipeline failures (app/pipelineRunner): the push alone, to members who may read
+ * the project (T6.3), with no figure from a dataset with row access rules.
+ * Outside server mode (a plain-Node test) there is no one to tell.
  */
-export async function deliver(projectId: string, events: AlertEvent[]): Promise<number> {
-  if (!Array.isArray(events) || events.length === 0) return 0;
-  if (serverDataDir() !== null) {
-    const pushable = await store.pushableEvents(projectId, events); // no figure from a dataset with row access rules
-    (require('../server/jobs/schedules') as typeof import('../server/jobs/schedules')).pushToReaders(projectId, 'alerts:fired', { projectId, events: pushable });
-  }
-  return 0;
+export async function pushAlertEvents(projectId: string, events: AlertEvent[]): Promise<void> {
+  if (!Array.isArray(events) || events.length === 0 || serverDataDir() === null) return;
+  await schedules().pushFired(projectId, events);
 }
 
 /**
@@ -68,7 +69,8 @@ export async function evaluateOnly(projectId: string, datasetId?: string): Promi
  */
 export async function evaluateAndDeliver(projectId: string, datasetId?: string): Promise<AlertEvent[]> {
   const fired = await evaluateOnly(projectId, datasetId);
-  await deliver(projectId, fired);
+  // What the tick does: the push (awaited, so the bell is right when a refresh answers) and the posts (never awaited).
+  if (fired.length && serverDataDir() !== null) await schedules().deliverFired(projectId, fired).pushed;
   return fired;
 }
 
@@ -104,7 +106,7 @@ export async function explainEvent(projectId: string, event: AlertEvent): Promis
     }, thread.id);
     return thread.id;
   } catch (err: any) {
-    console.error('[alerts] Could not explain an alert:', err && err.message);
+    logger.error('[alerts] Could not explain an alert:', err && err.message);
     return null;
   }
 }
@@ -141,17 +143,20 @@ export function register(): void {
 
   // The inbox and the rules page read the same payload: one file, two surfaces.
   // `unseen` is derived here rather than counted in the renderer so the bell and
-  // the list can never disagree about what "unread" means.
+  // the list can never disagree about what "unread" means. `seen` is the
+  // CALLER's (src/server/alertInbox.ts): one member's click never clears another's.
   ipcMain.handle('alerts:list', async (_e, { projectId }: any = {}) => {
     try {
       await store.syncWatchRules(projectId);
       const file = await redactAlerts(projectId, await store.load(projectId));
+      const seen = await seenView(projectId);
+      const events = file.events.map((ev) => ({ ...ev, seen: seen(ev) }));
       return {
         ok: true,
         rules: file.rules,
-        events: file.events,
+        events,
         digest: file.digest,
-        unseen: file.events.filter((ev) => !ev.seen).length,
+        unseen: events.filter((ev) => !ev.seen).length,
       };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not read alerts' };
@@ -214,9 +219,12 @@ export function register(): void {
     }
   });
 
-  ipcMain.handle('alerts:markSeen', async (_e, { projectId, eventId }: any = {}) => {
+  // Any reader marks their OWN inbox (a row of alert_inbox); without a database
+  // there is one identity, and the shared flag is its inbox.
+  ipcMain.handle('alerts:markSeen', async (_e, { projectId, eventId, through }: any = {}) => {
     try {
       const id = typeof eventId === 'string' && eventId ? eventId : undefined;
+      if (perMember()) return { ok: await markSeenFor(projectId, (await store.load(projectId)).events, id, typeof through === 'string' ? through : undefined) };
       return { ok: await store.markSeen(projectId, id) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Could not update the inbox' };

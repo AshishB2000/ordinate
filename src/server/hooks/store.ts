@@ -111,9 +111,10 @@ export type Claim =
 /**
  * One transaction with an RLS setting. `value` is checked against its shape
  * before it is inlined (`setting` is one of two literals), as recordFs does it:
- * one round trip for BEGIN and the setting.
+ * one round trip for BEGIN and the setting. Exported for ../db/inOrg.ts, so the
+ * notification stores reuse it rather than holding a copy.
  */
-async function within<T>(pool: Pool, setting: 'ordinate.org' | 'ordinate.hook', value: string, fn: (c: PoolClient) => Promise<T>): Promise<T> {
+export async function within<T>(pool: Pool, setting: 'ordinate.org' | 'ordinate.hook', value: string, fn: (c: PoolClient) => Promise<T>): Promise<T> {
   if (!(setting === 'ordinate.org' ? ORG_RE : HASH_RE).test(value)) throw new Error(`invalid ${setting}`);
   const c = await pool.connect();
   let broken: Error | undefined;

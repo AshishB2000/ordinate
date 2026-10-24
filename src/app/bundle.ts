@@ -1,121 +1,54 @@
 // Project bundles — one `.ordinate` file per project. MAIN PROCESS ONLY.
 //
 // A bundle is a plain ZIP of the project directory, Parquet included, plus a
-// manifest.json. Written and read with Node's own zlib and a minimal zip
-// writer/reader below — no dependency, because a zip is a few fixed-size
-// headers around deflate, and the reader has to be strict anyway.
+// manifest.json, written with Node's own zlib — no dependency, because a zip is
+// a few fixed-size headers around deflate (./zipWriter.ts).
 //
-// WHAT TRAVELS is a WHITELIST (ENTRY_RULES): project.json, the record
-// directories (stories and boundaries included), alerts.json, version history,
-// the data model (relationships.json), the catalog, image assets and the share
-// policy. What does not: config.json (keys and connection secrets live there,
-// never in a project), privacy/salt.key (a per-project secret), the Trash, the
-// Assistant's conversations (copilot.json), a synced project's lock.json, and
-// anything else. A backup IS a bundle, so what is left off here is left out of
-// every backup too — a new per-project file needs a rule here. Import
-// REFUSES a bundle holding any entry outside the same whitelist — a bundle is a
-// file from somewhere else, and "skip what we do not recognise" is how a crafted
-// one would smuggle a path in.
+// WHAT TRAVELS is a WHITELIST (./bundleRules.ts ENTRY_RULES): project.json, the
+// record directories (stories and boundaries included), alerts.json, version
+// history, the data model (relationships.json), the catalog, image assets and
+// the share policy. What does not: config.json (keys and connection secrets
+// live there, never in a project), privacy/salt.key (a per-project secret), the
+// Trash, the Assistant's conversations (copilot.json), a synced project's
+// lock.json, and anything else. A backup IS a bundle, so what is left off here
+// is left out of every backup too — a new per-project file needs a rule there.
 //
-// Import always makes a NEW project. Record ids are UUIDs; any that collide
-// with a record already on this machine (importing a bundle exported from this
-// same install, say) are remapped to fresh ones — in file names and in every
-// JSON body, by exact UUID string, so every reference follows its record.
-//
-// Guards: entry names are whitelist-matched before anything touches a path;
-// sizes are capped before inflating (a zip bomb stops at the cap); every
-// entry's CRC is checked; the manifest's counts must match what is there.
+// This file EXPORTS. The import (./bundleImport.ts, re-exported below) reads
+// the uploaded FILE through ./zipReader.ts: every name checked against the same
+// whitelist from the central directory before a byte is inflated, memory
+// bounded by one JSON entry, never by the bundle (docs/pod-lifecycle).
 
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
-import { randomUUID } from 'crypto';
 import * as projects from './projects';
-import { projectDir, projectsBase, isValidId } from './recordKinds';
-import { bundleThemesEntry, importBundleThemes } from './themeStore';
+import { projectDir } from './recordKinds';
+import { bundleThemesEntry } from './themeStore';
 import * as recordFs from './recordFs';
-import { listBlobs, readBlob, writeBlob } from './blobStore';
-import { bundleTemplatesEntry, importBundleTemplates } from './userTemplateStore'; // r7:templates
+import { listBlobs, readBlob } from './blobStore';
+import { bundleTemplatesEntry } from './userTemplateStore'; // r7:templates
+import { BUNDLE_FORMAT, BUNDLE_VERSION, MANIFEST_MAX_BYTES, MAX_ENTRIES, MAX_ENTRY_BYTES, MAX_TOTAL_BYTES, RECORD_MAX_BYTES, ruleFor } from './bundleRules';
+import type { BundleManifest } from './bundleRules';
+import { recordTooLargeToExport } from './bundleMessages';
+import { centralHeader, dosTime, endRecord, localHeader, pack, type Packed } from './zipWriter';
+import { walk, type BundleProgress } from './bundleImport';
 
-export const BUNDLE_FORMAT = 'ordinate-project';
-export const BUNDLE_VERSION = 1;
-
-const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
-const UUID_G = new RegExp(UUID, 'gi');
-const CONNECTION_FILE = new RegExp(`^connections/(${UUID})\\.json$`, 'i');
-const KEY = '\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}-\\d{3}Z(?:-\\d{1,3})?';
-
-/** Every entry a bundle may hold, and what it counts as in the manifest. */
-const ENTRY_RULES: Array<{ re: RegExp; count?: string }> = [
-  { re: /^manifest\.json$/ },
-  { re: /^project\.json$/ },
-  { re: /^alerts\.json$/ },
-  { re: /^events\.json$/ }, // r8:events — the project's Events list
-  { re: new RegExp(`^datasets/${UUID}\\.json$`, 'i'), count: 'datasets' },
-  { re: new RegExp(`^datasets/${UUID}(?:\\.source)?\\.parquet$`, 'i'), count: 'parquet' },
-  { re: new RegExp(`^visuals/${UUID}\\.json$`, 'i'), count: 'visuals' },
-  { re: new RegExp(`^analyses/${UUID}\\.json$`, 'i'), count: 'dashboards' },
-  { re: new RegExp(`^metrics/${UUID}\\.json$`, 'i'), count: 'metrics' },
-  { re: new RegExp(`^reports/${UUID}\\.json$`, 'i'), count: 'reports' },
-  { re: new RegExp(`^scorecards/${UUID}\\.json$`, 'i'), count: 'scorecards' },
-  { re: new RegExp(`^scenarios/${UUID}\\.json$`, 'i'), count: 'scenarios' },
-  { re: new RegExp(`^connections/${UUID}\\.json$`, 'i'), count: 'connections' },
-  { re: new RegExp(`^history/(?:dataset|visual|dashboard|metric|report)/${UUID}/${KEY}\\.json$`, 'i'), count: 'versions' },
-  { re: new RegExp(`^stories/${UUID}\\.json$`, 'i'), count: 'stories' },
-  { re: new RegExp(`^notebooks/${UUID}\\.json$`, 'i'), count: 'notebooks' }, // r7:notebooks
-  { re: new RegExp(`^boundaries/${UUID}\\.json$`, 'i'), count: 'boundaries' },
-  // Binary (and SVG) images: not `.json`, so import never rewrites their bytes.
-  { re: new RegExp(`^assets/${UUID}\\.(?:png|jpg|svg)$`, 'i'), count: 'assets' },
-  { re: /^relationships\.json$/ },
-  { re: /^catalog\.json$/ },
-  // The share policy travels. Its sibling privacy/salt.key NEVER does: it is a
-  // per-project secret, and "not on this list" is what keeps it home.
-  { re: /^privacy\/policy\.json$/ },
-  { re: /^comments\.json$/ }, // comment threads (src/app/comments.ts); target ids remap like any body
-  // The workspace themes this project's dashboards name (themeStore.ts). Not a
-  // project file: written at export, adopted into the workspace at import.
-  { re: /^themes\.json$/ },
-  { re: /^templates\.json$/ }, // r7:templates — user templates from these dashboards (userTemplateStore.ts)
-];
-
-const MAX_ENTRIES = 50_000;
-const MAX_ENTRY_BYTES = 1024 * 1024 * 1024; // 1 GiB — far past a 1M-row Parquet
-const MAX_TOTAL_BYTES = 4 * 1024 * 1024 * 1024 - 1; // what a zip without zip64 can say
-
-export interface BundleManifest {
-  format: string;
-  formatVersion: number;
-  appVersion: string;
-  exportedAt: string;
-  project: { name: string };
-  counts: Record<string, number>;
-}
-
-function ruleFor(name: string): { re: RegExp; count?: string } | undefined {
-  return ENTRY_RULES.find((r) => r.re.test(name));
-}
+export { BUNDLE_FORMAT, BUNDLE_VERSION } from './bundleRules';
+export type { BundleManifest } from './bundleRules';
+// The import reads a FILE through ./zipReader.ts (docs/pod-lifecycle): ./bundleImport.ts.
+export { importBundle, type BundleProgress, type ImportOptions, type ImportResult } from './bundleImport';
 
 // ── The zip itself ───────────────────────────────────────────────────────────
+// In memory: what an export builds (one project) and what the tests read back.
+// Untrusted input never comes through here — it is read from its file by
+// ./zipReader.ts — so this reader stays as the reference the streamed one is
+// compared with (scripts/test-bundleMemory.ts).
 
 export interface ZipEntry { name: string; data: Buffer }
 
-function dosTime(d: Date): { time: number; date: number } {
-  return {
-    time: (d.getHours() << 11) | (d.getMinutes() << 5) | Math.floor(d.getSeconds() / 2),
-    date: ((Math.max(1980, d.getFullYear()) - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate(),
-  };
-}
-
-interface Packed { body: Buffer; store: boolean; crc: number }
-
-function pack(e: ZipEntry, deflated: Buffer): Packed {
-  const store = deflated.length >= e.data.length;
-  return { body: store ? e.data : deflated, store, crc: zlib.crc32(e.data) >>> 0 };
-}
-
 /** A zip of the given entries: deflated when that is smaller, stored otherwise. */
 export function writeZip(entries: ZipEntry[], when = new Date()): Buffer {
-  return assemble(entries, entries.map((e) => pack(e, zlib.deflateRawSync(e.data))), when);
+  return assemble(entries, entries.map((e) => pack(e.data, zlib.deflateRawSync(e.data))), when);
 }
 
 const deflateRawAsync = (b: Buffer): Promise<Buffer> =>
@@ -136,7 +69,7 @@ export async function writeZipAsync(
 ): Promise<Buffer> {
   const packed: Packed[] = [];
   for (let i = 0; i < entries.length; i++) {
-    packed.push(pack(entries[i], await deflateRawAsync(entries[i].data)));
+    packed.push(pack(entries[i].data, await deflateRawAsync(entries[i].data)));
     if (onEntry) onEntry(i + 1, entries.length);
   }
   return assemble(entries, packed, when);
@@ -145,51 +78,20 @@ export async function writeZipAsync(
 function assemble(entries: ZipEntry[], packed: Packed[], when: Date): Buffer {
   // The entry count is a 16-bit field without zip64; past it the file would lie.
   if (entries.length > 0xffff) throw new Error('This project has too many files to bundle.');
-  const { time, date } = dosTime(when);
+  const at = dosTime(when);
   const locals: Buffer[] = [];
   const centrals: Buffer[] = [];
   let offset = 0;
   entries.forEach((e, i) => {
     const name = Buffer.from(e.name, 'utf8');
-    const { body, store, crc } = packed[i];
-    const local = Buffer.alloc(30);
-    local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(0x0800, 6); // names are UTF-8
-    local.writeUInt16LE(store ? 0 : 8, 8);
-    local.writeUInt16LE(time, 10);
-    local.writeUInt16LE(date, 12);
-    local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(body.length, 18);
-    local.writeUInt32LE(e.data.length, 22);
-    local.writeUInt16LE(name.length, 26);
-    local.writeUInt16LE(0, 28);
-    const central = Buffer.alloc(46);
-    central.writeUInt32LE(0x02014b50, 0);
-    central.writeUInt16LE(20, 4);
-    central.writeUInt16LE(20, 6);
-    central.writeUInt16LE(0x0800, 8);
-    central.writeUInt16LE(store ? 0 : 8, 10);
-    central.writeUInt16LE(time, 12);
-    central.writeUInt16LE(date, 14);
-    central.writeUInt32LE(crc, 16);
-    central.writeUInt32LE(body.length, 20);
-    central.writeUInt32LE(e.data.length, 24);
-    central.writeUInt16LE(name.length, 28);
-    central.writeUInt32LE(offset, 42);
-    locals.push(local, name, body);
-    centrals.push(central, name);
-    offset += 30 + name.length + body.length;
+    const p = packed[i];
+    locals.push(localHeader(name, p, e.data.length, at), name, p.body);
+    centrals.push(centralHeader(name, p, e.data.length, at, offset), name);
+    offset += 30 + name.length + p.body.length;
     if (offset > MAX_TOTAL_BYTES) throw new Error('This project is too large to bundle (over 4 GB).');
   });
   const cd = Buffer.concat(centrals);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(entries.length, 8);
-  end.writeUInt16LE(entries.length, 10);
-  end.writeUInt32LE(cd.length, 12);
-  end.writeUInt32LE(offset, 16);
-  return Buffer.concat([...locals, cd, end]);
+  return Buffer.concat([...locals, cd, endRecord(entries.length, cd.length, offset)]);
 }
 
 interface RawEntry { name: string; method: number; crc: number; usize: number; raw: Buffer }
@@ -254,7 +156,6 @@ export async function readZipAsync(buf: Buffer, onEntry?: (done: number, total: 
   return out;
 }
 
-const MAX_MANIFEST_BYTES = 1024 * 1024;
 
 /**
  * A bundle's manifest WITHOUT reading the bundle: the zip directory sits at the
@@ -289,7 +190,7 @@ export async function peekManifest(file: string): Promise<BundleManifest | null>
         const r = { name, method, crc: cd.readUInt32LE(p + 16), usize: cd.readUInt32LE(p + 24), raw: Buffer.alloc(0) };
         const csize = cd.readUInt32LE(p + 20);
         const localOff = cd.readUInt32LE(p + 42);
-        if ((method !== 0 && method !== 8) || r.usize > MAX_MANIFEST_BYTES || csize > MAX_MANIFEST_BYTES) return null;
+        if ((method !== 0 && method !== 8) || r.usize > MANIFEST_MAX_BYTES || csize > MANIFEST_MAX_BYTES) return null;
         const local = Buffer.alloc(30);
         await fh.read(local, 0, 30, localOff);
         if (local.readUInt32LE(0) !== 0x04034b50) return null;
@@ -311,29 +212,6 @@ export async function peekManifest(file: string): Promise<BundleManifest | null>
 }
 
 // ── Export ───────────────────────────────────────────────────────────────────
-
-async function walk(dir: string, rel = ''): Promise<string[]> {
-  let dirents: recordFs.Dirent[] = [];
-  try {
-    dirents = await recordFs.readdir(path.join(dir, rel), { withFileTypes: true });
-  } catch (_) {
-    return [];
-  }
-  const out: string[] = [];
-  for (const d of dirents) {
-    const r = rel ? rel + '/' + d.name : d.name;
-    if (d.isDirectory()) out.push(...(await walk(dir, r)));
-    else if (d.isFile()) out.push(r);
-  }
-  return out;
-}
-
-/** The bundle for one project, as bytes. Only whitelisted files go in. */
-/** Progress (0–1) and a cancel check a job hands in; both optional. */
-export interface BundleProgress {
-  onProgress?: (fraction: number, note?: string) => void;
-  checkCancelled?: () => void;
-}
 
 /** The version stamped into a manifest: package.json's. */
 function appVersion(): string {
@@ -358,6 +236,9 @@ export async function exportProject(
     if (opts.checkCancelled) opts.checkCancelled();
     const data = rel.startsWith('assets/') ? await readBlob(path.join(dir, rel)) : await recordFs.readFile(path.join(dir, rel));
     if (!data) continue; // a picture over its cap is not served, so it does not travel either
+    // A record past the cap (left by an older version): refused here, so no bundle we
+    // write — a backup above all — is one our own import refuses (docs/pod-lifecycle §3.5).
+    if (rel.endsWith('.json') && data.length > RECORD_MAX_BYTES) throw new Error(recordTooLargeToExport(rel));
     entries.push({ name: rel, data });
     if (opts.onProgress) opts.onProgress(0.3 * ((i + 1) / files.length), 'Reading files');
     if (rule.count) counts[rule.count] = (counts[rule.count] || 0) + 1;
@@ -384,139 +265,4 @@ export async function exportProject(
     if (opts.onProgress) opts.onProgress(0.3 + 0.7 * (done / total), `Compressing ${done} of ${total} files`);
   });
   return { bytes, manifest };
-}
-
-// ── Import ───────────────────────────────────────────────────────────────────
-
-/** Every record id already on this machine: file names under every project. */
-async function idsInUse(): Promise<Set<string>> {
-  const used = new Set<string>();
-  let pids: string[] = [];
-  try { pids = (await recordFs.readdir(projectsBase())).filter((n) => isValidId(n)); } catch (_) { pids = []; }
-  for (const pid of pids) {
-    used.add(pid.toLowerCase());
-    for (const rel of [...(await walk(path.join(projectsBase(), pid))), ...(await listBlobs(path.join(projectsBase(), pid, 'assets')))]) {
-      for (const m of rel.match(UUID_G) || []) used.add(m.toLowerCase());
-    }
-    try {
-      const a = JSON.parse(await recordFs.readFile(path.join(projectsBase(), pid, 'alerts.json'), 'utf8'));
-      for (const r of a.rules || []) if (typeof r.id === 'string') used.add(r.id.toLowerCase());
-    } catch (_) { /* no alerts */ }
-  }
-  return used;
-}
-
-export interface ImportResult {
-  ok: boolean;
-  error?: string;
-  project?: projects.Project;
-  counts?: Record<string, number>;
-  remapped?: number;
-}
-
-/** `name` replaces the manifest's project name (a restore names its copy). */
-export async function importBundle(bytes: Buffer, opts: BundleProgress & { name?: string } = {}): Promise<ImportResult> {
-  let entries: ZipEntry[];
-  try {
-    entries = await readZipAsync(bytes, (done, total) => {
-      if (opts.checkCancelled) opts.checkCancelled();
-      if (opts.onProgress) opts.onProgress(0.6 * (done / total), `Reading ${done} of ${total} files`);
-    });
-  } catch (err: any) {
-    if (err && err.name === 'JobCancelled') throw err; // a cancel is not a bad bundle
-    return { ok: false, error: err?.message || 'That file is not an Ordinate project bundle.' };
-  }
-  const outside = entries.filter((e) => !ruleFor(e.name));
-  if (outside.length) {
-    return { ok: false, error: `The bundle holds files Ordinate does not import (${outside[0].name}) — it was refused as a whole.` };
-  }
-  const manifestEntry = entries.find((e) => e.name === 'manifest.json');
-  let manifest: BundleManifest;
-  try {
-    manifest = JSON.parse(manifestEntry ? manifestEntry.data.toString('utf8') : '');
-  } catch (_) {
-    return { ok: false, error: 'The bundle has no readable manifest.' };
-  }
-  if (!manifest || manifest.format !== BUNDLE_FORMAT || manifest.formatVersion !== BUNDLE_VERSION) {
-    return { ok: false, error: 'This is not an Ordinate project bundle, or it is from a newer version.' };
-  }
-  // The manifest's counts must be what is actually there — a mismatch means a
-  // truncated or edited bundle, and importing half a project is worse than none.
-  const counts: Record<string, number> = {};
-  for (const e of entries) {
-    const c = ruleFor(e.name)!.count;
-    if (c) counts[c] = (counts[c] || 0) + 1;
-  }
-  const alertsEntry = entries.find((e) => e.name === 'alerts.json');
-  if (alertsEntry) {
-    try { counts.alerts = (JSON.parse(alertsEntry.data.toString('utf8')).rules || []).length; } catch (_) {
-      return { ok: false, error: 'The bundle\'s alerts.json is not readable.' };
-    }
-  }
-  const declared = manifest.counts && typeof manifest.counts === 'object' ? manifest.counts : {};
-  const keys = new Set([...Object.keys(declared), ...Object.keys(counts)]);
-  for (const k of keys) {
-    if ((declared[k] || 0) !== (counts[k] || 0)) {
-      return { ok: false, error: `The bundle does not match its manifest (${k}: ${declared[k] || 0} listed, ${counts[k] || 0} present).` };
-    }
-  }
-
-  // Remap every id that is already in use here, file names and bodies alike.
-  const used = await idsInUse();
-  const remap = new Map<string, string>();
-  for (const e of entries) {
-    const names = e.name.match(UUID_G) || [];
-    const body = e.name.endsWith('.json') ? e.data.toString('utf8').match(UUID_G) || [] : [];
-    for (const id of [...names, ...body]) {
-      const k = id.toLowerCase();
-      if (used.has(k) && !remap.has(k)) remap.set(k, randomUUID());
-    }
-  }
-  // A connection ALWAYS gets a fresh id (T6.3): its stored password/token is
-  // keyed by connection id (src/app/configSecrets.ts), so an id kept from the
-  // bundle — one whose project was deleted, say — could adopt a secret this
-  // importer never entered.
-  for (const e of entries) {
-    const id = CONNECTION_FILE.exec(e.name)?.[1].toLowerCase();
-    if (id && !remap.has(id)) remap.set(id, randomUUID());
-  }
-  const swap = (s: string): string => s.replace(UUID_G, (m) => remap.get(m.toLowerCase()) || m);
-
-  const name = String(opts.name || (manifest.project && manifest.project.name) || 'Imported project').trim() || 'Imported project';
-  const taken = new Set((await projects.listProjects()).map((p) => p.name));
-  const created = await projects.createProject(taken.has(name) ? `${name} (imported)` : name);
-  const dir = projectDir(created.id);
-  try {
-    for (const e of entries) {
-      if (e.name === 'manifest.json' || e.name === 'project.json' || e.name === 'themes.json' || e.name === 'templates.json') continue; // the new project has its own; themes are workspace records
-      const rel = swap(e.name);
-      if (!ruleFor(rel)) throw new Error('A remapped name left the whitelist.'); // cannot happen; guard anyway
-      const target = path.join(dir, ...rel.split('/'));
-      if (rel.startsWith('assets/')) { await writeBlob(target, e.data); continue; } // a row, on a server with DATABASE_URL
-      await fs.promises.mkdir(path.dirname(target), { recursive: true });
-      const data = rel.endsWith('.json') ? Buffer.from(swap(e.data.toString('utf8')), 'utf8') : e.data;
-      const tmp = target + '.' + randomUUID() + '.tmp';
-      await recordFs.writeFile(tmp, data);
-      await recordFs.rename(tmp, target);
-    }
-    // Carry the source project's dismissed insights and colours; everything else about the
-    // project record (id, dates, archive state) belongs to the new one.
-    const pj = entries.find((e) => e.name === 'project.json');
-    if (pj) {
-      try {
-        const src = JSON.parse(swap(pj.data.toString('utf8')));
-        if (Array.isArray(src.dismissedInsights)) {
-          for (const d of src.dismissedInsights.slice(0, 500)) await projects.setInsightDismissed(created.id, String(d), true);
-        }
-        // …and its category colours (sanitized on the way in, like any read).
-        if (src.colorMap) await projects.setColorMap(created.id, src.colorMap);
-      } catch (_) { /* optional */ }
-    }
-    await importBundleThemes(entries, swap).catch(() => 0); // a theme costs the look, never the import
-    await importBundleTemplates(entries, swap); // r7:templates — merged by id, never clobbering
-  } catch (err: any) {
-    await projects.deleteProject(created.id);
-    return { ok: false, error: err?.message || 'The bundle could not be written.' };
-  }
-  return { ok: true, project: (await projects.getProject(created.id)) || created, counts, remapped: remap.size };
 }

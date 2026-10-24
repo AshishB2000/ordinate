@@ -74,12 +74,42 @@ export interface OrgSettings {
   providers: string[];
 }
 
+/** Admin → People → Identity provider groups (src/server/admin/idpGroups.ts). */
+export interface IdpGroupRow {
+  group: string;
+  role: Role | null;
+  teamId: string | null;
+  teamName: string | null;
+}
+export interface IdpGroups {
+  mode: 'password' | 'oidc' | 'header' | 'dev';
+  /** Where groups are read, or null: the map is dormant (the variable is unset). */
+  source: 'oidc' | 'header' | null;
+  /** The claim or header name. */
+  from: string | null;
+  /** A group maps a role: every role follows the IdP, and the role picker is hidden. */
+  roleManaged: boolean;
+  groups: IdpGroupRow[];
+  linkedTeamIds: string[];
+}
+
 export interface ApiToken {
   id: string;
   name: string;
   prefix: string;
   createdAt: string;
   lastUsedAt: string | null;
+  /** When it stops working: its own end, never past created + API_TOKEN_MAX_DAYS. */
+  expiresAt: string;
+  expired: boolean;
+  /** Made before tokens had an end: it ends API_TOKEN_MAX_DAYS after it was made. */
+  legacy: boolean;
+}
+
+/** `tokens:list`: the caller's tokens and the server's maximum lifetime (API_TOKEN_MAX_DAYS). */
+export interface TokenList {
+  tokens: ApiToken[];
+  maxDays: number;
 }
 
 /** Admin → Live usage (src/server/admin/liveUsage.ts): one UTC day of one connection. */
@@ -154,7 +184,7 @@ export const aiWhy = (r: AiOutcome): string => r.error || [r.message, r.detail].
 
 export const useAiAdmin = () => useQuery({ queryKey: ['ai:admin'], queryFn: async () => (await rpc('ai:admin')) as AiAdmin });
 
-export type Created = { ok: true; id: string; name: string; prefix: string; createdAt: string; token: string } | { ok: false; error: string };
+export type Created = { ok: true; id: string; name: string; prefix: string; createdAt: string; expiresAt: string; token: string } | { ok: false; error: string };
 
 /** A write's reply: `{ ok }`, or why not. */
 type Result = { ok: boolean; error?: string };
@@ -181,18 +211,23 @@ const REFUSAL: Record<string, string> = {
   'password-long': 'A password can be 256 characters at most.',
   'self-password': 'Change your own password from the account menu instead.',
   mode: 'This server does not sign in with passwords.',
+  expiry: 'That is longer than this server lets a token live. Pick a shorter expiry.',
+  dormant: 'This server does not read groups from your identity provider yet.',
+  group: 'Name the group as your identity provider sends it.',
 };
 export const refusal = (code: string | undefined): string => REFUSAL[code ?? ''] ?? 'The change was refused.';
 
-type ListChannel = 'admin:users' | 'admin:teams' | 'admin:projects' | 'admin:settings' | 'admin:liveUsage' | 'tokens:list';
+type ListChannel = 'admin:users' | 'admin:teams' | 'admin:projects' | 'admin:settings' | 'admin:liveUsage' | 'admin:idpGroups' | 'tokens:list';
 const list = <T,>(channel: ListChannel) => ({ queryKey: [channel], queryFn: async () => (await rpc(channel)) as T });
 
 export const useAdminUsers = () => useQuery(list<AdminUser[]>('admin:users'));
 export const useTeams = () => useQuery(list<Team[]>('admin:teams'));
 export const useAdminProjects = () => useQuery(list<AdminProject[]>('admin:projects'));
 export const useOrgSettings = () => useQuery(list<OrgSettings>('admin:settings'));
-export const useTokens = () => useQuery(list<ApiToken[]>('tokens:list'));
+export const useTokens = () => useQuery(list<TokenList>('tokens:list'));
 export const useLiveUsage = () => useQuery(list<LiveUsage>('admin:liveUsage'));
+/** `enabled`: only where an IdP signs people in (oidc, header) — password and dev have no groups. */
+export const useIdpGroups = (enabled = true) => useQuery({ ...list<IdpGroups>('admin:idpGroups'), enabled });
 
 export function useAudit(filter: AuditFilter) {
   return useQuery({

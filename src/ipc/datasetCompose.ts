@@ -20,6 +20,7 @@ import * as jobs from '../app/jobs';
 import { detectSensitive } from '../data/sensitivity';
 import { scanDataset } from '../app/privacyStore';
 import type { Cell, TableData } from '../data/transforms';
+import { logger } from '../app/logger';
 
 const MAX_ROWS = 1_000_000;
 
@@ -244,7 +245,7 @@ export async function composeSave(
       const retyped = await applyRetype(projectId, saved.id, retype);
       if (captureLink && captureLink.entryId) {
         await history.setDatasetId(captureLink.entryId, saved.id)
-          .catch((e: any) => console.error('[history] setDatasetId failed:', e.message));
+          .catch((e: any) => logger.error('[history] setDatasetId failed:', e.message));
       }
       progress(0.95, 'Checking data quality');
       await runQualityChecks(projectId, saved.id); // the data-quality hook; never throws

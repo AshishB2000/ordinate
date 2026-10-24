@@ -42,10 +42,11 @@ every key of existingSecret (default: the Secret named like the release).
 {{- define "ordinate.env" -}}
 {{- $secret := .Values.existingSecret | default (include "ordinate.fullname" .) -}}
 {{- $secretNames := list "DATABASE_URL" "ORDINATE_MASTER_KEY" "OIDC_CLIENT_SECRET" "AWS_ACCESS_KEY_ID" "AWS_SECRET_ACCESS_KEY" "AWS_SESSION_TOKEN" "SMTP_PASSWORD" -}}
-{{- $owned := list "PORT" "METRICS_PORT" "DATA_DIR" "ORDINATE_ENV" -}}
+{{- $owned := list "PORT" "METRICS_PORT" "DATA_DIR" "ORDINATE_ENV" "SHUTDOWN_GRACE_SECONDS" -}}
+{{- if ge (int .Values.shutdownGraceSeconds) (sub (int .Values.terminationGracePeriodSeconds) 5 | int) }}{{ fail (printf "shutdownGraceSeconds (%v) must stay below terminationGracePeriodSeconds − 5 (the preStop sleep): %v" .Values.shutdownGraceSeconds (sub (int .Values.terminationGracePeriodSeconds) 5)) }}{{ end }}
 {{- range $k, $v := .Values.config }}
 {{- if has $k $secretNames }}{{ fail (printf "config.%s is a secret: put it in the existingSecret, never in values" $k) }}{{ end }}
-{{- if has $k $owned }}{{ fail (printf "config.%s is set by the chart (service.port, metrics.port, data)" $k) }}{{ end }}
+{{- if has $k $owned }}{{ fail (printf "config.%s is set by the chart (service.port, metrics.port, data, shutdownGraceSeconds)" $k) }}{{ end }}
 {{- end }}
 env:
   - name: ORDINATE_ENV
@@ -54,6 +55,8 @@ env:
     value: {{ .Values.service.port | quote }}
   - name: DATA_DIR
     value: /data
+  - name: SHUTDOWN_GRACE_SECONDS
+    value: {{ .Values.shutdownGraceSeconds | quote }}
   {{- if .Values.metrics.enabled }}
   - name: METRICS_PORT
     value: {{ .Values.metrics.port | quote }}

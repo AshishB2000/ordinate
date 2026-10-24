@@ -21,6 +21,7 @@ import { useCurrentProject } from '../projects/current';
 import { useCommands } from '../palette/registry';
 import { KeyCaps, ShortcutList } from '../palette/ShortcutsSheet';
 import { PrivacySection } from './PrivacySection';
+import { NotificationsGroup } from './NotificationsGroup';
 import { Group, Row, Segmented } from './Rows';
 import s from './Settings.module.css';
 
@@ -85,6 +86,7 @@ function You({ me }: { me: Me }) {
     <div className={`${s.cols} ${s.stackPage}`}>
       <div className={s.side}>
         <Who me={me} />
+        <NotificationsGroup />
         <Group title="Appearance" desc="Kept in this browser, like the system setting it can follow.">
           <Row title="Theme" desc="Follow the system, or always light or dark.">
             <Segmented label="Theme" value={theme} onChange={setTheme} options={THEME_PREFS.map((p) => ({ value: p, label: THEME_LABEL[p] }))} />
