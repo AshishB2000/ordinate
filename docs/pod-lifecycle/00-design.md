@@ -755,5 +755,12 @@ Each finding was fixed in its own commit, with a test that failed before the fix
   value budget bounds that parse at ~113 MB RSS. Two test hooks were needed in two places a
   pending promise held nothing open (`s3.close`, `DuckPool.sendersForTest`): an awaited reply must
   hold the loop, or the process ends at exit 0 with its work undone.
+- **Downstream flakes.** (1) "STREAMED, staging reached ~4 GiB" sampled a peak every ~100 ms and missed
+  it; the check is now exact — the project's four tables, renamed out of staging, sum to the declared
+  size, and the inflater ran (`cca2b88c`; the merged `85ab67c4` still sampled). (2) "Cannot use a pool
+  after calling end" at a pods teardown: a refresh URL's settle and `afterRefresh`, fresh-on-ask's
+  follow-ups and a debounced republish ran untracked and could write records after step 6b; they are
+  now detached work step 5 awaits, and a draining pod starts no republish (a test shows the settle
+  tracked right after the 202 — 0 before the fix).
 - **Pre-existing, not this branch:** `test-versionHistory` fails ~1 run in 3 on the untouched base
   too (a create and a rename in the same millisecond stamp `now − 1`).
