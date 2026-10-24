@@ -329,7 +329,9 @@ async function write(
     await importBundleTemplates(await small('templates.json'), swap); // r7:templates — merged by id, never clobbering
   } catch (err) {
     await projects.deleteProject(created.id);
-    if (err && (err as Error).name === 'JobCancelled') throw err;
+    // A cancel is not a bad bundle: a JobCancelled, or the job's signal aborting a read (AbortError).
+    const name = err && (err as Error).name;
+    if (name === 'JobCancelled' || name === 'AbortError') throw err;
     return { ok: false, error: err instanceof ZipRefused ? err.message : (err as Error)?.message || msg.notWritten() };
   }
   return { ok: true, project: (await projects.getProject(created.id)) || created, counts, remapped: remap.size };

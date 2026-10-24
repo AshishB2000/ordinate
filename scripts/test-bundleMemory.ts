@@ -216,6 +216,35 @@ async function main(adminUrl: string | undefined): Promise<void> {
     ok('round trip: every record, table and picture is byte-identical', diff === '', diff);
   }
 
+  // ── A cancel during the write is a cancel, and it stops a restore (review C4) ──
+  {
+    const jobs: typeof import('../src/app/jobs') = require('../src/app/jobs');
+    const before = await projectCount(C);
+    let jobId = '';
+    const job = await inOrg(C, async () => jobs.submit({
+      kind: 'bundle', label: 'import, cancelled mid-write',
+      run: (ctx) => bundle.importBundle({ file: tmpZip }, {
+        signal: ctx.signal,
+        onProgress: (f) => { if (f > 0.6) jobs.cancel(jobId); }, // the write phase has begun
+      }),
+    }));
+    jobId = job.id;
+    const outcome = await job.done.then(() => 'resolved', (err: Error) => err.name);
+    ok('a cancel during the write: the job ends cancelled (not "error"), the half-written project deleted',
+      jobs.get(job.id)?.state === 'cancelled' && outcome === 'AbortError' && (await projectCount(C)) === before, `${jobs.get(job.id)?.state} ${outcome}`);
+    // A restore of two projects, cancelled while it writes the first: it stops there.
+    const two = path.join(DATA, 'two.zip');
+    const w = await zw.ZipFileWriter.create(two);
+    for (const n of ['First', 'Second']) await w.add(`${n} — 0f8fad5b.ordinate`, exported.bytes, { store: true });
+    await w.add('backup.json', Buffer.from(JSON.stringify({ format: 'ordinate-backup', formatVersion: 1, appVersion: 't', exportedAt: new Date().toISOString(),
+      projects: ['First', 'Second'].map((n) => ({ file: `${n} — 0f8fad5b.ordinate`, name: n, counts: exported.manifest.counts })) })));
+    await w.close();
+    const ac = new AbortController();
+    const stopped = await inOrg(C, () => settings.restoreBackupFile(two, { signal: ac.signal, progress: (f) => { if (f > 0.3) ac.abort(); }, checkCancelled() {} }))
+      .then(() => 'resolved', (err: Error) => err.name);
+    ok('a restore cancelled mid-write stops: it rejects, and neither project is left behind', stopped === 'AbortError' && (await projectCount(C)) === before, `${stopped} ${await projectCount(C)}`);
+  }
+
   // ── Names: refused before one byte is inflated ──────────────────────────
   const stray = bundle.writeZip([...old, { name: 'privacy/salt.key', data: Buffer.from('secret') }]);
   const spy = spyInflaters();
