@@ -88,6 +88,8 @@ export async function issue(kind: 'upload' | 'download', file: string, name: str
     await fs.promises.rm(file, { force: true }).catch(() => undefined);
     throw err;
   }
+  // The hour runs from when the bytes are there to fetch, not from before a long PUT (review L2).
+  await tokens.restartExpiry(place.org, tokens.hashOf(token), ttlMs);
   const hex = tokens.hashOf(token).toString('hex');
   if (size <= LOCAL_COPY_MAX) copies.set(hex, { file, org: place.org, expires: Date.now() + ttlMs, refs: 0 });
   else void fs.promises.rm(file, { force: true }).catch(() => undefined);

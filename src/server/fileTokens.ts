@@ -53,6 +53,14 @@ export async function insert(token: string, r: NewRow): Promise<void> {
   ));
 }
 
+/** Starts a token's hour over from now — once its bytes have landed (an S3 PUT can take a while). */
+export async function restartExpiry(org: string, hash: Buffer, ttlMs: number): Promise<void> {
+  await inOrg(pool(), org, (c) => c.query(
+    `UPDATE file_tokens SET expires_at = now() + $3 * interval '1 millisecond' WHERE org_id = $1 AND token_hash = $2`,
+    [org, hash, ttlMs],
+  ));
+}
+
 export interface TakenRow {
   readonly key: string;
   readonly name: string;

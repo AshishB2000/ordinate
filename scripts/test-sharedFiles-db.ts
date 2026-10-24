@@ -40,12 +40,18 @@ const sha = (b: Buffer): string => createHash('sha256').update(b).digest('hex');
 function fakeS3() {
   const objects = new Map<string, Buffer>();
   const seen = { gets: 0, puts: 0, deletes: 0 };
-  const state = { mode: 'ok' as 'ok' | '503' | '404', putStatus: 200, putFailures: Infinity };
+  const state = { mode: 'ok' as 'ok' | '503' | '404', putStatus: 200, putFailures: Infinity, putDelayMs: 0 };
   const server = http.createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => chunks.push(c));
     req.on('end', () => {
       const key = decodeURIComponent(req.url ?? '');
+      if (req.method === 'PUT' && state.putDelayMs > 0) {
+        const wait = state.putDelayMs;
+        state.putDelayMs = 0;
+        setTimeout(() => { objects.set(key, Buffer.concat(chunks)); seen.puts++; res.end(); }, wait);
+        return;
+      }
       if (req.method === 'PUT') {
         seen.puts++;
         const status = state.putStatus !== 200 && state.putFailures > 0 ? state.putStatus : 200;
@@ -154,6 +160,14 @@ function fakeS3() {
     ok('a PUT that keeps failing refuses the offer and leaves nothing: no row, no file (row first, then the bytes)', putFailed === 'refused' && rows === 0 && !fs.existsSync(three.file), JSON.stringify({ putFailed, rows, file: fs.existsSync(three.file) }));
     s3.state.putStatus = 200;
     s3.state.putFailures = 0;
+
+    // 3b. The token's hour starts once its bytes have landed, not before a slow PUT (review L2).
+    s3.state.putDelayMs = 1_500;
+    const slow = newFile();
+    const tslow = await as(() => shared.issue('upload', slow.file, 'slow.csv', slow.body.length, 10_000, sha(slow.body)));
+    s3.state.putDelayMs = 0;
+    const left = Number((await db.pool.query(`SELECT extract(epoch FROM expires_at - now()) * 1000 AS ms FROM file_tokens WHERE token_hash = $1`, [tokens.hashOf(tslow)])).rows[0].ms);
+    ok(`a token whose PUT took 1.5 s still has its whole 10 s once issued (${Math.round(left)} ms left)`, left > 9_000, left);
 
     // 4. Local copies.
     const [a, b, c] = [newFile(), newFile(), newFile()];
