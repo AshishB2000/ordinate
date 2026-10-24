@@ -343,13 +343,14 @@ async function partTwo(adminUrl: string): Promise<void> {
       ['comment:resolve', () => ({ projectId: pid, id: cid }), 'read'],
       ['alerts:list', () => ({ projectId: pid }), 'read'],
       ['alerts:test', () => ({ projectId: pid, rule }), 'read'],
+      ['alerts:markSeen', () => ({ projectId: pid }), 'read'], // the caller's OWN inbox (docs/notifications §1 D2)
       ['drivers:explainAlert', () => ({ projectId: pid, ruleId }), 'read'],
       ['publish:run', () => ({ projectId: pid, dashboardIds: [s.aid], id: orgSite.id }), 'write'],
       ['publish:access', () => ({ projectId: pid, id: orgSite.id, access: 'org' }), 'write'],
       ['fx:dashboard', () => ({ projectId: pid, dashboardId: s.aid, code: null }), 'write'],
       ['alerts:save', () => ({ projectId: pid, rule }), 'write'],
       ['alerts:patch', () => ({ projectId: pid, ruleId, patch: { enabled: true } }), 'write'],
-      ['alerts:markSeen', () => ({ projectId: pid }), 'write'],
+
       ['alerts:setDigest', () => ({ projectId: pid, on: false }), 'write'],
       ['publish:unpublish', () => ({ projectId: pid, id: crypto.randomUUID() }), 'write'],
     ];

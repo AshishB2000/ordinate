@@ -24,6 +24,7 @@ import { useLogger } from '../app/logger';
 import { migrate } from './db/migrate';
 import { createPool, ping, scrubbed } from './db/pool';
 import { useRecordDb } from '../app/recordFs';
+import { useOrgDb } from './db/inOrg';
 import { useBlobDb } from '../app/blobStore';
 import { useMaskSaltStore } from '../app/privacyStore';
 import { useSecretStore } from '../app/configSecrets';
@@ -208,6 +209,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // only; recordFs ignores the pool under the desktop (T5.1). Before the
       // runner: a job's handler reads records like a request does.
       useRecordDb(pool);
+      useOrgDb(pool); // per-member alert inbox, alert post claims, mentions (0020): forced RLS, one org per transaction
       useBlobDb(pool); // logos and Image-card pictures too (0018): nothing durable on this pod's disk
       // One refresh of a dataset at a time across pods (L0.4): an advisory lock per (org, dataset).
       useRefreshLockDb(pool);
@@ -263,6 +265,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     app.addHook('onClose', async () => {
       if (isDraining()) return;
       useRecordDb(null);
+      useOrgDb(null);
       useBlobDb(null);
       useMaskSaltStore(null);
       useRefreshLockDb(null);
@@ -620,4 +623,6 @@ export function registerHandlers(): void {
   (require('../ipc/rebuild') as typeof import('../ipc/rebuild')).register();
   // Metric trees (docs/metric-tree): a metric broken into its parts, its change attributed to them.
   (require('../ipc/metricTree') as typeof import('../ipc/metricTree')).register();
+  // @mentions (docs/notifications): the picker, the caller's "Mentioned you" and its email setting.
+  (require('./mentions/rpc') as typeof import('./mentions/rpc')).register();
 }

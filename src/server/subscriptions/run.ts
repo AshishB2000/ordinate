@@ -13,6 +13,11 @@
 // handled and does nothing. Between pods the jobs table's lease is what lets
 // only one claim a tick; the stamp is what makes a repeat harmless.
 //
+// REFUSED FIRST. A dashboard whose figures can come from a dataset with row
+// access rules is refused from its definition (`dashboardSendRefusal`) before
+// the owner is looked up or any figure computed: a `skipped` run, code
+// `row_policy`. `deliver` still refuses per channel behind it.
+//
 // WHAT A RUN LEAVES. One history entry (time, outcome, a typed code — the
 // sentence is written from the catalog when it is read), the failure count, and
 // after PAUSE_AFTER failed runs in a row a pause: the subscription is switched
@@ -43,7 +48,7 @@ import { ctx, runInContext, type Identity } from '../context';
 import { toReaders } from '../jobs/schedules';
 import { dashboardLink } from '../publicUrl';
 import { publish } from '../sse';
-import { deliver, type DatasetsMemo } from './deliver';
+import { dashboardSendRefusal, deliver, type DatasetsMemo } from './deliver';
 
 let db: { pool: Pool | null; devAuth: boolean } = { pool: null, devAuth: true };
 
@@ -172,7 +177,10 @@ export async function runSubscription(projectId: string, id: string, slot?: numb
     sub = await store.stampRun(projectId, id, (run) => ({ ...run, lastSlot: slotIso })); // the fence, before anything leaves
     if (!sub) return null;
   }
-  const r = await attempt(sub, org, scheduled);
+  // A dashboard with row access rules is refused from its DEFINITION first: nothing computed, nothing sent
+  // (docs/row-policy D10; docs/notifications D5). Any other failure here is left for `attempt` to name.
+  const refused = await dashboardSendRefusal(projectId, sub.analysisId).catch(() => null);
+  const r: Result = refused ? { outcome: 'skipped', code: 'row_policy' } : await attempt(sub, org, scheduled);
   const entry: RunEntry = { at: new Date(now).toISOString(), trigger: scheduled ? 'schedule' : 'manual', outcome: r.outcome, code: r.code, ...(slotIso ? { slot: slotIso } : {}), ...(r.detail ? { detail: r.detail } : {}) };
   // Only a SCHEDULED failure counts toward the pause — and not one where the hourly email budget was the only
   // reason (it clears by itself); any send that goes out, even partly, clears the count.

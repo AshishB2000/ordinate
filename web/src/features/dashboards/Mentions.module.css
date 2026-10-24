@@ -1,0 +1,205 @@
+/* @mentions (docs/notifications): the chip in a comment, the @ picker under a
+   comment box, and Home's "Mentioned you". Tokens only; both themes follow them. */
+
+/* ── The chip ──────────────────────────────────────────────────────── */
+.chip {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chipGone {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-style: italic;
+  white-space: nowrap;
+}
+
+/* ── The picker ────────────────────────────────────────────────────── */
+.field {
+  position: relative;
+}
+.list {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  margin-bottom: var(--sp-4);
+  max-height: 240px;
+  overflow-y: auto;
+  padding: var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+}
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-4) var(--sp-8);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.option:hover {
+  background: var(--surface-2);
+}
+.optionOn {
+  background: var(--accent-soft);
+}
+.optionOn:hover {
+  background: var(--accent-soft);
+}
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--t-11);
+  font-weight: 700;
+}
+.optionText {
+  display: grid;
+  min-width: 0;
+}
+.optionName {
+  color: var(--text-strong);
+  font-size: var(--t-13);
+  font-weight: 600;
+}
+.optionMail {
+  color: var(--muted);
+  font-size: var(--t-11);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.listNote {
+  padding: var(--sp-8);
+  color: var(--muted);
+  font-size: var(--t-12);
+}
+.listNoteError {
+  padding: var(--sp-8);
+  color: var(--error);
+  font-size: var(--t-12);
+}
+
+/* ── Home: "Mentioned you" ─────────────────────────────────────────── */
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  margin: 0 0 var(--sp-24);
+}
+.homeHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+.homeH {
+  margin: 0;
+  font-size: var(--t-11);
+  font-weight: 600;
+  letter-spacing: var(--tr-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.homeNew {
+  padding: 1px 7px;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-11);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.homeAll {
+  margin-left: auto;
+}
+.homeRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--sp-12);
+}
+.card {
+  position: relative;
+  display: grid;
+  gap: var(--sp-8);
+  padding: var(--sp-12);
+  text-align: left;
+  font: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+.card:hover {
+  border-color: var(--accent-line);
+}
+.card:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+}
+.cardNew {
+  border-color: var(--accent-line);
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface);
+}
+.cardTop {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  font-size: var(--t-12);
+  color: var(--text);
+  min-width: 0;
+}
+.cardBy {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.cardWhen {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: var(--t-11);
+  white-space: nowrap;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: var(--r-full);
+  background: var(--accent);
+}
+.snippet {
+  color: var(--text);
+  font-size: var(--t-13);
+  line-height: var(--lh-body);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.on {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  color: var(--muted);
+  font-size: var(--t-11);
+  min-width: 0;
+}
+.onName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

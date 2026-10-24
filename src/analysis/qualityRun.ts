@@ -109,8 +109,8 @@ function alertSink(): AlertSink | null {
     // any: a lazy, optional require — this feature must load without alerts.
     const store: any = require('./alertStore');
     const ipc: any = require('../ipc/alerts');
-    if (typeof store.recordEvents !== 'function' || typeof ipc.deliver !== 'function') return null;
-    return { record: store.recordEvents, deliver: ipc.deliver };
+    if (typeof store.recordEvents !== 'function' || typeof ipc.pushAlertEvents !== 'function') return null;
+    return { record: store.recordEvents, deliver: ipc.pushAlertEvents }; // push only: no rule's channels name a quality event
   } catch {
     return null;
   }

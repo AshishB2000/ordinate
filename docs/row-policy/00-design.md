@@ -190,10 +190,11 @@ swallowed the throw — nothing is published, posted or served. Wrapped: `publis
 re-publish after refresh — `hosted.ts:136`, `:248`), `planPublish` (`publish:plan`), the embed build
 (`embedPage.ts:53`), `buildMessage` (subscriptions and `subscription:preview`, `run.ts:97`), alert
 evaluation and `alerts:test` (`alertStore.ts:422`, `:486`). `assertFanOutAllowed(projectId, ids)` is
-called at today's send points: `run.ts` before its `postToChannel` loop (`:136`, with the ids the
-scope recorded), `alertPosts.ts:41` per event (the rule's dataset), `publishHosted` before the
-manifest switch, the embed route before it serves. When item 4 lands it moves into `deliver(channel,
-model)` as one line over `model.datasetIds`. `alerts:save` and `subscription:save` refuse up front
+called at the send points: every post goes through `deliver(channel, source)` (`deliver.ts`
+`refuseFanOut`, over the datasets `figureDatasets` reads from the source); a subscription run first asks
+`dashboardSendRefusal` of the dashboard's DEFINITION in `runSubscription`, so a refused run computes no
+figure and is recorded as `skipped` / `row_policy` (docs/notifications D5); `publishHosted` refuses
+before the manifest switch, the embed route before it serves. `alerts:save` and `subscription:save` refuse up front
 (the save runs the same check as the dialog's preview), so the author sees why when they save.
 
 `exportScope(fn)` refuses a policy dataset to a RESTRICTED caller only; editors export as today.

@@ -29,6 +29,7 @@ import { RecentTable } from './RecentTable';
 import { WhatStandsOut } from '../analytics/insights/WhatStandsOut';
 import s from './HomePage.module.css';
 import { RecentComments } from '../dashboards/RecentComments';
+import { MentionedYou } from '../dashboards/MentionedYou';
 
 function homeProject(list: Project[] | undefined): Project | undefined {
   return list?.find((p) => !p.archivedAt) ?? list?.[0];
@@ -116,6 +117,8 @@ export default function HomePage() {
       <JumpBackIn projectId={project?.id} recent={recent} />
       {/* What the app FOUND in the project's data (T2.11); renders nothing when nothing stands out. */}
       <WhatStandsOut projectId={project?.id} />
+      {/* The comments that name YOU, across your projects (docs/notifications); nothing without a user directory. */}
+      <MentionedYou />
       {project && ov.data && <RecentComments projectId={project.id} comments={ov.data.comments} />}
       <RecentTable projectId={project?.id} recent={recent} canEdit={canEdit} />
     </div>

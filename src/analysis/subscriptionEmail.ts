@@ -36,6 +36,8 @@ export interface EmailLook {
   /** The sender's name (SMTP_FROM), shown above the title. */
   brand: string;
   lang?: string;
+  /** Why the reader has it, when it is not a channel's list (a mention: docs/notifications §5.6). */
+  reason?: string;
 }
 
 export const EMAIL_LIMITS = { kpis: 30, sections: 30, rows: 10 };
@@ -110,7 +112,7 @@ function htmlOf(m: MessageModel, look: EmailLook, link: string | null): string {
       : '',
     `<tr><td style="padding:24px 28px 24px;"><div style="border-top:1px solid #e5e7eb;padding-top:14px;font-size:12px;line-height:1.5;${MUTED}">`,
     m.footer ? `<div>${e(m.footer)}</div>` : '',
-    `<div>${e(emailReason(look.channelName))}</div>`,
+    `<div>${e(look.reason ?? emailReason(look.channelName))}</div>`,
     `</div></td></tr></table></td></tr></table></body></html>`,
   ].join('');
 }
@@ -131,7 +133,7 @@ function textOf(m: MessageModel, look: EmailLook, link: string | null): string {
   }
   if (m.more > 0) out.push('', moreInDashboard(m.more));
   if (link && m.link) out.push('', `${m.link.label}: ${link}`);
-  out.push('', '—', ...(m.footer ? [m.footer] : []), emailReason(look.channelName));
+  out.push('', '—', ...(m.footer ? [m.footer] : []), look.reason ?? emailReason(look.channelName));
   return out.join('\n') + '\n';
 }
 

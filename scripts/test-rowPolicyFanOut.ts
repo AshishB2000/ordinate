@@ -135,6 +135,28 @@ const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 200)}`;
     ok('fan-out: deliver() refuses a send over Orders before any post, whoever owns it — `row_policy`', refusedSend.ok === false && refusedSend.code === 'row_policy' && refusedSend.attempts === 0, JSON.stringify(refusedSend));
     const plainSend = await sendOf(onPlain);
     ok('NEGATIVE CONTROL: …a send over the plain dataset gets past it (to the post itself)', !['row_policy', 'compute_failed'].includes(plainSend.code), JSON.stringify(plainSend));
+    // A RUN over a policy dashboard computes nothing (docs/notifications D5): stored straight into the store, as a
+    // subscription saved before the rules would be; refused from its definition and kept as a skipped run.
+    const subs: typeof import('../src/analysis/subscriptions') = require('../src/analysis/subscriptions');
+    const runMod: typeof import('../src/server/subscriptions/run') = require('../src/server/subscriptions/run');
+    const JOBS = { user: { email: 'jobs@system', role: 'admin' as const }, org: { id: 'acme' } };
+    const runOver = async (analysisId: string) => {
+      const sub = await W.as('boss', () => subs.createSubscription(P, draft(analysisId), 'boss@acme.test'));
+      let n = 0;
+      (figMod as { resolveFigures: typeof realResolve }).resolveFigures = async (...a) => { n++; return realResolve(...a); };
+      try {
+        const entry = await H.context.runInContext(JOBS, 'job:subscriptions:acme', () => runMod.runSubscription(P, sub!.id, Date.now() - 60_000));
+        return { entry, computed: n };
+      } finally {
+        (figMod as { resolveFigures: typeof realResolve }).resolveFigures = realResolve;
+      }
+    };
+    const policyRun = await runOver(onOrders);
+    ok('subscriptions: a scheduled run over a policy dashboard is skipped as row_policy, and resolveFigures is never called',
+      policyRun.entry?.outcome === 'skipped' && policyRun.entry.code === 'row_policy' && policyRun.computed === 0, JSON.stringify(policyRun));
+    const plainRun = await runOver(onPlain);
+    ok('NEGATIVE CONTROL: a run over the plain dashboard computes its figures and goes to its channel',
+      plainRun.computed > 0 && plainRun.entry !== null && plainRun.entry.code !== 'row_policy' && plainRun.entry.outcome !== 'skipped', JSON.stringify(plainRun));
     const rule = (d: string) => ({ id: crypto.randomUUID(), name: 'Big', datasetId: d, metric: { column: 'sales', aggregation: 'sum' }, compare: 'threshold', threshold: { op: '>', value: 1 }, enabled: true });
     ok('fan-out: an alert rule over Orders is refused at save and at test', H.refused(await W.call('boss', 'alerts:save', { projectId: P, rule: rule(orders) }), 'fanout') && H.refused(await W.call('boss', 'alerts:test', { projectId: P, rule: rule(orders) })));
     const fired = await W.as('boss', async () => {

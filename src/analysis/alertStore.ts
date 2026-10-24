@@ -260,12 +260,31 @@ export async function recordEvents(projectId: string, events: AlertEvent[]): Pro
   const clean = (Array.isArray(events) ? events : []).map(alerts.sanitizeEvent).filter((e): e is AlertEvent => e !== null);
   if (!clean.length) return true;
   return withAlerts(projectId, false, async (file) => {
-    file.events = clean.concat(file.events).slice(0, alerts.MAX_EVENTS);
+    file.events = stampAfter(file.events, clean).concat(file.events).slice(0, alerts.MAX_EVENTS);
     return save(projectId, file);
   });
 }
 
-/** Mark one event seen, or every event when `eventId` is omitted. */
+/**
+ * `batch` (newest first, as the file keeps events) with each `at` restamped to
+ * the moment it is stored, strictly after the newest event already stored — so
+ * stored order is `at` order on every pod, whatever their clocks, and a member's
+ * "seen through" watermark (src/server/alertInbox.ts) can never cover an event
+ * stored after it was set. Called only under `withAlerts`. A rule's own
+ * `lastFiredAt` keeps the evaluation's time.
+ */
+function stampAfter(stored: AlertEvent[], batch: AlertEvent[]): AlertEvent[] {
+  let at = Math.max(-Infinity, ...stored.map((e) => Date.parse(e.at)).filter(Number.isFinite));
+  const now = Date.now();
+  const out: AlertEvent[] = new Array(batch.length);
+  for (let i = batch.length - 1; i >= 0; i--) {
+    at = Math.max(now, at + 1);
+    out[i] = { ...batch[i], at: new Date(at).toISOString() };
+  }
+  return out;
+}
+
+/** Mark one event seen, or every event when `eventId` is omitted — the shared flag, used without a database. */
 export async function markSeen(projectId: string, eventId?: string): Promise<boolean> {
   return withAlerts(projectId, false, async (file) => {
     let touched = false;
@@ -473,9 +492,10 @@ export async function evaluateProject(
       changed = true;
       if (r.event) fired.push(r.event);
     }
-    if (fired.length) stored.events = fired.concat(stored.events).slice(0, alerts.MAX_EVENTS);
+    const stamped = stampAfter(stored.events, fired);
+    if (stamped.length) stored.events = stamped.concat(stored.events).slice(0, alerts.MAX_EVENTS);
     if (changed && !(await save(projectId, stored))) return [];
-    return fired;
+    return stamped;
   });
 }
 

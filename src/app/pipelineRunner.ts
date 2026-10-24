@@ -137,7 +137,7 @@ async function raiseFailures(projectId: string, graph: PipelineGraph, outcomes: 
   if (!events.length) return;
   try {
     await require('../analysis/alertStore').recordEvents(projectId, events);
-    await require('../ipc/alerts').deliver(projectId, events);
+    await (require('../ipc/alerts') as typeof import('../ipc/alerts')).pushAlertEvents(projectId, events); // push only: no rule's channels
   } catch (err: unknown) {
     logger.error('[pipelines] could not raise the failure alert:', err instanceof Error ? err.message : err);
   }

@@ -374,6 +374,7 @@ export const MAIN_FILES = [
   'src/data/rowAccessMessages.ts',
   'src/app/editConflictMessages.ts',
   'src/publish/publishMessages.ts',
+  'src/server/mentionMessages.ts',
   'src/server/lifecycleMessages.ts',
   'src/app/bundleMessages.ts',
   'src/server/idpMessages.ts',

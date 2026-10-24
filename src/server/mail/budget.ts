@@ -1,10 +1,14 @@
 // Hourly email budgets, per pod (docs/email/00-design.md D6; the R8 ceiling):
 //
 //   org      RATE_LIMIT_EMAIL_ORG_PER_HOUR recipients per org and kind
-//            (subscriptions and alerts apart, so one cannot starve the other)
+//            (subscriptions, alerts and mentions apart, so one cannot starve another)
 //   project  half of that per project and kind, so one project cannot drain
 //            the org's budget
 //   test     TEST_EMAILS_PER_HOUR test emails per org
+//   mention  on top of the org and project buckets, per person: what one author
+//            can cause (MENTION_EMAILS_PER_AUTHOR emails, MENTION_PUSHES_PER_AUTHOR
+//            notices) and what one recipient gets (MENTION_EMAILS_PER_RECIPIENT),
+//            so one member cannot drain the org's mention budget or flood a person
 //
 // A batch HOLDS its recipients in every bucket before it is sent (all or none,
 // so two sends at once cannot both pass the check), and gives back what the
@@ -25,7 +29,7 @@ function charges(key: string, now: number): Charge[] {
 export type Bucket = readonly [key: string, limit: number];
 
 /** What one send's batches are held against: the org's bucket and the project's half, for this kind. */
-export function sendBuckets(org: string, projectId: string, kind: 'dashboard' | 'alert', orgPerHour: number): Bucket[] {
+export function sendBuckets(org: string, projectId: string, kind: 'dashboard' | 'alert' | 'mention', orgPerHour: number): Bucket[] {
   return [[`${org}\0${kind}`, orgPerHour], [`${org}\0${projectId}\0${kind}`, projectShare(orgPerHour)]];
 }
 
@@ -36,6 +40,20 @@ export function projectShare(orgPerHour: number): number {
 
 export function testBucket(org: string): Bucket[] {
   return [[`${org}\0test`, TEST_EMAILS_PER_HOUR]];
+}
+
+export const MENTION_EMAILS_PER_AUTHOR = 20;
+export const MENTION_EMAILS_PER_RECIPIENT = 10;
+export const MENTION_PUSHES_PER_AUTHOR = 60;
+
+/** One mention email, held against its author's hour and its recipient's (the org and project buckets come after, in the send). */
+export function mentionEmailBuckets(org: string, author: string, recipient: string): Bucket[] {
+  return [[`${org}\0mention-from\0${author}`, MENTION_EMAILS_PER_AUTHOR], [`${org}\0mention-to\0${recipient}`, MENTION_EMAILS_PER_RECIPIENT]];
+}
+
+/** One mention notice in someone's open tabs, held against its author's hour. */
+export function mentionPushBucket(org: string, author: string): Bucket[] {
+  return [[`${org}\0mention-push\0${author}`, MENTION_PUSHES_PER_AUTHOR]];
 }
 
 export interface Hold {

@@ -311,12 +311,15 @@ export function sanitizeRule(raw: any): AlertRule | null {
 export function sanitizeEvent(raw: any): AlertEvent | null {
   if (!raw || typeof raw !== 'object') return null;
   if (!UUID_RE.test(String(raw.id || '')) || !UUID_RE.test(String(raw.ruleId || ''))) return null;
+  // One spelling of the id (a member's seen state matches it as Postgres returns uuids: lower-case) and a
+  // canonical, STABLE time (a seen-through watermark compares it): an unreadable one is the epoch, as a missing one is.
+  const parsed = Date.parse(str(raw.at, 40));
   const ev: AlertEvent = {
-    id: String(raw.id),
+    id: String(raw.id).toLowerCase(),
     ruleId: String(raw.ruleId),
     ruleName: str(raw.ruleName) || t('common.alert'),
     datasetId: UUID_RE.test(String(raw.datasetId || '')) ? String(raw.datasetId) : '',
-    at: str(raw.at, 40) || new Date(0).toISOString(),
+    at: new Date(Number.isFinite(parsed) ? parsed : 0).toISOString(),
     value: num(raw.value),
     previous: num(raw.previous),
     delta: num(raw.delta),
