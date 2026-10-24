@@ -27,6 +27,7 @@ const store: typeof import('../src/ai/planStore') = require('../src/ai/planStore
 const pr: typeof import('../src/ai/planRun') = require('../src/ai/planRun');
 const ps: typeof import('../src/ai/planSteps') = require('../src/ai/planSteps');
 const context: typeof import('../src/server/context') = require('../src/server/context');
+const recordFs: typeof import('../src/app/recordFs') = require('../src/app/recordFs');
 
 type StepOutcome = import('../src/ai/planRun').StepOutcome;
 const P = randomUUID();
@@ -86,6 +87,30 @@ const edit = (runId: string, fn: (r: Record<string, any>) => void): void => { //
   edit(others[others.length - 1], (r) => { r.updatedAt = new Date(Date.now() - 25 * 3_600_000).toISOString(); });
   await store.prune();
   ok('a run untouched for 24 h goes; a leased run is never pruned', !left().includes(others[others.length - 1]) && left().includes(leased.id));
+
+  // L6: plan:start prunes only the caller's runs in its project; the sweep's full prune does the rest.
+  const Q = randomUUID();
+  const inQ = async () => store.create(pr.newRun(randomUUID(), Q, '', 'other project', STEPS));
+  for (let i = 0; i < 11; i++) await inQ();
+  const qLeft = (): number => fs.readdirSync(path.dirname(store.runPath(Q, randomUUID()))).filter((n) => n.endsWith('.json')).length;
+  const pBefore = left().length;
+  await fresh(); // a start in P
+  ok(`a start in one project reads and prunes only that project (the other keeps its ${qLeft()} runs, per-user capped there)`, qLeft() === 10 && left().length <= pBefore + 1);
+  await store.prune();
+  ok('the full prune holds the user to 10 runs across every project (the leased one aside)', left().length + qLeft() <= 11, JSON.stringify({ p: left().length, q: qLeft() }));
+
+  // L1: an apply that meets a busy record is tried again — the step's touches are never lost.
+  const run2 = await fresh();
+  const cl = await store.claim(P, run2.id, 'step', pr.beginStep);
+  const realLocked = recordFs.locked;
+  let failures = 1;
+  (recordFs as { locked: typeof realLocked }).locked = (async (p: string, fn: () => Promise<unknown>) => {
+    if (failures-- > 0) throw Object.assign(new Error('busy'), { code: 'ERECORDBUSY' });
+    return realLocked(p, fn);
+  }) as typeof realLocked;
+  const applied = await store.apply(P, run2.id, cl!.claim, (r) => pr.addTouches(r, made('kept')), (r) => pr.endStep(r, 0, made('kept'))).catch(() => null);
+  (recordFs as { locked: typeof realLocked }).locked = realLocked;
+  ok('an apply that meets ERECORDBUSY once is tried again: the touches and the step\'s result land', !!applied && applied.touches.some((t) => t.id === 'kept') && applied.status[0] === 'done');
 })()
   .catch((err) => ok('the suite ran to the end', false, err instanceof Error ? err.stack : err))
   .finally(() => {

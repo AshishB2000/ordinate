@@ -34,6 +34,8 @@ export const LEASE_MS = 90_000;
 export const HEARTBEAT_MS = 30_000;
 export const MAX_RUNS_PER_USER = 10;
 export const MAX_RUNS_PER_ORG = 50;
+/** A failed apply is tried again this many times (250 ms, then 1 s, then 4 s apart). */
+const APPLY_RETRIES = 3;
 export const INTERRUPTED = 'The server restarted while this step ran, so it may have partly run. Check what it made, then run it again or skip it.';
 
 export interface Lease {
@@ -130,7 +132,8 @@ export async function create(run: PlanRun): Promise<StoredRun> {
   const stored: StoredRun = { ...run, v: 1, by: ctx().user.email, createdAt: at, updatedAt: at };
   delete (stored as StoredRun & { fileToken?: string }).fileToken;
   await save(runPath(run.projectId, run.id), stored);
-  await prune().catch((err: unknown) => log.warn({ err }, 'plan runs could not be pruned'));
+  // Only the caller's runs in this project here; the whole org's caps are the sweep job's (review L6).
+  await prune({ projectId: run.projectId, user: stored.by }).catch((err: unknown) => log.warn({ err }, 'plan runs could not be pruned'));
   return stored;
 }
 
@@ -182,28 +185,40 @@ export function heartbeat(projectId: string, runId: string, claimId: string): { 
  * while the lease is still this claim's; the lease is then released. A lost lease is logged.
  */
 export async function apply(projectId: string, runId: string, claimId: string, merge: (run: StoredRun) => void, transition: (run: StoredRun) => void): Promise<StoredRun | null> {
-  const r = await update(projectId, runId, (run) => {
-    merge(run);
-    const ours = run.lease?.claim === claimId;
-    if (ours) {
-      transition(run);
-      delete run.lease;
+  // A busy record or a dropped connection must not lose a step's touches (undo needs them): try again,
+  // with backoff. Each attempt is one transaction, so a failed one wrote nothing; the fence is the claim.
+  let r: Awaited<ReturnType<typeof update<boolean>>> = null;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      r = await update(projectId, runId, (run) => {
+        merge(run);
+        const ours = run.lease?.claim === claimId;
+        if (ours) {
+          transition(run);
+          delete run.lease;
+        }
+        return ours;
+      });
+      break;
+    } catch (err) {
+      if (attempt >= APPLY_RETRIES) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 250 * 4 ** attempt));
     }
-    return ours;
-  });
+  }
   if (r && !r.out) log.warn({ run: runId }, 'plan run: a step finished after its lease was recovered; its writes were kept for undo, its status was not applied');
   return r ? r.run : null;
 }
 
 /**
- * The org's runs held to their caps: past the TTL, past each user's 10, past the org's 50 — oldest
- * first, never one with a live lease. Each delete is its own locked hold that re-reads the run and
- * keeps it if it changed since the scan.
+ * Runs held to their caps: past the TTL, past each user's 10, past the org's 50 — oldest first, never
+ * one with a live lease. Each delete is its own locked hold that re-reads the run and keeps it if it
+ * changed since the scan. With a `scope` (plan:start) only that user's runs in that one project are
+ * read; the sweep job prunes the whole org.
  */
-export async function prune(): Promise<number> {
+export async function prune(scope?: { projectId: string; user: string }): Promise<number> {
   let pids: string[] = [];
   try {
-    pids = (await recordFs.readdir(projectsBase())).filter((n) => isValidId(n));
+    pids = scope ? [scope.projectId] : (await recordFs.readdir(projectsBase())).filter((n) => isValidId(n));
   } catch {
     return 0;
   }
@@ -221,7 +236,7 @@ export async function prune(): Promise<number> {
       if (!name.endsWith('.json') || !isValidId(runId)) continue;
       const p = runPath(projectId, runId);
       const run = await load(p, projectId, runId);
-      if (!run) continue;
+      if (!run || (scope && run.by !== scope.user)) continue;
       found.push({ p, projectId, runId, by: run.by, updatedAt: run.updatedAt, leased: !!run.lease && run.lease.until >= now });
     }
   }
@@ -230,7 +245,7 @@ export async function prune(): Promise<number> {
   const victims = found.filter((f, i) => {
     const mine = (perUser.get(f.by) ?? 0) + 1;
     perUser.set(f.by, mine);
-    return !f.leased && (now - Date.parse(f.updatedAt) > TTL_MS || mine > MAX_RUNS_PER_USER || i >= MAX_RUNS_PER_ORG);
+    return !f.leased && (now - Date.parse(f.updatedAt) > TTL_MS || mine > MAX_RUNS_PER_USER || (!scope && i >= MAX_RUNS_PER_ORG));
   });
   let n = 0;
   for (const v of victims) {
