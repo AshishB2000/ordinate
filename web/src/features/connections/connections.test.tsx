@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import { renderApp } from '../../test-utils';
 import { collect, initialDraft } from './ConnectionForm';
 import type { Connector } from './api';
+import { SqlEditor } from './SqlEditor';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -347,5 +349,38 @@ describe('the workbench rail', () => {
     serve(base());
     renderApp(`/connections/${PID}/${CID}`);
     expect(await screen.findByRole('heading', { name: 'Connection not found' })).toBeTruthy();
+  });
+});
+
+describe('the SQL editor', () => {
+  function Editor() {
+    const [sql, setSql] = useState('');
+    const noop = () => undefined;
+    return (
+      <SqlEditor sql={sql} onSql={setSql} family="postgres" tables={['sales.orders']} columns={new Map()} limit="100000" onLimit={noop} busy={null} onRun={noop} onExplain={noop} onSave={noop} />
+    );
+  }
+
+  // The caret is placed in the same task as the insert: a key typed before the
+  // next frame must land after the inserted name, not be spliced in before it.
+  it('puts the caret after an accepted completion before the next key can arrive', () => {
+    render(<Editor />);
+    const el = screen.getByRole('combobox', { name: 'SQL' }) as HTMLTextAreaElement;
+    const text = 'select * from sales.ord where x';
+    const at = text.indexOf(' where');
+    fireEvent.change(el, { target: { value: text, selectionStart: at, selectionEnd: at } });
+    expect(screen.getByRole('option', { name: /sales\.orders/ })).toBeTruthy();
+    fireEvent.keyDown(el, { key: 'Enter' });
+    expect(el.value).toBe('select * from "sales"."orders" where x');
+    expect(el.selectionStart).toBe(el.value.indexOf(' where'));
+  });
+
+  it('puts the caret after a Tab indent at once', () => {
+    render(<Editor />);
+    const el = screen.getByRole('combobox', { name: 'SQL' }) as HTMLTextAreaElement;
+    fireEvent.change(el, { target: { value: 'ab', selectionStart: 1, selectionEnd: 1 } });
+    fireEvent.keyDown(el, { key: 'Tab' });
+    expect(el.value).toBe('a  b');
+    expect(el.selectionStart).toBe(3);
   });
 });
