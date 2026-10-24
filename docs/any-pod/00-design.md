@@ -30,7 +30,7 @@ Item 4 of batch 3, branch `fix/any-pod`, migration `0021`. Every file:line below
 | Drivers facts | A short-lived record keyed by the token. |
 | Shared counter | One Postgres table, `INSERT … ON CONFLICT … DO UPDATE SET n = n + 1 RETURNING n`, behind one helper, swept by the same job. Used by the password lockout, every email budget kind (item 3's `mention` included), test sends, Send now, and the embed per-token and per-org limits. |
 | Stay per pod (R8 says so) | The coarse per-IP and per-user RPC buckets (`limits.ts:29-31`, `:93-116`), the SMTP semaphore (`smtp.ts:36`, `:65-71`), `LIVE_MAX_CONCURRENT` (`liveBudget.ts:37`). |
-| `sample:seed` | Its in-flight guard becomes an advisory lock. |
+| `sample:seed` | Its in-flight guard becomes a lease record on the DB clock (an advisory lock, until the review round: §3.9). |
 | Docs | Drop the sticky-session requirement everywhere (CLAUDE.md included); keep one line for older versions. |
 
 ## 2. Caller inventory
@@ -689,25 +689,25 @@ success; the key is cleared instead.
 
 ### 3.9 `sample:seed`
 
-The lock is session-level, on a dedicated client: the `refreshLock` pattern, never an open
-transaction (finding 14). `withOrgTryLock(name, fn)` is factored out of `withRefreshLock`
-(`src/server/jobs/refreshLock.ts:76-102`), which now delegates to it with the dataset id as the
-name, so the refresh lock's key is unchanged. `withOrgLock(name, fn, waitMs)` wraps it: it retries
-every 250 ms until `waitMs` (30 s).
+**A lease record, not a lock held on a connection** (review H1: a session advisory lock pins a pooled
+client for the whole hold, and the pipelines below can hold one for minutes). `src/app/runLease.ts`:
 
-1. `pg_try_advisory_lock(hashtext(<org> || ':sample:seed'))`, with retries.
-2. `fn`: re-check `listProjects()`, then seed.
-3. `pg_advisory_unlock`. A client that cannot prove it let go is destroyed, not returned to the
-   pool.
+1. `claim`: one short `recordFs.locked` hold on `projects/sample-seed.json`. The lease is free when
+   there is none or its `until` has passed **on the database clock** (`clock_timestamp()`); then it
+   writes `{ claim: <uuid>, until: now + 90 s }`.
+2. `fn`: re-check `listProjects()`, then seed. A heartbeat renews the lease every 30 s, only while it
+   is still ours.
+3. `release`: one short hold that deletes it, only if the claim is still ours.
 
-- Session-level, so a pod that dies drops it with its connection.
-- **A lock error, or no lock within 30 s, answers `{ ok: false, error: 'unavailable' }`. It never
-  seeds unlocked.**
+- `waitForLease` retries every 250 ms for up to 30 s. **No lease within 30 s, or a lease error,
+  answers `{ ok: false, error: 'unavailable' }`. It never seeds unleased.**
+- A pod that dies stops renewing, and the lease frees itself 90 s later.
 - The per-pod `seeding` Map stays in front, so same-pod callers still share one answer.
 - A second pod's caller waits for the first to finish, then sees a project and answers
   `has_projects`. The page already says "Your organization already has a project." and refreshes
   its lists (`NoProject.tsx:30-33`).
-- Without the DB it just runs (one process).
+- Without the DB the record is a file and the clock is this pod's (one process).
+- `refreshLock.ts` is untouched (no `withOrgTryLock` was factored out after all).
 
 ### 3.10 The sweep job
 
@@ -750,17 +750,24 @@ at `:152-154` and `:208`. `pipelines:run` is live on the server (`app.ts:518`, `
 so today a second pod starts a concurrent run of the same pipeline, and each run's failures raise
 the alerts again.
 
-- `runFrom` takes `withOrgTryLock('pipeline:' + projectId)` around the whole run (key
-  `<org>:pipeline:<projectId>`, session-level on a dedicated client). If the lock is held anywhere,
-  it answers "This pipeline is already running.", today's sentence.
-- The cron `tick` goes through `runFrom` and skips a held lock the same way.
-- **One client per running pipeline** (rare, user-driven), the refresh lock's budget class.
+- `runFrom` takes the lease `projects/<pid>/pipeline-run.json` (§3.9) around the whole run. If it
+  is held anywhere, it answers "This pipeline is already running.", today's sentence.
+- **No pooled client is held while a run works** (review H1): the lease is a record, renewed by a
+  30 s heartbeat; each claim, renew and release is one short `recordFs.locked` hold.
+- **At most `MAX_PIPELINE_RUNS = 2` runs per pod**, a semaphore taken BEFORE the claim, so a pod
+  never holds a lease it has no slot to use. A third waits; a pending set keeps one project from
+  queueing twice.
+- `runFrom` never rejects: any failure, the lease's included, is logged and answers "The pipeline
+  could not run." The cron `tick` goes through it with a `.catch`, and `afterTick` has its own.
+- The cron `tick` skips a held lease the same way.
 - **`liveState` stays this pod's view, and says so.** `pipelines:get`'s `live` holds the node
   states of a run on THIS pod. The running pod pushes `pipelines:changed` with the full live map to
   every tab of the org at each node's start and finish, and that completes a page opened on another
   pod within one node. The comment on `live` (`pipelineRunner.ts`) says this.
-- Test: two pods start the same pipeline at once: one runs and one gets "already running". The
-  negative control is the preload passing the lock through, which gives two runs.
+- Tests: two pods start the same pipeline at once: one runs and one gets "already running" (the
+  negative control is the preload passing the lease through, which gives two runs); ten pipelines
+  running leave the pool usable (`SELECT 1` under 100 ms); a failing `connect()` in `tick` rejects
+  nothing.
 
 ### 3.13 The chart: more than one replica without shared storage
 
@@ -911,7 +918,7 @@ runs both ways at the end.
 8. **Drivers facts record, the `sample:seed` lock, and the pipeline lock.**
    - Code: `drivers.ts` (`remember` / `recall`, `driversFor`'s option); `copilot.ts:310`;
      `refreshLock.ts` (`withOrgLock`); `projects.ts`.
-   - Code: `pipelineRunner.runFrom` under `withOrgTryLock('pipeline:<id>')`.
+   - Code: `pipelineRunner.runFrom` under the lease `projects/<pid>/pipeline-run.json` (§3.12).
    - Tests: `test-drivers` (a token from the panel door, none from a tile; recall across projects);
      two-pod seed and pipeline races in test-anyPod, each with its negative control.
 9. **Docs.**
@@ -1084,3 +1091,23 @@ Also in this suite:
 | 14 a session-level seed lock, `unavailable` on failure | §3.9 |
 | 15 10 runs per user, 50 per org | §3.5 |
 | Conditions 1–7 | §3.5 (DB clock), §3.8 (1× → 2×), §3.4 (pod budget, the ASCII claim, 16 MB rows, measurements), §3.2 (`http` PUT, hash while writing), §3.7 (best-effort) |
+
+## 9. The review round, and where each finding landed
+
+| Finding | Fix | Test |
+|---|---|---|
+| H1 pipeline lock pinned a pooled client | lease record + per-pod semaphore of 2 before the claim; `runFrom` never rejects; `tick`/`afterTick` catch (§3.9, §3.12) | `test-runLease`; `test-anyPod` oneAtATime + poolUnderLoad (median `SELECT 1` 1 ms over 200 probes) |
+| M1 the popover lost a restarted pod's jobs | job lists are slices tagged with `POD_ID`; a reply or push replaces only its own pod's slice; a reconnect starts from the reply (§3.6) | `web/src/app/JobsButton.test.tsx`: a restart reply `[]` clears the stale job |
+| L4 SSE coalescing merged two pods' pushes | the coalescing key includes the pod id (`sse.ts`) | `test-sse` tab P |
+| M2 a transient S3 GET burned a download | retry once, then untake and answer 503 without `finish` (`sharedFiles.openTaken`) | `test-sharedFiles-db` |
+| M5 a failed `offerDownload` leaked the file | the PUT retries once on 5xx/network; on failure the row and the file are removed | `test-sharedFiles-db` |
+| L2 the token TTL ran during the upload | `restartExpiry` after publish | `test-sharedFiles-db` |
+| L3 a stalled PUT hung forever | `req.setTimeout(120 s)`, `req.on('close', body.destroy)` | `test-s3Staging` stalledPut |
+| M3 an eviction mid-write orphaned a stage | `import_stages.ready_at` (0021 edited, never applied anywhere); only ready rows are evicted; a row gone at publish removes its bytes; the sweep deletes `stage-*.parquet` no row names, past the TTL | `test-stageStore-db` 1–2 |
+| M4 memory stages never expired | per-entry `expires`; `pruneMemory` on the 60 s timer | `test-stageStore-db` 3 |
+| L7 no cross-pod preview check; ±Infinity untested | `get()` compared with the table put; NaN/±Infinity in `test-stageParquet` | `test-stageStore-db` 4, `test-anyPod` crossPodImport |
+| L1 a plan apply lost to a transient error | apply retried 3× with backoff, fenced by claim id (§3.5) | `test-planStore` |
+| L6 `create` pruned every run | `create` prunes the caller's runs; the sweep prunes all | `test-planStore` |
+| L5 raw `err.message` reached the browser | `importError` cuts `s3://…` and `orgs/<org>/…`; paste and query-to-dataset answer through it; `/api/files` answers a bare 500 | `test-files` (injected `s3://` failure; five checks fail without the fix) |
+| Cleanups | one `sweepRows` loop for tokens and stages; `withRefreshLock` alias gone (`refreshLock.ts` as on develop); `sha256File` kept (the fallback hash in `issue`) | — |
+

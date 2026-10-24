@@ -147,7 +147,8 @@ the desktop installers.
   - a staged import is a Parquet file any pod saves;
   - an Assistant plan run is a record;
   - Cancel and the Jobs list reach every pod;
-  - the sample seed and a pipeline run are one at a time across pods.
+  - the sample seed and a pipeline run are one at a time across pods (a pod runs at most two
+    pipelines at once; a third waits for a slot).
 
   The password lockout, the email budgets, Send now and the embed limits now count across pods, so
   N pods no longer allow N times each limit. See [`docs/any-pod/00-design.md`](docs/any-pod/00-design.md).
