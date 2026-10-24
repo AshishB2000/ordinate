@@ -239,6 +239,23 @@ const findJob = (e: Ev, id: string): Job | undefined => {
   const seq = D.events.map((e) => (e.channel === 'jobs:finished' ? 'fin' : (e.data as { n?: number }).n ?? 'big'));
   ok('backpressure: stale progress coalesced, the completion kept, order big → fin → newest', JSON.stringify(seq) === '["big","fin",2]', JSON.stringify(seq));
 
+  // Two pods' slices queued behind a full socket: each pod's newest survives — one pod's state never
+  // replaces another pod's (docs/any-pod, review L4).
+  const PA = '0a0a0a0a-0a0a-4a0a-8a0a-0a0a0a0a0a0a';
+  const PB = '0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b';
+  const kP = randomUUID();
+  const P = await openTab(kP, 'org-a', 'u', true);
+  const pc = sse.clientFor(kP, who('org-a'))!;
+  pc.send('jobs:changed', { active: [], recent: [], big: 'x'.repeat(16 * 2 ** 20) });
+  pc.send('jobs:changed', { active: [], recent: [], pod: PA, n: 1 });
+  pc.send('jobs:changed', { active: [], recent: [], pod: PB, n: 2 });
+  pc.send('jobs:changed', { active: [], recent: [], pod: PA, n: 3 });
+  P.res.resume();
+  ok('backpressure per pod: the queue drains', await until(() => P.events.length >= 3, 10_000), P.events.length);
+  await sleep(50);
+  const perPod = P.events.map((e) => (e.data as { n?: number }).n ?? 'big');
+  ok('backpressure per pod: pod A\'s newer slice replaces its older one, pod B\'s slice stays (big → B → A newest)', JSON.stringify(perPod) === '["big",2,3]', JSON.stringify(perPod));
+
   // E never reads, and its queue fills with completions: closed, not grown.
   const kE = randomUUID();
   const E = await openTab(kE, 'org-a', 'u', true);
@@ -277,7 +294,7 @@ const findJob = (e: Ev, id: string): Job | undefined => {
   Gb.close();
 
   // ── Closing frees the registry ────────────────────────────────────────────
-  for (const t of [A2, B, C, D]) t.close();
+  for (const t of [A2, B, C, D, P]) t.close();
   ok('every tab closed → registry back to 0', await until(() => sse.streamCount() === 0), sse.streamCount());
 
   // app.close() must not hang on an open stream.

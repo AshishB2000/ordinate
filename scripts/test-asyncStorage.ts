@@ -121,19 +121,20 @@ void (async () => {
   let clock = 1_000;
   stage.resetForTest(() => clock);
   const big = { columns: cols, rows: rowsOf(10_000), rowCount: 10_000, warnings: [] as string[] };
-  const id1 = stage.put(big);
+  const id1 = await stage.put(big);
   const pv = stage.previewOf(big, id1);
   ok('stage: the renderer gets a slice and a handle, not the table',
     pv.rows.length === stage.PREVIEW_ROWS && pv.rowCount === 10_000 && pv.stagedId === id1);
-  ok('stage: main still holds every row', stage.get(id1)!.rows.length === 10_000);
-  const id2 = stage.put(big);
-  const id3 = stage.put(big);
-  ok('stage: bounded — the oldest table goes first', stage.get(id1) === null && !!stage.get(id2) && !!stage.get(id3));
-  stage.drop(id2);
-  ok('stage: a save drops its table', stage.get(id2) === null);
+  ok('stage: main still holds every row', (await stage.get(id1))!.rows.length === 10_000);
+  ok('stage: a limited read gives the first rows and the whole row count', (await stage.get(id1, 5))!.rows.length === 5 && (await stage.get(id1, 5))!.rowCount === 10_000);
+  const id2 = await stage.put(big);
+  const id3 = await stage.put(big);
+  ok('stage: bounded — the oldest table goes first', (await stage.get(id1)) === null && !!(await stage.get(id2)) && !!(await stage.get(id3)));
+  await stage.drop(id2);
+  ok('stage: a save drops its table', (await stage.get(id2)) === null);
   clock += stage.TTL_MS + 1;
-  ok('stage: an abandoned import expires', stage.get(id3) === null && stage.sizeForTest() === 0);
-  ok('stage: a forged or missing id resolves to nothing', stage.get('../../config.json') === null && stage.get(42) === null);
+  ok('stage: an abandoned import expires', (await stage.get(id3)) === null && stage.sizeForTest() === 0);
+  ok('stage: a forged or missing id resolves to nothing', (await stage.get('../../config.json')) === null && (await stage.get(42)) === null);
 
   fs.rmSync(dir, { recursive: true, force: true });
   fs.rmSync(tmpUserData, { recursive: true, force: true });

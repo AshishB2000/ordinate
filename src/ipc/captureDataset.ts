@@ -79,7 +79,7 @@ export function register(deps: CaptureDeps = {}) {
     if (fileToken !== undefined) {
       let upload: Upload | null = null;
       try {
-        upload = resolveUpload(fileToken);
+        upload = await resolveUpload(fileToken);
         return await captureUpload.captureFromUpload(String(projectId), upload.path, payload.thumb);
       } catch (err: any) {
         return { ok: false, errorType: 'unknown', message: err?.message || 'Could not read that screenshot' };

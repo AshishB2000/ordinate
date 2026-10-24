@@ -232,7 +232,7 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
 
     // ── budget ────────────────────────────────────────────────────────────
     rewire({ RATE_LIMIT_EMAIL_ORG_PER_HOUR: '2' }); // a project's share: 1 mention email an hour
-    email.resetLimitsForTest();
+    await email.resetLimitsForTest(ORG);
     const [eb, rb, pb] = [mailsTo('cal'), await rowsOf('cal'), pushesTo('cal')];
     await as('ann').call('comment:add', { projectId: pid, target, body: `one ${m('cal')}` });
     await settle();
@@ -242,9 +242,9 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     ok('budget: …while its Home row and push still go', (await rowsOf('cal')) === rb + 2 && pushesTo('cal') === pb + 2);
     const budget: typeof import('../src/server/mail/budget') = require('../src/server/mail/budget');
     ok('budget: its own kind — the mention bucket is spent, the alert and subscription buckets are not',
-      budget.hold(budget.sendBuckets(ORG, pid, 'mention', 2), 1) === null && budget.hold(budget.sendBuckets(ORG, pid, 'alert', 2), 1) !== null && budget.hold(budget.sendBuckets(ORG, pid, 'dashboard', 2), 1) !== null);
+      (await budget.hold(budget.sendBuckets(ORG, pid, 'mention', 2), 1)) === null && (await budget.hold(budget.sendBuckets(ORG, pid, 'alert', 2), 1)) !== null && (await budget.hold(budget.sendBuckets(ORG, pid, 'dashboard', 2), 1)) !== null);
     rewire({});
-    email.resetLimitsForTest();
+    await email.resetLimitsForTest(ORG);
 
     // ── access ────────────────────────────────────────────────────────────
     const piece2 = randomUUID();
@@ -367,7 +367,7 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     // ── flood: one member cannot drain the mention budget ──────────────────
     {
       rewire({ RATE_LIMIT_EMAIL_ORG_PER_HOUR: '100' }); // a project's share: 50 an hour
-      email.resetLimitsForTest();
+      await email.resetLimitsForTest(ORG);
       const spamThread = (await as('ted').call('comment:add', { projectId: pid, target, body: 'a thread' })).body.comments.at(-1).id as string;
       const victims = ['ola', 'boss', 'aaa'];
       const mail0 = fake.txns.length;
@@ -388,7 +388,7 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
       await settle();
       ok('flood: a legitimate mention elsewhere still gets its email (not starved)', mailsTo('bea') === bea0 + 1);
       rewire({});
-      email.resetLimitsForTest();
+      await email.resetLimitsForTest(ORG);
     }
 
     // ── slow mail (last: a stalled relay keeps a send open) ────────────────

@@ -16,7 +16,6 @@
 // can be cancelled; a small one answers inline.
 
 import { ipcMain } from './bus';
-import { randomUUID } from 'crypto';
 
 import * as datasets from '../data/datasets';
 import * as metrics from '../analysis/metrics';
@@ -49,6 +48,7 @@ import type { DriversSpec, PeriodScopes } from '../analysis/driverScope';
 import * as alertStore from '../analysis/alertStore';
 import type { AlertRule } from '../analysis/alerts';
 import { resolveMetric } from './metrics';
+import { recall, remember } from './driversAsked';
 import { computeCardMetric } from './dashboards';
 import { dateRangeSpan, duringClause, eventWhen, eventsDuring, periodSpan } from '../analysis/events'; // r8:events
 import { projectEvents } from '../analysis/eventStore';
@@ -68,8 +68,6 @@ const RESIDENT_MIN_ROWS = 1_000;
 const JOB_ROWS = 250_000;
 /** Members of the chosen dimension sent to the panel's table. */
 const MEMBERS_SHOWN = 50;
-/** Questions remembered for "Ask the Assistant" (by token). */
-const TOKENS_KEPT = 50;
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -106,7 +104,8 @@ export interface DimensionView {
 
 export interface DriversResult {
   ok: true;
-  token: string;
+  /** The question, remembered for "Ask the Assistant" — minted by the panel's doors only (`remember`). */
+  token?: string;
   metric: { name: string; kind: 'additive' | 'ratio' | 'none'; direction?: 'up_good' | 'down_good' };
   periods: { a: string; b: string; column: string };
   totals: { a: number | null; b: number | null; delta: number | null; pct: number | null; aText: string; bText: string; deltaText: string };
@@ -276,26 +275,14 @@ async function latestScopes(projectId: string, spec: DriversSpec, column: string
   return { a: spec.filters.concat([step(now)], path), b: spec.filters.concat([step(prev)], path), aLabel: pretty(now), bLabel: pretty(prev), column, aRange };
 }
 
-const tokens = new Map<string, { projectId: string; spec: DriversSpec; params: unknown }>();
-
-function remember(projectId: string, spec: DriversSpec, params: unknown): string {
-  const token = randomUUID();
-  tokens.set(token, { projectId, spec, params });
-  while (tokens.size > TOKENS_KEPT) tokens.delete(tokens.keys().next().value as string);
-  return token;
-}
-
-/** A remembered question, for the Assistant's facts. */
-export function recall(projectId: string, token: string): { spec: DriversSpec; params: unknown } | null {
-  const t = tokens.get(token);
-  return t && t.projectId === projectId ? { spec: t.spec, params: t.params } : null;
-}
+/** A remembered question, for the Assistant's facts (a record any pod reads: ./driversAsked.ts). */
+export { recall };
 
 /**
  * The whole answer for one sanitized question. EXPORTED for the facts builder,
  * the waterfall tile and scripts/test-drivers.ts.
  */
-export async function driversFor(projectId: string, spec: DriversSpec, rawParams?: unknown): Promise<DriversReply> {
+export async function driversFor(projectId: string, spec: DriversSpec, rawParams?: unknown, opts: { remember?: boolean } = {}): Promise<DriversReply> {
   // The renderer's payload, or values a caller already resolved (a tile's render).
   const params: ParamValues = rawParams instanceof Map ? (rawParams as ParamValues) : paramValues(rawParams);
   const src = await sourceFor(projectId, spec.datasetId);
@@ -389,7 +376,7 @@ export async function driversFor(projectId: string, spec: DriversSpec, rawParams
   const stored: DriversSpec = selectedDim ? { ...spec, dimension: selectedDim.column } : spec;
   const out: DriversResult = {
     ok: true,
-    token: remember(projectId, stored, rawParams),
+    ...(opts.remember ? { token: await remember(projectId, stored, rawParams) } : {}),
     metric: { name, kind: shape.kind, ...(metric && metric.direction ? { direction: metric.direction } : {}) },
     periods: { a: scopes.aLabel, b: scopes.bLabel, column: scopes.column },
     totals: {
@@ -423,7 +410,7 @@ export async function driversFor(projectId: string, spec: DriversSpec, rawParams
 /** `driversFor`, as a visible job when the table is big. EXPORTED for the chart-point door (./driversPoint). */
 export async function runDrivers(projectId: string, spec: DriversSpec, rawParams: unknown): Promise<DriversReply> {
   const meta = await datasets.getDatasetMeta(projectId, spec.datasetId);
-  if (!meta || meta.rowCount < JOB_ROWS) return driversFor(projectId, spec, rawParams);
+  if (!meta || meta.rowCount < JOB_ROWS) return driversFor(projectId, spec, rawParams, { remember: true });
   const job = jobs.submit({
     kind: 'analysis',
     label: 'Explaining a change' + (spec.metric.label ? ' in ' + spec.metric.label : ''),
@@ -433,7 +420,7 @@ export async function runDrivers(projectId: string, spec: DriversSpec, rawParams
     silent: true,
     run: async (ctx) => {
       ctx.progress(0.1, `${meta.rowCount.toLocaleString('en-US')} rows`);
-      const r = await driversFor(projectId, spec, rawParams);
+      const r = await driversFor(projectId, spec, rawParams, { remember: true });
       ctx.checkCancelled();
       return r;
     },

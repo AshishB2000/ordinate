@@ -16,7 +16,7 @@
 import * as fs from 'fs';
 import { assertFanOutAllowed, exportScope, fanOutScope } from '../data/rowAccess';
 import * as path from 'path';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import type { Pool } from 'pg';
 import { ipcMain } from './bus';
 import * as appPaths from '../app/paths';
@@ -127,6 +127,6 @@ export function register(pool: () => Pool | null): void {
     const file = path.join(appPaths.temp(), `export-${randomUUID()}.html`);
     await fs.promises.mkdir(path.dirname(file), { recursive: true });
     await fs.promises.writeFile(file, html, { mode: 0o600 });
-    return { ok: true, ...offerDownload(file, safeName(a.name, 'html')) };
+    return { ok: true, ...(await offerDownload(file, safeName(a.name, 'html'), createHash('sha256').update(html, 'utf8').digest('hex'))) };
   });
 }

@@ -221,7 +221,7 @@ async function suite(adminUrl: string): Promise<void> {
     const tooBig = await sendNow();
     ok('a list larger than one project\'s share of the hour is its own refusal, not "this hour"', tooBig.body.ok === false && tooBig.body.error === say.runText('list_too_large', { channel: 'Leads' }) && fake.txns.length === n0, show(tooBig.body));
     rewire(mailEnv.parseMail({ ...relaySrc(fake.port), RATE_LIMIT_EMAIL_ORG_PER_HOUR: String(readers * 2) }, true)); // share 4
-    email.resetLimitsForTest();
+    await email.resetLimitsForTest('acme');
     const r1 = await sendNow();
     const r2 = await sendNow();
     ok('rate: a subscription within its share goes; the next would pass it and is refused whole', r1.body.ok === true && r2.body.ok === false && r2.body.error === say.runText('rate_limited', { channel: 'Leads' }) && fake.txns.length === n0 + 1, show(r2.body));
@@ -241,7 +241,7 @@ async function suite(adminUrl: string): Promise<void> {
     await B.context.runInContext(JOBS, 'job:tick:acme', () => Promise.all(schedules.deliverTickAlerts([{ projectId: pid, events: [{ ...ev, id: randomUUID() }] } as never], () => undefined)));
     ok('NEGATIVE CONTROL: an alert, in its own bucket, still goes out', fake.txns.length === n0 + 3);
     rewire(cfg.mail);
-    email.resetLimitsForTest();
+    await email.resetLimitsForTest('acme');
 
     // ── A send where one batch fails is partial: sent, said, never a failure ──
     const bulkTeam = (await pool.query<{ id: string }>(`INSERT INTO teams (org_id, name) VALUES ('acme', 'Bulk') RETURNING id`)).rows[0].id;

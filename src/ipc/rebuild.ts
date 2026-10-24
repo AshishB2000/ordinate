@@ -117,7 +117,7 @@ export function register(): void {
   ipcMain.handle('rebuild:read', async (_e, { fileToken }: any = {}) => {
     let upload: Upload | null = null;
     try {
-      upload = resolveUpload(fileToken);
+      upload = await resolveUpload(fileToken);
       const stat = await fs.promises.stat(upload.path);
       if (stat.size > MAX_IMAGE_BYTES) return { ok: false, errorType: 'bad_image', message: m.tooLarge() };
       const buf = await fs.promises.readFile(upload.path);

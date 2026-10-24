@@ -324,28 +324,28 @@ async function main(): Promise<void> {
 
   // ── Budgets: held per batch, refunded, a project's half ──────────────────
   {
-    budget.resetBudgetsForTest();
+    await budget.resetBudgetsForTest();
     const A = budget.sendBuckets('acme', 'project-a', 'dashboard', 10);
     const B = budget.sendBuckets('acme', 'project-b', 'dashboard', 10);
-    ok('a project may hold half the org\'s hour', budget.projectShare(10) === 5 && budget.hold(A, 5) !== null && budget.hold(A, 1) === null);
-    ok('project A exhausting its share does not refuse project B', budget.hold(B, 5) !== null);
-    ok('…and the org\'s own bucket still binds both (10 held of 10)', budget.hold(budget.sendBuckets('acme', 'project-c', 'dashboard', 10), 1) === null);
-    ok('alerts have their own buckets', budget.hold(budget.sendBuckets('acme', 'project-a', 'alert', 10), 5) !== null);
-    budget.resetBudgetsForTest();
-    const h = budget.hold(A, 5);
-    h?.refund(3);
-    ok('a refund gives the room back (5 held, 3 refunded → 3 more fit, 4 do not)', budget.hold(A, 3) !== null && budget.hold(A, 1) === null);
-    budget.resetBudgetsForTest();
+    ok('a project may hold half the org\'s hour', budget.projectShare(10) === 5 && (await budget.hold(A, 5)) !== null && (await budget.hold(A, 1)) === null);
+    ok('project A exhausting its share does not refuse project B', (await budget.hold(B, 5)) !== null);
+    ok('…and the org\'s own bucket still binds both (10 held of 10)', (await budget.hold(budget.sendBuckets('acme', 'project-c', 'dashboard', 10), 1)) === null);
+    ok('alerts have their own buckets', (await budget.hold(budget.sendBuckets('acme', 'project-a', 'alert', 10), 5)) !== null);
+    await budget.resetBudgetsForTest();
+    const h = await budget.hold(A, 5);
+    await h?.refund(3);
+    ok('a refund gives the room back (5 held, 3 refunded → 3 more fit, 4 do not)', (await budget.hold(A, 3)) !== null && (await budget.hold(A, 1)) === null);
+    await budget.resetBudgetsForTest();
     const f = await fake({});
     email.wireMail(mailEnv.parseMail({ SMTP_HOST: 'localhost', SMTP_PORT: String(f.port), SMTP_FROM: FROM } as import('../src/server/mail/mailEnv').MailSrc, true), null, []);
     const to = Array.from({ length: 120 }, (_, i) => `u${i}@x.test`);
     const r = await email.sendBatches(to, msg(), 'ch-budget', budget.sendBuckets('acme', 'p', 'dashboard', 200)); // a project's share: 100
     ok('a budget that runs out mid-send stops there: 100 sent, the third batch never held', r.accepted === 100 && r.limited === true && f.txns.length === 2, r);
-    budget.resetBudgetsForTest();
+    await budget.resetBudgetsForTest();
     f.opts = { rcpt: () => '550 5.1.1 no such user' };
     await email.sendBatches(to.slice(0, 50), msg(), 'ch-budget', budget.sendBuckets('acme', 'p', 'dashboard', 200));
-    ok('a batch the relay did not take costs nothing: the full share is still free', budget.hold(budget.sendBuckets('acme', 'p', 'dashboard', 200), 100) !== null);
-    budget.resetBudgetsForTest();
+    ok('a batch the relay did not take costs nothing: the full share is still free', (await budget.hold(budget.sendBuckets('acme', 'p', 'dashboard', 200), 100)) !== null);
+    await budget.resetBudgetsForTest();
     email.wireMail(null, null, []);
   }
 

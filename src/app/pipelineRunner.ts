@@ -19,6 +19,7 @@
 // Every node's run lands in its history (./pipelineStore) with its log.
 
 import { randomUUID } from 'crypto';
+import * as path from 'path';
 import * as datasets from '../data/datasets';
 import { refreshAsJob } from '../data/refreshJob';
 import { recomputeSteps } from '../data/datasetDependents';
@@ -34,9 +35,16 @@ import { downstream, runGraph } from './pipelines';
 import type { ExecResult, NodeOutcome, PipelineGraph, PipelineNode } from './pipelines';
 import { loadGraph } from './pipelineView';
 import { nextCronRun } from './pipelineCron';
+import { withLease } from './runLease';
+import { projectDir } from './recordKinds';
 import { logger } from './logger';
+import { trackWork } from '../server/lifecycle';
 
-/** Projects with a run in flight, and its nodes' live state. */
+/**
+ * Projects with a run in flight ON THIS POD, and its nodes' live state. `pipelines:get` reads it, so
+ * a page opened on another pod mid-run shows no live states until the running pod's next
+ * `pipelines:changed` push (sent to every tab of the org at each node's start and finish).
+ */
 const live = new Map<string, Map<string, 'queued' | 'running'>>();
 
 export function liveState(projectId: string): Record<string, string> {
@@ -145,14 +153,59 @@ async function raiseFailures(projectId: string, graph: PipelineGraph, outcomes: 
 
 export type RunReply = { ok: true; runId: string; outcomes: NodeOutcome[] } | { ok: false; error: string };
 
-/** Run these nodes and everything downstream. One run per project at a time. */
+const ALREADY = 'This pipeline is already running.';
+/** Pipeline runs at once on this pod; more wait their turn (they hold no database client while waiting or running). */
+export const MAX_PIPELINE_RUNS = 2;
+
+let slotsTaken = 0;
+const slotWaiters: Array<() => void> = [];
+/** Runs `fn` in one of this pod's MAX_PIPELINE_RUNS slots, waiting for a free one first. */
+export async function inPipelineSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (slotsTaken < MAX_PIPELINE_RUNS) slotsTaken++;
+  else await new Promise<void>((resolve) => slotWaiters.push(resolve)); // the slot is handed over, not re-counted
+  try {
+    return await fn();
+  } finally {
+    const next = slotWaiters.shift();
+    if (next) next();
+    else slotsTaken--;
+  }
+}
+
+/** Runs asked for on this pod and not yet finished (waiting for a slot or running). */
+const pending = new Set<string>();
+const leaseFile = (projectId: string): string => path.join(projectDir(projectId), 'pipeline-run.json');
+
+/**
+ * Run these nodes and everything downstream. One run per project at a time — across pods too: the
+ * run holds the project's pipeline-run LEASE (src/app/runLease.ts; docs/any-pod/00-design.md §3.12),
+ * so a second pod's Run, or its cron tick, answers "already running" instead of running (and
+ * alerting) twice. No database client is held while it runs. Never rejects: a failure is `ok: false`.
+ */
 export async function runFrom(
   projectId: string, start: string[], trigger: 'manual' | 'schedule',
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
 ): Promise<RunReply> {
+  const key = orgKey(projectId);
+  if (live.has(key) || pending.has(key)) return { ok: false, error: ALREADY };
+  if (!projectDir(projectId)) return { ok: false, error: 'The pipeline could not run.' };
+  pending.add(key);
+  try {
+    return await inPipelineSlot(async () => {
+      const r = await withLease(leaseFile(projectId), () => runLocked(projectId, start, trigger, sleep));
+      return r.ran ? r.value : { ok: false as const, error: ALREADY };
+    });
+  } catch (_) {
+    return { ok: false, error: 'The pipeline could not run.' }; // the lease store failed (its message stays in the server)
+  } finally {
+    pending.delete(key);
+  }
+}
+
+async function runLocked(projectId: string, start: string[], trigger: 'manual' | 'schedule', sleep: (ms: number) => Promise<void>): Promise<RunReply> {
   // Keyed per org: on a server a project id repeats across orgs after an import.
   const key = orgKey(projectId);
-  if (live.has(key)) return { ok: false, error: 'This pipeline is already running.' };
+  if (live.has(key)) return { ok: false, error: ALREADY };
   const state = new Map<string, 'queued' | 'running'>();
   live.set(key, state);
   try {
@@ -213,6 +266,7 @@ export async function tick(now = Date.now()): Promise<void> {
     // Stamp FIRST, win or lose — the scheduler's rule: a failing pipeline waits
     // for its next slot instead of retrying every minute.
     await store.update(p.id, (st) => { if (st.schedule) st.schedule.lastRunAt = new Date(now).toISOString(); });
-    void runFrom(p.id, [], 'schedule');
+    // Tracked: a shutdown waits for a scheduled run as it does for a handler's (../server/lifecycle).
+    trackWork(runFrom(p.id, [], 'schedule').catch(() => undefined)); // never rejects; a failure is the run's own ok:false
   }
 }

@@ -116,28 +116,52 @@ function isOver(run: PlanRun): boolean {
  * Run the next step. Returns the index it ran, or -1 when there was nothing it
  * could run (the run is over, or already running). Never throws: an executor
  * that throws is a failed step with its message.
+ *
+ * The composition of the parts a server runs apart (src/ai/planStore.ts): CLAIM
+ * the step (`beginStep`), run it with no lock held (`executeStep`), then apply
+ * — the touches ALWAYS (`addTouches`), the transition only for the claim that
+ * still holds the run (`endStep`).
  */
 export async function runNext(run: PlanRun, deps: RunDeps): Promise<number> {
+  const i = beginStep(run);
+  if (i < 0) return -1;
+  const outcome = await executeStep(run, i, deps);
+  addTouches(run, outcome);
+  endStep(run, i, outcome);
+  return i;
+}
+
+/** Marks the next step running; its index, or -1 when nothing can run (over, already running, or nothing left). */
+export function beginStep(run: PlanRun): number {
   if (isOver(run) || run.state === 'running') return -1;
   const i = nextIndex(run);
   if (i < 0) { run.state = 'finished'; return -1; }
   run.state = 'running';
   run.status[i] = 'running';
   run.errors[i] = null;
+  return i;
+}
 
-  let outcome: StepOutcome;
+/** Step `i`, re-checked against the project as it now is, then run. Never throws. */
+export async function executeStep(run: PlanRun, i: number, deps: RunDeps): Promise<StepOutcome> {
   try {
     const ctx = await deps.loadCtx(run);
     const { check } = checkStep(run.steps[i], ctx, i);
-    outcome = check.ok
+    return check.ok
       ? await deps.execute(run, run.steps[i], i, ctx)
       : { ok: false, error: check.error || 'This step is not valid any more.' };
   } catch (err: unknown) {
-    outcome = { ok: false, error: err instanceof Error && err.message ? err.message : 'The step failed.' };
+    return { ok: false, error: err instanceof Error && err.message ? err.message : 'The step failed.' };
   }
+}
 
-  // A step that failed PART-WAY still made its writes; they belong to the undo.
+/** A step's writes, which belong to the undo whatever became of the step — one that failed PART-WAY made them too. */
+export function addTouches(run: PlanRun, outcome: StepOutcome): void {
   if (outcome.touches) run.touches.push(...outcome.touches);
+}
+
+/** Step `i`'s result: done (and the run paused or finished) or failed (and the run with it). */
+export function endStep(run: PlanRun, i: number, outcome: StepOutcome): void {
   if (outcome.ok) {
     run.status[i] = 'done';
     run.results[i] = outcome.result;
@@ -147,7 +171,16 @@ export async function runNext(run: PlanRun, deps: RunDeps): Promise<number> {
     run.errors[i] = outcome.error;
     run.state = 'failed';
   }
-  return i;
+}
+
+/** A step left `running` by a server that went away: failed, with `message`, so the user can run it again or skip it. */
+export function recoverStep(run: PlanRun, message: string): void {
+  const i = run.status.indexOf('running');
+  if (i >= 0) {
+    run.status[i] = 'failed';
+    run.errors[i] = message;
+  }
+  run.state = i >= 0 ? 'failed' : run.state === 'running' ? 'paused' : run.state;
 }
 
 /** Skip the step that would run next (the failed one, or a pending one while stepping through). */

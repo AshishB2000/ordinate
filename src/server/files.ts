@@ -14,6 +14,11 @@
 // or by the sweep when it expires. A wrong org, a used token and an expired one
 // all look the same to the caller as an unknown one — no existence oracle.
 //
+// ANY POD (docs/any-pod/00-design.md). With DATABASE_URL a token is a row and
+// its bytes are in the org's staging area (./sharedFiles.ts): the shared
+// DATA_DIR, or S3 — so the upload, the RPC that uses it and the download can
+// each land on a different pod. Without it (one process) the Map below.
+//
 // The client's filename is display text only: it never becomes a path. The
 // file on disk is `upload-<random hex>` in the org's temp directory.
 //
@@ -22,11 +27,16 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
+import { Transform } from 'stream';
 import { pipeline } from 'stream/promises';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import * as appPaths from '../app/paths';
 import { ctx } from './context';
+import * as tokens from './fileTokens';
+import * as shared from './sharedFiles';
+import * as staging from './staging';
+import * as stageStore from '../data/stageStore';
 
 export const TOKEN_TTL_MS = 60 * 60 * 1000;
 const SWEEP_EVERY_MS = 60 * 1000;
@@ -37,6 +47,8 @@ const FRAMING_SLACK = 64 * 1024;
 // long / this much, then the socket is dropped (see tooLarge).
 const LINGER_MS = 2000;
 const LINGER_BYTES = 16 * 1024 * 1024;
+// One S3 PUT carries at most 5 GiB: with S3 storage no upload may be larger.
+const S3_PUT_MAX_MB = 5120;
 
 type Reason = 'unknown' | 'forbidden' | 'used' | 'expired';
 
@@ -58,8 +70,7 @@ interface Entry {
   used: boolean;
 }
 
-// ponytail: per-process. Behind N pods an upload and the RPC that uses it must
-// reach the same pod (sticky sessions) until tokens move to Postgres (P5).
+// Without a database: this process's tokens (there is one process).
 const entries = new Map<string, Entry>();
 let now = (): number => Date.now();
 
@@ -94,37 +105,60 @@ function take(token: unknown, kind: Entry['kind']): Entry {
 }
 
 export interface Upload {
-  /** Absolute path of the uploaded bytes. Read it; never move or keep it. */
+  /** A LOCAL file holding the uploaded bytes, on this pod's filesystem (positioned reads are fine). Read it; never move, keep or delete it. */
   readonly path: string;
   /** The client's filename, sanitized — for display and its extension only. */
   readonly name: string;
-  /** Deletes the file. Call it when finished (in a `finally`); the sweep is only the backstop. */
+  /** Deletes the file, the shared bytes and the token. Call it when finished (in a `finally`); never throws; the sweep is only the backstop. */
   done(): void;
 }
 
-/** The upload behind `token`, for the current request's org and user. Throws FileTokenError. */
-export function resolveUpload(token: unknown): Upload {
-  const e = take(token, 'upload');
-  return { path: e.path, name: e.name, done: () => forget(token as string) };
+/** The upload behind `token`, for the current request's org and user, as a local file. Throws FileTokenError. */
+export async function resolveUpload(token: unknown): Promise<Upload> {
+  if (!tokens.dbOn()) {
+    const e = take(token, 'upload');
+    return { path: e.path, name: e.name, done: () => forget(token as string) };
+  }
+  let t: shared.Taken;
+  let local: Awaited<ReturnType<typeof shared.localFile>>;
+  try {
+    t = await shared.take(token, 'upload');
+    local = await shared.localFile(t);
+  } catch (err) {
+    if (err instanceof shared.NoToken) throw new FileTokenError('unknown');
+    throw err;
+  }
+  let finished = false;
+  return { path: local.file, name: t.name, done: () => { if (!finished) { finished = true; shared.finish(t, local); } } };
 }
 
 /**
  * Hands a server-produced file to the browser: the reply carries the token, the
  * browser fetches GET /api/files/<token>. The file is the server's to DELETE
- * after it is sent (or when the token expires), so write it to temp().
+ * after it is sent (or when the token expires), so write it to temp() — with
+ * a database it MUST be directly in the caller's org temp(), named like
+ * `export-<uuid>.ordinate`. `sha256` (hex), when the caller hashed the bytes as
+ * it wrote them, saves a second read before an S3 upload.
  */
-export function offerDownload(filePath: string, name: string): { downloadToken: string } {
-  return { downloadToken: issue('download', path.resolve(filePath), displayName(name)) };
+export async function offerDownload(filePath: string, name: string, sha256?: string): Promise<{ downloadToken: string }> {
+  const file = path.resolve(filePath);
+  if (!tokens.dbOn()) return { downloadToken: issue('download', file, displayName(name)) };
+  if (path.dirname(file) !== path.resolve(appPaths.temp())) throw new Error('offerDownload: the file must be in the org temp directory');
+  const { size } = await fs.promises.stat(file);
+  return { downloadToken: await shared.issue('download', file, displayName(name), size, TOKEN_TTL_MS, sha256) };
 }
 
 // A USED upload may still be read by a job (a restore runs longer than the
-// token's hour); its handler deletes it (`done()`). The sweep leaves it a day.
+// token's hour); its handler deletes it (`done()`). The sweep leaves it a day —
+// in the Map here, and in Postgres (`fileTokens.USED_GRACE_MS`, the same day).
 const USED_GRACE_MS = 24 * 60 * 60 * 1000;
 
-/** Expires old tokens and deletes their files. Runs every minute while the server is up. */
+/** Expires old tokens and deletes their files (with a database: this pod's local copies). Runs every minute while the server is up. */
 export function sweep(): void {
   const t = now();
   for (const [token, e] of entries) if (t >= e.expires + (e.used ? USED_GRACE_MS : 0)) forget(token);
+  void shared.sweepCopies().catch(() => undefined);
+  stageStore.pruneMemory(); // a staged import nobody saved leaves this pod's heap with its TTL
 }
 
 /**
@@ -199,20 +233,37 @@ function tooLarge(req: FastifyRequest, reply: FastifyReply, maxMb: number): Fast
 }
 
 /**
+ * A file route whose failure answers a bare 500 — never the error's message, which can carry a
+ * server path or a storage URL (review L5). The message goes to the log only.
+ */
+function guarded<R extends FastifyRequest>(what: 'upload' | 'download', fn: (req: R, reply: FastifyReply) => Promise<unknown>) {
+  return async (req: R, reply: FastifyReply): Promise<unknown> => {
+    try {
+      return await fn(req, reply);
+    } catch (err) {
+      req.log.error({ err }, `file ${what} failed`);
+      if (reply.sent) return reply;
+      return reply.code(500).send({ error: `${what} failed` });
+    }
+  };
+}
+
+/**
  * Registers the multipart parser and both routes on `app`. Uploads above the
  * cap get 413: `ceilingMb` (MAX_UPLOAD_MB) is the ceiling, and `capMb()` — the
  * caller's org cap (Admin → Settings, T3.4), asked per upload — may only lower it.
  */
 export function registerFileRoutes(app: FastifyInstance, ceilingMb: number, capMb: () => Promise<number> = async () => ceilingMb): void {
   const ceilingBytes = ceilingMb * 1024 * 1024;
+  shared.useFilesLog(app.log);
   // Lazy: only the server needs the multipart parser.
   void app.register((require('@fastify/multipart') as typeof import('@fastify/multipart')).default, {
     limits: { fileSize: ceilingBytes, files: 1, fields: 0, parts: 1 },
   });
 
   // ponytail: no role check — dev auth is an admin; T3.3 makes this `write`.
-  app.post('/api/files', async (req, reply) => {
-    const maxMb = Math.min(ceilingMb, await capMb());
+  app.post('/api/files', guarded('upload', async (req, reply) => {
+    const maxMb = Math.min(ceilingMb, await capMb(), staging.isS3() ? S3_PUT_MAX_MB : Infinity);
     const maxBytes = maxMb * 1024 * 1024;
     const declared = Number(req.headers['content-length']);
     if (declared > maxBytes + FRAMING_SLACK) return tooLarge(req, reply, maxMb);
@@ -231,8 +282,10 @@ export function registerFileRoutes(app: FastifyInstance, ceilingMb: number, capM
     // to the end of the part — a 50 GB body would still be read in full.
     // Destroying the stream unpipes the request; tooLarge() then ends it.
     file.once('limit', () => file.destroy(new Error('upload over MAX_UPLOAD_MB')));
+    const hash = createHash('sha256'); // as it streams: an S3 PUT signs it, with no second read
+    const hashing = new Transform({ transform(chunk: Buffer, _enc, cb) { hash.update(chunk); cb(null, chunk); } });
     try {
-      await pipeline(file, fs.createWriteStream(dest, { flags: 'wx', mode: 0o600 }));
+      await pipeline(file, hashing, fs.createWriteStream(dest, { flags: 'wx', mode: 0o600 }));
     } catch (err) {
       fs.rmSync(dest, { force: true });
       if (file.truncated) return tooLarge(req, reply, maxMb);
@@ -240,11 +293,18 @@ export function registerFileRoutes(app: FastifyInstance, ceilingMb: number, capM
     }
     const name = displayName(part.filename);
     const { size } = fs.statSync(dest);
-    return { fileToken: issue('upload', dest, name), name, size };
-  });
+    if (!tokens.dbOn()) return { fileToken: issue('upload', dest, name), name, size };
+    try {
+      return { fileToken: await shared.issue('upload', dest, name, size, TOKEN_TTL_MS, hash.digest('hex')), name, size };
+    } catch (err) {
+      fs.rmSync(dest, { force: true });
+      throw err;
+    }
+  }));
 
-  app.get<{ Params: { token: string } }>('/api/files/:token', async (req, reply) => {
+  app.get<{ Params: { token: string } }>('/api/files/:token', guarded('download', async (req: FastifyRequest<{ Params: { token: string } }>, reply) => {
     const { token } = req.params;
+    if (tokens.dbOn()) return sendShared(token, reply);
     let e: Entry;
     try {
       e = take(token, 'download');
@@ -268,11 +328,42 @@ export function registerFileRoutes(app: FastifyInstance, ceilingMb: number, capM
       .header('cache-control', 'no-store')
       .header('x-content-type-options', 'nosniff')
       .send(body);
-  });
+  }));
 
   const timer = setInterval(sweep, SWEEP_EVERY_MS);
   timer.unref();
   app.addHook('onClose', async () => clearInterval(timer));
+}
+
+/** GET /api/files/<token> with a database: the bytes from this pod's copy or the staging area, then deleted. */
+async function sendShared(token: string, reply: FastifyReply): Promise<FastifyReply> {
+  let t: shared.Taken;
+  let src: Awaited<ReturnType<typeof shared.openTaken>>;
+  try {
+    t = await shared.take(token, 'download');
+  } catch (err) {
+    if (err instanceof shared.NoToken) return reply.code(404).send({ error: 'not found' });
+    throw err;
+  }
+  try {
+    src = await shared.openTaken(t);
+  } catch (err) {
+    // A moment's S3 failure: the take was undone and nothing deleted — the same link works again.
+    if (err instanceof shared.TryAgain) return reply.code(503).header('retry-after', 5).send({ error: 'try again' });
+    shared.finish(t);
+    return reply.code(404).send({ error: 'not found' });
+  }
+  const held = { file: '', own: false, held: src.held };
+  // 'close' also fires when the client hangs up — outside the request, where ctx() throws:
+  // finish() uses only what the take captured, and never throws.
+  src.body.once('close', () => shared.finish(t, held));
+  return reply
+    .header('content-type', 'application/octet-stream')
+    .header('content-length', src.size)
+    .header('content-disposition', contentDisposition(t.name))
+    .header('cache-control', 'no-store')
+    .header('x-content-type-options', 'nosniff')
+    .send(src.body);
 }
 
 /** Test hooks. */

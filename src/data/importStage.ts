@@ -14,14 +14,19 @@
 // desktop is one fixed owner). On the server a stagedId is only a random UUID,
 // so without this anyone who learned one could save — or drop — another org's
 // upload. `get` / `drop` by anyone else behave exactly as for an unknown id.
+//
+// ANY POD: with DATABASE_URL a stage is a row plus a Parquet file in the org's
+// staging area (./stageStore.ts), so the parse, the preview and the save can
+// each land on a different pod. The Map below is the store without a database.
 
 import { randomUUID } from 'crypto';
-import { ctx } from '../server/context';
+import { ctx, serverDataDir } from '../server/context';
+import * as stageStore from './stageStore';
 import type { ParseResult } from './parse';
 
 // ponytail: per owner, so a server holds at most users × MAX_STAGED tables; add a global byte budget if that bites.
-export const MAX_STAGED = 2;
-export const TTL_MS = 30 * 60 * 1000;
+export const MAX_STAGED = stageStore.MAX_STAGED;
+export const TTL_MS = stageStore.TTL_MS;
 /** Rows the renderer gets to paint — the composer draws 100 per page. */
 export const PREVIEW_ROWS = 2000;
 /** What a save says when the staged table it names is gone (or was never the caller's). */
@@ -54,23 +59,32 @@ function sweep(): void {
   }
 }
 
+const shared = (): boolean => stageStore.dbOn() && serverDataDir() !== null;
+
 /** Hold a parsed table for the caller; returns the id the renderer refers to it by. */
-export function put(table: ParseResult): string {
+export async function put(table: ParseResult): Promise<string> {
+  if (shared()) return stageStore.put(table);
   const id = randomUUID();
   staged.set(id, { table, at: now(), owner: ownerNow() });
   sweep();
   return id;
 }
 
-/** The caller's own staged table, or null (unknown, expired, already saved — or someone else's). */
-export function get(id: unknown): ParseResult | null {
+/**
+ * The caller's own staged table, or null (unknown, expired, already saved — or someone else's).
+ * With `limit`, only its first `limit` rows; `rowCount` is still the whole table's.
+ */
+export async function get(id: unknown, limit?: number | null): Promise<ParseResult | null> {
+  if (shared()) return stageStore.get(id, limit ?? undefined);
   sweep();
   if (typeof id !== 'string') return null;
   const s = staged.get(id);
-  return s && s.owner === ownerNow() ? s.table : null;
+  const t = s && s.owner === ownerNow() ? s.table : null;
+  return t && typeof limit === 'number' ? { ...t, rows: t.rows.slice(0, limit) } : t;
 }
 
-export function drop(id: unknown): void {
+export async function drop(id: unknown): Promise<void> {
+  if (shared()) return stageStore.drop(id);
   if (typeof id === 'string' && staged.get(id)?.owner === ownerNow()) staged.delete(id);
 }
 

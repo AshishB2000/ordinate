@@ -49,7 +49,10 @@ SPA (`web/dist`) and the API from one origin. Metadata in Postgres; Parquet on `
   `LISTEN/NOTIFY` (`src/server/jobs/bus.ts`). Jobs are a Postgres table claimed with `FOR UPDATE
   SKIP LOCKED` under a lease (`src/server/jobs/`).
 - **Files**: `POST /api/files` → `fileToken`; exports → `downloadToken` for `GET /api/files/<token>`.
-  Tokens are per pod and single-use — **more than one replica needs sticky sessions** (R8).
+  Tokens are single-use rows in Postgres (sha256 only, bound to org + user + kind) and the bytes sit
+  in the org's staging area (the shared `DATA_DIR`, or `orgs/<org>/staging/` on S3), so **any pod
+  serves any request**: no sticky sessions (R8, `docs/any-pod/`). Before this release, more than one
+  replica needed sticky sessions.
 - **Publish**: `/p/<publishId>/` (`src/server/published.ts`, pages from `src/publish/`), org members
   only unless the org turns on `public_links`. `dashboardExport.sanitizeBundle` is a **security
   control**: whitelist to labels/numbers/strings/`data:image` only.

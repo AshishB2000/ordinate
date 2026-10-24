@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { ipcMain } from './bus';
 import * as appPaths from '../app/paths';
 import { orgKey, serverDataDir } from '../server/context';
@@ -11,14 +11,17 @@ import * as jobs from '../app/jobs';
 import * as sharePolicy from '../app/sharePolicy';
 import { dropSalt } from '../app/privacyStore';
 import * as config from '../app/config';
-import { projectDir } from '../app/recordKinds';
+import { projectDir, projectsBase } from '../app/recordKinds';
 import { safetyBackup } from './backups';
 import * as recordFs from '../app/recordFs';
 import * as sample from '../app/sampleProject';
+import { waitForLease } from '../app/runLease';
 
 type SeedReply = { ok: true; projectId: string; analysisId?: string } | { ok: false; error: 'has_projects' | 'unavailable' };
 /** `sample:seed` calls in flight, by org. */
 const seeding = new Map<string, Promise<SeedReply>>();
+/** How long a second seed waits for the first, on another pod, to finish. */
+const SEED_LOCK_WAIT_MS = 30_000;
 
 // Projects (workspace shell) IPC — list/create/rename/archive/open, the
 // switcher's overview, and the .ordinate bundle's export and import.
@@ -59,21 +62,24 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
   // The bundled sample as the org's FIRST project (Home's "Start with sample
   // data"). Refused once the org has any project, archived ones included, so a
   // second click or a second admin adds nothing. Callers that arrive while a
-  // seed is running share its answer.
-  // ponytail: the in-flight map is per pod — two admins on two pods clicking
-  // in the same second would make two sample projects. An advisory lock on the
-  // org if that ever happens.
+  // seed is running share its answer on this pod; across pods the seed holds
+  // the org's seed LEASE (src/app/runLease.ts; docs/any-pod/00-design.md §3.9), so
+  // a second pod's caller waits, then finds the project. No lease in 30 s, or a
+  // lease store that fails, answers `unavailable` — never a seed without it.
   ipcMain.handle('sample:seed', async () => {
     const key = orgKey('sample:seed');
     const running = seeding.get(key);
     if (running) return running;
     const run = (async (): Promise<SeedReply> => {
-      if ((await projects.listProjects()).length > 0) return { ok: false, error: 'has_projects' };
-      const made = await sample.seedSampleProject({ again: true });
-      if (!made.seeded || !made.projectId) return { ok: false, error: 'unavailable' };
-      active(made.projectId);
-      await projects.touchOpened(made.projectId);
-      return { ok: true, projectId: made.projectId, analysisId: made.analysisId };
+      const seeded = await waitForLease(path.join(projectsBase(), 'sample-seed.json'), async (): Promise<SeedReply> => {
+        if ((await projects.listProjects()).length > 0) return { ok: false, error: 'has_projects' };
+        const made = await sample.seedSampleProject({ again: true });
+        if (!made.seeded || !made.projectId) return { ok: false, error: 'unavailable' };
+        active(made.projectId);
+        await projects.touchOpened(made.projectId);
+        return { ok: true, projectId: made.projectId, analysisId: made.analysisId };
+      }, SEED_LOCK_WAIT_MS).catch((): { ran: false } => ({ ran: false }));
+      return seeded.ran ? seeded.value : { ok: false, error: 'unavailable' };
     })().finally(() => seeding.delete(key));
     seeding.set(key, run);
     return run;
@@ -165,14 +171,14 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
         const tmp = target + '.partial';
         await recordFs.writeFile(tmp, bytes);
         await recordFs.rename(tmp, target);
-        return { path: target, counts: out.manifest.counts };
+        return { path: target, counts: out.manifest.counts, sha256: createHash('sha256').update(bytes).digest('hex') };
       },
       // A job's result reaches the tab over SSE: no path in it.
       resultOf: () => undefined,
     });
     try {
       const r = await job.done;
-      return { ok: true, counts: r.counts, ...offerDownload(r.path, safe + '.ordinate') };
+      return { ok: true, counts: r.counts, ...(await offerDownload(r.path, safe + '.ordinate', r.sha256)) };
     } catch (err: any) {
       await fs.promises.rm(target, { force: true }).catch(() => undefined);
       if (err instanceof jobs.JobCancelled) return { ok: false, canceled: true };
@@ -185,7 +191,7 @@ export function register({ onActive }: { onActive?: (id: string) => void } = {})
     // the org's own temp copy, deleted once read.
     let upload: Upload;
     try {
-      upload = resolveUpload(fileToken);
+      upload = await resolveUpload(fileToken);
     } catch (err) {
       if (err instanceof FileTokenError) return { ok: false, error: 'That upload has expired. Choose the file again.' };
       throw err;
