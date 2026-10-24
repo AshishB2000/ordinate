@@ -76,10 +76,10 @@ export async function shutdown(app: FastifyInstance, budgetMs: number, log: Fast
   duck.interruptAll();
   let survivors: string[] = [];
   await step('duckdb', async () => {
-    survivors = await duck.closeAll(at(0.95));
-  });
-  await step('s3', async () => {
-    if (!(await s3.close(at(0.95)))) log.warn('the S3 credential lookup was still running at the deadline');
+    // The workers and the S3 credential instance (main thread) close side by side, under one
+    // deadline; a lookup still running then is a survivor like a worker: never exited around.
+    const [workers, s3Closed] = await Promise.all([duck.closeAll(at(0.95)), s3.close(at(0.95))]);
+    survivors = s3Closed ? workers : [...workers, 's3'];
   });
   await step('compute', () => capped(computePool.shutdown(), at(1)));
   await step('postgres', async () => {
