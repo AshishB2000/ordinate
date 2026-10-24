@@ -151,13 +151,14 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
   // Boot: what a crash left behind, a day old, goes; anything younger or not ours stays.
   const t = tempOf('org-a');
   const dayAgo = (Date.now() - 25 * 60 * 60 * 1000) / 1000;
-  for (const n of ['bundle-old', 'backup-old.zip', 'restore-old.ordinate', 'export-old.ordinate', 'upload-old', 'bundle-new']) {
+  for (const n of ['bundle-old', 'backup-old.zip', 'restore-old.ordinate', 'export-old.ordinate', 'upload-old', 'drill-old.csv', 'bundle-new', 'other-old']) {
     fs.mkdirSync(path.join(t, n), { recursive: true });
     if (n.endsWith('-old') || n.includes('-old.')) fs.utimesSync(path.join(t, n), dayAgo, dayAgo);
   }
   const swept = files.sweepLeftovers(DATA);
   const left = fs.readdirSync(t).filter((n) => /-(old|new)/.test(n)).sort();
-  ok('boot sweep: day-old bundle/backup/restore/export leftovers go; a fresh one and an upload stay', swept === 4 && JSON.stringify(left) === '["bundle-new","upload-old"]', `${swept} ${JSON.stringify(left)}`);
+  ok('boot sweep: day-old bundle/backup/restore/export/upload/drill leftovers go; a fresh one and an unknown name stay',
+    swept === 6 && JSON.stringify(left) === '["bundle-new","other-old"]', `${swept} ${JSON.stringify(left)}`);
   for (const n of left) fs.rmSync(path.join(t, n), { recursive: true, force: true });
 
   // Download

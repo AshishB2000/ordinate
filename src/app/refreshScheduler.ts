@@ -50,6 +50,8 @@ import type { AlertEvent } from '../analysis/alerts';
 import { runQualityChecks } from '../analysis/qualityRun';
 import { track } from './quitCleanup';
 import type { LiveSyncMeta } from '../engine/live/schemaSyncJob';
+import * as jobs from './jobs';
+import { isRestarting } from '../server/lifecycle';
 
 /** How often the tick looks for work. The shortest schedule is 5 minutes (src/data/refreshCadence.ts). */
 const TICK_MS = 60_000;
@@ -233,6 +235,9 @@ interface Finished { outcome: AutoRefreshOutcome; events: AlertEvent[] }
  */
 async function begin(m: ScheduledMeta, now: number): Promise<{ settled: Promise<Finished | null> } | null> {
   if (await refreshRunning(m.projectId, m.id)) return null;
+  // A pod shutting down takes no new job: nothing is stamped, so the next tick — on
+  // another pod, a minute on — finds the dataset still due and runs it.
+  if (jobs.refusing()) return null;
   const label = await refreshLabel(m.projectId, m.id, true);
   // Stamp FIRST, win or lose, and BEFORE the job can write the record. A
   // source that is failing then waits its whole interval instead of retrying
@@ -242,13 +247,30 @@ async function begin(m: ScheduledMeta, now: number): Promise<{ settled: Promise<
   const before = await datasets.getDatasetMeta(m.projectId, m.id);
   // A job (src/data/refreshJob): a row in the Jobs popover, and queued behind
   // any ↻ the user clicked on the same dataset rather than racing it.
-  const job = queueRefresh(m.projectId, m.id, label);
+  let job: ReturnType<typeof queueRefresh>;
+  try {
+    job = queueRefresh(m.projectId, m.id, label);
+  } catch (err) {
+    // Refused by a shutdown that began during the awaits above: the stamp goes back.
+    if (isRestarting(err)) await unstamp(m);
+    throw err;
+  }
   return { settled: job.done.then((res) => after(m, before, res, now)).catch(() => null) };
+}
+
+/** Puts back the stamp `begin` took ('' clears one that was never there): the run did not happen here. */
+async function unstamp(m: ScheduledMeta): Promise<void> {
+  await datasets.setAutoRefresh(m.projectId, m.id, { lastAutoAt: m.autoRefresh?.lastAutoAt ?? '' });
 }
 
 /** Everything a finished scheduled refresh triggers. Null when it coalesced (another pod ran it). */
 async function after(m: ScheduledMeta, before: DatasetMeta | null, res: RefreshResult, stampedAt: number): Promise<Finished | null> {
   if (!res.ok && res.alreadyRunning) return null;
+  // Cancelled by a pod shutting down: not a run — no stamp, no failure to tell; another pod runs it.
+  if (!res.ok && res.restarted) {
+    await unstamp(m);
+    return null;
+  }
   // How late this run landed, from the stamp — waiting for a job slot counts:
   // longer than the cadence is "Behind schedule" (refreshCadence.behindSchedule).
   await datasets.setAutoRefresh(m.projectId, m.id, { lastAutoMs: Math.max(0, Date.now() - stampedAt) });
@@ -337,9 +359,11 @@ export async function tickNow(now = Date.now()): Promise<AutoRefreshOutcome[]> {
       outcomes.push(f.outcome);
       tell(f.outcome);
     }
-  } catch (_) {
+  } catch (err) {
     // A scheduler that throws is a scheduler that stops. Swallow and try again
-    // next minute.
+    // next minute — except a shutdown's refusal: the server's runner then lets
+    // its claim lapse rather than book a failed run (src/server/jobs/runner.ts).
+    if (isRestarting(err)) throw err;
   } finally {
     running = false;
     // In the `finally`, and AFTER `running` is cleared, so it fires on every
@@ -362,7 +386,7 @@ export function start(): void {
   if (timer) return;
   // No immediate first tick: launch is already busy, and anything overdue is
   // still overdue 60 seconds later.
-  timer = track(setInterval(() => { void tickNow(); }, TICK_MS));
+  timer = track(setInterval(() => { tickNow().catch(() => undefined); }, TICK_MS));
 }
 
 export function stop(): void {

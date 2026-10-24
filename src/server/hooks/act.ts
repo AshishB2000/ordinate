@@ -25,6 +25,7 @@ import type { DatasetMeta } from '../../data/datasets';
 import { isLive } from '../../data/liveDataset';
 import { startRefresh } from '../../data/refreshJob';
 import type { HookResult, HookTarget } from './store';
+import { trackWork } from '../lifecycle';
 
 export type HookAction = 'refresh' | 'bump';
 export type HookStatus = 'queued' | 'already_running' | 'cache_reset';
@@ -66,7 +67,8 @@ export async function runHookAction(projectId: string, datasetId: string, meta: 
   if (start.status !== 'queued') return ended('already_running', 'already_running');
   const end = start.done.then((res): HookResult => {
     // The follow-ups are not the refresh: the rows have landed, and the call's outcome does not wait for them.
-    if (res.ok) void (require('../../ipc/datasets') as typeof import('../../ipc/datasets')).afterRefresh(projectId, datasetId).catch(() => undefined);
+    // Tracked: a shutdown awaits it before it ends the Postgres pool (../lifecycle.ts, ../shutdown.ts step 5).
+    if (res.ok) trackWork((require('../../ipc/datasets') as typeof import('../../ipc/datasets')).afterRefresh(projectId, datasetId).catch(() => undefined));
     // Lost the lock to another pod between the ask and the job: joined after all. Any other failure is recorded on the dataset by the refresh itself.
     return res.ok ? 'ok' : res.alreadyRunning ? 'already_running' : 'failed';
   });

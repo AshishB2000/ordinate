@@ -46,6 +46,7 @@
   "bundleMessages.the_bundle_is_damaged_is_larger": "Das Paket ist beschädigt ({name} ist größer als angegeben).",
   "bundleMessages.the_bundle_is_too_large_to": "Das Paket ist zu groß zum Importieren.",
   "bundleMessages.the_bundle_s_alerts_json_is": "Die alerts.json des Pakets ist nicht lesbar.",
+  "bundleMessages.the_bundle_s_holds_more_values": null,
   "bundleMessages.the_bundle_s_is_larger_than": "{name} im Paket ist größer, als Ordinate importiert.",
   "bundleMessages.the_bundle_uses_a_zip_feature": "Das Paket nutzt eine ZIP-Funktion, die Ordinate nicht liest (zip64, ein Datendeskriptor oder ein geteiltes Archiv).",
   "bundleMessages.the_bundle_uses_an_unsupported": "Das Paket verwendet eine nicht unterstützte Kompressionsmethode.",

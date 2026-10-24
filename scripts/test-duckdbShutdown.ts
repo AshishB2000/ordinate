@@ -85,6 +85,21 @@ async function main(): Promise<void> {
   ok('…and started no worker', pool.orgs().length === 0, JSON.stringify(pool.orgs()));
   const leaseCode = await codeOf(asJob(async () => duck.leasePort()));
   ok("a compute lease after interruptAll is refused 'unavailable' (a thread never falls back to its own DuckDB)", leaseCode === 'unavailable', leaseCode);
+
+  // 4. The S3 credential instance runs on the MAIN thread (src/engine/s3.ts): a lookup
+  //    still running at the deadline is a survivor, never exited around (review C2).
+  const s3: typeof import('../src/engine/s3') = require('../src/engine/s3');
+  const { shutdown } = require('../src/server/shutdown') as typeof import('../src/server/shutdown');
+  const { fastify } = require('fastify') as typeof import('fastify');
+  const app = fastify({ logger: false });
+  await app.listen({ port: 0, host: '127.0.0.1' });
+  s3.setResolvingForTest(new Promise(() => undefined)); // a lookup that never settles
+  t0 = Date.now();
+  const left = await shutdown(app, 1000, app.log);
+  ok(`shutdown: an S3 credential lookup still running at the deadline is a survivor (exit 1), not an exit 0 (${Date.now() - t0} ms)`,
+    left.includes('s3') && Date.now() - t0 < 2500, `${JSON.stringify(left)} ${Date.now() - t0}`);
+  s3.setResolvingForTest(null);
+  ok('NEGATIVE CONTROL: with no lookup running, the S3 close leaves no survivor', await s3.close(Date.now() + 100));
 }
 
 main()

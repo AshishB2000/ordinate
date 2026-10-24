@@ -46,6 +46,7 @@
   "bundleMessages.the_bundle_is_damaged_is_larger": "El paquete está dañado ({name} es más grande de lo que indica).",
   "bundleMessages.the_bundle_is_too_large_to": "El paquete es demasiado grande para importarlo.",
   "bundleMessages.the_bundle_s_alerts_json_is": "No se puede leer el alerts.json del paquete.",
+  "bundleMessages.the_bundle_s_holds_more_values": null,
   "bundleMessages.the_bundle_s_is_larger_than": "El {name} del paquete es más grande de lo que Ordinate importa.",
   "bundleMessages.the_bundle_uses_a_zip_feature": "El paquete usa una función de zip que Ordinate no lee (zip64, un descriptor de datos o un archivo dividido).",
   "bundleMessages.the_bundle_uses_an_unsupported": "El paquete usa un método de compresión no compatible.",

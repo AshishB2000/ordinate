@@ -27,7 +27,7 @@ import * as computePool from '../engine/computePool';
 import * as s3 from '../engine/s3';
 import * as jobs from '../app/jobs';
 import { appPool, background } from './app';
-import { abortRequests, pendingWork, Restarting, startDraining } from './lifecycle';
+import { abortRequests, Restarting, settleWork, startDraining } from './lifecycle';
 import { restartedWhileRunning } from './lifecycleMessages';
 
 /** Resolves with `p`'s value, or undefined at `deadlineAt` — whichever is first. */
@@ -75,14 +75,14 @@ export async function shutdown(app: FastifyInstance, budgetMs: number, log: Fast
     log.warn({ aborted }, 'requests still running at the HTTP deadline were answered 503');
     await capped(closed, at(0.8));
   });
-  await step('detached', () => capped(Promise.allSettled(pendingWork()), at(0.8)));
+  await step('detached', () => capped(settleWork(), at(0.8)));
   duck.interruptAll();
   let survivors: string[] = [];
   await step('duckdb', async () => {
-    survivors = await duck.closeAll(at(0.95));
-  });
-  await step('s3', async () => {
-    if (!(await s3.close(at(0.95)))) log.warn('the S3 credential lookup was still running at the deadline');
+    // The workers and the S3 credential instance (main thread) close side by side, under one
+    // deadline; a lookup still running then is a survivor like a worker: never exited around.
+    const [workers, s3Closed] = await Promise.all([duck.closeAll(at(0.95)), s3.close(at(0.95))]);
+    survivors = s3Closed ? workers : [...workers, 's3'];
   });
   await step('compute', () => capped(computePool.shutdown(), at(1)));
   await step('postgres', async () => {
