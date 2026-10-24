@@ -395,7 +395,9 @@ function buildAnthropic({ systemPrompt, messages, model, maxTokens, apiKey, base
     body: { model, max_tokens: maxTokens, system: systemPrompt, messages: messages.map(m => ({ role: m.role, content: toContent(m) })) },
   };
 }
-function extractAnthropic(json: any): string { return (json.content && json.content[0] && json.content[0].text) || ''; }
+function extractAnthropic(json: any): string {
+  return ((json && Array.isArray(json.content) ? json.content : []).filter((b: any) => b && b.type === 'text' && typeof b.text === 'string').map((b: any) => b.text).join(''));
+}
 function cutoffAnthropic(json: any): boolean { return !!json && json.stop_reason === 'max_tokens'; }
 
 // OpenAI Chat Completions shape — also used by the OpenAI-compatible gateway.
@@ -433,7 +435,7 @@ function buildGemini({ systemPrompt, messages, model, maxTokens, apiKey, baseUrl
 function extractGemini(json: any): string {
   const c = json.candidates && json.candidates[0];
   const parts = (c && c.content && c.content.parts) || [];
-  return parts.map((p: any) => p.text || '').join('');
+  return parts.filter((p: any) => !p.thought).map((p: any) => p.text || '').join('');
 }
 function cutoffGemini(json: any): boolean { return !!json && json.candidates && json.candidates[0] && json.candidates[0].finishReason === 'MAX_TOKENS'; }
 
@@ -746,7 +748,10 @@ export async function draftDashboard(
   const { rawText, error } = await dispatch(system, messages);
   if (error) return error;
   const parsed = parseFirstObject(rawText);
-  if (!parsed) return errBadReply();
+  if (!parsed) {
+    logger.warn('[draftDashboard] failed to parse response', { len: rawText?.length, preview: (rawText || '').slice(0, 160) });
+    return errBadReply();
+  }
   return { ok: true, structure: parsed };
 }
 
@@ -760,10 +765,12 @@ export function parseFirstObject(rawText: string | undefined): Record<string, un
   try {
     parsed = JSON.parse(text);
   } catch (_) {
-    const start = text.indexOf('{');
-    const end = text.lastIndexOf('}');
+    const start = text.indexOf('{'), end = text.lastIndexOf('}');
     if (start >= 0 && end > start) {
-      try { parsed = JSON.parse(text.slice(start, end + 1)); } catch (_) { return null; }
+      const slice = text.slice(start, end + 1);
+      try { parsed = JSON.parse(slice); } catch (_) {
+        try { parsed = JSON.parse(slice.replace(/,\s*([}\]])/g, '$1')); } catch (_) { return null; }
+      }
     } else {
       return null;
     }

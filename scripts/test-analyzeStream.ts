@@ -137,6 +137,26 @@ for (const c of CASES) {
     Object.is(split.text, whole.text) && Object.is(split.text, ANSWER));
 }
 
+// Thinking blocks (Anthropic) and thought parts (Gemini) are filtered out, keeping only text
+const anthropicThinkingBody = {
+  content: [{ type: 'thinking', thinking: 'let me ponder...' }, { type: 'text', text: ANSWER }],
+  stop_reason: 'end_turn',
+};
+ok('anthropic: buffered extract() skips thinking blocks',
+  Object.is((analyze.ADAPTERS as any).anthropic.extract(anthropicThinkingBody), ANSWER));
+
+const geminiThoughtBody = {
+  candidates: [{ content: { parts: [{ text: 'internal thought', thought: true }, { text: ANSWER }] }, finishReason: 'STOP' }],
+};
+ok('gemini: buffered extract() skips thought parts',
+  Object.is((analyze.ADAPTERS as any).gemini.extract(geminiThoughtBody), ANSWER));
+
+// parseFirstObject handles trailing commas and code fences cleanly
+const withTrailingComma = '```json\n{"name": "test", "items": [1, 2, ], }\n```';
+const parsedObj = analyze.parseFirstObject(withTrailingComma);
+ok('parseFirstObject: parses JSON with trailing commas and code fences',
+  parsedObj !== null && parsedObj.name === 'test' && Array.isArray(parsedObj.items) && parsedObj.items.length === 2);
+
 try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) { /* best effort */ }
 
 console.log('');
