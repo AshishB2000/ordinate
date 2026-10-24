@@ -33,7 +33,7 @@ import { importBundleThemes } from './themeStore';
 import * as recordFs from './recordFs';
 import { listBlobs, writeBlob } from './blobStore';
 import { importBundleTemplates } from './userTemplateStore';
-import { BUNDLE_FORMAT, BUNDLE_POLICY, BUNDLE_VERSION, CONNECTION_FILE, kindOf, ruleFor, UUID, UUID_G } from './bundleRules';
+import { BUNDLE_FORMAT, BUNDLE_POLICY, BUNDLE_VERSION, CONNECTION_FILE, kindOf, ruleFor, UUID_G } from './bundleRules';
 import type { BundleManifest } from './bundleRules';
 import * as msg from './bundleMessages';
 import { countJsonValuesAsync, JsonTooComplex, MAX_JSON_VALUES, parseBounded } from './jsonBudget';
@@ -121,18 +121,23 @@ function uuidAt(buf: Buffer, i: number): boolean {
 }
 
 /**
- * Every UUID in `buf` (scanned as latin1: offsets are byte offsets, and a UTF-8
- * multi-byte sequence never matches), handed to `seen` — a loop, no match
- * array, yielding to the event loop about every 10 ms.
+ * Every UUID in `buf`, leftmost first and never overlapping (what a global
+ * regex finds), handed to `seen` with its byte offset. Anchored on each `-`
+ * through `buf.indexOf` (native) and checked in place: no string, no regex
+ * backtracking over a run of hex digits. Yields to the event loop whenever
+ * ~10 ms have passed: one regex over 32 MiB with no id held it 735 ms (S2).
  */
-async function eachId(buf: Buffer, seen: (id: string, at: number) => void): Promise<void> {
-  const text = buf.toString('latin1');
-  const re = new RegExp(UUID, 'gi');
+export async function eachId(buf: Buffer, seen: (id: string, at: number) => void): Promise<void> {
+  let from = 0; // the next id may start here (the end of the last one)
   let t = Date.now();
-  let n = 0;
-  for (let m = re.exec(text); m; m = re.exec(text)) {
-    seen(m[0], m.index);
-    if (++n % 1024 === 0 && Date.now() - t > 10) {
+  let steps = 0;
+  for (let dash = buf.indexOf(0x2d, from + 8); dash >= 0; dash = buf.indexOf(0x2d, Math.max(dash + 1, from + 8))) {
+    const at = dash - 8;
+    if (uuidAt(buf, at)) {
+      seen(buf.toString('latin1', at, at + 36), at);
+      from = at + 36;
+    }
+    if (++steps % 4096 === 0 && Date.now() - t >= 10) {
       await yieldToLoop();
       t = Date.now();
     }

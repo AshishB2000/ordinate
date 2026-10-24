@@ -161,6 +161,17 @@ function spyInflaters(): { count(): number; restore(): void } {
   return { count: () => n, restore: () => { proto._transform = real; } };
 }
 
+/** The largest text JSON.parse is handed until stop(): "never parsed" is a fact, not an RSS guess. */
+function spyParse(): { stop(): number } {
+  const real = JSON.parse;
+  let biggest = 0;
+  JSON.parse = ((text: string, reviver?: (k: string, v: unknown) => unknown) => {
+    biggest = Math.max(biggest, typeof text === 'string' ? text.length : 0);
+    return real(text, reviver);
+  }) as typeof JSON.parse;
+  return { stop: () => { JSON.parse = real; return biggest; } };
+}
+
 async function projectCount(org: string): Promise<number> {
   return inOrg(org, async () => (await projects.listProjects()).length);
 }
@@ -285,7 +296,12 @@ async function main(adminUrl: string | undefined): Promise<void> {
     spy2.restore();
     console.log(`     measured: a ${mb(size)} bundle declaring ${mb(declared)} — staging peaked at ${mb(staged)}, RSS grew ${mb(r.growth)}`);
     ok(`the bomb is ~4 MB and honestly declares ~4 GiB (${mb(size)} → ${mb(declared)})`, size < 8 * MB && declared > 4000 * MB);
-    ok('…it was STREAMED: the inflater ran and staging reached ~4 GiB', inflaters >= 4 && staged >= declared * 0.99, `${inflaters} ${staged}`);
+    // Moved out of staging (renamed, never copied): the project's four tables ARE what was streamed.
+    const tables = r.value.project ? await inOrg(C, async () => {
+      const dir = path.join(recordKinds.projectDir(r.value.project!.id), 'datasets');
+      return fs.readdirSync(dir).filter((f) => f.endsWith('.parquet')).reduce((n, f) => n + fs.statSync(path.join(dir, f)).size, 0);
+    }) : 0;
+    ok(`…it was STREAMED: the inflater ran and all ${mb(tables)} reached disk (staging sampled at ${mb(staged)})`, inflaters >= 4 && tables === declared, `${inflaters} ${tables} ${declared}`);
     ok(`…with RSS growth under 256 MB (${mb(r.growth)})`, r.growth < BOUND, r.growth);
     if (r.value.ok && r.value.project) await inOrg(C, () => projects.deleteProject(r.value.project!.id));
     fs.rmSync(file, { force: true });
@@ -352,6 +368,123 @@ async function main(adminUrl: string | undefined): Promise<void> {
     fs.rmSync(backup.value.file, { force: true });
   }
 
+  // ── Parse bombs (refutation S1): what the import PARSES is bounded too ─────
+  {
+    /** `head` + `unit` × n + `tail`, about `total` bytes, deflated as a stream with its true size and CRC. */
+    const fill = async (head: string, unit: string, tail: string, total: number): Promise<Body> => {
+      const per = Math.floor(MB / unit.length);
+      const chunk = Buffer.from(unit.repeat(per));
+      const n = Math.floor((total - head.length - tail.length) / unit.length);
+      const out: Buffer[] = [];
+      const d = zlib.createDeflateRaw();
+      d.on('data', (b: Buffer) => out.push(b));
+      const done = new Promise((r) => d.on('end', r));
+      let crc = 0;
+      const put = async (b: Buffer): Promise<void> => {
+        crc = zlib.crc32(b, crc);
+        if (!d.write(b)) await new Promise((r) => d.once('drain', r));
+      };
+      await put(Buffer.from(head));
+      for (let left = n; left > 0; left -= per) await put(left >= per ? chunk : chunk.subarray(0, left * unit.length));
+      const t = Buffer.from(tail);
+      crc = zlib.crc32(t, crc);
+      d.end(t);
+      await done;
+      return { body: Buffer.concat(out), crc: crc >>> 0, usize: head.length + n * unit.length + tail.length };
+    };
+    const rulesIn = (b: Body): number => (b.usize - '{"rules":['.length - '{}]}'.length) / 3 + 1; // honest counts: the old code parses it all
+    const alertsBomb = await fill('{"rules":[', '{},', '{}]}', 32 * MB);
+    const before = await projectCount(C);
+    for (const [name, counts] of [['alerts.json', { alerts: rulesIn(alertsBomb) }], ['project.json', {}], ['themes.json', {}], ['templates.json', {}]] as Array<[string, Record<string, number>]>) {
+      const file = path.join(DATA, `bomb-${name}.ordinate`);
+      zipOf(file, [{ name: 'manifest.json', body: manifestOf(counts) }, { name, body: alertsBomb }]);
+      const parsed = spyParse();
+      const r = await rssGrowth(() => inOrg(C, () => bundle.importBundle({ file })));
+      const biggest = parsed.stop();
+      ok(`parse bomb: a ${(fs.statSync(file).size / 1024).toFixed(0)} KB bundle with a 32 MiB ${name} of {} is never parsed (largest parse ${biggest} bytes), RSS +${mb(r.growth)}`,
+        biggest < MB && r.growth < 64 * MB, `${r.value.error} ${biggest} ${r.growth}`);
+      // templates.json may weigh 32 MiB (thumbnails): within its cap, over the value budget, it is an
+      // optional extra skipped — the import goes on without it. The others are past their byte caps.
+      if (name === 'templates.json') {
+        ok('…templates.json: skipped, the import goes on without it', r.value.ok === true, r.value.error);
+        if (r.value.project) await inOrg(C, () => projects.deleteProject(r.value.project!.id));
+      } else {
+        ok(`…${name}: the bundle is refused`, r.value.ok === false && r.value.error === m.entryTooLarge(name), r.value.error);
+      }
+    }
+    ok('parse bomb: none of the refused ones created a project', (await projectCount(C)) === before);
+    // Under its byte cap, over the value budget: 1.2 M empty objects in 3.5 MiB.
+    const dense = await fill('{"rules":[', '{},', '{}]}', 3.5 * MB);
+    const file = path.join(DATA, 'bomb-dense.ordinate');
+    zipOf(file, [{ name: 'manifest.json', body: manifestOf({ alerts: rulesIn(dense) }) }, { name: 'alerts.json', body: dense }]);
+    const parsedDense = spyParse();
+    const r = await inOrg(C, () => bundle.importBundle({ file }));
+    const biggestDense = parsedDense.stop();
+    ok(`parse bomb: an alerts.json under its byte cap but past 1,000,000 values is refused unparsed (largest parse ${biggestDense} bytes) — the persistent plant cannot land`,
+      r.ok === false && r.error === m.tooManyValues('alerts.json') && biggestDense < MB && (await projectCount(C)) === before, `${r.error} ${biggestDense}`);
+
+    // An org that ALREADY holds such an alerts.json (planted before this fix): read, it is refused, not parsed.
+    const victim = await inOrg(C, () => projects.createProject('Planted'));
+    const planted = await inOrg(C, async () => path.join(recordKinds.projectDir(victim.id), 'alerts.json'));
+    const text = '{"rules":[' + '{},'.repeat(3_000_000) + '{}]}';
+    if (scratchPool) {
+      await scratchPool.query(`INSERT INTO records (org_id, path, body) VALUES ($1, $2, $3)`, [C, `projects/${victim.id}/alerts.json`, text]);
+    } else {
+      fs.writeFileSync(planted, text);
+    }
+    const alertStore: typeof import('../src/analysis/alertStore') = require('../src/analysis/alertStore');
+    const small = path.join(DATA, 'small.ordinate');
+    zipOf(small, [{ name: 'manifest.json', body: manifestOf({}) }]); // a harmless import: idsInUse reads every project's alerts.json
+    const parsedLater = spyParse();
+    const later = await inOrg(C, () => bundle.importBundle({ file: small }));
+    const biggestLater = parsedLater.stop();
+    ok(`pre-existing oversized alerts.json: a later small import skips it, never parses it (largest parse ${biggestLater} bytes)`, later.ok === true && biggestLater < MB, `${later.error} ${biggestLater}`);
+    const parsedEval = spyParse();
+    const evalRead = await inOrg(C, () => alertStore.load(victim.id));
+    const biggestEval = parsedEval.stop();
+    ok(`…and alert evaluation reads it as no rules, unparsed (largest parse ${biggestEval} bytes)`, evalRead.rules.length === 0 && biggestEval < MB, biggestEval);
+  }
+
+  // ── Stalls (refutation S2): the id scan yields however few ids it finds ───
+  {
+    // Differential first: the dash-anchored scan finds exactly what a global regex finds.
+    const cases = [
+      `a ${U()} b ${U().toUpperCase()}${U()}"${U()}`, 'f'.repeat(200) + '-' + U() + '----' + U().slice(0, 30),
+      `${U().slice(0, 9)}${U()}`, '12345678-1234-1234-1234-123456789012345678-1234-1234-1234-123456789012', 'é' + U() + 'ü',
+      crypto.randomBytes(200_000).toString('latin1') + U() + crypto.randomBytes(1000).toString('hex').replace(/(.{8})/g, '$1-'),
+    ];
+    let same = 0;
+    for (const c of cases) {
+      const buf = Buffer.from(c, 'latin1');
+      const want: string[] = [];
+      for (const m of buf.toString('latin1').matchAll(new RegExp(rules.UUID, 'gi'))) want.push(`${m.index}:${m[0]}`);
+      const got: string[] = [];
+      await bundleImport.eachId(buf, (id, at) => got.push(`${at}:${id}`));
+      if (want.join() === got.join()) same++;
+    }
+    ok(`stall: the anchored id scan finds exactly what the global regex finds (differential, ${same} of ${cases.length} texts)`, same === cases.length);
+    const { monitorEventLoopDelay } = require('perf_hooks') as typeof import('perf_hooks');
+    const plain = await deflatedOf(Buffer.alloc(MB, 0x61), 32 * MB); // 32 MiB of "a": no id anywhere
+    const dsId = U();
+    const bad: Body = { body: zlib.deflateRawSync(Buffer.from('x')), crc: 0, usize: 1 };
+    const stalls = async (n: number): Promise<{ maxMs: number; value: import('../src/app/bundleImport').ImportResult }> => {
+      const names = Array.from({ length: n }, (_, i) => `history/dataset/${dsId}/2026-02-01T00-00-${String(i).padStart(2, '0')}-000Z.json`);
+      const file = path.join(DATA, `stall-${n}.ordinate`);
+      zipOf(file, [{ name: 'manifest.json', body: manifestOf({ versions: n, parquet: 1 }) }, ...names.map((name) => ({ name, body: plain })), { name: `datasets/${dsId}.parquet`, body: bad }]);
+      const h = monitorEventLoopDelay({ resolution: 5 });
+      h.enable();
+      const value = await inOrg(A, () => bundle.importBundle({ file }));
+      h.disable();
+      return { maxMs: h.max / 1e6, value };
+    };
+    const one = await stalls(1);
+    console.log(`     measured: one 32 MiB record with no id — longest event-loop stall ${one.maxMs.toFixed(0)} ms`);
+    ok(`stall: a 32 MiB record with no id never blocks the event loop past 50 ms (${one.maxMs.toFixed(0)} ms)`, one.maxMs < 50 && one.value.ok === false, `${one.maxMs} ${one.value.error}`);
+    const many = await stalls(16);
+    console.log(`     measured: 16 such records (a ${(16 * plain.body.length / 1024).toFixed(0)} KB upload) — longest stall ${many.maxMs.toFixed(0)} ms`);
+    ok(`stall: 16 of them (a ~${(16 * plain.body.length / 1024).toFixed(0)} KB upload) never stall past 50 ms (${many.maxMs.toFixed(0)} ms)`, many.maxMs < 50, many.maxMs);
+  }
+
   // ── The writer: ZipFileWriter ≡ writeZip ────────────────────────────────
   {
     const when = new Date('2026-05-06T07:08:10Z');
@@ -383,6 +516,7 @@ async function main(adminUrl: string | undefined): Promise<void> {
 }
 
 let dropDb: (() => Promise<void>) | null = null;
+let scratchPool: import('pg').Pool | null = null;
 async function useScratchDb(adminUrl: string): Promise<void> {
   const { Client, Pool }: typeof import('pg') = require('pg');
   const name = `ordinate_bundlemem_${process.pid}_${Date.now()}`;
@@ -397,6 +531,7 @@ async function useScratchDb(adminUrl: string): Promise<void> {
   await (require('../src/server/db/migrate') as typeof import('../src/server/db/migrate')).migrate(pool);
   recordFs.useRecordDb(pool);
   blobs.useBlobDb(pool);
+  scratchPool = pool;
   dropDb = async () => {
     recordFs.useRecordDb(null);
     blobs.useBlobDb(null);
