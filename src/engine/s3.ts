@@ -155,7 +155,7 @@ export async function createBucket(cfg: S3Env): Promise<void> {
 export async function put(cfg: S3Env, key: string, file: string, sha256: string, size: number): Promise<void> {
   let status = await putWithCreds(cfg, key, file, sha256, size, await credsFor(cfg));
   if (status === 403) status = await putWithCreds(cfg, key, file, sha256, size, await credsFor(cfg, true));
-  if (status !== 200) throw new Error(`S3 PUT failed: HTTP ${status}`);
+  if (status !== 200) throw Object.assign(new Error(`S3 PUT failed: HTTP ${status}`), { status });
 }
 
 /** One signed PUT with these credentials; the HTTP status. Exported for the tests (a local server, fake keys). */

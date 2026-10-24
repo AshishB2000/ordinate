@@ -75,9 +75,17 @@ export async function issue(kind: 'upload' | 'download', file: string, name: str
   await tokens.insert(token, { org: org.id, user: user.email, kind, key: place.name, name, size, ttlMs });
   if (!staging.isS3()) return token;
   try {
-    await staging.publish(place, file, sha256 ?? await sha256File(file), size);
+    const hash = sha256 ?? await sha256File(file);
+    try {
+      await staging.publish(place, file, hash, size);
+    } catch (err) {
+      if (!transient(err)) throw err;
+      await staging.publish(place, file, hash, size); // once more, for a moment's 5xx or a dropped connection
+    }
   } catch (err) {
+    // Nothing may outlive a failed offer: not the row, not the file the handler wrote.
     await tokens.remove(place.org, tokens.hashOf(token)).catch((e: unknown) => log.warn({ err: e }, 'file token: a row could not be deleted after its upload failed'));
+    await fs.promises.rm(file, { force: true }).catch(() => undefined);
     throw err;
   }
   const hex = tokens.hashOf(token).toString('hex');

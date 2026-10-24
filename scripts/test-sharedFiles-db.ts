@@ -40,7 +40,7 @@ const sha = (b: Buffer): string => createHash('sha256').update(b).digest('hex');
 function fakeS3() {
   const objects = new Map<string, Buffer>();
   const seen = { gets: 0, puts: 0, deletes: 0 };
-  const state = { mode: 'ok' as 'ok' | '503' | '404', putStatus: 200 };
+  const state = { mode: 'ok' as 'ok' | '503' | '404', putStatus: 200, putFailures: Infinity };
   const server = http.createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => chunks.push(c));
@@ -48,8 +48,10 @@ function fakeS3() {
       const key = decodeURIComponent(req.url ?? '');
       if (req.method === 'PUT') {
         seen.puts++;
-        if (state.putStatus === 200) objects.set(key, Buffer.concat(chunks));
-        res.statusCode = state.putStatus;
+        const status = state.putStatus !== 200 && state.putFailures > 0 ? state.putStatus : 200;
+        if (status !== 200) state.putFailures--;
+        if (status === 200) objects.set(key, Buffer.concat(chunks));
+        res.statusCode = status;
         return res.end();
       }
       if (req.method === 'DELETE') {
@@ -138,13 +140,20 @@ function fakeS3() {
     ok('…so the same link then downloads the very bytes', later.equals(dl.body));
     ok('…and then its object goes', await H.until(() => !hasObject(dl.file), 3_000));
 
-    // 3. A failed PUT deletes its row.
+    // 3. A PUT that fails once is retried (review M5); one that keeps failing deletes its row AND its file.
     s3.state.putStatus = 500;
+    s3.state.putFailures = 1;
+    const once = newFile();
+    const puts0 = s3.seen.puts;
+    const retried = await as(() => shared.issue('download', once.file, 'once.zip', once.body.length, 3_600_000, sha(once.body)).then(() => 'issued', () => 'refused'));
+    ok('a PUT that fails once (500) is retried, and the offer stands', retried === 'issued' && s3.seen.puts - puts0 === 2 && hasObject(once.file), JSON.stringify({ retried, puts: s3.seen.puts - puts0 }));
+    s3.state.putFailures = Infinity;
     const three = newFile();
-    const putFailed = await as(() => shared.issue('upload', three.file, 'three.csv', three.body.length, 3_600_000, sha(three.body)).then(() => 'issued', () => 'refused'));
-    const rows = Number((await db.pool.query(`SELECT count(*) AS n FROM file_tokens WHERE name = 'three.csv'`)).rows[0].n);
-    ok('a failed PUT refuses the upload and deletes its row (row first, then the bytes)', putFailed === 'refused' && rows === 0, JSON.stringify({ putFailed, rows }));
+    const putFailed = await as(() => shared.issue('download', three.file, 'three.zip', three.body.length, 3_600_000, sha(three.body)).then(() => 'issued', () => 'refused'));
+    const rows = Number((await db.pool.query(`SELECT count(*) AS n FROM file_tokens WHERE name = 'three.zip'`)).rows[0].n);
+    ok('a PUT that keeps failing refuses the offer and leaves nothing: no row, no file (row first, then the bytes)', putFailed === 'refused' && rows === 0 && !fs.existsSync(three.file), JSON.stringify({ putFailed, rows, file: fs.existsSync(three.file) }));
     s3.state.putStatus = 200;
+    s3.state.putFailures = 0;
 
     // 4. Local copies.
     const [a, b, c] = [newFile(), newFile(), newFile()];
