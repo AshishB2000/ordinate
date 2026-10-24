@@ -49,9 +49,9 @@ interface BackupManifest {
 }
 
 /** The upload behind a token, or null when it is unknown, used or expired. */
-function upload(token: unknown): Upload | null {
+async function upload(token: unknown): Promise<Upload | null> {
   try {
-    return resolveUpload(token);
+    return await resolveUpload(token);
   } catch (err) {
     if (err instanceof FileTokenError) return null;
     throw err;
@@ -194,7 +194,7 @@ export function register(): void {
 
   // ── The workspace logo, uploaded ─────────────────────────────────────────
   ipcMain.handle('branding:setLogo', async (_e, { fileToken }: { fileToken: string }) => {
-    const up = upload(fileToken);
+    const up = await upload(fileToken);
     if (!up) return EXPIRED;
     try {
       const st = await fs.promises.stat(up.path);
@@ -219,7 +219,7 @@ export function register(): void {
     try {
       const r = await job.done;
       const stamp = r.at.slice(0, 10);
-      return { ok: true, count: r.count, ...offerDownload(r.file, `Ordinate backup ${ctx().org.id} ${stamp}.zip`) };
+      return { ok: true, count: r.count, ...(await offerDownload(r.file, `Ordinate backup ${ctx().org.id} ${stamp}.zip`)) };
     } catch (err) {
       if (err instanceof jobs.JobCancelled) return { ok: false, canceled: true };
       return { ok: false, error: err instanceof Error ? err.message : 'The backup failed.' };
@@ -229,7 +229,7 @@ export function register(): void {
   // The RPC only resolves the upload and hands it to the job; the job reads it
   // (restoreBackupFile). The upload is deleted when the job is over, never before.
   ipcMain.handle('backups:restore', async (_e, { fileToken }: { fileToken: string; confirm: 'restore' }) => {
-    const up = upload(fileToken);
+    const up = await upload(fileToken);
     if (!up) return EXPIRED;
     try {
       const job = jobs.submit({

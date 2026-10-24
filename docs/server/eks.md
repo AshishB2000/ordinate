@@ -84,8 +84,27 @@ is `ordinate`:
 }
 ```
 
-Add a lifecycle rule that aborts incomplete multipart uploads after a day. A pod killed during a
-large write leaves invisible parts behind (T5.2).
+Add two lifecycle rules. With `STORAGE_URL=s3://acme-ordinate/prod` and the org `acme`:
+
+```json
+{
+  "Rules": [
+    { "ID": "abort-incomplete-uploads", "Status": "Enabled", "Filter": { "Prefix": "prod/" },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 } },
+    { "ID": "expire-staging", "Status": "Enabled", "Filter": { "Prefix": "prod/orgs/acme/staging/" },
+      "Expiration": { "Days": 1 } }
+  ]
+}
+```
+
+- **The first rule** clears the invisible parts that a pod killed during a large write leaves
+  behind (T5.2).
+- **The second rule** is the backstop for the org's staging area. Uploads, downloads and imports
+  in progress wait there for any pod to pick them up (`docs/any-pod/`). Ordinate deletes each one
+  when it is used, and its sweep deletes what expired, within the hour. The rule catches what a pod
+  that died mid-upload left.
+- **A filter is a key prefix**, so the staging rule needs one copy per org. Most installs have one
+  org, `ORDINATE_ORG`.
 
 ## 3. RDS
 
@@ -192,9 +211,6 @@ ingress:
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000
     alb.ingress.kubernetes.io/healthcheck-path: /readyz
-    # Uploads, downloads and AI plan runs are held by the pod that started
-    # them: with more than one pod, a browser must keep reaching the same one.
-    alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.type=lb_cookie,stickiness.lb_cookie.duration_seconds=86400
   hosts:
     - host: ordinate.example.com
       paths:
@@ -211,11 +227,10 @@ resources:
 ```
 <!-- values-eks:end -->
 
-**Sticky sessions are required with more than one pod.** Upload and download tokens, staged imports
-and AI plan runs live in the memory of the pod that issued them (threat model R8,
-`src/server/files.ts`). Without stickiness, an import whose upload landed on another pod fails
-with "That upload has expired". The chart's own e2e reaches a single pod through a port-forward, so it does not
-exercise this. With one replica, or before you have an ALB, stickiness does not matter.
+**Any pod serves any request: no sticky sessions.** Upload and download tokens are rows in
+Postgres, and their bytes are in S3. Staged imports, Assistant plan runs and the abuse counters are
+shared the same way (threat model R8, `docs/any-pod/`). `scripts/test-anyPod.ts` sends every step
+of an import, an export, a restore and a plan run to alternating pods.
 
 `/metrics` gets its own `ordinate-metrics` Service and is never routed by the Ingress. The default
 `resources` are small (250m / 512Mi request, 2 CPU / 2Gi limit). The values above are a starting

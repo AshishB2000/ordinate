@@ -111,9 +111,9 @@ Notes on the fields:
 
 ## Service and load balancer
 
-- **Target group**: protocol HTTP, port 8080, target type `ip`, health check path `/readyz`.
-  **Turn on stickiness (`lb_cookie`) when the service runs more than one task.** Uploads, downloads
-  and AI plan runs are held by the task that started them (threat model R8).
+- **Target group**: protocol HTTP, port 8080, target type `ip`, health check path `/readyz`. No
+  stickiness: any task serves any request (threat model R8). Give the bucket the two lifecycle rules
+  in [eks.md](eks.md#2-s3-and-irsa).
 - **Listener**: HTTPS 443 with your ACM certificate. Never route `/metrics`. It lives on port 9464
   only, so expose that port to your scraper's security group and nothing else.
 - **Security groups**: the ALB may reach the tasks on 8080; the tasks may reach RDS on 5432 and

@@ -19,20 +19,20 @@ import * as say from '../../analysis/subscriptionText';
 import { sendableCards } from '../../ipc/subscriptionFigures';
 import { formatBytes } from '../../publish/combos';
 import { ctx } from '../context';
+import * as counters from '../counters';
 import { dashboardLink } from '../publicUrl';
 import { registry } from '../rpc';
 import { brandName, knownRecipients, mailReady, previewEmail } from '../mail/emailChannel';
 import { dashboardSendRefusal, deliver } from './deliver';
 import { buildMessage, ownerIdentity, runSubscription } from './run';
 
-/** "Send now" at most once a minute per subscription, per pod. */
+/** "Send now" at most once a minute per subscription, across pods (../counters.ts). */
 let sendNowGapMs = 60_000;
-const lastSendNow = new Map<string, number>();
 
 /** Test hook: suites that send one subscription several times in a row. */
 export function setSendNowGapForTest(ms: number): void {
   sendNowGapMs = ms;
-  lastSendNow.clear();
+  counters.resetMemoryForTest();
 }
 
 /** "Mon 12 Oct, 08:00" in the subscription's own zone. */
@@ -227,11 +227,9 @@ export function register(): void {
   registry.handle('subscription:delete', async (_e, { projectId, id }: { projectId: string; id: string }) => ({ ok: await store.deleteSubscription(projectId, id) }));
 
   registry.handle('subscription:sendNow', async (_e, { projectId, id }: { projectId: string; id: string }) => {
-    const key = `${ctx().org.id}\0${projectId}\0${id}`;
-    const now = Date.now();
-    for (const [k, at] of lastSendNow) if (now - at >= sendNowGapMs) lastSendNow.delete(k);
-    if (lastSendNow.has(key)) return { ok: false as const, error: say.sendNowWait() };
-    lastSendNow.set(key, now);
+    // A gap of 0 (tests) is no limit at all — a window of 0 ms would still count against a longer one already open.
+    const gap = sendNowGapMs > 0 ? await counters.take(ctx().org.id, [{ key: `sendnow:${projectId}:${id}`, limit: 1, windowMs: sendNowGapMs }]) : null;
+    if (gap && !gap.ok) return { ok: false as const, error: say.sendNowWait() };
     const entry = await runSubscription(projectId, id);
     if (!entry) return { ok: false as const, error: say.subscriptionGone() };
     return entry.outcome === 'sent' ? { ok: true as const, run: runView(entry) } : { ok: false as const, error: say.runText(entry.code, entry.detail), run: runView(entry) };

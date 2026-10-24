@@ -116,6 +116,11 @@ export interface WriteProgress {
   checkCancelled?: () => void;
   /** For an s3:// target: a LOCAL directory the org's worker may read, for the NDJSON staging file. */
   stageDir?: string;
+  /**
+   * How a cell is stored, in place of `String(cell)` / NULL: a staged import's exact-value tags
+   * (src/data/stageCodec.ts). Applied chunk by chunk as the NDJSON is written — no second copy.
+   */
+  encodeCell?: (cell: Cell) => string | null;
 }
 
 /** True when the bridge is up, WITHOUT blocking the event loop to start it. */
@@ -169,7 +174,8 @@ export async function writeTableAsync(
       try {
         await duck.queryAsync(`SELECT 1 FROM ${read} LIMIT 1;`);
       } catch (err) {
-        if (!isMalformedJson(err)) throw err;
+        // An exact encoding never needs the lossy retry: refuse rather than replace a character.
+        if (!isMalformedJson(err) || opts.encodeCell) throw err;
         await writeNdjsonAsync(tmpJson, names, rows, true, opts);
         await duck.queryAsync(`SELECT 1 FROM ${read} LIMIT 1;`);
       }
@@ -193,20 +199,22 @@ export async function writeTableAsync(
  * thread keeps turning, then the rows are decoded here exactly as `readTable`
  * decodes them. Same null-on-any-failure contract.
  */
-export async function readTableAsync(filePath: string, schema?: ParsedColumn[]): Promise<ParquetTable | null> {
+export async function readTableAsync(filePath: string, schema?: ParsedColumn[], limit?: number): Promise<ParquetTable | null> {
   try {
     assertPath(filePath);
     const relation = relationSql(filePath);
+    // The first `limit` rows: a plain scan of one file keeps its order (preserve_insertion_order).
+    const cap = limit !== undefined && Number.isInteger(limit) && limit >= 0 ? ` LIMIT ${limit}` : '';
     const described = await duck.queryAsync(`DESCRIBE SELECT * FROM ${relation};`);
     const physical = described.map((r) => String(r.column_name ?? ''));
     if (physical.length === 1 && physical[0] === EMPTY_MARK) {
-      const n = Number((await duck.queryAsync(`SELECT count(*) AS n FROM ${relation};`))[0]?.n ?? 0);
+      const n = Number((await duck.queryAsync(`SELECT count(*) AS n FROM (SELECT 1 FROM ${relation}${cap});`))[0]?.n ?? 0);
       const rows: Cell[][] = [];
       for (let i = 0; i < n; i++) rows.push([]);
       return { columns: [], rows };
     }
     const projection = physical.map((p) => bomSafe(`"${p.replace(/"/g, '""')}"`)).join(', ');
-    const out = await duck.queryAsync(`SELECT ${projection} FROM ${relation};`);
+    const out = await duck.queryAsync(`SELECT ${projection} FROM ${relation}${cap};`);
     return decodeTable(physical, out, schema);
   } catch {
     return null;
@@ -303,10 +311,10 @@ export function isMalformedJson(err: unknown): boolean {
 }
 
 /** One NDJSON line per row — the storage encoding both writers share. */
-export function ndjsonLine(names: string[], row: Cell[], sanitize: boolean): string {
+export function ndjsonLine(names: string[], row: Cell[], sanitize: boolean, encode: (cell: Cell) => string | null = toStorage): string {
   const obj: Record<string, string | null> = {};
   for (let c = 0; c < names.length; c++) {
-    const v = toStorage(row[c] ?? null);
+    const v = encode(row[c] ?? null);
     obj[names[c]] = v !== null && sanitize ? wellFormed(v) : v;
   }
   return JSON.stringify(obj) + '\n';
@@ -329,7 +337,7 @@ async function writeNdjsonAsync(
       if (opts.checkCancelled) opts.checkCancelled();
       const end = Math.min(rows.length, start + ASYNC_CHUNK_ROWS);
       let buf = '';
-      for (let r = start; r < end; r++) buf += ndjsonLine(names, rows[r] || [], sanitize);
+      for (let r = start; r < end; r++) buf += ndjsonLine(names, rows[r] || [], sanitize, opts.encodeCell);
       await fh.write(buf, null, 'utf8');
       if (opts.onProgress) {
         opts.onProgress(0.8 * (end / rows.length), `${end.toLocaleString('en-US')} of ${rows.length.toLocaleString('en-US')} rows`);

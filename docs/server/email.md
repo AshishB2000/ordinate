@@ -126,7 +126,9 @@ it. It says how many people on the list have signed in.
 
 ## Limits
 
-- `RATE_LIMIT_EMAIL_ORG_PER_HOUR` (default 1000): recipients per organization per hour, in each pod.
+- `RATE_LIMIT_EMAIL_ORG_PER_HOUR` (default 1000): recipients per organization per hour, counted across
+  every pod (with `DATABASE_URL`). The hour starts at the first email of the hour, not a rolling
+  hour, so right at its end up to twice the limit can go out within a few minutes.
   Subscriptions and alerts are counted separately, so a busy subscription schedule cannot stop an
   alert. **One project may use at most half of it** per hour, so one project cannot use up the
   organization's email. A list larger than that half can never go out, and its run says so ("this
@@ -136,7 +138,7 @@ it. It says how many people on the list have signed in.
   for the next run, and the run says how many it reached. A run stopped only by the budget does not
   count toward pausing the subscription.
 - Ten test emails per organization per hour.
-- **Send now**: once a minute per subscription.
+- **Send now**: once a minute per subscription, across every pod.
 - At most 4 SMTP sessions at once per pod. After 3 failed connections in a row, sends fail fast for
   a minute instead of waiting on a dead relay.
 - A failure before the end of the message is retried twice (after 1 s and 4 s). Once the message

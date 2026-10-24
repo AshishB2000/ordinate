@@ -157,5 +157,5 @@ export function register(deps: { headless?: boolean }): void {
   });
 
   if (deps.headless) return;
-  require('../app/refreshScheduler').afterTick(() => { void runner.tick(); });
+  require('../app/refreshScheduler').afterTick(() => { void runner.tick().catch(() => undefined); });
 }

@@ -85,7 +85,7 @@ async function run(piece: Piece, emails: string[]): Promise<void> {
   const notice: MentionNotice = { projectId: piece.projectId, id: piece.id, commentId: piece.commentId, target: { kind: piece.target.kind, id: piece.target.id }, ...(where.analysisId ? { analysisId: where.analysisId } : {}), by: personName(piece.author), on: where.name };
   const org = ctx().org.id;
   for (const email of fresh) {
-    if (!hold(mentionPushBucket(org, piece.author), 1)) {
+    if (!(await hold(mentionPushBucket(org, piece.author), 1))) {
       logger.warn('[mentions] notice not pushed: its author reached the hourly limit (the Home row stands)');
       continue;
     }
@@ -127,12 +127,12 @@ async function mailOne(piece: Piece, email: string, notice: MentionNotice, words
   // A channel of one, made here and never saved: the send resolves it as it resolves any list (current reader, signed in, allowed domain).
   const one: Channel = { id: who.id, name: 'mention', kind: 'email', to: { userIds: [who.id], teamIds: [] }, createdBy: piece.author, createdAt: '', updatedAt: '' };
   const { org, requestId } = ctx();
-  const held = hold(mentionEmailBuckets(org.id, piece.author, email), 1);
+  const held = await hold(mentionEmailBuckets(org.id, piece.author, email), 1);
   if (!held) {
     logger.warn('[mentions] email not sent: its author or recipient reached the hourly limit (the Home row stands)');
     return;
   }
   const r = await deliver(one, { kind: 'mention', projectId: piece.projectId, message, reason: mentionEmailReason(notice.by) });
-  if (!r.ok) held.refund(1); // not sent: it cost the author and the recipient nothing
+  if (!r.ok) await held.refund(1); // not sent: it cost the author and the recipient nothing
   await audit(orgDb(), { org: org.id, actor: piece.author, action: 'rpc', channel: 'comment:mention', projectId: piece.projectId, targets: [piece.commentId, piece.id, who.id], outcome: r.ok ? 'ok' : 'error', requestId }).catch(() => undefined);
 }

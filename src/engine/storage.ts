@@ -71,8 +71,13 @@ function org(): string {
   return id;
 }
 
+/** The S3 settings when S3 is on, else null (src/server/staging.ts builds the org's staging keys on them). */
+export function s3Config(): S3Env | null {
+  return cfg;
+}
+
 /** `prefix/orgs/<org>/` — bucket-relative. */
-function orgKey(s: S3Env, orgId: string): string {
+export function orgKey(s: S3Env, orgId: string): string {
   return `${s.prefix ? s.prefix + '/' : ''}orgs/${orgId}/`;
 }
 

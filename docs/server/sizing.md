@@ -109,5 +109,5 @@ latency per channel, compute-pool queue depth, `residentTrace` `failed` counts a
 | Department, ≤ 200 people | 3–6 (HPA on CPU) | 2 → 4 CPU, 4 → 8 GiB | `DUCKDB_MAX_WORKERS=2`, `DUCKDB_THREADS=4` | 2–4 vCPU, `max_connections` ≥ 100 |
 
 Two pods are the minimum for a rollout or a node drain without downtime: the PDB keeps one. More
-than one pod needs sticky sessions at the load balancer ([eks.md](eks.md#5-values)) and S3 or a
-ReadWriteMany volume for the tables.
+than one pod needs S3 or a ReadWriteMany volume for the tables (and for uploads, downloads and
+imports in progress); any pod then serves any request, with no session affinity.

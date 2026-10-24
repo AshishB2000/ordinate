@@ -335,7 +335,7 @@ export function register() {
     try {
       // A staged import (./datasetImport.ts) saves the rows main already holds;
       // the renderer only ever had the display slice.
-      const stagedTable = importStage.get(stagedId);
+      const stagedTable = await importStage.get(stagedId);
       // A named staged table that is gone (expired, saved, or not the caller's —
       // importStage is per org + user) is refused, never saved from the slice.
       if (stagedId !== undefined && stagedId !== null && !stagedTable) return { ok: false, error: importStage.GONE };
@@ -347,7 +347,7 @@ export function register() {
         rows: capped,
         origin,
       });
-      if (saved && stagedTable) importStage.drop(stagedId);
+      if (saved && stagedTable) await importStage.drop(stagedId);
       if (!saved) return { ok: false, error: 'Invalid project, or the project no longer exists' };
       return saved;
     } catch (err: any) {

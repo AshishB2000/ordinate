@@ -159,12 +159,12 @@ export function PlanCard({ projectId, threadId, action, onDone, onLogged }: {
       const runId = running.runId;
       const t = token;
       token = undefined;
-      sn = await call(() => rpc('plan:next', { runId, ...(t ? { fileToken: t } : {}) }));
+      sn = await call(() => rpc('plan:next', { projectId, runId, ...(t ? { fileToken: t } : {}) }));
       if (!all.current || stopAsked.current || !sn || sn.state !== 'paused') break;
     }
     if (stopAsked.current && sn && sn.state === 'paused') {
       const runId = sn.runId;
-      await call(() => rpc('plan:stop', { runId }));
+      await call(() => rpc('plan:stop', { projectId, runId }));
     }
     stopAsked.current = false;
     setStopping(false);
@@ -250,7 +250,7 @@ export function PlanCard({ projectId, threadId, action, onDone, onLogged }: {
         <>
           <Button size="sm" variant="primary" onClick={() => void fix(i)}>Fix</Button>
           <Button size="sm" onClick={() => void skip(i)}>Skip</Button>
-          <Button size="sm" variant="ghost" onClick={() => void call(() => rpc('plan:stop', { runId }))}>Stop</Button>
+          <Button size="sm" variant="ghost" onClick={() => void call(() => rpc('plan:stop', { projectId, runId }))}>Stop</Button>
           {fileStep && <Button size="sm" icon="upload" onClick={() => fileRef.current?.click()}>Choose file…</Button>}
         </>
       );
@@ -266,8 +266,8 @@ export function PlanCard({ projectId, threadId, action, onDone, onLogged }: {
             <Button size="sm" variant="primary" onClick={() => void go(false)}>{`Run step ${snap.next + 1}`}</Button>
           )}
           <Button size="sm" onClick={() => void go(true)}>Run the rest</Button>
-          <Button size="sm" onClick={() => void call(() => rpc('plan:skip', { runId, index: snap.next }))}>Skip it</Button>
-          <Button size="sm" variant="ghost" onClick={() => void call(() => rpc('plan:stop', { runId }))}>Stop</Button>
+          <Button size="sm" onClick={() => void call(() => rpc('plan:skip', { projectId, runId, index: snap.next }))}>Skip it</Button>
+          <Button size="sm" variant="ghost" onClick={() => void call(() => rpc('plan:stop', { projectId, runId }))}>Stop</Button>
         </>
       );
     }
@@ -277,7 +277,7 @@ export function PlanCard({ projectId, threadId, action, onDone, onLogged }: {
         {state === 'undone' && u && (
           <span className={s.hint}>{`Undone — ${plural(u.undone, 'record')} put back${u.failed.length ? `; ${u.failed.length} could not be.` : '.'}`}</span>
         )}
-        {state !== 'undone' && snap.canUndo && <Button size="sm" onClick={() => void call(() => rpc('plan:undo', { runId }))}>Undo run</Button>}
+        {state !== 'undone' && snap.canUndo && <Button size="sm" onClick={() => void call(() => rpc('plan:undo', { projectId, runId }))}>Undo run</Button>}
         <Button size="sm" variant={state === 'undone' ? 'secondary' : 'primary'} onClick={onDone}>Done</Button>
       </>
     );
@@ -286,7 +286,7 @@ export function PlanCard({ projectId, threadId, action, onDone, onLogged }: {
   async function skip(i: number): Promise<void> {
     if (!snap) return;
     const runId = snap.runId;
-    const sn = await call(() => rpc('plan:skip', { runId, index: i }));
+    const sn = await call(() => rpc('plan:skip', { projectId, runId, index: i }));
     if (all.current && sn && sn.state === 'paused') await go(true);
   }
 
@@ -294,7 +294,7 @@ export function PlanCard({ projectId, threadId, action, onDone, onLogged }: {
     if (!snap) return;
     const runId = snap.runId;
     setNote(`Asking the Assistant to fix step ${i + 1}…`);
-    const sn = await call(() => rpc('plan:fix', { runId, index: i }));
+    const sn = await call(() => rpc('plan:fix', { projectId, runId, index: i }));
     if (sn && sn.ok) setNote(`Step ${i + 1} was rewritten and passed the check — run it when ready.`);
   }
 

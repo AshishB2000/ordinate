@@ -611,8 +611,9 @@ payloads (control: their in-app cards differ).
 - A rule deletion that removes the newest event, together with a pod clock behind it, could stamp a
   later event at or under a member's watermark. That needs both at once; accepted.
 
-**Budgets are per pod** until item 4, which moves every kind, `mention` included, to the shared
-counter. The real bounds on a flood, per pod and per hour:
+**Budgets are shared across pods**: every kind, `mention` and its per-author and per-recipient
+buckets included, is held on the one Postgres counter (docs/any-pod §3.8, fixed hourly windows). The
+real bounds on a flood, per hour:
 
 - a piece names at most 10 people (refused beyond, with a catalog sentence), and a person is told once
   per piece, ever: removing and re-adding a mention finds the row already there and sends nothing;

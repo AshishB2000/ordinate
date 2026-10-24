@@ -95,7 +95,7 @@ async function kpiOf(projectId: string, metricId: string): Promise<{ name: strin
 }
 
 /** The file an import step reads: the upload the run was handed (single use). */
-function pickImportFile(run: PlanRun): { path: string; name: string; done(): void } | null {
+async function pickImportFile(run: PlanRun): Promise<{ path: string; name: string; done(): void } | null> {
   const token = run.fileToken;
   run.fileToken = undefined;
   return token ? resolveUpload(token) : null;
@@ -103,7 +103,7 @@ function pickImportFile(run: PlanRun): { path: string; name: string; done(): voi
 
 async function runImport(run: PlanRun, step: Extract<PlanStep, { kind: 'import' }>): Promise<StepOutcome> {
   const pid = run.projectId;
-  const picked = pickImportFile(run);
+  const picked = await pickImportFile(run);
   if (!picked) return { ok: false, error: 'Choose the file to import, then run the step.' };
   // An upload's own path is `upload-<hex>`: its kind and name come from the client's file name.
   const kind = sourceKindForPath(picked.name);
