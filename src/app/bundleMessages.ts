@@ -81,6 +81,10 @@ export function notWritten(): string {
   return t('bundleMessages.the_bundle_could_not_be_written');
 }
 
+export function tooManyValues(name: string): string {
+  return t('bundleMessages.the_bundle_s_holds_more_values', { name });
+}
+
 export function notABackup(): string {
   return t('bundleMessages.that_file_is_not_an_ordinate');
 }

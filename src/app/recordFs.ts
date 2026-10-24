@@ -54,7 +54,9 @@ import type { Pool, PoolClient, QueryResult } from 'pg';
 import * as appPaths from './paths';
 import { ctx, orgKey, serverDataDir } from '../server/context';
 import { recordBusy, recordNotSaved, recordTooLarge } from './recordLockMessages';
-import { RECORD_MAX_BYTES } from './bundleRules';
+import { recordLimitOf } from './bundleRules';
+import { countJsonValues, MAX_JSON_VALUES } from './jsonBudget';
+import { logger } from './logger';
 
 /** What a listing with `withFileTypes` returns — `fs.Dirent` satisfies it. */
 export interface Dirent {
@@ -357,19 +359,47 @@ export function readFile(p: string): Promise<Buffer>;
 export function readFile(p: string, enc: BufferEncoding): Promise<string>;
 export async function readFile(p: string, enc?: BufferEncoding): Promise<string | Buffer> {
   const a = rec(p);
-  if (!a) return enc ? fs.promises.readFile(p, enc) : fs.promises.readFile(p);
-  const body = await readRow(a);
-  if (body === undefined) throw enoent('open', p);
-  return enc === 'utf8' || enc === 'utf-8' ? body : enc ? Buffer.from(body, 'utf8').toString(enc) : Buffer.from(body, 'utf8');
+  let out: string | Buffer;
+  if (!a) {
+    out = enc ? await fs.promises.readFile(p, enc) : await fs.promises.readFile(p);
+  } else {
+    const body = await readRow(a);
+    if (body === undefined) throw enoent('open', p);
+    out = enc === 'utf8' || enc === 'utf-8' ? body : enc ? Buffer.from(body, 'utf8').toString(enc) : Buffer.from(body, 'utf8');
+  }
+  if (overLimit(p, out)) {
+    // Stored before the limits (or by hand): refused, never handed to a parser — its
+    // reader sees an unreadable record, as for a corrupt one (docs/pod-lifecycle §3.5).
+    if (!warnedTooLarge.has(p)) {
+      warnedTooLarge.add(p);
+      logger.warn('[records] a record past its size or value limit was not read:', path.basename(p));
+    }
+    const e: NodeJS.ErrnoException = new Error(recordTooLarge());
+    e.code = 'ERECORDTOOLARGE';
+    throw e;
+  }
+  return out;
+}
+
+const warnedTooLarge = new Set<string>();
+
+/**
+ * A JSON record past its kind's byte cap, or a project record holding more than
+ * MAX_JSON_VALUES values (./jsonBudget.ts: a parse's heap is its values, not its
+ * bytes). Counted only above 1 MiB, where it can matter.
+ */
+function overLimit(p: string, data: string | Uint8Array): boolean {
+  const limit = recordLimitOf(p);
+  if (!limit) return false;
+  const bytes = typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength;
+  if (bytes > limit.bytes) return true;
+  return limit.values && bytes > 1024 * 1024 && countJsonValues(data) > MAX_JSON_VALUES;
 }
 
 export async function writeFile(p: string, data: string | Uint8Array, opts?: BufferEncoding | fs.WriteFileOptions): Promise<void> {
-  // No record past RECORD_MAX_BYTES is ever stored, so no bundle or backup we
-  // write holds one our own import would refuse (docs/pod-lifecycle §3.5).
-  const base = path.basename(p);
-  if (JSON_NAME.test(base) && !base.endsWith('.search.json') && (typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength) > RECORD_MAX_BYTES) {
-    throw new Error(recordTooLarge());
-  }
+  // Nothing past its limits is ever stored, so no bundle or backup we write holds a
+  // record our own import would refuse, and no read has to refuse one (§3.5).
+  if (overLimit(p, data)) throw new Error(recordTooLarge());
   forget();
   const a = rec(p);
   if (!a) return fs.promises.writeFile(p, data, opts);

@@ -25,7 +25,8 @@ import * as config from '../app/config';
 import * as jobs from '../app/jobs';
 import * as projects from '../app/projects';
 import * as bundle from '../app/bundle';
-import { MAX_ENTRIES, MAX_TOTAL_BYTES, RECORD_MAX_BYTES } from '../app/bundleRules';
+import { MAX_ENTRIES, MAX_TOTAL_BYTES } from '../app/bundleRules';
+import { parseBounded } from '../app/jsonBudget';
 import { notABackup } from '../app/bundleMessages';
 import { openZip, ZipRefused, type ZipEntryInfo, type ZipPolicy, type ZipReader, type ZipSource } from '../app/zipReader';
 import { ZipFileWriter } from '../app/zipWriter';
@@ -101,10 +102,13 @@ export async function writeBackup(job: { progress(p: number, note?: string): voi
   return { file, count: manifest.projects.length, at: manifest.exportedAt };
 }
 
+const BACKUP_LIST_MAX_BYTES = 4 * 1024 * 1024;
+
 /** The reader's policy for a backup: backup.json and one bundle per project. The names are keys, never paths. */
 const BACKUP_POLICY: ZipPolicy = {
   refuseName: (name) => (name === MANIFEST || /^[^/\\]+\.ordinate$/.test(name) ? null : notABackup()),
-  capOf: (name) => (name === MANIFEST ? RECORD_MAX_BYTES : MAX_TOTAL_BYTES),
+  // backup.json lists the projects (~400 bytes each): 4 MiB is ten thousand of them.
+  capOf: (name) => (name === MANIFEST ? BACKUP_LIST_MAX_BYTES : MAX_TOTAL_BYTES),
   maxEntries: MAX_ENTRIES,
   maxTotal: MAX_TOTAL_BYTES,
 };
@@ -128,7 +132,8 @@ export async function restoreBackupFile(file: string, j: JobContext): Promise<{ 
     const head = outer.get(MANIFEST);
     let manifest: BackupManifest;
     try {
-      manifest = JSON.parse(head ? (await outer.read(head, j.signal)).toString('utf8') : '') as BackupManifest;
+      if (!head) throw new SyntaxError('no backup.json');
+      manifest = (await parseBounded(await outer.read(head, j.signal))) as BackupManifest; // within the value budget (src/app/jsonBudget.ts)
     } catch (_) {
       throw new Error('That file is not an Ordinate backup (no readable backup.json).');
     }

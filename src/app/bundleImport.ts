@@ -36,6 +36,8 @@ import { importBundleTemplates } from './userTemplateStore';
 import { BUNDLE_FORMAT, BUNDLE_POLICY, BUNDLE_VERSION, CONNECTION_FILE, kindOf, ruleFor, UUID, UUID_G } from './bundleRules';
 import type { BundleManifest } from './bundleRules';
 import * as msg from './bundleMessages';
+import { countJsonValuesAsync, JsonTooComplex, MAX_JSON_VALUES, parseBounded } from './jsonBudget';
+import { logger } from './logger';
 import { openZip, ZipRefused, type ZipEntryInfo, type ZipReader, type ZipSource } from './zipReader';
 
 /** Progress (0–1) and a cancel check a job hands in; both optional. */
@@ -105,6 +107,19 @@ function oneAtATime<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
+const HEX = new Uint8Array(256);
+for (const c of '0123456789abcdefABCDEF') HEX[c.charCodeAt(0)] = 1;
+
+/** A UUID (8-4-4-4-12 hex, either case) at byte `i` of `buf`. */
+function uuidAt(buf: Buffer, i: number): boolean {
+  if (i < 0 || i + 36 > buf.length) return false;
+  for (let k = 0; k < 36; k++) {
+    const b = buf[i + k];
+    if (k === 8 || k === 13 || k === 18 || k === 23 ? b !== 0x2d : !HEX[b]) return false;
+  }
+  return true;
+}
+
 /**
  * Every UUID in `buf` (scanned as latin1: offsets are byte offsets, and a UTF-8
  * multi-byte sequence never matches), handed to `seen` — a loop, no match
@@ -166,12 +181,16 @@ async function importFrom(zip: ZipReader, opts: ImportOptions): Promise<ImportRe
   }
 
   // 2. The manifest, and its counts against the names.
+  // Every file parsed whole is parsed only within the value budget (./jsonBudget.ts):
+  // a parse's heap is its values, and a 33 KB bundle can hold 11 M empty objects.
   let manifest: BundleManifest;
   const manifestEntry = zip.get('manifest.json');
   try {
-    manifest = JSON.parse(manifestEntry ? (await zip.read(manifestEntry, opts.signal)).toString('utf8') : '');
+    if (!manifestEntry) throw new SyntaxError('no manifest');
+    manifest = (await parseBounded(await zip.read(manifestEntry, opts.signal))) as BundleManifest;
   } catch (err) {
     if (err instanceof ZipRefused) throw err;
+    if (err instanceof JsonTooComplex) return { ok: false, error: msg.tooManyValues('manifest.json') };
     return { ok: false, error: msg.noManifest() };
   }
   if (!manifest || manifest.format !== BUNDLE_FORMAT || manifest.formatVersion !== BUNDLE_VERSION) {
@@ -184,8 +203,9 @@ async function importFrom(zip: ZipReader, opts: ImportOptions): Promise<ImportRe
   }
   const alertsEntry = zip.get('alerts.json');
   if (alertsEntry) {
-    try { counts.alerts = (JSON.parse((await zip.read(alertsEntry, opts.signal)).toString('utf8')).rules || []).length; } catch (err) {
+    try { counts.alerts = (((await parseBounded(await zip.read(alertsEntry, opts.signal))) as { rules?: unknown[] }).rules || []).length; } catch (err) {
       if (err instanceof ZipRefused) throw err;
+      if (err instanceof JsonTooComplex) return { ok: false, error: msg.tooManyValues('alerts.json') };
       return { ok: false, error: msg.alertsUnreadable() };
     }
   }
@@ -244,9 +264,17 @@ async function write(
   const taken = new Set((await projects.listProjects()).map((p) => p.name));
   const created = await projects.createProject(taken.has(name) ? `${name} (imported)` : name);
   const dir = projectDir(created.id);
+  // The files read for their contents (the project's extras, themes, templates): an
+  // optional extra past the value budget is skipped — it costs a look, never the import.
   const small = async (n: string): Promise<{ name: string; data: Buffer }[]> => {
     const e = zip.get(n);
-    return e ? [{ name: n, data: await zip.read(e, opts.signal) }] : [];
+    if (!e) return [];
+    const data = await zip.read(e, opts.signal);
+    if ((await countJsonValuesAsync(data)) > MAX_JSON_VALUES) {
+      logger.warn(`[bundle] ${n} holds more than ${MAX_JSON_VALUES} values: not read`);
+      return [];
+    }
+    return [{ name: n, data }];
   };
   try {
     const { entries } = zip;

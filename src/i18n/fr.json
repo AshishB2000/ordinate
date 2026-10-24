@@ -46,6 +46,7 @@
   "bundleMessages.the_bundle_is_damaged_is_larger": "Le paquet est endommagé ({name} est plus grand qu’annoncé).",
   "bundleMessages.the_bundle_is_too_large_to": "Le paquet est trop volumineux pour être importé.",
   "bundleMessages.the_bundle_s_alerts_json_is": "Le fichier alerts.json du paquet est illisible.",
+  "bundleMessages.the_bundle_s_holds_more_values": null,
   "bundleMessages.the_bundle_s_is_larger_than": "Le fichier {name} du paquet dépasse ce qu’Ordinate importe.",
   "bundleMessages.the_bundle_uses_a_zip_feature": "Le paquet utilise une fonction zip qu’Ordinate ne lit pas (zip64, un descripteur de données ou une archive fractionnée).",
   "bundleMessages.the_bundle_uses_an_unsupported": "Le paquet utilise une méthode de compression non prise en charge.",
