@@ -190,6 +190,23 @@ export class DuckPool {
     this.wait.count += 1;
   }
 
+  /** Test hook: how many senders `org`'s worker keeps (its parent plus every compute port not yet closed). */
+  sendersForTest(org: string): Promise<number> {
+    const w = this.workers.get(org);
+    if (!w) return Promise.resolve(0);
+    return new Promise((resolve) => {
+      const on = (m: { type?: string; n?: number }): void => {
+        if (m.type !== 'senders') return;
+        w.worker.off('message', on);
+        w.worker.unref();
+        resolve(m.n ?? 0);
+      };
+      w.worker.on('message', on);
+      w.worker.ref(); // an awaited reply holds the process open (the worker is unref'd once ready)
+      w.worker.postMessage({ kind: 'senders' });
+    });
+  }
+
   /** Orgs with a live worker, least recently used first (tests). */
   orgs(): string[] {
     return [...this.workers.keys()].filter((k) => k !== PROBE_KEY);
