@@ -115,3 +115,13 @@ describe('Home → New → Dashboard', () => {
     expect(screen.queryByRole('button', { name: 'New' })).toBeNull();
   });
 });
+
+describe('one door, never none (review round)', () => {
+  it('Analyses keeps its Metrics link with no dashboards; Create dashboard shows once, in the empty state', async () => {
+    serve('editor', { 'analysis:gallery': [] });
+    renderApp(`/analyses?project=${P}`);
+    await screen.findByRole('heading', { name: 'No dashboards yet' }, LAZY);
+    expect(href('Metrics')).toBe(`/data/metrics?project=${P}`);
+    expect(main().getAllByRole('button', { name: 'Create dashboard' })).toHaveLength(1);
+  });
+});

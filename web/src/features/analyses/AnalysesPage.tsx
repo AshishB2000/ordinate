@@ -170,7 +170,8 @@ function Gallery({ projectId }: { projectId: string }) {
         <Icon name="target" />
         <span>Metrics</span>
       </Link>
-      {canEdit && (
+      {/* With nothing authored (not while loading, nor on an error) the empty state holds Draft and Create; Metrics stays. */}
+      {canEdit && q.data?.length !== 0 && (
         <>
           <Button icon="sparkles" onClick={() => setDrafting(true)} disabled={!aiReady} title={aiReady ? undefined : aiWhy}>
             Draft with the Assistant
@@ -291,8 +292,7 @@ function Gallery({ projectId }: { projectId: string }) {
       title="Analyses"
       status={count > 0 && <span className={s.count}>{count === 1 ? '1 dashboard' : `${count} dashboards`}</span>}
       sub="The dashboards you author: sheets of charts, metrics and text over your datasets."
-      // With nothing authored the empty state holds the doors: the header does not repeat them.
-      actions={q.data?.length !== 0 && actions}
+      actions={actions}
     >
       {body}
       {wizard && canEdit && <NewWizard projectId={projectId} datasetId={wizard.datasetId} initialStep={wizard.datasetId ? 2 : 1} onClose={() => setWizard(null)} />}
