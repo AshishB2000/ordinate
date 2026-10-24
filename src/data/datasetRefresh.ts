@@ -63,6 +63,8 @@ export interface RefreshErr {
   alreadyRunning?: true;
   /** Nothing ran: an incremental-only refresh found a full one due (RefreshMode). The markers stay as they were. */
   skipped?: true;
+  /** Cancelled by a pod shutting down (src/server/shutdown.ts): not a failure — another pod runs it. */
+  restarted?: true;
 }
 export type RefreshResult = RefreshOk | RefreshErr;
 
