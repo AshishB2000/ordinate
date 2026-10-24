@@ -183,6 +183,21 @@
     ['--accent', '--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5', '--chart-6', '--chart-7', '--chart-8']
       .map((token) => ({ token, against: '--surface', min: 3, what: 'on the surface' }))
       .concat([{ token: '--text', against: '--bg', min: 4.5, what: 'on the background' }]);
+  // A tone's ink is text on its own tint, so it is measured where it is read:
+  // on the fill composited over the surface (docs/design-floor).
+  const INKS: Array<[string, string]> = [['--accent-text', '--accent-soft'], ['--ok-text', '--ok-soft'],
+    ['--warn-text', '--warn-soft'], ['--error-text', '--error-soft']];
+
+  /** `fill` painted over the opaque `under`, as #rrggbb; null when either is not a colour. */
+  function over(fill: unknown, under: unknown): string | null {
+    if (typeof fill !== 'string' || typeof under !== 'string' || !HEX_RE.test(under)) return null;
+    if (HEX_RE.test(fill)) return fill;
+    const m = RGBA_RE.exec(fill);
+    if (!m) return null;
+    const a = Number(m[4]);
+    const u = [1, 3, 5].map((i) => parseInt(under.slice(i, i + 2), 16));
+    return '#' + [m[1], m[2], m[3]].map((c, i) => Math.round(Number(c) * a + u[i] * (1 - a)).toString(16).padStart(2, '0')).join('');
+  }
 
   function themeWarnings(tokens: unknown): Array<{ token: string; against: string; ratio: number; min: number; message: string }> {
     const t = sanitizeTokens(tokens);
@@ -193,6 +208,12 @@
       const ratio = Math.round(r * 10) / 10;
       out.push({ token: c.token, against: c.against, ratio, min: c.min,
         message: `${ratio}:1 ${c.what} — needs ${c.min}:1` });
+    }
+    for (const [ink, fill] of INKS) {
+      const r = contrast(t[ink], over(t[fill], t['--surface']));
+      if (r === null || r >= 4.5) continue;
+      const ratio = Math.round(r * 10) / 10;
+      out.push({ token: ink, against: fill, ratio, min: 4.5, message: `${ratio}:1 on its fill — needs 4.5:1` });
     }
     return out;
   }

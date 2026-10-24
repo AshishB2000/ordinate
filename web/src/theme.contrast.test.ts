@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { contrast } from './features/settings/themeModel';
 import { BUILTINS } from './features/settings/themeBuiltins';
+import { deriveAccent, deriveBase, deriveRamp, themeStyleVars, type Tokens } from './features/settings/themeModel';
 
 type Decls = Record<string, string>;
 type Row = { what: string; on: string; ratio: number; min: number };
@@ -143,6 +144,19 @@ for (const b of BUILTINS) {
   for (const [k, v] of Object.entries(b.tokens)) if (typeof v === 'string') t[k] = v;
   SHEETS[`built-in ${b.id}`] = { t, chips: true };
 }
+
+// A workspace theme is drawn on the dashboard sheet as custom properties (DashboardChrome useStyleVars),
+// over whatever app it is in: a dark one in a light app must not inherit the light app's inks.
+const themed = (tokens: Tokens): Decls => ({ ...LIGHT, ...Object.fromEntries(themeStyleVars(tokens)) });
+const INK_TOKENS = ['--accent-text', '--ok-text', '--warn-text', '--error-text'];
+const darkBuiltin = BUILTINS.find((b) => b.id === 'dark')!.tokens;
+const savedBefore: Tokens = Object.fromEntries(Object.entries(darkBuiltin).filter(([k]) => !INK_TOKENS.includes(k)));
+SHEETS['theme: built-in dark saved before the inks (light app)'] = { t: themed(savedBefore), chips: true };
+const clean = BUILTINS.find((b) => b.id === 'clean')!.tokens;
+SHEETS['theme: Light duplicated and made dark (light app)'] = {
+  t: themed(deriveRamp(deriveAccent(deriveBase({ ...clean, '--bg': '#101114', '--surface': '#1c1c20', '--text': '#ececee', '--border': '#2e2e33' })))),
+  chips: true,
+};
 
 describe('the AA floor', () => {
   for (const [name, { t, chips }] of Object.entries(SHEETS)) {

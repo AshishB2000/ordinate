@@ -15,7 +15,7 @@ import { Select } from '../../ui/Select';
 import { toast } from '../../ui/Toast';
 import { asOfView } from '../../ui/asOfView';
 import { useThemes } from '../settings/api';
-import { themeCssVars } from '../settings/themeModel';
+import { themeStyleVars } from '../settings/themeModel';
 import type { EditorApi } from '../analyses/editor/context';
 import { useEditor } from '../analyses/editor/context';
 import { CommentsPanel } from './CommentsPanel';
@@ -54,7 +54,7 @@ export function useStyleVars(raw: Record<string, unknown>): CSSProperties {
     const out: Record<string, string> = {};
     const id = v.themeId || themes.data?.defaultId;
     const theme = id && id !== 'none' ? themes.data?.themes.find((t) => t.id === id) : undefined;
-    if (theme) for (const [k, val] of themeCssVars(theme.tokens)) out[k] = val;
+    if (theme) for (const [k, val] of themeStyleVars(theme.tokens)) out[k] = val;
     const brand = v.accentHex ? brandTokens(v.accentHex) : null;
     if (brand) Object.assign(out, brand.light, brand.dark);
     return out as CSSProperties;

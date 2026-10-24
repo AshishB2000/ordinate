@@ -118,6 +118,14 @@ async function main(): Promise<void> {
   ok('contrast: a pair with a missing side is not guessed at', warnedOn({ '--chart-3': '#fde047' }).length === 0);
   ok('contrast: every chart colour and the accent are checked',
     warnedOn({ '--surface': '#ffffff', '--accent': '#ffffff', '--chart-1': '#fefefe', '--chart-8': '#fafafa' }).join() === '--accent,--chart-1,--chart-8');
+  // A tone's ink is read on its tint over the surface: the light app's accent ink on a dark sheet fails,
+  // the dark sheet's own passes (the negative control), and an ink with no tint to measure on is not guessed.
+  const darkTint = { '--surface': '#232327', '--accent-soft': 'rgba(59, 130, 246, 0.16)' };
+  const inkWarn = tm.themeWarnings({ ...darkTint, '--accent-text': '#1d4fd0' });
+  ok('contrast: a light ink on a dark sheet\'s tint warns at 4.5:1',
+    inkWarn.length === 1 && inkWarn[0].token === '--accent-text' && inkWarn[0].against === '--accent-soft' && /on its fill — needs 4.5:1$/.test(inkWarn[0].message), JSON.stringify(inkWarn));
+  ok('contrast: the dark sheet\'s own ink on that tint does not', warnedOn({ ...darkTint, '--accent-text': '#8cbaff' }).length === 0);
+  ok('contrast: an ink without its tint is not guessed at', warnedOn({ '--surface': '#232327', '--ok-text': '#065f46' }).length === 0);
 
   // ── 3. Resolution ─────────────────────────────────────────────────────────
   const themes = [{ id: A, name: 'A', tokens: {} }, { id: B, name: 'B', tokens: {} }];
