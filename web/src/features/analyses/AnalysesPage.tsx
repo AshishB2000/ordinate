@@ -120,6 +120,8 @@ function Gallery({ projectId }: { projectId: string }) {
   const [wizard, setWizard] = useState<{ datasetId?: string } | null>(() => (params.get('new') ? { datasetId: params.get('dataset') ?? undefined } : null));
   useEffect(() => {
     if (!params.get('new')) return;
+    // Also when the page is already on screen (the palette's New dashboard from here): open it, then strip the ask.
+    setWizard({ datasetId: params.get('dataset') ?? undefined });
     setParams(
       (p) => {
         const n = new URLSearchParams(p);

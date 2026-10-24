@@ -138,4 +138,14 @@ describe('one door, never none (review round)', () => {
     await screen.findByRole('heading', { level: 1, name: 'Captures' }, LAZY);
     expect(href('Data')).toBe(`/data/${P}?tab=captures`);
   });
+
+  it('?new=1 opens the wizard when Analyses is already on screen (the palette\'s New dashboard)', async () => {
+    serve('editor', { 'analysis:gallery': [] });
+    const router = renderApp(`/analyses?project=${P}`);
+    await screen.findByRole('heading', { name: 'No dashboards yet' }, LAZY);
+    expect(screen.queryByRole('dialog', { name: 'Create dashboard' })).toBeNull();
+    await act(() => router.navigate(`/analyses?project=${P}&new=1`));
+    expect(await screen.findByRole('dialog', { name: 'Create dashboard' }, LAZY)).toBeTruthy();
+    await waitFor(() => expect(router.state.location.search).toBe(`?project=${P}`));
+  });
 });
