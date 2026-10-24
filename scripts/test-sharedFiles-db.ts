@@ -94,6 +94,7 @@ function fakeS3() {
       fs.writeFileSync(file, body);
       return { file, body };
     };
+    const hasObject = (file: string): boolean => [...s3.objects.keys()].some((k) => k.endsWith('/' + path.basename(file)));
     const rowUsed = async (token: string): Promise<Date | null | 'gone'> => {
       const r = (await db.pool.query<{ used_at: Date | null }>('SELECT used_at FROM file_tokens WHERE token_hash = $1', [tokens.hashOf(token)])).rows[0];
       return r ? r.used_at : 'gone';
@@ -124,6 +125,18 @@ function fakeS3() {
     await as(async () => { const t = await shared.take(t2, 'upload'); return shared.localFile(t).catch(() => null); });
     ok('control: a 404 (the bytes are gone) leaves the token spent', (await rowUsed(t2)) instanceof Date);
     s3.state.mode = 'ok';
+
+    // 2b. A download whose GET fails for a moment is not destroyed (review M2): the take is undone, the bytes kept.
+    const dl = newFile();
+    const tdl = await as(() => shared.issue('download', dl.file, 'export.zip', dl.body.length, 3_600_000, sha(dl.body)));
+    fs.rmSync(dl.file); // taken on another pod: it must GET
+    s3.state.mode = '503';
+    const flaky = await as(async () => { const t = await shared.take(tdl, 'download'); return shared.openTaken(t).then(() => 'opened', (e: unknown) => (e instanceof shared.TryAgain ? 'TryAgain' : e instanceof shared.NoToken ? 'NoToken' : String(e))); });
+    ok('a download\'s GET failing twice (503) answers try-again: the take is undone and its bytes are still in the store', flaky === 'TryAgain' && (await rowUsed(tdl)) === null && hasObject(dl.file), JSON.stringify({ flaky, objects: [...s3.objects.keys()] }));
+    s3.state.mode = 'ok';
+    const later = await as(async () => { const t = await shared.take(tdl, 'download'); const o = await shared.openTaken(t); const parts: Buffer[] = []; for await (const c of o.body) parts.push(c as Buffer); shared.finish(t); return Buffer.concat(parts); });
+    ok('…so the same link then downloads the very bytes', later.equals(dl.body));
+    ok('…and then its object goes', await H.until(() => !hasObject(dl.file), 3_000));
 
     // 3. A failed PUT deletes its row.
     s3.state.putStatus = 500;

@@ -294,7 +294,9 @@ async function sendShared(token: string, reply: FastifyReply): Promise<FastifyRe
   }
   try {
     src = await shared.openTaken(t);
-  } catch {
+  } catch (err) {
+    // A moment's S3 failure: the take was undone and nothing deleted — the same link works again.
+    if (err instanceof shared.TryAgain) return reply.code(503).header('retry-after', 5).send({ error: 'try again' });
     shared.finish(t);
     return reply.code(404).send({ error: 'not found' });
   }

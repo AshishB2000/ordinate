@@ -55,6 +55,8 @@ export interface Taken {
 
 /** Thrown by a take that matched nothing; ./files.ts turns it into its FileTokenError. */
 export class NoToken extends Error {}
+/** The store failed for a moment (S3 5xx, a dropped connection): the take was undone; ask again. */
+export class TryAgain extends Error {}
 
 export const sha256File = async (file: string): Promise<string> => {
   const h = createHash('sha256');
@@ -161,7 +163,10 @@ export function finish(t: Taken, local?: { file: string; own: boolean; held: boo
     .catch((err: unknown) => log.warn({ err }, 'file token: its bytes or row could not be deleted; the sweep will'));
 }
 
-/** A taken download's bytes as a stream (this pod's copy held while it is read). Throws NoToken when they are gone. */
+/**
+ * A taken download's bytes as a stream (this pod's copy held while it is read). Throws NoToken when
+ * they are gone; TryAgain — the take undone, nothing deleted — when S3 failed for a moment twice.
+ */
 export async function openTaken(t: Taken): Promise<{ body: Readable; size: number; held: boolean }> {
   const held = holdCopy(t);
   if (held) {
@@ -172,11 +177,20 @@ export async function openTaken(t: Taken): Promise<{ body: Readable; size: numbe
       release(t);
     }
   }
-  try {
-    return { ...(await staging.openStream(t.place)), held: false };
-  } catch {
-    throw new NoToken();
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < (staging.isS3() ? 2 : 1); attempt++) {
+    try {
+      return { ...(await staging.openStream(t.place)), held: false };
+    } catch (err) {
+      lastErr = err;
+      if (!transient(err)) break;
+    }
   }
+  if (staging.isS3() && transient(lastErr)) {
+    await tokens.untake(t.org, t.hash, t.usedAt).catch((err: unknown) => log.warn({ err }, 'file token: a take could not be undone'));
+    throw new TryAgain();
+  }
+  throw new NoToken();
 }
 
 /** The 60 s pass over this pod's copies: expired ones, and ones whose row was taken elsewhere or is gone. Never one held. */
