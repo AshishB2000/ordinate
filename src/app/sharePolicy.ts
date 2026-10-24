@@ -32,7 +32,7 @@ import { randomUUID } from 'crypto';
 import * as catalog from './catalog';
 import * as store from './privacyStore';
 import type { ShareAction, SharePath } from './privacyStore';
-import { readZip, writeZip } from './bundle';
+import { readZipAsync, writeZipAsync } from './bundle';
 import type { ZipEntry } from './bundle';
 import { projectDir } from './recordKinds';
 import * as datasets from '../data/datasets';
@@ -345,7 +345,8 @@ async function dropMarkedColors(projectId: string, entries: ZipEntry[]): Promise
 export async function applyToBundle(projectId: string, bytes: Buffer): Promise<Buffer> {
   const action = (await store.getPolicy(projectId)).bundle;
   if (action === 'include') return bytes;
-  let entries: ZipEntry[] = readZip(bytes);
+  // Our own freshly exported bytes, inflated off the main thread (libuv's pool).
+  let entries: ZipEntry[] = await readZipAsync(bytes);
   const removed = { parquet: 0, versions: 0 };
   const scratch = path.join(projectDir(projectId), 'privacy', 'tmp-' + randomUUID());
   let changed = false;
@@ -410,5 +411,5 @@ export async function applyToBundle(projectId: string, bytes: Buffer): Promise<B
     }
     manifest.data = Buffer.from(JSON.stringify(mf, null, 2), 'utf8');
   }
-  return writeZip(entries);
+  return writeZipAsync(entries);
 }

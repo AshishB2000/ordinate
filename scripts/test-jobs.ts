@@ -158,6 +158,84 @@ void (async () => {
   ok('cancel: a job that finishes anyway is reported DONE — its output exists',
     jobs.get(finishesAnyway.id)?.state === 'done');
 
+  // ── A draining server (src/server/shutdown.ts) ────────────────────────────
+  jobs.reset();
+  const SENTENCE = 'Ordinate restarted while this was running. Run it again.';
+  jobs.refuseNew(() => new Error('Ordinate is restarting. Try again in a minute.'));
+  let refusedMsg = '';
+  try { jobs.submit({ kind: 'export', label: 'x', run: async () => 1 }); } catch (err) { refusedMsg = (err as Error).message; }
+  ok('drain: while draining, submit refuses with the sentence it was given', refusedMsg === 'Ordinate is restarting. Try again in a minute.', refusedMsg);
+  jobs.refuseNew(null);
+  const after = jobs.submit({ kind: 'export', label: 'x', run: async () => 1 });
+  ok('NEGATIVE CONTROL: refuseNew(null) takes jobs again', (await after.done) === 1);
+
+  jobs.reset();
+  const drainSeen: Array<{ id: string; state: string; error?: string }> = [];
+  jobs.onChange((s) => { for (const j of s.recent) drainSeen.push({ id: j.id, state: j.state, error: j.error }); });
+  const quick = gate();
+  const quickJob = jobs.submit({ kind: 'export', label: 'finishes in time', run: async () => { await quick.p; return 'ok'; } });
+  const coop = jobs.submit({ kind: 'import', label: 'honours its signal', run: (ctx) => new Promise((_res, rej) => {
+    ctx.signal.addEventListener('abort', () => rej(new Error('an unrelated error, raised by the abort')));
+  }) });
+  const deaf = gate();
+  const deafJob = jobs.submit({ kind: 'refresh', label: 'ignores its signal', run: async () => { await deaf.p; return 'late'; } });
+  const waiting = jobs.submit({ kind: 'report', label: 'still queued', run: async () => 'never' });
+  for (const p of [coop.done, deafJob.done, waiting.done]) p.catch(() => undefined);
+  await tick();
+  setTimeout(() => quick.release(), 30);
+  const reason = new Error(SENTENCE);
+  const t0 = Date.now();
+  const left = await jobs.drain(Date.now() + 150, reason, 100);
+  const tookMs = Date.now() - t0;
+  ok('drain: a queued job is cancelled with the sentence, never started', jobs.get(waiting.id)?.state === 'cancelled' && jobs.get(waiting.id)?.error === SENTENCE);
+  ok('drain: a job that finishes before the deadline is done', jobs.get(quickJob.id)?.state === 'done');
+  ok('drain: a running job is cancelled at the deadline with the sentence, whatever its run threw',
+    jobs.get(coop.id)?.state === 'cancelled' && jobs.get(coop.id)?.error === SENTENCE, JSON.stringify(jobs.get(coop.id)));
+  let coopErr = '';
+  try { await coop.done; } catch (err) { coopErr = (err as Error).message; }
+  ok('…and its caller is rejected with the sentence too', coopErr === SENTENCE, coopErr);
+  ok('drain: a job that ignores its signal ends interrupted with the sentence, and is returned',
+    jobs.get(deafJob.id)?.state === 'interrupted' && jobs.get(deafJob.id)?.error === SENTENCE && left.length === 1 && left[0].id === deafJob.id);
+  ok(`drain: bounded by deadline + slice (${tookMs} ms)`, tookMs >= 240 && tookMs < 600, tookMs);
+  ok('drain: every outcome was emitted (the owner\'s tab hears before the streams close)',
+    [waiting.id, coop.id, deafJob.id].every((id) => drainSeen.some((j) => j.id === id && j.error === SENTENCE)));
+  deaf.release();
+  await tick();
+  ok('drain: a late finish does not overwrite interrupted', jobs.get(deafJob.id)?.state === 'interrupted');
+
+  // A job sees its own signal through the request context (withAbort), even
+  // when the submitter's context has no signal — a scheduled refresh's.
+  jobs.reset();
+  const context: typeof import('../src/server/context') = require('../src/server/context');
+  const sys = { user: { email: 'jobs@system', role: 'admin' as const }, org: { id: 'default' } };
+  const seenSignal: { aborted?: boolean; had?: boolean } = {};
+  const held = gate();
+  const fromTick = context.runInContext(sys, 'job:refresh', () => jobs.submit({ kind: 'refresh', label: 'scheduled', run: async () => {
+    seenSignal.had = !!context.ctx().signal;
+    await held.p;
+    seenSignal.aborted = context.ctx().signal?.aborted;
+    return 1;
+  } }));
+  await tick();
+  jobs.cancel(fromTick.id);
+  held.release();
+  await fromTick.done.catch(() => undefined);
+  ok('signal: a job submitted from a signal-less context runs, with ITS signal in ctx()', seenSignal.had === true);
+  ok('…and its Cancel aborts ctx().signal (so a DuckDB call it is in is interrupted)', seenSignal.aborted === true);
+  const reqAc = new AbortController();
+  const both: { aborted?: boolean } = {};
+  const held2 = gate();
+  const fromReq = context.runInContext(sys, 'rpc', () => jobs.submit({ kind: 'export', label: 'from a request', run: async () => {
+    await held2.p;
+    both.aborted = context.ctx().signal?.aborted;
+    return 1;
+  } }), undefined, reqAc.signal);
+  await tick();
+  reqAc.abort();
+  held2.release();
+  await fromReq.done;
+  ok('signal: the submitting request\'s signal still reaches the job (as before)', both.aborted === true);
+
   // ── Persistence and interrupted ────────────────────────────────────────────
   jobs.reset();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jobs-test-'));

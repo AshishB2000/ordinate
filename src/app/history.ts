@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as appPaths from './paths';
 import * as recordFs from './recordFs';
 import { sniffImage } from './projectAssets';
+import { logger } from './logger';
 
 const isPng = (buf: Buffer): boolean => sniffImage(buf) === 'png';
 
@@ -121,7 +122,7 @@ async function readAllThreads(): Promise<any[]> {
       // ENOENT = orphaned capture (crop.png saved, thread.json never written, e.g.
       // analysis didn't finish). Not corruption — skip quietly. Only log real damage.
       if (err.code !== 'ENOENT') {
-        console.error('[history] Skipping corrupt or unreadable thread:', id, err.message);
+        logger.error('[history] Skipping corrupt or unreadable thread:', id, err.message);
       }
     }
   }
@@ -150,10 +151,10 @@ export async function migrateProjectIds(projectId: string): Promise<number> {
       await saveThread(thread);
       adopted += 1;
     } catch (err: any) {
-      console.error('[history] Could not adopt thread', thread.id, err.message);
+      logger.error('[history] Could not adopt thread', thread.id, err.message);
     }
   }
-  if (adopted > 0) console.log('[history] Adopted', adopted, 'pre-project capture(s) into project', projectId);
+  if (adopted > 0) logger.info('[history] Adopted', adopted, 'pre-project capture(s) into project', projectId);
   return adopted;
 }
 

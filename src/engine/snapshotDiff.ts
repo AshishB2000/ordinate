@@ -21,6 +21,7 @@ import { sqlEmpty } from './sqlGen';
 import type { ParsedColumn } from '../data/parse';
 import { planDiff, changedCells, emptyResult } from '../data/snapshotDiffJs';
 import type { DiffPlan, DiffResult, DiffCell } from '../data/snapshotDiffJs';
+import { logger } from '../app/logger';
 
 export interface DiffSource {
   parquetPath: string;
@@ -135,7 +136,7 @@ export async function diffParquet(
   try {
     return await run(plan, oldSrc, newSrc);
   } catch (err: any) {
-    console.error('[snapshotDiff] resident diff failed:', err?.message || err);
+    logger.error('[snapshotDiff] resident diff failed:', err?.message || err);
     return null;
   }
 }

@@ -26,17 +26,18 @@
 // dataset does not block the jobs behind it — the scan takes the first
 // STARTABLE job, not the first job.
 //
-// ── PERSISTENCE ──────────────────────────────────────────────────────────────
-// Active jobs (queued + running) and the recent list are written to one JSON
-// file whenever the SET changes — not on every progress tick. On the next boot
-// `restore()` reads it back and turns anything that was still active into
-// `interrupted`: a crash mid-import shows "Interrupted — the app closed while
-// this was running" rather than nothing at all.
+// ── MEMORY ONLY ON THE SERVER ────────────────────────────────────────────────
+// The queue lives in this process. A pod that stops DRAINS it (`drain`, called
+// by src/server/shutdown.ts): queued jobs are cancelled, running ones get until
+// the deadline and are then cancelled through their signal — each ends with
+// "Ordinate restarted while this was running." and its owner's tab is told. A
+// job is not resumed after a restart. `configure`/`restore` (a JSON file read
+// back as `interrupted`) remain the desktop's, exercised only by its test.
 
 import * as fs from 'fs';
 import { randomUUID } from 'crypto';
 import { AsyncLocalStorage, AsyncResource } from 'async_hooks';
-import { ctx, requestClient, serverDataDir } from '../server/context';
+import { ctx, requestClient, serverDataDir, withAbort } from '../server/context';
 
 export type JobKind =
   | 'import' | 'refresh' | 'export' | 'report' | 'bundle' | 'sql-save' | 'quality'
@@ -126,6 +127,10 @@ const running = new Map<string, Entry>();
 let recent: Job[] = [];
 const listeners = new Set<(jobs: JobsSnapshot) => void>();
 const finishListeners = new Set<(job: Job) => void>();
+/** While set (a draining server), `submit` throws what it makes. */
+let refusal: (() => Error) | null = null;
+/** The abort reason `drain` cancels with: a job aborted with it ends with its message. */
+let drainReason: Error | null = null;
 
 export interface JobsSnapshot {
   active: Job[];
@@ -202,6 +207,7 @@ export function get(id: string): Job | null {
  * popover does.
  */
 export function submit<T>(spec: JobSpec<T>): { id: string; done: Promise<T> } {
+  if (refusal) throw refusal();
   if (!spec || !KINDS.has(spec.kind) || typeof spec.run !== 'function') {
     throw new Error('jobs.submit: invalid job spec');
   }
@@ -319,8 +325,53 @@ export function restore(): Job[] {
   return interrupted;
 }
 
+/** True while a draining server refuses new jobs (src/app/refreshScheduler.ts asks before it stamps a run). */
+export function refusing(): boolean {
+  return refusal !== null;
+}
+
+/** A draining server refuses new jobs with what `make` returns; null takes new jobs again. */
+export function refuseNew(make: (() => Error) | null): void {
+  refusal = make;
+}
+
+/**
+ * Server shutdown (src/server/shutdown.ts). Queued jobs are cancelled now. Running
+ * ones are waited for until `deadlineAt`, then aborted with `reason` — their
+ * DuckDB calls are interrupted with them (`withAbort`) — and given `sliceMs`
+ * more. One still running then is finished `interrupted`. Every one of them
+ * carries `reason.message`, and every change is emitted, so its owner's tab
+ * hears before the streams close. Returns the jobs that never settled.
+ */
+export async function drain(deadlineAt: number, reason: Error, sliceMs: number): Promise<Job[]> {
+  drainReason = reason;
+  for (const e of queue.splice(0)) {
+    finish(e, 'cancelled', undefined, reason.message);
+    e.reject(reason);
+  }
+  persist();
+  emit();
+  await idleBy(deadlineAt);
+  for (const e of running.values()) if (!e.ctl.signal.aborted) e.ctl.abort(reason);
+  await idleBy(Date.now() + sliceMs);
+  const left = [...running.values()];
+  for (const e of left) finish(e, 'interrupted', undefined, reason.message);
+  if (left.length) {
+    persist();
+    emit();
+  }
+  return left.map((e) => ({ ...e.job }));
+}
+
+/** Resolves once nothing runs, or at `deadlineAt`. */
+async function idleBy(deadlineAt: number): Promise<void> {
+  while (running.size && Date.now() < deadlineAt) await new Promise((r) => setTimeout(r, Math.min(25, deadlineAt - Date.now())));
+}
+
 /** Test hook: forget everything, including in-flight entries. */
 export function reset(): void {
+  refusal = null;
+  drainReason = null;
   queue.length = 0;
   running.clear();
   recent = [];
@@ -388,10 +439,16 @@ function start(e: Entry): void {
     persist();
     emit();
   };
+  // The job's own signal joins the request's: a Cancel or a drain interrupts the DuckDB call it is in.
   Promise.resolve()
-    .then(() => running_ctx.run(ctx, () => e.spec.run(ctx)))
+    .then(() => running_ctx.run(ctx, () => withAbort(ctl.signal, () => e.spec.run(ctx))))
     .then(
       (value) => {
+        if (FINAL.has(job.state)) { // finished `interrupted` by drain
+          settle();
+          e.resolve(value);
+          return;
+        }
         let result: JobResult | undefined;
         try { result = e.spec.resultOf ? e.spec.resultOf(value) : undefined; } catch (_) { result = undefined; }
         job.progress = 1;
@@ -400,10 +457,17 @@ function start(e: Entry): void {
         e.resolve(value);
       },
       (err) => {
-        const cancelled = err instanceof JobCancelled || (ctl.signal.aborted && isAbort(err));
-        finish(e, cancelled ? 'cancelled' : 'error', undefined, cancelled ? 'Cancelled.' : messageOf(err));
+        if (FINAL.has(job.state)) { // finished `interrupted` by drain
+          settle();
+          e.reject(err);
+          return;
+        }
+        // A drain's abort: whatever the run threw (an interrupted query is a DuckDBError), it was the restart.
+        const restart = drainReason !== null && ctl.signal.reason === drainReason;
+        const cancelled = restart || err instanceof JobCancelled || (ctl.signal.aborted && isAbort(err));
+        finish(e, cancelled ? 'cancelled' : 'error', undefined, restart ? drainReason!.message : cancelled ? 'Cancelled.' : messageOf(err));
         settle();
-        e.reject(err);
+        e.reject(restart ? drainReason : err);
       },
     );
 }
@@ -426,8 +490,10 @@ function finish(e: Entry, state: JobState, result?: JobResult, error?: string): 
   }
 }
 
+/** An abort, or a DuckDB call the job's signal interrupted (DuckDBError `cancelled`). */
 function isAbort(err: unknown): boolean {
-  return Boolean(err && typeof err === 'object' && (err as { name?: string }).name === 'AbortError');
+  const e = err && typeof err === 'object' ? (err as { name?: string; code?: string }) : null;
+  return !!e && (e.name === 'AbortError' || (e.name === 'DuckDBError' && e.code === 'cancelled'));
 }
 
 function messageOf(err: unknown): string {

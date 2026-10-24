@@ -13,10 +13,12 @@ import { EnvError } from './envError';
 import { liveDailyQueryLimit, liveMaxConcurrent, liveMinCacheAgePublicSec, liveQueryTimeoutMs, maxBytesBilled } from './liveEnv';
 import { publicOrigin } from './publicUrl';
 import { parseMail, type MailEnv } from './mail/mailEnv';
+import { parsePod, type PodEnv } from './podEnv';
 
 export { EnvError } from './envError';
 // The Live settings live in ./liveEnv.ts; their names stay importable from here.
 export * from './liveEnv';
+export * from './podEnv';
 
 export type OrdinateEnv = 'dev' | 'prod';
 
@@ -53,6 +55,8 @@ export interface ServerEnv {
   readonly testLiveFake: boolean;
   /** The SMTP relay (./mail/mailEnv.ts, docs/email); null when SMTP_HOST is unset. Holds the relay password: never log it. */
   readonly mail: MailEnv | null;
+  /** The pod's lifecycle: the shutdown budget (./podEnv.ts, ./shutdown.ts). */
+  readonly pod: PodEnv;
 }
 
 export interface LimitsEnv {
@@ -257,7 +261,8 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   });
   const storage = parseStorage(src, databaseUrl);
   const mail = parseMail({ SMTP_HOST: src.SMTP_HOST, SMTP_PORT: src.SMTP_PORT, SMTP_SECURITY: src.SMTP_SECURITY, SMTP_USER: src.SMTP_USER, SMTP_PASSWORD: src.SMTP_PASSWORD, SMTP_FROM: src.SMTP_FROM, RATE_LIMIT_EMAIL_ORG_PER_HOUR: src.RATE_LIMIT_EMAIL_ORG_PER_HOUR }, databaseUrl !== null);
-  return Object.freeze({ port, metricsPort, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits, storage, testLiveFake, mail });
+  const pod = parsePod({ SHUTDOWN_GRACE_SECONDS: src.SHUTDOWN_GRACE_SECONDS, DATABASE_POOL_MAX: src.DATABASE_POOL_MAX });
+  return Object.freeze({ port, metricsPort, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits, storage, testLiveFake, mail, pod });
 }
 
 /** The directory of a file:// STORAGE_URL, null for unset or s3://. */

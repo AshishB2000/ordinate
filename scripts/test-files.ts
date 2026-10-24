@@ -136,6 +136,31 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
   await settle();
   ok('sweep: an hour-old abandoned upload is deleted', uploadsIn('org-a').length === 0);
 
+  // A USED upload a job still reads (a restore outlives the hour) survives the sweep for a day.
+  const busy = await upload('org-a', 'backup.zip', CSV);
+  context.runInContext(as('org-a'), 'take', () => files.resolveUpload(busy.json.fileToken)); // taken; done() not called yet
+  clock += files.TOKEN_TTL_MS + 1;
+  files.sweep();
+  await settle();
+  ok('sweep: a USED upload past its hour stays (its job may still be reading it)', uploadsIn('org-a').length === 1);
+  clock += 24 * 60 * 60 * 1000;
+  files.sweep();
+  await settle();
+  ok('NEGATIVE CONTROL: a day past its expiry, a used upload goes too', uploadsIn('org-a').length === 0);
+
+  // Boot: what a crash left behind, a day old, goes; anything younger or not ours stays.
+  const t = tempOf('org-a');
+  const dayAgo = (Date.now() - 25 * 60 * 60 * 1000) / 1000;
+  for (const n of ['bundle-old', 'backup-old.zip', 'restore-old.ordinate', 'export-old.ordinate', 'upload-old', 'drill-old.csv', 'bundle-new', 'other-old']) {
+    fs.mkdirSync(path.join(t, n), { recursive: true });
+    if (n.endsWith('-old') || n.includes('-old.')) fs.utimesSync(path.join(t, n), dayAgo, dayAgo);
+  }
+  const swept = files.sweepLeftovers(DATA);
+  const left = fs.readdirSync(t).filter((n) => /-(old|new)/.test(n)).sort();
+  ok('boot sweep: day-old bundle/backup/restore/export/upload/drill leftovers go; a fresh one and an unknown name stay',
+    swept === 6 && JSON.stringify(left) === '["bundle-new","other-old"]', `${swept} ${JSON.stringify(left)}`);
+  for (const n of left) fs.rmSync(path.join(t, n), { recursive: true, force: true });
+
   // Download
   const produced = context.runInContext(as('org-a'), 'export', () => {
     const p = path.join(appPaths.temp(), 'export-test.bin');

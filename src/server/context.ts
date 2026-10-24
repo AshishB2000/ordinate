@@ -13,6 +13,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { EnvError, type ServerEnv } from './env';
 import { markServerMode } from './mode';
+import { readContextWith } from '../app/logger';
 
 /** The caller's browser tab — what an IPC `event.sender` was. */
 export interface Client {
@@ -78,6 +79,8 @@ const DEV: Identity = Object.freeze({
 });
 
 const als = new AsyncLocalStorage<RequestContext>();
+// Every logger.* line inside a request carries its id and org (src/app/logger.ts).
+readContextWith(() => als.getStore());
 let dataDir: string | null = null;
 
 /** Marks this process as the server, storing per-org data under `dir`. Once, at boot. */
@@ -112,6 +115,18 @@ export function orgKey(key: string): string {
 /** Runs `fn` as a request with this identity (app.ts's hook; tests), pushing to `client`'s stream. */
 export function runInContext<T>(identity: Identity, requestId: string, fn: () => T, client: Client = NO_CLIENT, signal?: AbortSignal): T {
   return als.run({ ...identity, requestId, client, signal }, fn);
+}
+
+/**
+ * Runs `fn` with `signal` joined to the current request's (src/app/jobs.ts: a
+ * job's Cancel or drain interrupts the DuckDB call it is in). A store without a
+ * signal (a scheduled run) takes `signal` alone; no store (desktop), no change.
+ */
+export function withAbort<T>(signal: AbortSignal, fn: () => T): T {
+  const s = als.getStore();
+  if (!s) return fn();
+  // AbortSignal.any throws on an undefined member, and a store's signal is optional.
+  return als.run({ ...s, signal: s.signal ? AbortSignal.any([s.signal, signal]) : signal }, fn);
 }
 
 /** Runs `fn` as a published page's request (./published.ts): `isPublishedRequest()` holds below it. No tab to push to. */

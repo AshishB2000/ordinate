@@ -34,9 +34,13 @@ const CRED_TTL_MS = 5 * 60_000;
 let cached: { creds: Creds; at: number } | null = null;
 let resolving: Promise<Creds> | null = null;
 // @duckdb/node-api's connection, loaded lazily so nothing pays for it outside S3 mode.
-let conn: { runAndReadAll(sql: string): Promise<{ getRowObjectsJson(): Record<string, unknown>[] }> } | null = null;
+let conn: { runAndReadAll(sql: string): Promise<{ getRowObjectsJson(): Record<string, unknown>[] }>; closeSync(): void } | null = null;
+let instance: { closeSync(): void } | null = null;
+// Set by close(): the process is ending, and this instance must not start again.
+let closed = false;
 
 async function resolveCreds(cfg: S3Env): Promise<Creds> {
+  if (closed) throw new Error('S3: the server is shutting down');
   if (!conn) {
     const { DuckDBInstance } = require('@duckdb/node-api') as typeof import('@duckdb/node-api');
     const opts: Record<string, string> = {
@@ -45,7 +49,9 @@ async function resolveCreds(cfg: S3Env): Promise<Creds> {
       autoload_known_extensions: 'false',
     };
     if (cfg.extensionDir) opts.extension_directory = cfg.extensionDir;
-    const c = await (await DuckDBInstance.create(':memory:', opts)).connect();
+    const db = await DuckDBInstance.create(':memory:', opts);
+    instance = db;
+    const c = await db.connect();
     await c.runAndReadAll('LOAD httpfs; LOAD aws;');
     conn = c;
   }
@@ -69,6 +75,35 @@ async function credsFor(cfg: S3Env, fresh = false): Promise<Creds> {
     (err: unknown) => { resolving = null; throw err; },
   );
   return resolving;
+}
+
+/** Test hook: a credential lookup in flight (one that never settles, to test the shutdown's deadline). */
+export function setResolvingForTest(p: Promise<Creds> | null): void {
+  resolving = p;
+}
+
+/**
+ * Server shutdown (src/server/shutdown.ts): this module's DuckDB runs on the MAIN
+ * thread, so the exit must not cut a resolve in half. Waits for one in flight
+ * (until `deadlineAt`), then closes the connection and the instance. False when
+ * a resolve was still running at the deadline: it is left alone, never closed under.
+ */
+export async function close(deadlineAt: number): Promise<boolean> {
+  closed = true;
+  if (resolving) {
+    const settled = await Promise.race([
+      resolving.then(() => true, () => true),
+      // Ref'd on purpose: this wait holds the process until the deadline, never lets it end around a lookup.
+      new Promise<false>((r) => setTimeout(() => r(false), Math.max(0, deadlineAt - Date.now()))),
+    ]);
+    if (!settled) return false;
+  }
+  try { conn?.closeSync(); } catch { /* already closed */ }
+  try { instance?.closeSync(); } catch { /* already closed */ }
+  conn = null;
+  instance = null;
+  cached = null;
+  return true;
 }
 
 const enc = (s: string): string => encodeURIComponent(s).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());

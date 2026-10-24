@@ -117,10 +117,44 @@ export function offerDownload(filePath: string, name: string): { downloadToken: 
   return { downloadToken: issue('download', path.resolve(filePath), displayName(name)) };
 }
 
+// A USED upload may still be read by a job (a restore runs longer than the
+// token's hour); its handler deletes it (`done()`). The sweep leaves it a day.
+const USED_GRACE_MS = 24 * 60 * 60 * 1000;
+
 /** Expires old tokens and deletes their files. Runs every minute while the server is up. */
 export function sweep(): void {
   const t = now();
-  for (const [token, e] of entries) if (t >= e.expires) forget(token);
+  for (const [token, e] of entries) if (t >= e.expires + (e.used ? USED_GRACE_MS : 0)) forget(token);
+}
+
+/**
+ * Boot: what a crash left in every org's temp dir — a bundle's staging, a
+ * restore's or a backup's file, an export not yet downloaded, an upload whose
+ * token died with the pod, a drill-through CSV — once a day old,
+ * so a sibling pod's live file on a shared volume is never touched. Returns how
+ * many went.
+ */
+export function sweepLeftovers(dataDir: string, olderThanMs = USED_GRACE_MS): number {
+  let n = 0;
+  const cutoff = Date.now() - olderThanMs;
+  let orgs: string[] = [];
+  try { orgs = fs.readdirSync(path.join(dataDir, 'orgs')); } catch { return 0; }
+  for (const org of orgs) {
+    const temp = path.join(dataDir, 'orgs', org, 'temp');
+    let names: string[] = [];
+    try { names = fs.readdirSync(temp); } catch { continue; }
+    for (const name of names) {
+      if (!/^(bundle|restore|backup|export|upload|drill)-/.test(name)) continue;
+      const p = path.join(temp, name);
+      try {
+        if (fs.statSync(p).mtimeMs < cutoff) {
+          fs.rmSync(p, { recursive: true, force: true });
+          n++;
+        }
+      } catch { /* gone meanwhile */ }
+    }
+  }
+  return n;
 }
 
 /** A client-supplied filename made safe to show and to put in a header: no path, no control characters. */
