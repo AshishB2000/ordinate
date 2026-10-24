@@ -17,6 +17,7 @@ import { MAX_EVENTS, sanitizeEvent } from './events';
 import type { ProjectEvent } from './events';
 import { holidayEvents, sanitizeCalendars } from './holidays';
 import * as recordFs from '../app/recordFs';
+import { logger } from '../app/logger';
 
 export interface EventFile { events: ProjectEvent[]; calendars: string[] }
 
@@ -55,7 +56,7 @@ export async function save(projectId: string, f: EventFile): Promise<boolean> {
     await recordFs.rename(tmp, file);
     return true;
   } catch (err: any) {
-    console.error('[events] Could not write events.json:', err && err.message);
+    logger.error('[events] Could not write events.json:', err && err.message);
     return false;
   }
 }

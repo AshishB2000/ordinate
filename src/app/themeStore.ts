@@ -22,6 +22,7 @@ import * as appPaths from './paths';
 import { themeModel } from '../analysis/themeTokens';
 import type { ThemeRecord } from '../analysis/themeTokens';
 import * as recordFs from './recordFs';
+import { logger } from './logger';
 
 export const MAX_THEMES = 200;
 
@@ -66,7 +67,7 @@ async function readState(): Promise<ThemeState> {
   try {
     return sanitizeState(JSON.parse(text));
   } catch (_) {
-    console.error('[themes] themes.json is not valid JSON — kept as themes.json.corrupt, reading as empty');
+    logger.error('[themes] themes.json is not valid JSON — kept as themes.json.corrupt, reading as empty');
     await recordFs.copyFile(file, file + '.corrupt').catch(() => undefined);
     return { defaultId: '', themes: [] };
   }

@@ -191,6 +191,8 @@ export function VisualTileBody({
       filters: mergeFilters(filters, def.filters),
       ...(def.analytics ? { analytics: def.analytics } : {}),
       ...figureAsk(def.chartType, def.overrides), // a figure type's figures come with its answer (docs/chart-figures)
+      // The saved visual: a waterfall's stored totals are filled server-side for a viewer not sent them (R19).
+      ...(def.id ? { visualId: def.id } : {}),
     }),
     [def, filters],
   );

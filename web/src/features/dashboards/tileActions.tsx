@@ -137,6 +137,7 @@ export function TooltipVisual({ ed, tip, column, category, at }: { ed: EditorApi
             encoding: tip.encoding,
             filters: [...mergeFilters(ed.filters, tip.filters), ...(column ? [{ type: 'filter', column, op: '=', value: category }] : [])],
             ...figureAsk(tip.chartType, tip.overrides),
+            ...(tip.id ? { visualId: tip.id } : {}), // a waterfall's stored totals, filled server-side (R19)
           }
         : undefined,
     [tip, ed.filters, column, category],

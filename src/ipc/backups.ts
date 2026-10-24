@@ -6,6 +6,7 @@ import * as jobs from '../app/jobs';
 import * as backups from '../app/backups';
 import * as projects from '../app/projects';
 import { captureProjectId } from '../app/captureRecord';
+import { logger } from '../app/logger';
 
 // The safety copy taken before an import or a version restore. The work itself
 // is src/app/backups.ts. On the server backups are the operator's (Postgres and
@@ -43,6 +44,6 @@ export async function safetyBackup(reason: 'before-import' | 'before-restore', p
     });
     await job.done;
   } catch (err: any) {
-    console.warn('[backups] safety copy failed:', err?.message || err);
+    logger.warn('[backups] safety copy failed:', err?.message || err);
   }
 }

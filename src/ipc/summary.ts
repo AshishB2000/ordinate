@@ -46,6 +46,8 @@ import { computeCardMetric } from './dashboards';
 import { guardAnswer } from './copilot';
 import { isLive } from '../data/liveDataset';
 import { isLiveFigureError } from './liveRoute';
+import { seenView } from '../server/alertInbox';
+import type { AlertEvent } from '../analysis/alerts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_CARDS = 500;
@@ -186,12 +188,33 @@ async function qualityFact(projectId: string, ids: string[], tiles: Tile[]): Pro
   return best ? qualitySentence(best) : null;
 }
 
-async function alertFact(projectId: string, ids: string[], analysisId: string, tiles: Tile[]): Promise<SummarySentence | null> {
+/**
+ * Which alerts the sentence may name (docs/notifications/00-design.md §5.14): the
+ * caller's unseen ones on their own card; on a page that LEAVES the app (publish,
+ * embed, a report, re-publish after a refresh) no one's inbox — the ones that
+ * fired on the data as it is now (stored at or after their dataset's last
+ * refresh; a dataset never refreshed names none); without either, the shared flag.
+ */
+async function alertCandidate(projectId: string, events: AlertEvent[], scope: Pick<SummaryScope, 'seen' | 'outbound'>): Promise<(e: AlertEvent) => boolean> {
+  const seen = scope.seen;
+  if (seen) return (e) => !seen(e);
+  if (!scope.outbound) return (e) => !e.seen;
+  const refreshed = new Map<string, number>();
+  for (const e of events) {
+    if (refreshed.has(e.datasetId)) continue;
+    const meta = await datasets.getDatasetMeta(projectId, e.datasetId).catch(() => null);
+    refreshed.set(e.datasetId, meta && meta.lastRefreshedAt ? Date.parse(meta.lastRefreshedAt) : NaN);
+  }
+  return (e) => Date.parse(e.at) >= (refreshed.get(e.datasetId) ?? NaN);
+}
+
+async function alertFact(projectId: string, ids: string[], analysisId: string, tiles: Tile[], scope: SummaryScope): Promise<SummarySentence | null> {
   const file = await alertStore.load(projectId);
+  const open = await alertCandidate(projectId, file.events, scope);
   const cutoff = asOfIso();
   const ev = file.events
     // Quality alerts have their own sentence; an "as of" view sees only what had fired by then.
-    .filter((e) => !e.seen && e.ruleName !== 'Data quality' && (ids.includes(e.datasetId) || (!!analysisId && e.analysisId === analysisId)))
+    .filter((e) => open(e) && e.ruleName !== 'Data quality' && (ids.includes(e.datasetId) || (!!analysisId && e.analysisId === analysisId)))
     .filter((e) => !cutoff || e.at <= cutoff)
     .sort((a, b) => b.at.localeCompare(a.at))[0];
   if (!ev) return null;
@@ -212,6 +235,8 @@ export interface SummaryScope {
    * the model): drop any that quote values of a column marked sensitive.
    */
   outbound?: boolean;
+  /** The caller's own inbox (src/server/alertInbox.ts) — their card in the app, never a page that leaves it. */
+  seen?: (e: AlertEvent) => boolean;
 }
 
 /** The Summary card's sentences for a dashboard's sheets, ranked. EXPORTED for publish and the tests. */
@@ -228,7 +253,7 @@ export async function computeSummary(projectId: string, rawPages: unknown, scope
     kpi, driver,
     insights: await insightFacts(projectId, ids, tiles),
     quality: await qualityFact(projectId, ids, tiles),
-    alert: await alertFact(projectId, ids, scope.analysisId || '', tiles),
+    alert: await alertFact(projectId, ids, scope.analysisId || '', tiles, scope),
   });
   if (scope.outbound) {
     const kept: SummarySentence[] = [];
@@ -258,7 +283,10 @@ export function register(): void {
   ipcMain.handle('summary:compute', async (_e, req: any = {}) => withAsOf(req.projectId, req.asOf, async () => {
     try {
       if (typeof req.projectId !== 'string' || !UUID_RE.test(req.projectId)) return { ok: false, error: 'Invalid project' };
-      const sentences = await computeSummary(req.projectId, req.pages, scopeOf(req));
+      const scope = scopeOf(req);
+      // The card in the app names what YOU have not seen; asked for outbound (a report), no one's inbox.
+      if (!scope.outbound) scope.seen = await seenView(req.projectId);
+      const sentences = await computeSummary(req.projectId, req.pages, scope);
       const ready = (await execConfig.executionReady());
       return {
         ok: true,
@@ -279,7 +307,8 @@ export function register(): void {
     try {
       if (typeof req.projectId !== 'string' || !UUID_RE.test(req.projectId)) return { ok: false, error: 'Invalid project' };
       if (!(await execConfig.executionReady())) return { ok: false, error: NO_MODEL };
-      const sentences = await computeSummary(req.projectId, req.pages, scopeOf(req, true));
+      // Outbound for the sensitive-column rule (it goes to a model), but it rewrites the caller's own card.
+      const sentences = await computeSummary(req.projectId, req.pages, { ...scopeOf(req, true), seen: await seenView(req.projectId) });
       if (!sentences.length) return { ok: false, error: 'There is nothing to rewrite yet.' };
       const name = typeof req.name === 'string' && req.name.trim() ? req.name.trim().slice(0, 200) : 'this dashboard';
       const facts = summaryFacts(name, sentences);

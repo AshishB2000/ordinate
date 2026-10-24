@@ -10,8 +10,9 @@
 // The author is the signed-in user (ctx().user, src/app/comments.ts), never a
 // name the browser sends; edit and delete refuse anyone but the author.
 //
-// Alerts (src/ipc/alerts.ts): reading the inbox is `read`; rules and their
-// state are the project's records, so changing them is `write`.
+// Alerts (src/ipc/alerts.ts): reading the inbox, and marking what YOU have seen
+// in it, is `read`; rules and their state are the project's records, so
+// changing them is `write`.
 
 import { z } from 'zod';
 import { byProjectId, rpc, Steps, Uuid } from './contract';
@@ -84,6 +85,8 @@ export const dashboards = {
   'comment:reopen': rpc({ access: 'read', audit: true, input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
   'comment:delete': rpc({ access: 'read', audit: true, input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
   'comment:deleteReply': rpc({ access: 'read', audit: true, input: z.strictObject({ projectId: Uuid, id: Uuid, replyId: Uuid }), project: byProjectId }),
+  // The @ picker (docs/notifications §5.11): at most 8 people who can read this project NOW, matching `q` — never the org directory.
+  'comment:mentionable': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, q: z.string().max(100) }), project: byProjectId }),
 
   'alerts:list': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid }), project: byProjectId }),
   'alerts:save': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, rule: Rule }), project: byProjectId }),
@@ -103,7 +106,9 @@ export const dashboards = {
   'alerts:delete': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, ruleId: Uuid }), project: byProjectId }),
   // Whether a rule WOULD fire now — reads only.
   'alerts:test': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, rule: Rule }), project: byProjectId }),
-  'alerts:markSeen': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, eventId: Uuid.optional() }), project: byProjectId }),
+  // The caller's OWN inbox (src/server/alertInbox.ts): any reader, never anyone else's badge.
+  // `through`: Mark all seen covers the events the caller was SHOWN — the newest time the bell rendered.
+  'alerts:markSeen': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, eventId: Uuid.optional(), through: z.string().max(40).optional() }), project: byProjectId }),
   'alerts:setDigest': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, on: z.boolean() }), project: byProjectId }),
   // An alert's "Why": the change the rule caught, broken down by what drove it (src/ipc/drivers.ts, T2.10's engine).
   'drivers:explainAlert': rpc({ access: 'read', input: z.strictObject({ projectId: Uuid, ruleId: Uuid }), project: byProjectId }),

@@ -25,6 +25,8 @@ import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
 import * as stories from '../analysis/stories';
 import * as comments from '../app/comments';
+import { withMentionLabels } from '../app/mentionToken';
+import { labelsFor } from '../server/mentions/people';
 import { readLogoDataUrl } from '../app/branding';
 import { formatDate } from '../app/format';
 import { t } from '../app/i18n';
@@ -35,6 +37,7 @@ import { scorecardSnapshot } from './scorecards';
 import { publicReport } from './reports';
 import type { FilterStep } from '../data/transforms';
 import { figureAsk } from '../analysis/figureAsk';
+import { visualForCaller } from './rowDoors';
 
 /** A registered handler, called as the RPC layer calls it. Missing → a refusal, never a throw. */
 async function call(event: unknown, channel: string, payload: unknown): Promise<any> { // any: each handler's own reply
@@ -106,7 +109,11 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
     scorecard: (id) => scorecardSnapshot(projectId, id),
     comments: async () => {
       const res = await comments.list(projectId);
-      const list = res.ok ? res.comments.filter((c) => !c.deletedAt) : [];
+      const live = res.ok ? res.comments.filter((c) => !c.deletedAt) : [];
+      // A report leaves the app: a mention is "@Ann Lee" or "@former member", never the address it holds.
+      const bodies = live.flatMap((c) => [c.body, ...c.replies.map((r) => r.body)]);
+      const label = await labelsFor(projectId, bodies);
+      const list = live.map((c) => ({ ...c, body: withMentionLabels(c.body, label), replies: c.replies.map((r) => ({ ...r, body: withMentionLabels(r.body, label) })) }));
       const targets: Record<string, { name: string }> = {};
       if (list.some((c) => c.target.kind === 'visual' || c.target.kind === 'card')) {
         const names = new Map<string, string>();
@@ -236,7 +243,11 @@ export function register(): void {
     const out: Record<string, unknown> = {};
     for (const b of (Array.isArray(blocks) ? blocks : []) as FigureBlock[]) {
       if (b.kind === 'visual') {
-        out[b.id] = (await storyVisual(b, deps, projectId)) || { missing: true };
+        const fig = await storyVisual(b, deps, projectId);
+        // The figures are already drawn; the overrides go out as a restricted caller may see them (R19, ./rowDoors).
+        const v = fig && fig.chart ? await deps.visual(fig.visualId) : null;
+        if (fig && fig.chart && v) fig.chart = { ...fig.chart, overrides: (await visualForCaller(projectId, v)).overrides ?? {} };
+        out[b.id] = fig || { missing: true };
       } else if (b.kind === 'metric' || b.kind === 'metrics_row') {
         const ids = b.kind === 'metric' ? [b.metricId as string] : b.metricIds || [];
         const figures = [];

@@ -1,13 +1,16 @@
 // Server entry point: `npm run server` → `node src/server/main.js`.
-// Reads the environment once, listens, and closes cleanly on SIGTERM/SIGINT
-// (what Kubernetes and Compose send on a rollout).
+// Reads the environment once, listens, and on SIGTERM/SIGINT (what Kubernetes
+// and Compose send on a rollout) runs the one shutdown sequence (./shutdown.ts)
+// inside SHUTDOWN_GRACE_SECONDS. It never exits around a live DuckDB worker.
 
 import * as path from 'path';
 import { buildApp, registerHandlers } from './app';
 import { enterServerMode, identityFor } from './context';
 import { env, type ServerEnv } from './env';
 import { startMetricsServer } from './metrics';
-import { forbidSyncOnMainThread } from '../engine/duckdb';
+import { shutdown } from './shutdown';
+import { sweepLeftovers } from './files';
+import { closeAll, forbidSyncOnMainThread } from '../engine/duckdb';
 import { routeByOrg } from '../engine/duckdbPool';
 import * as storage from '../engine/storage';
 
@@ -44,6 +47,9 @@ if (cfg.testLiveFake) {
   (load(path.join(__dirname, '..', '..', 'scripts', 'liveFakeConnector.js')) as { registerLiveFake(): void }).registerLiveFake();
 }
 const app = buildApp(cfg);
+// What a crashed pod left in the org temp dirs (a bundle's staging, a backup…), a day old or more.
+const swept = sweepLeftovers(cfg.dataDir);
+if (swept) app.log.info({ swept }, 'removed temp files a crash left behind');
 
 // dev binds loopback only: dev mode runs every request as an admin (context.ts),
 // which must not be reachable from the LAN. prod runs in a container behind an
@@ -57,11 +63,10 @@ app.listen({ port: cfg.port, host }).catch((err: unknown) => {
 
 // Prometheus metrics on their own port (./metrics.ts) — never through the
 // ingress that routes PORT.
-let metrics: import('http').Server | null = null;
+// Left open through the shutdown, so `ordinate_draining 1` can be scraped.
 if (cfg.metricsPort !== null) {
   startMetricsServer(cfg.metricsPort, host).then(
-    (s) => {
-      metrics = s;
+    () => {
       app.log.info({ port: cfg.metricsPort }, 'metrics listening');
     },
     (err: unknown) => {
@@ -71,13 +76,26 @@ if (cfg.metricsPort !== null) {
   );
 }
 
+let stopping = false;
+let budgetEnds = 0;
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
-  process.once(sig, () => {
-    app.log.info({ signal: sig }, 'shutting down');
-    metrics?.close();
-    app.close().then(
-      () => process.exit(0),
-      () => process.exit(1),
-    );
+  process.on(sig, () => {
+    if (stopping) {
+      // A second signal before the budget is spent would be the native abort the
+      // sequence avoids; after it (a wedged worker, a local Ctrl-C), it ends the process.
+      if (Date.now() >= budgetEnds) process.exit(process.exitCode ?? 1);
+      app.log.warn({ signal: sig }, 'already shutting down');
+      return;
+    }
+    stopping = true;
+    budgetEnds = Date.now() + cfg.pod.shutdownGraceMs;
+    void shutdown(app, cfg.pod.shutdownGraceMs, app.log).then((survivors) => {
+      if (!survivors.length) process.exit(0);
+      // Never process.exit around a live worker: that IS the abort. Exit 1 once it
+      // has gone; the kubelet's SIGKILL after its grace ends a wedged one first.
+      app.log.error({ orgs: survivors }, 'DuckDB workers still running at the shutdown deadline; waiting for them to exit');
+      process.exitCode = 1;
+      void closeAll(Date.now() + 3_600_000).then(() => process.exit(1));
+    });
   });
 }

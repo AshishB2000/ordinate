@@ -42,6 +42,7 @@ import * as usage from '../../server/live/usageStore';
 import type { Ticket, UsageKey } from '../../server/live/usageStore';
 import { safeError } from '../../connectors/types';
 import * as msg from '../liveQueryMessages';
+import { logger } from '../../app/logger';
 
 /** A caller stopped waiting for a slot: its signal fired (it hung up, or every asker of a shared question did). */
 export class LiveQueueAbort extends Error {
@@ -126,7 +127,14 @@ export function acquire(org: string, _datasetId: string, signal?: AbortSignal): 
   });
 }
 
-/** In flight and waiting, per org — for a test, or a gauge one day. */
+/** Live statements in flight on this pod, every org together (/metrics: no org label). */
+export function inFlight(): number {
+  let n = 0;
+  for (const s of orgs.values()) n += s.running;
+  return n;
+}
+
+/** In flight and waiting, per org — for a test. */
 export function stats(org: string): { running: number; waiting: number } {
   const s = orgs.get(org);
   return { running: s?.running ?? 0, waiting: s?.queue.length ?? 0 };
@@ -185,7 +193,7 @@ export function setDailyCheckForTest(fn: DailyOverride | null): void {
 export function noteCall(ticket: Ticket | undefined, bytes: number | undefined): void {
   if (!ticket || bytes === undefined) return;
   void usage.addBytes(ticket, bytes).catch((err: unknown) => {
-    console.warn(`[live] usage: ${bytes} bytes of org ${ticket.org} not recorded — ${safeError(err)}`);
+    logger.warn(`[live] usage: ${bytes} bytes of org ${ticket.org} not recorded — ${safeError(err)}`);
   });
 }
 

@@ -31,6 +31,7 @@ import type { DatasetQuality, QualityRule, RefTable, RuleResult } from './qualit
 import { evaluateRuleAsync, failingPredicateAsync } from '../data/regexOffThread';
 import { regexWorkerOnly } from '../data/regexMemo';
 import type { AlertEvent } from './alerts';
+import { logger } from '../app/logger';
 
 // ── Evaluation ───────────────────────────────────────────────────────────────
 
@@ -108,8 +109,8 @@ function alertSink(): AlertSink | null {
     // any: a lazy, optional require — this feature must load without alerts.
     const store: any = require('./alertStore');
     const ipc: any = require('../ipc/alerts');
-    if (typeof store.recordEvents !== 'function' || typeof ipc.deliver !== 'function') return null;
-    return { record: store.recordEvents, deliver: ipc.deliver };
+    if (typeof store.recordEvents !== 'function' || typeof ipc.pushAlertEvents !== 'function') return null;
+    return { record: store.recordEvents, deliver: ipc.pushAlertEvents }; // push only: no rule's channels name a quality event
   } catch {
     return null;
   }
@@ -169,7 +170,7 @@ export async function runQualityChecks(
     if (opts.deliver !== false) await sink.deliver(projectId, events);
     return events;
   } catch (err: any) {
-    console.error('[quality] checks failed:', err && err.message);
+    logger.error('[quality] checks failed:', err && err.message);
     return [];
   }
 }

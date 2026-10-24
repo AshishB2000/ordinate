@@ -29,6 +29,7 @@ import * as budget from './liveBudget';
 import type { CompiledQuery } from './compile';
 import type { LiveRows } from './shape';
 import type { LiveTarget } from './liveTarget';
+import { logger } from '../../app/logger';
 
 /** Why one statement did not answer. */
 export type CallKind = 'failed' | 'timeout' | 'cancelled' | 'tooLarge' | 'daily';
@@ -64,7 +65,7 @@ export function timeoutMs(): number {
 export function failed(t: LiveTarget, kind: CallKind, detail = ''): LiveCallError {
   const e = new LiveCallError(kind, detail);
   // The server log's line: dataset id, step kind, the connector's (redacted) words.
-  if (kind !== 'cancelled') console.warn(`[live] ${opOf(t.dialect)} dataset ${t.datasetId}: ${kind}${detail ? ` — ${detail}` : ''}`);
+  if (kind !== 'cancelled') logger.warn(`[live] ${opOf(t.dialect)} dataset ${t.datasetId}: ${kind}${detail ? ` — ${detail}` : ''}`);
   return e;
 }
 

@@ -22,8 +22,15 @@ import { applyPipeline } from '../data/transforms';
 import type { Lock } from '../data/rowLock';
 import { RowPolicyError, closedToCaller, isRowPolicyError, restrictedOn, rowLockFor, rowPolicyRefusal, withLockSteps, withRowLock } from '../data/rowAccess';
 import { hasMetricMeasure } from '../analysis/metricMeasures';
+import * as visuals from '../analysis/visuals';
 import type { VizEncoding, VizOverrides } from '../analysis/visuals';
-import { relatedColumnNames } from './relationships';
+import { measureNames } from '../analysis/chartFormat';
+import { figureAsk, type FigureAsk } from '../analysis/figureAsk';
+import type { DriversEncoding } from '../analysis/driverScope';
+import { contentTag } from '../app/editConflict';
+import type { SaveKind } from '../analysis/recordDiff';
+import { isValidId } from '../app/ids';
+import { chartReads, metricReads, relatedColumnNames } from './relationships';
 
 /** Every string a question names (encoding, filters, a metric spec): the columns it may reach. */
 function namesIn(v: unknown, out: Set<string> = new Set()): Set<string> {
@@ -33,9 +40,16 @@ function namesIn(v: unknown, out: Set<string> = new Set()): Set<string> {
   return out;
 }
 
+/** The datasets the question names by id: its category's, its series', its measures' — other than its own. */
+function namedDatasets(datasetId: string, encoding: VizEncoding | null): string[] {
+  if (!encoding) return [];
+  const ids = [encoding.categoryDatasetId, encoding.seriesDatasetId, ...(Array.isArray(encoding.values) ? encoding.values.map((v) => v && v.datasetId) : [])];
+  return [...new Set(ids.filter((o): o is string => typeof o === 'string' && !!o && o !== datasetId))];
+}
+
 /** Does the question reach another dataset? Conservative: any name a relationship would supply counts. */
 async function reachesOther(projectId: string, datasetId: string, encoding: VizEncoding | null, rest: unknown): Promise<boolean> {
-  if (encoding && (hasMetricMeasure(encoding) || [encoding.categoryDatasetId, encoding.seriesDatasetId].some((o) => !!o && o !== datasetId))) return true;
+  if ((encoding && hasMetricMeasure(encoding)) || namedDatasets(datasetId, encoding).length) return true;
   const meta = await datasets.getDatasetMeta(projectId, datasetId);
   const own = new Set((meta?.columns ?? []).map((c) => c.name));
   const foreign = [...namesIn([encoding, rest])].filter((n) => !own.has(n));
@@ -43,6 +57,30 @@ async function reachesOther(projectId: string, datasetId: string, encoding: VizE
   const related = new Set(await relatedColumnNames(projectId, datasetId));
   return foreign.some((n) => related.has(n));
 }
+
+// Test seam: the related-dataset gate's negative control turns it off (scripts/test-rowPolicyLabels).
+let relatedGate = true;
+export function setRelatedGateForTest(on: boolean): void {
+  relatedGate = on;
+}
+
+/**
+ * B1: a restricted caller whose question READS another dataset that is closed to them. Asked when nothing
+ * restricts them on the base dataset, BEFORE the body and its answer cache: that cache is keyed by the base
+ * dataset and the question alone, so an editor's answer joined over a dataset with rules would otherwise be
+ * handed to them. `reads` is exactly what the body reads — the datasets named by id and the join plan's
+ * tables (./relationships chartReads / metricReads) — so a star schema whose other dimensions are open
+ * still answers (C1).
+ */
+async function relatedClosed(projectId: string, datasetId: string, reads: () => Promise<string[]>): Promise<boolean> {
+  if (!relatedGate || !(await restrictedOn(projectId))) return false;
+  for (const id of new Set(await reads())) if (id !== datasetId && (await closedToCaller(projectId, id))) return true;
+  return false;
+}
+
+/** What a chart's question reads besides its own dataset. */
+const chartReadsOf = (projectId: string, datasetId: string, encoding: VizEncoding, filters: FilterStep[]) => async (): Promise<string[]> =>
+  [...namedDatasets(datasetId, encoding), ...(await chartReads(projectId, datasetId, encoding, filters))];
 
 type Refusal = ReturnType<typeof rowPolicyRefusal>;
 
@@ -69,7 +107,10 @@ export async function lockedViz<O extends { sample?: boolean }, R>(
 ): Promise<R | Refusal> {
   const lock = await lockOrRefusal(projectId, datasetId);
   if (isRefusal(lock)) return lock;
-  if (!lock) return body(projectId, datasetId, encoding, filters, opts);
+  if (!lock) {
+    if (await relatedClosed(projectId, datasetId, chartReadsOf(projectId, datasetId, encoding, filters))) return rowPolicyRefusal('related');
+    return body(projectId, datasetId, encoding, filters, opts);
+  }
   if (encoding && encoding.drivers) return rowPolicyRefusal('reader');
   if (await reachesOther(projectId, datasetId, encoding, filters)) return rowPolicyRefusal('related');
   // The builder's sample is drawn over the whole table and reports its size: never under a lock.
@@ -86,7 +127,10 @@ export async function lockedMetric<S extends { column: string }, P, R>(
   body: (projectId: string, datasetId: string, spec: S, filters: FilterStep[], params: P) => Promise<R>,
 ): Promise<R> {
   const lock = await rowLockFor(projectId, datasetId);
-  if (!lock) return body(projectId, datasetId, spec, filters, params);
+  if (!lock) {
+    if (await relatedClosed(projectId, datasetId, () => metricReads(projectId, datasetId, spec.column, filters))) throw new RowPolicyError('related');
+    return body(projectId, datasetId, spec, filters, params);
+  }
   if (await reachesOther(projectId, datasetId, null, [spec.column, filters])) throw new RowPolicyError('related');
   return withRowLock(datasetId, () => body(projectId, datasetId, spec, withLockSteps(lock, filters), params));
 }
@@ -105,16 +149,93 @@ export function lockedTable<T extends { columns: datasets.Dataset['columns']; ro
 }
 
 
+/** What a visual-shaped record carries that row access rules care about. */
+interface VisualLike {
+  datasetId?: unknown;
+  encoding?: unknown;
+  overrides?: object;
+}
+
 /**
- * A visual as a restricted caller on a dataset with rules gets it (round 2, #12): without the custom category
- * order or the per-series colours, which name values from every row. CEILING: that caller sees the default
- * order and colours. Every other caller gets the record unchanged.
+ * The record without what names values from rows: the custom order, the series colours and the waterfall
+ * totals (category labels), the drivers' path values and a bucket compare's labels. A dual axis keeps only
+ * the names of the visual's own measures — `validateDualAxis` (analysis/chartFormat) allows no others, so
+ * they are exactly the series names any locked result of this encoding carries; a raw record (a version)
+ * can hold anything. Funnel steps stay: they are the definition the server runs (R19(a), authored).
  */
-export async function visualForCaller<T extends { datasetId?: unknown; overrides?: VizOverrides } | null>(projectId: string, v: T): Promise<T> {
-  if (!v || !v.overrides) return v;
-  // A dataset that cannot be named (a version of a deleted visual): closed to anyone restricted on the project.
-  const closed = typeof v.datasetId === 'string' && v.datasetId ? await closedToCaller(projectId, v.datasetId) : await restrictedOn(projectId);
-  if (!closed) return v;
-  const { sortOrder: _order, seriesColors: _colors, ...overrides } = v.overrides;
-  return { ...v, overrides };
+function withoutLabels<T extends VisualLike>(v: T): T {
+  const out: VisualLike = { ...v };
+  if (v.overrides) {
+    const { sortOrder: _order, seriesColors: _colors, waterfallTotals: _totals, y2Series, ...overrides } = v.overrides as VizOverrides;
+    const measures = new Set(measureNames(v.encoding as VizEncoding | undefined));
+    const y2 = Array.isArray(y2Series) ? y2Series.filter((n) => measures.has(n)) : [];
+    out.overrides = y2.length ? { ...overrides, y2Series: y2 } : overrides;
+  }
+  const enc = v.encoding as (VizEncoding & { drivers?: DriversEncoding }) | undefined;
+  if (enc && enc.drivers) {
+    const c = enc.drivers.compare;
+    out.encoding = { ...enc, drivers: { ...enc.drivers, path: [], compare: c && c.mode === 'bucket' ? { ...c, label: '', prev: '' } : c } };
+  }
+  return out as T;
+}
+
+/**
+ * A visual as a restricted caller gets it (round 2 #12, R19): on a dataset with rules — or one they cannot
+ * name (a version of a deleted visual), or reaching a related dataset closed to them (B1) — without the
+ * labels `withoutLabels` drops. CEILING: that caller
+ * sees the default order and colours; the waterfall still marks its totals, which the server fills from the
+ * stored record (`storedFigureAsk`). Every other caller gets the record unchanged (the same object).
+ */
+export async function visualForCaller<T extends VisualLike | null>(projectId: string, v: T): Promise<T> {
+  if (!v || !(await restrictedOn(projectId))) return v;
+  const ds = typeof v.datasetId === 'string' && v.datasetId ? v.datasetId : null;
+  const filters = (v as { filters?: unknown }).filters;
+  const closed = !ds || (await closedToCaller(projectId, ds))
+    || (!!v.encoding && (await relatedClosed(projectId, ds, chartReadsOf(projectId, ds, v.encoding as VizEncoding, Array.isArray(filters) ? (filters as FilterStep[]) : []))));
+  return closed ? withoutLabels(v) : v;
+}
+
+/**
+ * A record's edit tag as the caller gets it. The stored tag hashes the bytes as stored (app/editConflict),
+ * so it would confirm a guessed label that was not sent; a restricted caller cannot write, so theirs is
+ * the tag of what they were sent.
+ */
+export async function tagForCaller(projectId: string, kind: SaveKind, sent: unknown, stored: string): Promise<string> {
+  return (await restrictedOn(projectId)) ? contentTag(kind, sent) : stored;
+}
+
+/**
+ * A chart request's figure ask (analysis/figureAsk). A waterfall request that names its saved visual
+ * (`visualId`) and carries no totals gets the STORED ones — a restricted caller is no longer sent them
+ * (`visualForCaller`). Only a visual of this project and this dataset counts. The totals mark only labels
+ * already in the reply (analysis/chartShapes), so nothing from another team's rows leaves.
+ */
+export async function storedFigureAsk(projectId: string, datasetId: string, drawnAs: Record<string, unknown>): Promise<FigureAsk | null> {
+  const ask = figureAsk(drawnAs.chartType, drawnAs);
+  const id = drawnAs.visualId;
+  if (!ask || ask.chartType !== 'waterfall' || ask.waterfallTotals || typeof id !== 'string' || !isValidId(id)) return ask;
+  const v = await visuals.getVisual(projectId, id);
+  const totals = v && v.datasetId === datasetId ? v.overrides.waterfallTotals : undefined;
+  return totals && totals.length ? { ...ask, waterfallTotals: totals } : ask;
+}
+
+/** `visual:get`'s reply as the caller gets it: `visualForCaller`, and the tag of what was sent. */
+export async function visualReplyForCaller<T extends (VisualLike & { tag: string }) | null>(projectId: string, rec: T): Promise<T> {
+  const sent = await visualForCaller(projectId, rec);
+  return sent ? { ...sent, tag: await tagForCaller(projectId, 'visual', sent, sent.tag) } : sent;
+}
+
+/** A dashboard record's inline `card.visual` definitions (vestigial, still stored by `sanitizeCard`) through `visualForCaller`. */
+export async function dashboardForCaller<T>(projectId: string, rec: T): Promise<T> {
+  const sheets = (rec as { sheets?: unknown } | null)?.sheets;
+  if (!Array.isArray(sheets) || !(await restrictedOn(projectId))) return rec;
+  const out = [];
+  for (const sheet of sheets as Array<{ cards?: unknown }>) {
+    const cards = Array.isArray(sheet?.cards) ? (sheet.cards as Array<{ visual?: VisualLike }>) : null;
+    if (!cards) { out.push(sheet); continue; }
+    const mapped = [];
+    for (const c of cards) mapped.push(c && c.visual ? { ...c, visual: await visualForCaller(projectId, c.visual) } : c);
+    out.push({ ...sheet, cards: mapped });
+  }
+  return { ...(rec as object), sheets: out } as T;
 }

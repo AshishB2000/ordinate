@@ -208,9 +208,11 @@ export async function importBundleFile(file: string, active: (id: unknown) => vo
     kind: 'bundle',
     label: `Import ${path.basename(file)}`,
     run: async (ctx) => {
-      const res = await bundle.importBundle(await recordFs.readFile(file), {
+      // Read from the file with positioned reads, never whole (src/app/bundleImport.ts).
+      const res = await bundle.importBundle({ file }, {
         onProgress: (p, note) => ctx.progress(p, note),
         checkCancelled: () => ctx.checkCancelled(),
+        signal: ctx.signal,
       });
       if (!res.ok) throw new Error(res.error || 'Import failed.');
       return res;

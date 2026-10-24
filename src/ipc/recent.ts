@@ -9,6 +9,8 @@ import * as visuals from '../analysis/visuals';
 import { ctx, serverDataDir } from '../server/context';
 import * as comments from '../app/comments';
 import { targetNames } from './comments';
+import { commentSnippet } from '../app/mentionToken';
+import { labelsFor } from '../server/mentions/people';
 
 // Home's IPC: the cross-project "Recent" list (see src/app/recent.ts:
 // metadata-only, never hydrates a table or computes a figure), the Starred
@@ -51,13 +53,15 @@ export function register() {
     const top = open.slice().sort((a, b) => last(b).localeCompare(last(a))).slice(0, HOME_COMMENTS);
     let names: Record<string, { name: string; analysisId?: string }> = {};
     try { names = await targetNames(projectId, top); } catch (_) { /* names are a nicety */ }
+    // A mention reads "@Ann Lee" for a current reader and "@former member" for anyone else — never an address.
+    const label = await labelsFor(projectId, top.map((c) => c.body));
     return {
       open: open.length,
       recent: top.map((c) => ({
         id: c.id,
         author: c.author,
-        // The Markdown's marks dropped, its words kept (a link keeps its text, `snake_case` keeps its underscore).
-        snippet: c.body.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\*\*|__|`/g, '').replace(/^#{1,3}\s+/gm, '').replace(/\s+/g, ' ').trim().slice(0, 200),
+        // The Markdown's marks dropped, its words kept; mentions named before the cut (app/mentionToken.ts).
+        snippet: commentSnippet(c.body, label, 200),
         at: last(c),
         replies: c.replies.filter((x) => !x.deletedAt).length,
         target: { kind: c.target.kind, id: c.target.id },

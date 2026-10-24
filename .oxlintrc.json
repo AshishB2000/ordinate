@@ -40,6 +40,12 @@
 
   "overrides": [
     {
+      "files": ["src/**"],
+      "rules": {
+        "eslint/no-console": "error"
+      }
+    },
+    {
       "files": ["**/*.d.ts"],
       "rules": {
         "eslint/no-var": "off"

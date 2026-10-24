@@ -9,6 +9,24 @@ All notable changes to Ordinate are documented here. Format based on
 
 ## [Unreleased]
 
+### Notifications that reach the right person
+
+- **Your own alert inbox.** The bell's badge counts the alerts *you* have not seen in the project; every
+  reader (viewers too) has Mark seen and Mark all seen, which clear your badge only. Snooze stays an
+  editor's and says so: "Snooze for everyone · 24 h". Nobody's badge lights up on upgrade (migration
+  0020, `alert_inbox`). A page that leaves the app (publish, embed, a report) names alerts by the data,
+  never by one person's inbox.
+- **One alert send path.** A rule's Slack / Teams / email channels now get its post however it fired —
+  a ↻, an input-table save, a snapshot restore, fresh on ask, a refresh URL, a pipeline's alert step —
+  not only on the schedule, and each event at most once across paths and pods (`alert_posts`).
+- **A scheduled send of a dashboard with row access rules computes nothing**: it is skipped as
+  `row_policy` before any figure is resolved.
+- **@mentions in comments.** Typing @ lists up to 8 people who can read the project now; a mention shows
+  as "@Name" (or "@former member" once they lost access); anyone else is refused. The person gets a
+  notice in their open tabs with Open, an email (Settings → You → "Email me when someone mentions me",
+  on by default; budget kind `mention`, audited per recipient) and a row in Home's new "Mentioned you".
+  Off without a database. See `docs/notifications/00-design.md`.
+
 ### Breaking — Ordinate is now a self-hosted web app (Phase 7)
 
 The Electron desktop app is gone. Ordinate is a server a company runs in its own infrastructure,
@@ -99,6 +117,36 @@ the desktop installers.
   editors). The rail groups its sections under **View** and **Build**. See
   [`docs/design-floor/`](docs/design-floor/00-design.md).
 
+- **What saturates, on `/metrics`.** The DuckDB queues (depth, busy workers, wait), the Postgres
+  pool (open, idle, waiting), event-loop delay, memory, open event streams, Live queries in flight
+  and whether the pod is draining — never by org. `DATABASE_POOL_MAX` sizes the Postgres pool (10
+  by default). The Helm chart can ship a ServiceMonitor and six alert rules
+  (`metrics.serviceMonitor.enabled`, `metrics.prometheusRule.enabled`, both off). See
+  [`docs/server/monitoring.md`](docs/server/monitoring.md).
+
+### Added — identity provider groups, token expiry, disable that sticks
+
+- **Roles and teams from your identity provider.** Set `OIDC_GROUPS_CLAIM` (OIDC) or
+  `TRUSTED_GROUPS_HEADER` (header mode), then map groups to an org role and to teams in Admin → People
+  → Identity provider groups. Applied at every sign-in (header mode: whenever the groups change); a
+  missing claim, a malformed one or Entra ID's group overage changes nothing; the org's last admin is
+  kept. Once a group maps a role, roles are no longer set by hand, and a linked team's members come
+  from the IdP. `OIDC_EXTRA_SCOPES` asks for scopes an IdP needs to send groups. Migration 0019.
+- **API tokens expire.** A new token lives 30, 90 or 365 days, up to `API_TOKEN_MAX_DAYS` (default
+  365); the API tokens page shows each token's end.
+- **Disabling someone closes their open tabs' event streams on every pod**, within a second, as do
+  signing out everywhere and a password reset.
+
+### Changed — identity provider groups, token expiry, disable that sticks
+
+- **Tokens made before this release now expire `API_TOKEN_MAX_DAYS` after they were made** (365 days
+  by default); one older than that stops working at once. Lowering the maximum shortens every token.
+  `tokens:create` now requires `expiresInDays`.
+- **Disabling someone revokes their API tokens for good**: enabling them again no longer brings a token
+  back.
+- **The last-admin rule counts only admins who have signed in**: an invited admin who has not signed in
+  yet no longer lets the last signed-in admin be demoted or disabled.
+
 ### Security — since the move to the web
 
 - **SQL over datasets is checked against DuckDB's own reading of the query.** A query could reach
@@ -114,6 +162,23 @@ the desktop installers.
   rules now records the run code `row_policy`.
 
 - **Embeds refuse more datasets that store values computed across rows.** A locked embed tile is now refused when its dataset was built by SQL, a notebook or the composer, when a step looks up another dataset, or when a group-by, pivot or keyed dedupe does not keep every locked column — each could carry another customer's rows or totals into the view. (The same rule backs row access rules.)
+
+- **A restricted viewer no longer receives a related dataset's rows through a cached chart or KPI.** A chart or
+  KPI on a dataset without row access rules whose question reached a related dataset with rules was
+  answered from the answer cache an editor had warmed, labels and figures included. It is now refused
+  (`related`) before the cache is asked, and its stored labels are not sent either.
+
+- **Charts no longer send a restricted viewer category labels from other teams' rows.** A waterfall's
+  totals, a drivers tile's path and an inline dashboard card's styling are dropped for that viewer on
+  every path that returns a visual (as a custom order and series colours already were); the waterfall
+  still marks its own totals, filled in by the server from the saved visual. Edit tags returned to that
+  viewer are of what they were sent.
+
+- **A bundle or backup upload is checked before a byte is inflated.** Import and restore read the
+  file in place and refuse zip64, data descriptors, encryption, unknown methods, names off the
+  whitelist (in any case or Unicode form, or twice), lying sizes, overlapping entries and local
+  headers that disagree with the directory. A record over 32 MiB is never stored, so no bundle
+  Ordinate writes is one it would refuse.
 
 ### Fixed — since the move to the web
 
@@ -155,6 +220,22 @@ the desktop installers.
   custom theme's (including one saved earlier) are worked out for their own light or dark surfaces
   the same way, and the theme editor warns about an ink that does not read. A test measures every
   pair, so it cannot regress.
+
+- **A rolling deploy stops a pod cleanly.** On SIGTERM the pod answers `/readyz` 503, refuses new
+  jobs ("Ordinate is restarting. Try again in a minute."), lets running jobs and requests finish,
+  cancels what is left at a deadline ("Ordinate restarted while this was running. Run it again."),
+  interrupts every DuckDB query and closes each worker through its own queue, then exits 0 inside
+  `SHUTDOWN_GRACE_SECONDS` (20 s). Measured: 0 native aborts in 241 signalled shutdowns; the old
+  path aborted 7 times in 100 with a query unwinding and overran in 40 of 40 with one running.
+  Compose now waits 30 s before killing. See [`docs/pod-lifecycle/`](docs/pod-lifecycle/00-design.md).
+- **A bundle import, a backup or a restore no longer holds the upload, or the org, in memory.**
+  Tables stream to disk; records are read one at a time; a backup holds one project at a time and
+  a restore runs inside its job. Measured: a 4 MB bundle declaring 4 GiB streams with RSS up 12 MB;
+  a 279 MB backup of 16 projects with RSS up at most 107 MB. A cancelled job now also stops the
+  DuckDB query it was in.
+- **Every server log line is JSON through pino**, with the request id and org inside a request; no
+  `console` call is left in `src/` (lint-enforced). The Assistant's screenshot dev dump no longer
+  writes extracted cells to the log.
 
 ### Added
 - **The app is no longer empty on first launch.** A bundled sample project — 5,000 rows of generated

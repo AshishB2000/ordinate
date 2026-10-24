@@ -1,5 +1,5 @@
 import { ipcMain } from './bus';
-import { lockedViz, visualForCaller } from './rowDoors';
+import { lockedViz, storedFigureAsk, visualReplyForCaller } from './rowDoors';
 import * as fs from 'fs';
 import * as visuals from '../analysis/visuals';
 import * as answerKey from '../data/answerKey';
@@ -61,7 +61,6 @@ import { metricMeasureData } from './vizMetricMeasures';
 import { withGeoSuggest } from '../analysis/geoHits';
 import { contentTag, isRecordChanged, recordReply } from '../app/editConflict';
 import { withFigures } from '../analysis/chartShapes';
-import { figureAsk } from '../analysis/figureAsk';
 
 // Visuals (saved charts/maps) IPC — list/get/save/update/delete a Visual, plus
 // `visual:data` which loads a dataset and runs the PURE bridge (src/vizData.ts) to
@@ -559,7 +558,7 @@ export async function saveNewVisual(projectId: string, input: Parameters<typeof 
 export function register() {
   ipcMain.handle('visual:list', async (_e, { projectId }: any = {}) => visuals.listVisuals(projectId));
 
-  ipcMain.handle('visual:get', async (_e, { projectId, id }: any = {}) => visualForCaller(projectId, recordReply(await visuals.readVisual(projectId, id))));
+  ipcMain.handle('visual:get', async (_e, { projectId, id }: any = {}) => visualReplyForCaller(projectId, recordReply(await visuals.readVisual(projectId, id))));
 
   ipcMain.handle('visual:save', async (_e, { projectId, datasetId, name, chartType, encoding, overrides, filters, analytics }: any = {}) => {
     try {
@@ -635,7 +634,7 @@ export function register() {
       // same scope — AFTER the share policy, so an overlay can only name what
       // the shaped chart still shows.
       // The figures the chart draws (analysis/chartShapes) come LAST, off the series as shaped: never more than they say.
-      const reply = withFigures(withGeoSuggest(await withEvents(await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), flt, values), projectId, datasetId, flt), enc), figureAsk(drawnAs.chartType, drawnAs)); // r8:events
+      const reply = withFigures(withGeoSuggest(await withEvents(await withAnalytics(shaped, projectId, sanitizeOverlays(analytics), flt, values), projectId, datasetId, flt), enc), await storedFigureAsk(projectId, datasetId, drawnAs)); // r8:events
       // A parameter that cannot be made well-typed is a VALIDATION message the
       // tile shows — never a silently empty chart. Dated last (L0.2), inside the
       // as-of scope, so a snapshot view says the snapshot's time.

@@ -3,9 +3,10 @@
 // alert arrives as an `alerts:fired` push (to members who may read the
 // project, T6.3) and the list re-reads. Every figure in a message is the
 // server's sentence; the sparkline draws the rule's own stored history.
-// Snoozing, marking seen and changing a rule are writes: a viewer reads the
-// inbox and the rules. The bell is on every page, so it asks for the role only
-// once it is opened.
+// The badge and Mark seen are the CALLER's (docs/notifications): every reader
+// clears their own, never anyone else's. Snoozing and changing a rule are
+// writes that silence everyone, so they are an editor's and say so. The bell is
+// on every page, so it asks for the role only once it is opened.
 
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -28,6 +29,7 @@ import { useCanEdit } from '../projects/api';
 import { useCurrentProject } from '../projects/current';
 import { reason, useAlerts, useAlertsLive, useAlertWrite, type AlertEvent, type AlertRule } from './api';
 import { usePausedNotice } from '../subscriptions/notices';
+import { useMentionNotice } from './mentionNotice';
 import s from './Alerts.module.css';
 
 /** The rule's last values as a 96×24 line — positions only; every value is the server's. */
@@ -49,6 +51,11 @@ const condition = (r: AlertRule): string => {
   if (r.compare === 'change' && r.change) return `${r.change.direction === 'up' ? 'Rises' : r.change.direction === 'down' ? 'Falls' : 'Moves'} ${r.change.pct}% vs ${r.change.vs === 'previous_period' ? 'previous period' : 'previous refresh'}`;
   if (r.threshold) return `${{ '<': 'Below', '<=': 'At or below', '>': 'Above', '>=': 'At or above' }[r.threshold.op]} ${r.threshold.value}`;
   return '';
+};
+/** Mark all seen covers what the bell SHOWED: the newest event it drew (an alert landing after that stays unseen). */
+const shownThrough = (events: AlertEvent[]): { through?: string } => {
+  const newest = events.reduce<string | undefined>((m, e) => (m === undefined || e.at > m ? e.at : m), undefined);
+  return newest ? { through: newest } : {};
 };
 const HOURS = Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${String(h).padStart(2, '0')}:00` }));
 
@@ -203,12 +210,12 @@ function EventRow({ e, rule, projectId, canEdit, onClose }: { e: AlertEvent; rul
           <button
             type="button"
             className={s.linkBtn}
-            onClick={() => write.mutate({ channel: 'alerts:patch', input: { projectId, ruleId: rule.id, patch: { snoozedUntil: new Date(Date.now() + 86_400_000).toISOString() } } }, { onError: fail, onSuccess: () => toast('Snoozed for 24 hours') })}
+            onClick={() => write.mutate({ channel: 'alerts:patch', input: { projectId, ruleId: rule.id, patch: { snoozedUntil: new Date(Date.now() + 86_400_000).toISOString() } } }, { onError: fail, onSuccess: () => toast('Snoozed for everyone for 24 hours') })}
           >
-            Snooze 24h
+            Snooze for everyone · 24 h
           </button>
         )}
-        {!e.seen && canEdit && (
+        {!e.seen && (
           <button type="button" className={s.linkBtn} onClick={() => write.mutate({ channel: 'alerts:markSeen', input: { projectId, eventId: e.id } }, { onError: fail })}>
             Mark seen
           </button>
@@ -223,6 +230,8 @@ export function AlertsBell() {
   const [open, setOpen] = useState(false);
   // The bell is on every page, so it is also where a subscription's owner hears that it paused itself.
   usePausedNotice();
+  // …and where a person hears that someone mentioned them (docs/notifications §5.9).
+  useMentionNotice();
   // The bell asks the server only once it matters: opened, or an alert fired
   // (alerts:fired). A dashboard's KPI cards read the same list, so on a
   // dashboard the badge is there at once; every other page stays inside its
@@ -253,8 +262,8 @@ export function AlertsBell() {
       >
         <div className={s.inboxHead}>
           <span className={s.inboxTitle}>Alerts</span>
-          {unseen > 0 && projectId && canEdit && (
-            <Button size="sm" variant="ghost" onClick={() => write.mutate({ channel: 'alerts:markSeen', input: { projectId } })}>
+          {unseen > 0 && projectId && (
+            <Button size="sm" variant="ghost" onClick={() => write.mutate({ channel: 'alerts:markSeen', input: { projectId, ...shownThrough(q.data?.events ?? []) } })}>
               Mark all seen
             </Button>
           )}

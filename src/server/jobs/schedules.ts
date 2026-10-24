@@ -34,6 +34,7 @@
 import * as scheduler from '../../app/refreshScheduler';
 import { policyClosed } from '../../data/rowAccess';
 import type { TickAlerts } from '../../app/refreshScheduler';
+import type { AlertEvent } from '../../analysis/alerts';
 import * as config from '../../app/config';
 import * as pipelineRunner from '../../app/pipelineRunner';
 import * as alertStore from '../../analysis/alertStore';
@@ -79,17 +80,29 @@ export function pushToWriters(projectId: string, channel: string, payload: unkno
   void toReaders(readersVia.pool, readersVia.devAuth, projectId, channel, payload, true).catch(() => undefined);
 }
 
+type Push = (projectId: string, channel: string, payload: unknown) => void;
+
+/** The bell's push for fired events: every reader's tabs, and no figure from a dataset with row access rules (docs/row-policy, "Pushes"). Never rejects. */
+export function pushFired(projectId: string, events: AlertEvent[], push: Push = pushToReaders): Promise<void> {
+  return alertStore.pushableEvents(projectId, events).then((ev) => push(projectId, 'alerts:fired', { projectId, events: ev })).catch(() => undefined);
+}
+
 /**
- * What a tick's fired alerts become: the push each reader's bell repaints from, and — for a rule that names
- * Slack / Teams channels — a post there with the same sentence and figure (../subscriptions/alertPosts.ts),
- * never awaited by the tick. Returns the posts in flight, for a test to wait on.
+ * What a rule's fired events become on EVERY path — the tick, a ↻, an input-table save, a snapshot restore,
+ * fresh on ask, a refresh URL, MCP, a pipeline's alert step (docs/notifications §5.3-5.4): the push each
+ * reader's bell repaints from, and — for a rule that names Slack / Teams / email channels — a post there with
+ * the same sentence and figure (../subscriptions/alertPosts.ts), at most once per event id across paths and pods.
+ * `pushed` may be awaited (a request path does, so the bell is right when it answers); `posted` never is.
  */
-export function deliverTickAlerts(batches: TickAlerts[], push: (projectId: string, channel: string, payload: unknown) => void): Promise<number>[] {
-  // No figure from a dataset with row access rules reaches the readers' bells (docs/row-policy, "Pushes").
-  for (const b of batches) void alertStore.pushableEvents(b.projectId, b.events).then((events) => push(b.projectId, 'alerts:fired', { ...b, events })).catch(() => undefined);
+export function deliverFired(projectId: string, events: AlertEvent[], push: Push = pushToReaders): { pushed: Promise<void>; posted: Promise<number> } {
   // Lazy: that module reaches back here (through ./run) for `toReaders`.
   const { postFiredAlerts } = require('../subscriptions/alertPosts') as typeof import('../subscriptions/alertPosts');
-  return batches.map((b) => postFiredAlerts(b.projectId, b.events));
+  return { pushed: pushFired(projectId, events, push), posted: postFiredAlerts(projectId, events) };
+}
+
+/** A tick's fired alerts, per project, through `deliverFired`. Returns the posts in flight, for a test to wait on. */
+export function deliverTickAlerts(batches: TickAlerts[], push: Push): Promise<number>[] {
+  return batches.map((b) => deliverFired(b.projectId, b.events, push).posted);
 }
 
 /**

@@ -9,6 +9,7 @@ import type { ConnectorDef, ConnectorField } from '../connectors/types';
 import { buildSecrets, fieldsOf, isSecretField, loadSecrets, secretStatus, storeSecrets } from './connectionSecrets';
 import { composeSave } from './datasetCompose';
 import { registerEstimate } from './connectionEstimate';
+import { logger } from '../app/logger';
 
 // Connected-data-source IPC. Every source is a ConnectorDef in src/connectors, so
 // these handlers are source-agnostic: they resolve a connectorId, shape the form
@@ -239,7 +240,7 @@ export function register(): void {
     try {
       return connectorCatalog();
     } catch (err: unknown) {
-      console.error('[connections] connectors:catalog failed:', err instanceof Error ? err.message : err);
+      logger.error('[connections] connectors:catalog failed:', err instanceof Error ? err.message : err);
       return [];
     }
   });
