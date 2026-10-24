@@ -236,13 +236,17 @@ async function rowsOf(pod: H.Pod, projectId: string, datasetId: string): Promise
 }
 const sameRows = (a: unknown[][], b: unknown[][]): boolean => a.length === b.length && a.every((r, i) => r.length === b[i].length && r.every((v, c) => Object.is(v, b[i][c])));
 
-/** Upload on `up`, parse on `parse`, save on `save`: the preview, and the saved dataset's columns and rows. */
+/**
+ * Upload on `up`, parse on `parse`, preview and save on `save`: the preview, and the saved dataset's
+ * columns and rows. With `save` not the parsing pod, the preview is a read of the stage's Parquet (that
+ * pod never held the rows); `test-stageStore-db` compares that read with the table itself, cell by cell.
+ */
 async function importVia(p: Pass, up: H.Pod, parse: H.Pod, save: H.Pod, csv: Buffer, name: string) {
   const pid = await projectOf(p, U1);
   const tok = await H.upload(up.base, U1, csv, name + '.csv');
   const parsed = await H.rpc(parse.base, U1, 'dataset:pickAndParse', { fileToken: tok });
   const stagedId = parsed.body?.preview?.stagedId as string;
-  const preview = await H.rpc(parse.base, U1, 'dataset:composePreview', { projectId: pid, base: { inline: { name, stagedId } }, joins: [], offset: 0, limit: 50 });
+  const preview = await H.rpc(save.base, U1, 'dataset:composePreview', { projectId: pid, base: { inline: { name, stagedId } }, joins: [], offset: 0, limit: 50 });
   const saved = await saveStaged(save, U1, pid, name, stagedId);
   const ds = saved.body?.dataset as { id: string; columns: unknown } | undefined;
   return { preview: (preview.body?.rows ?? []) as unknown[][], saved: saved.body, columns: ds?.columns, rows: ds ? await rowsOf(save, pid, ds.id) : [] };
@@ -256,7 +260,7 @@ export async function crossPodImport(p: Pass): Promise<void> {
     ok(`[${p.name}] 1: ${label} — upload on A, parse on B, save on A gives the one-pod import: columns, types and every cell (Object.is)`,
       cross.rows.length === rows && JSON.stringify(cross.columns) === JSON.stringify(one.columns) && sameRows(cross.rows, one.rows),
       JSON.stringify({ n: [one.rows.length, cross.rows.length], saved: cross.saved?.ok }).slice(0, 300));
-    ok(`[${p.name}] 1: ${label} — the composer's preview on B (a limited read of the stage) equals the one-pod preview`,
+    ok(`[${p.name}] 1: ${label} — the composer's preview on A, which never held the rows (a limited Parquet read of B's stage), equals the one-pod preview`,
       cross.preview.length === Math.min(50, rows) && sameRows(cross.preview, one.preview));
   }
 }

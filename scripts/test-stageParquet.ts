@@ -34,7 +34,7 @@ let n = 0;
 const file = (): string => path.join(TMP, `t${n++}.parquet`);
 
 const LONE = 'a\uD800b';
-const NASTY: Cell[] = ['007', -0, 0, 1e21, 0.1 + 0.2, -1.5e-300, '', null, ' ', ' x ', '\tx\t', '﻿bom', '﻿﻿', LONE, 'nul\u0000inside', '😀 é', 'x'.repeat(5_000), 'n123', 's', 'j"', 42, Number.MAX_SAFE_INTEGER + 2, '-0'];
+const NASTY: Cell[] = ['007', -0, 0, NaN, Infinity, -Infinity, 1e21, 0.1 + 0.2, -1.5e-300, '', null, ' ', ' x ', '\tx\t', '﻿bom', '﻿﻿', LONE, 'nul\u0000inside', '😀 é', 'x'.repeat(5_000), 'n123', 's', 'j"', 42, Number.MAX_SAFE_INTEGER + 2, '-0'];
 const COLS: Col[] = [
   { name: 'Name "X"', type: 'text' }, { name: 'line\nbreak', type: 'number' }, { name: '', type: 'date' },
   { name: 'nul\u0000name', type: 'text' }, { name: LONE, type: 'text' }, { name: 'Name "X"', type: 'number' },
