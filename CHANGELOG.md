@@ -98,6 +98,29 @@ the desktop installers.
   (`metrics.serviceMonitor.enabled`, `metrics.prometheusRule.enabled`, both off). See
   [`docs/server/monitoring.md`](docs/server/monitoring.md).
 
+### Added — identity provider groups, token expiry, disable that sticks
+
+- **Roles and teams from your identity provider.** Set `OIDC_GROUPS_CLAIM` (OIDC) or
+  `TRUSTED_GROUPS_HEADER` (header mode), then map groups to an org role and to teams in Admin → People
+  → Identity provider groups. Applied at every sign-in (header mode: whenever the groups change); a
+  missing claim, a malformed one or Entra ID's group overage changes nothing; the org's last admin is
+  kept. Once a group maps a role, roles are no longer set by hand, and a linked team's members come
+  from the IdP. `OIDC_EXTRA_SCOPES` asks for scopes an IdP needs to send groups. Migration 0019.
+- **API tokens expire.** A new token lives 30, 90 or 365 days, up to `API_TOKEN_MAX_DAYS` (default
+  365); the API tokens page shows each token's end.
+- **Disabling someone closes their open tabs' event streams on every pod**, within a second, as do
+  signing out everywhere and a password reset.
+
+### Changed — identity provider groups, token expiry, disable that sticks
+
+- **Tokens made before this release now expire `API_TOKEN_MAX_DAYS` after they were made** (365 days
+  by default); one older than that stops working at once. Lowering the maximum shortens every token.
+  `tokens:create` now requires `expiresInDays`.
+- **Disabling someone revokes their API tokens for good**: enabling them again no longer brings a token
+  back.
+- **The last-admin rule counts only admins who have signed in**: an invited admin who has not signed in
+  yet no longer lets the last signed-in admin be demoted or disabled.
+
 ### Security — since the move to the web
 
 - **SQL over datasets is checked against DuckDB's own reading of the query.** A query could reach
@@ -113,6 +136,17 @@ the desktop installers.
   rules now records the run code `row_policy`.
 
 - **Embeds refuse more datasets that store values computed across rows.** A locked embed tile is now refused when its dataset was built by SQL, a notebook or the composer, when a step looks up another dataset, or when a group-by, pivot or keyed dedupe does not keep every locked column — each could carry another customer's rows or totals into the view. (The same rule backs row access rules.)
+
+- **A restricted viewer no longer receives a related dataset's rows through a cached chart or KPI.** A chart or
+  KPI on a dataset without row access rules whose question reached a related dataset with rules was
+  answered from the answer cache an editor had warmed, labels and figures included. It is now refused
+  (`related`) before the cache is asked, and its stored labels are not sent either.
+
+- **Charts no longer send a restricted viewer category labels from other teams' rows.** A waterfall's
+  totals, a drivers tile's path and an inline dashboard card's styling are dropped for that viewer on
+  every path that returns a visual (as a custom order and series colours already were); the waterfall
+  still marks its own totals, filled in by the server from the saved visual. Edit tags returned to that
+  viewer are of what they were sent.
 
 - **A bundle or backup upload is checked before a byte is inflated.** Import and restore read the
   file in place and refuse zip64, data descriptors, encryption, unknown methods, names off the

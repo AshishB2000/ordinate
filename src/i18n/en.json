@@ -251,6 +251,8 @@
   "freshOnAskMessages.fresh_on_ask_pulls_only_new": "Fresh on ask pulls only new rows, and this dataset's next refresh must be a full one ({reason}). Nothing was fetched; the next scheduled or manual refresh runs it.",
   "freshOnAskMessages.fresh_on_ask_pulls_only_new_2": "Fresh on ask pulls only new rows, and this dataset has no incremental refresh. Nothing was fetched.",
   "freshOnAskMessages.fresh_on_ask_takes_an_age": "Fresh on ask takes an age between 1 minute and 1 day.",
+  "idpMessages.this_person_s_role_comes_from": "This person’s role comes from your identity provider. Change their groups there, or change the group mapping under Identity provider groups.",
+  "idpMessages.this_team_s_members_come_from": "This team’s members come from your identity provider. Change the group there, or unlink the team under Identity provider groups.",
   "incrementalMessages.a_live_dataset_is_asked_at": "A Live dataset is asked at the warehouse every time, so it keeps no copy to refresh incrementally.",
   "incrementalMessages.append_mode_adds_new_rows_and": "Append mode adds new rows and takes no key column. Choose update by key to use one.",
   "incrementalMessages.cannot_filter_by_a_column_so": "{source} cannot filter by a column, so every incremental run would still read the whole source and filter after the fetch. Use a refresh schedule for it instead.",

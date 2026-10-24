@@ -60,6 +60,9 @@ export const FigureAskFields = {
   chartType: z.string().min(1).max(64).optional(),
   waterfallTotals: z.array(z.string().max(200)).max(200).optional(),
   bulletTarget: z.number().finite().optional(),
+  // The saved visual drawn (R19): a waterfall that carries no totals gets that visual's stored ones,
+  // server-side — what a restricted viewer is no longer sent (src/ipc/rowDoors.ts storedFigureAsk).
+  visualId: Uuid.optional(),
 };
 
 const VizDataInput = z.strictObject({

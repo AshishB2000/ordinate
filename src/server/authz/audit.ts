@@ -57,3 +57,18 @@ export async function audit(pool: Pool | null, e: AuditEntry): Promise<void> {
     [e.org, e.actor, e.action, e.channel ?? null, e.projectId ?? null, [...(e.targets ?? [])], e.outcome, e.requestId ?? null],
   );
 }
+
+/** Writes many rows in ONE statement (an IdP map change that re-applied many members). No pool → nothing. */
+export async function auditMany(pool: Pool | null, entries: readonly AuditEntry[]): Promise<void> {
+  if (!pool || !entries.length) return;
+  const rows = entries.map((e) => ({
+    org: e.org, actor: e.actor, action: e.action, channel: e.channel ?? null, project_id: e.projectId ?? null,
+    targets: (e.targets ?? []).join(','), outcome: e.outcome, request_id: e.requestId ?? null,
+  }));
+  await pool.query(
+    `INSERT INTO audit_log (org_id, actor, action, channel, project_id, target_ids, outcome, request_id)
+     SELECT v.org, v.actor, v.action, v.channel, v.project_id, string_to_array(v.targets, ',')::uuid[], v.outcome, v.request_id
+       FROM json_to_recordset($1::json) AS v(org text, actor text, action text, channel text, project_id uuid, targets text, outcome text, request_id text)`,
+    [JSON.stringify(rows)],
+  );
+}

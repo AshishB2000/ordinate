@@ -13,6 +13,8 @@ import { ctx, runInContext, type Identify } from './context';
 import { authorize, grantCreator, orgAllows, readable } from './authz/index';
 import { audit, targetIds, type Outcome } from './authz/audit';
 import { registerAuth } from './auth/index';
+import { isIdpManaged } from './auth/idpGroups';
+import { hashId } from './auth/store';
 import { cookieNames } from './auth/cookies';
 import { registerSecurityHeaders } from './headers';
 import { registerCsrf } from './csrf';
@@ -93,10 +95,10 @@ export const REDACT_PATHS: readonly string[] = SECRET_KEYS.flatMap((k) => {
 const STORAGE_GC_EVERY_MS = 15 * 60_000;
 let dbPool: Pool | null = null;
 let appEnv: ServerEnv | null = null;
-/** The scheduled-job runner and the cross-pod bus, once started: ./shutdown.ts stops them in its own order. */
-let bg: { runner: { stop(): Promise<void> } | null; bus: { stop(): Promise<void> } | null } = { runner: null, bus: null };
+/** The scheduled-job runner, the cross-pod bus and the stream sweep, once started: ./shutdown.ts stops them in its own order. */
+let bg: { runner: { stop(): Promise<void> } | null; bus: { stop(): Promise<void> } | null; sweep: { stop(): void } | null } = { runner: null, bus: null, sweep: null };
 
-/** The runner and bus of the app built last (./shutdown.ts). */
+/** The runner, bus and stream sweep of the app built last (./shutdown.ts). */
 export function background(): typeof bg {
   return bg;
 }
@@ -185,7 +187,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   const dbUrl = cfg.databaseUrl;
   const pool = dbUrl ? createPool(dbUrl, (err) => app.log.warn({ err }, 'postgres idle client error'), cfg.pod.databasePoolMax) : null;
   dbPool = pool;
-  bg = { runner: null, bus: null }; // this app's, once its onReady starts them
+  bg = { runner: null, bus: null, sweep: null }; // this app's, once its onReady starts them
   watchPgPool(pool); // ordinate_pg_pool_clients on /metrics
   appEnv = cfg;
   if (pool && dbUrl) {
@@ -194,6 +196,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     // reschedules. Lazy requires: nothing loads them without a DB.
     let jobs: { stop(): Promise<void> } | null = null;
     let bus: { stop(): Promise<void> } | null = null;
+    let sweep: { stop(): void } | null = null;
     app.addHook('onReady', async () => {
       try {
         const r = await migrate(pool);
@@ -241,8 +244,10 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       // nothing it would have to stop. Everything below this line is background work of that kind.
       if (isDraining()) return;
       bus = await (require('./jobs/bus') as typeof import('./jobs/bus')).startBus(pool, dbUrl, app.log);
+      // The backstop for a stream close the bus lost (docs/sso-lifecycle §3.9).
+      sweep = (require('./streamSweep') as typeof import('./streamSweep')).startStreamSweep(pool, cfg.auth.sessionIdleMs, cfg.auth.apiTokenMaxDays, app.log);
       jobs = (require('./jobs/runner') as typeof import('./jobs/runner')).startRunner(pool, cfg.dataDir, app.log);
-      bg = { runner: jobs, bus };
+      bg = { runner: jobs, bus, sweep };
     });
     // An app closed on its own (the tests) stops its runner and bus here. A
     // draining server has already (./shutdown.ts), under deadlines this cannot keep.
@@ -250,6 +255,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
       if (isDraining()) return;
       await jobs?.stop();
       await bus?.stop();
+      sweep?.stop();
     });
     // …and un-wires its stores. Never while draining: a handler that outlived its
     // reply would then save a record to this pod's disk and lose it. ./shutdown.ts
@@ -346,7 +352,15 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
     );
   });
 
-  registerEvents(app);
+  // Each stream remembers its session (session sign-in modes) and its API token, so the sweep below and a
+  // revoke end it with them (docs/sso-lifecycle §3.9).
+  const sessionCookie = cookieNames(cfg.env === 'prod').session;
+  const sessionModes = cfg.auth.mode === 'oidc' || cfg.auth.mode === 'password';
+  registerEvents(app, (req) => {
+    const id = sessionModes ? req.cookies?.[sessionCookie] : undefined;
+    const bearer = typeof req.headers.authorization === 'string' ? /^Bearer\s+(ord_\S+)\s*$/i.exec(req.headers.authorization)?.[1] : undefined;
+    return { session: typeof id === 'string' && id ? hashId(id) : null, token: bearer ? hashId(bearer) : null };
+  });
 
   // Readiness: can this pod answer queries? DuckDB, plus Postgres when
   // configured. With per-org workers (T4.3) the first call starts a locked,
@@ -455,6 +469,11 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
         await record('error', decision.projectId);
         return reply.code(409).send({ error: 'record_busy', code: 'record_busy', message: (err as Error).message });
       }
+      if (isIdpManaged(err)) {
+        // A role or team the identity provider decides (docs/sso-lifecycle): a typed 409 with the catalog's sentence.
+        await record('denied', decision.projectId);
+        return reply.code(409).send({ error: err.code, code: err.code, message: err.message });
+      }
       if (isRecordChanged(err)) {
         // A whole-document save from a stale copy (src/app/editConflict.ts): the record is
         // untouched; the catalog's sentence and the current tag, never the record.
@@ -532,12 +551,14 @@ export function registerHandlers(): void {
     if (!appEnv) throw new Error('no app built');
     return appEnv;
   };
-  (require('./admin/people') as typeof import('./admin/people')).register(() => dbPool, () => env().auth.allowedDomains);
+  (require('./admin/people') as typeof import('./admin/people')).register(() => dbPool, () => env().auth.allowedDomains, () => env().auth);
+  // Identity provider groups (docs/sso-lifecycle): the map, and a re-apply of every synced member when it changes.
+  (require('./admin/idpGroups') as typeof import('./admin/idpGroups')).register(() => dbPool, () => env().auth);
   (require('./admin/passwords') as typeof import('./admin/passwords')).register(() => dbPool, () => (appEnv ?? env()).auth.mode, () => env().auth.allowedDomains);
   (require('./admin/org') as typeof import('./admin/org')).register(() => dbPool, () => env().maxUploadMb);
   // Admin → Live usage (live data L2.7): Postgres's counts, or this pod's without it.
   (require('./admin/liveUsage') as typeof import('./admin/liveUsage')).register();
-  (require('./auth/tokens') as typeof import('./auth/tokens')).register(() => dbPool);
+  (require('./auth/tokens') as typeof import('./auth/tokens')).register(() => dbPool, () => env().auth.apiTokenMaxDays);
   // Refresh URLs (live data L0.5): a project writer's, per dataset.
   (require('./hooks/rpc') as typeof import('./hooks/rpc')).register(() => dbPool, () => env().limits.refreshHookMinIntervalSec);
   // The Assistant dock (T2.12): conversations, answers, plans, provider keys.

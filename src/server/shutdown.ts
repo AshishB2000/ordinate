@@ -8,7 +8,7 @@
 //   2  the scheduled-job runner stops claiming (awaited with step 3)
 //   3  in-process jobs: waited for until 0.5 T, then cancelled through their
 //      signal; each owner's tab hears (the bus is still up for a remote tab)
-//   3b the bus stops                                                  ≤ 0.7 T
+//   3b the bus stops, and the stream sweep behind it                  ≤ 0.7 T
 //   4  app.close(): streams end, in-flight HTTP finishes; at 0.7 T every
 //      request still running is aborted (503) and its socket closed  ≤ 0.8 T
 //   5  RPC handlers that outlived their reply                         ≤ 0.8 T
@@ -62,7 +62,10 @@ export async function shutdown(app: FastifyInstance, budgetMs: number, log: Fast
     if (left.length) log.warn({ jobs: left.map((j) => ({ id: j.id, kind: j.kind })) }, 'jobs still running at the shutdown deadline');
     if ((await capped(runner.then(() => true), at(0.55))) !== true) log.warn('a scheduled job was still running; its lease lapses and another pod retakes it');
   });
-  await step('bus', () => capped(bg.bus ? bg.bus.stop() : Promise.resolve(), at(0.7)));
+  await step('bus', () => {
+    bg.sweep?.stop(); // the stream sweep backstops the bus (docs/sso-lifecycle §3.9): it stops with it
+    return capped(bg.bus ? bg.bus.stop() : Promise.resolve(), at(0.7));
+  });
   await step('http', async () => {
     const closed = app.close();
     if ((await capped(closed.then(() => true), at(0.7))) === true) return;

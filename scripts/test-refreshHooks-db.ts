@@ -155,7 +155,7 @@ async function until(fn: () => Promise<boolean>, ms = 15_000): Promise<boolean> 
     ok('list: a project editor gets {available, minIntervalSec, hooks: []}', empty.available === true && empty.minIntervalSec === INTERVAL && empty.hooks.length === 0, JSON.stringify(empty));
     const pasted = (await call(podA, 'carol@acme.test', 'refreshHook:create', { projectId: P, datasetId: C })).body;
     ok('create: a pasted dataset cannot have one (the catalog sentence)', pasted.ok === false && pasted.error === EN['refreshHookMessages.has_no_source_to_refresh_from'].replace('{name}', 'Pasted'), JSON.stringify(pasted));
-    const personal = (await call(podA, 'carol@acme.test', 'tokens:create', { name: 'ci' })).body.token as string;
+    const personal = (await call(podA, 'carol@acme.test', 'tokens:create', { name: 'ci', expiresInDays: 30 })).body.token as string;
     const viaToken = (await call(podA, null, 'refreshHook:create', { projectId: P, datasetId: A }, personal)).body;
     ok('create: a personal API token cannot mint one (it would outlive the token\'s revocation)', viaToken.ok === false && viaToken.error === EN['refreshHookMessages.make_a_refresh_url_from_the'], JSON.stringify(viaToken));
 

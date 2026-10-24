@@ -100,9 +100,9 @@ export function useBuilder(projectId: string, columns: Column[], related: Relate
   const offType = initial.live ? chartFeature(chartType) : null;
   const wanted = useMemo(
     () => (complete && !offType
-      ? { projectId, datasetId, encoding: eff, filters: live, ...(overlays.length ? { analytics: overlays } : {}), ...(asOf ? { asOf } : {}), ...figureAsk(chartType, overrides) }
+      ? { projectId, datasetId, encoding: eff, filters: live, ...(overlays.length ? { analytics: overlays } : {}), ...(asOf ? { asOf } : {}), ...figureAsk(chartType, overrides), ...(visualId ? { visualId } : {}) }
       : undefined),
-    [complete, offType, projectId, datasetId, eff, live, overlays, asOf, chartType, overrides],
+    [complete, offType, projectId, datasetId, eff, live, overlays, asOf, chartType, overrides, visualId],
   );
   const preview = usePreview(useSettled(wanted, 160));
   const reply = complete ? preview.data : undefined;

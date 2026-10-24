@@ -73,6 +73,12 @@ export async function completeSetup(pool: Pool, org: string, email: string, hash
       await c.query('ROLLBACK');
       return 'code';
     }
+    // This can re-enable a disabled address: a re-enabled member's old tokens never come back (docs/sso-lifecycle §3.8).
+    await c.query(
+      `UPDATE api_tokens t SET revoked_at = now() FROM users u
+        WHERE u.org_id = $1 AND u.email = $2 AND u.disabled_at IS NOT NULL AND t.user_id = u.id AND t.revoked_at IS NULL`,
+      [org, email],
+    );
     const r = await c.query<{ id: string }>(
       `INSERT INTO users (org_id, email, role, password_hash, must_change_password, last_login_at) VALUES ($1, $2, 'admin', $3, false, now())
        ON CONFLICT (org_id, email) DO UPDATE

@@ -10,6 +10,7 @@ import type { Pool } from 'pg';
 import { ctx, type Role } from '../context';
 import type { AuthMode } from '../env';
 import { registry } from '../rpc';
+import { closeStreamsOf } from '../sse';
 import { hashPassword, passwordProblem } from '../auth/passwordHash';
 import { setPassword } from '../auth/passwordStore';
 
@@ -54,8 +55,10 @@ export function register(pool: () => Pool | null, mode: () => AuthMode, allowedD
     const self = await db().query('SELECT 1 FROM users WHERE org_id = $1 AND id = $2 AND email = $3', [org, userId, ctx().user.email]);
     if (self.rowCount === 1) return { ok: false, error: 'self-password' };
     if (!(await setPassword(db(), org, userId, await hashPassword(password), true))) return { ok: false, error: 'unknown' };
-    // Whoever held a session on the old password is out now.
-    await db().query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+    // Whoever held a session on the old password is out now — their open event streams too, on every pod.
+    const r = await db().query<{ email: string }>(
+      'WITH s AS (DELETE FROM sessions WHERE user_id = $2) SELECT email FROM users WHERE org_id = $1 AND id = $2', [org, userId]);
+    if (r.rows[0]) closeStreamsOf(org, r.rows[0].email);
     return { ok: true };
   });
 }

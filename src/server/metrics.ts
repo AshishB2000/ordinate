@@ -12,6 +12,7 @@
 //   ordinate_scheduled_job_runs_total                    the Postgres-claimed runs (./jobs/runner.ts)
 //   ordinate_compute_pool_*                              compute workers and the queue waiting for one
 //   ordinate_resident_calls_total                        residentTrace outcomes per call site (live:<dialect> too)
+//   ordinate_idp_sync_total{outcome}                     IdP group syncs (./auth/idpGroups.ts) — never by org
 //   what saturates (docs/server/monitoring.md):
 //   ordinate_duckdb_queue_depth / _busy_workers          the per-org DuckDB workers, summed — never by org
 //   ordinate_duckdb_wait_seconds                         enqueue → DuckDB starting the call
@@ -35,6 +36,7 @@ import * as jobs from '../app/jobs';
 import { poolStats, WAIT_BUCKETS } from '../engine/duckdbPool';
 import { inFlight as liveInFlight } from '../engine/live/liveBudget';
 import { runStats } from './jobs/runner';
+import { idpSyncCounts } from './auth/idpGroups';
 import { isDraining } from './lifecycle';
 import { RPC_ROUTE } from './limits';
 import { streamCount } from './sse';
@@ -184,6 +186,8 @@ export function metricsText(): string {
     for (const outcome of outcomes) out.push(`ordinate_resident_calls_total${labels({ op, outcome })} ${c[outcome]}`);
   }
   saturation(out);
+  family(out, 'ordinate_idp_sync_total', 'counter', 'IdP group syncs on this pod, by outcome: applied, unchanged, kept (the last admin), absent, overage or busy (nothing changed).');
+  for (const [outcome, n] of idpSyncCounts()) out.push(`ordinate_idp_sync_total${labels({ outcome })} ${n}`);
   return out.join('\n') + '\n';
 }
 

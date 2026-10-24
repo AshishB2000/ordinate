@@ -19,7 +19,7 @@ import { metricUsage } from '../analysis/metricUsage';
 import { importImage, readImageDataUrl } from '../app/projectAssets';
 import { FileTokenError, resolveUpload } from '../server/files';
 import { isLiveRefusalReply, liveRefusal } from '../data/liveDataset';
-import { visualForCaller } from './rowDoors';
+import { dashboardForCaller, tagForCaller, visualForCaller } from './rowDoors';
 import { figureAsk } from '../analysis/figureAsk';
 
 /** What a card needs of a Visual to draw it — the record minus its bookkeeping. */
@@ -82,9 +82,13 @@ export function register(): void {
     for (const s of await visuals.listVisuals(projectId)) {
       // Each with its tag: the dashboard's Interactions write a visual's overrides with it as `base`.
       const v = await visuals.readVisual(projectId, s.id);
-      if (v) defs.push({ ...visualDef(await visualForCaller(projectId, v.rec)), tag: v.tag });
+      if (!v) continue;
+      const sent = await visualForCaller(projectId, v.rec);
+      defs.push({ ...visualDef(sent), tag: await tagForCaller(projectId, 'visual', sent, v.tag) });
     }
-    return { ok: true, analysis: t.rec, visuals: defs, tag: t.tag };
+    // A restricted caller's tags are of what they were sent (rowDoors.tagForCaller), the dashboard's too.
+    const board = await dashboardForCaller(projectId, t.rec);
+    return { ok: true, analysis: board, visuals: defs, tag: await tagForCaller(projectId, 'dashboard', board, t.tag) };
   });
 
   ipcMain.handle('analysis:tiles', async (e, { projectId, params, asOf, currency, items }: any = {}) =>
@@ -93,6 +97,7 @@ export function register(): void {
         return call(e, 'visual:data', {
           projectId, datasetId: it.datasetId, encoding: it.encoding, filters: it.filters, params, analytics: it.analytics, asOf, currency,
           ...figureAsk(it.chartType, it), // what the tile is drawn as: its figures come with it
+          ...(it.visualId ? { visualId: it.visualId } : {}), // a waterfall's stored totals, filled server-side (rowDoors.storedFigureAsk)
         });
       }
       // A statistics card (statsTile.ts): the spec recomputed under the sheet's filters by stats:tile.
