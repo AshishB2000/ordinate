@@ -2,17 +2,8 @@
    chart-glyph motif, the empty state and "Start from a dataset", and the
    "+ New visual" dialog. Tokens only, so both themes follow. */
 
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-12);
-  flex-wrap: wrap;
-}
 .project {
   min-width: 220px;
-}
-.spacer {
-  flex: 1;
 }
 .count {
   font-size: var(--t-11);

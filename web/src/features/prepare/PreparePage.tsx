@@ -158,17 +158,19 @@ function Prepare({ projectId, datasetId, state }: { projectId: string; datasetId
   const editingStep = editing && editing.index >= 0 ? state.steps[editing.index] : null;
 
   return (
-    <Page title={state.name} sub={`Prepare · ${rows} · ${cols}`}>
-      <nav className={s.crumbs} aria-label="Dataset">
-        <Link className={buttonClass('ghost', 'sm')} to={`/data/${projectId}/${datasetId}`}>
-          <Icon name="arrow-left" />
-          <span>Dataset</span>
-        </Link>
-        <Link className={buttonClass('ghost', 'sm')} to={`/pipelines/${projectId}`}>
-          <Icon name="lineage" />
-          <span>Pipelines</span>
-        </Link>
-      </nav>
+    <Page
+      back={{ to: `/data/${projectId}/${datasetId}`, label: 'Dataset' }}
+      title={state.name}
+      sub={`Prepare · ${rows} · ${cols}`}
+      actions={
+        <nav aria-label="Dataset">
+          <Link className={buttonClass('ghost', 'sm')} to={`/pipelines/${projectId}`}>
+            <Icon name="lineage" />
+            <span>Pipelines</span>
+          </Link>
+        </nav>
+      }
+    >
       <div className={s.layout}>
         <aside className={s.rail} aria-label="Prepare steps" style={{ width: rail }}>
           {warnings.length > 0 && (

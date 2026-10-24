@@ -100,7 +100,7 @@ if (!adminUrl) {
     await screens(page, 'row-access-tab');
 
     // ── Vera, a viewer in team East ──────────────────────────────────────
-    const ctx = await page.context().browser()!.newContext({ baseURL: server.base, viewport: { width: 1440, height: 900 }, extraHTTPHeaders: { 'x-forwarded-email': VERA } });
+    const ctx = await page.context().browser()!.newContext({ baseURL: server.base, viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce', extraHTTPHeaders: { 'x-forwarded-email': VERA } });
     const vpage = await ctx.newPage();
     const problems = await failOnConsoleError(vpage);
     try {

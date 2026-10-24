@@ -2,12 +2,6 @@
    in view while the tiles scroll), the dashboard to be built and its tiles on
    the right — the capture page's arrangement. Tokens only: both themes follow. */
 
-.bar {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-12);
-  margin-top: calc(var(--sp-8) * -1);
-}
 .spacer {
   flex: 1;
 }

@@ -40,7 +40,8 @@ async function addStep(page: Page, type: string): Promise<void> {
   await page.getByRole('menuitem', { name: type, exact: true }).click();
 }
 
-const subText = (page: Page) => page.locator('main h1 + p').textContent();
+// The page header's sentence (Page's sub: the paragraph under the title row).
+const subText = (page: Page) => page.locator('main header p').first().textContent();
 
 e2e('prepare: add, preview, edit and remove steps over the server pipeline', async (s) => {
   const { page } = s;
@@ -89,7 +90,7 @@ e2e('prepare: add, preview, edit and remove steps over the server pipeline', asy
   await fx.waitFor({ state: 'detached' });
   await steps.getByText('Calculated field "double_units" = [units] * 2').waitFor();
   // The new column is the prepared table's last (the grid virtualises columns, so it may be off screen).
-  await page.waitForFunction((t) => document.querySelector('main h1 + p')?.textContent === t, filtered.replace(/(\d+) columns/, (_m, c: string) => `${Number(c) + 1} columns`));
+  await page.waitForFunction((t) => document.querySelector('main header p')?.textContent === t, filtered.replace(/(\d+) columns/, (_m, c: string) => `${Number(c) + 1} columns`));
 
   // ── A keyword-rules preview: the categories' shares are the server's ──
   await addStep(page, 'Text — tag with keyword rules');

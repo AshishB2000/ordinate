@@ -68,7 +68,7 @@
   outline: none;
 }
 .input::placeholder {
-  color: var(--text-faint);
+  color: var(--text-dim);
 }
 .spin {
   display: inline-flex;

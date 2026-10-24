@@ -27,7 +27,7 @@
   white-space: nowrap;
 }
 .placeholder {
-  color: var(--text-faint);
+  color: var(--text-dim);
 }
 
 .chevron {

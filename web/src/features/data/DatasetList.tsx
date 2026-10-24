@@ -10,6 +10,7 @@ import { useDatasets, type AutoRefreshEvery, type DatasetSummary } from '../../a
 import { useCanEdit } from '../projects/api';
 import { toastMovedToTrash } from '../projects/trashToast';
 import { Button, buttonClass, IconButton } from '../../ui/Button';
+import { Icon } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
 import { SkeletonRows } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
@@ -203,6 +204,10 @@ export function DatasetList({ projectId }: { projectId: string }) {
               <Link className={buttonClass('primary')} to={`/data/import?project=${projectId}`}>
                 Import file
               </Link>
+              <Link className={buttonClass('secondary')} to={`/connections/${projectId}`}>
+                <Icon name="plug" />
+                <span>Connect a database</span>
+              </Link>
               <Link className={buttonClass('ghost')} to={`/data/import?project=${projectId}&source=paste`}>
                 Paste data
               </Link>
@@ -211,8 +216,8 @@ export function DatasetList({ projectId }: { projectId: string }) {
         }
       >
         {canEdit
-          ? 'Import a CSV, JSON or Excel file — or paste data straight in — to save a structured dataset in this project.'
-          : 'An editor of this project can import a CSV, JSON or Excel file, or paste data in. You have view-only access.'}
+          ? 'Import a CSV, JSON or Excel file, paste data straight in, or connect a database, warehouse or app — each saves a structured dataset in this project.'
+          : 'An editor of this project can import a file, paste data in or connect a database. You have view-only access.'}
       </EmptyState>
     );
   }

@@ -76,6 +76,7 @@ async function screensInPlace(page: Page, name: string): Promise<void> {
   const prev = await page.evaluate(() => document.documentElement.dataset.theme ?? 'light');
   for (const theme of ['light', 'dark'] as const) {
     await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+    await page.waitForTimeout(300); // the repaint after a theme flip, as every other spec's in-place shot waits
     await page.screenshot({ path: path.join(SCREENS, `${name}-${theme}.png`), fullPage: true });
   }
   await page.evaluate((t) => (document.documentElement.dataset.theme = t), prev);

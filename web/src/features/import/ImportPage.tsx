@@ -8,7 +8,7 @@
 // the save continues into the new-analysis wizard on that dataset.
 
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { EmptyState, ErrorState, Page } from '../../app/blocks';
 import { SkeletonTable } from '../../ui/Skeleton';
 import { Icon, type IconName } from '../../ui/icons/Icon';
@@ -35,6 +35,12 @@ const SOURCES: readonly { id: Source; icon: IconName; label: string; hint: strin
 ];
 
 const isSource = (v: string | null): v is Source => SOURCES.some((x) => x.id === v);
+
+/** The sources that are a CONNECTION, not an upload: they open the 40-source picker (or its URL form) on Connections. */
+const DOORS: readonly { icon: IconName; label: string; hint: string; to: (projectId: string) => string }[] = [
+  { icon: 'database', label: 'Database, warehouse or app', hint: 'PostgreSQL, Snowflake, BigQuery, Salesforce and more', to: (p) => `/connections/${p}` },
+  { icon: 'link', label: 'From a URL', hint: 'A JSON document or API endpoint over https', to: (p) => `/connections/${p}?source=url` },
+];
 
 function StoredCapture({ projectId, captureId, next, onComposer }: { projectId: string; captureId: string; next?: ComposerStart['next']; onComposer: (s: ComposerStart) => void }) {
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +116,23 @@ function Importer({ projectId }: { projectId: string }) {
                 <span className={s.tileHint}>{x.hint}</span>
               </span>
             </button>
+          ))}
+          <p className={s.doorsLabel} id="import-connect">
+            Or connect a source
+          </p>
+          {DOORS.map((x) => (
+            <Link key={x.label} className={`${s.tile} ${s.door}`} to={x.to(projectId)} aria-describedby="import-connect">
+              <span className={s.tileIcon} aria-hidden="true">
+                <Icon name={x.icon} size={16} />
+              </span>
+              <span className={s.tileText}>
+                <span className={s.tileLabel}>{x.label}</span>
+                <span className={s.tileHint}>{x.hint}</span>
+              </span>
+              <span className={s.doorGo} aria-hidden="true">
+                <Icon name="arrow-right" size={16} />
+              </span>
+            </Link>
           ))}
         </nav>
         <section className={s.pane} aria-label={captureId ? 'Capture' : SOURCES.find((x) => x.id === source)?.label}>

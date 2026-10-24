@@ -1,12 +1,6 @@
 /* The Metrics tab and the metric editor (hub.css .ws-table / .mp-* /
    .me-*). A dense table; tokens only. */
 
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: calc(-1 * var(--sp-12));
-}
 .count {
   display: inline-flex;
   align-items: center;
@@ -125,7 +119,7 @@ th.num {
   font-weight: 600;
 }
 .unused {
-  color: var(--text-faint);
+  color: var(--text-dim);
 }
 .actions {
   width: 40px;

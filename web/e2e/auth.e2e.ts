@@ -108,7 +108,7 @@ const browser = await chromium.launch(process.env.E2E_CHROMIUM ? { executablePat
 
 try {
   check('server: starts with AUTH_MODE=oidc against a fresh database', await listening, serverOut);
-  const context = await browser.newContext({ colorScheme: 'light', viewport: { width: 1280, height: 800 } });
+  const context = await browser.newContext({ colorScheme: 'light', reducedMotion: 'reduce', viewport: { width: 1280, height: 800 } });
   const harvest = async (): Promise<void> => {
     for (const c of await context.cookies()) seen.add(c.value);
   };
@@ -179,6 +179,8 @@ try {
   await shoot('shell-signed-in-light.png');
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.reload();
+  // The page under the menu, loaded (not its skeleton), as in the light shot.
+  await page.waitForFunction(() => !!document.querySelector('main h1') && !document.querySelector('[aria-busy="true"]'));
   await page.getByRole('button', { name: 'Account and theme' }).click();
   await page.getByTestId('user-email').waitFor();
   await shoot('shell-signed-in-dark.png');

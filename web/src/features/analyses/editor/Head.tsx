@@ -4,9 +4,10 @@
 // layout size, and ⋯ — History and Publish.
 
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
+import { PageHead } from '../../../app/blocks';
 import { Badge } from '../../../ui/Badge';
-import { Button, IconButton, buttonClass } from '../../../ui/Button';
+import { Button, IconButton } from '../../../ui/Button';
 import { Menu } from '../../../ui/Menu';
 import { toast } from '../../../ui/Toast';
 import { Icon } from '../../../ui/icons/Icon';
@@ -136,57 +137,59 @@ export function Head() {
     void navigate(`/dashboards?project=${ed.projectId}&dashboard=${ed.analysisId}`);
   };
   return (
-    <header className={s.head}>
-      <div className={s.headRow}>
-        <Link className={buttonClass('ghost', 'sm')} to={back}>
-          <Icon name="chevron-left" />
-          <span>Analyses</span>
-        </Link>
-        <h1 className={s.nameH}>
-          {ro ? (
+    <div className={s.head}>
+      <PageHead
+        back={{ to: back, label: 'Analyses' }}
+        title={
+          ro ? (
             <span className={s.name}>{ed.doc.name}</span>
           ) : (
             <button type="button" className={s.name} title="Click to rename" onClick={() => setRenaming(true)}>
               {ed.doc.name}
             </button>
-          )}
-        </h1>
-        {ro ? (
-          <span title="You can read this dashboard, use its filters and comment. A project admin can make you an editor.">
-            <Badge icon="eye">View only</Badge>
-          </span>
-        ) : (
-          <SaveChip />
-        )}
-        <span className={s.grow} />
-        {!ro && (
+          )
+        }
+        status={
+          ro ? (
+            <span title="You can read this dashboard, use its filters and comment. A project admin can make you an editor.">
+              <Badge icon="eye">View only</Badge>
+            </span>
+          ) : (
+            <SaveChip />
+          )
+        }
+        actions={
           <>
-            <IconButton icon="undo" size="sm" label={past.length ? `Undo ${past[past.length - 1].label}` : 'Nothing to undo'} disabled={!past.length} onClick={ed.undo} />
-            <IconButton icon="redo" size="sm" label={future.length ? `Redo ${future[0].label}` : 'Nothing to redo'} disabled={!future.length} onClick={ed.redo} />
+            {!ro && (
+              <>
+                <IconButton icon="undo" size="sm" label={past.length ? `Undo ${past[past.length - 1].label}` : 'Nothing to undo'} disabled={!past.length} onClick={ed.undo} />
+                <IconButton icon="redo" size="sm" label={future.length ? `Redo ${future[0].label}` : 'Nothing to redo'} disabled={!future.length} onClick={ed.redo} />
+              </>
+            )}
+            <ViewsMenu />
+            <ViewControls />
+            <SizeSwitch />
+            <IconButton icon="message-square" size="sm" label="Comments on this dashboard" onClick={() => ed.view.openComments('all')} />
+            <SubscribeButton />
+            <Button size="sm" icon="monitor" onClick={() => ed.view.setPresenting(true)}>
+              Present
+            </Button>
+            <Menu
+              label="More dashboard actions"
+              align="end"
+              trigger={<IconButton icon="more-horizontal" size="sm" label="More dashboard actions" />}
+              items={[
+                { label: 'History', icon: 'history', onSelect: () => void navigate(`/versions/${ed.projectId}/dashboard/${ed.analysisId}`) },
+                { label: 'Lineage', icon: 'lineage', onSelect: () => setLineage(true) },
+                ...(ro ? [] : [{ label: 'Style…', icon: 'sliders' as const, onSelect: () => setStyling(true) }]),
+                { label: 'Export HTML', icon: 'download', onSelect: () => void exportHtml(ed) },
+                { label: 'Print or save as PDF', icon: 'file-text', onSelect: () => window.print() },
+                ...(ro ? [] : [{ label: 'Publish…', icon: 'external-link' as const, onSelect: publish }]),
+              ]}
+            />
           </>
-        )}
-        <ViewsMenu />
-        <ViewControls />
-        <SizeSwitch />
-        <IconButton icon="message-square" size="sm" label="Comments on this dashboard" onClick={() => ed.view.openComments('all')} />
-        <SubscribeButton />
-        <Button size="sm" icon="monitor" onClick={() => ed.view.setPresenting(true)}>
-          Present
-        </Button>
-        <Menu
-          label="More dashboard actions"
-          align="end"
-          trigger={<IconButton icon="more-horizontal" size="sm" label="More dashboard actions" />}
-          items={[
-            { label: 'History', icon: 'history', onSelect: () => void navigate(`/versions/${ed.projectId}/dashboard/${ed.analysisId}`) },
-            { label: 'Lineage', icon: 'lineage', onSelect: () => setLineage(true) },
-            ...(ro ? [] : [{ label: 'Style…', icon: 'sliders' as const, onSelect: () => setStyling(true) }]),
-            { label: 'Export HTML', icon: 'download', onSelect: () => void exportHtml(ed) },
-            { label: 'Print or save as PDF', icon: 'file-text', onSelect: () => window.print() },
-            ...(ro ? [] : [{ label: 'Publish…', icon: 'external-link' as const, onSelect: publish }]),
-          ]}
-        />
-      </div>
+        }
+      />
       <div className={s.headRow}>
         <SheetTabs />
         <span className={s.grow} />
@@ -236,6 +239,6 @@ export function Head() {
       {styling && <StyleDialog onClose={() => setStyling(false)} />}
       {lineage && <LineageDrawer projectId={ed.projectId} type="dashboard" id={ed.analysisId} name={ed.doc.name} onClose={() => setLineage(false)} />}
       {renaming && <NameDialog title="Rename dashboard" initial={ed.doc.name} onClose={() => setRenaming(false)} onSave={(v) => ed.edit('Rename dashboard', (d) => void (d.name = v))} />}
-    </header>
+    </div>
   );
 }

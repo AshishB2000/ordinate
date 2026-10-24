@@ -223,15 +223,21 @@ function Metrics({ projectId }: { projectId: string }) {
 
   const usage = deleting ? q.data?.rows[deleting.id]?.usage : null;
   return (
-    <Page title="Metrics" sub="What this project's numbers mean, defined once.">
-      <div className={s.head}>
-        {count > 0 ? <span className={s.count}>{count === 1 ? '1 metric' : `${count} metrics`}</span> : <span />}
-        {canEdit && (
+    <Page
+      back={{ to: `/data/${projectId}`, label: 'Data' }}
+      title="Metrics"
+      status={count > 0 && <span className={s.count}>{count === 1 ? '1 metric' : `${count} metrics`}</span>}
+      sub="What this project's numbers mean, defined once."
+      actions={
+        // With none defined the empty state holds New metric (and Suggest): the header does not repeat it.
+        canEdit &&
+        q.data?.metrics.length !== 0 && (
           <Button variant="primary" icon="plus" onClick={() => void open(null)}>
             New metric
           </Button>
-        )}
-      </div>
+        )
+      }
+    >
       {body}
       {editing && canEdit && <MetricEditor projectId={projectId} existing={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
       <Dialog

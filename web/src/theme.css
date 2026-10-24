@@ -136,11 +136,15 @@
   --surface-3: #eaecf0;
   --inset: #f2f4f7;
 
+  /* Text — the AA floor (docs/design-floor, theme.contrast.test.ts): --text,
+     --muted and --text-dim read at 4.5:1 on every surface below; --text-faint
+     at 3:1, for disabled controls, decorative icons and dividers only — never
+     for words someone has to read. Values from the desktop's AA pass. */
   --text: #18181b;
   --text-strong: #0f1117;
-  --muted: #6b7280;
-  --text-dim: #8a909c;
-  --text-faint: #aeb4bf;
+  --muted: #5f6672;
+  --text-dim: #636a75;
+  --text-faint: #6b7280;
 
   --border: #e5e7eb;
   --border-2: #d6dae1;
@@ -158,6 +162,13 @@
   --ok-soft: rgba(5, 150, 105, 0.1);
   --warn: #c77d11;
   --warn-soft: rgba(199, 125, 17, 0.12);
+  /* A tone as TEXT (a Badge on its -soft fill): the fill colours above are too
+     light to read at 11px, so each tone has its own ink, 4.5:1 on its soft fill
+     over every surface. --accent-text follows a workspace accent (brand.ts). */
+  --accent-text: var(--brand-accent-2, #1d4fd0);
+  --ok-text: #065f46;
+  --warn-text: #92400e;
+  --error-text: #be123c;
 
   --titlebar: #fafbfc;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
@@ -208,9 +219,9 @@
 
   --text: #ececee;
   --text-strong: #ffffff;
-  --muted: #9ca3af;
-  --text-dim: #6b7280;
-  --text-faint: #52525b;
+  --muted: #a8aeb9;
+  --text-dim: #9ca3af;
+  --text-faint: #8a919d;
 
   --border: #2e2e33;
   --border-2: #3a3a42;
@@ -239,6 +250,10 @@
   --ok-soft: rgba(52, 211, 153, 0.13);
   --warn: #f5b53d;
   --warn-soft: rgba(245, 181, 61, 0.14);
+  --accent-text: var(--brand-dk-accent-fg, #7cb0ff);
+  --ok-text: #34d399;
+  --warn-text: #f5b53d;
+  --error-text: #fca5a5;
 
   --titlebar: #17171a;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);

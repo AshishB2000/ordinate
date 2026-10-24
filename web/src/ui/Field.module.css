@@ -91,7 +91,7 @@
 }
 .input::placeholder,
 .textarea::placeholder {
-  color: var(--text-faint);
+  color: var(--text-dim);
 }
 
 .textarea {

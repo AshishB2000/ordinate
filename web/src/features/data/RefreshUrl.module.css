@@ -84,7 +84,7 @@
 }
 
 .revoked .prefix {
-  color: var(--text-faint);
+  color: var(--text-dim);
   text-decoration: line-through;
 }
 

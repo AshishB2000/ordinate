@@ -3,16 +3,25 @@
    keeps the list, the page frame and Compare. Tokens only. */
 
 .name {
-  flex: 1 1 200px;
-  min-width: 0;
-  padding: 4px 6px;
+  width: 420px;
+  max-width: 100%;
+  margin-left: calc(-1 * (var(--sp-8) + 1px));
+  padding: 0 var(--sp-8);
+  height: var(--ctl-md);
   border: 1px solid transparent;
   border-radius: var(--r-sm);
   background: transparent;
   color: var(--text-strong);
   font: inherit;
-  font-size: var(--t-15);
-  font-weight: 600;
+  letter-spacing: inherit;
+}
+/* As wide as the name, so its status chip sits right after it (a fixed width where the browser cannot size a field to its content). */
+@supports (field-sizing: content) {
+  .name {
+    field-sizing: content;
+    width: auto;
+    min-width: 12ch;
+  }
 }
 .name:hover {
   border-color: var(--border);
@@ -22,28 +31,9 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
-/* A viewer's name: the input's type, as plain text. */
-.nameText {
-  flex: 0 1 auto;
-  min-width: 0;
-  margin: 0;
-  padding: 4px 6px;
-  color: var(--text-strong);
-  font-size: var(--t-15);
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .status {
   color: var(--muted);
   font-size: var(--t-12);
-}
-.headActions {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  margin-left: auto;
 }
 .main {
   display: flex;

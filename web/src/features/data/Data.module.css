@@ -15,33 +15,6 @@
     padding: var(--sp-16);
   }
 }
-.head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sp-12) var(--sp-24);
-}
-.headText {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-  min-width: 0;
-}
-.headTools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-8);
-}
-.title {
-  font-size: var(--t-20);
-  line-height: var(--lh-tight);
-  letter-spacing: var(--tr-tighter);
-  font-weight: 600;
-  color: var(--text-strong);
-  overflow-wrap: anywhere;
-}
 .sub,
 .lead {
   color: var(--muted);
@@ -591,33 +564,6 @@
 }
 
 /* ── Dataset page header ────────────────────────────────────────────── */
-.dsHead {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-8);
-}
-.back {
-  align-self: flex-start;
-}
-.dsTop {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sp-12) var(--sp-24);
-}
-.dsIdent {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-8);
-  min-width: 0;
-}
-.dsTitleRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-8);
-}
 .dsMeta {
   display: flex;
   flex-wrap: wrap;
@@ -625,11 +571,6 @@
   gap: var(--sp-8) var(--sp-12);
   color: var(--muted);
   font-size: var(--t-12);
-}
-.dsActions {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
 }
 .usedIn {
   display: inline-flex;
@@ -682,7 +623,7 @@ a.lineChip:hover {
   color: var(--accent);
 }
 .lineGone {
-  color: var(--text-faint);
+  color: var(--text-dim);
   border-style: dashed;
 }
 

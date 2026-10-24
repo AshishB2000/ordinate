@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderApp } from '../../test-utils';
+import { PRIMARY_SELECTOR } from '../../ui/Button';
 
 // Admin → People → Identity provider groups, and what a managed role or a
 // linked team hides (docs/sso-lifecycle/00-design.md §3.15).
@@ -136,6 +137,18 @@ describe('Identity provider groups panel', () => {
     renderApp('/admin');
     expect(await screen.findByRole('heading', { name: 'No groups mapped yet' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Map a group' })).toBeTruthy();
+  });
+
+  it('People keeps one primary, Invite people: Map a group is a secondary, listed or empty (docs/design-floor)', async () => {
+    for (const g of [groups(), groups({ groups: [], roleManaged: false, linkedTeamIds: [] })]) {
+      serve(base({ body: g }));
+      renderApp('/admin');
+      const map = await screen.findByRole('button', { name: 'Map a group' });
+      const primaries = [...document.querySelectorAll(PRIMARY_SELECTOR)].map((b) => b.textContent?.trim());
+      expect(primaries).toEqual(['Invite people']);
+      expect(map.matches(PRIMARY_SELECTOR)).toBe(false);
+      cleanup();
+    }
   });
 
   it('designs the error state, with a retry', async () => {

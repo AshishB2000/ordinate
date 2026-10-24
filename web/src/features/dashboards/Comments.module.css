@@ -197,7 +197,7 @@
   color: var(--muted);
 }
 .homeCount {
-  color: var(--text-faint);
+  color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
 .homeRow {

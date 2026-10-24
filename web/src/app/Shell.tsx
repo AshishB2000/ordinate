@@ -20,6 +20,7 @@ import { JobsButton } from './JobsButton';
 import { AlertsBell } from '../features/dashboards/AlertsBell';
 import { useLiveLimitNotice } from '../features/admin/liveLimitNotice';
 import { NAV, type NavItem } from './nav';
+import { NAV_GROUPS } from './navGroups';
 import { Dock, DockToggle } from '../features/assistant/DockParts';
 import { useWorkspacePrefs } from './prefs';
 import { CommandPalette, openPalette } from '../features/palette/CommandPalette';
@@ -141,7 +142,7 @@ export function Shell() {
   // hidden once the role is known to be another; the page explains itself too.
   const role = me.data?.user?.role;
   const shown = NAV.filter((n) => n.to !== '/admin' || role === undefined || role === 'admin');
-  const main = shown.filter((n) => !n.bottom);
+  const groups = NAV_GROUPS.map((g) => ({ label: g.label, items: g.items.flatMap((to) => shown.filter((n) => n.to === to)) }));
   const bottom = shown.filter((n) => n.bottom);
   const here = useLocation();
   // Signed out while the app is open (expired, signed out in another tab):
@@ -174,8 +175,15 @@ export function Shell() {
         <div className={s.body}>
           <nav className={s.rail} aria-label="Sections">
             <div className={s.nav}>
-              {main.map((n) => (
-                <NavEntry key={n.to} item={n} />
+              {groups.map((g) => (
+                <div key={g.label} className={s.group} role="group" aria-labelledby={`nav-${g.label}`}>
+                  <span className={s.groupLabel} id={`nav-${g.label}`}>
+                    {g.label}
+                  </span>
+                  {g.items.map((n) => (
+                    <NavEntry key={n.to} item={n} />
+                  ))}
+                </div>
               ))}
             </div>
             <div className={s.bottom}>

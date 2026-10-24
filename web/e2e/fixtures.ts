@@ -290,6 +290,9 @@ export async function openSession(opts: E2eOptions = {}): Promise<Session & { cl
   const context = await browser.newContext({
     baseURL: srv.base,
     viewport: { width: 1440, height: 900 },
+    // The final frame at once (the app honours it: charts/build.ts, base.css), so a
+    // screenshot shows the figures, never a bar mid-grow or a panel mid-fade.
+    reducedMotion: 'reduce',
     ...opts.device,
     ...(contextHeaders ? { extraHTTPHeaders: contextHeaders } : {}),
   });

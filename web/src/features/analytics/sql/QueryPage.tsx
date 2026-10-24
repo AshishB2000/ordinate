@@ -10,10 +10,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { formatNumber } from '../../../../../src/app/format.ts';
-import { PageSkeleton } from '../../../app/blocks';
+import { PageHead, PageSkeleton } from '../../../app/blocks';
+import { Marked, useWorkbenchBack } from '../Workbench';
 import { buttonClass } from '../../../ui/Button';
 import { DataGrid } from '../../../ui/DataGrid/DataGrid';
-import { Icon } from '../../../ui/icons/Icon';
 import { SkeletonTable } from '../../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../../ui/States';
 import { useCaret } from '../../../ui/useCaret';
@@ -38,28 +38,18 @@ const plural = (n: number, one: string) => `${formatNumber(n)} ${one}${n === 1 ?
 
 function Head({ projectId }: { projectId: string }) {
   const canEdit = useCanEdit(projectId);
+  const back = useWorkbenchBack(projectId);
   return (
-    <header className={a.head}>
-      <div className={`${a.ident} ${s.identGrow}`}>
-        <h1 className={a.title}>
-          <span className={a.mark} aria-hidden="true">
-            <Icon name="code" />
-          </span>
-          SQL query
-        </h1>
-        <p className={a.sub}>
-          {canEdit
-            ? 'Every dataset in this project is a table — join, filter and aggregate them, then save the result as a dataset that stays up to date.'
-            : 'Every dataset in this project is a table — join, filter and aggregate them.'}
-        </p>
-      </div>
-      <div className={a.actions}>
-        <Link className={buttonClass('secondary', 'sm')} to={`/analytics?project=${projectId}`}>
-          <Icon name="x" />
-          Analytics
-        </Link>
-      </div>
-    </header>
+    <PageHead
+      className={a.head}
+      back={back}
+      title={<Marked icon="code">SQL query</Marked>}
+      sub={
+        canEdit
+          ? 'Every dataset in this project is a table — join, filter and aggregate them, then save the result as a dataset that stays up to date.'
+          : 'Every dataset in this project is a table — join, filter and aggregate them.'
+      }
+    />
   );
 }
 

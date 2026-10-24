@@ -7,16 +7,15 @@
 // (commit, undo/redo and ⌘Z return early) — hiding the buttons is half of it.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
-import { EmptyState, ErrorState, PageSkeleton } from '../../../app/blocks';
+import { EmptyState, ErrorState, PageHead, PageSkeleton } from '../../../app/blocks';
 import { Badge } from '../../../ui/Badge';
-import { Button, IconButton, buttonClass } from '../../../ui/Button';
+import { Button, IconButton } from '../../../ui/Button';
 import { Dialog, DialogClose } from '../../../ui/Dialog';
 import { Menu } from '../../../ui/Menu';
 import { toast } from '../../../ui/Toast';
-import { Icon } from '../../../ui/icons/Icon';
 import { storyOutline } from '../../../../../src/analysis/storyText.ts';
 import { useRoles } from '../../projects/api';
 import { useAdoptProject } from '../../projects/current';
@@ -205,53 +204,54 @@ function Editor({ projectId, story, focusEnd, readOnly, onReload }: { projectId:
 
   return (
     <div className={s.storyPage}>
-      <header className={s.head}>
-        <Link className={buttonClass('ghost', 'sm')} to={`/reports?project=${projectId}&tab=stories`} onClick={() => void flush()}>
-          <Icon name="arrow-left" />
-          <span>Stories</span>
-        </Link>
-        {readOnly ? (
-          <>
-            <h1 className={`${s.nameH} ${s.nameText}`}>{snap.name}</h1>
+      <PageHead
+        className={s.head}
+        back={{ to: `/reports?project=${projectId}&tab=stories`, label: 'Stories' }}
+        title={
+          readOnly ? (
+            snap.name
+          ) : (
+            <input
+              className={s.nameInput}
+              aria-label="Story name"
+              value={snap.name}
+              maxLength={200}
+              onChange={(e) => commit({ ...snap, name: e.target.value }, 'Rename', true)}
+              onBlur={() => !snap.name.trim() && commit({ ...snap, name: 'Untitled story' }, 'Rename')}
+              onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+            />
+          )
+        }
+        status={
+          readOnly ? (
             <Badge icon="eye">View only</Badge>
-          </>
-        ) : (
-          <>
-            <h1 className={s.nameH}>
-              <input
-                className={s.nameInput}
-                aria-label="Story name"
-                value={snap.name}
-                maxLength={200}
-                onChange={(e) => commit({ ...snap, name: e.target.value }, 'Rename', true)}
-                onBlur={() => !snap.name.trim() && commit({ ...snap, name: 'Untitled story' }, 'Rename')}
-                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-              />
-            </h1>
+          ) : (
             <span className={s.status} role="status">
               {status}
             </span>
+          )
+        }
+        actions={
+          <>
+            {!readOnly && (
+              <>
+                <IconButton icon="undo" label={undoLabel(hist) ? `Undo ${undoLabel(hist).toLowerCase()}` : 'Nothing to undo'} disabled={!undoLabel(hist)} onClick={() => step('undo')} />
+                <IconButton icon="redo" label={redoLabel(hist) ? `Redo ${redoLabel(hist).toLowerCase()}` : 'Nothing to redo'} disabled={!redoLabel(hist)} onClick={() => step('redo')} />
+              </>
+            )}
+            <Button icon="maximize" onClick={() => void flush().then(() => setPresenting(true))}>
+              Present
+            </Button>
+            <Button variant="primary" icon="download" onClick={() => void doExport()}>
+              Export PDF
+            </Button>
+            <CommentDoor projectId={projectId} kind="story" id={story.id} />
+            {!readOnly && (
+              <Menu label="Story options" align="end" trigger={<IconButton icon="more-horizontal" label="Story options" />} items={[{ label: 'Delete story', icon: 'trash', danger: true, onSelect: () => setConfirmDelete(true) }]} />
+            )}
           </>
-        )}
-        <div className={s.headActions}>
-          {!readOnly && (
-            <>
-              <IconButton icon="undo" label={undoLabel(hist) ? `Undo ${undoLabel(hist).toLowerCase()}` : 'Nothing to undo'} disabled={!undoLabel(hist)} onClick={() => step('undo')} />
-              <IconButton icon="redo" label={redoLabel(hist) ? `Redo ${redoLabel(hist).toLowerCase()}` : 'Nothing to redo'} disabled={!redoLabel(hist)} onClick={() => step('redo')} />
-            </>
-          )}
-          <Button icon="maximize" onClick={() => void flush().then(() => setPresenting(true))}>
-            Present
-          </Button>
-          <Button variant="primary" icon="download" onClick={() => void doExport()}>
-            Export PDF
-          </Button>
-          <CommentDoor projectId={projectId} kind="story" id={story.id} />
-          {!readOnly && (
-            <Menu label="Story options" align="end" trigger={<IconButton icon="more-horizontal" label="Story options" />} items={[{ label: 'Delete story', icon: 'trash', danger: true, onSelect: () => setConfirmDelete(true) }]} />
-          )}
-        </div>
-      </header>
+        }
+      />
       {changed && !readOnly && (
         <div className={s.conflict}>
           <ConflictBanner noun="story" onReload={onReload} onCopy={conflict.copy} />

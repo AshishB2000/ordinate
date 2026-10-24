@@ -1,14 +1,6 @@
 /* The dashboards list (hub.css .an-list-head / .an-grid / .an-card / .viz-card-*):
    a card grid of live previews. Tokens only, so both themes follow. */
 
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-12);
-  flex-wrap: wrap;
-  margin-top: calc(-1 * var(--sp-12));
-}
 .count {
   display: inline-flex;
   align-items: center;
@@ -19,11 +11,6 @@
   color: var(--muted);
   font-size: var(--t-12);
   font-variant-numeric: tabular-nums;
-}
-.actions {
-  display: flex;
-  gap: var(--sp-8);
-  flex-wrap: wrap;
 }
 .grid {
   margin: 0;

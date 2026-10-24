@@ -375,3 +375,16 @@
     padding-top: 0;
   }
 }
+
+/* A list's count, a chip after the page title (as Analyses and Metrics show theirs). */
+.count {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--sp-8);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+}

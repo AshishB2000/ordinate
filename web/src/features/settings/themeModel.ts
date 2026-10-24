@@ -18,6 +18,7 @@ const AXIS_COLORS = [
   '--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5', '--chart-6', '--chart-7', '--chart-8',
   '--chart-accent',
   '--error', '--error-soft', '--ok', '--ok-soft', '--warn', '--warn-soft',
+  '--accent-text', '--ok-text', '--warn-text', '--error-text',
   '--titlebar',
 ];
 const AXIS_SHADOWS = ['--shadow-sm', '--shadow-md', '--shadow-lg'];
@@ -132,7 +133,21 @@ const CHECKS = ['--accent', '--chart-1', '--chart-2', '--chart-3', '--chart-4', 
   .map((token) => ({ token, against: '--surface', min: 3, what: 'on the surface' }))
   .concat([{ token: '--text', against: '--bg', min: 4.5, what: 'on the background' }]);
 
-/** Every chart colour and the accent at 3:1 on the surface, body text at 4.5:1 on the page. Advice, not a gate. */
+/** A tone's ink and the tint it is read on (docs/design-floor). */
+const INKS: Array<[string, string]> = [['--accent-text', '--accent-soft'], ['--ok-text', '--ok-soft'], ['--warn-text', '--warn-soft'], ['--error-text', '--error-soft']];
+
+/** `fill` painted over the opaque `under`, as #rrggbb; null when either is not a colour. */
+function over(fill: unknown, under: unknown): string | null {
+  if (typeof fill !== 'string' || typeof under !== 'string' || !HEX_RE.test(under)) return null;
+  if (HEX_RE.test(fill)) return fill;
+  const m = RGBA_RE.exec(fill);
+  if (!m) return null;
+  const a = Number(m[4]);
+  const u = [1, 3, 5].map((i) => parseInt(under.slice(i, i + 2), 16));
+  return '#' + [m[1], m[2], m[3]].map((c, i) => Math.round(Number(c) * a + u[i] * (1 - a)).toString(16).padStart(2, '0')).join('');
+}
+
+/** Every chart colour and the accent at 3:1 on the surface, body text at 4.5:1 on the page, each tone's ink at 4.5:1 on its tint. Advice, not a gate. */
 export function themeWarnings(tokens: unknown): Warning[] {
   const t = sanitizeTokens(tokens);
   const out: Warning[] = [];
@@ -141,6 +156,12 @@ export function themeWarnings(tokens: unknown): Warning[] {
     if (r === null || r >= c.min) continue;
     const ratio = Math.round(r * 10) / 10;
     out.push({ token: c.token, against: c.against, ratio, min: c.min, message: `${ratio}:1 ${c.what} — needs ${c.min}:1` });
+  }
+  for (const [ink, fill] of INKS) {
+    const r = contrast(t[ink], over(t[fill], t['--surface']));
+    if (r === null || r >= 4.5) continue;
+    const ratio = Math.round(r * 10) / 10;
+    out.push({ token: ink, against: fill, ratio, min: 4.5, message: `${ratio}:1 on its fill — needs 4.5:1` });
   }
   return out;
 }
@@ -191,7 +212,7 @@ export function deriveBase(t: Tokens): Tokens {
   const text = hexOr(t['--text'], '#18181b');
   const border = hexOr(t['--border'], '#e5e7eb');
   const dark = isDark(bg);
-  return {
+  const b: Tokens = {
     ...t,
     '--surface-1': surface,
     '--surface-float': dark ? mix(surface, text, 0.04) : surface,
@@ -200,20 +221,25 @@ export function deriveBase(t: Tokens): Tokens {
     '--inset': mix(bg, text, 0.03),
     '--titlebar': mix(bg, surface, 0.5),
     '--text-strong': mix(text, dark ? '#ffffff' : '#000000', 0.5),
-    '--muted': mix(text, surface, 0.45),
-    '--text-dim': mix(text, surface, 0.58),
-    '--text-faint': mix(text, surface, 0.72),
     '--border-2': mix(border, text, 0.1),
     '--border-3': mix(border, text, 0.22),
     '--border-hairline': rgba(text, dark ? 0.1 : 0.08),
   };
+  // The quiet text tones start as a mix toward the surface and walk back toward the text until they
+  // hold the floor on every surface: 4.5:1 for words, 3:1 for the faint hints (theme.contrast.test.ts).
+  const under = [bg, surface, b['--surface-2'], b['--surface-3'], b['--inset']] as string[];
+  const quiet = (t0: number, min: number) => walk(mix(text, surface, t0), dark ? 1 : -1, (h) => under.every((u) => brandContrast(h, u) >= min));
+  b['--muted'] = quiet(0.45, 4.5);
+  b['--text-dim'] = quiet(0.58, 4.5);
+  b['--text-faint'] = quiet(0.72, 3);
+  return { ...b, ...deriveInks(b) };
 }
 
 export function deriveAccent(t: Tokens): Tokens {
   const accent = hexOr(t['--accent'], '#2563eb');
   const dark = isDark(hexOr(t['--surface'], '#ffffff'));
   const hsl = hexToHsl(accent);
-  return {
+  const a: Tokens = {
     ...t,
     '--accent-2': hsl ? hslToHex(hsl.h, hsl.s, Math.max(0, hsl.l - 0.07)) : accent,
     '--accent-soft': rgba(accent, dark ? 0.16 : 0.08),
@@ -222,6 +248,43 @@ export function deriveAccent(t: Tokens): Tokens {
     '--chart-accent': accent,
     '--accent-ink': brandContrast(accent, '#ffffff') >= 3 ? '#ffffff' : '#0f1117',
   };
+  return { ...a, ...deriveInks(a) };
+}
+
+/** The app's own tone inks (theme.css), the start of each walk. */
+const TONE_INKS: Record<'light' | 'dark', Tokens> = {
+  light: { '--ok-text': '#065f46', '--warn-text': '#92400e', '--error-text': '#be123c' },
+  dark: { '--ok-text': '#34d399', '--warn-text': '#f5b53d', '--error-text': '#fca5a5' },
+};
+
+/**
+ * The four inks for THIS theme's lightness: the accent's from its own hue, the tones from the app's,
+ * each walked until it reads 4.5:1 on its tint over every surface the theme carries.
+ */
+export function deriveInks(t: Tokens): Tokens {
+  const surface = hexOr(t['--surface'], '#ffffff');
+  const dark = isDark(surface);
+  const under = ['--bg', '--surface', '--surface-2', '--surface-3', '--inset'].map((k) => t[k]).filter((v): v is string => typeof v === 'string' && HEX_RE.test(v));
+  const start: Tokens = { '--accent-text': hexOr(t['--accent'], '#2563eb'), ...TONE_INKS[dark ? 'dark' : 'light'] };
+  const out: Tokens = {};
+  for (const [ink, fill] of INKS) {
+    const reads = (h: string) => (under.length ? under : [surface]).every((u) => brandContrast(h, over(t[fill], u) ?? u) >= 4.5);
+    out[ink] = walk(String(start[ink]), dark ? 1 : -1, reads);
+  }
+  return out;
+}
+
+/**
+ * What a sheet drawing a theme sets: its CSS, plus the inks a theme saved before they existed lacks —
+ * derived for its own surface, never left to the app's (a dark theme in a light app). A theme that sets
+ * no surface leaves the app's inks, which match the app's surfaces.
+ */
+export function themeStyleVars(tokens: unknown): Array<[string, string]> {
+  const t = sanitizeTokens(tokens);
+  const vars = themeCssVars(t);
+  if (!HEX_RE.test(String(t['--surface'] ?? ''))) return vars;
+  const inks = deriveInks(t);
+  return vars.concat(INKS.filter(([ink]) => !(ink in t)).map(([ink]): [string, string] => [ink, String(inks[ink])]));
 }
 
 /** The ramp from the accent: its hue family, each walked to 3:1 on THIS theme's surface. */

@@ -6,11 +6,6 @@
   flex-direction: column;
 }
 
-.pageBack {
-  display: flex;
-  margin-bottom: var(--sp-12);
-}
-
 /* A refused figure sits inside a card or a tile: no frame of its own, centred in what it has. */
 .refusal {
   display: flex;

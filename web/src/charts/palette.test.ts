@@ -8,11 +8,12 @@
 // __golden__/palette.json, compared with Object.is at every leaf.
 
 import { deepStrictEqual } from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { golden } from '../test-golden';
-import { applyBrandTokens, BRAND_DARK_SURFACES, brandTokens, rampColor, valueRamp } from './palette';
+import { applyBrandTokens, BRAND_DARK_SURFACES, BRAND_INK_SURFACES, brandTokens, rampColor, valueRamp } from './palette';
 
 const ROOT = path.resolve(process.cwd(), '..');
 const require = createRequire(path.join(ROOT, 'package.json'));
@@ -42,31 +43,87 @@ function contrast(a: string, b: string): number {
 
 const HOSTILE = ['#ffff00', '#ffffff', '#000000', '#00ff00', '#808080', '#1a1a1a', '#ff00ff', '#7fffd4'];
 
+/** A rule's custom property, read out of a stylesheet (comments dropped). */
+function cssToken(rel: string, sel: string, name: string): string {
+  const css = readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const body = new RegExp(`(^|[;}\\s])${sel.replace(/[.[\]"=]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[2] ?? '';
+  return new RegExp(`${name}\\s*:\\s*(#[0-9a-f]{6})`, 'i').exec(body)?.[1] ?? `${sel} has no ${name}`;
+}
+
 describe('the desktop palette, recorded', () => {
-  it('the dark surfaces', () => deepStrictEqual(BRAND_DARK_SURFACES, G.darkSurfaces));
+  // The desktop walked against two dark surfaces; the golden holds its answers for those. Today's list
+  // (every dark --surface and --surface-float, the app's and the dark sheet's) is only a different
+  // input to the same algorithm, so each comparison below passes the recorded one.
+  it('the dark surfaces: the recorded ones, and today\'s read out of the CSS', () => {
+    deepStrictEqual(G.darkSurfaces, ['#1c1c20', '#232327']);
+    const today = ['--surface', '--surface-float'].flatMap((t) => [cssToken('../theme.css', '[data-theme="dark"]', t), cssToken('../features/dashboards/Style.module.css', '.theme_dark', t)]);
+    deepStrictEqual([...BRAND_DARK_SURFACES].sort(), [...new Set(today)].sort());
+  });
 
   it('brandTokens: every seed gives the desktop tokens', () => {
     expect(G.brandTokens.length).toBeGreaterThan(16);
-    for (const [seed, want] of G.brandTokens) deepStrictEqual(brandTokens(seed), want, seed);
+    // null: the desktop's ink rule (no walk on the tint), the input the golden was recorded with.
+    for (const [seed, want] of G.brandTokens) deepStrictEqual(brandTokens(seed, G.darkSurfaces, null), want, seed);
   });
 
   it('valueRamp and rampColor: every kind, seed and surface', () => {
-    for (const [kind, seed, surface, want] of G.ramps) deepStrictEqual(valueRamp(kind, seed, surface), want, `${kind} ${seed} ${surface}`);
+    for (const [kind, seed, surface, want] of G.ramps) deepStrictEqual(valueRamp(kind, seed, surface, 7, G.darkSurfaces), want, `${kind} ${seed} ${surface}`);
     for (const [kind, ramp, v, min, max, want] of G.colors) expect(Object.is(rampColor(ramp, kind, v, min, max), want), `${kind} ${v}`).toBe(true);
   });
 
-  it('applyBrandTokens sets the desktop properties, and clearing removes them', () => {
+  it('applyBrandTokens sets the desktop properties to brandTokens\' values, and clearing removes them', () => {
     const el = document.createElement('div');
     applyBrandTokens(el, '#7c3aed');
     const set = Object.fromEntries([...Array(el.style.length).keys()].map((i) => [el.style.item(i), el.style.getPropertyValue(el.style.item(i))]));
-    deepStrictEqual(set, G.applied);
+    deepStrictEqual(Object.keys(set).sort(), Object.keys(G.applied).sort());
+    const t = brandTokens('#7c3aed')!;
+    deepStrictEqual(set, { ...t.light, ...t.dark });
     expect(Object.keys(set).length).toBeGreaterThan(10);
     applyBrandTokens(el, '');
     expect(el.style.length).toBe(0);
   });
 
   it('a broken port would be caught (negative control)', () => {
-    expect(() => deepStrictEqual(brandTokens('#2563eb'), G.brandTokens.find(([s]) => s === '#7c3aed')![1])).toThrow();
+    expect(() => deepStrictEqual(brandTokens('#2563eb', G.darkSurfaces, null), G.brandTokens.find(([s]) => s === '#7c3aed')![1])).toThrow();
+    // …and so would a surface list that drifted from the CSS: today's walk differs from the desktop's.
+    expect(() => deepStrictEqual(brandTokens('#2563eb'), G.brandTokens.find(([s]) => s === '#2563eb')![1])).toThrow();
+  });
+});
+
+/** `ink` on `tint` (an rgba() of the accent) painted over the opaque `under`, as the browser composites it. */
+function onTint(ink: string, tint: string, under: string): number {
+  const m = /^rgba\((\d+), (\d+), (\d+), ([\d.]+)\)$/.exec(tint)!;
+  const a = Number(m[4]);
+  const u = [1, 3, 5].map((i) => parseInt(under.slice(i, i + 2), 16));
+  return contrast(ink, '#' + [m[1], m[2], m[3]].map((c, i) => Math.round(Number(c) * a + u[i]! * (1 - a)).toString(16).padStart(2, '0')).join(''));
+}
+
+describe('the accent as text reads on its tint (docs/design-floor, review round)', () => {
+  it('the ink surfaces: every surface of every sheet, read out of the CSS', () => {
+    const STYLE = '../features/dashboards/Style.module.css';
+    const sheets: Array<[string, string, 'light' | 'dark']> = [['../theme.css', ':root', 'light'], ['../theme.css', '[data-theme="dark"]', 'dark'],
+      [STYLE, '.theme_clean', 'light'], [STYLE, '.theme_executive', 'light'], [STYLE, '.theme_dark', 'dark']];
+    const want = { light: new Set<string>(), dark: new Set<string>() };
+    for (const [file, sel, side] of sheets) for (const t of ['--bg', '--surface', '--surface-2', '--surface-3', '--inset', '--surface-float']) want[side].add(cssToken(file, sel, t));
+    deepStrictEqual([...BRAND_INK_SURFACES.light].sort(), [...want.light].sort());
+    deepStrictEqual([...BRAND_INK_SURFACES.dark].sort(), [...want.dark].sort());
+  });
+
+  for (const seed of new Set([...ACCENT_SWATCHES, ...HOSTILE, '#2563eb', '#0d9488', '#7c3aed', '#e11d48', '#ca8a04'])) {
+    it(`${seed}: the light ink (--brand-accent-2) and the dark one (--brand-dk-accent-fg) at 4.5:1 on their tint over every surface`, () => {
+      const { light: L, dark: D } = brandTokens(seed)!;
+      const fails: string[] = [];
+      for (const s of BRAND_INK_SURFACES.light) if (onTint(L['--brand-accent-2']!, L['--brand-accent-soft']!, s) < 4.5) fails.push('light on ' + s);
+      for (const s of BRAND_INK_SURFACES.dark) if (onTint(D['--brand-dk-accent-fg']!, D['--brand-dk-accent-soft']!, s) < 4.5) fails.push('dark on ' + s);
+      // …and the light ink stays a button fill white text reads on.
+      if (contrast(L['--brand-accent-2']!, '#ffffff') < 4.5) fails.push('light ink vs white text');
+      expect(fails).toEqual([]);
+    });
+  }
+
+  it('the desktop\'s ink rule misses it (negative control): #2563eb\'s recorded dark ink fails on surface-3\'s tint', () => {
+    const { dark: D } = brandTokens('#2563eb', G.darkSurfaces, null)!;
+    expect(onTint(D['--brand-dk-accent-fg']!, D['--brand-dk-accent-soft']!, '#303038')).toBeLessThan(4.5);
   });
 });
 

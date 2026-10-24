@@ -213,7 +213,7 @@ function Editor({ projectId, initial }: { projectId: string; initial: TableView 
 
   const notes = [...m.view.check.notes, ...(m.view.steps ? [`Prepare has ${m.view.steps} step${m.view.steps === 1 ? '' : 's'} on this table — the dataset page shows their output.`] : [])];
   return (
-    <Page title={m.view.name} sub="Input table — type or paste rows; every change is saved and checked by the server.">
+    <Page back={{ to: `/data/${projectId}/${id}`, label: 'Dataset' }} title={m.view.name} sub="Input table — type or paste rows; every change is saved and checked by the server.">
       <div className={s.inputHost}>
         <InputToolbar
           m={m}

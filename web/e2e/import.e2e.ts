@@ -178,3 +178,24 @@ e2e('designed states: no model, no captures (in the current project)', async ({ 
   await page.getByRole('region', { name: 'Upload a screenshot' }).getByRole('heading', { name: 'Reading a screenshot needs AI' }).waitFor();
   await screens(page, 'import-captures-empty');
 });
+
+e2e('Data → "Database, warehouse or app" lands on the connector picker (and "From a URL" on its form)', async ({ page, server }) => {
+  const pid = server.sample.projectId;
+  await page.goto(`/data/${pid}`);
+  await settled(page);
+  // The Data header's doors: Import file opens the importer, whose list ends in the connection doors.
+  await page.locator('#main header').getByRole('link', { name: 'Connect a database' }).waitFor();
+  await page.locator('#main header').getByRole('link', { name: 'Import file' }).click();
+  await settled(page);
+  await page.getByRole('link', { name: /^Database, warehouse or app/ }).click();
+  await page.waitForURL((u) => u.pathname === `/connections/${pid}` && u.search === '');
+  await page.getByRole('heading', { name: 'Add a connection' }).waitFor();
+  await page.getByLabel('Search data sources').waitFor();
+
+  await page.goBack();
+  await settled(page);
+  await page.getByRole('link', { name: /^From a URL/ }).click();
+  await page.waitForURL((u) => u.pathname === `/connections/${pid}` && u.searchParams.get('source') === 'url');
+  await page.getByRole('heading', { name: 'URL / API (JSON)' }).waitFor();
+  await screens(page, 'import-door-url');
+});

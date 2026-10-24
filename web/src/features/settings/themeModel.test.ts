@@ -6,7 +6,7 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ALL_TOKENS, deriveAccent, deriveBase, deriveRamp, FONTS, isDark, sanitizeTokens, themeCssVars, themeWarnings, type Tokens } from './themeModel';
+import { ALL_TOKENS, contrast, deriveAccent, deriveBase, deriveRamp, FONTS, isDark, sanitizeTokens, themeCssVars, themeStyleVars, themeWarnings, type Tokens } from './themeModel';
 import { BUILTINS } from './themeBuiltins';
 
 const ROOT = path.resolve(process.cwd(), '..');
@@ -78,5 +78,49 @@ describe('theme model — the browser copy agrees with the server’s', () => {
   it('a dark base re-derives a dark family (no light --surface-2 inside a dark theme)', () => {
     const dark = deriveBase({ '--bg': '#101114', '--surface': '#1c1c20', '--text': '#ececee', '--border': '#2e2e33' });
     for (const k of ['--surface-2', '--surface-3', '--inset', '--titlebar']) expect(isDark(dark[k])).toBe(true);
+  });
+});
+
+/** An ink measured as the browser paints it: on its rgba() fill composited over an opaque surface. */
+function onFill(ink: unknown, fill: unknown, surface: string): number {
+  const m = /^rgba\((\d+), (\d+), (\d+), ([\d.]+)\)$/.exec(String(fill));
+  const u = [1, 3, 5].map((i) => parseInt(surface.slice(i, i + 2), 16));
+  const bg = m ? '#' + [m[1], m[2], m[3]].map((c, i) => Math.round(Number(c) * Number(m[4]) + u[i] * (1 - Number(m[4]))).toString(16).padStart(2, '0')).join('') : surface;
+  return contrast(ink, bg) as number;
+}
+const INKS: Array<[string, string]> = [['--accent-text', '--accent-soft'], ['--ok-text', '--ok-soft'], ['--warn-text', '--warn-soft'], ['--error-text', '--error-soft']];
+const SURFACES = ['--bg', '--surface', '--surface-2', '--surface-3', '--inset'];
+const light = BUILTINS.find((b) => b.id === 'clean')!.tokens;
+const darkBuiltin = BUILTINS.find((b) => b.id === 'dark')!.tokens;
+
+describe('a theme\'s tone inks read on its own sheet (docs/design-floor, review round)', () => {
+  it('duplicating Light and making it dark re-derives every ink to 4.5:1 on its fill, over every surface', () => {
+    const t = deriveBase({ ...light, '--bg': '#101114', '--surface': '#1c1c20', '--text': '#ececee', '--border': '#2e2e33' });
+    for (const [ink, fill] of INKS) for (const sf of SURFACES) expect(onFill(t[ink], t[fill], t[sf] as string), `${ink} on ${sf}`).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('a new accent re-derives the accent ink from its own hue, and it reads on its tint', () => {
+    for (const accent of ['#7c3aed', '#0d9488', '#fde047', '#111111']) {
+      for (const base of [light, darkBuiltin]) {
+        const t = deriveAccent({ ...base, '--accent': accent });
+        for (const sf of SURFACES) expect(onFill(t['--accent-text'], t['--accent-soft'], t[sf] as string), `${accent} on ${sf}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it('a theme saved before the inks gets them where it is drawn, for its own lightness — never the app\'s', () => {
+    const saved: Tokens = { ...darkBuiltin };
+    for (const [ink] of INKS) delete saved[ink];
+    const vars = new Map(themeStyleVars(saved));
+    for (const [ink, fill] of INKS) for (const sf of SURFACES) expect(onFill(vars.get(ink), vars.get(fill), vars.get(sf)!), `${ink} on ${sf}`).toBeGreaterThanOrEqual(4.5);
+    // …and an ink the theme does carry is left as it is.
+    expect(new Map(themeStyleVars(darkBuiltin)).get('--ok-text')).toBe(darkBuiltin['--ok-text']);
+    expect(themeStyleVars(darkBuiltin).length).toBe(themeCssVars(darkBuiltin).length);
+  });
+
+  it('themeWarnings measures the inks: a light ink on a dark theme is not "contrast OK"', () => {
+    const stale = { ...darkBuiltin, '--accent-text': '#1d4fd0', '--ok-text': '#065f46' };
+    expect(themeWarnings(stale).map((w) => w.token).sort()).toEqual(['--accent-text', '--ok-text']);
+    expect(themeWarnings(darkBuiltin).filter((w) => w.token.endsWith('-text'))).toEqual([]);
   });
 });

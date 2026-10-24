@@ -206,19 +206,21 @@ function Capture({ projectId, view }: { projectId: string; view: CaptureView }) 
   const canEdit = useCanEdit(projectId);
   const at = view.createdAt ? new Date(view.createdAt) : null;
   return (
-    <Page title={view.title} sub="What the model read out of this screenshot. Every figure is computed by Ordinate from the table it extracted.">
-      <div className={s.bar}>
-        <Link className={buttonClass('ghost', 'sm')} to={`/data/captures?project=${projectId}`}>
-          <Icon name="arrow-left" />
-          <span>Captures</span>
-        </Link>
-        {at && !Number.isNaN(at.getTime()) && (
-          <time className={s.when} dateTime={view.createdAt}>
-            Captured {when.format(at)}
-          </time>
-        )}
-        {view.datasetId && <Badge tone="accent">Dataset</Badge>}
-      </div>
+    <Page
+      back={{ to: `/data/captures?project=${projectId}`, label: 'Captures' }}
+      title={view.title}
+      status={view.datasetId ? <Badge tone="accent">Dataset</Badge> : null}
+      sub={
+        <p>
+          {at && !Number.isNaN(at.getTime()) && (
+            <>
+              <time dateTime={view.createdAt}>Captured {when.format(at)}</time>.{' '}
+            </>
+          )}
+          What the model read out of this screenshot. Every figure is computed by Ordinate from the table it extracted.
+        </p>
+      }
+    >
       <div className={s.layout}>
         <Shot projectId={projectId} view={view} />
         <div className={s.read}>

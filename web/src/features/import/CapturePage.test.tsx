@@ -70,6 +70,10 @@ describe('a capture’s page', () => {
     const calls = serve(VIEW);
     open();
     expect(await screen.findByRole('heading', { level: 1, name: 'Regional sales' }, { timeout: LAZY })).toBeTruthy();
+    // When it was captured is a machine-readable date, not only words.
+    const when = document.querySelector('main header time');
+    expect(when?.getAttribute('datetime')).toBe(VIEW.createdAt);
+    expect(when?.textContent).toMatch(/^Captured /);
 
     const analysis = screen.getByRole('region', { name: 'Analysis' });
     expect(within(analysis).getByText('120').tagName).toBe('STRONG');

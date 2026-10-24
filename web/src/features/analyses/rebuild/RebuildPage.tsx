@@ -15,7 +15,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
 import { useDatasets } from '../../../api/datasets';
-import { EmptyState, ErrorState, Page, PageSkeleton } from '../../../app/blocks';
+import { EmptyState, ErrorState, Page, PageSkeleton, type Back } from '../../../app/blocks';
 import { Button, buttonClass } from '../../../ui/Button';
 import { Select } from '../../../ui/Select';
 import { toast } from '../../../ui/Toast';
@@ -158,31 +158,26 @@ export default function RebuildPage() {
 
   const title = 'Rebuild a dashboard from a screenshot';
   const sub = 'Drop a screenshot of a Tableau, Power BI, Looker or Metabase dashboard. The model reads its layout — never its numbers — and Ordinate rebuilds it on your data.';
-  const back = (
-    <Link className={buttonClass('ghost', 'sm')} to={`/analyses?project=${projectId}`}>
-      <Icon name="arrow-left" />
-      <span>Dashboards</span>
-    </Link>
-  );
+  const back: Back = { to: `/analyses?project=${projectId}`, label: 'Analyses' };
 
   if (status.isPending || sets.isPending) return <PageSkeleton />;
   if (status.isError) {
     return (
-      <Page title={title}>
+      <Page back={back} title={title}>
         <ErrorState title="The model’s status could not be read" message={status.error.message} onRetry={() => void status.refetch()} />
       </Page>
     );
   }
   if (sets.isError) {
     return (
-      <Page title={title}>
+      <Page back={back} title={title}>
         <ErrorState title="Datasets could not be loaded" message={sets.error.message} onRetry={() => void sets.refetch()} />
       </Page>
     );
   }
   if (!status.data?.ready) {
     return (
-      <Page title={title} sub={sub}>
+      <Page back={back} title={title} sub={sub}>
         <EmptyState icon="sparkles" title="Reading a dashboard screenshot needs AI" actions={<AiNotReady status={status.data ?? undefined} className={s.aiNote} />}>
           Templates, layouts and blank sheets work without a model — start one from Dashboards → New.
         </EmptyState>
@@ -191,8 +186,16 @@ export default function RebuildPage() {
   }
   if (!canEdit) {
     return (
-      <Page title={title} sub={sub}>
-        <EmptyState icon="lock" title="You can view this project, not add to it" actions={back}>
+      <Page back={back} title={title} sub={sub}>
+        <EmptyState
+          icon="lock"
+          title="You can view this project, not add to it"
+          actions={
+            <Link className={buttonClass('secondary')} to={back.to}>
+              Back to Analyses
+            </Link>
+          }
+        >
           Rebuilding a dashboard creates one. Ask a project editor for access.
         </EmptyState>
       </Page>
@@ -200,7 +203,7 @@ export default function RebuildPage() {
   }
   if (!list.length) {
     return (
-      <Page title={title} sub={sub}>
+      <Page back={back} title={title} sub={sub}>
         <EmptyState
           icon="database"
           title="Bring your data in first"
@@ -249,8 +252,7 @@ export default function RebuildPage() {
   }
 
   return (
-    <Page title={title} sub={sub}>
-      <div className={s.bar}>{back}</div>
+    <Page back={back} title={title} sub={sub}>
       <div className={s.layout}>
         <div className={s.left}>
           {shot ? (

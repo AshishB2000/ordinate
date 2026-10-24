@@ -4,9 +4,9 @@
 import { Page } from '../../app/blocks';
 import { EmptyState } from '../../ui/States';
 
-export function NoAccounts({ title }: { title: string }) {
+export function NoAccounts({ title, back }: { title: string; back?: { to: string; label: string } }) {
   return (
-    <Page title={title}>
+    <Page title={title} back={back}>
       <EmptyState icon="database" title="This server keeps no accounts">
         Members, teams and API tokens are stored in Postgres, and this server runs without one. Set DATABASE_URL and
         sign-in (AUTH_MODE) to manage them here.

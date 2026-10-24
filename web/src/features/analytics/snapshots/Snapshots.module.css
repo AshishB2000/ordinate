@@ -275,7 +275,7 @@
 }
 .null {
   font-style: italic;
-  color: var(--text-faint);
+  color: var(--text-dim);
 }
 .more {
   margin: 0;

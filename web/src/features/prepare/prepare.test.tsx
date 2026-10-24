@@ -143,6 +143,8 @@ describe('Prepare', () => {
     expect(within(list).getByText(/Filter: region != North/)).toBeTruthy();
     expect(within(list).getByText('5,000 → 4,232 rows')).toBeTruthy();
     expect(screen.getByText('Prepare · 4,232 rows · 3 columns')).toBeTruthy();
+    // The dataset's other place to go keeps its landmark beside the crumb back to it.
+    expect(within(screen.getByRole('navigation', { name: 'Dataset' })).getByRole('link', { name: 'Pipelines' })).toBeTruthy();
   });
 
   it('an empty pipeline says what a step is for', async () => {

@@ -11,34 +11,12 @@
   flex-direction: column;
 }
 .head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-12);
   flex: 0 0 auto;
   padding: var(--sp-12) var(--sp-16);
   background: var(--surface);
   border: 1px solid var(--border);
   border-bottom: 0;
   border-radius: var(--r-lg) var(--r-lg) 0 0;
-}
-.name {
-  margin: 0;
-  font-size: var(--t-15);
-  letter-spacing: var(--tr-tight);
-  line-height: var(--lh-snug);
-  font-weight: 600;
-  color: var(--text-strong);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-.headActions {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--sp-8);
-  margin-left: auto;
-  flex: 0 0 auto;
 }
 .dataset {
   min-width: 200px;

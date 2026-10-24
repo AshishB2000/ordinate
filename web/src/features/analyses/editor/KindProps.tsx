@@ -5,8 +5,9 @@
 // SAVED VISUAL's overrides, written through visual:update like the builder.
 
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { rpc } from '../../../api/client';
+import { backTo } from '../../../app/blocks';
 import { Button, buttonClass } from '../../../ui/Button';
 import { Checkbox } from '../../../ui/Choice';
 import { Input } from '../../../ui/Field';
@@ -230,12 +231,13 @@ export function InteractionProps({ def }: { def: VisualDef }) {
 /** A statistics card stores only its spec; the analysis is changed in the Statistics workbench. */
 export function StatsProps({ card }: { card: Card }) {
   const ed = useEditor();
+  const here = useLocation();
   const spec = card.stats as StatsSpec | undefined;
   return (
     <>
       <p className={s.note}>A statistics card stores only the analysis, and recomputes it under the sheet’s filters every time it is drawn.</p>
       {spec && (
-        <Link className={buttonClass('secondary', 'sm')} to={`/analytics/${ed.projectId}/${spec.datasetId}/stats`}>
+        <Link className={buttonClass('secondary', 'sm')} to={`/analytics/${ed.projectId}/${spec.datasetId}/stats`} state={backTo(here.pathname + here.search, ed.doc.name, 'Dashboard')}>
           <Icon name="chart-bar" />
           <span>Open in Statistics</span>
         </Link>

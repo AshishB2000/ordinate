@@ -15,21 +15,21 @@
 }
 .neutral {
   background: var(--surface-3);
-  color: var(--text-dim);
+  color: var(--muted);
 }
 .accent {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 .ok {
   background: var(--ok-soft);
-  color: var(--ok);
+  color: var(--ok-text);
 }
 .warn {
   background: var(--warn-soft);
-  color: var(--warn);
+  color: var(--warn-text);
 }
 .error {
   background: var(--error-soft);
-  color: var(--error);
+  color: var(--error-text);
 }

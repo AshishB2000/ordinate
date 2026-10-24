@@ -188,7 +188,8 @@ e2e('scenarios: empty list → new scenario → a driver moves the figures → c
   await idle(page);
   await screensInPlace(page, 'analytics-scenarios-compare');
 
-  await page.getByRole('link', { name: 'Back' }).click();
+  // The page header's crumb, back to the list.
+  await page.locator('#main').getByRole('link', { name: 'Scenarios', exact: true }).click();
   await page.getByRole('link', { name: /^Open scenario Price \+5%/ }).waitFor();
   await screens(page, 'analytics-scenarios-list');
   report(s);

@@ -28,21 +28,8 @@
   font-size: var(--t-12);
   font-style: italic;
 }
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
 
 /* ── The list ──────────────────────────────────────────────────────────── */
-.listBar {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--sp-8);
-}
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -206,10 +193,6 @@
   padding: var(--sp-24);
 }
 .head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-12);
   padding-bottom: var(--sp-12);
   border-bottom: 1px solid var(--border);
 }
@@ -218,14 +201,7 @@
 }
 
 /* ── Compare ───────────────────────────────────────────────────────────── */
-.cmpTitle {
-  margin: 0;
-  color: var(--text-strong);
-  font-size: var(--t-15);
-  font-weight: 700;
-}
 .cmpCount {
-  margin-left: auto;
   color: var(--muted);
   font-size: var(--t-12);
 }

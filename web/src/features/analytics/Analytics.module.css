@@ -10,26 +10,13 @@
   background: var(--bg);
 }
 .head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sp-16);
-  flex-wrap: wrap;
   padding: var(--sp-16) var(--sp-24) var(--sp-8);
 }
-.ident {
-  min-width: 0;
-}
-.title {
-  display: flex;
+/* A workbench's title wears its mark: the page title's type, the icon in an accent tile. */
+.marked {
+  display: inline-flex;
   align-items: center;
   gap: var(--sp-8);
-  margin: 0;
-  font-size: var(--t-20);
-  line-height: var(--lh-tight);
-  letter-spacing: var(--tr-tighter);
-  font-weight: 600;
-  color: var(--text-strong);
 }
 .mark {
   display: inline-flex;
@@ -40,17 +27,6 @@
   border-radius: var(--r-md);
   background: var(--accent-soft);
   color: var(--accent);
-}
-.sub {
-  margin: var(--sp-4) 0 0 36px;
-  font-size: var(--t-12);
-  color: var(--muted);
-}
-.actions {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--sp-8);
-  flex: none;
 }
 .dsPick {
   width: 240px;

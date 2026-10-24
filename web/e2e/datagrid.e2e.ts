@@ -295,17 +295,25 @@ e2e('keyboard, resize, sticky header and type badges; screenshots in both themes
   await page.keyboard.press('ControlOrMeta+Home');
   await page.keyboard.press('ArrowUp');
   assert.match((await active()) ?? '', /-h0$/);
+  // The virtualizer lays the header out again a frame after a width changes: wait (up to 5 s) for the
+  // width the step should give, then measure — with no animation to wait out, the old read came too soon.
+  const settledWidth = async (i: number, want: number) => {
+    await page
+      .waitForFunction(([k, w]) => Math.round(document.querySelectorAll('[role="columnheader"]')[k]!.getBoundingClientRect().width) === Math.round(w), [i, want] as const, { timeout: 5000 })
+      .catch(() => undefined); // the assertion below names what it got instead
+    return (await heads.nth(i).boundingBox())!.width;
+  };
   const w0 = (await heads.nth(0).boundingBox())!.width;
   await page.keyboard.press('Shift+ArrowRight');
   await page.keyboard.press('Shift+ArrowRight');
-  const w1 = (await heads.nth(0).boundingBox())!.width;
+  const w1 = await settledWidth(0, w0 + 32);
   assert.equal(Math.round(w1 - w0), 32, 'two Shift+Right steps widen by 32 px');
   const edge = (await heads.nth(1).boundingBox())!;
   await page.mouse.move(edge.x + edge.width - 1, edge.y + edge.height / 2);
   await page.mouse.down();
   await page.mouse.move(edge.x + edge.width + 59, edge.y + edge.height / 2, { steps: 4 });
   await page.mouse.up();
-  const w2 = (await heads.nth(1).boundingBox())!.width;
+  const w2 = await settledWidth(1, edge.width + 60);
   assert.equal(Math.round(w2 - edge.width), 60, 'a drag on the edge widens by the drag');
 
   const files = await screens(page, 'datagrid');

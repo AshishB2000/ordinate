@@ -5,11 +5,11 @@
 // React's style object (the CSSOM — the CSP's style-src does not govern it).
 
 import type { CSSProperties } from 'react';
-import { isDark, themeCssVars, type Tokens } from './themeModel';
+import { isDark, themeStyleVars, type Tokens } from './themeModel';
 import t from './Themes.module.css';
 
 function vars(tokens: Tokens): CSSProperties {
-  const out: Record<string, string> = Object.fromEntries(themeCssVars(tokens));
+  const out: Record<string, string> = Object.fromEntries(themeStyleVars(tokens));
   // Not a custom property: without it a dark theme draws light native controls.
   if (tokens['--bg']) out.colorScheme = isDark(tokens['--bg']) ? 'dark' : 'light';
   return out as CSSProperties;

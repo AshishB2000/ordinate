@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../../api/client';
-import { EmptyState, ErrorState, Page, PageSkeleton } from '../../../app/blocks';
+import { EmptyState, ErrorState, Page, PageHead, PageSkeleton } from '../../../app/blocks';
 import { Badge } from '../../../ui/Badge';
 import { buttonClass, IconButton } from '../../../ui/Button';
 import { Menu } from '../../../ui/Menu';
@@ -112,20 +112,13 @@ function Editor({ projectId, sc, readOnly, onReload }: { projectId: string; sc: 
   const res = result.data;
   return (
     <div className={f.page}>
-      <div className={f.head}>
-        <Link className={buttonClass('secondary', 'sm')} to={`/analytics/scenarios/${projectId}`}>
-          <Icon name="arrow-left" />
-          Back
-        </Link>
-        {readOnly ? (
-          <>
-            <h1 className={s.nameText}>{sc.name || 'Scenario'}</h1>
-            <Badge icon="eye">View only</Badge>
-            <span className={s.status}>What-ifs here are not saved</span>
-          </>
-        ) : (
-          <>
-            <h1 className={f.srOnly}>{draft.name || 'Scenario'}</h1>
+      <PageHead
+        className={f.head}
+        back={{ to: `/analytics/scenarios/${projectId}`, label: 'Scenarios' }}
+        title={
+          readOnly ? (
+            sc.name || 'Scenario'
+          ) : (
             <input
               className={s.name}
               type="text"
@@ -138,33 +131,44 @@ function Editor({ projectId, sc, readOnly, onReload }: { projectId: string; sc: 
               onBlur={() => !draft.name.trim() && setDraft({ ...draft, name: sc.name })}
               onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
             />
+          )
+        }
+        status={
+          readOnly ? (
+            <>
+              <Badge icon="eye">View only</Badge>
+              <span className={s.status}>What-ifs here are not saved</span>
+            </>
+          ) : (
             <span className={s.status} aria-live="polite">
               {status}
             </span>
+          )
+        }
+        actions={
+          <>
+            <Link className={buttonClass('secondary', 'sm')} to={`/analytics/scenarios/${projectId}/compare?ids=${sc.id}`}>
+              <Icon name="columns" />
+              Compare
+            </Link>
+            {!readOnly && (
+              <Menu
+                align="end"
+                trigger={<IconButton icon="more-horizontal" label="More scenario actions" size="sm" />}
+                items={[
+                  {
+                    label: 'Duplicate',
+                    icon: 'copy',
+                    onSelect: () => void flush.current().then(() => duplicateScenario(projectId, sc.id, () => void client.invalidateQueries({ queryKey: ['scenario:list', projectId] }))),
+                  },
+                  { kind: 'separator' },
+                  { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setDoomed(true) },
+                ]}
+              />
+            )}
           </>
-        )}
-        <div className={s.headActions}>
-          <Link className={buttonClass('secondary', 'sm')} to={`/analytics/scenarios/${projectId}/compare?ids=${sc.id}`}>
-            <Icon name="columns" />
-            Compare
-          </Link>
-          {!readOnly && (
-            <Menu
-              align="end"
-              trigger={<IconButton icon="more-horizontal" label="More scenario actions" size="sm" />}
-              items={[
-                {
-                  label: 'Duplicate',
-                  icon: 'copy',
-                  onSelect: () => void flush.current().then(() => duplicateScenario(projectId, sc.id, () => void client.invalidateQueries({ queryKey: ['scenario:list', projectId] }))),
-                },
-                { kind: 'separator' },
-                { label: 'Delete', icon: 'trash', danger: true, onSelect: () => setDoomed(true) },
-              ]}
-            />
-          )}
-        </div>
-      </div>
+        }
+      />
       {guard.changed && !readOnly && <ConflictBanner noun="scenario" onReload={onReload} onCopy={conflict.copy} />}
       <div className={s.main}>
         <ScenarioSetup

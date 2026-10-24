@@ -70,7 +70,22 @@ function List({ projectId }: { projectId: string }) {
   const canEdit = useCanEdit(projectId);
   const list = q.data ?? [];
   return (
-    <Page title="Scenarios" sub="What-if: drivers move a metric’s inputs, never the stored data. Open one to tune it, or compare up to four side by side.">
+    <Page
+      back={{ to: `/analytics?project=${projectId}`, label: 'Analytics' }}
+      title="Scenarios"
+      sub="What-if: drivers move a metric’s inputs, never the stored data. Open one to tune it, or compare up to four side by side."
+      actions={
+        list.length > 0 && (
+          <>
+            <Link className={buttonClass('secondary')} to={`/analytics/scenarios/${projectId}/compare`}>
+              <Icon name="columns" />
+              Compare
+            </Link>
+            <NewScenario projectId={projectId} />
+          </>
+        )
+      }
+    >
       {q.isPending ? (
         <SkeletonRows rows={4} label="Loading scenarios" />
       ) : q.isError ? (
@@ -92,13 +107,6 @@ function List({ projectId }: { projectId: string }) {
         </div>
       ) : (
         <>
-          <div className={s.listBar}>
-            <Link className={buttonClass('secondary')} to={`/analytics/scenarios/${projectId}/compare`}>
-              <Icon name="columns" />
-              Compare
-            </Link>
-            <NewScenario projectId={projectId} />
-          </div>
           <ul className={s.grid} aria-label="Scenarios">
             {list.map((sc) => (
               <Card key={sc.id} sc={sc} projectId={projectId} refresh={refresh} onDelete={() => setDoomed(sc)} />

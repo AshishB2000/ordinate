@@ -63,7 +63,6 @@ async function shoot(page: Page, theme: 'light' | 'dark'): Promise<string[]> {
 }
 
 e2e('pivot, cohort and funnel grids render from the API, accessibly, in both themes', async ({ page, rpc }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('/dev/charts');
   await settled(page);

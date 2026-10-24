@@ -221,12 +221,13 @@ describe('ExplainPanel', () => {
 
   it('"Open in Analytics" hands the server’s question to the workbench in router state, never the URL', async () => {
     serve({ 'drivers:explainPoint': { body: answer() } });
-    const { router } = show(target());
+    const { router } = show(target({ dashboard: 'Sales overview' }));
     await screen.findByRole('heading', { name: SENTENCE });
     fireEvent.click(screen.getByRole('button', { name: 'Open in Analytics' }));
     await waitFor(() => expect(router.state.location.pathname).toBe(`/analytics/${PID}/${DID}/drivers`));
     expect(router.state.location.search).toBe('');
-    expect(router.state.location.state).toEqual({ request: SPEC });
+    // …and the crumb back to the dashboard it was asked on (the workbench's "came from").
+    expect(router.state.location.state).toEqual({ request: SPEC, back: { to: '/', label: 'Sales overview' } });
   });
 });
 
@@ -240,13 +241,16 @@ describe('the workbench, opened with a handed question', () => {
       'dataset:list': { body: [{ id: DID, name: 'Orders', sourceKind: 'csv', rowCount: 120, columnCount: 3, updatedAt: '' }] },
       'drivers:explain': (p) => ({ body: result({ spec: p.request }) }),
     });
-    const router = createMemoryRouter(appRoutes(), { initialEntries: [{ pathname: `/analytics/${PID}/${DID}/drivers`, state: { request: SPEC } }] });
+    const router = createMemoryRouter(appRoutes(), { initialEntries: [{ pathname: `/analytics/${PID}/${DID}/drivers`, state: { request: SPEC, back: { to: `/analyses/${PID}/a1`, label: 'Sales overview' } } }] });
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
         <RouterProvider router={router} />
       </QueryClientProvider>,
     );
     expect(await screen.findByRole('heading', { name: SENTENCE })).toBeTruthy();
+    // The crumb goes back to the dashboard the question was asked on, not to the Analytics hub.
+    expect(screen.getByRole('link', { name: 'Sales overview' }).getAttribute('href')).toBe(`/analyses/${PID}/a1`);
+    expect(within(screen.getByRole('main')).queryByRole('link', { name: 'Analytics' })).toBeNull();
     const asked = () => sent.filter((s) => s.channel === 'drivers:explain');
     expect(asked()[0].payload.request).toEqual(SPEC);
     expect(screen.getByRole('note').textContent).toContain('the change you opened from a chart');

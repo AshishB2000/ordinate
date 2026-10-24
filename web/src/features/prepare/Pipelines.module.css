@@ -274,7 +274,7 @@
   border: 1px dashed var(--border-2);
   border-radius: var(--r-md);
   font-size: var(--t-12);
-  color: var(--text-faint);
+  color: var(--text-dim);
   text-align: center;
 }
 .faded {

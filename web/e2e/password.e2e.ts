@@ -104,7 +104,7 @@ try {
   check('server: printed a first-run setup code', code !== '', serverOut);
   check('server: warned that password sign-in is for trying Ordinate out', serverOut.includes('AUTH_MODE=password: Ordinate keeps its own passwords'));
 
-  const context = await browser.newContext({ colorScheme: 'light', viewport: { width: 1280, height: 800 } });
+  const context = await browser.newContext({ colorScheme: 'light', reducedMotion: 'reduce', viewport: { width: 1280, height: 800 } });
   const watch = (p: Page, who: string) => {
     p.on('console', (m) => {
       if (m.type() === 'error') consoleErrors.push(`${who} ${p.url()} :: ${m.text()}`);
@@ -190,7 +190,7 @@ try {
   await shoot(page, 'sign-in-password-error-light.png');
 
   // ── A temporary password: held on /change-password until changed ────────
-  const samCtx = await browser.newContext({ colorScheme: 'light', viewport: { width: 1280, height: 800 } });
+  const samCtx = await browser.newContext({ colorScheme: 'light', reducedMotion: 'reduce', viewport: { width: 1280, height: 800 } });
   const sam = await samCtx.newPage();
   watch(sam, 'sam');
   await sam.goto(base + '/data');

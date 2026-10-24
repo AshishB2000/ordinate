@@ -120,6 +120,8 @@ function Gallery({ projectId }: { projectId: string }) {
   const [wizard, setWizard] = useState<{ datasetId?: string } | null>(() => (params.get('new') ? { datasetId: params.get('dataset') ?? undefined } : null));
   useEffect(() => {
     if (!params.get('new')) return;
+    // Also when the page is already on screen (the palette's New dashboard from here): open it, then strip the ask.
+    setWizard({ datasetId: params.get('dataset') ?? undefined });
     setParams(
       (p) => {
         const n = new URLSearchParams(p);
@@ -165,12 +167,13 @@ function Gallery({ projectId }: { projectId: string }) {
   const aiReady = !!key.data?.ready;
   const aiWhy = key.isPending ? 'Checking whether a model is set up…' : AI_NOT_READY;
   const actions = (
-    <div className={s.actions}>
+    <>
       <Link className={buttonClass('ghost')} to={`/data/metrics?project=${projectId}`}>
         <Icon name="target" />
         <span>Metrics</span>
       </Link>
-      {canEdit && (
+      {/* With nothing authored (not while loading, nor on an error) the empty state holds Draft and Create; Metrics stays. */}
+      {canEdit && q.data?.length !== 0 && (
         <>
           <Button icon="sparkles" onClick={() => setDrafting(true)} disabled={!aiReady} title={aiReady ? undefined : aiWhy}>
             Draft with the Assistant
@@ -180,7 +183,7 @@ function Gallery({ projectId }: { projectId: string }) {
           </Button>
         </>
       )}
-    </div>
+    </>
   );
 
   let body;
@@ -287,11 +290,12 @@ function Gallery({ projectId }: { projectId: string }) {
   }
 
   return (
-    <Page title="Analyses" sub="The dashboards you author: sheets of charts, metrics and text over your datasets.">
-      <div className={s.head}>
-        {count > 0 ? <span className={s.count}>{count === 1 ? '1 dashboard' : `${count} dashboards`}</span> : <span />}
-        {actions}
-      </div>
+    <Page
+      title="Analyses"
+      status={count > 0 && <span className={s.count}>{count === 1 ? '1 dashboard' : `${count} dashboards`}</span>}
+      sub="The dashboards you author: sheets of charts, metrics and text over your datasets."
+      actions={actions}
+    >
       {body}
       {wizard && canEdit && <NewWizard projectId={projectId} datasetId={wizard.datasetId} initialStep={wizard.datasetId ? 2 : 1} onClose={() => setWizard(null)} />}
       {lineage && <LineageDrawer projectId={projectId} type="dashboard" id={lineage.id} name={lineage.name || 'Untitled dashboard'} onClose={() => setLineage(null)} />}

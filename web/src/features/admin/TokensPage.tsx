@@ -151,10 +151,13 @@ function RevokeButton({ t }: { t: ApiToken }) {
   );
 }
 
+/** Settings lists API tokens ("API tokens and MCP"), so that is the page a crumb goes back to. */
+const SETTINGS = { to: '/settings', label: 'Settings' };
+
 export default function TokensPage() {
   const me = useMe();
   if (me.isPending) return <PageSkeleton />;
-  if (me.data?.accounts === false) return <NoAccounts title="API tokens" />;
+  if (me.data?.accounts === false) return <NoAccounts title="API tokens" back={SETTINGS} />;
   return <Tokens />;
 }
 
@@ -171,6 +174,7 @@ function Expiry({ t }: { t: ApiToken }) {
 function Tokens() {
   const tokens = useTokens();
   const endpoint = `${window.location.origin}/api/mcp`;
+  const count = tokens.data?.tokens.length ?? 0;
   let body;
   if (tokens.isPending) body = <SkeletonTable cols={5} rows={3} label="Loading your tokens" />;
   else if (tokens.isError) {
@@ -218,15 +222,16 @@ function Tokens() {
     );
   }
   return (
-    <Page title="API tokens" sub="Personal tokens act as you, with your current role, until they expire or you revoke them. Each is shown once.">
+    <Page
+      title="API tokens"
+      back={SETTINGS}
+      status={count > 0 && <span className={s.count}>{count === 1 ? '1 token' : `${count} tokens`}</span>}
+      sub="Personal tokens act as you, with your current role, until they expire or you revoke them. Each is shown once."
+      // The one create door, in every state (the empty state does not repeat it). The server's maximum once the
+      // list is in; until then (or if it failed) the default — the server enforces its own (C8).
+      actions={<CreateDialog maxDays={tokens.data?.maxDays ?? DEFAULT_MAX_DAYS} />}
+    >
       <section className={s.section} aria-label="Your tokens">
-        <div className={s.bar}>
-          <h2 className={s.groupTitle}>Your tokens</h2>
-          <div className={s.barEnd}>
-            {/* The server's maximum once the list is in; until then (or if it failed) the default — the server enforces its own (C8). */}
-            <CreateDialog maxDays={tokens.data?.maxDays ?? DEFAULT_MAX_DAYS} />
-          </div>
-        </div>
         {body}
       </section>
       <section className={s.section} aria-label="Connect an MCP client">

@@ -89,7 +89,7 @@ if (!BASE) {
 
     // ── Signed in: the first-run setup form, or through the "proxy" ────────
     const proxied = SETUP_CODE ? {} : { extraHTTPHeaders: { 'x-forwarded-email': EMAIL } };
-    const context = await browser.newContext({ baseURL: BASE, viewport: { width: 1440, height: 900 }, ...proxied });
+    const context = await browser.newContext({ baseURL: BASE, viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce', ...proxied });
     const page = await context.newPage();
     const problems = await failOnConsoleError(page);
     const rpc = rpcBudget(page);

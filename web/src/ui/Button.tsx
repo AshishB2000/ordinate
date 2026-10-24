@@ -10,6 +10,9 @@ import s from './Button.module.css';
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 export type ControlSize = 'sm' | 'md' | 'lg';
 
+/** Anything styled as THE primary action (a Button, a Link via buttonClass, an IconButton): what PageHead counts. */
+export const PRIMARY_SELECTOR = `.${s.primary}, .${s.iconPrimary}`;
+
 /** The class list for anything that should LOOK like a button — a router <Link>, say. */
 export function buttonClass(variant: ButtonVariant = 'secondary', size: ControlSize = 'md', extra?: string) {
   return [s.btn, s[variant], s[size], extra].filter(Boolean).join(' ');

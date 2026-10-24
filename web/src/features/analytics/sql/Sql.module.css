@@ -42,9 +42,6 @@
   text-align: right;
 }
 /* The title block takes the row, so the head's actions stay on its right. */
-.identGrow {
-  flex: 1 1 360px;
-}
 .off {
   opacity: 0.55;
   cursor: default;

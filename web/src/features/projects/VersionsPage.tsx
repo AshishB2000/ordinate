@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
-import { Page } from '../../app/blocks';
+import { Page, type Back } from '../../app/blocks';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/icons/Icon';
@@ -23,6 +23,14 @@ import s from './Versions.module.css';
 
 const WORD: Record<VersionType, string> = { dashboard: 'Dashboard', visual: 'Visual', metric: 'Metric', report: 'Report', dataset: 'Pipeline' };
 const isType = (t: string | undefined): t is VersionType => !!t && Object.prototype.hasOwnProperty.call(WORD, t);
+/** The record a history belongs to: the page its History button was on (a metric's is the metrics list). */
+const RECORD: Record<VersionType, (p: string, id: string, name: string) => Back> = {
+  dashboard: (p, id, name) => ({ to: `/analyses/${p}/${id}`, label: name }),
+  visual: (p, id, name) => ({ to: `/visuals/${p}/${id}`, label: name }),
+  metric: (p) => ({ to: `/data/metrics?project=${p}`, label: 'Metrics' }),
+  report: (p, id, name) => ({ to: `/reports/${p}/${id}`, label: name }),
+  dataset: (p, id, name) => ({ to: `/data/${p}/${id}`, label: name }),
+};
 
 export default function VersionsPage() {
   const { projectId = '', type, id = '' } = useParams();
@@ -182,7 +190,7 @@ function History({ projectId, type, id }: { projectId: string; type: VersionType
   }
 
   return (
-    <Page title={`${title} — version history`} sub={`${WORD[type]} history. Every save is a version; restoring one saves it again as the newest, so nothing is lost.`}>
+    <Page back={RECORD[type](projectId, id, title)} title={`${title} — version history`} sub={`${WORD[type]} history. Every save is a version; restoring one saves it again as the newest, so nothing is lost.`}>
       <div className={s.layout}>
         <section className={s.side} aria-label="Saved versions">
           <div className={s.sideHead}>
