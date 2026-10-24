@@ -225,12 +225,17 @@ from a KPI's Why?; the analysis editor from a statistics card).
 
 ### The guard
 
-`web/src/app/backLinks.test.ts` parses every `.tsx` under `web/src` (TypeScript's own parser, not a
-regex) and fails on a back link outside `blocks.tsx`: a `<Link>`, `<NavLink>` or `<a>` holding an
-`arrow-left` or `chevron-left` icon, or a `<Button>`/`<IconButton>` with that icon whose `onClick`
-calls `navigate(`. A step back inside a flow (a wizard's Back, "Change source", a composer's "Back
-to sources", a pager's previous) does not navigate to a parent and is not one. Negative control:
-the same scan over a planted file finds both kinds.
+`web/src/app/backLinks.test.ts` parses every `.ts` and `.tsx` under `web/src` (oxc, through Vite)
+and counts every back icon it names — an `arrow-left` or `chevron-left` string in any position — and
+every "← Word" it puts on screen, outside `blocks.tsx` and the icon set. How the element is wired
+does not matter: a `<Link>`, a Button whose handler navigates under any name (`nav(`, a `goBack`
+reference), a menu item in a `.ts` table. A file may hold back icons only if it is on `STEP_BACKS`,
+with the exact count and the reason it is not a page's way back: a step back inside a flow (a
+wizard's Back, "Change source", "Back to sources", the theme editor's "Themes"), a pager, the
+dashboard viewer's drill-back, the canvas's "Narrower", an author's navigation card. One more use, or
+an entry that outlived its use, fails. Negative control: planted files — a link, an aliased `nav(`, a
+handler reference, a "← Data" glyph, a `.ts` menu item and an allowed file over its count — are all
+caught, while a key hint ("←/→") and a mapping arrow ("{to} ←") are not.
 
 ### The detail pages (caller inventory)
 
