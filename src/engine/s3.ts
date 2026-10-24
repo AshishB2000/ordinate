@@ -158,6 +158,13 @@ export async function put(cfg: S3Env, key: string, file: string, sha256: string,
   if (status !== 200) throw Object.assign(new Error(`S3 PUT failed: HTTP ${status}`), { status });
 }
 
+/** A PUT with no progress (no byte sent, no answer) for this long is abandoned: no total limit, a stall limit. */
+let putIdleMs = 120_000;
+/** Test hook: a shorter stall limit. */
+export function setPutIdleForTest(ms: number): void {
+  putIdleMs = ms;
+}
+
 /** One signed PUT with these credentials; the HTTP status. Exported for the tests (a local server, fake keys). */
 export function putWithCreds(cfg: S3Env, key: string, file: string, sha256: string, size: number, creds: Creds): Promise<number> {
   const url = objectUrl(cfg, key);
@@ -168,8 +175,10 @@ export function putWithCreds(cfg: S3Env, key: string, file: string, sha256: stri
       res.on('end', () => resolve(res.statusCode ?? 0));
       res.on('error', reject);
     });
-    req.on('error', reject);
     const body = fs.createReadStream(file);
+    req.setTimeout(putIdleMs, () => req.destroy(new Error('S3 PUT stalled')));
+    req.on('error', reject);
+    req.on('close', () => body.destroy()); // never leave the file open behind a dead request
     body.on('error', (err) => req.destroy(err));
     body.pipe(req);
   });

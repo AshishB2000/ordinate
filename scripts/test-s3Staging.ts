@@ -65,6 +65,25 @@ async function slowPut(): Promise<void> {
   ok('a slow link really was slow (the test proves no short timer cut it)', ms > 2_000, ms);
 }
 
+/** Review L3: a PUT whose server stops reading and never answers is abandoned at the stall limit, its file closed. */
+async function stalledPut(): Promise<void> {
+  const body = randomBytes(8 * 1024 * 1024);
+  const file = path.join(TMP, 'stalled.bin');
+  fs.writeFileSync(file, body);
+  const server = http.createServer((req) => { req.pause(); }); // reads nothing, answers nothing
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const port = (server.address() as import('net').AddressInfo).port;
+  const cfg: S3Env = { bucket: 'b', prefix: '', region: 'us-east-1', endpoint: `127.0.0.1:${port}`, useSsl: false, extensionDir: null };
+  s3.setPutIdleForTest(400);
+  const t0 = Date.now();
+  const r = await s3.putWithCreds(cfg, 'k', file, sha(body), body.length, { keyId: 'AKIAFAKE', secret: 'fake', token: '' }).then((s) => `status ${s}`, (e: Error) => e.message);
+  const ms = Date.now() - t0;
+  s3.setPutIdleForTest(120_000);
+  server.closeAllConnections();
+  server.close();
+  ok(`a stalled PUT is abandoned at the stall limit (${ms} ms), not left hanging`, r === 'S3 PUT stalled' && ms < 5_000, r);
+}
+
 function names(): void {
   const refused = (fn: () => unknown): boolean => { try { fn(); return false; } catch { return true; } };
   ok('a name with a separator, a `..`, an upper-case kind or no id is refused',
@@ -103,6 +122,7 @@ async function minio(t: import('./s3TestEnv').S3Test): Promise<void> {
 
 (async () => {
   await slowPut();
+  await stalledPut();
   names();
   const t = await s3Test.setup('staging');
   if (typeof t === 'string') {
