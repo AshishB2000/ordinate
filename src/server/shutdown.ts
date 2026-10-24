@@ -27,7 +27,7 @@ import * as computePool from '../engine/computePool';
 import * as s3 from '../engine/s3';
 import * as jobs from '../app/jobs';
 import { appPool, background } from './app';
-import { abortRequests, pendingWork, Restarting, startDraining } from './lifecycle';
+import { abortRequests, Restarting, settleWork, startDraining } from './lifecycle';
 import { restartedWhileRunning } from './lifecycleMessages';
 
 /** Resolves with `p`'s value, or undefined at `deadlineAt` — whichever is first. */
@@ -72,7 +72,7 @@ export async function shutdown(app: FastifyInstance, budgetMs: number, log: Fast
     log.warn({ aborted }, 'requests still running at the HTTP deadline were answered 503');
     await capped(closed, at(0.8));
   });
-  await step('detached', () => capped(Promise.allSettled(pendingWork()), at(0.8)));
+  await step('detached', () => capped(settleWork(), at(0.8)));
   duck.interruptAll();
   let survivors: string[] = [];
   await step('duckdb', async () => {
