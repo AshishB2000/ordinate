@@ -198,6 +198,22 @@ function tooLarge(req: FastifyRequest, reply: FastifyReply, maxMb: number): Fast
 }
 
 /**
+ * A file route whose failure answers a bare 500 — never the error's message, which can carry a
+ * server path or a storage URL (review L5). The message goes to the log only.
+ */
+function guarded<R extends FastifyRequest>(what: 'upload' | 'download', fn: (req: R, reply: FastifyReply) => Promise<unknown>) {
+  return async (req: R, reply: FastifyReply): Promise<unknown> => {
+    try {
+      return await fn(req, reply);
+    } catch (err) {
+      req.log.error({ err }, `file ${what} failed`);
+      if (reply.sent) return reply;
+      return reply.code(500).send({ error: `${what} failed` });
+    }
+  };
+}
+
+/**
  * Registers the multipart parser and both routes on `app`. Uploads above the
  * cap get 413: `ceilingMb` (MAX_UPLOAD_MB) is the ceiling, and `capMb()` — the
  * caller's org cap (Admin → Settings, T3.4), asked per upload — may only lower it.
@@ -211,7 +227,7 @@ export function registerFileRoutes(app: FastifyInstance, ceilingMb: number, capM
   });
 
   // ponytail: no role check — dev auth is an admin; T3.3 makes this `write`.
-  app.post('/api/files', async (req, reply) => {
+  app.post('/api/files', guarded('upload', async (req, reply) => {
     const maxMb = Math.min(ceilingMb, await capMb(), staging.isS3() ? S3_PUT_MAX_MB : Infinity);
     const maxBytes = maxMb * 1024 * 1024;
     const declared = Number(req.headers['content-length']);
@@ -249,9 +265,9 @@ export function registerFileRoutes(app: FastifyInstance, ceilingMb: number, capM
       fs.rmSync(dest, { force: true });
       throw err;
     }
-  });
+  }));
 
-  app.get<{ Params: { token: string } }>('/api/files/:token', async (req, reply) => {
+  app.get<{ Params: { token: string } }>('/api/files/:token', guarded('download', async (req: FastifyRequest<{ Params: { token: string } }>, reply) => {
     const { token } = req.params;
     if (tokens.dbOn()) return sendShared(token, reply);
     let e: Entry;
@@ -277,7 +293,7 @@ export function registerFileRoutes(app: FastifyInstance, ceilingMb: number, capM
       .header('cache-control', 'no-store')
       .header('x-content-type-options', 'nosniff')
       .send(body);
-  });
+  }));
 
   const timer = setInterval(sweep, SWEEP_EVERY_MS);
   timer.unref();

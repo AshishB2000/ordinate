@@ -234,6 +234,39 @@ const logSink = new Writable({ write(chunk, _enc, cb) { log += String(chunk); cb
   ok('log: the download URL is logged masked', log.includes('/api/files/[redacted]'));
   ok('log: no token appears anywhere in the log', tokens.every((t) => !log.includes(t)));
 
+  // Review L5: a storage failure carrying an s3:// URL and an org path never reaches the browser —
+  // not from the file routes (a bare 500), not from an import or a paste (importError).
+  const { importError } = require('../src/ipc/datasetImport') as typeof import('../src/ipc/datasetImport');
+  const LEAK = 's3://ordinate-bucket/pfx/orgs/org-a/staging/upload-0123456789abcdef0123456789abcdef';
+  const boom = { connect: async () => { throw new Error(`GET ${LEAK} failed: 500`); } } as unknown as import('pg').Pool;
+  const leaks = (s: string) => s.includes('s3://') || s.includes('orgs/org-a') || s.includes('ordinate-bucket');
+  ok('importError cuts an s3:// URL and an org path out of a message, keeping the rest',
+    importError(new Error(`IO Error: ${LEAK} 403`), null, 'fb') === 'IO Error: [storage] 403'
+      && importError(new Error('cannot open "/srv/x/orgs/acme/temp/stage-1.parquet"'), null, 'fb') === 'cannot open "[storage]"'
+      && importError(new Error('Bad CSV on line 3'), null, 'fb') === 'Bad CSV on line 3');
+  const fileTokens: typeof import('../src/server/fileTokens') = require('../src/server/fileTokens');
+  const stageStore: typeof import('../src/data/stageStore') = require('../src/data/stageStore');
+  fileTokens.useFileTokenDb(boom);
+  stageStore.useStageDb(boom);
+  try {
+    const form = new FormData();
+    form.append('file', new Blob(['a\n1\n'], { type: 'text/csv' }), 'x.csv');
+    const failUp = await fetch(`${base}/api/files`, { method: 'POST', body: form, headers: hdr('org-a') });
+    const upText = await failUp.text();
+    const failGet = await fetch(`${base}/api/files/${'A'.repeat(43)}`, { headers: hdr('org-a') });
+    const getText = await failGet.text();
+    ok('a storage failure in POST /api/files: a bare 500, no URL or path', failUp.status === 500 && !leaks(upText), `${failUp.status} ${upText}`);
+    ok('a storage failure in GET /api/files/:token: a bare 500, no URL or path', failGet.status === 500 && !leaks(getText), `${failGet.status} ${getText}`);
+    const failImp = await call('org-a', 'dataset:pickAndParse', { fileToken: 'A'.repeat(43) });
+    ok('…in dataset:pickAndParse: refused with no URL or path', failImp.body.ok === false && !leaks(JSON.stringify(failImp.body)), JSON.stringify(failImp.body));
+    const failPaste = await call('org-a', 'dataset:parsePaste', { text: 'a,b\n1,2\n' });
+    ok('…in dataset:parsePaste (the stage write): refused with no URL or path', failPaste.body.ok === false && !leaks(JSON.stringify(failPaste.body)), JSON.stringify(failPaste.body));
+    ok('…and the log has the real failure for the operator', log.includes(LEAK));
+  } finally {
+    fileTokens.useFileTokenDb(null);
+    stageStore.useStageDb(null);
+  }
+
   await app.close();
 })()
   .catch((err) => ok('suite ran to completion', false, err instanceof Error ? err.stack : err))

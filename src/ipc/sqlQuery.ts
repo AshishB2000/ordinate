@@ -13,6 +13,7 @@
 //                    that re-runs it — handed to the ordinary composer save
 //   sql:datasetQuery a SQL dataset's own statement ("View query", server only)
 
+import { importError } from './datasetImport';
 import { ipcMain } from './bus';
 import { isValidId } from '../app/ids';
 import { viewColumns } from '../engine/datasetView';
@@ -55,7 +56,7 @@ export function register(): void {
     try {
       return await schemaFor(projectId);
     } catch (err: any) {
-      return { ok: false, error: err?.message || 'Could not read the datasets' };
+      return { ok: false, error: importError(err, null, 'Could not read the datasets') };
     }
   });
 
@@ -90,7 +91,7 @@ export function register(): void {
       return { ...res, rows: rows.slice(0, importStage.PREVIEW_ROWS), rowCount: rows.length, stagedId };
     } catch (err: any) {
       if (err && err.name === 'JobCancelled') return { ok: false, canceled: true, error: 'Cancelled.' };
-      return { ok: false, error: err?.message || 'The full result could not be read.' };
+      return { ok: false, error: importError(err, null, 'The full result could not be read.') };
     }
   });
 }

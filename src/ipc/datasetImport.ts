@@ -22,12 +22,15 @@ import { resolveUpload, type Upload } from '../server/files';
 // preview and Save resolve that id here, so the rows never cross IPC at all.
 
 /**
- * An import failure as the browser may see it: the upload's server path put back as its own
- * name, and any other server path (DATA_DIR, the temp dir) never — the generic sentence then.
+ * An import failure as the browser may see it: the upload's server path put back as its own name,
+ * any storage URL (`s3://…`) or org path (`…/orgs/<org>/…`) cut out, and any other server path
+ * (DATA_DIR, the temp dir) never — the generic sentence then. Every import, paste and query-to-
+ * dataset failure answers through this.
  */
 export function importError(err: unknown, upload: Upload | null, fallback: string): string {
   let msg = err instanceof Error && typeof err.message === 'string' ? err.message : '';
   if (upload) msg = msg.split(upload.path).join(upload.name);
+  msg = msg.replace(/s3:\/\/[^\s'"]*/g, '[storage]').replace(/[^\s'"]*\borgs\/[a-z0-9-]+\/[^\s'"]*/g, '[storage]');
   const root = serverDataDir();
   return msg && !(root && msg.includes(root)) && !msg.includes(os.tmpdir()) ? msg : fallback;
 }
@@ -98,7 +101,7 @@ export function register(): void {
       // keeps sending its inline rows, as before).
       return { ok: true, preview: serverDataDir() !== null ? importStage.previewOf(parsed, await importStage.put(parsed)) : parsed };
     } catch (err: any) {
-      return { ok: false, error: err?.message || 'Failed to parse the pasted text' };
+      return { ok: false, error: importError(err, null, 'Failed to parse the pasted text') };
     }
   });
 }
