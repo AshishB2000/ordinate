@@ -131,4 +131,11 @@ describe('one door, never none (review round)', () => {
     await screen.findByRole('heading', { name: 'No metrics yet' }, LAZY);
     expect(main().getAllByRole('button', { name: 'New metric' })).toHaveLength(1);
   });
+
+  it('the Captures crumb goes back to the Captures tab, not the Datasets one', async () => {
+    serve('editor', { 'captureDataset:list': [] });
+    renderApp(`/data/captures?project=${P}`);
+    await screen.findByRole('heading', { level: 1, name: 'Captures' }, LAZY);
+    expect(href('Data')).toBe(`/data/${P}?tab=captures`);
+  });
 });

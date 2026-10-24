@@ -134,7 +134,8 @@ function Captures({ projectId }: { projectId: string }) {
   }
   return (
     <Page
-      back={{ to: `/data/${projectId}`, label: 'Data' }}
+      // Back to the Data section's own Captures tab, not its first (Datasets) one.
+      back={{ to: `/data/${projectId}?tab=captures`, label: 'Data' }}
       title="Captures"
       sub="Screenshots the model has read in this project."
       actions={
