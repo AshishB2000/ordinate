@@ -89,7 +89,7 @@ const STREAM: Record<string, { toStream(req: WireReq): WireReq; parseDelta(obj: 
     parseDelta: (o) => {
       const c = o && o.candidates && o.candidates[0];
       const parts = (c && c.content && c.content.parts) || [];
-      const text = parts.map((p: any) => (p && typeof p.text === 'string' ? p.text : '')).join('');
+      const text = parts.filter((p: any) => p && !p.thought).map((p: any) => (typeof p.text === 'string' ? p.text : '')).join('');
       const out: Delta = {};
       if (text) out.text = text;
       if (c && c.finishReason === 'MAX_TOKENS') out.cutoff = true;

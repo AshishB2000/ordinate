@@ -49,7 +49,7 @@ const CAP = 800;
  */
 const ALLOWED: Record<string, number> = {
   'scripts/test-connectorsHttp.ts': 880,
-  'src/ai/analyze.ts': 854,
+  'src/ai/analyze.ts': 851,
   'src/engine/anomaliesResident.ts': 870,
 };
 
