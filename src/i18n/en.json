@@ -43,6 +43,7 @@
   "bundleMessages.the_bundle_is_damaged_is_larger": "The bundle is damaged ({name} is larger than it says).",
   "bundleMessages.the_bundle_is_too_large_to": "The bundle is too large to import.",
   "bundleMessages.the_bundle_s_alerts_json_is": "The bundle's alerts.json is not readable.",
+  "bundleMessages.the_bundle_s_holds_more_values": "The bundle's {name} holds more values than Ordinate reads (over 1,000,000).",
   "bundleMessages.the_bundle_s_is_larger_than": "The bundle's {name} is larger than Ordinate imports.",
   "bundleMessages.the_bundle_uses_a_zip_feature": "The bundle uses a zip feature Ordinate does not read (zip64, a data descriptor or a split archive).",
   "bundleMessages.the_bundle_uses_an_unsupported": "The bundle uses an unsupported compression method.",

@@ -217,6 +217,22 @@ async function sigtermMidFlight(): Promise<void> {
     await pool.query("INSERT INTO orgs (id, name) VALUES ('default', 'Default') ON CONFLICT DO NOTHING");
     await pool.query("INSERT INTO users (org_id, email, role, last_login_at) VALUES ('default', 'dev@local', 'admin', now())");
     await pool.end();
+
+    // A SIGTERM that lands while the app boots (review C5): the runner and the bus never start.
+    const lifecycle: typeof import('../src/server/lifecycle') = require('../src/server/lifecycle');
+    const boot = () => appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: data, DATABASE_URL: env.DATABASE_URL }));
+    const normal = boot();
+    await normal.ready();
+    const started = { ...appMod.background() };
+    await normal.close();
+    ok('NEGATIVE CONTROL: a normal boot starts the scheduled-job runner and the bus', !!started.runner && !!started.bus);
+    lifecycle.startDraining();
+    const late = boot();
+    await late.ready();
+    const none = { ...appMod.background() };
+    lifecycle.resetForTest();
+    await late.close();
+    ok('a boot that finishes while the pod drains starts neither (nothing for the shutdown to stop)', !none.runner && !none.bus, JSON.stringify({ runner: !!none.runner, bus: !!none.bus }));
   }
   try {
     const runs: Outcome[] = [];

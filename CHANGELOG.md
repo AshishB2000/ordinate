@@ -177,8 +177,9 @@ the desktop installers.
 - **A bundle or backup upload is checked before a byte is inflated.** Import and restore read the
   file in place and refuse zip64, data descriptors, encryption, unknown methods, names off the
   whitelist (in any case or Unicode form, or twice), lying sizes, overlapping entries and local
-  headers that disagree with the directory. A record over 32 MiB is never stored, so no bundle
-  Ordinate writes is one it would refuse.
+  headers that disagree with the directory. Every file it parses whole is held to 1,000,000 values
+  and a byte cap for its kind (a 33 KB bundle of `{}` once grew RSS by 944 MB), and a project record
+  past those limits is never stored, and is refused rather than parsed if one was stored before.
 
 ### Fixed — since the move to the web
 
@@ -248,9 +249,9 @@ the desktop installers.
   Compose now waits 30 s before killing. See [`docs/pod-lifecycle/`](docs/pod-lifecycle/00-design.md).
 - **A bundle import, a backup or a restore no longer holds the upload, or the org, in memory.**
   Tables stream to disk; records are read one at a time; a backup holds one project at a time and
-  a restore runs inside its job. Measured: a 4 MB bundle declaring 4 GiB streams with RSS up 12 MB;
-  a 279 MB backup of 16 projects with RSS up at most 107 MB. A cancelled job now also stops the
-  DuckDB query it was in.
+  a restore runs inside its job; an import never stalls the server more than a few milliseconds.
+  Measured: a 4 MB bundle declaring 4 GiB streams with RSS up 1–53 MB; a 279 MB backup of 16
+  projects with RSS up at most 107 MB. A cancelled job now also stops the DuckDB query it was in.
 - **Every server log line is JSON through pino**, with the request id and org inside a request; no
   `console` call is left in `src/` (lint-enforced). The Assistant's screenshot dev dump no longer
   writes extracted cells to the log.

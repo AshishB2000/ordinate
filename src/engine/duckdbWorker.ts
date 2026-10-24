@@ -299,7 +299,7 @@ const ready = (async () => {
 // exit path already replies, and the `catch` here only keeps the queue alive.
 let queue: Promise<void> = ready;
 
-type Inbound = CallMessage | { kind: 'close' } | { kind: 'stop' } | { kind: 'interrupt'; id: number } | { kind: 'port'; port: MessagePort };
+type Inbound = CallMessage | { kind: 'close' } | { kind: 'stop' } | { kind: 'senders' } | { kind: 'interrupt'; id: number } | { kind: 'port'; port: MessagePort };
 
 /** Every sender this worker has served — what `stop` closes. */
 const senders = new Set<Sender>();
@@ -310,6 +310,10 @@ function listen(on: (fn: (msg: Inbound) => void) => void, post: (msg: AsyncReply
   on((msg) => {
     if (msg.kind === 'interrupt') return interrupt(from, msg.id);
     if (msg.kind === 'stop') return stopAll();
+    if (msg.kind === 'senders') {
+      parentPort?.postMessage({ type: 'senders', n: senders.size }); // a test's count (duckdbPool sendersForTest)
+      return;
+    }
     // A compute thread's own line to this worker (src/engine/duckdbPool.ts
     // `lease`): same queue, same connection, replies on that port.
     if (msg.kind === 'port') {
@@ -329,6 +333,7 @@ function attach(port: MessagePort): void {
   port.on('close', () => {
     from.closed = true;
     if (running && running.from === from) stopRunning();
+    senders.delete(from); // its queued calls still see `closed` and are skipped; nothing else needs it
   });
 }
 

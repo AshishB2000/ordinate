@@ -62,6 +62,7 @@ import { isValidId } from '../app/ids';
 import { ctx, runInContext, type Identity } from '../server/context';
 import { withRefreshLock } from '../server/jobs/refreshLock';
 import { freshOnAskWaitMs } from '../server/env';
+import { trackWork } from '../server/lifecycle';
 
 /** How often a wait for ANOTHER pod's refresh looks at the lock. */
 export const POLL_MS = 200;
@@ -172,7 +173,8 @@ async function pull(projectId: string, id: string, windowMs: number): Promise<Pu
     const r = await started.done;
     if (!r.ok) return r.skipped ? 'skipped' : 'failed';
     // As after a ↻ (src/ipc/datasets.ts): alerts, quality, republish, dependents. Not awaited by anyone asking.
-    void (require('../ipc/datasets') as typeof import('../ipc/datasets')).afterRefresh(projectId, id).catch(() => undefined);
+    // Tracked: a shutdown awaits it before it ends the Postgres pool (src/server/shutdown.ts step 5).
+    trackWork((require('../ipc/datasets') as typeof import('../ipc/datasets')).afterRefresh(projectId, id).catch(() => undefined));
     return 'landed';
   } catch {
     return 'failed';

@@ -11,6 +11,7 @@ import { startMetricsServer } from './metrics';
 import { shutdown } from './shutdown';
 import { sweepLeftovers } from './files';
 import { closeAll, forbidSyncOnMainThread } from '../engine/duckdb';
+import * as s3 from '../engine/s3';
 import { routeByOrg } from '../engine/duckdbPool';
 import * as storage from '../engine/storage';
 
@@ -93,9 +94,9 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
       if (!survivors.length) process.exit(0);
       // Never process.exit around a live worker: that IS the abort. Exit 1 once it
       // has gone; the kubelet's SIGKILL after its grace ends a wedged one first.
-      app.log.error({ orgs: survivors }, 'DuckDB workers still running at the shutdown deadline; waiting for them to exit');
+      app.log.error({ orgs: survivors }, 'DuckDB still running at the shutdown deadline (an org worker, or `s3` for the credential lookup); waiting for it');
       process.exitCode = 1;
-      void closeAll(Date.now() + 3_600_000).then(() => process.exit(1));
+      void Promise.all([closeAll(Date.now() + 3_600_000), s3.close(Date.now() + 3_600_000)]).then(() => process.exit(1));
     });
   });
 }

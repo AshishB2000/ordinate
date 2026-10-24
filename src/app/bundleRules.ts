@@ -68,16 +68,62 @@ export const MAX_ENTRIES = 50_000;
 export const MAX_ENTRY_BYTES = 1024 * 1024 * 1024; // 1 GiB — far past a 1M-row Parquet
 export const MAX_TOTAL_BYTES = 4 * 1024 * 1024 * 1024 - 1; // what a zip without zip64 can say
 /**
- * The largest JSON body Ordinate stores or imports, 32 MiB. The largest real
- * record type is an input table's VERSION (history/dataset/<id>/<key>.json): the
- * whole base table, at most 10,000 rows × 50 columns, compact JSON. Measured:
- * 5.6 MiB with typical cells, 30.1 MiB with a 60-character string in every cell.
- * docs/pod-lifecycle/00-design.md §3.5.
+ * The largest JSON body Ordinate stores or imports, 32 MiB: an input table's
+ * VERSION (history/dataset/<id>/<key>.json) holds the whole base table, at most
+ * 10,000 rows × 50 columns. Measured: 5.6 MiB with typical cells, 30.1 MiB
+ * with a 60-character string in every cell. docs/pod-lifecycle/00-design.md §3.5.
  */
 export const RECORD_MAX_BYTES = 32 * 1024 * 1024;
-export const MANIFEST_MAX_BYTES = 1024 * 1024;
+const MIB = 1024 * 1024;
+/**
+ * Every other record, 8 MiB: a record a person edits arrives in one RPC
+ * (MAX_RPC_BODY_KB, 1 MiB) and is stored pretty-printed; the widest dataset
+ * record (16,384 columns, source columns too) is 4.4 MiB.
+ */
+export const OTHER_RECORD_MAX_BYTES = 8 * MIB;
+/**
+ * The files the import PARSES whole, each capped by what its own sanitizer
+ * lets it reach (refutation S1):
+ *   manifest.json   counts and a name — 1 MiB is a thousand times the need;
+ *   alerts.json     ≤ 100 rules (≤ 200 keys each, of unbounded length) and
+ *                   ≤ 200 events of ≤ 400-character messages — 4 MiB;
+ *   project.json    the colour map: ≤ 64 columns × 256 values × 200-character
+ *                   keys is 3.6 MiB pretty-printed — 4 MiB;
+ *   themes.json     ≤ 200 themes of names, palettes and fonts — 1 MiB;
+ *   templates.json  user templates carry PNG thumbnails of up to 3 MiB each — 32 MiB.
+ * Bytes are only half of it: every one is also refused past MAX_JSON_VALUES
+ * before it is parsed (./jsonBudget.ts) — the heap a parse costs is its values.
+ */
+const PARSED_MAX_BYTES: Record<string, number> = {
+  'manifest.json': MIB,
+  'alerts.json': 4 * MIB,
+  'project.json': 4 * MIB,
+  'themes.json': MIB,
+  'templates.json': RECORD_MAX_BYTES,
+};
+export const MANIFEST_MAX_BYTES = PARSED_MAX_BYTES['manifest.json'];
 /** projectAssets.MAX_ASSET_BYTES: blobStore refuses a larger picture anyway. */
-export const ASSET_MAX_BYTES = 5 * 1024 * 1024;
+export const ASSET_MAX_BYTES = 5 * MIB;
+
+/** What a JSON entry of a bundle — or a project's record at that path — may weigh. */
+export function jsonCapOf(rel: string): number {
+  if (/^history\/dataset\//i.test(rel)) return RECORD_MAX_BYTES;
+  return PARSED_MAX_BYTES[rel] ?? OTHER_RECORD_MAX_BYTES;
+}
+
+/**
+ * A stored record's limits (./recordFs.ts reads and writes): a PROJECT record
+ * (`…/projects/<id>/<rel>`, what a bundle carries) gets its kind's byte cap and
+ * the value budget, so nothing an import or an edit stores is past either, and
+ * one planted before this check is refused when read instead of parsed. Any
+ * other record keeps the plain 32 MiB cap. Null: not a JSON record.
+ */
+export function recordLimitOf(p: string): { bytes: number; values: boolean } | null {
+  const norm = p.split('\\').join('/').replace(/(\.json)\.[^/]*$/, '$1'); // `x.json.<id>.tmp` is x.json
+  if (!/\.json$/.test(norm) || norm.endsWith('.search.json')) return null;
+  const m = /\/projects\/[0-9a-f-]{36}\/(.+)$/i.exec(norm);
+  return m ? { bytes: jsonCapOf(m[1]), values: true } : { bytes: RECORD_MAX_BYTES, values: false };
+}
 
 /** The import's read: the kind each name is, and what it may weigh. */
 export type EntryKind = 'json' | 'asset' | 'table';
@@ -99,9 +145,8 @@ export const BUNDLE_POLICY: ZipPolicy = {
     return null;
   },
   capOf(name: string): number {
-    if (name === 'manifest.json') return MANIFEST_MAX_BYTES;
     const kind = kindOf(name);
-    return kind === 'table' ? MAX_ENTRY_BYTES : kind === 'asset' ? ASSET_MAX_BYTES : RECORD_MAX_BYTES;
+    return kind === 'table' ? MAX_ENTRY_BYTES : kind === 'asset' ? ASSET_MAX_BYTES : jsonCapOf(name);
   },
   maxEntries: MAX_ENTRIES,
   maxTotal: MAX_TOTAL_BYTES,

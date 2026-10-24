@@ -163,7 +163,8 @@ export function sweep(): void {
 
 /**
  * Boot: what a crash left in every org's temp dir — a bundle's staging, a
- * restore's or a backup's file, an export not yet downloaded — once a day old,
+ * restore's or a backup's file, an export not yet downloaded, an upload whose
+ * token died with the pod, a drill-through CSV — once a day old,
  * so a sibling pod's live file on a shared volume is never touched. Returns how
  * many went.
  */
@@ -177,7 +178,7 @@ export function sweepLeftovers(dataDir: string, olderThanMs = USED_GRACE_MS): nu
     let names: string[] = [];
     try { names = fs.readdirSync(temp); } catch { continue; }
     for (const name of names) {
-      if (!/^(bundle|restore|backup|export)-/.test(name)) continue;
+      if (!/^(bundle|restore|backup|export|upload|drill)-/.test(name)) continue;
       const p = path.join(temp, name);
       try {
         if (fs.statSync(p).mtimeMs < cutoff) {
