@@ -124,4 +124,11 @@ describe('one door, never none (review round)', () => {
     expect(href('Metrics')).toBe(`/data/metrics?project=${P}`);
     expect(main().getAllByRole('button', { name: 'Create dashboard' })).toHaveLength(1);
   });
+
+  it('Metrics shows New metric once when there are none', async () => {
+    serve('editor', { 'metric:table': { ok: true, metrics: [], rows: {} } });
+    renderApp(`/data/metrics?project=${P}`);
+    await screen.findByRole('heading', { name: 'No metrics yet' }, LAZY);
+    expect(main().getAllByRole('button', { name: 'New metric' })).toHaveLength(1);
+  });
 });

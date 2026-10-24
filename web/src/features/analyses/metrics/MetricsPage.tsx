@@ -229,7 +229,9 @@ function Metrics({ projectId }: { projectId: string }) {
       status={count > 0 && <span className={s.count}>{count === 1 ? '1 metric' : `${count} metrics`}</span>}
       sub="What this project's numbers mean, defined once."
       actions={
-        canEdit && (
+        // With none defined the empty state holds New metric (and Suggest): the header does not repeat it.
+        canEdit &&
+        q.data?.metrics.length !== 0 && (
           <Button variant="primary" icon="plus" onClick={() => void open(null)}>
             New metric
           </Button>
