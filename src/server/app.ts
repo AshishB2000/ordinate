@@ -188,7 +188,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   const dbUrl = cfg.databaseUrl;
   const pool = dbUrl ? createPool(dbUrl, (err) => app.log.warn({ err }, 'postgres idle client error'), cfg.pod.databasePoolMax) : null;
   dbPool = pool;
-  bg = { runner: null, bus: null }; // this app's, once its onReady starts them
+  bg = { runner: null, bus: null, sweep: null }; // this app's, once its onReady starts them
   watchPgPool(pool); // ordinate_pg_pool_clients on /metrics
   appEnv = cfg;
   if (pool && dbUrl) {
