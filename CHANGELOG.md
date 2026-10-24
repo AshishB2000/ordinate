@@ -151,7 +151,10 @@ the desktop installers.
   empty-state sentences and placeholders were as low as 1.7:1. The muted, dim and faint text colours
   take the desktop's AA values (4.5:1 on every surface; faint, 3:1, is kept for disabled controls
   and decorative icons), every Badge tone and grid type chip has an ink that reads on its own tint,
-  and the dashboard style presets follow. A test measures every pair, so it cannot regress.
+  and the dashboard style presets follow. A workspace or dashboard brand accent's text colour and a
+  custom theme's (including one saved earlier) are worked out for their own light or dark surfaces
+  the same way, and the theme editor warns about an ink that does not read. A test measures every
+  pair, so it cannot regress.
 
 ### Added
 - **The app is no longer empty on first launch.** A bundled sample project — 5,000 rows of generated
