@@ -102,7 +102,8 @@ export function IdpGroupsPanel({ mode }: { mode: 'oidc' | 'header' }) {
         icon="shield"
         title="No groups mapped yet"
         actions={
-          <Button variant="primary" icon="plus" onClick={() => setEditing('new')}>
+          // Not primary: People's one primary is Invite people; this panel is a section of that page.
+          <Button icon="plus" onClick={() => setEditing('new')}>
             Map a group
           </Button>
         }
@@ -160,7 +161,7 @@ export function IdpGroupsPanel({ mode }: { mode: 'oidc' | 'header' }) {
         </div>
         {live && data.groups.length > 0 && (
           <div className={s.barEnd}>
-            <Button variant="primary" icon="plus" onClick={() => setEditing('new')}>
+            <Button icon="plus" onClick={() => setEditing('new')}>
               Map a group
             </Button>
           </div>

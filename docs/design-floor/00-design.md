@@ -373,6 +373,14 @@ fails if a main `NAV` entry is in no group or in two, or a group names a route `
     dark app carries the light accent axis, so a teal brand's light ramp draws the date chip at 4.31
     on the dark surface-3. `KNOWN` in `theme.contrast.test.ts` holds it exactly, so its fix (or a new
     failure) shows.
+20. **The screens merged from SSO lifecycle and notifications follow the same contract.** API tokens
+    is a page under Settings: a crumb back to Settings, its count after the title, and New token in
+    the header in every state (the empty state does not repeat it). Admin → People's identity
+    provider groups panel is a section of People, so its Map a group is a secondary beside People's
+    one primary, Invite people. The @mention chip and Home's new-mentions count use `--accent-text`
+    on the tint, the picker's error note `--error-text`; a picked option sits on `--surface-3` and a
+    new mention card is marked by its line and dot rather than a tint, so their quiet words keep 4.5:1.
+    The contrast gate reads those rules from `Mentions.module.css`.
 
 ## Steps
 

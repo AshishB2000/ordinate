@@ -201,6 +201,17 @@ describe('API tokens', () => {
     await waitFor(() => expect(calls.find((c) => c.channel === 'tokens:create')?.payload).toEqual({ name: 'CI', expiresInDays: 365 }));
   });
 
+  it('is a page under Settings: a crumb back, the count after the title, New token once in the header', async () => {
+    serve({ '/api/auth/me': { body: VIEWER }, 'tokens:list': listed([tokenRow({}), tokenRow({ id: 't2', name: 'CI' })]) });
+    renderApp('/tokens');
+    await screen.findByText('2 tokens');
+    const header = screen.getByRole('main').querySelector('header')!;
+    expect(within(header).getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('/settings');
+    expect(within(header).getByRole('heading', { level: 1, name: 'API tokens' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'New token' })).toHaveLength(1);
+    expect(within(header).getByRole('button', { name: 'New token' })).toBeTruthy();
+  });
+
   it('still offers New token when the list failed to load (C8)', async () => {
     const calls = serve({ '/api/auth/me': { body: VIEWER }, 'tokens:list': { status: 500, body: { error: 'handler failed' } }, 'tokens:create': { body: { ok: false, error: 'limit' } } });
     renderApp('/tokens');
