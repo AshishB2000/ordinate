@@ -177,7 +177,13 @@ async function until(fn: () => Promise<boolean>, ms = 15_000): Promise<boolean> 
     const first = await fire(podA, tA, { query: `?datasetId=${B}&projectId=${Q}`, headers: { 'content-type': 'application/json', origin: 'https://evil.example' }, body: JSON.stringify({ datasetId: B, projectId: P }) });
     ok('fire: 202 {status: queued} — cross-site, no CSRF pair, with a body and a query naming B', first.status === 202 && first.json?.status === 'queued', `${first.status} ${first.text}`);
     ok('fire: no cookie is set on the reply', first.headers.get('set-cookie') === null);
+    // The refresh runs on after the 202: its settle and its follow-ups are detached work a shutdown
+    // awaits before it ends the Postgres pool (src/server/lifecycle.ts; a pods run once logged
+    // "Cannot use a pool after calling end" at teardown).
+    const lifecycle: typeof import('../src/server/lifecycle') = require('../src/server/lifecycle');
+    ok('fire: what the queued refresh does after the 202 is tracked for the shutdown', lifecycle.pendingWork().length >= 1, lifecycle.pendingWork().length);
     ok('fire: A was refreshed (1 → 2 rows)', await until(async () => (await rowsOf(A)) === 2), await rowsOf(A));
+    ok('…and once it has landed and its follow-ups are done, nothing is left pending', await until(async () => lifecycle.pendingWork().length === 0), lifecycle.pendingWork().length);
     ok('fire: B was not (its record unchanged, 1 row)', (await rowsOf(B)) === 1 && JSON.stringify(await meta(B)) === bBefore);
     const jobsMod: typeof import('../src/app/jobs') = require('../src/app/jobs');
     const jobIds = () => new Set([...jobsMod.snapshot().active, ...jobsMod.snapshot().recent].map((j) => j.id));

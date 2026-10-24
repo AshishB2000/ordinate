@@ -31,6 +31,7 @@ import { refreshAlreadyRunning } from './refreshMessages';
 import { ctx, serverDataDir } from '../server/context';
 import { refreshLockHeld, withRefreshLock } from '../server/jobs/refreshLock';
 import { announceRefreshed } from './refreshEvents';
+import { isRestarting } from '../server/lifecycle';
 
 /** What `startRefresh` did: queued a job, or found one running and started nothing. */
 export type RefreshStart =
@@ -83,7 +84,8 @@ export function queueRefresh(projectId: string, id: string, label: string, mode:
       return res;
     },
     (err: any): RefreshResult => ( // any: whatever run() threw
-      { ok: false, error: err instanceof jobs.JobCancelled ? 'Cancelled.' : (err?.message || 'Refresh failed') }));
+      isRestarting(err) ? { ok: false, error: err.message, restarted: true }
+        : { ok: false, error: err instanceof jobs.JobCancelled ? 'Cancelled.' : (err?.message || 'Refresh failed') }));
   return { id: job.id, done };
 }
 

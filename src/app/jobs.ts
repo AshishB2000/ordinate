@@ -325,6 +325,11 @@ export function restore(): Job[] {
   return interrupted;
 }
 
+/** True while a draining server refuses new jobs (src/app/refreshScheduler.ts asks before it stamps a run). */
+export function refusing(): boolean {
+  return refusal !== null;
+}
+
 /** A draining server refuses new jobs with what `make` returns; null takes new jobs again. */
 export function refuseNew(make: (() => Error) | null): void {
   refusal = make;
