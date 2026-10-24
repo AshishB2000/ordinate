@@ -46,6 +46,7 @@ import { isValidId } from '../app/ids';
 import * as jobs from '../app/jobs';
 import { ctx, type Client, type Identity } from './context';
 import { encode } from './wire';
+import { POD_ID } from './podCommands';
 
 export const MAX_QUEUED = 256;
 let heartbeatMs = 20_000;
@@ -55,8 +56,10 @@ export function setHeartbeatMsForTest(ms: number): void {
   heartbeatMs = ms;
 }
 
-/** Channels whose payload is the whole current state, so a newer one supersedes a queued older one. */
+/** Channels whose payload is the whole current state, so a newer one supersedes a queued older one — per pod. */
 const STATE_CHANNELS: ReadonlySet<string> = new Set(['jobs:changed']);
+/** The pod a state payload is a slice of (its top-level `"pod"`), '' for none. */
+const sliceOf = (data: string): string => /"pod":"([0-9a-f-]{36})"/.exec(data)?.[1] ?? '';
 
 // Proxies (nginx, ALBs) buffer or cache a response unless told not to.
 const HEADERS = {
@@ -166,7 +169,7 @@ export function clientFor(key: unknown, who: Identity): Client | null {
 function open(key: string, who: Identity, res: ServerResponse): Stream {
   const owner = ownerOf(who);
   const id = nextId++;
-  const queue: { channel: string; frame: string }[] = [];
+  const queue: { channel: string; frame: string; slice: string }[] = [];
   const onDestroyed: (() => void)[] = [];
   let blocked = false;
   let closed = false;
@@ -190,11 +193,13 @@ function open(key: string, who: Identity, res: ServerResponse): Stream {
       const frame = `event: ${channel}\ndata: ${data}\n\n`;
       if (!blocked) return write(frame);
       if (STATE_CHANNELS.has(channel)) {
-        const i = queue.findIndex((q) => q.channel === channel);
+        // One pod's state replaces that pod's queued state only: another pod's slice is not stale.
+        const slice = sliceOf(data);
+        const i = queue.findIndex((q) => q.channel === channel && q.slice === slice);
         if (i >= 0) queue.splice(i, 1);
       }
       if (queue.length >= MAX_QUEUED) return s.close();
-      queue.push({ channel, frame });
+      queue.push({ channel, frame, slice: STATE_CHANNELS.has(channel) ? sliceOf(data) : '' });
     },
     isDestroyed: () => closed,
     once(_event: 'destroyed', fn: () => void) {
@@ -271,7 +276,7 @@ jobs.onChange((snap) => {
     const now = encode(s);
     if (stream.lastJobs === now) continue;
     stream.lastJobs = now;
-    stream.send('jobs:changed', s);
+    stream.send('jobs:changed', { ...s, pod: POD_ID }); // this pod's slice: the tab keeps one per pod (web/src/api/jobs.ts)
   }
 });
 jobs.onFinish((job) => {

@@ -7,6 +7,11 @@
 // own. The sender is installed only while the bus runs (DATABASE_URL): without
 // it there is one process, and `toOtherPods` says so by returning false.
 
+import { randomUUID } from 'crypto';
+
+/** This process, as the browser may see it: opaque, no host name. Tags each pod's slice of a user's jobs. */
+export const POD_ID = randomUUID();
+
 type Handler = (data: unknown) => void;
 
 const handlers = new Map<string, Handler>();

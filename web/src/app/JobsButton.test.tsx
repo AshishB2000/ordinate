@@ -90,23 +90,33 @@ describe('Jobs button', () => {
     expect(await screen.findByRole('heading', { name: 'Nothing running' })).toBeTruthy();
   });
 
-  it('merges every pod\'s pushes by job id: one pod\'s list never erases another\'s', async () => {
-    stubServer({ active: [], recent: [] });
+  it('keeps one slice per pod: one pod\'s push replaces its own slice, never another pod\'s', async () => {
+    stubServer({ active: [], recent: [], pod: 'A' });
     renderApp('/');
     await screen.findByRole('button', { name: 'Jobs' });
     const es = FakeSource.last!;
-    es.emit('jobs:changed', { active: [job({ id: 'on-a', state: 'running', progress: 0.1 })], recent: [] }); // pod A's slice
-    es.emit('jobs:changed', { active: [job({ id: 'on-b', state: 'running', progress: 0.2, label: 'Export' })], recent: [] }); // pod B's
+    es.emit('jobs:changed', { pod: 'A', active: [job({ id: 'on-a', state: 'running', progress: 0.1 })], recent: [] });
+    es.emit('jobs:changed', { pod: 'B', active: [job({ id: 'on-b', state: 'running', progress: 0.2, label: 'Export' })], recent: [] });
     expect(await screen.findByRole('button', { name: 'Jobs — 2 running' })).toBeTruthy();
-    es.emit('jobs:changed', { active: [], recent: [job({ id: 'on-a', finishedAt: NOW })] }); // A's finished
+    es.emit('jobs:changed', { pod: 'A', active: [], recent: [job({ id: 'on-a', finishedAt: NOW })] }); // A's finished
     expect(await screen.findByRole('button', { name: 'Jobs — 1 running' })).toBeTruthy();
-    es.emit('jobs:changed', { active: [job({ id: 'on-a', state: 'running', progress: 0.5 })], recent: [] }); // an older report of A's
-    expect(await screen.findByRole('button', { name: 'Jobs — 1 running' })).toBeTruthy(); // never revives a finished job
     fireEvent.click(screen.getByRole('button', { name: 'Jobs — 1 running' }));
     const pop = await screen.findByRole('dialog', { name: 'Jobs' });
     expect(within(pop).getByText('Export')).toBeTruthy();
     fireEvent.click(within(pop).getByRole('button', { name: 'Clear finished' }));
     await waitFor(() => expect(within(pop).queryByRole('region', { name: 'Recent' })).toBeNull()); // dropped here: no pod pushes an empty list
+  });
+
+  it('a job no pod reports any more is gone once the list is re-read (its pod restarted)', async () => {
+    stubServer({ active: [], recent: [], pod: 'B' });
+    renderApp('/');
+    await screen.findByRole('button', { name: 'Jobs' });
+    const es = FakeSource.last!;
+    act(() => es.onopen?.()); // the first open
+    es.emit('jobs:changed', { pod: 'A', active: [job({ id: 'stale', state: 'running', progress: 0.3 })], recent: [] });
+    expect(await screen.findByRole('button', { name: 'Jobs — 1 running' })).toBeTruthy();
+    act(() => es.onopen?.()); // a reconnect: the list is re-read, and the reply ([]) starts it over
+    expect(await screen.findByRole('button', { name: 'Jobs' })).toBeTruthy();
   });
 
   it('stays live from the stream: a pushed list repaints the button, a completion becomes a toast', async () => {

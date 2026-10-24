@@ -5,9 +5,10 @@
 // is re-read: pushes sent while it was down are gone.
 //
 // ANY POD: a job runs on the pod that took its RPC, and each pod pushes only its
-// own jobs, so the list MERGES by job id (`mergeJobs`) instead of replacing —
-// pod A's push must not erase pod B's jobs. `jobs:list` makes every other pod
-// push its slice too (src/ipc/jobs.ts).
+// own jobs, tagged with its pod id. The list keeps ONE SLICE PER POD: a push
+// replaces its pod's slice (pod A's push never erases pod B's jobs), and a
+// `jobs:list` reply starts over — every other pod re-pushes its slice
+// (src/ipc/jobs.ts), so a job no pod reports any more (a restart) is gone.
 
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -47,19 +48,14 @@ function snap(v: unknown): JobsSnapshot {
   return { active: Array.isArray(o.active) ? o.active : [], recent: Array.isArray(o.recent) ? o.recent : [] };
 }
 
-/**
- * `next` (one pod's report) folded into the list so far, by job id. A finished
- * job is never revived by an older report that still had it running; running
- * jobs by start, finished ones newest first.
- */
-export function mergeJobs(prev: JobsSnapshot | undefined, next: JobsSnapshot): JobsSnapshot {
+/** One slice per pod: what that pod last reported of this user's jobs. */
+export type JobSlices = Record<string, JobsSnapshot>;
+const podOf = (v: unknown): string => (v && typeof v === 'object' && typeof (v as { pod?: unknown }).pod === 'string' ? (v as { pod: string }).pod : '');
+
+/** Every pod's slice as one list: running jobs by start, finished ones newest first. */
+export function mergeSlices(slices: JobSlices | undefined): JobsSnapshot {
   const byId = new Map<string, Job>();
-  for (const j of [...(prev?.active ?? []), ...(prev?.recent ?? [])]) byId.set(j.id, j);
-  for (const j of [...next.active, ...next.recent]) {
-    const had = byId.get(j.id);
-    if (had && FINAL.has(had.state) && !FINAL.has(j.state)) continue;
-    byId.set(j.id, j);
-  }
+  for (const s of Object.values(slices ?? {})) for (const j of [...s.active, ...s.recent]) byId.set(j.id, j);
   const all = [...byId.values()];
   return {
     active: all.filter((j) => !FINAL.has(j.state)).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
@@ -67,14 +63,28 @@ export function mergeJobs(prev: JobsSnapshot | undefined, next: JobsSnapshot): J
   };
 }
 
-const listFn = (qc: ReturnType<typeof useQueryClient>) => async (): Promise<JobsSnapshot> =>
-  mergeJobs(qc.getQueryData<JobsSnapshot>(KEY), snap(await rpc('jobs:list')));
+/**
+ * A `jobs:list` reply STARTS the list over (the other pods re-push their slices: src/ipc/jobs.ts),
+ * so a job no pod reports any more — its pod restarted — is gone. A finished job the reply still
+ * has running (the reply raced its last push) stays finished.
+ */
+function fromReply(prev: JobSlices | undefined, reply: unknown): JobSlices {
+  const finished = new Map(mergeSlices(prev).recent.map((j) => [j.id, j]));
+  const s = snap(reply);
+  const active = s.active.filter((j) => !finished.has(j.id));
+  const recent = [...s.recent, ...s.active.filter((j) => finished.has(j.id)).map((j) => finished.get(j.id) as Job)];
+  return { [podOf(reply)]: { active, recent } };
+}
+
+const listFn = (qc: ReturnType<typeof useQueryClient>) => async (): Promise<JobSlices> =>
+  fromReply(qc.getQueryData<JobSlices>(KEY), await rpc('jobs:list'));
 
 /** The list, kept live from the stream. Mount once (the shell's Jobs button). */
 export function useJobs() {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: KEY, queryFn: listFn(qc) });
-  useServerEvent('jobs:changed', (p) => qc.setQueryData<JobsSnapshot>(KEY, (prev) => mergeJobs(prev, snap(p))));
+  const q = useQuery({ queryKey: KEY, queryFn: listFn(qc), select: mergeSlices });
+  // A push REPLACES its own pod's slice; the other pods' stay.
+  useServerEvent('jobs:changed', (p) => qc.setQueryData<JobSlices>(KEY, (prev) => ({ ...(prev ?? {}), [podOf(p)]: snap(p) })));
   useServerEvent('jobs:finished', (p) => {
     const j = p as Job;
     if (!j || typeof j !== 'object' || j.silent) return;
@@ -88,7 +98,7 @@ export function useJobs() {
 /** The same live list, read elsewhere (the shell's `useJobs` keeps it current; this registers no handlers of its own). */
 export function useJobList() {
   const qc = useQueryClient();
-  return useQuery({ queryKey: KEY, queryFn: listFn(qc) });
+  return useQuery({ queryKey: KEY, queryFn: listFn(qc), select: mergeSlices });
 }
 
 export function useCancelJob() {
@@ -104,7 +114,7 @@ export function useClearJobs() {
     mutationFn: async () => rpc('jobs:clear'),
     // Every pod cleared them; a pod left with nothing finished pushes nothing, so drop them here, then re-read.
     onSuccess: () => {
-      qc.setQueryData<JobsSnapshot>(KEY, (prev) => (prev ? { active: prev.active, recent: [] } : prev));
+      qc.setQueryData<JobSlices>(KEY, (prev) => (prev ? Object.fromEntries(Object.entries(prev).map(([pod, s]) => [pod, { active: s.active, recent: [] }])) : prev));
       return qc.invalidateQueries({ queryKey: KEY });
     },
     onError: () => toast('Could not clear finished jobs.', { kind: 'error' }),

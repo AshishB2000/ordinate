@@ -1,6 +1,6 @@
 import { ipcMain } from './bus';
 import * as jobs from '../app/jobs';
-import { onPodCommand, toOtherPods } from '../server/podCommands';
+import { onPodCommand, POD_ID, toOtherPods } from '../server/podCommands';
 import { publish } from '../server/sse';
 
 // Jobs IPC — the Jobs popover's list, Cancel and Clear. The queue itself is
@@ -27,7 +27,7 @@ export function registerServer(): void {
   ipcMain.handle('jobs:list', () => {
     const me = owner();
     if (me !== '\u0000') toOtherPods('jobs:list', { owner: me });
-    return jobs.snapshotFor(me);
+    return { ...jobs.snapshotFor(me), pod: POD_ID };
   });
   ipcMain.handle('jobs:cancel', (_e, { id }: { id: string }) => {
     const me = owner();
@@ -54,7 +54,7 @@ export function registerServer(): void {
     const target = ownerOf(who);
     if (!target) return;
     const snap = jobs.snapshotFor(who as string);
-    if (snap.active.length || snap.recent.length) publish(target, 'jobs:changed', snap);
+    if (snap.active.length || snap.recent.length) publish(target, 'jobs:changed', { ...snap, pod: POD_ID });
   });
 }
 
@@ -67,11 +67,11 @@ function cancelFor(who: string, id: string): boolean {
   if (!jobs.cancel(id)) return false;
   const target = ownerOf(who);
   if (!target) return true;
-  publish(target, 'jobs:changed', jobs.snapshotFor(who));
+  publish(target, 'jobs:changed', { ...jobs.snapshotFor(who), pod: POD_ID });
   const off = jobs.onFinish((j) => {
     if (j.id !== id) return;
     off();
-    publish(target, 'jobs:changed', jobs.snapshotFor(who));
+    publish(target, 'jobs:changed', { ...jobs.snapshotFor(who), pod: POD_ID });
   });
   if (!jobs.get(id) || ['done', 'error', 'cancelled', 'interrupted'].includes(jobs.get(id)!.state)) off(); // a queued job ends at once
   return true;
