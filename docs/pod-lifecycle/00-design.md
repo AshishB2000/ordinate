@@ -709,3 +709,51 @@ figure in `duckdbClose.ts` was measured 16 suites at a time).
 
 A full 10,000 × 50 input table of 22-character CJK cells is 33 MB of JSON: refused by the record
 writer, so never stored and never in a bundle.
+
+## 9. Review round (two independent reviewers, head 85ab67c4)
+
+Each finding was fixed in its own commit, with a test that failed before the fix.
+
+- **S1 — a parse's heap is its VALUES, not its bytes.** A 33 KB bundle whose `alerts.json` inflates to
+  32 MiB of `{}` grew RSS by 944 MB here (the reviewer: +1.21 GB, exit 134 at 512 MB); the same for
+  `project.json`, `themes.json`, `templates.json`, and persistently through `idsInUse` and alert
+  evaluation. Measured: 1,000,000 values cost at most +113 MB RSS and 56 ms (every one an empty
+  object; arrays +39 MB, numbers or strings +10 MB); a maximal input-table version is ~510,000.
+  The fix (`src/app/jsonBudget.ts`, `bundleRules.ts`, `recordFs.ts`):
+  - every file the import or a restore parses whole is parsed only within **1,000,000 values**
+    (a byte scan, windowed and yielding, before `JSON.parse`);
+  - byte caps by kind, each derived from its sanitizer: `manifest.json` 1 MiB, `themes.json` 1 MiB
+    (≤ 200 themes), `alerts.json` 4 MiB (≤ 100 rules with ≤ 200 keys of unbounded length, ≤ 200
+    events), `project.json` 4 MiB (the colour map: 64 × 256 × 200-character keys is 3.6 MiB),
+    `templates.json` 32 MiB (PNG thumbnails up to 3 MiB each), `backup.json` 4 MiB (~10,000
+    projects), `history/dataset/**` 32 MiB (input tables), every other record 8 MiB (the widest
+    dataset record, 16,384 columns, is 4.4 MiB). 1 MiB was not enough for three of them;
+  - `recordFs` holds a PROJECT record to the same byte cap and value budget on write — nothing past
+    them is stored — and on read: a record planted before this check is refused (logged once), its
+    reader sees an unreadable record, never a parse;
+  - an optional extra (themes, templates, project extras) past the budget is skipped, as an
+    unreadable one always was; a manifest or `alerts.json` past it refuses the bundle.
+  Measured after: the 33 KB alerts, project and themes bombs are refused from the directory with
+  nothing parsed and RSS +0 MB; the templates bomb is skipped (largest parse 176 bytes); a 3.5 MiB
+  `alerts.json` of 1.2 M values is refused unparsed; a pre-existing 9 MB one is not parsed by the
+  next import or by alert evaluation.
+- **S2 — the id scan stalled the event loop.** One regex over 32 MiB with no id held the loop 735 ms
+  (here 2,542 ms with one such record, 2,250 ms with 16); a window of `a…` costs 29 ms because `a` is
+  a hex digit. The scan now anchors on each `-` with `buf.indexOf` (native) and checks the 36 bytes
+  in place — no string, no regex — yielding every ~10 ms, and a differential test pins it to the
+  global regex. Longest stall now: 5 ms for one record, 6–7 ms for 16. The JSON bomb's first pass
+  dropped from +161–167 MB to +60 MB (no 32 MiB latin1 strings).
+- **C1** a draining pod's due refresh is neither stamped nor reported failed (`jobs.refusing()`;
+  a restart-cancelled run puts its stamp back; `Restarting` reaches the runner). **C2** the S3
+  credential close runs beside `closeAll` and a lookup still running is a survivor — its wait timer
+  was `unref`'d, which let the process end at exit 0 mid-lookup. **C3** a worker forgets a closed
+  compute port (44 senders after 40 leases → 1). **C4** an import cancelled mid-write ends
+  `cancelled`, not `done`. **C5** a SIGTERM during boot starts no runner and no bus. **C6** the boot
+  sweep also takes `upload-*` and `drill-*` leftovers. **Reuse:** one `deflateRawAsync`;
+  `peekManifest` reads through `openZip`.
+- **Residual (R3):** a record within its caps is still parsed whole when its screen reads it; the
+  value budget bounds that parse at ~113 MB RSS. Two test hooks were needed in two places a
+  pending promise held nothing open (`s3.close`, `DuckPool.sendersForTest`): an awaited reply must
+  hold the loop, or the process ends at exit 0 with its work undone.
+- **Pre-existing, not this branch:** `test-versionHistory` fails ~1 run in 3 on the untouched base
+  too (a create and a rename in the same millisecond stamp `now − 1`).
