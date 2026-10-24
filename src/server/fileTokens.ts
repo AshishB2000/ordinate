@@ -110,18 +110,9 @@ export async function waiting(org: string, hexes: readonly string[]): Promise<Se
 // expiry finish), or taken long ago by a handler that never called done() (a crash).
 const DUE = `org_id = $1 AND ((used_at IS NULL AND expires_at < now() - interval '10 minutes') OR used_at < now() - interval '6 hours')`;
 
-/** One sweep for `org`: each due row's bytes, then the row. A failed delete keeps its row for the next pass. */
+/** One sweep for `org`: each due row's bytes, then the row (./staging.ts `sweepRows`). */
 export async function sweep(p: Pool, org: string): Promise<number> {
-  const due = await inOrg(p, org, (c) => c.query<{ token_hash: Buffer; storage_key: string }>(`SELECT token_hash, storage_key FROM file_tokens WHERE ${DUE}`, [org]));
-  let n = 0;
-  for (const row of due.rows) {
-    try {
-      await staging.remove(staging.placeIn(org, row.storage_key));
-    } catch {
-      continue;
-    }
-    await inOrg(p, org, (c) => c.query('DELETE FROM file_tokens WHERE org_id = $1 AND token_hash = $2', [org, row.token_hash]));
-    n++;
-  }
-  return n;
+  return (await staging.sweepRows(p, org,
+    `SELECT token_hash AS k, storage_key FROM file_tokens WHERE ${DUE}`,
+    'DELETE FROM file_tokens WHERE org_id = $1 AND token_hash = $2')).length;
 }

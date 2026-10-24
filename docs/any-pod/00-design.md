@@ -821,6 +821,7 @@ CREATE TABLE import_stages (
   storage_key  text        COLLATE "C" NOT NULL,
   meta         text        NOT NULL,
   created_at   timestamptz NOT NULL DEFAULT clock_timestamp(),
+  ready_at     timestamptz,
   expires_at   timestamptz NOT NULL
 );
 CREATE INDEX import_stages_owner ON import_stages (org_id, user_email, created_at);

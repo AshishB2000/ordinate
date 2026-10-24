@@ -36,6 +36,7 @@ import { ctx } from './context';
 import * as tokens from './fileTokens';
 import * as shared from './sharedFiles';
 import * as staging from './staging';
+import * as stageStore from '../data/stageStore';
 
 export const TOKEN_TTL_MS = 60 * 60 * 1000;
 const SWEEP_EVERY_MS = 60 * 1000;
@@ -152,6 +153,7 @@ export function sweep(): void {
   const t = now();
   for (const [token, e] of entries) if (t >= e.expires) forget(token);
   void shared.sweepCopies().catch(() => undefined);
+  stageStore.pruneMemory(); // a staged import nobody saved leaves this pod's heap with its TTL
 }
 
 /** A client-supplied filename made safe to show and to put in a header: no path, no control characters. */

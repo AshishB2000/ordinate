@@ -7,9 +7,11 @@
 // truth: a stage another pod saved (and dropped) is gone here too, even when
 // this pod still holds its rows in memory.
 //
-//   put   the row FIRST (a pod dying mid-COPY leaves a row the sweep cleans
-//         up), then the Parquet, then evict the owner's stages past the newest
-//         MAX_STAGED. A failed COPY deletes its row.
+//   put   the row FIRST, not ready (a pod dying mid-COPY leaves a row the
+//         sweep cleans up), then the Parquet, then the row READY, then evict
+//         the owner's READY stages past the newest MAX_STAGED — never one still
+//         being written, so an eviction never leaves a file no row names, and
+//         never the caller's own. A failed COPY deletes its row.
 //   get   the caller's live row, then this pod's memory copy or the Parquet
 //         (the first `limit` rows only, for a preview).
 //   drop  the row, then the bytes and the memory copy.
@@ -17,6 +19,8 @@
 // The same-pod MEMORY copy is a fast path for tables up to STAGE_MEMORY_CELLS,
 // with a pod-wide LRU budget: a 1M-row parse leaves the heap once written.
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { randomUUID } from 'crypto';
 import type { Pool } from 'pg';
 import { ctx } from '../server/context';
@@ -56,17 +60,26 @@ function pool(): Pool {
   return db;
 }
 
+/** What put says when its own row was swept while it wrote (it never is, in normal operation). */
+export const STAGE_LOST = 'This import took too long to stage — bring the file in again.';
+
 // ── This pod's memory copies ────────────────────────────────────────────────
-const memory = new Map<string, { org: string; user: string; table: ParseResult; cells: number }>();
+const memory = new Map<string, { org: string; user: string; table: ParseResult; cells: number; expires: number }>();
 let memoryCells = 0;
 const cellsOf = (t: ParseResult): number => t.rows.length * Math.max(1, t.columns.length);
 
 function remember(id: string, org: string, user: string, table: ParseResult): void {
+  pruneMemory();
   const cells = cellsOf(table);
   if (cells > STAGE_MEMORY_CELLS) return;
-  memory.set(id, { org, user, table, cells });
+  memory.set(id, { org, user, table, cells, expires: Date.now() + TTL_MS });
   memoryCells += cells;
   while (memoryCells > STAGE_MEMORY_POD_CELLS && memory.size) forget(memory.keys().next().value as string);
+}
+
+/** Drops memory copies past their stage's TTL — a stage nobody saves must not stay in the heap (also run by the 60 s files timer). */
+export function pruneMemory(now = Date.now()): void {
+  for (const [id, m] of memory) if (now >= m.expires) forget(id);
 }
 
 function forget(id: string): void {
@@ -100,9 +113,16 @@ export async function put(table: ParseResult): Promise<string> {
     await removeBytes(place);
     throw err;
   }
+  const ready = await inOrg(pool(), org.id, (c) => c.query(
+    'UPDATE import_stages SET ready_at = clock_timestamp() WHERE org_id = $1 AND id = $2 RETURNING id', [org.id, id]));
+  if (!ready.rows.length) {
+    await removeBytes(place); // the row went while we wrote: nothing may name these bytes now
+    throw new Error(STAGE_LOST);
+  }
+  // Only READY stages are evicted, newest-ready kept — this one (just made ready) always is.
   const evicted = await inOrg(pool(), org.id, (c) => c.query<{ id: string; storage_key: string }>(
     `DELETE FROM import_stages WHERE org_id = $1 AND id IN (
-       SELECT id FROM import_stages WHERE org_id = $1 AND user_email = $2 ORDER BY created_at DESC OFFSET $3)
+       SELECT id FROM import_stages WHERE org_id = $1 AND user_email = $2 AND ready_at IS NOT NULL ORDER BY ready_at DESC OFFSET $3)
      RETURNING id, storage_key`,
     [org.id, user.email, MAX_STAGED],
   ));
@@ -119,7 +139,7 @@ export async function get(id: unknown, limit?: number): Promise<ParseResult | nu
   if (typeof id !== 'string' || !UUID_RE.test(id)) return null;
   const { org, user } = ctx();
   const r = await inOrg(pool(), org.id, (c) => c.query<{ storage_key: string; meta: string }>(
-    'SELECT storage_key, meta FROM import_stages WHERE org_id = $1 AND id = $2 AND user_email = $3 AND expires_at > now()',
+    'SELECT storage_key, meta FROM import_stages WHERE org_id = $1 AND id = $2 AND user_email = $3 AND ready_at IS NOT NULL AND expires_at > now()',
     [org.id, id, user.email],
   ));
   const row = r.rows[0];
@@ -128,6 +148,7 @@ export async function get(id: unknown, limit?: number): Promise<ParseResult | nu
     return null;
   }
   const rest = (JSON.parse(row.meta) as { table: Omit<ParseResult, 'rows'> }).table;
+  pruneMemory();
   const m = memory.get(id);
   if (m && m.org === org.id && m.user === user.email) {
     memory.delete(id); // touch: most recently used last
@@ -151,22 +172,31 @@ export async function drop(id: unknown): Promise<void> {
   for (const row of r.rows) await removeBytes(placeOf(org.id, row.storage_key));
 }
 
-/** One sweep for `org` (the `shared:sweep` job): stages expired 10 minutes ago — the bytes, then the row. */
+/**
+ * One sweep for `org` (the `shared:sweep` job): stages expired 10 minutes ago — the bytes, then the
+ * row (staging `sweepRows`). Then, in file mode, the backstop for a crash between a write and its
+ * row: a `stage-*.parquet` in the org's temp that no row names, older than the TTL, is deleted (on
+ * S3 the bucket's lifecycle rule is the backstop).
+ */
 export async function sweep(p: Pool, org: string): Promise<number> {
-  const due = await inOrg(p, org, (c) => c.query<{ id: string; storage_key: string }>(
-    `SELECT id, storage_key FROM import_stages WHERE org_id = $1 AND expires_at < now() - interval '10 minutes'`, [org]));
-  let n = 0;
-  for (const row of due.rows) {
-    try {
-      await staging.remove(placeOf(org, row.storage_key));
-    } catch {
-      continue;
-    }
-    await inOrg(p, org, (c) => c.query('DELETE FROM import_stages WHERE org_id = $1 AND id = $2', [org, row.id]));
-    forget(row.id);
-    n++;
+  const gone = await staging.sweepRows(p, org,
+    `SELECT id AS k, storage_key FROM import_stages WHERE org_id = $1 AND expires_at < now() - interval '10 minutes'`,
+    'DELETE FROM import_stages WHERE org_id = $1 AND id = $2');
+  for (const id of gone) forget(id);
+  if (staging.isS3()) return gone.length;
+  const dir = staging.tempDir(org);
+  const files = (await fs.promises.readdir(dir)).map((n) => ({ n, id: /^stage-([0-9a-f-]{36})\.parquet$/.exec(n)?.[1] })).filter((f): f is { n: string; id: string } => !!f.id);
+  if (!files.length) return gone.length;
+  const named = await inOrg(p, org, (c) => c.query<{ id: string }>('SELECT id FROM import_stages WHERE org_id = $1 AND id = ANY($2::uuid[])', [org, files.map((f) => f.id)]));
+  const known = new Set(named.rows.map((r) => r.id));
+  const before = Date.now() - TTL_MS;
+  for (const f of files) {
+    if (known.has(f.id)) continue;
+    const file = path.join(dir, f.n);
+    const st = await fs.promises.stat(file).catch(() => null);
+    if (st && st.mtimeMs < before) await fs.promises.rm(file, { force: true }).catch(() => undefined);
   }
-  return n;
+  return gone.length;
 }
 
 /** Test hooks. */

@@ -32,6 +32,8 @@ CREATE TABLE file_tokens (
 CREATE INDEX file_tokens_expiry ON file_tokens (org_id, expires_at);
 
 -- `meta` is JSON text, not jsonb: a column name may hold U+0000, which jsonb refuses.
+-- `ready_at` is NULL while the Parquet is still being written: such a row is never read and never
+-- evicted (an eviction mid-write left a file no row named). Eviction keeps the newest ready ones.
 CREATE TABLE import_stages (
   id           uuid        PRIMARY KEY,
   org_id       text        NOT NULL,
@@ -39,6 +41,7 @@ CREATE TABLE import_stages (
   storage_key  text        COLLATE "C" NOT NULL,
   meta         text        NOT NULL,
   created_at   timestamptz NOT NULL DEFAULT clock_timestamp(),
+  ready_at     timestamptz,
   expires_at   timestamptz NOT NULL
 );
 CREATE INDEX import_stages_owner ON import_stages (org_id, user_email, created_at);

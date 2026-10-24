@@ -19,7 +19,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import type { Readable } from 'stream';
+import type { Pool } from 'pg';
 import { ctx, serverDataDir } from './context';
+import { inOrg } from './db/orgTx';
 import * as s3 from '../engine/s3';
 import { orgKey, orgUrl, s3Config } from '../engine/storage';
 
@@ -107,4 +109,24 @@ export async function openStream(p: Place): Promise<{ body: Readable; size: numb
 export async function remove(p: Place): Promise<void> {
   if (isS3()) await s3.remove(need(), s3Key(p));
   else await fs.promises.rm(localPath(p), { force: true });
+}
+
+/**
+ * One sweep of an org's due rows (the `shared:sweep` job): `due` selects `(k, storage_key)` for org
+ * $1; each row's bytes are deleted, then `drop` deletes the row by org $1 and `k` $2. A failed
+ * delete keeps its row for the next pass. File tokens and staged imports both sweep through this.
+ */
+export async function sweepRows(p: Pool, org: string, due: string, drop: string): Promise<string[]> {
+  const rows = await inOrg(p, org, (c) => c.query<{ k: unknown; storage_key: string }>(due, [org]));
+  const gone: string[] = [];
+  for (const row of rows.rows) {
+    try {
+      await remove(placeIn(org, row.storage_key));
+    } catch {
+      continue;
+    }
+    await inOrg(p, org, (c) => c.query(drop, [org, row.k]));
+    gone.push(String(row.k));
+  }
+  return gone;
 }
