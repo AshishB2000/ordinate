@@ -59,6 +59,11 @@ export function pendingWork(): Promise<unknown>[] {
   return [...work];
 }
 
+/** Resolves once nothing tracked is left, work tracked by tracked work too (an afterRefresh starts refreshDependents). Callers cap it. */
+export async function settleWork(): Promise<void> {
+  while (work.size) await Promise.allSettled(work);
+}
+
 /** Test hook. */
 export function resetForTest(): void {
   draining = false;

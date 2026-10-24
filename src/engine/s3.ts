@@ -77,6 +77,11 @@ async function credsFor(cfg: S3Env, fresh = false): Promise<Creds> {
   return resolving;
 }
 
+/** Test hook: a credential lookup in flight (one that never settles, to test the shutdown's deadline). */
+export function setResolvingForTest(p: Promise<Creds> | null): void {
+  resolving = p;
+}
+
 /**
  * Server shutdown (src/server/shutdown.ts): this module's DuckDB runs on the MAIN
  * thread, so the exit must not cut a resolve in half. Waits for one in flight
@@ -88,7 +93,8 @@ export async function close(deadlineAt: number): Promise<boolean> {
   if (resolving) {
     const settled = await Promise.race([
       resolving.then(() => true, () => true),
-      new Promise<false>((r) => setTimeout(() => r(false), Math.max(0, deadlineAt - Date.now())).unref()),
+      // Ref'd on purpose: this wait holds the process until the deadline, never lets it end around a lookup.
+      new Promise<false>((r) => setTimeout(() => r(false), Math.max(0, deadlineAt - Date.now()))),
     ]);
     if (!settled) return false;
   }

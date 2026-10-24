@@ -69,7 +69,8 @@ export function endRecord(count: number, cdSize: number, cdOffset: number): Buff
   return end;
 }
 
-const deflateRawAsync = (b: Buffer): Promise<Buffer> =>
+/** zlib's deflateRaw on libuv's pool, as a promise (./bundle.ts writeZipAsync too). */
+export const deflateRawAsync = (b: Buffer): Promise<Buffer> =>
   new Promise((res, rej) => zlib.deflateRaw(b, (err, out) => (err ? rej(err) : res(out))));
 
 /** A zip appended to `file` entry by entry: only the central records (46 bytes + name each) stay in memory. */

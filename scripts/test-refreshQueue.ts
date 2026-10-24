@@ -232,6 +232,24 @@ async function main(): Promise<void> {
     JSON.stringify(out4));
   ok('4. a full refresh never overlapped another', maxInFlight === 1, maxInFlight);
   ok('4. not incremental: the summary says so', !(await datasets.listDatasets(pid)).find((d) => d.id === ids.get('h1'))?.incrementalOn);
+
+  // ── 5. A pod that drains (docs/pod-lifecycle, review C1) ──────────────────
+  // A due refresh on a pod that refuses new jobs is not stamped and not reported
+  // as failed: the next pod's tick, a minute on, finds it still due and runs it.
+  await datasets.setAutoRefresh(pid, ids.get('h1')!, { every: null });
+  await datasets.setAutoRefresh(pid, ids.get('h2')!, { every: null });
+  await table('r', false);
+  await schedule('r', 'hourly'); // never ran: due at once
+  reported.length = 0;
+  const { Restarting } = require('../src/server/lifecycle') as typeof import('../src/server/lifecycle');
+  jobs.refuseNew(() => new Restarting());
+  await sched.tickNow();
+  jobs.refuseNew(null);
+  ok('5. draining: the due refresh is NOT stamped', (await auto('r'))?.lastAutoAt === undefined, JSON.stringify(await auto('r')));
+  ok('5. …and no failure is reported for it', reported.length === 0, JSON.stringify(reported));
+  const out5 = await sched.tickNow();
+  ok('5. the next pod\'s tick runs it and stamps it', out5.some((o) => names.get(o.datasetId) === 'r' && o.ok) && typeof (await auto('r'))?.lastAutoAt === 'string',
+    JSON.stringify(out5));
 }
 
 main()

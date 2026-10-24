@@ -18,7 +18,6 @@
 // whitelist from the central directory before a byte is inflated, memory
 // bounded by one JSON entry, never by the bundle (docs/pod-lifecycle).
 
-import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
 import * as projects from './projects';
@@ -27,10 +26,12 @@ import { bundleThemesEntry } from './themeStore';
 import * as recordFs from './recordFs';
 import { listBlobs, readBlob } from './blobStore';
 import { bundleTemplatesEntry } from './userTemplateStore'; // r7:templates
-import { BUNDLE_FORMAT, BUNDLE_VERSION, MANIFEST_MAX_BYTES, MAX_ENTRIES, MAX_ENTRY_BYTES, MAX_TOTAL_BYTES, RECORD_MAX_BYTES, ruleFor } from './bundleRules';
+import { BUNDLE_FORMAT, BUNDLE_POLICY, BUNDLE_VERSION, MAX_ENTRIES, MAX_ENTRY_BYTES, MAX_TOTAL_BYTES, RECORD_MAX_BYTES, ruleFor } from './bundleRules';
 import type { BundleManifest } from './bundleRules';
 import { recordTooLargeToExport } from './bundleMessages';
-import { centralHeader, dosTime, endRecord, localHeader, pack, type Packed } from './zipWriter';
+import { centralHeader, deflateRawAsync, dosTime, endRecord, localHeader, pack, type Packed } from './zipWriter';
+import { openZip } from './zipReader';
+import { parseBounded } from './jsonBudget';
 import { walk, type BundleProgress } from './bundleImport';
 
 export { BUNDLE_FORMAT, BUNDLE_VERSION } from './bundleRules';
@@ -51,8 +52,6 @@ export function writeZip(entries: ZipEntry[], when = new Date()): Buffer {
   return assemble(entries, entries.map((e) => pack(e.data, zlib.deflateRawSync(e.data))), when);
 }
 
-const deflateRawAsync = (b: Buffer): Promise<Buffer> =>
-  new Promise((res, rej) => zlib.deflateRaw(b, (err, out) => (err ? rej(err) : res(out))));
 const inflateRawAsync = (b: Buffer, max: number): Promise<Buffer> =>
   new Promise((res, rej) => zlib.inflateRaw(b, { maxOutputLength: Math.max(1, max) }, (err, out) => (err ? rej(err) : res(out))));
 
@@ -158,56 +157,25 @@ export async function readZipAsync(buf: Buffer, onEntry?: (done: number, total: 
 
 
 /**
- * A bundle's manifest WITHOUT reading the bundle: the zip directory sits at the
- * end of the file, so this reads the tail, finds manifest.json's entry there,
- * and reads just those bytes — a backup list stays cheap however large the
- * projects are. Same guards as readZip (CRC, size cap, format check). Null for
- * anything that is not a readable Ordinate bundle: truncated, garbage, another
- * format. The caller skips it; nothing here throws.
+ * A bundle's manifest WITHOUT reading the bundle: the strict reader
+ * (./zipReader.ts) checks the directory and every header with positioned reads
+ * and inflates only manifest.json — a backup list stays cheap however large the
+ * projects are. Null for anything that is not a readable Ordinate bundle:
+ * truncated, garbage, another format. The caller skips it; nothing here throws.
  */
 export async function peekManifest(file: string): Promise<BundleManifest | null> {
-  let fh: fs.promises.FileHandle | null = null;
   try {
-    fh = await fs.promises.open(file, 'r');
-    const size = (await fh.stat()).size;
-    const tail = Buffer.alloc(Math.min(size, 22 + 65535));
-    await fh.read(tail, 0, tail.length, size - tail.length);
-    let eocd = -1;
-    for (let i = tail.length - 22; i >= 0; i--) if (tail.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
-    if (eocd < 0) return null;
-    const count = tail.readUInt16LE(eocd + 10);
-    const cdSize = tail.readUInt32LE(eocd + 12);
-    const cdOffset = tail.readUInt32LE(eocd + 16);
-    if (cdOffset + cdSize > size || count > MAX_ENTRIES) return null;
-    const cd = Buffer.alloc(cdSize);
-    await fh.read(cd, 0, cdSize, cdOffset);
-    for (let p = 0, n = 0; n < count && p + 46 <= cd.length; n++) {
-      if (cd.readUInt32LE(p) !== 0x02014b50) return null;
-      const nameLen = cd.readUInt16LE(p + 28);
-      const name = cd.toString('utf8', p + 46, p + 46 + nameLen);
-      if (name === 'manifest.json') {
-        const method = cd.readUInt16LE(p + 10);
-        const r = { name, method, crc: cd.readUInt32LE(p + 16), usize: cd.readUInt32LE(p + 24), raw: Buffer.alloc(0) };
-        const csize = cd.readUInt32LE(p + 20);
-        const localOff = cd.readUInt32LE(p + 42);
-        if ((method !== 0 && method !== 8) || r.usize > MANIFEST_MAX_BYTES || csize > MANIFEST_MAX_BYTES) return null;
-        const local = Buffer.alloc(30);
-        await fh.read(local, 0, 30, localOff);
-        if (local.readUInt32LE(0) !== 0x04034b50) return null;
-        r.raw = Buffer.alloc(csize);
-        const start = localOff + 30 + local.readUInt16LE(26) + local.readUInt16LE(28);
-        if ((await fh.read(r.raw, 0, csize, start)).bytesRead !== csize) return null;
-        const data = checked(r, method === 0 ? r.raw : await inflateRawAsync(r.raw, r.usize)).data;
-        const m = JSON.parse(data.toString('utf8'));
-        return m && m.format === BUNDLE_FORMAT && m.formatVersion === BUNDLE_VERSION ? m : null;
-      }
-      p += 46 + nameLen + cd.readUInt16LE(p + 30) + cd.readUInt16LE(p + 32);
+    const zip = await openZip({ file }, BUNDLE_POLICY);
+    try {
+      const e = zip.get('manifest.json');
+      if (!e) return null;
+      const m = (await parseBounded(await zip.read(e))) as BundleManifest | null;
+      return m && m.format === BUNDLE_FORMAT && m.formatVersion === BUNDLE_VERSION ? m : null;
+    } finally {
+      await zip.close();
     }
-    return null;
   } catch (_) {
     return null;
-  } finally {
-    if (fh) await fh.close().catch(() => { /* already closed */ });
   }
 }
 

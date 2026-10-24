@@ -519,7 +519,12 @@ async function main(): Promise<void> {
 
   const before = (await datasets.getDataset(pid, derived!.id))!.rows.length;
   await datasets.updateSteps(pid, orders!.id, [{ type: 'filter', column: 'region', op: '=', value: 'north' } as any]);
-  await deps.refreshDependents(pid, orders!.id);
+  const lifecycle: typeof import('../src/server/lifecycle') = require('../src/server/lifecycle');
+  const pushed = deps.refreshDependents(pid, orders!.id);
+  // It is dropped un-awaited after a refresh (afterRefresh); a shutdown that
+  // ended the pool under it logged "Cannot use a pool after calling end".
+  ok('push: the dependent run is tracked for the shutdown', lifecycle.pendingWork().includes(pushed), lifecycle.pendingWork().length);
+  await pushed;
   const afterTot = await datasets.getDataset(pid, derived!.id);
   const afterCount = await datasets.getDataset(pid, derived2!.id);
   ok('push: a prepare step on the input re-runs its SQL dataset', before === 5 && afterTot!.rows.length === 1,

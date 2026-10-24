@@ -46,6 +46,7 @@
   "bundleMessages.the_bundle_is_damaged_is_larger": "バンドルが破損しています（{name} が記載より大きい）。",
   "bundleMessages.the_bundle_is_too_large_to": "バンドルが大きすぎて取り込めません。",
   "bundleMessages.the_bundle_s_alerts_json_is": "バンドルの alerts.json を読み取れません。",
+  "bundleMessages.the_bundle_s_holds_more_values": null,
   "bundleMessages.the_bundle_s_is_larger_than": "バンドルの {name} は Ordinate が取り込める上限を超えています。",
   "bundleMessages.the_bundle_uses_a_zip_feature": "バンドルが Ordinate の読めない zip 機能（zip64、データ記述子、分割アーカイブ）を使っています。",
   "bundleMessages.the_bundle_uses_an_unsupported": "バンドルが対応していない圧縮方式を使っています。",

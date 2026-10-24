@@ -214,6 +214,16 @@ async function main(): Promise<void> {
   await inOrg('a', () => q('SELECT 1 AS x'));
   ok(`a terminated compute thread's query is interrupted: the org answers in ${Date.now() - t0} ms`, Date.now() - t0 < 1000);
 
+  // Regression (review C3): a worker kept every compute port it was ever leased.
+  for (let i = 0; i < 40; i++) {
+    const lp = await inOrg('a', async () => pool.lease('a'));
+    lp.port.close();
+    lp.release();
+  }
+  await new Promise((r) => setTimeout(r, 200));
+  const senders = await pool.sendersForTest('a');
+  ok(`40 compute leases opened and closed: the worker keeps only its parent (${senders} sender${senders === 1 ? '' : 's'})`, senders === 1, senders);
+
   // Regression: an interrupt that reached the worker before the statement was
   // EXECUTING (here: posted in the same tick as the call, so it lands while the
   // worker is still preparing it) was dropped — DuckDB clears its interrupt flag

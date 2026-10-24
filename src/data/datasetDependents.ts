@@ -32,6 +32,7 @@ import { runQualityChecks } from '../analysis/qualityRun';
 import * as datasets from './datasets';
 import { refreshDataset } from './datasetRefresh';
 import { announceRefreshed } from './refreshEvents';
+import { trackWork } from '../server/lifecycle';
 
 /** How many SQL hops downstream one change may reach. */
 const MAX_DEPTH = 8;
@@ -42,6 +43,8 @@ export function refreshDependents(projectId: string, changedId: string): Promise
   const prev = queues.get(projectId) || Promise.resolve();
   const next = prev.then(() => pushFrom(projectId, changedId)).catch(() => { /* never reject */ });
   queues.set(projectId, next);
+  // Callers drop it un-awaited; the shutdown waits for it before ending the pool.
+  trackWork(next);
   void next.then(() => {
     if (queues.get(projectId) === next) queues.delete(projectId);
   });

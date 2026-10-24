@@ -187,6 +187,7 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
   const dbUrl = cfg.databaseUrl;
   const pool = dbUrl ? createPool(dbUrl, (err) => app.log.warn({ err }, 'postgres idle client error'), cfg.pod.databasePoolMax) : null;
   dbPool = pool;
+  bg = { runner: null, bus: null }; // this app's, once its onReady starts them
   watchPgPool(pool); // ordinate_pg_pool_clients on /metrics
   appEnv = cfg;
   if (pool && dbUrl) {
@@ -239,6 +240,9 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
           run: async () => { await storage.collectGarbage(cfg.storage.gcGraceMs); },
         });
       }
+      // A SIGTERM during boot (./shutdown.ts has already run past its runner/bus step): start
+      // nothing it would have to stop. Everything below this line is background work of that kind.
+      if (isDraining()) return;
       bus = await (require('./jobs/bus') as typeof import('./jobs/bus')).startBus(pool, dbUrl, app.log);
       // The backstop for a stream close the bus lost (docs/sso-lifecycle §3.9).
       sweep = (require('./streamSweep') as typeof import('./streamSweep')).startStreamSweep(pool, cfg.auth.sessionIdleMs, cfg.auth.apiTokenMaxDays, app.log);
