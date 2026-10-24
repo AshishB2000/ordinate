@@ -761,6 +761,11 @@ Each finding was fixed in its own commit, with a test that failed before the fix
   after calling end" at a pods teardown: a refresh URL's settle and `afterRefresh`, fresh-on-ask's
   follow-ups and a debounced republish ran untracked and could write records after step 6b; they are
   now detached work step 5 awaits, and a draining pod starts no republish (a test shows the settle
-  tracked right after the 202 — 0 before the fix).
+  tracked right after the 202 — 0 before the fix). That alone failed 1 run in 2 in the CI env: step 5
+  awaited a SNAPSHOT of the set, and work tracked by tracked work (the job lands → `afterRefresh` →
+  `refreshDependents`, which was not tracked at all) started after it. `refreshDependents` is
+  tracked at its one entry point, and step 5 is `settleWork()`, a loop until the set is empty under
+  the same 0.8T cap (`test-shutdownWork`: 22 ms with work left on the snapshot, 193 ms with the
+  loop); the pods suite then passed 5 of 5.
 - **Pre-existing, not this branch:** `test-versionHistory` fails ~1 run in 3 on the untouched base
   too (a create and a rename in the same millisecond stamp `now − 1`).
