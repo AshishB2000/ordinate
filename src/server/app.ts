@@ -561,7 +561,7 @@ export function registerHandlers(): void {
   // Identity provider groups (docs/sso-lifecycle): the map, and a re-apply of every synced member when it changes.
   (require('./admin/idpGroups') as typeof import('./admin/idpGroups')).register(() => dbPool, () => env().auth);
   (require('./admin/passwords') as typeof import('./admin/passwords')).register(() => dbPool, () => (appEnv ?? env()).auth.mode, () => env().auth.allowedDomains);
-  (require('./admin/org') as typeof import('./admin/org')).register(() => dbPool, () => env().maxUploadMb);
+  (require('./admin/org') as typeof import('./admin/org')).register(() => dbPool, () => env().maxUploadMb, () => env().auditRetentionDays);
   // Admin → Live usage (live data L2.7): Postgres's counts, or this pod's without it.
   (require('./admin/liveUsage') as typeof import('./admin/liveUsage')).register();
   (require('./auth/tokens') as typeof import('./auth/tokens')).register(() => dbPool, () => env().auth.apiTokenMaxDays);

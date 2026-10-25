@@ -5,7 +5,9 @@
 //              to another team in one transaction (the previous owner team
 //              keeps an ordinary admin grant — nobody loses access silently)
 //   audit      T3.3's audit_log, filtered, newest first, keyset-paged by id.
-//              A row holds ids and names of channels, never a value.
+//              A row holds ids and names of channels, never a value; the page
+//              carries the current name of each id it can (./auditNames.ts)
+//              and how long rows are kept (AUDIT_RETENTION_DAYS).
 //   settings   public links, allowed AI providers, a per-org upload cap that
 //              POST /api/files enforces under MAX_UPLOAD_MB (uploadCapMb()).
 
@@ -13,6 +15,7 @@ import type { Pool } from 'pg';
 import { AI_PROVIDERS } from '../../api/admin';
 import { ctx } from '../context';
 import { registry } from '../rpc';
+import { auditNames } from './auditNames';
 
 const PAGE = 50;
 
@@ -61,8 +64,8 @@ export async function uploadCapMb(pool: Pool | null, org: string, ceiling: numbe
   return cap && cap < ceiling ? cap : ceiling;
 }
 
-/** `maxUploadMb()`: MAX_UPLOAD_MB, read per call. */
-export function register(pool: () => Pool | null, maxUploadMb: () => number): void {
+/** `maxUploadMb()`: MAX_UPLOAD_MB, `retentionDays()`: AUDIT_RETENTION_DAYS (null: forever), each read per call. */
+export function register(pool: () => Pool | null, maxUploadMb: () => number, retentionDays: () => number | null = () => null): void {
   const db = (): Pool => {
     const p = pool();
     if (!p) throw new Error('admin needs Postgres (DATABASE_URL)');
@@ -138,7 +141,8 @@ export function register(pool: () => Pool | null, maxUploadMb: () => number): vo
     const channels = f.before
       ? undefined
       : (await db().query<{ c: string }>(`SELECT DISTINCT channel AS c FROM audit_log WHERE org_id = $1 AND channel IS NOT NULL ORDER BY 1 LIMIT 200`, [org()])).rows.map((x) => x.c);
-    return { rows, next: r.rows.length > limit ? rows[rows.length - 1].id : null, ...(channels ? { channels } : {}) };
+    const names = await auditNames(db(), org(), rows);
+    return { rows, names, retentionDays: retentionDays(), next: r.rows.length > limit ? rows[rows.length - 1].id : null, ...(channels ? { channels } : {}) };
   });
 
   registry.handle('admin:settings', async (): Promise<OrgSettings> => {

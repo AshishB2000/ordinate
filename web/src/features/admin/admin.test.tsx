@@ -103,6 +103,8 @@ describe('Admin', () => {
   it('pages the audit log on the server: Older sends the cursor', async () => {
     const page = (ids: number[], next: number | null) => ({
       rows: ids.map((id) => ({ id, at: '2026-10-03T09:00:00Z', actor: 'boss@acme.test', action: 'rpc', channel: 'admin:setRole', projectId: null, targets: ['0f0e0d0c-0000-4000-8000-000000000001'], outcome: 'ok', requestId: `req-${id}` })),
+      names: {},
+      retentionDays: null,
       next,
       channels: ['admin:setRole'],
     });
@@ -117,6 +119,30 @@ describe('Admin', () => {
     expect(await screen.findByText('req-3')).toBeTruthy();
     expect(calls.filter((c) => c.channel === 'admin:audit').map((c) => c.payload)).toEqual([{}, { before: 8 }]);
     expect((screen.getByRole('button', { name: 'Older' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/Rows are kept until AUDIT_RETENTION_DAYS is set/)).toBeTruthy();
+  });
+
+  it('shows what a call touched by name, and counts the ids that name nothing', async () => {
+    const [project, dataset, visual, card] = ['87c88b78-c91c-49c9-abf7-bd9b6cbf422b', '929646dd-e6e0-4f79-a4ad-9fda9c61448d', '196db7a1-0000-4000-8000-000000000002', '48b8668d-0000-4000-8000-000000000003'];
+    serve({
+      '/api/auth/me': { body: ADMIN },
+      'admin:projects': { body: [] },
+      'admin:audit': {
+        body: {
+          rows: [{ id: 1, at: '2026-10-24T13:53:00Z', actor: 'boss@acme.test', action: 'rpc', channel: 'dataset:delete', projectId: project, targets: [project, dataset, visual, card], outcome: 'ok', requestId: 'req-bu' }],
+          names: { [project]: { kind: 'project', name: 'Test' }, [dataset]: { kind: 'dataset', name: 'Sales Q3' }, [visual]: { kind: 'visual', name: 'Revenue', trashed: true } },
+          retentionDays: 365,
+          next: null,
+        },
+      },
+    });
+    renderApp('/admin?tab=audit');
+    expect(await screen.findByRole('cell', { name: 'Test' })).toBeTruthy(); // the project, from the page's names
+    expect(screen.getByText(/Sales Q3/).textContent).toBe('Dataset Sales Q3');
+    expect(screen.getByText(/Revenue/).textContent).toBe('Visual Revenue · in Trash');
+    expect(screen.getByText('1 other id').getAttribute('title')).toContain(card);
+    expect(screen.queryByText(/87c88b78/)).toBeNull(); // the project is its own column, not repeated as an item
+    expect(screen.getByText(/Rows are kept for 365 days/)).toBeTruthy();
   });
 });
 

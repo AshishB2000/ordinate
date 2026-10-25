@@ -384,6 +384,34 @@ export async function readFile(p: string, enc?: BufferEncoding): Promise<string 
 const warnedTooLarge = new Set<string>();
 
 /**
+ * Several records for a READ-ONLY caller: one query with the DB, one read each
+ * without. Path → text; a path that is missing, unreadable or past its limits is
+ * simply absent. No memo and no lock: what it returns may be stale a moment later.
+ */
+export async function readMany(paths: readonly string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const byRel = new Map<string, string>();
+  const files: string[] = [];
+  let first: At | null = null;
+  for (const p of paths) {
+    const a = rec(p);
+    if (a && !isTmp(a.rel)) {
+      first ??= a;
+      byRel.set(a.rel, p);
+    } else files.push(p);
+  }
+  if (first) {
+    const r = await sql(first, 'SELECT path, body FROM records WHERE org_id = $1 AND path = ANY($2::text[])', [[...byRel.keys()]]);
+    for (const row of r.rows as Array<{ path: string; body: string }>) {
+      const p = byRel.get(row.path);
+      if (p && !overLimit(p, row.body)) out.set(p, row.body);
+    }
+  }
+  await Promise.all(files.map((p) => readFile(p, 'utf8').then((t) => { out.set(p, t); }, () => undefined)));
+  return out;
+}
+
+/**
  * A JSON record past its kind's byte cap, or a project record holding more than
  * MAX_JSON_VALUES values (./jsonBudget.ts: a parse's heap is its values, not its
  * bytes). Counted only above 1 MiB, where it can matter.
