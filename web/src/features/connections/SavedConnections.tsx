@@ -6,8 +6,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { formatNumber } from '../../../../src/app/format.ts';
-import { Button, IconButton } from '../../ui/Button';
-import { Dialog, DialogClose } from '../../ui/Dialog';
+import { IconButton } from '../../ui/Button';
+import { ConfirmDelete } from '../../ui/ConfirmDelete';
 import { toast } from '../../ui/Toast';
 import { deleteConnection, type Connection, type Connector, type Logo } from './api';
 import { ConnLogo } from './ConnLogo';
@@ -100,23 +100,17 @@ export function SavedConnections({
           );
         })}
       </ul>
-      <Dialog
-        open={doomed !== null}
-        onOpenChange={(o) => !o && setDoomed(null)}
-        title="Delete this connection?"
-        description={doomed ? `“${doomed.name}” and its stored credentials are removed. Datasets already imported from it keep their data but can no longer refresh.` : undefined}
-        size="sm"
-        footer={
-          <>
-            <DialogClose asChild>
-              <Button>Cancel</Button>
-            </DialogClose>
-            <Button variant="danger" icon="trash" loading={busy} onClick={() => void remove()}>
-              Delete
-            </Button>
-          </>
-        }
-      />
+      {doomed && (
+        <ConfirmDelete
+          title={`Delete ${doomed.name}?`}
+          description="Its stored credentials are removed for good. Datasets already imported from it keep their data but can no longer refresh. This cannot be undone."
+          confirm="Delete connection"
+          typeToConfirm={doomed.name}
+          busy={busy}
+          onConfirm={() => void remove()}
+          onClose={() => setDoomed(null)}
+        />
+      )}
     </section>
   );
 }

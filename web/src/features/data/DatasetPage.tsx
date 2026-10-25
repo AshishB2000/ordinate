@@ -201,7 +201,7 @@ function Header({ projectId, id, name, rowCount, columnCount, live, scoped = fal
                 ...(canEdit && (d?.originKind || live) ? [{ label: 'Refresh URL…', icon: 'link' as const, onSelect: () => setHooks(true) }] : []),
                 ...(canEdit && source.data?.canGoLive ? [{ label: 'Switch to Live…', icon: 'zap' as const, onSelect: () => setGoLive(true) }] : []),
                 { label: 'Pipeline history', icon: 'history', onSelect: () => void navigate(`/versions/${projectId}/dataset/${id}`) },
-                ...(canEdit ? [{ kind: 'separator' as const }, { label: 'Move to Trash', icon: 'trash' as const, danger: true, disabled: !d, onSelect: () => d && remove(d) }] : []),
+                ...(canEdit ? [{ kind: 'separator' as const }, { label: 'Move to Trash', icon: 'trash' as const, danger: true, disabled: !d, onSelect: () => d && remove.ask(d) }] : []),
               ]}
             />
           </>
@@ -210,6 +210,7 @@ function Header({ projectId, id, name, rowCount, columnCount, live, scoped = fal
       {graph && <LineageDrawer projectId={projectId} id={id} name={name} onClose={() => setGraph(false)} />}
       {goLive && <SwitchToLiveDialog projectId={projectId} datasetId={id} name={name} rowCount={rowCount} onClose={() => setGoLive(false)} />}
       {hooks && <RefreshUrlDialog projectId={projectId} target={{ datasetId: id }} name={name} live={live} onClose={() => setHooks(false)} />}
+      {remove.dialog}
     </>
   );
 }
