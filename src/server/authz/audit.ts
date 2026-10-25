@@ -11,8 +11,14 @@
 // actor (email), org, outcome, request id, and ids — UUID-shaped values found
 // under `id` / `…Id` keys of the parsed input. Never another field value: an
 // input can carry rows, formulas, URLs or a connection password.
+//
+// Every row is also one `audit` log line with the same fields, so an operator
+// who needs years of history keeps it in their log drain. Postgres keeps rows
+// for AUDIT_RETENTION_DAYS (unset: forever); `pruneAudit` deletes older ones
+// (docs/server/audit-retention.md).
 
 import type { Pool } from 'pg';
+import { logFields } from '../../app/logger';
 
 export type AuditAction = 'rpc' | 'login' | 'logout' | 'logout_everywhere' | 'password_change' | 'hook_refresh' | 'scheduled_refresh' | 'embed_view';
 export type Outcome = 'ok' | 'denied' | 'error';
@@ -48,9 +54,17 @@ export function targetIds(input: unknown): string[] {
   return [...out];
 }
 
-/** Writes one row. No pool (dev without Postgres) → nothing to write to. */
+/** The log line's fields: exactly the row's, under one key so they never mix with the line's own `org` / `reqId`. */
+function logAudit(e: AuditEntry): void {
+  logFields('audit', {
+    audit: { org: e.org, actor: e.actor, action: e.action, channel: e.channel ?? null, projectId: e.projectId ?? null, targets: [...(e.targets ?? [])], outcome: e.outcome, requestId: e.requestId ?? null },
+  });
+}
+
+/** Writes one row, and its log line. No pool (dev without Postgres) → nothing to write to. */
 export async function audit(pool: Pool | null, e: AuditEntry): Promise<void> {
   if (!pool) return;
+  logAudit(e);
   await pool.query(
     `INSERT INTO audit_log (org_id, actor, action, channel, project_id, target_ids, outcome, request_id)
      VALUES ($1, $2, $3, $4, $5, $6::uuid[], $7, $8)`,
@@ -61,6 +75,7 @@ export async function audit(pool: Pool | null, e: AuditEntry): Promise<void> {
 /** Writes many rows in ONE statement (an IdP map change that re-applied many members). No pool → nothing. */
 export async function auditMany(pool: Pool | null, entries: readonly AuditEntry[]): Promise<void> {
   if (!pool || !entries.length) return;
+  for (const e of entries) logAudit(e);
   const rows = entries.map((e) => ({
     org: e.org, actor: e.actor, action: e.action, channel: e.channel ?? null, project_id: e.projectId ?? null,
     targets: (e.targets ?? []).join(','), outcome: e.outcome, request_id: e.requestId ?? null,
@@ -71,4 +86,28 @@ export async function auditMany(pool: Pool | null, entries: readonly AuditEntry[
        FROM json_to_recordset($1::json) AS v(org text, actor text, action text, channel text, project_id uuid, targets text, outcome text, request_id text)`,
     [JSON.stringify(rows)],
   );
+}
+
+/** Rows one DELETE removes; a pass runs up to PRUNE_BATCHES of them, so a first pass over years of rows never holds one long lock. */
+export const PRUNE_BATCH = 5000;
+const PRUNE_BATCHES = 40;
+
+/**
+ * Deletes `org`'s rows older than `days` (null or 0: keeps all). Runs on the
+ * shared sweep (../sharedState.ts), one org at a time; a backlog bigger than
+ * one pass finishes over the next ones. Returns how many it deleted.
+ */
+export async function pruneAudit(pool: Pool, org: string, days: number | null): Promise<number> {
+  if (!days) return 0;
+  let total = 0;
+  for (let i = 0; i < PRUNE_BATCHES; i++) {
+    const r = await pool.query(
+      `DELETE FROM audit_log WHERE id IN (
+         SELECT id FROM audit_log WHERE org_id = $1 AND at < now() - $2 * interval '1 day' LIMIT $3)`,
+      [org, days, PRUNE_BATCH],
+    );
+    total += r.rowCount ?? 0;
+    if ((r.rowCount ?? 0) < PRUNE_BATCH) break;
+  }
+  return total;
 }
