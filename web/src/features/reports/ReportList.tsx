@@ -10,6 +10,7 @@ import { rpc } from '../../api/client';
 import { EmptyState, ErrorState } from '../../app/blocks';
 import { ago } from '../../app/when';
 import { Button, IconButton } from '../../ui/Button';
+import { ConfirmDelete } from '../../ui/ConfirmDelete';
 import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Menu } from '../../ui/Menu';
 import { Skeleton } from '../../ui/Skeleton';
@@ -98,7 +99,9 @@ function ReportCard({ projectId, r, onGenerate, busy, canEdit }: { projectId: st
     if (!res || res.ok === false || res instanceof Error) toast(failure(res, 'Could not duplicate.'), { kind: 'error' });
     refresh();
   };
+  const [confirming, setConfirming] = useState(false);
   const remove = async () => {
+    setConfirming(false);
     const res = (await rpc('reports:delete', { projectId, id: r.id }).catch(() => null)) as { ok?: boolean } | null;
     toastMovedToTrash(client, { projectId, type: 'report', id: r.id, name: r.name }, res);
     refresh();
@@ -142,11 +145,19 @@ function ReportCard({ projectId, r, onGenerate, busy, canEdit }: { projectId: st
           items={[
             { label: 'History', icon: 'history', onSelect: () => void navigate(`/versions/${projectId}/report/${r.id}`) },
             ...(canEdit
-              ? [{ label: 'Duplicate', icon: 'copy' as const, onSelect: () => void duplicate() }, { kind: 'separator' as const }, { label: 'Delete', icon: 'trash' as const, danger: true, onSelect: () => void remove() }]
+              ? [{ label: 'Duplicate', icon: 'copy' as const, onSelect: () => void duplicate() }, { kind: 'separator' as const }, { label: 'Delete', icon: 'trash' as const, danger: true, onSelect: () => setConfirming(true) }]
               : []),
           ]}
         />
       </div>
+      {confirming && (
+        <ConfirmDelete
+          title={`Delete “${r.name}”?`}
+          description="It moves to the Trash for 30 days. Restore it from there if you change your mind."
+          onConfirm={() => void remove()}
+          onClose={() => setConfirming(false)}
+        />
+      )}
     </li>
   );
 }

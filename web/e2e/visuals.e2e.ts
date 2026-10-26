@@ -202,6 +202,7 @@ e2e('visuals: a new visual from the dialog, a region map, and the card menu', as
   await page.getByRole('button', { name: /^Profit map, again/ }).waitFor();
   await page.getByRole('button', { name: 'More actions for Profit map, again' }).click();
   await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await page.getByRole('dialog', { name: 'Delete “Profit map, again”?' }).getByRole('button', { name: 'Delete' }).click();
   await page.getByText('Moved “Profit map, again” to Trash').waitFor();
   await page.getByRole('button', { name: /^Profit map, again/ }).waitFor({ state: 'detached' });
   // Undo on the toast restores it (trash:restore), then it goes for good.
@@ -209,6 +210,7 @@ e2e('visuals: a new visual from the dialog, a region map, and the card menu', as
   await page.getByRole('button', { name: /^Profit map, again/ }).waitFor();
   await page.getByRole('button', { name: 'More actions for Profit map, again' }).click();
   await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await page.getByRole('dialog', { name: 'Delete “Profit map, again”?' }).getByRole('button', { name: 'Delete' }).click();
   await page.getByRole('button', { name: /^Profit map, again/ }).waitFor({ state: 'detached' });
   assert.equal(await page.locator('[data-visual-id]').count(), before + 1);
 

@@ -6,6 +6,7 @@ import { useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
 import { Button } from '../../ui/Button';
+import { ConfirmDelete } from '../../ui/ConfirmDelete';
 import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Input } from '../../ui/Field';
 import { toast } from '../../ui/Toast';
@@ -89,9 +90,7 @@ export function NewProjectDialog({ onCreated, onClose }: { onCreated: (id: strin
 }
 
 export function DeleteDialog({ project, onClose, onDeleted }: { project: ProjectRow; onClose: () => void; onDeleted: () => void }) {
-  const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
-  const matches = typed.trim() === project.name.trim();
   const del = () => {
     setBusy(true);
     rpc('projects:delete', { id: project.id }).then(
@@ -111,32 +110,14 @@ export function DeleteDialog({ project, onClose, onDeleted }: { project: Project
     );
   };
   return (
-    <Dialog
-      open
-      onOpenChange={(o) => !o && onClose()}
-      size="sm"
+    <ConfirmDelete
       title={`Delete ${project.name}?`}
       description="Every dataset, visual, dashboard and report in it is deleted for good, with its history. This cannot be undone — to hide it instead, archive it."
-      footer={
-        <>
-          <DialogClose asChild>
-            <Button>Keep it</Button>
-          </DialogClose>
-          <Button variant="danger" loading={busy} disabled={!matches} onClick={del}>
-            Delete project
-          </Button>
-        </>
-      }
-    >
-      <form
-        className={s.dialogBody}
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (matches && !busy) del();
-        }}
-      >
-        <Input label={`Type “${project.name}” to confirm`} value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus autoComplete="off" />
-      </form>
-    </Dialog>
+      confirm="Delete project"
+      typeToConfirm={project.name}
+      busy={busy}
+      onConfirm={del}
+      onClose={onClose}
+    />
   );
 }

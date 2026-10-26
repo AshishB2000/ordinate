@@ -12,6 +12,7 @@ import { useDatasets } from '../../api/datasets';
 import { EmptyState, ErrorState, Page } from '../../app/blocks';
 import { ago } from '../../app/when';
 import { Button, IconButton, buttonClass } from '../../ui/Button';
+import { ConfirmDelete } from '../../ui/ConfirmDelete';
 import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Input } from '../../ui/Field';
 import { Menu } from '../../ui/Menu';
@@ -135,6 +136,7 @@ function Gallery({ projectId }: { projectId: string }) {
   const [lineage, setLineage] = useState<GalleryItem | null>(null);
   const [drafting, setDrafting] = useState(false);
   const [renaming, setRenaming] = useState<GalleryItem | null>(null);
+  const [doomed, setDoomed] = useState<GalleryItem | null>(null);
   const [name, setName] = useState('');
   const refresh = () => void client.invalidateQueries({ queryKey: ['analysis:gallery', projectId] });
 
@@ -150,8 +152,9 @@ function Gallery({ projectId }: { projectId: string }) {
     }
     refresh();
   };
-  // To the Trash, with Undo on the toast — which is why there is no confirm.
+  // To the Trash after a confirm; the toast still carries Undo.
   const remove = async (item: GalleryItem) => {
+    setDoomed(null);
     let reply: { ok?: boolean } | null = null;
     try {
       reply = (await rpc('analysis:delete', { projectId, id: item.id })) as { ok?: boolean };
@@ -281,7 +284,7 @@ function Gallery({ projectId }: { projectId: string }) {
               setName(item.name);
               setRenaming(item);
             }}
-            onDelete={() => void remove(item)}
+            onDelete={() => setDoomed(item)}
           />
         ))}
       </ul>
@@ -325,6 +328,14 @@ function Gallery({ projectId }: { projectId: string }) {
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus maxLength={200} />
         </form>
       </Dialog>
+      {doomed && (
+        <ConfirmDelete
+          title={`Delete “${doomed.name || 'Untitled dashboard'}”?`}
+          description="It moves to the Trash for 30 days. Restore it from there if you change your mind."
+          onConfirm={() => void remove(doomed)}
+          onClose={() => setDoomed(null)}
+        />
+      )}
     </Page>
   );
 }

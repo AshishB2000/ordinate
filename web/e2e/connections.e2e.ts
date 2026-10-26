@@ -332,9 +332,12 @@ if (adminUrl) {
     }
     assert.ok(replies().includes(connId), 'the replies were recorded');
 
-    // Delete, after a confirmation.
+    // Delete, after the name is typed back: nothing brings a connection back.
     await page.getByRole('button', { name: 'Delete connection Orders warehouse' }).click();
-    await page.getByRole('dialog', { name: 'Delete this connection?' }).getByRole('button', { name: 'Delete' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Delete Orders warehouse?' });
+    assert.ok(await confirm.getByRole('button', { name: 'Delete connection' }).isDisabled(), 'disarmed until the name is typed');
+    await confirm.getByLabel('Type “Orders warehouse” to confirm').fill('Orders warehouse');
+    await confirm.getByRole('button', { name: 'Delete connection' }).click();
     await page.getByText('No connections yet. Pick a source below to add one.').waitFor();
     report(s);
   });

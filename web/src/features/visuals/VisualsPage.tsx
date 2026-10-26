@@ -11,6 +11,7 @@ import { Navigate, useNavigate, useParams } from 'react-router';
 import { useDatasets, type DatasetSummary } from '../../api/datasets';
 import { EmptyState, ErrorState, Page, PageSkeleton } from '../../app/blocks';
 import { Button } from '../../ui/Button';
+import { ConfirmDelete } from '../../ui/ConfirmDelete';
 import { Skeleton } from '../../ui/Skeleton';
 import { toast } from '../../ui/Toast';
 import { useAiStatus } from '../assistant/api';
@@ -66,6 +67,7 @@ function Gallery({ projectId }: { projectId: string }) {
   const refresh = useRefreshVisuals(projectId);
   const [creating, setCreating] = useState<{ datasetId?: string; startAtSuggest?: boolean } | null>(null);
   const [renaming, setRenaming] = useState<VisualSummary | null>(null);
+  const [doomed, setDoomed] = useState<VisualSummary | null>(null);
   const canEdit = useCanEdit(projectId);
 
   const go = (choice: NewChoice) => {
@@ -97,12 +99,15 @@ function Gallery({ projectId }: { projectId: string }) {
         (e: Error) => toast(e.message, { kind: 'error' }),
       ),
     history: (v) => void navigate(`/versions/${projectId}/visual/${v.id}`),
-    // To the Trash, with Undo on the toast — no confirm for a delete that can be taken back.
-    remove: (v) =>
-      void deleteVisual(projectId, v.id).then((reply) => {
-        refresh(v.id);
-        toastMovedToTrash(client, { projectId, type: 'visual', id: v.id, name: v.name }, reply);
-      }),
+    remove: setDoomed,
+  };
+  // To the Trash after a confirm; the toast still carries Undo.
+  const remove = (v: VisualSummary) => {
+    setDoomed(null);
+    void deleteVisual(projectId, v.id).then((reply) => {
+      refresh(v.id);
+      toastMovedToTrash(client, { projectId, type: 'visual', id: v.id, name: v.name }, reply);
+    });
   };
 
   const count = list.data?.length ?? 0;
@@ -167,6 +172,14 @@ function Gallery({ projectId }: { projectId: string }) {
               setRenaming(null);
             })
           }
+        />
+      )}
+      {doomed && (
+        <ConfirmDelete
+          title={`Delete “${doomed.name}”?`}
+          description="It moves to the Trash for 30 days. Restore it from there if you change your mind."
+          onConfirm={() => remove(doomed)}
+          onClose={() => setDoomed(null)}
         />
       )}
     </Page>
