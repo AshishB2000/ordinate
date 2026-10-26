@@ -35,6 +35,11 @@ const ALLOW: Readonly<Record<string, Allowed>> = {
     reason: 'ICNS parser loop, via pptxgenjs: as above — no ICNS image ever reaches it.',
     reviewBy: '2027-01-04',
   },
+  'GHSA-xcx6-jx8p-x3h5': {
+    pkg: '@azure/msal-node',
+    reason: 'Auth-code flow (acquireTokenByCode), via tedious → @azure/identity: the SQL Server connector signs in with SQL auth only (type default). Fix is 7.1.0; @azure/identity 4.14.0 still takes ^6.',
+    reviewBy: '2027-01-04',
+  },
 };
 
 const GATE = new Set(['high', 'critical']);
