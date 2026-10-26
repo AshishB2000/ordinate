@@ -60,8 +60,18 @@ export interface AuditFilter {
   before?: number;
 }
 
+/** What an id on the page names now (src/server/admin/auditNames.ts); an id that names nothing has no entry. */
+export interface AuditName {
+  kind: 'project' | 'dataset' | 'visual' | 'dashboard' | 'metric' | 'report' | 'connection' | 'user' | 'team';
+  name: string;
+  trashed?: true;
+}
+
 export interface AuditPage {
   rows: AuditRow[];
+  names: Record<string, AuditName>;
+  /** AUDIT_RETENTION_DAYS; null keeps every row. */
+  retentionDays: number | null;
   next: number | null;
   channels?: string[];
 }

@@ -1,7 +1,8 @@
 // Admin → Audit log: who did what, newest first — sign-ins and sign-outs,
 // every write and admin call, audited reads. Filtered and paged on the server
 // (keyset by id: "Older" asks for rows before the last one shown). A row holds
-// channel names and ids, never a value — there are none to show.
+// channel names and ids, never a value; the server sends each id's CURRENT name
+// where it names a record, person or team of this org, and the page shows those.
 
 import { useState, type FormEvent } from 'react';
 import { Badge, type BadgeTone } from '../../ui/Badge';
@@ -10,7 +11,7 @@ import { Input } from '../../ui/Field';
 import { Select } from '../../ui/Select';
 import { SkeletonTable } from '../../ui/Skeleton';
 import { EmptyState, ErrorState } from '../../ui/States';
-import { fmtDateTime, useAdminProjects, useAudit, type AuditFilter, type AuditRow } from './api';
+import { fmtDateTime, useAdminProjects, useAudit, type AuditFilter, type AuditName, type AuditRow } from './api';
 import s from './Admin.module.css';
 
 const ACTIONS = [
@@ -41,6 +42,47 @@ const EVENT: Record<string, string> = {
   scheduled_refresh: 'Scheduled refresh',
   embed_view: 'Embedded dashboard viewed',
 };
+
+const KIND: Record<AuditName['kind'], string> = {
+  project: 'Project',
+  dataset: 'Dataset',
+  visual: 'Visual',
+  dashboard: 'Dashboard',
+  metric: 'Metric',
+  report: 'Report',
+  connection: 'Connection',
+  user: 'Person',
+  team: 'Team',
+};
+/** Named items shown in a row before "+N more". */
+const SHOWN = 3;
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** What a row's call touched, by name; ids that name nothing are counted, listed in the tooltip. */
+function Items({ ids, names }: { ids: string[]; names: Record<string, AuditName> }) {
+  const named = ids.filter((t) => names[t]);
+  const other = ids.filter((t) => !names[t]);
+  if (!ids.length) return <span className={s.meta}>—</span>;
+  const rest = [
+    ...(named.length > SHOWN ? [`${named.length - SHOWN} more`] : []),
+    ...(other.length ? [plural(other.length, named.length ? 'other id' : 'id')] : []),
+  ];
+  const tip = [
+    ...named.slice(SHOWN).map((t) => `${KIND[names[t].kind]}: ${names[t].name}`),
+    ...(other.length ? ['Ids that name no record here (a part of a record, or something deleted for good):', ...other] : []),
+  ].join('\n');
+  return (
+    <ul className={s.items}>
+      {named.slice(0, SHOWN).map((t) => (
+        <li key={t} title={t}>
+          <span className={s.kind}>{KIND[names[t].kind]}</span> {names[t].name}
+          {names[t].trashed ? <span className={s.meta}> · in Trash</span> : null}
+        </li>
+      ))}
+      {rest.length ? <li className={s.meta} title={tip}>{rest.join(' · ')}</li> : null}
+    </ul>
+  );
+}
 
 /** A `<input type="date">` day as the ISO instant its LOCAL midnight is, `days` later. */
 function dayStart(value: string, days = 0): string | undefined {
@@ -74,6 +116,8 @@ export function AuditTab() {
   const projects = useAdminProjects();
   if (audit.data?.channels && audit.data.channels.join() !== channels.join()) setChannels(audit.data.channels);
   const projectName = new Map((projects.data ?? []).map((p) => [p.id, p.name]));
+  const names = audit.data?.names ?? {};
+  const kept = audit.data ? (audit.data.retentionDays ? `Rows are kept for ${plural(audit.data.retentionDays, 'day')}.` : 'Rows are kept until AUDIT_RETENTION_DAYS is set.') : '';
   const set = (patch: Partial<Filters>) => {
     setApplied((f) => ({ ...f, ...patch }));
     setCursors([]);
@@ -104,23 +148,23 @@ export function AuditTab() {
               <th scope="col">Who</th>
               <th scope="col">Event</th>
               <th scope="col">Project</th>
-              <th scope="col">Ids</th>
+              <th scope="col">Items</th>
               <th scope="col">Outcome</th>
-              <th scope="col">Request</th>
+              <th scope="col" title="The request id: search the server log for it to see that request's lines">Request</th>
             </tr>
           </thead>
           <tbody>
             {audit.data.rows.map((r) => {
               // An org-level call (a transfer, a creation) names its project among the ids.
-              const pid = r.projectId ?? r.targets.find((t) => projectName.has(t)) ?? null;
+              const pid = r.projectId ?? r.targets.find((t) => projectName.has(t) || names[t]?.kind === 'project') ?? null;
               return (
                 <tr key={r.id}>
                   <td className={s.meta}>{fmtDateTime(r.at)}</td>
                   <td>{r.actor ?? <span className={s.meta}>Unknown</span>}</td>
                   <td className={r.action === 'rpc' ? s.mono : undefined}>{r.action === 'rpc' ? r.channel : EVENT[r.action] ?? r.action}</td>
-                  <td>{pid ? projectName.get(pid) ?? <span className={s.mono}>{pid.slice(0, 8)}</span> : <span className={s.meta}>—</span>}</td>
-                  <td className={s.mono} title={r.targets.join('\n')}>
-                    {r.targets.length ? r.targets.map((t) => t.slice(0, 8)).join(' ') : <span className={s.meta}>—</span>}
+                  <td>{pid ? projectName.get(pid) ?? names[pid]?.name ?? <span className={s.meta}>Deleted project</span> : <span className={s.meta}>—</span>}</td>
+                  <td>
+                    <Items ids={r.targets.filter((t) => t !== pid)} names={names} />
                   </td>
                   <td>
                     <Badge tone={TONE[r.outcome]}>{OUTCOME_LABEL[r.outcome]}</Badge>
@@ -167,6 +211,10 @@ export function AuditTab() {
           Clear filters
         </Button>
       </form>
+      <p className={s.lead}>
+        Every sign-in and every change, newest first. <strong>Items</strong> are what a change touched, by their current name. Every row is
+        also an <code>audit</code> line in the server log, under the same request id. {kept}
+      </p>
       {body}
       <nav className={s.pager} aria-label="Audit pages">
         <Button icon="chevron-left" disabled={cursors.length === 0 || audit.isFetching} onClick={() => setCursors((c) => c.slice(0, -1))}>
