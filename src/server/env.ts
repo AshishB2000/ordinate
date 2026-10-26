@@ -38,6 +38,8 @@ export interface ServerEnv {
   readonly databaseUrl: string | null;
   /** Largest file `POST /api/files` accepts, in MB (MAX_UPLOAD_MB). */
   readonly maxUploadMb: number;
+  /** AUDIT_RETENTION_DAYS: audit rows older than this are deleted (./authz/audit.ts pruneAudit). Null: kept forever. */
+  readonly auditRetentionDays: number | null;
   /**
    * ORDINATE_MASTER_KEY (T5.3): wraps the per-org data keys that encrypt every
    * stored secret (src/server/secrets/). A `KeyObject`, so the bytes never
@@ -228,6 +230,14 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   }
   const maxUploadMb = rawMax === '' ? 200 : Number(rawMax);
 
+  // Unset or 0 keeps every audit row, as before this setting existed: an upgrade never starts deleting a trail.
+  const rawAudit = src.AUDIT_RETENTION_DAYS ?? '';
+  const auditDays = rawAudit === '' ? 0 : Number(rawAudit);
+  if (rawAudit !== '' && (!/^\d{1,5}$/.test(rawAudit) || (auditDays > 0 && auditDays < 30))) {
+    throw new EnvError(`AUDIT_RETENTION_DAYS must be 0 (keep every row) or a whole number of days from 30 to 99999, got ${JSON.stringify(rawAudit)}`);
+  }
+  const auditRetentionDays = auditDays || null;
+
   // Required in prod once there is a database to hold secrets: without it a
   // pod could store nothing, and would fail on the first connection save.
   const rawKey = src.ORDINATE_MASTER_KEY ?? '';
@@ -269,7 +279,7 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Ser
   const storage = parseStorage(src, databaseUrl);
   const mail = parseMail({ SMTP_HOST: src.SMTP_HOST, SMTP_PORT: src.SMTP_PORT, SMTP_SECURITY: src.SMTP_SECURITY, SMTP_USER: src.SMTP_USER, SMTP_PASSWORD: src.SMTP_PASSWORD, SMTP_FROM: src.SMTP_FROM, RATE_LIMIT_EMAIL_ORG_PER_HOUR: src.RATE_LIMIT_EMAIL_ORG_PER_HOUR }, databaseUrl !== null);
   const pod = parsePod({ SHUTDOWN_GRACE_SECONDS: src.SHUTDOWN_GRACE_SECONDS, DATABASE_POOL_MAX: src.DATABASE_POOL_MAX });
-  return Object.freeze({ port, metricsPort, dataDir, env, logLevel, databaseUrl, maxUploadMb, masterKey, auth, duckdb, limits, storage, testLiveFake, mail, pod });
+  return Object.freeze({ port, metricsPort, dataDir, env, logLevel, databaseUrl, maxUploadMb, auditRetentionDays, masterKey, auth, duckdb, limits, storage, testLiveFake, mail, pod });
 }
 
 /** The directory of a file:// STORAGE_URL, null for unset or s3://. */

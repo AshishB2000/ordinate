@@ -10,13 +10,15 @@ import * as fileTokens from './fileTokens';
 import * as stageStore from '../data/stageStore';
 import * as planStore from '../ai/planStore';
 import { useLeaseDb } from '../app/runLease';
+import { pruneAudit } from './authz/audit';
 import { defineJob } from './jobs/runner';
 
-/** How often each org's expired tokens, stages, counter windows and plan runs are swept. */
+/** How often each org's expired tokens, stages, counter windows, plan runs and audit rows are swept. */
 export const SHARED_SWEEP_EVERY_MS = 5 * 60_000;
 
 let pool: Pool | null = null;
 let defined = false;
+let auditDays: number | null = null;
 
 /** One pass for the job's org. Each part is independent: one failing does not stop the rest. */
 export async function sweepOrg(p: Pool): Promise<void> {
@@ -26,14 +28,17 @@ export async function sweepOrg(p: Pool): Promise<void> {
     () => fileTokens.sweep(p, org),
     () => stageStore.sweep(p, org),
     () => planStore.prune(),
+    () => pruneAudit(p, org, auditDays),
   ];
   const errors: unknown[] = [];
   for (const part of parts) await part().catch((err: unknown) => errors.push(err));
   if (errors.length) throw errors[0]; // the runner logs it and records last_error
 }
 
-export function wireSharedState(p: Pool, log: stageStore.Log): void {
+/** `auditRetentionDays`: AUDIT_RETENTION_DAYS (null keeps every audit row). */
+export function wireSharedState(p: Pool, log: stageStore.Log, auditRetentionDays: number | null = null): void {
   pool = p;
+  auditDays = auditRetentionDays;
   counters.useCounterDb(p);
   fileTokens.useFileTokenDb(p);
   stageStore.useStageDb(p, log);

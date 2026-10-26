@@ -53,12 +53,20 @@ export function useLogger(sink: LogSink | null): LogSink {
   return prev;
 }
 
+function sinkNow(): LogSink {
+  const c = contextOf();
+  return c ? base.child({ reqId: c.requestId, org: c.org.id }) : base;
+}
+
 function emit(level: Level, args: unknown[]): void {
   const err = args.find((a): a is Error => a instanceof Error);
   const msg = format(...args.map((a) => (a instanceof Error ? a.message : a)));
-  const c = contextOf();
-  const sink = c ? base.child({ reqId: c.requestId, org: c.org.id }) : base;
-  sink[level](err ? { err } : {}, msg);
+  sinkNow()[level](err ? { err } : {}, msg);
+}
+
+/** An info line whose fields are the payload, for a log drain to index — not formatted into `msg`. */
+export function logFields(msg: string, fields: Record<string, unknown>): void {
+  sinkNow().info(fields, msg);
 }
 
 export const logger = {
