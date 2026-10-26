@@ -42,12 +42,17 @@ input {
   outline-offset: 2px;
 }
 
-/* Same blanket rule as the desktop: near-zero so `transitionend` still fires. */
+/* Reduced motion: the final frame at once. Transitions are OFF (0s), not near-zero —
+   a near-zero duration turns EVERY property change into a transition (the initial
+   transition-property is `all`), so a dragged pane's inline width trails the pointer
+   (dock.e2e read 340px after a drag to 400px). Nothing here listens for
+   `transitionend`. Animations stay
+   near-zero: Radix's Presence waits for `animationend` (floating.module.css). */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    transition-duration: 0.01ms !important;
+    transition-duration: 0s !important;
     transition-delay: 0s !important;
     animation-duration: 0.01ms !important;
     animation-delay: 0s !important;
