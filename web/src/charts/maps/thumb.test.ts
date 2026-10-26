@@ -128,3 +128,13 @@ describe("map thumbnail: projection and fills", () => {
     void failureCount;
   });
 });
+
+describe('map thumbnail: the accent ramp (Home)', () => {
+  it('shades on the stops it is given, and on the map\'s own blue ones without', async () => {
+    const { choroplethColor, rampStops } = await import('./colors');
+    const accent = ['#f3e8ff', '#6d28d9'];
+    expect([0, 0.5, 1].map((t) => choroplethColor(t, false, accent))).toEqual(['#f3e8ff', '#b088ec', '#6d28d9']);
+    expect(choroplethColor(1, false)).toBe(rampStops(false).at(-1));
+    expect(choroplethColor(0, true)).toBe(rampStops(true)[0]);
+  });
+});

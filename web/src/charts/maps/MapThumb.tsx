@@ -1,21 +1,24 @@
 // <MapThumb> — a gallery card's static mini-map (mapThumb.ts / mapGeoThumb.ts):
 // the shapes on a 2D canvas, no MapLibre, no WebGL, no tiles. When anything is
 // missing (no geo, no boundaries for the level) it keeps the map glyph — a
-// plain card beats a broken one.
+// plain card beats a broken one. `accentOnly` (Home) shades the values on a
+// ramp of the accent instead of the map's own blue one.
 
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../../ui/icons/Icon';
 import { boundariesFor, bundledBoundaries } from './boundaries';
+import { rampOfHue } from '../palette';
 import { isDarkHex } from './colors';
 import { cssVar } from './maplibre';
 import { drawGeoThumb, drawRegionThumb } from './thumb';
 import type { MapData } from './types';
-import { useDocTheme } from './useDocTheme';
+import { useDocAppearance } from './useDocTheme';
 import s from './MapThumb.module.css';
 
-export function MapThumb({ data, chartType, label, projectId }: { data: MapData; chartType: string; label: string; projectId?: string }) {
+export function MapThumb({ data, chartType, label, projectId, accentOnly }: { data: MapData; chartType: string; label: string; projectId?: string; accentOnly?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const theme = useDocTheme();
+  // Drawn in --accent: a theme, canvas or highlight change redraws it.
+  const theme = useDocAppearance();
   const [drawn, setDrawn] = useState(false);
 
   useEffect(() => {
@@ -37,11 +40,14 @@ export function MapThumb({ data, chartType, label, projectId }: { data: MapData;
       canvas.height = Math.round(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
+      const accent = cssVar(canvas, '--accent', '#3b82f6');
+      const dark = isDarkHex(cssVar(canvas, '--surface', '#ffffff'));
       const t = {
         empty: cssVar(canvas, '--surface-3', '#e5e7eb'),
         line: cssVar(canvas, '--border', '#d1d5db'),
-        accent: cssVar(canvas, '--accent', '#3b82f6'),
-        dark: isDarkHex(cssVar(canvas, '--surface', '#ffffff')),
+        accent,
+        dark,
+        ramp: accentOnly ? rampOfHue(accent, 5, dark) : undefined,
       };
       const ok = density
         ? drawGeoThumb(ctx, w, h, geo, shapes ? shapes.features : [], t)
@@ -53,7 +59,7 @@ export function MapThumb({ data, chartType, label, projectId }: { data: MapData;
     return () => {
       cancelled = true;
     };
-  }, [data, chartType, projectId, theme]);
+  }, [data, chartType, projectId, theme, accentOnly]);
 
   return (
     <div className={s.thumb} role="img" aria-label={label} data-drawn={drawn ? 'true' : 'false'}>

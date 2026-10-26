@@ -117,6 +117,37 @@ describe('My settings', () => {
     expect(screen.getByRole('menuitemradio', { name: 'Dark' }).getAttribute('aria-checked')).toBe('true');
   });
 
+  it('Appearance: a canvas and a highlight apply to <html> at once and are kept in this browser; Reset drops the highlight', async () => {
+    serve({ '/api/auth/me': { body: VIEWER } });
+    renderApp('/settings');
+    const canvases = await screen.findByRole('radiogroup', { name: 'Canvas' });
+    expect(within(canvases).getAllByRole('radio')).toHaveLength(10);
+    expect(within(canvases).getByRole('radio', { name: 'Slate' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(within(canvases).getByRole('radio', { name: 'Stone' }));
+    expect(document.documentElement.dataset.canvas).toBe('stone');
+    expect(localStorage.getItem('ordinate.canvas')).toBe('stone');
+    expect(within(canvases).getByRole('radio', { name: 'Stone' }).getAttribute('aria-checked')).toBe('true');
+    // Each chip draws its own canvas: appearance.css matches the chip's attribute.
+    expect(canvases.querySelectorAll('[data-canvas]')).toHaveLength(10);
+
+    const highlights = screen.getByRole('radiogroup', { name: 'Highlight' });
+    expect(within(highlights).getAllByRole('radio')).toHaveLength(10);
+    expect(within(highlights).queryByRole('radio', { checked: true })).toBeNull(); // none of the member's own: the workspace's accent
+    expect(screen.queryByRole('button', { name: 'Reset to default' })).toBeNull();
+    fireEvent.click(within(highlights).getByRole('radio', { name: 'Violet' }));
+    expect(document.documentElement.dataset.accent).toBe('violet');
+    expect(localStorage.getItem('ordinate.accent')).toBe('violet');
+    expect(within(highlights).getByRole('radio', { name: 'Violet' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Reset to default' }));
+    expect(document.documentElement.dataset.accent).toBeUndefined();
+    expect(localStorage.getItem('ordinate.accent')).toBeNull();
+
+    // Slate is the default: picking it back stores nothing and leaves no attribute.
+    fireEvent.click(within(canvases).getByRole('radio', { name: 'Slate' }));
+    expect(document.documentElement.dataset.canvas).toBeUndefined();
+    expect(localStorage.getItem('ordinate.canvas')).toBeNull();
+  });
+
   it('Privacy: a viewer reads the policy but cannot change it; an admin changes one path', async () => {
     const overview = {
       ok: true,

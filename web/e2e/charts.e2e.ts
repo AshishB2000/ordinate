@@ -93,7 +93,7 @@ e2e('every chart id renders from the API, in both themes', async ({ page, rpc })
   const dark = await inspect(page);
   for (const t of dark) if (!DOM.has(t.id)) assert.ok(t.ink > 2000, `${t.id} (dark): blank canvas`);
   const darkPng = await pngOf(page, 'column');
-  assert.deepEqual(darkPng.corner, [28, 28, 32, 255], 'dark surface #1c1c20');
+  assert.deepEqual(darkPng.corner, [16, 24, 38, 255], 'dark surface #101826');
 
   for (const l of rpc.loads) console.log(`rpc  ${String(l.rpcs).padStart(2)}  ${new URL(l.url).pathname}`);
 });

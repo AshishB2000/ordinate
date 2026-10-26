@@ -30,10 +30,11 @@ const BADGE = read('./ui/Badge.module.css');
 const GRID = read('./ui/DataGrid/DataGrid.module.css');
 const DATA = read('./features/data/Data.module.css');
 const MENTIONS = read('./features/dashboards/Mentions.module.css');
+const APPEARANCE = read('./appearance.css');
 
-/** The declarations of the rule whose selector is exactly `sel` (the last of a name wins). */
+/** The declarations of the first rule whose selector list names exactly `sel`. */
 function block(css: string, sel: string): Decls {
-  const m = new RegExp(`(^|[;}\\s])${sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css);
+  const m = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].find((r) => r[1].split(',').some((x) => x.trim() === sel));
   if (!m) throw new Error(`no ${sel} rule`);
   const out: Decls = {};
   for (const d of m[2].split(';')) {
@@ -181,23 +182,71 @@ for (const seed of ['#2563eb', '#7c3aed', '#0d9488', '#e11d48', '#ca8a04', '#fff
   }
 }
 
+// A member's canvas (appearance.css on <html data-canvas>; Slate is theme.css itself) under no highlight
+// and under each of theirs (<html data-accent>), in both themes: every one of the hundred-odd pairs.
+const CANVAS_IDS = ['slate', ...[...APPEARANCE.matchAll(/^\[data-canvas="(\w+)"\] \{/gm)].map((m) => m[1])];
+const HIGHLIGHT_IDS = [...APPEARANCE.matchAll(/^\[data-accent="(\w+)"\] \{/gm)].map((m) => m[1]);
+/** The canvas sheets, and whether each is dark: the chart marks and the primary button are held to it too. */
+const CANVAS_SHEETS: Record<string, boolean> = {};
+for (const c of CANVAS_IDS) {
+  const light = c === 'slate' ? LIGHT : { ...LIGHT, ...block(APPEARANCE, `[data-canvas="${c}"]`) };
+  const dark = c === 'slate' ? DARK : { ...DARK, ...block(APPEARANCE, `[data-theme="dark"][data-canvas="${c}"]`) };
+  for (const h of ['', ...HIGHLIGHT_IDS]) {
+    const user = h ? block(APPEARANCE, `[data-accent="${h}"]`) : {};
+    for (const [side, t] of [['light', light], ['dark', dark]] as const) {
+      const name = `canvas ${c}${h ? ` · ${h}` : ''} (${side})`;
+      SHEETS[name] = { t: { ...t, ...user }, chips: true };
+      CANVAS_SHEETS[name] = side === 'dark';
+    }
+  }
+}
+
 /**
- * Below the floor before this branch, and not this branch's to fix (docs/design-floor, Follow-ups): an
- * `auto` sheet in a DARK app carries the LIGHT accent axis (DashboardChrome styleClass), so a brand's
- * light ramp is drawn on the app's dark surfaces. Exact, so the fix — or one more failure — shows here.
+ * What a highlight draws beyond words: the accent as a chart mark (Home's pictures, the trend line) at 3:1 on a
+ * card, and the primary button's label on it — 4.5:1 in light, the large-text 3:1 in dark (palette.ts
+ * brandTokens). The chart ramp itself is the workspace's, not a canvas's: its own floors are palette.test.ts's.
  */
-const KNOWN: Record<string, string[]> = {
-  'brand #0d9488 · auto · blue (dark app)': ['Grid chip date on --surface-3: 4.31 < 4.5'],
-};
+function marks(t: Decls, dark: boolean): Row[] {
+  const s = paint('var(--surface)', t, '#ffffff');
+  const accent = paint('var(--accent)', t, s);
+  return [
+    { what: '--chart-accent', on: '--surface', ratio: contrast(paint('var(--chart-accent)', t, s), s) as number, min: 3 },
+    { what: '--accent-ink', on: '--accent', ratio: contrast(paint('var(--accent-ink)', t, accent), accent) as number, min: dark ? 3 : 4.5 },
+  ];
+}
+
+/**
+ * Pairs below the floor that are not a branch's to fix, exactly, so the fix — or one more failure — shows
+ * here. Empty since the Slate canvas: `brand #0d9488 · auto · blue (dark app)` had its date chip at 4.31:1
+ * on --surface-3, and Slate's darker surface-3 lifts it over the floor — but its cause stands (docs/design-
+ * floor, Follow-ups): an `auto` sheet in a DARK app carries the LIGHT accent axis (DashboardChrome styleClass).
+ */
+const KNOWN: Record<string, string[]> = {};
 
 describe('the AA floor', () => {
   for (const [name, { t, chips }] of Object.entries(SHEETS)) {
-    it(name, () => expect(fails(audit(t, chips))).toEqual(KNOWN[name] ?? []));
+    const rows = () => (name in CANVAS_SHEETS ? [...audit(t, chips), ...marks(t, CANVAS_SHEETS[name])] : audit(t, chips));
+    it(name, () => expect(fails(rows())).toEqual(KNOWN[name] ?? []));
   }
 
+  it('covers every canvas and highlight appearance.css carries', () => {
+    expect(CANVAS_IDS).toHaveLength(10);
+    expect(HIGHLIGHT_IDS).toHaveLength(10);
+    expect(Object.keys(CANVAS_SHEETS)).toHaveLength(10 * 11 * 2);
+  });
+
+  it('fails a planted canvas pair (negative control)', () => {
+    const stone = { ...LIGHT, ...block(APPEARANCE, '[data-canvas="stone"]') };
+    // Stone's muted text a step too pale, an accent lost on its card, and a dark button with white words on chalk.
+    expect(fails(audit({ ...stone, '--muted': '#9a928a' }))).toContain('--muted on --surface-3: 2.54 < 4.5');
+    expect(fails(marks({ ...stone, '--user-accent': '#e6e1da' }, false))).toContain('--chart-accent on --surface: 1.30 < 3');
+    const mono = block(APPEARANCE, '[data-accent="mono"]');
+    expect(fails(marks({ ...DARK, ...mono, '--user-dk-accent-ink': '#ffffff' }, true))).toContain('--accent-ink on --accent: 1.26 < 3');
+  });
+
   it('fails a planted pair (negative control)', () => {
-    // The light theme's dim text as it shipped (2.71:1 on surface-3) …
-    expect(fails(audit({ ...LIGHT, '--text-dim': '#8a909c' }))).toContain('--text-dim on --surface-3: 2.71 < 4.5');
+    // The light theme's dim text as it shipped (2.71:1 on the surface-3 of then, 2.63:1 on Slate's) …
+    expect(fails(audit({ ...LIGHT, '--text-dim': '#8a909c' }))).toContain('--text-dim on --surface-3: 2.63 < 4.5');
     // … and the ok Badge inked in its fill colour, as it shipped: 3.35:1 on its 10% tint over white,
     // lower than the same ink on the bare surface — the tint is composited before it is measured.
     expect(fails(audit({ ...LIGHT, '--ok-text': 'var(--ok)' }))).toContain('Badge ok on --surface: 3.35 < 4.5');

@@ -20,9 +20,8 @@ export function rampStops(dark: boolean): readonly string[] {
   return dark ? STOPS_DARK : STOPS_LIGHT;
 }
 
-/** The ramp at t ∈ [0, 1], interpolated between the five stops. */
-export function choroplethColor(t: number, dark: boolean): string {
-  const stops = rampStops(dark);
+/** The ramp at t ∈ [0, 1], interpolated between the five stops (or `stops`: Home's thumbnails pass the accent's). */
+export function choroplethColor(t: number, dark: boolean, stops: readonly string[] = rampStops(dark)): string {
   const scaled = Math.max(0, Math.min(1, t)) * (stops.length - 1);
   const lo = Math.floor(scaled);
   const hi = Math.min(stops.length - 1, lo + 1);

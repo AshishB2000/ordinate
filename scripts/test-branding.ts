@@ -35,8 +35,9 @@ ok('Settings offered exactly main\'s eight swatches', JSON.stringify(sfHexes) ==
 
 // ── theme.css reads the tokens ──────────────────────────────────────────────
 const theme = fs.readFileSync(path.join(REPO, 'web/src/theme.css'), 'utf8');
-ok('theme.css: --accent reads --brand-accent in light', /--accent:\s*var\(--brand-accent,/.test(theme));
-ok('theme.css: --accent reads --brand-dk-accent in dark', /--accent:\s*var\(--brand-dk-accent,/.test(theme));
+// A member's own highlight (--user-*, web/src/appearance.css) comes first; without one, the workspace's brand.
+ok('theme.css: --accent reads --brand-accent in light', /--accent:\s*var\(--user-accent,\s*var\(--brand-accent,/.test(theme));
+ok('theme.css: --accent reads --brand-dk-accent in dark', /--accent:\s*var\(--user-dk-accent,\s*var\(--brand-dk-accent,/.test(theme));
 ok('theme.css: the chart ramp reads --brand-chart-1', /--chart-1:\s*var\(--brand-chart-1,/.test(theme));
 
 // ── Branding settings ───────────────────────────────────────────────────────

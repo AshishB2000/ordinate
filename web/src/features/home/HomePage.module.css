@@ -11,6 +11,10 @@
   flex-direction: column;
   gap: var(--sp-16);
   padding: var(--sp-24) var(--sp-32) var(--sp-32);
+  /* Home's small pictures speak the accent, whatever the visuals' own colours
+     (HomeThumbs draws with `accentOnly`): the "What stands out" sparklines read
+     --chart-1, so on this page it is the accent. */
+  --chart-1: var(--chart-accent);
 }
 .scroll > * {
   max-width: 1440px;
@@ -68,14 +72,18 @@
   flex: none;
 }
 
-/* ── THE HERO: asking is what Home is for — a tinted panel the page's full
-   measure, and on it the bar, the one element that lifts off the page ── */
+/* ── THE HERO: asking is what Home is for — a panel the page's full measure,
+   washed with the accent from its top-left corner, and on it the bar, the one
+   element that lifts off the page ── */
 .hero {
   display: flex;
   flex-direction: column;
   gap: var(--sp-12);
   padding: var(--sp-24);
-  background: var(--accent-soft);
+  background:
+    radial-gradient(ellipse 75% 140% at 0% 0%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 70%),
+    radial-gradient(ellipse 60% 120% at 100% 100%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%),
+    var(--surface);
   border: 1px solid var(--accent-line);
   border-radius: var(--r-xl);
 }

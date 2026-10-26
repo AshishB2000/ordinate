@@ -3,7 +3,10 @@
 // draws the Visuals gallery's own thumbnail; a dashboard draws its first two
 // visual cards the same way, from the ids `recent:list` carries for it. So
 // every picture on the page rides ONE batched `visual:thumbs` call. Every
-// figure is the server's; any failure leaves the card's glyph.
+// figure is the server's; any failure leaves the card's glyph. Drawn
+// `accentOnly`: Home's pictures are silhouettes in the member's accent, so the
+// page never clashes with the canvas or highlight they picked — the visuals keep
+// their own colours everywhere else.
 
 import type { RecentItem } from '../../api/home';
 import { useThumb, type VisualSummary } from '../visuals/api';
@@ -20,13 +23,13 @@ function DashCell({ it, id, onDrawn }: { it: RecentItem; id: string; onDrawn: ()
   if (!t || !t.ok || !t.data || NO_THUMB.has(t.chartType)) return null;
   return (
     <span className={s.dashCell}>
-      <Thumb projectId={it.projectId} v={v} visible onDrawn={onDrawn} />
+      <Thumb projectId={it.projectId} v={v} visible onDrawn={onDrawn} accentOnly />
     </span>
   );
 }
 
 export default function HomeThumb({ it, onDrawn }: { it: RecentItem; onDrawn: () => void }) {
-  if (it.type === 'visual') return <Thumb projectId={it.projectId} v={summary(it, it.id, it.meta?.chartType ?? '')} visible onDrawn={onDrawn} />;
+  if (it.type === 'visual') return <Thumb projectId={it.projectId} v={summary(it, it.id, it.meta?.chartType ?? '')} visible onDrawn={onDrawn} accentOnly />;
   const ids = it.type === 'analysis' ? (it.meta?.previewIds ?? []) : [];
   if (!ids.length) return null;
   return (

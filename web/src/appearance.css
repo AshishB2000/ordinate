@@ -1,0 +1,540 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Ordinate — personal appearance presets (Settings → You → Appearance)
+
+   CANVAS: the neutral ramp — page chrome, canvas, surfaces, borders and the
+   text tokens tuned for them. Slate is theme.css itself; the other nine are
+   here. HIGHLIGHT: the member's own accent, as --user-* tokens theme.css
+   reads before the workspace's --brand-* ones. theme-boot.js sets
+   <html data-canvas data-accent> before first paint (src/app/theme.ts).
+
+   A canvas rule also matches any element carrying the attribute, so the
+   settings preview chips draw each canvas in place. Every canvas under every
+   highlight, in both themes, is held to the AA floor by
+   theme.contrast.test.ts; the highlight values are brandTokens() output over
+   every canvas surface, and appearance.test.ts proves they still are.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Pure neutral — stark white, carbon black */
+[data-canvas="pure"] {
+  --chrome: #f4f4f4;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-1: #ffffff;
+  --surface-2: #f4f4f4;
+  --surface-3: #e9e9e9;
+  --inset: #f7f7f7;
+  --surface-float: #ffffff;
+  --text: #0a0a0a;
+  --text-strong: #000000;
+  --muted: #575757;
+  --text-dim: #5a5a5a;
+  --text-faint: #717171;
+  --border: #e6e6e6;
+  --border-2: #d2d2d2;
+  --border-3: #b8b8b8;
+  --border-hairline: rgba(0, 0, 0, 0.08);
+}
+[data-theme="dark"][data-canvas="pure"],
+[data-theme="dark"] [data-canvas="pure"] {
+  --chrome: #000000;
+  --bg: #0a0a0a;
+  --surface: #121212;
+  --surface-1: #121212;
+  --surface-2: #1c1c1c;
+  --surface-3: #262626;
+  --inset: #070707;
+  --surface-float: #1c1c1c;
+  --text: #ededed;
+  --text-strong: #ffffff;
+  --muted: #a3a3a3;
+  --text-dim: #9c9c9c;
+  --text-faint: #808080;
+  --border: #232323;
+  --border-2: #2e2e2e;
+  --border-3: #404040;
+  --border-hairline: rgba(255, 255, 255, 0.08);
+}
+
+/* Indigo — a periwinkle tint, obsidian in dark */
+[data-canvas="indigo"] {
+  --chrome: #eceef7;
+  --bg: #fafbff;
+  --surface: #ffffff;
+  --surface-1: #ffffff;
+  --surface-2: #f1f2f9;
+  --surface-3: #e8eaf4;
+  --inset: #f4f5fb;
+  --surface-float: #ffffff;
+  --text: #14162b;
+  --text-strong: #0b0c1c;
+  --muted: #555a72;
+  --text-dim: #585d76;
+  --text-faint: #6c718a;
+  --border: #e1e3ef;
+  --border-2: #d1d4e3;
+  --border-3: #b9bdcf;
+  --border-hairline: rgba(20, 22, 43, 0.08);
+}
+[data-theme="dark"][data-canvas="indigo"],
+[data-theme="dark"] [data-canvas="indigo"] {
+  --chrome: #08090f;
+  --bg: #0e0f17;
+  --surface: #151724;
+  --surface-1: #151724;
+  --surface-2: #1d2030;
+  --surface-3: #262a3d;
+  --inset: #0b0c13;
+  --surface-float: #1d2030;
+  --text: #eceef7;
+  --text-strong: #ffffff;
+  --muted: #a2a6bd;
+  --text-dim: #999db4;
+  --text-faint: #7f849c;
+  --border: #23263a;
+  --border-2: #2f3349;
+  --border-3: #41465f;
+  --border-hairline: rgba(190, 195, 255, 0.08);
+}
+
+/* Warm stone — alabaster, espresso charcoal */
+[data-canvas="stone"] {
+  --chrome: #f1eee9;
+  --bg: #fcfbf9;
+  --surface: #ffffff;
+  --surface-1: #ffffff;
+  --surface-2: #f5f2ee;
+  --surface-3: #eee9e3;
+  --inset: #f6f4f0;
+  --surface-float: #ffffff;
+  --text: #1c1917;
+  --text-strong: #0c0a09;
+  --muted: #615950;
+  --text-dim: #645c54;
+  --text-faint: #776f66;
+  --border: #e7e2da;
+  --border-2: #d8d0c5;
+  --border-3: #c0b6a9;
+  --border-hairline: rgba(28, 25, 23, 0.08);
+}
+[data-theme="dark"][data-canvas="stone"],
+[data-theme="dark"] [data-canvas="stone"] {
+  --chrome: #0c0b0a;
+  --bg: #141211;
+  --surface: #1b1917;
+  --surface-1: #1b1917;
+  --surface-2: #24211e;
+  --surface-3: #2e2a26;
+  --inset: #100f0e;
+  --surface-float: #24211e;
+  --text: #eeeae5;
+  --text-strong: #ffffff;
+  --muted: #a89f95;
+  --text-dim: #9f968c;
+  --text-faint: #857c72;
+  --border: #2a2724;
+  --border-2: #37332f;
+  --border-3: #48433e;
+  --border-hairline: rgba(255, 240, 220, 0.07);
+}
+
+/* Soft zinc — balanced industrial grey */
+[data-canvas="zinc"] {
+  --chrome: #efeff1;
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-1: #ffffff;
+  --surface-2: #f4f4f5;
+  --surface-3: #e8e8eb;
+  --inset: #f5f5f6;
+  --surface-float: #ffffff;
+  --text: #18181b;
+  --text-strong: #09090b;
+  --muted: #58585f;
+  --text-dim: #5b5b63;
+  --text-faint: #6f6f78;
+  --border: #e4e4e7;
+  --border-2: #d4d4d8;
+  --border-3: #b9b9c0;
+  --border-hairline: rgba(24, 24, 27, 0.08);
+}
+[data-theme="dark"][data-canvas="zinc"],
+[data-theme="dark"] [data-canvas="zinc"] {
+  --chrome: #09090b;
+  --bg: #111113;
+  --surface: #18181b;
+  --surface-1: #18181b;
+  --surface-2: #222226;
+  --surface-3: #2c2c31;
+  --inset: #0e0e10;
+  --surface-float: #222226;
+  --text: #ececee;
+  --text-strong: #ffffff;
+  --muted: #a5a5ae;
+  --text-dim: #9d9da6;
+  --text-faint: #82828c;
+  --border: #27272a;
+  --border-2: #33333a;
+  --border-3: #46464e;
+  --border-hairline: rgba(255, 255, 255, 0.08);
+}
+
+/* Warm sand — cream, editorial paper */
+[data-canvas="sand"] {
+  --chrome: #f2ece1;
+  --bg: #fdfaf4;
+  --surface: #fffdf8;
+  --surface-1: #fffdf8;
+  --surface-2: #f7f1e6;
+  --surface-3: #f0e9dc;
+  --inset: #f8f3ea;
+  --surface-float: #fffdf8;
+  --text: #231d14;
+  --text-strong: #120e08;
+  --muted: #645949;
+  --text-dim: #675c4c;
+  --text-faint: #7a6e5d;
+  --border: #e9e0cf;
+  --border-2: #dbcfba;
+  --border-3: #c4b59c;
+  --border-hairline: rgba(35, 29, 20, 0.09);
+}
+[data-theme="dark"][data-canvas="sand"],
+[data-theme="dark"] [data-canvas="sand"] {
+  --chrome: #0e0c08;
+  --bg: #16130e;
+  --surface: #1d1a14;
+  --surface-1: #1d1a14;
+  --surface-2: #26221b;
+  --surface-3: #302b22;
+  --inset: #120f0b;
+  --surface-float: #26221b;
+  --text: #f0eadf;
+  --text-strong: #ffffff;
+  --muted: #aca190;
+  --text-dim: #a29786;
+  --text-faint: #887d6c;
+  --border: #2c2820;
+  --border-2: #3a342a;
+  --border-3: #4c4538;
+  --border-hairline: rgba(255, 235, 200, 0.07);
+}
+
+/* Ocean mist — seafoam slate, abyssal dark */
+[data-canvas="ocean"] {
+  --chrome: #e7eff0;
+  --bg: #f8fbfb;
+  --surface: #ffffff;
+  --surface-1: #ffffff;
+  --surface-2: #eef4f5;
+  --surface-3: #e0eaec;
+  --inset: #f1f6f7;
+  --surface-float: #ffffff;
+  --text: #0d1b1f;
+  --text-strong: #061114;
+  --muted: #4b5f65;
+  --text-dim: #4e6268;
+  --text-faint: #62767c;
+  --border: #d9e5e7;
+  --border-2: #c6d5d8;
+  --border-3: #acbec2;
+  --border-hairline: rgba(13, 27, 31, 0.08);
+}
+[data-theme="dark"][data-canvas="ocean"],
+[data-theme="dark"] [data-canvas="ocean"] {
+  --chrome: #040b0d;
+  --bg: #091316;
+  --surface: #0e1b1f;
+  --surface-1: #0e1b1f;
+  --surface-2: #14262a;
+  --surface-3: #1c3136;
+  --inset: #071013;
+  --surface-float: #14262a;
+  --text: #e3eff0;
+  --text-strong: #ffffff;
+  --muted: #92a8ac;
+  --text-dim: #89a0a4;
+  --text-faint: #6e878c;
+  --border: #17292d;
+  --border-2: #21363b;
+  --border-3: #30494f;
+  --border-hairline: rgba(160, 240, 230, 0.08);
+}
+
+/* Sage and pine — a muted botanical neutral */
+[data-canvas="forest"] {
+  --chrome: #e9eee8;
+  --bg: #f9fbf8;
+  --surface: #ffffff;
+  --surface-1: #ffffff;
+  --surface-2: #f0f4ef;
+  --surface-3: #e6ece4;
+  --inset: #f2f5f1;
+  --surface-float: #ffffff;
+  --text: #141c15;
+  --text-strong: #0a110b;
+  --muted: #526053;
+  --text-dim: #556356;
+  --text-faint: #687669;
+  --border: #dde5db;
+  --border-2: #cbd6c9;
+  --border-3: #b1beaf;
+  --border-hairline: rgba(20, 28, 21, 0.08);
+}
+[data-theme="dark"][data-canvas="forest"],
+[data-theme="dark"] [data-canvas="forest"] {
+  --chrome: #070a07;
+  --bg: #0e130f;
+  --surface: #141b15;
+  --surface-1: #141b15;
+  --surface-2: #1b241c;
+  --surface-3: #232e24;
+  --inset: #0b0f0b;
+  --surface-float: #1b241c;
+  --text: #e7eee7;
+  --text-strong: #ffffff;
+  --muted: #9fac9f;
+  --text-dim: #96a396;
+  --text-faint: #7b897c;
+  --border: #202a21;
+  --border-2: #2b372c;
+  --border-3: #3c4a3d;
+  --border-hairline: rgba(200, 255, 200, 0.07);
+}
+
+/* Warm quartz — blush stone, plum charcoal */
+[data-canvas="rose"] {
+  --chrome: #f3ecee;
+  --bg: #fdfafa;
+  --surface: #ffffff;
+  --surface-1: #ffffff;
+  --surface-2: #f7f1f2;
+  --surface-3: #f0e8ea;
+  --inset: #f8f4f5;
+  --surface-float: #ffffff;
+  --text: #22161a;
+  --text-strong: #13090c;
+  --muted: #65555a;
+  --text-dim: #68585d;
+  --text-faint: #7b6b70;
+  --border: #ebe0e2;
+  --border-2: #ddcfd2;
+  --border-3: #c5b4b8;
+  --border-hairline: rgba(34, 22, 26, 0.08);
+}
+[data-theme="dark"][data-canvas="rose"],
+[data-theme="dark"] [data-canvas="rose"] {
+  --chrome: #0d090b;
+  --bg: #151012;
+  --surface: #1d161a;
+  --surface-1: #1d161a;
+  --surface-2: #261e22;
+  --surface-3: #30272c;
+  --inset: #110d0f;
+  --surface-float: #261e22;
+  --text: #f0e8eb;
+  --text-strong: #ffffff;
+  --muted: #ae9fa5;
+  --text-dim: #a5969c;
+  --text-faint: #8a7b81;
+  --border: #2c2328;
+  --border-2: #392e34;
+  --border-3: #4b3f45;
+  --border-hairline: rgba(255, 215, 225, 0.07);
+}
+
+/* High-contrast ink — the crispest text on every surface */
+[data-canvas="midnight"] {
+  --chrome: #e8eaef;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-1: #ffffff;
+  --surface-2: #f1f3f6;
+  --surface-3: #e7eaef;
+  --inset: #f4f5f8;
+  --surface-float: #ffffff;
+  --text: #05070d;
+  --text-strong: #000000;
+  --muted: #3b4150;
+  --text-dim: #3e4454;
+  --text-faint: #555c6c;
+  --border: #d3d7df;
+  --border-2: #b9bfca;
+  --border-3: #9aa1af;
+  --border-hairline: rgba(5, 7, 13, 0.14);
+}
+[data-theme="dark"][data-canvas="midnight"],
+[data-theme="dark"] [data-canvas="midnight"] {
+  --chrome: #000000;
+  --bg: #05070c;
+  --surface: #0b0e15;
+  --surface-1: #0b0e15;
+  --surface-2: #131721;
+  --surface-3: #1b2030;
+  --inset: #030509;
+  --surface-float: #131721;
+  --text: #f7f9fc;
+  --text-strong: #ffffff;
+  --muted: #c2c8d4;
+  --text-dim: #b8bfcc;
+  --text-faint: #969eae;
+  --border: #262c3a;
+  --border-2: #343b4c;
+  --border-3: #4a5266;
+  --border-hairline: rgba(255, 255, 255, 0.14);
+}
+
+/* ── Highlights: brandTokens(seed) over every canvas surface, the chart ramp left out ── */
+
+/* blue #2563eb */
+[data-accent="blue"] {
+  --user-accent: #2563eb;
+  --user-accent-2: #1451d8;
+  --user-accent-soft: rgba(37, 99, 235, 0.08);
+  --user-accent-line: rgba(37, 99, 235, 0.22);
+  --user-focus: rgba(37, 99, 235, 0.4);
+  --user-dk-accent: #5484ef;
+  --user-dk-accent-2: #3870ec;
+  --user-dk-accent-soft: rgba(84, 132, 239, 0.16);
+  --user-dk-accent-line: rgba(84, 132, 239, 0.32);
+  --user-dk-focus: rgba(84, 132, 239, 0.4);
+  --user-dk-accent-fg: #8cacf4;
+}
+
+/* indigo #4f46e5 */
+[data-accent="indigo"] {
+  --user-accent: #4f46e5;
+  --user-accent-2: #3127e1;
+  --user-accent-soft: rgba(79, 70, 229, 0.08);
+  --user-accent-line: rgba(79, 70, 229, 0.22);
+  --user-focus: rgba(79, 70, 229, 0.4);
+  --user-dk-accent: #827ced;
+  --user-dk-accent-2: #6861e9;
+  --user-dk-accent-soft: rgba(130, 124, 237, 0.16);
+  --user-dk-accent-line: rgba(130, 124, 237, 0.32);
+  --user-dk-focus: rgba(130, 124, 237, 0.4);
+  --user-dk-accent-fg: #ada9f3;
+}
+
+/* violet #7c3aed */
+[data-accent="violet"] {
+  --user-accent: #7c3aed;
+  --user-accent-2: #6619ea;
+  --user-accent-soft: rgba(124, 58, 237, 0.08);
+  --user-accent-line: rgba(124, 58, 237, 0.22);
+  --user-focus: rgba(124, 58, 237, 0.4);
+  --user-dk-accent: #a172f2;
+  --user-dk-accent-2: #8e56ef;
+  --user-dk-accent-soft: rgba(161, 114, 242, 0.16);
+  --user-dk-accent-line: rgba(161, 114, 242, 0.32);
+  --user-dk-focus: rgba(161, 114, 242, 0.4);
+  --user-dk-accent-fg: #c0a0f6;
+}
+
+/* teal #0d9488 */
+[data-accent="teal"] {
+  --user-accent: #0b8177;
+  --user-accent-2: #086059;
+  --user-accent-soft: rgba(11, 129, 119, 0.08);
+  --user-accent-line: rgba(11, 129, 119, 0.22);
+  --user-focus: rgba(11, 129, 119, 0.4);
+  --user-dk-accent: #0e9d91;
+  --user-dk-accent-2: #0b8177;
+  --user-dk-accent-soft: rgba(14, 157, 145, 0.16);
+  --user-dk-accent-line: rgba(14, 157, 145, 0.32);
+  --user-dk-focus: rgba(14, 157, 145, 0.4);
+  --user-dk-accent-fg: #12c2b4;
+}
+
+/* emerald #059669 */
+[data-accent="emerald"] {
+  --user-accent: #04825b;
+  --user-accent-2: #035f43;
+  --user-accent-soft: rgba(4, 130, 91, 0.08);
+  --user-accent-line: rgba(4, 130, 91, 0.22);
+  --user-focus: rgba(4, 130, 91, 0.4);
+  --user-dk-accent: #05a070;
+  --user-dk-accent-2: #04825b;
+  --user-dk-accent-soft: rgba(5, 160, 112, 0.16);
+  --user-dk-accent-line: rgba(5, 160, 112, 0.32);
+  --user-dk-focus: rgba(5, 160, 112, 0.4);
+  --user-dk-accent-fg: #06c88c;
+}
+
+/* sky #0284c7 */
+[data-accent="sky"] {
+  --user-accent: #0277b3;
+  --user-accent-2: #026090;
+  --user-accent-soft: rgba(2, 119, 179, 0.08);
+  --user-accent-line: rgba(2, 119, 179, 0.22);
+  --user-focus: rgba(2, 119, 179, 0.4);
+  --user-dk-accent: #0291db;
+  --user-dk-accent-2: #027dbd;
+  --user-dk-accent-soft: rgba(2, 145, 219, 0.16);
+  --user-dk-accent-line: rgba(2, 145, 219, 0.32);
+  --user-dk-focus: rgba(2, 145, 219, 0.4);
+  --user-dk-accent-fg: #27b4fd;
+}
+
+/* amber #d97706 */
+[data-accent="amber"] {
+  --user-accent: #b16105;
+  --user-accent-2: #8e4e04;
+  --user-accent-soft: rgba(177, 97, 5, 0.08);
+  --user-accent-line: rgba(177, 97, 5, 0.22);
+  --user-focus: rgba(177, 97, 5, 0.4);
+  --user-dk-accent: #d97706;
+  --user-dk-accent-2: #bb6705;
+  --user-dk-accent-soft: rgba(217, 119, 6, 0.16);
+  --user-dk-accent-line: rgba(217, 119, 6, 0.32);
+  --user-dk-focus: rgba(217, 119, 6, 0.4);
+  --user-dk-accent-fg: #f99119;
+}
+
+/* orange #ea580c */
+[data-accent="orange"] {
+  --user-accent: #cd4d0b;
+  --user-accent-2: #a13c08;
+  --user-accent-soft: rgba(205, 77, 11, 0.08);
+  --user-accent-line: rgba(205, 77, 11, 0.22);
+  --user-focus: rgba(205, 77, 11, 0.4);
+  --user-dk-accent: #ea580c;
+  --user-dk-accent-2: #cd4d0b;
+  --user-dk-accent-soft: rgba(234, 88, 12, 0.16);
+  --user-dk-accent-line: rgba(234, 88, 12, 0.32);
+  --user-dk-focus: rgba(234, 88, 12, 0.4);
+  --user-dk-accent-fg: #f68a52;
+}
+
+/* rose #e11d48 */
+[data-accent="rose"] {
+  --user-accent: #e11d48;
+  --user-accent-2: #b8183b;
+  --user-accent-soft: rgba(225, 29, 72, 0.08);
+  --user-accent-line: rgba(225, 29, 72, 0.22);
+  --user-focus: rgba(225, 29, 72, 0.4);
+  --user-dk-accent: #e95273;
+  --user-dk-accent-2: #e6375d;
+  --user-dk-accent-soft: rgba(233, 82, 115, 0.16);
+  --user-dk-accent-line: rgba(233, 82, 115, 0.32);
+  --user-dk-focus: rgba(233, 82, 115, 0.4);
+  --user-dk-accent-fg: #f0889f;
+}
+
+/* Monochrome: ink on light, chalk on dark — the one highlight whose dark
+   button carries dark text, so it sets the ink too. Pure greys: a
+   tinted one would turn the accent ramps (Home's maps) blue. */
+[data-accent="mono"] {
+  --user-accent: #171717;
+  --user-accent-2: #262626;
+  --user-accent-soft: rgba(23, 23, 23, 0.06);
+  --user-accent-line: rgba(23, 23, 23, 0.2);
+  --user-focus: rgba(23, 23, 23, 0.4);
+  --user-accent-ink: #ffffff;
+  --user-dk-accent: #e5e5e5;
+  --user-dk-accent-2: #ffffff;
+  --user-dk-accent-soft: rgba(229, 229, 229, 0.1);
+  --user-dk-accent-line: rgba(229, 229, 229, 0.26);
+  --user-dk-focus: rgba(229, 229, 229, 0.45);
+  --user-dk-accent-fg: #e5e5e5;
+  --user-dk-accent-ink: #171717;
+}

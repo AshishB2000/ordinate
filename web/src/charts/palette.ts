@@ -139,21 +139,39 @@ function brandRgba(hex: string, a: number): string {
 /**
  * The surfaces the ramp must read on: theme.css --surface in light, and every
  * dark surface a chart or the accent is drawn on — the app's --surface and
- * --surface-float (dialogs, the dock, Explore's cards) and the dark sheet's
- * (Style.module.css .theme_dark). palette.test.ts reads them out of the CSS.
+ * --surface-float (dialogs, the dock, Explore's cards) under every canvas
+ * (theme.css, appearance.css) and the dark sheet's (Style.module.css
+ * .theme_dark). palette.test.ts reads them out of the CSS.
  */
 const BRAND_LIGHT_SURFACE = '#ffffff';
-export const BRAND_DARK_SURFACES: readonly string[] = ['#1c1c20', '#26262c', '#232327', '#2a2a30'];
+export const BRAND_DARK_SURFACES: readonly string[] = [
+  '#0b0e15', '#0e1b1f', '#101826', '#121212', '#131721', '#141b15', '#14262a', '#151724', '#172134', '#18181b',
+  '#1b1917', '#1b241c', '#1c1c1c', '#1d161a', '#1d1a14', '#1d2030', '#222226', '#232327', '#24211e', '#261e22',
+  '#26221b', '#2a2a30',
+];
 
 /**
  * Every surface the accent as TEXT (a Badge, a number chip, a hovered name) is read on, on the accent's
- * tint: bg, surface, surface-2/-3, inset and surface-float of the app's sheets and the dashboard
+ * tint: bg, surface, surface-2/-3, inset and surface-float of every canvas and the dashboard
  * presets'. palette.test.ts reads them out of the CSS. `null` in brandTokens is the desktop's rule
  * (the dark ink on three bare surfaces, the light one not walked) — what the golden was recorded with.
  */
 export const BRAND_INK_SURFACES: { readonly light: readonly string[]; readonly dark: readonly string[] } = {
-  light: ['#f7f7f8', '#ffffff', '#f3f4f6', '#eaecf0', '#f2f4f7', '#f6f4f1', '#fffefc', '#f2f0ec', '#e8e5df', '#f1efeb'],
-  dark: ['#141417', '#1c1c20', '#26262c', '#303038', '#18181c', '#18181b', '#232327', '#2a2a30', '#313139', '#1d1d21'],
+  light: [
+    '#e0eaec', '#e4e9f0', '#e6ece4', '#e7eaef', '#e8e5df', '#e8e8eb', '#e8eaf4', '#e9e9e9', '#eaecf0', '#eee9e3',
+    '#eef4f5', '#f0e8ea', '#f0e9dc', '#f0f3f8', '#f0f4ef', '#f1efeb', '#f1f2f9', '#f1f3f6', '#f1f6f7', '#f2f0ec',
+    '#f2f4f7', '#f2f5f1', '#f2f5f9', '#f3f4f6', '#f4f4f4', '#f4f4f5', '#f4f5f8', '#f4f5fb', '#f5f2ee', '#f5f5f6',
+    '#f6f4f0', '#f6f4f1', '#f7f1e6', '#f7f1f2', '#f7f7f7', '#f7f7f8', '#f8f3ea', '#f8f4f5', '#f8fbfb', '#f9fafc',
+    '#f9fbf8', '#fafafa', '#fafbff', '#fcfbf9', '#fdfaf4', '#fdfafa', '#fffdf8', '#fffefc', '#ffffff',
+  ],
+  dark: [
+    '#030509', '#05070c', '#070707', '#071013', '#080d17', '#091316', '#0a0a0a', '#0b0c13', '#0b0e15', '#0b0f0b',
+    '#0b111c', '#0e0e10', '#0e0f17', '#0e130f', '#0e1b1f', '#100f0e', '#101826', '#110d0f', '#111113', '#120f0b',
+    '#121212', '#131721', '#141211', '#141b15', '#14262a', '#151012', '#151724', '#16130e', '#172134', '#18181b',
+    '#1b1917', '#1b2030', '#1b241c', '#1c1c1c', '#1c3136', '#1d161a', '#1d1a14', '#1d1d21', '#1d2030', '#1f2b41',
+    '#222226', '#232327', '#232e24', '#24211e', '#261e22', '#26221b', '#262626', '#262a3d', '#2a2a30', '#2c2c31',
+    '#2e2a26', '#30272c', '#302b22', '#313139',
+  ],
 };
 
 /** Walk `ink` (darker in light, lighter in dark) until it reads 4.5:1 on `tint` at `alpha` over every one of `under`. */
