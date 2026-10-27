@@ -23,7 +23,7 @@ import { chromium, firefox, webkit, type Browser, type Page } from 'playwright';
 import { startServer, type Server } from './server.ts';
 
 export const SCREENS = fileURLToPath(new URL('./__screens__/', import.meta.url));
-const THEME_KEY = 'ordinate.theme'; // web/src/app/theme.ts + public/theme-boot.js
+export const THEME_KEY = 'ordinate.theme'; // web/src/app/theme.ts + public/theme-boot.js
 
 export async function launchBrowser(): Promise<Browser> {
   const name = process.env.E2E_BROWSER || 'chromium';

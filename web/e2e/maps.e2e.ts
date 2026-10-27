@@ -13,7 +13,7 @@
 
 import assert from 'node:assert/strict';
 import type { Page } from 'playwright';
-import { e2e, hasWebGL2, screens, settled, tilePng } from './fixtures.ts';
+import { THEME_KEY, e2e, hasWebGL2, screens, settled, tilePng } from './fixtures.ts';
 
 const KINDS = ['region', 'bubble', 'offline', 'points', 'hexbin', 'flow'] as const;
 const OSM = /^https:\/\/[abc]\.tile\.openstreetmap\.org\//;
@@ -61,6 +61,25 @@ async function canvasColours(page: Page, id: string): Promise<number> {
       const seen = new Set<number>();
       for (let i = 0; i < data.length; i += 4 * 97) seen.add(((data[i] >> 3) << 10) | ((data[i + 1] >> 3) << 5) | (data[i + 2] >> 3));
       return seen.size;
+    });
+}
+
+/** The mean luminance (0–1) of the map's WebGL canvas, sampled. */
+async function canvasLuma(page: Page, id: string): Promise<number> {
+  return card(page, id)
+    .locator('canvas.maplibregl-canvas')
+    .evaluate((gl: HTMLCanvasElement) => {
+      const c = document.createElement('canvas');
+      c.width = gl.width;
+      c.height = gl.height;
+      const ctx = c.getContext('2d');
+      if (!ctx) return -1;
+      ctx.drawImage(gl, 0, 0);
+      const { data } = ctx.getImageData(0, 0, c.width, c.height);
+      let sum = 0;
+      let n = 0;
+      for (let i = 0; i < data.length; i += 4 * 97, n++) sum += (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255;
+      return n ? sum / n : -1;
     });
 }
 
@@ -114,6 +133,19 @@ e2e('every map kind renders from the server, painted and labelled', async (s) =>
   assert.ok(tiles.length > 0, 'OSM tiles were requested (and answered locally)');
   const allowed = new Set([server.base, 'https://a.tile.openstreetmap.org', 'https://b.tile.openstreetmap.org', 'https://c.tile.openstreetmap.org']);
   assert.deepEqual([...hosts].filter((h) => !allowed.has(h)), [], 'no host beyond the server and the OSM tile servers');
+
+  // Dark: the same light tile drawn dim — MapLibre's raster paint on the tile layer, not a CSS filter over
+  // the canvas, so it is in the canvas's own pixels. The point map's canvas is tiles alone at this zoom.
+  const light = await canvasLuma(page, 'points');
+  await page.evaluate((k) => localStorage.setItem(k, 'dark'), THEME_KEY);
+  await page.reload();
+  await settled(page);
+  await allReady(page);
+  const dark = await canvasLuma(page, 'points');
+  await page.evaluate((k) => localStorage.removeItem(k), THEME_KEY); // screens() reloads next
+  console.log(`tiles luminance: light ${light.toFixed(2)}, dark ${dark.toFixed(2)}`);
+  assert.ok(light > 0.7, `light tiles stay light, got ${light}`);
+  assert.ok(dark < 0.3, `dark tiles are dimmed, got ${dark}`);
 
   // Tall enough that the full-page shots hold all six maps (the shell scrolls <main>, not the page).
   await page.setViewportSize({ width: 1440, height: 2200 });

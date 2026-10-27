@@ -13,7 +13,7 @@ export function AsOfCaption({ asOf, className }: { asOf: AsOf | null | undefined
   const v = asOfView(asOf);
   if (!v || !asOf) return null;
   return (
-    <time className={[s.asOf, v.tone === 'warn' && s.warn, className].filter(Boolean).join(' ')} dateTime={asOf.at} title={v.title} data-testid="as-of">
+    <time className={[s.asOf, v.tone === 'warn' && s.warn, className].filter(Boolean).join(' ')} dateTime={asOf.at} title={v.title} data-tone={v.tone} data-testid="as-of">
       {v.tone === 'warn' && <Icon name="alert" size={12} />}
       {v.text}
     </time>

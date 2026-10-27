@@ -55,13 +55,20 @@ export function hasWebGL2(): boolean {
   }
 }
 
-/** OSM raster tiles, or (`water`) the offline basemap: a flat water fill, land added after load. */
-function styleFor(water: string | null): ML.StyleSpecification {
+/**
+ * OSM's tiles on a dark card: inverted (brightness-min above -max), the hue turned back so water stays blue,
+ * and a little less colour — light land lands near the dark surface and the tiles' own labels read light.
+ * MapLibre's raster paint, so no CSS filter over the canvas and no second tile host.
+ */
+const DARK_TILES = { 'raster-brightness-min': 0.9, 'raster-brightness-max': 0.04, 'raster-hue-rotate': 180, 'raster-saturation': -0.3 } as const;
+
+/** OSM raster tiles (dimmed on a dark card), or (`water`) the offline basemap: a flat water fill, land added after load. */
+function styleFor(water: string | null, dark: boolean): ML.StyleSpecification {
   if (water !== null) return { version: 8, sources: {}, layers: [{ id: 'cv-water', type: 'background', paint: { 'background-color': water } }] };
   return {
     version: 8,
     sources: { osm: { type: 'raster', tiles: OSM_TILE_URLS.slice(), tileSize: 256, maxzoom: 19, attribution: OSM_ATTRIBUTION } },
-    layers: [{ id: 'osm-tiles', type: 'raster', source: 'osm' }],
+    layers: [{ id: 'osm-tiles', type: 'raster', source: 'osm', ...(dark ? { paint: { ...DARK_TILES } } : {}) }],
   };
 }
 
@@ -71,12 +78,12 @@ function styleFor(water: string | null): ML.StyleSpecification {
  */
 const coarse = (): boolean => typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
 
-/** A north-up map (no rotate or pitch — the desktop's Leaflet heritage, and stable exports). */
-export function createMap(ml: MapLibre, container: HTMLElement, offlineWater: string | null): MlMap {
+/** A north-up map (no rotate or pitch — the desktop's Leaflet heritage, and stable exports). `dark`: the card's surface is dark. */
+export function createMap(ml: MapLibre, container: HTMLElement, offlineWater: string | null, dark = false): MlMap {
   const map = new ml.Map({
     cooperativeGestures: coarse(),
     container,
-    style: styleFor(offlineWater),
+    style: styleFor(offlineWater, dark),
     center: [0, 20],
     zoom: 1,
     maxZoom: 18,

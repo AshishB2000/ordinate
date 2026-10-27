@@ -48,6 +48,25 @@
   margin-right: var(--sp-4);
   vertical-align: -2px;
 }
+/* An old or stale figure: muted words and a small warning dot, not an orange
+   line on every card. The words still say it ("Stale · …", a date that is not
+   today) and the hover title says why. */
+.head .asOf[data-tone='warn'] {
+  color: var(--muted);
+}
+.head .asOf[data-tone='warn'] > svg {
+  display: none;
+}
+.head .asOf[data-tone='warn']::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--sp-4);
+  border-radius: var(--r-full);
+  background: var(--warn);
+  vertical-align: 1px;
+}
 @container (max-width: 300px) {
   .head .asOf {
     display: none;
@@ -59,12 +78,26 @@
   gap: 2px;
   margin-left: auto;
   cursor: default;
-  opacity: 0.55;
+}
+/* Quiet until wanted: the head's actions show while the card is hovered or
+   holds focus (a click selects and focuses it; Tab reaches every button, so
+   they are faded, never removed), and always where there is no hover. A status
+   stays (data-keep): an alert watching the KPI, open comments. An open menu
+   keeps its trigger shown. */
+.ctrls > * {
+  opacity: 0;
   transition: opacity var(--dur-fast) var(--ease-out);
 }
-.head:hover .ctrls,
-.ctrls:focus-within {
+.ctrls > [data-keep],
+[data-card-id]:hover > .head .ctrls > *,
+[data-card-id]:focus-within > .head .ctrls > *,
+.ctrls:has([aria-expanded='true']) > * {
   opacity: 1;
+}
+@media (hover: none) {
+  .ctrls > * {
+    opacity: 1;
+  }
 }
 .edit {
   height: 24px;
@@ -97,7 +130,7 @@
 }
 .value {
   font-size: var(--t-28);
-  font-weight: 600;
+  font-weight: 700;
   line-height: var(--lh-tight);
   letter-spacing: var(--tr-tighter);
   font-variant-numeric: tabular-nums;
@@ -192,10 +225,19 @@
   width: 60%;
   height: 28px;
 }
-.skLabel {
-  display: block;
-  width: 40%;
-  height: 12px;
+
+/* A KPI is a stat tile: its name a small muted label over the figure, in
+   sentence case, no rule between, so the figure carries the card. */
+[data-kind='metric'] > .head {
+  border-bottom: 0;
+}
+[data-kind='metric'] .title {
+  font-size: var(--t-12);
+  font-weight: 500;
+  color: var(--muted);
+}
+[data-kind='metric'] > .body {
+  padding-top: 0;
 }
 
 /* Text */
@@ -290,28 +332,19 @@
   cursor: default;
   user-select: auto;
 }
-:global([data-phone]) .ctrls {
+:global([data-phone]) .ctrls > * {
   opacity: 1;
 }
 :global([data-phone]) .ctrls button {
   width: 44px;
   height: 44px;
 }
-/* A KPI on a phone is a tile in a strip two to a screen: its name a small
-   label on top, the figure under it, the ⋯ in the corner — no rule, no
-   repeated name under the figure, no freshness (the header says it once). */
+/* A KPI on a phone is a tile in a strip two to a screen: the ⋯ in the corner,
+   no name under the figure, no freshness (the header says it once). */
 :global([data-phone]) [data-kind='metric'] > .head {
   flex-basis: 36px;
   height: 36px;
   padding: var(--sp-4) 0 0 var(--sp-12);
-  border-bottom: 0;
-}
-:global([data-phone]) [data-kind='metric'] .title {
-  font-size: var(--t-11);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
 }
 :global([data-phone]) [data-kind='metric'] .asOf,
 :global([data-phone]) [data-kind='metric'] .ctrls > :not(:last-child) {
