@@ -348,3 +348,15 @@
 :global([data-phone]) [data-kind='metric'] .metricLabel {
   display: none;
 }
+
+/* A card's note (Card.note): one muted line under its title, never wrapping into the body. */
+.cardNote {
+  flex: 0 0 auto;
+  margin: var(--sp-8) 0 0;
+  padding: 0 var(--sp-12);
+  font-size: var(--t-12);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

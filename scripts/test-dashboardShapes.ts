@@ -121,8 +121,13 @@ async function checkBuild(): Promise<void> {
   const story = await planBuild.buildPlan(projectId, { name: 'Story', shape: 'visual', sheets: [{ name: 'S', rows: [{ type: 'charts', visuals: [bar()] }] }] });
   const sv = story.ok ? story.analysis.sheets[0].cards.find((c) => c.type === 'visual') : undefined;
   ok('build: a visual-analysis chart draws the accent', (await visuals.getVisual(projectId, sv?.visualId || ''))?.overrides.accent === true);
+  const tbl = await planBuild.buildPlan(projectId, { name: 'Every region', shape: 'table', sheets: [{ name: 'S', rows: [{ type: 'charts', visuals: [bar({ chartType: 'table' })] }] }] });
+  const tv = tbl.ok ? tbl.analysis.sheets[0].cards.find((c) => c.type === 'visual') : undefined;
+  const tvis = await visuals.getVisual(projectId, tv?.visualId || '');
+  ok('build: a table-shape table sorts, searches and draws bars, and is tall', tvis?.overrides.richTable === true && !tvis?.overrides.accent && tv?.layout.h === 10);
   const flat = await planBuild.buildPlan(projectId, { name: 'Plain', sheets: [{ name: 'S', metrics: [kpiOf('revenue')], visuals: [bar()] }] });
-  ok('build: no shape, no trend and no accent (negative control)', flat.ok && flat.analysis.sheets[0].cards.every((c) => !c.metric?.trend && !c.note));
+  const flatVis = flat.ok ? await visuals.getVisual(projectId, flat.analysis.sheets[0].cards.find((c) => c.type === 'visual')?.visualId || '') : null;
+  ok('build: no shape, no trend, no accent, no rich table (negative control)', flat.ok && flat.analysis.sheets[0].cards.every((c) => !c.metric?.trend && !c.note) && !!flatVis && Object.keys(flatVis.overrides).length === 0, JSON.stringify(flatVis?.overrides));
 
   // The takeaway is the app's caption of the lead chart — the same function, the same figures.
   const prev = await planPreview.previewPlan(projectId, { shape: 'visual', sheets: [{ name: 'S', rows: [{ type: 'charts', visuals: [bar({ note: 'Read the leader' })] }, { type: 'charts', visuals: [bar({ name: 'Second' })] }] }] });

@@ -7,6 +7,7 @@ import { useMemo, useRef } from 'react';
 import { asMonthLabels } from '../../charts/build';
 import { Chart, type ChartHandle } from '../../charts/Chart';
 import { DataTable } from '../../charts/DataTable';
+import { RichTable } from '../../charts/RichTable';
 import { MapThumb } from '../../charts/maps/MapThumb';
 import { MapView } from '../../charts/maps/MapView';
 import type { MapData } from '../../charts/maps/types';
@@ -127,7 +128,7 @@ export function DrawnVisual({
     return <GridViz type={type} data={data as GridData} label={label} fill />;
   }
   if (renderer === 'map') return <MapView data={data as unknown as MapData} chartType={type} label={label} projectId={projectId} onMarkClick={onMapMark} />;
-  if (renderer === 'table') return <DataTable data={data} label={label} />;
+  if (renderer === 'table') return overrides?.richTable ? <RichTable data={data} label={label} /> : <DataTable data={data} label={label} />;
   return <Chart type={type} data={data} overrides={merged} label={label} onChart={thumb ? trimThumb : onChart} />;
 }
 

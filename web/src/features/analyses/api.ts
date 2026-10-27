@@ -41,6 +41,8 @@ export interface Card {
   visualId?: string;
   heading?: string;
   text?: string;
+  /** One line under a chart's or a KPI's title (dashboards.ts Card.note). */
+  note?: string;
   metric?: {
     datasetId: string;
     column: string;

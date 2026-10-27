@@ -42,6 +42,8 @@ export interface DashboardShape {
   kpiTrend?: boolean;
   /** Charts draw their first series in the accent and the rest muted (chartFormat `accent`). */
   accent?: boolean;
+  /** Its tables sort, search and carry bars in their cells (chartFormat `richTable`). */
+  richTable?: boolean;
 }
 
 const TAKEAWAY_HEADER = 'The app writes the takeaway sentence under the title from the first chart\'s own figures, so do not write one.';
@@ -105,6 +107,7 @@ export const DASHBOARD_SHAPES: readonly DashboardShape[] = [
     titles: 'Title the table with what each row is, in sentence case ("Every state, by population"), and give it a "note": one line on how to read it, with no figures. Readers sort it, search it and read bars in its cells.',
     takeaway: TAKEAWAY_HEADER,
     chartH: 10,
+    richTable: true,
   },
 ];
 

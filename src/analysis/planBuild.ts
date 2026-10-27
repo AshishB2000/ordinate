@@ -120,7 +120,7 @@ export async function buildPlanRecords(projectId: string, raw: unknown): Promise
           chartType: pv.chartType,
           encoding: pv.encoding,
           filters: pv.filters,
-          ...(shape?.accent ? { overrides: { accent: true } } : {}),
+          overrides: { ...(shape?.accent ? { accent: true } : {}), ...(shape?.richTable && pv.chartType === 'table' ? { richTable: true } : {}) },
         });
         if (!saved) continue;
         id = saved.id;

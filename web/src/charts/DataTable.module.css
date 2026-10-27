@@ -83,3 +83,77 @@
   border-collapse: separate;
   border-spacing: 0;
 }
+
+/* ── RichTable.tsx: the Table shape's sortable, searchable table with bars in its cells ── */
+.rich {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  height: 100%;
+  min-height: 0;
+}
+.rich .scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.rich .table th,
+.rich .table td {
+  padding: var(--sp-8) var(--sp-12);
+}
+.rich .table tbody tr:hover > * {
+  background: var(--surface-2);
+}
+.sortBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.sortBtn:hover {
+  color: var(--text-strong);
+}
+.sortBtn:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+.sortMark {
+  min-width: 0.8em;
+  font-size: 0.8em;
+  color: var(--accent);
+}
+.barCell {
+  min-width: 120px;
+}
+.cellText {
+  display: block;
+}
+/* A 6px rounded track under the figure; the bar is the cell's share of its column's largest. */
+.track {
+  display: block;
+  height: 6px;
+  margin-top: var(--sp-4);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--chart-1);
+}
+.neg {
+  background: var(--error);
+}
+.none {
+  margin: var(--sp-12) 0;
+  text-align: center;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
