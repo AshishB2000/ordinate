@@ -201,11 +201,10 @@ export function readAssets(): SiteAssets {
     chartJs: read('node_modules', 'chart.js', 'dist', 'chart.umd.min.js'),
     formatJs: read('src', 'app', 'format.js'),
     geoMatchJs: read('src', 'analysis', 'geoMatch.js'),
-    // The pure half, one inline script: the core (charts, phone fold, maps), then the page's words.
-    coreJs: ['publishCore.js', 'publishWords.js'].map((f) => read('src', 'publish', 'site', f)).join('\n'),
+    coreJs: read('src', 'publish', 'site', 'publishCore.js'),
     phoneJs: read('src', 'publish', 'site', 'publishPhone.js'),
     // One inline script, in order: the tiles and the helpers the rest use, the maps, the other pages, then the page.
-    clientJs: ['publishTiles.js', 'publishRich.js', 'publishMaps.js', 'publishPages.js', 'publishClient.js'].map((f) => read('src', 'publish', 'site', f)).join('\n'),
+    clientJs: ['publishTiles.js', 'publishMaps.js', 'publishPages.js', 'publishClient.js'].map((f) => read('src', 'publish', 'site', f)).join('\n'),
   };
 }
 

@@ -242,8 +242,6 @@ export function CardView({
         </span>
         )}
       </div>
-      {/* One line under the title (Card.note): what to look at, in the author's or the draft's words. */}
-      {!folded && card.note && <p className={s.cardNote}>{card.note}</p>}
       {!folded && (
         <div className={s.body} id={card.type === 'tabs' ? `panel-${card.id}` : undefined} role={card.type === 'tabs' ? 'tabpanel' : undefined}
           aria-labelledby={card.type === 'tabs' ? `tab-${card.id}-${activeTab(card, ed.groupTab.get(card.id))}` : undefined}>

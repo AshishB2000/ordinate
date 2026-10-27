@@ -16,7 +16,6 @@ import { DrillPanel, type DrillTarget } from '../../visuals/drill/DrillPanel';
 import { PointMenu } from '../../analytics/explain/PointMenu';
 import { useEditor, type EditorApi } from './context';
 import { useTileAsOf } from './tileAsOf';
-import { TrendChange, TrendLine } from './KpiTrend';
 import s from './Cards.module.css';
 import { LiveRefusal } from '../../live/LiveOff';
 import { liveRefusalOf } from '../../live/refusal';
@@ -68,7 +67,6 @@ export function MetricBody({ card }: { card: Card }) {
       ...(compare ? { compare } : {}),
       // A what-if is of a saved metric (the scenario's drivers aim at what the metric reads).
       ...(m.scenarioId && m.metricId ? { scenarioId: m.scenarioId } : {}),
-      ...(m.trend ? { trend: true as const } : {}),
       filters: ed.filters,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the compare by value: a new object each render is the same question
@@ -145,9 +143,6 @@ export function MetricBody({ card }: { card: Card }) {
       );
     }
   }
-  // A trend's change stands in for a Compare the card does not have (KpiTrend.tsx).
-  const tc = t.trend?.change;
-  if (!delta && tc) delta = <TrendChange change={tc} pct={typeof tc.pct === 'number' && Number.isFinite(tc.pct) ? kpiPct(tc.pct) : ''} />;
   // A what-if card: the figure UNDER the scenario is the headline, its change on the baseline the one comparison shown.
   // The sheet's parameters reach both sides, so a driver that follows one moves with that parameter's slider.
   const sc = t.scenario;
@@ -193,7 +188,6 @@ export function MetricBody({ card }: { card: Card }) {
       {/* Under the figure only when it adds something — never the head's title again (as kpiSubtitle.ts on a published page). */}
       {label.trim().toLowerCase() !== metricLabel(m).trim().toLowerCase() && <div className={s.metricLabel}>{label}</div>}
       {delta}
-      {t.trend && <TrendLine trend={t.trend} />}
       {whatIfNote && <p className={s.paramErr}>{whatIfNote}</p>}
       {t.paramErrors && t.paramErrors.length > 0 && <p className={s.paramErr}>{t.paramErrors[0]}</p>}
       {why && compare && (

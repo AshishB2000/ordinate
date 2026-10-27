@@ -68,6 +68,28 @@ function pcStory(page: any, root: HTMLElement): void {
 
 const PC_STATUS: Record<string, string> = { good: 'On track', warn: 'At risk', off: 'Off track', none: 'No target' };
 
+/** A twelve-period line, drawn as an inline SVG from the app's figures. */
+function pcSpark(values: Array<number | null>): SVGSVGElement | null {
+  const pts = values.map((v, i) => (typeof v === 'number' ? [i, v] as [number, number] : null)).filter((p): p is [number, number] => !!p);
+  if (pts.length < 2) return null;
+  const W = 96; const H = 24;
+  const ys = pts.map((p) => p[1]);
+  const min = Math.min(...ys); const span = (Math.max(...ys) - min) || 1;
+  const step = W / Math.max(1, values.length - 1);
+  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${(p[0] * step).toFixed(1)},${(H - 2 - ((p[1] - min) / span) * (H - 4)).toFixed(1)}`).join(' ');
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('class', 'pub-sc-spark');
+  svg.setAttribute('width', String(W));
+  svg.setAttribute('height', String(H));
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', d);
+  svg.appendChild(path);
+  return svg;
+}
+
 function pcScorecard(page: any, root: HTMLElement): void {
   const sc = page.scorecard;
   root.appendChild(pcEl('h1', 'pub-title', sc.name));

@@ -12,7 +12,6 @@
 import { z } from 'zod';
 import { Base, byProjectId, FileToken, rpc, Steps, Uuid } from './contract';
 import { FigureAskFields } from './visuals';
-import { AUTO_SHAPE, DASHBOARD_SHAPES } from '../analysis/dashboardShapes';
 
 const Name = z.string().max(200);
 /** A sheet array: `sanitizePages` whitelists every card by type. */
@@ -53,8 +52,6 @@ const Tile = z.discriminatedUnion('kind', [
     aggregation: Aggregation,
     metricId: Uuid.optional(),
     compare: Compare.optional(),
-    // A small trend under the figure (ipc/kpiTrend.ts): the metric per month, and its latest change.
-    trend: z.literal(true).optional(),
     // A what-if: the saved metric under this scenario, beside its baseline (`scenario:card`).
     scenarioId: Uuid.optional(),
     filters: Steps.optional(),
@@ -134,9 +131,8 @@ export const analyses = {
   // The AI draft: FACTS in (no rows, no secrets), a validated, previewed plan
   // out; nothing is saved. Asking is `read`, as the dock's copilot:ask is;
   // building what it proposed (`analysis:buildPlan`) is `write`.
-  // ASK FIRST (analysis/planClarify.ts): `shape` is the dashboard shape the user
-  // picked (analysis/dashboardShapes.ts), or "auto" to let the model pick one;
-  // with `clarify` the reply may be `{ questions }` instead of a plan,
+  // ASK FIRST (analysis/planClarify.ts): `kind` is the dashboard the user
+  // picked; with `clarify` the reply may be `{ questions }` instead of a plan,
   // and the next call brings the `answers` — `[]` is "Skip — just build it".
   // A call with `answers` is never answered with questions.
   'analysis:draft': rpc({
@@ -145,7 +141,7 @@ export const analyses = {
       projectId: Uuid,
       datasetId: Uuid.optional(),
       intent: z.string().max(2_000).optional(),
-      shape: z.enum([AUTO_SHAPE, ...DASHBOARD_SHAPES.map((s) => s.id)]).optional(),
+      kind: z.enum(['explore', 'overview', 'report']).optional(),
       clarify: z.boolean().optional(),
       answers: z.array(z.strictObject({ ask: z.string().max(200), answer: z.string().max(200) })).max(3).optional(),
     }),
@@ -218,14 +214,6 @@ export const analyses = {
       currency: z.string().regex(/^[A-Z]{3}$/).optional(),
       items: z.array(Tile).min(1).max(100),
     }),
-    project: byProjectId,
-  }),
-  // The sheet's TAKEAWAY: the app's caption (analysis/captions.ts) of its lead
-  // chart — the visual the browser names, under the sheet's filters — through
-  // `visual:data`. Words around the server's own figures; a model writes none.
-  'analysis:takeaway': rpc({
-    access: 'read',
-    input: z.strictObject({ projectId: Uuid, visualId: Uuid, filters: Steps.optional(), params: ParamPayload.optional() }),
     project: byProjectId,
   }),
   // An image card's picture: an upload (T0.4) copied into the project's assets

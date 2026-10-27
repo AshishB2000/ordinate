@@ -157,17 +157,6 @@ async function main(): Promise<void> {
   ] }] } }) as any; // any: asserting a sanitizer's output shape
   ok('sanitize: a KPI keeps what it measures (its subtitle), and nothing else new',
     JSON.stringify(kpiPage.dashboard.sheets[0].cards[0].payloads[0]) === '{"value":5,"display":"5","caption":"c","subtitle":"Sum of sales"}');
-  const changed = sanitizePage({ kind: 'dashboard', site: {}, dashboard: { name: 'K', keys: ['0'], controls: [], sheets: [{ name: 'S', cards: [
-    { kind: 'metric', title: 'Revenue', note: '  All of 2024,\n  by month ' + 'x'.repeat(300), layout: {}, variants: [0], payloads: [{ value: 5, display: '5', caption: 'c',
-      compare: { deltaDisplay: '+1.2K', pct: 18.2, tone: '<b>', label: 'vs previous period', secret: 'sk-live-c' },
-      trend: { values: [1, '2', null, Infinity], labels: ['Jan', { o: 1 }], change: { deltaDisplay: '−3', pct: 'x', tone: 'bad', label: 'vs Jan', url: 'http://x' }, token: 't' } }] },
-  ] }] } }) as any; // any: asserting a sanitizer's output shape
-  const ch = changed.dashboard.sheets[0].cards[0];
-  ok('sanitize: a KPI\'s change line and trend keep strings, finite numbers and a closed-enum tone — nothing else',
-    JSON.stringify(ch.payloads[0].compare) === '{"deltaDisplay":"+1.2K","pct":18.2,"tone":"flat","label":"vs previous period"}'
-    && JSON.stringify(ch.payloads[0].trend) === '{"values":[1,null,null,null],"labels":["Jan",""],"change":{"deltaDisplay":"−3","pct":null,"tone":"bad","label":"vs Jan"}}',
-  JSON.stringify(ch.payloads[0]));
-  ok('sanitize: a card\'s note is one line, capped (the record\'s own rule)', ch.note.startsWith('All of 2024, by month x') && ch.note.length === 140 && !/\s{2}|\n/.test(ch.note), ch.note);
   const scored = sanitizePage({ kind: 'scorecard', site: {}, scorecard: { name: 'Q', rows: [{ name: 'a', status: 'good' }, { name: 'b', status: 'off' }],
     counts: { good: 1, warn: 0, off: 1, none: 'x', extra: 9 }, groups: [] } }) as any; // any: asserting a sanitizer's output shape
   ok('sanitize: a scorecard carries the server\'s status counts (the page tallies nothing), integers only',

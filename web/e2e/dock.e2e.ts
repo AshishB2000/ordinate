@@ -17,7 +17,7 @@
 // app-computed KPI; a follow-up whose reply is a REFINE changes the answer on
 // screen, its card showing the filter it kept beside the one it added; and a
 // reply that proposes a dashboard ASKS FIRST — the
-// brief (shape and look), then the model's own questions, once — drafts it from
+// brief (kind and look), then the model's own questions, once — drafts it from
 // the answers, shows the review, and creates it on the click, in the look that
 // was picked. Zero console errors throughout; screens in both themes.
 //
@@ -428,18 +428,18 @@ if (!dbUrl) {
       }
     };
 
-    // The brief — shape and look — is there at once: no model has been asked to draft.
+    // The brief — kind and look — is there at once: no model has been asked to draft.
     const brief = page.getByRole('dialog', { name: 'Draft a dashboard' });
-    const shapes = brief.getByRole('radiogroup', { name: 'Shape' });
-    await shapes.waitFor();
+    const kinds = brief.getByRole('radiogroup', { name: 'Kind' });
+    await kinds.waitFor();
     assert.equal(draftCalls.length, 0, 'the brief asks no model');
-    assert.deepEqual(await shapes.getByRole('radio').evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value)), ['auto', 'scorecard', 'review', 'visual', 'table']);
-    assert.equal(await shapes.getByRole('radio', { name: /^Assistant picks/ }).isChecked(), true, 'the Assistant picks the shape unless the person does');
+    assert.deepEqual(await kinds.getByRole('radio').evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value)), ['explore', 'overview', 'report']);
+    assert.equal(await kinds.getByRole('radio', { name: /^Explore/ }).isChecked(), true, 'Explore is the default kind');
     assert.equal(await brief.getByRole('radio', { name: /^Workspace default/ }).isChecked(), true, 'the workspace default is the default look');
-    // A real radio group: one arrow key moves the pick to the next shape.
-    await shapes.getByRole('radio', { name: /^Assistant picks/ }).focus();
+    // A real radio group: one arrow key moves the pick to the next kind.
+    await kinds.getByRole('radio', { name: /^Explore/ }).focus();
     await page.keyboard.press('ArrowRight');
-    assert.equal(await shapes.getByRole('radio', { name: /^Scorecard/ }).isChecked(), true, 'the arrow keys move within the group');
+    assert.equal(await kinds.getByRole('radio', { name: /^Overview/ }).isChecked(), true, 'the arrow keys move within the group');
     await brief.getByRole('radio', { name: /^Dark/ }).check();
     await shots('dock-draft-brief');
     await brief.getByRole('button', { name: 'Draft dashboard' }).click();
@@ -460,7 +460,7 @@ if (!dbUrl) {
     await review.locator('canvas').first().waitFor(); // the app drew it, from its own figures
     assert.deepEqual(draftCalls.map((c) => c.asking), [true, false], 'it asked once: the call that carried the answers could not ask again');
     assert.match(draftAsk, /revenue by region/, 'the draft was asked for what the reply proposed');
-    assert.match(draftAsk, /The user chose this dashboard shape\. .*SCORECARD/, 'the shape picked in the brief is in the facts, as the app\'s sentence');
+    assert.match(draftAsk, /OVERVIEW dashboard/, 'the kind picked in the brief is in the facts, as the app\'s sentence');
     assert.match(draftAsk, /Which measure matters most\? → Revenue/, 'the answer is in the facts');
     assert.doesNotMatch(draftAsk, /How should the regions be compared/, 'a question left unanswered is not sent');
     assert.doesNotMatch(draftCalls.map((c) => c.facts).join('\n'), /dark/i, 'the look never goes to the model');
@@ -499,7 +499,7 @@ if (!dbUrl) {
     await wiz.getByRole('radio', { name: /Let the Assistant design it/ }).click();
     await wiz.getByRole('button', { name: 'Next' }).click();
     await wiz.getByRole('textbox', { name: 'Describe the dashboard' }).fill('Revenue by region');
-    await wiz.getByRole('radio', { name: /^Table/ }).check();
+    await wiz.getByRole('radio', { name: /^Report/ }).check();
     assert.equal(await wiz.getByRole('radio', { name: /^Workspace default/ }).isChecked(), true);
     await shots('analyses-wizard-brief');
     const before = draftCalls.length;
@@ -509,7 +509,7 @@ if (!dbUrl) {
     await review.getByText('Revenue by region', { exact: true }).waitFor();
     assert.equal(await page.getByRole('dialog', { name: 'Draft a dashboard' }).count(), 0, 'the brief was the wizard\'s: the flow showed none of its own');
     assert.deepEqual(draftCalls.slice(before).map((c) => c.asking), [true, false], 'asked once here too');
-    assert.match(draftAsk, /The user chose this dashboard shape\. .*TABLE/, 'the wizard\'s shape is in the facts');
+    assert.match(draftAsk, /chose a REPORT/, 'the wizard\'s kind is in the facts');
     assert.doesNotMatch(draftAsk, /USER ANSWERS/, 'Skip sends no answers');
     await review.getByRole('button', { name: 'Discard' }).click();
     await review.waitFor({ state: 'detached' });

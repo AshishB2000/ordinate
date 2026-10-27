@@ -26,10 +26,6 @@
 import * as dashboards from './dashboards';
 import type { PlanSheet } from './analysisPlan';
 import { flattenRows, shapeRows } from './planRows';
-import type { DashboardShape } from './dashboardShapes';
-
-/** The tile sizes a dashboard shape asks for (./dashboardShapes `kpi`, `chartH`); absent, the app's own. */
-export type ShapeSizes = Pick<DashboardShape, 'kpi' | 'chartH'>;
 
 const KPI_W = 3;
 const KPI_H = 2;
@@ -38,12 +34,7 @@ const TEXT_H = 2;
 /** The chart of a `spotlight` or `annotated` row. The rail beside it gets the
  *  rest of the grid, so the row is always flush. */
 const WIDE_W = 8;
-
-/** The sizes one sheet is laid out with: a shape's, else the constants above. */
-function sizes(shape?: ShapeSizes) {
-  const kw = shape?.kpi?.w ?? KPI_W;
-  return { kw, kh: shape?.kpi?.h ?? KPI_H, perLine: dashboards.GRID_COLS / kw, chartH: shape?.chartH ?? CHART_H };
-}
+const KPIS_PER_LINE = dashboards.GRID_COLS / KPI_W;
 
 /** One layout per tile, lined up with the sheet's own flat arrays. */
 export interface SheetLayout {
@@ -82,17 +73,16 @@ function packer() {
 }
 
 /** The flat packing: every sheet's layout before rows existed, unchanged. */
-function arrangeFlat(sheet: Arrangeable, shape?: ShapeSizes): SheetLayout {
+function arrangeFlat(sheet: Arrangeable): SheetLayout {
   // PER SHEET. It was once created for the whole plan, so sheet 2's first card
   // inherited sheet 1's cursor and started N rows down its own empty grid.
   const pk = packer();
-  const { kw, kh, chartH } = sizes(shape);
-  const metrics = sheet.metrics.map(() => pk.place(kw, kh));
+  const metrics = sheet.metrics.map(() => pk.place(KPI_W, KPI_H));
   pk.newRow();
   // One chart fills the sheet; two or more share the row. Counted here rather
   // than declared in the plan — a flat sheet says nothing about arrangement.
   const chartW = sheet.visuals.length > 1 ? dashboards.GRID_COLS / 2 : dashboards.GRID_COLS;
-  const visuals = sheet.visuals.map(() => pk.place(chartW, chartH));
+  const visuals = sheet.visuals.map(() => pk.place(chartW, CHART_H));
   pk.newRow();
   const texts = sheet.texts.map(() => pk.place(dashboards.GRID_COLS, TEXT_H));
   return { metrics, visuals, texts };
@@ -110,14 +100,13 @@ function arrangeFlat(sheet: Arrangeable, shape?: ShapeSizes): SheetLayout {
  * what gets built, and a layout for some other set of tiles would be handed to
  * the wrong cards.
  */
-export function arrangeSheet(sheet: Arrangeable, shape?: ShapeSizes): SheetLayout {
+export function arrangeSheet(sheet: Arrangeable): SheetLayout {
   const rows = shapeRows(sheet.rows);
   const flat = flattenRows(rows);
   const accounted = flat.metrics.length === sheet.metrics.length
     && flat.visuals.length === sheet.visuals.length
     && flat.texts.length === sheet.texts.length;
-  if (!rows.length || !accounted) return arrangeFlat(sheet, shape);
-  const { kw, kh, perLine, chartH } = sizes(shape);
+  if (!rows.length || !accounted) return arrangeFlat(sheet);
 
   const cols = dashboards.GRID_COLS;
   const out: SheetLayout = { metrics: [], visuals: [], texts: [] };
@@ -125,13 +114,13 @@ export function arrangeSheet(sheet: Arrangeable, shape?: ShapeSizes): SheetLayou
   for (const row of rows) {
     if (row.type === 'kpis') {
       row.metrics.forEach((_m, i) => out.metrics.push({
-        x: (i % perLine) * kw, y: y + Math.floor(i / perLine) * kh, w: kw, h: kh,
+        x: (i % KPIS_PER_LINE) * KPI_W, y: y + Math.floor(i / KPIS_PER_LINE) * KPI_H, w: KPI_W, h: KPI_H,
       }));
-      y += Math.ceil(row.metrics.length / perLine) * kh;
+      y += Math.ceil(row.metrics.length / KPIS_PER_LINE) * KPI_H;
     } else if (row.type === 'charts') {
       const w = cols / row.visuals.length; // one or two — shapeRows guarantees it
-      row.visuals.forEach((_v, i) => out.visuals.push({ x: i * w, y, w, h: chartH }));
-      y += chartH;
+      row.visuals.forEach((_v, i) => out.visuals.push({ x: i * w, y, w, h: CHART_H }));
+      y += CHART_H;
     } else if (row.type === 'spotlight') {
       // Two KPIs split the chart's height and three fill it. A fourth makes the
       // ROW taller, never the tiles shorter: KPI_H is the smallest a KPI is drawn.
@@ -141,9 +130,9 @@ export function arrangeSheet(sheet: Arrangeable, shape?: ShapeSizes): SheetLayou
       row.metrics.forEach((_m, i) => out.metrics.push({ x: WIDE_W, y: y + i * h, w: cols - WIDE_W, h }));
       y += n * h;
     } else if (row.type === 'annotated') {
-      out.visuals.push({ x: 0, y, w: WIDE_W, h: chartH });
-      out.texts.push({ x: WIDE_W, y, w: cols - WIDE_W, h: chartH });
-      y += chartH;
+      out.visuals.push({ x: 0, y, w: WIDE_W, h: CHART_H });
+      out.texts.push({ x: WIDE_W, y, w: cols - WIDE_W, h: CHART_H });
+      y += CHART_H;
     } else {
       out.texts.push({ x: 0, y, w: cols, h: TEXT_H });
       y += TEXT_H;

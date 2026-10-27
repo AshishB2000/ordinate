@@ -4,10 +4,9 @@
 // Three things, each with its prompt text beside its parser for the reason
 // analysisPlan.ts gives (a prompt that drifts from its parser is an unseeable bug):
 //
-//   the SHAPE     a dashboard shape (./dashboardShapes.ts) or "auto" — the user's
-//                 pick, turned into an APP-WRITTEN sentence in the facts by
-//                 `shapeText`. The model never sees the pick itself, only our
-//                 sentence, in the plan's own vocabulary.
+//   the KIND      explore | overview | report — the user's pick, turned into an
+//                 APP-WRITTEN sentence in the facts. The model never sees the
+//                 pick itself, only our sentence, in the plan's own vocabulary.
 //   QUESTIONS     up to three of the model's own, when the request leaves open a
 //                 choice that changes which views it builds. Structure, like a
 //                 plan: validated here, and never a figure.
@@ -19,6 +18,31 @@
 // None of it widens what a draft can build. The reply to every call still goes
 // through `validatePlan`; that is the trust boundary, not anything written here.
 // The LOOK is not here at all: it never goes to the model (planBuild.buildPlan).
+
+export const DASHBOARD_KINDS = ['explore', 'overview', 'report'] as const;
+export type DashboardKind = (typeof DASHBOARD_KINDS)[number];
+
+// Each sentence speaks in the row types (planRows.ts), the controls
+// (planControls.ts) and the chart types a plan may use — scripts/test-planClarify.ts
+// fails if one quotes a term that is not in those vocabularies.
+const KIND_FACTS: Record<DashboardKind, string> = {
+  explore:
+    'The user chose an EXPLORE dashboard — one to dig into, not to glance at. Give each sheet "controls" on the ' +
+    'columns a reader would filter by, use more "charts" rows than you otherwise would so the data is cut several ' +
+    'ways, and end on a full-width "charts" row holding a "table" for the detail.',
+  overview:
+    'The user chose an OVERVIEW dashboard — one page to take in at a glance. Use a single sheet that opens on ' +
+    'one "spotlight" row, or on one full-width "charts" row, and keep to a few tiles after it. Add a "kpis" row ' +
+    'only if those figures are headlines on their own.',
+  report:
+    'The user chose a REPORT — read top to bottom, like a page. Prefer "annotated" rows, so each chart has a note ' +
+    'beside it saying what to look at, and open a section with a "note" row. A note states no figure.',
+};
+
+/** The app's sentence for a kind, or '' for anything that is not one. */
+export function kindText(kind: unknown): string {
+  return typeof kind === 'string' && Object.hasOwn(KIND_FACTS, kind) ? KIND_FACTS[kind as DashboardKind] : '';
+}
 
 // ── Questions ───────────────────────────────────────────────────────────────
 
@@ -129,7 +153,7 @@ export function answersText(raw: unknown): string {
 
 /** What the user settled before the draft — the facts' fourth input (planFacts.buildFactsText). */
 export interface DraftAsk {
-  /** A dashboard shape id or "auto" (dashboardShapes.shapeText); anything else is ignored. */
-  shape?: unknown;
+  /** A DASHBOARD_KINDS member; anything else is ignored. */
+  kind?: unknown;
   answers?: unknown;
 }

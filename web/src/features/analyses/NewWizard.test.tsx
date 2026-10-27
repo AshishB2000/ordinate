@@ -104,17 +104,17 @@ describe('the wizard’s layouts', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Describe the dashboard' }), { target: { value: '  revenue by region  ' } });
     // The same brief the draft flow shows, on its defaults — asked here, so not asked again.
-    expect((screen.getByRole('radio', { name: /^Assistant picks/ }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('radio', { name: /^Explore/ }) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByRole('radio', { name: /^Workspace default/ }) as HTMLInputElement).checked).toBe(true);
-    fireEvent.click(screen.getByRole('radio', { name: /^Scorecard/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /^Overview/ }));
     fireEvent.click(screen.getByRole('radio', { name: /^Executive/ }));
     expect(calls.some((c) => c.channel === 'analysis:draft')).toBe(false); // the wizard no longer asks the model itself
 
     fireEvent.click(screen.getByRole('button', { name: 'Draft with the Assistant' }));
     const review = await screen.findByRole('dialog', { name: 'Assistant draft — review before creating' });
     expect(screen.queryByRole('dialog', { name: 'Draft a dashboard' })).toBeNull();
-    expect(screen.queryByRole('radiogroup', { name: 'Shape' })).toBeNull();
-    expect(calls.filter((c) => c.channel === 'analysis:draft').map((c) => c.payload)).toEqual([{ projectId: PID, datasetId: DID, intent: 'revenue by region', shape: 'scorecard', clarify: true }]);
+    expect(screen.queryByRole('radiogroup', { name: 'Kind' })).toBeNull();
+    expect(calls.filter((c) => c.channel === 'analysis:draft').map((c) => c.payload)).toEqual([{ projectId: PID, datasetId: DID, intent: 'revenue by region', kind: 'overview', clarify: true }]);
     // The name follows the dataset until it is typed, so the draft's own name stands.
     fireEvent.click(within(review).getByRole('button', { name: 'Create dashboard' }));
     await waitFor(() => expect(calls.find((c) => c.channel === 'analysis:buildPlan')?.payload).toEqual({ projectId: PID, plan: { name: 'Orders' }, style: 'executive' }));

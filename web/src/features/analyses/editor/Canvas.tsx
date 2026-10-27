@@ -17,7 +17,6 @@ import { CardView } from './CardView';
 import { useEditor } from './context';
 import { EmptySheet } from './EmptySheet';
 import { FilterBar } from './FilterBar';
-import { Takeaway } from './Takeaway';
 import { childrenOf, clampInt, COLS, FRAME_WIDTH, isGroup, materialize, MAX_H, moveItem, resolve, setHeight, setHidden, SIZE_LABEL, snapRect, type Guide } from './geometry';
 import { lockedRows, type ImageSpec } from './KindCards';
 import { HiddenTray, SizeNote } from './SizeNote';
@@ -360,7 +359,6 @@ export function Canvas() {
 
   return (
     <div className={s.canvas} onClick={(e) => e.target === e.currentTarget && ed.select(null)}>
-      <Takeaway />
       <FilterBar />
       <ClickFilterBar ed={ed} />
       <SelectionStrip ed={ed} />
