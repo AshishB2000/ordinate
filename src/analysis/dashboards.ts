@@ -155,6 +155,8 @@ export interface CardMetric {
   calc?: TableCalc;
   /** Show the metric under this saved what-if scenario (src/analysis/scenarios.ts). */
   scenarioId?: string;
+  /** A small trend under the figure: the metric per month along the dataset's date column (src/ipc/kpiTrend.ts), never stored. */
+  trend?: boolean;
 }
 
 /**
@@ -187,6 +189,8 @@ export interface Card {
    * republish source and (ii) an "open the source visual" affordance.
    */
   visual?: CardVisual; // type 'visual'
+  /** One line under a chart's or a KPI's title — words about it, never a figure the app did not compute. */
+  note?: string; // type 'visual' | 'metric'
 
   heading?: string; // type 'text'
   text?: string; // type 'text'
@@ -397,6 +401,8 @@ export function sanitizeCard(raw: unknown): Card | null {
     const inline = sanitizeCardVisual(o.visual);
     if (inline) card.visual = inline;
     if (card.visualId === undefined && card.visual === undefined) return null;
+    const note = cardNote(o.note);
+    if (note) card.note = note;
     return card;
   }
 
@@ -479,8 +485,17 @@ export function sanitizeCard(raw: unknown): Card | null {
   const calc = sanitizeTableCalc(m.calc);
   if (calc) metric.calc = calc;
   if (metricId && typeof m.scenarioId === 'string' && UUID_RE.test(m.scenarioId)) metric.scenarioId = m.scenarioId;
+  if (m.trend === true) metric.trend = true;
   card.metric = metric;
+  const note = cardNote(o.note);
+  if (note) card.note = note;
   return card;
+}
+
+/** A card's note: one line — line breaks folded, capped — or '' for none. */
+export const CARD_NOTE_MAX = 140;
+export function cardNote(raw: unknown): string {
+  return typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim().slice(0, CARD_NOTE_MAX).trim() : '';
 }
 
 // Map+filter: keep only cards that survive sanitizeCard.
