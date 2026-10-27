@@ -61,7 +61,7 @@ const PLANS: Record<string, { title: string; plan: object }> = {
         name: 'Analysis',
         rows: [
           { type: 'charts', visuals: [chart('Which category leads?', 'bar', { category: 'category', values: sum('revenue') }, 'The leader sets the pace for the rest')] },
-          { type: 'charts', visuals: [chart('What share does each segment take?', 'treemap', { category: 'customer_segment', values: sum('revenue') }, 'Box size is each segment’s share of revenue')] },
+          { type: 'charts', visuals: [chart('What share does each segment take?', 'donut', { category: 'customer_segment', values: sum('revenue') }, 'Each slice is a segment’s share of revenue')] },
           { type: 'charts', visuals: [chart('How has each region moved?', 'line', { category: 'order_date', grain: 'quarter', values: sum('revenue'), series: 'region' }, 'The accent line is the region to watch')] },
         ],
       }],
@@ -101,6 +101,7 @@ e2e('shapes: the wizard offers four, and a draft of each is built with the app\'
   let drafted = '';
   await page.route('**/api/rpc/analysis%3Adraft', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: drafted }));
 
+  const built: { id: string; analysisId: string; takeaway?: string }[] = [];
   for (const [id, { title, plan }] of Object.entries(PLANS)) {
     // The server's own preview of that plan: what the draft reply is, figures and takeaway computed here.
     const res = await page.request.post(`${server.base}/api/rpc/analysis:previewPlan`, { headers: { 'x-csrf-token': csrf }, data: { args: [{ projectId: pid, plan }] } });
@@ -132,6 +133,7 @@ e2e('shapes: the wizard offers four, and a draft of each is built with the app\'
     await dialogShots(page, `shapes-draft-${id}`);
     await review.getByRole('button', { name: 'Create dashboard' }).click();
     await page.waitForURL(/\/analyses\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
+    built.push({ id, analysisId: page.url().split('/').at(-1) ?? '', takeaway: preview.takeaway });
     await settled(page);
     // The built sheet: its takeaway is the lead chart's caption — the same sentence the preview computed.
     const take = page.getByTestId('takeaway');
@@ -143,5 +145,31 @@ e2e('shapes: the wizard offers four, and a draft of each is built with the app\'
       await page.getByRole('button', { name: /sum of revenue/i }).first().click(); // largest first
     }
     await screens(page, `shapes-${id}`);
+  }
+
+  // ── Published: each shape's page, with the same takeaway under its title ──
+  const res = await page.request.post(`${server.base}/api/rpc/publish:run`, { headers: { 'x-csrf-token': csrf }, data: { args: [{ projectId: pid, dashboardIds: built.map((b) => b.analysisId) }] } });
+  const run = JSON.parse(await res.text()) as { ok: boolean; site: { id: string; pages: { file: string; name: string }[] } };
+  assert.equal(run.ok, true, JSON.stringify(run).slice(0, 300));
+  for (const b of built) {
+    const file = run.site.pages.find((p) => p.name === (PLANS[b.id].plan as { name: string }).name)?.file;
+    assert.ok(file, `${b.id}: published`);
+    await page.goto(`/p/${run.site.id}/${file}`);
+    await page.waitForFunction(() => document.body.dataset.ready === 'true');
+    if (b.takeaway) assert.equal(await page.locator('.pub-takeaway').textContent(), b.takeaway, `${b.id}: the page says what the app said`);
+    if (b.id === 'table') {
+      await page.getByRole('searchbox', { name: /^Search Every state/ }).waitFor();
+      assert.ok((await page.locator('.pub-bar').count()) > 10, 'a bar in each figure\'s cell');
+      await page.locator('.pub-sort', { hasText: 'sum of revenue' }).click(); // largest first
+      assert.equal(await page.locator('th[aria-sort="descending"]').count(), 1);
+    }
+    if (b.id === 'scorecard') await page.locator('.pub-kpi svg').first().waitFor(); // each KPI's months
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.waitForTimeout(400); // an Auto dashboard redraws its charts in the reader's scheme
+      if (b.id === 'table') await page.locator('.pub-sort', { hasText: 'sum of revenue' }).click(); // the redraw reset it: largest first again
+      await page.screenshot({ path: path.join(SCREENS, `shapes-published-${b.id}-${scheme}.png`), fullPage: true });
+    }
+    await page.emulateMedia({ colorScheme: null });
   }
 });

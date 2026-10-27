@@ -85,6 +85,10 @@ const SITE_CSS = `
   .dash-theme--dark .pub-tone--good { color: #10b981; } .dash-theme--dark .pub-tone--bad { color: #ef4444; }
   @media (prefers-color-scheme: dark) { .dash-theme--auto .pub-tone--good { color: #10b981; } .dash-theme--auto .pub-tone--bad { color: #ef4444; } }
   .pub-kpi-spark { display: block; width: 100%; height: 28px; margin-top: 2px; color: var(--accent); }
+  /* A tile with a trend reads top down and gives the trend what the tile has left (a Scorecard's tall tiles). */
+  .pub-card--metric:has(.pub-kpi-spark) { justify-content: flex-start; }
+  .pub-card--metric:has(.pub-kpi-spark) > .pub-kpi--card { flex: 1 1 auto; }
+  .pub-kpi--card > .pub-kpi-spark { flex: 1 1 28px; height: auto; min-height: 28px; max-height: 120px; margin-top: 8px; }
   .pub-kpi-spark path { fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
   .pub-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
   .pub-caption { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; line-height: 1.45; }

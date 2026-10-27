@@ -86,7 +86,7 @@ export const DASHBOARD_SHAPES: readonly DashboardShape[] = [
     layout: 'One sheet read top to bottom: two to four sections, each ONE chart answering one question — a "charts" row with one chart, or an "annotated" row when a note beside it helps. No KPI row.',
     questions: [
       { ask: 'Who leads, and by how much?', charts: ['bar', 'column', 'pareto'] },
-      { ask: 'What share does each take?', charts: ['treemap', 'donut', 'pct_stacked_bar'] },
+      { ask: 'What share does each take?', charts: ['donut', 'pct_stacked_bar', 'treemap'] },
       { ask: 'How has it changed?', charts: ['line', 'area'] },
       { ask: 'How do two measures relate?', charts: ['scatter', 'bubble'] },
       { ask: 'Where is it?', charts: ['map_choropleth', 'map_bubble'] },
