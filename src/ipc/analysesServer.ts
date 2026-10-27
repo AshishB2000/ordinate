@@ -22,6 +22,8 @@ import { isLiveRefusalReply, liveRefusal } from '../data/liveDataset';
 import { dashboardForCaller, tagForCaller, visualForCaller } from './rowDoors';
 import { figureAsk } from '../analysis/figureAsk';
 import { kpiTrend } from './kpiTrend';
+import { tileCaption } from '../analysis/captions';
+import { mergeDashboardFilters } from '../analysis/dashboardFilters';
 import { paramValues, resolveFilterParams } from '../analysis/params';
 import { sanitizeDashboardFilters } from '../analysis/dashboards';
 
@@ -150,6 +152,18 @@ export function register(): void {
       }
       return res;
     })));
+
+  // The sheet's takeaway: the lead chart's caption, from the figures `visual:data` answers for it under the sheet's
+  // filters — the card's own and the sheet's, merged as the published page merges them (publish/dashboardData.ts).
+  ipcMain.handle('analysis:takeaway', async (e, { projectId, visualId, filters, params }: any = {}) => { // any: contract-checked
+    const v = await visuals.getVisual(projectId, visualId);
+    if (!v) return { ok: true, text: '' };
+    const r = await call(e, 'visual:data', {
+      projectId, datasetId: v.datasetId, encoding: v.encoding, filters: mergeDashboardFilters(sanitizeDashboardFilters(filters), v.filters), params,
+      ...figureAsk(v.chartType, v.overrides),
+    });
+    return { ok: true, text: r && r.ok ? tileCaption({ chartType: v.chartType, data: r.data, overrides: v.overrides as any }) : '' }; // any: a visual's overrides record
+  });
 
   // An image card's picture (layoutKinds.ts): the upload (T0.4) copied into the
   // project by content — PNG / JPG / script-free SVG, 5 MB — the desktop's

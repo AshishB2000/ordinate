@@ -30,6 +30,8 @@ const visuals: typeof import('../src/analysis/visuals') = require('../src/analys
 const analysisStore: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
 const ipcVisuals: typeof import('../src/ipc/visuals') = require('../src/ipc/visuals');
 const kpi: typeof import('../src/ipc/kpiTrend') = require('../src/ipc/kpiTrend');
+const analysesServer: typeof import('../src/ipc/analysesServer') = require('../src/ipc/analysesServer');
+const rpc: typeof import('../src/server/rpc') = require('../src/server/rpc');
 
 // ── The registry ─────────────────────────────────────────────────────────────
 
@@ -136,6 +138,24 @@ async function checkBuild(): Promise<void> {
   ok('preview: the takeaway is the lead chart\'s own caption', !!lead.data && prev.takeaway === captions.tileCaption({ chartType: lead.chartType, data: lead.data }) && /leads/.test(prev.takeaway || ''), prev.takeaway);
 }
 
+// ── The sheet's takeaway, against visual:data + the caption ─────────────────
+
+async function checkTakeaway(): Promise<void> {
+  ipcVisuals.register();
+  analysesServer.register();
+  const take = rpc.handlers.get('analysis:takeaway');
+  const data = rpc.handlers.get('visual:data');
+  const v = await visuals.saveVisual(projectId, { name: 'Who leads?', datasetId: dsId, chartType: 'bar', encoding: { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }] }, filters: [] });
+  if (!take || !data || !v) { ok('takeaway: registered', false); return; }
+  const west = [{ type: 'filter', column: 'region', op: '!=', value: 'North' }];
+  const got = (await take(null, { projectId, visualId: v.id, filters: west })) as { ok: boolean; text: string };
+  const want = (await data(null, { projectId, datasetId: dsId, encoding: v.encoding, filters: west })) as { ok: boolean; data: any };
+  ok('takeaway: the lead chart\'s caption under the sheet\'s filters, as visual:data answers it', got.ok && got.text === captions.tileCaption({ chartType: 'bar', data: want.data }) && /^East leads/.test(got.text), got.text);
+  const all = (await take(null, { projectId, visualId: v.id })) as { text: string };
+  ok('takeaway: the filters change it (negative control)', all.text !== got.text, all.text);
+  ok('takeaway: a visual that is gone says nothing', ((await take(null, { projectId, visualId: '0b6d5b1e-8a52-4c43-9d36-0d5a8f7c1a19' })) as { text: string }).text === '');
+}
+
 // ── KPI trend, against the chart door ───────────────────────────────────────
 
 async function checkTrend(): Promise<void> {
@@ -171,6 +191,7 @@ async function checkTrend(): Promise<void> {
   await checkPlan();
   await checkBuild();
   await checkTrend();
+  await checkTakeaway();
   if (failureCount()) console.error('\n' + failureCount() + ' dashboard-shape check(s) FAILED');
   else console.log('\nAll dashboard-shape checks passed.');
   finish();

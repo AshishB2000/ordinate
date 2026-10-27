@@ -220,6 +220,14 @@ export const analyses = {
     }),
     project: byProjectId,
   }),
+  // The sheet's TAKEAWAY: the app's caption (analysis/captions.ts) of its lead
+  // chart — the visual the browser names, under the sheet's filters — through
+  // `visual:data`. Words around the server's own figures; a model writes none.
+  'analysis:takeaway': rpc({
+    access: 'read',
+    input: z.strictObject({ projectId: Uuid, visualId: Uuid, filters: Steps.optional(), params: ParamPayload.optional() }),
+    project: byProjectId,
+  }),
   // An image card's picture: an upload (T0.4) copied into the project's assets
   // (the desktop's asset:pickImage, minus its native dialog), and read back as
   // a data: URL for the <img> (hub CSP: img-src data:). Ids are generated UUIDs.
