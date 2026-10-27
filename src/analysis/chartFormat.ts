@@ -76,6 +76,10 @@ export interface FormatOverrides {
   seriesColors?: Record<string, ColorToken>;
   /** A single-series bar chart painted per category from the project's colour map. */
   colorByCategory?: boolean;
+  /** The first series in the accent (--chart-1), every other muted (--border-2): a Visual analysis chart. */
+  accent?: boolean;
+  /** A `table` a reader sorts, searches and reads with bars in its cells: the Table shape's. */
+  richTable?: boolean;
   /** Colour a measure's marks by value along a ramp derived from the accent. */
   measurePalettes?: Record<string, 'sequential' | 'diverging'>;
 }
@@ -235,6 +239,8 @@ export function validateFormat(raw: unknown, ctx: FormatContext = {}): { value: 
   const sc = tokenMap(o.seriesColors, MAX_SERIES_COLORS);
   if (sc) value.seriesColors = sc;
   if (o.colorByCategory === true) value.colorByCategory = true;
+  if (o.accent === true) value.accent = true;
+  if (o.richTable === true) value.richTable = true;
 
   if (o.measurePalettes && typeof o.measurePalettes === 'object' && !Array.isArray(o.measurePalettes)) {
     const known = ctx.encoding ? new Set(measureNames(ctx.encoding)) : null;

@@ -19,7 +19,7 @@ import { annDrawable, annExtent, annotationsPlugin, annWanted, type AnnCommentPi
 import { buildChartDatasets } from './datasets';
 import { evDrawable, eventsPlugin } from './events';
 import { applyExtraTooltip, extraChartOptions, isExtraFamily } from './familiesExtra';
-import { fmtApply, fmtResolve } from './fmtApply';
+import { fmtApply, fmtColorsByCategory, fmtResolve } from './fmtApply';
 import * as OrdFormat from '../../../src/app/format.ts';
 import { fmtVal, fmtWith, pctText, tcAxisFmt, tcTooltip } from './format';
 import { CHART_PALETTE, getCSSVar, paletteFromSeed } from './palette';
@@ -204,6 +204,12 @@ export function buildChart(
   // Formatting depth (./fmtApply, T2.7): series colours into the palette, and
   // the project's colour per category.
   const fmtCat = fmtResolve(labels, series, overrides, palette, type);
+  // A Visual analysis chart (chartFormat `accent`): the first series keeps the accent, every other is muted
+  // (--border-2). Never on a chart coloured per category — a pie's slices are not series.
+  if (overrides.accent && !fmtColorsByCategory(type, series, overrides)) {
+    const muted = getCSSVar('--border-2', canvas) || '#ced7e2';
+    for (let i = 1; i < Math.max(series.length, palette.length); i++) palette[i] = muted;
+  }
 
   // ── The parameter object every family module reads ───────────────────────
   const c: ChartCtx = {

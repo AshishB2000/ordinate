@@ -14,6 +14,7 @@
 import { sanitizeBundle, sanitizeChartData, sanitizePng, sanitizeLayout } from '../analysis/dashboardExport';
 import type { ExportChartData } from '../analysis/dashboardExport';
 import { sanitizeFormatPrefs } from '../app/format';
+import { cardNote } from '../analysis/dashboards';
 
 const MAX_STR = 20_000;
 const MAX_LABEL = 400;
@@ -149,6 +150,13 @@ export function sanitizePayload(raw: unknown): unknown {
     // A KPI: its figure, its display, its sentence — and what it measures, when the server wrote that.
     const kpi: Obj = { value: num(o.value), display: str(o.display, 120), caption: str(o.caption, MAX_LABEL) };
     if (typeof o.subtitle === 'string' && o.subtitle) kpi.subtitle = str(o.subtitle, MAX_LABEL);
+    if (o.compare && typeof o.compare === 'object') kpi.compare = sanitizeChange(o.compare);
+    if (o.trend && typeof o.trend === 'object') {
+      // A small trend under the figure: the server's figures and their labels, and its own change line.
+      const t = obj(o.trend);
+      kpi.trend = { values: arr(t.values, 120).map(num), labels: arr(t.labels, 120).map((l) => str(l, MAX_LABEL)) };
+      if (t.change && typeof t.change === 'object') (kpi.trend as Obj).change = sanitizeChange(t.change);
+    }
     return kpi;
   }
   const data: ExportChartData = sanitizeChartData(o);
@@ -164,6 +172,14 @@ export function sanitizePayload(raw: unknown): unknown {
   if (typeof o.hidden === 'string') out.hidden = str(o.hidden, MAX_LABEL);
   if (Array.isArray(o.events)) out.events = sanitizeEventMarks(o.events, data.labels.length);
   return out;
+}
+
+const CHANGE_TONES: ReadonlySet<string> = new Set(['good', 'bad', 'flat']);
+
+/** A KPI's change line (./kpiCompare.ts): the server's delta text, its percent, a closed-enum tone and the period's name. */
+function sanitizeChange(raw: unknown): Obj {
+  const o = obj(raw);
+  return { deltaDisplay: str(o.deltaDisplay, 80), pct: num(o.pct), tone: CHANGE_TONES.has(o.tone as string) ? o.tone : 'flat', label: str(o.label, 80) };
 }
 
 const EVENT_KINDS: ReadonlySet<string> = new Set(['launch', 'campaign', 'incident', 'holiday', 'other']);
@@ -214,10 +230,15 @@ function sanitizeCard(raw: unknown): unknown {
   const payloads = arr(o.payloads, 5000).map(sanitizePayload);
   const variants = arr(o.variants, 5000).map((v) => int(v, 0, Math.max(0, payloads.length - 1), 0));
   const card: Obj = { kind, layout, sizes, title, variants, payloads };
+  const note = cardNote(o.note); // one line, capped — the record's own rule
+  if (note && kind !== 'summary') card.note = note;
   if (kind === 'chart') {
     card.chartType = PUBLISHED_CHART_TYPES.has(o.chartType as string) ? o.chartType
       : PUBLISHED_AS.get(o.chartType as string) || 'column';
     card.category = str(o.category, MAX_LABEL);
+    // A dashboard shape's drawing (dashboardShapes.ts): flags only, `true` or absent.
+    if (o.accent === true) card.accent = true;
+    if (o.richTable === true) card.richTable = true;
   }
   return card;
 }

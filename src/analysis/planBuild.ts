@@ -19,6 +19,7 @@ import type { PlanDrop, PlannedCalcField, PlannedVisual } from './analysisPlan';
 import { loadPlanContext, validatePlan } from './analysisPlan';
 import { arrangeSheet } from './planLayout';
 import { shapeRows } from './planRows';
+import { shapeOf } from './dashboardShapes';
 
 /**
  * A plan turned into REAL records, minus the Analysis: the calculated fields and
@@ -63,6 +64,8 @@ export interface BuildResult {
 export async function buildPlanRecords(projectId: string, raw: unknown): Promise<PlanRecords> {
   const ctx = await loadPlanContext(projectId);
   const { plan, dropped } = validatePlan(raw, ctx);
+  // The shape changes sizes, KPI trends and chart colour — never what a tile computes.
+  const shape = shapeOf(plan.shape);
 
   // 1. Calculated fields → TransformSteps, appended to the dataset's existing
   //    pipeline. updateSteps sanitizes, recomputes from the immutable source and
@@ -117,6 +120,7 @@ export async function buildPlanRecords(projectId: string, raw: unknown): Promise
           chartType: pv.chartType,
           encoding: pv.encoding,
           filters: pv.filters,
+          overrides: { ...(shape?.accent ? { accent: true } : {}), ...(shape?.richTable && pv.chartType === 'table' ? { richTable: true } : {}) },
         });
         if (!saved) continue;
         id = saved.id;
@@ -130,14 +134,14 @@ export async function buildPlanRecords(projectId: string, raw: unknown): Promise
       ...sheet,
       visuals: alive,
       rows: sheet.rows && shapeRows(sheet.rows, (pv) => savedIds.has(pv)),
-    });
+    }, shape);
 
     // THE ORDER OF `cards` IS NOT THE ARRANGEMENT, and does not follow it:
     // metrics, then visuals, then texts, each in the sheet's flat order, however
     // the rows interleave them. planExec.runDashboard ties each KPI card to its
     // metric by that order. Only the layouts say where a tile is.
-    sheet.metrics.forEach((m, i) => cards.push({ type: 'metric', layout: at.metrics[i], metric: m }));
-    alive.forEach((pv, i) => cards.push({ type: 'visual', layout: at.visuals[i], visualId: savedIds.get(pv) }));
+    sheet.metrics.forEach((m, i) => cards.push({ type: 'metric', layout: at.metrics[i], metric: shape?.kpiTrend ? { ...m, trend: true } : m }));
+    alive.forEach((pv, i) => cards.push({ type: 'visual', layout: at.visuals[i], visualId: savedIds.get(pv), note: pv.note }));
     sheet.texts.forEach((t, i) => cards.push({ type: 'text', layout: at.texts[i], ...t }));
     // sanitizeCards is the same whitelist a hand-built sheet goes through — a
     // sheet IS a dashboards.Page.

@@ -3,7 +3,7 @@
 // computed every figure in the previews. What the app REFUSED is shown first
 // and never collapsed. Nothing is created until "Create dashboard".
 //
-// It ASKS FIRST. The brief — what kind, which look (DraftBrief.tsx) — then, if
+// It ASKS FIRST. The brief — which shape, which look (DraftBrief.tsx) — then, if
 // the model has questions about the request, those (DraftClarify.tsx), once;
 // then the review.
 
@@ -22,6 +22,7 @@ import { failure, type Analysis, type BuildReply, type DraftAnswer, type DraftRe
 import { DEFAULT_BRIEF, DraftBrief, type Brief } from './DraftBrief';
 import { DraftClarify } from './DraftClarify';
 import { PlanSketch } from './PlanSketch';
+import { shapeOf } from '../../../../src/analysis/dashboardShapes.ts';
 import { DrawnVisual, vizLabel } from './VisualTile';
 import s from './Draft.module.css';
 
@@ -48,7 +49,7 @@ export function Dropped({ list }: { list: PlanPreview['dropped'] }) {
 }
 
 /** One previewed visual: the app's figures, or the reason there are none (never a placeholder number). */
-export function PreviewCard({ v, projectId }: { v: PreviewVisual; projectId: string }) {
+export function PreviewCard({ v, projectId, overrides }: { v: PreviewVisual; projectId: string; overrides?: Record<string, unknown> }) {
   const name = v.name || v.title || 'Visual';
   const type = v.chartType || 'column';
   return (
@@ -57,9 +58,10 @@ export function PreviewCard({ v, projectId }: { v: PreviewVisual; projectId: str
         <span className={s.visualTitle}>{name}</span>
         {v.chartType && <span className={s.type}>{vizLabel(v.chartType)}</span>}
       </div>
+      {v.cardNote && <p className={s.cardNote}>{v.cardNote}</p>}
       {v.data ? (
         <div className={s.viz}>
-          <DrawnVisual type={type} data={v.data} label={name} projectId={projectId} />
+          <DrawnVisual type={type} data={v.data} overrides={overrides} label={name} projectId={projectId} />
         </div>
       ) : (
         <p className={s.why}>{v.note || 'The app could not compute this one yet.'}</p>
@@ -68,12 +70,24 @@ export function PreviewCard({ v, projectId }: { v: PreviewVisual; projectId: str
   );
 }
 
+/** What the shape changes about a chart's drawing (planBuild.ts sets the same overrides), so the preview is the page. */
+function drawn(shape: ReturnType<typeof shapeOf>, chartType?: string): Record<string, unknown> | undefined {
+  if (shape?.accent) return { accent: true };
+  return shape?.richTable && chartType === 'table' ? { richTable: true } : undefined;
+}
+
 /** The drafted plan as the app will build it. */
 export function Review({ draft, projectId }: { draft: PlanPreview; projectId: string }) {
   const calcs = draft.calculatedFields ?? [];
+  const shape = shapeOf(draft.shape);
   return (
     <div className={s.body}>
-      <div className={s.title}>{draft.name || 'Assistant dashboard'}</div>
+      <div className={s.titleRow}>
+        <div className={s.title}>{draft.name || 'Assistant dashboard'}</div>
+        {shape && <Badge tone="accent">{shape.title}</Badge>}
+      </div>
+      {/* The app's caption of the lead chart — the sentence the dashboard's header will carry. */}
+      {draft.takeaway && <p className={s.takeaway}>{draft.takeaway}</p>}
       {draft.rationale && draft.rationale.trim() && (
         <div className={s.interp}>
           <span className={s.interpH}>Why the model proposed this · AI interpretation</span>
@@ -104,7 +118,7 @@ export function Review({ draft, projectId }: { draft: PlanPreview; projectId: st
             {visuals.length === 0 && cards.length > 0 && <p className={s.note}>{cards.length === 1 ? '1 card' : `${cards.length} cards`}</p>}
             <div className={s.visuals}>
               {visuals.map((v, i) => (
-                <PreviewCard key={i} v={v} projectId={projectId} />
+                <PreviewCard key={i} v={v} projectId={projectId} overrides={drawn(shape, v.chartType)} />
               ))}
             </div>
           </section>
@@ -183,18 +197,18 @@ export function DraftFlow({
   const navigate = useNavigate();
   const client = useQueryClient();
 
-  const kind = brief.kind;
+  const shape = brief.shape;
   useEffect(() => {
     if (!briefed) return;
     let live = true;
-    rpc('analysis:draft', { projectId, ...(datasetId ? { datasetId } : {}), ...(intent ? { intent } : {}), kind, clarify: true, ...(answers ? { answers } : {}) }).then(
+    rpc('analysis:draft', { projectId, ...(datasetId ? { datasetId } : {}), ...(intent ? { intent } : {}), shape, clarify: true, ...(answers ? { answers } : {}) }).then(
       (r) => live && setReply(r as DraftReply),
       (err: unknown) => live && setFailed(failure(err, 'Could not draft a dashboard.')),
     );
     return () => {
       live = false;
     };
-  }, [briefed, projectId, datasetId, intent, kind, answers, attempt]);
+  }, [briefed, projectId, datasetId, intent, shape, answers, attempt]);
   // Ask again after a failure, exactly as that ask was made.
   const retry = () => {
     setFailed('');

@@ -5,7 +5,8 @@
 import { CHART_TYPE_IDS, type PlanContext } from './analysisPlan';
 import { GEO_LEVEL_LABELS } from './geoHits';
 import { columnNoteLines, type FactColumnDoc } from '../ai/copilotFacts';
-import { answersText, kindText, type DraftAsk } from './planClarify';
+import { answersText, type DraftAsk } from './planClarify';
+import { shapeText } from './dashboardShapes';
 
 /**
  * `intent` is the user's own words from the create-analysis wizard — what they
@@ -152,7 +153,7 @@ function userNoteLines(ctx: PlanContext, extras: PlanFactExtras): string[] {
  * value — but a definition is the user's own words, so a literal they typed
  * into one ("region = West") is in it.
  *
- * `ask` is what the user settled before the draft (planClarify.ts): the KIND of
+ * `ask` is what the user settled before the draft (planClarify.ts): the SHAPE of
  * dashboard, as the app's own sentence, and their answers to the model's
  * questions, fenced like the request they refine. Without it — every caller
  * but the ask-first flow — the text is, again, byte-identical.
@@ -196,10 +197,10 @@ export function buildFactsText(ctx: PlanContext, intent?: string, extras?: PlanF
   // The user's notes: after the app's facts, which they must not bury, and
   // before the request, which stays last.
   if (extras) lines.push(...userNoteLines(ctx, extras));
-  // The kind the user picked: the app's sentence, so it sits with the app's
-  // facts — above the request it shapes, never inside the user's fence.
-  const kind = ask ? kindText(ask.kind) : '';
-  if (kind) lines.push('', kind);
+  // The shape the user picked (or left to the model): the app's sentence, so it
+  // sits with the app's facts — above the request it shapes, never inside the user's fence.
+  const shape = ask ? shapeText(ask.shape) : '';
+  if (shape) lines.push('', shape);
   // Last, and fenced: after the closed vocabularies, so the constraints are read
   // before the request that must live inside them.
   const want = typeof intent === 'string' ? intent.trim().slice(0, INTENT_MAX) : '';

@@ -15,7 +15,7 @@
 //      carries answers — even none ("Skip") — is sent the plain draft prompt
 //      and can only come back a plan. The check ships its negative control:
 //      the asking call does carry the clause.
-//   4. NO OPTS, NO CHANGE. A caller that passes none of kind / clarify /
+//   4. NO OPTS, NO CHANGE. A caller that passes none of shape / clarify /
 //      answers (story:draft, automation) makes the call it made before.
 //   5. THE LOOK NEVER GOES TO THE MODEL. `buildPlan` applies a preset by id,
 //      and with none does what `analysis:create` does: the workspace default.
@@ -33,10 +33,10 @@ const path: typeof import('path') = require('path');
 process.env.ORDINATE_LOCAL_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-planclarify-'));
 
 const plan: typeof import('../src/analysis/analysisPlan') = require('../src/analysis/analysisPlan');
-const planRows: typeof import('../src/analysis/planRows') = require('../src/analysis/planRows');
 const planFacts: typeof import('../src/analysis/planFacts') = require('../src/analysis/planFacts');
 const planBuild: typeof import('../src/analysis/planBuild') = require('../src/analysis/planBuild');
 const clarify: typeof import('../src/analysis/planClarify') = require('../src/analysis/planClarify');
+const shapes: typeof import('../src/analysis/dashboardShapes') = require('../src/analysis/dashboardShapes');
 const dashboards: typeof import('../src/analysis/dashboards') = require('../src/analysis/dashboards');
 const datasets: typeof import('../src/data/datasets') = require('../src/data/datasets');
 const projects: typeof import('../src/app/projects') = require('../src/app/projects');
@@ -118,7 +118,7 @@ function checkQuestions(): void {
   ok('prompt: the draft prompt itself does not ask (negative control for §3)', !plan.DRAFT_DASHBOARD_SYSTEM_PROMPT.includes('"questions"'));
 }
 
-// ── §2 Answers, and the kind ────────────────────────────────────────────────
+// ── §2 Answers, and the shape ───────────────────────────────────────────────
 
 const INTENT = 'a dashboard about revenue';
 const CTX: any = {
@@ -158,28 +158,18 @@ function checkAnswers(): void {
   const withAnswers = planFacts.buildFactsText(CTX, INTENT, undefined, { answers: ANSWERS });
   ok('facts: the answers follow the request, and everything before them is unchanged', withAnswers === bare + '\n\n' + text, withAnswers.slice(-400));
   ok('facts: the request is still fenced once', count(withAnswers, '<<<USER REQUEST') === 1 && count(withAnswers, 'USER REQUEST') === 1);
-  for (const ask of [undefined, {}, { answers: [] }, { kind: undefined }, { kind: 'spiral' }, { kind: 'constructor' }, { kind: 7 }] as any[]) {
+  for (const ask of [undefined, {}, { answers: [] }, { shape: undefined }, { shape: 'spiral' }, { shape: 'constructor' }, { shape: 7 }, { shape: '' }] as any[]) {
     ok(`facts: ${JSON.stringify(ask) ?? 'undefined'} changes nothing`, planFacts.buildFactsText(CTX, INTENT, undefined, ask) === bare);
   }
 
-  // The kind: the APP's sentence, before the request, in the plan's own words.
-  ok('kinds: explore, overview, report', clarify.DASHBOARD_KINDS.join() === 'explore,overview,report');
-  const quoted = (s: string): string[] => Array.from(s.matchAll(/"([a-z_]+)"/g), (m) => m[1]);
-  const vocabulary = new Set<string>([...planRows.ROW_TYPES, ...plan.CHART_TYPE_IDS, 'controls']);
-  for (const kind of clarify.DASHBOARD_KINDS) {
-    const sentence = clarify.kindText(kind);
-    const facts = planFacts.buildFactsText(CTX, INTENT, undefined, { kind });
-    ok(`kind ${kind}: its sentence is in the facts, before the request`,
+  // The shape: the APP's sentence, before the request, in the plan's own words (dashboardShapes.ts).
+  for (const id of [...shapes.DASHBOARD_SHAPES.map((x) => x.id), shapes.AUTO_SHAPE]) {
+    const sentence = shapes.shapeText(id);
+    const facts = planFacts.buildFactsText(CTX, INTENT, undefined, { shape: id });
+    ok(`shape ${id}: its sentence is in the facts, before the request`,
       sentence.length > 0 && facts.includes(sentence) && facts.indexOf(sentence) < facts.indexOf('<<<USER REQUEST') && facts.endsWith('USER REQUEST'), facts.slice(-600));
-    ok(`kind ${kind}: …and with no request it is simply last`, planFacts.buildFactsText(CTX, undefined, undefined, { kind }).endsWith(sentence));
-    ok(`kind ${kind}: every term it quotes is one a plan may use`, quoted(sentence).length > 0 && quoted(sentence).every((w) => vocabulary.has(w)), quoted(sentence).join());
-    ok(`kind ${kind}: no figure in it`, !/\d/.test(sentence), sentence);
+    ok(`shape ${id}: …and with no request it is simply last`, planFacts.buildFactsText(CTX, undefined, undefined, { shape: id }).endsWith(sentence));
   }
-  ok('kinds: each says something different', new Set(clarify.DASHBOARD_KINDS.map((k) => clarify.kindText(k))).size === 3);
-  ok('kinds: explore asks for controls and a table', /"controls"/.test(clarify.kindText('explore')) && /"table"/.test(clarify.kindText('explore')));
-  ok('kinds: overview asks for a spotlight', /"spotlight"/.test(clarify.kindText('overview')));
-  ok('kinds: report asks for annotated rows and notes', /"annotated"/.test(clarify.kindText('report')) && /"note"/.test(clarify.kindText('report')));
-  ok('kinds: an unknown kind has no sentence', ['spiral', '', 'constructor', 'toString', undefined, null, 7].every((k) => clarify.kindText(k) === ''));
 }
 
 // ── §3 + §4 The real draft, the model stubbed ───────────────────────────────
@@ -258,7 +248,7 @@ async function checkDraft(): Promise<void> {
   ok('no opts: the facts are exactly today\'s', old.calls[0].text === today);
   const none = await draftSeen(undefined, [PLAN]);
   ok('no opts at all: the same call, without a request', none.calls.length === 1 && none.calls[0].args === 1 && none.calls[0].text === planFacts.buildFactsText(ctx, undefined, extras));
-  const offs = await draftSeen({ intent: INTENT, clarify: false, kind: undefined, answers: undefined }, [QUESTIONS]);
+  const offs = await draftSeen({ intent: INTENT, clarify: false, shape: undefined, answers: undefined }, [QUESTIONS]);
   ok('clarify off: one plain call, and a reply of questions is not handed on as questions',
     offs.calls.length === 1 && plain(offs.calls[0]) && offs.calls[0].text === today && !('questions' in offs.reply), JSON.stringify(offs.reply).slice(0, 200));
   for (const junk of ['true', 1, {}, null] as any[]) {
@@ -308,7 +298,7 @@ async function checkDraft(): Promise<void> {
     ['answers', { intent: INTENT, clarify: true, answers: ANSWERS }],
     ['no answers (Skip)', { intent: INTENT, clarify: true, answers: [] }],
     ['answers that are not a list', { intent: INTENT, clarify: true, answers: null }],
-    ['answers and a kind', { intent: INTENT, clarify: true, kind: 'explore', answers: ANSWERS }],
+    ['answers and a shape', { intent: INTENT, clarify: true, shape: 'scorecard', answers: ANSWERS }],
     ['answers and no request', { clarify: true, answers: ANSWERS }],
   ];
   for (const [what, opts] of second) {
@@ -318,17 +308,22 @@ async function checkDraft(): Promise<void> {
   }
   ok('one round: the same check trips on the asking call (negative control)', asks(asked.calls[0]) && 'questions' in asked.reply && !plain(asked.calls[0]));
 
-  // Each kind's sentence reaches the facts — on the asking call and the drafting one.
-  for (const kind of clarify.DASHBOARD_KINDS) {
-    const sentence = clarify.kindText(kind);
-    const first = await draftSeen({ intent: INTENT, clarify: true, kind }, [QUESTIONS]);
-    const then = await draftSeen({ intent: INTENT, clarify: true, kind, answers: ANSWERS }, [PLAN]);
-    ok(`kind ${kind}: its sentence is in the facts of the asking call`, first.calls[0].text === planFacts.buildFactsText(ctx, INTENT, extras, { kind }) && first.calls[0].text.includes(sentence));
-    ok(`kind ${kind}: …and of the drafting call, with the answers`, drafted(then.reply) && then.calls[0].text === planFacts.buildFactsText(ctx, INTENT, extras, { kind, answers: ANSWERS })
+  // Each shape's sentence reaches the facts — on the asking call and the drafting one — and the chosen shape is the plan's.
+  for (const shape of ['scorecard', 'table', shapes.AUTO_SHAPE]) {
+    const sentence = shapes.shapeText(shape);
+    const first = await draftSeen({ intent: INTENT, clarify: true, shape }, [QUESTIONS]);
+    const then = await draftSeen({ intent: INTENT, clarify: true, shape, answers: ANSWERS }, [{ ...PLAN, shape: 'review' }]);
+    ok(`shape ${shape}: its sentence is in the facts of the asking call`, first.calls[0].text === planFacts.buildFactsText(ctx, INTENT, extras, { shape }) && first.calls[0].text.includes(sentence));
+    ok(`shape ${shape}: …and of the drafting call, with the answers`, drafted(then.reply) && then.calls[0].text === planFacts.buildFactsText(ctx, INTENT, extras, { shape, answers: ANSWERS })
       && then.calls[0].text.includes(sentence) && then.calls[0].text !== today);
+    // Chosen, it wins over what the model wrote; left to the model, the model's known pick stands.
+    const want = shape === shapes.AUTO_SHAPE ? 'review' : shape;
+    ok(`shape ${shape}: the reply and its plan carry "${want}"`, then.reply?.shape === want && then.reply?.plan?.shape === want, JSON.stringify(then.reply?.plan).slice(0, 200));
   }
-  const unknown = await draftSeen({ intent: INTENT, kind: 'spiral' as any }, [PLAN]);
-  ok('kind: an unknown one is ignored', unknown.calls[0].text === today && unknown.calls[0].args === 1);
+  const invented = await draftSeen({ intent: INTENT, clarify: true, shape: shapes.AUTO_SHAPE, answers: [] }, [{ ...PLAN, shape: 'spiral' }]);
+  ok('shape: a shape the model invented is not kept', drafted(invented.reply) && !('shape' in invented.reply.plan), JSON.stringify(invented.reply.plan).slice(0, 200));
+  const unknown = await draftSeen({ intent: INTENT, shape: 'spiral' as any }, [PLAN]);
+  ok('shape: an unknown one is ignored', unknown.calls[0].text === today && unknown.calls[0].args === 1);
 
   // A model that is not there is still `notReady`, whichever call it was.
   for (const opts of [{ clarify: true }, { clarify: true, answers: [] }]) {
