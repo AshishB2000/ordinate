@@ -33,7 +33,6 @@ const path: typeof import('path') = require('path');
 process.env.ORDINATE_LOCAL_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-planclarify-'));
 
 const plan: typeof import('../src/analysis/analysisPlan') = require('../src/analysis/analysisPlan');
-const planRows: typeof import('../src/analysis/planRows') = require('../src/analysis/planRows');
 const planFacts: typeof import('../src/analysis/planFacts') = require('../src/analysis/planFacts');
 const planBuild: typeof import('../src/analysis/planBuild') = require('../src/analysis/planBuild');
 const clarify: typeof import('../src/analysis/planClarify') = require('../src/analysis/planClarify');
