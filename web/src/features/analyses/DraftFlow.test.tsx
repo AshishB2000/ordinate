@@ -1,7 +1,7 @@
-// ASK FIRST, in the browser: the brief (kind and look) is on screen before any
+// ASK FIRST, in the browser: the brief (shape and look) is on screen before any
 // model is asked; the draft is then asked with `clarify`, and a reply of
 // questions is one more screen — once — before the review. What these hold is
-// what is SENT: the kind, the answers ("Skip" is an empty list), and the look,
+// what is SENT: the shape, the answers ("Skip" is an empty list), and the look,
 // which goes to `analysis:buildPlan` and nowhere else.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { DEFAULT_BRIEF, DraftBrief, type Brief } from './DraftBrief';
 import { DraftFlow } from './DraftReview';
+import { DASHBOARD_SHAPES } from '../../../../src/analysis/dashboardShapes.ts';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -65,32 +66,37 @@ const names = (group: HTMLElement) => within(group).getAllByRole('radio').map((r
 const checked = (group: HTMLElement) => within(group).getAllByRole('radio').filter((r) => (r as HTMLInputElement).checked).map((r) => (r as HTMLInputElement).value);
 
 describe('the brief', () => {
-  it('offers three kinds and five looks, on Explore and the workspace default', () => {
+  it('offers the four shapes and five looks, on "Assistant picks" and the workspace default', () => {
     const { calls } = serve([]);
     mount(<DraftBrief value={DEFAULT_BRIEF} onChange={() => {}} />);
-    const kind = screen.getByRole('radiogroup', { name: 'Kind' });
+    const shape = screen.getByRole('radiogroup', { name: 'Shape' });
     const look = screen.getByRole('radiogroup', { name: 'Look' });
-    expect(within(kind).getAllByRole('radio').map((r) => (r as HTMLInputElement).value)).toEqual(['explore', 'overview', 'report']);
-    // A card reads as its title and then its one-line description.
-    expect(names(kind).map((text, i) => text.startsWith(['Explore', 'Overview', 'Report'][i]) && text.length > 20)).toEqual([true, true, true]);
-    expect(checked(kind)).toEqual(['explore']);
+    // The registry's own ids, in its order, after the Assistant's choice.
+    expect(within(shape).getAllByRole('radio').map((r) => (r as HTMLInputElement).value)).toEqual(['auto', ...DASHBOARD_SHAPES.map((x) => x.id)]);
+    expect(within(shape).getAllByRole('radio').map((r) => (r as HTMLInputElement).value)).toEqual(['auto', 'scorecard', 'review', 'visual', 'table']);
+    // A card reads as its title and then its one-line description, under its picture.
+    expect(names(shape).map((text, i) => text.startsWith(['Assistant picks', 'Scorecard', 'Review', 'Visual analysis', 'Table'][i]) && text.length > 20)).toEqual([true, true, true, true, true]);
+    expect(checked(shape)).toEqual(['auto']);
+    // Each shape's picture is its registry boxes, placed on the 12-column grid.
+    const scorecard = within(shape).getByRole('radio', { name: /^Scorecard/ }).closest('label') as HTMLElement;
+    expect(scorecard.querySelectorAll('[style*="grid-column"]')).toHaveLength(DASHBOARD_SHAPES[0].art.length);
     // The three pinned themes carry the Style dialog's own words; Dense is the fourth.
     expect(names(look)).toEqual(['Workspace defaultFrom Settings', 'LightAlways light', 'ExecutiveSlate, serif figures', 'DarkAlways dark', 'DenseCompact rows']);
     expect(checked(look)).toEqual(['']); // the workspace default is no look at all
-    expect(DEFAULT_BRIEF).toEqual({ kind: 'explore', look: '' });
+    expect(DEFAULT_BRIEF).toEqual({ shape: 'auto', look: '' });
     expect(calls.some((c) => c.channel === 'analysis:draft')).toBe(false); // no model is asked to draw it
   });
 
-  it('reports the kind and the look that were picked, each leaving the other alone', () => {
+  it('reports the shape and the look that were picked, each leaving the other alone', () => {
     serve([]);
     const seen: Brief[] = [];
-    mount(<DraftBrief value={{ kind: 'overview', look: 'dense' }} onChange={(b) => seen.push(b)} />);
-    expect(checked(screen.getByRole('radiogroup', { name: 'Kind' }))).toEqual(['overview']);
+    mount(<DraftBrief value={{ shape: 'review', look: 'dense' }} onChange={(b) => seen.push(b)} />);
+    expect(checked(screen.getByRole('radiogroup', { name: 'Shape' }))).toEqual(['review']);
     expect(checked(screen.getByRole('radiogroup', { name: 'Look' }))).toEqual(['dense']);
-    fireEvent.click(screen.getByRole('radio', { name: /^Report/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /^Table/ }));
     fireEvent.click(screen.getByRole('radio', { name: /^Dark/ }));
     fireEvent.click(screen.getByRole('radio', { name: /^Workspace default/ }));
-    expect(seen).toEqual([{ kind: 'report', look: 'dense' }, { kind: 'overview', look: 'dark' }, { kind: 'overview', look: '' }]);
+    expect(seen).toEqual([{ shape: 'table', look: 'dense' }, { shape: 'review', look: 'dark' }, { shape: 'review', look: '' }]);
   });
 
   it('names the workspace’s own default when the app already knows it — without asking for it', () => {
@@ -102,7 +108,7 @@ describe('the brief', () => {
 });
 
 describe('the draft flow', () => {
-  it('brief → questions → review: the kind and the answers go to the draft, the look to the build', async () => {
+  it('brief → questions → review: the shape and the answers go to the draft, the look to the build', async () => {
     const { calls, drafts } = serve([QUESTIONS, PLAN]);
     const onClose = vi.fn();
     mount(<DraftFlow projectId={PID} datasetId={DID} intent="sales" onClose={onClose} />);
@@ -110,13 +116,13 @@ describe('the draft flow', () => {
     // The brief, at once: nothing has been asked of the model.
     const brief = await screen.findByRole('dialog', { name: 'Draft a dashboard' });
     expect(drafts()).toEqual([]);
-    fireEvent.click(within(brief).getByRole('radio', { name: /^Overview/ }));
+    fireEvent.click(within(brief).getByRole('radio', { name: /^Review/ }));
     fireEvent.click(within(brief).getByRole('radio', { name: /^Dark/ }));
     fireEvent.click(within(brief).getByRole('button', { name: 'Draft dashboard' }));
 
     // The model's questions: one group each, nothing answered for the user.
     const ask = await screen.findByRole('dialog', { name: 'A few questions first' });
-    expect(drafts()).toEqual([{ projectId: PID, datasetId: DID, intent: 'sales', kind: 'overview', clarify: true }]);
+    expect(drafts()).toEqual([{ projectId: PID, datasetId: DID, intent: 'sales', shape: 'review', clarify: true }]);
     const measure = within(ask).getByRole('radiogroup', { name: 'Which measure?' });
     expect(within(measure).getAllByRole('radio').map((r) => (r as HTMLInputElement).value)).toEqual(['Revenue', 'Order count']);
     expect(within(within(ask).getByRole('radiogroup', { name: 'Compared how?' })).getAllByRole('radio')).toHaveLength(3);
@@ -128,7 +134,7 @@ describe('the draft flow', () => {
     fireEvent.click(within(measure).getByRole('radio', { name: 'Revenue' }));
     fireEvent.click(within(ask).getByRole('button', { name: 'Continue' }));
     const review = await screen.findByRole('dialog', { name: REVIEW });
-    expect(drafts()[1]).toEqual({ projectId: PID, datasetId: DID, intent: 'sales', kind: 'overview', clarify: true, answers: [{ ask: 'Which measure?', answer: 'Revenue' }] });
+    expect(drafts()[1]).toEqual({ projectId: PID, datasetId: DID, intent: 'sales', shape: 'review', clarify: true, answers: [{ ask: 'Which measure?', answer: 'Revenue' }] });
     expect(drafts()).toHaveLength(2);
     expect(within(review).getByText('Sales overview')).toBeTruthy();
     expect(calls.some((c) => c.channel === 'analysis:buildPlan')).toBe(false); // nothing is created until the click
@@ -147,8 +153,8 @@ describe('the draft flow', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Skip — just build it' }));
     await screen.findByRole('dialog', { name: REVIEW });
     expect(drafts()).toEqual([
-      { projectId: PID, kind: 'explore', clarify: true },
-      { projectId: PID, kind: 'explore', clarify: true, answers: [] },
+      { projectId: PID, shape: 'auto', clarify: true },
+      { projectId: PID, shape: 'auto', clarify: true, answers: [] },
     ]);
   });
 
@@ -159,7 +165,7 @@ describe('the draft flow', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Draft dashboard' }));
     const review = await screen.findByRole('dialog', { name: REVIEW });
     expect(screen.queryByRole('dialog', { name: 'A few questions first' })).toBeNull();
-    expect(drafts()).toEqual([{ projectId: PID, intent: 'revenue by region', kind: 'explore', clarify: true }]);
+    expect(drafts()).toEqual([{ projectId: PID, intent: 'revenue by region', shape: 'auto', clarify: true }]);
     fireEvent.click(within(review).getByRole('button', { name: 'Create dashboard' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(calls.find((c) => c.channel === 'analysis:buildPlan')?.payload).toEqual({ projectId: PID, plan: { name: 'Mine' } });
@@ -168,13 +174,35 @@ describe('the draft flow', () => {
   it('with the brief already chosen (the wizard), it skips its own and drafts at once', async () => {
     const { calls, drafts } = serve([PLAN]);
     const onClose = vi.fn();
-    mount(<DraftFlow projectId={PID} datasetId={DID} intent="sales" brief={{ kind: 'report', look: 'executive' }} onClose={onClose} />);
+    mount(<DraftFlow projectId={PID} datasetId={DID} intent="sales" brief={{ shape: 'table', look: 'executive' }} onClose={onClose} />);
     const review = await screen.findByRole('dialog', { name: REVIEW });
-    expect(screen.queryByRole('radiogroup', { name: 'Kind' })).toBeNull();
-    expect(drafts()).toEqual([{ projectId: PID, datasetId: DID, intent: 'sales', kind: 'report', clarify: true }]);
+    expect(screen.queryByRole('radiogroup', { name: 'Shape' })).toBeNull();
+    expect(drafts()).toEqual([{ projectId: PID, datasetId: DID, intent: 'sales', shape: 'table', clarify: true }]);
     fireEvent.click(within(review).getByRole('button', { name: 'Create dashboard' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(calls.find((c) => c.channel === 'analysis:buildPlan')?.payload).toEqual({ projectId: PID, plan: PLAN.plan, style: 'executive' });
+  });
+
+  it('the review names the shape the plan follows, the app\'s takeaway and each chart\'s note', async () => {
+    const shaped = {
+      ...PLAN,
+      shape: 'visual',
+      takeaway: 'West leads revenue at 3.8M, 2.4× East',
+      sheets: [{ name: 'Overview', visuals: [{ name: 'Who leads?', chartType: 'bar', data: null, note: 'Not computed here.', cardNote: 'Read the leader first' }] }],
+    };
+    serve([shaped]);
+    mount(<DraftFlow projectId={PID} intent="sales" brief={{ shape: 'auto', look: '' }} onClose={() => {}} />);
+    const review = await screen.findByRole('dialog', { name: REVIEW });
+    expect(within(review).getByText('Visual analysis')).toBeTruthy(); // the registry's title, not the id
+    expect(within(review).getByText('West leads revenue at 3.8M, 2.4× East')).toBeTruthy();
+    expect(within(review).getByText('Read the leader first')).toBeTruthy();
+  });
+
+  it('a shape the registry does not know is not named', async () => {
+    serve([{ ...PLAN, shape: 'spiral' }]);
+    mount(<DraftFlow projectId={PID} intent="sales" brief={{ shape: 'auto', look: '' }} onClose={() => {}} />);
+    const review = await screen.findByRole('dialog', { name: REVIEW });
+    expect(DASHBOARD_SHAPES.some((x) => within(review).queryByText(x.title))).toBe(false);
   });
 
   it('shows a skeleton while the model works, on both calls', async () => {
@@ -209,7 +237,7 @@ describe('the draft flow', () => {
     expect(within(refused).getByText('The model replied with nothing usable.')).toBeTruthy();
     fireEvent.click(within(refused).getByRole('button', { name: 'Try again' }));
     await screen.findByRole('dialog', { name: REVIEW });
-    const ask = { projectId: PID, intent: 'sales', kind: 'explore', clarify: true };
+    const ask = { projectId: PID, intent: 'sales', shape: 'auto', clarify: true };
     const answered = { ...ask, answers: [{ ask: 'Which measure?', answer: 'Order count' }] };
     expect(drafts()).toEqual([ask, ask, answered, answered]);
   });

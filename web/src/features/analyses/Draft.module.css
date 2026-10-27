@@ -12,6 +12,18 @@
   font-weight: 600;
   color: var(--text-strong);
 }
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+/* The header's takeaway, as the built dashboard will read it: the app's sentence. */
+.takeaway {
+  margin: 0;
+  font-size: var(--t-13);
+  color: var(--text);
+  line-height: var(--lh-snug);
+}
 .interp {
   padding: var(--sp-12);
   border: 1px dashed var(--border-2);
@@ -172,6 +184,11 @@
   font-size: var(--t-11);
   color: var(--muted);
 }
+.cardNote {
+  margin: calc(-1 * var(--sp-4)) 0 0;
+  font-size: var(--t-12);
+  color: var(--muted);
+}
 .viz {
   position: relative;
   height: 200px;
@@ -303,6 +320,14 @@
 .tile_control {
   border-radius: var(--r-full);
   background: var(--border-3);
+}
+/* "Assistant picks": no arrangement to draw, so the sketch's frame holds the Assistant's mark. */
+.autoArt {
+  composes: kindArt;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
 }
 /* A look, drawn under ITS OWN tokens: the caller adds the dashboard style's
    classes (dashboards/Style.module.css), which redefine --bg, --surface, --accent

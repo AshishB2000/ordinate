@@ -1,52 +1,32 @@
 // The BRIEF: the two things settled before the Assistant drafts a dashboard —
-// what kind it is, and which look it gets. No model is asked to draw this; it
-// is on screen at once, as DraftFlow's first step and inside the wizard's.
+// which shape it takes, and which look it gets. No model is asked to draw this;
+// it is on screen at once, as DraftFlow's first step and inside the wizard's.
 //
-// The KIND goes to `analysis:draft`, where the server turns it into its own
-// sentence for the model (src/analysis/planClarify.ts). The LOOK goes to
+// The SHAPE goes to `analysis:draft`, where the server turns it into its own
+// sentence for the model (src/analysis/dashboardShapes.ts) — or, left to the
+// Assistant, the menu of shapes it picks one from. The LOOK goes to
 // `analysis:buildPlan` and nowhere else: a preset id the server applies, never
 // something the model is shown. "Workspace default" is no look at all — the
 // server then starts the dashboard as Settings says new ones start.
 
 import { PRESETS, styleClass, type DashStyle } from '../dashboards/DashboardChrome';
 import { usePrefs } from '../settings/api';
-import type { DraftKind, LookId } from './api';
+import { AUTO_SHAPE, DASHBOARD_SHAPES, type ShapeBox } from '../../../../src/analysis/dashboardShapes.ts';
+import { Icon } from '../../ui/icons/Icon';
+import type { DraftShape, LookId } from './api';
 import { CardRadios } from './CardRadios';
 import s from './Draft.module.css';
 
 export interface Brief {
-  kind: DraftKind;
+  /** A shape by id, or "auto" to let the Assistant pick one. */
+  shape: DraftShape;
   /** A look by preset id, or '' for the workspace's default. */
   look: LookId | '';
 }
-export const DEFAULT_BRIEF: Brief = { kind: 'explore', look: '' };
+export const DEFAULT_BRIEF: Brief = { shape: AUTO_SHAPE, look: '' };
 
-type Box = [kind: 'visual' | 'metric' | 'text' | 'control', x: number, y: number, w: number, h: number];
-
-// Each kind as the arrangement it asks the model for, on the review sketch's
-// 12-column grid — a picture of the idea, not of the page that will be drafted.
-const KINDS: { value: DraftKind; title: string; hint: string; art: Box[] }[] = [
-  {
-    value: 'explore',
-    title: 'Explore',
-    hint: 'Filters, more charts and a detail table — a dashboard to dig into.',
-    art: [['control', 0, 0, 3, 1], ['control', 3, 0, 3, 1], ['control', 6, 0, 2, 1], ['visual', 0, 1, 4, 5], ['visual', 4, 1, 4, 5], ['visual', 8, 1, 4, 5], ['visual', 0, 6, 12, 4]],
-  },
-  {
-    value: 'overview',
-    title: 'Overview',
-    hint: 'One main chart and a few big numbers, to take in at a glance.',
-    art: [['visual', 0, 0, 8, 6], ['metric', 8, 0, 4, 3], ['metric', 8, 3, 4, 3], ['visual', 0, 6, 12, 4]],
-  },
-  {
-    value: 'report',
-    title: 'Report',
-    hint: 'Charts with a note beside each, read from top to bottom.',
-    art: [['visual', 0, 0, 8, 5], ['text', 8, 0, 4, 5], ['visual', 0, 5, 8, 5], ['text', 8, 5, 4, 5]],
-  },
-];
-
-function KindArt({ boxes }: { boxes: Box[] }) {
+/** A shape's picture (dashboardShapes.ts `art`), in the review sketch's own boxes at the card's width. */
+function ShapeArt({ boxes }: { boxes: readonly ShapeBox[] }) {
   return (
     <span className={s.kindArt}>
       {boxes.map(([kind, x, y, w, h], i) => (
@@ -85,12 +65,24 @@ export function DraftBrief({ value, onChange }: { value: Brief; onChange: (next:
   const mine = LOOKS.find((l) => l.id === prefs?.branding?.dashboardStyle);
   return (
     <div className={s.body}>
-      <CardRadios
-        label="Kind"
-        hint="What the dashboard is for. The Assistant arranges it to suit."
-        value={value.kind}
-        onChange={(kind) => onChange({ ...value, kind })}
-        options={KINDS.map((k) => ({ value: k.value, title: k.title, hint: k.hint, art: <KindArt boxes={k.art} /> }))}
+      <CardRadios<DraftShape>
+        label="Shape"
+        hint="How the dashboard is built. Every figure and the takeaway sentence are computed by the app."
+        value={value.shape}
+        onChange={(shape) => onChange({ ...value, shape })}
+        options={[
+          {
+            value: AUTO_SHAPE,
+            title: 'Assistant picks',
+            hint: 'The shape that best answers your request.',
+            art: (
+              <span className={s.autoArt}>
+                <Icon name="sparkles" />
+              </span>
+            ),
+          },
+          ...DASHBOARD_SHAPES.map((x) => ({ value: x.id as DraftShape, title: x.title, hint: x.hint, art: <ShapeArt boxes={x.art} /> })),
+        ]}
       />
       <CardRadios<Brief['look']>
         as="lead"
