@@ -82,7 +82,6 @@ export function MetricBody({ card }: { card: Card }) {
     return (
       <div className={s.metric} aria-busy="true">
         <Skeleton className={s.skValue} />
-        <Skeleton className={s.skLabel} />
       </div>
     );
   }
@@ -186,8 +185,8 @@ export function MetricBody({ card }: { card: Card }) {
         onClose={() => setMenuAt(null)}
       />
       {rows && <DrillPanel target={rows} onClose={() => setRows(null)} />}
-      {/* The label goes when the delta line is there and the head already says it (kpiCompare.ts). */}
-      {!(delta && label === metricLabel(m)) && <div className={s.metricLabel}>{label}</div>}
+      {/* Under the figure only when it adds something — never the head's title again (as kpiSubtitle.ts on a published page). */}
+      {label.trim().toLowerCase() !== metricLabel(m).trim().toLowerCase() && <div className={s.metricLabel}>{label}</div>}
       {delta}
       {whatIfNote && <p className={s.paramErr}>{whatIfNote}</p>}
       {t.paramErrors && t.paramErrors.length > 0 && <p className={s.paramErr}>{t.paramErrors[0]}</p>}

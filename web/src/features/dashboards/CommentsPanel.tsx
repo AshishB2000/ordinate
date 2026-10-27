@@ -94,7 +94,7 @@ export function CommentButton({ ed, card }: { ed: EditorApi; card: Card }) {
   const open = threads.filter((c) => !c.resolvedAt).length;
   const label = open ? `${open} open comment${open === 1 ? '' : 's'}` : threads.length ? 'Comments — all resolved' : 'Comment on this';
   return (
-    <button type="button" className={open ? `${s.cmtBtn} ${s.cmtOn}` : s.cmtBtn} aria-label={label} title={label} onClick={() => ed.view.openComments({ kind: 'card', id: card.id })}>
+    <button type="button" className={open ? `${s.cmtBtn} ${s.cmtOn}` : s.cmtBtn} data-keep={open ? '' : undefined} aria-label={label} title={label} onClick={() => ed.view.openComments({ kind: 'card', id: card.id })}>
       <Icon name="message-square" size={12} />
       {open > 0 && <span className={s.cmtCount}>{open}</span>}
     </button>

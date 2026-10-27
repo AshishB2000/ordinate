@@ -147,7 +147,8 @@ export function MapView({ data, chartType, label, projectId, onMarkClick, classN
       }
 
       try {
-        map = createMap(ml, host, offline ? t.inset : null);
+        // A theme switch makes a new map (the effect keys on it), so the tiles' dark paint follows the card's surface.
+        map = createMap(ml, host, offline ? t.inset : null, t.dark);
       } catch {
         return setStatus({ kind: 'nowebgl' });
       }

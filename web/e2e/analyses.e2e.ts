@@ -162,6 +162,14 @@ e2e('the sample dashboard on the canvas: a control narrows a KPI on the server, 
   await page.getByRole('group', { name: 'Click filters' }).getByText('Click a mark on a chart to filter the other cards.').waitFor();
   await screens(page, 'analyses-editor');
 
+  // A card head's actions are faded until the card is hovered (or focused), then shown; never removed.
+  const propsBtn = await revenue.getByRole('button', { name: 'Card properties' }).elementHandle();
+  const opacity = (v: string) => page.waitForFunction(({ b, v }) => getComputedStyle(b).opacity === v, { b: propsBtn, v });
+  await page.mouse.move(0, 0);
+  await opacity('0');
+  await revenue.hover();
+  await opacity('1');
+
   // A dropdown control on region: the KPI is recomputed by the server under it.
   await page.getByRole('button', { name: 'Control' }).click();
   await page.getByRole('menuitem', { name: 'Filter control…' }).click();

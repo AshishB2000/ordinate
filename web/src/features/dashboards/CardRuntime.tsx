@@ -302,7 +302,7 @@ export function WatchedBell({ ed, card }: { ed: EditorApi; card: Card }) {
   if (!rule) return null;
   const fired = q.data?.events.some((e) => e.ruleId === rule.id && !e.seen);
   return (
-    <span className={fired ? `${s.watched} ${s.fired}` : s.watched} title={fired ? `“${rule.name}” fired` : `Watched by “${rule.name}”`} role="img" aria-label={fired ? 'Alert fired' : 'Watched by an alert'}>
+    <span className={fired ? `${s.watched} ${s.fired}` : s.watched} data-keep="" title={fired ? `“${rule.name}” fired` : `Watched by “${rule.name}”`} role="img" aria-label={fired ? 'Alert fired' : 'Watched by an alert'}>
       <Icon name="bell" size={12} />
     </span>
   );
