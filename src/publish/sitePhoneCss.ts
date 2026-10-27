@@ -40,13 +40,14 @@ export function phoneCss(max: number): string {
       border-radius: 999px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
     .pub-filters-badge[hidden] { display: none; }
     .pub-filters { display: none; }
+    .pub-takeaway { margin: 12px 0 0; font-size: 14px; }
     .pub-hint { margin: 10px 0 0; }
     .pub-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 4px -16px 0; padding: 0 16px; }
     .pub-tab { flex: 0 0 auto; min-height: 44px; white-space: nowrap; }
 
     .pub-grid { display: flex; flex-direction: column; margin-top: 12px; }
     .pub-grid > .pub-card { flex: 0 0 auto; order: var(--pc-p-ord, 0); height: calc(var(--pc-p-h, 6) * 40px + (var(--pc-p-h, 6) - 1) * var(--gap)); }
-    .pub-grid > .pub-card--metric { height: 112px; }
+    .pub-grid > .pub-card--metric { height: auto; min-height: 112px; }
     .pub-grid > .pub-card--text, .pub-grid > .pub-card--summary, .pub-grid > .pub-card--broken { height: auto; min-height: 40px; }
     .pub-grid > .pub-in-strip { display: none; }
     .pub-text-h, .pub-text-p { max-width: 68ch; }
@@ -56,7 +57,7 @@ export function phoneCss(max: number): string {
     .pub-kpis-track { display: flex; gap: var(--gap); overflow-x: auto; overscroll-behavior-x: contain; padding: 2px 16px;
       scroll-padding: 0 16px; scroll-snap-type: x mandatory; scrollbar-width: none; }
     .pub-kpis-track::-webkit-scrollbar, .pub-nav::-webkit-scrollbar, .pub-tabs::-webkit-scrollbar { display: none; }
-    .pub-kpis-track > .pub-card { flex: 0 0 calc((100% - 32px - var(--gap)) / 2.2); height: 112px; scroll-snap-align: start; }
+    .pub-kpis-track > .pub-card { flex: 0 0 calc((100% - 32px - var(--gap)) / 2.2); min-height: 112px; padding: 12px 14px; scroll-snap-align: start; }
     .pub-kpis-track .pub-kpi-value { font-size: min(var(--kpi-size), 26px); }
     .pub-kpis-dots { display: flex; justify-content: center; min-height: 22px; }
     .pub-dot { position: relative; width: 22px; height: 22px; padding: 0; border: 0; background: none; cursor: pointer; }
