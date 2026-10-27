@@ -21,6 +21,9 @@ import { FileTokenError, resolveUpload } from '../server/files';
 import { isLiveRefusalReply, liveRefusal } from '../data/liveDataset';
 import { dashboardForCaller, tagForCaller, visualForCaller } from './rowDoors';
 import { figureAsk } from '../analysis/figureAsk';
+import { kpiTrend } from './kpiTrend';
+import { paramValues, resolveFilterParams } from '../analysis/params';
+import { sanitizeDashboardFilters } from '../analysis/dashboards';
 
 /** What a card needs of a Visual to draw it — the record minus its bookkeeping. */
 function visualDef(v: visuals.Visual) {
@@ -131,6 +134,13 @@ export function register(): void {
           card: { metricId: it.metricId, datasetId: it.datasetId, column: it.column, aggregation: it.aggregation },
           filters: it.filters, compare: it.compare, params, currency,
         });
+      }
+      // A small trend (kpiTrend.ts): the measure per month, through the chart door. Not under "As of", as a Compare
+      // is not. shortcut: a converted currency (fx) skips it — its months would be in the source currency.
+      if (it.trend && !asOf && !currency) {
+        const values = paramValues(params);
+        const trend = await kpiTrend(projectId, it, resolveFilterParams(sanitizeDashboardFilters(it.filters), values).steps, values);
+        if (trend) res.trend = trend;
       }
       // A what-if card (analysis/scenarios): the saved metric under the scenario, with the sheet's filters and
       // parameters on BOTH sides — a driver that follows a parameter moves as its control does. Not under

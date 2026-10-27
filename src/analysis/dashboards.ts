@@ -37,6 +37,8 @@ import type { Visual } from './visuals';
 import { sanitizeSteps } from '../data/transforms';
 import type { FilterStep } from '../data/transforms';
 import { sanitizePeriod, sanitizeCompare } from './dateIntel';
+import { cardNote } from './dashboardShapes';
+export { cardNote }; // the card note's one rule, kept with the shapes so the web can bundle it
 import type { CompareMode, PeriodPreset } from './dateIntel';
 import { sanitizeTableCalc } from './tableCalc';
 import type { TableCalc } from './tableCalc';
@@ -490,12 +492,6 @@ export function sanitizeCard(raw: unknown): Card | null {
   const note = cardNote(o.note);
   if (note) card.note = note;
   return card;
-}
-
-/** A card's note: one line — line breaks folded, capped — or '' for none. */
-export const CARD_NOTE_MAX = 140;
-export function cardNote(raw: unknown): string {
-  return typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim().slice(0, CARD_NOTE_MAX).trim() : '';
 }
 
 // Map+filter: keep only cards that survive sanitizeCard.

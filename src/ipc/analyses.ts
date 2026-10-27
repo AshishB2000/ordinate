@@ -5,6 +5,7 @@ import { draftDashboard, dispatch, parseFirstObject, type NeutralMsg } from '../
 import * as plan from '../analysis/analysisPlan';
 import { buildFactsText } from '../analysis/planFacts';
 import { CLARIFY_PROMPT, validateQuestions } from '../analysis/planClarify';
+import { shapeOf } from '../analysis/dashboardShapes';
 import { loadDraftFacts } from './draftFacts';
 import * as planPreview from '../analysis/planPreview';
 import * as planBuild from '../analysis/planBuild';
@@ -139,11 +140,11 @@ export function register() {
     trash.trashRecord(projectId, 'dashboard', id)); // to the Trash, restorable for 30 days
 
   // Exported so the self-check drives the real handler body, not a copy of it.
-  ipcMain.handle('analysis:draft', async (_e, { projectId, datasetId, intent, kind, clarify, answers }: any = {}) =>
+  ipcMain.handle('analysis:draft', async (_e, { projectId, datasetId, intent, shape, clarify, answers }: any = {}) =>
     draftAnalysisPlan(projectId, {
       datasetId: typeof datasetId === 'string' ? datasetId : undefined,
       intent: typeof intent === 'string' ? intent : undefined,
-      kind, clarify, answers, // each re-checked where it is used
+      shape, clarify, answers, // each re-checked where it is used
     }));
 
   // Re-validate and re-preview a plan the USER edited. No model, so this works
@@ -216,8 +217,8 @@ export function register() {
  * `{ ok:false, notReady:true }` with no model configured, which is the whole of
  * what "AI is optional" costs this surface — preview and build still work.
  *
- * ASK FIRST (planClarify.ts). `kind` adds the app's sentence for that kind of
- * dashboard to the facts. With `clarify: true` and no `answers`, the model is
+ * ASK FIRST (planClarify.ts). `shape` adds the app's sentence for that dashboard
+ * shape (or, for "auto", the menu of shapes) to the facts. With `clarify: true` and no `answers`, the model is
  * also told it may reply with questions instead of a plan, and valid ones come
  * back as `{ ok:true, questions }` — and nothing else: no plan, no preview.
  * The caller asks the user and calls again with `answers`.
@@ -230,7 +231,7 @@ export function register() {
  */
 export async function draftAnalysisPlan(
   projectId: string,
-  opts: { datasetId?: string; intent?: string; kind?: unknown; clarify?: unknown; answers?: unknown } = {},
+  opts: { datasetId?: string; intent?: string; shape?: unknown; clarify?: unknown; answers?: unknown } = {},
 ): Promise<any> {
   try {
     const ctx = await plan.loadPlanContext(projectId, opts.datasetId);
@@ -246,7 +247,7 @@ export async function draftAnalysisPlan(
     }
 
     // App-computed, row-free, secret-free. See planFacts.buildFactsText.
-    const facts = buildFactsText(ctx, opts.intent, await loadDraftFacts(projectId, ctx), { kind: opts.kind, answers: opts.answers });
+    const facts = buildFactsText(ctx, opts.intent, await loadDraftFacts(projectId, ctx), { shape: opts.shape, answers: opts.answers });
     const asking = opts.clarify === true && opts.answers === undefined;
     let res = asking ? await draftDashboard(facts, plan.DRAFT_DASHBOARD_SYSTEM_PROMPT + CLARIFY_PROMPT) : await draftDashboard(facts);
     // Only the asking call's reply is ever read for questions.
@@ -263,11 +264,15 @@ export async function draftAnalysisPlan(
       return { ok: false, error: res.message || 'Could not draft an analysis' };
     }
 
+    // The shape the user chose is the plan's, whatever the model wrote; left to
+    // the model, its pick stands only if it names a shape (validatePlan).
+    const chosen = shapeOf(opts.shape);
+    const structure = chosen && res.structure && typeof res.structure === 'object' ? { ...res.structure, shape: chosen.id } : res.structure;
     // Reuses the context the FACTS block was built from — the model saw exactly
     // the records this validates against.
     return await planPreview.previewPlan(
       projectId,
-      await withInsightCharts(projectId, res.structure, ctx, opts.intent),
+      await withInsightCharts(projectId, structure, ctx, opts.intent),
       ctx,
     );
   } catch (err: any) {
