@@ -13,7 +13,7 @@ import type { ChartDataShape } from './types';
 type Sort = { col: number; dir: 'asc' | 'desc' } | null;
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-export function RichTable({ data, label }: { data: ChartDataShape; label?: string }) {
+export function RichTable({ data, label, labelHeader }: { data: ChartDataShape; label?: string; labelHeader?: string }) {
   const m = tableModel(data);
   const [sort, setSort] = useState<Sort>(null);
   const [query, setQuery] = useState('');
@@ -49,7 +49,7 @@ export function RichTable({ data, label }: { data: ChartDataShape; label?: strin
         <table className={`${s.table} ${s.pinned}`} aria-label={label}>
           <thead>
             <tr>
-              {head(-1, m.labelHeader)}
+              {head(-1, labelHeader || m.labelHeader)}
               {m.series.map((c, j) => head(j, c.name))}
             </tr>
           </thead>
