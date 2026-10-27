@@ -9,7 +9,6 @@ import { useCallback, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { nav } from '../../api/client';
 import { Page } from '../../app/blocks';
-import { THEME_PREFS, useThemePref, type ThemePref } from '../../app/theme';
 import { Button } from '../../ui/Button';
 import { SkeletonBlock } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
@@ -22,10 +21,10 @@ import { useCommands } from '../palette/registry';
 import { KeyCaps, ShortcutList } from '../palette/ShortcutsSheet';
 import { PrivacySection } from './PrivacySection';
 import { NotificationsGroup } from './NotificationsGroup';
-import { Group, Row, Segmented } from './Rows';
+import { AppearanceGroup } from './AppearanceGroup';
+import { Group } from './Rows';
 import s from './Settings.module.css';
 
-const THEME_LABEL: Record<ThemePref, string> = { system: 'System', light: 'Light', dark: 'Dark' };
 const TABS = ['you', 'privacy'] as const;
 type TabId = (typeof TABS)[number];
 
@@ -79,7 +78,6 @@ function LinkCard({ to, icon, title, desc }: { to: string; icon: IconName; title
 }
 
 function You({ me }: { me: Me }) {
-  const [theme, setTheme] = useThemePref();
   const { project } = useCurrentProject();
   const admin = me.user?.role === 'admin';
   return (
@@ -87,11 +85,7 @@ function You({ me }: { me: Me }) {
       <div className={s.side}>
         <Who me={me} />
         <NotificationsGroup />
-        <Group title="Appearance" desc="Kept in this browser, like the system setting it can follow.">
-          <Row title="Theme" desc="Follow the system, or always light or dark.">
-            <Segmented label="Theme" value={theme} onChange={setTheme} options={THEME_PREFS.map((p) => ({ value: p, label: THEME_LABEL[p] }))} />
-          </Row>
-        </Group>
+        <AppearanceGroup />
         <Group
           title="Keyboard"
           desc={

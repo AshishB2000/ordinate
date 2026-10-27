@@ -1,0 +1,94 @@
+/* Settings → Appearance (AppearanceGroup.tsx): the canvas chips and the
+   Monochrome swatch. A chip's preview carries data-canvas, so every token in
+   it below is that canvas's own, in the current theme (appearance.css). */
+
+/* Ten canvases: two rows of five, or a wrap of what fits on a phone. */
+.canvases {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--sp-8);
+  width: 100%;
+}
+@media (max-width: 640px) {
+  .canvases {
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  }
+}
+.canvas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--t-12);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.canvas:hover {
+  border-color: var(--border-2);
+}
+.canvas[aria-checked='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  color: var(--text-strong);
+}
+
+/* The window in small: the chrome plane, and the canvas raised off it. */
+.preview {
+  display: block;
+  height: 56px;
+  padding: var(--sp-8) 0 0 var(--sp-12);
+  border-radius: var(--r-sm);
+  background: var(--chrome);
+  overflow: hidden;
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  height: 100%;
+  padding: var(--sp-8);
+  background: var(--bg);
+  border: 1px solid var(--border-hairline);
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: var(--r-sm) 0 0 0;
+}
+.title,
+.line,
+.pill {
+  display: block;
+  height: 5px;
+  border-radius: var(--r-full);
+}
+.title {
+  width: 64%;
+  background: var(--text-strong);
+}
+.line {
+  width: 84%;
+  height: 4px;
+  background: var(--muted);
+}
+.pill {
+  width: 18px;
+  height: 7px;
+  margin-top: auto;
+  margin-bottom: var(--sp-4);
+  background: var(--accent);
+}
+.name {
+  padding: 0 var(--sp-4) 2px;
+  font-weight: 500;
+}
+
+/* Ink on light, chalk on dark: the swatch is both halves. A class and an attribute, so it
+   outranks Settings.module.css .swatch whichever sheet loads first. */
+.mono[role='radio'] {
+  --sw: var(--muted);
+  background: linear-gradient(135deg, var(--text-strong) 50%, var(--surface) 50%);
+}

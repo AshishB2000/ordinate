@@ -43,12 +43,19 @@ function contrast(a: string, b: string): number {
 
 const HOSTILE = ['#ffff00', '#ffffff', '#000000', '#00ff00', '#808080', '#1a1a1a', '#ff00ff', '#7fffd4'];
 
-/** A rule's custom property, read out of a stylesheet (comments dropped). */
+const readCss = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+/** A rule's custom property, read out of a stylesheet (comments dropped): the first rule whose selector list names `sel`. */
 function cssToken(rel: string, sel: string, name: string): string {
-  const css = readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-  const body = new RegExp(`(^|[;}\\s])${sel.replace(/[.[\]"=]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[2] ?? '';
+  const body = [...readCss(rel).matchAll(/([^{}]+)\{([^{}]*)\}/g)].find((r) => r[1].split(',').some((x) => x.trim() === sel))?.[2] ?? '';
   return new RegExp(`${name}\\s*:\\s*(#[0-9a-f]{6})`, 'i').exec(body)?.[1] ?? `${sel} has no ${name}`;
 }
+
+/** Every canvas a member can pick (appearance.css; Slate is theme.css): its light and its dark rule. */
+const CANVASES: Array<[string, string, string]> = [
+  ['../theme.css', ':root', '[data-theme="dark"]'],
+  ...[...readCss('../appearance.css').matchAll(/^\[data-canvas="(\w+)"\] \{/gm)].map((m): [string, string, string] => ['../appearance.css', `[data-canvas="${m[1]}"]`, `[data-theme="dark"][data-canvas="${m[1]}"]`]),
+];
 
 describe('the desktop palette, recorded', () => {
   // The desktop walked against two dark surfaces; the golden holds its answers for those. Today's list
@@ -56,7 +63,8 @@ describe('the desktop palette, recorded', () => {
   // input to the same algorithm, so each comparison below passes the recorded one.
   it('the dark surfaces: the recorded ones, and today\'s read out of the CSS', () => {
     deepStrictEqual(G.darkSurfaces, ['#1c1c20', '#232327']);
-    const today = ['--surface', '--surface-float'].flatMap((t) => [cssToken('../theme.css', '[data-theme="dark"]', t), cssToken('../features/dashboards/Style.module.css', '.theme_dark', t)]);
+    expect(CANVASES).toHaveLength(10);
+    const today = ['--surface', '--surface-float'].flatMap((t) => [...CANVASES.map(([file, , dark]) => cssToken(file, dark, t)), cssToken('../features/dashboards/Style.module.css', '.theme_dark', t)]);
     deepStrictEqual([...BRAND_DARK_SURFACES].sort(), [...new Set(today)].sort());
   });
 
@@ -101,7 +109,8 @@ function onTint(ink: string, tint: string, under: string): number {
 describe('the accent as text reads on its tint (docs/design-floor, review round)', () => {
   it('the ink surfaces: every surface of every sheet, read out of the CSS', () => {
     const STYLE = '../features/dashboards/Style.module.css';
-    const sheets: Array<[string, string, 'light' | 'dark']> = [['../theme.css', ':root', 'light'], ['../theme.css', '[data-theme="dark"]', 'dark'],
+    const sheets: Array<[string, string, 'light' | 'dark']> = [
+      ...CANVASES.flatMap(([file, light, dark]): Array<[string, string, 'light' | 'dark']> => [[file, light, 'light'], [file, dark, 'dark']]),
       [STYLE, '.theme_clean', 'light'], [STYLE, '.theme_executive', 'light'], [STYLE, '.theme_dark', 'dark']];
     const want = { light: new Set<string>(), dark: new Set<string>() };
     for (const [file, sel, side] of sheets) for (const t of ['--bg', '--surface', '--surface-2', '--surface-3', '--inset', '--surface-float']) want[side].add(cssToken(file, sel, t));

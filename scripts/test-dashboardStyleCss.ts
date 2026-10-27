@@ -53,21 +53,17 @@ function decomment(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, '');
 }
 
-function esc(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** The custom properties declared by the rule whose selector is exactly `sel`.
+/** The custom properties declared by the first rule whose selector list names
+ *  exactly `sel` (theme.css's rules also name the Slate preview chip).
  *  `null` when there is no such rule — a missing block and an empty one are
- *  different bugs and must not report the same way. Preset blocks never nest,
- *  so scanning to the first `}` is enough. */
+ *  different bugs and must not report the same way. */
 function propsOf(css: string, sel: string): Set<string> | null {
-  const m = new RegExp('(^|[;}\\s])' + esc(sel) + '\\s*\\{([^}]*)\\}').exec(css);
-  if (!m) return null;
+  const r = rules(css).find((x) => x.sel.split(',').some((s) => s.trim() === sel));
+  if (!r) return null;
   const out = new Set<string>();
   const re = /(^|[;{\s])(--[A-Za-z0-9_-]+)\s*:/g;
   let d: RegExpExecArray | null;
-  while ((d = re.exec(m[2]))) out.add(d[2]);
+  while ((d = re.exec(r.body))) out.add(d[2]);
   return out;
 }
 

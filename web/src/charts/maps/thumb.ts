@@ -71,6 +71,8 @@ export interface ThumbTheme {
   line: string;
   accent: string;
   dark: boolean;
+  /** The value ramp, near the surface first; the map's own blue one when absent. */
+  ramp?: readonly string[];
 }
 
 /** A region (or bubble) thumbnail over a level's boundaries. False when there is nothing to draw. */
@@ -86,7 +88,7 @@ export function drawRegionThumb(
   if (!geo.items.length || !features.length) return false;
   const bboxes = features.map((f) => geoBBox(f && f.geometry));
   // '' marks "no data", so the fit can tell a matched region from one that merely shares the empty colour.
-  const raw = mapThumbFills(features, geo.items, '', (t) => choroplethColor(t, theme.dark));
+  const raw = mapThumbFills(features, geo.items, '', (t) => choroplethColor(t, theme.dark, theme.ramp));
   const fills = bubble ? features.map(() => theme.empty) : raw.map((c) => c || theme.empty);
   // Fit the MATCHED regions, as the live map does; nothing matched → the whole level.
   let fit: BBox | null = null;
@@ -168,7 +170,7 @@ export function drawGeoThumb(ctx: CanvasRenderingContext2D, w: number, h: number
       const ring: number[][] = [];
       for (let i = 0; i < x.ring.length; i += 2) ring.push([x.ring[i], x.ring[i + 1]]);
       trace(ctx, [ring], project);
-      ctx.fillStyle = choroplethColor(unit(x.value, min, max), theme.dark);
+      ctx.fillStyle = choroplethColor(unit(x.value, min, max), theme.dark, theme.ramp);
       ctx.fill();
     }
   }

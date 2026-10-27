@@ -6,6 +6,7 @@ import { appRoutes } from './app/routes';
 import { RpcError } from './api/client';
 import { LiveRefusalError } from './features/live/refusal';
 import './theme.css';
+import './appearance.css'; // after theme.css: a picked canvas wins over its Slate defaults
 import './app/base.css';
 
 const queryClient = new QueryClient({

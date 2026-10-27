@@ -110,7 +110,7 @@ describe('the "Did you mean" row', () => {
   it('wears the theme’s tokens only — every colour it uses is defined for light AND dark, none written in', () => {
     const read = (rel: string): string => readFileSync(new URL(rel, import.meta.url), 'utf8');
     const theme = read('../../theme.css');
-    const at = theme.indexOf('[data-theme="dark"] {');
+    const at = theme.search(/^\[data-theme="dark"\]/m); // the dark rule (it also names the Slate preview chip)
     const [light, dark] = [theme.slice(0, at), theme.slice(at)];
     const css = read('./DidYouMean.module.css');
     const card = read('./AnswerCard.module.css');

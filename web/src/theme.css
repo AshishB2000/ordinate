@@ -11,7 +11,8 @@
    Fonts use system stacks (no remote fetch — the app is local-first).
    ═══════════════════════════════════════════════════════════════════════ */
 
-:root {
+:root,
+[data-canvas="slate"] {
   /* chart palette — shared across themes (blue, teal, amber, violet, rose) */
   /* Restrained, accent-led categorical palette (cool, harmonious — not a rainbow) */
   /* Each reads the workspace accent's ramp (--brand-chart-*, set by brand.ts
@@ -24,7 +25,7 @@
   --chart-6: var(--brand-chart-6, #b45309);  /* amber-700    */
   --chart-7: var(--brand-chart-7, #be185d);  /* pink-700     */
   --chart-8: var(--brand-chart-8, #4d7c0f);  /* lime-700     */
-  --chart-accent: var(--brand-accent, #2563eb);
+  --chart-accent: var(--user-accent, var(--brand-accent, #2563eb));
 
   /* type + shape */
   --font-ui: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system,
@@ -129,32 +130,42 @@
   --dash-gap: 12px;
   --dash-row: 48px;
 
-  /* ── Light (default) ── */
-  --bg: #f7f7f8;
+  /* ── Light (default): the Slate canvas ──────────────────────────────
+     The window is two planes: --chrome under the top bar and the rail, and
+     --bg, the canvas the page sits on, raised off it (Shell.module.css). The
+     other nine canvases a member can pick are appearance.css; this block is
+     also what the Slate preview chip draws (Settings → Appearance).
+     --chrome is the title bar's colour by its new name: theme.css sets
+     --titlebar per theme (the dashboard sheets redefine that one already),
+     and a picked canvas sets --chrome itself (appearance.css). */
+  --chrome: var(--titlebar);
+  --bg: #f9fafc;
   --surface: #ffffff;
-  --surface-2: #f3f4f6;
-  --surface-3: #eaecf0;
-  --inset: #f2f4f7;
+  --surface-2: #f0f3f8;
+  --surface-3: #e4e9f0;
+  --inset: #f2f5f9;
 
   /* Text — the AA floor (docs/design-floor, theme.contrast.test.ts): --text,
      --muted and --text-dim read at 4.5:1 on every surface below; --text-faint
      at 3:1, for disabled controls, decorative icons and dividers only — never
-     for words someone has to read. Values from the desktop's AA pass. */
-  --text: #18181b;
-  --text-strong: #0f1117;
-  --muted: #5f6672;
-  --text-dim: #636a75;
-  --text-faint: #6b7280;
+     for words someone has to read. */
+  --text: #0e1628;
+  --text-strong: #070d1b;
+  --muted: #536077;
+  --text-dim: #566279;
+  --text-faint: #6a768c;
 
-  --border: #e5e7eb;
-  --border-2: #d6dae1;
-  --border-3: #bfc5cf;
+  --border: #dfe5ee;
+  --border-2: #ced7e2;
+  --border-3: #b5c0cf;
 
-  --accent: var(--brand-accent, #2563eb);
-  --accent-2: var(--brand-accent-2, #1d4fd0);
-  --accent-soft: var(--brand-accent-soft, rgba(37, 99, 235, 0.08));
-  --accent-line: var(--brand-accent-line, rgba(37, 99, 235, 0.22));
-  --accent-ink: #ffffff;
+  /* The accent: a member's own highlight (--user-*, appearance.css) first,
+     then the workspace's brand (--brand-*, palette.ts), then the app's blue. */
+  --accent: var(--user-accent, var(--brand-accent, #2563eb));
+  --accent-2: var(--user-accent-2, var(--brand-accent-2, #1d4fd0));
+  --accent-soft: var(--user-accent-soft, var(--brand-accent-soft, rgba(37, 99, 235, 0.08)));
+  --accent-line: var(--user-accent-line, var(--brand-accent-line, rgba(37, 99, 235, 0.22)));
+  --accent-ink: var(--user-accent-ink, #ffffff);
 
   --error: #e11d48;
   --error-soft: rgba(225, 29, 72, 0.09);
@@ -165,12 +176,12 @@
   /* A tone as TEXT (a Badge on its -soft fill): the fill colours above are too
      light to read at 11px, so each tone has its own ink, 4.5:1 on its soft fill
      over every surface. --accent-text follows a workspace accent (brand.ts). */
-  --accent-text: var(--brand-accent-2, #1d4fd0);
+  --accent-text: var(--user-accent-2, var(--brand-accent-2, #1d4fd0));
   --ok-text: #065f46;
   --warn-text: #92400e;
   --error-text: #be123c;
 
-  --titlebar: #fafbfc;
+  --titlebar: #ebeff5;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
   --shadow-md: 0 10px 28px -12px rgba(15, 23, 42, 0.18);
   --shadow-lg: 0 30px 70px -24px rgba(15, 23, 42, 0.28);
@@ -196,42 +207,38 @@
   --surface-float: #ffffff;
   /* 8% of the text colour — a hairline that belongs to the palette rather
      than a grey picked to sit next to it. */
-  --border-hairline: rgba(24, 24, 27, 0.08);
+  --border-hairline: rgba(14, 22, 40, 0.08);
 
   /* One focus treatment, defined once. 2px accent at 40%, OUTSIDE the
      control so it never eats a pixel of the border it sits on. */
-  --focus-ring: var(--brand-focus, rgba(37, 99, 235, 0.4));
+  --focus-ring: var(--user-focus, var(--brand-focus, rgba(37, 99, 235, 0.4)));
   --focus-ring-w: 2px;
   color-scheme: light;
 }
 
-[data-theme="dark"] {
-  /* Dark is retuned so the surfaces STEP UP in lightness with elevation —
-     page → card → floating — rather than all sitting within a point or two
-     of each other. On a dark ground a card cannot be separated by a shadow
-     (a shadow on black is invisible), so lightness is the only channel
-     left, and it has to actually be used. */
-  --bg: #141417;
-  --surface: #1c1c20;
-  --surface-2: #26262c;
-  --surface-3: #303038;
-  --inset: #18181c;
+[data-theme="dark"],
+[data-theme="dark"] [data-canvas="slate"] {
+  /* Dark is a navy slate whose planes STEP UP in lightness — chrome (--titlebar) →
+     canvas → card → floating. On a dark ground a card cannot be separated
+     by a shadow (a shadow on black is invisible), so lightness is the only
+     channel left, and it has to actually be used. */
+  --bg: #0b111c;
+  --surface: #101826;
+  --surface-2: #172134;
+  --surface-3: #1f2b41;
+  --inset: #080d17;
 
-  --text: #ececee;
+  --text: #e6ecf6;
   --text-strong: #ffffff;
-  --muted: #a8aeb9;
-  --text-dim: #9ca3af;
-  --text-faint: #8a919d;
+  --muted: #98a4b9;
+  --text-dim: #8f9bb0;
+  --text-faint: #76839a;
 
-  --border: #2e2e33;
-  --border-2: #3a3a42;
-  --border-3: #4a4a55;
-
-  --accent: var(--brand-dk-accent, #3b82f6);
-  --accent-2: var(--brand-dk-accent-2, #2f6fe0);
-  --accent-soft: var(--brand-dk-accent-soft, rgba(59, 130, 246, 0.16));
-  --accent-line: var(--brand-dk-accent-line, rgba(59, 130, 246, 0.32));
-  --accent-ink: #ffffff;
+  --accent: var(--user-dk-accent, var(--brand-dk-accent, #3b82f6));
+  --accent-2: var(--user-dk-accent-2, var(--brand-dk-accent-2, #2f6fe0));
+  --accent-soft: var(--user-dk-accent-soft, var(--brand-dk-accent-soft, rgba(59, 130, 246, 0.16)));
+  --accent-line: var(--user-dk-accent-line, var(--brand-dk-accent-line, rgba(59, 130, 246, 0.32)));
+  --accent-ink: var(--user-dk-accent-ink, #ffffff);
 
   /* Same hues lifted in lightness/saturation so they read on the dark surface */
   --chart-1: var(--brand-dk-chart-1, #3b82f6);  /* accent blue */
@@ -242,7 +249,7 @@
   --chart-6: var(--brand-dk-chart-6, #fbbf24);  /* amber-400   */
   --chart-7: var(--brand-dk-chart-7, #f472b6);  /* pink-400    */
   --chart-8: var(--brand-dk-chart-8, #a3e635);  /* lime-400    */
-  --chart-accent: var(--brand-dk-accent, #3b82f6);
+  --chart-accent: var(--user-dk-accent, var(--brand-dk-accent, #3b82f6));
 
   --error: #f87171;
   --error-soft: rgba(248, 113, 113, 0.13);
@@ -250,27 +257,27 @@
   --ok-soft: rgba(52, 211, 153, 0.13);
   --warn: #f5b53d;
   --warn-soft: rgba(245, 181, 61, 0.14);
-  --accent-text: var(--brand-dk-accent-fg, #7cb0ff);
+  --accent-text: var(--user-dk-accent-fg, var(--brand-dk-accent-fg, #7cb0ff));
   --ok-text: #34d399;
   --warn-text: #f5b53d;
   --error-text: #fca5a5;
 
-  --titlebar: #17171a;
+  --titlebar: #060a12;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, 0.55);
   --shadow-lg: 0 28px 64px -20px rgba(0, 0, 0, 0.65);
 
   /* The elevation ramp, one step apart each time. */
-  --surface-1: #1c1c20;
-  --surface-float: #26262c;
-  /* 10% white, per the dark spec — on a dark ground a border tinted with
+  --surface-1: #101826;
+  --surface-float: #172134;
+  /* 8% of a pale blue (white, per the dark spec, tinted to the slate) — on a dark ground a border tinted with
      the TEXT colour (near-white) is the one that reads as a hairline;
      tinting it with the background just paints the background. */
-  --border-hairline: rgba(255, 255, 255, 0.1);
-  --border: #2b2b31;
-  --border-2: #3a3a42;
-  --border-3: #4a4a55;
+  --border-hairline: rgba(160, 190, 255, 0.08);
+  --border: #1b2538;
+  --border-2: #26324a;
+  --border-3: #36445f;
 
-  --focus-ring: var(--brand-dk-focus, rgba(59, 130, 246, 0.4));
+  --focus-ring: var(--user-dk-focus, var(--brand-dk-focus, rgba(59, 130, 246, 0.4)));
   color-scheme: dark;
 }
