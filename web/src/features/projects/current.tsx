@@ -18,7 +18,7 @@
 // `/data/:projectId/:datasetId`, `/versions/:projectId/…` — calls
 // `useAdoptProject(projectId)` so the switcher agrees with the page.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { rpc } from '../../api/client';
@@ -106,11 +106,23 @@ export function useCanCreateProject(): boolean {
   return role === 'admin' || role === 'editor';
 }
 
-/** A page whose URL names its project: make it the current one, so the switcher shows it. */
+/** The current project's id, or null outside the shell's provider (a hook rendered on its own in a test). */
+export function useCurrentProjectId(): string | null {
+  return useContext(Ctx)?.projectId ?? null;
+}
+
+/**
+ * A page whose URL names its project: make it the current one, so the switcher shows it.
+ * Once per id the URL names: a switch in the switcher moves the current project while this
+ * page is still on screen (its route changes a moment later), and must not be adopted back.
+ */
 export function useAdoptProject(projectId: string | undefined): void {
   const { projectId: current, projects, select } = useCurrentProject();
   const known = projects.some((p) => p.id === projectId && !p.archived);
+  const adopted = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (projectId && known && projectId !== current) select(projectId);
+    if (!projectId || !known || adopted.current === projectId) return;
+    adopted.current = projectId;
+    if (projectId !== current) select(projectId);
   }, [projectId, known, current, select]);
 }

@@ -9,6 +9,7 @@ afterEach(() => {
     setDockOpen(false);
     takePendingQuestion();
   });
+  localStorage.clear();
 });
 
 const P = '11111111-1111-4111-8111-111111111111';
@@ -22,7 +23,17 @@ const recent = [
   { type: 'dataset', id: 'd2', projectId: Q, projectName: 'Other', name: 'Elsewhere', updatedAt: NOW },
 ];
 
+const MINE = {
+  counts: { datasets: 2, dashboards: 1, captures: 0, visuals: 1 },
+  datasets: [
+    { id: 'd1', name: 'Orders', rowCount: 5000, columnCount: 9, qualityFailing: 1 },
+    { id: 'd3', name: 'Returns', rowCount: 12, columnCount: 3 },
+  ],
+};
+
 type Reply = unknown; // a canned reply, or a (payload) => reply function
+type ListRow = { id: string; name: string; updatedAt: string; lastOpenedAt?: string; archivedAt?: string };
+const answer = (r: Reply, payload: unknown) => (typeof r === 'function' ? (r as (p: unknown) => unknown)(payload) : r);
 
 /** fetch, answered per RPC channel; records each call's payload. `{ status, body }` replies fail. */
 function stubServer(replies: Record<string, Reply>, role = 'admin') {
@@ -33,13 +44,7 @@ function stubServer(replies: Record<string, Reply>, role = 'admin') {
     'projects:roles': { [P]: role === 'viewer' ? 'viewer' : 'admin' },
     'recent:list': recent,
     'starred:get': ['analysis:a1'],
-    'home:overview': {
-      counts: { datasets: 2, dashboards: 1, captures: 0, visuals: 1 },
-      datasets: [
-        { id: 'd1', name: 'Orders', rowCount: 5000, columnCount: 9, qualityFailing: 1 },
-        { id: 'd3', name: 'Returns', rowCount: 12, columnCount: 3 },
-      ],
-    },
+    'home:overview': MINE,
     'onboarding:status': { show: true, collapsed: false, steps: [{ id: 'import', done: true }], doneCount: 1, total: 4 },
     'jobs:list': { active: [], recent: [] },
     'prefs:get': { formats: {}, branding: { accent: '' } },
@@ -48,6 +53,12 @@ function stubServer(replies: Record<string, Reply>, role = 'admin') {
     'copilot:history': { ok: true, turns: [], threadId: null },
     'dataset:list': [],
     ...replies,
+  };
+  // The switcher's rows (Home's project is the current one): the same projects, unless a test gives them.
+  all['projects:overview'] ??= (payload: unknown) => {
+    const v = answer(all['projects:list'], payload);
+    if (!Array.isArray(v)) return v;
+    return (v as ListRow[]).map((p) => ({ id: p.id, name: p.name, updatedAt: p.updatedAt, lastOpenedAt: p.lastOpenedAt ?? null, archived: !!p.archivedAt, datasets: 0, dashboards: 0, sample: false }));
   };
   vi.stubGlobal(
     'fetch',
@@ -58,8 +69,7 @@ function stubServer(replies: Record<string, Reply>, role = 'admin') {
       const channel = decodeURIComponent(url.replace('/api/rpc/', ''));
       const payload = (JSON.parse(String(init?.body ?? '{}')) as { args?: unknown[] }).args?.[0];
       calls.push({ channel, payload });
-      const r = all[channel];
-      const v = typeof r === 'function' ? (r as (p: unknown) => unknown)(payload) : r;
+      const v = answer(all[channel], payload);
       if (v && typeof v === 'object' && 'status' in v) {
         const fail = v as unknown as { status: number; body: unknown };
         return Response.json(fail.body, { status: fail.status });
@@ -303,5 +313,55 @@ describe('Home', () => {
     const rec = await screen.findByRole('region', { name: 'Recent' });
     expect(await within(rec).findByRole('link', { name: /^Orders/ })).toBeTruthy();
     expect((await screen.findByTestId('home-sub')).textContent).toBe('My project');
+  });
+  it('follows the switcher: a new empty project, then back to the one with the work', async () => {
+    const B = '33333333-3333-4333-8333-333333333333';
+    const OLD = '2026-10-01T10:00:00.000Z';
+    const opened: Record<string, string> = { [P]: OLD };
+    let made = false;
+    // The server lists the newest EDITED first: once made, the empty project leads (projects:open stamps only lastOpenedAt).
+    const projects = () => [
+      ...(made ? [{ id: B, name: 'Empty New Project', createdAt: NOW, updatedAt: NOW, lastOpenedAt: opened[B] }] : []),
+      { id: P, name: 'Sales', createdAt: OLD, updatedAt: OLD, lastOpenedAt: opened[P] },
+    ];
+    stubServer({
+      'projects:list': projects,
+      'projects:roles': { [P]: 'admin', [B]: 'admin' },
+      'projects:create': () => ((made = true), { id: B, name: 'Empty New Project' }),
+      'projects:open': (p: unknown) => {
+        const id = (p as { id: string }).id;
+        opened[id] = new Date(Date.now() + Object.keys(opened).length * 1000).toISOString();
+        return projects().find((x) => x.id === id) ?? null;
+      },
+      'home:overview': (p: unknown) => ((p as { projectId: string }).projectId === P ? MINE : { counts: { datasets: 0, dashboards: 0, captures: 0, visuals: 0 }, datasets: [] }),
+      'onboarding:status': { show: false },
+    });
+    renderApp('/');
+    const sub = () => screen.getByTestId('home-sub').textContent;
+    await waitFor(() => expect(sub()).toBe('Sales  ·  2 datasets  ·  1 dashboard'));
+
+    fireEvent.click(screen.getByTestId('project-switcher'));
+    fireEvent.click(await screen.findByRole('button', { name: 'New project' }));
+    fireEvent.change(await screen.findByLabelText('Project name'), { target: { value: 'Empty New Project' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(sub()).toBe('Empty New Project  ·  0 datasets  ·  0 dashboards'));
+    expect(screen.getByTestId('project-switcher').textContent).toContain('Empty New Project');
+    expect((await screen.findByRole('link', { name: 'Bring in some data' })).getAttribute('href')).toBe(`/data/import?project=${B}`);
+    expect(screen.queryByRole('region', { name: 'Jump back in' })).toBeNull();
+
+    // Back to the project with the work: the switcher and every part of Home follow at once.
+    fireEvent.click(screen.getByTestId('project-switcher'));
+    const pop = await screen.findByRole('dialog', { name: 'Projects' });
+    fireEvent.click(within(pop).getByRole('button', { name: /^Sales.*opened/ }));
+    await waitFor(() => expect(screen.getByTestId('project-switcher').textContent).toContain('Sales'));
+    await waitFor(() => expect(sub()).toBe('Sales  ·  2 datasets  ·  1 dashboard'));
+    const mine = [`/data/${P}/d1`, `/analyses/${P}/a1`, `/visuals/${P}/v1`];
+    const jump = await screen.findByRole('region', { name: 'Jump back in' });
+    expect(within(jump).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(mine);
+    const rec = screen.getByRole('region', { name: 'Recent' });
+    expect(within(rec).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(mine);
+    // And it stays there once the lists refetch.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(sub()).toBe('Sales  ·  2 datasets  ·  1 dashboard');
   });
 });

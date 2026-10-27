@@ -98,6 +98,7 @@ function serve(routes: Record<string, Reply>) {
 const base = (extra: Record<string, Reply> = {}) => ({
   '/api/auth/me': { body: ME },
   'projects:list': { body: [{ id: PID, name: 'Sales', createdAt: '', updatedAt: '' }] },
+  'projects:overview': { body: [{ id: PID, name: 'Sales', updatedAt: '', lastOpenedAt: null, archived: false, datasets: 0, dashboards: 0, sample: false }] },
   'connectors:catalog': { body: [PG, URLC] },
   'connectors:logos': { body: {} },
   'connections:list': { body: [] },

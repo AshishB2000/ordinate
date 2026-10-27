@@ -6,16 +6,15 @@
 // data, the open comments, and the table of all recent work. Bringing data in
 // is the New menu's, so nothing on the page repeats it.
 //
-// The project Home speaks for is the most recently updated one the caller can
-// read (projects:list comes newest first). T2.2's switcher will make it the
-// session's chosen project instead.
+// The project Home speaks for is the current one — the top bar's switcher's
+// (../projects/current), as on every project-scoped screen.
 
 import { useNavigate } from 'react-router';
 import { useOverview, useRecent } from '../../api/home';
-import { useProjects, type Project } from '../../api/projects';
 import { openDockWith } from '../assistant/dockState';
 import { useMe } from '../auth/api';
-import { useCanEdit } from '../projects/api';
+import { useCanEdit, type ProjectRow } from '../projects/api';
+import { useCurrentProject } from '../projects/current';
 import { NoProject } from '../projects/NoProject';
 import { Button } from '../../ui/Button';
 import { Menu } from '../../ui/Menu';
@@ -31,11 +30,7 @@ import s from './HomePage.module.css';
 import { RecentComments } from '../dashboards/RecentComments';
 import { MentionedYou } from '../dashboards/MentionedYou';
 
-function homeProject(list: Project[] | undefined): Project | undefined {
-  return list?.find((p) => !p.archivedAt) ?? list?.[0];
-}
-
-function Subtitle({ project, failed, loading }: { project: Project | undefined; failed: boolean; loading: boolean }) {
+function Subtitle({ project, failed, loading }: { project: ProjectRow | null; failed: boolean; loading: boolean }) {
   const ov = useOverview(project?.id);
   if (loading) return <Skeleton className={s.subSk} />;
   if (failed) return <p className={s.sub}>Your projects could not be loaded.</p>;
@@ -81,12 +76,13 @@ function NewMenu({ projectId }: { projectId: string | undefined }) {
 
 export default function HomePage() {
   const me = useMe();
-  const projects = useProjects();
-  const project = homeProject(projects.data);
-  const ov = useOverview(project?.id);
+  const cur = useCurrentProject();
+  const project = cur.project;
+  const projectId = cur.projectId ?? undefined;
+  const ov = useOverview(projectId);
   const recent = useRecent();
   // New and "Bring in some data" change the project: an editor's.
-  const canEdit = useCanEdit(project?.id);
+  const canEdit = useCanEdit(projectId);
   const prompts = suggestPrompts(
     (ov.data?.datasets ?? []).map((d) => d.name),
     (recent.data ?? []).filter((r) => r.type === 'dataset').map((r) => r.name),
@@ -100,28 +96,28 @@ export default function HomePage() {
           <p className={s.greet} data-testid="home-greet">
             {greeting(displayName(me.data?.user?.email), new Date().getHours())}
           </p>
-          <Subtitle project={project} failed={projects.isError} loading={projects.isPending} />
+          <Subtitle project={project} failed={cur.status === 'error'} loading={cur.status === 'pending'} />
         </div>
         <div className={s.headActions}>
           <GetStartedPill />
-          {canEdit && <NewMenu projectId={project?.id} />}
+          {canEdit && <NewMenu projectId={projectId} />}
         </div>
       </header>
       <AskBar prompts={prompts} onAsk={openDockWith} />
       <GetStarted />
-      {projects.isSuccess && !project && (
+      {cur.status === 'success' && !project && (
         <div className={s.emptyBox}>
           <NoProject why="Your data, visuals and dashboards live in a project." />
         </div>
       )}
-      {projects.isError && <ErrorState compact heading={2} title="Your projects could not be loaded" message="Check your connection and try again." onRetry={() => void projects.refetch()} />}
-      <JumpBackIn projectId={project?.id} recent={recent} />
+      {cur.status === 'error' && <ErrorState compact heading={2} title="Your projects could not be loaded" message="Check your connection and try again." onRetry={cur.refetch} />}
+      <JumpBackIn projectId={projectId} recent={recent} />
       {/* What the app FOUND in the project's data (T2.11); renders nothing when nothing stands out. */}
-      <WhatStandsOut projectId={project?.id} />
+      <WhatStandsOut projectId={projectId} />
       {/* The comments that name YOU, across your projects (docs/notifications); nothing without a user directory. */}
       <MentionedYou />
       {project && ov.data && <RecentComments projectId={project.id} comments={ov.data.comments} />}
-      <RecentTable projectId={project?.id} recent={recent} canEdit={canEdit} />
+      <RecentTable projectId={projectId} recent={recent} canEdit={canEdit} />
     </div>
   );
 }

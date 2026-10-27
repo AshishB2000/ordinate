@@ -4,7 +4,7 @@
 // src/server/authz/share.ts). Every figure — a count, days left — is the
 // server's; the screens only format it.
 
-import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { skipToken, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { rpc, type Channel, type RpcArgs, type RpcInput } from '../../api/client';
 import { toast } from '../../ui/Toast';
 
@@ -87,6 +87,17 @@ export function byRecent(list: readonly ProjectRow[]): ProjectRow[] {
 
 export function useOverview() {
   return useQuery({ queryKey: [OVERVIEW], queryFn: async () => (await rpc(OVERVIEW)) as ProjectRow[] });
+}
+
+/**
+ * A project the server just made (created, imported), in the switcher's list at once: selected
+ * before `projects:overview` refetches, it would otherwise resolve to another project meanwhile.
+ * The refetch that follows replaces this row with the server's.
+ */
+export function seedProject(client: QueryClient, p: { id: string; name: string }): void {
+  const now = new Date().toISOString();
+  const row: ProjectRow = { id: p.id, name: p.name, updatedAt: now, lastOpenedAt: now, archived: false, datasets: 0, dashboards: 0, sample: false };
+  client.setQueryData<ProjectRow[]>([OVERVIEW], (old = []) => [row, ...old.filter((x) => x.id !== p.id)]);
 }
 
 /**
