@@ -41,8 +41,6 @@ export interface Card {
   visualId?: string;
   heading?: string;
   text?: string;
-  /** One line under a chart's or a KPI's title (dashboards.ts Card.note). */
-  note?: string;
   metric?: {
     datasetId: string;
     column: string;
@@ -215,14 +213,8 @@ export type StatsTile =
 export type ScenarioReply =
   | { ok: true; scenarioName: string; baseline: number | null; baselineDisplay: string; value: number | null; display: string; delta: number | null; deltaDisplay: string; pct: number | null; tone: 'good' | 'bad' | 'flat' | 'neutral' }
   | { ok: false; error: string };
-/** A KPI's small trend (src/ipc/kpiTrend.ts): every figure and the change's tone are the server's. */
-export interface KpiTrend {
-  labels: string[];
-  values: Array<number | null>;
-  change?: { delta: number; pct: number | null; deltaDisplay: string; tone: 'good' | 'bad' | 'flat'; label: string };
-}
 export type MetricTile =
-  | { ok: true; value: number | null; display?: string; name?: string; paramErrors?: string[]; compare?: CompareReply; scenario?: ScenarioReply; fx?: { target: string }; asOf?: AsOf; trend?: KpiTrend }
+  | { ok: true; value: number | null; display?: string; name?: string; paramErrors?: string[]; compare?: CompareReply; scenario?: ScenarioReply; fx?: { target: string }; asOf?: AsOf }
   | { ok: false; error: string };
 
 // A sheet is one round trip: the tiles asked for in the same tick go out as ONE
@@ -305,17 +297,11 @@ export interface PreviewVisual {
   chartType?: string;
   data: (ChartDataShape & Record<string, unknown>) | null;
   note?: string;
-  /** The line under its title (the model's words, never a figure). */
-  cardNote?: string;
 }
 export interface PlanPreview {
   ok: true;
   name?: string;
   rationale?: string;
-  /** The dashboard shape it follows (src/analysis/dashboardShapes.ts). */
-  shape?: string;
-  /** The header's takeaway: the app's caption of the lead chart, never model text. */
-  takeaway?: string;
   sheets: {
     name: string;
     visuals?: PreviewVisual[];
@@ -332,9 +318,9 @@ export interface PlanPreview {
 /** A draft that was not asked to ask first (`story:draft`): a plan, or a refusal. */
 export type PlanReply = PlanPreview | { ok: false; notReady?: boolean; error?: string };
 
-// ASK FIRST (src/analysis/planClarify.ts). The shape and the look are spelled as
+// ASK FIRST (src/analysis/planClarify.ts). The kind and the look are spelled as
 // their contracts spell them, so a renamed one fails `tsc` here too.
-export type DraftShape = NonNullable<RpcInput<'analysis:draft'>['shape']>;
+export type DraftKind = NonNullable<RpcInput<'analysis:draft'>['kind']>;
 /** A look by preset id — what `analysis:buildPlan` takes; the server holds what each one is. */
 export type LookId = NonNullable<RpcInput<'analysis:buildPlan'>['style']>;
 /** One of the model's own questions about the request: structure, validated by the server, never a figure. */

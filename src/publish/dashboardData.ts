@@ -49,8 +49,6 @@ import { embedTileLocked } from '../server/embedMessages';
 import { withChartFigures, type ChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
 import { kpiSubtitle } from './kpiSubtitle';
-import { kpiCompare } from './kpiCompare';
-import { kpiTrend } from '../ipc/kpiTrend';
 
 export interface PublishedControl {
   id: string;
@@ -74,11 +72,6 @@ export interface PublishedCard {
   chartType?: string;
   /** The category column, so a click on a label can drive a control. */
   category?: string;
-  /** One line under a chart's or a KPI's title (Card.note). */
-  note?: string;
-  /** A dashboard shape's drawing (chartFormat): the first series in the accent, the rest muted; the Table shape's table. */
-  accent?: true;
-  richTable?: true;
   heading?: string;
   text?: string;
   reason?: string;
@@ -116,11 +109,9 @@ export interface PublishedView { name: string; sheet: number; picks: number[]; d
 function publishedViews(a: analysis.Analysis, specs: ControlSpec[], plan: ComboPlan, lock?: Lock | null): PublishedView[] {
   const out: PublishedView[] = [];
   // Under an embed's lock a view that sets a control the bar left out is dropped: its NAME may be another customer's.
-  const left = lock ? a.sheets.flatMap((s) => s.cards).filter((c) => c && c.type === 'control' && !specs.some((x) => x.card.id === c.id || x.twins.some((t) => t.id === c.id))) : [];
+  const left = lock ? a.sheets.flatMap((s) => s.cards).filter((c) => c && c.type === 'control' && !specs.some((x) => x.card.id === c.id)) : [];
   for (const v of a.views || []) {
     if (left.some((c) => viewControlValue(v, c) !== null)) continue;
-    // A folded copy (controlSpecs) the view sets to a filter of its own is a state the one control cannot show.
-    if (specs.some((s) => s.twins.some((t) => { const own = stepsKey(t, viewControlValue(v, t)); return own !== '[]' && own !== stepsKey(s.card, viewControlValue(v, s.card)); }))) continue;
     const picks = specs.map((s, i) => viewPick(a, v, s, plan.domains[i]));
     // A pick the page does not carry (-1) leaves the view out: showing the
     // default figures under the view's name would be a wrong answer, not a near one.
@@ -225,8 +216,6 @@ interface ControlSpec {
   domain: ControlDomain;
   /** Option index → the control state (null = "All"), or for a parameter, its value. */
   states: unknown[];
-  /** The same control on later sheets, folded into this one (controlSpecs): every published control filters the whole page. */
-  twins: Card[];
 }
 
 async function distinct(projectId: string, datasetId: string, column: string): Promise<string[] | string> {
@@ -262,7 +251,7 @@ async function controlSpec(projectId: string, card: Card, a: analysis.Analysis, 
     const want = control.kind === 'dropdown' ? def && def.value : def && Array.isArray(def.values) ? def.values[0] : undefined;
     const idx = typeof want === 'string' ? values.indexOf(want) : -1;
     return {
-      card, control, twins: [],
+      card, control,
       domain: { id, label, options: ['All', ...values], defaultIndex: idx >= 0 ? idx + 1 : 0 },
       states: [null, ...values.map((v) => (control.kind === 'dropdown' ? { value: v } : { values: [v] }))],
     };
@@ -293,7 +282,7 @@ async function controlSpec(projectId: string, card: Card, a: analysis.Analysis, 
       }
     }
     return {
-      card, control, twins: [],
+      card, control,
       domain: { id, label, options: ['All time', ...opts.map((o) => o.label)], defaultIndex },
       states: [null, ...opts.map((o) => o.state)],
     };
@@ -303,7 +292,7 @@ async function controlSpec(projectId: string, card: Card, a: analysis.Analysis, 
     // the author's saved radius and "Anywhere".
     const def = sanitizeRadiusValue(control.default);
     return {
-      card, control, twins: [],
+      card, control,
       domain: { id, label, options: def ? ['Anywhere', def.value] : ['Anywhere'], defaultIndex: def ? 1 : 0 },
       states: def ? [null, def] : [null],
     };
@@ -316,44 +305,20 @@ async function controlSpec(projectId: string, card: Card, a: analysis.Analysis, 
   const options = list.length ? list : [current];
   const defaultIndex = Math.max(0, options.indexOf(Array.isArray(p.value) ? String(p.value[0]) : String(p.value)));
   return {
-    card, control, twins: [],
+    card, control,
     domain: { id, label: control.label || p.name, options, defaultIndex },
     states: list.length ? list : [p.value],
   };
 }
 
 export interface Unlisted { control: string; reason: string } // a control a page cannot offer (a Live column with no list of values), and why
-/** The filter steps a control's state stands for, as a key ('[]' for none; a parameter filters nothing). */
-function stepsKey(card: Card, state: ControlValue | null): string {
-  return JSON.stringify(card.control && card.control.kind !== 'parameter' ? controlSteps(card.control, state) : []);
-}
-
-/** Which controls are one: the same parameter, or the same kind over the same dataset column. */
-function controlKey(c: CardControl): string {
-  return c.kind === 'parameter' ? 'p\u0000' + c.paramId : [c.kind, c.datasetId, c.column].join('\u0000');
-}
-
-/**
- * Every control card on every sheet, in reading order; the ones left out go onto `unlisted`. A published
- * control filters the whole page, so the same control repeated on another sheet (an AI-drafted dashboard
- * puts its filters on every sheet) is folded into the first as a twin — unless its default filters
- * something the first one's does not, which the one control could not show.
- */
+/** Every control card on every sheet, in reading order; the ones left out go onto `unlisted`. */
 async function controlSpecs(projectId: string, a: analysis.Analysis, unlisted: Unlisted[], lock?: Lock | null): Promise<ControlSpec[]> {
   const out: ControlSpec[] = [];
-  const seen = new Map<string, ControlSpec | null>();
   for (const sheet of a.sheets) {
     for (const card of sheet.cards) {
-      if (!card || card.type !== 'control' || !card.control) continue;
-      const key = controlKey(card.control);
-      if (seen.has(key)) {
-        const first = seen.get(key);
-        const own = stepsKey(card, card.control.default || null);
-        if (!first) continue; // the first was left out (unlisted, or outside a lock): so is its copy
-        if (own === '[]' || own === stepsKey(first.card, first.control.default || null)) { first.twins.push(card); continue; }
-      }
+      if (!card || card.type !== 'control') continue;
       const spec = await controlSpec(projectId, card, a, unlisted, lock);
-      if (!seen.has(key)) seen.set(key, spec);
       if (spec) out.push(spec);
     }
   }
@@ -491,10 +456,6 @@ export async function buildDashboard(
         cards.push({
           ...base, kind: 'chart', title: substituteText(v.name || 'Visual', defaults),
           chartType: v.chartType || 'column', category: enc.category,
-          ...(card.note ? { note: substituteText(card.note, defaults) } : {}),
-          // A dashboard shape's drawing (chartFormat): the accent, and the Table shape's table.
-          ...((v.overrides as { accent?: boolean })?.accent ? { accent: true } : {}),
-          ...((v.overrides as { richTable?: boolean })?.richTable ? { richTable: true } : {}),
         });
         continue;
       }
@@ -538,18 +499,12 @@ export async function buildDashboard(
             // filter's or a formula's literal, never a column the Share policy marks (./kpiSubtitle).
             if (subtitle === undefined) subtitle = await kpiSubtitle(projectId, m, title, viaMetric); // the same for every combination
             if (subtitle) payload.subtitle = subtitle;
-            // Never under an embed's lock: compareMetric re-sanitizes the filters, which drops a lock step's `lock` flag.
-            const change = lock ? null : await kpiCompare(projectId, m, scope.filters, scope.params);
-            if (change) payload.compare = change;
-            // A KPI's small trend (src/ipc/kpiTrend.ts), through the chart door under this combination's filters.
-            const trend = m.trend ? await kpiTrend(projectId, m, bound.steps, scope.params) : null;
-            if (trend) payload.trend = trend;
           }
           base.variants.push(intern(store, payload));
           done++;
           if (ctx.progress) ctx.progress(done / total, `${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} tile answers`);
         }
-        cards.push({ ...base, kind: 'metric', title, ...(card.note ? { note: substituteText(card.note, defaults) } : {}) });
+        cards.push({ ...base, kind: 'metric', title });
         continue;
       }
       if (card.type === 'stats' && card.stats) {

@@ -54,47 +54,6 @@ function pcRamp(): string[] {
   return out;
 }
 
-/**
- * A run of periods as a small inline SVG line, from the app's figures — a scorecard row's last twelve, a KPI's
- * trend. It stretches to the width CSS gives it (`preserveAspectRatio: none`; the stroke does not scale).
- */
-function pcSpark(values: Array<number | null>, cls = 'pub-sc-spark'): SVGSVGElement | null {
-  const pts = values.map((v, i) => (typeof v === 'number' ? [i, v] as [number, number] : null)).filter((p): p is [number, number] => !!p);
-  if (pts.length < 2) return null;
-  const W = 96; const H = 24;
-  const ys = pts.map((p) => p[1]);
-  const min = Math.min(...ys); const span = (Math.max(...ys) - min) || 1;
-  const step = W / Math.max(1, values.length - 1);
-  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${(p[0] * step).toFixed(1)},${(H - 2 - ((p[1] - min) / span) * (H - 4)).toFixed(1)}`).join(' ');
-  const ns = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('class', cls);
-  svg.setAttribute('width', String(W));
-  svg.setAttribute('height', String(H));
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  svg.setAttribute('preserveAspectRatio', 'none');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS(ns, 'path');
-  path.setAttribute('d', d);
-  svg.appendChild(path);
-  return svg;
-}
-
-/** A KPI's change line: the server's signed delta and its tone, the percent, and what it is against. */
-function pcChange(c: any): HTMLElement {
-  const line = pcEl('div', 'pub-kpi-change');
-  const pct = typeof c.pct === 'number' ? pkPct(c.pct, (v, d) => OrdFormat.formatNumber(v, { maxDecimals: d })) : '';
-  line.appendChild(pcEl('span', 'pub-kpi-delta pub-tone--' + c.tone, c.deltaDisplay && pct ? `${c.deltaDisplay} (${pct})` : c.deltaDisplay || pct));
-  if (c.label) line.appendChild(pcEl('span', 'pub-kpi-vs', c.label));
-  return line;
-}
-
-/** A sentence with its figures set in bold — as DOM nodes; the text is never parsed as HTML. */
-function pcFigureText(el: HTMLElement, text: string): void {
-  el.textContent = '';
-  for (const r of pkFigureRuns(text)) el.appendChild(r.figure ? pcEl('strong', '', r.text) : document.createTextNode(r.text));
-}
-
 // ── Tiles ────────────────────────────────────────────────────────────────────
 
 function pcTable(model: { head: string[]; rows: any[][] }): HTMLElement {
@@ -152,7 +111,7 @@ function pcPivot(grid: any): HTMLElement {
   return wrap;
 }
 
-function pcChartBody(card: { chartType: string; category?: string; title?: string; accent?: boolean; richTable?: boolean }, payload: any, page: any, onPick: (label: string) => void): HTMLElement {
+function pcChartBody(card: { chartType: string; category?: string; title?: string }, payload: any, page: any, onPick: (label: string) => void): HTMLElement {
   const kind = pkRenderKind(card.chartType);
   if (kind === 'pivot' && payload.pivot) return pcPivot(payload.pivot);
   if (kind === 'map') return pcMap(payload, page, card.chartType);
@@ -164,7 +123,6 @@ function pcChartBody(card: { chartType: string; category?: string; title?: strin
     return box;
   }
   if (kind === 'table') {
-    if (card.richTable && card.chartType === 'table') return pcRichTable(pkTableModel(payload, card.category || ''), card.title || '');
     const wrap = pcTable(pkTableModel(payload, card.category || ''));
     if (card.chartType !== 'table') wrap.appendChild(pcEl('p', 'pub-note', 'Shown as a table in this published copy.'));
     return wrap;
@@ -175,12 +133,7 @@ function pcChartBody(card: { chartType: string; category?: string; title?: strin
   canvas.setAttribute('aria-label', card.title || 'Chart');
   holder.appendChild(canvas);
   // A figure type whose figures this page does not carry (published before they existed): say so, never work them out.
-  // A Visual analysis chart (chartFormat `accent`): the first series in the accent, every other muted. A chart of one
-  // series — a pie's slices, a treemap's boxes — is coloured per category and keeps its ramp.
-  const series = Array.isArray(payload.series) ? payload.series.length : 0;
-  const muted = card.accent && series > 1 ? getComputedStyle(document.documentElement).getPropertyValue('--border-2').trim() || '#ced7e2' : '';
-  const ramp = muted ? pcRamp().slice(0, 1).concat(Array.from({ length: series - 1 }, () => muted)) : pcRamp();
-  const cfg = pkChartConfig(card.chartType, payload, ramp, pcFmt, pcMonths, OrdFormat.formatPct);
+  const cfg = pkChartConfig(card.chartType, payload, pcRamp(), pcFmt, pcMonths, OrdFormat.formatPct);
   if (!cfg) return pcEl('div', 'pub-broken', 'This chart needs a newer publish to draw — publish the dashboard again.');
   const src: number[] | undefined = cfg.src;
   delete cfg.src;
@@ -235,12 +188,7 @@ function pcCard(card: any, combo: number, page: any, onPick: (column: string, la
     return el;
   }
   const payload = pkPayload(card, combo) || {};
-  if (card.title) {
-    const head = el.appendChild(pcEl('h3', 'pub-card-title', card.title));
-    // A KPI says its name once: what it measures ("Sum of revenue", the server's) is the name's tooltip, not a second line.
-    if (card.kind === 'metric' && payload.subtitle) head.title = payload.subtitle;
-  }
-  if (card.note) el.appendChild(pcEl('p', 'pub-card-note', card.note));
+  if (card.title) el.appendChild(pcEl('h3', 'pub-card-title', card.title));
   if (payload.error) {
     el.appendChild(pcEl('div', 'pub-broken', payload.error));
     return el;
@@ -254,14 +202,10 @@ function pcCard(card: any, combo: number, page: any, onPick: (column: string, la
     return el;
   }
   if (card.kind === 'metric') {
-    // Under the name: the figure, its change against another period (or its trend's), then the trend itself.
+    // The figure, then what it measures under it, as the app's KPI tile reads (the title is the card's head).
     const box = pcEl('div', 'pub-kpi pub-kpi--card');
     box.appendChild(pcEl('div', 'pub-kpi-value', payload.display || '—'));
-    const trend = payload.trend;
-    const change = payload.compare || (trend && trend.change);
-    if (change) box.appendChild(pcChange(change));
-    const spark = trend && Array.isArray(trend.values) ? pcSpark(trend.values, 'pub-kpi-spark') : null;
-    if (spark) box.appendChild(spark);
+    if (payload.subtitle) box.appendChild(pcEl('div', 'pub-kpi-label', payload.subtitle));
     el.appendChild(box);
   } else {
     el.appendChild(pcChartBody(card, payload, page, (label) => onPick(card.category || '', label, card.title)));

@@ -52,7 +52,6 @@ import * as visuals from './visuals';
 import * as dashboards from './dashboards';
 import { CONTROLS_PROMPT, validateControl, type PlannedControl } from './planControls';
 import { ROWS_PROMPT, flattenRows, validateRows, type PlanRow } from './planRows';
-import { planNote, shapeOf } from './dashboardShapes';
 import type { VizEncoding } from './visuals';
 import { computeColumnSummariesResident } from '../engine/statsResident';
 import { fillMapRegions, geoHitsFor, type GeoHits } from './geoHits';
@@ -103,8 +102,6 @@ export interface PlannedVisual {
   /** Name of a proposed calculated field this encoding depends on, when it does.
    *  Such a card is previewed WITHOUT data (the column does not exist yet). */
   needsCalcField?: string;
-  /** One line under its title (dashboardShapes.planNote: never a digit). */
-  note?: string;
 }
 
 /**
@@ -152,8 +149,6 @@ export interface PlanSheet {
 export interface AnalysisPlan {
   name: string;
   rationale: string;
-  /** The dashboard shape it follows (./dashboardShapes), when it names a known one. */
-  shape?: string;
   calculatedFields: PlannedCalcField[];
   sheets: PlanSheet[];
 }
@@ -263,7 +258,7 @@ export const DRAFT_DASHBOARD_SYSTEM_PROMPT =
   'prose. NEVER output a computed value, figure, percentage or count; the app computes every number itself and ' +
   'will REJECT anything it cannot verify. Reference ONLY the exact dataset names, column names, saved-visual ' +
   'names and chart types given to you. Use this shape:\n' +
-  '  { "name": "<analysis name>", "shape": "<the dashboard shape you followed, when one is given>",\n' +
+  '  { "name": "<analysis name>",\n' +
   '    "rationale": "<1-3 sentences, NO numbers, on why these views>",\n' +
   '    "calculatedFields": [ { "dataset":"<dataset name>", "name":"<new column name>", "formula":"<expression>" } ],\n' +
   '    "sheets": [ { "name":"<sheet name>", "rows": [ <row>, ... ], "controls": [ <control>, ... ] } ] }\n' +
@@ -274,8 +269,7 @@ export const DRAFT_DASHBOARD_SYSTEM_PROMPT =
   '  { "dataset":"<dataset name>", "column":"<column>", "aggregation":"sum|avg|count|min|max",\n' +
   '    "label":"<short title>" }\n' +
   'Each visual is EITHER a new chart:\n' +
-  '  { "dataset":"<dataset name>", "name":"<short title>", "note":"<optional: one line on what to look at, no figures>",\n' +
-  '    "chartType":"<one of the listed chart types>",\n' +
+  '  { "dataset":"<dataset name>", "name":"<short title>", "chartType":"<one of the listed chart types>",\n' +
   '    "encoding": { "category":"<dimension column>", "values":[ {"column":"<column>",' +
   '"aggregation":"sum|avg|count|min|max"} ], "series":"<optional split column>" },\n' +
   '    "filters": [ {"type":"filter","column":"<column>","op":"=|!=|>|<|>=|<=|contains|is_empty|not_empty",' +
@@ -336,7 +330,6 @@ export function validatePlan(raw: unknown, ctx: PlanContext): ValidatedPlan {
 
   const name = str(o.name) || 'Assistant dashboard';
   const rationale = str(o.rationale);
-  const shape = shapeOf(o.shape);
 
   // ── 1. Calculated fields. A formula MUST compile before it is stored. ────
   const calculatedFields: PlannedCalcField[] = [];
@@ -450,7 +443,7 @@ export function validatePlan(raw: unknown, ctx: PlanContext): ValidatedPlan {
   // it); make that true here so preview and build agree on the sheet count too.
   if (sheets.length === 0) sheets.push({ name: 'Sheet 1', metrics: [], visuals: [], texts: [] });
 
-  return { plan: { name, rationale, ...(shape ? { shape: shape.id } : {}), calculatedFields, sheets }, dropped };
+  return { plan: { name, rationale, calculatedFields, sheets }, dropped };
 }
 
 /** Longest a plan's own text may be. A note is a caption, not a document, and
@@ -674,12 +667,6 @@ function validateVisual(
     return null;
   }
   if (enc.series !== undefined && !real.has(enc.series)) needsCalcField = needsCalcField || enc.series;
-  // Small multiples over a column that is not there split nothing: drop the split, keep the chart.
-  const facetCols = enc.facet ? [enc.facet.rows, enc.facet.cols].filter((c): c is string => !!c) : [];
-  if (facetCols.some((c) => !real.has(c))) {
-    dropped.push({ kind: 'encoding', where, message: `${at} ("${title}"): small multiples dropped — ${facetCols.join(', ')} must be columns of "${ds.name}".` });
-    delete enc.facet;
-  }
 
   // A MAP IS DRAWN FROM `encoding.geo` AND NOTHING ELSE, and no prompt asks a
   // model for one. So the level is the app's: read off the category column's own
@@ -718,7 +705,5 @@ function validateVisual(
     filters: keptFilters,
   };
   if (needsCalcField) out.needsCalcField = needsCalcField;
-  const note = planNote(raw.note);
-  if (note) out.note = note;
   return out;
 }

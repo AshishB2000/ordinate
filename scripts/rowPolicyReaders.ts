@@ -15,7 +15,6 @@ export const TREATMENT: Readonly<Record<string, Treatment>> = {
   'analysis:gallery': 'REDACT',
   'analysis:open': 'REDACT',
   'analysis:previewPlan': 'NET',
-  'analysis:takeaway': 'DOOR', // the lead chart's caption over visual:data's answer: the caller's own rows
   'analysis:tiles': 'DOOR',
   'answer:card': 'DOOR',
   'answer:explain': 'DOOR',

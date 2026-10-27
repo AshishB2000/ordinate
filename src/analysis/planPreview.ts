@@ -22,8 +22,6 @@ import type {
 } from './analysisPlan';
 import { loadPlanContext, validatePlan } from './analysisPlan';
 import { arrangeSheet, readingOrder, type PlacedTile } from './planLayout';
-import { shapeOf } from './dashboardShapes';
-import { tileCaption } from './captions';
 // INVERTED IMPORT, deliberately. `vizDataFor` lives beside `residentVizData` in
 // src/ipc/visuals.ts because that is where the resident-vs-JS decision for a
 // chart already lives, and `register()` is inert until called (the same reason
@@ -78,18 +76,12 @@ export interface VisualPreview {
   warnings: string[];
   /** Why `data` is null, when it is. Never a figure. */
   note?: string;
-  /** The line under its title (PlannedVisual.note) — `note` above is taken. */
-  cardNote?: string;
 }
 
 export interface PlanPreview {
   ok: true;
   name: string;
   rationale: string;
-  /** The dashboard shape it follows (./dashboardShapes), when it names one. */
-  shape?: string;
-  /** The header's takeaway: the app's caption of the first sheet's lead chart (./captions) — never model text. */
-  takeaway?: string;
   /**
    * `visuals` carries a computed `data` per card because a chart is the thing a
    * reader cannot check by eye. `metrics` and `texts` pass through VERBATIM: a
@@ -197,17 +189,11 @@ async function previewValidated(
       visuals: out,
       texts: sheet.texts,
       controls: sheet.controls || [],
-      layout: readingOrder(arrangeSheet(sheet, shapeOf(plan.shape))),
+      layout: readingOrder(arrangeSheet(sheet)),
     });
   }
 
-  // The lead chart is the first in reading order — within a kind that is the flat order — as the published header picks it.
-  const lead = sheets[0]?.visuals[0];
-  const takeaway = lead && lead.data ? tileCaption({ chartType: lead.chartType, data: lead.data }) : '';
-  return {
-    ok: true, name: plan.name, rationale: plan.rationale, ...(plan.shape ? { shape: plan.shape } : {}), ...(takeaway ? { takeaway } : {}),
-    sheets, calculatedFields, dropped, plan,
-  };
+  return { ok: true, name: plan.name, rationale: plan.rationale, sheets, calculatedFields, dropped, plan };
 }
 
 async function previewVisual(
@@ -232,7 +218,6 @@ async function previewVisual(
     data: null,
     recommendedShape: null,
     warnings: [],
-    ...(pv.note ? { cardNote: pv.note } : {}),
   };
 
   // An existing saved Visual previews through its OWN stored definition, which

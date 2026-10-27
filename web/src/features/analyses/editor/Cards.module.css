@@ -187,22 +187,6 @@
 .vsRow .vs {
   min-width: 0;
 }
-/* A KPI's months (KpiTrend.tsx): a quiet line in the accent, under the change. */
-.spark {
-  width: 100%;
-  max-width: 160px;
-  height: 28px;
-  margin-top: var(--sp-4);
-  flex: 0 0 auto;
-}
-.spark path {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
 /* "Why?" beside the vs line, and a KPI's retry (dash-metric-why). */
 .why {
   flex: 0 0 auto;
@@ -380,16 +364,4 @@
 }
 :global([data-phone]) [data-kind='metric'] .metricLabel {
   display: none;
-}
-
-/* A card's note (Card.note): one muted line under its title, never wrapping into the body. */
-.cardNote {
-  flex: 0 0 auto;
-  margin: var(--sp-8) 0 0;
-  padding: 0 var(--sp-12);
-  font-size: var(--t-12);
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

@@ -56,10 +56,6 @@ function pcDashboard(page: any, root: HTMLElement): void {
   }
   head.appendChild(ident);
   root.appendChild(head);
-  // One sentence under the title: the server's own caption of the sheet's lead chart (publishWords.ts pkTakeaway), set by draw().
-  const takeaway = pcEl('p', 'pub-takeaway');
-  takeaway.hidden = true;
-  if (!embed.hideTitle) root.appendChild(takeaway);
   const bar = pcEl('div', 'pub-filters');
   bar.setAttribute('role', 'group');
   bar.setAttribute('aria-label', 'Filters');
@@ -155,7 +151,7 @@ function pcDashboard(page: any, root: HTMLElement): void {
     head.appendChild(open);
     root.appendChild(scrim);
     root.appendChild(bar);
-    if (d.mode === 'single') root.appendChild(pcEl('p', 'pub-hint', 'Pick one filter at a time — the others reset.'));
+    if (d.mode === 'single') root.appendChild(pcEl('p', 'pub-hint', 'This published copy changes one filter at a time.'));
   }
   const tabs = pcEl('div', 'pub-tabs');
   tabs.setAttribute('role', 'tablist');
@@ -200,16 +196,11 @@ function pcDashboard(page: any, root: HTMLElement): void {
     grid.textContent = '';
     const combo = pkComboIndex(d.keys, picks);
     const s = d.sheets[sheet];
-    const lead = s && !embed.hideTitle ? pkTakeaway(s.cards, combo < 0 ? 0 : combo) : null;
-    pcFigureText(takeaway, lead ? lead.text : '');
-    takeaway.hidden = !lead;
     if (!s || !s.cards.length) { grid.appendChild(pcEl('p', 'pub-empty', 'This sheet is empty.')); return; }
     // Controls moved to the filter bar, so the rows they sat on are empty: start
     // the grid at the first row a tile actually uses.
     const top = Math.min(...s.cards.map((c: any) => c.layout.y));
     const els: HTMLElement[] = s.cards.map((card: any) => grid.appendChild(pcCard(card, combo < 0 ? 0 : combo, page, pick, top)));
-    // The header says the lead's sentence; its card does not say it again.
-    if (lead) els[lead.at].querySelector('.pub-caption')?.remove();
     // A phone reads the tiles in one column, in the phone layout's order, each run of KPIs one swipeable strip
     // (publishCore.ts pkPhoneBlocks). Every tile carries its place; the strips exist on every size and the
     // stylesheet shows them — and hides the KPIs they hold from the grid — only on a phone.

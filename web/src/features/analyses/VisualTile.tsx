@@ -7,7 +7,6 @@ import { useMemo, useRef } from 'react';
 import { asMonthLabels } from '../../charts/build';
 import { Chart, type ChartHandle } from '../../charts/Chart';
 import { DataTable } from '../../charts/DataTable';
-import { RichTable } from '../../charts/RichTable';
 import { MapThumb } from '../../charts/maps/MapThumb';
 import { MapView } from '../../charts/maps/MapView';
 import type { MapData } from '../../charts/maps/types';
@@ -94,14 +93,11 @@ export function DrawnVisual({
   thumb,
   onChart,
   onMapMark,
-  labelHeader,
 }: {
   type: string;
   data: ChartDataShape & Record<string, unknown>;
   overrides?: Record<string, unknown>;
   label: string;
-  /** A rich table's first header: the column its rows come from, not "Label". */
-  labelHeader?: string;
   projectId: string;
   thumb?: boolean;
   onChart?: (chart: ChartHandle | null) => void;
@@ -131,7 +127,7 @@ export function DrawnVisual({
     return <GridViz type={type} data={data as GridData} label={label} fill />;
   }
   if (renderer === 'map') return <MapView data={data as unknown as MapData} chartType={type} label={label} projectId={projectId} onMarkClick={onMapMark} />;
-  if (renderer === 'table') return overrides?.richTable ? <RichTable data={data} label={label} labelHeader={labelHeader} /> : <DataTable data={data} label={label} />;
+  if (renderer === 'table') return <DataTable data={data} label={label} />;
   return <Chart type={type} data={data} overrides={merged} label={label} onChart={thumb ? trimThumb : onChart} />;
 }
 
@@ -265,7 +261,7 @@ export function VisualTileBody({
       {asTable && !def.chartType.startsWith('map_') ? (
         <DataTable data={q.data.data} label={label} />
       ) : (
-        <DrawnVisual type={def.chartType} data={q.data.data} overrides={def.overrides} label={label} labelHeader={def.encoding.category} projectId={projectId} thumb={thumb} onChart={(c) => (chart.current = c)} onMapMark={thumb ? undefined : onMapMark} />
+        <DrawnVisual type={def.chartType} data={q.data.data} overrides={def.overrides} label={label} projectId={projectId} thumb={thumb} onChart={(c) => (chart.current = c)} onMapMark={thumb ? undefined : onMapMark} />
       )}
       {!thumb && q.data.paramErrors && q.data.paramErrors.length > 0 && <p className={s.paramErr}>{q.data.paramErrors[0]}</p>}
     </div>
