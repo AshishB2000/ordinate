@@ -49,7 +49,7 @@ export function Dropped({ list }: { list: PlanPreview['dropped'] }) {
 }
 
 /** One previewed visual: the app's figures, or the reason there are none (never a placeholder number). */
-export function PreviewCard({ v, projectId }: { v: PreviewVisual; projectId: string }) {
+export function PreviewCard({ v, projectId, overrides }: { v: PreviewVisual; projectId: string; overrides?: Record<string, unknown> }) {
   const name = v.name || v.title || 'Visual';
   const type = v.chartType || 'column';
   return (
@@ -61,13 +61,19 @@ export function PreviewCard({ v, projectId }: { v: PreviewVisual; projectId: str
       {v.cardNote && <p className={s.cardNote}>{v.cardNote}</p>}
       {v.data ? (
         <div className={s.viz}>
-          <DrawnVisual type={type} data={v.data} label={name} projectId={projectId} />
+          <DrawnVisual type={type} data={v.data} overrides={overrides} label={name} projectId={projectId} />
         </div>
       ) : (
         <p className={s.why}>{v.note || 'The app could not compute this one yet.'}</p>
       )}
     </div>
   );
+}
+
+/** What the shape changes about a chart's drawing (planBuild.ts sets the same overrides), so the preview is the page. */
+function drawn(shape: ReturnType<typeof shapeOf>, chartType?: string): Record<string, unknown> | undefined {
+  if (shape?.accent) return { accent: true };
+  return shape?.richTable && chartType === 'table' ? { richTable: true } : undefined;
 }
 
 /** The drafted plan as the app will build it. */
@@ -112,7 +118,7 @@ export function Review({ draft, projectId }: { draft: PlanPreview; projectId: st
             {visuals.length === 0 && cards.length > 0 && <p className={s.note}>{cards.length === 1 ? '1 card' : `${cards.length} cards`}</p>}
             <div className={s.visuals}>
               {visuals.map((v, i) => (
-                <PreviewCard key={i} v={v} projectId={projectId} />
+                <PreviewCard key={i} v={v} projectId={projectId} overrides={drawn(shape, v.chartType)} />
               ))}
             </div>
           </section>
