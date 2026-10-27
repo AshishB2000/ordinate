@@ -94,6 +94,20 @@ const SITE_CSS = `
   .pub-broken { margin: auto; font-size: 12px; color: var(--text-faint); text-align: center; }
   .pub-card--broken { border-style: dashed; background: var(--surface-2); box-shadow: none; }
   .pub-table-wrap { flex: 1 1 auto; overflow: auto; min-height: 0; }
+  .pub-rich { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  .pub-rich-search { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-2);
+    background: var(--surface); color: var(--text-strong); }
+  .pub-rich-table th, .pub-rich-table td { padding: 8px 12px; }
+  .pub-rich-table tbody tr:hover > * { background: var(--surface-2); }
+  .pub-rich-table th.num { text-align: right; }
+  .pub-sort { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  .pub-sort:hover { color: var(--text-strong); }
+  .pub-rich-table th[aria-sort="ascending"] .pub-sort::after { content: " ▲"; color: var(--accent); font-size: .8em; }
+  .pub-rich-table th[aria-sort="descending"] .pub-sort::after { content: " ▼"; color: var(--accent); font-size: .8em; }
+  .pub-bar-cell { min-width: 120px; }
+  .pub-track { display: block; height: 6px; margin-top: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+  .pub-bar { display: block; height: 100%; border-radius: inherit; background: var(--chart-1); }
+  .pub-bar--neg { background: #e11d48; }
   .pub-table { border-collapse: collapse; font-size: 12px; width: 100%; }
   .pub-table th, .pub-table td { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
   .pub-table thead th { position: sticky; top: 0; background: var(--surface); color: var(--muted); font-weight: 600; }

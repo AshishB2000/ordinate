@@ -50,6 +50,7 @@ import { withChartFigures, type ChartFigures } from '../analysis/chartShapes';
 import { figureAsk } from '../analysis/figureAsk';
 import { kpiSubtitle } from './kpiSubtitle';
 import { kpiCompare } from './kpiCompare';
+import { kpiTrend } from '../ipc/kpiTrend';
 
 export interface PublishedControl {
   id: string;
@@ -75,6 +76,9 @@ export interface PublishedCard {
   category?: string;
   /** One line under a chart's or a KPI's title (Card.note). */
   note?: string;
+  /** A dashboard shape's drawing (chartFormat): the first series in the accent, the rest muted; the Table shape's table. */
+  accent?: true;
+  richTable?: true;
   heading?: string;
   text?: string;
   reason?: string;
@@ -488,6 +492,9 @@ export async function buildDashboard(
           ...base, kind: 'chart', title: substituteText(v.name || 'Visual', defaults),
           chartType: v.chartType || 'column', category: enc.category,
           ...(card.note ? { note: substituteText(card.note, defaults) } : {}),
+          // A dashboard shape's drawing (chartFormat): the accent, and the Table shape's table.
+          ...((v.overrides as { accent?: boolean })?.accent ? { accent: true } : {}),
+          ...((v.overrides as { richTable?: boolean })?.richTable ? { richTable: true } : {}),
         });
         continue;
       }
@@ -534,6 +541,9 @@ export async function buildDashboard(
             // Never under an embed's lock: compareMetric re-sanitizes the filters, which drops a lock step's `lock` flag.
             const change = lock ? null : await kpiCompare(projectId, m, scope.filters, scope.params);
             if (change) payload.compare = change;
+            // A KPI's small trend (src/ipc/kpiTrend.ts), through the chart door under this combination's filters.
+            const trend = m.trend ? await kpiTrend(projectId, m, bound.steps, scope.params) : null;
+            if (trend) payload.trend = trend;
           }
           base.variants.push(intern(store, payload));
           done++;

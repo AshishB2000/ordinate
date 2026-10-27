@@ -236,6 +236,9 @@ function sanitizeCard(raw: unknown): unknown {
     card.chartType = PUBLISHED_CHART_TYPES.has(o.chartType as string) ? o.chartType
       : PUBLISHED_AS.get(o.chartType as string) || 'column';
     card.category = str(o.category, MAX_LABEL);
+    // A dashboard shape's drawing (dashboardShapes.ts): flags only, `true` or absent.
+    if (o.accent === true) card.accent = true;
+    if (o.richTable === true) card.richTable = true;
   }
   return card;
 }

@@ -152,7 +152,7 @@ function pcPivot(grid: any): HTMLElement {
   return wrap;
 }
 
-function pcChartBody(card: { chartType: string; category?: string; title?: string }, payload: any, page: any, onPick: (label: string) => void): HTMLElement {
+function pcChartBody(card: { chartType: string; category?: string; title?: string; accent?: boolean; richTable?: boolean }, payload: any, page: any, onPick: (label: string) => void): HTMLElement {
   const kind = pkRenderKind(card.chartType);
   if (kind === 'pivot' && payload.pivot) return pcPivot(payload.pivot);
   if (kind === 'map') return pcMap(payload, page, card.chartType);
@@ -164,6 +164,7 @@ function pcChartBody(card: { chartType: string; category?: string; title?: strin
     return box;
   }
   if (kind === 'table') {
+    if (card.richTable && card.chartType === 'table') return pcRichTable(pkTableModel(payload, card.category || ''), card.title || '');
     const wrap = pcTable(pkTableModel(payload, card.category || ''));
     if (card.chartType !== 'table') wrap.appendChild(pcEl('p', 'pub-note', 'Shown as a table in this published copy.'));
     return wrap;
@@ -174,7 +175,12 @@ function pcChartBody(card: { chartType: string; category?: string; title?: strin
   canvas.setAttribute('aria-label', card.title || 'Chart');
   holder.appendChild(canvas);
   // A figure type whose figures this page does not carry (published before they existed): say so, never work them out.
-  const cfg = pkChartConfig(card.chartType, payload, pcRamp(), pcFmt, pcMonths, OrdFormat.formatPct);
+  // A Visual analysis chart (chartFormat `accent`): the first series in the accent, every other muted. A chart of one
+  // series — a pie's slices, a treemap's boxes — is coloured per category and keeps its ramp.
+  const series = Array.isArray(payload.series) ? payload.series.length : 0;
+  const muted = card.accent && series > 1 ? getComputedStyle(document.documentElement).getPropertyValue('--border-2').trim() || '#ced7e2' : '';
+  const ramp = muted ? pcRamp().slice(0, 1).concat(Array.from({ length: series - 1 }, () => muted)) : pcRamp();
+  const cfg = pkChartConfig(card.chartType, payload, ramp, pcFmt, pcMonths, OrdFormat.formatPct);
   if (!cfg) return pcEl('div', 'pub-broken', 'This chart needs a newer publish to draw — publish the dashboard again.');
   const src: number[] | undefined = cfg.src;
   delete cfg.src;

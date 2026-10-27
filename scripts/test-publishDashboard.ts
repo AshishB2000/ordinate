@@ -30,6 +30,7 @@ const metricsStore: typeof import('../src/analysis/metrics') = require('../src/a
 const { buildDashboard } = require('../src/publish/dashboardData') as typeof import('../src/publish/dashboardData');
 const { sanitizePage } = require('../src/publish/sanitize') as typeof import('../src/publish/sanitize');
 const { compareMetric } = require('../src/ipc/periods') as typeof import('../src/ipc/periods');
+const { kpiTrend } = require('../src/ipc/kpiTrend') as typeof import('../src/ipc/kpiTrend');
 const format: typeof import('../src/app/format') = require('../src/app/format');
 const { formatValue } = format;
 const { readAssets } = require('../src/publish/publish') as typeof import('../src/publish/publish');
@@ -110,6 +111,28 @@ async function main(): Promise<void> {
     ap!.controls.length === 2 && ap!.controls[1].options[ap!.controls[1].defaultIndex] === 'region2', JSON.stringify(ap!.controls));
 
   // ── 4. The page's words (src/publish/site/publishWords.ts), jsdom-free ─────────
+  // ── Shapes: the accent, the Table shape's table and a KPI's trend reach the page as the server made them ──
+  const accented = await visuals.saveVisual(proj.id, { datasetId: dsId, name: 'Who leads?', chartType: 'line', encoding: { category: 'day', grain: 'quarter', values: [{ column: 'amount', aggregation: 'sum' }], series: 'region' }, overrides: { accent: true } } as any); // any: as above
+  const rich = await visuals.saveVisual(proj.id, { datasetId: dsId, name: 'Every region', chartType: 'table', encoding: { category: 'region', values: [{ column: 'amount', aggregation: 'sum' }] }, overrides: { richTable: true } } as any); // any: as above
+  const shaped = await analysis.saveAnalysis(proj.id, {
+    name: 'Shaped',
+    sheets: [sheet('Main', [
+      kpi(0, { label: 'Trend', trend: true }),
+      { id: randomUUID(), type: 'visual', visualId: accented!.id, layout: at(0, 2, 12, 4) },
+      { id: randomUUID(), type: 'visual', visualId: rich!.id, layout: at(0, 6, 12, 4) },
+      { id: randomUUID(), type: 'visual', visualId: v!.id, layout: at(0, 10, 12, 4) },
+    ])],
+  } as any); // any: a record literal the saver sanitizes
+  const sp = sanitizePage({ kind: 'dashboard', site: {}, dashboard: await buildDashboard(proj.id, shaped!.id, 64) }) as any; // any: the page's JSON
+  const [tk, acc, tbl, bare] = sp.dashboard.sheets[0].cards;
+  const want = await kpiTrend(proj.id, { datasetId: dsId, column: 'amount', aggregation: 'sum' }, []);
+  const got = tk.payloads[tk.variants[0]].trend;
+  ok('shapes: a KPI\'s trend is the server\'s, month for month (Object.is)', !!want && !!got && got.values.length === want.values.length
+    && got.values.every((x: number, i: number) => Object.is(x, want.values[i])) && got.change.deltaDisplay === want.change!.deltaDisplay && got.change.tone === want.change!.tone, JSON.stringify(got));
+  ok('shapes: the accent and the rich table are flags on their charts, and on no other', acc.accent === true && !acc.richTable && tbl.richTable === true && !tbl.accent && !bare.accent && !bare.richTable);
+  const junk = sanitizePage({ kind: 'dashboard', site: {}, dashboard: { ...sp.dashboard, sheets: [{ name: 'x', cards: [{ ...acc, accent: 'yes', richTable: 1 }] }] } }) as any; // any: the page's JSON
+  ok('shapes: the page keeps only `true` (negative control)', !('accent' in junk.dashboard.sheets[0].cards[0]) && !('richTable' in junk.dashboard.sheets[0].cards[0]));
+
   const ctx: any = { OrdFormat: format }; // any: a bare vm global the core's functions land on; OrdFormat as the page binds it
   vm.createContext(ctx);
   vm.runInContext(readAssets().coreJs, ctx);

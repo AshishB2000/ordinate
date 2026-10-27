@@ -20,6 +20,13 @@ describe('the takeaway', () => {
     const text = 'California leads Population 2024 at 38.9M, 1.3× Texas';
     const { container } = render(<p><Emphasised text={text} /></p>);
     expect(container.textContent).toBe(text);
-    expect(Array.from(container.querySelectorAll('strong')).map((b) => b.textContent)).toEqual(['2024', '38.9M', '1.3×']);
+    expect(Array.from(container.querySelectorAll('strong')).map((b) => b.textContent)).toEqual(['38.9M', '1.3×']);
+  });
+
+  it('bolds what the published header bolds (scripts/test-publishDashboard.ts, the same sentence)', () => {
+    const lead = 'Technology leads revenue at $2.1M, 3.4× Furniture; region0 fell −4.1% in 2024 (2,612 orders)';
+    const { container } = render(<p><Emphasised text={lead} /></p>);
+    expect(container.textContent).toBe(lead);
+    expect(Array.from(container.querySelectorAll('strong')).map((b) => b.textContent)).toEqual(['$2.1M', '3.4×', '−4.1%', '2,612']);
   });
 });
