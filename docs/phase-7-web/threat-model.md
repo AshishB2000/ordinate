@@ -319,11 +319,15 @@ ownership and result path (`jobs.publicJob`, `test-home`). No cross-project IDOR
 ## 7. Dependency audit (`npm audit --omit=dev`, 2026-10-04)
 
 CI gate: job `audit` in `.github/workflows/ci.yml` runs `scripts/audit-gate.ts` over the root and
-`web/`: it fails on any high/critical advisory outside a three-entry allowlist (below, each with a
+`web/`: it fails on any high/critical advisory outside a four-entry allowlist (below, each with a
 reason and a 2027-01-04 review date), on an entry past its review date, and on an entry no longer
 reported. Negative controls: dropping the maplibre entry fails 3 checks; an expired date fails 3. The
 in-range `npm audit fix` (lockfile only: `fast-uri` 3.1.8, `brace-expansion` 1.1.21/2.1.7/5.0.12) was
 applied with the user's approval on 2026-10-04.
+
+2026-10-24: two new highs failed every PR. `zod` is reachable (every RPC input is validated with it)
+and is fixed by the bump to 4.6.7. `@azure/msal-node` has no fix reachable through `@azure/identity`
+and no path from the app, so it is allowlisted.
 
 | Package (path) | Severity | Advisory | Reachable from the server/web app? | Fix |
 |---|---|---|---|---|
@@ -331,6 +335,8 @@ applied with the user's approval on 2026-10-04.
 | `pptxgenjs` 4.0.1 → `image-size` 1.2.1 (root) | high | GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr — JXL/HEIF/ICNS parser infinite loops | No — reports (`src/ipc/reports.ts`) are not registered on the server; images are chart PNGs the app drew | none (audit offers a downgrade to 4.0.0) — **allowlisted** |
 | `fast-uri` 3.1.2 via `ajv` (fastify) | high | 8 advisories — host confusion / SSRF in URI parsing | No — parses Fastify's own JSON-schema `$id`s, never a request URL | **fixed**: in-range `npm audit fix` (lockfile only) |
 | `brace-expansion` 1.1.15 / 2.1.3 / 5.0.6 via `glob`/`minimatch` (`@fastify/static`, `exceljs` → `archiver`) | high | 6 advisories — ReDoS/OOM on crafted brace patterns | No — patterns are fixed in code (static root listing, xlsx writer) | **fixed**: in-range `npm audit fix` (lockfile only) |
+| `zod` 4.6.5 (root, direct) | high | GHSA-mrhx-c7xc-m3w5 — an unbounded array schema records an issue per failing element, so a huge array exhausts memory | Yes — RPC contracts (`src/api/`) validate every request body | **fixed**: `zod` ^4.6.7 |
+| `tedious` 20.0.0 → `@azure/identity` 4.13.1 → `@azure/msal-node` 5.4.3 (root) | high | GHSA-xcx6-jx8p-x3h5 — auth-code flow may disclose parameters to an attacker's endpoint | No — `src/connectors/mssql.ts` always uses SQL authentication (`type: 'default'`); Entra ID logins are not offered, and tedious never runs an auth-code flow | 7.1.0, but `@azure/identity` 4.14.0 (latest) still takes `^6` — **allowlisted** |
 | `exceljs` 4.4.0 → `uuid` 8.3.2 (root) | moderate | GHSA-w5hq-g745-h8pq — v3/v5/v6 with a caller buffer | No — exceljs calls v4 | none in range |
 
 `web/` alone: only `maplibre-gl` (critical).

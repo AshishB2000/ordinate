@@ -9,6 +9,18 @@ All notable changes to Ordinate are documented here. Format based on
 
 ## [Unreleased]
 
+### Audit log
+
+- **Retention, and an `audit` log line.** `AUDIT_RETENTION_DAYS` deletes audit rows older than that many
+  days, in batches on the shared sweep; unset, every row is kept, as before. Every audit row is also one
+  `audit` JSON line in the server log with the same fields, for your log system to keep as long as your
+  policy says. See `docs/server/audit-retention.md`.
+- **Names instead of ids.** Admin → Audit log shows what each change touched by its current name —
+  project, dataset, visual, dashboard, metric, report, connection, person or team, including records in
+  Trash — looked up from the admin's own org when the page loads. Ids that name nothing (a card inside a
+  dashboard, something deleted for good) are counted, with the list on hover. The page says how long
+  rows are kept.
+
 ### Notifications that reach the right person
 
 - **Your own alert inbox.** The bell's badge counts the alerts *you* have not seen in the project; every

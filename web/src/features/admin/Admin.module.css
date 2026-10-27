@@ -388,3 +388,17 @@
   font-size: var(--t-12);
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Audit: what a call touched ─────────────────────────────────────── */
+.items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: var(--sp-8) 0;
+  list-style: none;
+}
+.kind {
+  color: var(--muted);
+  font-size: var(--t-12);
+}

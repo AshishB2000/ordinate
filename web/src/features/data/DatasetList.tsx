@@ -10,6 +10,7 @@ import { useDatasets, type AutoRefreshEvery, type DatasetSummary } from '../../a
 import { useCanEdit } from '../projects/api';
 import { toastMovedToTrash } from '../projects/trashToast';
 import { Button, buttonClass, IconButton } from '../../ui/Button';
+import { ConfirmDelete } from '../../ui/ConfirmDelete';
 import { Icon } from '../../ui/icons/Icon';
 import { Select } from '../../ui/Select';
 import { SkeletonRows } from '../../ui/Skeleton';
@@ -68,13 +69,15 @@ export function WatchToggle({ projectId, d }: { projectId: string; d: DatasetSum
 }
 
 /**
- * A delete is a move to the Trash, taking the dataset's visuals with it — so
- * no confirm: the toast carries Undo (T2.2's trashToast, `trash:restore`).
+ * A delete is a move to the Trash, taking the dataset's visuals with it. It
+ * asks first; the toast still carries Undo (T2.2's trashToast, `trash:restore`).
+ * Render `dialog` wherever `ask` is called.
  */
 export function useDeleteDataset(projectId: string, then?: () => void) {
   const client = useQueryClient();
+  const [doomed, setDoomed] = useState<DatasetSummary | null>(null);
   const del = useWrite('dataset:delete', ['dataset:list', 'catalog:list', 'relationship:list', 'trash:list'], { quiet: true });
-  return (d: DatasetSummary) =>
+  const run = (d: DatasetSummary) =>
     del.mutate(
       { projectId, id: d.id },
       {
@@ -84,6 +87,18 @@ export function useDeleteDataset(projectId: string, then?: () => void) {
         },
       },
     );
+  const dialog = doomed && (
+    <ConfirmDelete
+      title={`Delete “${doomed.name}”?`}
+      description="It moves to the Trash for 30 days, with every visual built on it. Restore it from there if you change your mind."
+      onConfirm={() => {
+        setDoomed(null);
+        run(doomed);
+      }}
+      onClose={() => setDoomed(null)}
+    />
+  );
+  return { ask: setDoomed, dialog };
 }
 
 /** One dataset's refresh, its outcome kept for the row. Never throws, never alerts. */
@@ -272,12 +287,13 @@ export function DatasetList({ projectId }: { projectId: string }) {
                 tags={tagged(d)}
                 outcome={refresh.state[d.id]}
                 onRefresh={() => void refresh.run(d.id)}
-                onDelete={() => remove(d)}
+                onDelete={() => remove.ask(d)}
               />
             ))}
           </tbody>
         </table>
       </div>
+      {remove.dialog}
     </section>
   );
 }

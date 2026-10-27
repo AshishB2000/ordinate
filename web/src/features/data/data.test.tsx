@@ -79,6 +79,26 @@ describe('Data list', () => {
     expect(screen.getByRole('link', { name: 'Import file' })).toBeTruthy();
   }, 30_000); // the first test pays for the lazy route chunk's transform
 
+  it('asks before moving a dataset to the Trash', async () => {
+    const calls = serve({
+      'projects:list': { body: [{ id: P, name: 'Sales', createdAt: '', updatedAt: '' }] },
+      'dataset:list': { body: [ORDERS] },
+      'catalog:tags': { body: { ok: true, tags: [], refs: {} } },
+      'dataset:delete': { body: { ok: true, cascaded: 0 } },
+    });
+    renderApp(`/data/${P}`);
+    const trash = await screen.findByRole('button', { name: 'Move Orders to the Trash' }, { timeout: LAZY });
+    const deletes = () => calls.filter((c) => c.channel === 'dataset:delete');
+    fireEvent.click(trash);
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Delete “Orders”?' })).getByRole('button', { name: 'Keep it' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(deletes()).toHaveLength(0);
+    fireEvent.click(trash);
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Delete “Orders”?' })).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(deletes()).toHaveLength(1));
+    expect(deletes()[0]!.payload).toEqual({ projectId: P, id: D });
+  }, 30_000);
+
   it('shows a viewer the datasets without the controls that change them', async () => {
     serve({
       'projects:list': { body: [{ id: P, name: 'Sales', createdAt: '', updatedAt: '' }] },
