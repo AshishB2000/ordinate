@@ -6,7 +6,6 @@
 // directory (no one can be mentioned there).
 
 import { useNavigate } from 'react-router';
-import { useProjects } from '../../api/projects';
 import { ago } from '../../app/when';
 import { Button } from '../../ui/Button';
 import { SkeletonRows } from '../../ui/Skeleton';
@@ -14,6 +13,7 @@ import { EmptyState, ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { Icon, type IconName } from '../../ui/icons/Icon';
 import { threadPath } from '../../../../src/app/threadPath.ts';
+import { useOverview } from '../projects/api';
 import { useMentions, useMentionSeen, type HomeMention } from './mentionsApi';
 import s from './Mentions.module.css';
 
@@ -23,7 +23,8 @@ const SHOWN = 8;
 export function MentionedYou() {
   const q = useMentions();
   const seen = useMentionSeen();
-  const projects = useProjects();
+  // Names from the switcher's list, which the shell has already loaded: no call of its own.
+  const projects = useOverview();
   const navigate = useNavigate();
   if (q.isSuccess && !q.data.available) return null;
   const items = q.data?.items ?? [];

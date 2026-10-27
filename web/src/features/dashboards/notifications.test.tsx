@@ -54,7 +54,7 @@ afterEach(() => {
 });
 
 function home(routes: Record<string, RpcReply>) {
-  const calls = serveRpc({ 'projects:list': { body: [{ id: P, name: 'Sales', createdAt: '', updatedAt: '' }] }, ...routes });
+  const calls = serveRpc({ 'projects:overview': { body: [{ id: P, name: 'Sales', updatedAt: '', lastOpenedAt: null, archived: false, datasets: 1, dashboards: 0, sample: false }] }, ...routes });
   const router = createMemoryRouter([{ path: '/', element: <MentionedYou /> }, { path: '/analyses/:p/:a', element: <p>the dashboard</p> }], { initialEntries: ['/'] });
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
