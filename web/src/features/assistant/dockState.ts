@@ -11,15 +11,15 @@
 // gives for free. Which routes, and the id checks: ./dockRoute.ts.
 //
 // PROJECT: the URL's when it names one; otherwise the one picked in the dock,
-// else the most recently opened. ponytail: off a project's own pages the dock
-// does not follow the project switcher (features/projects/current) — read it
-// here if the two should ever agree there too.
+// else the switcher's current project (features/projects/current), else the
+// most recently opened.
 
 import { useCallback, useSyncExternalStore } from 'react';
 import { matchPath, useLocation } from 'react-router';
 import { notifyManager, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { useDatasetColumns } from '../../api/datasets';
 import { useProjects, type Project } from '../../api/projects';
+import { useCurrentProjectId } from '../projects/current';
 import { useCapture } from '../import/api';
 import { periodsBack } from '../reports/scorecards/period';
 import type { Ask } from './api';
@@ -116,9 +116,11 @@ export interface DockProject {
 export function useDockProject(enabled: boolean): DockProject {
   const chosen = useSyncExternalStore(subscribe, () => picked);
   const route = routeProject(useLocation().pathname);
+  const current = useCurrentProjectId();
   const q = useProjects();
   const list = enabled ? (q.data ?? []) : [];
-  const id = route ?? (chosen && list.some((p) => p.id === chosen) ? chosen : (newest(list)?.id ?? null));
+  // The dock's own pick, else the switcher's project, else the newest one.
+  const id = route ?? [chosen, current].find((c) => c && list.some((p) => p.id === c)) ?? newest(list)?.id ?? null;
   return { id, name: list.find((p) => p.id === id)?.name ?? '', fromRoute: route !== null, projects: list, loading: q.isPending };
 }
 

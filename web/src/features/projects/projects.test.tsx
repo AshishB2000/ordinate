@@ -130,6 +130,46 @@ describe('project switcher', () => {
     expect(await screen.findByText('Created “Delta”.')).toBeTruthy();
   });
 
+  it('leaves a page whose URL names the old project, and stays on the new one', async () => {
+    const pick = async (name: RegExp) => {
+      fireEvent.click(switcher());
+      fireEvent.click(within(await screen.findByRole('dialog', { name: 'Projects' })).getByRole('button', { name }));
+    };
+    const opens = (calls: { channel: string; payload: unknown }[]) => calls.filter((c) => c.channel === 'projects:open').map((c) => c.payload);
+    // /data/:projectId adopts its project; switching away must not be adopted back.
+    let calls = serve({ ...base({ [A]: 'admin', [B]: 'admin' }), 'projects:open': { body: null } });
+    let router = renderApp(`/data/${B}`);
+    await waitFor(() => expect(switcher().textContent).toContain('Beta'));
+    await pick(/^Alpha.*opened/);
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/data/${A}`));
+    await new Promise((r) => setTimeout(r, 50));
+    expect([router.state.location.pathname, switcher().textContent]).toEqual([`/data/${A}`, expect.stringContaining('Alpha')]);
+    expect(opens(calls)).toEqual([{ id: B }, { id: A }]);
+    cleanup();
+    localStorage.clear();
+
+    // ?project= names it: the link follows the switch, so a reload or a copied link opens the new one.
+    calls = serve({ ...base({ [A]: 'admin', [B]: 'admin' }), 'projects:open': { body: null } });
+    router = renderApp(`/analyses?project=${B}`);
+    await waitFor(() => expect(switcher().textContent).toContain('Beta'));
+    await pick(/^Alpha.*opened/);
+    await waitFor(() => expect(router.state.location.search).toBe(`?project=${A}`));
+    expect([router.state.location.pathname, switcher().textContent]).toEqual(['/analyses', expect.stringContaining('Alpha')]);
+    expect(opens(calls)).toEqual([{ id: A }]);
+  });
+
+  it('opens Connections on the current project, and follows a /connections/:projectId link', async () => {
+    localStorage.setItem('ordinate.project', B);
+    serve(base({ [A]: 'admin', [B]: 'admin' }));
+    renderApp('/connections');
+    expect((await screen.findByRole('combobox', { name: 'Project' })).textContent).toContain('Beta');
+    cleanup();
+    localStorage.clear();
+    serve({ ...base({ [A]: 'admin', [B]: 'admin' }), 'projects:open': { body: null } });
+    renderApp(`/connections/${B}`);
+    await waitFor(() => expect(switcher().textContent).toContain('Beta'));
+  });
+
   it('deletes only once the name is typed back', async () => {
     const calls = serve({ ...base({ [A]: 'admin' }), 'projects:delete': { body: { ok: true } } });
     renderApp('/');

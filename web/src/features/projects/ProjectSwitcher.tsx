@@ -21,7 +21,7 @@ import { SkeletonRows } from '../../ui/Skeleton';
 import { ErrorState } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { useMe } from '../auth/api';
-import { fmtOpened, plural, useRoles, type ProjectRow } from './api';
+import { fmtOpened, plural, seedProject, useRoles, type ProjectRow } from './api';
 import { useCanCreateProject, useCurrentProject } from './current';
 import shell from '../../app/Shell.module.css';
 import s from './Projects.module.css';
@@ -94,6 +94,10 @@ export function ProjectSwitcher() {
     if (UUID_IN_PATH.test(here.pathname)) {
       const section = '/' + here.pathname.split('/')[1];
       void navigate(NAV.some((n) => n.to === section) ? section : '/');
+    } else if (new URLSearchParams(here.search).has('project')) {
+      // The link names the old project: name the new one, so a reload or a copied link opens it.
+      // The rest of the query (a dataset, a dashboard) belonged to the old project too.
+      void navigate(`${here.pathname}?project=${id}`);
     }
   };
 
@@ -141,6 +145,7 @@ export function ProjectSwitcher() {
         counts?: Record<string, number>;
       };
       if (!r.ok || !r.project) return void toast(r.error ?? 'That bundle could not be imported.', { kind: 'error' });
+      seedProject(client, r.project);
       refresh();
       switchTo(r.project.id);
       const c = r.counts ?? {};

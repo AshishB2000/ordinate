@@ -10,7 +10,7 @@ import { ConfirmDelete } from '../../ui/ConfirmDelete';
 import { Dialog, DialogClose } from '../../ui/Dialog';
 import { Input } from '../../ui/Field';
 import { toast } from '../../ui/Toast';
-import type { ProjectRow } from './api';
+import { seedProject, type ProjectRow } from './api';
 import s from './Projects.module.css';
 
 export function NameDialog({
@@ -81,6 +81,7 @@ export function NewProjectDialog({ onCreated, onClose }: { onCreated: (id: strin
       run={async (n) => {
         const made = (await rpc('projects:create', { name: n || 'Untitled project' })) as { id: string; name: string } | null;
         if (!made?.id) throw new Error('the server did not create it');
+        seedProject(client, made);
         for (const key of ['projects:overview', 'projects:roles', 'projects:list']) void client.invalidateQueries({ queryKey: [key] });
         onCreated(made.id);
         toast(`Created “${made.name}”.`, { kind: 'success' });
