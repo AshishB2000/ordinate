@@ -101,7 +101,25 @@ jobs:
   web:
     name: web (build, Vitest, e2e)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Was 20 (a run took ~12 min, the e2e step ~9). The Postgres-backed specs add ~6 min,
+    # view-only-routes' walk ~3.5 of it, so a run is ~19 min: 20 left no room.
+    timeout-minutes: 25
+    # The Postgres-backed specs (`grep -l DATABASE_URL web/e2e/*.e2e.ts`:
+    # row access, view-only, embed, password and OIDC sign-in, notifications…)
+    # skip without DATABASE_URL. Each creates and drops its own scratch
+    # database, so the URL is the superuser's maintenance database.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -126,6 +144,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: e2e (Chromium)
         run: npm --prefix web run e2e
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
       - name: Upload the e2e screenshots
         if: always()
         continue-on-error: true
