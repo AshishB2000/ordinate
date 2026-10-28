@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ordinate",
+  "description": "The Ordinate plugin: skills and the MCP connection for agents that work inside an Ordinate server.",
+  "owner": {
+    "name": "Ordinate",
+    "url": "https://github.com/AshishB2000/ordinate"
+  },
+  "plugins": [
+    {
+      "name": "ordinate",
+      "description": "Build dashboards and answer data questions in your Ordinate server. Every figure comes from the server, never from the model.",
+      "source": "./plugins/ordinate",
+      "category": "data"
+    }
+  ]
+}

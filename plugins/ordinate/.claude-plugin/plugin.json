@@ -1,0 +1,11 @@
+{
+  "name": "ordinate",
+  "description": "Build dashboards and answer data questions in your Ordinate server through its MCP endpoint. Every figure comes from the server, never from the model.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Ordinate",
+    "url": "https://github.com/AshishB2000/ordinate"
+  },
+  "homepage": "https://github.com/AshishB2000/ordinate/tree/develop/plugins/ordinate",
+  "license": "MIT"
+}
