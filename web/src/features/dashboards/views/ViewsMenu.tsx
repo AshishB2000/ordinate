@@ -31,7 +31,7 @@ export function ViewsMenu() {
   const v = useSavedViews();
   const [naming, setNaming] = useState<'create' | 'rename' | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const writer = !ed.readOnly;
+  const writer = ed.writer;
   if (!writer && v.list.length === 0) return null;
   const cur = v.list.find((x) => x.id === v.applied) ?? null;
 

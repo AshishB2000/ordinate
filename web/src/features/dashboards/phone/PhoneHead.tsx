@@ -44,18 +44,24 @@ export function PhoneHead() {
   // Saved views are picked in the Filters sheet too.
   const hasFilters = barControls(ed.cards).length > 0 || datasetIds.length > 0 || ed.views.list.length > 0;
   const sheets = ed.doc.sheets;
+  // The view page is for reading: it does not say so.
+  const viewOnly = ed.readOnly && !ed.viewing;
   const stamp = ed.view.asOf ? `As of ${new Date(ed.view.asOf).toLocaleString()}` : latest?.text;
   return (
     <header className={s.head}>
       <div className={s.bar}>
-        <BackLink iconOnly className={s.tap} to={`/analyses?project=${ed.projectId}`} label="Analyses" />
+        {ed.viewing ? (
+          <BackLink iconOnly className={s.tap} to={`/dashboards?project=${ed.projectId}`} label="Dashboards" />
+        ) : (
+          <BackLink iconOnly className={s.tap} to={`/analyses?project=${ed.projectId}`} label="Analyses" />
+        )}
         <div className={s.ident}>
           <h1 className={s.name}>{ed.doc.name}</h1>
-          {(stamp || ed.readOnly) && (
+          {(stamp || viewOnly) && (
             <p className={latest?.tone === 'warn' && !ed.view.asOf ? `${s.stamp} ${s.warn}` : s.stamp} title={ed.view.asOf ? undefined : latest?.title}>
               {stamp}
-              {stamp && ed.readOnly && ' · '}
-              {ed.readOnly && 'View only'}
+              {stamp && viewOnly && ' · '}
+              {viewOnly && 'View only'}
             </p>
           )}
         </div>

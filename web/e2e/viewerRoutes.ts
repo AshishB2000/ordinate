@@ -161,7 +161,9 @@ export const ROUTES: readonly RouteCase[] = [
   { pattern: '/data', url: (s) => `/data?project=${s.pid}`, editor: { role: 'link', name: 'Import file' } },
   { pattern: '/visuals', url: (s) => `/visuals?project=${s.pid}`, editor: { role: 'button', name: 'New visual' } },
   { pattern: '/analyses', url: (s) => `/analyses?project=${s.pid}`, editor: { role: 'button', name: 'Create dashboard' } },
-  { pattern: '/dashboards', url: (s) => `/dashboards?project=${s.pid}`, editor: { role: 'button', name: 'Publish…' } },
+  // The Ready dashboards (default) and the Shared links tab.
+  { pattern: '/dashboards', url: (s) => `/dashboards?project=${s.pid}`, editor: { role: 'link', name: 'Create dashboard' } },
+  { pattern: '/dashboards', url: (s) => `/dashboards?project=${s.pid}&tab=links`, editor: { role: 'button', name: 'Publish…' } },
   // A question by link (docs/explore): an editor may save it; a viewer explores and shares it, and keeps Copy link.
   {
     pattern: '/explore',
@@ -236,4 +238,11 @@ export const ROUTES: readonly RouteCase[] = [
   { pattern: '/data/captures/:projectId/:captureId', url: (s) => `/data/captures/${s.pid}/${s.did}` },
   { pattern: '/analyses/:projectId/rebuild', url: (s) => `/analyses/${s.pid}/rebuild` },
   { pattern: '/data/metrics/:projectId/:metricId/tree', url: (s) => `/data/metrics/${s.pid}/${s.metricId}/tree`, editor: { role: 'button', name: 'Edit tree' } },
+  // A dashboard opened from the Dashboards page: read-only for everyone; an editor also gets Edit, a viewer Copy link.
+  {
+    pattern: '/dashboards/:projectId/:analysisId',
+    url: (s) => `/dashboards/${s.pid}/${s.aid}`,
+    editor: { role: 'link', name: 'Edit' },
+    viewer: [{ role: 'button', name: 'Copy link' }, { role: 'button', name: 'Present' }],
+  },
 ];

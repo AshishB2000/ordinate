@@ -20,9 +20,10 @@
 //               chart keeps every category, the chip row says what is on;
 //               ⌘/Ctrl-click adds a value, Esc and a chip clear; nothing is
 //               saved; the sheet's switch off → the click drills again
-//   publish     /dashboards empty → Publish… → the live size estimate →
-//               Publish → the row → the published page at /p/<id>/ renders
-//               with ZERO CSP violations under its own pinned policy
+//   publish     /dashboards Shared links empty → Publish… → the live size
+//               estimate → Publish → the row → the link /p/<id>/ opens straight
+//               on its one page, which renders with ZERO CSP violations under
+//               its own pinned policy
 //
 //   npm --prefix web run e2e
 
@@ -228,7 +229,7 @@ e2e('cards: markdown text, the summary, a pivot copied and exported, a navigate 
 
 e2e('publish: the dialog, the list, and the published page under its own CSP', async ({ page, server, rpc }) => {
   const pid = server.sample.projectId;
-  await page.goto(`/dashboards?project=${pid}`);
+  await page.goto(`/dashboards?project=${pid}&tab=links`);
   await settled(page);
   await page.getByRole('heading', { name: 'Nothing published yet' }).waitFor();
   await screensInPlace(page, 'dashboards-empty');
@@ -261,8 +262,9 @@ e2e('publish: the dialog, the list, and the published page under its own CSP', a
 
   // The published page: the server's own route, its pinned policy as the header; zero CSP violations (fixture).
   const res = await page.goto(href);
+  // One dashboard in the link: it opens straight on it (the server's redirect), no list page in between.
+  assert.match(page.url(), /\/p\/[0-9a-f-]{36}\/[^/]+\.html$/, 'a one-page link skips its list page');
   assert.match(res?.headers()['content-security-policy'] ?? '', /^default-src 'none'.*frame-ancestors 'none'$/);
-  await page.getByRole('link', { name: /Retail overview/ }).first().click();
   await page.waitForFunction(() => document.querySelectorAll('canvas').length > 0 && !!document.querySelector('.pub-title'));
   for (const scheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: scheme });

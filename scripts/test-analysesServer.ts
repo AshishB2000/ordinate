@@ -279,6 +279,23 @@ async function partOne(): Promise<void> {
       && up.body.analysis.sheets[0].name === 'Main' && up.body.analysis.sheets[0].cards[0].layout.w === 12 && up.body.analysis.parameters[0].name === 'min', JSON.stringify(up.body.analysis?.sheets));
     const rn = await call('analysis:rename', { projectId: pid, id: made.body.id, name: 'Renamed' });
     ok('rename: ok', rn.body.ok && rn.body.analysis.name === 'Renamed');
+
+    // ── Ready (the Dashboards page lists it): not content ─────────────────
+    const row = async (id: string) => (await call('analysis:gallery', { projectId: pid })).body.find((x: { id: string }) => x.id === id);
+    const opened = (await call('analysis:open', { projectId: pid, id: made.body.id })).body;
+    const on = await call('analysis:setReady', { projectId: pid, id: made.body.id, ready: true });
+    const onOpen = (await call('analysis:open', { projectId: pid, id: made.body.id })).body;
+    ok('ready: on — the record and the gallery carry it', on.body.ok && onOpen.analysis.ready === true && (await row(made.body.id))?.ready === true, JSON.stringify(on.body));
+    ok('ready: not content — the edit-conflict tag and updatedAt do not move', onOpen.tag === opened.tag && onOpen.analysis.updatedAt === opened.analysis.updatedAt, JSON.stringify([opened.tag, onOpen.tag]));
+    const autosave = await call('analysis:update', { projectId: pid, id: made.body.id, base: opened.tag, name: 'Renamed again' });
+    ok('ready: an open editor\'s autosave on the tag it opened with lands, and keeps Ready', autosave.status === 200 && autosave.body.ok && autosave.body.analysis.ready === true, JSON.stringify(autosave.body).slice(0, 200));
+    const off = await call('analysis:setReady', { projectId: pid, id: made.body.id, ready: false });
+    const offOpen = (await call('analysis:open', { projectId: pid, id: made.body.id })).body;
+    ok('ready: off — absent again (never `false`), in the record and the gallery', off.body.ok && !('ready' in offOpen.analysis) && !('ready' in (await row(made.body.id))), JSON.stringify(offOpen.analysis).slice(0, 120));
+    ok('NEGATIVE CONTROL: a dashboard never marked carries no ready', !('ready' in (await row(s.aid))));
+    const lostReady = await call('analysis:setReady', { projectId: pid, id: crypto.randomUUID(), ready: true });
+    ok('ready: an unknown dashboard is a refusal with a reason; a missing flag is a 400', lostReady.body.ok === false && typeof lostReady.body.error === 'string'
+      && (await call('analysis:setReady', { projectId: pid, id: made.body.id })).status === 400);
     const del = await call('analysis:delete', { projectId: pid, id: made.body.id });
     const inTrash = (await call('trash:list', { projectId: pid })).body;
     ok('delete: to the Trash (restorable), gone from the gallery', del.body.ok && JSON.stringify(inTrash).includes(made.body.id)
@@ -404,6 +421,8 @@ async function partTwo(adminUrl: string): Promise<void> {
       ['analysis:rename', () => ({ projectId: pid, id: s.aid, name: 'Board' }), 'write'],
       // Saved views are shared: a viewer applies them, only an editor saves one.
       ['analysis:view', () => ({ projectId: pid, id: s.aid, op: { op: 'default', viewId: '' } }), 'write'],
+      // What the Dashboards page lists is an editor's call; a viewer reads the list.
+      ['analysis:setReady', () => ({ projectId: pid, id: s.aid, ready: false }), 'write'],
       ['analysis:buildPlan', () => ({ projectId: pid, plan }), 'write'],
       ['analysis:starterCards', () => ({ projectId: pid, kind: 'kpis', datasetId: s.ds }), 'write'],
       ['metric:ensureDefaults', () => ({ projectId: pid }), 'write'],

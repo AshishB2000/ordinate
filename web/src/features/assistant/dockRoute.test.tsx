@@ -36,6 +36,7 @@ const KIND: Record<string, string> = {
   '/analytics/:projectId/:datasetId/segments': 'dataset',
   '/visuals/:projectId/:visualId': 'visual',
   '/analyses/:projectId/:analysisId': 'analysis',
+  '/dashboards/:projectId/:analysisId': 'analysis',
   '/scorecards/:projectId/:scorecardId': 'scorecard',
   '/analytics/scenarios/:projectId/:scenarioId': 'scenario',
   '/data/captures/:projectId/:captureId': 'capture',

@@ -21,6 +21,8 @@ import s from './Editor.module.css';
 import { StyleDialog, SubscribeButton, ViewControls, exportHtml } from '../../dashboards/DashboardChrome';
 import { addSummary } from '../../dashboards/SummaryBody';
 import { ViewsMenu } from '../../dashboards/views/ViewsMenu';
+import { ReadySwitch } from '../../dashboards/ReadySwitch';
+import { ViewActions } from '../../dashboards/ViewActions';
 
 function SaveChip() {
   const { save } = useEditor();
@@ -125,7 +127,8 @@ export function Head() {
   const [styling, setStyling] = useState(false);
   const { past, future } = ed.history;
   const ro = ed.readOnly;
-  const back = `/analyses?project=${ed.projectId}`;
+  // Opened from the Dashboards page (ed.viewing), back goes there and no badge says what the page is for.
+  const back = ed.viewing ? { to: `/dashboards?project=${ed.projectId}`, label: 'Dashboards' } : { to: `/analyses?project=${ed.projectId}`, label: 'Analyses' };
   // Publishing lives with the dashboard viewer (T2.9): write what is on screen now, then go there.
   const publish = () => {
     // Changed elsewhere: what would be published is the other version, without these edits — not until it is settled.
@@ -139,7 +142,7 @@ export function Head() {
   return (
     <div className={s.head}>
       <PageHead
-        back={{ to: back, label: 'Analyses' }}
+        back={back}
         title={
           ro ? (
             <span className={s.name}>{ed.doc.name}</span>
@@ -150,7 +153,7 @@ export function Head() {
           )
         }
         status={
-          ro ? (
+          ed.viewing ? undefined : ro ? (
             <span title="You can read this dashboard, use its filters and comment. A project admin can make you an editor.">
               <Badge icon="eye">View only</Badge>
             </span>
@@ -162,6 +165,7 @@ export function Head() {
           <>
             {!ro && (
               <>
+                <ReadySwitch />
                 <IconButton icon="undo" size="sm" label={past.length ? `Undo ${past[past.length - 1].label}` : 'Nothing to undo'} disabled={!past.length} onClick={ed.undo} />
                 <IconButton icon="redo" size="sm" label={future.length ? `Redo ${future[0].label}` : 'Nothing to redo'} disabled={!future.length} onClick={ed.redo} />
               </>
@@ -187,6 +191,7 @@ export function Head() {
                 ...(ro ? [] : [{ label: 'Publish…', icon: 'external-link' as const, onSelect: publish }]),
               ]}
             />
+            {ed.viewing && <ViewActions />}
           </>
         }
       />

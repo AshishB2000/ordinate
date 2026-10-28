@@ -106,8 +106,17 @@
   padding-right: var(--sp-32);
 }
 .meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-8);
+  padding-right: var(--sp-32); /* clear of the card's ⋯, as .name is: the Ready chip wraps rather than meet it */
   font-size: var(--t-12);
   color: var(--muted);
+}
+/* On the Dashboards page: a chip at the end of the meta line, clear of the preview's marks. */
+.readyMark {
+  display: inline-flex;
 }
 .menu {
   position: absolute;

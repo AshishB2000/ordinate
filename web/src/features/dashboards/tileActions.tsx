@@ -18,7 +18,7 @@ import type { MenuEntry } from '../../ui/Menu';
 import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
 import { useTile, type Card, type Step, type VisualDef, type VisualTile } from '../analyses/api';
-import type { EditorApi } from '../analyses/editor/context';
+import { boardPath, type EditorApi } from '../analyses/editor/context';
 import { DrawnVisual, mergeFilters, vizLabel } from '../analyses/VisualTile';
 import { stashNavigation, stepKey } from './useViewer';
 import s from './Dashboards.module.css';
@@ -102,7 +102,7 @@ export function useRunAction(ed: EditorApi) {
       }
       // The autosave flushes on the way out (Editor's unmount); the target opens with the carry and a way back.
       stashNavigation({ to, carry: steps, crumb: { fromId: ed.analysisId, fromName: ed.doc.name, fromSheet: ed.doc.sheets[ed.sheet]?.id }, sheet: action.target?.page });
-      void navigate(`/analyses/${ed.projectId}/${to}`);
+      void navigate(boardPath(ed, to));
       return;
     }
     if (action.kind === 'url') {
@@ -188,7 +188,7 @@ export function SelectionStrip({ ed }: { ed: EditorApi }) {
     const c = v.crumb;
     if (!c) return;
     stashNavigation({ to: c.fromId, carry: [], crumb: null, sheet: c.fromSheet });
-    void navigate(`/analyses/${ed.projectId}/${c.fromId}`);
+    void navigate(boardPath(ed, c.fromId));
   };
   return (
     <div className={s.selStrip} role="region" aria-label="Selection">

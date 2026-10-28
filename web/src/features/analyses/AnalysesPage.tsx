@@ -11,6 +11,7 @@ import { rpc } from '../../api/client';
 import { useDatasets } from '../../api/datasets';
 import { EmptyState, ErrorState, Page } from '../../app/blocks';
 import { ago } from '../../app/when';
+import { Badge } from '../../ui/Badge';
 import { Button, IconButton, buttonClass } from '../../ui/Button';
 import { ConfirmDelete } from '../../ui/ConfirmDelete';
 import { Dialog, DialogClose } from '../../ui/Dialog';
@@ -31,38 +32,11 @@ import { toastMovedToTrash } from '../projects/trashToast';
 import { failure, useGallery, type GalleryItem } from './api';
 import { DraftFlow } from './DraftReview';
 import { NewWizard } from './NewWizard';
-import { VisualTileBody } from './VisualTile';
+import { GalleryPreview as Preview } from './GalleryPreview';
 import s from './Analyses.module.css';
-
-const NO_FILTERS: never[] = [];
-const NO_PARAMS: never[] = [];
 
 /** How many build-intent chips the empty state offers (anList.ts AN_CHIP_MAX). */
 const CHIP_MAX = 3;
-
-function Preview({ projectId, item }: { projectId: string; item: GalleryItem }) {
-  if (!item.previews.length) {
-    // A first sheet with no visual cards gets the section's own bar motif.
-    return (
-      <span className={`${s.prev} ${s.prevNone}`} aria-hidden="true">
-        <span className={s.bars}>
-          <span className={s.bar2} />
-          <span className={s.bar4} />
-          <span className={s.bar3} />
-        </span>
-      </span>
-    );
-  }
-  return (
-    <span className={item.previews.length > 1 ? `${s.prev} ${s.prev2}` : s.prev} aria-hidden="true">
-      {item.previews.map((v) => (
-        <span key={v.id} className={s.thumb}>
-          <VisualTileBody projectId={projectId} def={v} filters={NO_FILTERS} params={NO_PARAMS} thumb />
-        </span>
-      ))}
-    </span>
-  );
-}
 
 /** A dashboard's catalog ref (src/app/catalog.ts: the record kind is `analysis`). */
 const refOf = (item: GalleryItem) => `analysis:${item.id}`;
@@ -86,6 +60,14 @@ function Card({ projectId, item, tags, onRename, onDelete, onLineage, canEdit }:
         <span className={s.name}>{item.name || 'Untitled dashboard'}</span>
         <span className={s.meta}>
           {sheets} · Updated {ago(item.updatedAt)}
+          {/* Listed on the Dashboards page: the editing screen's Ready switch. */}
+          {item.ready && (
+            <span className={s.readyMark}>
+              <Badge tone="ok" icon="check">
+                Ready
+              </Badge>
+            </span>
+          )}
         </span>
         <TagChips tags={tagsOf(tags, refOf(item))} />
       </Link>

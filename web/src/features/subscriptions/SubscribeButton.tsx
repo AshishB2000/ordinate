@@ -11,7 +11,7 @@ const SubscribeDialog = lazy(() => import('./SubscribeDialog'));
 export function SubscribeButton() {
   const ed = useEditor();
   const [open, setOpen] = useState(false);
-  if (ed.readOnly) return null;
+  if (!ed.writer) return null;
   return (
     <>
       <Button

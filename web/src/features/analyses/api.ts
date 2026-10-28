@@ -99,6 +99,8 @@ export interface Analysis {
   views?: SavedView[];
   defaultViewId?: string;
   updatedAt: string;
+  /** Listed on the Dashboards page (analysis:setReady); absent = not. */
+  ready?: true;
 }
 
 // ── Saved views (src/analysis/savedViews.ts) ─────────────────────────────
@@ -146,6 +148,8 @@ export interface GalleryItem {
   name: string;
   sheetCount: number;
   updatedAt: string;
+  /** Listed on the Dashboards page (analysis:setReady). */
+  ready?: true;
   previews: VisualDef[];
   sheets: { id: string; name: string }[];
 }

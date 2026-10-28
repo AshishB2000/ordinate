@@ -1,0 +1,5 @@
+/* The Ready switch sits in the header row: its label beside it, not spread across the bar. */
+.ready {
+  flex: none;
+  gap: var(--sp-8);
+}

@@ -95,6 +95,10 @@ export interface Analysis {
   views?: SavedView[];
   defaultViewId?: string;
 
+  /** On the Dashboards page (docs/superpowers/specs/2026-10-27-dashboards-in-app-design.md). Absent = not Ready, so
+   *  no migration. Not content: outside the edit-conflict tag, never a version, never bumps `updatedAt` (setReady). */
+  ready?: true;
+
   createdAt: string;
   /** Bumped by any sheet/filter/name edit. */
   updatedAt: string;
@@ -110,6 +114,7 @@ export interface AnalysisSummary {
   views?: Array<{ id: string; name: string }>;
   /** The first sheet's first two visual cards, as saved-visual ids — what a preview card draws (Home). Absent when it has none. */
   previewIds?: string[];
+  ready?: true;
 }
 
 
@@ -163,6 +168,7 @@ function normalize(data: any, projectId: string): Analysis {
     // Absent on every record written before styles existed → the default.
     style: sanitizeStyle(data.style),
     parameters: sanitizeParameters(data.parameters, randomUUID),
+    ...(data.ready === true ? { ready: true as const } : {}),
     createdAt,
     updatedAt: data.updatedAt || createdAt,
     schemaVersion: 1,
@@ -214,6 +220,7 @@ export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]
         updatedAt: a.updatedAt,
         views: (a.views || []).map((v) => ({ id: v.id, name: v.name })),
         ...(previewIds.length ? { previewIds } : {}),
+        ...(a.ready ? { ready: true as const } : {}),
       });
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
@@ -323,6 +330,29 @@ export async function updateAnalysis(
     await fs.promises.mkdir(analysesDir(projectId), { recursive: true });
     await writeJsonAtomic(file, updated);
     return updated;
+  });
+}
+
+/**
+ * Mark a dashboard Ready (listed on the Dashboards page) or not. The stored JSON is patched as it is — every other
+ * key byte for byte, `updatedAt` included — so the edit-conflict tag (which hashes only the saved keys) never moves
+ * and an open editor's next autosave is not refused. False when the record is missing.
+ */
+export async function setReady(projectId: string, id: string, ready: boolean): Promise<boolean> {
+  if (!isValidId(projectId) || !isValidId(id)) return false;
+  const file = analysisFilePath(projectId, id);
+  return recordFs.locked(file, async () => {
+    let data: any; // any: the stored record, patched as parsed
+    try {
+      data = JSON.parse(await recordFs.readFile(file, 'utf8'));
+    } catch (_) {
+      return false;
+    }
+    if (!isValidAnalysis(data)) return false;
+    if (ready) data.ready = true;
+    else delete data.ready;
+    await writeJsonAtomic(file, data);
+    return true;
   });
 }
 

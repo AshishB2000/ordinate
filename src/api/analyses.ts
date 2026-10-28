@@ -108,6 +108,9 @@ export const analyses = {
     project: byProjectId,
   }),
   'analysis:delete': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid }), project: byProjectId }),
+  // Ready: whether the dashboard is listed on the Dashboards page. Not content — never part of `analysis:update`, no
+  // version, `updatedAt` and the edit-conflict tag untouched (analysis.ts setReady), so it cannot clash with an open editor.
+  'analysis:setReady': rpc({ access: 'write', input: z.strictObject({ projectId: Uuid, id: Uuid, ready: z.boolean() }), project: byProjectId }),
   // One edit to a dashboard's SAVED VIEWS (savedViews.ts applyViewOp) — shared by
   // everyone who reads it, so `write`; a viewer lists and applies them from
   // `analysis:open`. Never part of `analysis:update`: the autosave sends the whole

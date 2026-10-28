@@ -80,7 +80,7 @@ describe('Data: Connect a database, in the header and the empty state', () => {
 describe('Dashboards: Create dashboard beside Publish…', () => {
   it('an editor sees it in the header and in the empty state, and it opens the wizard', async () => {
     serve('editor');
-    renderApp(`/dashboards?project=${P}`);
+    renderApp(`/dashboards?project=${P}&tab=links`);
     await screen.findByRole('heading', { name: 'Nothing published yet' }, LAZY);
     const links = main().getAllByRole('link', { name: 'Create dashboard' });
     expect(links.map((a) => a.getAttribute('href'))).toEqual([`/analyses?project=${P}&new=1`, `/analyses?project=${P}&new=1`]);
@@ -89,7 +89,7 @@ describe('Dashboards: Create dashboard beside Publish…', () => {
 
   it('a viewer sees neither (control)', async () => {
     serve('viewer');
-    renderApp(`/dashboards?project=${P}`);
+    renderApp(`/dashboards?project=${P}&tab=links`);
     await screen.findByRole('heading', { name: 'Nothing published yet' }, LAZY);
     expect(main().queryByRole('link', { name: 'Create dashboard' })).toBeNull();
     expect(main().queryByRole('button', { name: 'Publish…' })).toBeNull();

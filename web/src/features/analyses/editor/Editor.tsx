@@ -29,6 +29,7 @@ import { PhoneHead } from '../../dashboards/phone/PhoneHead';
 import { gatherView, openingView, seedFromView } from '../../dashboards/views/viewState';
 import { ConflictBanner, LeaveGuard } from '../../editConflicts/ConflictBanner';
 import { useEditGuard } from '../../editConflicts/useEditGuard';
+import { useCanEdit } from '../../projects/api';
 
 /** The autosave debounce (dashboards.ts): a drag fires several edits; one write. */
 const SAVE_MS = 600;
@@ -127,10 +128,11 @@ function useAutosave(projectId: string, id: string, doc: Doc, version: number, t
     };
   }, [write, unsaved]);
 
-  return { state, retry: () => void write(), flush, queue, changed, unsaved };
+  // Only what the server does not have: a read-only page (the view page, a viewer's Export or Subscribe) never writes.
+  return { state, retry: () => void (unsaved() && write()), flush, queue, changed, unsaved };
 }
 
-export function Editor({ projectId, analysis, visuals: initialVisuals, tag, onReload, readOnly = false }: {
+export function Editor({ projectId, analysis, visuals: initialVisuals, tag, onReload, readOnly = false, viewing = false }: {
   projectId: string;
   analysis: Analysis;
   visuals: VisualDef[];
@@ -139,6 +141,8 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, tag, onRe
   /** The banner's Reload: the host reads the record again and mounts a new editor (editConflicts/useReload). */
   onReload?: () => void;
   readOnly?: boolean;
+  /** Opened from the Dashboards page: read-only whatever the role (EditorApi.viewing). */
+  viewing?: boolean;
 }) {
   const [history, dispatch] = useReducer(reduce, analysis, (a) => initial(fromAnalysis(a)));
   const doc = history.doc;
@@ -152,6 +156,7 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, tag, onRe
   });
   const view = useViewer(projectId, analysis.id, opening.view ? opening.seed : null);
   const styleVars = useStyleVars(doc.style);
+  const canEdit = useCanEdit(projectId);
   const [views, setViews] = useState(() => ({ list: analysis.views ?? [], defaultId: analysis.defaultViewId ?? '' }));
   const [applied, setApplied] = useState(() => opening.view?.id ?? '');
 
@@ -255,6 +260,8 @@ export function Editor({ projectId, analysis, visuals: initialVisuals, tag, onRe
     projectId,
     analysisId: analysis.id,
     readOnly,
+    viewing,
+    writer: !readOnly || (viewing && canEdit),
     history,
     doc,
     // The one door every change takes: shut for a viewer, so the document never changes and the autosave never writes.
