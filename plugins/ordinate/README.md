@@ -17,22 +17,19 @@ itself live in `.claude/skills/` at the repo root.
 1. In Ordinate, open **API tokens** (`/tokens`) and make a personal token (`ord_…`). It acts as
    you, with your current role: the agent sees only the projects you can read, and can only
    create visuals and dashboards where you are an editor.
-2. Before starting Claude Code, set:
-
-   ```bash
-   export ORDINATE_URL=https://bi.example.com   # your Ordinate address, no trailing slash
-   export ORDINATE_TOKEN=ord_…
-   ```
-
-   Keep the token in your shell profile or secret manager, never in a file in a repo.
-3. In Claude Code:
+2. In Claude Code:
 
    ```
    /plugin marketplace add AshishB2000/ordinate
    /plugin install ordinate@ordinate
    ```
 
-`.mcp.json` connects to `${ORDINATE_URL}/api/mcp` with `Authorization: Bearer ${ORDINATE_TOKEN}`.
+   When the plugin is enabled, Claude Code asks for your **Ordinate address** (for example
+   `https://bi.example.com`, no trailing slash) and your **personal API token**. The address is
+   saved in your Claude Code settings; the token goes to your system's credential store, never
+   to a file.
+
+The plugin's `plugin.json` connects to `<address>/api/mcp` with `Authorization: Bearer <token>`.
 The tools are listed in [`docs/automation.md`](../../docs/automation.md). They are read-only
 except `create_visual` and `create_dashboard`, which save records, never data.
 

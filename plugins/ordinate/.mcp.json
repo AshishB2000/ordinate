@@ -1,9 +1,0 @@
-{
-  "ordinate": {
-    "type": "http",
-    "url": "${ORDINATE_URL}/api/mcp",
-    "headers": {
-      "Authorization": "Bearer ${ORDINATE_TOKEN}"
-    }
-  }
-}
