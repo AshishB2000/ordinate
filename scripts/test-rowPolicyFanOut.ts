@@ -70,7 +70,13 @@ const show = (r: H.Reply): string => `${r.status} ${r.text.slice(0, 200)}`;
     const site = await W.call('boss', 'publish:run', target(onPlain));
     const siteId = String(site.body?.site?.id ?? '');
     ok('NEGATIVE CONTROL: a dashboard over a dataset without rules publishes, and records what it read', site.body?.ok === true && JSON.stringify(site.body.site.datasetIds) === JSON.stringify([plain]), show(site));
-    const page = async () => (await W.app.inject({ method: 'GET', url: `/p/${siteId}/`, headers: { 'x-forwarded-email': 'boss@acme.test' }, remoteAddress: '127.0.0.1' })).statusCode;
+    const get = (url: string) => W.app.inject({ method: 'GET', url, headers: { 'x-forwarded-email': 'boss@acme.test' }, remoteAddress: '127.0.0.1' });
+    // A one-page site's link redirects to that page (#336); follow it, within this site only.
+    const page = async () => {
+      const first = await get(`/p/${siteId}/`);
+      const to = String(first.headers.location ?? '');
+      return first.statusCode === 302 && to.startsWith(`/p/${siteId}/`) ? (await get(to)).statusCode : first.statusCode;
+    };
     ok('served: the published page opens', (await page()) === 200);
     const claims = { pub: siteId, exp: Math.floor(Date.now() / 1000) + 600, params: {}, hide: [] };
     const embed = () => H.context.runAsPublished({ user: { email: 'embed', role: 'viewer' }, org: { id: 'acme' } }, 'embed', async () =>
