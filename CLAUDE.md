@@ -204,6 +204,11 @@ prompts unrounded); a leading U+FEFF is lost on every string the bridge returns 
   `src/analysis/anomalies.ts` is a pure detector; the model only puts app-found figures into words.
 - **Automation** — live surface: HTTP MCP, `POST /api/mcp` (`src/automation/serverMcp.ts`, bearer
   token, runs as its user). The CLI (`cli.ts`, `argv.ts`) has no entry point since T8.1.
+- **Skills live in two places.** `.claude/skills/` is for developing Ordinate (branch workflow,
+  review). `plugins/ordinate/` is the product plugin, for an agent working inside an Ordinate
+  server over MCP (build a dashboard, answer a data question); the repo root's
+  `.claude-plugin/marketplace.json` lists it. Change a plugin skill with the tool or validator it
+  describes: `test-pluginSkills` builds its examples against the sample project.
 
 ### Web app (`web/`)
 
