@@ -13,7 +13,7 @@ import { ErrorState } from '../../../ui/States';
 import { Icon, type IconName } from '../../../ui/icons/Icon';
 import { useTile, type Card, type StatsTile } from '../api';
 import { DrawnVisual } from '../VisualTile';
-import { useEditor } from './context';
+import { boardPath, useEditor } from './context';
 import { useTileAsOf } from './tileAsOf';
 import s from './Kinds.module.css';
 
@@ -135,7 +135,7 @@ export function NavBody({ card }: { card: Card }) {
     // This dashboard: just switch sheets (the editor stays open).
     if (it.target.analysisId === ed.analysisId) return ed.setSheet(Math.max(0, ed.doc.sheets.findIndex((p) => p.id === it.target?.page)));
     const sheet = it.target.page ? `?sheet=${it.target.page}` : '';
-    void navigate(`/analyses/${ed.projectId}/${it.target.analysisId}${sheet}`);
+    void navigate(`${boardPath(ed, it.target.analysisId)}${sheet}`);
   };
   return (
     <nav className={nav.style === 'tabs' ? `${s.nav} ${s.navTabs}` : s.nav} aria-label={card.heading || 'Dashboard navigation'}>

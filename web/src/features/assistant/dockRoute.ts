@@ -12,7 +12,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CAPTURE_ID = /^[0-9a-zA-Z_-]{1,64}$/;
 
 /** What comes before `:projectId` in every route that names a project (app/routes.tsx — dockRoute.test.tsx walks that list against this one). */
-const BEFORE_PROJECT = ['/data', '/data/captures', '/data/input', '/data/metrics', '/visuals', '/analyses', '/scorecards', '/analytics', '/analytics/scenarios', '/connections', '/pipelines', '/reports', '/stories', '/versions'];
+const BEFORE_PROJECT = ['/data', '/data/captures', '/data/input', '/data/metrics', '/visuals', '/analyses', '/scorecards', '/analytics', '/analytics/scenarios', '/connections', '/pipelines', '/reports', '/stories', '/versions', '/dashboards'];
 
 /** The project the URL names, or null — the segment where a route keeps its project, and only when it is an id. */
 export function routeProject(pathname: string): string | null {
@@ -46,6 +46,7 @@ const SCREENS: readonly (readonly [pattern: string, kind: ScreenKind])[] = [
   ['/analytics/:projectId/:id/segments', 'dataset'],
   ['/visuals/:projectId/:id', 'visual'],
   ['/analyses/:projectId/:id', 'analysis'],
+  ['/dashboards/:projectId/:id', 'analysis'], // the same dashboard, opened from the Dashboards page to read
   ['/scorecards/:projectId/:id', 'scorecard'],
   ['/analytics/scenarios/:projectId/:id', 'scenario'],
 ];

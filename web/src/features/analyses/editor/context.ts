@@ -51,6 +51,13 @@ export interface EditorApi {
    * selection do nothing, and no authoring tool is drawn.
    */
   readOnly: boolean;
+  /** The view page (/dashboards/<p>/<id>): read-only for everyone, a reader's header, and links to other dashboards stay on it. */
+  viewing: boolean;
+  /**
+   * May save the reader's own things to the project — a view, a subscription, an alert: an editor or admin, on the
+   * view page too, where nothing edits the dashboard. Everywhere else it is `!readOnly`.
+   */
+  writer: boolean;
   history: History;
   doc: Doc;
   /** One labelled, undoable change. `coalesce`: a keystroke in a field (one step per burst). */
@@ -109,3 +116,6 @@ export function useEditor(): EditorApi {
   if (!e) throw new Error('useEditor() outside the dashboard editor');
   return e;
 }
+
+/** Another dashboard's address from this one: its view page while viewing, its editing screen otherwise. */
+export const boardPath = (ed: Pick<EditorApi, 'projectId' | 'viewing'>, id: string) => `/${ed.viewing ? 'dashboards' : 'analyses'}/${ed.projectId}/${id}`;

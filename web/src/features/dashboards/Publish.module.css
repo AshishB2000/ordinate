@@ -5,8 +5,9 @@
 .bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--sp-12);
-  margin-top: calc(-1 * var(--sp-12));
+  margin-bottom: var(--sp-16);
 }
 .barNote {
   display: inline-flex;

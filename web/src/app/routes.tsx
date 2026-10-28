@@ -91,6 +91,8 @@ export const pages: RouteObject[] = [
   page('/analyses/:projectId/rebuild', () => import('../features/analyses/rebuild/RebuildPage')),
   // A metric's tree (docs/metric-tree): why it moved, broken into its parts.
   page('/data/metrics/:projectId/:metricId/tree', () => import('../features/analyses/metrics/tree/MetricTreePage')),
+  // A dashboard opened from the Dashboards page: the editing canvas, read-only for everyone (docs/superpowers/specs).
+  page('/dashboards/:projectId/:analysisId', () => import('../features/dashboards/DashboardViewPage')),
 ];
 
 // Sign-in sits OUTSIDE the shell: no nav for someone who is not signed in.

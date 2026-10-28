@@ -241,7 +241,7 @@ if (!adminUrl) {
     await chip.waitFor({ state: 'detached' });
     await tiles();
 
-    await open(`/dashboards?project=${pid}`);
+    await open(`/dashboards?project=${pid}&tab=links`);
     await page.getByRole('heading', { name: 'Nothing published yet' }).waitFor();
     await page.getByText(/An editor of this project can publish/).waitFor();
     assert.equal(await count(page, 'button', 'Publish…'), 0, 'Dashboards: no Publish…');
@@ -288,7 +288,7 @@ if (!adminUrl) {
     await page.getByRole('group', { name: 'Amount by region card' }).getByRole('link', { name: 'Edit' }).waitFor();
     assert.equal(await page.getByText('View only', { exact: true }).count(), 0);
 
-    await open(`/dashboards?project=${pid}`);
+    await open(`/dashboards?project=${pid}&tab=links`);
     await page.getByRole('button', { name: 'Publish…' }).waitFor();
   });
 }

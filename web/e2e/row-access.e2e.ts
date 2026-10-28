@@ -136,7 +136,7 @@ if (!adminUrl) {
     }
 
     // ── Publishing that dashboard says why it is off ─────────────────────
-    await page.goto(`/dashboards?project=${pid}`);
+    await page.goto(`/dashboards?project=${pid}&tab=links`);
     await settled(page);
     await page.getByRole('button', { name: 'Publish…' }).click();
     const dlg = page.getByRole('dialog', { name: 'Publish' });

@@ -58,9 +58,10 @@ if (!adminUrl) {
     assert.equal(published.ok, true, JSON.stringify(published));
     const link = `${server.base}/p/${published.site.id}/`;
 
-    // A member opens it.
+    // A member opens it: one dashboard in the link, so straight on it — no list page in between.
     await page.goto(link);
-    await page.getByRole('link', { name: 'Dashboard Weekly note' }).waitFor();
+    await page.getByText('All on track.').waitFor();
+    assert.match(page.url(), /\/p\/[0-9a-f-]{36}\/[^/]+\.html$/, 'a one-page link skips its list page');
 
     // Signed out: nothing of the page — the server sends the visitor to sign in.
     const browser = await launchBrowser();
@@ -81,7 +82,6 @@ if (!adminUrl) {
       // Now anyone with the link opens it, signed out, under its own pinned CSP.
       const open = await anon.goto(link);
       assert.match(open?.headers()['content-security-policy'] ?? '', /^default-src 'none'.*frame-ancestors 'none'$/);
-      await anon.getByRole('link', { name: 'Dashboard Weekly note' }).click();
       await anon.getByText('All on track.').waitFor();
       assert.deepEqual(problems(), [], 'the published page under its own CSP: zero violations, zero console errors');
 

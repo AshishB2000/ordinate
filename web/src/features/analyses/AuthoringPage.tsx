@@ -2,7 +2,8 @@
 // (legacy openAnalysis + the workbench). Loads the record and the project's
 // visuals in one call, then hands them to the editor, which owns them until
 // the page is left; the cached copy is dropped on the way out so the next
-// open reads what was saved.
+// open reads what was saved. `viewing`: the same page opened from the
+// Dashboards page (dashboards/DashboardViewPage), read-only for everyone.
 
 import { useEffect } from 'react';
 import { Link, useParams } from 'react-router';
@@ -42,7 +43,7 @@ function Loading() {
   );
 }
 
-export default function AuthoringPage() {
+export default function AuthoringPage({ viewing = false }: { viewing?: boolean }) {
   const { projectId = '', analysisId = '' } = useParams();
   useAdoptProject(projectId);
   const q = useOpenAnalysis(projectId, analysisId);
@@ -53,8 +54,8 @@ export default function AuthoringPage() {
   const client = useQueryClient();
   useEffect(() => () => client.removeQueries({ queryKey: ['analysis:open', projectId, analysisId] }), [client, projectId, analysisId]);
   const back = (
-    <Link className={buttonClass('primary')} to={`/analyses?project=${projectId}`}>
-      Back to Analyses
+    <Link className={buttonClass('primary')} to={`/${viewing ? 'dashboards' : 'analyses'}?project=${projectId}`}>
+      Back to {viewing ? 'Dashboards' : 'Analyses'}
     </Link>
   );
 
@@ -84,7 +85,8 @@ export default function AuthoringPage() {
       visuals={q.data.visuals}
       tag={q.data.tag}
       onReload={reload}
-      readOnly={role !== 'editor' && role !== 'admin'}
+      readOnly={viewing || (role !== 'editor' && role !== 'admin')}
+      viewing={viewing}
     />
   );
 }

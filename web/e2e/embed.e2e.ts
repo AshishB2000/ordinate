@@ -164,7 +164,7 @@ if (!adminUrl) {
     await elementShots(page, 'section[aria-label="Preview embed"]', 'admin-embedding-preview');
 
     // ── Dashboards → ⋯ → Embed…, locked to East ────────────────────────
-    await page.goto(`/dashboards?project=${pid}`);
+    await page.goto(`/dashboards?project=${pid}&tab=links`);
     await settled(page);
     await page.getByRole('button', { name: /options$/ }).first().click();
     await page.getByRole('menuitem', { name: 'Embed…' }).click();

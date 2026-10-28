@@ -1,9 +1,12 @@
-// /dashboards?project=<id> — what this project has PUBLISHED (T2.9): each
-// link, what it holds, who may open it, who published it and when, and the
-// way to open, copy, publish again, change access or take it down. Publish…
-// opens the dialog; `&dashboard=<id>` (the authoring head's Publish…) opens it
-// with that dashboard picked. The pages themselves are served by the server
-// at /p/<id>/ — a snapshot, built by value when published.
+// /dashboards?project=<id> — the project's dashboards for reading, in two tabs.
+// Dashboards (the default): every dashboard an editor marked Ready, one click
+// from opening inside the app (ReadyDashboards). Shared links (`&tab=links`):
+// what this project has PUBLISHED (T2.9) — each link, what it holds, who may
+// open it, who published it and when, and the way to open, copy, publish
+// again, change access or take it down. Publish… opens the dialog;
+// `&dashboard=<id>` (the authoring head's Publish…, the view page's Share link)
+// opens it on that tab with that dashboard picked. The pages themselves are
+// served by the server at /p/<id>/ — a snapshot, built by value when published.
 
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -12,6 +15,7 @@ import { ago } from '../../app/when';
 import { Button, buttonClass, IconButton } from '../../ui/Button';
 import { Menu } from '../../ui/Menu';
 import { SkeletonRows } from '../../ui/Skeleton';
+import { Tab, TabList, TabPanel, Tabs } from '../../ui/Tabs';
 import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
 import { ProjectGate } from '../import/ProjectGate';
@@ -19,6 +23,7 @@ import { useCanEdit } from '../projects/api';
 import { reason, siteUrl, usePublishActions, useSites, type HostedSite } from './api';
 import { PublishDialog } from './PublishDialog';
 import { EmbedDialog } from './EmbedDialog';
+import { ReadyDashboards } from './ReadyDashboards';
 import p from './Publish.module.css';
 
 const size = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
@@ -110,41 +115,29 @@ function CreateDashboard({ projectId }: { projectId: string }) {
   );
 }
 
-function Published({ projectId }: { projectId: string }) {
-  const [params, setParams] = useSearchParams();
-  const preselect = params.get('dashboard') ?? undefined;
+/** The Shared links tab: the published links, and Publish…. `preselect`: the dialog opens with that dashboard picked. */
+function SharedLinks({ projectId, preselect, onClosePreselect }: { projectId: string; preselect?: string; onClosePreselect: () => void }) {
   const q = useSites(projectId);
   const canEdit = useCanEdit(projectId);
   const [dialog, setDialog] = useState<{ site?: HostedSite } | null>(() => (preselect ? {} : null));
   const [embed, setEmbed] = useState<HostedSite | null>(null);
   const close = () => {
     setDialog(null);
-    if (preselect) {
-      params.delete('dashboard');
-      setParams(params, { replace: true });
-    }
+    if (preselect) onClosePreselect();
   };
   const publicLinks = q.data?.publicLinks ?? false;
   return (
-    <Page
-      title="Dashboards"
-      sub="Published, read-only pages of this project’s dashboards, stories and scorecards."
-      actions={
-        canEdit && (
-          <>
-            <CreateDashboard projectId={projectId} />
-            <Button variant="primary" icon="globe" onClick={() => setDialog({})}>
-              Publish…
-            </Button>
-          </>
-        )
-      }
-    >
+    <>
       <div className={p.bar}>
         <span className={p.barNote}>
           <Icon name={publicLinks ? 'globe' : 'lock'} size={12} />
           {publicLinks ? 'Your organisation allows links anyone can open.' : 'Links open for people in your organisation only.'}
         </span>
+        {canEdit && (
+          <Button variant="primary" icon="globe" onClick={() => setDialog({})}>
+            Publish…
+          </Button>
+        )}
       </div>
       {q.isPending ? (
         <SkeletonRows rows={4} label="Loading published links" />
@@ -178,14 +171,53 @@ function Published({ projectId }: { projectId: string }) {
       )}
       {embed && canEdit && <EmbedDialog projectId={projectId} site={embed} onClose={() => setEmbed(null)} />}
       {dialog && canEdit && <PublishDialog projectId={projectId} site={dialog.site} preselect={preselect} publicLinks={publicLinks} onClose={close} onPublished={() => undefined} />}
+    </>
+  );
+}
+
+function Board({ projectId }: { projectId: string }) {
+  const [params, setParams] = useSearchParams();
+  const preselect = params.get('dashboard') ?? undefined;
+  const canEdit = useCanEdit(projectId);
+  // A dashboard to share lands on Shared links; otherwise the tab is the address's, Dashboards by default.
+  const tab = preselect || params.get('tab') === 'links' ? 'links' : 'dashboards';
+  const pick = (v: string, drop?: string) =>
+    setParams(
+      (cur) => {
+        const next = new URLSearchParams(cur);
+        if (drop) next.delete(drop);
+        if (v === 'links') next.set('tab', 'links');
+        else next.delete('tab');
+        return next;
+      },
+      { replace: true },
+    );
+  return (
+    <Page title="Dashboards" sub="The dashboards this project reads, and the links that share them." actions={canEdit && <CreateDashboard projectId={projectId} />}>
+      <Tabs value={tab} onValueChange={(v) => pick(v, 'dashboard')}>
+        <TabList label="Dashboards">
+          <Tab value="dashboards" icon="layout-dashboard">
+            Dashboards
+          </Tab>
+          <Tab value="links" icon="globe">
+            Shared links
+          </Tab>
+        </TabList>
+        <TabPanel value="dashboards">
+          <ReadyDashboards projectId={projectId} />
+        </TabPanel>
+        <TabPanel value="links">
+          <SharedLinks projectId={projectId} preselect={preselect} onClosePreselect={() => pick('links', 'dashboard')} />
+        </TabPanel>
+      </Tabs>
     </Page>
   );
 }
 
 export default function DashboardsPage() {
   return (
-    <ProjectGate title="Dashboards" why="Published dashboards belong to a project.">
-      {(projectId) => <Published key={projectId} projectId={projectId} />}
+    <ProjectGate title="Dashboards" why="Dashboards belong to a project.">
+      {(projectId) => <Board key={projectId} projectId={projectId} />}
     </ProjectGate>
   );
 }
