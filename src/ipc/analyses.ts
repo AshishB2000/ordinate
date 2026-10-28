@@ -135,6 +135,10 @@ export function register() {
       throw err;
     }));
 
+  // Ready (the Dashboards page lists it): one key of the stored record, under its lock; nothing else moves.
+  ipcMain.handle('analysis:setReady', async (_e, { projectId, id, ready }: any = {}) =>
+    (await analysis.setReady(projectId, id, ready === true)) ? { ok: true, ready: ready === true } : { ok: false, error: dashboardGone() });
+
   ipcMain.handle('analysis:delete', async (_e, { projectId, id }: any = {}) =>
     trash.trashRecord(projectId, 'dashboard', id)); // to the Trash, restorable for 30 days
 

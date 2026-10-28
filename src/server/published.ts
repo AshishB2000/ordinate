@@ -56,7 +56,7 @@ export async function orgAllowsLinks(pool: Pool | null, org: string): Promise<bo
 const anonymous = (org: string): Identity => ({ user: { email: 'anonymous', role: 'viewer' }, org: { id: org } });
 
 /** The site and page as `who` (or, when null, the public) may see them. */
-async function find(pool: Pool | null, who: Identity | null, id: string, file: string, reqId: string): Promise<string | null> {
+async function find(pool: Pool | null, who: Identity | null, id: string, file: string, reqId: string): Promise<{ html: string; site: HostedSite } | null> {
   // As a published page's request: the Live cache floor (header) holds below it.
   const read = (as: Identity, allow: (s: HostedSite) => boolean | Promise<boolean>) =>
     runAsPublished(as, reqId, async () => {
@@ -65,7 +65,8 @@ async function find(pool: Pool | null, who: Identity | null, id: string, file: s
       const projects = require('../app/projects') as typeof import('../app/projects');
       if (!(await projects.getProject(site.projectId))) return null;
       if (!(await servable(site))) return null; // a snapshot built over rows that now have access rules (row-policy D10)
-      return getPage(id, file);
+      const html = await getPage(id, file);
+      return html === null ? null : { html, site };
     });
   if (who) {
     const own = await read(who, () => true);
@@ -73,8 +74,8 @@ async function find(pool: Pool | null, who: Identity | null, id: string, file: s
   }
   for (const org of await publicOrgs(pool)) {
     if (who && org === who.org.id) continue; // already looked: a member sees it above or not at all
-    const html = await read(anonymous(org), (s) => s.access === 'link');
-    if (html !== null) return html;
+    const found = await read(anonymous(org), (s) => s.access === 'link');
+    if (found !== null) return found;
   }
   return null;
 }
@@ -87,11 +88,15 @@ export function registerPublishedRoutes(app: FastifyInstance, identify: Identify
     reply.header('cache-control', 'no-store').header('x-robots-tag', 'noindex');
     if (!isValidId(id) || !PAGE_RE.test(file)) return reply.code(404).type('text/html').send(NOT_FOUND);
     const who = await identify(req.headers, req.socket.remoteAddress);
-    const html = await find(pool(), who, id, file, String(req.id));
-    if (html === null) {
+    const found = await find(pool(), who, id, file, String(req.id));
+    if (found === null) {
       if (!who) return reply.redirect(`/sign-in?next=${encodeURIComponent(req.url.split('?')[0])}`);
       return reply.code(404).type('text/html').send(NOT_FOUND);
     }
+    // A link holding ONE page opens straight on it, links shared before this included; several keep their list page.
+    const only = found.site.pages.length === 1 ? found.site.pages[0].file : null;
+    if (file === 'index.html' && only) return reply.redirect(`/p/${id}/${encodeURIComponent(only)}`);
+    const { html } = found;
     const csp = pageCsp(html);
     if (!csp) return reply.code(500).type('text/html').send(NOT_FOUND); // not a page we built
     return reply.header('content-security-policy', `${csp}; frame-ancestors 'none'`).type('text/html; charset=utf-8').send(html);

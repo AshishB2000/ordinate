@@ -67,7 +67,7 @@ export function register(): void {
       }
       // The sheets' ids and names: a navigation card's target picker (actionEditor.ts aeTargetFields).
       const sheets = a ? a.sheets.map((p) => ({ id: p.id, name: p.name })) : [];
-      out.push({ id: s.id, name: s.name, sheetCount: s.sheetCount, updatedAt: s.updatedAt, previews, sheets });
+      out.push({ id: s.id, name: s.name, sheetCount: s.sheetCount, updatedAt: s.updatedAt, previews, sheets, ...(s.ready ? { ready: true } : {}) });
     }
     return out;
   });

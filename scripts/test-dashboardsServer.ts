@@ -148,7 +148,15 @@ async function partOne(): Promise<void> {
     ok('whitelist: a key the sanitizer does not name (a planted canary) never reaches the page', !html.includes(CANARY));
     ok('whitelist: markup in a heading cannot close the data block', !html.includes('</script><script>alert(1)'));
     const idx = await alice.page(`/p/${site.id}/`);
-    ok('serve: the index page; the bare link adds the slash', idx.status === 200 && (await idx.text()).includes(file) && (await alice.page(`/p/${site.id}`)).headers.get('location') === `/p/${site.id}/`);
+    ok('serve: a link holding ONE page opens straight on it, no list page; the bare link adds the slash',
+      idx.status === 302 && idx.headers.get('location') === `/p/${site.id}/${encodeURIComponent(file)}` && (await alice.page(`/p/${site.id}`)).headers.get('location') === `/p/${site.id}/`, `${idx.status} ${idx.headers.get('location')}`);
+    const second: string = (await alice.call('analysis:create', { projectId: pid, name: 'Second board' })).body.id;
+    const two = (await alice.call('publish:run', { projectId: pid, dashboardIds: [s.aid, second] })).body.site;
+    const twoIdx = await alice.page(`/p/${two?.id}/`);
+    ok('NEGATIVE CONTROL: a link holding two pages keeps its list page', two?.pages.length === 2 && twoIdx.status === 200 && (await twoIdx.text()).includes(two.pages[1].file), `${twoIdx.status}`);
+    await alice.call('publish:unpublish', { projectId: pid, id: two.id });
+    await alice.call('analysis:delete', { projectId: pid, id: second });
+    ok('access: the one-page redirect is only for who may open the link — another org\'s member gets the 404, never the page\'s name', (await eve.page(`/p/${site.id}/`)).status === 404);
     const nope = await eve.page(`/p/${site.id}/${file}`);
     const made = await eve.page(`/p/${crypto.randomUUID()}/${file}`);
     ok('access: a signed-in member of ANOTHER org gets nothing — the same 404 as a made-up id', nope.status === 404 && made.status === 404 && (await nope.text()) === (await made.text()));
@@ -251,7 +259,7 @@ async function partOne(): Promise<void> {
     const after = await figure(auto.id);
     ok('republish: dataset:refresh succeeded', rf.body?.ok === true, JSON.stringify(rf.body).slice(0, 200));
     ok('republish: the opted-in site is rebuilt with the new figures — at the SAME link', JSON.stringify(after.values) === '[999,1]' && after.at !== before.at
-      && (await alice.page(`/p/${auto.id}/`)).status === 200, JSON.stringify([after.values, before.at, after.at]));
+      && ((await alice.page(`/p/${auto.id}/`)).headers.get('location') ?? '').startsWith(`/p/${auto.id}/`), JSON.stringify([after.values, before.at, after.at]));
     ok('republish: a site that did not opt in keeps its snapshot', JSON.stringify((await figure(manual.id)).values) === '[111,222]');
     ok('republish: a refresh of a dataset the site does not read rebuilds nothing', (await context.runInContext(ALICE, 'r', () => hosted.republishUsing(pid, new Set([s.ds])))).length === 0);
 
@@ -307,12 +315,15 @@ async function partTwo(adminUrl: string): Promise<void> {
     await boss.call('admin:saveSettings', { publicLinks: true, aiProviders: settings.aiProviders, uploadCapMb: settings.uploadCapMb });
     const pub = (await boss.call('publish:run', { projectId: pid, dashboardIds: [s.aid], access: 'link' })).body.site;
     ok('links: on — a public site is published', pub && pub.access === 'link');
-    const open = await anon.page(`/p/${pub.id}/`);
+    const open = await anon.page(`/p/${pub.id}/${pub.pages[0].file}`);
     ok('links: anyone with the link opens it, signed out', open.status === 200 && !!open.headers.get('content-security-policy')?.includes("frame-ancestors 'none'"));
-    ok('links: an org-only site still sends the signed-out to sign in', (await anon.page(`/p/${orgSite.id}/`)).status === 302);
-    ok('links: an org member opens the org-only site', (await as('alice').page(`/p/${orgSite.id}/`)).status === 200);
+    const pubIdx = await anon.page(`/p/${pub.id}/`);
+    ok('links: …and its bare link opens straight on its one page', pubIdx.status === 302 && pubIdx.headers.get('location') === `/p/${pub.id}/${encodeURIComponent(pub.pages[0].file)}`);
+    const toSignIn = (r: Response) => r.status === 302 && (r.headers.get('location') ?? '').startsWith('/sign-in?');
+    ok('links: an org-only site still sends the signed-out to sign in', toSignIn(await anon.page(`/p/${orgSite.id}/`)));
+    ok('links: an org member opens the org-only site', (await as('alice').page(`/p/${orgSite.id}/${orgSite.pages[0].file}`)).status === 200);
     await boss.call('admin:saveSettings', { publicLinks: false, aiProviders: settings.aiProviders, uploadCapMb: settings.uploadCapMb });
-    ok('links: off again — the public site closes at once, without touching it', (await anon.page(`/p/${pub.id}/`)).status === 302);
+    ok('links: off again — the public site closes at once, without touching it', toSignIn(await anon.page(`/p/${pub.id}/`)));
     ok('links: …and the site cannot be made public again', (await boss.call('publish:access', { projectId: pid, id: orgSite.id, access: 'link' })).body.ok === false);
 
     // ── Roles ────────────────────────────────────────────────────────────
