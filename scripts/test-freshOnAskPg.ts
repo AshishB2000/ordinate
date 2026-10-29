@@ -11,10 +11,14 @@
 //      full one (the run log), and the figure is not "refreshing".
 //   3. FRESH_ON_ASK_WAIT_MS=0: the answer at once from the copy, refreshing;
 //      the push when the rows land; the next ask shows them.
-//   4. Another pod: its claim of the window held (advisory lock) → this pod
-//      pulls nothing; its refresh running (the refresh lock held, the window
-//      stamped) → this pod waits on the lock and answers fresh when it is let
-//      go, or "refreshing" when the wait runs out first.
+//   4. Another pod: it claims the window first (its stamp lands while this
+//      pod's claim waits on the record's lock) → this pod pulls nothing; its
+//      refresh running (the refresh lock held, the window stamped) → this pod
+//      waits on the lock and answers fresh when it is let go, or "refreshing"
+//      when the wait runs out first. Then NV-41: a load of more due datasets
+//      than the pool has clients never starves it — an unrelated SELECT 1
+//      answers at once meanwhile (NEGATIVE CONTROL: with every client held,
+//      the same probe does not).
 //   5. Measured: the added latency of a dashboard load on a fresh copy and on
 //      a stale one, against the same load on a dataset without fresh on ask.
 //
@@ -54,7 +58,7 @@ const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.len
   const configSecrets: typeof import('../src/app/configSecrets') = require('../src/app/configSecrets');
   const schedules: typeof import('../src/server/jobs/schedules') = require('../src/server/jobs/schedules');
   const record: typeof import('../src/data/datasetRecord') = require('../src/data/datasetRecord');
-  const fresh: typeof import('../src/data/freshOnAsk') = require('../src/data/freshOnAsk');
+  const appPaths: typeof import('../src/app/paths') = require('../src/app/paths');
 
   const dbName = `ordinate_l31_${process.pid}_${Date.now()}`;
   const scratch = new URL(adminUrl);
@@ -211,11 +215,16 @@ const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.len
     const before4 = await truth();
     await insert('East', 1);
     await stale(shared);
-    const claimKey = lock.lockKey('acme', fresh.CLAIM_PREFIX + shared);
-    await other.query('SELECT pg_advisory_lock(hashtext($1))', [claimKey]);
-    const claimed = await load(shared);
-    await other.query('SELECT pg_advisory_unlock(hashtext($1))', [claimKey]);
-    ok('another pod holding this window\'s claim → this pod pulls nothing (and nothing is refreshing)',
+    // "Another pod" takes the record's lock (recordFs.locked's key), stamps the window inside it and commits.
+    const rel = await inOrg(async () => path.relative(appPaths.userData(), record.datasetFilePath(P, shared)).split(path.sep).join('/'));
+    await other.query(`BEGIN; SELECT set_config('ordinate.org', 'acme', true)`);
+    await other.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', ['records:acme:' + rel]);
+    const claiming = load(shared);
+    await sleep(300); // this pod's claim is waiting on the record's lock now
+    await other.query(`UPDATE records SET body = jsonb_set(body::jsonb, '{freshOnAsk,triggeredAt}', to_jsonb($1::text))::text WHERE org_id = 'acme' AND path = $2`, [new Date().toISOString(), rel]);
+    await other.query('COMMIT');
+    const claimed = await claiming;
+    ok('another pod claiming this window first → this pod pulls nothing (and nothing is refreshing)',
       (await runs(shared)).length === 1 && claimed.value[1]?.value === before4.sum && !claimed.value[1]?.asOf?.refreshing, JSON.stringify(claimed.value[1]));
     // That pod claimed the window and is refreshing: the stamp is recent and the refresh lock is held.
     const stampNow = () => inOrg(() => record.serialized(record.datasetFilePath(P, shared), (raw) => {
@@ -238,6 +247,33 @@ const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.len
     const outlasted = await load(shared);
     await other.query('SELECT pg_advisory_unlock(hashtext($1))', [lock.lockKey('acme', shared)]);
     ok('…and says "refreshing" when that refresh outlasts the wait', outlasted.value.every((r: any) => r.asOf?.refreshing === true) && outlasted.ms >= 1400, `${outlasted.ms.toFixed(0)} ms`); // any: tiles
+
+    // ── 4b. More due datasets than pool clients (NV-41) ──────────────────────
+    // The pool has 6 clients. One load asks 8 due copies: 8 claims at once. A claim that held one client
+    // while it checked out a second (and a third) could hold all 6 and wait on itself; one write under the
+    // record's lock holds one, at most recordFs's holds of them.
+    const probe = async (): Promise<number> => {
+      const t = performance.now();
+      const answered = await Promise.race([pool.query('SELECT 1').then(() => true), sleep(1500).then(() => false)]);
+      return answered ? performance.now() - t : Infinity;
+    };
+    process.env.FRESH_ON_ASK_WAIT_MS = '10000';
+    const many: string[] = [];
+    for (let i = 0; i < 8; i++) many.push(await marked(`Orders (crowd ${i + 1})`));
+    await insert('North', 2);
+    for (const d of many) await stale(d);
+    const crowd = post('analysis:tiles', { projectId: P, items: many.map((d) => ({ kind: 'metric', datasetId: d, column: 'amount', aggregation: 'sum' })) });
+    await sleep(100);
+    const probeMs = await probe();
+    const crowded = await crowd;
+    const sum5 = (await truth()).sum;
+    ok('NV-41: 8 due copies on a 6-client pool → an unrelated SELECT 1 still answers at once', probeMs < 500, `${probeMs.toFixed(0)} ms`);
+    ok('NV-41: …and each copy was pulled exactly once and answers with the new rows',
+      crowded.status === 200 && crowded.value.every((r: any) => r.value === sum5) && (await Promise.all(many.map(runs))).every((l) => l.length === 2 && l[0].mode === 'incremental'), crowded.body.slice(0, 300)); // any: tiles
+    const heldClients = await Promise.all(Array.from({ length: 6 }, () => pool.connect()));
+    const starved = await probe();
+    heldClients.forEach((c) => c.release());
+    ok('NV-41 NEGATIVE CONTROL: with every pool client held, the same probe does not answer', starved === Infinity, String(starved));
 
     // ── 5. Measured ──────────────────────────────────────────────────────────
     process.env.FRESH_ON_ASK_WAIT_MS = '5000';

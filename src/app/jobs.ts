@@ -24,7 +24,10 @@
 // jobs writing the same dataset's Parquet would race, and the second would
 // read what the first half-wrote. The queue is FIFO, but a job blocked on its
 // dataset does not block the jobs behind it — the scan takes the first
-// STARTABLE job, not the first job.
+// STARTABLE job, not the first job. And the queue is every org's on a server
+// pod, so it is FAIR per org (NV-44): a free slot goes to the first startable
+// job of the org with the fewest running. One org's backlog then waits behind
+// its own jobs only; another org's job starts at the next slot that frees.
 //
 // ── MEMORY ONLY ON THE SERVER ────────────────────────────────────────────────
 // The queue lives in this process. A pod that stops DRAINS it (`drain`, called
@@ -118,6 +121,8 @@ interface Entry {
   reject: (e: unknown) => void;
   /** Runs `fn` in the SUBMITTER's async context (its org and user), whoever's finish starts the job. */
   within: (fn: () => void) => void;
+  /** The org it was submitted in ('' outside any): the unit of the fair share (`next`). */
+  org: string;
 }
 
 let file: string | null = null;
@@ -172,6 +177,15 @@ export function requestOwner(): string | undefined {
     return `${c.org.id}\n${c.user.email}`;
   } catch (_) {
     return undefined; // a scheduler tick outside any request
+  }
+}
+
+/** The current request's org, '' outside any (a server's tick has one: it runs as the system, in the org). */
+function requestOrg(): string {
+  try {
+    return ctx().org.id;
+  } catch (_) {
+    return '';
   }
 }
 
@@ -236,7 +250,7 @@ export function submit<T>(spec: JobSpec<T>): { id: string; done: Promise<T> } {
   // An unawaited rejection must not crash main; the state carries the outcome.
   done.catch(() => { /* reported through the job record */ });
   const within = AsyncResource.bind((fn: () => void) => fn());
-  queue.push({ job, spec: spec as JobSpec<unknown>, ctl: new AbortController(), resolve, reject, within });
+  queue.push({ job, spec: spec as JobSpec<unknown>, ctl: new AbortController(), resolve, reject, within, org: requestOrg() });
   persist();
   emit();
   pump();
@@ -389,9 +403,25 @@ function startable(e: Entry): boolean {
   return true;
 }
 
+/** The queued job to start next: of the startable ones, the first of the org with the fewest running. -1: none. */
+function next(): number {
+  const busy = new Map<string, number>();
+  for (const r of running.values()) busy.set(r.org, (busy.get(r.org) ?? 0) + 1);
+  let best = -1;
+  let least = Infinity;
+  for (let i = 0; i < queue.length && least > 0; i++) {
+    const n = busy.get(queue[i].org) ?? 0;
+    if (n < least && startable(queue[i])) {
+      best = i;
+      least = n;
+    }
+  }
+  return best;
+}
+
 function pump(): void {
   while (running.size < MAX_RUNNING) {
-    const i = queue.findIndex(startable);
+    const i = next();
     if (i < 0) return;
     const [e] = queue.splice(i, 1);
     // A queued job starts from ANOTHER job's settle(), inside that job's

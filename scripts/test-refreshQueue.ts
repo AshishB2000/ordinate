@@ -18,7 +18,10 @@
 //   3. a run that outlasts 5 minutes: `lastAutoMs` > interval → the summary
 //      says behindSchedule, computed on the server; one inside it does not;
 //   4. two due FULL (non-incremental) refreshes: awaited by the tick, one at a
-//      time, most overdue first.
+//      time, most overdue first;
+//   6. the run budget (NV-45): past `stopAt` the tick begins no further full
+//      refresh — the one left is not stamped and the next tick runs it (the
+//      negative control is §4, where both run under no budget).
 //
 //   npm run build:ts && node scripts/test-refreshQueue.js
 
@@ -250,6 +253,24 @@ async function main(): Promise<void> {
   const out5 = await sched.tickNow();
   ok('5. the next pod\'s tick runs it and stamps it', out5.some((o) => names.get(o.datasetId) === 'r' && o.ok) && typeof (await auto('r'))?.lastAutoAt === 'string',
     JSON.stringify(out5));
+
+  // ── 6. The run budget (NV-45) ──────────────────────────────────────────────
+  await datasets.setAutoRefresh(pid, ids.get('r')!, { every: null });
+  await table('k1', false);
+  await table('k2', false);
+  await schedule('k1', 'hourly'); // never: first
+  await schedule('k2', 'hourly', new Date(Date.now() - 3 * 60 * MIN).toISOString());
+  held.add('k1');
+  started.length = 0;
+  const tick6 = sched.tickNow(Date.now(), Date.now() + 100);
+  await until(() => parked().includes('k1'));
+  await sleep(200); // the budget runs out while k1 is fetching
+  release('k1');
+  const out6 = await tick6;
+  ok('6. past its budget the tick finishes the refresh it began and begins no other', out6.map((o) => names.get(o.datasetId)).join() === 'k1' && !started.includes('k2'), JSON.stringify(out6));
+  ok('6. …the one left is not stamped: still due', Date.parse((await auto('k2'))?.lastAutoAt ?? '') < Date.now() - 2 * 60 * MIN, JSON.stringify(await auto('k2')));
+  const out6b = await sched.tickNow();
+  ok('6. …and the next tick runs it', out6b.some((o) => names.get(o.datasetId) === 'k2' && o.ok), JSON.stringify(out6b));
 }
 
 main()

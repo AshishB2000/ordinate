@@ -5,13 +5,18 @@
 //                           or lower when the org's admin set a lower cap.
 //                           Replies { fileToken, name, size }. A handler takes
 //                           the token instead of a path: `resolveUpload(token)`.
+//                           Spends the per-user RPC bucket (./limits.ts), and
+//                           a user streams at most MAX_UPLOADS_IN_FLIGHT at once
+//                           on a pod — one more is a 429 (NV-43).
 //   GET  /api/files/:token  streams a file a handler produced and handed over
 //                           with `offerDownload(filePath, name)`.
 //
 // A token is 32 random bytes, bound to the org AND user that got it, single
 // use, and dead after an hour. Its file is deleted once the token is done with
 // (an upload's handler calls `done()`, a download is deleted after it is sent)
-// or by the sweep when it expires. A wrong org, a used token and an expired one
+// or by the sweep when it expires — or when it is EVICTED: a user keeps at most
+// tokens.MAX_WAITING files (MAX_WAITING_BYTES) waiting for their take, and each
+// new one drops their oldest waiting ones past that (NV-43, NV-55). A wrong org, a used token and an expired one
 // all look the same to the caller as an unknown one — no existence oracle.
 //
 // ANY POD (docs/any-pod/00-design.md). With DATABASE_URL a token is a row and
@@ -30,7 +35,7 @@ import * as path from 'path';
 import { createHash, randomBytes } from 'crypto';
 import { Transform } from 'stream';
 import { pipeline } from 'stream/promises';
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest, onRequestAsyncHookHandler } from 'fastify';
 import * as appPaths from '../app/paths';
 import { ctx } from './context';
 import * as tokens from './fileTokens';
@@ -49,6 +54,8 @@ const LINGER_MS = 2000;
 const LINGER_BYTES = 16 * 1024 * 1024;
 // One S3 PUT carries at most 5 GiB: with S3 storage no upload may be larger.
 const S3_PUT_MAX_MB = 5120;
+/** Uploads one user may be streaming to this pod at once: each holds up to the upload cap on its disk. */
+export const MAX_UPLOADS_IN_FLIGHT = 2;
 
 type Reason = 'unknown' | 'forbidden' | 'used' | 'expired';
 
@@ -66,6 +73,7 @@ interface Entry {
   readonly user: string;
   readonly path: string;
   readonly name: string;
+  readonly size: number;
   readonly expires: number;
   used: boolean;
 }
@@ -74,10 +82,17 @@ interface Entry {
 const entries = new Map<string, Entry>();
 let now = (): number => Date.now();
 
-function issue(kind: Entry['kind'], filePath: string, name: string): string {
+function issue(kind: Entry['kind'], filePath: string, name: string, size: number): string {
   const { org, user } = ctx();
   const token = randomBytes(32).toString('base64url');
-  entries.set(token, { kind, org: org.id, user: user.email, path: filePath, name, expires: now() + TOKEN_TTL_MS, used: false });
+  entries.set(token, { kind, org: org.id, user: user.email, path: filePath, name, size, expires: now() + TOKEN_TTL_MS, used: false });
+  // The user's waiting files, newest (this one) first: past their share the oldest go, as in Postgres (tokens.evictWaiting).
+  const waiting = [...entries].filter(([, e]) => e.org === org.id && e.user === user.email && !e.used && now() < e.expires).reverse();
+  let bytes = 0;
+  waiting.forEach(([t, e], i) => {
+    bytes += e.size;
+    if (i > 0 && (i >= tokens.MAX_WAITING || bytes > tokens.MAX_WAITING_BYTES)) forget(t);
+  });
   return token;
 }
 
@@ -142,9 +157,9 @@ export async function resolveUpload(token: unknown): Promise<Upload> {
  */
 export async function offerDownload(filePath: string, name: string, sha256?: string): Promise<{ downloadToken: string }> {
   const file = path.resolve(filePath);
-  if (!tokens.dbOn()) return { downloadToken: issue('download', file, displayName(name)) };
-  if (path.dirname(file) !== path.resolve(appPaths.temp())) throw new Error('offerDownload: the file must be in the org temp directory');
+  if (tokens.dbOn() && path.dirname(file) !== path.resolve(appPaths.temp())) throw new Error('offerDownload: the file must be in the org temp directory');
   const { size } = await fs.promises.stat(file);
+  if (!tokens.dbOn()) return { downloadToken: issue('download', file, displayName(name), size) };
   return { downloadToken: await shared.issue('download', file, displayName(name), size, TOKEN_TTL_MS, sha256) };
 }
 
@@ -213,6 +228,11 @@ export function maskFileToken(url: string): string {
 }
 
 function tooLarge(req: FastifyRequest, reply: FastifyReply, maxMb: number): FastifyReply {
+  return refuseBody(req, reply).code(413).send({ error: 'file too large', maxMb });
+}
+
+/** Refuses an upload whose body is still arriving (see below); the caller sets the status and sends. */
+function refuseBody(req: FastifyRequest, reply: FastifyReply): FastifyReply {
   // A lingering close, as nginx does it. Closing a socket the client is still
   // writing to makes the kernel send a reset, and the client can lose the 413
   // with it. So: read and discard what is still arriving (nothing is kept),
@@ -229,7 +249,7 @@ function tooLarge(req: FastifyRequest, reply: FastifyReply, maxMb: number): Fast
     sock.end();
     setTimeout(() => sock.destroy(), LINGER_MS).unref();
   });
-  return reply.code(413).send({ error: 'file too large', maxMb });
+  return reply;
 }
 
 /**
@@ -252,8 +272,9 @@ function guarded<R extends FastifyRequest>(what: 'upload' | 'download', fn: (req
  * Registers the multipart parser and both routes on `app`. Uploads above the
  * cap get 413: `ceilingMb` (MAX_UPLOAD_MB) is the ceiling, and `capMb()` — the
  * caller's org cap (Admin → Settings, T3.4), asked per upload — may only lower it.
+ * `perUser`: the per-user rate check (./limits.ts), run on each upload after sign-in.
  */
-export function registerFileRoutes(app: FastifyInstance, ceilingMb: number, capMb: () => Promise<number> = async () => ceilingMb): void {
+export function registerFileRoutes(app: FastifyInstance, ceilingMb: number, capMb: () => Promise<number> = async () => ceilingMb, perUser?: onRequestAsyncHookHandler): void {
   const ceilingBytes = ceilingMb * 1024 * 1024;
   shared.useFilesLog(app.log);
   // Lazy: only the server needs the multipart parser.
@@ -261,8 +282,24 @@ export function registerFileRoutes(app: FastifyInstance, ceilingMb: number, capM
     limits: { fileSize: ceilingBytes, files: 1, fields: 0, parts: 1 },
   });
 
+  const streaming = new Map<string, number>(); // org + email → uploads in flight on this pod
   // ponytail: no role check — dev auth is an admin; T3.3 makes this `write`.
-  app.post('/api/files', guarded('upload', async (req, reply) => {
+  app.post('/api/files', perUser ? { onRequest: perUser } : {}, guarded('upload', async (req, reply) => {
+    const { org, user } = ctx();
+    const who = `${org.id}\n${user.email}`;
+    const n = streaming.get(who) ?? 0;
+    if (n >= MAX_UPLOADS_IN_FLIGHT) return refuseBody(req, reply).code(429).header('retry-after', 5).send({ error: 'too many uploads at once' });
+    streaming.set(who, n + 1);
+    try {
+      return await receive(req, reply);
+    } finally {
+      const left = (streaming.get(who) ?? 1) - 1;
+      if (left > 0) streaming.set(who, left);
+      else streaming.delete(who);
+    }
+  }));
+
+  async function receive(req: FastifyRequest, reply: FastifyReply): Promise<unknown> {
     const maxMb = Math.min(ceilingMb, await capMb(), staging.isS3() ? S3_PUT_MAX_MB : Infinity);
     const maxBytes = maxMb * 1024 * 1024;
     const declared = Number(req.headers['content-length']);
@@ -293,14 +330,14 @@ export function registerFileRoutes(app: FastifyInstance, ceilingMb: number, capM
     }
     const name = displayName(part.filename);
     const { size } = fs.statSync(dest);
-    if (!tokens.dbOn()) return { fileToken: issue('upload', dest, name), name, size };
+    if (!tokens.dbOn()) return { fileToken: issue('upload', dest, name, size), name, size };
     try {
       return { fileToken: await shared.issue('upload', dest, name, size, TOKEN_TTL_MS, hash.digest('hex')), name, size };
     } catch (err) {
       fs.rmSync(dest, { force: true });
       throw err;
     }
-  }));
+  }
 
   app.get<{ Params: { token: string } }>('/api/files/:token', guarded('download', async (req: FastifyRequest<{ Params: { token: string } }>, reply) => {
     const { token } = req.params;

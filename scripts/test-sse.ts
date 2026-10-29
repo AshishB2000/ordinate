@@ -7,6 +7,7 @@
 // completion, closing instead of growing), heartbeat, and the registry back to 0.
 // Closing a user's streams (docs/sso-lifecycle §3.9): only that user's, on this
 // pod and handed to the fan-out; a session kept; `publish` never sends CLOSE.
+// At most MAX_STREAMS_PER_USER streams per user on a pod (NV-53): one more is a 429.
 //
 //   npm run build:ts && node scripts/test-sse.js
 
@@ -292,6 +293,27 @@ const findJob = (e: Ev, id: string): Job | undefined => {
   ok('close: a CLOSE from another pod (deliverLocal) ends the target\'s streams', await Promise.race([H.ended.then(() => true), sleep(2000).then(() => false)]));
   sse.setFanOut(null);
   Gb.close();
+
+  // ── At most MAX_STREAMS_PER_USER per user on a pod (NV-53) ────────────────
+  const ivyKeys = Array.from({ length: sse.MAX_STREAMS_PER_USER }, () => randomUUID());
+  const ivy: Tab[] = [];
+  for (const k of ivyKeys) ivy.push(await openTab(k, 'org-a', 'ivy'));
+  ok('cap: a user opens MAX_STREAMS_PER_USER streams', ivy.every((t) => t.status === 200), ivy.map((t) => t.status).join(','));
+  const before = sse.streamCount();
+  const over = await openTab(randomUUID(), 'org-a', 'ivy');
+  ok('cap: one more → 429 with Retry-After, nothing registered, none of the others closed',
+    over.status === 429 && over.headers['retry-after'] === '30' && sse.streamCount() === before && !(await Promise.race([ivy[0].ended.then(() => true), sleep(100).then(() => false)])), `${over.status} ${sse.streamCount()}/${before}`);
+  const again = await openTab(ivyKeys[5], 'org-a', 'ivy');
+  ok('cap: reopening an id the user holds replaces it (200, the count unchanged)', again.status === 200 && (await until(() => sse.streamCount() === before)), sse.streamCount());
+  const jo = await openTab(randomUUID(), 'org-a', 'jo');
+  const ivyB = await openTab(randomUUID(), 'org-b', 'ivy');
+  ok('cap NEGATIVE CONTROL: another user, and the same name in another org, still open streams', jo.status === 200 && ivyB.status === 200);
+  ivy[0].close();
+  await until(() => sse.streamCount() === before + 1);
+  const after = await openTab(randomUUID(), 'org-a', 'ivy');
+  ok('cap: once one closes, the user opens a new one', after.status === 200);
+  for (const t of [...ivy, again, jo, ivyB, after]) t.close();
+  ok('cap: every one of them closed', await until(() => sse.streamCount() === 5), sse.streamCount());
 
   // ── Closing frees the registry ────────────────────────────────────────────
   for (const t of [A2, B, C, D, P]) t.close();
