@@ -5,10 +5,11 @@
 // ranked hits ⌘K paints. MAIN PROCESS ONLY. dependency-free apart from what
 // datasets.ts already pulls in, so it is callable from a test or the CLI.
 //
-// CANCELLATION is by generation: every search takes the next number, and a
-// search whose number is no longer the latest stops before its next query and
-// answers `cancelled`. ⌘K issues one per debounced keystroke, so typing
-// "Calif" never leaves four older searches queued on the DuckDB worker.
+// CANCELLATION is by generation: every search takes the caller's next number,
+// and a search whose number is no longer that caller's latest stops before its
+// next query and answers `cancelled`. ⌘K issues one per debounced keystroke, so
+// typing "Calif" never leaves four older searches queued on the DuckDB worker.
+// Per caller (org + user): another member's search never cancels yours (NV-2).
 //
 // SENSITIVE COLUMNS (marked personal/financial in the catalog, PR #179) are not
 // searched unless the project's share policy lets their values out as they
@@ -29,6 +30,7 @@ import { readIndex, scheduleIndex, searchDataset } from '../engine/dataSearchRes
 import { compareMatches, excludedColumns, needleOf, searchRowsJs } from './dataSearch';
 import type { MatchRank } from './dataSearch';
 import { isLive } from './liveDataset';
+import { ctx, orgKey } from '../server/context';
 
 /** Hits returned to ⌘K — a group, not a page. */
 export const MAX_HITS = 10;
@@ -62,7 +64,8 @@ export interface DataSearchReply {
   error?: string;
 }
 
-let generation = 0;
+/** The latest search number per caller, `orgKey(user)`: one entry per member who searched. */
+const generations = new Map<string, number>();
 
 export interface RunOpts {
   /** '' = every non-archived project (⌘K on Home). */
@@ -81,8 +84,10 @@ async function scope(projectId: string): Promise<Array<{ id: string; name: strin
 }
 
 export async function runSearch(opts: RunOpts): Promise<DataSearchReply> {
-  const my = ++generation;
-  const cancelled = (): boolean => my !== generation;
+  const caller = orgKey(ctx().user.email);
+  const my = (generations.get(caller) ?? 0) + 1;
+  generations.set(caller, my);
+  const cancelled = (): boolean => my !== generations.get(caller);
   const term = typeof opts.term === 'string' ? opts.term.trim().slice(0, MAX_TERM) : '';
   const out: DataSearchReply = { ok: true, hits: [], partial: [], searched: 0 };
   if (needleOf(term).length < MIN_TERM) return out;

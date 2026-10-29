@@ -182,6 +182,23 @@ function throws(fn: () => unknown): boolean {
     fs.existsSync(path.join(DATA, 'orgs', 'org-a', 'userData', 'projects', pid))
       && !fs.existsSync(path.join(DATA, 'orgs', 'org-b', 'userData', 'projects', pid)));
 
+  // ── NV-2: a search is cancelled by its own caller's next one, never another member's ──
+  const { runSearch } = require('../src/data/dataSearchRun') as typeof import('../src/data/dataSearchRun');
+  const member = (org: string, email: string): import('../src/server/context').Identity => ({ user: { email, role: 'viewer' }, org: { id: org } });
+  const search = (who: import('../src/server/context').Identity, term: string, projectId = pid) =>
+    context.runInContext(who, 'nv2', () => runSearch({ projectId, term }));
+  const alice = member('org-a', 'alice@a.test');
+  ok('NV-2 control: a lone search finds the value', (await search(alice, '007')).ok === true);
+  for (const [label, other] of [['another member of the org', member('org-a', 'bob@a.test')], ['a member of another org', member('org-b', 'bob@b.test')]] as const) {
+    const mine = search(alice, '007'); // parked at its first await
+    await search(other, '  ', ''); // returns at once, after taking its number
+    const r = await mine;
+    ok(`NV-2: ${label} searching does not cancel alice's search in flight`, r.ok === true && !r.cancelled && r.hits.length > 0, JSON.stringify(r));
+  }
+  const first = search(alice, '007');
+  await search(alice, '  ');
+  ok('NV-2 control: alice\'s own next search still cancels her older one', (await first).cancelled === true);
+
   await app.close();
 })()
   .catch((err) => ok('suite ran to completion', false, err instanceof Error ? err.stack : err))
