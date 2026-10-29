@@ -238,7 +238,7 @@ function Logo() {
     }
   };
   return (
-    <Row title="Logo" desc="PNG or SVG, up to 512 KB. On reports, presented dashboards and exports.">
+    <Row title="Logo" desc="PNG or SVG, up to 512 KB. At the top of the sidebar, and on reports, presented dashboards and exports.">
       <span className={s.logoFrame} aria-busy={logo.isPending}>
         {logo.data ? (
           <img src={logo.data} alt="Workspace logo" />
@@ -262,7 +262,32 @@ function Logo() {
   );
 }
 
-function Branding({ accent, style }: { accent: string; style: Prefs['branding']['dashboardStyle'] }) {
+/** The company's name: saved on blur or Enter, shown with the logo at the head of every member's sidebar. */
+function CompanyName({ name }: { name: string }) {
+  const save = useSavePrefs('branding:set');
+  const [text, setText] = useState(name);
+  const commit = () => {
+    const v = text.trim();
+    if (v !== name) save.mutate({ companyName: v });
+  };
+  return (
+    <Row title="Company name" desc="Beside the logo at the top of the sidebar, for every member.">
+      <div className={s.select}>
+        <Input
+          aria-label="Company name"
+          value={text}
+          maxLength={60}
+          placeholder="e.g. Acme Inc."
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => e.key === 'Enter' && commit()}
+        />
+      </div>
+    </Row>
+  );
+}
+
+function Branding({ accent, style, companyName }: { accent: string; style: Prefs['branding']['dashboardStyle']; companyName: string }) {
   const save = useSavePrefs('branding:set');
   const current = accent || APP_BLUE;
   const [hex, setHex] = useState(current);
@@ -308,6 +333,7 @@ function Branding({ accent, style }: { accent: string; style: Prefs['branding'][
           />
         </div>
       </Row>
+      <CompanyName key={companyName} name={companyName} />
       <Logo />
       <Row title="New dashboards start as" desc="A dashboard's own Style panel still overrides it.">
         <div className={s.select}>
@@ -373,7 +399,7 @@ export function WorkspaceTab() {
       <Formats f={p.formats} />
       {/* Keyed by the saved value so a save resets the local field. Prefixed: with no accent and
           no rules both were '', and duplicate sibling keys left the old Branding on the page. */}
-      <Branding key={`accent:${p.branding.accent}`} accent={p.branding.accent} style={p.branding.dashboardStyle} />
+      <Branding key={`accent:${p.branding.accent}`} accent={p.branding.accent} style={p.branding.dashboardStyle} companyName={p.branding.companyName} />
       <Assistant
         key={`rules:${o.globalRules}`}
         rules={o.globalRules}

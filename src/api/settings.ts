@@ -45,12 +45,14 @@ export const settings = {
   // ── Organization: formats, branding, the Assistant's rules, notifications ──
   // preload: setFormats(patch) — src/ipc/prefs.ts; config re-sanitizes the merge.
   'formats:set': admin(FormatsPatch),
-  // preload: setBranding(patch) — the accent ('' = the app's own blue) and the
-  // style new dashboards start as. `logo` is not the browser's to set.
+  // preload: setBranding(patch) — the accent ('' = the app's own blue), the
+  // style new dashboards start as and the company's name ('' = none; 60 is
+  // COMPANY_NAME_MAX in src/app/branding.ts). `logo` is not the browser's to set.
   'branding:set': admin(
     z.strictObject({
       accent: z.union([z.literal(''), z.string().regex(/^#[0-9a-f]{6}$/)]).optional(),
       dashboardStyle: z.enum(['auto', 'clean', 'executive', 'dense', 'dark']).optional(),
+      companyName: z.string().max(60).optional(),
     }),
   ),
   // preload: brandingLogo('workspace') — a data: URL, never a path. Only the

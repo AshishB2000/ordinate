@@ -33,7 +33,14 @@ export function register(): void {
     const cur = config.get().branding;
     const p = (patch && typeof patch === 'object' ? patch : {}) as Record<string, unknown>;
     // `logo` is not the renderer's to set: it records which FILE exists.
-    config.save({ branding: { ...cur, accent: 'accent' in p ? p.accent : cur.accent, dashboardStyle: p.dashboardStyle ?? cur.dashboardStyle } });
+    config.save({
+      branding: {
+        ...cur,
+        accent: 'accent' in p ? p.accent : cur.accent,
+        dashboardStyle: p.dashboardStyle ?? cur.dashboardStyle,
+        companyName: 'companyName' in p ? p.companyName : cur.companyName,
+      },
+    });
     return { ok: true, ...publicPrefs() };
   });
 

@@ -12,7 +12,7 @@ const DS = '22222222-2222-4222-8222-222222222222';
 const ADMIN_DEV = { user: { email: 'dev@local', role: 'admin' }, org: 'default', mode: 'dev', canSignOut: false, accounts: false };
 const VIEWER = { user: { email: 'pat@acme.test', role: 'viewer' }, org: 'acme', mode: 'oidc', canSignOut: true, accounts: true };
 const FORMATS = { locale: 'en-US', numberStyle: 'locale', currency: 'USD', currencyPosition: 'before', dateFormat: 'medium', weekStart: 1, fiscalYearStart: 1, calendarType: 'gregorian', yearEnd: 'nearest', compact: true };
-const BRANDING = { accent: '', logo: '', dashboardStyle: 'auto' };
+const BRANDING = { accent: '', logo: '', dashboardStyle: 'auto', companyName: '' };
 const PROJECT = { id: PID, name: 'Retail', updatedAt: '2026-10-01T00:00:00Z', lastOpenedAt: null, archived: false, datasets: 1, dashboards: 0, sample: false };
 
 type Reply = { status?: number; body?: unknown } | ((payload: unknown) => { status?: number; body?: unknown });
@@ -235,6 +235,23 @@ describe('Organization settings (Admin)', () => {
     // stale Branding stayed on the page beside the new one.
     expect(checked()).toEqual(['true']);
     expect(sent(calls, 'branding:set')).toEqual([{ accent: '#7c3aed' }]);
+  });
+
+  it('Workspace: the company name is saved trimmed on Enter and heads the sidebar at once', async () => {
+    const acme = { ...BRANDING, companyName: 'Acme Corp' };
+    const calls = serve({
+      '/api/auth/me': { body: ADMIN_DEV },
+      'key:status': { body: { globalRules: '', autoRefresh: true, notifications: { alerts: true } } },
+      'branding:set': { body: { ok: true, formats: FORMATS, branding: acme } },
+    });
+    renderApp('/admin?tab=workspace');
+    const field = await screen.findByRole('textbox', { name: 'Company name' });
+    expect(field.getAttribute('maxlength')).toBe('60');
+    fireEvent.change(field, { target: { value: '  Acme Corp ' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    await waitFor(() => expect(screen.getByTestId('brand').textContent).toContain('Acme Corp'));
+    expect(sent(calls, 'branding:set')).toEqual([{ companyName: 'Acme Corp' }]);
+    expect((screen.getByRole('textbox', { name: 'Company name' }) as HTMLInputElement).value).toBe('Acme Corp');
   });
 
   it('Themes: the empty state, then Duplicate on a built-in saves a copy under a free name', async () => {

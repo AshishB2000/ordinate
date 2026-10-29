@@ -15,7 +15,8 @@ import { Menu, type MenuEntry } from '../ui/Menu';
 import { PageSkeleton } from '../ui/Skeleton';
 import { toast, Toaster } from '../ui/Toast';
 import { ProjectProvider } from '../features/projects/current';
-import { ProjectSwitcher } from '../features/projects/ProjectSwitcher';
+import { Avatar, ProjectSwitcher } from '../features/projects/ProjectSwitcher';
+import { useLogo } from '../features/settings/api';
 import { JobsButton } from './JobsButton';
 import { AlertsBell } from '../features/dashboards/AlertsBell';
 import { useLiveLimitNotice } from '../features/admin/liveLimitNotice';
@@ -132,17 +133,31 @@ function UserMenu() {
   );
 }
 
-/** The rail: the project switcher and the sections, icons only until the
+/** The company at the head of the rail (Admin → Workspace): its logo, else the
+ * initial of its name; the name itself once the rail opens. Unbranded, Ordinate's. */
+function Brand({ branding }: { branding: ReturnType<typeof useWorkspacePrefs> }) {
+  // No call for a logo the workspace does not have.
+  const logo = useLogo(!!branding?.logo);
+  const name = (typeof branding?.companyName === 'string' && branding.companyName) || 'Ordinate';
+  return (
+    <div className={s.brand} data-testid="brand">
+      <span className={s.brandMark}>{logo.data ? <img src={logo.data} alt="" /> : <Avatar name={name} />}</span>
+      <span className={s.brandName}>{name}</span>
+    </div>
+  );
+}
+
+/** The rail: the company and the sections, icons only until the
  * pointer rests on it or keyboard focus enters, then the names slide out OVER
  * the page (Shell.module.css). Each label stays in the DOM, so every link keeps its name. */
-function Rail({ groups, bottom }: { groups: { label: string; items: NavItem[] }[]; bottom: NavItem[] }) {
+function Rail({ groups, bottom, branding }: { groups: { label: string; items: NavItem[] }[]; bottom: NavItem[]; branding: ReturnType<typeof useWorkspacePrefs> }) {
   // Picking a section folds the names away at once, even with the pointer still on
   // the rail; they come back once it has left and returned.
   const [picked, setPicked] = useState(false);
   const pick = () => setPicked(true);
   return (
     <div className={s.rail} data-picked={picked || undefined} onPointerLeave={() => setPicked(false)}>
-      <ProjectSwitcher />
+      <Brand branding={branding} />
       <nav className={s.sections} aria-label="Sections">
         <div className={s.nav}>
           {groups.map((g) => (
@@ -167,7 +182,7 @@ function Rail({ groups, bottom }: { groups: { label: string; items: NavItem[] }[
 }
 
 export function Shell() {
-  useWorkspacePrefs();
+  const branding = useWorkspacePrefs();
   // A refreshed dataset redraws every figure on screen that reads it (L0.1).
   useDatasetFreshness();
   // An org admin hears when today's live warehouse queries run out (L2.7; pushed to admins only).
@@ -191,9 +206,11 @@ export function Shell() {
         <a className={s.skip} href="#main">
           Skip to content
         </a>
-        <Rail groups={groups} bottom={bottom} />
+        <Rail groups={groups} bottom={bottom} branding={branding} />
         <header className={s.topbar}>
-          <div className={s.side} />
+          <div className={s.side}>
+            <ProjectSwitcher />
+          </div>
           <div className={s.search} role="search">
             <Icon name="search" />
             <input className={s.searchInput} type="search" placeholder="Search" aria-label="Search" aria-haspopup="dialog" readOnly onClick={openPalette} onKeyDown={(e) => (e.key === 'Enter' || e.key.length === 1) && openPalette(e)} />

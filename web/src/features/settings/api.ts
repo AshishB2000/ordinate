@@ -14,6 +14,8 @@ export interface Branding {
   accent: string;
   logo: string;
   dashboardStyle: 'auto' | 'clean' | 'executive' | 'dense' | 'dark';
+  /** '' for none; the sidebar's head shows it beside the logo. */
+  companyName: string;
 }
 
 export interface Prefs {
@@ -77,10 +79,12 @@ export function useOrgConfig() {
   return useQuery({ queryKey: ['key:status'], queryFn: async () => (await rpc('key:status')) as OrgConfig });
 }
 
-export function useLogo() {
+/** The workspace logo as a data: URL. `enabled` false skips the call (the shell, when branding says there is none). */
+export function useLogo(enabled = true) {
   return useQuery({
     queryKey: ['branding:logo'],
     queryFn: async () => ((await rpc('branding:logo', 'workspace')) as { dataUrl: string | null }).dataUrl,
+    enabled,
   });
 }
 

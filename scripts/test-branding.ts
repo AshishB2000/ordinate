@@ -47,6 +47,19 @@ ok('sanitizeBranding: hex lower-cased, unknown logo kind and preset dropped',
 ok('sanitizeBranding: a CSS injection is not an accent',
   branding.sanitizeBranding({ accent: '#fff;} body{display:none' }).accent === '');
 
+// The company's name: one trimmed line, capped, '' for none.
+const name = (v: unknown) => branding.sanitizeBranding({ companyName: v }).companyName;
+ok('companyName: none by default', branding.sanitizeBranding({}).companyName === '' && branding.BRANDING_DEFAULTS.companyName === '');
+ok('companyName: trimmed, with runs of whitespace and control characters made one space',
+  name('  Acme \n\t Corp\u0000 ') === 'Acme Corp', JSON.stringify(name('  Acme \n\t Corp\u0000 ')));
+ok('companyName: whitespace only is none', name(' \n ') === '');
+ok('companyName: kept whole at the cap', name('a'.repeat(branding.COMPANY_NAME_MAX)).length === branding.COMPANY_NAME_MAX);
+// Negative controls: what is not a short string never reaches the sidebar whole.
+ok('companyName: an over-long name is cut at the cap', name('b'.repeat(500)) === 'b'.repeat(branding.COMPANY_NAME_MAX));
+ok('companyName: cut at the cap in the contract\'s units, never inside an emoji', name('😀'.repeat(80)) === '😀'.repeat(branding.COMPANY_NAME_MAX / 2), name('😀'.repeat(80)));
+ok('companyName: never inside a family emoji either', name('a'.repeat(55) + '👨‍👩‍👧') === 'a'.repeat(55));
+ok('companyName: a number, an object or an array is none', name(42) === '' && name({ toString: () => 'x' }) === '' && name(['Acme']) === '');
+
 // ── The logo gate ───────────────────────────────────────────────────────────
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(40)]);
 const svg = (body: string) => Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">${body}</svg>`);
