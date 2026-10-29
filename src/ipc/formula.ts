@@ -38,6 +38,7 @@ import { detectColumnType } from '../data/parse';
 import * as datasets from '../data/datasets';
 import { pageFor } from './datasets';
 import { lodPreview } from './lodData';
+import { withFormulaBudget } from '../formula/formulaBudget';
 
 /** How many rows the preview shows. Small on purpose: this runs per keystroke. */
 const SAMPLE_ROWS = 8;
@@ -165,7 +166,8 @@ async function checkFormula(projectId: string, datasetId: string, expression: st
   const sample: FormulaSample = { columns: known.concat(lods.map((l) => src.slice(l.start, l.end))), rows: [] };
   if (lods.length) sample.lodColumns = lods.length;
   if (!lodVals) sample.note = 'This dataset is too large to preview level-of-detail values here; they are computed when the field is saved.';
-  if (page.ok) {
+  // Eight rows still run under the work budget: one row of a 4,000-character formula can be seconds (NV-42).
+  if (page.ok) withFormulaBudget(undefined, () => {
     page.rows.forEach((row, r) => {
       const rowMap: Record<string, FValue> = {};
       for (let i = 0; i < columnNames.length; i += 1) rowMap[columnNames[i]] = (row[i] ?? null) as FValue;
@@ -176,7 +178,7 @@ async function checkFormula(projectId: string, datasetId: string, expression: st
         result: res.fn.evaluate(rowMap),
       });
     });
-  }
+  });
 
   return {
     tokens,

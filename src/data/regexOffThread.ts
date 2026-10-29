@@ -26,6 +26,7 @@ import type { RegexSpec } from '../engine/regexPool';
 import { evaluateRuleJs, failingPredicateJs } from '../analysis/qualityRules';
 import type { QualityRule, RefTable, RuleResult } from '../analysis/qualityRules';
 import { formatNumber } from '../app/format';
+import { newFormulaBudget } from '../formula/formulaBudget';
 
 const seconds = (): string => formatNumber(deadline() / 1000, { maxDecimals: 1 });
 
@@ -103,6 +104,7 @@ export async function applyPipelineAsync(source: TableData, steps: TransformStep
   if (!regexWorkerOnly() || !list.some(needsWorker)) {
     return applyPipeline(source, list, ctx);
   }
+  if (!ctx.budget) ctx = { ...ctx, budget: newFormulaBudget() }; // one formula work budget across the awaits (NV-42)
   const start = applyPipeline(source, [], ctx); // the fold's own deep copy
   let table: TableData = { columns: start.columns, rows: start.rows };
   const warnings: string[] = [];

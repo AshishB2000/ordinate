@@ -37,6 +37,8 @@ import type { LodAgg, LodSpec } from './formulaParse';
 import { num, toDate } from './formulaEval';
 import { tokenize } from './formulaTokens';
 import { nearestColumn } from './didYouMean';
+import { isFormulaBudgetError, spend, withFormulaBudget } from './formulaBudget';
+import type { FormulaBudget } from './formulaBudget';
 
 type Cell = string | number | null;
 interface Col {
@@ -46,6 +48,8 @@ interface Col {
 /** The visual's dimensions — absent or empty outside a visual. */
 export interface LodContext {
   vizDims?: string[];
+  /** The work budget to draw on (a prepare fold shares one); a fresh one when absent. */
+  budget?: FormulaBudget;
 }
 
 /** The dimensions one LOD groups by, under the visual's own. */
@@ -109,7 +113,8 @@ function safe(fn: (row: Record<string, FValue>) => FValue, m: Record<string, FVa
   try {
     const v = fn(m);
     return v === undefined ? null : v;
-  } catch (_) {
+  } catch (e) {
+    if (isFormulaBudgetError(e)) throw e;
     return null;
   }
 }
@@ -117,9 +122,14 @@ function safe(fn: (row: Record<string, FValue>) => FValue, m: Record<string, FVa
 /**
  * Every LOD's per-row value, in fill order — `out[j][i]` is LOD j at row i.
  * The caller has already checked the dimensions exist (`lodDimProblem`); an
- * unknown one here keys as null rather than throwing.
+ * unknown one here keys as null rather than throwing. Past the work budget it
+ * throws FormulaBudgetError (formulaBudget.ts).
  */
 export function lodValues(lods: LodSpec[], columns: Col[], rows: Cell[][], ctx: LodContext = {}): FValue[][] {
+  return withFormulaBudget(ctx.budget, () => lodFill(lods, columns, rows, ctx));
+}
+
+function lodFill(lods: LodSpec[], columns: Col[], rows: Cell[][], ctx: LodContext): FValue[][] {
   const out: FValue[][] = [];
   const idx = (name: string): number => columns.findIndex((c) => c.name === name);
   for (const spec of lods) {
@@ -142,6 +152,7 @@ export function lodValues(lods: LodSpec[], columns: Col[], rows: Cell[][], ctx: 
       let v: FValue;
       if (direct >= 0) v = r[direct] ?? null;
       else {
+        spend(spec.cost ?? 1);
         const m = rowMap(columns, r);
         for (let j = 0; j < out.length; j += 1) m[lods[j].key] = out[j][i];
         v = safe(spec.arg, m);
@@ -158,14 +169,19 @@ export function lodValues(lods: LodSpec[], columns: Col[], rows: Cell[][], ctx: 
  * The compiled expression over EVERY row, LODs included — what a calculated
  * field stores and what the formula editor previews. An expression with no
  * LOD is evaluated exactly as `transforms.stepCalculatedField` always did.
+ * Past the work budget it throws FormulaBudgetError (formulaBudget.ts).
  */
 export function evaluateTable(fn: Compiled, columns: Col[], rows: Cell[][], ctx: LodContext = {}): FValue[] {
-  const lods = fn.lods || [];
-  const vals = lods.length ? lodValues(lods, columns, rows, ctx) : [];
-  return rows.map((r, i) => {
-    const m = rowMap(columns, r);
-    for (let j = 0; j < lods.length; j += 1) m[lods[j].key] = vals[j][i];
-    return fn.evaluate(m);
+  return withFormulaBudget(ctx.budget, () => {
+    const lods = fn.lods || [];
+    const vals = lods.length ? lodValues(lods, columns, rows, ctx) : [];
+    const cost = fn.cost ?? 1;
+    return rows.map((r, i) => {
+      spend(cost);
+      const m = rowMap(columns, r);
+      for (let j = 0; j < lods.length; j += 1) m[lods[j].key] = vals[j][i];
+      return fn.evaluate(m);
+    });
   });
 }
 
