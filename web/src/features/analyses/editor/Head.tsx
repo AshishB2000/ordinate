@@ -1,7 +1,8 @@
 // The editor's top strip (legacy dashboards.ts .dash-editor-head, moved above
 // the workbench by authoring.ts anMountTopStrip): Back, the name (the rename
 // control), the save state, the sheet tabs, the add row, undo / redo, the
-// layout size, and ⋯ — History and Publish.
+// layout size, and ⋯ — History, Lineage, Style, export and print. Ready is the
+// one switch that puts a dashboard in front of readers; there is no Publish here.
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -129,16 +130,6 @@ export function Head() {
   const ro = ed.readOnly;
   // Opened from the Dashboards page (ed.viewing), back goes there and no badge says what the page is for.
   const back = ed.viewing ? { to: `/dashboards?project=${ed.projectId}`, label: 'Dashboards' } : { to: `/analyses?project=${ed.projectId}`, label: 'Analyses' };
-  // Publishing lives with the dashboard viewer (T2.9): write what is on screen now, then go there.
-  const publish = () => {
-    // Changed elsewhere: what would be published is the other version, without these edits — not until it is settled.
-    if (ed.save.changed) {
-      toast('Not published: this dashboard was changed in another tab or by someone else, and your changes are not saved. Choose Reload or Save mine as a copy in the banner first.', { kind: 'error' });
-      return;
-    }
-    ed.save.retry();
-    void navigate(`/dashboards?project=${ed.projectId}&dashboard=${ed.analysisId}`);
-  };
   return (
     <div className={s.head}>
       <PageHead
@@ -193,7 +184,6 @@ export function Head() {
                 ...(ro ? [] : [{ label: 'Style…', icon: 'sliders' as const, onSelect: () => setStyling(true) }]),
                 { label: 'Export HTML', icon: 'download', onSelect: () => void exportHtml(ed) },
                 { label: 'Print or save as PDF', icon: 'file-text', onSelect: () => window.print() },
-                ...(ro ? [] : [{ label: 'Publish…', icon: 'external-link' as const, onSelect: publish }]),
               ]}
             />
             {ed.viewing && <ViewActions />}
