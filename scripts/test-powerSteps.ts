@@ -222,6 +222,15 @@ async function main(): Promise<void> {
     ok('split into rows keeps a null cell as one row', rows.rowCount === 7 && JSON.stringify(rows.stepCounts) === '[{"before":4,"after":7}]');
     const u = run([{ type: 'unpivot', columns: ['units', 'tags'] }]);
     ok('unpivot is row-major and keeps nulls', u.rowCount === 8 && JSON.stringify(col(u, 'attribute').slice(0, 2)) === '["units","tags"]');
+    // NV-52: one row of 9,000 columns, half chosen, would build 4,500 rows × 4,502 cells.
+    const names = Array.from({ length: 9000 }, (_, k) => `c${k}`);
+    const wide: TableData = { columns: names.map((name) => ({ name, type: 'text' as const })), rows: [names.slice()] };
+    const t0 = performance.now();
+    const wu = run([{ type: 'unpivot', columns: names.slice(0, 4500) }], wide);
+    ok('an unpivot past the cell budget is skipped before it builds a row', wu.rowCount === 1 &&
+      /^Unpivot skipped: it would make 20,259,000 cells; the limit is 20,000,000$/.test(wu.warnings[0] || '') && performance.now() - t0 < 500, JSON.stringify(wu.warnings));
+    const fits = run([{ type: 'unpivot', columns: names.slice(0, 2) }], wide);
+    ok('negative control: a small unpivot of the same table runs', fits.rowCount === 2 && fits.warnings.length === 0);
     const pv = run([{ type: 'pivot', key: 'region', value: 'units', fn: 'count', groupBy: ['sku'] }]);
     ok('pivot: first-seen keys, one row per group, missing combinations null',
       pv.columns.map((c) => c.name).join() === 'sku,East,West,North' && JSON.stringify(pv.rows[0]) === '["007",2,null,null]', JSON.stringify(pv));
