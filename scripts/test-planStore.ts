@@ -36,7 +36,13 @@ const STEPS = ps.sanitizePlanSteps([
   { kind: 'metric', dataset: 'Sales', name: 'Revenue', column: 'Sales', aggregation: 'sum' },
 ]).steps;
 const made = (id: string): StepOutcome => ({ ok: true, result: { summary: 'made ' + id }, touches: [{ type: 'dataset', id, name: id, created: true }] });
-const fresh = async () => store.create({ ...pr.newRun(randomUUID(), P, '', 'test', STEPS), fileToken: 'x'.repeat(43) } as import('../src/ai/planRun').PlanRun);
+// The prune orders runs by updatedAt, to the millisecond. Two runs made in the same one tie, and
+// which of them goes is then up to directory order, so each new run starts on a later millisecond.
+const nextMs = (): void => { const t = Date.now(); while (Date.now() === t) { /* spin, < 1 ms */ } };
+const fresh = async () => {
+  nextMs();
+  return store.create({ ...pr.newRun(randomUUID(), P, '', 'test', STEPS), fileToken: 'x'.repeat(43) } as import('../src/ai/planRun').PlanRun);
+};
 const file = (runId: string): string => store.runPath(P, runId);
 const edit = (runId: string, fn: (r: Record<string, any>) => void): void => { // any: a raw record on disk
   const r = JSON.parse(fs.readFileSync(file(runId), 'utf8'));

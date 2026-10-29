@@ -113,6 +113,9 @@ jobs:
         image: postgres:17
         env:
           POSTGRES_PASSWORD: postgres
+          # connections.e2e saves a source with a canary password (to prove it never
+          # leaks), so the server must accept any password, as a local `initdb -A trust` does.
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
