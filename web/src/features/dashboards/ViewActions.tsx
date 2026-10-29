@@ -1,12 +1,11 @@
-// The view page's own header actions (/dashboards/<p>/<id>). An editor shares by publishing: Share link opens the
-// Publish dialog on the Dashboards page's Shared links tab with this dashboard picked, and Edit opens the editing
-// screen. A viewer cannot publish (`publish:run` is write), so theirs is Copy link: this page's in-app address, which
-// anyone in the project can open.
+// The view page's own header actions (/dashboards/<p>/<id>). Editing lives in Analyses only, so there is no Edit here.
+// An editor shares by publishing: Share link opens the Publish dialog on the Dashboards page's Shared links tab with
+// this dashboard picked. A viewer cannot publish (`publish:run` is write), so theirs is Copy link: this page's in-app
+// address, which anyone in the project can open.
 
-import { Link, useNavigate } from 'react-router';
-import { Button, buttonClass } from '../../ui/Button';
+import { useNavigate } from 'react-router';
+import { Button } from '../../ui/Button';
 import { toast } from '../../ui/Toast';
-import { Icon } from '../../ui/icons/Icon';
 import { useEditor } from '../analyses/editor/context';
 import { useCanEdit } from '../projects/api';
 
@@ -27,14 +26,8 @@ export function ViewActions() {
     );
   }
   return (
-    <>
-      <Button size="sm" icon="globe" onClick={() => void navigate(`/dashboards?project=${ed.projectId}&dashboard=${ed.analysisId}`)}>
-        Share link
-      </Button>
-      <Link className={buttonClass('secondary', 'sm')} to={`/analyses/${ed.projectId}/${ed.analysisId}`}>
-        <Icon name="pencil" />
-        <span>Edit</span>
-      </Link>
-    </>
+    <Button size="sm" icon="globe" onClick={() => void navigate(`/dashboards?project=${ed.projectId}&dashboard=${ed.analysisId}`)}>
+      Share link
+    </Button>
   );
 }

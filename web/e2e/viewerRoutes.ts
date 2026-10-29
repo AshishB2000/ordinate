@@ -238,11 +238,11 @@ export const ROUTES: readonly RouteCase[] = [
   { pattern: '/data/captures/:projectId/:captureId', url: (s) => `/data/captures/${s.pid}/${s.did}` },
   { pattern: '/analyses/:projectId/rebuild', url: (s) => `/analyses/${s.pid}/rebuild` },
   { pattern: '/data/metrics/:projectId/:metricId/tree', url: (s) => `/data/metrics/${s.pid}/${s.metricId}/tree`, editor: { role: 'button', name: 'Edit tree' } },
-  // A dashboard opened from the Dashboards page: read-only for everyone; an editor also gets Edit, a viewer Copy link.
+  // A dashboard opened from the Dashboards page: read-only for everyone (editing is in Analyses); an editor gets Share link, a viewer Copy link.
   {
     pattern: '/dashboards/:projectId/:analysisId',
     url: (s) => `/dashboards/${s.pid}/${s.aid}`,
-    editor: { role: 'link', name: 'Edit' },
+    editor: { role: 'button', name: 'Share link' },
     viewer: [{ role: 'button', name: 'Copy link' }, { role: 'button', name: 'Present' }],
   },
 ];
