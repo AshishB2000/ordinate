@@ -14,6 +14,10 @@
 //              limit it refuses, typed, with no statement sent
 //   notice     a burst of refusals → one `live:daily-limit` event on the org
 //              admin's stream, none on a viewer's; a second burst sends none
+//   share      one member spends at most MEMBER_SHARE of the limit (NV-47): past
+//              it they are refused with their own sentence while another member
+//              is still admitted; the org's limit still holds over everyone.
+//              NEGATIVE CONTROL: under AUTH_MODE=dev (one identity) no share
 //   RLS        as an ordinary role: nothing without `ordinate.org`, one org's
 //              rows with it, a write for another org refused — and the store's
 //              own statements pass under it
@@ -55,7 +59,6 @@ type Identity = import('../src/server/context').Identity;
 type Admission = import('../src/server/live/usageStore').Admission;
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'ordinate-liveusage-db-'));
 const ACME: Identity = { user: { email: 'boss@acme.test', role: 'admin' }, org: { id: 'acme' } };
-const BETA: Identity = { user: { email: 'boss@beta.test', role: 'admin' }, org: { id: 'beta' } };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const show = (v: unknown): string => JSON.stringify(v);
 let reqN = 0;
@@ -213,7 +216,9 @@ function openTab(base: string, email: string): Promise<Tab> {
     process.env.LIVE_DAILY_QUERY_LIMIT = '2';
     const bk = key();
     const use = { org: 'beta', datasetId: randomUUID(), ...bk };
-    const burst1 = await as(BETA, () => Promise.all(Array.from({ length: 8 }, () => budget.checkDaily(use))));
+    // Eight different members, so the org's limit (not one member's share of it) is what refuses.
+    const member = (i: number): Identity => ({ user: { email: `m${i}@beta.test`, role: 'viewer' }, org: { id: 'beta' } });
+    const burst1 = await Promise.all(Array.from({ length: 8 }, (_, i) => as(member(i), () => budget.checkDaily(use))));
     const until = async (cond: () => boolean, ms = 5000) => { for (const end = Date.now() + ms; !cond() && Date.now() < end;) await sleep(20); return cond(); };
     const notices = (t: Tab) => t.events.filter((e) => e.channel === 'live:daily-limit');
     await until(() => notices(bossTab).length > 0);
@@ -221,9 +226,33 @@ function openTab(base: string, email: string): Promise<Tab> {
     ok('notice: 8 checks at limit 2 → 2 admitted, 6 refused, and ONE `live:daily-limit` event on the org admin\'s stream',
       burst1.filter((d) => d.ok).length === 2 && notices(bossTab).length === 1 && show(notices(bossTab)[0].data) === show({ day: today, limit: 2 }), show(bossTab.events));
     ok('notice: …none on a viewer\'s stream (the limit is the admins\' to raise)', notices(vicTab).length === 0, show(vicTab.events));
-    await as(BETA, () => Promise.all(Array.from({ length: 4 }, () => budget.checkDaily(use))));
+    await Promise.all(Array.from({ length: 4 }, (_, i) => as(member(8 + i), () => budget.checkDaily(use))));
     await sleep(300);
     ok('notice NEGATIVE CONTROL: a second burst of refusals the same day sends nothing', notices(bossTab).length === 1);
+
+    // ── One member's share (NV-47) ──────────────────────────────────────────
+    process.env.LIVE_DAILY_QUERY_LIMIT = '10';
+    const inDelta = (email: string): Identity => ({ user: { email, role: 'viewer' }, org: { id: 'delta' } });
+    const duse = { org: 'delta', datasetId: randomUUID(), ...key() };
+    const brief = (ds: { ok: boolean; message?: string }[]): string => show(ds.map((d) => (d.ok ? 'ok' : d.message)));
+    const greedy = [];
+    for (let i = 0; i < 8; i++) greedy.push(await as(inDelta('greedy@delta.test'), () => budget.checkDaily(duse)));
+    const shareMsg = msg.liveMemberDailyLimit('5');
+    ok('share: one member at limit 10 → 5 admitted, then refused with their own sentence (nothing counted for the org past it)',
+      greedy.filter((d) => d.ok).length === 5 && greedy.slice(5).every((d) => !d.ok && d.message === shareMsg) && Number((await sums('delta')).queries) === 5, brief(greedy));
+    const next = await as(inDelta('ann@delta.test'), () => budget.checkDaily(duse));
+    ok('share: …while another member is still admitted', next.ok, brief([next]));
+    const rest = [];
+    for (let i = 0; i < 5; i++) rest.push(await as(inDelta(`m${i}@delta.test`), () => budget.checkDaily(duse)));
+    ok('share: the org\'s limit still holds over everyone: the 11th statement of the day is refused with the org\'s sentence',
+      rest.slice(0, 4).every((d) => d.ok) && !rest[4].ok && rest[4].message === msg.liveDailyLimit('10'), brief(rest));
+    const devUse = { org: 'epsilon', datasetId: randomUUID(), ...key() };
+    const wired = usage.liveUsageDb();
+    usage.useLiveUsageDb(podA, true);
+    const solo = [];
+    for (let i = 0; i < 10; i++) solo.push(await as({ user: { email: 'dev@local', role: 'admin' }, org: { id: 'epsilon' } }, () => budget.checkDaily(devUse)));
+    usage.useLiveUsageDb(wired?.pool ?? null, wired?.devAuth);
+    ok('share NEGATIVE CONTROL: under AUTH_MODE=dev (one identity) the one member spends the whole limit', solo.every((d) => d.ok), brief(solo));
     delete process.env.LIVE_DAILY_QUERY_LIMIT;
 
     // ── RLS, as an ordinary role ────────────────────────────────────────────
