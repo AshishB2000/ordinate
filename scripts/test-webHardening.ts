@@ -20,7 +20,8 @@
 //    interrupted (the org's worker answers the next query at once).
 // 6. HOST: dev mode answers only an IP, a loopback name or ORDINATE_PUBLIC_URL's
 //    name (421 otherwise, no cookie) — a DNS-rebinding page is not the admin.
-// 7. ERRORS: a route that throws answers a fixed 500, never the error's text.
+// 7. ERRORS: a route that throws answers a fixed 500, never the error's text;
+//    and X-Forwarded-For from an untrusted peer is logged once.
 //
 // Session fixation and logout-everywhere need Postgres: scripts/test-auth-db.ts.
 // Real bearer tokens on RPC without a CSRF pair: scripts/test-tokens-db.ts.
@@ -344,7 +345,8 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
   await rl.close();
 
   // Login + callback share one bucket; X-Forwarded-For only from a trusted proxy.
-  const bare = fastify();
+  const warns: string[] = [];
+  const bare = fastify({ logger: { level: 'warn', stream: new (require('stream') as typeof import('stream')).Writable({ write(c: Buffer, _e, cb) { warns.push(c.toString('utf8')); cb(); } }) } });
   const proxies = envMod.proxyList(['10.0.0.0/8']);
   limits.registerLimits(bare, { loginPerMinute: 2, rpcUserPerMinute: 99, rpcIpPerMinute: 99, jsonBodyBytes: 1024, rpcTimeoutMs: 1000, refreshHookMinIntervalSec: 60, embedPerMinute: 99, embedOrgPerMinute: 99 }, proxies);
   bare.get('/api/auth/login', async () => 'login');
@@ -360,6 +362,9 @@ function headersOk(label: string, h: Hdrs, csp: string, prod = false): void {
   ok('xff: …the proxy-named client is limited on its own', (await g('/api/auth/login', '10.1.1.1', '198.51.100.9')).statusCode === 429);
   const spoof = [await g('/api/auth/login', '192.0.2.50', '1.1.1.1'), await g('/api/auth/login', '192.0.2.50', '2.2.2.2'), await g('/api/auth/login', '192.0.2.50', '3.3.3.3')];
   ok('xff: from an untrusted peer X-Forwarded-For is ignored (rotating it does not escape)', spoof[2].statusCode === 429, spoof.map((r) => r.statusCode).join());
+  const xffWarns = warns.filter((l) => l.includes('TRUSTED_PROXY_CIDRS'));
+  ok('xff: …and logged ONCE, naming that peer (a proxy missing from TRUSTED_PROXY_CIDRS pools every client); the trusted proxy\'s never',
+    xffWarns.length === 1 && xffWarns[0].includes('192.0.2.50'), warns.join(''));
   const req = (peer: string, xff?: string) => ({ socket: { remoteAddress: peer }, headers: xff ? { 'x-forwarded-for': xff } : {} }) as unknown as Parameters<typeof limits.clientIp>[0];
   ok('clientIp: right-most untrusted hop, trusted hops skipped', limits.clientIp(req('10.0.0.1', '6.6.6.6, 198.51.100.4, 10.0.0.9'), proxies) === '198.51.100.4');
   ok('clientIp: untrusted peer → the peer', limits.clientIp(req('192.0.2.9', '10.0.0.1'), proxies) === '192.0.2.9');
