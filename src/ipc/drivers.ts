@@ -280,9 +280,9 @@ export { recall };
 
 /**
  * The whole answer for one sanitized question. EXPORTED for the facts builder,
- * the waterfall tile and scripts/test-drivers.ts.
+ * the waterfall tile and scripts/test-drivers.ts. `withhold`: columns never
+ * offered as a dimension, at either level — an alert post's (./alertDiagnosis).
  */
-/** `withhold`: columns never offered as a dimension, at either level — an alert post's (./alertDiagnosis). */
 export async function driversFor(projectId: string, spec: DriversSpec, rawParams?: unknown, opts: { remember?: boolean; withhold?: Set<string> } = {}): Promise<DriversReply> {
   // The renderer's payload, or values a caller already resolved (a tile's render).
   const params: ParamValues = rawParams instanceof Map ? (rawParams as ParamValues) : paramValues(rawParams);
