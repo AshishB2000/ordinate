@@ -238,6 +238,15 @@ async function main(): Promise<void> {
   const plainMysql = VARIANTS.find((v) => v.id === 'mysql')!;
   ok('mysql honours the TLS checkbox when ticked', !!mysqlConn.connectionOptions(plainMysql, ctx({ values: { ssl: true } })).ssl);
   ok('mysql leaves TLS off when unticked', !mysqlConn.connectionOptions(plainMysql, ctx({ values: { ssl: false } })).ssl);
+  // NV-10: TLS authenticates the server — the chain AND the host name, for every variant.
+  for (const v of VARIANTS) {
+    const tls = mysqlConn.connectionOptions(v, ctx({ values: { ssl: true } })).ssl as { rejectUnauthorized?: boolean; verifyIdentity?: boolean } | undefined;
+    ok(`${v.id}: TLS verifies the certificate and the host name`, tls?.rejectUnauthorized === true && tls?.verifyIdentity === true, tls);
+  }
+  ok('no field turns certificate checks off', CONNECTORS.every((c) => c.fields.every((f) => !/insecure|unverified|trust/i.test(f.key))));
+  ok('the TLS help no longer says the certificate goes unchecked',
+    CONNECTORS.every((c) => !/not verified/i.test(String(c.fields.find((f) => f.key === 'ssl')?.help))));
+
   ok(
     'planetscale lists tables via SHOW TABLES (some plans hide information_schema)',
     ps.listVia === 'show_tables',

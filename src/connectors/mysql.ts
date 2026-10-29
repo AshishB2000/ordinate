@@ -208,11 +208,12 @@ export function connectionOptions(variant: MysqlVariant, ctx: ConnectorContext):
     supportBigNumbers: true,
     bigNumberStrings: true,
 
-    // TLS on the wire without pinning a CA. Aurora and most managed MySQL serve
-    // certificates from roots we cannot ship, and self-hosted servers are usually
-    // self-signed; verifying would just make TLS unusable and push people to turn
-    // it off entirely. Same trade-off the Postgres connector already makes.
-    ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+    // TLS that authenticates the server (NV-10): unverified, anyone on the path
+    // could be the server, and caching_sha2_password hands a "secure" channel
+    // the password in clear. verifyIdentity too — without it mysql2 3.x checks
+    // the chain but not the host name. A private CA (Amazon RDS, a self-signed
+    // server) goes in NODE_EXTRA_CA_CERTS, as for Postgres (docs/server/configuration.md).
+    ssl: useSsl ? { rejectUnauthorized: true, verifyIdentity: true } : undefined,
 
     connectTimeout: Math.min(sanitizeTimeoutMs(ctx.timeoutMs), CONNECT_TIMEOUT_MS),
     // Explicit: no client-side named placeholders, no server-side prepare. `?`
@@ -365,7 +366,7 @@ export const VARIANTS: MysqlVariant[] = [
     sslDefault: true, // Aurora endpoints accept TLS and are reached over a network we do not control.
     timeout: 'max_execution_time',
     listVia: 'information_schema',
-    sslHelp: 'Aurora endpoints support TLS; leave this on unless your cluster has it disabled.',
+    sslHelp: 'Aurora endpoints support TLS; leave this on. Their certificate comes from the Amazon RDS CA, which this server trusts only once an administrator adds it (NODE_EXTRA_CA_CERTS).',
   },
   {
     id: 'singlestore',
@@ -439,7 +440,7 @@ function fieldsFor(v: MysqlVariant): ConnectorField[] {
       label: 'Use TLS',
       type: 'checkbox',
       default: v.sslRequired ? true : v.sslDefault,
-      help: v.sslHelp ?? 'Encrypts the connection. The server certificate is not verified against a CA.',
+      help: v.sslHelp ?? 'Encrypts the connection and verifies the server certificate and host name.',
     },
   ];
 }
