@@ -26,6 +26,7 @@
 export {}; // module scope — sibling test scripts share top-level names
 import { ok, finish } from './selfcheck';
 import { withCsrf } from './csrfPair';
+import { randomUUID } from 'crypto';
 import { Client, Pool } from 'pg';
 import type { FastifyInstance } from 'fastify';
 
@@ -166,6 +167,44 @@ async function serverPart(base: string): Promise<void> {
     ok('F2: an imported connection always gets a fresh id', conns.length === 1 && conns[0].id !== connId, JSON.stringify(conns.map((c) => c.id)));
     const held = await context.runInContext(DEV, 'load', () => configSecrets.loadConnectionSecrets(conns[0]?.id));
     ok('F2: …so it holds no secret it was never given', Object.keys(held).length === 0, JSON.stringify(held));
+
+    // NV-9: a connection's id is its FILE's. A body naming another id — renamed
+    // entry, or the id spelt in \u escapes the import's byte scan cannot see —
+    // never selects, loads or drops that id's secret.
+    const renamed = await editedBundle(pid, (entries) => {
+      const e = entries.find((x) => x.name.startsWith('connections/'));
+      if (!e) return;
+      const rec = JSON.parse(e.data.toString('utf8'));
+      rec.id = connId; // the orphan's id, not in use, so pass 1 does not remap it
+      e.name = `connections/${randomUUID()}.json`;
+      e.data = Buffer.from(JSON.stringify(rec));
+    });
+    const pr = (await call('projects:import', { fileToken: await upload(renamed, 'renamed.ordinate') })).body?.project?.id as string;
+    const prConns = await context.runInContext(DEV, 'list', () => connections.listConnections(pr));
+    ok('NV-9: a connection whose body names another id reads back with its file\'s id', prConns.length === 1 && prConns[0].id !== connId, JSON.stringify(prConns.map((c) => c.id)));
+    const prHeld = await context.runInContext(DEV, 'load', () => configSecrets.loadConnectionSecrets(prConns[0]?.id));
+    ok('NV-9: …and adopts no orphaned secret', Object.keys(prHeld).length === 0, JSON.stringify(prHeld));
+
+    const alive = (await call('projects:create', { name: 'Victim alive' })).body.id as string;
+    const aliveId = (await context.runInContext(DEV, 'conn', async () => {
+      const c = await connections.saveConnection(alive, { connectorId: 'postgres', name: 'Prod', values: { host: 'db.example.com', port: 5432, database: 'w', user: 'r' } });
+      if (c) await configSecrets.saveConnectionSecrets(c.id, { password: 'canary-A' });
+      return c;
+    }))?.id ?? '';
+    const escaped = await editedBundle(alive, (entries) => {
+      const e = entries.find((x) => x.name === `connections/${aliveId}.json`);
+      if (!e) return;
+      const esc = [...aliveId].map((ch) => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0')).join('');
+      e.data = Buffer.from(JSON.stringify(JSON.parse(e.data.toString('utf8'))).replace(`"${aliveId}"`, `"${esc}"`));
+    });
+    ok('control: the escaped body still decodes to the live connection\'s id', (await bundle.readZipAsync(escaped)).some((e) =>
+      e.name.startsWith('connections/') && !e.data.includes(aliveId) && JSON.parse(e.data.toString('utf8')).id === aliveId));
+    const pe = (await call('projects:import', { fileToken: await upload(escaped, 'escaped.ordinate') })).body?.project?.id as string;
+    const peConns = await context.runInContext(DEV, 'list', () => connections.listConnections(pe));
+    const peHeld = await context.runInContext(DEV, 'load', () => configSecrets.loadConnectionSecrets(peConns[0]?.id));
+    ok('NV-9: an escaped body id does not select the live connection\'s secret', peConns.length === 1 && peConns[0].id !== aliveId && !JSON.stringify(peHeld).includes('canary-A'), JSON.stringify({ ids: peConns.map((c) => c.id), peHeld }));
+    await call('projects:delete', { id: pe });
+    ok('NV-9: deleting the importing project leaves the named project\'s secret', [...mem.rows].some(([k, v]) => k.endsWith('|' + aliveId) && v === 'canary-A'), JSON.stringify([...mem.rows.keys()]));
   } finally {
     configSecrets.useSecretStore(null);
   }
