@@ -48,6 +48,20 @@ describe('shell', () => {
     expect(screen.getByRole('link', { name: 'Home' }).getAttribute('aria-current')).toBeNull();
   });
 
+  it('the closed rail keeps every name, and picking a section folds it until the pointer leaves', () => {
+    stubFetch(200, []);
+    renderApp('/');
+    const rail = screen.getByRole('navigation', { name: 'Sections' }).parentElement!;
+    // Closed, the labels are faded, not removed: each link is still found by its name.
+    for (const n of NAV) expect(within(rail).getByRole('link', { name: n.label }).getAttribute('aria-hidden')).toBeNull();
+    expect(within(rail).getByRole('button', { name: /Switch project/ })).toBeTruthy();
+    expect(rail.hasAttribute('data-picked')).toBe(false);
+    fireEvent.click(within(rail).getByRole('link', { name: 'Data' }));
+    expect(rail.hasAttribute('data-picked')).toBe(true);
+    fireEvent.pointerLeave(rail);
+    expect(rail.hasAttribute('data-picked')).toBe(false);
+  });
+
   it('switches theme between system, light and dark from the account menu', () => {
     stubFetch(200, []);
     renderApp('/');
