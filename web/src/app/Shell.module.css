@@ -59,14 +59,14 @@
   background: var(--border);
 }
 
-/* The project switcher heads the rail: closed, only its initial shows. */
+/* The project switcher: "Project ▾" at the start of the top bar, beside the rail. */
 .project {
   display: flex;
   align-items: center;
-  gap: var(--ctl-gap);
-  width: 100%;
+  gap: 6px;
+  max-width: 240px;
   height: var(--ctl-md);
-  padding: 0 9px; /* centres the 22px initial on the 64px rail */
+  padding: 0 var(--sp-8);
   border: none;
   border-radius: var(--r-md);
   background: transparent;
@@ -80,20 +80,8 @@
 .project:hover {
   background: var(--surface-2);
 }
-.projectAvatar {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
-  border-radius: var(--r-sm);
-  background: var(--accent-soft);
-  color: var(--accent);
-}
 .projectName {
-  /* Its own width even while the rail is closed, so it is uncovered, never squeezed. */
-  flex: none;
-  max-width: 140px;
+  min-width: 0;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -201,8 +189,7 @@
 }
 .navLabel,
 .groupLabel,
-.projectName,
-.project > svg {
+.brandName {
   opacity: var(--names);
   transition: opacity var(--dur-fast) var(--ease-out) var(--wait);
 }
@@ -212,11 +199,41 @@
   .rail,
   .navLabel,
   .groupLabel,
-  .projectName,
-  .project > svg,
+  .brandName,
   .group::before {
     transition-delay: var(--wait) !important;
   }
+}
+/* The company at the head of the rail, on the top bar's line: closed, only its mark. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--ctl-gap);
+  height: var(--ctl-md);
+  padding: 0 var(--sp-8); /* centres the 24px mark on the 64px rail */
+  white-space: nowrap;
+}
+.brandMark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+}
+.brandMark > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: var(--r-sm);
+}
+.brandName {
+  /* Its own width even while the rail is closed, so opening uncovers it, never squeezes it. */
+  flex: none;
+  max-width: 164px; /* what the open rail leaves beside the mark */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  color: var(--text-strong);
 }
 .sections {
   flex: 1 0 auto;
@@ -320,6 +337,9 @@
 
 /* Narrow windows: the sides stop sharing the width equally, the search takes what is left. */
 @media (max-width: 900px) {
+  .project {
+    max-width: 160px;
+  }
   .side {
     flex: 0 0 auto;
   }

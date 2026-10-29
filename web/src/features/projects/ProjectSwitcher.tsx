@@ -1,4 +1,4 @@
-// The project switcher — the top bar's project button and its popover
+// The project switcher — the top bar's "Project ▾" button and its popover
 // (legacy projectSwitcher.ts). Each row says what is in the project and when
 // it was last opened; its ⋯ carries Rename, Share, Export, Archive and Delete
 // — each offered only to a role the server will allow. New project and Import
@@ -34,7 +34,7 @@ const ShareDialog = lazy(() => import('./ShareDialog').then((m) => ({ default: m
 
 const UUID_IN_PATH = /\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/|$)/i;
 
-/** The initial in a tinted square — a project's face in the switcher and the top bar. */
+/** The initial in a tinted square — a project's face in the switcher, the company's at the head of the rail. */
 export function Avatar({ name, large }: { name: string; large?: boolean }) {
   let h = 0;
   for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -233,13 +233,7 @@ export function ProjectSwitcher() {
         title="Projects"
         trigger={
           <button type="button" className={`${shell.project} ${s.trigger}`} aria-label={`Switch project (current: ${name})`} data-testid="project-switcher">
-            {cur.project ? (
-              <Avatar name={cur.project.name} />
-            ) : (
-              <span className={shell.projectAvatar}>
-                <Icon name="folder" />
-              </span>
-            )}
+            <Icon name="folder" />
             <span className={shell.projectName}>{name}</span>
             <Icon name="chevron-down" />
           </button>

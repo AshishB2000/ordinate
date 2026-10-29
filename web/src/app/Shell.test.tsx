@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, within } from '@testing-library/react';
-import { renderApp, stubFetch } from '../test-utils';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { renderApp, serveRpc, stubFetch } from '../test-utils';
 import { media } from '../test-setup';
 import { NAV } from './nav';
 import { NAV_GROUPS } from './navGroups';
@@ -54,12 +54,49 @@ describe('shell', () => {
     const rail = screen.getByRole('navigation', { name: 'Sections' }).parentElement!;
     // Closed, the labels are faded, not removed: each link is still found by its name.
     for (const n of NAV) expect(within(rail).getByRole('link', { name: n.label }).getAttribute('aria-hidden')).toBeNull();
-    expect(within(rail).getByRole('button', { name: /Switch project/ })).toBeTruthy();
     expect(rail.hasAttribute('data-picked')).toBe(false);
     fireEvent.click(within(rail).getByRole('link', { name: 'Data' }));
     expect(rail.hasAttribute('data-picked')).toBe(true);
     fireEvent.pointerLeave(rail);
     expect(rail.hasAttribute('data-picked')).toBe(false);
+  });
+
+  // The project switcher sits in the top bar, so it shows whether the rail is open or not.
+  it('keeps the project switcher in the top bar, out of the rail', () => {
+    stubFetch(200, []);
+    renderApp('/');
+    const topBar = screen.getByRole('search').parentElement!;
+    expect(within(topBar).getByRole('button', { name: /Switch project/ })).toBeTruthy();
+    expect(within(screen.getByTestId('brand').parentElement!).queryByRole('button', { name: /Switch project/ })).toBeNull();
+  });
+
+  const LOGO = 'data:image/png;base64,iVBORw0KGgo=';
+  const prefs = (branding: object) => ({ body: { formats: {}, branding: { accent: '', logo: '', dashboardStyle: 'auto', companyName: '', ...branding } } });
+
+  it('heads the rail with the company: its logo, and its name for when the rail opens', async () => {
+    const calls = serveRpc({ 'prefs:get': prefs({ logo: 'png', companyName: 'Acme Corp' }), 'branding:logo': { body: { ok: true, dataUrl: LOGO } } });
+    renderApp('/');
+    const brand = screen.getByTestId('brand');
+    await waitFor(() => expect(brand.querySelector('img')?.getAttribute('src')).toBe(LOGO));
+    expect(brand.textContent).toBe('Acme Corp');
+    expect(calls.filter((c) => c.channel === 'branding:logo')).toHaveLength(1);
+  });
+
+  it('without a logo, the initial of the company name, and no call for a logo', async () => {
+    const calls = serveRpc({ 'prefs:get': prefs({ companyName: 'acme Corp' }) });
+    renderApp('/');
+    const brand = screen.getByTestId('brand');
+    await within(brand).findByText('acme Corp');
+    expect(brand.querySelector('img')).toBeNull();
+    expect(brand.querySelector('[aria-hidden="true"]')?.textContent).toBe('A');
+    expect(calls.some((c) => c.channel === 'branding:logo')).toBe(false);
+  });
+
+  it('with no name and no logo, the rail is headed Ordinate', async () => {
+    serveRpc({ 'prefs:get': prefs({}) });
+    renderApp('/');
+    const brand = screen.getByTestId('brand');
+    await waitFor(() => expect(brand.textContent).toBe('OOrdinate'));
   });
 
   it('switches theme between system, light and dark from the account menu', () => {

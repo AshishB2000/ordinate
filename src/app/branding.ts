@@ -1,7 +1,7 @@
-// WORKSPACE BRANDING — the accent colour, the logo and the style new
-// dashboards start in. MAIN PROCESS.
+// WORKSPACE BRANDING — the accent colour, the logo, the company's name and the
+// style new dashboards start in. MAIN PROCESS.
 //
-// The settings are three small values on config.json (sanitized below). The
+// The settings are four small values on config.json (sanitized below). The
 // LOGO is bytes — branding/logo.png|svg through ./blobStore.ts, a row of
 // `blobs` on a server with DATABASE_URL, else a file under userData — because it
 // can be half a megabyte and has no business inside a JSON the whole app
@@ -28,9 +28,14 @@ export interface Branding {
   logo: '' | 'png' | 'svg';
   /** The style a NEW dashboard starts in. */
   dashboardStyle: DashStylePreset;
+  /** The company's name, beside its logo at the head of the sidebar; '' for none. */
+  companyName: string;
 }
 
-export const BRANDING_DEFAULTS: Branding = { accent: '', logo: '', dashboardStyle: 'auto' };
+export const BRANDING_DEFAULTS: Branding = { accent: '', logo: '', dashboardStyle: 'auto', companyName: '' };
+
+/** A name at the head of the sidebar, not a sentence. branding:set's contract holds the same cap. */
+export const COMPANY_NAME_MAX = 60;
 
 /** The eight accent swatches Settings offers, in order. The first is the app's own. */
 export const ACCENT_SWATCHES: readonly string[] = [
@@ -50,7 +55,22 @@ export function sanitizeBranding(raw: unknown): Branding {
     logo: o.logo === 'png' || o.logo === 'svg' ? o.logo : '',
     dashboardStyle: (DASH_STYLE_PRESET_IDS as readonly string[]).includes(String(o.dashboardStyle))
       ? (o.dashboardStyle as DashStylePreset) : 'auto',
+    companyName: sanitizeCompanyName(o.companyName),
   };
+}
+
+const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/** One line of text: runs of whitespace and control characters become one space, cut at
+ *  the cap — counted as the contract counts (UTF-16 units), never inside a character. */
+export function sanitizeCompanyName(v: unknown): string {
+  if (typeof v !== 'string') return '';
+  let out = '';
+  for (const { segment } of GRAPHEMES.segment(v.replace(/[\s\p{Cc}]+/gu, ' ').trim())) {
+    if (out.length + segment.length > COMPANY_NAME_MAX) break;
+    out += segment;
+  }
+  return out.trim();
 }
 
 // ── Logo validation ─────────────────────────────────────────────────────────

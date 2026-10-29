@@ -104,6 +104,12 @@ async function partOne(): Promise<void> {
     ok('branding:set: accent and new-dashboard style stored', br.accent === '#0d9488' && br.dashboardStyle === 'executive', JSON.stringify(br));
     ok('branding:set: logo is not the browser\'s to set (400)', (await call('branding:set', { logo: 'png' })).status === 400);
     ok('branding:set: a colour that is not #rrggbb is a 400', (await call('branding:set', { accent: 'red; background:url(x)' })).status === 400);
+    await call('branding:set', { companyName: '  Acme   Corp ' });
+    const named = (await call('prefs:get')).body.branding;
+    ok('branding:set: the company name is stored trimmed, the rest kept', named.companyName === 'Acme Corp' && named.accent === '#0d9488', JSON.stringify(named));
+    ok('branding:set: a company name over 60 characters is a 400', (await call('branding:set', { companyName: 'x'.repeat(61) })).status === 400);
+    ok('branding:set: a company name that is not a string is a 400', (await call('branding:set', { companyName: 42 })).status === 400);
+    ok('branding:set: a refused name left the stored one alone', (await call('prefs:get')).body.branding.companyName === 'Acme Corp');
 
     // ── The logo ──────────────────────────────────────────────────────────
     ok('branding:logo: none yet', (await call('branding:logo', 'workspace')).body.dataUrl === null);
