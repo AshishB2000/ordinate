@@ -219,7 +219,6 @@ h5.mdH {
   margin-bottom: var(--sp-8);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
   border-radius: var(--r-lg);
 }
 .cmpList {
