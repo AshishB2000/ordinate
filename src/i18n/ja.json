@@ -661,5 +661,10 @@
   "wordCloudRender.no_words_to_draw_every_value": "描画する単語がありません — すべての値が空またはゼロです",
   "wordCloudRender.not_fit": "{p0}{n, plural, other {個の小さい単語が}}収まりませんでした",
   "wordCloudRender.word_cloud": "ワードクラウド: {p0}{p1, select, true {、…} other {}}",
-  "wordCloudRender.word_cloud_no_words_to_draw": "ワードクラウド: 描画する単語がありません"
+  "wordCloudRender.word_cloud_no_words_to_draw": "ワードクラウド: 描画する単語がありません",
+  "workBudgetMessages.a_dataset_holds_at_most_prepare": null,
+  "workBudgetMessages.this_excel_file_cannot_be_imported": null,
+  "workBudgetMessages.this_formula_does_more_work_than": null,
+  "workBudgetMessages.this_sheet_spans_rows_by_columns": null,
+  "workBudgetMessages.unpivot_skipped_it_would_make_cells": null
 }
