@@ -16,8 +16,10 @@
 //               change it every page is /change-password and every /api/ call
 //               but /api/auth/* is 403; changing it ends their other sessions
 //   admin       add / reset are org-confined, refuse a short password, your own
-//               reset, an address outside ALLOWED_EMAIL_DOMAINS, and any mode
-//               but password
+//               reset, an address outside ALLOWED_EMAIL_DOMAINS, any mode but
+//               password, and an admin's API token (a browser session only)
+//   tokens      a password change or reset revokes the person's API tokens
+//   busy        sign-ins hashing at once on a pod are capped (`busy` past it)
 //   audit+logs  sign-ins and password changes are audit rows; no password, hash,
 //               session id or (outside its one startup line) setup code is ever
 //               logged or audited
@@ -148,6 +150,19 @@ const sessionOf = (r: Inject) => {
       });
       return { status: r.statusCode, body: (r.statusCode === 200 ? wire.decode(r.body) : r.body) as any }; // any: each channel's own reply
     };
+    /** RPC with a personal API token alone — no cookie, no CSRF pair (a bearer request needs none). */
+    const bearer = async (token: string, channel: string, payload?: unknown) => {
+      const r = await app.inject({
+        method: 'POST', url: `/api/rpc/${channel}`, headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        payload: wire.encode({ args: payload === undefined ? [] : [payload] }),
+      });
+      return { status: r.statusCode, body: (r.statusCode === 200 ? wire.decode(r.body) : r.body) as any }; // any: each channel's own reply
+    };
+    const mint = async (sid: string | undefined) => {
+      const t = (await rpc(sid, 'tokens:create', { name: 'cli', expiresInDays: 30 })).body.token as string;
+      secrets.add(t);
+      return t;
+    };
     /** A designed refusal: 200 { ok: false, error } (a 4xx would be a browser console error). */
     const refused = (r: Inject, error: string) => r.statusCode === 200 && r.json().ok === false && r.json().error === error;
     const accepted = (r: Inject) => r.statusCode === 200 && r.json().ok === true;
@@ -243,6 +258,15 @@ const sessionOf = (r: Inject) => {
     ok('change: the other device was signed out', (await me(a2)).user === null);
     ok('change: the temporary password no longer works, the new one does', refused(await post('login', { email: 'alice@acme.test', password: TEMP }), 'invalid') &&
       accepted(await post('login', { email: 'alice@acme.test', password: OWN })));
+    // NV-4: an API token minted on a session of the old password dies with it (someone who had the password minted it).
+    const aT = sessionOf(await post('login', { email: 'alice@acme.test', password: OWN }));
+    const T1 = await mint(aT);
+    ok('tokens: precondition — her API token works', (await bearer(T1, 'projects:list')).status === 200);
+    const OWN2 = pw('alice-own-password-2');
+    ok('change: → ok again', accepted(await post('change', { current: OWN, password: OWN2 }, aT)));
+    ok('change: her API tokens are revoked with the old password', (await bearer(T1, 'projects:list')).status === 401);
+    ok('change: …and this browser stays in (negative control)', (await rpc(aT, 'projects:list')).status === 200);
+    ok('change: back to the first one', accepted(await post('change', { current: OWN2, password: OWN }, aT)));
 
     // ── Reset, disable, org confinement ───────────────────────────────────
     const aliceId = added.body.id as string;
@@ -250,9 +274,24 @@ const sessionOf = (r: Inject) => {
     ok('admin:resetPassword: your own → ok:false self-password', (await rpc(boss, 'admin:resetPassword', { userId: bossId, password: 'long-enough-1' })).body.error === 'self-password');
     ok('admin:resetPassword: a short one → ok:false password-short', (await rpc(boss, 'admin:resetPassword', { userId: aliceId, password: 'short' })).body.error === 'password-short');
     const a3 = sessionOf(await post('login', { email: 'alice@acme.test', password: OWN }));
+    const T2 = await mint(a3);
+    const TB = await mint(boss);
+    ok('tokens: precondition — her new token and the admin\'s work', (await bearer(T2, 'projects:list')).status === 200 && (await bearer(TB, 'projects:list')).status === 200);
+    // NV-5: a leaked admin token must not mint a sign-in that outlives it — an account, or a password for someone else.
+    const viaToken = await bearer(TB, 'admin:addUser', { email: 'mallory@acme.test', role: 'admin', password: pw('mallory-temporary-1') });
+    ok('admin:addUser: with an API token → ok:false session, no account', viaToken.status === 200 && viaToken.body.ok === false && viaToken.body.error === 'session' &&
+      (await pool.query(`SELECT 1 FROM users WHERE email = 'mallory@acme.test'`)).rowCount === 0, JSON.stringify(viaToken.body));
+    const hashBefore = (await pool.query<{ h: string }>('SELECT password_hash AS h FROM users WHERE id = $1', [aliceId])).rows[0].h;
+    const resetViaToken = await bearer(TB, 'admin:resetPassword', { userId: aliceId, password: pw('mallory-knows-this-1') });
+    ok('admin:resetPassword: with an API token → ok:false session, her password untouched', resetViaToken.body.ok === false && resetViaToken.body.error === 'session' &&
+      (await pool.query<{ h: string }>('SELECT password_hash AS h FROM users WHERE id = $1', [aliceId])).rows[0].h === hashBefore && (await me(a3)).user !== null, JSON.stringify(resetViaToken.body));
+    ok('admin token (NEGATIVE CONTROL): still reads admin lists — only minting a sign-in needs the browser', (await bearer(TB, 'admin:users')).status === 200);
     const RESET = pw('alice-reset-temp-1');
     ok('admin:resetPassword: → ok', (await rpc(boss, 'admin:resetPassword', { userId: aliceId, password: RESET })).body.ok === true);
     ok('admin:resetPassword: she is signed out everywhere', (await me(a3)).user === null && (await me(a1)).user === null);
+    const deadMe = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { authorization: `Bearer ${T2}` } });
+    ok('admin:resetPassword: …her API tokens too (signed out everywhere means everywhere)', (await bearer(T2, 'projects:list')).status === 401 && deadMe.json().user === null);
+    ok('admin:resetPassword: …another member\'s token is untouched (negative control)', (await bearer(TB, 'projects:list')).status === 200);
     const lr = await post('login', { email: 'alice@acme.test', password: RESET });
     ok('admin:resetPassword: the new one is temporary again', accepted(lr) && lr.json().mustChangePassword === true, lr.body);
     await pool.query(`INSERT INTO orgs (id, name) VALUES ('beta', 'beta') ON CONFLICT DO NOTHING`);
@@ -284,6 +323,15 @@ const sessionOf = (r: Inject) => {
         headers: withCsrf({ 'content-type': 'application/json' }), payload: JSON.stringify({ email: 'boss@acme.test', password: BOSS }) })).statusCode);
     }
     ok('rate limit: RATE_LIMIT_LOGIN_PER_MINUTE covers the password routes (4th try → 429)', tries.join() === '200,200,200,429', tries.join());
+
+    // NV-39: fresh emails from fresh addresses pass the lockout and the per-IP limit, so this pod caps the scrypts it runs at once.
+    const burst = await Promise.all(Array.from({ length: 12 }, (_, i) => post('login', { email: `stranger${i}@acme.test`, password: 'guess-a-password' }, undefined, `198.51.100.${100 + i}`)));
+    const codes = burst.map((r) => (r.statusCode === 200 ? String(r.json().error) : String(r.statusCode)));
+    const busy = burst.filter((r) => refused(r, 'busy'));
+    ok('busy: 12 sign-ins at once → some `busy` with Retry-After, the rest refused as usual, never a 5xx',
+      busy.length > 0 && busy.every((r) => r.headers['retry-after'] === '1') && codes.every((c) => c === 'busy' || c === 'invalid'), codes.join());
+    ok('busy: …at most 4 hashed at once (the rest answered without a scrypt)', burst.length - busy.length <= 4, codes.join());
+    ok('busy (NEGATIVE CONTROL): once they finish, a sign-in hashes again', accepted(await post('login', { email: 'boss@acme.test', password: BOSS })));
 
     // ── After a move to SSO a leftover temporary password holds nobody ─────
     const store: typeof import('../src/server/auth/store') = require('../src/server/auth/store');

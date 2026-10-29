@@ -237,6 +237,7 @@
   "embedMessages.at_most_sites_can_be_allowed": "Es können höchstens {max} Websites zugelassen werden.",
   "embedMessages.embedding_is_not_available_for_this": "Einbetten ist für dieses Dashboard nicht verfügbar.",
   "embedMessages.generate_a_signing_secret_before_turning": "Erzeugen Sie ein Signaturgeheimnis, bevor Sie das Einbetten aktivieren.",
+  "embedMessages.generate_the_signing_secret_in_the": null,
   "embedMessages.is_not_a_site_origin_use": "„{origin}“ ist kein Website-Ursprung. Verwenden Sie https://host (oder http://localhost) ohne Pfad.",
   "embedMessages.not_available_in_this_embedded_view": "In dieser eingebetteten Ansicht nicht verfügbar.",
   "embedMessages.not_offered_in_a_locked_embed": "In einer Einbettung mit festen Filtern nicht verfügbar.",

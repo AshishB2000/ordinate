@@ -58,7 +58,7 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
   try {
     mock = await startMockOidc({ clientId: 'ordinate-test', clientSecret: SECRET });
     const idp = mock;
-    const cfg = envMod.parseEnv({
+    const oidcEnv = {
       LOG_LEVEL: 'trace',
       DATABASE_URL: scratch.toString(),
       AUTH_MODE: 'oidc',
@@ -71,8 +71,8 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
       ALLOWED_EMAIL_DOMAINS: 'acme.test',
       SESSION_IDLE_MINUTES: '60',
       SESSION_ABSOLUTE_HOURS: '24',
-    });
-    const app = appMod.buildApp(cfg, sink);
+    };
+    const app = appMod.buildApp(envMod.parseEnv(oidcEnv), sink);
     apps.push(app);
     await app.ready();
     const tables = await pool.query<{ t: string }>(`SELECT tablename AS t FROM pg_tables WHERE schemaname = 'public' ORDER BY 1`);
@@ -88,14 +88,15 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
       (await app.inject({ method: 'POST', url: '/api/rpc/no:such', headers: withCsrf(id ? { cookie: `ordinate_session=${id}` } : {}) })).statusCode;
 
     /** The whole browser dance, minus the browser: login → IdP → callback. */
-    const signIn = async (email: string, o: { cookie?: string; next?: string; decision?: 'allow' | 'deny'; tamper?: boolean; noTx?: boolean } = {}) => {
-      const login = await app.inject({ method: 'GET', url: '/api/auth/login' + (o.next ? `?next=${encodeURIComponent(o.next)}` : '') });
+    const signIn = async (email: string, o: { cookie?: string; next?: string; decision?: 'allow' | 'deny'; tamper?: boolean; noTx?: boolean; app?: FastifyInstance } = {}) => {
+      const a = o.app ?? app;
+      const login = await a.inject({ method: 'GET', url: '/api/auth/login' + (o.next ? `?next=${encodeURIComponent(o.next)}` : '') });
       const tx = cookieOf(login, 'ordinate_login');
       if (tx) secrets.add(tx.value);
       const back = new URL(await idp.approve(String(login.headers.location), email, o.decision));
       if (o.tamper) back.searchParams.set('state', 'forged-state');
       const cookie = [!o.noTx && tx ? `ordinate_login=${tx.value}` : '', o.cookie ? `ordinate_session=${o.cookie}` : ''].filter(Boolean).join('; ');
-      const cb = await app.inject({ method: 'GET', url: back.pathname + back.search, headers: cookie ? { cookie } : {} });
+      const cb = await a.inject({ method: 'GET', url: back.pathname + back.search, headers: cookie ? { cookie } : {} });
       const sess = cb.cookies.find((c) => c.name === 'ordinate_session' && c.value);
       if (sess) secrets.add(sess.value);
       return { login, tx, cb, sess, id: sess?.value, to: String(cb.headers.location) };
@@ -207,6 +208,29 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
     const unv = await signIn('carol@acme.test');
     idp.extraClaims = {};
     ok('email_verified=false → error=email', unv.to === '/sign-in?error=email' && !unv.id, unv.to);
+    // NV-3: the email is the whole identity (and ORDINATE_ADMIN_EMAIL's is admin), so only a JSON true vouches for it.
+    const verifiedAs = async (claim: unknown, email: string, a?: FastifyInstance) => {
+      idp.extraClaims = { email_verified: claim }; // undefined: dropped by JSON, so the claim is absent
+      try {
+        return await signIn(email, { app: a });
+      } finally {
+        idp.extraClaims = {};
+      }
+    };
+    for (const [label, claim] of [['absent', undefined], ['the string "false"', 'false'], ['the string "true"', 'true'], ['1', 1]] as const) {
+      const r = await verifiedAs(claim, 'boss@acme.test');
+      ok(`email_verified ${label} → error=email, no session — not even for ORDINATE_ADMIN_EMAIL`, r.to === '/sign-in?error=email' && !r.id, r.to);
+    }
+    ok('email_verified absent: …and nothing is written for a new address', (await verifiedAs(undefined, 'dave@acme.test')).to === '/sign-in?error=email' &&
+      (await pool.query(`SELECT 1 FROM users WHERE email = 'dave@acme.test'`)).rowCount === 0);
+    const lax = appMod.buildApp(envMod.parseEnv({ ...oidcEnv, OIDC_EMAIL_VERIFIED: 'optional' }), sink);
+    apps.push(lax);
+    await lax.ready();
+    const entra = await verifiedAs(undefined, 'dave@acme.test', lax);
+    ok('OIDC_EMAIL_VERIFIED=optional: an absent claim signs in (an IdP that never sends it)', !!entra.id && (await me(entra.id)).user?.email === 'dave@acme.test', entra.to);
+    ok('OIDC_EMAIL_VERIFIED=optional: …a present one still has to be true', (await verifiedAs('false', 'dave@acme.test', lax)).to === '/sign-in?error=email' &&
+      (await verifiedAs(false, 'dave@acme.test', lax)).to === '/sign-in?error=email');
+    ok('email_verified=true (NEGATIVE CONTROL): signs in', !!(await verifiedAs(true, 'dave@acme.test')).id);
     const denied = await signIn('carol@acme.test', { decision: 'deny' });
     ok('IdP denial → error=denied', denied.to === '/sign-in?error=denied' && !denied.id, denied.to);
     const forged = await signIn('carol@acme.test', { tamper: true });
@@ -230,7 +254,8 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
     ok('audit: no session id, cookie, code or token in any row', [...secrets, ...idp.issued].every((s) => !s || !trailText.includes(s)));
 
     // ── Header mode ────────────────────────────────────────────────────────
-    const hcfg = (cidrs: string) => envMod.parseEnv({ LOG_LEVEL: 'trace', DATABASE_URL: scratch.toString(), AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: cidrs, ORDINATE_ORG: 'acme' });
+    const hcfg = (cidrs: string, extra: Record<string, string> = {}) =>
+      envMod.parseEnv({ LOG_LEVEL: 'trace', DATABASE_URL: scratch.toString(), AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: cidrs, ORDINATE_ORG: 'acme', ...extra });
     const happ = appMod.buildApp(hcfg('10.0.0.0/8, fd00::/8'), sink);
     apps.push(happ);
     await happ.ready();
@@ -249,6 +274,19 @@ const cookieOf = (r: Inject, name: string) => r.cookies.find((c) => c.name === n
     const hm = (await hreq('fd00::7', dana, '/api/auth/me')).json() as { user: { email: string; role: string } | null; mode: string };
     ok('header: me is the asserted user, auto-provisioned as viewer', hm.user?.email === 'dana@acme.test' && hm.user.role === 'viewer' && hm.mode === 'header', JSON.stringify(hm));
     ok('header: trusted peer without the header → 401', (await hreq('10.1.2.3', {})).statusCode === 401);
+    // NV-6: a DNS-rebinding page in a browser on the proxy's host arrives FROM the trusted peer, its own name as Host.
+    const rebound = { host: 'rebind.attacker.test:8080', 'x-forwarded-email': 'rebound@acme.test' };
+    const rme = await hreq('10.1.2.3', rebound, '/api/auth/me');
+    ok('header: a trusted peer with a foreign Host → 421 before any identity', rme.statusCode === 421 && !rme.body.includes('rebound'), `${rme.statusCode} ${rme.body}`);
+    ok('header: …its RPC too, CSRF pair and same-origin Origin or not', (await hreq('10.1.2.3', { ...rebound, origin: 'http://rebind.attacker.test:8080' })).statusCode === 421);
+    ok('header: …and nothing was provisioned for the asserted address', (await pool.query(`SELECT 1 FROM users WHERE email = 'rebound@acme.test'`)).rowCount === 0);
+    const papp = appMod.buildApp(hcfg('10.0.0.0/8', { ORDINATE_PUBLIC_URL: 'https://bi.acme.test' }), sink);
+    apps.push(papp);
+    await papp.ready();
+    const viaProxy = (host: string) => papp.inject({ method: 'POST', url: '/api/rpc/no:such', remoteAddress: '10.1.2.3', headers: withCsrf({ host, 'x-forwarded-email': 'dana2@acme.test' }) });
+    ok('header (NEGATIVE CONTROL): the proxy passing the public Host (ORDINATE_PUBLIC_URL) → passes the gate', (await viaProxy('bi.acme.test')).statusCode === 404);
+    ok('header (NEGATIVE CONTROL): …or an IP Host (a proxy that sets its own) → passes', (await viaProxy('10.0.0.5:8080')).statusCode === 404);
+    ok('header: …while any other name is still refused there', (await viaProxy('evil.acme.test')).statusCode === 421);
     ok('header: a disabled user is refused even from the proxy', await (async () => {
       await pool.query(`UPDATE users SET disabled_at = now() WHERE email = 'dana@acme.test'`);
       return (await hreq('10.1.2.3', dana)).statusCode === 401;

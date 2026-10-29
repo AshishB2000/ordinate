@@ -115,7 +115,9 @@ const EXPECT = [true, true, false, false, true, true, false, false, true, true, 
     await H.sleep(300); // the last log lines
     const ran = verified() - before;
     const locked = storm.filter((r) => r.body.error === 'locked').length;
-    ok(`30 wrong attempts at once across A and B: at most 10 scrypt verifications (${ran}), the rest locked (${locked})`, ran <= 10 && ran + locked === 30, JSON.stringify(storm.map((r) => r.body.error)));
+    const busy = storm.filter((r) => r.body.error === 'busy').length; // charged, then past a pod's sign-ins hashing at once (src/server/auth/password.ts)
+    ok(`30 wrong attempts at once across A and B: at most 10 scrypt verifications (${ran}), the rest locked (${locked}) or busy (${busy})`,
+      ran <= 10 && locked >= 20 && ran + locked + busy === 30, JSON.stringify(storm.map((r) => r.body.error)));
     await A.stop();
     await B.stop();
 

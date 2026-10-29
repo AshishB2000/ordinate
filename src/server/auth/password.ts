@@ -3,7 +3,7 @@
 //
 //   POST /api/auth/password/setup   { code, email, password } → the first admin, signed in
 //   POST /api/auth/password/login   { email, password }       → a session (rotated)
-//   POST /api/auth/password/change  { current, password }     → a new password; other sessions end
+//   POST /api/auth/password/change  { current, password }     → a new password; other sessions and API tokens end
 //
 // First run: while no enabled admin has a password, each pod prints a one-time
 // setup code in its log at startup (the ONE credential this server logs, on
@@ -50,6 +50,12 @@ const ChangeBody = z.strictObject({ current: Pw, password: Pw });
 // deletes one.
 const FAIL_MAX = 10;
 const FAIL_WINDOW_MS = 15 * 60_000;
+
+// Sign-ins hashing at once on this pod. Every one is a 32 MiB scrypt on libuv's shared thread pool (4 threads
+// by default), which DNS lookups (the SSRF guard), files and DuckDB queue behind; a stranger choosing a fresh
+// email and address each time is held by neither the lockout nor the per-IP limit. Past this: `busy`.
+// shortcut: a constant at libuv's default pool size, per pod; follow UV_THREADPOOL_SIZE if a pod ever raises it.
+const HASHING_MAX = 4;
 
 /** Charges one attempt for `email` in `org`; the seconds to wait when the account is locked, else 0. */
 async function attempt(org: string, email: string): Promise<number> {
@@ -115,16 +121,25 @@ export function registerPassword(app: FastifyInstance, cfg: ServerEnv, pool: Poo
     return { ok: true };
   });
 
+  let hashing = 0;
   app.post('/api/auth/password/login', async (req, reply) => {
     const body = LoginBody.safeParse(req.body);
     const email = body.success ? normalEmail(body.data.email) : null;
     if (!body.success || !email) return refuse('invalid-input');
     const wait = await attempt(auth.org, email);
     if (wait > 0) return reply.header('retry-after', wait).send(refuse('locked', { retryAfter: wait }));
-
-    const c = await credentials(pool, auth.org, email);
-    // Always one scrypt: an unknown email costs what a known one does.
-    const good = await verifyPassword(body.data.password, c?.hash ?? null);
+    // After the charge, so the lockout still counts every attempt across pods; `busy` costs no scrypt.
+    if (hashing >= HASHING_MAX) return reply.header('retry-after', 1).send(refuse('busy', { retryAfter: 1 }));
+    hashing++;
+    let c: Awaited<ReturnType<typeof credentials>>;
+    let good: boolean;
+    try {
+      c = await credentials(pool, auth.org, email);
+      // Always one scrypt: an unknown email costs what a known one does.
+      good = await verifyPassword(body.data.password, c?.hash ?? null);
+    } finally {
+      hashing--;
+    }
     if (!c || !good) {
       req.log.info('password sign-in refused: wrong email or password');
       await trail(req, c ? email : null, 'login', 'denied');
@@ -166,8 +181,10 @@ export function registerPassword(app: FastifyInstance, cfg: ServerEnv, pool: Poo
     if (!(await setPassword(pool, who.org.id, c.userId, await hashPassword(body.data.password), false))) {
       return refuse('signed-out');
     }
-    // Whoever else held a session on the old password is out — with their open event streams; this browser stays in.
+    // Whoever else held a session on the old password is out — with any API token minted from one and their open
+    // event streams; this browser stays in.
     await endOtherSessions(pool, c.userId, sid);
+    await pool.query('UPDATE api_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [c.userId]);
     closeStreamsOf(who.org.id, email, { keepSession: sid ? hashId(sid) : undefined });
     req.log.info('password changed');
     await trail(req, email, 'password_change', 'ok');

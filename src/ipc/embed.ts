@@ -11,7 +11,7 @@ import { getDefs, getSite, type HostedSite } from '../publish/hosted';
 import type { PublishedDef } from '../publish/dashboardData';
 import { canStore, hasSecret, MAX_ORIGINS, readSettings, rotateSecret, saveSettings, secretOf } from '../server/embed/settings';
 import { MAX_LOCK_COLUMNS, MAX_TTL_SEC, PREVIEW_TTL_SEC, previewKey, signToken } from '../server/embed/token';
-import { embedNeedsSecret, embedNeedsStore, embedNotFound, embedRepublish } from '../server/embedMessages';
+import { embedNeedsSecret, embedNeedsSession, embedNeedsStore, embedNotFound, embedRepublish } from '../server/embedMessages';
 
 const org = (): string => ctx().org.id;
 
@@ -46,7 +46,8 @@ export function register(): void {
   ipcMain.handle('embed:settings', async () => ({ ...(await status()), maxOrigins: MAX_ORIGINS, maxTtlHours: MAX_TTL_SEC / 3600, maxLockColumns: MAX_LOCK_COLUMNS }));
   ipcMain.handle('embed:status', status);
   ipcMain.handle('embed:save', async (_e, s: { enabled: boolean; origins: string[] }) => saveSettings(org(), s));
-  ipcMain.handle('embed:rotate', async () => rotateSecret(org()));
+  // The secret signs embeds for as long as it stands: a browser session only, so a leaked API token cannot take one.
+  ipcMain.handle('embed:rotate', async () => (ctx().via === 'token' ? { ok: false as const, error: embedNeedsSession() } : rotateSecret(org())));
 
   // Which columns a lock on this dashboard can hold: each column of a dataset its figures read, and how many tiles it covers.
   ipcMain.handle('embed:columns', async (_e, { projectId, siteId, dashboardId }: { projectId: string; siteId: string; dashboardId: string }) => {

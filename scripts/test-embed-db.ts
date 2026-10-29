@@ -133,6 +133,12 @@ async function suite(adminUrl: string): Promise<void> {
     ok('secret: one `embed.signing` row of ciphertext', sealed.rows.length === 1 && sealed.rows[0].ref === 'org' && !sealed.rows[0].ciphertext.toString('latin1').includes(SECRET.slice(10)));
     const real = secretsMod.createSecretStore(pool, cfg.masterKey!);
     ok('secret: bound to its org (NEGATIVE CONTROL: its own org reads it)', (await real.get('globex', 'embed.signing', 'org')) === null && (await real.get('acme', 'embed.signing', 'org')) === SECRET);
+    // NV-5: the secret signs embeds for as long as it stands, so a leaked admin API token must not take one.
+    const apiToken: string = (await boss.call('tokens:create', { name: 'ci', expiresInDays: 30 })).body.token;
+    const viaToken = await B.client(base, { authorization: `Bearer ${apiToken}` }, replies).call('embed:rotate');
+    ok('secret: an admin\'s API token cannot rotate it — a sentence, no secret, the stored one unchanged',
+      viaToken.status === 200 && viaToken.body.ok === false && /API token/.test(viaToken.body.error) && !viaToken.text.includes('ord_embed_') &&
+      (await real.get('acme', 'embed.signing', 'org')) === SECRET, show(viaToken.body));
 
     // ── Origins ─────────────────────────────────────────────────────────
     for (const bad of ['http://portal.acme.test', 'https://portal.acme.test/app', 'https://*.acme.test', 'portal.acme.test']) {
@@ -250,7 +256,7 @@ async function suite(adminUrl: string): Promise<void> {
     const dump = JSON.stringify((await pool.query('SELECT * FROM audit_log')).rows);
     ok('audit: no token and no secret in any audit row', !dump.includes(SECRET) && !dump.includes(SECRET2) && !dump.includes(one.split('.')[2]));
     const rotations = (await pool.query(`SELECT 1 FROM audit_log WHERE action = 'rpc' AND channel = 'embed:rotate' AND outcome = 'ok'`)).rowCount;
-    ok('audit: each rotation is an admin rpc row', rotations === 2);
+    ok('audit: each rotation is an admin rpc row (two, plus the API token\'s call the handler answered with a refusal)', rotations === 3, rotations);
 
     // ── Canary ──────────────────────────────────────────────────────────
     await new Promise((r) => setTimeout(r, 200));

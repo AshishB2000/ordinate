@@ -59,7 +59,7 @@ function envChecks(): void {
   ok('env: plain AWS — no endpoint, TLS, us-east-1', JSON.stringify(envMod.parseEnv({ AUTH_MODE: 'dev', ...db, STORAGE_URL: 's3://b-1' }).storage.s3) ===
     JSON.stringify({ bucket: 'b-1', prefix: '', region: 'us-east-1', endpoint: null, useSsl: true, extensionDir: null }));
   ok('env: STORAGE_URL=file:///x is DATA_DIR', envMod.parseEnv({ AUTH_MODE: 'dev', STORAGE_URL: 'file:///srv/ordinate' }).dataDir === path.resolve('/srv/ordinate'));
-  ok('env: …and satisfies prod\'s DATA_DIR rule', envMod.parseEnv({ ORDINATE_ENV: 'prod', AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: '10.0.0.0/8', ...db,
+  ok('env: …and satisfies prod\'s DATA_DIR rule', envMod.parseEnv({ ORDINATE_ENV: 'prod', AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: '10.0.0.0/8', ORDINATE_PUBLIC_URL: 'https://bi.example.com', ...db,
     ORDINATE_MASTER_KEY: 'a'.repeat(64), STORAGE_URL: 'file:///data' }).dataDir === path.resolve('/data'));
   for (const [label, vars, name] of [
     ['a bucket with a quote', { ...db, STORAGE_URL: "s3://b'x/p" }, 'STORAGE_URL'],

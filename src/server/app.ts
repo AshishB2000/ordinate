@@ -168,11 +168,24 @@ export function buildApp(cfg: ServerEnv, logStream?: NodeJS.WritableStream, iden
 
   useLogger(app.log); // src/app/logger.ts: every logger.* line in the process goes through pino, redacted
 
+  // A route or hook that throws — a Postgres error under /api/auth/*, /p/ or a refresh URL, a settings write
+  // the onSend hook awaits — would get Fastify's default reply, which carries the error's message (a database
+  // address, Postgres's text). The message goes to the log, never the wire (threat model R7), as RPC's does.
+  // Fastify's own 4xx (a body over the cap, malformed JSON) keep their status and default reply.
+  app.setErrorHandler((err: Error & { statusCode?: number }, req, reply) => {
+    if (err.statusCode !== undefined && err.statusCode >= 400 && err.statusCode < 500) return reply.send(err);
+    req.log.error({ err: scrubbed(err, cfg.databaseUrl ?? '') }, 'request failed');
+    return reply.code(500).send({ error: 'server error' });
+  });
+
   // T6.2, in this order and before sign-in's hook below: security headers on
   // every response, the CSRF check on every non-GET, the per-IP rate limits —
   // all three refuse without a database query.
   registerSecurityHeaders(app, cfg.env === 'prod');
-  registerCsrf(app, { cookie: cookieNames(cfg.env === 'prod').csrf, secure: cfg.env === 'prod', bearerDecides: !!cfg.databaseUrl && !identifyOverride });
+  registerCsrf(app, {
+    cookie: cookieNames(cfg.env === 'prod').csrf, secure: cfg.env === 'prod', bearerDecides: !!cfg.databaseUrl && !identifyOverride,
+    pinHost: cfg.auth.mode === 'dev' || cfg.auth.mode === 'header', publicHost: cfg.auth.publicHost, // DNS rebinding (./csrf.ts)
+  });
   const limits = registerLimits(app, cfg.limits, proxyList(cfg.auth.trustedProxies));
   // Request counts and latency for GET /metrics, which itself is served only on METRICS_PORT (./metrics.ts).
   registerRequestMetrics(app);
