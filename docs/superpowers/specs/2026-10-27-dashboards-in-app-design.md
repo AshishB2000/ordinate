@@ -26,9 +26,10 @@ with the sidebar, today's numbers and the app's own light/dark.
      again, embed, access, unpublish), and the Publish… button.
 2. **A dashboard opened from that page** (`/dashboards/<projectId>/<dashboardId>`): the dashboard
    in view mode inside the app — the same canvas as the editing screen with every editing tool
-   hidden. The header has: back to Dashboards, the name, the reader's tools that exist today (sheet
-   tabs, filters, Views, Comments, Subscribe, Present, ⋯ History / Export / Print), **Share link**,
-   and **Edit** (editors and admins only), which goes to `/analyses/<projectId>/<dashboardId>`.
+   hidden. The header has: back to Dashboards, the name, the reader's tools (sheet tabs only when
+   there is more than one sheet, filters, Views, Comments, Subscribe, Present, ⋯ Export / Print) and
+   **Share link** (editors and admins) or **Copy link** (viewers). It reads like `/p/<id>/`: no Edit,
+   no layout size switch, no History or Lineage — authoring stays in Analyses (amended 2026-10-28).
    No "View only" badge on this page — viewing is the point of it.
 3. **Ready switch** on the editing screen's header (editors and admins only): on means the
    dashboard is on the Dashboards page; off takes it off. Nothing else changes; nothing is deleted.
