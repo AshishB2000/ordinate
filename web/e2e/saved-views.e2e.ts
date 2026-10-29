@@ -204,7 +204,8 @@ e2e('saved views: a picker over 725 dates, search, date pills, save → link →
   budget('default view');
 
   // ── The Subscribe dialog lists it ───────────────────────────────────
-  await page.getByRole('button', { name: 'Subscribe' }).click();
+  await page.getByRole('button', { name: 'More dashboard actions' }).click(); // the editor keeps Subscribe in ⋯
+  await page.getByRole('menuitem', { name: 'Subscribe…' }).click();
   const sub = page.getByRole('dialog', { name: 'Subscribe to Year end' });
   await sub.getByRole('combobox', { name: 'Saved view' }).click({ timeout: 30_000 });
   await page.getByRole('option', { name: 'Last trading day' }).waitFor();

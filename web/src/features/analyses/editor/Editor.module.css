@@ -144,6 +144,13 @@
   outline-offset: -2px;
   border-radius: var(--r-sm);
 }
+/* Undo / redo and the layout size, before the add buttons: the authoring tools, out of the title row. */
+.tools {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding-bottom: var(--sp-8);
+}
 .adds {
   display: flex;
   gap: var(--sp-4);

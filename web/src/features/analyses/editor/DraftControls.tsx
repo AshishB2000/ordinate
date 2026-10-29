@@ -6,7 +6,7 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { Badge } from '../../../ui/Badge';
-import { Button } from '../../../ui/Button';
+import { Button, IconButton } from '../../../ui/Button';
 import { ConfirmDelete } from '../../../ui/ConfirmDelete';
 import type { MenuEntry } from '../../../ui/Menu';
 import { toast } from '../../../ui/Toast';
@@ -87,10 +87,16 @@ export function useDraftControls(): DraftControls {
     buttons: (
       <>
         <span className={s.headRule} aria-hidden="true" />
+        {/* An icon, named and titled, so the title row holds at 1280 px; the dialog it opens says what goes back. */}
         {status === 'edited' && (
-          <Button size="sm" variant="ghost" icon="rotate-ccw" disabled={!!stuck} title={stuck} onClick={() => setAsking('discard')}>
-            Discard edits
-          </Button>
+          <IconButton
+            icon="rotate-ccw"
+            size="sm"
+            label="Discard edits"
+            disabled={!!stuck}
+            title={stuck ?? `Discard edits: back to the version published ${when}`}
+            onClick={() => setAsking('discard')}
+          />
         )}
         <Button size="sm" icon="eye" onClick={() => void preview()}>
           Preview

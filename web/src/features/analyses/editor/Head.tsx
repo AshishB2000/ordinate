@@ -1,10 +1,13 @@
 // The editor's top strip (legacy dashboards.ts .dash-editor-head, moved above
-// the workbench by authoring.ts anMountTopStrip): back to Dashboards, the name
-// (the rename control), where the draft stands and the save state, the sheet
-// tabs, the add row, undo / redo, the layout size, ⋯ — History, Lineage, Style,
-// export and print — and Preview / Publish (./DraftControls).
+// the workbench by authoring.ts anMountTopStrip). The title row: back to
+// Dashboards, the name (the rename control), where the draft stands and the save
+// state, then what to do with the dashboard — views, compare, comments, Present,
+// ⋯ (History, Lineage, Style, Subscribe, export and print) and Discard / Preview /
+// Publish (./DraftControls). The row under it is the authoring one: sheet tabs,
+// undo / redo, the layout size and the add buttons. Kept to one title row at
+// 1280 px in every draft state (web/e2e/editor-head.e2e.ts).
 
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { PageHead } from '../../../app/blocks';
 import { Badge } from '../../../ui/Badge';
@@ -19,10 +22,12 @@ import { nextSheetName, uuid } from './doc';
 import { NameDialog } from './NameDialog';
 import { SizeSwitch } from './SizeNote';
 import s from './Editor.module.css';
-import { StyleDialog, SubscribeButton, ViewControls, exportHtml } from '../../dashboards/DashboardChrome';
+import { StyleDialog, ViewControls, exportHtml } from '../../dashboards/DashboardChrome';
 import { addSummary } from '../../dashboards/SummaryBody';
 import { ViewsMenu } from '../../dashboards/views/ViewsMenu';
 import { useDraftControls } from './DraftControls';
+
+const SubscribeDialog = lazy(() => import('../../subscriptions/SubscribeDialog'));
 
 function SaveChip() {
   const { save } = useEditor();
@@ -125,6 +130,7 @@ export function Head() {
   const [renaming, setRenaming] = useState(false);
   const [lineage, setLineage] = useState(false);
   const [styling, setStyling] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
   const draft = useDraftControls();
   const { past, future } = ed.history;
   const ro = ed.readOnly;
@@ -157,17 +163,11 @@ export function Head() {
         }
         actions={
           <>
-            {!ro && (
-              <>
-                <IconButton icon="undo" size="sm" label={past.length ? `Undo ${past[past.length - 1].label}` : 'Nothing to undo'} disabled={!past.length} onClick={ed.undo} />
-                <IconButton icon="redo" size="sm" label={future.length ? `Redo ${future[0].label}` : 'Nothing to redo'} disabled={!future.length} onClick={ed.redo} />
-              </>
-            )}
             <ViewsMenu />
             <ViewControls />
-            <SizeSwitch />
+            {/* An editor's is in the authoring row; a reader with one sheet has no such row. */}
+            {ro && <SizeSwitch />}
             <IconButton icon="message-square" size="sm" label="Comments on this dashboard" onClick={() => ed.view.openComments('all')} />
-            <SubscribeButton />
             <Button size="sm" icon="monitor" onClick={() => ed.view.setPresenting(true)}>
               Present
             </Button>
@@ -180,6 +180,19 @@ export function Head() {
                 { label: 'History', icon: 'history', onSelect: () => void navigate(`/versions/${ed.projectId}/dashboard/${ed.analysisId}`) },
                 { label: 'Lineage', icon: 'lineage', onSelect: () => setLineage(true) },
                 ...(ro ? [] : [{ label: 'Style…', icon: 'sliders' as const, onSelect: () => setStyling(true) }]),
+                // Making a subscription is a write on the project; the view page keeps its Subscribe button.
+                ...(ed.writer
+                  ? [
+                      {
+                        label: 'Subscribe…',
+                        icon: 'send' as const,
+                        onSelect: () => {
+                          ed.save.retry(); // what is on screen is what gets sent
+                          setSubscribing(true);
+                        },
+                      },
+                    ]
+                  : []),
                 { label: 'Export HTML', icon: 'download', onSelect: () => void exportHtml(ed) },
                 { label: 'Print or save as PDF', icon: 'file-text', onSelect: () => window.print() },
                 ...draft.menuEnd,
@@ -194,6 +207,15 @@ export function Head() {
         <div className={s.headRow}>
           <SheetTabs />
           <span className={s.grow} />
+          {!ro && (
+            <div className={s.tools}>
+              <IconButton icon="undo" size="sm" label={past.length ? `Undo ${past[past.length - 1].label}` : 'Nothing to undo'} disabled={!past.length} onClick={ed.undo} />
+              <IconButton icon="redo" size="sm" label={future.length ? `Redo ${future[0].label}` : 'Nothing to redo'} disabled={!future.length} onClick={ed.redo} />
+              <span className={s.headRule} aria-hidden="true" />
+              <SizeSwitch />
+              <span className={s.headRule} aria-hidden="true" />
+            </div>
+          )}
           {!ro && (
             <div className={s.adds} role="group" aria-label="Add to the sheet">
               <Button size="sm" icon="plus" onClick={() => ed.openAdd('visual')}>
@@ -240,6 +262,11 @@ export function Head() {
       )}
       {draft.dialogs}
       {styling && <StyleDialog onClose={() => setStyling(false)} />}
+      {subscribing && (
+        <Suspense fallback={null}>
+          <SubscribeDialog projectId={ed.projectId} dashboard={{ id: ed.analysisId, name: ed.doc.name }} onClose={() => setSubscribing(false)} />
+        </Suspense>
+      )}
       {lineage && <LineageDrawer projectId={ed.projectId} type="dashboard" id={ed.analysisId} name={ed.doc.name} onClose={() => setLineage(false)} />}
       {renaming && <NameDialog title="Rename dashboard" initial={ed.doc.name} onClose={() => setRenaming(false)} onSave={(v) => ed.edit('Rename dashboard', (d) => void (d.name = v))} />}
     </div>
