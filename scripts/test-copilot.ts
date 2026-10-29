@@ -201,6 +201,49 @@ async function main(): Promise<void> {
   ok('visual facts: labels from a sensitive column are withheld, the figures kept',
     !vGuarded.text.includes('grace@example.com') && vGuarded.text.includes('(withheld)=200') && /Labels from email are withheld/.test(vGuarded.text), vGuarded.text);
 
+  // ── Insights about a withheld column are left out whole (NV-31) ──
+  const found = [
+    { detail: 'Column "email" is dominated by "grace@example.com" (67% of rows).', column: 'email' },
+    { detail: 'For spend, North rose from 100 to 120 between 2024-01 and 2024-02.', column: 'region', facts: { dateColumn: 'card' } },
+    { detail: 'The largest region, "South", is 40% on its own.', column: 'region' },
+  ];
+  const iOpen = copilot.datasetFacts(people!, pSums, [], found, [], {});
+  const iGuarded = copilot.datasetFacts(people!, pSums, [], found, [], docs);
+  ok('insights NEGATIVE CONTROL: unmarked, every finding is told', iOpen.text.includes('dominated by "grace@example.com"') && iOpen.text.includes('North rose'));
+  ok('insights: a finding on a marked column, or over a marked date column, is left out', !iGuarded.text.includes('grace@example.com')
+    && !iGuarded.text.includes('North rose') && iGuarded.text.includes('"South", is 40%'), iGuarded.text);
+
+  // ── Every source of a label: pivot dimensions, facets, a related dataset (NV-32) ──
+  const visualsMod: typeof import('../src/analysis/visuals') = require('../src/analysis/visuals');
+  const catalogMod: typeof import('../src/app/catalog') = require('../src/app/catalog');
+  const ipcCopilot: typeof import('../src/ipc/copilot') = require('../src/ipc/copilot');
+  const spend = [{ column: 'spend', aggregation: 'sum' as const }];
+  const shapes: Array<[string, string, unknown]> = [
+    ['a pivot row dimension', 'pivot', { category: 'region', values: spend, pivot: { rows: [{ column: 'region' }, { column: 'email' }], columns: [], values: spend } }],
+    ['a pivot column dimension', 'pivot', { category: 'region', values: spend, pivot: { rows: [{ column: 'region' }], columns: [{ column: 'email' }], values: spend } }],
+    ['a facet', 'column', { category: 'region', values: spend, facet: { cols: 'email' } }],
+  ];
+  const shapeIds: string[] = [];
+  for (const [label, chartType, encoding] of shapes) {
+    const sv = await visualsMod.saveVisual(proj.id, { name: label, datasetId: people!.id, chartType, encoding });
+    shapeIds.push(sv!.id);
+  }
+  const factsOf = async (id: string) => (await ipcCopilot.buildFacts(proj.id, { kind: 'visual', id })).text;
+  const unmarked = await Promise.all(shapeIds.map(factsOf));
+  ok('visual shapes NEGATIVE CONTROL: unmarked, each chart\'s facts name the emails', unmarked.every((t) => t.includes('grace@example.com')), unmarked.join('\n---\n'));
+  await catalogMod.setColumn(proj.id, people!.id, 'email', { sensitivity: 'personal' });
+  for (const [k, id] of shapeIds.entries()) {
+    const t = await factsOf(id);
+    ok(`visual facts: ${shapes[k][0]} on a marked column — no value of it, the figures kept`,
+      !t.includes('grace@example.com') && !t.includes('alan@example.com') && /\(withheld\)|=\d/.test(t) && /Labels from [^)]*email[^)]* are withheld/.test(t), t);
+  }
+  const relEnc = { category: 'owner', categoryDatasetId: '7c9e6679-7425-40de-944b-e07fc1f90ae7', values: spend };
+  const relViz = { data: { labels: ['grace@example.com'], series: [{ name: 'sum(spend)', values: [200] }] }, recommendedShape: 'categorical', warnings: [] } as any;
+  const relV = { name: 'Spend by owner', chartType: 'column', datasetId: people!.id, encoding: relEnc } as any;
+  ok('visual facts: a category from a related dataset is withheld by THAT dataset\'s marks',
+    !copilot.visualFacts(relV, 'People', relViz, {}, [], { [relEnc.categoryDatasetId]: { owner: { sensitivity: 'personal' } } }).text.includes('grace@example.com'));
+  ok('visual facts NEGATIVE CONTROL: …and shown when that dataset has none', copilot.visualFacts(relV, 'People', relViz, {}, [], {}).text.includes('grace@example.com'));
+
   // "Also called" names (the catalog's `aliases`) are names a person wrote, not
   // values of the column: every block that prints a display name prints them
   // too, in ONE format, and a mark still withholds the values.
