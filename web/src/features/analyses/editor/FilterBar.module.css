@@ -289,3 +289,64 @@
     font-size: 16px;
   }
 }
+
+/* The view page's filter box (as /p/'s .pub-filters): one bordered box, each
+   control's label in small capitals over its widget, widgets the height of a
+   button; the saved views and Reset at the far end. An active control's widget
+   takes the accent tint instead of its chip. */
+.box {
+  align-items: flex-end;
+  gap: var(--sp-12) var(--sp-16);
+  padding: var(--sp-12) var(--sp-16);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.box .chips {
+  align-items: flex-end;
+  gap: var(--sp-12) var(--sp-16);
+}
+.box .chip {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 6px var(--sp-4);
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.box .chip > .label {
+  grid-column: 1 / -1;
+  font-size: var(--t-11);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.box .select,
+.box .num,
+.box .text,
+.box .date,
+.box .multiBtn {
+  height: var(--ctl-md);
+  min-width: 180px;
+  padding: 0 var(--sp-12);
+  border-radius: var(--r-md);
+  font-size: var(--t-13);
+}
+.box .multiBtn {
+  justify-content: space-between;
+}
+.box .on .select,
+.box .on .num,
+.box .on .text,
+.box .on .date,
+.box .on .multiBtn {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.grow {
+  flex: 1 1 auto;
+}

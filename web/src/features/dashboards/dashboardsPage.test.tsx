@@ -1,8 +1,9 @@
 // The Dashboards page (docs/superpowers/specs/2026-10-27-dashboards-in-app-design.md): it lists only Ready dashboards,
 // with no tabs, and opens them in view mode; the published list keeps only its address (`&tab=links`); the view page is
-// the editing canvas with no editing tool (no Edit, layout size, History, Lineage, or sheet tabs for one sheet) and
-// Copy link, the live in-app address, for everyone; the editing screen has no Publish…, and its Ready switch writes
-// `analysis:setReady` and nothing else.
+// the editing canvas with no editing tool (no Edit, layout size, History, Lineage, or sheet tabs for one sheet), its own
+// header (Dashboards / project, then Compare, Subscribe, Expand and ⋯ with Copy link — the live in-app address, for
+// everyone — and no Present); the editing screen has no Publish…, and its Ready switch writes `analysis:setReady` and
+// nothing else.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -86,11 +87,13 @@ describe('Dashboards page', () => {
 });
 
 describe('The view page', () => {
-  it('is the canvas with no editing tool: back to Dashboards, no badge, no Edit, and Copy link for an editor too', async () => {
+  it('is the canvas with no editing tool: Dashboards / project back to the list, no badge, no Edit, no Present, and Copy link in ⋯ for an editor too', async () => {
     serve('admin');
     renderApp(`/dashboards/${P}/${A1}`);
     await screen.findByRole('heading', { level: 1, name: 'Board' });
-    expect(within(screen.getByRole('main')).getByRole('link', { name: 'Dashboards' }).getAttribute('href')).toBe(`/dashboards?project=${P}`);
+    const crumbs = within(screen.getByRole('navigation', { name: 'Breadcrumb' }));
+    expect(crumbs.getByRole('link', { name: 'Dashboards' }).getAttribute('href')).toBe(`/dashboards?project=${P}`);
+    expect((await crumbs.findByRole('link', { name: 'Sales' })).getAttribute('href')).toBe(`/dashboards?project=${P}`);
     for (const tool of ['Add sheet', 'Nothing to undo', 'Ready']) expect(screen.queryByRole('button', { name: tool }) ?? screen.queryByRole('switch', { name: tool })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Add to the sheet' })).toBeNull();
     expect(screen.queryByText('View only')).toBeNull();
@@ -98,8 +101,32 @@ describe('The view page', () => {
     expect(screen.queryByRole('group', { name: 'Layout size' })).toBeNull();
     expect(screen.queryByRole('tablist', { name: 'Sheets' })).toBeNull(); // one sheet: nothing to switch between
     expect(screen.queryByRole('button', { name: 'Share link' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Copy link' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Present' })).toBeNull(); // Expand takes its place
+    expect(screen.getByRole('button', { name: 'Expand' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Subscribe' })).toBeTruthy(); // a reader's own write: an editor keeps it here
+    expect(screen.queryByRole('button', { name: 'Copy link' })).toBeNull(); // in ⋯
+    await openMore();
+    expect(screen.getByRole('menuitem', { name: 'Copy link' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Comments' })).toBeTruthy();
+  });
+
+  it('Expand lays the dashboard over the window and keeps its header; the button and Esc give the window back', async () => {
+    serve('viewer');
+    renderApp(`/dashboards/${P}/${A1}`);
+    const expand = await screen.findByRole('button', { name: 'Expand' });
+    const root = () => document.querySelector('[data-viewing]') as HTMLElement;
+    const before = root().className;
+    fireEvent.click(expand);
+    const exit = screen.getByRole('button', { name: 'Exit full screen' });
+    expect(exit.getAttribute('aria-pressed')).toBe('true');
+    expect(root().className).not.toBe(before);
+    expect(screen.getByRole('heading', { level: 1, name: 'Board' })).toBeTruthy(); // the header stays
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await screen.findByRole('button', { name: 'Expand' });
+    expect(root().className).toBe(before);
+    fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Exit full screen' }));
+    expect(root().className).toBe(before);
   });
 
   it('a dashboard of two sheets keeps its sheet tabs on the view page', async () => {
@@ -116,7 +143,8 @@ describe('The view page', () => {
       const writeText = vi.fn(async () => undefined);
       Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
       const router = renderApp(`/dashboards/${P}/${A1}`);
-      fireEvent.click(await screen.findByRole('button', { name: 'Copy link' }));
+      await openMore();
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Copy link' }));
       await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/dashboards/${P}/${A1}`));
       expect(router.state.location.pathname).toBe(`/dashboards/${P}/${A1}`);
       expect(screen.queryByRole('dialog', { name: 'Publish' })).toBeNull();
@@ -135,7 +163,7 @@ describe('The view page', () => {
     expect(calls.some((c) => c.channel === 'analysis:update')).toBe(false);
   });
 
-  it('the view page’s ⋯ menu is export and print only — no History, no Lineage', async () => {
+  it('the view page’s ⋯ menu is the link, comments, export and print — no History, no Lineage', async () => {
     serve('admin');
     renderApp(`/dashboards/${P}/${A1}`);
     await openMore();

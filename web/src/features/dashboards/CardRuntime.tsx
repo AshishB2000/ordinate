@@ -28,6 +28,7 @@ import { presentRow } from './DashboardChrome';
 import { pivotToCsv, pivotToTsv, saveText } from './pivotExport';
 import { actionMenu, actionsOf, TooltipVisual, useRunAction } from './tileActions';
 import { isPhoneReader } from './phone/phoneBlocks';
+import { IS_MAC } from '../palette/registry';
 import { PointSheet, type PointAction } from './phone/PointSheet';
 import s from './Dashboards.module.css';
 
@@ -220,9 +221,14 @@ export function VisualCard({
     () => (cmp !== 'null' && CHART_OVERLAY_TYPES.has(def.chartType) ? { ...shown, encoding: { ...shown.encoding, compare: JSON.parse(cmp) as unknown } } : shown),
     [shown, def.chartType, cmp],
   );
-  // A phone: the legend goes under the chart, where a narrow plot does not lose its width to it.
+  // A phone: the legend goes under the chart, where a narrow plot does not lose its width to it. The view page: a chart
+  // whose marks filter the sheet says so in its tooltip, in place of the sheet's "Click to filter" row (ClickFilters).
   const phone = isPhoneReader(ed);
-  const drawnHere = useMemo(() => (phone ? { ...compared, overrides: { ...compared.overrides, legendPosition: 'bottom' } } : compared), [compared, phone]);
+  const hint = ed.viewing && !phone && !!onMark && !clicks.length ? `Click to filter · ${IS_MAC ? '⌘' : 'Ctrl'}-click picks several` : '';
+  const drawnHere = useMemo(
+    () => (phone ? { ...compared, overrides: { ...compared.overrides, legendPosition: 'bottom' } } : hint ? { ...compared, overrides: { ...compared.overrides, tooltipHint: hint } } : compared),
+    [compared, phone, hint],
+  );
   const [tap, setTap] = useState<{ point: ChartPoint; time: boolean; value: string | number; shown: string } | null>(null);
   // A plain click: the tile's own actions, else click-to-filter, else the rows behind the mark (dashGrid.ts wireDrillClick).
   const [drill, setDrill] = useState<DrillTarget | null>(null);

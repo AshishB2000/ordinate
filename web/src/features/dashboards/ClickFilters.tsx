@@ -7,7 +7,9 @@
 // The row is there whenever a chart on the sheet can be clicked, saying so
 // while nothing is — so the sheet does not jump under the pointer when the
 // first chip arrives, and the second click lands on the mark it was aimed at.
-// A sheet with no clickable chart has no row.
+// A sheet with no clickable chart has no row. Nor does the view page while
+// nothing is clicked: there the chart's own tooltip says "Click to filter"
+// (CardRuntime's tooltipHint).
 
 import { Button } from '../../ui/Button';
 import { Kbd } from '../../ui/Kbd';
@@ -41,7 +43,7 @@ export function ClickFilterBar({ ed }: { ed: EditorApi }) {
     return card?.type === 'visual' && card.visualId ? ed.visuals.get(card.visualId) : undefined;
   };
   if (!clicks.length) {
-    if (phone) return null;
+    if (phone || ed.viewing) return null;
     const clickable = ed.cards.some((c) => {
       const def = visualOf(c.id);
       return !!def && clickColumns(ed, def) !== null;

@@ -2,6 +2,8 @@
 // the open sheet's controls as chips, each a live widget. A control filters the
 // whole dashboard; its selection is view state, never saved — "Set as default"
 // is the one way it reaches the record. Parameter chips move a parameter.
+// On the view page the bar is a box, as on a published page: each label over its
+// widget, then the saved views and Reset at its end.
 
 import { useState } from 'react';
 import { Button, IconButton } from '../../../ui/Button';
@@ -18,6 +20,7 @@ import s from './FilterBar.module.css';
 import { ResetControls } from '../../dashboards/ControlsExtras';
 import { FiltersSheet } from '../../dashboards/phone/FiltersSheet';
 import { isPhoneReader } from '../../dashboards/phone/phoneBlocks';
+import { ViewsMenu } from '../../dashboards/views/ViewsMenu';
 
 /** The sheet's control cards in the order their author built them (a sorted COPY). */
 export function barControls(cards: readonly Card[]): Card[] {
@@ -143,7 +146,9 @@ export function FilterBar() {
   const ed = useEditor();
   const [sheetOpen, setSheetOpen] = useState(false);
   const chips = barControls(ed.cards);
-  if (!chips.length) return null;
+  const boxed = ed.viewing && ed.size !== 'phone';
+  // The box also holds the saved views, so a sheet with none of its own controls may still have one.
+  if (!chips.length && !(boxed && ed.views.list.length)) return null;
   const isOn = (c: Card) =>
     c.control?.kind === 'parameter'
       ? JSON.stringify(ed.paramValue(c.control.paramId ?? '')) !== JSON.stringify(ed.doc.parameters.find((p) => p.id === c.control?.paramId)?.value)
@@ -182,6 +187,21 @@ export function FilterBar() {
           Filters ({n}){on > 0 && <span className={s.badge}>{on} on</span>}
         </Button>
         <FiltersSheet ed={ed} open={sheetOpen} onOpenChange={setSheetOpen} view={false} />
+      </div>
+    );
+  }
+  if (boxed) {
+    return (
+      <div className={`${s.bar} ${s.box}`} role="group" aria-label="Filters">
+        {chips.length > 0 && list}
+        <span className={s.grow} />
+        <ViewsMenu boxed />
+        {on > 0 && (
+          <Button size="sm" variant="ghost" onClick={clearAll}>
+            Clear all
+          </Button>
+        )}
+        <ResetControls />
       </div>
     );
   }

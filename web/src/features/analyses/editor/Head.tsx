@@ -23,7 +23,6 @@ import { StyleDialog, SubscribeButton, ViewControls, exportHtml } from '../../da
 import { addSummary } from '../../dashboards/SummaryBody';
 import { ViewsMenu } from '../../dashboards/views/ViewsMenu';
 import { ReadySwitch } from '../../dashboards/ReadySwitch';
-import { ViewActions } from '../../dashboards/ViewActions';
 
 function SaveChip() {
   const { save } = useEditor();
@@ -128,8 +127,8 @@ export function Head() {
   const [styling, setStyling] = useState(false);
   const { past, future } = ed.history;
   const ro = ed.readOnly;
-  // Opened from the Dashboards page (ed.viewing), back goes there and no badge says what the page is for.
-  const back = ed.viewing ? { to: `/dashboards?project=${ed.projectId}`, label: 'Dashboards' } : { to: `/analyses?project=${ed.projectId}`, label: 'Analyses' };
+  // The view page (ed.viewing) has its own header, dashboards/ViewHead.
+  const back = { to: `/analyses?project=${ed.projectId}`, label: 'Analyses' };
   return (
     <div className={s.head}>
       <PageHead
@@ -144,7 +143,7 @@ export function Head() {
           )
         }
         status={
-          ed.viewing ? undefined : ro ? (
+          ro ? (
             <span title="You can read this dashboard, use its filters and comment. A project admin can make you an editor.">
               <Badge icon="eye">View only</Badge>
             </span>
@@ -163,8 +162,7 @@ export function Head() {
             )}
             <ViewsMenu />
             <ViewControls />
-            {/* The view page reads like /p/<id>/: the layout preview, History and Lineage are authoring tools. */}
-            {!ed.viewing && <SizeSwitch />}
+            <SizeSwitch />
             <IconButton icon="message-square" size="sm" label="Comments on this dashboard" onClick={() => ed.view.openComments('all')} />
             <SubscribeButton />
             <Button size="sm" icon="monitor" onClick={() => ed.view.setPresenting(true)}>
@@ -175,18 +173,13 @@ export function Head() {
               align="end"
               trigger={<IconButton icon="more-horizontal" size="sm" label="More dashboard actions" />}
               items={[
-                ...(ed.viewing
-                  ? []
-                  : [
-                      { label: 'History', icon: 'history' as const, onSelect: () => void navigate(`/versions/${ed.projectId}/dashboard/${ed.analysisId}`) },
-                      { label: 'Lineage', icon: 'lineage' as const, onSelect: () => setLineage(true) },
-                    ]),
+                { label: 'History', icon: 'history', onSelect: () => void navigate(`/versions/${ed.projectId}/dashboard/${ed.analysisId}`) },
+                { label: 'Lineage', icon: 'lineage', onSelect: () => setLineage(true) },
                 ...(ro ? [] : [{ label: 'Style…', icon: 'sliders' as const, onSelect: () => setStyling(true) }]),
                 { label: 'Export HTML', icon: 'download', onSelect: () => void exportHtml(ed) },
                 { label: 'Print or save as PDF', icon: 'file-text', onSelect: () => window.print() },
               ]}
             />
-            {ed.viewing && <ViewActions />}
           </>
         }
       />

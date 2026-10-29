@@ -16,6 +16,7 @@
 //               server moves the date range in scope, exactly as a KPI card's own
 //               Compare does
 //   presenting  Present mode
+//   expanded    the view page over the whole window, its header kept (the app's sidebar and search bar hidden)
 //   comments    the comment panel's target, or null
 //
 // A navigation to ANOTHER dashboard is a route change (the editor remounts), so
@@ -65,6 +66,8 @@ export interface Viewer {
   setCompare(c: Compare | null): void;
   presenting: boolean;
   setPresenting(on: boolean): void;
+  expanded: boolean;
+  setExpanded(on: boolean): void;
   comments: CommentTarget;
   openComments(t: CommentTarget): void;
   /** A saved view applied (views/viewState.ts): its selection, narrowing and As of replace the reader's; click-filters go. */
@@ -131,6 +134,7 @@ export function useViewer(projectId: string, analysisId: string, opening?: Openi
   }, []);
   const [compare, setCompare] = useState<Compare | null>(null);
   const [presenting, setPresenting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   // `?comment=<kind>:<id>` (Home's "Recent comments"): the thread opens on arrival.
   const [comments, openComments] = useState<CommentTarget>(() => {
     const l = linkedThread();
@@ -191,10 +195,12 @@ export function useViewer(projectId: string, analysisId: string, opening?: Openi
       setCompare,
       presenting,
       setPresenting,
+      expanded,
+      setExpanded,
       comments,
       openComments,
       restore,
     }),
-    [selection, toggleSelection, narrowed, narrow, clicks, clickMark, clearClicks, arrived, asOf, currency, compare, presenting, comments, restore],
+    [selection, toggleSelection, narrowed, narrow, clicks, clickMark, clearClicks, arrived, asOf, currency, compare, presenting, expanded, comments, restore],
   );
 }
