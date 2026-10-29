@@ -64,18 +64,24 @@ export function languages(): LanguageInfo[] {
   });
 }
 
-let current = 'en';
-let tr: Translator | null = null;
+let own = 'en';
+let slot: { get(): string; set(code: string): void } = { get: () => own, set: (code) => { own = code; } };
+const translators = new Map<string, Translator>();
+
+/** The server keeps one language per org (src/app/orgAmbient.ts, NV-1); elsewhere this module's own. */
+export function scopeLanguage(wrap: (s: typeof slot) => typeof slot): void {
+  slot = wrap(slot);
+}
 
 /** Set from config at startup and whenever Settings changes it. */
 export function setLanguage(code: unknown): string {
   const next = isLanguage(code) ? code : 'en';
-  if (next !== current || !tr) { current = next; tr = null; }
-  return current;
+  slot.set(next);
+  return next;
 }
 
 export function currentLanguage(): string {
-  return current;
+  return slot.get();
 }
 
 export function catalog(code: string): Catalog {
@@ -83,12 +89,15 @@ export function catalog(code: string): Catalog {
 }
 
 function translator(): Translator {
+  const current = currentLanguage();
+  let tr = translators.get(current);
   if (!tr) {
     tr = createTranslator({
       locale: current,
       messages: current === 'en' ? {} : catalog(current),
       fallback: catalog('en'),
     });
+    translators.set(current, tr);
   }
   return tr;
 }
@@ -100,6 +109,7 @@ export function t(key: string, params?: Params): string {
 
 /** What the renderer needs before its first script runs. */
 export function bootPayload(): { locale: string; messages: Catalog; fallback: Catalog; languages: LanguageInfo[] } {
+  const current = currentLanguage();
   return {
     locale: current,
     messages: current === 'en' || current === PSEUDO_LOCALE ? {} : catalog(current),
@@ -113,7 +123,7 @@ export function bootPayload(): { locale: string; messages: Catalog; fallback: Ca
  * an English prompt is byte-for-byte what it was. The facts stay numbers: the
  * model is told to copy every figure as given, never to convert or recompute it.
  */
-export function languageInstruction(code = current): string {
+export function languageInstruction(code = currentLanguage()): string {
   const name = ENGLISH_NAME[code];
   if (!name || code === 'en') return '';
   return `--- Language ---\nWrite all prose for the reader in ${name}. Keep every number, figure, date, `

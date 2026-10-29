@@ -16,6 +16,7 @@ import type { OnboardingState } from './onboarding';
 import { BACKUP_DEFAULTS, sanitizeBackups } from './backupSettings';
 import type { BackupSettings } from './backupSettings';
 import { isLanguage, setLanguage } from './i18n';
+import { scopeAmbientByOrg } from './orgAmbient';
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 export interface LegacyProviderEntry { apiKey?: string | null; endpoint?: string; model: string }
@@ -245,9 +246,8 @@ export const MEMORY_MODES: string[] = ['same_as_chat', 'override'];
 
 // The cache is keyed by the file it came from: on the server configPath() is
 // per org, and one org must never be handed another's config (it holds keys).
-// ponytail: setCalendar/setFormatPrefs/setLanguage below are process-wide, so
-// two orgs' format settings still race on the server; per-org config moves to
-// Postgres in P5.
+// setCalendar/setFormatPrefs/setLanguage below set the org's own values on the
+// server (./orgAmbient.ts); an org read before its config was loaded loads it.
 let cache: Config | null = null;
 let cacheFile = '';
 
@@ -531,6 +531,8 @@ export function load(): Config {
   setLanguage(cache.language);
   return cache;
 }
+
+scopeAmbientByOrg(() => { load(); });
 
 export function get(): Config {
   return cache && cacheFile === configPath() && cacheStamp === (backing ? backing.stamp() : 0) ? cache : load();
