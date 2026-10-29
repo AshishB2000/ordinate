@@ -66,7 +66,7 @@ export function FirstDashboard({ projectId, ai, aiWhy, datasets, onCreate, onDra
             {sets.map((d) => (
               <button key={d.id} type="button" className={s.chip} onClick={() => onDraft(d.id)}>
                 <Icon name="database" size={12} />
-                {d.name || 'Untitled dataset'}
+                <span className={s.chipName}>{d.name || 'Untitled dataset'}</span>
               </button>
             ))}
           </div>

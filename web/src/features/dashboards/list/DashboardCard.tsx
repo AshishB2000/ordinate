@@ -14,6 +14,7 @@ import type { TagIndex } from '../../data/api';
 import { TagChips, tagsOf } from '../../data/tags';
 import { displayName } from '../../home/homeText';
 import a from '../../analyses/Analyses.module.css';
+import s from './List.module.css';
 
 /** A dashboard's catalog ref (src/app/catalog.ts: the record kind is `analysis`). */
 export const refOf = (item: GalleryItem) => `analysis:${item.id}`;
@@ -79,7 +80,7 @@ export function DashboardCard({ projectId, item, tags, canEdit, onAsk }: {
         </span>
         <TagChips tags={tagsOf(tags, refOf(item))} />
       </Link>
-      <span className={a.menu}>
+      <span className={`${a.menu} ${s.cardMenu}`}>
         {canEdit ? (
           <Menu
             label={`${name} options`}
