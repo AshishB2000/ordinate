@@ -300,7 +300,7 @@ npm run import-desktop -- <userData> [--org id]   # one-time import of a desktop
 node scripts/gen-automation-docs.js   # regenerate docs/automation.md (after build:ts)
 ```
 
-`npm start` is the same server entry point. `postinstall` builds and fetches map GeoJSON;
+`npm start` is the same server entry point. `postinstall` builds and fetches only missing map GeoJSON (the committed `assets/geo` is what ships);
 `prestart`/`pretest` compile automatically.
 
 ## Git
