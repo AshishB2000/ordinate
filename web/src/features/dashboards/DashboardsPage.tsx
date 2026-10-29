@@ -1,12 +1,10 @@
-// /dashboards?project=<id> — the project's dashboards for reading, in two tabs.
-// Dashboards (the default): every dashboard an editor marked Ready, one click
-// from opening inside the app (ReadyDashboards). Shared links (`&tab=links`):
-// what this project has PUBLISHED (T2.9) — each link, what it holds, who may
-// open it, who published it and when, and the way to open, copy, publish
-// again, change access or take it down. Publish… opens the dialog;
-// `&dashboard=<id>` (the authoring head's Publish…, the view page's Share link)
-// opens it on that tab with that dashboard picked. The pages themselves are
-// served by the server at /p/<id>/ — a snapshot, built by value when published.
+// /dashboards?project=<id> — the project's live dashboards: every dashboard an
+// editor marked Ready, one click from opening inside the app (ReadyDashboards).
+// No tabs. The published snapshots (T2.9, served at /p/<id>/) still have their
+// list at `&tab=links` (or `&dashboard=<id>`, which opens Publish on it): each
+// link, who may open it, and the way to copy, publish again, change access or
+// take it down. Nothing in the app links there any more; the address is kept
+// for the /p/ and embed flows.
 
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -15,7 +13,6 @@ import { ago } from '../../app/when';
 import { Button, buttonClass, IconButton } from '../../ui/Button';
 import { Menu } from '../../ui/Menu';
 import { SkeletonRows } from '../../ui/Skeleton';
-import { Tab, TabList, TabPanel, Tabs } from '../../ui/Tabs';
 import { toast } from '../../ui/Toast';
 import { Icon } from '../../ui/icons/Icon';
 import { ProjectGate } from '../import/ProjectGate';
@@ -115,7 +112,7 @@ function CreateDashboard({ projectId }: { projectId: string }) {
   );
 }
 
-/** The Shared links tab: the published links, and Publish…. `preselect`: the dialog opens with that dashboard picked. */
+/** The published links (`&tab=links`), and Publish…. `preselect`: the dialog opens with that dashboard picked. */
 function SharedLinks({ projectId, preselect, onClosePreselect }: { projectId: string; preselect?: string; onClosePreselect: () => void }) {
   const q = useSites(projectId);
   const canEdit = useCanEdit(projectId);
@@ -179,37 +176,21 @@ function Board({ projectId }: { projectId: string }) {
   const [params, setParams] = useSearchParams();
   const preselect = params.get('dashboard') ?? undefined;
   const canEdit = useCanEdit(projectId);
-  // A dashboard to share lands on Shared links; otherwise the tab is the address's, Dashboards by default.
-  const tab = preselect || params.get('tab') === 'links' ? 'links' : 'dashboards';
-  const pick = (v: string, drop?: string) =>
+  const links = !!preselect || params.get('tab') === 'links';
+  // Closing Publish opened on a dashboard stays on the published list.
+  const dropPreselect = () =>
     setParams(
       (cur) => {
         const next = new URLSearchParams(cur);
-        if (drop) next.delete(drop);
-        if (v === 'links') next.set('tab', 'links');
-        else next.delete('tab');
+        next.delete('dashboard');
+        next.set('tab', 'links');
         return next;
       },
       { replace: true },
     );
   return (
-    <Page title="Dashboards" sub="The dashboards this project reads, and the links that share them." actions={canEdit && <CreateDashboard projectId={projectId} />}>
-      <Tabs value={tab} onValueChange={(v) => pick(v, 'dashboard')}>
-        <TabList label="Dashboards">
-          <Tab value="dashboards" icon="layout-dashboard">
-            Dashboards
-          </Tab>
-          <Tab value="links" icon="globe">
-            Shared links
-          </Tab>
-        </TabList>
-        <TabPanel value="dashboards">
-          <ReadyDashboards projectId={projectId} />
-        </TabPanel>
-        <TabPanel value="links">
-          <SharedLinks projectId={projectId} preselect={preselect} onClosePreselect={() => pick('links', 'dashboard')} />
-        </TabPanel>
-      </Tabs>
+    <Page title="Dashboards" sub={links ? 'The links that share this project’s dashboards.' : 'The dashboards this project reads.'} actions={canEdit && <CreateDashboard projectId={projectId} />}>
+      {links ? <SharedLinks projectId={projectId} preselect={preselect} onClosePreselect={dropPreselect} /> : <ReadyDashboards projectId={projectId} />}
     </Page>
   );
 }

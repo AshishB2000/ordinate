@@ -17,25 +17,24 @@ with the sidebar, today's numbers and the app's own light/dark.
 
 ## What the user sees
 
-1. **Dashboards page** (`/dashboards?project=<id>`), two tabs:
-   - **Dashboards** (default): every dashboard of the project marked **Ready**, as cards with a
-     small preview, its name, sheet count and when it was last updated. Click a card to open it.
-     Empty state when none are Ready: says what Ready means; editors get a way to Analyses and to
-     Create dashboard.
-   - **Shared links**: today's list of published links, unchanged in what it can do (copy, publish
-     again, embed, access, unpublish), and the Publish… button.
+1. **Dashboards page** (`/dashboards?project=<id>`), no tabs: every dashboard of the project marked
+   **Ready**, as cards with a small preview, its name, sheet count and when it was last updated.
+   Click a card to open it. Empty state when none are Ready: says what Ready means; editors get a
+   way to Analyses and to Create dashboard. (Amended 2026-10-28: the **Shared links** tab is gone.
+   The list of published `/p/` links keeps only its address, `&tab=links`, which nothing in the
+   app links to; the ⋯ Publish… item on the editing screen is gone too.)
 2. **A dashboard opened from that page** (`/dashboards/<projectId>/<dashboardId>`): the dashboard
    in view mode inside the app — the same canvas as the editing screen with every editing tool
-   hidden. The header has: back to Dashboards, the name, the reader's tools that exist today (sheet
-   tabs, filters, Views, Comments, Subscribe, Present, ⋯ History / Export / Print), **Share link**,
-   and **Edit** (editors and admins only), which goes to `/analyses/<projectId>/<dashboardId>`.
+   hidden. The header has: back to Dashboards, the name, the reader's tools (sheet tabs only when
+   there is more than one sheet, filters, Views, Comments, Subscribe, Present, ⋯ Export / Print) and
+   **Copy link** for everyone (the live in-app address). It reads like `/p/<id>/`: no Edit,
+   no layout size switch, no History or Lineage — authoring stays in Analyses (amended 2026-10-28).
    No "View only" badge on this page — viewing is the point of it.
 3. **Ready switch** on the editing screen's header (editors and admins only): on means the
    dashboard is on the Dashboards page; off takes it off. Nothing else changes; nothing is deleted.
    The Analyses list shows a small "Ready" mark on dashboards that are Ready.
-4. **Share link** opens the existing Publish dialog with this dashboard picked (the flow the ⋯
-   Publish… item uses today: `/dashboards?project=<id>&dashboard=<id>`, which should land on the
-   Shared links tab with the dialog open).
+4. **Copy link** copies `/dashboards/<p>/<id>`, the live page, for editors and viewers alike.
+   (Amended 2026-10-28: it used to be Share link, which opened the Publish dialog for editors.)
 5. **A published link that holds one page opens straight on it** — no list page — including
    links already shared. A link holding several keeps its list page.
 
@@ -71,10 +70,8 @@ Claude's calls (check these):
   read-only for viewers as today.
 - `/dashboards/<p>/<id>` opens **any** dashboard the person can read, Ready or not — a navigation
   target may not be Ready. Ready decides only what the Dashboards tab lists.
-- **Share link by role.** Editors and admins: opens the Publish dialog with this dashboard picked
-  (lands on the Shared links tab). Viewers cannot publish (`publish:run` is `write`), so for them
-  the button is **Copy link** and copies the in-app address `/dashboards/<p>/<id>`, which anyone
-  in the project can open.
+- **Copy link for everyone.** It copies the in-app address `/dashboards/<p>/<id>`, which anyone in
+  the project can open, and always shows the dashboard as it is now — never a snapshot.
 - **A dashboard's own Style still applies.** The view page renders exactly as the editor does. A
   dashboard whose Style theme is Auto (the default) follows the app's light/dark switch; one an
   editor set to Light, Dark or Executive keeps that look on both pages. No view-only CSS.
