@@ -18,7 +18,7 @@ export function CreateActions({ projectId, aiReady, aiWhy, onCreate, onDraft }: 
   const navigate = useNavigate();
   return (
     <>
-      <Button icon="sparkles" onClick={onDraft} disabled={!aiReady} title={aiReady ? undefined : aiWhy}>
+      <Button className={s.draft} icon="sparkles" onClick={onDraft} disabled={!aiReady} title={aiReady ? undefined : aiWhy}>
         Draft with AI
       </Button>
       <span className={s.split}>

@@ -169,22 +169,24 @@ export function DashboardList({ projectId }: { projectId: string }) {
   else if (!canEdit) body = <Grid label="Dashboards" items={items} {...grid} />;
   else {
     body = (
-      <Tabs value={tab} onValueChange={pick}>
-        <TabList label="Dashboards">
-          <Tab value="published" count={String(published.length)}>
-            Published
-          </Tab>
-          <Tab value="drafts" count={String(drafts.length)}>
-            Drafts
-          </Tab>
-        </TabList>
-        <TabPanel value="published">
-          <div className={s.panel}>{published.length ? <Grid label="Published dashboards" items={published} {...grid} /> : <EmptyTab which="published" />}</div>
-        </TabPanel>
-        <TabPanel value="drafts">
-          <div className={s.panel}>{drafts.length ? <Grid label="Draft dashboards" items={drafts} {...grid} /> : <EmptyTab which="drafts" />}</div>
-        </TabPanel>
-      </Tabs>
+      <div className={s.tabs}>
+        <Tabs value={tab} onValueChange={pick}>
+          <TabList label="Dashboards">
+            <Tab value="published" count={String(published.length)}>
+              Published
+            </Tab>
+            <Tab value="drafts" count={String(drafts.length)}>
+              Drafts
+            </Tab>
+          </TabList>
+          <TabPanel value="published">
+            <div className={s.panel}>{published.length ? <Grid label="Published dashboards" items={published} {...grid} /> : <EmptyTab which="published" />}</div>
+          </TabPanel>
+          <TabPanel value="drafts">
+            <div className={s.panel}>{drafts.length ? <Grid label="Draft dashboards" items={drafts} {...grid} /> : <EmptyTab which="drafts" />}</div>
+          </TabPanel>
+        </Tabs>
+      </div>
     );
   }
 

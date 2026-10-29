@@ -9,8 +9,12 @@
 //              Drafts, and the Published tab says it is empty
 //   first      a project with no dashboard: "Start your first dashboard", with Create, Draft with AI (shut, no model),
 //              the screenshot rebuild link — Create opens the wizard
+//   phone      the same states at 414 and 375 wide (phoneFits.ts): nothing scrolls sideways, both menus and the dialog
+//              are on screen, the header's two ways in stack full width, every control of the page's own is a thumb's
+//              target (screens: dashboards-list-phone-*)
 //
-// A viewer's page is walked in view-only.e2e.ts (it needs Postgres for a second person).
+// A viewer's page is walked in view-only.e2e.ts (it needs Postgres for a second person), and on a phone in
+// dashboards-list-viewer.e2e.ts.
 //
 //   npm --prefix web run e2e
 
@@ -18,6 +22,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import type { Page } from 'playwright';
 import { e2e, SCREENS, screens, settled } from './fixtures.ts';
+import { phoneFits, PHONE } from './phoneFits.ts';
 
 /** One screenshot per theme WITHOUT a reload (a menu stays open). */
 async function screensInPlace(page: Page, name: string): Promise<void> {
@@ -120,3 +125,77 @@ e2e('an editor’s first dashboard: every way to start one, and Create opens the
   await page.getByRole('button', { name: 'Create dashboard' }).click();
   await page.getByRole('dialog', { name: 'Create dashboard' }).waitFor();
 });
+
+e2e('the Dashboards page on a phone: the header, tabs, cards, both menus, a dialog and the empty panels fit', async ({ page, server }) => {
+  const pid = server.sample.projectId;
+  const misfits: string[] = [];
+  const name = 'Retail overview, revised for the quarterly business review'; // a long one: it must truncate, not widen the card
+  // Every control on the page a thumb presses: the header's three, the tabs, each card's ⋯.
+  // Menus' rows and dialogs' buttons are the UI kit's (32px, web/src/ui), so only the page's own controls are measured.
+  const tap = [
+    page.getByRole('button', { name: 'Draft with AI' }),
+    page.getByRole('button', { name: 'Create dashboard', exact: true }),
+    page.getByRole('button', { name: 'More ways to create' }),
+    page.getByRole('tab'),
+    page.getByRole('button', { name: / options$/ }),
+  ];
+
+  await page.goto(`/dashboards?project=${pid}`);
+  await settled(page);
+  const drafts = page.getByRole('list', { name: 'Draft dashboards' });
+  await drafts.getByRole('link', { name: /Retail overview/ }).waitFor();
+  await page.waitForFunction(() => document.querySelectorAll('ul[aria-label="Draft dashboards"] canvas').length >= 1);
+  await phoneFits(page, misfits, 'Drafts', { tap });
+  // Stacked, the header's two ways in share the row: the split's arrow ends where Draft with AI does.
+  const right = async (label: string) => page.getByRole('button', { name: label, exact: true }).evaluate((el) => Math.round(el.getBoundingClientRect().right));
+  if ((await right('More ways to create')) !== (await right('Draft with AI'))) misfits.push('Drafts @375: Create dashboard does not span the row, as Draft with AI does');
+  await screens(page, 'dashboards-list-phone-drafts');
+
+  await page.getByRole('button', { name: 'More ways to create' }).click();
+  const create = page.getByRole('menu', { name: 'More ways to create' });
+  await phoneFits(page, misfits, 'the create menu', { on: [create] });
+  await screensInPlace(page, 'dashboards-list-phone-create-menu');
+  await page.keyboard.press('Escape');
+
+  // ── Published, with edits not live: the badge and the longest meta a card has ──
+  const href = (await drafts.getByRole('link', { name: /Retail overview/ }).getAttribute('href')) ?? '';
+  const aid = /\/analyses\/[^/]+\/([0-9a-f-]{36})$/.exec(href)?.[1] ?? '';
+  assert.equal((await call(page, 'analysis:publish', { projectId: pid, id: aid })).ok, true);
+  assert.equal((await call(page, 'analysis:rename', { projectId: pid, id: aid, name })).ok, true);
+  await page.goto(`/dashboards?project=${pid}`);
+  await settled(page);
+  await page.getByRole('list', { name: 'Published dashboards' }).getByText('Edits not live').waitFor();
+  await page.waitForFunction(() => document.querySelectorAll('ul[aria-label="Published dashboards"] canvas').length >= 1);
+  await phoneFits(page, misfits, 'Published', { tap });
+  await screens(page, 'dashboards-list-phone-published');
+  await page.setViewportSize({ width: 414, height: 896 });
+  await screens(page, 'dashboards-list-phone-414-published');
+  await page.setViewportSize(PHONE.viewport);
+
+  await page.getByRole('button', { name: `${name} options` }).click();
+  const menu = page.getByRole('menu', { name: `${name} options` });
+  await phoneFits(page, misfits, 'the card menu', { on: [menu] });
+  await screensInPlace(page, 'dashboards-list-phone-card-menu');
+  await menu.getByRole('menuitem', { name: 'Unpublish…' }).click();
+  const confirm = page.getByRole('dialog', { name: /^Unpublish/ });
+  await confirm.getByText(/The draft stays/).waitFor();
+  await phoneFits(page, misfits, 'the Unpublish dialog', { on: [confirm] });
+  await screensInPlace(page, 'dashboards-list-phone-unpublish');
+  await confirm.getByRole('button', { name: 'Unpublish', exact: true }).click();
+  await page.getByText(/is a draft again/).waitFor();
+  await page.getByRole('tab', { name: /^Published/ }).click();
+  await page.getByRole('heading', { name: 'Nothing published yet' }).waitFor();
+  await phoneFits(page, misfits, 'the empty Published tab', { tap });
+  await screensInPlace(page, 'dashboards-list-phone-empty-tab');
+  assert.equal((await call(page, 'analysis:rename', { projectId: pid, id: aid, name: 'Retail overview' })).ok, true);
+
+  // ── A project with no dashboard: the first-dashboard panel ──
+  const made = await call(page, 'projects:create', { name: 'Phone start' });
+  await page.goto(`/dashboards?project=${made.id}`);
+  await settled(page);
+  await page.getByRole('heading', { name: 'Start your first dashboard' }).waitFor();
+  await phoneFits(page, misfits, 'the first-dashboard panel', { tap: [page.getByRole('main').getByRole('button')] });
+  await screens(page, 'dashboards-list-phone-empty');
+
+  assert.deepEqual(misfits, [], misfits.join('\n'));
+}, { device: PHONE });

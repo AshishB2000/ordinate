@@ -146,6 +146,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-4);
+  max-width: 100%;
   height: 28px;
   padding: 0 var(--sp-12);
   border: 1px solid var(--border);
@@ -157,6 +158,16 @@
   cursor: pointer;
   transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
 }
+/* A long dataset name ends in an ellipsis on one line: wrapped, it ran out of the 28px pill. */
+.chip > svg {
+  flex: none;
+}
+.chipName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .chip:hover {
   border-color: var(--accent-line);
   background: var(--accent-soft);
@@ -164,4 +175,41 @@
 .chip:focus-visible {
   outline: var(--focus-ring-w) solid var(--focus-ring);
   outline-offset: 2px;
+}
+
+/* ── A phone (under 600px, the app's phone line: Dialog.module.css, Shell.module.css) ──
+   Every control here a thumb presses gets the phone dashboard's 44px (docs/phone-dashboards). The header's two ways
+   in no longer fit side by side, so each takes the full width, stacked; the same for the first-dashboard panel's. */
+@media (max-width: 599px) {
+  button.draft,
+  .split,
+  .split > button:first-child,
+  .actions > button {
+    flex: 1 1 auto;
+  }
+  button.draft,
+  .split > button:first-child,
+  .actions > button,
+  .tabs [role='tab'] {
+    height: 44px;
+  }
+  .splitArrow {
+    width: 44px;
+    height: 44px;
+  }
+  /* The card's ⋯ (or Copy link) is drawn at 28px; its hit area is 44px, as the phone dashboard's dots are. */
+  .cardMenu button {
+    position: relative;
+  }
+  .cardMenu button::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+  .chip {
+    height: 40px;
+  }
+  .empty {
+    padding: var(--sp-32) var(--sp-16);
+  }
 }
