@@ -481,7 +481,7 @@ export const TILE_END = 'Current total';
  */
 export async function driversVizData(
   projectId: string, datasetId: string, enc: { drivers?: unknown; category?: string }, filters: FilterStep[], params?: unknown,
-): Promise<{ ok: true; data: { labels: string[]; series: Array<{ name: string; values: Array<number | null> }> }; recommendedShape: string; warnings: string[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; data: { labels: string[]; series: Array<{ name: string; values: Array<number | null> }>; labelColumn: string }; recommendedShape: string; warnings: string[] } | { ok: false; error: string }> {
   const d = enc.drivers && typeof enc.drivers === 'object' ? (enc.drivers as Record<string, unknown>) : null;
   if (!d) return { ok: false, error: 'Not a drivers tile' };
   const spec = sanitizeDriversSpec({ ...d, datasetId, dimension: enc.category }, filters);
@@ -495,7 +495,9 @@ export async function driversVizData(
   if (w.other.count > 0) { labels.push(`Other (${w.other.count})`); values.push(w.other.delta); }
   labels.push(TILE_END);
   values.push(w.end);
-  return { ok: true, data: { labels, series: [{ name: r.metric.name, values }] }, recommendedShape: 'categorical', warnings: [] };
+  // `labelColumn`: the column the labels are members of — not always enc.category, which driversFor passes over
+  // when the scope leaves it unrankable (one value left, say). The Share policy judges the labels by it.
+  return { ok: true, data: { labels, series: [{ name: r.metric.name, values }], labelColumn: r.selected.column }, recommendedShape: 'categorical', warnings: [] };
 }
 
 async function addTile(projectId: string, spec: DriversSpec, name: string): Promise<{ ok: true; visual: any } | { ok: false; error: string }> {

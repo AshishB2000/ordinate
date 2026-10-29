@@ -224,6 +224,8 @@ export interface ChartReplyLike {
   data?: {
     labels?: (string | number)[];
     series?: { name: string; role?: string }[];
+    /** A drivers tile's: the column its labels are members of (ipc/drivers.ts driversVizData). */
+    labelColumn?: string;
     geo?: unknown;
     pivot?: { rowHeaders: string[][]; colHeaders: string[][] };
     facets?: unknown;
@@ -267,7 +269,9 @@ export async function applyToChart<R extends ChartReplyLike>(
     const hide = labelish.some(Boolean) || (action === 'drop' && valueish.some(Boolean));
     return hide ? { ok: false, error: HIDDEN_BY_POLICY, hiddenByPolicy: true } : reply;
   }
-  const catS = await sens(encoding.categoryDatasetId, encoding.category);
+  // A drivers tile draws the members of whichever column it could rank, not always its saved dimension.
+  const drivers = !!encoding.drivers;
+  const catS = await sens(encoding.categoryDatasetId, (drivers && reply.data.labelColumn) || encoding.category);
   const serS = await sens(encoding.seriesDatasetId, encoding.series);
   const rowDims = encoding.pivot ? await Promise.all(encoding.pivot.rows.map((d) => sens(datasetId, d.column))) : [];
   const colDims = encoding.pivot ? await Promise.all(encoding.pivot.columns.map((d) => sens(datasetId, d.column))) : [];
@@ -297,7 +301,11 @@ export async function applyToChart<R extends ChartReplyLike>(
   const data = { ...reply.data };
   const pivotRows = rowDims.some(Boolean);
   const pivotCols = colDims.some(Boolean);
-  if (Array.isArray(data.labels) && (catS || pivotRows)) data.labels = data.labels.map(tok);
+  if (Array.isArray(data.labels) && (catS || pivotRows)) {
+    const last = data.labels.length - 1;
+    // A drivers tile's first and last bars are its fixed totals, which its stored override marks by label.
+    data.labels = data.labels.map((v, i) => (drivers && (i === 0 || i === last) ? v : tok(v)));
+  }
   if (Array.isArray(data.series) && (serS || pivotCols)) {
     data.series = data.series.map((s) => (s && s.role !== 'overlay' ? { ...s, name: String(tok(s.name)) } : s));
   }

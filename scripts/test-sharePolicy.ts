@@ -245,6 +245,32 @@ async function main(): Promise<void> {
   ok('map/mask: a map over unmarked columns only is untouched (control)', openMap.ok === true, JSON.stringify(openMap).slice(0, 200));
   await datasets.deleteDataset(pid, gid);
 
+  // ── 3b''. A drivers tile is judged by the column it DREW (NV-28) ─────────
+  const salesDs = await datasets.saveDataset(pid, { name: 'Sales', sourceKind: 'csv', columns: [
+    { name: 'day', type: 'date' }, { name: 'region', type: 'text' }, { name: 'rep', type: 'text' }, { name: 'revenue', type: 'number' },
+  ], rows: [
+    ['2024-01-15', 'East', 'Ann', 100], ['2024-01-15', 'East', 'Bob', 100], ['2024-01-15', 'West', 'Cy', 100],
+    ['2024-02-15', 'East', 'Ann', 20], ['2024-02-15', 'East', 'Bob', 90], ['2024-02-15', 'West', 'Cy', 100],
+  ] });
+  const sid = salesDs!.id;
+  await catalog.setColumn(pid, sid, 'rep', { sensitivity: 'personal' });
+  const tile = { category: 'region', values: [{ column: 'revenue', aggregation: 'sum' }], drivers: { metric: { column: 'revenue', aggregation: 'sum' }, compare: { mode: 'latest', column: 'day' }, path: [] } };
+  const eastOnly = [{ type: 'filter', column: 'region', op: '=', value: 'East' }];
+  const tileReq = (share: string | undefined, filters: unknown[] = eastOnly) =>
+    call('visual:data', { projectId: pid, datasetId: sid, encoding: tile, filters, ...(share ? { share } : {}) });
+  const fellBack = await tileReq(undefined);
+  ok('drivers tile, fixture: one region left, so the tile draws rep instead (in the app: raw)', fellBack.ok && fellBack.data.labels.includes('Ann'), JSON.stringify(fellBack.data ? fellBack.data.labels : fellBack));
+  const tileMasked = await tileReq('report');
+  const tl: string[] = tileMasked.ok ? tileMasked.data.labels : [];
+  ok('drivers tile/mask: the fallback column\'s members are tokens', tileMasked.ok && !tl.includes('Ann') && !tl.includes('Bob') && tl.includes(mask.maskToken(salt, 'Ann')), JSON.stringify(tl));
+  ok('drivers tile/mask: …and its totals bars keep the labels its override marks', tl[0] === 'Previous total' && tl[tl.length - 1] === 'Current total', JSON.stringify(tl));
+  const ownDim = await tileReq('report', []);
+  ok('drivers tile/mask: drawn by its own unmarked dimension, the labels stay raw (control)', ownDim.ok && ownDim.data.labels.includes('East'), JSON.stringify(ownDim.data ? ownDim.data.labels : ownDim));
+  await store.setPolicy(pid, { report: 'drop' });
+  ok('drivers tile/drop: hidden', (await tileReq('report')).hiddenByPolicy === true);
+  await store.setPolicy(pid, { report: 'mask' });
+  await datasets.deleteDataset(pid, sid);
+
   // A column masked in Prepare is not masked again, and not counted.
   const stepped = await datasets.updateSteps(pid, did, [{ type: 'mask_hash', column: 'email' }]);
   ok('fixture: a Prepare hash step on email', !!stepped);
