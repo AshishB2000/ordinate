@@ -12,6 +12,7 @@ import { applyPipelineAsync } from '../data/regexOffThread';
 import type { TableData, TransformStep } from '../data/transforms';
 import type { PipelineContext } from '../data/stepTypes';
 import { loadStepRefs } from '../data/stepRefs';
+import { saltForSteps } from '../app/privacyStore';
 import { checkPowerStep } from '../data/stepsSanitize';
 import { lookupStats, unionPlan } from '../data/stepsCombine';
 import { parseDatePreview } from '../data/stepsClean';
@@ -29,7 +30,8 @@ export async function inputAt(projectId: string, datasetId: string, index: numbe
   const source: TableData = ds.source ?? { columns: ds.columns, rows: ds.rows };
   const steps = ds.steps || [];
   const prefix = Number.isInteger(index) && index >= 0 && index < steps.length ? steps.slice(0, index) : steps;
-  const ctx = await loadStepRefs(projectId, datasetId, [...prefix, extra]);
+  // The salt too, as updateSteps folds: without it a stored mask_hash step is skipped and raw values come back (NV-24).
+  const ctx = { salt: await saltForSteps(projectId, prefix), ...(await loadStepRefs(projectId, datasetId, [...prefix, extra])) };
   // ponytail: a full fold per preview; the resident path could serve the prefix if a big dataset makes this slow
   const input = prefix.length ? await applyPipelineAsync(source, prefix, ctx) : source;
   return { input: { columns: input.columns, rows: input.rows }, ctx };
@@ -106,7 +108,7 @@ export async function stepCounts(projectId: string, datasetId: string): Promise<
   const ds = await datasets.getDataset(projectId, datasetId);
   if (!ds) return { ok: false, error: 'Dataset not found' };
   const source: TableData = ds.source ?? { columns: ds.columns, rows: ds.rows };
-  const out = await applyPipelineAsync(source, steps, await loadStepRefs(projectId, datasetId, steps));
+  const out = await applyPipelineAsync(source, steps, { salt: await saltForSteps(projectId, steps), ...(await loadStepRefs(projectId, datasetId, steps)) });
   return { ok: true, stepCounts: out.stepCounts || [] };
 }
 
