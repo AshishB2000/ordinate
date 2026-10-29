@@ -54,13 +54,16 @@ let clients: FakeClient[] = [];
 let connectImpl: () => Promise<void> = async () => {};
 let queryImpl: (text: string, values?: unknown[]) => Promise<FakeResult> = async () => ({ fields: [], rows: [] });
 
-class FakeClient {
+const { EventEmitter }: typeof import('events') = require('events');
+
+class FakeClient extends EventEmitter {
   config: Record<string, unknown>;
   queries: Recorded[] = [];
   connects = 0;
   ends = 0;
 
   constructor(config: Record<string, unknown>) {
+    super();
     this.config = config || {};
     clients.push(this);
   }
@@ -70,11 +73,19 @@ class FakeClient {
     await connectImpl();
   }
 
-  async query(arg: string | { text: string; values?: unknown[]; queryMode?: string }): Promise<FakeResult> {
-    const text = typeof arg === 'string' ? arg : String(arg.text);
-    const values = typeof arg === 'string' ? undefined : arg.values;
-    this.queries.push({ text, values, mode: typeof arg === 'string' ? 'simple' : arg.queryMode });
-    return queryImpl(text, values);
+  query(arg: string | FakeQuery): Promise<FakeResult> | FakeQuery {
+    if (typeof arg === 'string') {
+      this.queries.push({ text: arg, mode: 'simple' });
+      return queryImpl(arg);
+    }
+    // A submitted Query, as pg runs one: rows emitted as they arrive, then the callback.
+    const { text, values, queryMode } = arg.config;
+    this.queries.push({ text: String(text), values, mode: queryMode });
+    queryImpl(String(text), values).then((res) => {
+      for (const row of res.rows || []) arg.emit('row', row, res);
+      arg.callback(null, res);
+    }, (err: Error) => arg.callback(err));
+    return arg;
   }
 
   async end(): Promise<void> {
@@ -82,9 +93,19 @@ class FakeClient {
   }
 }
 
+class FakeQuery extends EventEmitter {
+  constructor(
+    readonly config: { text: string; values?: unknown[]; queryMode?: string },
+    _values: unknown,
+    readonly callback: (err: Error | null, res?: FakeResult) => void,
+  ) {
+    super();
+  }
+}
+
 const origLoad = Module._load;
 Module._load = function (request: string, ...rest: unknown[]): unknown {
-  if (request === 'pg') return { Client: FakeClient, types: realPgTypes };
+  if (request === 'pg') return { Client: FakeClient, Query: FakeQuery, types: realPgTypes };
   return origLoad.apply(this, [request, ...rest]);
 };
 
@@ -288,6 +309,22 @@ async function main(): Promise<void> {
     /^\s*set\b/i.test(text) ? {} : { fields: [{ name: 'n', dataTypeID: 23 }], rows: [[1], [2], [3]] };
   r = await byId('postgres').run(makeCtx({ rowLimit: 3 }), 'select n from exact');
   ok('an EXACT fit is not falsely reported as truncated', r.ok === true && r.truncated === false, r);
+  ok('NV-12: the client keeps an error listener, so a peer-driven error cannot end the pod',
+    clients[0]?.listenerCount('error') === 1, clients[0]?.listenerCount('error'));
+
+  // NV-40: rows are counted as they arrive; past MAX_RESULT_BYTES the client is
+  // ended (pg would buffer the rest) and what arrived comes back truncated.
+  const { MAX_RESULT_BYTES } = require('../src/connectors/types') as typeof import('../src/connectors/types');
+  const half = 'x'.repeat(MAX_RESULT_BYTES / 2 - 64);
+  for (const [n, want] of [[4, true], [2, false]] as const) {
+    reset();
+    queryImpl = async (text) => (/^\s*set\b/i.test(text) ? {} : { fields: [{ name: 's', dataTypeID: 25 }], rows: Array(n).fill([half]) });
+    r = await byId('postgres').run(makeCtx({ rowLimit: 100 }), 'select s from wide');
+    ok(want ? 'past MAX_RESULT_BYTES: the rows under it, truncated, the client ended at once'
+      : 'negative control: the same rows under the ceiling are whole',
+    r.ok === true && r.rows.length === 2 && r.truncated === want && clients[0]?.ends === (want ? 2 : 1),
+    r.ok === true ? `${r.rows.length} rows, truncated=${r.truncated}, ends=${clients[0]?.ends}` : r);
+  }
 
   reset();
   await byId('postgres').run(makeCtx({ rowLimit: 5 }), 'select 1;   ');

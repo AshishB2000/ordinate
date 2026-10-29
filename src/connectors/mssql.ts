@@ -13,10 +13,11 @@
 // a `finally` on every path.
 //
 // READ-ONLY. `assertReadOnly` is a guard, not a SQL parser: it rejects anything
-// whose top level is not SELECT/WITH, anything containing a top-level DML/DDL
-// keyword (including SELECT ... INTO, which creates a table), and any statement
-// batch. The real guarantee is still a read-only database login — this stops the
-// obvious mistake, it does not make a write-capable account safe.
+// whose top level is not SELECT/WITH, unbalanced parentheses, and any top-level
+// word that can START a statement (T-SQL runs a batch with no separator, NV-37)
+// or write (SELECT ... INTO creates a table). The real guarantee is still a
+// read-only database login — this stops the obvious mistake, it does not make a
+// write-capable account safe.
 
 import type { Connection as TdsConnection, ConnectionConfiguration } from 'tedious';
 import type {
@@ -27,7 +28,8 @@ import type {
   ConnectorSchema,
   ConnectorTables,
 } from './types';
-import { safeError } from './types';
+import { MAX_RESULT_BYTES, rowBytes, safeError } from './types';
+import { encryptionDeclined } from './connectorMessages';
 import { connect as netConnect, type Socket } from 'net';
 import { checkHost, guardOn, type PinnedHost } from './ssrf';
 
@@ -96,12 +98,15 @@ interface TopScan {
   words: string[];
   /** A ';' at depth 0 with non-whitespace after it — i.e. a statement batch. */
   batched: boolean;
+  /** A ')' with no '(' (it would close the cap's derived table, NV-37), or a '(' never closed. */
+  unbalanced: boolean;
 }
 
 function scanTopLevel(sql: string): TopScan {
   const words: string[] = [];
   let depth = 0;
   let batched = false;
+  let unbalanced = false;
   let i = 0;
   const n = sql.length;
   while (i < n) {
@@ -149,7 +154,7 @@ function scanTopLevel(sql: string): TopScan {
       continue;
     }
     if (c === '(') { depth++; i++; continue; }
-    if (c === ')') { if (depth > 0) depth--; i++; continue; }
+    if (c === ')') { if (depth > 0) depth--; else unbalanced = true; i++; continue; }
     if (c === ';') {
       if (depth === 0 && sql.slice(i + 1).trim().length > 0) batched = true;
       i++;
@@ -164,15 +169,25 @@ function scanTopLevel(sql: string): TopScan {
     }
     i++;
   }
-  return { words, batched };
+  return { words, batched, unbalanced: unbalanced || depth > 0 };
 }
 
-// Top-level keywords that mean this is not a read. `INTO` is here because
-// `SELECT … INTO t2 FROM t1` creates and populates a table.
+// Top-level words that mean this is not one read. T-SQL needs no ';' between
+// statements, so `select 1 dbcc freeproccache` is a batch of two (NV-37): every
+// word that can START a T-SQL statement is here, not only DML/DDL. `INTO` is
+// here because `SELECT … INTO t2 FROM t1` creates and populates a table; the
+// rowset functions because OPENQUERY/OPENDATASOURCE/OPENROWSET run text on
+// another server. A second SELECT or WITH is allowed: it can only start a read.
+// END and FETCH also continue a query, so they are judged in context below.
 const WRITE_WORDS = new Set([
   'INSERT', 'UPDATE', 'DELETE', 'MERGE', 'INTO', 'CREATE', 'ALTER', 'DROP',
   'TRUNCATE', 'EXEC', 'EXECUTE', 'GRANT', 'REVOKE', 'DENY', 'BACKUP',
   'RESTORE', 'SHUTDOWN', 'RECONFIGURE', 'BULK', 'OPENROWSET', 'WAITFOR',
+  'OPENQUERY', 'OPENDATASOURCE', 'DBCC', 'KILL', 'CHECKPOINT', 'WRITETEXT', 'UPDATETEXT',
+  'READTEXT', 'DISABLE', 'ENABLE', 'RECEIVE', 'SEND', 'MOVE', 'GET', 'BEGIN', 'COMMIT',
+  'ROLLBACK', 'SAVE', 'DECLARE', 'SET', 'OPEN', 'CLOSE', 'DEALLOCATE', 'IF', 'WHILE',
+  'BREAK', 'CONTINUE', 'GOTO', 'RETURN', 'PRINT', 'RAISERROR', 'THROW', 'USE',
+  'SETUSER', 'REVERT', 'ADD', 'RENAME', 'DUMP', 'LOAD',
 ]);
 
 function assertReadOnly(scan: TopScan): string | null {
@@ -183,8 +198,17 @@ function assertReadOnly(scan: TopScan): string | null {
   if (scan.batched) {
     return 'Only a single statement is allowed';
   }
-  for (const w of scan.words) {
-    if (WRITE_WORDS.has(w)) {
+  if (scan.unbalanced) {
+    return 'Unbalanced parentheses';
+  }
+  let cases = 0;
+  for (let i = 0; i < scan.words.length; i++) {
+    const w = scan.words[i];
+    if (w === 'CASE') cases++;
+    // END closes a CASE, or starts `END CONVERSATION`; FETCH follows OFFSET … ROWS, or starts a cursor fetch.
+    if (w === 'END' && cases > 0) { cases--; continue; }
+    if (w === 'FETCH' && /^ROWS?$/.test(scan.words[i - 1] ?? '')) continue;
+    if (WRITE_WORDS.has(w) || w === 'END' || w === 'FETCH') {
       return `Only SELECT queries are allowed (found "${w}")`;
     }
   }
@@ -227,11 +251,13 @@ export function capTsql(sql: string, cap: number, scan?: TopScan): string {
   const isCte = w[0] === 'WITH';
 
   if (hasPaging) return inner; // already paged by the user — client-side cap only
+  // The user's text on its OWN line (T6.3, NV-37): a trailing `--` comment
+  // would otherwise swallow what comes after it.
   if (hasOrderBy || isCte) {
-    const order = hasOrderBy ? '' : ' ORDER BY (SELECT NULL)';
-    return `${inner}${order} OFFSET 0 ROWS FETCH NEXT ${cap} ROWS ONLY`;
+    const order = hasOrderBy ? '' : 'ORDER BY (SELECT NULL) ';
+    return `${inner}\n${order}OFFSET 0 ROWS FETCH NEXT ${cap} ROWS ONLY`;
   }
-  return `SELECT TOP (${cap}) * FROM ( ${inner} ) AS _ord_cap`;
+  return `SELECT TOP (${cap}) * FROM (\n${inner}\n) AS _ord_cap`;
 }
 
 // A T-SQL identifier we are willing to interpolate. Identifiers cannot be bound
@@ -401,12 +427,33 @@ function dial(address: string, port: number, signal: AbortSignal): Promise<Socke
 
 // ── driver plumbing ───────────────────────────────────────────────────────────
 
+type TlsNegotiation = (prelogin: { encryptionString?: string }, signal: AbortSignal) => Promise<void>;
+
+/**
+ * NV-11: with `encrypt: true`, tedious 20 asks for TLS in the plaintext PRELOGIN
+ * and, when the reply says OFF or NOT_SUP, sends LOGIN7 — the password, merely
+ * obfuscated — without it. Anyone answering for the address could say NOT_SUP.
+ * Encryption asked for is encryption required, so the login stops there. A
+ * tedious that no longer has this hook fails closed (and test-connectorsWire
+ * sends LOGIN7's absence through a real tedious).
+ */
+function requireTls(conn: TdsConnection): void {
+  const c = conn as unknown as { performTlsNegotiation: TlsNegotiation };
+  const negotiate = c.performTlsNegotiation;
+  if (typeof negotiate !== 'function') throw new Error('This tedious version cannot be made to require TLS before the login; not connecting.');
+  c.performTlsNegotiation = function (prelogin, signal) {
+    if (prelogin.encryptionString !== 'ON' && prelogin.encryptionString !== 'REQ') return Promise.reject(new Error(encryptionDeclined()));
+    return negotiate.call(this, prelogin, signal);
+  };
+}
+
 function connect(cfg: ConnectionConfiguration): Promise<TdsConnection> {
   const { Connection } = loadTedious();
   return new Promise<TdsConnection>((resolve, reject) => {
     let conn: TdsConnection;
     try {
       conn = new Connection(cfg);
+      if (cfg.options?.encrypt === true) requireTls(conn);
     } catch (err) {
       reject(err);
       return;
@@ -454,7 +501,7 @@ function execSql(
   return new Promise<ExecResult>((resolve, reject) => {
     let columns: { name: string; type: string }[] = [];
     const rows: (string | number | boolean | null)[][] = [];
-    let seen = 0;
+    let bytes = 0;
     let canceled = false;
     let settled = false;
 
@@ -466,7 +513,7 @@ function execSql(
         reject(err);
         return;
       }
-      resolve({ columns, rows, truncated: seen > cap });
+      resolve({ columns, rows, truncated: canceled });
     });
 
     // tedious types the payload as ColumnMetadata[] OR a name-keyed object
@@ -486,15 +533,16 @@ function execSql(
     });
 
     req.on('row', (cols: TdsColumnValue[]) => {
-      seen++;
-      if (seen > cap) {
-        if (!canceled) {
-          canceled = true;
-          try { conn.cancel(); } catch (_) { /* request already finished */ }
-        }
+      if (canceled) return;
+      const row = (cols || []).map((c) => cellToValue(c?.value));
+      bytes += rowBytes(row);
+      // The probe row past the cap, or past MAX_RESULT_BYTES (NV-40): stop the server streaming.
+      if (rows.length >= cap || bytes > MAX_RESULT_BYTES) {
+        canceled = true;
+        try { conn.cancel(); } catch (_) { /* request already finished */ }
         return;
       }
-      rows.push((cols || []).map((c) => cellToValue(c?.value)));
+      rows.push(row);
     });
 
     if (addParams) addParams(req);

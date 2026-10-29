@@ -20,13 +20,14 @@
 //
 // Node's own `dns`/`net`/`http(s)` only — no dependency.
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as dns from 'dns';
 import * as http from 'http';
 import * as https from 'https';
 import { BlockList, isIP, type LookupFunction } from 'net';
 import { Readable } from 'stream';
 import { proxyList } from '../server/env';
-import { serverDataDir } from '../server/context';
+import { ctx, serverDataDir } from '../server/context';
 
 /** The guard applies on the server only (see the header). */
 export function guardOn(): boolean {
@@ -170,9 +171,9 @@ export async function checkHost(raw: string, admit?: ReadonlySet<string>): Promi
     addrs = [{ address: host, family: isIP(host) }];
   } else {
     try {
-      addrs = await dns.promises.lookup(host, { all: true, verbatim: true });
-    } catch {
-      throw new SsrfError(`Could not resolve ${host}.`);
+      addrs = await boundedLookup(host);
+    } catch (e) {
+      throw e instanceof SsrfError ? e : new SsrfError(`Could not resolve ${host}.`);
     }
   }
   if (addrs.length === 0) throw new SsrfError(`Could not resolve ${host}.`);
@@ -184,6 +185,87 @@ export async function checkHost(raw: string, admit?: ReadonlySet<string>): Promi
     }
   }
   return Object.freeze({ host, address: addrs[0].address, family: addrs[0].family === 6 ? 6 : 4 });
+}
+
+// ── bounded resolution (NV-54) ───────────────────────────────────────────────
+// dns.lookup is getaddrinfo on libuv's pool — 4 threads unless UV_THREADPOOL_SIZE
+// says otherwise, shared with every org's DuckDB steps, fs and scrypt — and it
+// cannot be cancelled: a name whose servers never answer holds a thread for the
+// resolver's whole timeout. So at most LOOKUPS.slots run on the pod at once, one
+// per org, a slot frees only when its getaddrinfo really returns, and a caller
+// waits LOOKUPS.waitMs at most, queued and in flight together.
+
+/** Mutable only so the self-check can shorten the wait. */
+export const LOOKUPS = { slots: 2, waitMs: 10_000 };
+const resolving = new Set<string>(); // org ids holding a slot
+const waiters = new Set<() => void>();
+
+function lookupOrg(): string {
+  try {
+    return ctx().org.id;
+  } catch {
+    return ''; // outside a request: one shared slot
+  }
+}
+
+/** Resolves on the next freed slot, or false at `until`. */
+function slotFreed(until: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const wake = (): void => { clearTimeout(timer); waiters.delete(wake); resolve(true); };
+    const timer = setTimeout(() => { waiters.delete(wake); resolve(false); }, Math.max(0, until - Date.now()));
+    waiters.add(wake);
+  });
+}
+
+async function boundedLookup(host: string): Promise<dns.LookupAddress[]> {
+  const org = lookupOrg();
+  const until = Date.now() + LOOKUPS.waitMs;
+  const late = (): SsrfError => new SsrfError(`Could not resolve ${host} in time.`);
+  while (resolving.size >= LOOKUPS.slots || resolving.has(org)) {
+    if (!(await slotFreed(until))) throw late();
+  }
+  resolving.add(org);
+  const lookup = dns.promises.lookup(host, { all: true, verbatim: true }).finally(() => {
+    resolving.delete(org);
+    for (const wake of waiters) wake(); // each deletes itself: safe mid-iteration
+  });
+  lookup.catch(() => {}); // it may settle after the caller stopped waiting
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(late()), Math.max(0, until - Date.now())); });
+  try {
+    return await Promise.race([lookup, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ── a driver that resolves for itself (NV-13) ────────────────────────────────
+
+type LookupAll = (host: string, opts?: dns.LookupOptions) => Promise<dns.LookupAddress | dns.LookupAddress[]>;
+const driverPins = new AsyncLocalStorage<(host: string) => Promise<PinnedHost>>();
+let lookupHooked = false;
+
+/**
+ * Runs `fn` with `dns.promises.lookup` answering from `pin` — for a driver that
+ * resolves hosts itself and takes no lookup or socket option (Oracle's thin
+ * driver re-resolves its connect string and dials every answer), so it dials
+ * the address checkHost approved, never a second, rebound answer. Scoped to
+ * `fn`'s async context: every other caller gets the lookup it had before.
+ */
+export function withPinnedLookups<T>(pin: (host: string) => Promise<PinnedHost>, fn: () => Promise<T>): Promise<T> {
+  if (!lookupHooked) {
+    lookupHooked = true;
+    const prior = dns.promises.lookup as LookupAll;
+    const pinned: LookupAll = async (host, opts) => {
+      const answer = driverPins.getStore();
+      if (!answer) return prior.call(dns.promises, host, opts ?? {});
+      const p = await driverPins.exit(() => answer(host)); // exited: checkHost's own lookup is a real one
+      const a = { address: p.address, family: p.family };
+      return opts?.all ? [a] : a;
+    };
+    (dns.promises as unknown as { lookup: LookupAll }).lookup = pinned;
+  }
+  return driverPins.run(pin, fn);
 }
 
 /**

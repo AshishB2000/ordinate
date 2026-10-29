@@ -162,6 +162,9 @@ how the pod authenticates to S3 and trusts Postgres.
   keys was (T5.2, T7.1, T7.3).
 - **`NODE_EXTRA_CA_CERTS`**: a PEM bundle Node adds to its trusted roots. You need it for
   `sslmode=verify-full` to a Postgres whose certificate comes from a private CA, such as Amazon RDS.
+  Data connections with TLS on verify the server certificate too (the MySQL family always; SQL Server
+  and the Postgres family unless their trust-the-certificate box is ticked), so a source whose
+  certificate comes from a private CA (Amazon RDS and Aurora, a self-signed server) needs its CA here.
 - `NODE_ENV`: the image sets `production`. Ordinate's code never reads it.
 
 ## TLS to Postgres

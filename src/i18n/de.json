@@ -191,6 +191,8 @@
   "common.total": "Gesamt",
   "common.value": "Wert",
   "common.vs_previous": "ggü. Vorherigem",
+  "connectorMessages.a_wallet_folder_is_a_path": null,
+  "connectorMessages.the_server_did_not_agree_to": null,
   "connectorMessages.this_connection_signs_in_with_the": null,
   "dashShare.and_more": "{p0} und {p1} weitere",
   "driverPointMessages.a_change_is_explained_between_two": "Eine Änderung wird zwischen zwei Zeiträumen erklärt; dafür ist ein Diagramm mit einem Datum auf der Achse nötig.",

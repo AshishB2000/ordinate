@@ -238,6 +238,21 @@ export interface ConnectorDef {
   live?: ConnectorLive;
 }
 
+/**
+ * Rule 3 in bytes (NV-40). A SQL driver's result is held on the shared pod's
+ * main thread, so it also stops — reported `truncated`, like the row cap — once
+ * its cell text passes the HTTP family's response ceiling (httpShared MAX_BYTES).
+ * Counted as each row arrives, so the driver never buffers past it.
+ */
+export const MAX_RESULT_BYTES = 100 * 1024 * 1024;
+
+/** One narrowed row's share of MAX_RESULT_BYTES: its text, 8 for anything else. */
+export function rowBytes(row: readonly (string | number | boolean | null)[]): number {
+  let n = 0;
+  for (const v of row) n += typeof v === 'string' ? v.length : 8;
+  return n;
+}
+
 /** Redact anything that looks like a credential before it reaches a renderer.
  *  Connector errors are driver strings and drivers DO put DSNs in them. */
 export function safeError(e: unknown, secrets?: Record<string, string>): string {

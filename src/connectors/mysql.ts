@@ -22,7 +22,10 @@
 
 import { connect as netConnect } from 'net';
 import { createConnection, Connection, ConnectionOptions, FieldPacket } from 'mysql2/promise';
+import type { Connection as CoreConnection } from 'mysql2';
 import {
+  MAX_RESULT_BYTES,
+  rowBytes,
   ConnectorContext,
   ConnectorDef,
   ConnectorError,
@@ -208,11 +211,12 @@ export function connectionOptions(variant: MysqlVariant, ctx: ConnectorContext):
     supportBigNumbers: true,
     bigNumberStrings: true,
 
-    // TLS on the wire without pinning a CA. Aurora and most managed MySQL serve
-    // certificates from roots we cannot ship, and self-hosted servers are usually
-    // self-signed; verifying would just make TLS unusable and push people to turn
-    // it off entirely. Same trade-off the Postgres connector already makes.
-    ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+    // TLS that authenticates the server (NV-10): unverified, anyone on the path
+    // could be the server, and caching_sha2_password hands a "secure" channel
+    // the password in clear. verifyIdentity too — without it mysql2 3.x checks
+    // the chain but not the host name. A private CA (Amazon RDS, a self-signed
+    // server) goes in NODE_EXTRA_CA_CERTS, as for Postgres (docs/server/configuration.md).
+    ssl: useSsl ? { rejectUnauthorized: true, verifyIdentity: true } : undefined,
 
     connectTimeout: Math.min(sanitizeTimeoutMs(ctx.timeoutMs), CONNECT_TIMEOUT_MS),
     // Explicit: no client-side named placeholders, no server-side prepare. `?`
@@ -277,6 +281,9 @@ async function withConnection<T extends { ok: true } | ConnectorError>(
   let backstop: NodeJS.Timeout | null = null;
   try {
     conn = await createConnection(connectionOptions(variant, ctx));
+    // NV-12: createConnection's own 'error' listener is one-shot; a second connection-level error
+    // (a reset after an ERR packet) would be unlistened, throw from a socket callback and end the pod.
+    conn.on('error', () => {});
     const live = conn;
     backstop = setTimeout(() => {
       try { live.destroy(); } catch (_) { /* already gone */ }
@@ -365,7 +372,7 @@ export const VARIANTS: MysqlVariant[] = [
     sslDefault: true, // Aurora endpoints accept TLS and are reached over a network we do not control.
     timeout: 'max_execution_time',
     listVia: 'information_schema',
-    sslHelp: 'Aurora endpoints support TLS; leave this on unless your cluster has it disabled.',
+    sslHelp: 'Aurora endpoints support TLS; leave this on. Their certificate comes from the Amazon RDS CA, which this server trusts only once an administrator adds it (NODE_EXTRA_CA_CERTS).',
   },
   {
     id: 'singlestore',
@@ -439,7 +446,7 @@ function fieldsFor(v: MysqlVariant): ConnectorField[] {
       label: 'Use TLS',
       type: 'checkbox',
       default: v.sslRequired ? true : v.sslDefault,
-      help: v.sslHelp ?? 'Encrypts the connection. The server certificate is not verified against a CA.',
+      help: v.sslHelp ?? 'Encrypts the connection and verifies the server certificate and host name.',
     },
   ];
 }
@@ -493,18 +500,37 @@ async function run(variant: MysqlVariant, ctx: ConnectorContext, sql: string): P
   if (!inner) return { ok: false, error: 'No query specified' };
   const cap = effectiveRowLimit(ctx.rowLimit);
 
-  return withConnection(variant, ctx, async (conn, plan) => {
-    const [rows, fields] = await conn.query<RawRows>(plan.prefix + wrapSelect(inner, cap));
-    const all = Array.isArray(rows) ? rows : [];
-    // The probe row proves the cap clipped. Report it; never trim silently.
-    const truncated = all.length > cap;
-    const body = truncated ? all.slice(0, cap) : all;
-    return {
-      ok: true as const,
-      columns: (fields || []).map((f: FieldPacket) => ({ name: str(f.name), type: columnTypeName(f) })),
-      rows: body.map((r: unknown[]) => (Array.isArray(r) ? r.map(normalizeCell) : [normalizeCell(r)])),
-      truncated,
-    };
+  return withConnection(variant, ctx, (conn, plan) => streamRows(conn, plan.prefix + wrapSelect(inner, cap), cap));
+}
+
+/** The capped query, STREAMED: conn.query would buffer the whole result first.
+ *  Rows are narrowed as they arrive and kept up to the cap and MAX_RESULT_BYTES
+ *  (NV-40); past either the rest is read and dropped (the LIMIT and the server
+ *  timeout bound that) and the result is reported truncated — the probe row is
+ *  how the cap proves it clipped. */
+export function streamRows(conn: Connection, sql: string, cap: number): Promise<ConnectorRows> {
+  const core = (conn as unknown as { connection: CoreConnection }).connection;
+  return new Promise((resolve, reject) => {
+    let fields: FieldPacket[] = [];
+    const rows: ConnectorRows['rows'] = [];
+    let bytes = 0;
+    let truncated = false;
+    core.query(sql)
+      .on('fields', (f: FieldPacket[]) => { fields = f; })
+      .on('result', (r: unknown) => {
+        if (truncated) return;
+        const row = Array.isArray(r) ? r.map(normalizeCell) : [normalizeCell(r)];
+        bytes += rowBytes(row);
+        if (rows.length >= cap || bytes > MAX_RESULT_BYTES) truncated = true;
+        else rows.push(row);
+      })
+      .on('error', reject)
+      .on('end', () => resolve({
+        ok: true,
+        columns: (fields || []).map((f) => ({ name: str(f.name), type: columnTypeName(f) })),
+        rows,
+        truncated,
+      }));
   });
 }
 
