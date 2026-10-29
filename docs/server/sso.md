@@ -274,6 +274,13 @@ lasts at most one session and one token:
   open event streams on every pod within a second (a 30-second sweep catches a missed message). Signing
   out everywhere, and a password reset, close streams too. A refresh URL a disabled person made stops
   while they are disabled and works again if they are enabled; revoke it in the dataset's panel.
+- **A password change or reset revokes API tokens.** Under password sign-in, changing your password
+  or an admin's **Reset password** revokes every API token of that account, as a token may have been
+  made by whoever knew the old password. Make new ones after.
+- **Some admin actions need a browser session.** An admin's API token cannot add a person, reset a
+  password, or generate the embed signing secret (each would outlive the token), the same as it cannot
+  make another token or a refresh URL. It answers `ok: false` with `session`, or a sentence for the
+  embed secret.
 
 ## Password sign-in (for trying Ordinate out)
 
@@ -302,7 +309,7 @@ password (**Generate** makes a random 16-character one). The admin hands it over
 Ordinate sends no email. At the first sign-in the person has to choose their own password: until
 then every page goes to `/change-password` and every API call except `/api/auth/*` answers 403. A
 forgotten password is the same flow, through **Reset password** in the person's row menu. A reset
-also signs them out everywhere.
+also signs them out everywhere and revokes their API tokens.
 
 **What the server enforces:**
 
@@ -311,7 +318,7 @@ also signs them out everywhere.
 | Storage | scrypt (N=2^15, r=8, p=1, 16-byte salt), from Node's own `crypto`. A password is never stored, logged or audited. |
 | Length | 10 to 256 characters. |
 | Wrong passwords | A wrong email and a wrong password get the same answer. Ten attempts per account in 15 minutes may be checked, counted across every pod and charged before the password is checked; the next is refused (`locked`, with `Retry-After`) until the window ends, and a right password clears the count. `RATE_LIMIT_LOGIN_PER_MINUTE` also covers the password routes, per client IP. |
-| Changing a password | Asks for the current one, and signs out every other session of the account. |
+| Changing a password | Asks for the current one, signs out every other session of the account and revokes its API tokens. |
 | Sessions | The same session cookie as `oidc`, rotated at every sign-in, under `SESSION_IDLE_MINUTES` and `SESSION_ABSOLUTE_HOURS`. |
 | Audit | Sign-ins (`login`), password changes (`password_change`), and the admin's `admin:addUser` / `admin:resetPassword` calls. |
 

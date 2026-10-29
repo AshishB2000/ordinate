@@ -79,6 +79,11 @@ export function embedNeedsSecret(): string {
   return t('embedMessages.generate_a_signing_secret_before_turning');
 }
 
+/** embed:rotate through a personal API token: a leaked token must not take a signing secret that outlives it. */
+export function embedNeedsSession(): string {
+  return t('embedMessages.generate_the_signing_secret_in_the');
+}
+
 export function embedNeedsOrigin(): string {
   return t('embedMessages.add_at_least_one_site_before');
 }

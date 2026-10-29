@@ -232,6 +232,7 @@
   "embedMessages.at_most_sites_can_be_allowed": "At most {max} sites can be allowed.",
   "embedMessages.embedding_is_not_available_for_this": "Embedding is not available for this dashboard.",
   "embedMessages.generate_a_signing_secret_before_turning": "Generate a signing secret before turning embedding on.",
+  "embedMessages.generate_the_signing_secret_in_the": "Generate the signing secret in the app while signed in, not with an API token.",
   "embedMessages.is_not_a_site_origin_use": "“{origin}” is not a site origin. Use https://host (or http://localhost), with no path.",
   "embedMessages.not_available_in_this_embedded_view": "Not available in this embedded view.",
   "embedMessages.not_offered_in_a_locked_embed": "Not offered in a locked embed.",

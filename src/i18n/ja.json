@@ -235,6 +235,7 @@
   "embedMessages.at_most_sites_can_be_allowed": "許可できるサイトは最大 {max} 件です。",
   "embedMessages.embedding_is_not_available_for_this": "このダッシュボードは埋め込みできません。",
   "embedMessages.generate_a_signing_secret_before_turning": "埋め込みを有効にする前に署名シークレットを生成してください。",
+  "embedMessages.generate_the_signing_secret_in_the": null,
   "embedMessages.is_not_a_site_origin_use": "「{origin}」はサイトのオリジンではありません。パスなしの https://host（または http://localhost）を使ってください。",
   "embedMessages.not_available_in_this_embedded_view": "この埋め込み表示では利用できません。",
   "embedMessages.not_offered_in_a_locked_embed": "フィルターが固定された埋め込みでは提供されません。",

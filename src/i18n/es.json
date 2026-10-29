@@ -235,6 +235,7 @@
   "embedMessages.at_most_sites_can_be_allowed": "Se pueden permitir como máximo {max} sitios.",
   "embedMessages.embedding_is_not_available_for_this": "La inserción no está disponible para este panel.",
   "embedMessages.generate_a_signing_secret_before_turning": "Genera un secreto de firma antes de activar la inserción.",
+  "embedMessages.generate_the_signing_secret_in_the": null,
   "embedMessages.is_not_a_site_origin_use": "«{origin}» no es un origen de sitio. Usa https://host (o http://localhost), sin ruta.",
   "embedMessages.not_available_in_this_embedded_view": "No disponible en esta vista insertada.",
   "embedMessages.not_offered_in_a_locked_embed": "No se ofrece en una inserción con filtros fijados.",

@@ -3,7 +3,7 @@
 //
 //   POST /api/auth/password/setup   { code, email, password } → the first admin, signed in
 //   POST /api/auth/password/login   { email, password }       → a session (rotated)
-//   POST /api/auth/password/change  { current, password }     → a new password; other sessions end
+//   POST /api/auth/password/change  { current, password }     → a new password; other sessions and API tokens end
 //
 // First run: while no enabled admin has a password, each pod prints a one-time
 // setup code in its log at startup (the ONE credential this server logs, on
@@ -166,8 +166,10 @@ export function registerPassword(app: FastifyInstance, cfg: ServerEnv, pool: Poo
     if (!(await setPassword(pool, who.org.id, c.userId, await hashPassword(body.data.password), false))) {
       return refuse('signed-out');
     }
-    // Whoever else held a session on the old password is out — with their open event streams; this browser stays in.
+    // Whoever else held a session on the old password is out — with any API token minted from one and their open
+    // event streams; this browser stays in.
     await endOtherSessions(pool, c.userId, sid);
+    await pool.query('UPDATE api_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [c.userId]);
     closeStreamsOf(who.org.id, email, { keepSession: sid ? hashId(sid) : undefined });
     req.log.info('password changed');
     await trail(req, email, 'password_change', 'ok');
