@@ -1,7 +1,8 @@
-// The Dashboards page (docs/superpowers/specs/2026-10-27-dashboards-in-app-design.md): the Ready tab lists only Ready
-// dashboards and opens them in view mode; Shared links keeps the published list; the view page is the editing canvas
-// with no editing tool (no Edit, layout size, History, Lineage, or sheet tabs for one sheet), Share link for an editor
-// and Copy link for a viewer; the editing screen's Ready switch writes `analysis:setReady` and nothing else.
+// The Dashboards page (docs/superpowers/specs/2026-10-27-dashboards-in-app-design.md): it lists only Ready dashboards,
+// with no tabs, and opens them in view mode; the published list keeps only its address (`&tab=links`); the view page is
+// the editing canvas with no editing tool (no Edit, layout size, History, Lineage, or sheet tabs for one sheet) and
+// Copy link, the live in-app address, for everyone; the editing screen has no Publish…, and its Ready switch writes
+// `analysis:setReady` and nothing else.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -51,7 +52,9 @@ describe('Dashboards page', () => {
     const card = await screen.findByRole('link', { name: /Ready board/ });
     expect(card.getAttribute('href')).toBe(`/dashboards/${P}/${A1}`);
     expect(screen.queryByText('Draft board')).toBeNull();
-    expect(screen.getByRole('tab', { name: 'Dashboards' }).getAttribute('aria-selected')).toBe('true');
+    // No tabs: the Ready dashboards are the page.
+    expect(screen.queryByRole('tab', { name: 'Shared links' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Dashboards' })).toBeNull();
   });
 
   it('with none Ready, says what Ready means — an editor gets the way to Analyses, and Create dashboard in the header', async () => {
@@ -70,19 +73,20 @@ describe('Dashboards page', () => {
     expect(screen.queryByRole('link', { name: 'Create dashboard' })).toBeNull();
   });
 
-  it('Shared links is today’s list, by its tab or by a dashboard to share (which opens Publish on it)', async () => {
+  it('the published list keeps its address but no tab: &dashboard= opens Publish on it, and closing stays on the list', async () => {
     const calls = serve('admin');
     const router = renderApp(`/dashboards?project=${P}&dashboard=${A1}`);
     await screen.findByRole('dialog', { name: 'Publish' });
-    expect(screen.getByRole('tab', { name: 'Shared links', hidden: true }).getAttribute('aria-selected')).toBe('true'); // behind the modal
-    expect(calls.some((c) => c.channel === 'analysis:gallery')).toBe(false); // the other tab's list is never asked for
+    expect(screen.queryByRole('tab', { name: 'Shared links', hidden: true })).toBeNull();
+    expect(calls.some((c) => c.channel === 'analysis:gallery')).toBe(false); // the Ready list is never asked for
     fireEvent.keyDown(screen.getByRole('dialog', { name: 'Publish' }), { key: 'Escape' });
     await waitFor(() => expect(router.state.location.search).toBe(`?project=${P}&tab=links`));
+    await screen.findByRole('heading', { name: 'Nothing published yet' });
   });
 });
 
 describe('The view page', () => {
-  it('is the canvas with no editing tool: back to Dashboards, no badge, Share link for an editor, and no Edit', async () => {
+  it('is the canvas with no editing tool: back to Dashboards, no badge, no Edit, and Copy link for an editor too', async () => {
     serve('admin');
     renderApp(`/dashboards/${P}/${A1}`);
     await screen.findByRole('heading', { level: 1, name: 'Board' });
@@ -93,7 +97,8 @@ describe('The view page', () => {
     expect(screen.queryByRole('link', { name: 'Edit' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Layout size' })).toBeNull();
     expect(screen.queryByRole('tablist', { name: 'Sheets' })).toBeNull(); // one sheet: nothing to switch between
-    expect(screen.getByRole('button', { name: 'Share link' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Share link' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Copy link' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Subscribe' })).toBeTruthy(); // a reader's own write: an editor keeps it here
   });
 
@@ -105,17 +110,21 @@ describe('The view page', () => {
     expect(within(tabs).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Sheet 1', 'Sheet 2']);
   });
 
-  it('a viewer copies the in-app address instead (they cannot publish), and gets no Edit', async () => {
-    serve('viewer');
-    const writeText = vi.fn(async () => undefined);
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    renderApp(`/dashboards/${P}/${A1}`);
-    fireEvent.click(await screen.findByRole('button', { name: 'Copy link' }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/dashboards/${P}/${A1}`));
-    expect(screen.queryByRole('link', { name: 'Edit' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Share link' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Subscribe' })).toBeNull();
-  });
+  for (const role of ['admin', 'viewer'] as const) {
+    it(`Copy link copies the live in-app address for ${role === 'admin' ? 'an editor' : 'a viewer'} — no Publish, no leaving the page`, async () => {
+      serve(role);
+      const writeText = vi.fn(async () => undefined);
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+      const router = renderApp(`/dashboards/${P}/${A1}`);
+      fireEvent.click(await screen.findByRole('button', { name: 'Copy link' }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/dashboards/${P}/${A1}`));
+      expect(router.state.location.pathname).toBe(`/dashboards/${P}/${A1}`);
+      expect(screen.queryByRole('dialog', { name: 'Publish' })).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Edit' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Share link' })).toBeNull();
+      if (role === 'viewer') expect(screen.queryByRole('button', { name: 'Subscribe' })).toBeNull();
+    });
+  }
 
   it('reading writes nothing: Export HTML from the view page sends no dashboard save, even for an editor', async () => {
     const calls = serve('admin', { 'dashboard:exportHtml': { body: { ok: false, error: 'Not in this test.' } } });
@@ -135,7 +144,7 @@ describe('The view page', () => {
     expect(screen.queryByRole('menuitem', { name: 'Lineage' })).toBeNull();
   });
 
-  it('NEGATIVE CONTROL: an editor on the editing screen keeps layout size, the sheet tabs, History and Lineage', async () => {
+  it('NEGATIVE CONTROL: an editor on the editing screen keeps layout size, the sheet tabs, History and Lineage (and has no Publish…)', async () => {
     serve('admin');
     renderApp(`/analyses/${P}/${A1}`);
     await screen.findByRole('tablist', { name: 'Sheets' });
@@ -143,6 +152,7 @@ describe('The view page', () => {
     await openMore();
     expect(screen.getByRole('menuitem', { name: 'History' })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: 'Lineage' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Publish…' })).toBeNull(); // Ready is the switch that puts it in front of readers
   });
 
   it('links to another dashboard stay on the view page while viewing, and on the editing screen while editing', () => {

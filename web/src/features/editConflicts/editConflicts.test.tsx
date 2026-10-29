@@ -12,9 +12,8 @@
 //               autosave stops (no write however long it waits), Reload opens
 //               the dashboard again without it, and Save mine as a copy creates
 //               "<name> (copy)" from the document on screen and opens it; while
-//               refused, Publish… stays put and says why, and a tab close or an
-//               in-app navigation with unsaved edits asks first (CONTROL: with
-//               no conflict, Publish… leaves and nothing asks).
+//               refused, a tab close or an in-app navigation with unsaved edits
+//               asks first (CONTROL: with no conflict, leaving asks nothing).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
@@ -215,10 +214,6 @@ const unloadPrevented = (): boolean => {
   window.dispatchEvent(ev);
   return ev.defaultPrevented;
 };
-async function publish() {
-  fireEvent.pointerDown(await screen.findByRole('button', { name: 'More dashboard actions' }), { button: 0, ctrlKey: false });
-  fireEvent.click(within(await screen.findByRole('menu', { name: 'More dashboard actions' })).getByRole('menuitem', { name: 'Publish…' }));
-}
 const updates = (calls: { channel: string; payload: unknown }[]) => calls.filter((c) => c.channel === 'analysis:update').map((c) => c.payload as { base?: string; name: string });
 const wait = (ms: number) => act(() => new Promise((r) => setTimeout(r, ms)));
 
@@ -260,24 +255,22 @@ describe('the dashboard editor', { timeout: 40_000 }, () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('CONTROL: with no conflict, nothing is held back — Publish… goes to the viewer, and leaving asks nothing', async () => {
+  it('CONTROL: with no conflict, nothing is held back — leaving asks nothing', async () => {
     serveEditor((p, n) => ({ body: { ok: true, analysis: analysis(A, p.name), tag: `T${n}` } }));
     const router = renderApp(`/analyses/${P}/${A}`);
     await screen.findByTitle('Click to rename', undefined, { timeout: 15_000 });
     expect(unloadPrevented()).toBe(false);
-    await publish();
-    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboards'));
+    act(() => void router.navigate(`/analyses?project=${P}`));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/analyses'));
+    expect(screen.queryByRole('dialog', { name: 'Leave without your changes?' })).toBeNull();
   });
 
-  it('while changed elsewhere: Publish… stays and says why; leaving with unsaved edits asks first (tab close and in-app)', async () => {
+  it('while changed elsewhere: leaving with unsaved edits asks first (tab close and in-app)', async () => {
     serveEditor(() => ({ status: 409, body: { error: 'record_changed', code: 'record_changed', message: CHANGED().message, tag: 'ELSEWHERE' } }));
     const router = renderApp(`/analyses/${P}/${A}`);
     const here = `/analyses/${P}/${A}`;
     await rename('Three');
     await screen.findByRole('alert', undefined, { timeout: 3000 });
-    await publish();
-    expect(await screen.findByText(/Not published: this dashboard was changed in another tab or by someone else/)).toBeTruthy();
-    expect(router.state.location.pathname).toBe(here);
     expect(unloadPrevented()).toBe(true);
     act(() => void router.navigate(`/analyses?project=${P}`));
     let dlg = await screen.findByRole('dialog', { name: 'Leave without your changes?' });
