@@ -1,6 +1,6 @@
 import { ipcMain } from './bus';
 import * as datasets from '../data/datasets';
-import { closedToCaller, gateRows } from '../data/rowAccess';
+import { closedToCaller, gateRows, restrictedOn } from '../data/rowAccess';
 import * as captureDataset from '../data/captureDataset';
 import * as history from '../app/history';
 import * as captureUpload from '../app/captureUpload';
@@ -64,6 +64,29 @@ function sanitizeBody(raw: any): string[][] {
   return raw.map((r) => (Array.isArray(r) ? r.map((v) => (v == null ? '' : String(v))) : []));
 }
 
+/**
+ * Every dataset a capture's rows were saved into (row-policy D9, NV-20): its link, and each dataset whose
+ * origin names the capture — a composer save with joins writes no link, and a second save moves it. Only a
+ * restricted caller can be refused, so only theirs walks the datasets.
+ */
+async function savedInto(projectId: string): Promise<(captureId: string, linked: string | null | undefined) => string[]> {
+  const byCapture = new Map<string, string[]>();
+  if (await restrictedOn(projectId)) {
+    for (const d of await datasets.listDatasets(projectId)) {
+      if (d.originKind) continue; // a summary withholds a capture origin (datasetSummary.ts): read the record
+      const o = (await datasets.getDatasetMeta(projectId, d.id))?.origin;
+      if (o && o.kind === 'capture') byCapture.set(o.captureId, [...(byCapture.get(o.captureId) ?? []), d.id]);
+    }
+  }
+  // String(): an older thread's id (or link) may be stored as a number.
+  return (captureId, linked) => [...new Set([...(linked ? [String(linked)] : []), ...(byCapture.get(String(captureId)) ?? [])])];
+}
+
+/** The stored table and the screenshot ARE those datasets' rows: refused when any of them has row access rules. */
+async function gateCapture(projectId: string, thread: { id: string; datasetId?: string | null }): Promise<void> {
+  for (const id of (await savedInto(projectId))(thread.id, thread.datasetId)) await gateRows(projectId, id);
+}
+
 export function register(deps: CaptureDeps = {}) {
   // ── Review-grid seed ────────────────────────────────────────────────────────
   // The renderer's review-and-correct modal opens on this: it turns the capture's
@@ -105,20 +128,21 @@ export function register(deps: CaptureDeps = {}) {
   // it — the list carries the upload's own thumbnail instead); and delete.
   // The desktop reads the same records through history:list / history:delete.
   ipcMain.handle('captureDataset:status', () => modelStatus());
-  ipcMain.handle('captureDataset:list', async (_e, { projectId }: any = {}) =>
-    Promise.all((await history.loadAllSummaries(String(projectId))).map(async ({ cropPath, copilotThreadId: _c, ...rest }) => {
+  ipcMain.handle('captureDataset:list', async (_e, { projectId }: any = {}) => {
+    const into = await savedInto(String(projectId));
+    return Promise.all((await history.loadAllSummaries(String(projectId))).map(async ({ cropPath, copilotThreadId: _c, ...rest }) => {
       // A capture saved into a dataset with row access rules: its thumbnail is a picture of every row (row-policy REDACT).
-      const closed = rest.datasetId ? await closedToCaller(String(projectId), rest.datasetId) : false;
+      const closed = (await Promise.all(into(rest.id, rest.datasetId).map((id) => closedToCaller(String(projectId), id)))).some(Boolean);
       if (closed) delete (rest as { thumb?: unknown }).thumb;
       return { ...rest, hasImage: !!cropPath && !closed };
-    })));
+    }));
+  });
   // The capture's own page. A dataset the capture was saved into counts only
   // while it still exists (a metadata read — no rows are loaded).
   ipcMain.handle('captureDataset:get', async (_e, { projectId, captureId }: any = {}) => {
     const thread = await captureUpload.loadOwn(String(projectId), String(captureId)).catch(() => null);
     if (!thread) return { ok: false, error: 'That capture no longer exists.' };
-    // The stored table IS the rows of the dataset it was saved into: refused when that dataset has row access rules (row-policy D9).
-    if (thread.datasetId) await gateRows(String(projectId), String(thread.datasetId));
+    await gateCapture(String(projectId), thread);
     const view = captureUpload.viewOf(thread);
     const kept = view.datasetId ? await datasets.getDatasetMeta(String(projectId), view.datasetId) : null;
     return { ...view, datasetId: kept ? view.datasetId : null };
@@ -127,7 +151,7 @@ export function register(deps: CaptureDeps = {}) {
   // GET route if captures ever hold more than screenshots.
   ipcMain.handle('captureDataset:image', async (_e, { projectId, captureId }: any = {}) => {
     const thread = await captureUpload.loadOwn(String(projectId), String(captureId)).catch(() => null);
-    if (thread && thread.datasetId) await gateRows(String(projectId), String(thread.datasetId)); // a picture of the rows (row-policy D9)
+    if (thread) await gateCapture(String(projectId), thread); // a picture of the rows
     const png = thread ? await history.loadCrop(thread.id, thread) : null;
     return png ? { ok: true, dataUrl: 'data:image/png;base64,' + png.toString('base64') } : { ok: false };
   });
