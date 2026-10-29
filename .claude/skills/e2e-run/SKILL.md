@@ -46,10 +46,12 @@ Sixteen specs need Postgres (`grep -l DATABASE_URL web/e2e/*.e2e.ts`). Without
 `DATABASE_URL` they skip: the run shows `﹣ row access e2e … # DATABASE_URL is unset` and
 `ℹ skipped 1`, or the spec prints `skip password e2e: …` and exits 0.
 
-**CI's e2e job has no Postgres, so these specs never run in CI.** A green `develop` run reports
-`tests 108, skipped 12`, plus `auth` and `password` exiting early. If your change touches their
-screens, run them locally against a throwaway Postgres (Homebrew `postgresql@17`; start and stop
-it with the sandbox off, using an absolute scratch directory):
+**Check CI's count too, not just its colour.** In the `web` job's e2e log, `skipped` should be
+`1`: `compose`, which runs against the stack in the `docker` and `helm` jobs. Anything more means
+Postgres specs skipped there as well (before CI's `web` job had a Postgres service, a green run
+read `skipped 12`). If your change touches their screens, run them locally against a throwaway
+Postgres (Homebrew `postgresql@17`; start and stop it with the sandbox off, using an absolute
+scratch directory):
 
 ```bash
 initdb -D <scratch>/pg -U postgres -A trust
