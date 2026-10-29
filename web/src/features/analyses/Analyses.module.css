@@ -1,17 +1,6 @@
-/* The dashboards list (hub.css .an-list-head / .an-grid / .an-card / .viz-card-*):
-   a card grid of live previews. Tokens only, so both themes follow. */
+/* The dashboards list's cards (hub.css .an-grid / .an-card / .viz-card-*): a card grid of live previews, on the
+   Dashboards page (dashboards/list). Tokens only, so both themes follow. */
 
-.count {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 var(--sp-8);
-  border-radius: var(--r-full);
-  background: var(--surface-2);
-  color: var(--muted);
-  font-size: var(--t-12);
-  font-variant-numeric: tabular-nums;
-}
 .grid {
   margin: 0;
   padding: 0;
@@ -110,44 +99,14 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-4) var(--sp-8);
-  padding-right: var(--sp-32); /* clear of the card's ⋯, as .name is: the Ready chip wraps rather than meet it */
+  padding-right: var(--sp-32); /* clear of the card's ⋯, as .name is: the badge wraps rather than meet it */
   font-size: var(--t-12);
   color: var(--muted);
-}
-/* On the Dashboards page: a chip at the end of the meta line, clear of the preview's marks. */
-.readyMark {
-  display: inline-flex;
 }
 .menu {
   position: absolute;
   right: var(--sp-8);
   bottom: var(--sp-12);
-}
-.chips {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: var(--sp-8);
-  margin-top: calc(-1 * var(--sp-12));
-}
-.chip {
-  height: 28px;
-  padding: 0 var(--sp-12);
-  border: 1px solid var(--border);
-  border-radius: var(--r-full);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: var(--t-12);
-  cursor: pointer;
-}
-.chip:hover {
-  border-color: var(--accent-line);
-  background: var(--accent-soft);
-}
-.chip:focus-visible {
-  outline: var(--focus-ring-w) solid var(--focus-ring);
-  outline-offset: 2px;
 }
 .skPrev {
   display: block;
@@ -163,18 +122,4 @@
   display: block;
   width: 40%;
   height: 10px;
-}
-
-/* No model: the empty state says why the Assistant's doors are shut, and where to connect one. */
-.aiHint {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: var(--sp-8);
-  margin: calc(-1 * var(--sp-12)) auto 0;
-  max-width: 560px;
-  color: var(--muted);
-  font-size: var(--t-13);
-  text-align: center;
 }

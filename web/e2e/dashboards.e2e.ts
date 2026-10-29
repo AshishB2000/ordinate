@@ -55,7 +55,7 @@ async function call(page: Page, channel: string, payload: unknown): Promise<any>
 }
 
 async function openSample(page: Page, pid: string): Promise<void> {
-  await page.goto(`/analyses?project=${pid}`);
+  await page.goto(`/dashboards?project=${pid}`);
   await settled(page);
   await page.getByRole('link', { name: /Retail overview/ }).click();
   await page.getByRole('heading', { level: 1, name: 'Retail overview' }).waitFor();
@@ -150,7 +150,7 @@ e2e('viewer: present, style, alert me, the inbox, comments', async ({ page, serv
 e2e('cards: markdown text, the summary, a pivot copied and exported, a navigate action and Back', async ({ page, server }) => {
   const pid = server.sample.projectId;
   await grantClipboard(page, server.base);
-  await page.goto(`/analyses?project=${pid}`);
+  await page.goto(`/dashboards?project=${pid}`);
   await settled(page);
   const datasets = (await call(page, 'dataset:list', { projectId: pid })) as { id: string; name: string }[];
   const ds = datasets.find((d) => d.name === 'Retail orders')?.id as string;
@@ -287,7 +287,7 @@ async function clickUntil(page: Page, box: { x: number; y: number; width: number
 
 e2e('runtime: reset controls, quick filters, map selection, a drill, comment doors and Home', async ({ page, server, rpc }) => {
   const pid = server.sample.projectId;
-  await page.goto(`/analyses?project=${pid}`);
+  await page.goto(`/dashboards?project=${pid}`);
   await settled(page);
   const datasets = (await call(page, 'dataset:list', { projectId: pid })) as { id: string; name: string }[];
   const ds = datasets.find((d) => d.name === 'Retail orders')?.id as string;
@@ -413,7 +413,7 @@ async function until(cond: () => Promise<boolean>, what: string, ms = 10_000): P
 
 e2e('click-to-filter: a bar filters the other cards, its own chart stays whole, chips, multi-select, Esc, the switch', async ({ page, server, rpc }) => {
   const pid = server.sample.projectId;
-  await page.goto(`/analyses?project=${pid}`);
+  await page.goto(`/dashboards?project=${pid}`);
   await settled(page);
   const datasets = (await call(page, 'dataset:list', { projectId: pid })) as { id: string; name: string }[];
   const ds = datasets.find((d) => d.name === 'Retail orders')?.id as string;

@@ -150,11 +150,11 @@ describe('project switcher', () => {
 
     // ?project= names it: the link follows the switch, so a reload or a copied link opens the new one.
     calls = serve({ ...base({ [A]: 'admin', [B]: 'admin' }), 'projects:open': { body: null } });
-    router = renderApp(`/analyses?project=${B}`);
+    router = renderApp(`/dashboards?project=${B}`);
     await waitFor(() => expect(switcher().textContent).toContain('Beta'));
     await pick(/^Alpha.*opened/);
     await waitFor(() => expect(router.state.location.search).toBe(`?project=${A}`));
-    expect([router.state.location.pathname, switcher().textContent]).toEqual(['/analyses', expect.stringContaining('Alpha')]);
+    expect([router.state.location.pathname, switcher().textContent]).toEqual(['/dashboards', expect.stringContaining('Alpha')]);
     expect(opens(calls)).toEqual([{ id: A }]);
   });
 
@@ -282,8 +282,8 @@ describe('no project yet', () => {
       'projects:overview': () => ({ body: made ? [row(A, 'Fresh')] : [] }),
       'projects:create': () => ((made = true), { body: { id: A, name: 'Fresh' } }),
     });
-    renderApp('/analyses');
-    expect(await screen.findByText('Analyses belong to a project. Create one, or start with sample data to look around.')).toBeTruthy();
+    renderApp('/dashboards');
+    expect(await screen.findByText('Dashboards belong to a project. Create one, or start with sample data to look around.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'New project' }));
     const dialog = await screen.findByRole('dialog', { name: 'New project' });
     fireEvent.change(within(dialog).getByLabelText('Project name'), { target: { value: 'Fresh' } });

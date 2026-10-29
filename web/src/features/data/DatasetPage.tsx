@@ -184,7 +184,7 @@ function Header({ projectId, id, name, rowCount, columnCount, live, scoped = fal
                   New visual
                 </Link>
                 {/* The dashboard wizard on this dataset, at "Start from" (T2.8; dsExplorer's "New dashboard"). */}
-                <Link className={buttonClass('secondary', 'sm')} to={`/analyses?project=${projectId}&new=1&dataset=${id}`}>
+                <Link className={buttonClass('secondary', 'sm')} to={`/dashboards?project=${projectId}&new=1&dataset=${id}`}>
                   New dashboard
                 </Link>
               </>

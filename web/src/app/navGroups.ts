@@ -11,5 +11,5 @@ export interface NavGroup {
 
 export const NAV_GROUPS: readonly NavGroup[] = [
   { label: 'View', items: ['/', '/explore', '/dashboards', '/reports'] },
-  { label: 'Build', items: ['/data', '/connections', '/pipelines', '/visuals', '/analyses', '/analytics'] },
+  { label: 'Build', items: ['/data', '/connections', '/pipelines', '/visuals', '/analytics'] },
 ];

@@ -260,8 +260,8 @@ describe('the dashboard editor', { timeout: 40_000 }, () => {
     const router = renderApp(`/analyses/${P}/${A}`);
     await screen.findByTitle('Click to rename', undefined, { timeout: 15_000 });
     expect(unloadPrevented()).toBe(false);
-    act(() => void router.navigate(`/analyses?project=${P}`));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/analyses'));
+    act(() => void router.navigate(`/dashboards?project=${P}`));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboards'));
     expect(screen.queryByRole('dialog', { name: 'Leave without your changes?' })).toBeNull();
   });
 
@@ -272,15 +272,15 @@ describe('the dashboard editor', { timeout: 40_000 }, () => {
     await rename('Three');
     await screen.findByRole('alert', undefined, { timeout: 3000 });
     expect(unloadPrevented()).toBe(true);
-    act(() => void router.navigate(`/analyses?project=${P}`));
+    act(() => void router.navigate(`/dashboards?project=${P}`));
     let dlg = await screen.findByRole('dialog', { name: 'Leave without your changes?' });
     fireEvent.click(within(dlg).getByRole('button', { name: 'Stay' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Leave without your changes?' })).toBeNull());
     expect(router.state.location.pathname).toBe(here);
-    act(() => void router.navigate(`/analyses?project=${P}`));
+    act(() => void router.navigate(`/dashboards?project=${P}`));
     dlg = await screen.findByRole('dialog', { name: 'Leave without your changes?' });
     fireEvent.click(within(dlg).getByRole('button', { name: 'Leave' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/analyses'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboards'));
   });
 
   it('Save mine as a copy: "<name> (copy)" from the document on screen, then it opens', async () => {
