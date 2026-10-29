@@ -189,6 +189,7 @@
   "common.total": "合計",
   "common.value": "値",
   "common.vs_previous": "対前",
+  "connectorMessages.the_server_did_not_agree_to": null,
   "connectorMessages.this_connection_signs_in_with_the": null,
   "dashShare.and_more": "{p0}、ほか{p1}件",
   "driverPointMessages.a_change_is_explained_between_two": "変化は 2 つの期間の間で説明されるため、軸に日付があるグラフが必要です。",

@@ -8,3 +8,8 @@ import { t } from '../app/i18n';
 export function adminRoleWarning(role: string): string {
   return t('connectorMessages.this_connection_signs_in_with_the', { role });
 }
+
+/** SQL Server: the server's reply declined the encryption the connection requires, so the login was not sent. */
+export function encryptionDeclined(): string {
+  return t('connectorMessages.the_server_did_not_agree_to');
+}

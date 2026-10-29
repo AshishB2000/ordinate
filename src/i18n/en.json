@@ -186,6 +186,7 @@
   "common.total": "Total",
   "common.value": "Value",
   "common.vs_previous": "vs previous",
+  "connectorMessages.the_server_did_not_agree_to": "The server did not agree to encrypt the connection, so the password was not sent. Check that the server has TLS turned on.",
   "connectorMessages.this_connection_signs_in_with_the": "This connection signs in with the {role} role, which can change data and account settings. Ordinate only reads, but give it a read-only role instead.",
   "dashShare.and_more": "{p0}, and {p1} more",
   "driverPointMessages.a_change_is_explained_between_two": "A change is explained between two periods, so this needs a chart with a date on its axis.",

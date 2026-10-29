@@ -189,6 +189,7 @@
   "common.total": "Total",
   "common.value": "Valor",
   "common.vs_previous": "frente al anterior",
+  "connectorMessages.the_server_did_not_agree_to": null,
   "connectorMessages.this_connection_signs_in_with_the": null,
   "dashShare.and_more": "{p0}, y {p1} más",
   "driverPointMessages.a_change_is_explained_between_two": "Un cambio se explica entre dos periodos, así que hace falta un gráfico con una fecha en su eje.",
