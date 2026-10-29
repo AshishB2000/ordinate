@@ -218,11 +218,13 @@ async function recordMissed(sub: Subscription, slot: number, now: number): Promi
 
 /**
  * The org's due subscriptions, one after another. Called by the `subscriptions`
- * job (./job.ts) in the org's context; `now` is passed in.
+ * job (./job.ts) in the org's context; `now` is passed in. Past `stopAt` (epoch
+ * ms, the runner's run budget) it sends no further one: their slots are not
+ * stamped, so the next run sends them (NV-45).
  * ponytail: every project's subscription list is read each minute — a `next_run_at`
  * index when an org holds thousands.
  */
-export async function tickSubscriptions(now = Date.now()): Promise<number> {
+export async function tickSubscriptions(now = Date.now(), stopAt = Infinity): Promise<number> {
   let ran = 0;
   for (const p of await projects.listProjects()) {
     for (const sub of await store.listSubscriptions(p.id)) {
@@ -230,6 +232,7 @@ export async function tickSubscriptions(now = Date.now()): Promise<number> {
       const due = dueDecision({ schedule: sub.schedule, timezone: sub.timezone, lastSlot: sub.run.lastSlot, since: sub.since }, now);
       if (due.kind === 'none') continue;
       if (due.kind === 'missed') await recordMissed(sub, due.slot, now);
+      else if (Date.now() >= stopAt) return ran;
       else if (await runSubscription(p.id, sub.id, due.slot, now)) ran++;
     }
   }

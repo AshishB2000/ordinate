@@ -455,6 +455,38 @@ const quietLog = () => {
       JSON.stringify(fenced.rows));
     ok('fence: the late finish is logged', log.warns.some((w) => w.includes('lease was retaken')), JSON.stringify(log.warns));
 
+    // The run budget (NV-45): a run that stops on it is due again AT ONCE, but behind every row already due —
+    // so one org's long pass does not hold this pod's one slot. A run that finished waits its interval.
+    await pool.query(`DELETE FROM jobs`);
+    runner.setTimingForTest({ runBudgetMs: 200 });
+    const ctxMod: typeof import('../src/server/context') = require('../src/server/context');
+    const items: string[] = [];
+    runner.defineJob('bench:many', {
+      everyMs: 3_600_000,
+      run: async (_target, stopAt) => {
+        const org = ctxMod.ctx().org.id;
+        for (let i = 0; i < (org === 'busy' ? 20 : 2); i++) {
+          if (Date.now() >= stopAt) return true;
+          items.push(org);
+          await sleep(60);
+        }
+        return false;
+      },
+    });
+    await pool.query(`INSERT INTO jobs (org_id, kind, next_run_at) VALUES ('busy', 'bench:many', now() - interval '2 seconds'), ('other', 'bench:many', now() - interval '1 second')`);
+    const order: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const c = await runner.claimOne(pool, ['bench:many']);
+      if (!c) break;
+      order.push(c.orgId);
+      await runner.runClaim(pool, c, fl);
+    }
+    const busyItems = items.filter((o) => o === 'busy').length;
+    ok('budget: a long pass stops starting items at its budget, and another org\'s due row runs before its next pass', order.join() === 'busy,other,busy' && busyItems >= 4 && busyItems <= 10, `${order.join()} · ${busyItems} items`);
+    const later = await pool.query<{ org_id: string; due: boolean }>(`SELECT org_id, next_run_at <= now() AS due FROM jobs WHERE kind = 'bench:many' ORDER BY org_id`);
+    ok('budget NEGATIVE CONTROL: the pass that finished waits its interval; the one cut short is due again', JSON.stringify(later.rows.map((r) => [r.org_id, r.due])) === '[["busy",true],["other",false]]', JSON.stringify(later.rows));
+    runner.setTimingForTest({ runBudgetMs: runner.RUN_BUDGET_MS });
+
     // A notification over the cap goes by reference; the table is the size limit's answer.
     ok('bus: the inline cap is below Postgres\'s 8000-byte NOTIFY limit', bus.MAX_NOTIFY_BYTES < 8000);
   } finally {

@@ -140,6 +140,10 @@ export function wireSchedules(pool: Pool, devAuth: boolean): void {
 
   defineJob('tick', {
     everyMs: TICK_EVERY_MS,
-    run: async () => { await scheduler.tickNow(); },
+    // Out of budget: due full refreshes may be left (never begun, still due); the runner runs the row again soon.
+    run: async (_target, stopAt) => {
+      await scheduler.tickNow(Date.now(), stopAt);
+      return Date.now() >= stopAt;
+    },
   });
 }
