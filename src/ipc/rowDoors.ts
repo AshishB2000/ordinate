@@ -20,7 +20,8 @@ import * as datasets from '../data/datasets';
 import type { FilterStep } from '../data/transforms';
 import { applyPipeline } from '../data/transforms';
 import type { Lock } from '../data/rowLock';
-import { RowPolicyError, closedToCaller, isRowPolicyError, restrictedOn, rowLockFor, rowPolicyRefusal, withLockSteps, withRowLock } from '../data/rowAccess';
+import { RowPolicyError, closedToCaller, gateRows, inFanOut, isRowPolicyError, restrictedOn, rowLockFor, rowPolicyRefusal, withLockSteps, withRowLock } from '../data/rowAccess';
+import type { RowPolicyReason } from '../data/rowAccess';
 import { hasMetricMeasure } from '../analysis/metricMeasures';
 import * as visuals from '../analysis/visuals';
 import type { VizEncoding, VizOverrides } from '../analysis/visuals';
@@ -70,12 +71,33 @@ export function setRelatedGateForTest(on: boolean): void {
  * dataset and the question alone, so an editor's answer joined over a dataset with rules would otherwise be
  * handed to them. `reads` is exactly what the body reads — the datasets named by id and the join plan's
  * tables (./relationships chartReads / metricReads) — so a star schema whose other dimensions are open
- * still answers (C1).
+ * still answers (C1). The refusal's reason, or null.
+ *
+ * Inside a fan-out build (a publish, an embed) it gates EVERY caller, editors included, and records each read
+ * through the storage net (gateRows): on a cache hit the body never reaches that net, so the related dataset
+ * would be neither refused nor recorded, and /p/ would keep serving once it gained rules (D10).
  */
-async function relatedClosed(projectId: string, datasetId: string, reads: () => Promise<string[]>): Promise<boolean> {
-  if (!relatedGate || !(await restrictedOn(projectId))) return false;
-  for (const id of new Set(await reads())) if (id !== datasetId && (await closedToCaller(projectId, id))) return true;
-  return false;
+async function relatedClosed(projectId: string, datasetId: string, reads: () => Promise<string[]>): Promise<RowPolicyReason | null> {
+  if (!relatedGate) return null;
+  const fanout = inFanOut();
+  if (!fanout && !(await restrictedOn(projectId))) return null;
+  for (const id of new Set(await reads())) {
+    if (id === datasetId) continue;
+    const why = fanout ? await netRefusal(projectId, id) : (await closedToCaller(projectId, id)) ? 'related' : null;
+    if (why) return why;
+  }
+  return null;
+}
+
+/** The storage net on `id`: records the read in the fan-out scope; its refusal (the build is marked refused too), or null. */
+async function netRefusal(projectId: string, id: string): Promise<RowPolicyReason | null> {
+  try {
+    await gateRows(projectId, id);
+    return null;
+  } catch (err) {
+    if (isRowPolicyError(err)) return err.reason;
+    throw err;
+  }
 }
 
 /** What a chart's question reads besides its own dataset. */
@@ -108,7 +130,8 @@ export async function lockedViz<O extends { sample?: boolean }, R>(
   const lock = await lockOrRefusal(projectId, datasetId);
   if (isRefusal(lock)) return lock;
   if (!lock) {
-    if (await relatedClosed(projectId, datasetId, chartReadsOf(projectId, datasetId, encoding, filters))) return rowPolicyRefusal('related');
+    const why = await relatedClosed(projectId, datasetId, chartReadsOf(projectId, datasetId, encoding, filters));
+    if (why) return rowPolicyRefusal(why);
     return body(projectId, datasetId, encoding, filters, opts);
   }
   if (encoding && encoding.drivers) return rowPolicyRefusal('reader');
@@ -128,7 +151,8 @@ export async function lockedMetric<S extends { column: string }, P, R>(
 ): Promise<R> {
   const lock = await rowLockFor(projectId, datasetId);
   if (!lock) {
-    if (await relatedClosed(projectId, datasetId, () => metricReads(projectId, datasetId, spec.column, filters))) throw new RowPolicyError('related');
+    const why = await relatedClosed(projectId, datasetId, () => metricReads(projectId, datasetId, spec.column, filters));
+    if (why) throw new RowPolicyError(why);
     return body(projectId, datasetId, spec, filters, params);
   }
   if (await reachesOther(projectId, datasetId, null, [spec.column, filters])) throw new RowPolicyError('related');
@@ -191,7 +215,7 @@ export async function visualForCaller<T extends VisualLike | null>(projectId: st
   const ds = typeof v.datasetId === 'string' && v.datasetId ? v.datasetId : null;
   const filters = (v as { filters?: unknown }).filters;
   const closed = !ds || (await closedToCaller(projectId, ds))
-    || (!!v.encoding && (await relatedClosed(projectId, ds, chartReadsOf(projectId, ds, v.encoding as VizEncoding, Array.isArray(filters) ? (filters as FilterStep[]) : []))));
+    || (!!v.encoding && !!(await relatedClosed(projectId, ds, chartReadsOf(projectId, ds, v.encoding as VizEncoding, Array.isArray(filters) ? (filters as FilterStep[]) : []))));
   return closed ? withoutLabels(v) : v;
 }
 

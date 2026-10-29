@@ -81,6 +81,11 @@ export function exportScope<T>(fn: () => Promise<T>): Promise<{ value: T; datase
   return outgoing('export', fn);
 }
 
+/** Inside a fan-out build? Its doors gate (and record) every dataset a question reads, for every caller. */
+export function inFanOut(): boolean {
+  return scopes.getStore()?.out?.kind === 'fanout';
+}
+
 // ── The record, raw ─────────────────────────────────────────────────────────
 
 type Raw = Record<string, unknown>;
