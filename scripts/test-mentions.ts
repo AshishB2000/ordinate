@@ -54,6 +54,7 @@ const smtp: typeof import('../src/server/mail/smtp') = require('../src/server/ma
 const mailEnv: typeof import('../src/server/mail/mailEnv') = require('../src/server/mail/mailEnv');
 const email: typeof import('../src/server/mail/emailChannel') = require('../src/server/mail/emailChannel');
 const analysis: typeof import('../src/analysis/analysis') = require('../src/analysis/analysis');
+const drafts: typeof import('../src/analysis/publishDashboard') = require('../src/analysis/publishDashboard');
 const notify: typeof import('../src/server/mentions/notify') = require('../src/server/mentions/notify');
 const store: typeof import('../src/server/mentions/store') = require('../src/server/mentions/store');
 const orgDb: typeof import('../src/server/db/inOrg') = require('../src/server/db/inOrg');
@@ -129,6 +130,8 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     await b.pool.query(`INSERT INTO orgs (id, name) VALUES ('globex', 'globex') ON CONFLICT DO NOTHING`);
     await b.pool.query(`INSERT INTO users (org_id, email, role, last_login_at) VALUES ('globex', 'gina@globex.test', 'admin', now())`);
     const board = await b.run(BOSS, () => analysis.saveAnalysis(pid, { name: 'Revenue review', sheets: [{ name: 'S', cards: [] }] } as never));
+    // Published: the project's viewers read it (a draft is its editors' — docs/analysis/00-model.md).
+    await b.run(BOSS, () => drafts.publish(pid, board!.id));
     const target = { kind: 'analysis', id: board!.id };
     const as = (w: string) => b.as(w);
     const settle = async () => { await notify.mentionsSettled(); };
@@ -191,6 +194,18 @@ async function suite(b: Bench, fake: Awaited<ReturnType<typeof startFake>>): Pro
     const trail = await b.pool.query<{ actor: string; targets: string[] }>(`SELECT actor, target_ids::text[] AS targets FROM audit_log WHERE channel = 'comment:mention' ORDER BY id DESC LIMIT 1`);
     const piece = told.body.comments.at(-1).id as string;
     ok('told: one audit row per recipient — the comment, the piece and the recipient', trail.rows[0]?.actor === at('ann') && trail.rows[0].targets.includes(piece) && trail.rows[0].targets.includes(await b.uid('bea')), show(trail.rows));
+
+    // ── a dashboard's draft: its editors' alone ────────────────────────────
+    {
+      const draft = await b.run(BOSS, () => analysis.saveAnalysis(pid, { name: 'Unreleased plan', sheets: [{ name: 'S', cards: [] }] } as never));
+      const [p0, e0, r0, ola0] = [pushesTo('bea'), mailsTo('bea'), await rowsOf('bea'), pushesTo('ola')];
+      await as('boss').call('comment:add', { projectId: pid, target: { kind: 'analysis', id: draft!.id }, body: `see ${m('bea')} and ${m('ola')}` });
+      await settle();
+      ok('draft: a viewer mentioned on a dashboard never published gets no push, email or Home row — never its name', pushesTo('bea') === p0 && mailsTo('bea') === e0 && (await rowsOf('bea')) === r0
+        && !pushes.some((p) => p.user === at('bea') && p.data.includes('Unreleased plan')));
+      const told = pushes.filter((p) => p.channel === 'mentions:new' && p.user === at('ola')).at(-1);
+      ok('draft NEGATIVE CONTROL: an org admin mentioned in the same comment is told, by the draft\'s name', pushesTo('ola') === ola0 + 1 && !!told && JSON.parse(told.data).on === 'Unreleased plan', told?.data);
+    }
 
     // ── quiet ─────────────────────────────────────────────────────────────
     const quiet = async (label: string, fn: () => Promise<unknown>) => {

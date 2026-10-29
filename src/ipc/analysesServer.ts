@@ -21,6 +21,10 @@ import { FileTokenError, resolveUpload } from '../server/files';
 import { isLiveRefusalReply, liveRefusal } from '../data/liveDataset';
 import { dashboardForCaller, tagForCaller, visualForCaller } from './rowDoors';
 import { figureAsk } from '../analysis/figureAsk';
+import type { Card } from '../analysis/dashboards';
+import { asPublished, statusOf, visualOfCard } from '../analysis/publishedCopy';
+import { metaOf } from '../analysis/publishDashboard';
+import { contentTag } from '../app/editConflict';
 
 /** What a card needs of a Visual to draw it — the record minus its bookkeeping. */
 function visualDef(v: visuals.Visual) {
@@ -38,6 +42,14 @@ function visualDef(v: visuals.Visual) {
 }
 export type VisualDef = ReturnType<typeof visualDef>;
 
+/**
+ * A visual card's chart as a Visual: a published copy's frozen definition (`card.visual`, under the card's
+ * `visualId`), else the Visuals store's. Null for a hole.
+ */
+async function cardVisual(projectId: string, c: Card, at: string): Promise<visuals.Visual | null> {
+  return visualOfCard(projectId, c, at) ?? (c.visualId ? visuals.getVisual(projectId, c.visualId) : null);
+}
+
 /** How many of the first sheet's visuals a list card previews (anList.ts AN_PREVIEW_MAX). */
 const PREVIEW_MAX = 2;
 
@@ -53,31 +65,57 @@ async function call(event: unknown, channel: string, payload: unknown): Promise<
 }
 
 export function register(): void {
+  // A viewer's list holds published dashboards only, each drawn from its copy (the store's caller-aware reads);
+  // an editor's holds every draft, drawn from the draft, with its status and when it was published.
   ipcMain.handle('analysis:gallery', async (_e, { projectId }: any = {}) => {
     const out = [];
     for (const s of await analysis.listAnalyses(projectId)) {
       const a = await analysis.getAnalysis(projectId, s.id);
       const previews: VisualDef[] = [];
       for (const c of (a && a.sheets[0] ? a.sheets[0].cards : [])) {
-        if (c.type !== 'visual' || !c.visualId) continue;
+        if (c.type !== 'visual' || (!c.visualId && !c.visual)) continue;
         // A dangling visualId is a hole in the sheet, not a card to draw.
-        const v = await visuals.getVisual(projectId, c.visualId);
+        const v = await cardVisual(projectId, c, a!.updatedAt);
         if (v) previews.push(visualDef(await visualForCaller(projectId, v)));
         if (previews.length >= PREVIEW_MAX) break;
       }
       // The sheets' ids and names: a navigation card's target picker (actionEditor.ts aeTargetFields).
       const sheets = a ? a.sheets.map((p) => ({ id: p.id, name: p.name })) : [];
-      out.push({ id: s.id, name: s.name, sheetCount: s.sheetCount, updatedAt: s.updatedAt, previews, sheets, ...(s.ready ? { ready: true } : {}) });
+      const by = s.publishedBy ? { publishedBy: s.publishedBy } : {};
+      out.push({ id: s.id, name: s.name, sheetCount: s.sheetCount, updatedAt: s.updatedAt, previews, sheets, status: s.status, ...(s.publishedAt ? { publishedAt: s.publishedAt } : {}), ...by });
     }
     return out;
   });
 
   // ponytail: every visual of the project, with its definition — a few KB each.
   // Page by the cards' ids if a project ever holds thousands.
-  ipcMain.handle('analysis:open', async (_e, { projectId, id }: any = {}) => {
+  ipcMain.handle('analysis:open', async (_e, { projectId, id, published }: any = {}) => {
     // The dashboard and its stored tag, from one read: the editor's base (src/app/editConflict.ts).
     const t = await analysis.readAnalysis(projectId, id);
     if (!t) return { ok: false, error: 'That dashboard could not be loaded.' };
+    // The published copy: always for a viewer (a draft never published is not theirs to load), on request for an
+    // editor — who gets the draft when there is no copy yet (the view page shows it as a Preview).
+    const viewer = await analysis.readsPublishedOnly(projectId);
+    const copy = viewer || published === true ? asPublished(t.rec) : null;
+    if (viewer && !copy) return { ok: false, error: 'That dashboard could not be loaded.' };
+    const meta = metaOf(t.rec.published);
+    const about = { status: viewer ? 'published' : statusOf(t.rec), showing: copy ? 'published' : 'draft', ...(meta ? { published: viewer ? { publishedAt: meta.publishedAt } : meta } : {}) };
+    if (copy) {
+      // Each visual card's frozen chart is its definition: what the canvas draws, never the chart as edited since.
+      const defs: Array<VisualDef & { tag: string }> = [];
+      const seen = new Set<string>();
+      for (const c of copy.sheets.flatMap((sh) => sh.cards)) {
+        if (c.type !== 'visual' || !c.visualId || seen.has(c.visualId)) continue;
+        seen.add(c.visualId);
+        const v = await cardVisual(projectId, c, copy.updatedAt);
+        if (!v) continue;
+        const sent = visualDef(await visualForCaller(projectId, v));
+        defs.push({ ...sent, tag: contentTag('visual', sent) });
+      }
+      const board = await dashboardForCaller(projectId, copy);
+      return { ok: true, analysis: board, visuals: defs, tag: contentTag('dashboard', board), ...about };
+    }
+    const { published: _copy, ...draft } = t.rec;
     const defs: Array<VisualDef & { tag: string }> = [];
     for (const s of await visuals.listVisuals(projectId)) {
       // Each with its tag: the dashboard's Interactions write a visual's overrides with it as `base`.
@@ -87,8 +125,8 @@ export function register(): void {
       defs.push({ ...visualDef(sent), tag: await tagForCaller(projectId, 'visual', sent, v.tag) });
     }
     // A restricted caller's tags are of what they were sent (rowDoors.tagForCaller), the dashboard's too.
-    const board = await dashboardForCaller(projectId, t.rec);
-    return { ok: true, analysis: board, visuals: defs, tag: await tagForCaller(projectId, 'dashboard', board, t.tag) };
+    const board = await dashboardForCaller(projectId, draft);
+    return { ok: true, analysis: board, visuals: defs, tag: await tagForCaller(projectId, 'dashboard', board, t.tag), ...about };
   });
 
   ipcMain.handle('analysis:tiles', async (e, { projectId, params, asOf, currency, items }: any = {}) =>

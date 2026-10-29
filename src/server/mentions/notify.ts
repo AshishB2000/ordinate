@@ -33,6 +33,8 @@ import { appLink } from '../publicUrl';
 import { publish } from '../sse';
 import { deliver } from '../subscriptions/deliver';
 import { orgDb } from '../db/inOrg';
+import { writerEmails } from '../authz/index';
+import { asAudience } from '../../analysis/analysis';
 import { currentReaders, labelFor, peopleIn } from './people';
 import { recipient, recordMentions } from './store';
 import { logger } from '../../app/logger';
@@ -77,11 +79,20 @@ export function notifyMentions(piece: Piece, emails: string[]): Promise<void> {
 async function run(piece: Piece, emails: string[]): Promise<void> {
   if (!emails.length || !orgDb()) return;
   const readers = await currentReaders(piece.projectId);
-  const still = emails.filter((e) => readers !== null && readers.has(e));
+  let still = emails.filter((e) => readers !== null && readers.has(e));
   if (!still.length) return;
+  // A dashboard's draft is its editors' (docs/analysis/00-model.md): the notice names what viewers can open, and one
+  // on a dashboard (or a card) only a draft has goes to the project's editors alone.
+  let where = await asAudience(() => placeOf(piece));
+  if (!where.found && (piece.target.kind === 'analysis' || piece.target.kind === 'card')) {
+    const pool = orgDb();
+    const writers = new Set(pool ? (await writerEmails(pool, ctx().org.id, piece.projectId)).map((e) => e.toLowerCase()) : []);
+    still = still.filter((e) => writers.has(e.toLowerCase()));
+    if (!still.length) return;
+    where = await placeOf(piece);
+  }
   const fresh = await recordMentions({ projectId: piece.projectId, pieceId: piece.id, commentId: piece.commentId, author: piece.author }, still);
   if (!fresh.length) return;
-  const where = await placeOf(piece);
   const notice: MentionNotice = { projectId: piece.projectId, id: piece.id, commentId: piece.commentId, target: { kind: piece.target.kind, id: piece.target.id }, ...(where.analysisId ? { analysisId: where.analysisId } : {}), by: personName(piece.author), on: where.name };
   const org = ctx().org.id;
   for (const email of fresh) {
@@ -103,15 +114,15 @@ async function run(piece: Piece, emails: string[]): Promise<void> {
 }
 
 /** The record's name and, for a card, the dashboard it is on. */
-async function placeOf(piece: Piece): Promise<{ name: string; analysisId?: string }> {
+async function placeOf(piece: Piece): Promise<{ name: string; analysisId?: string; found: boolean }> {
   try {
     // Lazy: ipc/comments starts these notices.
     const { targetNames } = require('../../ipc/comments') as typeof import('../../ipc/comments');
     const names = await targetNames(piece.projectId, [{ target: piece.target } as never]);
     const t = names[`${piece.target.kind}:${piece.target.id}`];
-    return t ? { name: t.name, ...(t.analysisId ? { analysisId: t.analysisId } : {}) } : { name: aDeletedRecord() };
+    return t ? { name: t.name, ...(t.analysisId ? { analysisId: t.analysisId } : {}), found: true } : { name: aDeletedRecord(), found: false };
   } catch {
-    return { name: aDeletedRecord() };
+    return { name: aDeletedRecord(), found: false };
   }
 }
 

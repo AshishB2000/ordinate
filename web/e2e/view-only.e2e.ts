@@ -50,7 +50,7 @@ if (!adminUrl) {
   });
 
   /** Is the control there? Roles arrive after the page: a present control is waited for, an absent one is counted once the page has settled. */
-  const count = (page: Page, role: 'button' | 'link' | 'group', name: string | RegExp) => page.getByRole(role, { name, exact: typeof name === 'string' }).count();
+  const count = (page: Page, role: 'button' | 'link' | 'group' | 'tab', name: string | RegExp) => page.getByRole(role, { name, exact: typeof name === 'string' }).count();
 
   e2e('view-only: a viewer reads everything and is offered nothing that changes it; an editor is', async ({ page, server }) => {
     // Any GET hands the context its CSRF cookie (T6.2); a non-GET repeats it in X-CSRF-Token, as the app does.
@@ -110,6 +110,8 @@ if (!adminUrl) {
     });
     const aid: string = dash.id;
     assert.match(aid, /^[0-9a-f-]{36}$/, JSON.stringify(dash));
+    // Published: the viewer reads published dashboards only.
+    assert.equal((await rpc(ADMIN, 'analysis:publish', { projectId: pid, id: aid })).ok, true);
 
     // ── …and shares it: one viewer, one editor ────────────────────────────
     await rpc(VIEWER, 'projects:list'); // a first header-mode request provisions the account (an org viewer)

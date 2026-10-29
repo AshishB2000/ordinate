@@ -19,6 +19,8 @@ import { randomUUID } from 'crypto';
 import { applyViewOp } from '../analysis/savedViews';
 import { dashboardGone } from '../analysis/savedViewMessages';
 import { contentTag, isRecordChanged } from '../app/editConflict';
+import * as publishChannels from './analysesPublish';
+import { statusOf } from '../analysis/publishedCopy';
 
 // Analyses IPC — list/get/create/rename/update/delete an Analysis (the AUTHORING
 // container), plus the AI layout draft channel `analysis:draft` (MOVED from the
@@ -59,6 +61,12 @@ import { contentTag, isRecordChanged } from '../app/editConflict';
 // came out of `vizDataFor`, which is the same function that draws the built
 // Visual; see the header of src/analysisPlan.ts for why they cannot disagree.
 
+/** The draft as an editor's reply carries it: the published copy stays on the server (`analysis:open { published }`). */
+function draftOf(a: analysis.Analysis): Omit<analysis.Analysis, 'published'> {
+  const { published: _copy, ...draft } = a;
+  return draft;
+}
+
 export function register() {
   ipcMain.handle('analysis:list', async (_e, { projectId }: any = {}) =>
     analysis.listAnalyses(projectId),
@@ -92,7 +100,7 @@ export function register() {
       const before = await analysis.getAnalysis(projectId, id);
       const updated = await analysis.updateAnalysis(projectId, id, { name });
       if (updated) await versions.record(projectId, 'dashboard', updated, { before });
-      return updated ? { ok: true, analysis: updated } : { ok: false, error: 'Could not rename the analysis' };
+      return updated ? { ok: true, analysis: draftOf(updated), status: statusOf(updated) } : { ok: false, error: 'Could not rename the analysis' };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Failed to rename the analysis' };
     }
@@ -109,7 +117,8 @@ export function register() {
       // Every save is a version (src/app/versions.ts) — the autosave included;
       // one that changed nothing versioned is dropped there, not here.
       if (updated) await versions.record(projectId, 'dashboard', updated, { before });
-      return updated ? { ok: true, analysis: updated, tag: contentTag('dashboard', updated) } : { ok: false, error: 'Could not update the analysis' };
+      // `status`: whether the draft now differs from what was published — the editor's header follows it.
+      return updated ? { ok: true, analysis: draftOf(updated), tag: contentTag('dashboard', updated), status: statusOf(updated) } : { ok: false, error: 'Could not update the analysis' };
     } catch (err: any) {
       if (isRecordChanged(err)) throw err; // the route's 409, with the current tag
       return { ok: false, error: err?.message || 'Failed to update the analysis' };
@@ -135,9 +144,8 @@ export function register() {
       throw err;
     }));
 
-  // Ready (the Dashboards page lists it): one key of the stored record, under its lock; nothing else moves.
-  ipcMain.handle('analysis:setReady', async (_e, { projectId, id, ready }: any = {}) =>
-    (await analysis.setReady(projectId, id, ready === true)) ? { ok: true, ready: ready === true } : { ok: false, error: dashboardGone() });
+  // Publish, Unpublish, Discard edits (the draft and its published copy).
+  publishChannels.register();
 
   ipcMain.handle('analysis:delete', async (_e, { projectId, id }: any = {}) =>
     trash.trashRecord(projectId, 'dashboard', id)); // to the Trash, restorable for 30 days

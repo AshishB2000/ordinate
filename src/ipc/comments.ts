@@ -70,8 +70,19 @@ export async function targetNames(projectId: string, list: Comment[]): Promise<R
   return out;
 }
 
+/**
+ * The threads the caller may read. A viewer reads none on a dashboard's draft (docs/analysis/00-model.md): one on a
+ * dashboard or card their dashboards — the published copies, which targetNames reads for them — do not have.
+ */
+export async function readableComments(projectId: string, list: Comment[]): Promise<Comment[]> {
+  if (!(await analysis.readsPublishedOnly(projectId))) return list;
+  const shown = await targetNames(projectId, list);
+  return list.filter((c) => (c.target.kind !== 'analysis' && c.target.kind !== 'card') || !!shown[`${c.target.kind}:${c.target.id}`]);
+}
+
 async function answer(projectId: string, res: comments.Result): Promise<unknown> {
   if (!res.ok) return res;
+  res = { ...res, comments: await readableComments(projectId, res.comments) };
   const list = res.comments.map((c) => ({
     ...c,
     mine: comments.isMine(c.author),

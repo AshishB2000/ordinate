@@ -78,6 +78,8 @@ if (!adminUrl) {
         card('metric', 4, { metric: { datasetId: did, column: 'revenue', aggregation: 'sum', label: 'Revenue' } }),
       ] }],
     });
+    // Published: Vera, a viewer, reads published dashboards only.
+    assert.equal((await rpc(ADMIN, 'analysis:publish', { projectId: pid, id: board.id })).ok, true);
     const east = { type: 'filter', column: 'region', op: '=', value: 'East' };
     const eastRevenue: number = (await rpc(ADMIN, 'dashboard:metric', { projectId: pid, datasetId: did, column: 'revenue', aggregation: 'sum', filters: [east] })).value;
     const allRevenue: number = (await rpc(ADMIN, 'dashboard:metric', { projectId: pid, datasetId: did, column: 'revenue', aggregation: 'sum' })).value;

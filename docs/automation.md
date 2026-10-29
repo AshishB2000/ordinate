@@ -91,12 +91,12 @@ The registry's command-line form, kept as the reference for whichever entry poin
 | `metrics list` | `list_metrics` | read | List the project's saved metrics and how each is defined. |
 | `metrics value` | `metric_value` | read | The current value of a saved metric, computed by the app and formatted by the metric. |
 | `insights` | `insights` | read | What the app found in a dataset: trends, movers, concentration and anomalies. |
-| `dashboards list` | `list_dashboards` | read | List dashboards with their sheets and the reports built on them. |
+| `dashboards list` | `list_dashboards` | read | List dashboards with their sheets, status (draft, published, edited: published with edits not live yet) and the reports built on them. A viewer's token lists published dashboards only. |
 | `dashboards export` | `export_dashboard` | read | Export a dashboard as one self-contained HTML page, a PDF or a PNG. |
 | `reports run` | `run_report` | read | Generate a saved report (PDF, PPTX or DOCX) through the app's own report renderer. |
 | `publish` | — | writes files | Publish dashboards to a static folder from a publish config file (runs as a publish job). |
 | — | `create_visual` | writes records | Save a new visual. Validated exactly as the app validates a chart; writes a record, never data. Logged in Jobs. |
-| — | `create_dashboard` | writes records | Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. Writes records, never data. Logged in Jobs. |
+| — | `create_dashboard` | writes records | Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project's editors and admins see it until one of them publishes it in the app. Writes records, never data. Logged in Jobs. |
 
 ### projects list
 
@@ -209,7 +209,7 @@ What the app found in a dataset: trends, movers, concentration and anomalies.
 
 CLI `dashboards list` · MCP tool `list_dashboards` · read-only
 
-List dashboards with their sheets and the reports built on them.
+List dashboards with their sheets, status (draft, published, edited: published with edits not live yet) and the reports built on them. A viewer's token lists published dashboards only.
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -272,7 +272,7 @@ Save a new visual. Validated exactly as the app validates a chart; writes a reco
 
 MCP only · MCP tool `create_dashboard` · **writes records**
 
-Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. Writes records, never data. Logged in Jobs.
+Build a new dashboard from a plan, validated by the same validator as the Assistant; reports what was dropped. It is a DRAFT: only the project's editors and admins see it until one of them publishes it in the app. Writes records, never data. Logged in Jobs.
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |

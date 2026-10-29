@@ -25,6 +25,7 @@ import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
 import * as stories from '../analysis/stories';
 import * as comments from '../app/comments';
+import { readableComments } from './comments';
 import { withMentionLabels } from '../app/mentionToken';
 import { labelsFor } from '../server/mentions/people';
 import { readLogoDataUrl } from '../app/branding';
@@ -107,9 +108,11 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
       return r && r.ok !== false && typeof r.answer === 'string' ? r.answer.trim() : '';
     },
     scorecard: (id) => scorecardSnapshot(projectId, id),
-    comments: async () => {
+    // A report leaves the app, so its discussion is what a viewer could read: no thread on a dashboard's draft, and
+    // each card named as the published copy names it (analysis.asAudience).
+    comments: () => analysis.asAudience(async () => {
       const res = await comments.list(projectId);
-      const live = res.ok ? res.comments.filter((c) => !c.deletedAt) : [];
+      const live = res.ok ? (await readableComments(projectId, res.comments)).filter((c) => !c.deletedAt) : [];
       // A report leaves the app: a mention is "@Ann Lee" or "@former member", never the address it holds.
       const bodies = live.flatMap((c) => [c.body, ...c.replies.map((r) => r.body)]);
       const label = await labelsFor(projectId, bodies);
@@ -132,7 +135,7 @@ export function pageDeps(event: unknown, projectId: string, share = true): PageD
         }
       }
       return { comments: list, targets };
-    },
+    }),
     logo: async (a) => {
       const scope = a.style && a.style.logo === 'custom' && a.id ? a.id : 'workspace';
       return readLogoDataUrl(appPaths.userData(), scope).catch(() => null);
@@ -150,7 +153,8 @@ async function shareNote(event: unknown, projectId: string, datasetIds: Set<stri
 
 /** A report's dashboard — or the empty stand-in a scorecard report runs on (reportScorecard.ts reportAnalysisFor). */
 async function analysisFor(projectId: string, report: reportSpec.Report): Promise<(PageAnalysis & { filters?: FilterStep[]; parameters?: any[]; views?: any[] }) | null> { // any: analysis.Parameter / SavedView, passed through
-  const a = report.analysisId ? await analysis.getAnalysis(projectId, report.analysisId) : null;
+  // A report is sent and read by viewers: the dashboard's published copy, or a draft never published.
+  const a = report.analysisId ? await analysis.getAudienceAnalysis(projectId, report.analysisId) : null;
   if (a) return a as unknown as PageAnalysis;
   return report.scorecardId ? { id: '', name: report.name, sheets: [], style: {} } : null;
 }

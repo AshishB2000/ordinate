@@ -42,9 +42,14 @@ export interface VersionFile {
   restoredFrom?: string;
   /** Who saved it: the signed-in user's email. Absent on versions saved before it was kept (docs/version-diff). */
   by?: string;
+  /** A dashboard's Publish, Unpublish or Discard edits (analysis/publishedCopy.ts): recorded even when the content did not move. */
+  event?: VersionEvent;
   // ponytail: content of one of five record shapes; its own store re-sanitizes on restore
   record: Record<string, any>;
 }
+
+export type VersionEvent = 'published' | 'unpublished' | 'discarded';
+const EVENT_SUMMARY: Record<VersionEvent, string> = { published: 'Published', unpublished: 'Unpublished', discarded: 'Discarded the edits since publishing' };
 
 export interface VersionMeta {
   key: string;
@@ -52,6 +57,7 @@ export interface VersionMeta {
   summary: string;
   restoredFrom?: string;
   by?: string;
+  event?: VersionEvent;
   /** Dashboards only: the first sheet's tiles as {x,y,w,h,type} — enough to
    *  draw a thumbnail of the layout without shipping every card. */
   thumb?: Array<{ x: number; y: number; w: number; h: number; type: string }>;
@@ -138,6 +144,8 @@ function savedBy(): string | undefined {
 export interface RecordOpts {
   restoredFrom?: string;
   by?: string;
+  /** Written even when the content equals the newest version's; the summary names the event. */
+  event?: VersionEvent;
   now?: Date;
   /**
    * The record as it stood BEFORE this save. Used once: a record that has no
@@ -167,7 +175,7 @@ async function write(
       existing = await keys(dir);
     }
     const newest = existing.length ? await readVersion(dir, existing[existing.length - 1]) : null;
-    if (newest && sameContent(type, newest.record, rec)) return null;
+    if (newest && !opts.event && sameContent(type, newest.record, rec)) return null;
 
     const savedAt = (opts.now || new Date()).toISOString();
     let key = keyFor(savedAt);
@@ -176,10 +184,11 @@ async function write(
     const content = contentOf(type, rec);
     // The summary is the diff alone; `restoredFrom` says it was a restore, and
     // the panel words that in the reader's own clock.
-    const summary = summarize(type, newest ? newest.record : null, content);
+    const summary = opts.event ? EVENT_SUMMARY[opts.event] : summarize(type, newest ? newest.record : null, content);
     const file: VersionFile = { savedAt, summary, record: content };
     if (opts.restoredFrom) file.restoredFrom = opts.restoredFrom;
     if (opts.by) file.by = opts.by;
+    if (opts.event) file.event = opts.event;
 
     await fs.promises.mkdir(dir, { recursive: true });
     const target = path.join(dir, key + '.json');
@@ -203,6 +212,7 @@ function toMeta(type: string, key: string, f: VersionFile): VersionMeta {
   const meta: VersionMeta = { key, savedAt: f.savedAt, summary: f.summary };
   if (f.restoredFrom) meta.restoredFrom = f.restoredFrom;
   if (f.by) meta.by = f.by;
+  if (f.event) meta.event = f.event;
   if (type === 'dashboard') {
     const first = Array.isArray(f.record.sheets) ? f.record.sheets[0] : null;
     const cards = first && Array.isArray(first.cards) ? first.cards : [];

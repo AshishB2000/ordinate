@@ -178,6 +178,7 @@ export async function createDashboard(ctx: Ctx, rawPlan: unknown): Promise<unkno
         id: res.analysis.id,
         name: res.analysis.name,
         sheets: res.analysis.sheets.length,
+        status: 'draft', // editors and admins only, until someone publishes it in the app
         visualIds: res.visualIds,
         dropped: [...extra, ...res.dropped].map((d) => ({ where: d.where, message: d.message })),
       };

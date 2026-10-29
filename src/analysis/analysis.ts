@@ -30,8 +30,6 @@ import { randomUUID } from 'crypto';
 import * as appPaths from '../app/paths';
 import * as projects from '../app/projects';
 import { sanitizePages, sanitizeDashboardFilters, sanitizeStyle } from './dashboards';
-import type { CardType } from './dashboards';
-import * as visuals from './visuals';
 import type { FilterStep } from '../data/transforms';
 import { sanitizeParameters } from './params';
 import type { Parameter } from './params';
@@ -45,6 +43,9 @@ import type { Page, DashboardStyle } from './dashboards';
 import * as recordFs from '../app/recordFs';
 import { lockedUpdate, readTagged, type Tagged } from '../app/editConflict';
 import { logger } from '../app/logger';
+import { callerOn } from '../server/authz/caller';
+import { asPublished, audienceCopy, copyOf, sanitizePublished, statusOf, type DashboardStatus, type PublishedCopy } from './publishedCopy';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 export interface Analysis {
   /** Generated UUID — never derived from the name; it is a filesystem path. */
@@ -95,9 +96,12 @@ export interface Analysis {
   views?: SavedView[];
   defaultViewId?: string;
 
-  /** On the Dashboards page (docs/superpowers/specs/2026-10-27-dashboards-in-app-design.md). Absent = not Ready, so
-   *  no migration. Not content: outside the edit-conflict tag, never a version, never bumps `updatedAt` (setReady). */
-  ready?: true;
+  /**
+   * What viewers see (./publishedCopy.ts): the content as last Published, charts frozen. Absent = a draft only
+   * editors see. Not content: outside the edit-conflict tag, and Publish never bumps `updatedAt`. Replaces the
+   * old `ready: true` flag, which a read turns into a copy once (migrateReady).
+   */
+  published?: PublishedCopy;
 
   createdAt: string;
   /** Bumped by any sheet/filter/name edit. */
@@ -114,7 +118,10 @@ export interface AnalysisSummary {
   views?: Array<{ id: string; name: string }>;
   /** The first sheet's first two visual cards, as saved-visual ids — what a preview card draws (Home). Absent when it has none. */
   previewIds?: string[];
-  ready?: true;
+  /** ./publishedCopy.ts DashboardStatus. A viewer's list holds published ones only, and says `published`. */
+  status: DashboardStatus;
+  publishedAt?: string;
+  publishedBy?: string;
 }
 
 
@@ -159,7 +166,7 @@ function isValidAnalysis(data: any): boolean {
 // cannot point itself at another project.
 function normalize(data: any, projectId: string): Analysis {
   const createdAt = data.createdAt || new Date().toISOString();
-  return withViews({
+  const a: Analysis = {
     id: String(data.id),
     projectId,
     name: typeof data.name === 'string' && data.name.trim() ? data.name : 'Untitled dashboard',
@@ -168,11 +175,79 @@ function normalize(data: any, projectId: string): Analysis {
     // Absent on every record written before styles existed → the default.
     style: sanitizeStyle(data.style),
     parameters: sanitizeParameters(data.parameters, randomUUID),
-    ...(data.ready === true ? { ready: true as const } : {}),
     createdAt,
     updatedAt: data.updatedAt || createdAt,
     schemaVersion: 1,
-  }, data.views, data.defaultViewId);
+  };
+  const published = sanitizePublished(data.published, randomUUID);
+  if (published) a.published = published;
+  // A Ready dashboard whose one-time migration could not be written (migrateReady): published as it stands, charts
+  // following the Visuals store until a Publish freezes them — never a dashboard its viewers lose.
+  else if (data.ready === true) a.published = copyOf(a, a.updatedAt, undefined);
+  return withViews(a, data.views, data.defaultViewId);
+}
+
+const audience = new AsyncLocalStorage<true>();
+
+/** A project viewer (read access only) reads published dashboards only; editors, admins and the system read drafts. */
+export async function readsPublishedOnly(projectId: string): Promise<boolean> {
+  return isValidId(projectId) && (audience.getStore() === true || (await callerOn(projectId)).restricted);
+}
+
+/** Runs `fn` reading dashboards as a viewer would, whoever is asking: what a notice to anyone in the project may name. */
+export function asAudience<T>(fn: () => Promise<T>): Promise<T> {
+  return audience.run(true, fn);
+}
+
+/**
+ * What a send, a report, a published page or an export renders — they reach viewers: the published copy, or for a
+ * dashboard never published (only an editor reaches it) the draft. A viewer's own read is the copy already.
+ */
+export async function getAudienceAnalysis(projectId: string, id: string): Promise<Analysis | null> {
+  const a = await getAnalysis(projectId, id);
+  return a && audienceCopy(a);
+}
+
+/**
+ * `ready: true` (the Ready switch, before drafts) → a published copy of the content as it stands, charts frozen, and
+ * the flag gone; every other key byte for byte, so the edit tag and `updatedAt` do not move. Under the record's lock,
+ * re-read: a second reader (any pod) finds nothing to do. Never fatal — a failure leaves the stored record, which
+ * normalize() still reads as published.
+ */
+async function migrateReady(projectId: string, id: string, data: any): Promise<any> { // any: the stored record
+  if (data.ready !== true) return data;
+  try {
+    return await patchStored(projectId, id, async (stored) => {
+      if (stored.ready !== true) return false;
+      if (!sanitizePublished(stored.published, randomUUID)) {
+        const a = normalize({ ...stored, ready: undefined }, projectId);
+        const { frozenSheets } = require('./publishDashboard') as typeof import('./publishDashboard'); // lazy: it imports this store
+        stored.published = { ...copyOf(a, a.updatedAt, undefined), sheets: await frozenSheets(projectId, a.sheets) };
+      }
+      delete stored.ready;
+      return true;
+    }) ?? data;
+  } catch (err: any) { // any: a write that could not happen
+    logger.warn('[analysis] could not move a Ready dashboard to a published copy:', id, err?.message);
+    return data;
+  }
+}
+
+/** The stored JSON of one record, read, patched in place by `fn` (true = write it back) and written, under its lock. Null when missing. */
+export async function patchStored(projectId: string, id: string, fn: (stored: any) => Promise<boolean>): Promise<any> { // any: the stored record
+  if (!isValidId(projectId) || !isValidId(id)) return null;
+  const file = analysisFilePath(projectId, id);
+  return recordFs.locked(file, async () => {
+    let data: any; // any: the stored record, patched as parsed
+    try {
+      data = JSON.parse(await recordFs.readFile(file, 'utf8'));
+    } catch (_) {
+      return null;
+    }
+    if (!isValidAnalysis(data)) return null;
+    if (await fn(data)) await writeJsonAtomic(file, data);
+    return data;
+  });
 }
 
 /** Saved views, checked against the record's FINAL sheets and parameters — a
@@ -193,6 +268,7 @@ export async function init(): Promise<void> {
 // corrupt/missing files quietly (ENOENT silent; real damage logged).
 export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]> {
   if (!isValidId(projectId)) return [];
+  const publishedOnly = await readsPublishedOnly(projectId);
   const dir = analysesDir(projectId);
   let dirents;
   try {
@@ -208,9 +284,12 @@ export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]
     if (!isValidId(id)) continue; // skip stray/tmp files
     try {
       const raw = await recordFs.readFile(analysisFilePath(projectId, id), 'utf8');
-      const data = JSON.parse(raw);
+      const data = await migrateReady(projectId, id, JSON.parse(raw));
       if (!isValidAnalysis(data)) continue;
-      const a = normalize(data, projectId);
+      const stored = normalize(data, projectId);
+      // A viewer lists the published copy, by its own name and sheets; a draft is not listed to them at all.
+      const a = publishedOnly ? asPublished(stored) : stored;
+      if (!a) continue;
       // From the record already read: no second file, no figure.
       const previewIds = (a.sheets[0]?.cards ?? []).flatMap((c) => (c.type === 'visual' && c.visualId ? [c.visualId] : [])).slice(0, 2);
       out.push({
@@ -220,7 +299,8 @@ export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]
         updatedAt: a.updatedAt,
         views: (a.views || []).map((v) => ({ id: v.id, name: v.name })),
         ...(previewIds.length ? { previewIds } : {}),
-        ...(a.ready ? { ready: true as const } : {}),
+        status: publishedOnly ? 'published' : statusOf(stored),
+        ...(stored.published ? { publishedAt: stored.published.publishedAt, ...(stored.published.publishedBy ? { publishedBy: stored.published.publishedBy } : {}) } : {}),
       });
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
@@ -233,13 +313,22 @@ export async function listAnalyses(projectId: string): Promise<AnalysisSummary[]
   return out;
 }
 
-// Load a single analysis. Returns null if either id is invalid, or the file is
-// missing/corrupt. A PURE READ — it never migrates and never writes.
+// Load a single analysis AS THE CALLER MAY READ IT: a viewer gets the published
+// copy (./publishedCopy.ts asPublished) or null for a draft — the same null as a
+// missing id — so a reader not written with drafts in mind cannot hand one to
+// them. Null too if either id is invalid, or the file is missing/corrupt.
 export async function getAnalysis(projectId: string, id: string): Promise<Analysis | null> {
+  const a = await getStoredAnalysis(projectId, id);
+  return a && (await readsPublishedOnly(projectId)) ? asPublished(a) : a;
+}
+
+/** The record as stored — the draft, its published copy inside — whoever asks. For writes, and for the sends and
+ *  pages that pick the copy themselves (publishedCopy.audienceCopy). The only write is migrateReady's, once. */
+export async function getStoredAnalysis(projectId: string, id: string): Promise<Analysis | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
   try {
     const raw = await recordFs.readFile(analysisFilePath(projectId, id), 'utf8');
-    const data = JSON.parse(raw);
+    const data = await migrateReady(projectId, id, JSON.parse(raw));
     if (!isValidAnalysis(data)) return null;
     return normalize(data, projectId);
   } catch (_) {
@@ -333,33 +422,18 @@ export async function updateAnalysis(
   });
 }
 
-/**
- * Mark a dashboard Ready (listed on the Dashboards page) or not. The stored JSON is patched as it is — every other
- * key byte for byte, `updatedAt` included — so the edit-conflict tag (which hashes only the saved keys) never moves
- * and an open editor's next autosave is not refused. False when the record is missing.
- */
-export async function setReady(projectId: string, id: string, ready: boolean): Promise<boolean> {
-  if (!isValidId(projectId) || !isValidId(id)) return false;
-  const file = analysisFilePath(projectId, id);
-  return recordFs.locked(file, async () => {
-    let data: any; // any: the stored record, patched as parsed
-    try {
-      data = JSON.parse(await recordFs.readFile(file, 'utf8'));
-    } catch (_) {
-      return false;
-    }
-    if (!isValidAnalysis(data)) return false;
-    if (ready) data.ready = true;
-    else delete data.ready;
-    await writeJsonAtomic(file, data);
-    return true;
-  });
-}
-
 /** The record and the tag of what is stored, from ONE read (src/app/editConflict.ts): its editor's open and the guarded save. */
 export async function readAnalysis(projectId: string, id: string): Promise<Tagged<Analysis> | null> {
   if (!isValidId(projectId) || !isValidId(id)) return null;
-  return readTagged('dashboard', analysisFilePath(projectId, id), (d) => (isValidAnalysis(d) ? normalize(d, projectId) : null));
+  let ready = false;
+  const read = () => readTagged('dashboard', analysisFilePath(projectId, id), (d) => {
+    ready = isValidAnalysis(d) && d.ready === true;
+    return isValidAnalysis(d) ? normalize(d, projectId) : null;
+  });
+  const t = await read();
+  if (!t || !ready) return t;
+  await migrateReady(projectId, id, { ready: true }); // the tag does not move: `published` is outside it
+  return read();
 }
 
 /**
@@ -381,81 +455,6 @@ export async function deleteAnalysis(projectId: string, id: string): Promise<boo
   }
 }
 
-
-// ── The dashboard's own inventory, flattened ────────────────────────────────
-//
-// ONE read model, two consumers: the FACTS the Assistant is given about an open
-// dashboard (src/ai/copilot.ts analysisFacts) and the context its edit-delta
-// validator resolves tile names against (src/analysis/dashboardDelta.ts). They
-// must agree — the model can only name a tile the app can then find, so a second
-// copy of this walk is how "the Assistant edited the wrong chart" happens.
-//
-// A visual card stores only `visualId`; its title, chart type and encoding live
-// on the separate Visual record, which is why this is async and why the card
-// walk alone was never enough.
-//
-// NAMES ONLY. Column names and aggregation names, never a value and never a
-// figure — the same rule every other AI-facing builder in this codebase follows.
-
-export interface AnalysisTile {
-  cardId: string;
-  /** 0-based index of the page the tile sits on. */
-  pageIndex: number;
-  type: CardType;
-  /** Visual name, metric label, text heading or control label — whatever the
-   *  user would actually call this tile when asking to change it. */
-  title: string;
-  visualId?: string;
-  datasetId?: string;
-  chartType?: string;
-  /** The dimension column, for a visual. A NAME, not its values. */
-  category?: string;
-  /** Measures as "sum(revenue)" — aggregation + column NAME only. */
-  measures?: string[];
-}
-
-/** Flatten an Analysis into its tiles, resolving each visual card's Visual
- *  record. A deleted Visual leaves the tile in place with a plain title, so a
- *  broken card is still nameable rather than invisible. */
-export async function listAnalysisTiles(projectId: string, a: Analysis): Promise<AnalysisTile[]> {
-  const out: AnalysisTile[] = [];
-  const seen = new Map<string, Awaited<ReturnType<typeof visuals.getVisual>>>();
-  const pages = Array.isArray(a && a.sheets) ? a.sheets : [];
-  for (let p = 0; p < pages.length; p += 1) {
-    const cards = Array.isArray(pages[p].cards) ? pages[p].cards : [];
-    for (const card of cards) {
-      if (!card || typeof card !== 'object' || !card.id) continue;
-      const tile: AnalysisTile = { cardId: card.id, pageIndex: p, type: card.type, title: '' };
-      if (card.type === 'visual' && card.visualId) {
-        tile.visualId = card.visualId;
-        let v = seen.get(card.visualId);
-        if (v === undefined) {
-          v = await visuals.getVisual(projectId, card.visualId);
-          seen.set(card.visualId, v);
-        }
-        if (v) {
-          tile.title = v.name;
-          tile.datasetId = v.datasetId;
-          tile.chartType = v.chartType;
-          if (v.encoding && typeof v.encoding.category === 'string') tile.category = v.encoding.category;
-          const vals = v.encoding && Array.isArray(v.encoding.values) ? v.encoding.values : [];
-          tile.measures = vals.map((m) => `${m.aggregation}(${m.column})`);
-        } else {
-          tile.title = '(deleted visual)';
-        }
-      } else if (card.type === 'metric' && card.metric) {
-        tile.title = card.metric.label || `${card.metric.aggregation}(${card.metric.column})`;
-        tile.datasetId = card.metric.datasetId;
-      } else if (card.type === 'text') {
-        tile.title = card.heading || 'Text';
-      } else if (card.type === 'control' && card.control) {
-        const param = card.control.kind === 'parameter' ? (a.parameters || []).find((x) => x.id === card.control!.paramId) : undefined;
-        tile.title = card.control.label || (param ? param.name : card.control.column);
-        if (card.control.datasetId) tile.datasetId = card.control.datasetId;
-      }
-      if (!tile.title) tile.title = card.type;
-      out.push(tile);
-    }
-  }
-  return out;
-}
+// The dashboard's tiles, flattened (the Assistant's facts and its edit validator): ./analysisTiles.ts.
+export { listAnalysisTiles } from './analysisTiles';
+export type { AnalysisTile } from './analysisTiles';

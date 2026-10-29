@@ -1,6 +1,7 @@
 import { ipcMain } from './bus';
 import * as trash from '../app/trash';
 import * as scheduler from '../app/refreshScheduler';
+import { readsPublishedOnly } from '../analysis/analysis';
 
 // Trash IPC — list, restore, delete for good, empty. The deletes that PUT
 // things here are the record types' own `*:delete` handlers, each of which now
@@ -14,7 +15,11 @@ export function register(): void {
   // whether or not auto-refresh is on — so "30 days" holds for everyone.
   scheduler.afterTick(() => { void trash.purgeExpired().catch(() => 0); });
 
-  ipcMain.handle('trash:list', async (_e, { projectId }: any = {}) => trash.list(String(projectId || '')));
+  // A deleted dashboard is a draft now (nothing publishes it): not a viewer's to see (docs/analysis/00-model.md).
+  ipcMain.handle('trash:list', async (_e, { projectId }: any = {}) => {
+    const items = await trash.list(String(projectId || ''));
+    return (await readsPublishedOnly(String(projectId || ''))) ? items.filter((e) => e.type !== 'dashboard') : items;
+  });
 
   ipcMain.handle('trash:restore', async (_e, { projectId, type, id }: any = {}) =>
     trash.restore(String(projectId || ''), type, String(id || '')));

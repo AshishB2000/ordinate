@@ -191,6 +191,7 @@
   "common.vs_previous": "frente al anterior",
   "connectorMessages.this_connection_signs_in_with_the": null,
   "dashShare.and_more": "{p0}, y {p1} más",
+  "draftMessages.this_dashboard_has_not_been_published": null,
   "driverPointMessages.a_change_is_explained_between_two": "Un cambio se explica entre dos periodos, así que hace falta un gráfico con una fecha en su eje.",
   "driverPointMessages.a_change_is_explained_from_today": "Un cambio se explica con los datos de hoy, y este panel muestra una instantánea anterior. Vuelva a poner “As of” en el momento actual para explicarlo.",
   "driverPointMessages.average_of": "Promedio de {column}",

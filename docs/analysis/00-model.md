@@ -7,6 +7,11 @@
 > analysis" migration — was **removed**. There is now **one** artifact: a **Dashboard**, which is the
 > Analysis authoring surface renamed in the UI. It stays an `analysis` record on disk. Everything
 > below describes that single surface.
+>
+> **Revised again for drafts and Publish** (`docs/superpowers/specs/2026-10-29-dashboard-drafts-publish-design.md`).
+> Still one record — but it now keeps a **published copy inside itself** (`Analysis.published`). Every
+> dashboard is a **draft** only editors and admins see; **Publish** freezes the draft, charts included,
+> as the copy viewers read until the next Publish. See §0.5. This replaces the Ready flag.
 
 **Internal name ≠ UI name.** The user-facing thing is a "Dashboard". Internally it is still an
 `analysis`: the record type (`src/analysis/analysis.ts`), its store, the `analysis:*` IPC channels,
@@ -24,15 +29,43 @@ conclusion drawn from the code). Nothing here is benchmarked on this branch.
    (visual / metric / text / control) over the project's datasets, with dashboard-wide filters. It
    is always editable — there is no separate published, read-only copy. (READ-FROM-CODE:
    `src/analysis/analysis.ts`, `src/ipc/analyses.ts`.)
-2. **No publish step.** There is no `analysis:publish`, no `Dashboard` record type, no
-   `saveDashboard`/`updateDashboard`. Old published-dashboard JSON files left in `userData` are
-   simply not read by anything — ignored, skipped-never-fatal, no migration code. (READ-FROM-CODE:
-   `src/ipc/analyses.ts` registers no publish channel; `src/ipc/dashboards.ts` holds only
-   `dashboard:metric`.)
-3. **Sharing = Export.** The way a dashboard leaves the app is the by-value snapshot export — see §4.
-   It reads the live editor state; there is no stored snapshot to export.
+2. **Drafts and a published copy, in one record.** There is no `Dashboard` record type. The draft is
+   the record's own content; `published` is a copy of it frozen at the last Publish (§0.5). Old
+   published-dashboard JSON files from the desktop era are still not read by anything.
+3. **Sharing = Export, of the published copy.** What leaves the app — a `/p/` page, an embed, an HTML
+   export, a subscription, a report, a mention notice — is built from the published copy, or from the
+   draft only when the dashboard was never published (only an editor can reach one).
 4. **The app does the math.** Every number a card shows is recomputed on open by app code; the model
    never writes a computed figure. See §5.
+
+### 0.5 Drafts and Publish (READ-FROM-CODE: `src/analysis/publishedCopy.ts`, `publishDashboard.ts`)
+
+- **Who sees what.** Project editors and admins read the draft (and may ask for the copy —
+  `analysis:open { published: true }`, the view page). A project **viewer** (read access only) reads
+  the published copy **everywhere**: the store's `getAnalysis` / `listAnalyses` are caller-aware
+  (`readsPublishedOnly`, the `authz/caller` rule row access uses), so a viewer gets the copy, and a
+  dashboard never published is `null` — the same as a missing id. Paths that bypass the store guard
+  themselves: dashboard history (`versions:*` — a viewer gets none), Trash, catalog notes, comment
+  threads on a draft, mention notices. `scripts/test-dashboardDraftsViewer.ts` walks every reader as
+  a viewer.
+- **The copy** holds what an editor's save writes — name, sheets, filters, style, parameters — with
+  each visual card's chart DEFINITION frozen into its inline `card.visual` (its `visualId` kept), plus
+  `publishedAt`, `publishedBy`, `versionKey` (the version Publish recorded — `versions:diff` from it to
+  now) and `contentHash` (the draft's edit tag at Publish). **No figure is stored**: every number is
+  recomputed on render through the frozen definition. Saved views are not frozen (reader state, not
+  content): the copy's readers get the record's views checked against the copy's sheets.
+- **Status** (`statusOf`): `draft` (never published), `published` (the draft's content tag equals
+  `contentHash` — so undoing back reads as in sync), `edited` (published, edits not live). A chart
+  edited in Visuals does not change it: Discard could not undo that edit.
+- **Publish / Unpublish / Discard edits** (`analysis:publish|unpublish|discard`, `write`) each record a
+  version with an `event`. Publish and Unpublish leave the draft, its `updatedAt` and its edit tag
+  alone; Publish takes the editor's `base` and refuses a draft that moved since (409). Discard puts the
+  copy back as the draft — visual cards drop the frozen definition and draw their chart as it is now;
+  it never writes to the shared Visuals store.
+- **Ready → published.** A record still carrying the old `ready: true` is migrated on first read
+  (`analysis.ts migrateReady`): a published copy of its content, charts frozen, `ready` removed, every
+  other key byte for byte. Idempotent under the record's lock; if the write fails the read still
+  treats it as published. Nothing writes `ready` any more.
 
 ---
 
@@ -63,8 +96,8 @@ Storage: `analyses/` is a fourth sibling of `datasets/`, `visuals/`, `dashboards
 stores (READ-FROM-CODE, `src/analysis/analysis.ts`): the dual-UUID guard (`UUID_RE` on **both**
 `projectId` and record id before either touches a path), atomic temp-sibling-then-`rename` writes
 with a per-write `randomUUID()` suffix, `normalize()` re-sanitising every stored field on load, and a
-corrupt/unreadable file being skipped rather than fatal. `getAnalysis`/`listAnalyses` are **pure
-reads** — they never migrate and never write.
+corrupt/unreadable file being skipped rather than fatal. `getAnalysis`/`listAnalyses` read as the
+caller may (§0.5); their one write is the once-only Ready migration.
 
 ### 2.1 `Analysis` (`src/analysis/analysis.ts`)
 
@@ -76,14 +109,12 @@ export interface Analysis {
   sheets: Page[];                   // the authoring surface. A sheet IS a dashboards.Page (§2.3).
                                     // Always ≥ 1, the invariant sanitizePages() enforces.
   filters: FilterStep[];            // dashboard-wide cross-card filters (filter-only steps)
+  style: DashboardStyle;
+  parameters: Parameter[];
+  views?: SavedView[]; defaultViewId?: string;
+  published?: PublishedCopy;        // what viewers see (§0.5); absent = a draft. Not content.
   createdAt: string;
-  updatedAt: string;                // bumped by any sheet/filter/name edit
-
-  // Inert vestiges of the removed publish flow — nothing writes them now, and no
-  // code resolves them. Safe to drop in a later cleanup; kept here only because
-  // this doc is READ-FROM-CODE and they still appear in the interface.
-  publishedDashboardIds: string[];
-  lastPublishedAt: string | null;
+  updatedAt: string;                // bumped by any sheet/filter/name edit (never by Publish)
   schemaVersion: 1;
 }
 ```
@@ -120,12 +151,11 @@ export interface CardControl { kind; label; datasetId; column; default?; }
 export type    CardVisual = Pick<Visual, 'datasetId'|'name'|'chartType'|'encoding'|'overrides'|'filters'>;
 ```
 
-A visual card carries `visualId` and is resolved from the `visuals/` store at render
-(`renderer/hub/dashGrid.ts:601`). `sanitizeCard` still accepts a two-shaped visual card (`visualId`
-**or** an inline `visual`) and `CardVisual` still exists (`src/analysis/dashboards.ts:88, 236-245`),
-but with no publish path **nothing populates `card.visual`** — the inline form is a dormant capability
-in the sanitizer, not part of the live authoring flow. Cards reference visuals by id and resolve at
-render; that is the model.
+A draft's visual card carries `visualId` and is resolved from the `visuals/` store at render. A
+published copy's visual card also carries the chart's definition frozen at Publish as `card.visual`
+(`CardVisual`, overlays included), and **that wins** wherever the copy is drawn or computed: the open
+reply hands the frozen definitions to the canvas as its `visuals`, and `/p/`, exports, subscriptions
+and reports read `card.visual` first.
 
 `CardControl` stores only the widget's *definition*; the reader's live selection becomes a
 `FilterStep` via `controlSteps` and is never persisted (`src/analysis/dashboards.ts:39-49`).
@@ -171,8 +201,13 @@ There is no published record, so "share" is the by-value snapshot export, unchan
 
 | channel | payload → result | notes |
 |---|---|---|
-| `analysis:list` | `{projectId}` → `AnalysisSummary[]` | newest-updated first, corrupt files skipped |
-| `analysis:get` | `{projectId, id}` → `Analysis \| null` | pure read, never migrates |
+| `analysis:list` | `{projectId}` → `AnalysisSummary[]` | newest-updated first, corrupt files skipped; uncontracted (the browser reads `analysis:gallery`) |
+| `analysis:get` | `{projectId, id}` → `Analysis \| null` | as the caller may read it (§0.5); uncontracted (the browser reads `analysis:open`) |
+| `analysis:gallery` | `{projectId}` → items with `status`, `publishedAt?`, `publishedBy?` | a viewer's: published ones, from the copy |
+| `analysis:open` | `{projectId, id, published?}` → `{analysis, visuals, tag, status, showing, published?}` | `published`: the copy (frozen charts as `visuals`); a viewer always gets it |
+| `analysis:publish` | `{projectId, id, base?}` → `{status, published}` | freezes the draft; a version; 409 on a stale `base` |
+| `analysis:unpublish` | `{projectId, id}` → `{status}` | the draft stays; a version |
+| `analysis:discard` | `{projectId, id}` → `{analysis, tag, status, published}` | the copy back as the draft; a version |
 | `analysis:create` | `{projectId, name, sheets?, filters?}` → `Analysis \| {ok:false,error}` | `sheets` optional so `analysis:draft` can hand its packed sheets straight in |
 | `analysis:rename` | `{projectId, id, name}` → `{ok, analysis}` | |
 | `analysis:update` | `{projectId, id, name?, sheets?, filters?}` → `{ok, analysis}` | full array replace, not a patch-merge |
@@ -222,8 +257,9 @@ Small and load-bearing:
 3. **`sheets` ↔ `pages` is an alias, not a copy.** One array under two names
    (`renderer/hub/dashGrid.ts:40`); anything that deep-copies it silently forks the editor from what
    gets saved and exported.
-4. **Cards reference visuals by id and resolve at render.** A visual card holds `visualId` and is
-   resolved from the `visuals/` store on open; a dangling reference degrades to a placeholder, never
-   a crash. Nothing on the render path may assume an inline `card.visual` is present.
-5. **Reads stay reads.** `getAnalysis` / `listAnalyses` never migrate or write; the store's
-   dual-UUID path guard and atomic writes are the only correctness gates, and both are format-only.
+4. **A draft's cards reference visuals by id; a published copy's carry them frozen.** A dangling
+   reference degrades to a placeholder, never a crash. Where `card.visual` is present it wins; nothing
+   may assume it is.
+5. **A viewer never reads a draft.** Not its content, its name, its history or its threads, on any
+   channel (`scripts/test-dashboardDraftsViewer.ts`). A new reader goes through `getAnalysis` /
+   `listAnalyses`, or guards itself and joins that walk.

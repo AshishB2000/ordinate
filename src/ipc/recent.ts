@@ -8,7 +8,7 @@ import * as analysis from '../analysis/analysis';
 import * as visuals from '../analysis/visuals';
 import { ctx, serverDataDir } from '../server/context';
 import * as comments from '../app/comments';
-import { targetNames } from './comments';
+import { readableComments, targetNames } from './comments';
 import { commentSnippet } from '../app/mentionToken';
 import { labelsFor } from '../server/mentions/people';
 
@@ -48,7 +48,7 @@ export function register() {
   const recentComments = async (projectId: string) => {
     const r = await comments.list(projectId);
     if (!r.ok) return { open: 0, recent: [] };
-    const open = r.comments.filter((c) => !c.deletedAt && !c.resolvedAt);
+    const open = (await readableComments(projectId, r.comments)).filter((c) => !c.deletedAt && !c.resolvedAt);
     const last = (c: (typeof open)[number]) => (c.replies.length ? c.replies[c.replies.length - 1].createdAt : c.createdAt);
     const top = open.slice().sort((a, b) => last(b).localeCompare(last(a))).slice(0, HOME_COMMENTS);
     let names: Record<string, { name: string; analysisId?: string }> = {};
