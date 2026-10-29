@@ -33,10 +33,10 @@ COPY web/package.json web/package-lock.json web/
 RUN npm ci --ignore-scripts --no-audit --no-fund && npm --prefix web ci --ignore-scripts --no-audit --no-fund
 COPY . .
 RUN npm run build:ts && npm --prefix web run build
-# The boundary GeoJSON, as postinstall fetches it — and the build FAILS rather
-# than ship download-geo's empty placeholder (its fallback when a fetch fails).
-RUN node scripts/download-geo.js \
- && node -e "const fs=require('fs'),{geoJsonText}=require('./src/server/geo');for(const f of ['world-countries.js','us-states.js','us-counties.json']){const n=JSON.parse(geoJsonText(f,fs.readFileSync('assets/geo/'+f,'utf8'))).features.length;console.log(f,n,'features');if(!n)process.exit(1)}"
+# The boundary GeoJSON is the committed, reviewed copy in assets/geo (COPY above):
+# never fetched here, since its sources are unpinned third-party branches (NV-15).
+# The build FAILS rather than ship an empty placeholder.
+RUN node -e "const fs=require('fs'),{geoJsonText}=require('./src/server/geo');for(const f of ['world-countries.js','us-states.js','us-counties.json']){const n=JSON.parse(geoJsonText(f,fs.readFileSync('assets/geo/'+f,'utf8'))).features.length;console.log(f,n,'features');if(!n)process.exit(1)}"
 # The runtime runs the emitted .js; the .ts beside it ships nowhere.
 RUN find src -name '*.ts' -delete
 

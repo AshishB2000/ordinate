@@ -71,6 +71,39 @@ function throws(fn: () => unknown): boolean {
     return c !== wc && c === context.ctx().client;
   }));
 
+  // ── NV-1: formats, calendar and language are the CALLER's org's ──────────
+  // They used to be process-wide copies of whichever org last loaded its
+  // config, so one org's Formats moved another org's periods and currency.
+  const config: typeof import('../src/app/config') = require('../src/app/config');
+  const dateIntel: typeof import('../src/analysis/dateIntel') = require('../src/analysis/dateIntel');
+  const retail: typeof import('../src/analysis/retailCalendar') = require('../src/analysis/retailCalendar');
+  const format: typeof import('../src/app/format') = require('../src/app/format');
+  const i18n: typeof import('../src/app/i18n') = require('../src/app/i18n');
+  process.env.ORDINATE_TODAY = '2026-10-28';
+  const inOrg = <T>(org: string, fn: () => T): T => context.runInContext(as(org), 'nv1', fn);
+  const ambient = () => JSON.stringify({
+    fy: dateIntel.getCalendar().fiscalYearStart, year: dateIntel.resolvePeriodNow({ preset: 'this_year' }),
+    wc: retail.activeWeekCal()?.type ?? null, currency: format.getFormatPrefs().currency, lang: i18n.currentLanguage(),
+  });
+  const betaBefore = inOrg('beta', () => { config.get(); return ambient(); });
+  inOrg('acme', () => config.save({ formats: { ...config.get().formats, calendarType: '445', fiscalYearStart: 7, currency: 'EUR' }, language: 'de' }));
+  inOrg('acme', () => config.get()); // what prefs:get does on every page load
+  const acmeNow = JSON.parse(inOrg('acme', ambient));
+  ok('NV-1: acme reads its own saved formats, calendar and language',
+    acmeNow.fy === 7 && acmeNow.wc === '445' && acmeNow.currency === 'EUR' && acmeNow.lang === 'de', JSON.stringify(acmeNow));
+  // No config.get() here: a figure path (vizDataFor, a period filter) never calls it.
+  ok('NV-1: beta still computes with its own defaults after acme loaded and saved', inOrg('beta', ambient) === betaBefore
+    && JSON.parse(betaBefore).currency === 'USD' && JSON.parse(betaBefore).year?.from === '2026-01-01', `${betaBefore} vs ${inOrg('beta', ambient)}`);
+  fs.mkdirSync(path.join(DATA, 'orgs', 'gamma', 'userData'), { recursive: true });
+  fs.writeFileSync(path.join(DATA, 'orgs', 'gamma', 'userData', 'config.json'), JSON.stringify({ formats: { currency: 'GBP', fiscalYearStart: 4 } }));
+  const gamma = JSON.parse(inOrg('gamma', ambient));
+  ok('NV-1: an org read before this process loaded its config gets its own settings', gamma.currency === 'GBP' && gamma.fy === 4, JSON.stringify(gamma));
+  ok('NV-1 control: outside a request a set stays process-wide (the desktop slot)', (() => {
+    format.setFormatPrefs({ currency: 'JPY' });
+    return format.getFormatPrefs().currency === 'JPY' && JSON.parse(inOrg('acme', ambient)).currency === 'EUR';
+  })());
+  delete process.env.ORDINATE_TODAY;
+
   // ── Over HTTP, dev auth: everything lands in orgs/default ─────────────────
   const devApp = appMod.buildApp(envMod.parseEnv({ AUTH_MODE: 'dev', LOG_LEVEL: 'silent', DATA_DIR: DATA }));
   const dl = await devApp.inject({ method: 'POST', url: '/api/rpc/projects:list', headers: withCsrf({ 'content-type': 'application/json' }), payload: '{"args":[]}' });
@@ -148,6 +181,23 @@ function throws(fn: () => unknown): boolean {
   ok('the project is on disk under orgs/org-a only',
     fs.existsSync(path.join(DATA, 'orgs', 'org-a', 'userData', 'projects', pid))
       && !fs.existsSync(path.join(DATA, 'orgs', 'org-b', 'userData', 'projects', pid)));
+
+  // ── NV-2: a search is cancelled by its own caller's next one, never another member's ──
+  const { runSearch } = require('../src/data/dataSearchRun') as typeof import('../src/data/dataSearchRun');
+  const member = (org: string, email: string): import('../src/server/context').Identity => ({ user: { email, role: 'viewer' }, org: { id: org } });
+  const search = (who: import('../src/server/context').Identity, term: string, projectId = pid) =>
+    context.runInContext(who, 'nv2', () => runSearch({ projectId, term }));
+  const alice = member('org-a', 'alice@a.test');
+  ok('NV-2 control: a lone search finds the value', (await search(alice, '007')).ok === true);
+  for (const [label, other] of [['another member of the org', member('org-a', 'bob@a.test')], ['a member of another org', member('org-b', 'bob@b.test')]] as const) {
+    const mine = search(alice, '007'); // parked at its first await
+    await search(other, '  ', ''); // returns at once, after taking its number
+    const r = await mine;
+    ok(`NV-2: ${label} searching does not cancel alice's search in flight`, r.ok === true && !r.cancelled && r.hits.length > 0, JSON.stringify(r));
+  }
+  const first = search(alice, '007');
+  await search(alice, '  ');
+  ok('NV-2 control: alice\'s own next search still cancels her older one', (await first).cancelled === true);
 
   await app.close();
 })()

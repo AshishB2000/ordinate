@@ -253,14 +253,21 @@ export function sameDayLastYear(day: number, wc: WeekCal): number {
 
 // ── The active calendar ─────────────────────────────────────────────────────
 
-let active: WeekCal | null = null;
+let own: WeekCal | null = null;
+let slot: { get(): WeekCal | null; set(c: WeekCal | null): void } = { get: () => own, set: (c) => { own = c; } };
+
+/** Per org on the server, with the calendar it comes from (`dateIntel.scopeCalendar`, NV-1). */
+export function scopeWeekCal(wrap: (s: typeof slot) => typeof slot): void {
+  slot = wrap(slot);
+}
 
 /** Set by `dateIntel.setCalendar` from the workspace formats. */
 export function setActiveWeekCal(c: unknown): void {
-  active = weekCalOf(c);
+  slot.set(weekCalOf(c));
 }
 
 /** The workspace's week calendar, or null under gregorian. */
 export function activeWeekCal(): WeekCal | null {
+  const active = slot.get();
   return active ? { ...active } : null;
 }
