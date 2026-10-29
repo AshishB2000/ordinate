@@ -134,6 +134,8 @@ export interface OidcEnv {
   readonly redirectUrl: string;
   /** OIDC_EXTRA_SCOPES: sent after `openid email profile` (./idpEnv.ts). */
   readonly extraScopes: readonly string[];
+  /** OIDC_EMAIL_VERIFIED: `optional` accepts an ID token with no email_verified (Entra ID never sends one); present, it must be true. */
+  readonly emailVerified: 'required' | 'optional';
 }
 
 export interface AuthEnv {
@@ -495,6 +497,7 @@ function parseAuth(src: Readonly<Record<string, string | undefined>>, env: Ordin
       clientSecret: required(src, 'OIDC_CLIENT_SECRET', why),
       redirectUrl: httpUrl('OIDC_REDIRECT_URL', required(src, 'OIDC_REDIRECT_URL', why), env),
       extraScopes: extraScopes(mode, src.OIDC_EXTRA_SCOPES),
+      emailVerified: oneOf('OIDC_EMAIL_VERIFIED', src.OIDC_EMAIL_VERIFIED, ['required', 'optional'] as const, 'required'),
     });
   }
 

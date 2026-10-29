@@ -133,9 +133,12 @@ export function registerOidc(app: FastifyInstance, cfg: ServerEnv, pool: Pool, n
       );
     const claims = tokens.claims();
     const email = normalEmail(claims?.email);
-    // An IdP that says the address is unverified must not sign anyone in as it.
-    if (!email || claims?.email_verified === false) {
-      req.log.warn({ hasEmail: email !== null }, 'oidc sign-in refused: no verified email in the id_token');
+    // The email IS the account (ORDINATE_ADMIN_EMAIL's is admin): only a JSON `true` vouches for it. A missing claim
+    // passes only under OIDC_EMAIL_VERIFIED=optional (an IdP that never sends one); "false", or "true" as text, never.
+    const verified = claims?.email_verified;
+    if (!email || !(verified === true || (verified === undefined && oidc.emailVerified === 'optional'))) {
+      const emailVerified = verified === undefined ? 'absent' : typeof verified === 'boolean' ? verified : 'not a boolean';
+      req.log.warn({ hasEmail: email !== null, emailVerified }, 'oidc sign-in refused: no verified email in the id_token (an IdP that never sends email_verified needs OIDC_EMAIL_VERIFIED=optional)');
       await trail(null, 'denied');
       return fail(reply, 'email');
     }

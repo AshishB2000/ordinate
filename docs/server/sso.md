@@ -33,7 +33,7 @@ have not each been run against a live tenant.
 | Application type | Web application with a client secret (a confidential client), authorization code flow. Implicit and hybrid flows are not needed. |
 | Redirect (callback) URI | `https://<your host>/api/auth/callback`, exactly. The same string goes in `OIDC_REDIRECT_URL`. |
 | Scopes requested | `openid email profile` |
-| Claims used | `email` (required) and `email_verified`. If `email_verified` is present and `false`, sign-in is refused. If it is absent, sign-in is accepted. |
+| Claims used | `email` (required) and `email_verified`, which must be the JSON value `true`: the email is the whole identity (and `ORDINATE_ADMIN_EMAIL`'s is admin). `false`, a string such as `"true"`, or no claim at all refuses the sign-in with `email`. For an IdP that never sends the claim (Entra ID), set `OIDC_EMAIL_VERIFIED=optional`: an absent claim is then accepted, a present one must still be `true`. |
 | PKCE | S256, always sent. IdPs that require PKCE for confidential clients are fine. |
 | Token endpoint authentication | `client_secret_post`: the secret goes in the form body. If the IdP enforces a method per client, choose POST. |
 | Sign-out URL | None. Sign-out ends the Ordinate session only, not the IdP session. |
@@ -73,7 +73,7 @@ name and code, never a token:
 | `expired` | The 10-minute login cookie was missing. The user took too long, or a proxy dropped the cookie. |
 | `denied` | The IdP answered `access_denied`, for example because the user is not assigned to the app. |
 | `failed` | The code exchange or token check failed. Check the client secret, the redirect URI, the token endpoint method and the server clock. |
-| `email` | The ID token carried no email, or `email_verified: false`. |
+| `email` | The ID token carried no email, or its `email_verified` was not `true` (absent, without `OIDC_EMAIL_VERIFIED=optional`). The server log says which. |
 | `domain` | The domain is not in `ALLOWED_EMAIL_DOMAINS`. |
 | `disabled` | An admin disabled this user. |
 
@@ -99,8 +99,9 @@ name and code, never a token:
 3. Set `OIDC_ISSUER=https://login.microsoftonline.com/<tenant-id>/v2.0` and `OIDC_CLIENT_ID` to the
    application (client) ID. Use your tenant ID. The multi-tenant `common` and `organizations`
    endpoints were not tested, and a deployment has one org anyway.
-4. Entra ID sends no `email_verified`, so Ordinate accepts the `email` claim as Entra ID gives it.
-   Set `ALLOWED_EMAIL_DOMAINS` to your verified domains, and use **Enterprise applications →
+4. Entra ID sends no `email_verified`, so set `OIDC_EMAIL_VERIFIED=optional`: without it every
+   sign-in is refused with `email`. Ordinate then accepts the `email` claim as Entra ID gives it, so
+   set `ALLOWED_EMAIL_DOMAINS` to your verified domains, and use **Enterprise applications →
    Properties → Assignment required** to choose who may sign in.
 
 ## Google (Workspace)

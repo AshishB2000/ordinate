@@ -74,6 +74,10 @@ for (const v of ['OIDC_ISSUER', 'OIDC_CLIENT_ID', 'OIDC_CLIENT_SECRET', 'OIDC_RE
   envFails(`oidc without ${v}`, { ...OIDC, [v]: '' }, v);
 }
 envFails('oidc without DATABASE_URL', { ...OIDC, DATABASE_URL: '' }, 'DATABASE_URL');
+// NV-3: the email is the account, so a verified one is required unless the operator says the IdP never sends the claim.
+ok('env: OIDC_EMAIL_VERIFIED defaults to required', o.oidc?.emailVerified === 'required');
+ok('env: OIDC_EMAIL_VERIFIED=optional is read (Entra ID)', envMod.parseEnv({ ...OIDC, OIDC_EMAIL_VERIFIED: 'optional' }).auth.oidc?.emailVerified === 'optional');
+envFails('OIDC_EMAIL_VERIFIED=false', { ...OIDC, OIDC_EMAIL_VERIFIED: 'false' }, 'OIDC_EMAIL_VERIFIED');
 envFails('header without DATABASE_URL', { AUTH_MODE: 'header', TRUSTED_PROXY_CIDRS: '10.0.0.0/8' }, 'DATABASE_URL');
 // prod + DATABASE_URL also needs ORDINATE_MASTER_KEY (T5.3) before auth is read.
 const KEY = { ORDINATE_MASTER_KEY: '0'.repeat(64) };

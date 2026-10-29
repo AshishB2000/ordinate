@@ -67,7 +67,7 @@ config:
   # DUCKDB_MEMORY_LIMIT, DUCKDB_THREADS (defaults to the CPU limit, rounded down;
   # every node core when no limit is set), DUCKDB_QUERY_TIMEOUT_SECONDS, DUCKDB_IDLE_SECONDS,
   # SESSION_IDLE_MINUTES, SESSION_ABSOLUTE_HOURS, RATE_LIMIT_*_PER_MINUTE,
-  # MAX_RPC_BODY_KB, RPC_TIMEOUT_SECONDS, SSRF_ALLOW.
+  # MAX_RPC_BODY_KB, RPC_TIMEOUT_SECONDS, SSRF_ALLOW, OIDC_EMAIL_VERIFIED (optional for Entra ID).
   # Email for subscriptions and alerts (docs/server/email.md) — empty SMTP_HOST = no email.
   # The password, when the relay asks for one, goes in the existingSecret as SMTP_PASSWORD.
   SMTP_HOST: ""            # smtp.example.com, or an internal relay
