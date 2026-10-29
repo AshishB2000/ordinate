@@ -198,9 +198,10 @@ if (!adminUrl) {
     await page.keyboard.press('Escape');
     assert.equal(await count(page, 'link', 'Edit'), 0, 'editor: no tile Edit');
     assert.equal(await page.getByRole('navigation', { name: 'Authoring panels' }).count(), 0, 'editor: no tool rail');
-    // What reads stays: the sheet tab, Present, comments, the tile's own read-only menu.
-    await page.getByRole('tab', { name: 'Overview' }).waitFor();
+    // What reads stays: Present, comments, the tile's own read-only menu. The sample has one
+    // sheet, so a read-only view shows no tabs row, as on /p/<id>/ (#338).
     await page.getByRole('button', { name: 'Present' }).waitFor();
+    assert.equal(await page.getByRole('tablist', { name: 'Sheets' }).count(), 0, 'one sheet: no tabs row');
     await page.getByRole('button', { name: 'Comments on this dashboard' }).waitFor();
     await page.getByRole('button', { name: 'Amount by region card actions' }).click();
     const items = (await page.getByRole('menuitem').allTextContents()).map((t) => t.trim());
